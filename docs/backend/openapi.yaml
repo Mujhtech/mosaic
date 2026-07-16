@@ -1,0 +1,86 @@
+openapi: 3.1.0
+info:
+  title: Mosaic API
+  version: 0.1.0
+  description: Phase 0 operational API surface. Product APIs are not implemented yet.
+paths:
+  /health:
+    get:
+      operationId: getHealth
+      summary: Check API process liveness
+      responses:
+        "200":
+          description: The API process is accepting HTTP requests.
+          headers:
+            X-Request-ID:
+              description: Request correlation identifier.
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthEnvelope"
+        "500":
+          description: The request failed safely after an unexpected server error.
+          headers:
+            X-Request-ID:
+              description: Request correlation identifier.
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+        "504":
+          description: The cooperative handler deadline expired.
+          headers:
+            X-Request-ID:
+              description: Request correlation identifier.
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+components:
+  schemas:
+    HealthEnvelope:
+      type: object
+      additionalProperties: false
+      required:
+        - data
+      properties:
+        data:
+          type: object
+          additionalProperties: false
+          required:
+            - status
+          properties:
+            status:
+              type: string
+              const: ok
+    ErrorEnvelope:
+      type: object
+      additionalProperties: false
+      required:
+        - error
+      properties:
+        error:
+          type: object
+          additionalProperties: false
+          required:
+            - code
+            - message
+          properties:
+            code:
+              type: string
+            message:
+              type: string
+            fields:
+              type: object
+              additionalProperties:
+                type: array
+                items:
+                  type: string
+            requestId:
+              type: string

@@ -1,0 +1,20 @@
+name: mosaic_sdk_example
+description: Minimal configuration example for the Mosaic Flutter SDK foundation.
+publish_to: none
+version: 0.1.0
+
+environment:
+  sdk: ">=3.3.0 <4.0.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+  mosaic_sdk:
+    path: ..
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+
+flutter:
+  uses-material-design: true

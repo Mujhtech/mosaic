@@ -1,0 +1,106 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:mosaic:protocol:schema:v0.1:compatibility-manifest",
+  "title": "Mosaic Protocol 0.1 Compatibility Manifest",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "status",
+    "schema",
+    "canonicalFixture",
+    "capabilities",
+    "readerPolicy"
+  ],
+  "properties": {
+    "schemaVersion": {
+      "type": "string",
+      "const": "0.1"
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "draft",
+        "approved",
+        "deprecated"
+      ]
+    },
+    "schema": {
+      "type": "string",
+      "const": "../schema/v0.1/paywall.schema.json"
+    },
+    "canonicalFixture": {
+      "type": "string",
+      "const": "../fixtures/v0.1/minimal-paywall.json"
+    },
+    "capabilities": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": {
+        "$ref": "#/$defs/capability"
+      }
+    },
+    "readerPolicy": {
+      "$ref": "#/$defs/readerPolicy"
+    }
+  },
+  "$defs": {
+    "capability": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "version",
+        "fallback"
+      ],
+      "properties": {
+        "name": {
+          "type": "string",
+          "enum": [
+            "layout.vertical",
+            "component.text",
+            "component.featureList",
+            "component.productSelector",
+            "component.purchaseButton",
+            "component.restoreButton",
+            "component.closeButton",
+            "component.legalText"
+          ]
+        },
+        "version": {
+          "type": "string",
+          "const": "0.1"
+        },
+        "fallback": {
+          "type": "string",
+          "const": "rejectDocument"
+        }
+      }
+    },
+    "readerPolicy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "unknownSchemaVersion",
+        "unknownComponent",
+        "unknownProperty",
+        "unsupportedCapability"
+      ],
+      "properties": {
+        "unknownSchemaVersion": {
+          "const": "rejectDocument"
+        },
+        "unknownComponent": {
+          "const": "rejectDocument"
+        },
+        "unknownProperty": {
+          "const": "rejectDocument"
+        },
+        "unsupportedCapability": {
+          "const": "rejectDocument"
+        }
+      }
+    }
+  }
+}

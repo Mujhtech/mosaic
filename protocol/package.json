@@ -1,0 +1,18 @@
+{
+  "name": "@mosaic/protocol-validation",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "check": "npm run validate && npm test",
+    "test": "node --test tools/validation.test.mjs",
+    "validate": "node tools/validate.mjs"
+  },
+  "devDependencies": {
+    "ajv": "8.17.1"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
+

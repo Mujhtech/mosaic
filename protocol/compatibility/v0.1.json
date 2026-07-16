@@ -1,0 +1,54 @@
+{
+  "schemaVersion": "0.1",
+  "status": "draft",
+  "schema": "../schema/v0.1/paywall.schema.json",
+  "canonicalFixture": "../fixtures/v0.1/minimal-paywall.json",
+  "capabilities": [
+    {
+      "name": "layout.vertical",
+      "version": "0.1",
+      "fallback": "rejectDocument"
+    },
+    {
+      "name": "component.text",
+      "version": "0.1",
+      "fallback": "rejectDocument"
+    },
+    {
+      "name": "component.featureList",
+      "version": "0.1",
+      "fallback": "rejectDocument"
+    },
+    {
+      "name": "component.productSelector",
+      "version": "0.1",
+      "fallback": "rejectDocument"
+    },
+    {
+      "name": "component.purchaseButton",
+      "version": "0.1",
+      "fallback": "rejectDocument"
+    },
+    {
+      "name": "component.restoreButton",
+      "version": "0.1",
+      "fallback": "rejectDocument"
+    },
+    {
+      "name": "component.closeButton",
+      "version": "0.1",
+      "fallback": "rejectDocument"
+    },
+    {
+      "name": "component.legalText",
+      "version": "0.1",
+      "fallback": "rejectDocument"
+    }
+  ],
+  "readerPolicy": {
+    "unknownSchemaVersion": "rejectDocument",
+    "unknownComponent": "rejectDocument",
+    "unknownProperty": "rejectDocument",
+    "unsupportedCapability": "rejectDocument"
+  }
+}

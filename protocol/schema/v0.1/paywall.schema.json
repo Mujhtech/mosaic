@@ -1,0 +1,355 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:mosaic:protocol:schema:v0.1:paywall",
+  "title": "Mosaic Paywall Protocol 0.1",
+  "description": "The platform-neutral Mosaic paywall document supported by protocol version 0.1.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "id",
+    "revision",
+    "compatibility",
+    "layout"
+  ],
+  "properties": {
+    "schemaVersion": {
+      "$ref": "#/$defs/version"
+    },
+    "id": {
+      "$ref": "#/$defs/identifier"
+    },
+    "revision": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 2147483647
+    },
+    "compatibility": {
+      "$ref": "#/$defs/documentCompatibility"
+    },
+    "layout": {
+      "$ref": "#/$defs/verticalLayout"
+    }
+  },
+  "$defs": {
+    "version": {
+      "type": "string",
+      "const": "0.1"
+    },
+    "identifier": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^[a-z][a-z0-9]*(?:[-_][a-z0-9]+)*$"
+    },
+    "localizationKey": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_]*(?:\\.[a-z][a-z0-9_]*)+$"
+    },
+    "localizedText": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "default",
+        "localizationKey"
+      ],
+      "properties": {
+        "default": {
+          "type": "string",
+          "minLength": 1
+        },
+        "localizationKey": {
+          "$ref": "#/$defs/localizationKey"
+        }
+      }
+    },
+    "capabilityName": {
+      "type": "string",
+      "enum": [
+        "layout.vertical",
+        "component.text",
+        "component.featureList",
+        "component.productSelector",
+        "component.purchaseButton",
+        "component.restoreButton",
+        "component.closeButton",
+        "component.legalText"
+      ]
+    },
+    "requiredCapability": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "version"
+      ],
+      "properties": {
+        "name": {
+          "$ref": "#/$defs/capabilityName"
+        },
+        "version": {
+          "$ref": "#/$defs/version"
+        }
+      }
+    },
+    "documentCompatibility": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "requiredCapabilities"
+      ],
+      "properties": {
+        "requiredCapabilities": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "$ref": "#/$defs/requiredCapability"
+          }
+        }
+      }
+    },
+    "verticalLayout": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "type",
+        "id",
+        "gap",
+        "padding",
+        "children"
+      ],
+      "properties": {
+        "type": {
+          "const": "vertical"
+        },
+        "id": {
+          "$ref": "#/$defs/identifier"
+        },
+        "gap": {
+          "type": "number",
+          "minimum": 0
+        },
+        "padding": {
+          "type": "number",
+          "minimum": 0
+        },
+        "children": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/component"
+          }
+        }
+      }
+    },
+    "component": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/textComponent"
+        },
+        {
+          "$ref": "#/$defs/featureListComponent"
+        },
+        {
+          "$ref": "#/$defs/productSelectorComponent"
+        },
+        {
+          "$ref": "#/$defs/purchaseButtonComponent"
+        },
+        {
+          "$ref": "#/$defs/restoreButtonComponent"
+        },
+        {
+          "$ref": "#/$defs/closeButtonComponent"
+        },
+        {
+          "$ref": "#/$defs/legalTextComponent"
+        }
+      ]
+    },
+    "textComponent": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "type",
+        "id",
+        "value"
+      ],
+      "properties": {
+        "type": {
+          "const": "text"
+        },
+        "id": {
+          "$ref": "#/$defs/identifier"
+        },
+        "value": {
+          "$ref": "#/$defs/localizedText"
+        }
+      }
+    },
+    "featureListItem": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "text"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/identifier"
+        },
+        "text": {
+          "$ref": "#/$defs/localizedText"
+        }
+      }
+    },
+    "featureListComponent": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "type",
+        "id",
+        "items"
+      ],
+      "properties": {
+        "type": {
+          "const": "featureList"
+        },
+        "id": {
+          "$ref": "#/$defs/identifier"
+        },
+        "items": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/featureListItem"
+          }
+        }
+      }
+    },
+    "productReference": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "productId"
+      ],
+      "properties": {
+        "productId": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+        }
+      }
+    },
+    "productSelectorComponent": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "type",
+        "id",
+        "products",
+        "initiallySelectedProductId"
+      ],
+      "properties": {
+        "type": {
+          "const": "productSelector"
+        },
+        "id": {
+          "$ref": "#/$defs/identifier"
+        },
+        "products": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/productReference"
+          }
+        },
+        "initiallySelectedProductId": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+        }
+      }
+    },
+    "purchaseButtonComponent": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "type",
+        "id",
+        "label"
+      ],
+      "properties": {
+        "type": {
+          "const": "purchaseButton"
+        },
+        "id": {
+          "$ref": "#/$defs/identifier"
+        },
+        "label": {
+          "$ref": "#/$defs/localizedText"
+        }
+      }
+    },
+    "restoreButtonComponent": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "type",
+        "id",
+        "label"
+      ],
+      "properties": {
+        "type": {
+          "const": "restoreButton"
+        },
+        "id": {
+          "$ref": "#/$defs/identifier"
+        },
+        "label": {
+          "$ref": "#/$defs/localizedText"
+        }
+      }
+    },
+    "closeButtonComponent": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "type",
+        "id",
+        "label"
+      ],
+      "properties": {
+        "type": {
+          "const": "closeButton"
+        },
+        "id": {
+          "$ref": "#/$defs/identifier"
+        },
+        "label": {
+          "$ref": "#/$defs/localizedText"
+        }
+      }
+    },
+    "legalTextComponent": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "type",
+        "id",
+        "value"
+      ],
+      "properties": {
+        "type": {
+          "const": "legalText"
+        },
+        "id": {
+          "$ref": "#/$defs/identifier"
+        },
+        "value": {
+          "$ref": "#/$defs/localizedText"
+        }
+      }
+    }
+  }
+}
