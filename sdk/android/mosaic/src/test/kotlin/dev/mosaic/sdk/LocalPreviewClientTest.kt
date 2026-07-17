@@ -17,14 +17,20 @@ class LocalPreviewClientTest {
         try {
             client.start()
             val connection = factory.connections.single()
-            assertEquals(MOSAIC_LOCAL_PREVIEW_WEBSOCKET_PROTOCOL, connection.subprotocol)
+            assertEquals(
+                "$MOSAIC_LOCAL_PREVIEW_WEBSOCKET_PROTOCOL_V02, $MOSAIC_LOCAL_PREVIEW_WEBSOCKET_PROTOCOL",
+                connection.subprotocol,
+            )
             connection.listener.onOpen(connection.socket, MOSAIC_LOCAL_PREVIEW_WEBSOCKET_PROTOCOL)
             await { connection.socket.sent.size >= 2 }
 
             val handshake = connection.socket.sent.take(2).map(MosaicLocalPreviewCodec::decode)
             assertTrue(handshake[0].payload is MosaicPreviewClientConnectedPayload)
             val report = handshake[1].payload as MosaicPreviewCapabilityReportPayload
-            assertEquals(MosaicCapabilityName.entries.map { it.wireName }, report.supportedCapabilities.map { it.name })
+            assertEquals(
+                MosaicCapabilityCatalog.v01.map { it.wireName }.toSet(),
+                report.supportedCapabilities.map { it.name }.toSet(),
+            )
             assertEquals(MosaicPreviewCapabilityName.entries.toSet(), report.previewCapabilities.map { it.name }.toSet())
             assertEquals(MOSAIC_LOCAL_PREVIEW_DEFAULT_MAX_DOCUMENT_BYTES, report.limits.maxDocumentBytes)
 

@@ -1,6 +1,6 @@
 name: mosaic_sdk
-description: Native Protocol 0.1 renderer and Local Preview 0.1 client for Flutter.
-version: 0.2.0-dev.1
+description: Native Mosaic Protocol 0.1 and 0.2 renderer with Local Preview for Flutter.
+version: 0.2.0-dev.2
 publish_to: none
 
 environment:

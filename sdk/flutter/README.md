@@ -1,10 +1,15 @@
-# Mosaic Flutter SDK — Phase 2 local preview
+# Mosaic Flutter SDK — Protocol and Local Preview 0.2
 
-This package decodes Mosaic Protocol 0.1 RC1 and renders its sole canonical
-paywall with native Flutter widgets. It includes strict
-decoding, localization and RTL, bundled fallback loading, mock commerce,
-normalized results, diagnostics, accessibility semantics, native rendering,
-and the Local Preview 0.1 WebSocket client.
+This package provides separate strict readers for Mosaic Protocol 0.1 and 0.2
+and renders both with native Flutter widgets. It includes localization and RTL,
+bundled fallback loading, mock commerce, normalized results, diagnostics,
+accessibility semantics, native rendering, and Local Preview 0.1/0.2 support.
+
+Protocol 0.2 adds generalized Stack layout, contextual sizing, outer insets,
+semantic and literal colors, border/corner/clip/opacity styling, typography,
+complete Product Card default/selected styles, Carousel, Switch, Countdown,
+and switch-controlled visibility. The 0.1 behavior remains unchanged and the
+SDK never migrates a document implicitly.
 
 Phase 2 remains account-free and local-only. It does not include remote
 configuration, hosted publishing, REST fetching, caching, placements,
@@ -97,9 +102,11 @@ completes a Flutter frame.
 
 The client:
 
-- uses WebSocket subprotocol `mosaic.local-preview.v0.1`;
+- advertises `mosaic.local-preview.v0.2` then `mosaic.local-preview.v0.1` and
+  uses the exact server-selected version for the full connection;
 - sends `previewClientConnected` then `capabilityReport`;
-- reports all Protocol 0.1 and Phase 2 preview capabilities;
+- reports exact schema, renderer, and preview capability versions for the
+  negotiated protocol;
 - orders local document and mock-commerce revisions independently;
 - repeats prior acknowledgements for idempotent revision duplicates;
 - rejects stale/conflicting/invalid/unsupported revisions atomically;
@@ -113,15 +120,29 @@ routing metadata, never a user identity or credential. Keep `clientId` stable
 only for the running process; do not derive it from advertising or hardware
 identifiers.
 
+Canonical local project files can be loaded atomically with their embedded
+document and mock-commerce state:
+
+```dart
+final project = const MosaicPreviewMessageCodec().decodeLocalProject(
+  projectJson,
+  expectedFileFormatVersion: mosaicLocalPreviewV02ProtocolVersion,
+);
+```
+
+Studio-side integrations can use `negotiateMosaicLocalPreviewVersion` and
+`decideMosaicPreviewDraftDelivery` to choose the highest mutual exact version
+and withhold incompatible or oversized compact UTF-8 drafts before sending.
+
 ## Protocol and fallback guarantees
 
 - `MosaicProtocolDecoder` rejects unknown fields, components, versions,
   capabilities, invalid bounds, and inconsistent references atomically.
 - Semantic validation covers unique IDs, asset/product/action references,
-  exact capability derivation, and localization catalog consistency.
+  exact capability derivation, localization catalog consistency, switch
+  visibility references, carousel nesting, and countdown ordering.
 - The package contains no JSON Schema or fixture copy. Conformance tests read
-  `protocol/fixtures/v0.1/complete-paywall.json` and the Local Preview 0.1
-  fixtures directly.
+  the canonical Protocol and Local Preview 0.1/0.2 fixtures directly.
 - `MosaicPaywallLoader` resolves only local candidate → bundled fallback →
   `configurationUnavailable` in Phase 1.
 - A missing or undecodable bundled image uses the document's localized
@@ -161,6 +182,15 @@ errors or credentials.
   `Directionality`.
 - The renderer uses `SafeArea`, `SingleChildScrollView`, Material buttons,
   native text scaling, and Flutter semantics. It does not use a WebView.
+- Carousel uses native `PageView`, measures its pages to a stable maximum
+  height, and announces user-driven page changes. Switch uses native `Switch`.
+- Hidden conditional content is absent from layout, hit testing, and semantics
+  while retaining its runtime state; an accepted document revision resets all
+  Switch and Carousel state deterministically.
+- Countdown accepts an injected clock for deterministic hosts/tests, updates
+  from a non-blocking timer, and intentionally avoids a per-second live region.
+- Product Card selected styling recursively inherits every omitted default
+  leaf rather than replacing the complete style object.
 - Heading roles map to `Semantics.header`; RC1 heading levels are validated,
   while the supported Flutter semantics API exposes the heading role rather
   than the numeric level.

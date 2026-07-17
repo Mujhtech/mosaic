@@ -19,7 +19,7 @@ class CanonicalFixtureTest {
         assertEquals(20.0, document.layout.content.spacing, 0.0)
         assertEquals(MosaicHorizontalAlignment.STRETCH, document.layout.content.horizontalAlignment)
         assertEquals(
-            MosaicCapabilityName.entries.toSet(),
+            MosaicCapabilityCatalog.v01,
             document.compatibility.requiredCapabilities.map { it.name }.toSet(),
         )
         assertEquals(
@@ -53,13 +53,17 @@ class CanonicalFixtureTest {
     }
 
     @Test
-    fun capabilityReportDeclaresEveryExactRc1Capability() {
+    fun capabilityReportDeclaresExactProtocol01And02Capabilities() {
         val report = MosaicProtocolCapabilities.report("test-sdk")
 
         assertEquals("test-sdk", report.sdkVersion)
-        assertEquals(setOf("0.1"), report.supportedSchemaVersions)
+        assertEquals(setOf("0.1", "0.2"), report.supportedSchemaVersions)
         assertEquals(MosaicCapabilityName.entries.toSet(), report.supportedCapabilities.keys)
-        assertTrue(report.supportedCapabilities.values.all { it == "0.1" })
+        assertEquals(
+            MosaicCapabilityCatalog.v01.map { MosaicRequiredCapability(it, "0.1") }.toSet() +
+                MosaicCapabilityCatalog.v02.map { MosaicRequiredCapability(it, "0.2") }.toSet(),
+            report.supportedCapabilityVersions,
+        )
     }
 
     @Test

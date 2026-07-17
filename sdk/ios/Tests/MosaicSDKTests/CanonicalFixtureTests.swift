@@ -36,12 +36,16 @@ final class CanonicalFixtureTests: XCTestCase {
     XCTAssertEqual(document.localization.locales["ar"]?.direction, .rightToLeft)
     XCTAssertEqual(
       Set(document.compatibility.requiredCapabilities.map(\.name)),
-      Set(MosaicCapabilityName.allCases)
+      Set(MosaicCapabilityCatalog.v01)
     )
-    XCTAssertEqual(MosaicSDKCapabilityReport.current.supportedSchemaVersions, ["0.1"])
+    XCTAssertEqual(MosaicSDKCapabilityReport.current.supportedSchemaVersions, ["0.1", "0.2"])
     XCTAssertEqual(
-      Set(MosaicSDKCapabilityReport.current.capabilities.map(\.name)),
-      Set(MosaicCapabilityName.allCases)
+      Set(
+        MosaicSDKCapabilityReport.current.capabilities
+          .filter { $0.version == "0.1" }
+          .map(\.name)
+      ),
+      Set(MosaicCapabilityCatalog.v01)
     )
   }
 
@@ -63,9 +67,9 @@ final class CanonicalFixtureTests: XCTestCase {
 
   func testRejectsUnknownSchemaComponentAndPropertyAtomically() throws {
     var unsupportedVersion = try canonicalFixtureObject()
-    unsupportedVersion["schemaVersion"] = "0.2"
+    unsupportedVersion["schemaVersion"] = "9.9"
     XCTAssertThrowsError(try MosaicProtocolDecoder.decode(encoded(unsupportedVersion))) { error in
-      XCTAssertEqual(error as? MosaicProtocolError, .unsupportedSchemaVersion("0.2"))
+      XCTAssertEqual(error as? MosaicProtocolError, .unsupportedSchemaVersion("9.9"))
     }
 
     var unsupportedComponent = try canonicalFixtureObject()

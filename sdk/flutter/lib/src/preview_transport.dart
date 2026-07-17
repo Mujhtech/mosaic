@@ -13,6 +13,13 @@ abstract interface class MosaicPreviewSocket {
   Future<void> close();
 }
 
+/// Optional extension exposed by transports that can report the WebSocket
+/// subprotocol selected by the peer.
+abstract interface class MosaicNegotiatedPreviewSocket
+    implements MosaicPreviewSocket {
+  String? get selectedProtocol;
+}
+
 /// Opens WebSockets for the local-preview client.
 abstract interface class MosaicPreviewSocketConnector {
   Future<MosaicPreviewSocket> connect(
@@ -39,10 +46,13 @@ final class MosaicIoPreviewSocketConnector
   }
 }
 
-final class _MosaicIoPreviewSocket implements MosaicPreviewSocket {
+final class _MosaicIoPreviewSocket implements MosaicNegotiatedPreviewSocket {
   const _MosaicIoPreviewSocket(this._socket);
 
   final WebSocket _socket;
+
+  @override
+  String? get selectedProtocol => _socket.protocol;
 
   @override
   Stream<Object?> get messages => _socket;

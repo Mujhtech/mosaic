@@ -436,7 +436,7 @@ class MosaicLocalPreviewEngine(
             )
 
         val schemaVersion = root.stringProperty("schemaVersion")
-        if (schemaVersion != MOSAIC_PROTOCOL_VERSION ||
+        if (schemaVersion !in MOSAIC_SUPPORTED_PROTOCOL_VERSIONS ||
             schemaVersion !in capabilityReport.supportedSchemaVersions
         ) {
             val diagnostic = validationDiagnostic(
@@ -493,7 +493,10 @@ class MosaicLocalPreviewEngine(
                 problemKind = MosaicPreviewProblemKind.UNSUPPORTED_COMPONENT,
                 warning = blockingWarning(
                     diagnostic,
-                    MosaicPreviewSupportedCapability("component.${issue.type}", MOSAIC_PROTOCOL_VERSION),
+                    MosaicPreviewSupportedCapability(
+                        "component.${issue.type}",
+                        schemaVersion ?: MOSAIC_LATEST_PROTOCOL_VERSION,
+                    ),
                     MosaicPreviewRecoveryActionName.REMOVE_COMPONENT,
                 ),
             )
@@ -535,7 +538,7 @@ class MosaicLocalPreviewEngine(
                         message = when (code) {
                             "validation.unknownProperty" -> "The document contains an unsupported property."
                             "validation.invalidReference" -> "The component references an undeclared item."
-                            else -> "The paywall document does not satisfy Protocol 0.1."
+                            else -> "The paywall document does not satisfy its declared Mosaic Protocol."
                         },
                         pointer = pointer,
                         componentId = location.componentId,
@@ -568,13 +571,14 @@ class MosaicLocalPreviewEngine(
     private fun findUnsupportedCapability(root: JsonObject): CapabilityIssue? {
         val values = root.getAsJsonObject("compatibility")
             ?.getAsJsonArray("requiredCapabilities") ?: return null
-        val supported = capabilityReport.supportedCapabilities.mapKeys { it.key.wireName }
         values.forEachIndexed { index, value ->
             val item = value.takeIf(JsonElement::isJsonObject)?.asJsonObject ?: return@forEachIndexed
             val name = item.stringProperty("name") ?: return@forEachIndexed
             val version = item.stringProperty("version") ?: return@forEachIndexed
             val capabilityName = MosaicCapabilityName.entries.firstOrNull { it.wireName == name }
-            if (capabilityName == null || supported[name] != version) {
+            if (capabilityName == null ||
+                !capabilityReport.supports(MosaicRequiredCapability(capabilityName, version))
+            ) {
                 return CapabilityIssue(name, version, "/compatibility/requiredCapabilities/$index/name")
             }
         }
@@ -584,6 +588,7 @@ class MosaicLocalPreviewEngine(
     private data class ComponentIssue(val type: String, val componentId: String?, val pointer: String)
     private val supportedComponentTypes = setOf(
         "verticalStack",
+        "stack",
         "text",
         "image",
         "featureList",
@@ -592,6 +597,9 @@ class MosaicLocalPreviewEngine(
         "restoreButton",
         "closeButton",
         "legalText",
+        "carousel",
+        "switch",
+        "countdown",
     )
 
     private fun findUnknownComponent(root: JsonObject): ComponentIssue? {
@@ -601,9 +609,17 @@ class MosaicLocalPreviewEngine(
             if (type !in supportedComponentTypes) {
                 return ComponentIssue(type, node.stringProperty("id"), "$pointer/type")
             }
-            if (type == "verticalStack") {
+            if (type == "verticalStack" || type == "stack") {
                 node.getAsJsonArray("children")?.forEachIndexed { index, child ->
                     if (child.isJsonObject) walk(child.asJsonObject, "$pointer/children/$index")?.let { return it }
+                }
+            } else if (type == "carousel") {
+                node.getAsJsonArray("pages")?.forEachIndexed { index, page ->
+                    if (page.isJsonObject) {
+                        page.asJsonObject.getAsJsonObject("content")?.let { content ->
+                            walk(content, "$pointer/pages/$index/content")?.let { return it }
+                        }
+                    }
                 }
             }
             return null
@@ -633,9 +649,15 @@ class MosaicLocalPreviewEngine(
             if (node.stringProperty("type") == "productSelector") {
                 node.stringProperty("id")?.let(selectorIds::add)
             }
-            if (node.stringProperty("type") == "verticalStack") {
+            if (node.stringProperty("type") in setOf("verticalStack", "stack")) {
                 node.getAsJsonArray("children")?.forEachIndexed { index, child ->
                     if (child.isJsonObject) collect(child.asJsonObject, "$pointer/children/$index")
+                }
+            } else if (node.stringProperty("type") == "carousel") {
+                node.getAsJsonArray("pages")?.forEachIndexed { index, page ->
+                    page.takeIf(JsonElement::isJsonObject)?.asJsonObject
+                        ?.getAsJsonObject("content")
+                        ?.let { collect(it, "$pointer/pages/$index/content") }
                 }
             }
         }
@@ -706,11 +728,18 @@ class MosaicLocalPreviewEngine(
     }
 
     private fun componentPointer(document: MosaicPaywallDocument, componentId: String): String {
-        fun walk(stack: MosaicVerticalStack, pointer: String): String? {
+        fun walk(stack: MosaicStack, pointer: String): String? {
             stack.children.forEachIndexed { index, node ->
                 val childPointer = "$pointer/children/$index"
                 if (node.id == componentId) return childPointer
-                if (node is MosaicVerticalStack) walk(node, childPointer)?.let { return it }
+                when (node) {
+                    is MosaicStack -> walk(node, childPointer)?.let { return it }
+                    is MosaicCarouselComponent -> node.pages.forEachIndexed { pageIndex, page ->
+                        if (page.id == componentId) return "$childPointer/pages/$pageIndex"
+                        walk(page.content, "$childPointer/pages/$pageIndex/content")?.let { return it }
+                    }
+                    else -> Unit
+                }
             }
             return null
         }

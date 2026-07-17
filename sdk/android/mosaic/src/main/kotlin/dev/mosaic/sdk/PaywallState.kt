@@ -20,10 +20,18 @@ class MosaicPaywallState(
     val document: MosaicPaywallDocument,
     private val purchaseProvider: MosaicPurchaseProvider,
     private val diagnostics: MosaicDiagnosticSink = MosaicDiagnosticSink.None,
+    private val clock: () -> Long = System::currentTimeMillis,
 ) {
-    private val selectors = document.layout.content.walkDepthFirst()
+    private val allNodes = document.layout.content.walkDepthFirst().toList()
+    private val selectors = allNodes
         .filterIsInstance<MosaicProductSelectorComponent>()
         .associateBy(MosaicProductSelectorComponent::id)
+    private val switches = allNodes
+        .filterIsInstance<MosaicSwitchComponent>()
+        .associateBy(MosaicSwitchComponent::id)
+    private val carousels = allNodes
+        .filterIsInstance<MosaicCarouselComponent>()
+        .associateBy(MosaicCarouselComponent::id)
     private val productReferences = document.products.associateBy(MosaicProductReference::id)
 
     var selectorStates: Map<String, MosaicProductSelectorState> by mutableStateOf(
@@ -38,6 +46,42 @@ class MosaicPaywallState(
 
     var isRestoreBusy: Boolean by mutableStateOf(false)
         private set
+
+    var switchValues: Map<String, Boolean> by mutableStateOf(
+        switches.mapValues { (_, component) -> component.initialValue },
+    )
+        private set
+
+    var carouselPageIndices: Map<String, Int> by mutableStateOf(
+        carousels.mapValues { (_, component) -> component.initialPageIndex },
+    )
+        private set
+
+    fun switchValue(switchId: String): Boolean = switchValues[switchId] ?: false
+
+    fun setSwitchValue(switchId: String, value: Boolean) {
+        if (switchId !in switches) return
+        switchValues = switchValues + (switchId to value)
+    }
+
+    fun carouselPageIndex(carouselId: String): Int = carouselPageIndices[carouselId] ?: 0
+
+    fun setCarouselPageIndex(carouselId: String, index: Int) {
+        val carousel = carousels[carouselId] ?: return
+        if (index !in carousel.pages.indices) return
+        carouselPageIndices = carouselPageIndices + (carouselId to index)
+    }
+
+    fun isVisible(visibility: MosaicVisibility): Boolean = when (visibility) {
+        MosaicVisibility.Always -> true
+        MosaicVisibility.Hidden -> false
+        is MosaicVisibility.SwitchValue -> switchValue(visibility.switchId) == visibility.equals
+    }
+
+    fun isNodeVisible(nodeId: String): Boolean =
+        document.layout.content.findVisibility(nodeId, ancestorsVisible = true, ::isVisible) ?: false
+
+    fun currentTimeMillis(): Long = clock()
 
     suspend fun loadProducts(): List<MosaicPaywallEvent> {
         val providerIds = document.products.map(MosaicProductReference::providerProductId)
@@ -97,6 +141,13 @@ class MosaicPaywallState(
     }
 
     suspend fun purchase(selectorId: String): MosaicPaywallEvent {
+        if (!isNodeVisible(selectorId)) {
+            val unavailableReferenceId = selectors[selectorId]?.initiallySelectedProductReferenceId
+            return MosaicPaywallEvent(
+                interaction = MosaicInteractionOutcome.ProductUnavailable(unavailableReferenceId),
+                presentationResult = MosaicPresentationResult.ProductUnavailable(unavailableReferenceId),
+            )
+        }
         val selectorState = selectorStates[selectorId]
         val selectedReferenceId = selectorState?.selectedProductReferenceId
         val unavailableReferenceId = selectedReferenceId
@@ -216,4 +267,41 @@ class MosaicPaywallState(
         interaction = MosaicInteractionOutcome.Dismissed,
         presentationResult = MosaicPresentationResult.Dismissed,
     )
+}
+
+private fun MosaicStack.findVisibility(
+    targetId: String,
+    ancestorsVisible: Boolean,
+    visible: (MosaicVisibility) -> Boolean,
+): Boolean? {
+    val stackVisible = ancestorsVisible && visible(visibility)
+    if (id == targetId) return stackVisible
+    children.forEach { node ->
+        val nodeVisible = stackVisible && visible(node.visibilityOrAlways())
+        if (node.id == targetId) return nodeVisible
+        when (node) {
+            is MosaicStack -> node.findVisibility(targetId, stackVisible, visible)?.let { return it }
+            is MosaicCarouselComponent -> node.pages.forEach { page ->
+                if (page.id == targetId) return nodeVisible
+                page.content.findVisibility(targetId, nodeVisible, visible)?.let { return it }
+            }
+            else -> Unit
+        }
+    }
+    return null
+}
+
+internal fun MosaicNode.visibilityOrAlways(): MosaicVisibility = when (this) {
+    is MosaicStack -> visibility
+    is MosaicTextComponent -> visibility
+    is MosaicImageComponent -> visibility
+    is MosaicFeatureListComponent -> visibility
+    is MosaicProductSelectorComponent -> visibility
+    is MosaicPurchaseButtonComponent -> visibility
+    is MosaicRestoreButtonComponent -> visibility
+    is MosaicCloseButtonComponent -> visibility
+    is MosaicLegalTextComponent -> visibility
+    is MosaicCarouselComponent -> visibility
+    is MosaicSwitchComponent -> visibility
+    is MosaicCountdownComponent -> visibility
 }

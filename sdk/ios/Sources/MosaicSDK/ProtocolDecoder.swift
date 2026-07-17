@@ -20,7 +20,7 @@ public enum MosaicProtocolError: Error, Sendable, Equatable {
   }
 }
 
-/// A closed, atomic reader for Mosaic Protocol 0.1 RC1.
+/// A closed, atomic reader for every supported Mosaic protocol version.
 ///
 /// This code validates the native model boundary; it is not a platform-owned
 /// copy of the canonical JSON Schema. The repository schema remains the source
@@ -41,20 +41,39 @@ public enum MosaicProtocolDecoder {
         reason: "expected_string"
       )
     }
-    guard schemaVersion == mosaicProtocolVersion else {
+    guard mosaicSupportedProtocolVersions.contains(schemaVersion) else {
       throw MosaicProtocolError.unsupportedSchemaVersion(schemaVersion)
     }
 
-    try MosaicProtocolShape.validate(root)
+    switch schemaVersion {
+    case mosaicProtocolVersion:
+      try MosaicProtocolShape.validate(root)
+    case mosaicProtocolVersionV02:
+      try MosaicProtocolV02Shape.validate(root)
+    default:
+      throw MosaicProtocolError.unsupportedSchemaVersion(schemaVersion)
+    }
 
     let document: MosaicPaywallDocument
     do {
       document = try JSONDecoder().decode(MosaicPaywallDocument.self, from: data)
+    } catch let error as DecodingError {
+      throw MosaicProtocolError.invalidShape(
+        path: decodingPath(for: error),
+        reason: decodingReason(for: error)
+      )
     } catch {
       throw MosaicProtocolError.invalidShape(path: "$", reason: "type_or_enum_mismatch")
     }
 
-    try MosaicProtocolSemantics.validate(document)
+    switch schemaVersion {
+    case mosaicProtocolVersion:
+      try MosaicProtocolSemantics.validate(document)
+    case mosaicProtocolVersionV02:
+      try MosaicProtocolV02Semantics.validate(document)
+    default:
+      throw MosaicProtocolError.unsupportedSchemaVersion(schemaVersion)
+    }
     return document
   }
 
@@ -63,6 +82,31 @@ public enum MosaicProtocolDecoder {
       throw MosaicProtocolError.invalidJSON
     }
     return try decode(data)
+  }
+}
+
+private func decodingPath(for error: DecodingError) -> String {
+  let codingPath: [any CodingKey]
+  switch error {
+  case .dataCorrupted(let context), .keyNotFound(_, let context),
+    .typeMismatch(_, let context), .valueNotFound(_, let context):
+    codingPath = context.codingPath
+  @unknown default:
+    return "$"
+  }
+  return codingPath.reduce("$") { path, key in
+    if let index = key.intValue { return "\(path)[\(index)]" }
+    return "\(path).\(key.stringValue)"
+  }
+}
+
+private func decodingReason(for error: DecodingError) -> String {
+  switch error {
+  case .dataCorrupted: "data_corrupted"
+  case .keyNotFound(let key, _): "missing_\(key.stringValue)"
+  case .typeMismatch: "type_mismatch"
+  case .valueNotFound: "missing_value"
+  @unknown default: "type_or_enum_mismatch"
   }
 }
 
@@ -523,9 +567,10 @@ private enum MosaicProtocolSemantics {
         try layoutID(component.id)
         capabilities.insert(.image)
         try identifier(component.assetId)
-        guard component.aspectRatio.isFinite,
-          component.aspectRatio > 0,
-          component.aspectRatio <= 10
+        guard let aspectRatio = component.aspectRatio,
+          aspectRatio.isFinite,
+          aspectRatio > 0,
+          aspectRatio <= 10
         else {
           throw violation("protocol_invalid_image_aspect_ratio")
         }
@@ -611,6 +656,8 @@ private enum MosaicProtocolSemantics {
         capabilities.insert(.legalText)
         localizedTexts.append(component.value)
         try textAccessibility(component.accessibility)
+      case .stack, .carousel, .switchControl, .countdown:
+        throw violation("protocol_0_2_node_in_0_1_document")
       }
     }
 
@@ -664,7 +711,7 @@ private enum MosaicProtocolSemantics {
   }
 
   private static func textAccessibility(_ value: MosaicTextAccessibility) throws {
-    if case .heading(let level) = value, !(1...6).contains(level) {
+    if let level = value.headingLevel, !(1...6).contains(level) {
       throw violation("protocol_invalid_heading_level")
     }
   }

@@ -9,7 +9,7 @@ import com.google.gson.JsonParser
 import java.math.BigDecimal
 
 /**
- * Strict, hand-written reader for Mosaic Protocol 0.1 RC1.
+ * Strict, hand-written reader for Mosaic Protocol 0.1 and dispatcher for Protocol 0.2.
  *
  * JSON Schema remains canonical in `protocol/`; this SDK deliberately does not maintain a schema
  * copy. The reader mirrors RC1's closed wire contract and enforces its cross-field semantics before
@@ -38,9 +38,15 @@ object MosaicProtocolDecoder {
         }
 
         val schemaVersion = root.requiredString("schemaVersion", "$.schemaVersion")
-        if (schemaVersion != MOSAIC_PROTOCOL_VERSION ||
-            schemaVersion !in capabilityReport.supportedSchemaVersions
-        ) {
+        if (schemaVersion == MOSAIC_PROTOCOL_VERSION_V02) {
+            if (schemaVersion !in capabilityReport.supportedSchemaVersions) {
+                throw MosaicProtocolException(
+                    "Unsupported schemaVersion $schemaVersion at $.schemaVersion.",
+                )
+            }
+            return MosaicProtocolV02Decoder.decode(source, capabilityReport)
+        }
+        if (schemaVersion != MOSAIC_PROTOCOL_VERSION || schemaVersion !in capabilityReport.supportedSchemaVersions) {
             throw MosaicProtocolException(
                 "Unsupported schemaVersion $schemaVersion at $.schemaVersion.",
             )
@@ -100,9 +106,8 @@ object MosaicProtocolDecoder {
                 ?: throw MosaicProtocolException(
                     "Unsupported capability $wireName@$version at $capabilityPath.",
                 )
-            if (version != MOSAIC_PROTOCOL_VERSION ||
-                capabilityReport.supportedCapabilities[name] != version
-            ) {
+            val required = MosaicRequiredCapability(name, version)
+            if (version != MOSAIC_PROTOCOL_VERSION || !capabilityReport.supports(required)) {
                 throw MosaicProtocolException(
                     "Unsupported capability $wireName@$version at $capabilityPath.",
                 )
@@ -112,7 +117,7 @@ object MosaicProtocolDecoder {
                     "Duplicate capability $wireName@$version at $capabilityPath.",
                 )
             }
-            MosaicRequiredCapability(name, version)
+            required
         }
         return MosaicDocumentCompatibility(capabilities)
     }
@@ -227,9 +232,11 @@ object MosaicProtocolDecoder {
         val children = objectValue.required("children", path).nonEmptyArrayAt("$path.children")
         return MosaicVerticalStack(
             id = objectValue.requiredIdentifier("id", "$path.id"),
-            spacing = objectValue.requiredLogicalSize("spacing", "$path.spacing"),
+            direction = MosaicStackDirection.VERTICAL,
+            gap = objectValue.requiredLogicalSize("spacing", "$path.spacing"),
             padding = edgeInsets(objectValue.required("padding", path), "$path.padding"),
-            horizontalAlignment = when (
+            mainAxisDistribution = MosaicMainAxisDistribution.START,
+            crossAxisAlignment = when (
                 objectValue.requiredString("horizontalAlignment", "$path.horizontalAlignment")
             ) {
                 "start" -> MosaicHorizontalAlignment.START
@@ -241,6 +248,7 @@ object MosaicProtocolDecoder {
                 )
             },
             children = children.mapIndexed { index, child -> node(child, "$path.children[$index]") },
+            type = "verticalStack",
         )
     }
 
@@ -276,13 +284,15 @@ object MosaicProtocolDecoder {
         return MosaicTextComponent(
             id = objectValue.requiredIdentifier("id", "$path.id"),
             value = localizedText(objectValue.required("value", path), "$path.value"),
-            style = when (objectValue.requiredString("style", "$path.style")) {
+            typography = MosaicTypography.legacy(
+                style = when (objectValue.requiredString("style", "$path.style")) {
                 "title" -> MosaicTextStyle.TITLE
                 "body" -> MosaicTextStyle.BODY
                 "caption" -> MosaicTextStyle.CAPTION
                 else -> throw MosaicProtocolException("Invalid text style at $path.style.")
-            },
-            alignment = textAlignment(objectValue, "alignment", "$path.alignment"),
+                },
+                alignment = textAlignment(objectValue, "alignment", "$path.alignment"),
+            ),
             accessibility = textAccessibility(
                 objectValue.required("accessibility", path),
                 "$path.accessibility",
@@ -299,6 +309,7 @@ object MosaicProtocolDecoder {
         return MosaicImageComponent(
             id = objectValue.requiredIdentifier("id", "$path.id"),
             assetId = objectValue.requiredIdentifier("assetId", "$path.assetId"),
+            width = MosaicWidthSizing.Fill,
             aspectRatio = objectValue.requiredNumber(
                 "aspectRatio",
                 "$path.aspectRatio",
@@ -306,6 +317,7 @@ object MosaicProtocolDecoder {
                 maximum = BigDecimal.TEN,
                 exclusiveMinimum = true,
             ),
+            height = null,
             contentMode = when (objectValue.requiredString("contentMode", "$path.contentMode")) {
                 "fit" -> MosaicImageContentMode.FIT
                 "fill" -> MosaicImageContentMode.FILL
@@ -327,8 +339,14 @@ object MosaicProtocolDecoder {
         val items = objectValue.required("items", path).nonEmptyArrayAt("$path.items")
         return MosaicFeatureListComponent(
             id = objectValue.requiredIdentifier("id", "$path.id"),
-            itemSpacing = objectValue.requiredLogicalSize("itemSpacing", "$path.itemSpacing"),
+            marker = MosaicFeatureMarker.CHECKMARK,
+            gap = objectValue.requiredLogicalSize("itemSpacing", "$path.itemSpacing"),
+            markerColor = MosaicColor.semantic(MosaicSemanticColor.ACTION_PRIMARY),
             items = items.mapIndexed { index, item -> featureListItem(item, "$path.items[$index]") },
+            typography = MosaicTypography.legacy(
+                MosaicTypographyStyle.BODY,
+                MosaicTextAlignment.START,
+            ),
             accessibility = controlAccessibility(
                 objectValue.required("accessibility", path),
                 "$path.accessibility",
@@ -382,7 +400,9 @@ object MosaicProtocolDecoder {
                 "initiallySelectedProductReferenceId",
                 "$path.initiallySelectedProductReferenceId",
             ),
-            itemSpacing = objectValue.requiredLogicalSize("itemSpacing", "$path.itemSpacing"),
+            direction = MosaicStackDirection.VERTICAL,
+            gap = objectValue.requiredLogicalSize("itemSpacing", "$path.itemSpacing"),
+            cardStyles = MosaicProductCardStyles.Legacy,
             unavailableFallback = MosaicUnavailableProductFallback(
                 localizedText(fallback.required("message", fallbackPath), "$fallbackPath.message"),
             ),
@@ -408,6 +428,10 @@ object MosaicProtocolDecoder {
                 objectValue.required("inProgressLabel", path),
                 "$path.inProgressLabel",
             ),
+            typography = MosaicTypography.legacy(
+                MosaicTypographyStyle.LABEL,
+                MosaicTextAlignment.CENTER,
+            ),
             action = purchaseAction(objectValue.required("action", path), "$path.action"),
             accessibility = controlAccessibility(
                 objectValue.required("accessibility", path),
@@ -431,6 +455,10 @@ object MosaicProtocolDecoder {
                 objectValue.required("inProgressLabel", path),
                 "$path.inProgressLabel",
             ),
+            typography = MosaicTypography.legacy(
+                MosaicTypographyStyle.LABEL,
+                MosaicTextAlignment.CENTER,
+            ),
             action = restoreAction(objectValue.required("action", path), "$path.action"),
             accessibility = controlAccessibility(
                 objectValue.required("accessibility", path),
@@ -444,6 +472,10 @@ object MosaicProtocolDecoder {
         return MosaicCloseButtonComponent(
             id = objectValue.requiredIdentifier("id", "$path.id"),
             label = localizedText(objectValue.required("label", path), "$path.label"),
+            typography = MosaicTypography.legacy(
+                MosaicTypographyStyle.LABEL,
+                MosaicTextAlignment.CENTER,
+            ),
             action = closeAction(objectValue.required("action", path), "$path.action"),
             accessibility = controlAccessibility(
                 objectValue.required("accessibility", path),
@@ -460,7 +492,10 @@ object MosaicProtocolDecoder {
         return MosaicLegalTextComponent(
             id = objectValue.requiredIdentifier("id", "$path.id"),
             value = localizedText(objectValue.required("value", path), "$path.value"),
-            alignment = textAlignment(objectValue, "alignment", "$path.alignment"),
+            typography = MosaicTypography.legacy(
+                MosaicTypographyStyle.CAPTION,
+                textAlignment(objectValue, "alignment", "$path.alignment"),
+            ),
             accessibility = textAccessibility(
                 objectValue.required("accessibility", path),
                 "$path.accessibility",
@@ -636,7 +671,10 @@ object MosaicProtocolDecoder {
             throw MosaicProtocolException("Capability declarations do not match document content.")
         }
         declared.forEach { capability ->
-            if (capabilityReport.supportedCapabilities[capability] != MOSAIC_PROTOCOL_VERSION) {
+            if (!capabilityReport.supports(
+                    MosaicRequiredCapability(capability, MOSAIC_PROTOCOL_VERSION),
+                )
+            ) {
                 throw MosaicProtocolException("The Android SDK does not support ${capability.wireName}@0.1.")
             }
         }
@@ -683,6 +721,11 @@ object MosaicProtocolDecoder {
                         addControlAccessibility(node.accessibility)
                     }
                     is MosaicLegalTextComponent -> add(node.value)
+                    is MosaicCarouselComponent,
+                    is MosaicSwitchComponent,
+                    is MosaicCountdownComponent -> throw MosaicProtocolException(
+                        "Protocol 0.2 component in a Protocol 0.1 document.",
+                    )
                 }
             }
         }
@@ -754,6 +797,11 @@ object MosaicProtocolDecoder {
                     add(MosaicCapabilityName.CLOSE_ACTION)
                 }
                 is MosaicLegalTextComponent -> add(MosaicCapabilityName.LEGAL_TEXT)
+                is MosaicCarouselComponent,
+                is MosaicSwitchComponent,
+                is MosaicCountdownComponent -> throw MosaicProtocolException(
+                    "Protocol 0.2 component in a Protocol 0.1 document.",
+                )
             }
             if (node !is MosaicVerticalStack) add(MosaicCapabilityName.ACCESSIBILITY_METADATA)
         }

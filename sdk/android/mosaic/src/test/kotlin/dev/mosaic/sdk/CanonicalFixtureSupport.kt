@@ -33,6 +33,11 @@ internal fun findNode(root: JsonObject, id: String): JsonObject {
         objectValue.getAsJsonObject("content")?.let { content ->
             find(content)?.let { return it }
         }
+        objectValue.getAsJsonArray("pages")?.forEach { page ->
+            page.takeIf(JsonElement::isJsonObject)?.asJsonObject
+                ?.getAsJsonObject("content")
+                ?.let { content -> find(content)?.let { return it } }
+        }
         return null
     }
     return checkNotNull(find(root.getAsJsonObject("layout"))) { "Missing node $id." }

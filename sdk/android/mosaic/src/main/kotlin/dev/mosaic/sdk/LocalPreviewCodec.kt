@@ -7,7 +7,7 @@ import com.google.gson.JsonParseException
 import com.google.gson.JsonParser
 import java.math.BigDecimal
 
-/** Strict JSON reader/writer for the frozen, platform-neutral Local Preview 0.1 contract. */
+/** Strict JSON reader/writer for exact Local Preview 0.1 or 0.2 sessions. */
 object MosaicLocalPreviewCodec {
     private val messageIdPattern = Regex("^msg_[A-Za-z0-9][A-Za-z0-9_-]*$")
     private val sessionIdPattern = Regex("^session_[A-Za-z0-9][A-Za-z0-9_-]*$")
@@ -27,7 +27,11 @@ object MosaicLocalPreviewCodec {
     private val propertyPattern = Regex("^[A-Za-z][A-Za-z0-9]*$")
     private val currencyPattern = Regex("^[A-Z]{3}$")
 
-    fun decode(source: String): MosaicPreviewMessage {
+    fun decode(
+        source: String,
+        expectedVersion: String = MOSAIC_LOCAL_PREVIEW_VERSION,
+    ): MosaicPreviewMessage {
+        requireSupportedVersion(expectedVersion)
         if (source.toByteArray(Charsets.UTF_8).size > MOSAIC_LOCAL_PREVIEW_MAX_FRAME_BYTES) {
             throw MosaicPreviewCodecException("The preview frame exceeds the 2 MiB limit.")
         }
@@ -45,7 +49,7 @@ object MosaicLocalPreviewCodec {
             "$",
         )
         val version = root.requiredString("previewProtocolVersion", "$.previewProtocolVersion")
-        if (version != MOSAIC_LOCAL_PREVIEW_VERSION) {
+        if (version != expectedVersion) {
             throw MosaicPreviewCodecException("Unsupported local preview protocol version.")
         }
         val messageId = root.requiredPatternString(
@@ -73,7 +77,7 @@ object MosaicLocalPreviewCodec {
         val type = MosaicPreviewMessageType.fromWireName(typeValue)
             ?: throw MosaicPreviewCodecException("Unknown preview message type at $.type.")
         val payloadObject = root.required("payload", "$").objectAt("$.payload")
-        val payload = decodePayload(type, payloadObject)
+        val payload = decodePayload(type, payloadObject, expectedVersion)
         return MosaicPreviewMessage(
             messageId = messageId,
             sessionId = sessionId,
@@ -83,8 +87,12 @@ object MosaicLocalPreviewCodec {
         )
     }
 
-    fun encode(message: MosaicPreviewMessage): String {
-        if (message.previewProtocolVersion != MOSAIC_LOCAL_PREVIEW_VERSION) {
+    fun encode(
+        message: MosaicPreviewMessage,
+        expectedVersion: String = MOSAIC_LOCAL_PREVIEW_VERSION,
+    ): String {
+        requireSupportedVersion(expectedVersion)
+        if (message.previewProtocolVersion != expectedVersion) {
             throw MosaicPreviewCodecException("Unsupported local preview protocol version.")
         }
         val root = JsonObject().apply {
@@ -96,16 +104,17 @@ object MosaicLocalPreviewCodec {
             add("payload", encodePayload(message.payload))
         }
         // Re-run the strict reader so callers cannot emit an invalid local-preview frame.
-        return root.toString().also(::decode)
+        return root.toString().also { decode(it, expectedVersion) }
     }
 
     private fun decodePayload(
         type: MosaicPreviewMessageType,
         payload: JsonObject,
+        expectedVersion: String,
     ): MosaicPreviewPayload = when (type) {
         MosaicPreviewMessageType.CLIENT_CONNECTED -> decodeClientConnected(payload)
         MosaicPreviewMessageType.CLIENT_DISCONNECTED -> decodeClientDisconnected(payload)
-        MosaicPreviewMessageType.CAPABILITY_REPORT -> decodeCapabilityReport(payload)
+        MosaicPreviewMessageType.CAPABILITY_REPORT -> decodeCapabilityReport(payload, expectedVersion)
         MosaicPreviewMessageType.DRAFT_UPDATED -> decodeDraftUpdated(payload)
         MosaicPreviewMessageType.DRAFT_ACCEPTED -> decodeDraftAccepted(payload)
         MosaicPreviewMessageType.DRAFT_REJECTED -> decodeDraftRejected(payload)
@@ -138,7 +147,10 @@ object MosaicLocalPreviewCodec {
         )
     }
 
-    private fun decodeCapabilityReport(payload: JsonObject): MosaicPreviewCapabilityReportPayload {
+    private fun decodeCapabilityReport(
+        payload: JsonObject,
+        expectedVersion: String,
+    ): MosaicPreviewCapabilityReportPayload {
         payload.expectKeys(
             setOf(
                 "clientId",
@@ -172,7 +184,7 @@ object MosaicLocalPreviewCodec {
                 val name = MosaicPreviewCapabilityName.entries.firstOrNull { it.wireName == nameValue }
                     ?: throw MosaicPreviewCodecException("Unknown preview capability at $path.name.")
                 val version = objectValue.requiredString("version", "$path.version")
-                if (version != MOSAIC_LOCAL_PREVIEW_VERSION) {
+                if (version != expectedVersion) {
                     throw MosaicPreviewCodecException("Unsupported preview capability version at $path.version.")
                 }
                 MosaicPreviewCapability(name, version)
@@ -190,6 +202,12 @@ object MosaicLocalPreviewCodec {
                 limits.requiredInteger("maxDocumentBytes", "$limitsPath.maxDocumentBytes", 65_536..2_097_152),
             ),
         )
+    }
+
+    private fun requireSupportedVersion(version: String) {
+        if (version != MOSAIC_LOCAL_PREVIEW_VERSION && version != MOSAIC_LOCAL_PREVIEW_VERSION_V02) {
+            throw MosaicPreviewCodecException("Unsupported local preview protocol version.")
+        }
     }
 
     private fun decodeDraftUpdated(payload: JsonObject): MosaicPreviewDraftUpdatedPayload {

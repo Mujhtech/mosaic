@@ -406,7 +406,11 @@ final class LocalPreviewClientTests: XCTestCase {
       sessionId: sessionId,
       identity: previewTestIdentity()
     )
-    let client = MosaicLocalPreviewClient(configuration: configuration)
+    let client = MosaicLocalPreviewClient(
+      configuration: configuration,
+      codec: MosaicPreviewMessageCodec(protocolVersion: mosaicLocalPreviewProtocolVersion),
+      fallbackProtocolVersions: []
+    )
     client.connect()
 
     var handshakeTypes: [String] = []
@@ -471,6 +475,8 @@ final class LocalPreviewClientTests: XCTestCase {
     return MosaicLocalPreviewClient(
       configuration: configuration,
       connector: connector,
+      codec: MosaicPreviewMessageCodec(protocolVersion: mosaicLocalPreviewProtocolVersion),
+      fallbackProtocolVersions: [],
       delay: delay
     )
   }

@@ -10,6 +10,12 @@ import 'preview_transport.dart';
 import 'protocol.dart';
 
 const String mosaicLocalPreviewWebSocketProtocol = 'mosaic.local-preview.v0.1';
+const String mosaicLocalPreviewV02WebSocketProtocol =
+    'mosaic.local-preview.v0.2';
+const List<String> mosaicLocalPreviewWebSocketProtocols = <String>[
+  mosaicLocalPreviewV02WebSocketProtocol,
+  mosaicLocalPreviewWebSocketProtocol,
+];
 
 enum MosaicPreviewConnectionStatus {
   disconnected,
@@ -189,6 +195,7 @@ final class MosaicPreviewClient extends ChangeNotifier {
   var _heartbeatSequence = 0;
   var _shouldReconnect = false;
   var _disposed = false;
+  var _negotiatedPreviewVersion = mosaicLocalPreviewProtocolVersion;
   DateTime? _lastInboundAt;
   DateTime? _lastTrafficAt;
 
@@ -205,6 +212,8 @@ final class MosaicPreviewClient extends ChangeNotifier {
   MosaicPreviewDraftIssue? _draftIssue;
 
   MosaicPreviewConnectionStatus get connectionStatus => _connectionStatus;
+
+  String get negotiatedPreviewVersion => _negotiatedPreviewVersion;
 
   int get reconnectAttempt => _reconnectAttempt;
 
@@ -402,13 +411,35 @@ final class MosaicPreviewClient extends ChangeNotifier {
     try {
       final socket = await _connector.connect(
         configuration.endpoint,
-        protocols: const <String>[mosaicLocalPreviewWebSocketProtocol],
+        protocols: mosaicLocalPreviewWebSocketProtocols,
       );
       if (!_shouldReconnect || generation != _lifecycleGeneration) {
         await socket.close();
         return;
       }
       _socket = socket;
+      final reportsNegotiation = socket is MosaicNegotiatedPreviewSocket;
+      final selected = reportsNegotiation ? socket.selectedProtocol : null;
+      if (reportsNegotiation &&
+          selected != mosaicLocalPreviewV02WebSocketProtocol &&
+          selected != mosaicLocalPreviewWebSocketProtocol) {
+        _socket = null;
+        _shouldReconnect = false;
+        await _closeBestEffort(socket);
+        _setConnectionStatus(MosaicPreviewConnectionStatus.disconnected);
+        _emitConnectionDiagnostic(
+          'preview.noMutualVersion',
+          'Studio and the preview client have no mutually supported Local Preview version.',
+        );
+        return;
+      }
+      _negotiatedPreviewVersion = switch (selected) {
+        mosaicLocalPreviewV02WebSocketProtocol =>
+          mosaicLocalPreviewV02ProtocolVersion,
+        mosaicLocalPreviewWebSocketProtocol =>
+          mosaicLocalPreviewProtocolVersion,
+        _ => mosaicLocalPreviewProtocolVersion,
+      };
       _lastInboundAt = _clock();
       _lastTrafficAt = _lastInboundAt;
       _reconnectAttempt = 0;
@@ -425,7 +456,10 @@ final class MosaicPreviewClient extends ChangeNotifier {
       );
       _send(
         'capabilityReport',
-        mosaicFlutterCapabilityPayload(configuration.identity.clientId),
+        mosaicFlutterCapabilityPayload(
+          configuration.identity.clientId,
+          previewProtocolVersion: _negotiatedPreviewVersion,
+        ),
       );
       _startHeartbeat(socket, generation);
     } on Object {
@@ -464,6 +498,7 @@ final class MosaicPreviewClient extends ChangeNotifier {
       decoded = _codec.decode(
         frame,
         expectedSessionId: configuration.sessionId,
+        expectedProtocolVersion: _negotiatedPreviewVersion,
       );
     } on Object {
       _emitConnectionDiagnostic(
@@ -573,6 +608,25 @@ final class MosaicPreviewClient extends ChangeNotifier {
 
     try {
       final document = _decoder.decode(source);
+      if (document.schemaVersion != _negotiatedPreviewVersion) {
+        final diagnostic = _documentDiagnostic(
+          code: 'preview.incompatibleSchemaVersion',
+          message:
+              'The negotiated Local Preview version cannot carry this draft schema.',
+          location: const MosaicPreviewDiagnosticLocation(documentPath: ''),
+          recovery: const MosaicPreviewRecovery(
+            action: MosaicPreviewRecoveryAction.updatePreviewClient,
+            message:
+                'Negotiate the matching Local Preview version before sending this draft.',
+          ),
+        );
+        _rejectValidation(
+          update,
+          reason: 'unsupportedSchemaVersion',
+          diagnostic: diagnostic,
+        );
+        return;
+      }
       _pendingDocument = document;
       _pendingEditableDocumentId = update.editableDocumentId;
       _pendingRevision = update.revision;
@@ -595,7 +649,8 @@ final class MosaicPreviewClient extends ChangeNotifier {
     } on Object {
       final diagnostic = _documentDiagnostic(
         code: 'preview.validation.failed',
-        message: 'The draft does not conform to Mosaic Protocol 0.1.',
+        message:
+            'The draft does not conform to the negotiated Mosaic Protocol.',
         location: const MosaicPreviewDiagnosticLocation(documentPath: ''),
         recovery: const MosaicPreviewRecovery(
           action: MosaicPreviewRecoveryAction.restoreLastValidDraft,
@@ -890,6 +945,7 @@ final class MosaicPreviewClient extends ChangeNotifier {
         sentAt: _clock(),
         type: type,
         payload: payload,
+        protocolVersion: _negotiatedPreviewVersion,
       );
     } on Object {
       _emitConnectionDiagnostic(
@@ -984,7 +1040,8 @@ final class MosaicPreviewClient extends ChangeNotifier {
           location: location,
           recovery: const MosaicPreviewRecovery(
             action: MosaicPreviewRecoveryAction.updatePreviewClient,
-            message: 'Use Protocol 0.1 or update the preview client.',
+            message:
+                'Use the negotiated Protocol version or update the preview client.',
           ),
         ),
       );
@@ -1008,7 +1065,8 @@ final class MosaicPreviewClient extends ChangeNotifier {
       reason: 'validationFailed',
       diagnostic: _documentDiagnostic(
         code: 'preview.validation.failed',
-        message: 'The draft does not conform to Mosaic Protocol 0.1.',
+        message:
+            'The draft does not conform to the negotiated Mosaic Protocol.',
         location: location,
         recovery: const MosaicPreviewRecovery(
           action: MosaicPreviewRecoveryAction.editProperty,

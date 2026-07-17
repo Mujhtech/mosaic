@@ -3,7 +3,10 @@ package dev.mosaic.sdk
 import java.net.URI
 
 const val MOSAIC_LOCAL_PREVIEW_VERSION: String = "0.1"
+const val MOSAIC_LOCAL_PREVIEW_VERSION_V02: String = "0.2"
+const val MOSAIC_LOCAL_PREVIEW_LATEST_VERSION: String = MOSAIC_LOCAL_PREVIEW_VERSION_V02
 const val MOSAIC_LOCAL_PREVIEW_WEBSOCKET_PROTOCOL: String = "mosaic.local-preview.v0.1"
+const val MOSAIC_LOCAL_PREVIEW_WEBSOCKET_PROTOCOL_V02: String = "mosaic.local-preview.v0.2"
 const val MOSAIC_LOCAL_PREVIEW_MAX_FRAME_BYTES: Int = 2 * 1024 * 1024
 const val MOSAIC_LOCAL_PREVIEW_DEFAULT_MAX_DOCUMENT_BYTES: Int = 1024 * 1024
 const val MOSAIC_LOCAL_PREVIEW_HEARTBEAT_MILLIS: Long = 5_000
@@ -14,6 +17,10 @@ data class MosaicLocalPreviewConfiguration(
     val sessionId: String = DEFAULT_SESSION_ID,
     val client: MosaicPreviewClientIdentity,
     val maxDocumentBytes: Int = MOSAIC_LOCAL_PREVIEW_DEFAULT_MAX_DOCUMENT_BYTES,
+    val supportedPreviewProtocolVersions: List<String> = listOf(
+        MOSAIC_LOCAL_PREVIEW_VERSION_V02,
+        MOSAIC_LOCAL_PREVIEW_VERSION,
+    ),
 ) {
     init {
         requireLocalEndpoint(endpoint)
@@ -37,6 +44,13 @@ data class MosaicLocalPreviewConfiguration(
         require(maxDocumentBytes in 65_536..MOSAIC_LOCAL_PREVIEW_MAX_FRAME_BYTES) {
             "maxDocumentBytes must be between 64 KiB and 2 MiB."
         }
+        require(
+            supportedPreviewProtocolVersions.isNotEmpty() &&
+                supportedPreviewProtocolVersions.distinct().size == supportedPreviewProtocolVersions.size &&
+                supportedPreviewProtocolVersions.all {
+                    it == MOSAIC_LOCAL_PREVIEW_VERSION || it == MOSAIC_LOCAL_PREVIEW_VERSION_V02
+                },
+        ) { "Invalid supported local preview protocol versions." }
     }
 
     companion object {
@@ -142,7 +156,7 @@ enum class MosaicPreviewCapabilityName(val wireName: String) {
 
 data class MosaicPreviewCapability(
     val name: MosaicPreviewCapabilityName,
-    val version: String = MOSAIC_LOCAL_PREVIEW_VERSION,
+    val version: String = MOSAIC_LOCAL_PREVIEW_LATEST_VERSION,
 )
 
 data class MosaicPreviewSupportedCapability(

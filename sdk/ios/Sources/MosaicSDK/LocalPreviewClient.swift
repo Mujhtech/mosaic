@@ -105,7 +105,8 @@ public final class MosaicLocalPreviewClient: ObservableObject {
   }
 
   private let connector: any MosaicPreviewSocketConnector
-  private let codec: MosaicPreviewMessageCodec
+  private let codecs: [MosaicPreviewMessageCodec]
+  private var activeCodec: MosaicPreviewMessageCodec
   private let delay: MosaicPreviewDelay
   private let clock: MosaicPreviewClock
 
@@ -130,13 +131,20 @@ public final class MosaicLocalPreviewClient: ObservableObject {
   public init(
     configuration: MosaicPreviewClientConfiguration,
     connector: any MosaicPreviewSocketConnector = MosaicURLSessionPreviewSocketConnector(),
-    codec: MosaicPreviewMessageCodec = MosaicPreviewMessageCodec(),
+    codec: MosaicPreviewMessageCodec = MosaicPreviewMessageCodec(
+      protocolVersion: mosaicLatestLocalPreviewProtocolVersion
+    ),
+    fallbackProtocolVersions: [String] = [mosaicLocalPreviewProtocolVersion],
     delay: @escaping MosaicPreviewDelay = mosaicPreviewTaskDelay,
     clock: @escaping MosaicPreviewClock = { Date() }
   ) {
     self.configuration = configuration
     self.connector = connector
-    self.codec = codec
+    let fallbackCodecs = fallbackProtocolVersions
+      .filter { $0 != codec.protocolVersion }
+      .map { MosaicPreviewMessageCodec(protocolVersion: $0) }
+    codecs = [codec] + fallbackCodecs
+    activeCodec = codec
     self.delay = delay
     self.clock = clock
     purchaseProvider = MosaicPreviewPurchaseProvider()
@@ -283,9 +291,11 @@ public final class MosaicLocalPreviewClient: ObservableObject {
       }
 
       do {
+        let attemptCodec = codecs[min(consecutiveFailures, codecs.count - 1)]
+        activeCodec = attemptCodec
         let connectedSocket = try await connector.connect(
           endpoint: configuration.endpoint,
-          protocols: [mosaicLocalPreviewWebSocketProtocol]
+          protocols: [attemptCodec.webSocketSubprotocol]
         )
         guard shouldReconnect, generation == lifecycleGeneration, !Task.isCancelled else {
           await connectedSocket.close()
@@ -337,7 +347,9 @@ public final class MosaicLocalPreviewClient: ObservableObject {
     )
     try await send(
       .capabilityReport(
-        MosaicPreviewCapabilityReport(clientId: configuration.identity.clientId)
+        activeCodec.protocolVersion == mosaicLocalPreviewProtocolVersionV02
+          ? .v02(clientId: configuration.identity.clientId)
+          : MosaicPreviewCapabilityReport(clientId: configuration.identity.clientId)
       )
     )
   }
@@ -371,7 +383,7 @@ public final class MosaicLocalPreviewClient: ObservableObject {
     }
     let decoded: MosaicPreviewDecodedMessage
     do {
-      decoded = try codec.decode(source, expectedSessionId: configuration.sessionId)
+      decoded = try activeCodec.decode(source, expectedSessionId: configuration.sessionId)
     } catch {
       addDiagnostic(
         code: "preview.message.invalid",
@@ -767,7 +779,7 @@ public final class MosaicLocalPreviewClient: ObservableObject {
   private func send(_ message: MosaicPreviewOutgoingMessage) async throws {
     guard let socket else { throw URLError(.notConnectedToInternet) }
     outboundSequence += 1
-    let source = try codec.encode(
+    let source = try activeCodec.encode(
       message,
       messageId: "msg_ios_\(outboundSequence)",
       sessionId: configuration.sessionId,
@@ -909,7 +921,15 @@ public final class MosaicLocalPreviewClient: ObservableObject {
     if let compatibility = root["compatibility"] as? [String: Any],
       let capabilities = compatibility["requiredCapabilities"] as? [[String: Any]]
     {
-      let supported = Set(MosaicCapabilityName.allCases.map(\.rawValue))
+      let expectedDocumentVersion =
+        activeCodec.protocolVersion == mosaicLocalPreviewProtocolVersionV02
+        ? mosaicProtocolVersionV02
+        : mosaicProtocolVersion
+      let supported = Set(
+        (expectedDocumentVersion == mosaicProtocolVersionV02
+          ? MosaicCapabilityCatalog.v02
+          : MosaicCapabilityCatalog.v01).map(\.rawValue)
+      )
       for (index, capability) in capabilities.enumerated() {
         guard
           let name = capability["name"] as? String,
@@ -917,7 +937,7 @@ public final class MosaicLocalPreviewClient: ObservableObject {
         else {
           continue
         }
-        if !supported.contains(name) || version != mosaicProtocolVersion {
+        if !supported.contains(name) || version != expectedDocumentVersion {
           return MosaicPreviewUnsupportedRequirement(
             capabilityName: safeMachineIdentifier(name),
             capabilityVersion: safeSemanticVersion(version),
@@ -939,12 +959,16 @@ public final class MosaicLocalPreviewClient: ObservableObject {
     permitsScrollContainer: Bool
   ) -> MosaicPreviewUnsupportedRequirement? {
     guard let type = node["type"] as? String else { return nil }
-    let supported = Set(MosaicLayoutNodeKind.allPreviewCases.map(\.rawValue))
+    let isV02 = activeCodec.protocolVersion == mosaicLocalPreviewProtocolVersionV02
+    let supported = Set(
+      (isV02 ? MosaicLayoutNodeKind.v02PreviewCases : MosaicLayoutNodeKind.v01PreviewCases)
+        .map(\.rawValue)
+    )
     if !supported.contains(type) || (!permitsScrollContainer && type == "scrollContainer") {
       let id = (node["id"] as? String).flatMap(safeComponentId)
       return MosaicPreviewUnsupportedRequirement(
         capabilityName: safeMachineIdentifier("component.\(type)"),
-        capabilityVersion: mosaicProtocolVersion,
+        capabilityVersion: isV02 ? mosaicProtocolVersionV02 : mosaicProtocolVersion,
         location: MosaicPreviewDiagnosticLocation(
           documentPath: "\(path)/type",
           componentId: id,
@@ -955,7 +979,9 @@ public final class MosaicLocalPreviewClient: ObservableObject {
     if type == "scrollContainer", let content = node["content"] as? [String: Any] {
       return unsupportedNode(content, path: "\(path)/content", permitsScrollContainer: false)
     }
-    if type == "verticalStack", let children = node["children"] as? [[String: Any]] {
+    if (type == "verticalStack" || type == "stack"),
+      let children = node["children"] as? [[String: Any]]
+    {
       for (index, child) in children.enumerated() {
         if let unsupported = unsupportedNode(
           child,
@@ -964,6 +990,17 @@ public final class MosaicLocalPreviewClient: ObservableObject {
         ) {
           return unsupported
         }
+      }
+    }
+    if type == "carousel", let pages = node["pages"] as? [[String: Any]] {
+      for (index, page) in pages.enumerated() {
+        if let content = page["content"] as? [String: Any],
+          let unsupported = unsupportedNode(
+            content,
+            path: "\(path)/pages/\(index)/content",
+            permitsScrollContainer: false
+          )
+        { return unsupported }
       }
     }
     return nil
@@ -1151,7 +1188,7 @@ private struct MosaicPreviewUnsupportedRequirement {
 }
 
 extension MosaicLayoutNodeKind {
-  fileprivate static let allPreviewCases: [MosaicLayoutNodeKind] = [
+  fileprivate static let v01PreviewCases: [MosaicLayoutNodeKind] = [
     .scrollContainer,
     .verticalStack,
     .text,
@@ -1162,6 +1199,22 @@ extension MosaicLayoutNodeKind {
     .restoreButton,
     .closeButton,
     .legalText,
+  ]
+
+  fileprivate static let v02PreviewCases: [MosaicLayoutNodeKind] = [
+    .scrollContainer,
+    .stack,
+    .text,
+    .image,
+    .featureList,
+    .productSelector,
+    .purchaseButton,
+    .restoreButton,
+    .closeButton,
+    .legalText,
+    .carousel,
+    .switchControl,
+    .countdown,
   ]
 }
 

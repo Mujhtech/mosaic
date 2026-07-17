@@ -136,7 +136,7 @@ private object SystemMosaicPreviewClock : MosaicPreviewClock {
 /**
  * Local-development-only preview client.
  *
- * It does not fetch hosted configuration, authenticate, or weaken Protocol 0.1 validation.
+ * It does not fetch hosted configuration, authenticate, or weaken protocol validation.
  */
 class MosaicLocalPreviewClient(
     val configuration: MosaicLocalPreviewConfiguration,
@@ -166,6 +166,11 @@ class MosaicLocalPreviewClient(
     private var heartbeatJob: Job? = null
     private var lastValidMessageMillis: Long = 0
     private var heartbeatSequence = 0
+    @Volatile
+    private var selectedPreviewProtocolVersion: String? = null
+
+    private val offeredSubprotocols: List<String> =
+        configuration.supportedPreviewProtocolVersions.map(::previewSubprotocol)
 
     val state: StateFlow<MosaicLocalPreviewState> = engine.state
     val purchaseProvider: MosaicPurchaseProvider = engine.purchaseProvider
@@ -192,6 +197,7 @@ class MosaicLocalPreviewClient(
             heartbeatJob = null
             closingSocket = socket
             socket = null
+            selectedPreviewProtocolVersion = null
         }
         closingSocket?.let {
             sendPayload(
@@ -246,7 +252,8 @@ class MosaicLocalPreviewClient(
                     openedSocket.close(1000, "Stale local preview connection")
                     return
                 }
-                if (selectedProtocol != MOSAIC_LOCAL_PREVIEW_WEBSOCKET_PROTOCOL) {
+                val selectedVersion = selectedProtocol?.let(::previewVersionForSubprotocol)
+                if (selectedVersion == null || selectedProtocol !in offeredSubprotocols) {
                     engine.recordConnectionDiagnostic(
                         "preview.subprotocolMismatch",
                         "The local relay did not select the required preview protocol.",
@@ -255,6 +262,7 @@ class MosaicLocalPreviewClient(
                     handleLost(connectionGeneration, allowReconnect = true)
                     return
                 }
+                selectedPreviewProtocolVersion = selectedVersion
                 synchronized(lifecycleLock) { socket = openedSocket }
                 val connected = sendPayload(
                     MosaicPreviewClientConnectedPayload(configuration.client),
@@ -301,7 +309,7 @@ class MosaicLocalPreviewClient(
         try {
             val created = socketFactory.open(
                 configuration.endpoint,
-                MOSAIC_LOCAL_PREVIEW_WEBSOCKET_PROTOCOL,
+                offeredSubprotocols.joinToString(", "),
                 listener,
             )
             synchronized(lifecycleLock) {
@@ -320,11 +328,14 @@ class MosaicLocalPreviewClient(
         if (!isCurrent(connectionGeneration)) return
         messageMutex.withLock {
             val message = try {
-                MosaicLocalPreviewCodec.decode(text)
+                MosaicLocalPreviewCodec.decode(
+                    text,
+                    selectedPreviewProtocolVersion ?: return,
+                )
             } catch (_: MosaicPreviewCodecException) {
                 engine.recordConnectionDiagnostic(
                     "preview.invalidMessage",
-                    "The local preview relay sent a message that does not match contract 0.1.",
+                    "The local preview relay sent a message that does not match the selected contract.",
                 )
                 currentSocket(connectionGeneration)?.close(1002, "Invalid preview message")
                 return
@@ -409,6 +420,7 @@ class MosaicLocalPreviewClient(
             heartbeatJob?.cancel()
             heartbeatJob = null
             socket = null
+            selectedPreviewProtocolVersion = null
             if (!started || !allowReconnect) {
                 generation += 1
                 engine.updateConnection(MosaicPreviewConnectionStatus.Disconnected)
@@ -427,17 +439,35 @@ class MosaicLocalPreviewClient(
     }
 
     private fun capabilityPayload(): MosaicPreviewCapabilityReportPayload {
+        val previewVersion = selectedPreviewProtocolVersion
+            ?: configuration.supportedPreviewProtocolVersions.first()
         val report = MosaicProtocolCapabilities.report()
+        val capabilityCatalog = if (previewVersion == MOSAIC_LOCAL_PREVIEW_VERSION_V02) {
+            MosaicCapabilityCatalog.v02
+        } else {
+            MosaicCapabilityCatalog.v01
+        }
+        val paywallVersion = if (previewVersion == MOSAIC_LOCAL_PREVIEW_VERSION_V02) {
+            MOSAIC_PROTOCOL_VERSION_V02
+        } else {
+            MOSAIC_PROTOCOL_VERSION
+        }
         return MosaicPreviewCapabilityReportPayload(
             clientId = configuration.client.clientId,
-            supportedSchemaVersions = report.supportedSchemaVersions.sorted(),
-            supportedCapabilities = MosaicCapabilityName.entries.map { capability ->
+            supportedSchemaVersions = if (previewVersion == MOSAIC_LOCAL_PREVIEW_VERSION_V02) {
+                report.supportedSchemaVersions.sorted()
+            } else {
+                listOf(MOSAIC_PROTOCOL_VERSION)
+            },
+            supportedCapabilities = capabilityCatalog.map { capability ->
                 MosaicPreviewSupportedCapability(
                     capability.wireName,
-                    checkNotNull(report.supportedCapabilities[capability]),
+                    paywallVersion,
                 )
+            }.sortedBy(MosaicPreviewSupportedCapability::name),
+            previewCapabilities = MosaicPreviewCapabilityName.entries.map {
+                MosaicPreviewCapability(it, previewVersion)
             },
-            previewCapabilities = MosaicPreviewCapabilityName.entries.map(::MosaicPreviewCapability),
             limits = MosaicPreviewLimits(configuration.maxDocumentBytes),
         )
     }
@@ -457,8 +487,12 @@ class MosaicLocalPreviewClient(
             sessionId = configuration.sessionId,
             sentAt = clock.utcTimestamp(),
             payload = payload,
+            previewProtocolVersion = selectedPreviewProtocolVersion
+                ?: configuration.supportedPreviewProtocolVersions.first(),
         )
-        return runCatching { target.send(MosaicLocalPreviewCodec.encode(message)) }.getOrDefault(false)
+        return runCatching {
+            target.send(MosaicLocalPreviewCodec.encode(message, message.previewProtocolVersion))
+        }.getOrDefault(false)
     }
 
     private fun rememberMessage(messageId: String): Boolean = synchronized(receivedMessageIds) {
@@ -480,4 +514,16 @@ class MosaicLocalPreviewClient(
 
     private fun isCurrent(connectionGeneration: Int): Boolean =
         synchronized(lifecycleLock) { started && generation == connectionGeneration }
+
+    private fun previewSubprotocol(version: String): String = when (version) {
+        MOSAIC_LOCAL_PREVIEW_VERSION -> MOSAIC_LOCAL_PREVIEW_WEBSOCKET_PROTOCOL
+        MOSAIC_LOCAL_PREVIEW_VERSION_V02 -> MOSAIC_LOCAL_PREVIEW_WEBSOCKET_PROTOCOL_V02
+        else -> error("Unsupported local preview version $version")
+    }
+
+    private fun previewVersionForSubprotocol(subprotocol: String): String? = when (subprotocol) {
+        MOSAIC_LOCAL_PREVIEW_WEBSOCKET_PROTOCOL -> MOSAIC_LOCAL_PREVIEW_VERSION
+        MOSAIC_LOCAL_PREVIEW_WEBSOCKET_PROTOCOL_V02 -> MOSAIC_LOCAL_PREVIEW_VERSION_V02
+        else -> null
+    }
 }

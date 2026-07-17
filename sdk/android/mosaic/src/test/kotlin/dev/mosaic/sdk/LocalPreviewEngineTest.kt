@@ -77,7 +77,7 @@ class LocalPreviewEngineTest {
         val base = message(3)
         val payload = base.payload as MosaicPreviewDraftUpdatedPayload
         val document = JsonParser.parseString(payload.documentJson).asJsonObject
-        findNode(document, "headline").addProperty("type", "carousel")
+        findNode(document, "headline").addProperty("type", "androidText")
         val update = base.copy(
             payload = payload.copy(
                 revision = MosaicLocalRevision("revision_unsupported_000005", 5),

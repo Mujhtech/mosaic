@@ -18,6 +18,8 @@ public final class MosaicPaywallModel: ObservableObject {
   @Published public private(set) var productsByReferenceID: [String: MosaicProduct] = [:]
   @Published public private(set) var selectedProductReferenceIDs: [String: String] = [:]
   @Published public private(set) var unavailableSelectorIDs: Set<String> = []
+  @Published public private(set) var switchValues: [String: Bool] = [:]
+  @Published public private(set) var carouselPageIndices: [String: Int] = [:]
   @Published public private(set) var busyPurchaseButtonID: String?
   @Published public private(set) var busyRestoreButtonID: String?
   @Published public private(set) var isLoadingProducts = false
@@ -27,12 +29,14 @@ public final class MosaicPaywallModel: ObservableObject {
   private let interactionHandler: @MainActor (MosaicInteractionOutcome) -> Void
   private let resultHandler: @MainActor (MosaicPresentationResult) -> Void
   private let productReferencesByID: [String: MosaicProductReference]
+  private let clock: @Sendable () -> Date
   private var hasPrepared = false
 
   public init(
     document: MosaicPaywallDocument,
     requestedLocale: String? = nil,
     purchaseProvider: any MosaicPurchaseProvider,
+    clock: @escaping @Sendable () -> Date = { Date() },
     onInteraction: @escaping @MainActor (MosaicInteractionOutcome) -> Void = { _ in },
     onResult: @escaping @MainActor (MosaicPresentationResult) -> Void
   ) {
@@ -42,10 +46,17 @@ public final class MosaicPaywallModel: ObservableObject {
       requestedLocale: requestedLocale
     )
     self.purchaseProvider = purchaseProvider
+    self.clock = clock
     interactionHandler = onInteraction
     resultHandler = onResult
     productReferencesByID = Dictionary(
       uniqueKeysWithValues: document.products.map { ($0.id, $0) }
+    )
+    switchValues = Dictionary(
+      uniqueKeysWithValues: document.switches.map { ($0.id, $0.initialValue) }
+    )
+    carouselPageIndices = Dictionary(
+      uniqueKeysWithValues: document.carousels.map { ($0.id, $0.initialPageIndex) }
     )
   }
 
@@ -121,6 +132,41 @@ public final class MosaicPaywallModel: ObservableObject {
     selectedProductReferenceIDs[selectorID]
   }
 
+  public func switchValue(for switchID: String) -> Bool {
+    switchValues[switchID] ?? false
+  }
+
+  public func setSwitchValue(_ value: Bool, for switchID: String) {
+    guard document.switches.contains(where: { $0.id == switchID }) else { return }
+    switchValues[switchID] = value
+  }
+
+  public func carouselPageIndex(for carouselID: String) -> Int {
+    carouselPageIndices[carouselID] ?? 0
+  }
+
+  public func setCarouselPageIndex(_ index: Int, for carouselID: String) {
+    guard
+      let carousel = document.carousels.first(where: { $0.id == carouselID }),
+      carousel.pages.indices.contains(index)
+    else { return }
+    carouselPageIndices[carouselID] = index
+  }
+
+  public func isVisible(_ visibility: MosaicVisibility) -> Bool {
+    switch visibility {
+    case .always: true
+    case .hidden: false
+    case .switchValue(let switchID, let equals): switchValue(for: switchID) == equals
+    }
+  }
+
+  public func isNodeVisible(_ nodeID: String) -> Bool {
+    document.isNodeVisible(nodeID, switchValues: switchValues)
+  }
+
+  public func currentDate() -> Date { clock() }
+
   public func selectProduct(referenceID: String, in selectorID: String) {
     guard
       let selector = document.productSelector(id: selectorID),
@@ -136,6 +182,7 @@ public final class MosaicPaywallModel: ObservableObject {
   public func isPurchaseEnabled(_ button: MosaicPurchaseButtonComponent) -> Bool {
     guard busyPurchaseButtonID != button.id else { return false }
     guard case .purchase(let selectorID) = button.action else { return false }
+    guard isNodeVisible(selectorID) else { return false }
     return selectedProductReferenceIDs[selectorID] != nil
   }
 
@@ -241,7 +288,7 @@ public final class MosaicPaywallModel: ObservableObject {
 
 extension MosaicPaywallDocument {
   public var productSelectors: [MosaicProductSelectorComponent] {
-    layout.content.descendants.compactMap { node in
+    allNodes.compactMap { node in
       guard case .productSelector(let selector) = node else { return nil }
       return selector
     }
@@ -250,15 +297,87 @@ extension MosaicPaywallDocument {
   public func productSelector(id: String) -> MosaicProductSelectorComponent? {
     productSelectors.first { $0.id == id }
   }
+
+  public var allNodes: [MosaicNode] { layout.content.descendants }
+
+  public var switches: [MosaicSwitchComponent] {
+    allNodes.compactMap { node in
+      guard case .switchControl(let value) = node else { return nil }
+      return value
+    }
+  }
+
+  public var carousels: [MosaicCarouselComponent] {
+    allNodes.compactMap { node in
+      guard case .carousel(let value) = node else { return nil }
+      return value
+    }
+  }
+
+  fileprivate func isNodeVisible(
+    _ targetID: String, switchValues: [String: Bool]
+  ) -> Bool {
+    func visible(_ visibility: MosaicVisibility) -> Bool {
+      switch visibility {
+      case .always: true
+      case .hidden: false
+      case .switchValue(let switchID, let equals): switchValues[switchID] == equals
+      }
+    }
+
+    func search(_ stack: MosaicStack, ancestorsVisible: Bool) -> Bool? {
+      let stackVisible = ancestorsVisible && visible(stack.visibility)
+      if stack.id == targetID { return stackVisible }
+      for node in stack.children {
+        let nodeVisible = stackVisible && visible(node.visibility)
+        if node.id == targetID { return nodeVisible }
+        switch node {
+        case .stack(let nested), .verticalStack(let nested):
+          if let result = search(nested, ancestorsVisible: stackVisible) { return result }
+        case .carousel(let carousel):
+          for page in carousel.pages {
+            if page.id == targetID { return nodeVisible }
+            if let result = search(page.content, ancestorsVisible: nodeVisible) { return result }
+          }
+        default: break
+        }
+      }
+      return nil
+    }
+    return search(layout.content, ancestorsVisible: true) ?? false
+  }
 }
 
-extension MosaicVerticalStack {
+extension MosaicStack {
   fileprivate var descendants: [MosaicNode] {
     children.flatMap { node in
-      if case .verticalStack(let stack) = node {
+      switch node {
+      case .verticalStack(let stack), .stack(let stack):
         return [node] + stack.descendants
+      case .carousel(let carousel):
+        return [node] + carousel.pages.flatMap { $0.content.descendants }
+      default:
+        return [node]
       }
-      return [node]
+    }
+  }
+}
+
+extension MosaicNode {
+  var visibility: MosaicVisibility {
+    switch self {
+    case .verticalStack(let value), .stack(let value): value.visibility
+    case .text(let value): value.visibility
+    case .image(let value): value.visibility
+    case .featureList(let value): value.visibility
+    case .productSelector(let value): value.visibility
+    case .purchaseButton(let value): value.visibility
+    case .restoreButton(let value): value.visibility
+    case .closeButton(let value): value.visibility
+    case .legalText(let value): value.visibility
+    case .carousel(let value): value.visibility
+    case .switchControl(let value): value.visibility
+    case .countdown(let value): value.visibility
     }
   }
 }

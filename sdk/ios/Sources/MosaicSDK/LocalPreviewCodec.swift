@@ -1,12 +1,27 @@
 import CoreFoundation
 import Foundation
 
-/// Strict native adapter for the canonical Local Preview 0.1 JSON contract.
+/// Strict native adapter for one exact Local Preview session version.
 ///
 /// The JSON Schema remains canonical. This boundary intentionally rejects
 /// unknown envelope and payload fields before any document reaches SwiftUI.
 public struct MosaicPreviewMessageCodec: Sendable {
-  public init() {}
+  public let protocolVersion: String
+
+  public init(protocolVersion: String = mosaicLocalPreviewProtocolVersion) {
+    precondition(
+      protocolVersion == mosaicLocalPreviewProtocolVersion
+        || protocolVersion == mosaicLocalPreviewProtocolVersionV02,
+      "Unsupported Mosaic Local Preview codec version."
+    )
+    self.protocolVersion = protocolVersion
+  }
+
+  public var webSocketSubprotocol: String {
+    protocolVersion == mosaicLocalPreviewProtocolVersionV02
+      ? mosaicLocalPreviewWebSocketProtocolV02
+      : mosaicLocalPreviewWebSocketProtocol
+  }
 
   public func decode(
     _ source: String,
@@ -42,7 +57,7 @@ public struct MosaicPreviewMessageCodec: Sendable {
     )
     guard
       try MosaicPreviewJSON.string(envelope["previewProtocolVersion"])
-        == mosaicLocalPreviewProtocolVersion
+        == protocolVersion
     else {
       throw MosaicPreviewProtocolError.unsupportedVersion
     }
@@ -116,7 +131,7 @@ public struct MosaicPreviewMessageCodec: Sendable {
     sentAt: Date = Date()
   ) throws -> String {
     let envelope: [String: Any] = [
-      "previewProtocolVersion": mosaicLocalPreviewProtocolVersion,
+      "previewProtocolVersion": protocolVersion,
       "messageId": messageId,
       "sessionId": sessionId,
       "sentAt": MosaicPreviewJSON.timestampString(sentAt),
@@ -235,7 +250,9 @@ public struct MosaicPreviewMessageCodec: Sendable {
     guard (1...32).contains(preview.count) else {
       throw MosaicPreviewProtocolError.invalidPayload
     }
-    let previewKeys = try preview.map { try MosaicPreviewJSON.previewCapability($0) }
+    let previewKeys = try preview.map {
+      try MosaicPreviewJSON.previewCapability($0, expectedVersion: protocolVersion)
+    }
     guard Set(previewKeys).count == previewKeys.count else {
       throw MosaicPreviewProtocolError.invalidPayload
     }
@@ -702,14 +719,14 @@ private enum MosaicPreviewJSON {
     return "\(try machineIdentifier(value["name"]))@\(try semanticVersion(value["version"]))"
   }
 
-  static func previewCapability(_ value: Any?) throws -> String {
+  static func previewCapability(_ value: Any?, expectedVersion: String) throws -> String {
     let value = try object(value)
     try expectKeys(value, allowed: ["name", "version"])
     let name = try enumValue(value["name"], as: MosaicPreviewCapabilityName.self)
-    guard try string(value["version"]) == mosaicLocalPreviewProtocolVersion else {
+    guard try string(value["version"]) == expectedVersion else {
       throw MosaicPreviewProtocolError.invalidPayload
     }
-    return "\(name.rawValue)@\(mosaicLocalPreviewProtocolVersion)"
+    return "\(name.rawValue)@\(expectedVersion)"
   }
 
   static func validateRevisionTarget(_ payload: [String: Any]) throws {

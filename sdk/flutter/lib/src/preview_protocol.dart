@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'protocol.dart';
 
 const String mosaicLocalPreviewProtocolVersion = '0.1';
+const String mosaicLocalPreviewV02ProtocolVersion = '0.2';
 const int mosaicFlutterPreviewMaximumDocumentBytes = 1048576;
 
 const Set<String> mosaicFlutterPreviewCapabilities = <String>{
@@ -451,16 +452,39 @@ sealed class MosaicPreviewIncomingMessage {
 
 final class MosaicPreviewDecodedMessage {
   const MosaicPreviewDecodedMessage({
+    required this.protocolVersion,
     required this.messageId,
     required this.sentAt,
     required this.message,
   });
 
+  final String protocolVersion;
   final String messageId;
 
   /// Raw timestamp accepted by the normative Local Preview 0.1 regex.
   final String sentAt;
   final MosaicPreviewIncomingMessage message;
+}
+
+/// A fully validated, local-only Studio project snapshot.
+final class MosaicLocalPreviewProject {
+  const MosaicLocalPreviewProject({
+    required this.fileFormatVersion,
+    required this.editableDocumentId,
+    required this.revision,
+    required this.document,
+    required this.preview,
+    required this.commerceRevision,
+    required this.commerceState,
+  });
+
+  final String fileFormatVersion;
+  final String editableDocumentId;
+  final MosaicLocalRevision revision;
+  final MosaicPaywallDocument document;
+  final MosaicPreviewContext preview;
+  final MosaicLocalRevision commerceRevision;
+  final MosaicPreviewMockCommerceState commerceState;
 }
 
 final class MosaicPreviewDraftUpdated extends MosaicPreviewIncomingMessage {
@@ -534,9 +558,82 @@ final class MosaicPreviewProtocolException implements Exception {
 final class MosaicPreviewMessageCodec {
   const MosaicPreviewMessageCodec();
 
+  /// Decodes the canonical Local Preview project container and its embedded
+  /// protocol document atomically. A 0.1 project remains a strict 0.1 read;
+  /// no implicit migration is performed.
+  MosaicLocalPreviewProject decodeLocalProject(
+    String source, {
+    String expectedFileFormatVersion = mosaicLocalPreviewProtocolVersion,
+  }) {
+    final Object? decoded;
+    try {
+      decoded = jsonDecode(source);
+    } on FormatException {
+      throw const MosaicPreviewProtocolException(
+        'The local project was not valid JSON.',
+      );
+    }
+    final project = _object(decoded, r'$');
+    _expectKeys(
+      project,
+      const <String>{
+        'fileFormatVersion',
+        'editableDocumentId',
+        'revision',
+        'document',
+        'preview',
+        'mockCommerce',
+      },
+      r'$',
+    );
+    final fileFormatVersion = _string(
+      project['fileFormatVersion'],
+      'fileFormatVersion',
+    );
+    if (fileFormatVersion != expectedFileFormatVersion ||
+        (fileFormatVersion != mosaicLocalPreviewProtocolVersion &&
+            fileFormatVersion != mosaicLocalPreviewV02ProtocolVersion)) {
+      throw const MosaicPreviewProtocolException(
+        'The local project format version is unsupported.',
+      );
+    }
+    final documentObject = _object(project['document'], 'document');
+    if (documentObject['schemaVersion'] != fileFormatVersion) {
+      throw const MosaicPreviewProtocolException(
+        'The local project and document versions do not match.',
+      );
+    }
+    final commerce = _object(project['mockCommerce'], 'mockCommerce');
+    _expectKeys(
+      commerce,
+      const <String>{'revision', 'state'},
+      'mockCommerce',
+    );
+    final MosaicPaywallDocument document;
+    try {
+      document = const MosaicProtocolDecoder().decode(
+        jsonEncode(documentObject),
+      );
+    } on MosaicProtocolException {
+      throw const MosaicPreviewProtocolException(
+        'The local project document is invalid.',
+      );
+    }
+    return MosaicLocalPreviewProject(
+      fileFormatVersion: fileFormatVersion,
+      editableDocumentId: _documentId(project['editableDocumentId']),
+      revision: _revision(project['revision']),
+      document: document,
+      preview: _previewContext(project['preview']),
+      commerceRevision: _revision(commerce['revision']),
+      commerceState: _mockCommerceState(commerce['state']),
+    );
+  }
+
   MosaicPreviewDecodedMessage decode(
     String source, {
     required String expectedSessionId,
+    String expectedProtocolVersion = mosaicLocalPreviewProtocolVersion,
   }) {
     final Object? decoded;
     try {
@@ -559,8 +656,13 @@ final class MosaicPreviewMessageCodec {
       },
       r'$',
     );
-    if (_string(envelope['previewProtocolVersion'], 'previewProtocolVersion') !=
-        mosaicLocalPreviewProtocolVersion) {
+    final protocolVersion = _string(
+      envelope['previewProtocolVersion'],
+      'previewProtocolVersion',
+    );
+    if (protocolVersion != expectedProtocolVersion ||
+        (protocolVersion != mosaicLocalPreviewProtocolVersion &&
+            protocolVersion != mosaicLocalPreviewV02ProtocolVersion)) {
       throw const MosaicPreviewProtocolException(
         'The preview protocol version is unsupported.',
       );
@@ -591,7 +693,7 @@ final class MosaicPreviewMessageCodec {
       'previewHeartbeat' => _heartbeat(payload),
       'previewClientDisconnected' => _disconnected(payload),
       'previewClientConnected' => _connected(payload),
-      'capabilityReport' => _capabilityReport(payload),
+      'capabilityReport' => _capabilityReport(payload, protocolVersion),
       'draftAccepted' => _draftAccepted(payload),
       'draftRejected' => _draftRejected(payload),
       'validationError' => _validationError(payload),
@@ -602,6 +704,7 @@ final class MosaicPreviewMessageCodec {
         ),
     };
     return MosaicPreviewDecodedMessage(
+      protocolVersion: protocolVersion,
       messageId: messageId,
       sentAt: sentAtSource,
       message: message,
@@ -614,7 +717,14 @@ final class MosaicPreviewMessageCodec {
     required DateTime sentAt,
     required String type,
     required Map<String, Object?> payload,
+    String protocolVersion = mosaicLocalPreviewProtocolVersion,
   }) {
+    if (protocolVersion != mosaicLocalPreviewProtocolVersion &&
+        protocolVersion != mosaicLocalPreviewV02ProtocolVersion) {
+      throw const MosaicPreviewProtocolException(
+        'The preview protocol version is unsupported.',
+      );
+    }
     _validatedString(
       messageId,
       name: 'messageId',
@@ -630,14 +740,18 @@ final class MosaicPreviewMessageCodec {
       pattern: _sessionIdPattern,
     );
     final source = jsonEncode(<String, Object?>{
-      'previewProtocolVersion': mosaicLocalPreviewProtocolVersion,
+      'previewProtocolVersion': protocolVersion,
       'messageId': messageId,
       'sessionId': sessionId,
       'sentAt': sentAt.toUtc().toIso8601String(),
       'type': type,
       'payload': payload,
     });
-    decode(source, expectedSessionId: sessionId);
+    decode(
+      source,
+      expectedSessionId: sessionId,
+      expectedProtocolVersion: protocolVersion,
+    );
     return source;
   }
 
@@ -727,7 +841,10 @@ final class MosaicPreviewMessageCodec {
     return const MosaicPreviewNoopMessage(type: 'previewClientConnected');
   }
 
-  MosaicPreviewNoopMessage _capabilityReport(Map<String, Object?> payload) {
+  MosaicPreviewNoopMessage _capabilityReport(
+    Map<String, Object?> payload,
+    String protocolVersion,
+  ) {
     _expectKeys(
       payload,
       const <String>{
@@ -765,6 +882,7 @@ final class MosaicPreviewMessageCodec {
       payload['previewCapabilities'],
       maximum: 32,
       previewCapabilities: true,
+      expectedPreviewVersion: protocolVersion,
     );
     final limits = _object(payload['limits'], 'limits');
     _expectKeys(limits, const <String>{'maxDocumentBytes'}, 'limits');
@@ -1001,6 +1119,7 @@ final class MosaicPreviewMessageCodec {
     Object? value, {
     required int maximum,
     bool previewCapabilities = false,
+    String? expectedPreviewVersion,
   }) {
     final values = _list(value, 'capabilities');
     if (values.isEmpty || values.length > maximum) {
@@ -1011,7 +1130,7 @@ final class MosaicPreviewMessageCodec {
     final seen = <String>{};
     for (final capability in values) {
       final key = previewCapabilities
-          ? _previewCapability(capability)
+          ? _previewCapability(capability, expectedPreviewVersion!)
           : _capability(capability);
       if (!seen.add(key)) {
         throw const MosaicPreviewProtocolException(
@@ -1034,7 +1153,7 @@ final class MosaicPreviewMessageCodec {
     return '$name@$version';
   }
 
-  String _previewCapability(Object? value) {
+  String _previewCapability(Object? value, String expectedVersion) {
     final capability = _object(value, 'previewCapability');
     _expectKeys(
       capability,
@@ -1046,12 +1165,13 @@ final class MosaicPreviewMessageCodec {
       'name',
       mosaicFlutterPreviewCapabilities,
     );
-    if (capability['version'] != mosaicLocalPreviewProtocolVersion) {
+    final version = capability['version'];
+    if (version != expectedVersion) {
       throw const MosaicPreviewProtocolException(
         'The preview capability version is unsupported.',
       );
     }
-    return '$name@$mosaicLocalPreviewProtocolVersion';
+    return '$name@$version';
   }
 
   void _diagnosticList(Object? value, {required int maximum}) {
@@ -1517,25 +1637,261 @@ void _expectKeys(
   }
 }
 
-Map<String, Object?> mosaicFlutterCapabilityPayload(String clientId) =>
-    <String, Object?>{
-      'clientId': clientId,
-      'supportedSchemaVersions': <String>[mosaicProtocolVersion],
-      'supportedCapabilities': <Map<String, String>>[
-        for (final capability in mosaicProtocolV01Capabilities)
-          <String, String>{
-            'name': capability,
-            'version': mosaicProtocolVersion,
-          },
-      ],
-      'previewCapabilities': <Map<String, String>>[
-        for (final capability in mosaicFlutterPreviewCapabilities)
-          <String, String>{
-            'name': capability,
-            'version': mosaicLocalPreviewProtocolVersion,
-          },
-      ],
-      'limits': <String, Object?>{
-        'maxDocumentBytes': mosaicFlutterPreviewMaximumDocumentBytes,
-      },
-    };
+const List<String> mosaicLocalPreviewVersionPreference = <String>[
+  mosaicLocalPreviewV02ProtocolVersion,
+  mosaicLocalPreviewProtocolVersion,
+];
+
+final class MosaicLocalPreviewNegotiation {
+  const MosaicLocalPreviewNegotiation._({
+    required this.isCompatible,
+    this.selectedVersion,
+    this.selectedWebSocketSubprotocol,
+    this.diagnosticCode,
+  });
+
+  const MosaicLocalPreviewNegotiation.selected({
+    required String version,
+    required String webSocketSubprotocol,
+  }) : this._(
+          isCompatible: true,
+          selectedVersion: version,
+          selectedWebSocketSubprotocol: webSocketSubprotocol,
+        );
+
+  const MosaicLocalPreviewNegotiation.incompatible()
+      : this._(
+          isCompatible: false,
+          diagnosticCode: 'preview.noMutualVersion',
+        );
+
+  final bool isCompatible;
+  final String? selectedVersion;
+  final String? selectedWebSocketSubprotocol;
+  final String? diagnosticCode;
+}
+
+MosaicLocalPreviewNegotiation negotiateMosaicLocalPreviewVersion(
+  Iterable<String> localSupportedVersions,
+  Iterable<String> remoteSupportedVersions,
+) {
+  final local = localSupportedVersions.toSet();
+  final remote = remoteSupportedVersions.toSet();
+  for (final version in mosaicLocalPreviewVersionPreference) {
+    if (local.contains(version) && remote.contains(version)) {
+      return MosaicLocalPreviewNegotiation.selected(
+        version: version,
+        webSocketSubprotocol: 'mosaic.local-preview.v$version',
+      );
+    }
+  }
+  return const MosaicLocalPreviewNegotiation.incompatible();
+}
+
+sealed class MosaicPreviewDraftDeliveryDecision {
+  const MosaicPreviewDraftDeliveryDecision();
+}
+
+final class MosaicPreviewDraftSend extends MosaicPreviewDraftDeliveryDecision {
+  const MosaicPreviewDraftSend();
+}
+
+final class MosaicPreviewDraftWithhold
+    extends MosaicPreviewDraftDeliveryDecision {
+  const MosaicPreviewDraftWithhold({
+    required this.code,
+    required this.message,
+    required this.recoveryAction,
+    required this.recoveryMessage,
+  });
+
+  final String code;
+  final String message;
+  final String recoveryAction;
+  final String recoveryMessage;
+  String get fallback => 'keepLastAcceptedDraft';
+}
+
+/// Applies the exact Local Preview 0.2 schema, capability, and compact UTF-8
+/// byte gate before a draft is sent. Malformed reports withhold safely.
+MosaicPreviewDraftDeliveryDecision decideMosaicPreviewDraftDelivery({
+  required MosaicLocalPreviewNegotiation negotiation,
+  required Map<String, Object?> capabilityReport,
+  required Map<String, Object?> document,
+}) {
+  MosaicPreviewDraftWithhold withhold(
+    String code,
+    String message,
+    String recoveryMessage, {
+    String action = 'updatePreviewClient',
+  }) =>
+      MosaicPreviewDraftWithhold(
+        code: code,
+        message: message,
+        recoveryAction: action,
+        recoveryMessage: recoveryMessage,
+      );
+
+  if (!negotiation.isCompatible || negotiation.selectedVersion == null) {
+    return withhold(
+      'preview.noMutualVersion',
+      'Studio and the preview client have no mutually supported Local Preview version.',
+      'Update Studio or the preview client to a mutually supported version.',
+    );
+  }
+  final schemaVersion = document['schemaVersion'];
+  if (schemaVersion is! String ||
+      negotiation.selectedVersion != schemaVersion) {
+    return withhold(
+      'preview.incompatibleSchemaVersion',
+      'This Local Preview ${negotiation.selectedVersion} client cannot receive a Protocol $schemaVersion draft.',
+      'Update the preview client to a version that supports Local Preview and Protocol $schemaVersion.',
+    );
+  }
+  try {
+    final clientId = capabilityReport['clientId'];
+    final schemas = capabilityReport['supportedSchemaVersions'];
+    final capabilities = capabilityReport['supportedCapabilities'];
+    final previewCapabilities = capabilityReport['previewCapabilities'];
+    final limits = capabilityReport['limits'];
+    if (clientId is! String ||
+        clientId.isEmpty ||
+        schemas is! List<Object?> ||
+        schemas.isEmpty ||
+        schemas.any((value) => value is! String) ||
+        schemas.toSet().length != schemas.length ||
+        capabilities is! List<Object?> ||
+        previewCapabilities is! List<Object?> ||
+        limits is! Map<String, Object?> ||
+        limits['maxDocumentBytes'] is! num) {
+      throw const FormatException();
+    }
+    final maximum = limits['maxDocumentBytes'] as num;
+    if (!maximum.isFinite || maximum <= 0 || maximum != maximum.truncate()) {
+      throw const FormatException();
+    }
+    if (!schemas.contains(schemaVersion)) {
+      return withhold(
+        'preview.incompatibleSchemaVersion',
+        'The preview client does not support the draft schema.',
+        'Update the preview client to support Protocol $schemaVersion.',
+      );
+    }
+    Map<String, String> capabilityMap(List<Object?> values) {
+      final result = <String, String>{};
+      for (final entry in values) {
+        if (entry is! Map<String, Object?> ||
+            entry['name'] is! String ||
+            entry['version'] is! String ||
+            result.containsKey(entry['name'])) {
+          throw const FormatException();
+        }
+        result[entry['name']! as String] = entry['version']! as String;
+      }
+      return result;
+    }
+
+    final supported = capabilityMap(capabilities);
+    final supportedPreview = capabilityMap(previewCapabilities);
+    final compatibility = document['compatibility'];
+    if (compatibility is! Map<String, Object?> ||
+        compatibility['requiredCapabilities'] is! List<Object?>) {
+      return withhold(
+        'preview.invalidDraft',
+        'The preview draft is missing its capability contract.',
+        'Validate the complete draft before preview delivery.',
+        action: 'editProperty',
+      );
+    }
+    final required = compatibility['requiredCapabilities']! as List<Object?>;
+    final missing = <String>[];
+    for (final entry in required) {
+      if (entry is! Map<String, Object?> ||
+          entry['name'] is! String ||
+          entry['version'] is! String) {
+        return withhold(
+          'preview.invalidDraft',
+          'The preview draft has an invalid capability contract.',
+          'Validate the complete draft before preview delivery.',
+          action: 'editProperty',
+        );
+      }
+      final name = entry['name']! as String;
+      if (supported[name] != entry['version']) missing.add(name);
+    }
+    if (missing.isNotEmpty) {
+      return withhold(
+        'preview.unsupportedCapability',
+        'The preview client does not support every capability required by this draft.',
+        'Update the preview client to support: ${missing.join(', ')}.',
+      );
+    }
+    final missingPreview = <String>[
+      for (final capability in mosaicFlutterPreviewCapabilities)
+        if (supportedPreview[capability] != negotiation.selectedVersion)
+          capability,
+    ];
+    if (missingPreview.isNotEmpty) {
+      return withhold(
+        'preview.unsupportedPreviewCapability',
+        'The preview client does not support every required Local Preview capability.',
+        'Update the preview client to support: ${missingPreview.join(', ')}@${negotiation.selectedVersion}.',
+      );
+    }
+    final bytes = utf8.encode(jsonEncode(document)).length;
+    if (bytes > maximum.toInt()) {
+      return withhold(
+        'preview.documentTooLarge',
+        'The serialized preview draft exceeds the client document byte limit.',
+        'Reduce the draft size or use a preview client with a larger document limit.',
+        action: 'removeComponent',
+      );
+    }
+    return const MosaicPreviewDraftSend();
+  } on Object {
+    return withhold(
+      'preview.invalidCapabilityReport',
+      'The preview client capability report is missing or malformed.',
+      'Reconnect or update the preview client so it sends a complete capability report.',
+    );
+  }
+}
+
+Map<String, Object?> mosaicFlutterCapabilityPayload(
+  String clientId, {
+  String previewProtocolVersion = mosaicLocalPreviewProtocolVersion,
+}) {
+  final v02 = previewProtocolVersion == mosaicLocalPreviewV02ProtocolVersion;
+  if (!v02 && previewProtocolVersion != mosaicLocalPreviewProtocolVersion) {
+    throw ArgumentError.value(
+      previewProtocolVersion,
+      'previewProtocolVersion',
+      'Must be 0.1 or 0.2.',
+    );
+  }
+  return <String, Object?>{
+    'clientId': clientId,
+    'supportedSchemaVersions': v02
+        ? <String>[mosaicProtocolVersion, mosaicProtocolV02Version]
+        : <String>[mosaicProtocolVersion],
+    'supportedCapabilities': <Map<String, String>>[
+      for (final capability in v02
+          ? mosaicProtocolV02Capabilities
+          : mosaicProtocolV01Capabilities)
+        <String, String>{
+          'name': capability,
+          'version': v02 ? mosaicProtocolV02Version : mosaicProtocolVersion,
+        },
+    ],
+    'previewCapabilities': <Map<String, String>>[
+      for (final capability in mosaicFlutterPreviewCapabilities)
+        <String, String>{
+          'name': capability,
+          'version': previewProtocolVersion,
+        },
+    ],
+    'limits': <String, Object?>{
+      'maxDocumentBytes': mosaicFlutterPreviewMaximumDocumentBytes,
+    },
+  };
+}

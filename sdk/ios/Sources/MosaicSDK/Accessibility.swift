@@ -7,6 +7,7 @@ public enum MosaicAccessibilityRole: Sendable, Equatable {
   case group
   case button
   case productOption
+  case switchControl
 }
 
 public struct MosaicAccessibilityElement: Sendable, Equatable, Identifiable {
@@ -58,24 +59,24 @@ extension MosaicPaywallModel {
   }
 
   private func appendAccessibility(
-    from stack: MosaicVerticalStack,
+    from stack: MosaicStack,
     to elements: inout [MosaicAccessibilityElement]
   ) {
+    guard isVisible(stack.visibility) else { return }
     for node in stack.children {
+      guard isVisible(node.visibility) else { continue }
       switch node {
-      case .verticalStack(let nested):
+      case .verticalStack(let nested), .stack(let nested):
         appendAccessibility(from: nested, to: &elements)
       case .text(let component):
-        let role: MosaicAccessibilityRole
-        switch component.accessibility {
-        case .text: role = .text
-        case .heading(let level): role = .heading(level: level)
-        }
+        let role = component.accessibility.headingLevel.map(MosaicAccessibilityRole.heading)
+          ?? .text
         elements.append(
           MosaicAccessibilityElement(
             id: component.id,
             role: role,
-            label: localization.resolve(component.value)
+            label: component.accessibility.label.map(localization.resolve)
+              ?? localization.resolve(component.value)
           )
         )
       case .image(let component):
@@ -186,7 +187,51 @@ extension MosaicPaywallModel {
           MosaicAccessibilityElement(
             id: component.id,
             role: .text,
-            label: localization.resolve(component.value)
+            label: component.accessibility.label.map(localization.resolve)
+              ?? localization.resolve(component.value)
+          )
+        )
+      case .carousel(let component):
+        elements.append(
+          MosaicAccessibilityElement(
+            id: component.id,
+            role: .group,
+            label: localization.resolve(component.accessibility.label),
+            hint: component.accessibility.hint.map(localization.resolve),
+            value: localization.resolve(
+              component.pages[carouselPageIndex(for: component.id)].accessibilityLabel
+            )
+          )
+        )
+        if component.pages.indices.contains(carouselPageIndex(for: component.id)) {
+          appendAccessibility(
+            from: component.pages[carouselPageIndex(for: component.id)].content,
+            to: &elements
+          )
+        }
+      case .switchControl(let component):
+        elements.append(
+          MosaicAccessibilityElement(
+            id: component.id,
+            role: .switchControl,
+            label: localization.resolve(component.accessibility.label),
+            hint: component.accessibility.hint.map(localization.resolve),
+            value: switchValue(for: component.id) ? "On" : "Off",
+            isSelected: switchValue(for: component.id)
+          )
+        )
+      case .countdown(let component):
+        elements.append(
+          MosaicAccessibilityElement(
+            id: component.id,
+            role: component.accessibility.headingLevel.map(MosaicAccessibilityRole.heading)
+              ?? .text,
+            label: component.accessibility.label.map(localization.resolve)
+              ?? MosaicCountdownText.resolve(
+                component: component,
+                now: currentDate(),
+                completedText: localization.resolve(component.completedText)
+              )
           )
         )
       }

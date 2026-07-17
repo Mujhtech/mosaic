@@ -46,9 +46,10 @@ void main() {
     await client.connect();
 
     expect(client.connectionStatus, MosaicPreviewConnectionStatus.connected);
-    expect(connector.protocols.single, <String>[
-      mosaicLocalPreviewWebSocketProtocol,
-    ]);
+    expect(
+      connector.protocols.single,
+      mosaicLocalPreviewWebSocketProtocols,
+    );
     expect(_sentTypes(socket), <String>[
       'previewClientConnected',
       'capabilityReport',

@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.2.0-dev.2
+
+- Add a separate strict Mosaic Protocol 0.2 reader while retaining the strict 0.1 reader without implicit migration.
+- Render generalized stacks, contextual sizing, outer insets, colors, borders, clipping, opacity, typography, and complete product-card state styles with native Flutter widgets.
+- Add native Carousel, Switch, and Countdown components with deterministic runtime reset, hidden-state preservation, controlled-clock testing, and accessible semantics.
+- Enforce the canonical hidden-selector purchase dependency and emit the safe `purchase.hiddenProductSelector` diagnostic.
+- Negotiate Local Preview 0.2 before 0.1 and encode every message with the negotiated envelope version.
+- Add exact version-scoped capability reports, strict local-project loading, schema/version matching, and the atomic pre-send capability/compact-byte gate.
+- Preserve the last accepted preview revision after invalid or incompatible 0.2 drafts.
+- Add direct coverage for every canonical Protocol 0.2 fixture and Local Preview 0.2 message, migration, fallback, RTL at 200% text scale, native interactions, and a reviewed Flutter golden.
+
 ## 0.2.0-dev.1
 
 - Add the Local Preview 0.1 WebSocket client with explicit endpoint, session, and renderer-neutral client identity.
