@@ -2,7 +2,7 @@ name = "mosaic_ios"
 description = "Owns Mosaic's Swift SDK, SwiftUI-native renderer, StoreKit-facing boundaries, example app, tests, and protocol conformance."
 
 model = "gpt-5.6-sol"
-model_reasoning_effort = "max"
+model_reasoning_effort = "xhigh"
 sandbox_mode = "workspace-write"
 
 developer_instructions = """

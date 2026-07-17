@@ -2,7 +2,7 @@ name = "mosaic_flutter"
 description = "Owns Mosaic's Flutter SDK, Flutter-native renderer, example app, tests, and protocol conformance."
 
 model = "gpt-5.6-sol"
-model_reasoning_effort = "max"
+model_reasoning_effort = "xhigh"
 sandbox_mode = "workspace-write"
 
 developer_instructions = """

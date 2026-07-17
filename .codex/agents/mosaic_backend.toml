@@ -1,7 +1,7 @@
 name = "mosaic_backend"
 description = "Owns Mosaic's Go modular-monolith backend, REST APIs, persistence, publishing, telemetry, and workers."
 model = "gpt-5.6-sol"
-model_reasoning_effort = "max"
+model_reasoning_effort = "xhigh"
 sandbox_mode = "workspace-write"
 
 developer_instructions = """

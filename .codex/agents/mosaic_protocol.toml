@@ -1,7 +1,7 @@
 name = "mosaic_protocol"
 description = "Owns Mosaic's platform-neutral protocol, schemas, compatibility rules, fixtures, and cross-platform contracts."
 model = "gpt-5.6-sol"
-model_reasoning_effort = "max"
+model_reasoning_effort = "xhigh"
 sandbox_mode = "workspace-write"
 
 developer_instructions = """
