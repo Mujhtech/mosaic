@@ -1,0 +1,160 @@
+:root {
+  /* shadcn compatibility values. Keep these stable for existing dashboard primitives. */
+  --accent: oklch(0.94 0.025 203);
+  --accent-foreground: oklch(0.26 0.024 222);
+  --background: oklch(0.985 0.004 95);
+  --border: oklch(0.9 0.009 95);
+  --card: oklch(1 0 0);
+  --card-foreground: oklch(0.2 0.012 80);
+  --destructive: oklch(0.58 0.22 28);
+  --destructive-foreground: oklch(0.98 0.01 28);
+  --foreground: oklch(0.2 0.012 80);
+  --input: oklch(0.9 0.009 95);
+  --muted: oklch(0.955 0.006 95);
+  --muted-foreground: oklch(0.5 0.012 80);
+  --popover: oklch(1 0 0);
+  --popover-foreground: oklch(0.2 0.012 80);
+  --primary: oklch(0.48 0.12 194);
+  --primary-foreground: oklch(0.985 0.003 194);
+  --ring: oklch(0.54 0.11 194);
+  --secondary: oklch(0.945 0.012 194);
+  --secondary-foreground: oklch(0.26 0.024 222);
+  --sidebar: oklch(0.97 0.008 95);
+  --sidebar-accent: oklch(0.925 0.02 194);
+  --sidebar-accent-foreground: oklch(0.24 0.025 222);
+  --sidebar-border: oklch(0.89 0.012 95);
+  --sidebar-foreground: oklch(0.24 0.018 80);
+  --sidebar-primary: oklch(0.48 0.12 194);
+  --sidebar-primary-foreground: oklch(0.985 0.003 194);
+  --sidebar-ring: oklch(0.54 0.11 194);
+  --radius: 0.75rem;
+
+  /* Semantic surfaces and workspace roles. */
+  --mosaic-surface: var(--background);
+  --mosaic-surface-raised: var(--card);
+  --mosaic-canvas-surface: color-mix(
+    in oklab,
+    var(--background) 75%,
+    var(--muted)
+  );
+  --mosaic-panel-surface: var(--card);
+  --mosaic-toolbar-surface: var(--card);
+  --mosaic-rail-surface: var(--sidebar);
+  --mosaic-inspector-surface: var(--card);
+  --mosaic-text: var(--foreground);
+  --mosaic-text-muted: var(--muted-foreground);
+  --mosaic-text-on-action: var(--primary-foreground);
+
+  /* Actions, selection, and status. */
+  --mosaic-action: var(--primary);
+  --mosaic-action-foreground: var(--primary-foreground);
+  --mosaic-action-hover: var(--accent);
+  --mosaic-selection-surface: color-mix(
+    in oklab,
+    var(--primary) 24%,
+    transparent
+  );
+  --mosaic-selection-border: var(--primary);
+  --mosaic-status-info-surface: oklch(0.96 0.025 235);
+  --mosaic-status-info-border: oklch(0.78 0.08 235);
+  --mosaic-status-info-text: oklch(0.34 0.09 235);
+  --mosaic-status-success-surface: oklch(0.96 0.035 155);
+  --mosaic-status-success-border: oklch(0.75 0.1 155);
+  --mosaic-status-success-text: oklch(0.34 0.1 155);
+  --mosaic-status-warning-surface: oklch(0.97 0.045 85);
+  --mosaic-status-warning-border: oklch(0.78 0.12 85);
+  --mosaic-status-warning-text: oklch(0.4 0.11 70);
+  --mosaic-status-danger-surface: oklch(0.96 0.035 28);
+  --mosaic-status-danger-border: oklch(0.76 0.12 28);
+  --mosaic-status-danger-text: oklch(0.42 0.17 28);
+
+  /* Borders, focus, elevation, and shadows. */
+  --mosaic-border: var(--border);
+  --mosaic-border-strong: oklch(0.76 0.014 95);
+  --mosaic-focus-ring: var(--ring);
+  --mosaic-focus-width: 2px;
+  --mosaic-focus-offset: 2px;
+  --mosaic-shadow-color: oklch(0.2 0.012 80 / 10%);
+  --mosaic-shadow-sm: 0 1px 2px var(--mosaic-shadow-color);
+  --mosaic-shadow-md:
+    0 8px 24px oklch(0.2 0.012 80 / 9%), 0 2px 6px oklch(0.2 0.012 80 / 6%);
+  --mosaic-elevation-toolbar: var(--mosaic-shadow-sm);
+  --mosaic-elevation-overlay: var(--mosaic-shadow-md);
+
+  /* Spacing and typography. */
+  --mosaic-space-1: 0.25rem;
+  --mosaic-space-2: 0.5rem;
+  --mosaic-space-3: 0.75rem;
+  --mosaic-space-4: 1rem;
+  --mosaic-space-6: 1.5rem;
+  --mosaic-font-sans:
+    Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont,
+    "Segoe UI", sans-serif;
+  --mosaic-type-xs: 0.75rem;
+  --mosaic-type-sm: 0.875rem;
+  --mosaic-type-md: 1rem;
+  --mosaic-leading-tight: 1.25;
+  --mosaic-leading-normal: 1.5;
+  --mosaic-weight-medium: 500;
+  --mosaic-weight-semibold: 600;
+
+  /* Radius and motion. */
+  --mosaic-radius-sm: calc(var(--radius) - 4px);
+  --mosaic-radius-md: calc(var(--radius) - 2px);
+  --mosaic-radius-lg: var(--radius);
+  --mosaic-radius-full: 9999px;
+  --mosaic-motion-fast: 120ms;
+  --mosaic-motion-standard: 180ms;
+  --mosaic-ease-standard: cubic-bezier(0.2, 0, 0, 1);
+}
+
+.dark {
+  --accent: oklch(0.3 0.04 203);
+  --accent-foreground: oklch(0.95 0.014 203);
+  --background: oklch(0.17 0.01 80);
+  --border: oklch(1 0 0 / 13%);
+  --card: oklch(0.21 0.012 80);
+  --card-foreground: oklch(0.96 0.006 95);
+  --foreground: oklch(0.96 0.006 95);
+  --input: oklch(1 0 0 / 15%);
+  --muted: oklch(0.26 0.012 80);
+  --muted-foreground: oklch(0.72 0.012 80);
+  --popover: oklch(0.21 0.012 80);
+  --popover-foreground: oklch(0.96 0.006 95);
+  --primary: oklch(0.72 0.12 194);
+  --primary-foreground: oklch(0.18 0.016 194);
+  --ring: oklch(0.7 0.11 194);
+  --secondary: oklch(0.28 0.02 194);
+  --secondary-foreground: oklch(0.95 0.014 203);
+  --sidebar: oklch(0.19 0.012 80);
+  --sidebar-accent: oklch(0.29 0.035 194);
+  --sidebar-accent-foreground: oklch(0.95 0.014 203);
+  --sidebar-border: oklch(1 0 0 / 13%);
+  --sidebar-foreground: oklch(0.94 0.008 95);
+  --sidebar-primary: oklch(0.72 0.12 194);
+  --sidebar-primary-foreground: oklch(0.18 0.016 194);
+  --sidebar-ring: oklch(0.7 0.11 194);
+  --mosaic-status-info-surface: oklch(0.27 0.045 235);
+  --mosaic-status-info-border: oklch(0.52 0.1 235);
+  --mosaic-status-info-text: oklch(0.86 0.06 235);
+  --mosaic-status-success-surface: oklch(0.25 0.045 155);
+  --mosaic-status-success-border: oklch(0.5 0.11 155);
+  --mosaic-status-success-text: oklch(0.86 0.07 155);
+  --mosaic-status-warning-surface: oklch(0.28 0.05 75);
+  --mosaic-status-warning-border: oklch(0.56 0.12 80);
+  --mosaic-status-warning-text: oklch(0.9 0.08 85);
+  --mosaic-status-danger-surface: oklch(0.27 0.055 28);
+  --mosaic-status-danger-border: oklch(0.56 0.14 28);
+  --mosaic-status-danger-text: oklch(0.9 0.07 28);
+  --mosaic-border-strong: oklch(1 0 0 / 24%);
+  --mosaic-shadow-color: oklch(0 0 0 / 26%);
+  --mosaic-shadow-md:
+    0 8px 24px oklch(0 0 0 / 24%), 0 2px 6px oklch(0 0 0 / 18%);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --mosaic-motion-fast: 1ms;
+    --mosaic-motion-standard: 1ms;
+  }
+}
