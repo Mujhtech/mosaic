@@ -346,11 +346,28 @@ The Phase 2 demo is:
 
 ## Phase 2.5: Production Studio UX & Design System
 
+Phase 2.5 now has two explicit owner-approved gates:
+
+- **Gate 2.5A — Production Studio UX and Design System:** the current canvas-first Studio,
+  Layers, contextual Protocol `0.1` inspector, resizable workspace, local preview, and design-system
+  work described in this section and in
+  `docs/plans/phase-2.5-studio-implementation.md`.
+- **Gate 2.5B — Protocol 0.2 Styling and Component Expansion:** the versioned styling contract,
+  generalized Stack, Carousel, Switch, Countdown, Product Card Default/Selected states, Studio
+  coverage, and matching Flutter, SwiftUI, and Compose support described in
+  `docs/plans/phase-2.5b-protocol-0.2-expansion.md`.
+
+Gate 2.5A does not authorize protocol or SDK expansion. Gate 2.5B is the separate explicit owner
+authorization for Protocol `0.2` and its complete cross-platform vertical slice. Phase 2.5 is not
+accepted, and Phase 3 must not begin, until both gates pass.
+
 ### Objectives
 
 Transform the functional Phase 2 prototype into a production-quality editor that developers and designers genuinely enjoy using.
 
-The goal of this phase is **not** to add more product functionality.
+The goal of Gate 2.5A is **not** to add more product functionality. Gate 2.5B then adds only the
+bounded Protocol `0.2` capabilities required to make those contextual editing workflows useful for
+production paywalls.
 
 The goal is to dramatically improve:
 
@@ -436,7 +453,7 @@ import {
   ResizableHandle,
   ResizablePanel,
   ResizablePanelGroup,
-} from "@/components/ui/resizable"
+} from "@/components/ui/resizable";
 ```
 
 The implementation must use:
@@ -577,22 +594,22 @@ Use explicit units for panel constraints.
 Prefer:
 
 ```tsx
-minSize="240px"
-maxSize="440px"
-defaultSize="300px"
+minSize = "240px";
+maxSize = "440px";
+defaultSize = "300px";
 ```
 
 Avoid ambiguous size values.
 
 Recommended starting constraints:
 
-| Workspace area | Default | Minimum | Maximum |
-|---|---:|---:|---:|
-| Activity rail | 52px | 52px | 52px |
-| Left tool panel | 300px | 240px | 440px |
-| Property inspector | 360px | 300px | 560px |
-| Bottom diagnostics | 220px high | 140px high | 45vh |
-| Canvas | Remaining space | 420px wide | Remaining space |
+| Workspace area     |         Default |    Minimum |         Maximum |
+| ------------------ | --------------: | ---------: | --------------: |
+| Activity rail      |            52px |       52px |            52px |
+| Left tool panel    |           300px |      240px |           440px |
+| Property inspector |           360px |      300px |           560px |
+| Bottom diagnostics |      220px high | 140px high |            45vh |
+| Canvas             | Remaining space | 420px wide | Remaining space |
 
 These values are initial constraints and may be adjusted following usability testing.
 
@@ -818,6 +835,14 @@ Invalid nesting must be rejected with:
 
 The hierarchy must represent the actual Mosaic document structure.
 
+The layer tree is the structural interaction surface. Do not place a permanent toolbar of move,
+nest, outdent, duplicate, or delete buttons above it. An eligible layer row can initiate drag from
+any non-control surface; the grip is an affordance, not a required hit target. Right-click and the
+overflow button open the same contextual actions. Duplicate and delete live there; nest and
+outdent appear only when the selected structure makes them valid. Inline rename remains focused
+until commit or cancel. Keep the keyboard reference in a shortcuts tooltip or dialog instead of
+permanent panel copy.
+
 ---
 
 ### Canvas Interaction
@@ -830,12 +855,15 @@ Users should be able to:
 - hover to highlight
 - double-click supported text to edit
 - use keyboard navigation between components
-- drag to reorder where appropriate
-- duplicate from the canvas
-- delete selected components
-- open contextual menus
 - see selection boundaries
 - inspect spacing visually where supported
+
+The browser canvas must preserve the rendered component semantics: headings are headings, copy is
+text, feature collections are lists, product choices use selection controls, and only protocol
+actions render as buttons. Generic editor frames must not turn every component into a button.
+
+Structural editing belongs to Layers. Reorder, reparent, duplicate, delete, lock, hide, and layer
+context menus must not add draggable wrappers or structural-action chrome to the canvas.
 
 Canvas selection and layer selection must remain synchronized.
 
@@ -907,7 +935,8 @@ solely for this phase unless:
 5. conformance tests exist
 6. the product owner explicitly approves the expansion
 
-Phase 2.5 is not a protocol-expansion phase.
+Gate 2.5A is not a protocol-expansion gate. Gate 2.5B is the sole approved Protocol `0.2`
+expansion; components and properties outside its frozen contract remain excluded.
 
 ---
 
@@ -931,6 +960,20 @@ Use progressive disclosure through sections such as:
 - Visibility
 - Accessibility
 - Advanced
+
+For Phase 2.5, those section names are a vocabulary, not a promise that every element exposes
+every section. Show the most frequently used section first, keep secondary sections collapsed,
+and keep Advanced closed until requested. Validation navigation may open the section that owns the
+invalid field.
+
+The inspector must expose the complete canonical Protocol `0.1` surface and must not synthesize
+properties that the protocol and all three native renderers do not support. IDs, localization keys,
+fixed action discriminators, and fixed protocol policies belong in Advanced. Structural child
+editing remains in Layers.
+
+For Gate 2.5A, the examples below remain vocabulary only and are not Protocol `0.1` acceptance
+criteria. Gate 2.5B approves the bounded subset defined in the Protocol `0.2` expansion contract;
+that contract, rather than these examples, is authoritative for exact fields and semantics.
 
 #### Text example
 
@@ -1401,13 +1444,43 @@ The review must include:
 - one-minute demo result
 - founder-review answers
 
+The report must evaluate the two gates separately before issuing one final Phase 2.5
+classification.
+
+#### Gate 2.5A evidence
+
+- the complete production Studio UX and design-system acceptance in this roadmap;
+- no Protocol `0.1`, Local Preview `0.1`, fixture, or SDK expansion;
+- contextual coverage of the complete Protocol `0.1` surface;
+- the Studio usability path and one-minute demo.
+
+#### Gate 2.5B evidence
+
+- Protocol `0.1` remains immutable and every valid `0.1` document remains supported;
+- the deterministic `0.1` to `0.2` migration, strict `0.2` schema, manifest, documentation,
+  generated browser contract, fixtures, and changelogs;
+- Local Preview `0.2` schemas, messages, local-project and session-flow fixtures, exact WebSocket
+  subprotocol, and capability negotiation, while Local Preview `0.1` remains unchanged and
+  supported;
+- generalized vertical/horizontal Stack, Carousel, Switch, Countdown, approved styling, and
+  Product Card complete Default plus deterministic Selected overrides in Studio and all three
+  native renderers, including per-field and full Selected reset;
+- exact runtime-versus-document state boundaries for selection, Carousel page, Switch value,
+  Countdown time, and Studio preview controls;
+- long localization, RTL, accessibility scaling, contrast, truncation, unavailable product,
+  expired Countdown, hidden-content, unsupported-client, fallback, and migration conformance;
+- atomic rejection and last-accepted or bundled fallback when a client cannot render Protocol
+  `0.2` completely;
+- the complete task workflow and demo defined in the Gate 2.5B implementation contract.
+
 Classify the phase as:
 
 - Accepted
 - Accepted with tracked follow-ups
 - Rejected pending fixes
 
-Do not begin Phase 3 until Phase 2.5 is accepted.
+Do not begin Phase 3 until both Gate 2.5A and Gate 2.5B are accepted and the consolidated Phase 2.5
+report is accepted.
 
 ## Phase 3: Hosted Publishing
 
