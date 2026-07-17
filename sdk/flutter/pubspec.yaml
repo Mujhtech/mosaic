@@ -1,6 +1,6 @@
 name: mosaic_sdk
-description: Phase 0 configuration, protocol decoding, and commerce contracts for Mosaic Flutter consumers.
-version: 0.1.0-dev.1
+description: Protocol 0.1 RC1 native paywall renderer and mock commerce for Flutter.
+version: 0.1.0-dev.2
 publish_to: none
 
 environment:

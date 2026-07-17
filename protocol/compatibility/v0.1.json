@@ -1,16 +1,27 @@
 {
   "schemaVersion": "0.1",
-  "status": "draft",
+  "status": "releaseCandidate",
+  "releaseCandidate": "RC1",
   "schema": "../schema/v0.1/paywall.schema.json",
-  "canonicalFixture": "../fixtures/v0.1/minimal-paywall.json",
+  "canonicalFixture": "../fixtures/v0.1/complete-paywall.json",
   "capabilities": [
     {
-      "name": "layout.vertical",
+      "name": "layout.scrollContainer",
+      "version": "0.1",
+      "fallback": "rejectDocument"
+    },
+    {
+      "name": "layout.verticalStack",
       "version": "0.1",
       "fallback": "rejectDocument"
     },
     {
       "name": "component.text",
+      "version": "0.1",
+      "fallback": "rejectDocument"
+    },
+    {
+      "name": "component.image",
       "version": "0.1",
       "fallback": "rejectDocument"
     },
@@ -43,12 +54,104 @@
       "name": "component.legalText",
       "version": "0.1",
       "fallback": "rejectDocument"
+    },
+    {
+      "name": "localization.catalogs",
+      "version": "0.1",
+      "fallback": "rejectDocument"
+    },
+    {
+      "name": "localization.rtl",
+      "version": "0.1",
+      "fallback": "rejectDocument"
+    },
+    {
+      "name": "product.references",
+      "version": "0.1",
+      "fallback": "rejectDocument"
+    },
+    {
+      "name": "asset.bundledImage",
+      "version": "0.1",
+      "fallback": "rejectDocument"
+    },
+    {
+      "name": "action.purchase",
+      "version": "0.1",
+      "fallback": "rejectDocument"
+    },
+    {
+      "name": "action.restore",
+      "version": "0.1",
+      "fallback": "rejectDocument"
+    },
+    {
+      "name": "action.close",
+      "version": "0.1",
+      "fallback": "rejectDocument"
+    },
+    {
+      "name": "accessibility.metadata",
+      "version": "0.1",
+      "fallback": "rejectDocument"
+    },
+    {
+      "name": "fallback.asset",
+      "version": "0.1",
+      "fallback": "rejectDocument"
+    },
+    {
+      "name": "fallback.product",
+      "version": "0.1",
+      "fallback": "rejectDocument"
+    },
+    {
+      "name": "outcome.normalized",
+      "version": "0.1",
+      "fallback": "rejectDocument"
     }
   ],
   "readerPolicy": {
     "unknownSchemaVersion": "rejectDocument",
     "unknownComponent": "rejectDocument",
     "unknownProperty": "rejectDocument",
-    "unsupportedCapability": "rejectDocument"
+    "unsupportedCapability": "rejectDocument",
+    "invalidReference": "rejectDocument",
+    "primaryDocumentRejected": "loadBundledFallback",
+    "bundledFallbackRejected": "configurationUnavailable",
+    "missingAsset": "useDeclaredAssetFallback",
+    "unavailableProduct": "useSelectorFallback"
+  },
+  "normalizedOutcomes": {
+    "selectProduct": [
+      "productSelected"
+    ],
+    "purchase": [
+      "purchased",
+      "alreadyEntitled",
+      "cancelled",
+      "productUnavailable",
+      "purchaseFailed"
+    ],
+    "restore": [
+      "restored",
+      "alreadyEntitled",
+      "restoreNoPurchases",
+      "restoreFailed"
+    ],
+    "close": [
+      "dismissed"
+    ],
+    "presentation": [
+      "purchased",
+      "restored",
+      "alreadyEntitled",
+      "dismissed",
+      "cancelled",
+      "productUnavailable",
+      "configurationUnavailable",
+      "purchaseFailed",
+      "renderingFailed"
+    ]
   }
 }

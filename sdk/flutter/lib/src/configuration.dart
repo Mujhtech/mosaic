@@ -38,8 +38,8 @@ final class MosaicConfiguration {
 
 /// A configured Mosaic SDK handle.
 ///
-/// Networking, caching, placements, and rendering are intentionally deferred
-/// beyond Phase 0.
+/// Phase 1 rendering remains local. Networking, caching, placements, remote
+/// configuration, analytics, and real billing adapters are not implemented.
 final class Mosaic {
   const Mosaic._({
     required this.configuration,

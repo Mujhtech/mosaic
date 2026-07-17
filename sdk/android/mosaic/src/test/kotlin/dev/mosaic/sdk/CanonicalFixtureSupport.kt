@@ -1,0 +1,55 @@
+package dev.mosaic.sdk
+
+import com.google.gson.JsonElement
+import com.google.gson.JsonObject
+import com.google.gson.JsonParser
+import java.nio.file.Files
+import java.nio.file.Path
+import kotlin.text.Charsets
+
+internal fun canonicalFixtureSource(): String =
+    Files.readAllBytes(canonicalFixture()).toString(Charsets.UTF_8)
+
+internal fun canonicalFixtureObject(): JsonObject =
+    JsonParser.parseString(canonicalFixtureSource()).asJsonObject
+
+internal fun canonicalDocument(): MosaicPaywallDocument =
+    MosaicProtocolDecoder.decode(canonicalFixtureSource())
+
+internal fun canonicalFixtureReplacing(original: String, replacement: String): String {
+    val source = canonicalFixtureSource()
+    check(original in source) { "Canonical fixture does not contain $original." }
+    return source.replaceFirst(original, replacement)
+}
+
+internal fun findNode(root: JsonObject, id: String): JsonObject {
+    fun find(element: JsonElement): JsonObject? {
+        if (!element.isJsonObject) return null
+        val objectValue = element.asJsonObject
+        if (objectValue.get("id")?.asString == id) return objectValue
+        objectValue.getAsJsonArray("children")?.forEach { child ->
+            find(child)?.let { return it }
+        }
+        objectValue.getAsJsonObject("content")?.let { content ->
+            find(content)?.let { return it }
+        }
+        return null
+    }
+    return checkNotNull(find(root.getAsJsonObject("layout"))) { "Missing node $id." }
+}
+
+private fun canonicalFixture(): Path {
+    val configuredRoot = System.getProperty("mosaic.repositoryRoot")?.let(Path::of)
+    if (configuredRoot != null) {
+        val fixture = configuredRoot.resolve("protocol/fixtures/v0.1/complete-paywall.json")
+        if (Files.exists(fixture)) return fixture
+    }
+
+    var directory: Path? = Path.of("").toAbsolutePath()
+    while (directory != null) {
+        val fixture = directory.resolve("protocol/fixtures/v0.1/complete-paywall.json")
+        if (Files.exists(fixture)) return fixture
+        directory = directory.parent
+    }
+    error("Cannot locate the sole canonical Protocol 0.1 RC1 fixture in the Mosaic repository.")
+}

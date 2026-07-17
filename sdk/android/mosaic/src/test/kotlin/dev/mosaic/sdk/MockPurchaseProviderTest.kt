@@ -1,64 +1,83 @@
 package dev.mosaic.sdk
 
-import kotlin.coroutines.Continuation
-import kotlin.coroutines.EmptyCoroutineContext
-import kotlin.coroutines.startCoroutine
+import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class MockPurchaseProviderTest {
     @Test
-    fun mockProviderReturnsExplicitCommerceResults() = runImmediateSuspend {
+    fun mockProviderReturnsExplicitCommerceResults() = runTest {
         val provider = MockMosaicPurchaseProvider(
-            products = listOf(
-                MosaicProduct(
-                    id = "mosaic_pro_yearly",
-                    title = "Mosaic Pro Yearly",
-                    localizedPrice = "$49.99",
-                ),
-            ),
+            products = MockMosaicPurchaseProvider.phase1Products(),
         )
 
         val load = provider.loadProducts(listOf("mosaic_pro_yearly"))
         assertTrue(load is MosaicProductLoadResult.Loaded)
+        assertEquals("$79.99", (load as MosaicProductLoadResult.Loaded).products.single().localizedPrice)
 
-        val purchase = provider.purchase("mosaic_pro_yearly")
-        assertTrue(purchase is MosaicPurchaseResult.Purchased)
-
-        val repeated = provider.purchase("mosaic_pro_yearly")
-        assertTrue(repeated is MosaicPurchaseResult.AlreadyEntitled)
-
-        val restore = provider.restore()
-        assertTrue(restore is MosaicRestoreResult.Restored)
-
-        val active = provider.activeEntitlements()
-        assertTrue(active is MosaicActiveEntitlementsResult.Active)
+        assertTrue(provider.purchase("mosaic_pro_yearly") is MosaicPurchaseResult.Purchased)
+        assertTrue(provider.purchase("mosaic_pro_yearly") is MosaicPurchaseResult.AlreadyEntitled)
+        assertTrue(provider.restore() is MosaicRestoreResult.Restored)
+        assertTrue(provider.activeEntitlements() is MosaicActiveEntitlementsResult.Active)
     }
 
     @Test
-    fun mockProviderReportsUnavailableAndEmptyStates() = runImmediateSuspend {
-        val provider = MockMosaicPurchaseProvider()
+    fun partialProductLoadsKeepAvailableStoreData() = runTest {
+        val provider = MockMosaicPurchaseProvider(
+            products = MockMosaicPurchaseProvider.phase1Products().take(1),
+        )
+
+        val result = provider.loadProducts(
+            listOf("mosaic_pro_monthly", "mosaic_pro_yearly"),
+        ) as MosaicProductLoadResult.Loaded
+
+        assertEquals(listOf("mosaic_pro_monthly"), result.products.map { it.id })
+        assertEquals(setOf("mosaic_pro_yearly"), result.unavailableProductIds)
+    }
+
+    @Test
+    fun scenariosCoverCancellationFailureUnavailableAndRestoreStates() = runTest {
+        val product = MockMosaicPurchaseProvider.phase1Products().first()
 
         assertTrue(
-            provider.loadProducts(listOf("missing")) is MosaicProductLoadResult.Unavailable,
+            MockMosaicPurchaseProvider(
+                listOf(product),
+                purchaseScenario = MosaicMockPurchaseScenario.CANCELLED,
+            ).purchase(product.id) is MosaicPurchaseResult.Cancelled,
         )
-        assertTrue(provider.purchase("missing") is MosaicPurchaseResult.ProductUnavailable)
-        assertEquals(MosaicRestoreResult.NothingToRestore, provider.restore())
+        assertTrue(
+            MockMosaicPurchaseProvider(
+                listOf(product),
+                purchaseScenario = MosaicMockPurchaseScenario.FAILURE,
+            ).purchase(product.id) is MosaicPurchaseResult.Failed,
+        )
+        assertTrue(
+            MockMosaicPurchaseProvider(
+                listOf(product),
+                purchaseScenario = MosaicMockPurchaseScenario.PRODUCT_UNAVAILABLE,
+            ).purchase(product.id) is MosaicPurchaseResult.ProductUnavailable,
+        )
+        assertTrue(
+            MockMosaicPurchaseProvider(
+                restoreScenario = MosaicMockRestoreScenario.RESTORED,
+            ).restore() is MosaicRestoreResult.Restored,
+        )
+        assertTrue(
+            MockMosaicPurchaseProvider(
+                restoreScenario = MosaicMockRestoreScenario.ALREADY_ENTITLED,
+            ).restore() is MosaicRestoreResult.AlreadyEntitled,
+        )
+        assertEquals(
+            MosaicRestoreResult.NothingToRestore,
+            MockMosaicPurchaseProvider(
+                restoreScenario = MosaicMockRestoreScenario.NOTHING_TO_RESTORE,
+            ).restore(),
+        )
+        assertTrue(
+            MockMosaicPurchaseProvider(
+                restoreScenario = MosaicMockRestoreScenario.FAILURE,
+            ).restore() is MosaicRestoreResult.Failed,
+        )
     }
-}
-
-/** The Phase 0 mock does not suspend internally, so no coroutine runtime is required in tests. */
-private fun <T> runImmediateSuspend(block: suspend () -> T): T {
-    var outcome: Result<T>? = null
-    block.startCoroutine(
-        object : Continuation<T> {
-            override val context = EmptyCoroutineContext
-
-            override fun resumeWith(result: Result<T>) {
-                outcome = result
-            }
-        },
-    )
-    return checkNotNull(outcome) { "The Phase 0 mock unexpectedly suspended." }.getOrThrow()
 }

@@ -1,49 +1,75 @@
 # Mosaic Protocol Versioning
 
-## Exact versions during the draft period
+## Exact versions
 
-`schemaVersion` is an exact protocol identifier, not an implied compatibility
-range. A reader that declares support for `0.1` accepts `0.1` only. It must not
-infer support for another version from numeric ordering.
+`schemaVersion` and every capability version are exact identifiers, not numeric
+compatibility ranges. A reader declaring `0.1` accepts only `0.1` and only the
+capability names and `0.1` versions it explicitly supports. It must not infer
+forward or backward support from numeric ordering.
 
-Capability versions are also exact. A component capability at `0.1` is
-supported only when the reader explicitly declares that name and version.
-
-This conservative rule avoids assuming a compatibility policy before the
-Protocol review gate approves one. A future range or migration policy is a
-public-contract decision and must not be introduced by one implementation.
+This conservative rule remains in force through the Protocol review gate. A
+future range, migration, or compatibility policy is a public-contract decision
+and cannot be introduced by one SDK.
 
 ## Artifact lifecycle
 
-The compatibility manifest records one of these states:
+The compatibility manifest status is one of:
 
-- `draft`: may change during its active review cycle;
-- `approved`: frozen for consumers and immutable;
-- `deprecated`: still readable where supported, but not recommended for new
-  documents.
+- `draft`: actively being designed and not ready for cross-platform review;
+- `releaseCandidate`: coherent candidate implemented for the review gate;
+- `approved`: product-owner-approved and immutable;
+- `deprecated`: still readable where supported but discouraged for new work.
 
-Once a version becomes approved, its schema, manifest, and canonical fixtures
-must not be edited in place. A contract change creates a new version directory
-and changelog entry. Corrections that would alter whether any document validates
-also require a new version.
+Protocol `0.1` is currently `releaseCandidate` with provenance `RC1`. RC1 is not
+approval. If review changes the contract before approval, all three SDK owners
+must receive the revised contract explicitly, the candidate identifier must
+advance, and every conformance check must be rerun.
+
+Approval occurs only after the Protocol and cross-platform prototype gates.
+When the approved bytes match RC1, approval changes the manifest lifecycle
+status and changelog status; it does not silently redesign the schema.
+
+After approval, schema, manifest contract, and canonical fixtures must not be
+edited in place. A correction that changes decoding, validation, rendering,
+fallback, accessibility, action, or outcome behavior creates a new protocol
+version and migration note. Deprecation does not make approved artifacts
+mutable.
 
 ## Change requirements
 
-Every protocol change requires:
+Every pre-approval candidate change and every future version requires:
 
-1. a versioned schema update;
-2. canonical fixture changes or additions;
-3. invalid-input coverage where applicable;
-4. compatibility and fallback review;
-5. documentation and changelog updates; and
-6. decoding support or a defined safe failure across all supported readers.
+1. schema and manifest review;
+2. canonical fixture update when the contract is exercised differently;
+3. valid and invalid validation coverage;
+4. compatibility, accessibility, and fallback review;
+5. documentation and changelog updates;
+6. implementation or defined atomic rejection in Flutter, SwiftUI, and
+   Jetpack Compose; and
+7. explicit notification to every platform owner when a shared candidate
+   changes.
 
-The protocol remains platform-neutral. A single reader's implementation
-convenience is not sufficient reason to change the shared contract.
+The protocol stays platform-neutral. Framework convenience, native resource
+names, billing-provider models, and platform-only UI behavior are not valid
+reasons to fork or weaken the shared contract.
+
+## Reader sequence
+
+A reader must:
+
+1. check the exact schema version;
+2. compare every required capability and exact version;
+3. validate the closed document plus semantic references;
+4. render only after complete validation succeeds;
+5. attempt its bundled fallback when the primary document is rejected; and
+6. return `configurationUnavailable` when the bundled fallback also fails.
+
+No version policy permits best-effort partial rendering of unknown content.
 
 ## Current review gate
 
-Protocol `0.1` remains `draft` until the product owner reviews its component
-semantics, strict rejection policy, exact-version policy, localization fallback,
-and deferred design-token/style model. Approval should change only the manifest
-status and changelog status after all first-party fixture decode checks pass.
+Protocol `0.1` RC1 remains pending product-owner review of its component and
+layout semantics, localization/direction resolution, product and asset model,
+actions, accessibility, strict fallback policy, capability set, normalized
+outcomes, and documented native differences. Do not mark it `approved` as part
+of Phase 1 implementation or begin Phase 2 before that review.

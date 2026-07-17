@@ -10,6 +10,7 @@ void main() {
           id: 'mosaic_pro_yearly',
           title: 'Mosaic Pro Yearly',
           localizedPrice: r'$49.99',
+          localizedPeriod: 'year',
         ),
       ],
     );
@@ -42,5 +43,78 @@ void main() {
       isA<MosaicPurchaseProductUnavailable>(),
     );
     expect(await provider.restore(), isA<MosaicNothingToRestore>());
+  });
+
+  test('mock provider preserves partial availability in source order',
+      () async {
+    final provider = MockMosaicPurchaseProvider(
+      products: const <MosaicProduct>[
+        MosaicProduct(
+          id: 'available',
+          title: 'Available',
+          localizedPrice: r'$1.99',
+          localizedPeriod: 'month',
+        ),
+      ],
+    );
+
+    final result = await provider.loadProducts(<String>[
+      'missing',
+      'available',
+    ]);
+
+    expect(result, isA<MosaicProductsLoaded>());
+    final loaded = result as MosaicProductsLoaded;
+    expect(loaded.products.map((product) => product.id), <String>['available']);
+    expect(loaded.unavailableProductIds, <String>['missing']);
+    expect(loaded.products.single.localizedPeriod, 'month');
+  });
+
+  test('mock provider deterministically exposes every purchase scenario',
+      () async {
+    const product = MosaicProduct(
+      id: 'product',
+      title: 'Product',
+      localizedPrice: r'$1.99',
+    );
+    final expectations = <MockMosaicPurchaseScenario, Type>{
+      MockMosaicPurchaseScenario.success: MosaicPurchased,
+      MockMosaicPurchaseScenario.cancellation: MosaicPurchaseCancelled,
+      MockMosaicPurchaseScenario.failure: MosaicPurchaseFailed,
+      MockMosaicPurchaseScenario.alreadyEntitled: MosaicAlreadyEntitled,
+      MockMosaicPurchaseScenario.productUnavailable:
+          MosaicPurchaseProductUnavailable,
+    };
+
+    for (final entry in expectations.entries) {
+      final provider = MockMosaicPurchaseProvider(
+        products: const <MosaicProduct>[product],
+        purchaseScenario: entry.key,
+      );
+      expect((await provider.purchase('product')).runtimeType, entry.value);
+    }
+  });
+
+  test('mock provider deterministically exposes every restore scenario',
+      () async {
+    const product = MosaicProduct(
+      id: 'product',
+      title: 'Product',
+      localizedPrice: r'$1.99',
+    );
+    final expectations = <MockMosaicRestoreScenario, Type>{
+      MockMosaicRestoreScenario.success: MosaicRestored,
+      MockMosaicRestoreScenario.alreadyEntitled: MosaicRestoreAlreadyEntitled,
+      MockMosaicRestoreScenario.noPurchases: MosaicNothingToRestore,
+      MockMosaicRestoreScenario.failure: MosaicRestoreFailed,
+    };
+
+    for (final entry in expectations.entries) {
+      final provider = MockMosaicPurchaseProvider(
+        products: const <MosaicProduct>[product],
+        restoreScenario: entry.key,
+      );
+      expect((await provider.restore()).runtimeType, entry.value);
+    }
   });
 }

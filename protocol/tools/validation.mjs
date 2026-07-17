@@ -11,7 +11,7 @@ export const protocolRoot = resolve(toolsDirectory, "..");
 export const protocolPaths = Object.freeze({
   canonicalFixture: resolve(
     protocolRoot,
-    "fixtures/v0.1/minimal-paywall.json",
+    "fixtures/v0.1/complete-paywall.json",
   ),
   compatibilityManifest: resolve(protocolRoot, "compatibility/v0.1.json"),
   compatibilityManifestSchema: resolve(
@@ -24,12 +24,26 @@ export const protocolPaths = Object.freeze({
 const capabilityByType = Object.freeze({
   closeButton: "component.closeButton",
   featureList: "component.featureList",
+  image: "component.image",
   legalText: "component.legalText",
   productSelector: "component.productSelector",
   purchaseButton: "component.purchaseButton",
   restoreButton: "component.restoreButton",
+  scrollContainer: "layout.scrollContainer",
   text: "component.text",
+  verticalStack: "layout.verticalStack",
 });
+
+const requiredCanonicalComponentTypes = Object.freeze([
+  "closeButton",
+  "featureList",
+  "image",
+  "legalText",
+  "productSelector",
+  "purchaseButton",
+  "restoreButton",
+  "text",
+]);
 
 export function readJson(filePath) {
   return JSON.parse(readFileSync(filePath, "utf8"));
@@ -71,21 +85,82 @@ function addUniqueEntries(errors, entries, label) {
   }
 }
 
+function addUniqueFieldValues(errors, entries, field, label) {
+  const seen = new Set();
+
+  for (const entry of entries) {
+    const value = entry[field];
+    if (seen.has(value)) {
+      errors.push(`${label} contains duplicate ${field} ${value}`);
+    }
+    seen.add(value);
+  }
+}
+
 function capabilityMap(entries) {
   return new Map(entries.map((entry) => [entry.name, entry.version]));
 }
 
-function expectedDocumentCapabilities(document) {
-  const capabilities = new Set();
+export function walkDocumentNodes(document) {
+  const nodes = [];
 
-  if (document.layout?.type === "vertical") {
-    capabilities.add("layout.vertical");
+  function visit(node) {
+    if (!node || typeof node !== "object") {
+      return;
+    }
+
+    nodes.push(node);
+    if (node.type === "scrollContainer") {
+      visit(node.content);
+    } else if (node.type === "verticalStack") {
+      for (const child of node.children ?? []) {
+        visit(child);
+      }
+    }
   }
 
-  for (const component of document.layout?.children ?? []) {
-    const capability = capabilityByType[component.type];
+  visit(document.layout);
+  return nodes;
+}
+
+export function expectedDocumentCapabilities(document) {
+  const capabilities = new Set(["localization.catalogs"]);
+
+  if (
+    Object.values(document.localization?.locales ?? {}).some(
+      (locale) => locale.direction === "rtl",
+    )
+  ) {
+    capabilities.add("localization.rtl");
+  }
+
+  if ((document.products?.length ?? 0) > 0) {
+    capabilities.add("product.references");
+  }
+
+  if ((document.assets?.length ?? 0) > 0) {
+    capabilities.add("asset.bundledImage");
+    capabilities.add("fallback.asset");
+  }
+
+  for (const node of walkDocumentNodes(document)) {
+    const capability = capabilityByType[node.type];
     if (capability) {
       capabilities.add(capability);
+    }
+
+    if (node.accessibility) {
+      capabilities.add("accessibility.metadata");
+    }
+
+    if (node.type === "productSelector") {
+      capabilities.add("fallback.product");
+      capabilities.add("outcome.normalized");
+    }
+
+    if (node.action?.type) {
+      capabilities.add(`action.${node.action.type}`);
+      capabilities.add("outcome.normalized");
     }
   }
 
@@ -138,23 +213,316 @@ function validateDocumentCapabilities(errors, document, manifest, paywallSchema)
   }
 }
 
-function validateProductSelection(errors, document) {
-  for (const component of document.layout.children) {
-    if (component.type !== "productSelector") {
+function validateSchemaCapabilityAgreement(
+  errors,
+  paywallSchema,
+  manifestSchema,
+) {
+  const documentCapabilities = new Set(
+    paywallSchema.$defs.capabilityName.enum,
+  );
+  const manifestCapabilities = new Set(
+    manifestSchema.$defs.capabilityName.enum,
+  );
+
+  for (const capability of documentCapabilities) {
+    if (!manifestCapabilities.has(capability)) {
+      errors.push(`manifest schema omits paywall capability ${capability}`);
+    }
+  }
+  for (const capability of manifestCapabilities) {
+    if (!documentCapabilities.has(capability)) {
+      errors.push(`manifest schema declares unknown capability ${capability}`);
+    }
+  }
+}
+
+function validateNodeIdentifiers(errors, nodes) {
+  addUniqueFieldValues(errors, nodes, "id", "layout tree");
+
+  for (const node of nodes) {
+    if (node.type !== "featureList") {
       continue;
     }
 
-    const productIds = component.products.map((product) => product.productId);
-    if (new Set(productIds).size !== productIds.length) {
-      errors.push(`product selector ${component.id} contains duplicate product IDs`);
+    addUniqueFieldValues(
+      errors,
+      node.items,
+      "id",
+      `feature list ${node.id}`,
+    );
+  }
+}
+
+function validateAssetReferences(errors, document, nodes) {
+  addUniqueFieldValues(errors, document.assets, "id", "asset catalog");
+  const assetsById = new Map(document.assets.map((asset) => [asset.id, asset]));
+  const referencedAssets = new Set();
+
+  for (const node of nodes) {
+    if (node.type !== "image") {
+      continue;
     }
 
-    if (!productIds.includes(component.initiallySelectedProductId)) {
+    const asset = assetsById.get(node.assetId);
+    if (!asset) {
+      errors.push(`image ${node.id} references unknown asset ${node.assetId}`);
+      continue;
+    }
+    if (asset.type !== "image") {
+      errors.push(`image ${node.id} references non-image asset ${node.assetId}`);
+    }
+    referencedAssets.add(node.assetId);
+  }
+
+  for (const asset of document.assets) {
+    if (!referencedAssets.has(asset.id)) {
+      errors.push(`asset catalog declares unused asset ${asset.id}`);
+    }
+  }
+}
+
+function validateProductReferences(errors, document, nodes) {
+  addUniqueFieldValues(errors, document.products, "id", "product catalog");
+  addUniqueFieldValues(
+    errors,
+    document.products,
+    "productId",
+    "product catalog",
+  );
+
+  const productsById = new Map(
+    document.products.map((product) => [product.id, product]),
+  );
+  const referencedProducts = new Set();
+  const selectorsById = new Map();
+  const purchaseSelectorIds = new Set();
+
+  for (const node of nodes) {
+    if (node.type === "productSelector") {
+      selectorsById.set(node.id, node);
+      const referenceIds = node.productReferenceIds;
+
+      for (const referenceId of referenceIds) {
+        if (!productsById.has(referenceId)) {
+          errors.push(
+            `product selector ${node.id} references unknown product ${referenceId}`,
+          );
+        }
+        referencedProducts.add(referenceId);
+      }
+
+      if (!referenceIds.includes(node.initiallySelectedProductReferenceId)) {
+        errors.push(
+          `product selector ${node.id} initially selects an undeclared product`,
+        );
+      }
+    }
+
+    if (node.type === "purchaseButton") {
+      purchaseSelectorIds.add(node.action.productSelectorId);
+    }
+  }
+
+  for (const node of nodes) {
+    if (node.type !== "purchaseButton") {
+      continue;
+    }
+
+    const target = selectorsById.get(node.action.productSelectorId);
+    if (!target) {
       errors.push(
-        `product selector ${component.id} initially selects an undeclared product`,
+        `purchase button ${node.id} references unknown product selector ` +
+          node.action.productSelectorId,
       );
     }
   }
+
+  for (const selector of selectorsById.values()) {
+    if (!purchaseSelectorIds.has(selector.id)) {
+      errors.push(`product selector ${selector.id} has no purchase action`);
+    }
+  }
+
+  for (const product of document.products) {
+    if (!referencedProducts.has(product.id)) {
+      errors.push(`product catalog declares unused product ${product.id}`);
+    }
+  }
+}
+
+function collectLocalizedText(value, path, entries) {
+  if (Array.isArray(value)) {
+    value.forEach((entry, index) =>
+      collectLocalizedText(entry, `${path}/${index}`, entries),
+    );
+    return;
+  }
+
+  if (!value || typeof value !== "object") {
+    return;
+  }
+
+  if (
+    typeof value.default === "string" &&
+    typeof value.localizationKey === "string"
+  ) {
+    entries.push({ path, text: value });
+    return;
+  }
+
+  for (const [key, entry] of Object.entries(value)) {
+    collectLocalizedText(entry, `${path}/${key}`, entries);
+  }
+}
+
+function validateLocalization(errors, document) {
+  const { defaultLocale, fallbackLocale, locales } = document.localization;
+
+  if (!Object.hasOwn(locales, defaultLocale)) {
+    errors.push(`localization default locale ${defaultLocale} is not declared`);
+  }
+  if (!Object.hasOwn(locales, fallbackLocale)) {
+    errors.push(`localization fallback locale ${fallbackLocale} is not declared`);
+  }
+
+  if (!Object.hasOwn(locales, defaultLocale)) {
+    return;
+  }
+
+  const localizedEntries = [];
+  collectLocalizedText(document.assets, "/assets", localizedEntries);
+  collectLocalizedText(document.products, "/products", localizedEntries);
+  collectLocalizedText(document.layout, "/layout", localizedEntries);
+
+  const referencedKeys = new Set();
+  const defaultStrings = locales[defaultLocale].strings;
+
+  for (const { path, text } of localizedEntries) {
+    referencedKeys.add(text.localizationKey);
+    if (!Object.hasOwn(defaultStrings, text.localizationKey)) {
+      errors.push(
+        `${path} references missing default localization key ` +
+          text.localizationKey,
+      );
+      continue;
+    }
+
+    if (defaultStrings[text.localizationKey] !== text.default) {
+      errors.push(
+        `${path} default text does not match ${defaultLocale} catalog key ` +
+          text.localizationKey,
+      );
+    }
+  }
+
+  for (const key of Object.keys(defaultStrings)) {
+    if (!referencedKeys.has(key)) {
+      errors.push(`default localization catalog declares unused key ${key}`);
+    }
+  }
+
+  for (const [locale, catalog] of Object.entries(locales)) {
+    if (locale === defaultLocale) {
+      continue;
+    }
+
+    for (const key of Object.keys(catalog.strings)) {
+      if (!Object.hasOwn(defaultStrings, key)) {
+        errors.push(`localization catalog ${locale} declares unknown key ${key}`);
+      }
+    }
+  }
+}
+
+function localeCandidates(document, requestedLocale) {
+  const { defaultLocale, fallbackLocale, locales } = document.localization;
+  const candidates = [];
+
+  function add(locale) {
+    if (locale && !candidates.includes(locale)) {
+      candidates.push(locale);
+    }
+  }
+
+  if (requestedLocale) {
+    add(requestedLocale);
+    add(requestedLocale.split("-")[0]);
+    add(fallbackLocale);
+    add(defaultLocale);
+  } else {
+    add(defaultLocale);
+    add(fallbackLocale);
+  }
+
+  return candidates.filter((locale) => Object.hasOwn(locales, locale));
+}
+
+export function resolveLocalizedText(document, localizedText, requestedLocale) {
+  const candidates = localeCandidates(document, requestedLocale);
+  const directionLocale = candidates[0] ?? document.localization.defaultLocale;
+  const direction =
+    document.localization.locales[directionLocale]?.direction ?? "ltr";
+
+  for (const locale of candidates) {
+    const strings = document.localization.locales[locale].strings;
+    if (Object.hasOwn(strings, localizedText.localizationKey)) {
+      return {
+        direction,
+        locale,
+        value: strings[localizedText.localizationKey],
+      };
+    }
+  }
+
+  return {
+    direction,
+    locale: null,
+    value: localizedText.default,
+  };
+}
+
+export function validateCanonicalFixtureCoverage(document) {
+  const errors = [];
+  const nodes = walkDocumentNodes(document);
+  const componentTypes = new Set(nodes.map((node) => node.type));
+
+  for (const componentType of requiredCanonicalComponentTypes) {
+    if (!componentTypes.has(componentType)) {
+      errors.push(`canonical fixture omits component ${componentType}`);
+    }
+  }
+
+  if (
+    !nodes.some(
+      (node) =>
+        node.type === "verticalStack" && node !== document.layout?.content,
+    )
+  ) {
+    errors.push("canonical fixture does not exercise nested vertical stacks");
+  }
+
+  if (
+    !Object.values(document.localization?.locales ?? {}).some(
+      (locale) => locale.direction === "rtl",
+    )
+  ) {
+    errors.push("canonical fixture does not exercise RTL localization");
+  }
+
+  const defaultLocale = document.localization?.defaultLocale;
+  const hasLongTranslation = Object.entries(
+    document.localization?.locales ?? {},
+  ).some(
+    ([locale, catalog]) =>
+      locale !== defaultLocale &&
+      Object.values(catalog.strings).some((value) => value.length >= 120),
+  );
+  if (!hasLongTranslation) {
+    errors.push("canonical fixture does not exercise a long localization");
+  }
+
+  return errors;
 }
 
 export function validateProtocol({
@@ -186,8 +554,13 @@ export function validateProtocol({
     );
   }
 
+  const nodes = walkDocumentNodes(document);
+  validateSchemaCapabilityAgreement(errors, paywallSchema, manifestSchema);
   validateDocumentCapabilities(errors, document, manifest, paywallSchema);
-  validateProductSelection(errors, document);
+  validateNodeIdentifiers(errors, nodes);
+  validateAssetReferences(errors, document, nodes);
+  validateProductReferences(errors, document, nodes);
+  validateLocalization(errors, document);
 
   return errors;
 }

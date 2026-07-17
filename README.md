@@ -3,10 +3,11 @@
 Mosaic is an open-source, cross-platform app monetization platform built around
 one platform-neutral protocol, three native SDKs, and one Studio.
 
-Phase 0 establishes the repository foundation only. Protocol `0.1`, the Go API
-health shell, the TanStack Start dashboard shell, and Flutter, SwiftUI, and
-Jetpack Compose SDK package foundations are implemented as review drafts. No
-Phase 1 renderer or product domain is included.
+Phase 0 is accepted. Phase 1 now has a review candidate: Mosaic Protocol `0.1`
+RC1, one canonical complete paywall fixture, native Flutter/SwiftUI/Jetpack
+Compose renderers, deterministic mock commerce, bundled fallback handling,
+accessibility and visual tests, and three example applications. Phase 2 has not
+started.
 
 ## Repository map
 
@@ -14,10 +15,11 @@ Phase 1 renderer or product domain is included.
 apps/api/         Go API foundation
 apps/dashboard/   TanStack Start dashboard foundation
 apps/worker/      deferred worker-boundary documentation
-protocol/         canonical JSON Schema, compatibility manifest, and fixture
-sdk/flutter/      Flutter configuration, decoding, and mock commerce boundary
-sdk/ios/          Swift package configuration, decoding, and mock commerce boundary
-sdk/android/      Compose-ready Android library with the same boundaries
+protocol/         Protocol 0.1 RC1 schema, compatibility manifest, and canonical fixture
+sdk/flutter/      Flutter decoder, native renderer, fallback loader, and mock commerce
+sdk/ios/          Swift package decoder, SwiftUI renderer, fallback loader, and mock commerce
+sdk/android/      Android decoder, Compose renderer, fallback loader, and mock commerce
+examples/         Flutter, iOS, and Android Phase 1 scenario applications
 docs/             architecture and foundation documentation
 ```
 
@@ -29,8 +31,8 @@ docs/             architecture and foundation documentation
 - Swift 6+ and Xcode 16+
 - JDK 17 and Android SDK 36
 
-The SDK platform minimums are provisional until the Phase 0 product-owner
-review.
+The SDK platform minimums remain working baselines pending stable public SDK
+versioning.
 
 ## Install and validate
 
@@ -67,6 +69,8 @@ flutter pub get
 dart format --output=none --set-exit-if-changed lib test example/lib
 flutter analyze
 flutter test
+cd example
+flutter build bundle --no-pub
 ```
 
 Swift SDK:
@@ -75,13 +79,19 @@ Swift SDK:
 swift format lint --strict --recursive sdk/ios/Package.swift sdk/ios/Sources sdk/ios/Tests
 swift build --package-path sdk/ios
 swift test --package-path sdk/ios
+xcodebuild -project examples/ios-example/MosaicExample.xcodeproj \
+  -scheme MosaicExample \
+  -destination 'generic/platform=iOS Simulator' \
+  -derivedDataPath examples/ios-example/.build/DerivedData \
+  CODE_SIGNING_ALLOWED=NO build
 ```
 
 Android SDK:
 
 ```bash
 cd sdk/android
-./gradlew --no-daemon :mosaic:assembleDebug :mosaic:testDebugUnitTest :mosaic:lintDebug
+./gradlew --no-daemon :mosaic:assembleDebug :mosaic:testDebugUnitTest \
+  :mosaic:lintDebug :mosaic:assembleDebugAndroidTest
 ```
 
 Run the API with `go run ./cmd/api` from `apps/api`, and run the dashboard with
@@ -94,8 +104,9 @@ Run the API with `go run ./cmd/api` from `apps/api`, and run the dashboard with
 - [Protocol 0.1](docs/protocol/v0.1.md)
 - [Backend foundation](docs/backend/api-foundation.md)
 - [Dashboard foundation](docs/dashboard/foundation.md)
-- [SDK foundations](docs/sdk/README.md)
+- [Phase 1 SDK renderers](docs/sdk/README.md)
+- [Phase 1 review candidate](docs/reviews/phase-1-review.md)
 
 There is intentionally no root package-manager workspace or shared Go module
-yet. The Phase 0 review gate must choose the monorepo command structure and the
-future API/worker shared-module boundary before product or worker code begins.
+yet. Phase 1 remains local-only and does not add remote configuration,
+publishing, Studio editing, analytics, placements, or real billing providers.

@@ -1,0 +1,23 @@
+name: mosaic_flutter_example
+description: Mosaic Phase 1 native Flutter renderer playground.
+publish_to: none
+version: 1.0.0+1
+
+environment:
+  sdk: ^3.10.4
+
+dependencies:
+  flutter:
+    sdk: flutter
+  mosaic_sdk:
+    path: ../../sdk/flutter
+
+dev_dependencies:
+  flutter_lints: ^6.0.0
+  flutter_test:
+    sdk: flutter
+
+flutter:
+  uses-material-design: true
+  assets:
+    - assets/generated/

@@ -4,11 +4,16 @@ final class MosaicProduct {
     required this.id,
     required this.title,
     required this.localizedPrice,
+    this.localizedPeriod,
   });
 
+  /// Opaque provider product identifier requested by the protocol document.
   final String id;
   final String title;
   final String localizedPrice;
+
+  /// Runtime-only localized period, such as "month" or "year".
+  final String? localizedPeriod;
 }
 
 /// Provider-neutral entitlement returned by a purchase adapter.
@@ -30,10 +35,16 @@ sealed class MosaicProductLoadResult {
 }
 
 final class MosaicProductsLoaded extends MosaicProductLoadResult {
-  MosaicProductsLoaded(Iterable<MosaicProduct> products)
-      : products = List.unmodifiable(products);
+  MosaicProductsLoaded(
+    Iterable<MosaicProduct> products, {
+    Iterable<String> unavailableProductIds = const <String>[],
+  })  : products = List.unmodifiable(products),
+        unavailableProductIds = List.unmodifiable(unavailableProductIds);
 
   final List<MosaicProduct> products;
+
+  /// Requested provider identifiers omitted because they were unavailable.
+  final List<String> unavailableProductIds;
 }
 
 final class MosaicProductsUnavailable extends MosaicProductLoadResult {
@@ -86,6 +97,13 @@ sealed class MosaicRestoreResult {
 
 final class MosaicRestored extends MosaicRestoreResult {
   MosaicRestored(Iterable<MosaicEntitlement> entitlements)
+      : entitlements = Set.unmodifiable(entitlements);
+
+  final Set<MosaicEntitlement> entitlements;
+}
+
+final class MosaicRestoreAlreadyEntitled extends MosaicRestoreResult {
+  MosaicRestoreAlreadyEntitled(Iterable<MosaicEntitlement> entitlements)
       : entitlements = Set.unmodifiable(entitlements);
 
   final Set<MosaicEntitlement> entitlements;

@@ -1,8 +1,8 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "urn:mosaic:protocol:schema:v0.1:paywall",
-  "title": "Mosaic Paywall Protocol 0.1",
-  "description": "The platform-neutral Mosaic paywall document supported by protocol version 0.1.",
+  "title": "Mosaic Paywall Protocol 0.1 RC1",
+  "description": "The platform-neutral Mosaic Phase 1 native-paywall document contract.",
   "type": "object",
   "additionalProperties": false,
   "required": [
@@ -10,6 +10,9 @@
     "id",
     "revision",
     "compatibility",
+    "localization",
+    "assets",
+    "products",
     "layout"
   ],
   "properties": {
@@ -27,8 +30,23 @@
     "compatibility": {
       "$ref": "#/$defs/documentCompatibility"
     },
+    "localization": {
+      "$ref": "#/$defs/localization"
+    },
+    "assets": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/imageAsset"
+      }
+    },
+    "products": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/productReference"
+      }
+    },
     "layout": {
-      "$ref": "#/$defs/verticalLayout"
+      "$ref": "#/$defs/scrollContainer"
     }
   },
   "$defs": {
@@ -39,11 +57,17 @@
     "identifier": {
       "type": "string",
       "minLength": 1,
+      "maxLength": 128,
       "pattern": "^[a-z][a-z0-9]*(?:[-_][a-z0-9]+)*$"
     },
     "localizationKey": {
       "type": "string",
+      "maxLength": 256,
       "pattern": "^[a-z][a-z0-9_]*(?:\\.[a-z][a-z0-9_]*)+$"
+    },
+    "localeTag": {
+      "type": "string",
+      "pattern": "^[a-z]{2,3}(?:-(?:[A-Z]{2}|[0-9]{3}))?$"
     },
     "localizedText": {
       "type": "object",
@@ -55,24 +79,94 @@
       "properties": {
         "default": {
           "type": "string",
-          "minLength": 1
+          "minLength": 1,
+          "maxLength": 5000
         },
         "localizationKey": {
           "$ref": "#/$defs/localizationKey"
         }
       }
     },
+    "localeCatalog": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "direction",
+        "strings"
+      ],
+      "properties": {
+        "direction": {
+          "type": "string",
+          "enum": [
+            "ltr",
+            "rtl"
+          ]
+        },
+        "strings": {
+          "type": "object",
+          "minProperties": 1,
+          "propertyNames": {
+            "$ref": "#/$defs/localizationKey"
+          },
+          "additionalProperties": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 5000
+          }
+        }
+      }
+    },
+    "localization": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "defaultLocale",
+        "fallbackLocale",
+        "locales"
+      ],
+      "properties": {
+        "defaultLocale": {
+          "$ref": "#/$defs/localeTag"
+        },
+        "fallbackLocale": {
+          "$ref": "#/$defs/localeTag"
+        },
+        "locales": {
+          "type": "object",
+          "minProperties": 1,
+          "propertyNames": {
+            "$ref": "#/$defs/localeTag"
+          },
+          "additionalProperties": {
+            "$ref": "#/$defs/localeCatalog"
+          }
+        }
+      }
+    },
     "capabilityName": {
       "type": "string",
       "enum": [
-        "layout.vertical",
+        "layout.scrollContainer",
+        "layout.verticalStack",
         "component.text",
+        "component.image",
         "component.featureList",
         "component.productSelector",
         "component.purchaseButton",
         "component.restoreButton",
         "component.closeButton",
-        "component.legalText"
+        "component.legalText",
+        "localization.catalogs",
+        "localization.rtl",
+        "product.references",
+        "asset.bundledImage",
+        "action.purchase",
+        "action.restore",
+        "action.close",
+        "accessibility.metadata",
+        "fallback.asset",
+        "fallback.product",
+        "outcome.normalized"
       ]
     },
     "requiredCapability": {
@@ -108,44 +202,298 @@
         }
       }
     },
-    "verticalLayout": {
+    "logicalSize": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 4096
+    },
+    "positiveLogicalSize": {
+      "type": "number",
+      "exclusiveMinimum": 0,
+      "maximum": 4096
+    },
+    "edgeInsets": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "top",
+        "start",
+        "bottom",
+        "end"
+      ],
+      "properties": {
+        "top": {
+          "$ref": "#/$defs/logicalSize"
+        },
+        "start": {
+          "$ref": "#/$defs/logicalSize"
+        },
+        "bottom": {
+          "$ref": "#/$defs/logicalSize"
+        },
+        "end": {
+          "$ref": "#/$defs/logicalSize"
+        }
+      }
+    },
+    "textAlignment": {
+      "type": "string",
+      "enum": [
+        "start",
+        "center",
+        "end"
+      ]
+    },
+    "controlAccessibility": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "label"
+      ],
+      "properties": {
+        "label": {
+          "$ref": "#/$defs/localizedText"
+        },
+        "hint": {
+          "$ref": "#/$defs/localizedText"
+        }
+      }
+    },
+    "textAccessibility": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "role"
+          ],
+          "properties": {
+            "role": {
+              "const": "text"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "role",
+            "level"
+          ],
+          "properties": {
+            "role": {
+              "const": "heading"
+            },
+            "level": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 6
+            }
+          }
+        }
+      ]
+    },
+    "imageAccessibility": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "hidden"
+          ],
+          "properties": {
+            "hidden": {
+              "const": true
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "hidden",
+            "label"
+          ],
+          "properties": {
+            "hidden": {
+              "const": false
+            },
+            "label": {
+              "$ref": "#/$defs/localizedText"
+            }
+          }
+        }
+      ]
+    },
+    "bundledImageSource": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "type",
+        "key"
+      ],
+      "properties": {
+        "type": {
+          "const": "bundled"
+        },
+        "key": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256,
+          "pattern": "^[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*$"
+        }
+      }
+    },
+    "imageAssetFallback": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "type",
+        "value"
+      ],
+      "properties": {
+        "type": {
+          "const": "placeholder"
+        },
+        "value": {
+          "$ref": "#/$defs/localizedText"
+        }
+      }
+    },
+    "imageAsset": {
       "type": "object",
       "additionalProperties": false,
       "required": [
         "type",
         "id",
-        "gap",
-        "padding",
-        "children"
+        "source",
+        "fallback"
       ],
       "properties": {
         "type": {
-          "const": "vertical"
+          "const": "image"
         },
         "id": {
           "$ref": "#/$defs/identifier"
         },
-        "gap": {
-          "type": "number",
-          "minimum": 0
+        "source": {
+          "$ref": "#/$defs/bundledImageSource"
+        },
+        "fallback": {
+          "$ref": "#/$defs/imageAssetFallback"
+        }
+      }
+    },
+    "productReference": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "productId",
+        "label"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/identifier"
+        },
+        "productId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+        },
+        "label": {
+          "$ref": "#/$defs/localizedText"
+        },
+        "badge": {
+          "$ref": "#/$defs/localizedText"
+        }
+      }
+    },
+    "scrollContainer": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "type",
+        "id",
+        "axis",
+        "safeArea",
+        "showsIndicators",
+        "content"
+      ],
+      "properties": {
+        "type": {
+          "const": "scrollContainer"
+        },
+        "id": {
+          "$ref": "#/$defs/identifier"
+        },
+        "axis": {
+          "const": "vertical"
+        },
+        "safeArea": {
+          "const": "respect"
+        },
+        "showsIndicators": {
+          "type": "boolean"
+        },
+        "content": {
+          "$ref": "#/$defs/verticalStack"
+        }
+      }
+    },
+    "verticalStack": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "type",
+        "id",
+        "spacing",
+        "padding",
+        "horizontalAlignment",
+        "children"
+      ],
+      "properties": {
+        "type": {
+          "const": "verticalStack"
+        },
+        "id": {
+          "$ref": "#/$defs/identifier"
+        },
+        "spacing": {
+          "$ref": "#/$defs/logicalSize"
         },
         "padding": {
-          "type": "number",
-          "minimum": 0
+          "$ref": "#/$defs/edgeInsets"
+        },
+        "horizontalAlignment": {
+          "type": "string",
+          "enum": [
+            "start",
+            "center",
+            "end",
+            "stretch"
+          ]
         },
         "children": {
           "type": "array",
           "minItems": 1,
           "items": {
-            "$ref": "#/$defs/component"
+            "$ref": "#/$defs/node"
           }
         }
       }
     },
-    "component": {
+    "node": {
       "oneOf": [
         {
+          "$ref": "#/$defs/verticalStack"
+        },
+        {
           "$ref": "#/$defs/textComponent"
+        },
+        {
+          "$ref": "#/$defs/imageComponent"
         },
         {
           "$ref": "#/$defs/featureListComponent"
@@ -173,7 +521,10 @@
       "required": [
         "type",
         "id",
-        "value"
+        "value",
+        "style",
+        "alignment",
+        "accessibility"
       ],
       "properties": {
         "type": {
@@ -184,6 +535,62 @@
         },
         "value": {
           "$ref": "#/$defs/localizedText"
+        },
+        "style": {
+          "type": "string",
+          "enum": [
+            "title",
+            "body",
+            "caption"
+          ]
+        },
+        "alignment": {
+          "$ref": "#/$defs/textAlignment"
+        },
+        "accessibility": {
+          "$ref": "#/$defs/textAccessibility"
+        }
+      }
+    },
+    "imageComponent": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "type",
+        "id",
+        "assetId",
+        "width",
+        "aspectRatio",
+        "contentMode",
+        "accessibility"
+      ],
+      "properties": {
+        "type": {
+          "const": "image"
+        },
+        "id": {
+          "$ref": "#/$defs/identifier"
+        },
+        "assetId": {
+          "$ref": "#/$defs/identifier"
+        },
+        "width": {
+          "const": "fill"
+        },
+        "aspectRatio": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "maximum": 10
+        },
+        "contentMode": {
+          "type": "string",
+          "enum": [
+            "fit",
+            "fill"
+          ]
+        },
+        "accessibility": {
+          "$ref": "#/$defs/imageAccessibility"
         }
       }
     },
@@ -209,7 +616,10 @@
       "required": [
         "type",
         "id",
-        "items"
+        "marker",
+        "itemSpacing",
+        "items",
+        "accessibility"
       ],
       "properties": {
         "type": {
@@ -218,26 +628,41 @@
         "id": {
           "$ref": "#/$defs/identifier"
         },
+        "marker": {
+          "const": "checkmark"
+        },
+        "itemSpacing": {
+          "$ref": "#/$defs/logicalSize"
+        },
         "items": {
           "type": "array",
           "minItems": 1,
           "items": {
             "$ref": "#/$defs/featureListItem"
           }
+        },
+        "accessibility": {
+          "$ref": "#/$defs/controlAccessibility"
         }
       }
     },
-    "productReference": {
+    "unavailableProductFallback": {
       "type": "object",
       "additionalProperties": false,
       "required": [
-        "productId"
+        "selection",
+        "whenNoneAvailable",
+        "message"
       ],
       "properties": {
-        "productId": {
-          "type": "string",
-          "minLength": 1,
-          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+        "selection": {
+          "const": "firstAvailable"
+        },
+        "whenNoneAvailable": {
+          "const": "showMessageAndDisablePurchase"
+        },
+        "message": {
+          "$ref": "#/$defs/localizedText"
         }
       }
     },
@@ -247,8 +672,11 @@
       "required": [
         "type",
         "id",
-        "products",
-        "initiallySelectedProductId"
+        "productReferenceIds",
+        "initiallySelectedProductReferenceId",
+        "itemSpacing",
+        "unavailableFallback",
+        "accessibility"
       ],
       "properties": {
         "type": {
@@ -257,17 +685,65 @@
         "id": {
           "$ref": "#/$defs/identifier"
         },
-        "products": {
+        "productReferenceIds": {
           "type": "array",
           "minItems": 1,
+          "uniqueItems": true,
           "items": {
-            "$ref": "#/$defs/productReference"
+            "$ref": "#/$defs/identifier"
           }
         },
-        "initiallySelectedProductId": {
-          "type": "string",
-          "minLength": 1,
-          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+        "initiallySelectedProductReferenceId": {
+          "$ref": "#/$defs/identifier"
+        },
+        "itemSpacing": {
+          "$ref": "#/$defs/logicalSize"
+        },
+        "unavailableFallback": {
+          "$ref": "#/$defs/unavailableProductFallback"
+        },
+        "accessibility": {
+          "$ref": "#/$defs/controlAccessibility"
+        }
+      }
+    },
+    "purchaseAction": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "type",
+        "productSelectorId"
+      ],
+      "properties": {
+        "type": {
+          "const": "purchase"
+        },
+        "productSelectorId": {
+          "$ref": "#/$defs/identifier"
+        }
+      }
+    },
+    "restoreAction": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "type"
+      ],
+      "properties": {
+        "type": {
+          "const": "restore"
+        }
+      }
+    },
+    "closeAction": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "type"
+      ],
+      "properties": {
+        "type": {
+          "const": "close"
         }
       }
     },
@@ -277,7 +753,10 @@
       "required": [
         "type",
         "id",
-        "label"
+        "label",
+        "inProgressLabel",
+        "action",
+        "accessibility"
       ],
       "properties": {
         "type": {
@@ -288,6 +767,15 @@
         },
         "label": {
           "$ref": "#/$defs/localizedText"
+        },
+        "inProgressLabel": {
+          "$ref": "#/$defs/localizedText"
+        },
+        "action": {
+          "$ref": "#/$defs/purchaseAction"
+        },
+        "accessibility": {
+          "$ref": "#/$defs/controlAccessibility"
         }
       }
     },
@@ -297,7 +785,10 @@
       "required": [
         "type",
         "id",
-        "label"
+        "label",
+        "inProgressLabel",
+        "action",
+        "accessibility"
       ],
       "properties": {
         "type": {
@@ -308,6 +799,15 @@
         },
         "label": {
           "$ref": "#/$defs/localizedText"
+        },
+        "inProgressLabel": {
+          "$ref": "#/$defs/localizedText"
+        },
+        "action": {
+          "$ref": "#/$defs/restoreAction"
+        },
+        "accessibility": {
+          "$ref": "#/$defs/controlAccessibility"
         }
       }
     },
@@ -317,7 +817,9 @@
       "required": [
         "type",
         "id",
-        "label"
+        "label",
+        "action",
+        "accessibility"
       ],
       "properties": {
         "type": {
@@ -328,6 +830,12 @@
         },
         "label": {
           "$ref": "#/$defs/localizedText"
+        },
+        "action": {
+          "$ref": "#/$defs/closeAction"
+        },
+        "accessibility": {
+          "$ref": "#/$defs/controlAccessibility"
         }
       }
     },
@@ -337,7 +845,9 @@
       "required": [
         "type",
         "id",
-        "value"
+        "value",
+        "alignment",
+        "accessibility"
       ],
       "properties": {
         "type": {
@@ -348,6 +858,12 @@
         },
         "value": {
           "$ref": "#/$defs/localizedText"
+        },
+        "alignment": {
+          "$ref": "#/$defs/textAlignment"
+        },
+        "accessibility": {
+          "$ref": "#/$defs/textAccessibility"
         }
       }
     }

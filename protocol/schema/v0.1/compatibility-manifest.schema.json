@@ -7,10 +7,12 @@
   "required": [
     "schemaVersion",
     "status",
+    "releaseCandidate",
     "schema",
     "canonicalFixture",
     "capabilities",
-    "readerPolicy"
+    "readerPolicy",
+    "normalizedOutcomes"
   ],
   "properties": {
     "schemaVersion": {
@@ -21,9 +23,14 @@
       "type": "string",
       "enum": [
         "draft",
+        "releaseCandidate",
         "approved",
         "deprecated"
       ]
+    },
+    "releaseCandidate": {
+      "type": "string",
+      "const": "RC1"
     },
     "schema": {
       "type": "string",
@@ -31,7 +38,7 @@
     },
     "canonicalFixture": {
       "type": "string",
-      "const": "../fixtures/v0.1/minimal-paywall.json"
+      "const": "../fixtures/v0.1/complete-paywall.json"
     },
     "capabilities": {
       "type": "array",
@@ -43,9 +50,38 @@
     },
     "readerPolicy": {
       "$ref": "#/$defs/readerPolicy"
+    },
+    "normalizedOutcomes": {
+      "$ref": "#/$defs/normalizedOutcomes"
     }
   },
   "$defs": {
+    "capabilityName": {
+      "type": "string",
+      "enum": [
+        "layout.scrollContainer",
+        "layout.verticalStack",
+        "component.text",
+        "component.image",
+        "component.featureList",
+        "component.productSelector",
+        "component.purchaseButton",
+        "component.restoreButton",
+        "component.closeButton",
+        "component.legalText",
+        "localization.catalogs",
+        "localization.rtl",
+        "product.references",
+        "asset.bundledImage",
+        "action.purchase",
+        "action.restore",
+        "action.close",
+        "accessibility.metadata",
+        "fallback.asset",
+        "fallback.product",
+        "outcome.normalized"
+      ]
+    },
     "capability": {
       "type": "object",
       "additionalProperties": false,
@@ -56,17 +92,7 @@
       ],
       "properties": {
         "name": {
-          "type": "string",
-          "enum": [
-            "layout.vertical",
-            "component.text",
-            "component.featureList",
-            "component.productSelector",
-            "component.purchaseButton",
-            "component.restoreButton",
-            "component.closeButton",
-            "component.legalText"
-          ]
+          "$ref": "#/$defs/capabilityName"
         },
         "version": {
           "type": "string",
@@ -85,7 +111,12 @@
         "unknownSchemaVersion",
         "unknownComponent",
         "unknownProperty",
-        "unsupportedCapability"
+        "unsupportedCapability",
+        "invalidReference",
+        "primaryDocumentRejected",
+        "bundledFallbackRejected",
+        "missingAsset",
+        "unavailableProduct"
       ],
       "properties": {
         "unknownSchemaVersion": {
@@ -99,6 +130,74 @@
         },
         "unsupportedCapability": {
           "const": "rejectDocument"
+        },
+        "invalidReference": {
+          "const": "rejectDocument"
+        },
+        "primaryDocumentRejected": {
+          "const": "loadBundledFallback"
+        },
+        "bundledFallbackRejected": {
+          "const": "configurationUnavailable"
+        },
+        "missingAsset": {
+          "const": "useDeclaredAssetFallback"
+        },
+        "unavailableProduct": {
+          "const": "useSelectorFallback"
+        }
+      }
+    },
+    "normalizedOutcomes": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "selectProduct",
+        "purchase",
+        "restore",
+        "close",
+        "presentation"
+      ],
+      "properties": {
+        "selectProduct": {
+          "const": [
+            "productSelected"
+          ]
+        },
+        "purchase": {
+          "const": [
+            "purchased",
+            "alreadyEntitled",
+            "cancelled",
+            "productUnavailable",
+            "purchaseFailed"
+          ]
+        },
+        "restore": {
+          "const": [
+            "restored",
+            "alreadyEntitled",
+            "restoreNoPurchases",
+            "restoreFailed"
+          ]
+        },
+        "close": {
+          "const": [
+            "dismissed"
+          ]
+        },
+        "presentation": {
+          "const": [
+            "purchased",
+            "restored",
+            "alreadyEntitled",
+            "dismissed",
+            "cancelled",
+            "productUnavailable",
+            "configurationUnavailable",
+            "purchaseFailed",
+            "renderingFailed"
+          ]
         }
       }
     }

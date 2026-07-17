@@ -1,9 +1,10 @@
 # Mosaic Protocol
 
-Protocol `0.1` is the first draft of Mosaic's platform-neutral paywall contract.
-It intentionally covers only the semantics used by the Phase 0 canonical fixture.
+Protocol `0.1` RC1 is Mosaic's Phase 1 platform-neutral native-paywall
+contract. It is a release candidate at the Protocol review gate, not an
+approved or immutable version.
 
-## Structure
+## Canonical artifacts
 
 ```text
 protocol/
@@ -11,7 +12,7 @@ protocol/
 │   └── v0.1.json
 ├── fixtures/
 │   └── v0.1/
-│       └── minimal-paywall.json
+│       └── complete-paywall.json
 ├── schema/
 │   └── v0.1/
 │       ├── compatibility-manifest.schema.json
@@ -22,35 +23,38 @@ protocol/
     └── validation.test.mjs
 ```
 
-The only canonical fixture is
-`fixtures/v0.1/minimal-paywall.json`. Consumers must load or package that file
-from its canonical location instead of maintaining a second copy.
+`fixtures/v0.1/complete-paywall.json` is the only complete canonical RC1
+paywall. It exercises the entire Phase 1 component set, nested layout,
+provider-neutral products, a bundled image key and placeholder, English,
+long German, Arabic RTL, accessibility metadata, product selection, purchase,
+restore, close, and normalized outcomes. SDKs must consume or package that
+file from its canonical path and must not maintain platform copies.
+
+The schema contains declarative data only. It has no remote fetch, executable
+content, arbitrary styling language, analytics, Studio, or real billing
+contract.
 
 ## Install and validate
 
 From this directory:
 
 ```bash
-npm install
-npm run validate
-npm test
+npm ci
 npm run check
 ```
 
-After `package-lock.json` exists, use `npm ci` for a clean reproducible install.
-From the repository root, the complete check is:
+From the repository root:
 
 ```bash
 npm --prefix protocol ci
 npm --prefix protocol run check
 ```
 
-`npm run validate` compiles both JSON Schemas, validates the fixture and
-compatibility manifest, verifies canonical JSON formatting, and checks the
-cross-file capability and product-selection invariants. `npm test` covers the
-valid fixture plus representative invalid schema versions, components,
-properties, compatibility declarations, and product selections.
+`npm run validate` compiles both JSON Schemas, validates the canonical fixture
+and manifest, checks canonical JSON formatting, derives capabilities through
+the recursive layout, and enforces cross-field IDs, references, actions,
+locales, products, and catalog invariants. `npm test` covers the valid RC1
+contract and invalid input for every Phase 1 contract area and fallback policy.
 
-See `docs/protocol/v0.1.md` for the contract and
-`docs/protocol/versioning.md` for version handling.
-
+See `docs/protocol/v0.1.md` for normative semantics and
+`docs/protocol/versioning.md` for candidate and approval handling.
