@@ -1,7 +1,7 @@
 package dev.mosaic.sdk
 
 const val MOSAIC_PROTOCOL_VERSION: String = "0.1"
-const val MOSAIC_ANDROID_SDK_VERSION: String = "0.1.0-dev.2"
+const val MOSAIC_ANDROID_SDK_VERSION: String = "0.1.0-dev.3"
 
 enum class MosaicCapabilityName(val wireName: String) {
     SCROLL_CONTAINER("layout.scrollContainer"),

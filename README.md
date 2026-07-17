@@ -3,23 +3,23 @@
 Mosaic is an open-source, cross-platform app monetization platform built around
 one platform-neutral protocol, three native SDKs, and one Studio.
 
-Phase 0 is accepted. Phase 1 now has a review candidate: Mosaic Protocol `0.1`
-RC1, one canonical complete paywall fixture, native Flutter/SwiftUI/Jetpack
-Compose renderers, deterministic mock commerce, bundled fallback handling,
-accessibility and visual tests, and three example applications. Phase 2 has not
-started.
+Phase 0 and Phase 1 are accepted. Phase 2 adds an account-free, local-first
+Studio, the Local Preview `0.1` WebSocket contract, and live preview clients for
+Flutter, SwiftUI, and Jetpack Compose. The workflow remains local-only: no
+hosted projects, publishing, analytics, experiments, or real billing provider
+is required.
 
 ## Repository map
 
 ```text
 apps/api/         Go API foundation
-apps/dashboard/   TanStack Start dashboard foundation
+apps/dashboard/   TanStack Start dashboard and local Studio
 apps/worker/      deferred worker-boundary documentation
-protocol/         Protocol 0.1 RC1 schema, compatibility manifest, and canonical fixture
-sdk/flutter/      Flutter decoder, native renderer, fallback loader, and mock commerce
-sdk/ios/          Swift package decoder, SwiftUI renderer, fallback loader, and mock commerce
-sdk/android/      Android decoder, Compose renderer, fallback loader, and mock commerce
-examples/         Flutter, iOS, and Android Phase 1 scenario applications
+protocol/         Protocol 0.1 RC1 plus the Local Preview 0.1 contract and fixtures
+sdk/flutter/      Flutter native renderer, fallback, mock commerce, and preview client
+sdk/ios/          SwiftUI native renderer, fallback, mock commerce, and preview client
+sdk/android/      Compose native renderer, fallback, mock commerce, and preview client
+examples/         Flutter, iOS, and Android local-renderer and preview applications
 docs/             architecture and foundation documentation
 ```
 
@@ -94,8 +94,17 @@ cd sdk/android
   :mosaic:lintDebug :mosaic:assembleDebugAndroidTest
 ```
 
-Run the API with `go run ./cmd/api` from `apps/api`, and run the dashboard with
-`npm run dev` from `apps/dashboard`.
+Run the API with `go run ./cmd/api` from `apps/api`. To start the account-free
+Studio and its loopback preview relay together, run:
+
+```bash
+cd apps/dashboard
+npm run dev:studio
+```
+
+Open `http://localhost:3000/studio`. Preview clients connect to
+`ws://127.0.0.1:4317/preview` using the local session documented by each example
+application. `npm run dev` remains available when only the dashboard is needed.
 
 ## Documentation
 
@@ -105,8 +114,11 @@ Run the API with `go run ./cmd/api` from `apps/api`, and run the dashboard with
 - [Backend foundation](docs/backend/api-foundation.md)
 - [Dashboard foundation](docs/dashboard/foundation.md)
 - [Phase 1 SDK renderers](docs/sdk/README.md)
-- [Phase 1 review candidate](docs/reviews/phase-1-review.md)
+- [Phase 1 review](docs/reviews/phase-1-review.md)
+- [Phase 2 review](docs/reviews/phase-2.md)
 
 There is intentionally no root package-manager workspace or shared Go module
-yet. Phase 1 remains local-only and does not add remote configuration,
-publishing, Studio editing, analytics, placements, or real billing providers.
+yet. Phase 2 remains local-only and does not add remote configuration,
+publishing, analytics, placements, experiments, accounts, or real billing
+providers. The roadmap's `mosaic dev` convenience command is deferred; Phase 2
+uses `npm run dev:studio` directly.

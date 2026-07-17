@@ -1,9 +1,11 @@
-# Mosaic Android SDK — Phase 1 RC1
+# Mosaic Android SDK — Phase 2 local preview
 
 The Android SDK strictly decodes Mosaic Protocol 0.1 RC1 and renders its sole
-canonical fixture with Jetpack Compose primitives. Phase 1 is local only: it
-uses injected mock commerce and a generated bundled fallback. It has no REST
-fetching, remote configuration, cache, Studio, analytics, or Play Billing.
+canonical fixture with Jetpack Compose primitives. Phase 2 adds a native,
+local-development preview client for the frozen Local Preview 0.1 contract.
+It uses injected mock commerce and a generated bundled fallback. It has no
+accounts, hosted configuration, remote publishing, analytics, experiments,
+cloud storage, RevenueCat, or Play Billing.
 
 ## Requirements
 
@@ -22,6 +24,12 @@ library build copies it into an ignored
 generated output into the AAR. Android source contains neither a fixture fork
 nor a JSON Schema copy. JVM conformance tests read the repository file
 directly.
+
+Local Preview 0.1 remains owned by `protocol/schema/local-preview/v0.1/` and
+`docs/protocol/local-preview-v0.1.md`. Android keeps no schema or fixture fork.
+Its codec reads the canonical message fixture during JVM conformance tests,
+while received draft documents still pass through the canonical Protocol 0.1
+decoder before rendering.
 
 The decoder rejects unknown versions, fields, components, capabilities,
 invalid references, duplicate IDs, invalid catalogs, mismatched inline
@@ -58,6 +66,70 @@ paywall usable.
 The exact presentation union is `purchased`, `restored`, `alreadyEntitled`,
 `dismissed`, `cancelled`, `productUnavailable`, `configurationUnavailable`,
 `purchaseFailed`, and `renderingFailed`.
+
+## Local Studio preview
+
+`MosaicLocalPreviewClient` owns the WebSocket lifecycle and protocol state.
+`MosaicLocalPreviewPaywall` starts and stops that client with the Compose
+lifecycle, renders its current `StateFlow`, and acknowledges a revision only
+after Compose has adopted it. `MosaicLocalPreviewScreen` adds the development
+status panel used by the example application.
+
+```kotlin
+val fallback = MosaicLocalPaywallLoader(
+    MosaicCanonicalBundleSource(applicationContext),
+).load(primaryDocumentJson = null)
+
+val client = MosaicLocalPreviewClient(
+    configuration = MosaicLocalPreviewConfiguration(
+        endpoint = MosaicLocalPreviewConfiguration.ANDROID_EMULATOR_ENDPOINT,
+        sessionId = MosaicLocalPreviewConfiguration.DEFAULT_SESSION_ID,
+        client = MosaicAndroidPreviewIdentity.create(
+            context = applicationContext,
+            clientId = "client_android_example",
+            displayName = "Android example preview",
+        ),
+    ),
+    fallback = fallback,
+)
+
+MosaicLocalPreviewScreen(
+    client = client,
+    onInteraction = { outcome -> /* update development UI */ },
+    onResult = { result -> /* host still owns navigation */ },
+)
+```
+
+The emulator default is `ws://10.0.2.2:4317/preview`; a host process can use
+`ws://127.0.0.1:4317/preview`. Configuration accepts only credential-free
+local `ws://` or `wss://` endpoints: loopback, private-network, link-local, and
+`.local` hosts. Query strings, fragments, user information, and public hosts
+are rejected. Cleartext traffic is enabled only by the example application for
+its local development socket, not by the library.
+
+The client sends `previewClientConnected` followed by `capabilityReport`,
+including the Protocol schema version, all supported Protocol capabilities,
+the five Android preview capabilities, and its document-size limit. It
+consumes draft identity and revision, raw Protocol document, locale and text
+scale; independently ordered mock products, purchase/restore outcomes and
+entitlement; targeted heartbeats; and safe disconnect diagnostics.
+
+Drafts are rejected when they are stale, conflicting, oversized, invalid, or
+require an unsupported schema, capability, or component. Diagnostics identify
+the affected component, property, and JSON path where the contract supplies
+them. A rejected draft or render failure preserves the last accepted draft;
+before one exists, the bundled fallback remains visible. Unsupported required
+components therefore never disappear silently.
+
+Mock commerce state is isolated behind `MosaicPurchaseProvider`. A commerce
+revision can update products, selection availability, purchase behavior,
+restore behavior, and entitlement without changing the Protocol document or
+requiring a real billing provider.
+
+Connection state is visibly reported as connected, reconnecting, or
+disconnected. Reconnect delay starts at 250 milliseconds and is capped at five
+seconds. Heartbeats are sent every five seconds, and a connection with no valid
+message for 15 seconds is safely re-established.
 
 ## Native behaviour
 
@@ -104,6 +176,10 @@ From `sdk/android`:
 
 The instrumentation suite checks accessibility semantics, selection,
 unavailable and busy states, RTL, placeholder geometry, host outcomes, and a
-real `captureToImage` SHA-256 baseline recorded for `Pixel_3a_API_34`.
+real `captureToImage` SHA-256 baseline recorded for `Pixel_3a_API_34`. Phase 2
+adds preview status, locale/RTL/text-scale, commerce, invalid-document, and
+unsupported-component UI checks. JVM tests consume both canonical Protocol and
+Local Preview flow fixtures and cover the codec, revision state machine,
+transport handshake, heartbeat routing, reconnect behavior, and fallback.
 
 The runnable app is in `examples/android-example`.

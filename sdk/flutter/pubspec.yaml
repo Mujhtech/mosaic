@@ -1,6 +1,6 @@
 name: mosaic_sdk
-description: Protocol 0.1 RC1 native paywall renderer and mock commerce for Flutter.
-version: 0.1.0-dev.2
+description: Native Protocol 0.1 renderer and Local Preview 0.1 client for Flutter.
+version: 0.2.0-dev.1
 publish_to: none
 
 environment:

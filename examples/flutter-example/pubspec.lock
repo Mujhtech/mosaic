@@ -129,7 +129,7 @@ packages:
       path: "../../sdk/flutter"
       relative: true
     source: path
-    version: "0.1.0-dev.1"
+    version: "0.2.0-dev.1"
   path:
     dependency: transitive
     description:

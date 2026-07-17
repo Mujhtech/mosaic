@@ -3,9 +3,31 @@
 All notable Mosaic protocol changes are recorded here. Versioned artifacts are
 not immutable until their review gate is approved.
 
+## Local Preview 0.1 - 2026-07-17
+
+Status: frozen Phase 2 integration contract; Phase 2 review pending
+
+- Added a separate, platform-neutral Local Preview `0.1` WebSocket envelope
+  without changing approved Paywall Protocol `0.1` RC1 semantics.
+- Defined editable document identities, ordered local revisions, preview client
+  identity, exact first-party preview capabilities, acknowledgements,
+  heartbeats, validation errors, compatibility warnings, render failures, and
+  bounded safe diagnostics with recovery actions.
+- Defined local mock subscription and non-consumable products, availability,
+  trials, introductory offers, deterministic purchase/restore outcomes, and
+  mock entitlement state without introducing a real billing provider model.
+- Added a closed local-project autosave schema and normative raw Protocol `0.1`
+  JSON import/export rules.
+- Added generated message and project fixtures plus validation, correlation,
+  stale-revision, mock-commerce, safety, and import/export tests.
+- Added a browser-safe canonical validation and generated TypeScript type
+  surface for Studio, with browser/Node semantic-parity and generation-drift
+  tests. This is an integration surface over the frozen schemas, not a schema
+  or paywall-semantics change.
+
 ## 0.1 RC1 - 2026-07-16
 
-Status: release candidate; product-owner approval pending
+Status: approved and immutable; product-owner approval recorded 2026-07-17
 
 - Replaced the Phase 0 minimal decoder fixture with the single complete Phase
   1 fixture at `fixtures/v0.1/complete-paywall.json`.

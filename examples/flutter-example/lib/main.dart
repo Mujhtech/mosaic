@@ -1,6 +1,22 @@
+import 'dart:async';
+
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:mosaic_sdk/mosaic_sdk.dart';
+
+const String _previewEndpoint = String.fromEnvironment(
+  'MOSAIC_PREVIEW_ENDPOINT',
+  defaultValue: 'ws://127.0.0.1:4317/preview',
+);
+const String _previewSessionId = String.fromEnvironment(
+  'MOSAIC_PREVIEW_SESSION_ID',
+  defaultValue: 'session_local_01',
+);
+const String _previewClientId = String.fromEnvironment(
+  'MOSAIC_PREVIEW_CLIENT_ID',
+  defaultValue: 'client_flutter_example',
+);
 
 void main() {
   runApp(const MosaicFlutterExample());
@@ -13,7 +29,7 @@ final class MosaicFlutterExample extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp(
       debugShowCheckedModeBanner: false,
-      title: 'Mosaic Flutter RC1',
+      title: 'Mosaic Flutter local preview',
       theme: ThemeData(
         useMaterial3: true,
         colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xff6750a4)),
@@ -23,78 +39,98 @@ final class MosaicFlutterExample extends StatelessWidget {
   }
 }
 
-enum _ProductAvailability { all, monthlyOnly, none }
-
 final class PaywallPlayground extends StatefulWidget {
-  const PaywallPlayground({super.key});
+  const PaywallPlayground({
+    this.previewClient,
+    this.fallbackDocument,
+    super.key,
+  });
+
+  final MosaicPreviewClient? previewClient;
+  final MosaicPaywallDocument? fallbackDocument;
 
   @override
   State<PaywallPlayground> createState() => _PaywallPlaygroundState();
 }
 
 final class _PaywallPlaygroundState extends State<PaywallPlayground> {
-  MockMosaicPurchaseScenario _purchaseScenario =
-      MockMosaicPurchaseScenario.success;
-  MockMosaicRestoreScenario _restoreScenario =
-      MockMosaicRestoreScenario.success;
-  _ProductAvailability _availability = _ProductAvailability.all;
-  String _locale = 'en';
-  String _lastEvent = 'Waiting for an interaction';
+  late final MosaicPreviewClient _previewClient;
+  late final Future<MosaicPaywallDocument> _fallbackDocument;
+  late final bool _ownsPreviewClient;
+  String _lastEvent = 'Waiting for a Studio revision';
+
+  @override
+  void initState() {
+    super.initState();
+    _ownsPreviewClient = widget.previewClient == null;
+    _previewClient = widget.previewClient ?? _createPreviewClient();
+    _fallbackDocument = widget.fallbackDocument == null
+        ? _loadFallbackDocument()
+        : Future<MosaicPaywallDocument>.value(widget.fallbackDocument);
+    if (_ownsPreviewClient) {
+      unawaited(_previewClient.connect());
+    }
+  }
+
+  @override
+  void dispose() {
+    if (_ownsPreviewClient) {
+      _previewClient.dispose();
+    }
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
-    final provider = MockMosaicPurchaseProvider(
-      products: _productsForAvailability(),
-      purchaseScenario: _purchaseScenario,
-      restoreScenario: _restoreScenario,
-    );
-    final mosaic = Mosaic.configure(
-      apiKey: 'public_phase1_example',
-      purchaseProvider: provider,
-    );
-    final scenarioKey =
-        '${_purchaseScenario.name}-${_restoreScenario.name}-'
-        '${_availability.name}-$_locale';
-
     return Scaffold(
-      appBar: AppBar(title: const Text('Mosaic Flutter RC1')),
+      appBar: AppBar(
+        title: const Text('Mosaic Flutter preview'),
+        actions: <Widget>[
+          IconButton(
+            tooltip: 'Reconnect preview',
+            onPressed: () => unawaited(_previewClient.connect()),
+            icon: const Icon(Icons.refresh),
+          ),
+          IconButton(
+            tooltip: 'Disconnect preview',
+            onPressed: () => unawaited(_previewClient.disconnect()),
+            icon: const Icon(Icons.link_off),
+          ),
+        ],
+      ),
       body: Column(
         children: <Widget>[
-          _controls(context),
+          _PreviewStatusPanel(
+            client: _previewClient,
+            endpoint: _previewEndpoint,
+            sessionId: _previewSessionId,
+            lastEvent: _lastEvent,
+          ),
           Expanded(
-            child: MosaicPaywallHost(
-              key: ValueKey<String>(scenarioKey),
-              mosaic: mosaic,
-              requestedLocale: _locale,
-              bundledFallbackLoader: () => rootBundle.loadString(
-                'assets/generated/complete-paywall.json',
-              ),
-              // Deliberately demonstrates the protocol-declared placeholder.
-              // A host can instead map mosaic.paywall.hero to AssetImage(...).
-              imageResolver: (logicalKey) => null,
-              onResult: (result) {
-                if (!mounted) {
-                  return;
+            child: FutureBuilder<MosaicPaywallDocument>(
+              future: _fallbackDocument,
+              builder: (context, snapshot) {
+                final fallback = snapshot.data;
+                if (fallback == null) {
+                  if (snapshot.hasError) {
+                    return const _FallbackLoadFailure();
+                  }
+                  return const Center(child: CircularProgressIndicator());
                 }
-                setState(() {
-                  _lastEvent = 'Presentation: ${result.outcome.wireValue}';
-                });
-              },
-              onInteraction: (interaction) {
-                if (!mounted) {
-                  return;
-                }
-                setState(() {
-                  _lastEvent = 'Interaction: ${interaction.outcome.wireValue}';
-                });
-              },
-              onDiagnostic: (diagnostic) {
-                if (!mounted) {
-                  return;
-                }
-                setState(() {
-                  _lastEvent = 'Diagnostic: ${diagnostic.code}';
-                });
+                return MosaicPreviewPaywall(
+                  client: _previewClient,
+                  fallbackDocument: fallback,
+                  fallbackPurchaseProvider: _fallbackPurchaseProvider(),
+                  // The placeholder proves the protocol-owned asset fallback.
+                  imageResolver: (logicalKey) => null,
+                  onResult: (result) =>
+                      _recordEvent('Presentation: ${result.outcome.wireValue}'),
+                  onInteraction: (interaction) => _recordEvent(
+                    'Interaction: ${interaction.outcome.wireValue}',
+                  ),
+                  onDiagnostic: (diagnostic) =>
+                      _recordEvent('Diagnostic: ${diagnostic.code}'),
+                );
               },
             ),
           ),
@@ -103,129 +139,289 @@ final class _PaywallPlaygroundState extends State<PaywallPlayground> {
     );
   }
 
-  Widget _controls(BuildContext context) {
-    return Material(
-      color: Theme.of(context).colorScheme.surfaceContainerLow,
-      child: Padding(
-        padding: const EdgeInsets.all(12),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: <Widget>[
-            Wrap(
-              spacing: 12,
-              runSpacing: 8,
-              children: <Widget>[
-                _dropdown<MockMosaicPurchaseScenario>(
-                  label: 'Purchase',
-                  value: _purchaseScenario,
-                  values: MockMosaicPurchaseScenario.values
-                      .where(
-                        (scenario) =>
-                            scenario != MockMosaicPurchaseScenario.automatic,
-                      )
-                      .toList(growable: false),
-                  onChanged: (value) => setState(() {
-                    _purchaseScenario = value;
-                  }),
-                ),
-                _dropdown<MockMosaicRestoreScenario>(
-                  label: 'Restore',
-                  value: _restoreScenario,
-                  values: MockMosaicRestoreScenario.values
-                      .where(
-                        (scenario) =>
-                            scenario != MockMosaicRestoreScenario.automatic,
-                      )
-                      .toList(growable: false),
-                  onChanged: (value) => setState(() {
-                    _restoreScenario = value;
-                  }),
-                ),
-                _dropdown<_ProductAvailability>(
-                  label: 'Products',
-                  value: _availability,
-                  values: _ProductAvailability.values,
-                  onChanged: (value) => setState(() {
-                    _availability = value;
-                  }),
-                ),
-                _dropdown<String>(
-                  label: 'Locale',
-                  value: _locale,
-                  values: const <String>['en', 'de', 'ar'],
-                  onChanged: (value) => setState(() {
-                    _locale = value;
-                  }),
-                ),
-              ],
-            ),
-            const SizedBox(height: 8),
-            Text(
-              _lastEvent,
-              key: const ValueKey<String>('last-event'),
-              style: Theme.of(context).textTheme.labelLarge,
-            ),
-            Text(
-              'The hero lookup intentionally uses its declared placeholder.',
-              style: Theme.of(context).textTheme.bodySmall,
-            ),
-          ],
+  void _recordEvent(String value) {
+    if (!mounted) {
+      return;
+    }
+    setState(() {
+      _lastEvent = value;
+    });
+  }
+
+  MosaicPreviewClient _createPreviewClient() {
+    final platformName = defaultTargetPlatform.name;
+    return MosaicPreviewClient(
+      configuration: MosaicPreviewClientConfiguration(
+        endpoint: Uri.parse(_previewEndpoint),
+        sessionId: _previewSessionId,
+        identity: MosaicPreviewClientIdentity(
+          clientId: _previewClientId,
+          displayName: 'Flutter example preview',
+          renderer: MosaicPreviewSoftwareIdentity(
+            id: 'mosaic.flutter',
+            version: mosaicFlutterSdkVersion,
+          ),
+          application: MosaicPreviewApplicationIdentity(
+            id: 'mosaic.flutter.example',
+            displayName: 'Mosaic Flutter Example',
+            version: '0.1.0',
+          ),
+          device: MosaicPreviewDeviceIdentity(
+            displayName: 'Flutter $platformName preview',
+            systemName: platformName,
+            systemVersion: 'local',
+          ),
         ),
       ),
+      onDiagnostic: (diagnostic) =>
+          _recordEvent('Connection: ${diagnostic.code}'),
     );
   }
 
-  Widget _dropdown<T extends Object>({
-    required String label,
-    required T value,
-    required List<T> values,
-    required ValueChanged<T> onChanged,
-  }) {
-    return DropdownButton<T>(
-      value: value,
-      hint: Text(label),
-      items: <DropdownMenuItem<T>>[
-        for (final item in values)
-          DropdownMenuItem<T>(
-            value: item,
-            child: Text('$label: ${_displayName(item)}'),
+  Future<MosaicPaywallDocument> _loadFallbackDocument() async {
+    final source = await rootBundle.loadString(
+      'assets/generated/complete-paywall.json',
+    );
+    return const MosaicProtocolDecoder().decode(source);
+  }
+}
+
+final class _PreviewStatusPanel extends StatelessWidget {
+  const _PreviewStatusPanel({
+    required this.client,
+    required this.endpoint,
+    required this.sessionId,
+    required this.lastEvent,
+  });
+
+  final MosaicPreviewClient client;
+  final String endpoint;
+  final String sessionId;
+  final String lastEvent;
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: client,
+      builder: (context, _) {
+        final status = client.connectionStatus;
+        final issue = client.draftIssue;
+        final preview = client.previewContextForRendering;
+        final commerce = client.mockCommerceState;
+        return Material(
+          color: Theme.of(context).colorScheme.surfaceContainerLow,
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(12, 8, 12, 10),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: <Widget>[
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: <Widget>[
+                    _StatusChip(
+                      key: const ValueKey<String>('connection-status'),
+                      icon: _connectionIcon(status),
+                      label: _connectionLabel(status),
+                      color: _connectionColor(context, status),
+                    ),
+                    _StatusChip(
+                      icon: Icons.commit,
+                      label: client.liveRevision == null
+                          ? 'Bundled fallback'
+                          : 'Revision ${client.liveRevision!.sequence}',
+                    ),
+                    _StatusChip(
+                      icon: Icons.translate,
+                      label: preview == null
+                          ? 'Locale: default'
+                          : 'Locale: ${preview.locale}',
+                    ),
+                    _StatusChip(
+                      icon: Icons.text_fields,
+                      label: preview == null
+                          ? 'Text: 1×'
+                          : 'Text: ${preview.textScale}×',
+                    ),
+                    _StatusChip(
+                      key: const ValueKey<String>('mock-purchase-state'),
+                      icon: Icons.shopping_bag_outlined,
+                      label: commerce == null
+                          ? 'Mock purchase: local fallback'
+                          : 'Mock purchase: ${commerce.purchaseOutcome.name}',
+                    ),
+                    _StatusChip(
+                      icon: Icons.verified_user_outlined,
+                      label: commerce?.entitlement.isActive ?? false
+                          ? 'Entitlement: active'
+                          : 'Entitlement: none',
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  '$endpoint  •  $sessionId',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
+                Text(
+                  lastEvent,
+                  key: const ValueKey<String>('last-event'),
+                  style: Theme.of(context).textTheme.labelMedium,
+                ),
+                if (issue != null) ...<Widget>[
+                  const SizedBox(height: 8),
+                  _DraftIssueBanner(issue: issue),
+                ],
+              ],
+            ),
           ),
-      ],
-      onChanged: (value) {
-        if (value != null) {
-          onChanged(value);
-        }
+        );
       },
     );
   }
 
-  String _displayName(Object value) {
-    if (value is Enum) {
-      return value.name;
-    }
-    return value.toString();
-  }
+  static String _connectionLabel(MosaicPreviewConnectionStatus status) =>
+      switch (status) {
+        MosaicPreviewConnectionStatus.connected => 'Connected',
+        MosaicPreviewConnectionStatus.connecting => 'Connecting',
+        MosaicPreviewConnectionStatus.reconnecting => 'Reconnecting',
+        MosaicPreviewConnectionStatus.disconnected => 'Disconnected',
+      };
 
-  List<MosaicProduct> _productsForAvailability() {
-    return switch (_availability) {
-      _ProductAvailability.all => _mockProducts,
-      _ProductAvailability.monthlyOnly => _mockProducts.take(1).toList(),
-      _ProductAvailability.none => const <MosaicProduct>[],
-    };
+  static IconData _connectionIcon(MosaicPreviewConnectionStatus status) =>
+      switch (status) {
+        MosaicPreviewConnectionStatus.connected => Icons.link,
+        MosaicPreviewConnectionStatus.connecting => Icons.sync,
+        MosaicPreviewConnectionStatus.reconnecting => Icons.sync_problem,
+        MosaicPreviewConnectionStatus.disconnected => Icons.link_off,
+      };
+
+  static Color _connectionColor(
+    BuildContext context,
+    MosaicPreviewConnectionStatus status,
+  ) => switch (status) {
+    MosaicPreviewConnectionStatus.connected => Colors.green.shade800,
+    MosaicPreviewConnectionStatus.connecting ||
+    MosaicPreviewConnectionStatus.reconnecting => Colors.orange.shade900,
+    MosaicPreviewConnectionStatus.disconnected => Theme.of(
+      context,
+    ).colorScheme.error,
+  };
+}
+
+final class _StatusChip extends StatelessWidget {
+  const _StatusChip({
+    required this.icon,
+    required this.label,
+    this.color,
+    super.key,
+  });
+
+  final IconData icon;
+  final String label;
+  final Color? color;
+
+  @override
+  Widget build(BuildContext context) {
+    return Semantics(
+      label: label,
+      child: Chip(
+        avatar: Icon(icon, size: 16, color: color),
+        label: Text(label, style: TextStyle(color: color)),
+        visualDensity: VisualDensity.compact,
+      ),
+    );
   }
 }
 
-const List<MosaicProduct> _mockProducts = <MosaicProduct>[
-  MosaicProduct(
-    id: 'mosaic_pro_monthly',
-    title: 'Mosaic Pro Monthly',
-    localizedPrice: r'$5.99',
-    localizedPeriod: 'month',
-  ),
-  MosaicProduct(
-    id: 'mosaic_pro_yearly',
-    title: 'Mosaic Pro Yearly',
-    localizedPrice: r'$49.99',
-    localizedPeriod: 'year',
-  ),
-];
+final class _DraftIssueBanner extends StatelessWidget {
+  const _DraftIssueBanner({required this.issue});
+
+  final MosaicPreviewDraftIssue issue;
+
+  @override
+  Widget build(BuildContext context) {
+    final label = switch (issue.kind) {
+      MosaicPreviewDraftIssueKind.invalidDocument => 'Invalid document',
+      MosaicPreviewDraftIssueKind.unsupportedComponent =>
+        'Unsupported component',
+      MosaicPreviewDraftIssueKind.renderFailure => 'Render failure',
+    };
+    return Semantics(
+      liveRegion: true,
+      container: true,
+      label: '$label. ${issue.message} ${issue.recovery.message}',
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          color: Theme.of(context).colorScheme.errorContainer,
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.all(12),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: <Widget>[
+              Icon(
+                Icons.error_outline,
+                color: Theme.of(context).colorScheme.onErrorContainer,
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: <Widget>[
+                    Text(
+                      label,
+                      key: const ValueKey<String>('preview-draft-issue'),
+                      style: Theme.of(context).textTheme.titleSmall,
+                    ),
+                    Text(issue.message),
+                    Text(
+                      issue.recovery.message,
+                      style: Theme.of(context).textTheme.labelMedium,
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+final class _FallbackLoadFailure extends StatelessWidget {
+  const _FallbackLoadFailure();
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Semantics(
+        liveRegion: true,
+        child: const Text('The bundled fallback document could not be loaded.'),
+      ),
+    );
+  }
+}
+
+MockMosaicPurchaseProvider _fallbackPurchaseProvider() {
+  return MockMosaicPurchaseProvider(
+    products: const <MosaicProduct>[
+      MosaicProduct(
+        id: 'mosaic_pro_monthly',
+        title: 'Mosaic Pro Monthly',
+        localizedPrice: r'$5.99',
+        localizedPeriod: 'month',
+      ),
+      MosaicProduct(
+        id: 'mosaic_pro_yearly',
+        title: 'Mosaic Pro Yearly',
+        localizedPrice: r'$49.99',
+        localizedPeriod: 'year',
+      ),
+    ],
+  );
+}

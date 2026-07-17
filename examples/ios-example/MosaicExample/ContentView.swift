@@ -1,230 +1,168 @@
 import MosaicSDK
 import SwiftUI
+import UIKit
 
+@MainActor
 struct ContentView: View {
-  @State private var locale = ExampleLocale.english
-  @State private var scenario = ExampleScenario.purchaseSuccess
-  @State private var lastEvent = "Ready"
+  private let bootstrap = ExamplePreviewBootstrap.load()
 
   var body: some View {
-    VStack(spacing: 0) {
-      VStack(alignment: .leading, spacing: 10) {
-        HStack {
-          Picker("Locale", selection: $locale) {
-            ForEach(ExampleLocale.allCases) { locale in
-              Text(locale.title).tag(locale)
-            }
-          }
-          .pickerStyle(.menu)
-
-          Spacer()
-
-          Picker("Mock scenario", selection: $scenario) {
-            ForEach(ExampleScenario.allCases) { scenario in
-              Text(scenario.title).tag(scenario)
-            }
-          }
-          .pickerStyle(.menu)
-        }
-
-        Text(lastEvent)
-          .font(.caption.monospaced())
-          .foregroundStyle(.secondary)
-          .lineLimit(2)
-          .accessibilityLabel("Last Mosaic event: \(lastEvent)")
-      }
-      .padding(.horizontal)
-      .padding(.vertical, 10)
-
-      Divider()
-
-      ExamplePaywallHost(
-        locale: locale.identifier,
-        scenario: scenario,
-        onStatus: { lastEvent = $0 }
+    switch bootstrap {
+    case .ready(let configuration, let fallbackDocument):
+      RunningLocalPreview(
+        configuration: configuration,
+        fallbackDocument: fallbackDocument
       )
-      .id("\(locale.rawValue)-\(scenario.rawValue)")
+    case .unavailable(let message):
+      VStack(spacing: 12) {
+        Image(systemName: "exclamationmark.triangle.fill")
+          .font(.largeTitle)
+          .foregroundStyle(.orange)
+          .accessibilityHidden(true)
+        Text("Local preview unavailable")
+          .font(.headline)
+        Text(message)
+          .multilineTextAlignment(.center)
+          .foregroundStyle(.secondary)
+      }
+      .frame(maxWidth: .infinity, maxHeight: .infinity)
+      .padding()
+      .accessibilityElement(children: .combine)
     }
   }
 }
 
 @MainActor
-private struct ExamplePaywallHost: View {
-  let locale: String
-  let scenario: ExampleScenario
-  let onStatus: @MainActor (String) -> Void
-  private let loadResult: MosaicPaywallLoadResult
+private struct RunningLocalPreview: View {
+  @StateObject private var client: MosaicLocalPreviewClient
+  @State private var lastEvent = "Waiting for Studio"
+
+  private let fallbackDocument: MosaicPaywallDocument
+  private let fallbackPurchaseProvider = MockMosaicPurchaseProvider(
+    products: MosaicProduct.phase1MockProducts
+  )
 
   init(
-    locale: String,
-    scenario: ExampleScenario,
-    onStatus: @escaping @MainActor (String) -> Void
+    configuration: MosaicPreviewClientConfiguration,
+    fallbackDocument: MosaicPaywallDocument
   ) {
-    self.locale = locale
-    self.scenario = scenario
-    self.onStatus = onStatus
+    _client = StateObject(
+      wrappedValue: MosaicLocalPreviewClient(configuration: configuration)
+    )
+    self.fallbackDocument = fallbackDocument
+  }
+
+  var body: some View {
+    VStack(spacing: 0) {
+      MosaicLocalPreviewScreen(
+        client: client,
+        fallbackDocument: fallbackDocument,
+        fallbackPurchaseProvider: fallbackPurchaseProvider,
+        imageResolver: .missing,
+        onInteraction: { interaction in
+          lastEvent = "Interaction · \(interaction.name.rawValue)"
+        },
+        onResult: { result in
+          lastEvent = "Result · \(result.name.rawValue)"
+        }
+      )
+
+      Divider()
+      Text(lastEvent)
+        .font(.caption.monospaced())
+        .foregroundStyle(.secondary)
+        .lineLimit(2)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.horizontal)
+        .padding(.vertical, 8)
+        .accessibilityLabel("Last Mosaic event: \(lastEvent)")
+    }
+  }
+}
+
+@MainActor
+private enum ExamplePreviewBootstrap {
+  case ready(
+    configuration: MosaicPreviewClientConfiguration,
+    fallbackDocument: MosaicPaywallDocument
+  )
+  case unavailable(message: String)
+
+  static func load() -> ExamplePreviewBootstrap {
     let candidate = Bundle.main.url(
       forResource: "complete-paywall",
       withExtension: "json"
     ).flatMap { try? Data(contentsOf: $0) }
-    loadResult = MosaicPaywallLoader.load(candidateData: candidate)
-  }
 
-  var body: some View {
-    switch loadResult {
-    case .loaded(let document, let source, _):
-      MosaicPaywall(
-        document: document,
-        requestedLocale: locale,
-        purchaseProvider: scenario.provider,
-        // The example intentionally exercises the declared same-geometry
-        // placeholder for mosaic.paywall.hero.
-        imageResolver: .missing,
-        onInteraction: { interaction in
-          onStatus("interaction: \(interaction.name.rawValue)")
-        },
-        onResult: { result in
-          // The host records the terminal outcome. It would also own sheet or
-          // fullScreenCover dismissal in a modal integration.
-          onStatus("result: \(result.name.rawValue) [\(source.rawValue)]")
-        }
+    let fallbackDocument: MosaicPaywallDocument
+    switch MosaicPaywallLoader.load(candidateData: candidate) {
+    case .loaded(let document, _, _):
+      fallbackDocument = document
+    case .unavailable(_, let diagnostics):
+      let codes = diagnostics.map(\.code).joined(separator: ", ")
+      return .unavailable(
+        message: "The bundled canonical fixture could not load. \(codes)"
       )
-    case .unavailable(let result, let diagnostics):
-      VStack(spacing: 12) {
-        Text("Paywall unavailable")
-          .font(.headline)
-        Text(result.name.rawValue)
-          .font(.body.monospaced())
-        Text(diagnostics.map(\.code).joined(separator: ", "))
-          .font(.caption)
-          .foregroundStyle(.secondary)
+    }
+
+    let environment = ProcessInfo.processInfo.environment
+    let endpoint: URL
+    if let source = environment["MOSAIC_PREVIEW_ENDPOINT"] {
+      guard let configuredEndpoint = URL(string: source) else {
+        return .unavailable(message: "MOSAIC_PREVIEW_ENDPOINT is not a valid URL.")
       }
-      .frame(maxWidth: .infinity, maxHeight: .infinity)
-      .padding()
+      endpoint = configuredEndpoint
+    } else {
+      endpoint = MosaicPreviewDefaults.endpoint
     }
-  }
-}
 
-enum ExampleLocale: String, CaseIterable, Identifiable {
-  case english
-  case german
-  case arabic
-
-  var id: String { rawValue }
-
-  var title: String {
-    switch self {
-    case .english: "English"
-    case .german: "Deutsch (long)"
-    case .arabic: "العربية (RTL)"
-    }
-  }
-
-  var identifier: String {
-    switch self {
-    case .english: "en"
-    case .german: "de-DE"
-    case .arabic: "ar-EG"
-    }
-  }
-}
-
-enum ExampleScenario: String, CaseIterable, Identifiable {
-  case purchaseSuccess
-  case purchaseCancellation
-  case purchaseFailure
-  case purchaseUnavailable
-  case alreadyEntitled
-  case noProducts
-  case restoreSuccess
-  case restoreNoPurchases
-  case restoreFailure
-
-  var id: String { rawValue }
-
-  var title: String {
-    switch self {
-    case .purchaseSuccess: "Purchase success"
-    case .purchaseCancellation: "Purchase cancelled"
-    case .purchaseFailure: "Purchase failure"
-    case .purchaseUnavailable: "Purchase unavailable"
-    case .alreadyEntitled: "Already entitled"
-    case .noProducts: "No products"
-    case .restoreSuccess: "Restore success"
-    case .restoreNoPurchases: "Restore empty"
-    case .restoreFailure: "Restore failure"
-    }
-  }
-
-  @MainActor
-  var provider: any MosaicPurchaseProvider {
-    let products: [MosaicProduct] =
-      self == .noProducts ? [] : MosaicProduct.phase1MockProducts
-    switch self {
-    case .purchaseSuccess, .restoreNoPurchases:
-      return MockMosaicPurchaseProvider(
-        products: products,
-        purchaseBehavior: .success,
-        restoreBehavior: .noPurchases
+    let device = UIDevice.current
+    let version =
+      Bundle.main.object(
+        forInfoDictionaryKey: "CFBundleShortVersionString"
+      ) as? String ?? "0.2"
+    let identity = MosaicPreviewClientIdentity(
+      clientId: ExampleProcessIdentity.clientId,
+      displayName: "Mosaic iOS local preview",
+      renderer: MosaicPreviewSoftwareIdentity(id: "mosaic.ios", version: "0.2.0"),
+      application: MosaicPreviewApplicationIdentity(
+        id: Bundle.main.bundleIdentifier ?? "dev.mosaic.phase2.example",
+        displayName: "Mosaic iOS Example",
+        version: version
+      ),
+      device: MosaicPreviewDeviceIdentity(
+        displayName: device.name,
+        systemName: device.systemName,
+        systemVersion: device.systemVersion
       )
-    case .purchaseCancellation:
-      return MockMosaicPurchaseProvider(
-        products: products,
-        purchaseBehavior: .cancellation
+    )
+
+    do {
+      return .ready(
+        configuration: try MosaicPreviewClientConfiguration(
+          endpoint: endpoint,
+          sessionId: environment["MOSAIC_PREVIEW_SESSION_ID"]
+            ?? MosaicPreviewDefaults.sessionId,
+          identity: identity
+        ),
+        fallbackDocument: fallbackDocument
       )
-    case .purchaseFailure:
-      return MockMosaicPurchaseProvider(
-        products: products,
-        purchaseBehavior: .failure(diagnosticCode: "mock_purchase_failed")
-      )
-    case .purchaseUnavailable:
-      return MockMosaicPurchaseProvider(
-        products: products,
-        purchaseBehavior: .unavailable
-      )
-    case .alreadyEntitled:
-      return MockMosaicPurchaseProvider(
-        products: products,
-        purchaseBehavior: .alreadyEntitled,
-        restoreBehavior: .alreadyEntitled([MosaicEntitlement(id: "mosaic-pro")])
-      )
-    case .noProducts:
-      return MockMosaicPurchaseProvider(products: [])
-    case .restoreSuccess:
-      return MockMosaicPurchaseProvider(
-        products: products,
-        restoreBehavior: .success([MosaicEntitlement(id: "mosaic-pro")])
-      )
-    case .restoreFailure:
-      return MockMosaicPurchaseProvider(
-        products: products,
-        restoreBehavior: .failure(diagnosticCode: "mock_restore_failed")
+    } catch {
+      return .unavailable(
+        message: "Check the local endpoint, session ID, and preview identity configuration."
       )
     }
   }
 }
 
-#Preview("Normal") {
+/// A reconnect-stable identifier scoped only to this application process.
+/// It is never persisted and is not derived from a user or device identifier.
+enum ExampleProcessIdentity {
+  static let clientId =
+    "client_ios_"
+    + UUID().uuidString.replacingOccurrences(of: "-", with: "").lowercased()
+}
+
+#Preview("Local Studio") {
   ContentView()
-}
-
-#Preview("Unavailable products") {
-  ExamplePreview(locale: .english, scenario: .noProducts)
-}
-
-#Preview("Long German") {
-  ExamplePreview(locale: .german, scenario: .purchaseSuccess)
-}
-
-#Preview("Arabic RTL") {
-  ExamplePreview(locale: .arabic, scenario: .purchaseSuccess)
-}
-
-private struct ExamplePreview: View {
-  let locale: ExampleLocale
-  let scenario: ExampleScenario
-
-  var body: some View {
-    ExamplePaywallHost(locale: locale.identifier, scenario: scenario) { _ in }
-  }
 }

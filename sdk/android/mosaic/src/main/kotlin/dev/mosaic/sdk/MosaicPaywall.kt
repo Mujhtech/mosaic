@@ -40,6 +40,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalLayoutDirection
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.SemanticsPropertyKey
@@ -51,6 +52,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.LayoutDirection
+import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
 
@@ -75,6 +77,7 @@ fun MosaicPaywall(
     onResult: (MosaicPresentationResult) -> Unit,
     modifier: Modifier = Modifier,
     requestedLocale: String? = null,
+    previewTextScale: Float? = null,
     imageResolver: MosaicBundledImageResolver = MosaicBundledImageResolver.None,
     diagnostics: MosaicDiagnosticSink = MosaicDiagnosticSink.None,
     onInteraction: (MosaicInteractionOutcome) -> Unit = {},
@@ -86,6 +89,7 @@ fun MosaicPaywall(
             onResult = onResult,
             modifier = modifier,
             requestedLocale = requestedLocale,
+            previewTextScale = previewTextScale,
             imageResolver = imageResolver,
             diagnostics = diagnostics,
             onInteraction = onInteraction,
@@ -104,6 +108,7 @@ fun MosaicPaywall(
     onResult: (MosaicPresentationResult) -> Unit,
     modifier: Modifier = Modifier,
     requestedLocale: String? = null,
+    previewTextScale: Float? = null,
     imageResolver: MosaicBundledImageResolver = MosaicBundledImageResolver.None,
     diagnostics: MosaicDiagnosticSink = MosaicDiagnosticSink.None,
     onInteraction: (MosaicInteractionOutcome) -> Unit = {},
@@ -123,6 +128,7 @@ fun MosaicPaywall(
     MosaicPaywallContent(
         state = state,
         requestedLocale = requestedLocale,
+        previewTextScale = previewTextScale,
         imageResolver = imageResolver,
         diagnostics = diagnostics,
         onEvent = dispatch,
@@ -136,6 +142,7 @@ fun MosaicPaywallContent(
     onEvent: (MosaicPaywallEvent) -> Unit,
     modifier: Modifier = Modifier,
     requestedLocale: String? = null,
+    previewTextScale: Float? = null,
     imageResolver: MosaicBundledImageResolver = MosaicBundledImageResolver.None,
     diagnostics: MosaicDiagnosticSink = MosaicDiagnosticSink.None,
 ) {
@@ -148,8 +155,19 @@ fun MosaicPaywallContent(
         MosaicLayoutDirection.RTL -> LayoutDirection.Rtl
     }
     val scrollState = rememberScrollState()
+    val hostDensity = LocalDensity.current
+    val previewDensity = remember(hostDensity.density, hostDensity.fontScale, previewTextScale) {
+        if (previewTextScale == null) {
+            hostDensity
+        } else {
+            Density(hostDensity.density, previewTextScale.coerceIn(0.5f, 3f))
+        }
+    }
 
-    CompositionLocalProvider(LocalLayoutDirection provides layoutDirection) {
+    CompositionLocalProvider(
+        LocalLayoutDirection provides layoutDirection,
+        LocalDensity provides previewDensity,
+    ) {
         Box(
             modifier = modifier
                 .fillMaxSize()

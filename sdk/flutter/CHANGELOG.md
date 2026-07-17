@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.2.0-dev.1
+
+- Add the Local Preview 0.1 WebSocket client with explicit endpoint, session, and renderer-neutral client identity.
+- Report the complete Protocol 0.1 renderer capability set and all five Phase 2 preview capabilities.
+- Apply document and mock-commerce revisions with per-document ordering, idempotent acknowledgement,
+  stale-revision rejection, and conflict protection that survives reconnects.
+- Keep the last accepted draft live after validation, compatibility, or render failure.
+- Add bounded reconnect backoff, text-frame and byte limits, heartbeat ping/pong, and safe connection diagnostics.
+- Add structured validation, compatibility, and render diagnostics correlated with terminal draft status.
+- Adapt local mock product, purchase, restore, and entitlement state to the existing provider-neutral renderer.
+- Add a native live-preview widget with locale, RTL, and accessibility text-scale overrides.
+- Add canonical message-flow, transport, revision, commerce, reconnect, diagnostic, and widget coverage.
+- Upgrade the top-level example into a visible local Studio preview client.
+
 ## 0.1.0-dev.2
 
 - Implement the strict Protocol 0.1 RC1 decoder and recursive semantic/capability validation.

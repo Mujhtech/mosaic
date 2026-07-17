@@ -5,18 +5,20 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:mosaic_sdk/mosaic_sdk.dart';
 
 File canonicalFixtureFile() {
+  return repositoryFile('protocol/fixtures/v0.1/complete-paywall.json');
+}
+
+File repositoryFile(String relativePath) {
   var directory = Directory.current.absolute;
   while (true) {
-    final candidate = File(
-      '${directory.path}/protocol/fixtures/v0.1/complete-paywall.json',
-    );
+    final candidate = File('${directory.path}/$relativePath');
     if (candidate.existsSync()) {
       return candidate;
     }
     final parent = directory.parent;
     if (parent.path == directory.path) {
       fail(
-        'Cannot locate protocol/fixtures/v0.1/complete-paywall.json from '
+        'Cannot locate $relativePath from '
         '${Directory.current.path}. Run tests inside the Mosaic checkout.',
       );
     }

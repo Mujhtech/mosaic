@@ -3,6 +3,24 @@ import XCTest
 
 @testable import MosaicSDK
 
+func previewTestIdentity() -> MosaicPreviewClientIdentity {
+  MosaicPreviewClientIdentity(
+    clientId: "client_ios_tests",
+    displayName: "iOS test preview",
+    renderer: MosaicPreviewSoftwareIdentity(id: "mosaic.ios", version: "0.1.0"),
+    application: MosaicPreviewApplicationIdentity(
+      id: "mosaic.ios.tests",
+      displayName: "Mosaic iOS Tests",
+      version: "0.1.0"
+    ),
+    device: MosaicPreviewDeviceIdentity(
+      displayName: "Test device",
+      systemName: "iOS",
+      systemVersion: "18.0"
+    )
+  )
+}
+
 func canonicalFixtureURL(filePath: StaticString = #filePath) throws -> URL {
   let fileManager = FileManager.default
   var directory = URL(fileURLWithPath: "\(filePath)").deletingLastPathComponent()
@@ -25,6 +43,50 @@ func canonicalFixtureURL(filePath: StaticString = #filePath) throws -> URL {
 
 func canonicalFixtureData() throws -> Data {
   try Data(contentsOf: canonicalFixtureURL())
+}
+
+func localPreviewFlowURL(filePath: StaticString = #filePath) throws -> URL {
+  let fileManager = FileManager.default
+  var directory = URL(fileURLWithPath: "\(filePath)").deletingLastPathComponent()
+
+  while directory.path != "/" {
+    let candidate =
+      directory
+      .appendingPathComponent("protocol")
+      .appendingPathComponent("fixtures")
+      .appendingPathComponent("local-preview")
+      .appendingPathComponent("v0.1")
+      .appendingPathComponent("session-flow.messages.json")
+    if fileManager.fileExists(atPath: candidate.path) {
+      return candidate
+    }
+    directory.deleteLastPathComponent()
+  }
+
+  throw CanonicalFixtureLookupError.notFound
+}
+
+func localPreviewFlowObjects() throws -> [[String: Any]] {
+  guard
+    let values = try JSONSerialization.jsonObject(
+      with: Data(contentsOf: localPreviewFlowURL())
+    ) as? [[String: Any]]
+  else {
+    throw CanonicalFixtureLookupError.invalidShape
+  }
+  return values
+}
+
+func localPreviewMessageSource(at index: Int) throws -> String {
+  let values = try localPreviewFlowObjects()
+  guard values.indices.contains(index) else {
+    throw CanonicalFixtureLookupError.invalidShape
+  }
+  let data = try JSONSerialization.data(withJSONObject: values[index], options: [.sortedKeys])
+  guard let source = String(data: data, encoding: .utf8) else {
+    throw CanonicalFixtureLookupError.invalidShape
+  }
+  return source
 }
 
 func canonicalFixtureObject() throws -> [String: Any] {

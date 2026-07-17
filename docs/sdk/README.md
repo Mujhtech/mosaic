@@ -1,16 +1,18 @@
-# Mosaic Phase 1 SDK Renderers
+# Mosaic Native SDKs
 
-Mosaic Protocol `0.1` RC1 now drives three idiomatic native paywall renderers
-from one repository-owned fixture:
+Mosaic Protocol `0.1` RC1 drives three idiomatic native paywall renderers from
+one repository-owned fixture. Local Preview `0.1` adds a shared, local-only
+WebSocket contract so each renderer can apply Studio revisions without an app
+rebuild:
 
-| Platform | Native surface | Local fallback | Phase 1 verification |
+| Platform | Native surface | Local fallback | Phase 2 verification |
 | --- | --- | --- | --- |
-| Flutter | Flutter and Material widgets | Host bundle loader | Analyzer, 57 widget/unit tests, pixel golden, two example bundles |
-| iOS | SwiftUI | SwiftPM packaged canonical resource | Swift build, 36 package tests, simulator app, two simulator UI/snapshot tests |
-| Android | Jetpack Compose and Material 3 | Generated AAR asset | Assemble/lint, 31 JVM tests, 6 emulator UI tests, pixel checksum |
+| Flutter | Flutter and Material widgets | Host bundle loader | Analyzer, 82 tests, widget coverage, real-relay example proof |
+| iOS | SwiftUI | SwiftPM packaged canonical resource | Swift build, 59 package tests, 6 simulator tests, real-relay example proof |
+| Android | Jetpack Compose and Material 3 | Generated AAR asset | Assemble/lint, 52 JVM tests, 7 emulator tests, real-relay example proof |
 
-Phase 1 is deliberately local-only. None of these packages fetch remote
-configuration, publish content, integrate Studio, ingest analytics, evaluate
+Phase 2 remains deliberately local-only. None of these packages fetch hosted
+configuration, publish content, authenticate users, ingest analytics, evaluate
 placements, or call a real billing provider.
 
 ## Canonical protocol contract
@@ -73,6 +75,23 @@ restore/already-entitled results; Android may retain mock entitlement and
 transaction metadata; SwiftUI keeps those presentation payloads minimal.
 Diagnostics likewise use platform-native types while exposing only safe codes.
 
+## Local preview behaviour
+
+All three SDKs negotiate `mosaic.local-preview.v0.1`, identify the preview
+client, and report supported schema, renderer, and preview capabilities before
+receiving a draft. They independently order document and mock-commerce
+revisions, reject stale or conflicting updates, acknowledge only after the
+native view applies a revision, reconnect with bounded backoff, and keep the
+last accepted document or bundled fallback on failure.
+
+Local endpoints are credential-free and restricted to loopback, emulator-host,
+private, link-local, or local-development hosts. Unsupported components,
+invalid documents, missing products/assets, and render failures produce safe,
+structured diagnostics rather than crashing the host app.
+
+Start Studio and its relay with `npm run dev:studio` from `apps/dashboard`.
+Each example README documents its simulator or emulator endpoint.
+
 ## Build and test
 
 ### Flutter
@@ -88,6 +107,13 @@ flutter build bundle --no-pub
 
 The full scenario app is under `examples/flutter-example`; run
 `dart run tool/sync_fixture.dart` before its build or launch.
+
+With the relay running, enable the real WebSocket slice with:
+
+```bash
+flutter test --no-pub --dart-define=MOSAIC_RUN_RELAY_INTEGRATION=true \
+  test/preview_relay_integration_test.dart
+```
 
 ### SwiftUI
 
@@ -105,6 +131,9 @@ xcodebuild -project examples/ios-example/MosaicExample.xcodeproj \
 The concrete-simulator golden command is documented in
 `examples/ios-example/README.md`.
 
+Set `MOSAIC_PREVIEW_RELAY_TEST=1` to include the package's real-relay vertical
+slice while the local relay is running.
+
 ### Jetpack Compose
 
 ```bash
@@ -118,7 +147,6 @@ The runnable Compose app is under `examples/android-example`.
 
 ## Gate status
 
-The implementation is stopped at Review Gate 1. See
-`docs/reviews/phase-1-review.md` for the conformance matrix, validation evidence,
-scope variance, and unsupported environmental checks. Phase 2 is not
-authorized by this SDK work.
+Phase 1 is accepted. See `docs/reviews/phase-2.md` for the Phase 2 compatibility
+matrix, live three-platform evidence, unavailable environmental checks, and
+tracked follow-ups. Phase 2.5 and later work remain outside these SDK changes.

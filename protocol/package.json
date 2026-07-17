@@ -5,14 +5,15 @@
   "type": "module",
   "scripts": {
     "check": "npm run validate && npm test",
-    "test": "node --test tools/validation.test.mjs",
+    "generate:browser-contract": "node tools/generate-browser-contract.mjs",
+    "generate:preview-fixtures": "node tools/generate-local-preview-fixtures.mjs",
+    "test": "node --test tools/*.test.mjs",
     "validate": "node tools/validate.mjs"
   },
-  "devDependencies": {
-    "ajv": "8.17.1"
+  "dependencies": {
+    "ajv": "8.20.0"
   },
   "engines": {
     "node": ">=20"
   }
 }
-

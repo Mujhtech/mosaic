@@ -110,9 +110,6 @@ Phase 1 must not begin until Phase 0 is accepted.
 
 - scroll container
 - vertical stack
-- horizontal stack
-- container
-- spacer
 - text
 - image
 - feature list
@@ -121,6 +118,10 @@ Phase 1 must not begin until Phase 0 is accepted.
 - restore button
 - close button
 - legal text
+
+Horizontal stack, arbitrary container, and spacer are deferred to a future
+protocol version and compatibility review. They are not part of Protocol `0.1`
+and must not be introduced implicitly during Phase 2.
 
 ### Protocol deliverables
 

@@ -18,6 +18,12 @@ let package = Package(
       name: "MosaicSDK",
       resources: [.process("Resources")]
     ),
-    .testTarget(name: "MosaicSDKTests", dependencies: ["MosaicSDK"]),
+    // The PNG is consumed by the Xcode-hosted UIKit snapshot target, not by
+    // the macOS SwiftPM test process.
+    .testTarget(
+      name: "MosaicSDKTests",
+      dependencies: ["MosaicSDK"],
+      exclude: ["Resources"]
+    ),
   ]
 )

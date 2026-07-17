@@ -20,14 +20,13 @@ The compatibility manifest status is one of:
 - `approved`: product-owner-approved and immutable;
 - `deprecated`: still readable where supported but discouraged for new work.
 
-Protocol `0.1` is currently `releaseCandidate` with provenance `RC1`. RC1 is not
-approval. If review changes the contract before approval, all three SDK owners
-must receive the revised contract explicitly, the candidate identifier must
-advance, and every conformance check must be rerun.
+Protocol `0.1` is `approved` with provenance `RC1`. The product owner approved
+the unchanged RC1 bytes on 2026-07-17 after the Protocol and cross-platform
+prototype gates. The lifecycle status changed without redesigning the schema,
+fixture, capabilities, fallback rules, or renderer semantics.
 
 Approval occurs only after the Protocol and cross-platform prototype gates.
-When the approved bytes match RC1, approval changes the manifest lifecycle
-status and changelog status; it does not silently redesign the schema.
+The approved RC1 bytes are now the immutable Protocol `0.1` baseline.
 
 After approval, schema, manifest contract, and canonical fixtures must not be
 edited in place. A correction that changes decoding, validation, rendering,
@@ -68,8 +67,7 @@ No version policy permits best-effort partial rendering of unknown content.
 
 ## Current review gate
 
-Protocol `0.1` RC1 remains pending product-owner review of its component and
-layout semantics, localization/direction resolution, product and asset model,
-actions, accessibility, strict fallback policy, capability set, normalized
-outcomes, and documented native differences. Do not mark it `approved` as part
-of Phase 1 implementation or begin Phase 2 before that review.
+Protocol `0.1` RC1 passed product-owner review and is immutable. Local Preview
+`0.1` is a separate frozen Phase 2 integration contract whose Phase 2 review is
+still pending. Approval or revision of the preview transport does not reopen or
+mutate the Paywall Protocol `0.1` component and rendering semantics.

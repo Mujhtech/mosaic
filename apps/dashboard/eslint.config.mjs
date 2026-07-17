@@ -14,6 +14,14 @@ export default tseslint.config(
   ...pluginQuery.configs["flat/recommended"],
   reactHooks.configs.flat.recommended,
   {
+    files: ["scripts/**/*.mjs"],
+    languageOptions: {
+      ecmaVersion: "latest",
+      globals: globals.node,
+      sourceType: "module",
+    },
+  },
+  {
     files: ["**/*.{ts,tsx}"],
     languageOptions: {
       ecmaVersion: "latest",
@@ -37,6 +45,13 @@ export default tseslint.config(
     files: ["src/routes/**/*.tsx"],
     rules: {
       // File-route modules must export TanStack's generated Route constant.
+      "react-refresh/only-export-components": "off",
+    },
+  },
+  {
+    files: ["src/features/paywall-editor/stores/editor-store-context.tsx"],
+    rules: {
+      // This feature context intentionally colocates its provider and typed hooks.
       "react-refresh/only-export-components": "off",
     },
   },

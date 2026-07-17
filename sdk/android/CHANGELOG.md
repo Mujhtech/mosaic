@@ -1,5 +1,23 @@
 # Changelog
 
+## 0.1.0-dev.3
+
+- Add a strict, platform-neutral Local Preview 0.1 message codec with canonical fixture
+  conformance, closed payload validation, safe diagnostics, and the
+  `mosaic.local-preview.v0.1` WebSocket subprotocol.
+- Add a local-only OkHttp WebSocket preview client with client identity and capability reports,
+  heartbeat handling, bounded reconnect backoff, message deduplication, and safe disconnect
+  behavior.
+- Add independent draft and mock-commerce revision ordering, stale and conflicting revision
+  rejection, delayed acknowledgements after a Compose frame adopts a draft, and last-valid or
+  bundled fallback rendering.
+- Add live mock product, purchase, restore, and entitlement state, including immediate warnings
+  when a commerce update makes an already-rendered draft unavailable.
+- Add Compose preview entry points, a development status panel, locale/RTL/text-scale overrides,
+  render and asset diagnostics, and the Phase 2 Android example integration.
+- Add canonical flow, transport, ordering, fallback, mock commerce, configuration, status UI,
+  reconnect, validation, and unsupported-component tests.
+
 ## 0.1.0-dev.2
 
 - Implement strict Protocol 0.1 RC1 models, recursive semantic validation, exact capability

@@ -1,0 +1,49 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:mosaic:protocol:schema:local-preview:v0.1:local-project",
+  "title": "Mosaic Local Project File 0.1",
+  "description": "Local-only autosave container for one editable Mosaic paywall and deterministic preview state.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "fileFormatVersion",
+    "editableDocumentId",
+    "revision",
+    "document",
+    "preview",
+    "mockCommerce"
+  ],
+  "properties": {
+    "fileFormatVersion": {
+      "const": "0.1"
+    },
+    "editableDocumentId": {
+      "$ref": "urn:mosaic:protocol:schema:local-preview:v0.1:message#/$defs/editableDocumentId"
+    },
+    "revision": {
+      "$ref": "urn:mosaic:protocol:schema:local-preview:v0.1:message#/$defs/localRevision"
+    },
+    "document": {
+      "$ref": "urn:mosaic:protocol:schema:v0.1:paywall"
+    },
+    "preview": {
+      "$ref": "urn:mosaic:protocol:schema:local-preview:v0.1:message#/$defs/previewContext"
+    },
+    "mockCommerce": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "revision",
+        "state"
+      ],
+      "properties": {
+        "revision": {
+          "$ref": "urn:mosaic:protocol:schema:local-preview:v0.1:message#/$defs/localRevision"
+        },
+        "state": {
+          "$ref": "urn:mosaic:protocol:schema:local-preview:v0.1:message#/$defs/mockCommerceState"
+        }
+      }
+    }
+  }
+}

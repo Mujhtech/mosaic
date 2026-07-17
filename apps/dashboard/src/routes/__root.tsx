@@ -10,7 +10,6 @@ import {
 import type { ReactNode } from "react"
 
 import { RouteErrorState, RouteNotFoundState } from "@/components/feedback/route-feedback"
-import { AppShell } from "@/components/layout/app-shell"
 import { AppProviders } from "@/providers/app-providers"
 import type { RouterContext } from "@/router-context"
 import globalStyles from "@/styles/globals.css?url"
@@ -39,9 +38,7 @@ function RootComponent() {
   return (
     <RootDocument>
       <AppProviders queryClient={queryClient}>
-        <AppShell>
-          <Outlet />
-        </AppShell>
+        <Outlet />
       </AppProviders>
     </RootDocument>
   )
@@ -50,9 +47,9 @@ function RootComponent() {
 function RootErrorComponent(props: ErrorComponentProps) {
   return (
     <RootDocument>
-      <AppShell>
+      <main id="main-content">
         <RouteErrorState {...props} />
-      </AppShell>
+      </main>
     </RootDocument>
   )
 }

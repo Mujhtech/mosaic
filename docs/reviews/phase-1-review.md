@@ -1,10 +1,14 @@
 # Phase 1 Review Report
 
-**Date:** 2026-07-17  
-**Gate:** Review Gate 1 — Cross-Platform Local Renderer  
-**Status:** **Review candidate — awaiting product-owner acceptance**  
-**Recommended classification:** **Accepted with tracked follow-ups**  
-**Decision:** **Hold at Review Gate 1; do not begin Phase 2**
+**Date:** 2026-07-17
+
+**Gate:** Review Gate 1 — Cross-Platform Local Renderer
+
+**Status:** **Accepted with tracked follow-ups**
+
+**Product-owner decision:** **Accepted on 2026-07-17**
+
+**Decision:** **Proceed to Phase 2; the dashboard foundation follow-up was resolved on 2026-07-17**
 
 ## Executive Summary
 
@@ -21,9 +25,13 @@ No remote configuration, REST fetching, Studio editing, analytics ingestion,
 placement evaluation, experiment infrastructure, or real billing provider was
 introduced.
 
-This report stops the work at Review Gate 1. It recommends acceptance with
-tracked environmental and documentation follow-ups, but it does not record the
-product owner's gate decision and does not authorize Phase 2.
+The product owner accepted Phase 1 with tracked follow-ups on 2026-07-17. The
+unchanged Protocol `0.1` RC1 bytes are now the approved immutable baseline.
+The separately identified dashboard foundation follow-up was repaired and
+validated on the same date: the required `sidebar-07`, `login-05`, and
+`signup-05` foundations now use Base UI and Phosphor icons, and the dashboard
+format, lint, type, test, and production-build checks pass without Radix UI or
+Lucide application imports. Phase 2 is authorized.
 
 ## Review Inputs
 
@@ -299,19 +307,11 @@ container, text, image, feature list, product selector, purchase button,
 restore button, close button, and legal text. Protocol RC1 and all three SDKs
 conform to that exact list.
 
-The current product roadmap additionally lists horizontal stack, container, and
-spacer under Phase 1. They were not in the explicit implementation brief and
-were therefore not silently added to RC1. Before the product owner records Gate
-1 acceptance, the roadmap should either:
-
-1. be reconciled to the explicitly approved ten-component RC1 scope; or
-2. track those three components as a deliberate follow-up/revision with a new
-   protocol compatibility review.
-
-This variance is a documentation/product-scope decision, not a failure of the
-authorized renderer proof. Adding the three types now would change the frozen
-contract and would require a new protocol review and explicit notification to
-all platform owners.
+The product owner reconciled the roadmap to the explicitly approved ten-type
+RC1 scope on 2026-07-17. Horizontal stack, arbitrary container, and spacer are
+deferred to a future protocol version and compatibility review. They are not
+Phase 2 deliverables. Adding them to the approved contract would require a new
+protocol version and explicit notification to all platform owners.
 
 ## Product, Engineering, UX, and Demo Review
 
@@ -354,24 +354,20 @@ all platform owners.
 
 ## Tracked Follow-ups
 
-1. Reconcile the roadmap's additional Phase 1 component names with the explicit
-   ten-component RC1 scope before recording the product-owner gate decision.
-2. Add physical-device manual VoiceOver and TalkBack review before a public SDK
+1. Add physical-device manual VoiceOver and TalkBack review before a public SDK
    release.
-3. Add iOS-minimum and Android-minimum runtime jobs to the future CI matrix.
-4. Configure a Kotlin formatter and a reviewable Android golden artifact when
+2. Add iOS-minimum and Android-minimum runtime jobs to the future CI matrix.
+3. Configure a Kotlin formatter and a reviewable Android golden artifact when
    repository-wide mobile CI is established.
-5. Re-run a Flutter debug APK build in an environment with observable Android
+4. Re-run a Flutter debug APK build in an environment with observable Android
    Gradle progress; the portable application bundles already pass.
 
 ## Final Classification
 
-**Recommended: Accepted with tracked follow-ups.**
+**Accepted with tracked follow-ups.**
 
 The explicitly authorized Phase 1 renderer proof and all available validation
-are complete. The remaining items are a product-document scope reconciliation
-and environmental/release-matrix follow-ups, not known cross-platform behavior
-defects.
-
-**Stop condition:** Mosaic is held at Review Gate 1 for product-owner review.
-Phase 2 has not started and is not authorized by this report.
+are complete. Remaining items are environmental and release-matrix follow-ups,
+not known cross-platform behavior defects. Product-owner acceptance was
+recorded on 2026-07-17, the dashboard foundation follow-up is resolved, and
+Phase 2 is authorized.

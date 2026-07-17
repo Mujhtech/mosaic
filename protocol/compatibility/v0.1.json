@@ -1,6 +1,6 @@
 {
   "schemaVersion": "0.1",
-  "status": "releaseCandidate",
+  "status": "approved",
   "releaseCandidate": "RC1",
   "schema": "../schema/v0.1/paywall.schema.json",
   "canonicalFixture": "../fixtures/v0.1/complete-paywall.json",

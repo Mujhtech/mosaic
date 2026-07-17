@@ -43,7 +43,7 @@ test("the RC1 canonical fixture, manifest, coverage, and formatting are valid", 
   assert.deepEqual(errors(input), []);
   assert.deepEqual(validateCanonicalFixtureCoverage(input.document), []);
   assert.deepEqual(validateJsonFormatting(), []);
-  assert.equal(input.manifest.status, "releaseCandidate");
+  assert.equal(input.manifest.status, "approved");
   assert.equal(input.manifest.releaseCandidate, "RC1");
   assert.equal(
     input.manifest.canonicalFixture,

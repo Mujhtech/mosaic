@@ -1,12 +1,14 @@
-# Mosaic Flutter SDK — Phase 1 RC1
+# Mosaic Flutter SDK — Phase 2 local preview
 
 This package decodes Mosaic Protocol 0.1 RC1 and renders its sole canonical
-paywall with native Flutter widgets. Phase 1 is local-only: it includes strict
+paywall with native Flutter widgets. It includes strict
 decoding, localization and RTL, bundled fallback loading, mock commerce,
-normalized results, diagnostics, accessibility semantics, and native rendering.
+normalized results, diagnostics, accessibility semantics, native rendering,
+and the Local Preview 0.1 WebSocket client.
 
-It does not include remote configuration, REST fetching, caching, placements,
-Studio preview, analytics, real billing adapters, or any Phase 2 behavior.
+Phase 2 remains account-free and local-only. It does not include remote
+configuration, hosted publishing, REST fetching, caching, placements,
+analytics, experiments, or real billing adapters.
 
 ## Requirements
 
@@ -53,6 +55,64 @@ MosaicPaywallHost(
 `MosaicPaywall` is the lower-level widget for an already decoded and validated
 `MosaicPaywallDocument`. Neither widget owns modal presentation or dismissal.
 
+## Local Studio preview
+
+Create one explicit local endpoint/session configuration and keep the client
+alive for the running application process:
+
+```dart
+final preview = MosaicPreviewClient(
+  configuration: MosaicPreviewClientConfiguration(
+    endpoint: Uri.parse('ws://127.0.0.1:4317/preview'),
+    sessionId: 'session_local_01',
+    identity: MosaicPreviewClientIdentity(
+      clientId: 'client_flutter_example',
+      displayName: 'Flutter example preview',
+      renderer: MosaicPreviewSoftwareIdentity(
+        id: 'mosaic.flutter',
+        version: mosaicFlutterSdkVersion,
+      ),
+      application: MosaicPreviewApplicationIdentity(
+        id: 'example.app',
+        displayName: 'Example App',
+        version: '1.0.0',
+      ),
+      device: MosaicPreviewDeviceIdentity(
+        displayName: 'Local simulator',
+        systemName: 'iOS',
+        systemVersion: '26.0',
+      ),
+    ),
+  ),
+);
+
+await preview.connect();
+```
+
+Render the latest safe revision with `MosaicPreviewPaywall`. Supply the
+existing bundled document/provider as the disconnected and pre-first-revision
+fallback. The widget applies the message's locale and text scale, rerenders
+without rebuilding the app, and sends `draftAccepted` only after the revision
+completes a Flutter frame.
+
+The client:
+
+- uses WebSocket subprotocol `mosaic.local-preview.v0.1`;
+- sends `previewClientConnected` then `capabilityReport`;
+- reports all Protocol 0.1 and Phase 2 preview capabilities;
+- orders local document and mock-commerce revisions independently;
+- repeats prior acknowledgements for idempotent revision duplicates;
+- rejects stale/conflicting/invalid/unsupported revisions atomically;
+- preserves the last accepted draft after rejection or render failure;
+- reconnects from 250 ms up to 5 seconds with a bounded attempt count; and
+- sends five-second heartbeats and safe diagnostics without raw exceptions,
+  documents, credentials, or local paths.
+
+Endpoint and `sessionId` are independent and both required. A session is local
+routing metadata, never a user identity or credential. Keep `clientId` stable
+only for the running process; do not derive it from advertising or hardware
+identifiers.
+
 ## Protocol and fallback guarantees
 
 - `MosaicProtocolDecoder` rejects unknown fields, components, versions,
@@ -60,7 +120,8 @@ MosaicPaywallHost(
 - Semantic validation covers unique IDs, asset/product/action references,
   exact capability derivation, and localization catalog consistency.
 - The package contains no JSON Schema or fixture copy. Conformance tests read
-  `protocol/fixtures/v0.1/complete-paywall.json` directly.
+  `protocol/fixtures/v0.1/complete-paywall.json` and the Local Preview 0.1
+  fixtures directly.
 - `MosaicPaywallLoader` resolves only local candidate → bundled fallback →
   `configurationUnavailable` in Phase 1.
 - A missing or undecodable bundled image uses the document's localized
@@ -119,9 +180,26 @@ flutter pub get
 dart format --output=none --set-exit-if-changed lib test example/lib
 flutter analyze --no-pub
 flutter test --no-pub
-cd example
+cd ../../examples/flutter-example
+dart run tool/sync_fixture.dart
+flutter analyze --no-pub
+flutter test --no-pub
 flutter build bundle --no-pub
 ```
+
+For the real relay integration slice, start `npm run preview:relay` from
+`apps/dashboard`, then run from `sdk/flutter`:
+
+```bash
+flutter test --no-pub \
+  --dart-define=MOSAIC_RUN_RELAY_INTEGRATION=true \
+  test/preview_relay_integration_test.dart
+```
+
+That opt-in test verifies the negotiated WebSocket subprotocol, identity and
+capability relay, an edited Protocol 0.1 draft, and the returned
+`draftAccepted` acknowledgement. The normal offline suite compiles and skips
+it when no relay is running.
 
 The committed golden under `test/goldens/` is a true Flutter pixel baseline.
 Update it only after an intentional renderer review, then rerun without

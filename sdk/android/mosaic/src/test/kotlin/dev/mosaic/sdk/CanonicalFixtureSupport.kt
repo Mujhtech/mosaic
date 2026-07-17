@@ -39,17 +39,21 @@ internal fun findNode(root: JsonObject, id: String): JsonObject {
 }
 
 private fun canonicalFixture(): Path {
+    return repositoryFile("protocol/fixtures/v0.1/complete-paywall.json")
+}
+
+internal fun repositoryFile(relativePath: String): Path {
     val configuredRoot = System.getProperty("mosaic.repositoryRoot")?.let(Path::of)
     if (configuredRoot != null) {
-        val fixture = configuredRoot.resolve("protocol/fixtures/v0.1/complete-paywall.json")
+        val fixture = configuredRoot.resolve(relativePath)
         if (Files.exists(fixture)) return fixture
     }
 
     var directory: Path? = Path.of("").toAbsolutePath()
     while (directory != null) {
-        val fixture = directory.resolve("protocol/fixtures/v0.1/complete-paywall.json")
+        val fixture = directory.resolve(relativePath)
         if (Files.exists(fixture)) return fixture
         directory = directory.parent
     }
-    error("Cannot locate the sole canonical Protocol 0.1 RC1 fixture in the Mosaic repository.")
+    error("Cannot locate $relativePath in the Mosaic repository.")
 }

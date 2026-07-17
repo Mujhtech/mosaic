@@ -1,11 +1,7 @@
-import { createFileRoute } from "@tanstack/react-router"
-
-import { FoundationOverview } from "@/features/foundation/components/foundation-overview"
+import { createFileRoute, redirect } from "@tanstack/react-router"
 
 export const Route = createFileRoute("/")({
-  component: FoundationRoute,
+  beforeLoad: () => {
+    throw redirect({ to: "/studio" })
+  },
 })
-
-function FoundationRoute() {
-  return <FoundationOverview />
-}

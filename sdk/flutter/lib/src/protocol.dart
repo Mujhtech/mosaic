@@ -1,7 +1,7 @@
 import 'dart:convert';
 
 const String mosaicProtocolVersion = '0.1';
-const String mosaicFlutterSdkVersion = '0.1.0-dev.2';
+const String mosaicFlutterSdkVersion = '0.2.0-dev.1';
 
 /// Every Protocol 0.1 capability implemented by this Flutter SDK.
 const Set<String> mosaicProtocolV01Capabilities = <String>{

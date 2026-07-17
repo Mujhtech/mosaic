@@ -1,5 +1,5 @@
 name: mosaic_flutter_example
-description: Mosaic Phase 1 native Flutter renderer playground.
+description: Mosaic Phase 2 Flutter local-preview client and native renderer.
 publish_to: none
 version: 1.0.0+1
 
