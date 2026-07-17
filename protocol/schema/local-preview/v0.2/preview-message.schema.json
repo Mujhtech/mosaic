@@ -1,0 +1,1201 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:mosaic:protocol:schema:local-preview:v0.2:message",
+  "title": "Mosaic Local Preview Message 0.2",
+  "description": "Closed, platform-neutral WebSocket messages for account-free local Studio preview.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "previewProtocolVersion",
+    "messageId",
+    "sessionId",
+    "sentAt",
+    "type",
+    "payload"
+  ],
+  "properties": {
+    "previewProtocolVersion": {
+      "const": "0.2"
+    },
+    "messageId": {
+      "$ref": "#/$defs/messageId"
+    },
+    "sessionId": {
+      "$ref": "#/$defs/sessionId"
+    },
+    "sentAt": {
+      "$ref": "#/$defs/utcTimestamp"
+    },
+    "type": {
+      "type": "string",
+      "enum": [
+        "previewClientConnected",
+        "previewClientDisconnected",
+        "capabilityReport",
+        "draftUpdated",
+        "draftAccepted",
+        "draftRejected",
+        "validationError",
+        "renderWarning",
+        "renderFailure",
+        "mockCommerceStateChanged",
+        "previewHeartbeat"
+      ]
+    },
+    "payload": {
+      "type": "object"
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "type": {
+            "const": "previewClientConnected"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "payload": {
+            "$ref": "#/$defs/previewClientConnectedPayload"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "type": {
+            "const": "previewClientDisconnected"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "payload": {
+            "$ref": "#/$defs/previewClientDisconnectedPayload"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "type": {
+            "const": "capabilityReport"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "payload": {
+            "$ref": "#/$defs/capabilityReportPayload"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "type": {
+            "const": "draftUpdated"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "payload": {
+            "$ref": "#/$defs/draftUpdatedPayload"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "type": {
+            "const": "draftAccepted"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "payload": {
+            "$ref": "#/$defs/draftAcceptedPayload"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "type": {
+            "const": "draftRejected"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "payload": {
+            "$ref": "#/$defs/draftRejectedPayload"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "type": {
+            "const": "validationError"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "payload": {
+            "$ref": "#/$defs/validationErrorPayload"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "type": {
+            "const": "renderWarning"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "payload": {
+            "$ref": "#/$defs/renderWarningPayload"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "type": {
+            "const": "renderFailure"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "payload": {
+            "$ref": "#/$defs/renderFailurePayload"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "type": {
+            "const": "mockCommerceStateChanged"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "payload": {
+            "$ref": "#/$defs/mockCommerceStateChangedPayload"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "type": {
+            "const": "previewHeartbeat"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "payload": {
+            "$ref": "#/$defs/previewHeartbeatPayload"
+          }
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "messageId": {
+      "type": "string",
+      "minLength": 5,
+      "maxLength": 100,
+      "pattern": "^msg_[A-Za-z0-9][A-Za-z0-9_-]*$"
+    },
+    "sessionId": {
+      "type": "string",
+      "minLength": 9,
+      "maxLength": 100,
+      "pattern": "^session_[A-Za-z0-9][A-Za-z0-9_-]*$"
+    },
+    "clientId": {
+      "type": "string",
+      "minLength": 8,
+      "maxLength": 100,
+      "pattern": "^client_[A-Za-z0-9][A-Za-z0-9_-]*$"
+    },
+    "editableDocumentId": {
+      "type": "string",
+      "minLength": 10,
+      "maxLength": 100,
+      "pattern": "^document_[A-Za-z0-9][A-Za-z0-9_-]*$"
+    },
+    "revisionId": {
+      "type": "string",
+      "minLength": 10,
+      "maxLength": 100,
+      "pattern": "^revision_[A-Za-z0-9][A-Za-z0-9_-]*$"
+    },
+    "utcTimestamp": {
+      "type": "string",
+      "maxLength": 32,
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(?:\\.[0-9]{1,6})?Z$"
+    },
+    "machineIdentifier": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+    },
+    "semanticVersion": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 64,
+      "pattern": "^[0-9]+\\.[0-9]+(?:\\.[0-9]+)?(?:[-+][A-Za-z0-9.-]+)?$"
+    },
+    "safeText": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 512,
+      "pattern": "^[^\\r\\n]*$"
+    },
+    "safeDisplayName": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 80,
+      "pattern": "^[^\\r\\n]*$"
+    },
+    "diagnosticCode": {
+      "type": "string",
+      "minLength": 3,
+      "maxLength": 96,
+      "pattern": "^[a-z][a-zA-Z0-9]*(?:[._-][a-zA-Z0-9]+)+$"
+    },
+    "jsonPointer": {
+      "type": "string",
+      "minLength": 0,
+      "maxLength": 512,
+      "pattern": "^(?:/(?:[^~/]|~[01])*)*$"
+    },
+    "componentId": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "pattern": "^[a-z][a-z0-9]*(?:[-_][a-z0-9]+)*$"
+    },
+    "localeTag": {
+      "type": "string",
+      "pattern": "^[a-z]{2,3}(?:-(?:[A-Z]{2}|[0-9]{3}))?$"
+    },
+    "localRevision": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "revisionId",
+        "sequence"
+      ],
+      "properties": {
+        "revisionId": {
+          "$ref": "#/$defs/revisionId"
+        },
+        "sequence": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 2147483647
+        }
+      }
+    },
+    "softwareIdentity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "version"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/machineIdentifier"
+        },
+        "version": {
+          "$ref": "#/$defs/semanticVersion"
+        }
+      }
+    },
+    "applicationIdentity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "displayName",
+        "version"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/machineIdentifier"
+        },
+        "displayName": {
+          "$ref": "#/$defs/safeDisplayName"
+        },
+        "version": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64,
+          "pattern": "^[^\\r\\n]*$"
+        }
+      }
+    },
+    "deviceIdentity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "displayName",
+        "systemName",
+        "systemVersion"
+      ],
+      "properties": {
+        "displayName": {
+          "$ref": "#/$defs/safeDisplayName"
+        },
+        "systemName": {
+          "$ref": "#/$defs/safeDisplayName"
+        },
+        "systemVersion": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64,
+          "pattern": "^[^\\r\\n]*$"
+        }
+      }
+    },
+    "previewClientIdentity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "clientId",
+        "displayName",
+        "renderer",
+        "application",
+        "device"
+      ],
+      "properties": {
+        "clientId": {
+          "$ref": "#/$defs/clientId"
+        },
+        "displayName": {
+          "$ref": "#/$defs/safeDisplayName"
+        },
+        "renderer": {
+          "$ref": "#/$defs/softwareIdentity"
+        },
+        "application": {
+          "$ref": "#/$defs/applicationIdentity"
+        },
+        "device": {
+          "$ref": "#/$defs/deviceIdentity"
+        }
+      }
+    },
+    "supportedCapability": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "version"
+      ],
+      "properties": {
+        "name": {
+          "$ref": "#/$defs/machineIdentifier"
+        },
+        "version": {
+          "$ref": "#/$defs/semanticVersion"
+        }
+      }
+    },
+    "previewCapabilityName": {
+      "type": "string",
+      "enum": [
+        "preview.liveUpdate",
+        "preview.mockCommerce",
+        "preview.localeOverride",
+        "preview.textScale",
+        "preview.diagnostics"
+      ]
+    },
+    "previewCapability": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "version"
+      ],
+      "properties": {
+        "name": {
+          "$ref": "#/$defs/previewCapabilityName"
+        },
+        "version": {
+          "const": "0.2"
+        }
+      }
+    },
+    "previewLimits": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "maxDocumentBytes"
+      ],
+      "properties": {
+        "maxDocumentBytes": {
+          "type": "integer",
+          "minimum": 65536,
+          "maximum": 2097152
+        }
+      }
+    },
+    "previewContext": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "locale",
+        "textScale"
+      ],
+      "properties": {
+        "locale": {
+          "$ref": "#/$defs/localeTag"
+        },
+        "textScale": {
+          "type": "number",
+          "minimum": 0.5,
+          "maximum": 3
+        }
+      }
+    },
+    "diagnosticLocation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "documentPath"
+      ],
+      "properties": {
+        "documentPath": {
+          "$ref": "#/$defs/jsonPointer"
+        },
+        "componentId": {
+          "$ref": "#/$defs/componentId"
+        },
+        "property": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z][A-Za-z0-9]*$"
+        }
+      }
+    },
+    "recoveryAction": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "action",
+        "message"
+      ],
+      "properties": {
+        "action": {
+          "type": "string",
+          "enum": [
+            "editProperty",
+            "removeComponent",
+            "bindProduct",
+            "selectSupportedTemplate",
+            "updatePreviewClient",
+            "restoreLastValidDraft",
+            "retry",
+            "reconnect",
+            "inspectComponent"
+          ]
+        },
+        "message": {
+          "$ref": "#/$defs/safeText"
+        }
+      }
+    },
+    "validationDiagnostic": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "code",
+        "message",
+        "location",
+        "recovery"
+      ],
+      "properties": {
+        "code": {
+          "$ref": "#/$defs/diagnosticCode"
+        },
+        "message": {
+          "$ref": "#/$defs/safeText"
+        },
+        "location": {
+          "$ref": "#/$defs/diagnosticLocation"
+        },
+        "recovery": {
+          "$ref": "#/$defs/recoveryAction"
+        }
+      }
+    },
+    "compatibilityWarning": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "code",
+        "severity",
+        "message",
+        "fallback",
+        "recovery"
+      ],
+      "properties": {
+        "code": {
+          "$ref": "#/$defs/diagnosticCode"
+        },
+        "severity": {
+          "type": "string",
+          "enum": [
+            "warning",
+            "blocking"
+          ]
+        },
+        "message": {
+          "$ref": "#/$defs/safeText"
+        },
+        "location": {
+          "$ref": "#/$defs/diagnosticLocation"
+        },
+        "capability": {
+          "$ref": "#/$defs/supportedCapability"
+        },
+        "fallback": {
+          "type": "string",
+          "enum": [
+            "keepLastAcceptedDraft",
+            "useDeclaredAssetFallback",
+            "useSelectorFallback",
+            "nativeApproximation"
+          ]
+        },
+        "recovery": {
+          "$ref": "#/$defs/recoveryAction"
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "severity": {
+                "const": "blocking"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "fallback": {
+                "const": "keepLastAcceptedDraft"
+              }
+            }
+          }
+        }
+      ]
+    },
+    "renderDiagnostic": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "code",
+        "message",
+        "fallback",
+        "recovery"
+      ],
+      "properties": {
+        "code": {
+          "$ref": "#/$defs/diagnosticCode"
+        },
+        "message": {
+          "$ref": "#/$defs/safeText"
+        },
+        "location": {
+          "$ref": "#/$defs/diagnosticLocation"
+        },
+        "fallback": {
+          "const": "keepLastAcceptedDraft"
+        },
+        "recovery": {
+          "$ref": "#/$defs/recoveryAction"
+        }
+      }
+    },
+    "period": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "unit",
+        "value"
+      ],
+      "properties": {
+        "unit": {
+          "type": "string",
+          "enum": [
+            "day",
+            "week",
+            "month",
+            "year"
+          ]
+        },
+        "value": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 120
+        }
+      }
+    },
+    "introductoryOffer": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "localizedPrice",
+        "period",
+        "cycles"
+      ],
+      "properties": {
+        "localizedPrice": {
+          "$ref": "#/$defs/safeDisplayName"
+        },
+        "period": {
+          "$ref": "#/$defs/period"
+        },
+        "cycles": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 120
+        }
+      }
+    },
+    "availableSubscriptionProduct": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "productReferenceId",
+        "availability",
+        "kind",
+        "localizedPrice",
+        "currencyCode",
+        "billingPeriod"
+      ],
+      "properties": {
+        "productReferenceId": {
+          "$ref": "#/$defs/componentId"
+        },
+        "availability": {
+          "const": "available"
+        },
+        "kind": {
+          "const": "subscription"
+        },
+        "localizedPrice": {
+          "$ref": "#/$defs/safeDisplayName"
+        },
+        "currencyCode": {
+          "type": "string",
+          "pattern": "^[A-Z]{3}$"
+        },
+        "billingPeriod": {
+          "$ref": "#/$defs/period"
+        },
+        "trialPeriod": {
+          "$ref": "#/$defs/period"
+        },
+        "introductoryOffer": {
+          "$ref": "#/$defs/introductoryOffer"
+        }
+      }
+    },
+    "availableNonConsumableProduct": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "productReferenceId",
+        "availability",
+        "kind",
+        "localizedPrice",
+        "currencyCode"
+      ],
+      "properties": {
+        "productReferenceId": {
+          "$ref": "#/$defs/componentId"
+        },
+        "availability": {
+          "const": "available"
+        },
+        "kind": {
+          "const": "nonConsumable"
+        },
+        "localizedPrice": {
+          "$ref": "#/$defs/safeDisplayName"
+        },
+        "currencyCode": {
+          "type": "string",
+          "pattern": "^[A-Z]{3}$"
+        }
+      }
+    },
+    "unavailableMockProduct": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "productReferenceId",
+        "availability",
+        "reason"
+      ],
+      "properties": {
+        "productReferenceId": {
+          "$ref": "#/$defs/componentId"
+        },
+        "availability": {
+          "const": "unavailable"
+        },
+        "reason": {
+          "type": "string",
+          "enum": [
+            "notConfigured",
+            "temporarilyUnavailable",
+            "unsupported"
+          ]
+        }
+      }
+    },
+    "mockProduct": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/availableSubscriptionProduct"
+        },
+        {
+          "$ref": "#/$defs/availableNonConsumableProduct"
+        },
+        {
+          "$ref": "#/$defs/unavailableMockProduct"
+        }
+      ]
+    },
+    "noEntitlement": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "status"
+      ],
+      "properties": {
+        "status": {
+          "const": "none"
+        }
+      }
+    },
+    "activeEntitlement": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "status",
+        "productReferenceId"
+      ],
+      "properties": {
+        "status": {
+          "const": "active"
+        },
+        "productReferenceId": {
+          "$ref": "#/$defs/componentId"
+        }
+      }
+    },
+    "mockEntitlement": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/noEntitlement"
+        },
+        {
+          "$ref": "#/$defs/activeEntitlement"
+        }
+      ]
+    },
+    "mockCommerceState": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "products",
+        "purchaseOutcome",
+        "restoreOutcome",
+        "entitlement"
+      ],
+      "properties": {
+        "products": {
+          "type": "array",
+          "minItems": 0,
+          "maxItems": 50,
+          "items": {
+            "$ref": "#/$defs/mockProduct"
+          }
+        },
+        "purchaseOutcome": {
+          "type": "string",
+          "enum": [
+            "purchased",
+            "alreadyEntitled",
+            "cancelled",
+            "purchaseFailed"
+          ]
+        },
+        "restoreOutcome": {
+          "type": "string",
+          "enum": [
+            "restored",
+            "alreadyEntitled",
+            "restoreNoPurchases",
+            "restoreFailed"
+          ]
+        },
+        "entitlement": {
+          "$ref": "#/$defs/mockEntitlement"
+        }
+      }
+    },
+    "revisionTarget": {
+      "type": "object",
+      "required": [
+        "clientId",
+        "editableDocumentId",
+        "revision"
+      ],
+      "properties": {
+        "clientId": {
+          "$ref": "#/$defs/clientId"
+        },
+        "editableDocumentId": {
+          "$ref": "#/$defs/editableDocumentId"
+        },
+        "revision": {
+          "$ref": "#/$defs/localRevision"
+        }
+      }
+    },
+    "previewClientConnectedPayload": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "client"
+      ],
+      "properties": {
+        "client": {
+          "$ref": "#/$defs/previewClientIdentity"
+        }
+      }
+    },
+    "previewClientDisconnectedPayload": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "clientId",
+        "reason"
+      ],
+      "properties": {
+        "clientId": {
+          "$ref": "#/$defs/clientId"
+        },
+        "reason": {
+          "type": "string",
+          "enum": [
+            "closed",
+            "timeout",
+            "transportError",
+            "replaced",
+            "sessionEnded"
+          ]
+        },
+        "diagnostic": {
+          "$ref": "#/$defs/safeText"
+        }
+      }
+    },
+    "capabilityReportPayload": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "clientId",
+        "supportedSchemaVersions",
+        "supportedCapabilities",
+        "previewCapabilities",
+        "limits"
+      ],
+      "properties": {
+        "clientId": {
+          "$ref": "#/$defs/clientId"
+        },
+        "supportedSchemaVersions": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 16,
+          "uniqueItems": true,
+          "items": {
+            "$ref": "#/$defs/semanticVersion"
+          }
+        },
+        "supportedCapabilities": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 128,
+          "uniqueItems": true,
+          "items": {
+            "$ref": "#/$defs/supportedCapability"
+          }
+        },
+        "previewCapabilities": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 32,
+          "uniqueItems": true,
+          "items": {
+            "$ref": "#/$defs/previewCapability"
+          }
+        },
+        "limits": {
+          "$ref": "#/$defs/previewLimits"
+        }
+      }
+    },
+    "draftUpdatedPayload": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "editableDocumentId",
+        "revision",
+        "document",
+        "preview"
+      ],
+      "properties": {
+        "editableDocumentId": {
+          "$ref": "#/$defs/editableDocumentId"
+        },
+        "revision": {
+          "$ref": "#/$defs/localRevision"
+        },
+        "document": {
+          "$ref": "urn:mosaic:protocol:schema:v0.2:paywall"
+        },
+        "preview": {
+          "$ref": "#/$defs/previewContext"
+        }
+      }
+    },
+    "draftAcceptedPayload": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "clientId",
+        "editableDocumentId",
+        "revision"
+      ],
+      "properties": {
+        "clientId": {
+          "$ref": "#/$defs/clientId"
+        },
+        "editableDocumentId": {
+          "$ref": "#/$defs/editableDocumentId"
+        },
+        "revision": {
+          "$ref": "#/$defs/localRevision"
+        }
+      }
+    },
+    "draftRejectedPayload": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "clientId",
+        "editableDocumentId",
+        "revision",
+        "reason",
+        "diagnostics"
+      ],
+      "properties": {
+        "clientId": {
+          "$ref": "#/$defs/clientId"
+        },
+        "editableDocumentId": {
+          "$ref": "#/$defs/editableDocumentId"
+        },
+        "revision": {
+          "$ref": "#/$defs/localRevision"
+        },
+        "reason": {
+          "type": "string",
+          "enum": [
+            "staleRevision",
+            "revisionConflict",
+            "validationFailed",
+            "unsupportedSchemaVersion",
+            "unsupportedCapability",
+            "documentTooLarge",
+            "renderFailed"
+          ]
+        },
+        "diagnostics": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 50,
+          "items": {
+            "$ref": "#/$defs/validationDiagnostic"
+          }
+        }
+      }
+    },
+    "validationErrorPayload": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "clientId",
+        "editableDocumentId",
+        "revision",
+        "errors"
+      ],
+      "properties": {
+        "clientId": {
+          "$ref": "#/$defs/clientId"
+        },
+        "editableDocumentId": {
+          "$ref": "#/$defs/editableDocumentId"
+        },
+        "revision": {
+          "$ref": "#/$defs/localRevision"
+        },
+        "errors": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 100,
+          "items": {
+            "$ref": "#/$defs/validationDiagnostic"
+          }
+        }
+      }
+    },
+    "renderWarningPayload": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "clientId",
+        "editableDocumentId",
+        "revision",
+        "warnings"
+      ],
+      "properties": {
+        "clientId": {
+          "$ref": "#/$defs/clientId"
+        },
+        "editableDocumentId": {
+          "$ref": "#/$defs/editableDocumentId"
+        },
+        "revision": {
+          "$ref": "#/$defs/localRevision"
+        },
+        "warnings": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 50,
+          "items": {
+            "$ref": "#/$defs/compatibilityWarning"
+          }
+        }
+      }
+    },
+    "renderFailurePayload": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "clientId",
+        "editableDocumentId",
+        "revision",
+        "failure"
+      ],
+      "properties": {
+        "clientId": {
+          "$ref": "#/$defs/clientId"
+        },
+        "editableDocumentId": {
+          "$ref": "#/$defs/editableDocumentId"
+        },
+        "revision": {
+          "$ref": "#/$defs/localRevision"
+        },
+        "failure": {
+          "$ref": "#/$defs/renderDiagnostic"
+        }
+      }
+    },
+    "mockCommerceStateChangedPayload": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "editableDocumentId",
+        "stateRevision",
+        "state"
+      ],
+      "properties": {
+        "editableDocumentId": {
+          "$ref": "#/$defs/editableDocumentId"
+        },
+        "stateRevision": {
+          "$ref": "#/$defs/localRevision"
+        },
+        "state": {
+          "$ref": "#/$defs/mockCommerceState"
+        }
+      }
+    },
+    "previewHeartbeatPayload": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "clientId",
+        "kind",
+        "sequence"
+      ],
+      "properties": {
+        "clientId": {
+          "$ref": "#/$defs/clientId"
+        },
+        "kind": {
+          "type": "string",
+          "enum": [
+            "ping",
+            "pong"
+          ]
+        },
+        "sequence": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 2147483647
+        }
+      }
+    }
+  }
+}

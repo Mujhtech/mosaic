@@ -1,0 +1,22 @@
+{
+  "studioSupportedPreviewVersions": [
+    "0.1",
+    "0.2"
+  ],
+  "clientSupportedPreviewVersions": [
+    "0.1"
+  ],
+  "selectedPreviewVersion": "0.1",
+  "selectedWebSocketSubprotocol": "mosaic.local-preview.v0.1",
+  "draftSchemaVersion": "0.2",
+  "delivery": "withhold",
+  "diagnostic": {
+    "code": "preview.incompatibleSchemaVersion",
+    "message": "This Local Preview 0.1 client cannot receive a Protocol 0.2 draft.",
+    "fallback": "keepLastAcceptedDraft",
+    "recovery": {
+      "action": "updatePreviewClient",
+      "message": "Update the preview client to a version that supports Local Preview and Protocol 0.2."
+    }
+  }
+}

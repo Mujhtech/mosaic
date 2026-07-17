@@ -1,0 +1,226 @@
+{
+  "schemaVersion": "0.2",
+  "status": "releaseCandidate",
+  "releaseCandidate": "RC1",
+  "predecessorVersion": "0.1",
+  "schema": "../schema/v0.2/paywall.schema.json",
+  "canonicalFixture": "../fixtures/v0.2/complete-paywall.json",
+  "migration": {
+    "from": "0.1",
+    "to": "0.2",
+    "tool": "../tools/migrate-v0.1-to-v0.2.mjs",
+    "canonicalFixture": "../fixtures/v0.2/migrated-v0.1.json"
+  },
+  "capabilities": [
+    {
+      "name": "layout.scrollContainer",
+      "version": "0.2",
+      "fallback": "rejectDocument"
+    },
+    {
+      "name": "layout.stack",
+      "version": "0.2",
+      "fallback": "rejectDocument"
+    },
+    {
+      "name": "layout.sizing",
+      "version": "0.2",
+      "fallback": "rejectDocument"
+    },
+    {
+      "name": "layout.outerInsets",
+      "version": "0.2",
+      "fallback": "rejectDocument"
+    },
+    {
+      "name": "component.text",
+      "version": "0.2",
+      "fallback": "rejectDocument"
+    },
+    {
+      "name": "component.image",
+      "version": "0.2",
+      "fallback": "rejectDocument"
+    },
+    {
+      "name": "component.featureList",
+      "version": "0.2",
+      "fallback": "rejectDocument"
+    },
+    {
+      "name": "component.productSelector",
+      "version": "0.2",
+      "fallback": "rejectDocument"
+    },
+    {
+      "name": "component.purchaseButton",
+      "version": "0.2",
+      "fallback": "rejectDocument"
+    },
+    {
+      "name": "component.restoreButton",
+      "version": "0.2",
+      "fallback": "rejectDocument"
+    },
+    {
+      "name": "component.closeButton",
+      "version": "0.2",
+      "fallback": "rejectDocument"
+    },
+    {
+      "name": "component.legalText",
+      "version": "0.2",
+      "fallback": "rejectDocument"
+    },
+    {
+      "name": "component.carousel",
+      "version": "0.2",
+      "fallback": "rejectDocument"
+    },
+    {
+      "name": "component.switch",
+      "version": "0.2",
+      "fallback": "rejectDocument"
+    },
+    {
+      "name": "component.countdown",
+      "version": "0.2",
+      "fallback": "rejectDocument"
+    },
+    {
+      "name": "localization.catalogs",
+      "version": "0.2",
+      "fallback": "rejectDocument"
+    },
+    {
+      "name": "localization.rtl",
+      "version": "0.2",
+      "fallback": "rejectDocument"
+    },
+    {
+      "name": "product.references",
+      "version": "0.2",
+      "fallback": "rejectDocument"
+    },
+    {
+      "name": "asset.bundledImage",
+      "version": "0.2",
+      "fallback": "rejectDocument"
+    },
+    {
+      "name": "action.purchase",
+      "version": "0.2",
+      "fallback": "rejectDocument"
+    },
+    {
+      "name": "action.restore",
+      "version": "0.2",
+      "fallback": "rejectDocument"
+    },
+    {
+      "name": "action.close",
+      "version": "0.2",
+      "fallback": "rejectDocument"
+    },
+    {
+      "name": "accessibility.metadata",
+      "version": "0.2",
+      "fallback": "rejectDocument"
+    },
+    {
+      "name": "fallback.asset",
+      "version": "0.2",
+      "fallback": "rejectDocument"
+    },
+    {
+      "name": "fallback.product",
+      "version": "0.2",
+      "fallback": "rejectDocument"
+    },
+    {
+      "name": "outcome.normalized",
+      "version": "0.2",
+      "fallback": "rejectDocument"
+    },
+    {
+      "name": "style.colors",
+      "version": "0.2",
+      "fallback": "rejectDocument"
+    },
+    {
+      "name": "style.box",
+      "version": "0.2",
+      "fallback": "rejectDocument"
+    },
+    {
+      "name": "style.clipping",
+      "version": "0.2",
+      "fallback": "rejectDocument"
+    },
+    {
+      "name": "style.typography",
+      "version": "0.2",
+      "fallback": "rejectDocument"
+    },
+    {
+      "name": "style.productCardStates",
+      "version": "0.2",
+      "fallback": "rejectDocument"
+    },
+    {
+      "name": "visibility.static",
+      "version": "0.2",
+      "fallback": "rejectDocument"
+    },
+    {
+      "name": "condition.switchVisibility",
+      "version": "0.2",
+      "fallback": "rejectDocument"
+    }
+  ],
+  "readerPolicy": {
+    "unknownSchemaVersion": "rejectDocument",
+    "unknownComponent": "rejectDocument",
+    "unknownProperty": "rejectDocument",
+    "unsupportedCapability": "rejectDocument",
+    "invalidReference": "rejectDocument",
+    "primaryDocumentRejected": "loadBundledFallback",
+    "bundledFallbackRejected": "configurationUnavailable",
+    "missingAsset": "useDeclaredAssetFallback",
+    "unavailableProduct": "useSelectorFallback",
+    "falseVisibilityCondition": "removeFromLayoutAccessibilityAndFocus",
+    "completedCountdown": "showLocalizedCompletedText"
+  },
+  "normalizedOutcomes": {
+    "selectProduct": [
+      "productSelected"
+    ],
+    "purchase": [
+      "purchased",
+      "alreadyEntitled",
+      "cancelled",
+      "productUnavailable",
+      "purchaseFailed"
+    ],
+    "restore": [
+      "restored",
+      "alreadyEntitled",
+      "restoreNoPurchases",
+      "restoreFailed"
+    ],
+    "close": [
+      "dismissed"
+    ],
+    "presentation": [
+      "purchased",
+      "restored",
+      "alreadyEntitled",
+      "dismissed",
+      "cancelled",
+      "productUnavailable",
+      "configurationUnavailable",
+      "purchaseFailed",
+      "renderingFailed"
+    ]
+  }
+}

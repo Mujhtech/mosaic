@@ -3,6 +3,42 @@
 All notable Mosaic protocol changes are recorded here. Versioned artifacts are
 not immutable until their review gate is approved.
 
+## Protocol and Local Preview 0.2 RC1 - 2026-07-17
+
+Status: release candidate; SDK, Studio, and product-owner approval pending
+
+- Preserved every approved Protocol and Local Preview 0.1 artifact
+  byte-for-byte and added hash regression coverage.
+- Replaced `verticalStack` in 0.2 with generalized vertical/horizontal `stack`
+  semantics and deterministic 0.1-to-0.2 migration.
+- Added vertical/horizontal Product Selector layout with `gap`, including
+  deterministic vertical migration from 0.1 `itemSpacing`.
+- Added horizontal paged Carousel with 2–20 stable, localized pages, an initial
+  index, Stack content, largest-page height, manual snapping, no autoplay or
+  loop, and no nested Carousel.
+- Added Switch with off/on track and thumb colors plus static and single-Switch
+  Boolean visibility that removes false subtrees from layout, accessibility,
+  focus, and hit testing.
+- Added absolute UTC Countdown with ordered largest/smallest units, controlled
+  clock completion semantics, localized completed text, and no action.
+- Added the frozen eight semantic colors and uppercase `#RRGGBBAA`, constrained
+  box appearance, inside border, uniform radius, opacity, clipping, logical
+  padding, safe sizing, separate outer insets, and line-height-multiplier
+  typography with eligible maximum lines.
+- Added Product Card complete Default styling plus recursively partial,
+  per-leaf resettable Selected overrides, including empty `{}` full reset. No
+  other authored card state exists.
+- Added complete, migrated, 20-page edge, expired Countdown, hidden purchase
+  target, and intentionally invalid fixtures; semantic validators; browser
+  types/runtime validation; and exact 0.2 capability metadata.
+- Added Local Preview 0.2 schemas and generated fixtures, highest-mutual 0.1/0.2
+  subprotocol negotiation, explicit 0.1-only incompatibility recovery, exact
+  capability gating, and accepted-revision Switch/Carousel runtime reset
+  without changing Local Preview 0.1.
+- Explicitly excluded CSS, freeform positioning, rotation, multi-paint,
+  project-defined token catalogs, executable content, Carousel autoplay/loop,
+  and Countdown actions.
+
 ## Local Preview 0.1 - 2026-07-17
 
 Status: frozen Phase 2 integration contract; Phase 2 review pending

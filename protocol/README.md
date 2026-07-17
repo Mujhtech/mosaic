@@ -1,66 +1,55 @@
 # Mosaic Protocol
 
-Protocol `0.1` RC1 is Mosaic's Phase 1 platform-neutral native-paywall
-contract. The product owner accepted the unchanged RC1 bytes on 2026-07-17,
-so this version is now the approved and immutable Protocol `0.1` baseline.
+Protocol `0.1` is Mosaic's immutable Phase 1 native-paywall baseline. Protocol
+`0.2` RC1 is the release-candidate constrained component-and-style expansion.
+Both are exact, platform-neutral contracts; readers support versions
+explicitly. Protocol `0.2` is not approved until all SDK and Studio conformance
+gates pass.
 
-## Canonical artifacts
+Canonical versioned artifacts live under:
 
 ```text
 protocol/
-├── browser/
-│   ├── generated/
-│   │   └── contract-types.d.ts
-│   ├── index.d.ts
-│   └── index.js
+├── browser/                         # browser-safe validators and generated types
 ├── compatibility/
-│   └── v0.1.json
+│   ├── v0.1.json
+│   └── v0.2.json
 ├── fixtures/
-│   ├── local-preview/
-│   │   └── v0.1/
-│   │       ├── local-project.json
-│   │       └── session-flow.messages.json
-│   └── v0.1/
-│       └── complete-paywall.json
+│   ├── local-preview/{v0.1,v0.2}/
+│   ├── v0.1/complete-paywall.json
+│   └── v0.2/
+│       ├── complete-paywall.json
+│       ├── migrated-v0.1.json
+│       ├── edge-cases.json
+│       ├── expired-countdown.json
+│       ├── hidden-purchase-target.json
+│       └── invalid/noncanonical-color.json
 ├── schema/
-│   ├── local-preview/
-│   │   └── v0.1/
-│   │       ├── local-project.schema.json
-│   │       └── preview-message.schema.json
-│   └── v0.1/
-│       ├── compatibility-manifest.schema.json
-│       └── paywall.schema.json
-└── tools/
-    ├── browser-contract-validation.mjs
-    ├── browser-contract.test.mjs
-    ├── generate-browser-contract.mjs
-    ├── generate-local-preview-fixtures.mjs
-    ├── preview-validation.mjs
-    ├── preview-validation.test.mjs
-    ├── validate.mjs
-    ├── validation.mjs
-    └── validation.test.mjs
+│   ├── local-preview/{v0.1,v0.2}/
+│   ├── v0.1/
+│   └── v0.2/
+└── tools/                           # generation, migration, validation, and tests
 ```
 
-`fixtures/v0.1/complete-paywall.json` is the only complete canonical RC1
-paywall. It exercises the entire Phase 1 component set, nested layout,
-provider-neutral products, a bundled image key and placeholder, English,
-long German, Arabic RTL, accessibility metadata, product selection, purchase,
-restore, close, and normalized outcomes. SDKs must consume or package that
-file from its canonical path and must not maintain platform copies.
+The 0.1 fixture remains the only complete canonical 0.1 paywall and its bytes
+must not change. The 0.2 complete fixture is the cross-platform conformance
+source for generalized Stack, Carousel, Switch, Countdown, constrained colors
+and boxes, bounded typography, visibility, Product Selector direction, and
+Product Card states. SDKs may
+package generated copies but must not maintain hand-edited platform forks.
 
-The paywall schema contains declarative data only. It has no remote fetch,
-executable content, arbitrary styling language, analytics, Studio metadata, or
-real billing contract.
+All versions contain declarative data only. Protocol 0.2 does not add CSS,
+freeform position, rotation, multi-paint, project token catalogs, executable
+code, Carousel autoplay/loop, or Countdown actions.
 
-Local Preview `0.1` is a separate Phase 2 transport and local-project
-contract. It carries the immutable paywall document without changing its
-meaning and adds only local editor identity, ordered revisions, capability
-reports, mock commerce, acknowledgements, and safe diagnostics. Its generated
-fixtures derive their embedded paywall bytes from the single canonical RC1
-fixture; they are not alternate paywall sources.
+Local Preview is separately versioned. Local Preview 0.1 embeds only Protocol
+0.1. Peers choose the highest mutually supported Local Preview subprotocol.
+Local Preview 0.2 embeds only Protocol 0.2; a negotiated 0.1 connection must
+withhold a 0.2 draft and keep its last accepted value. The browser entry
+validates both exact versions and returns structured editor-addressable
+diagnostics.
 
-## Install and validate
+## Install, generate, and validate
 
 From this directory:
 
@@ -76,35 +65,33 @@ npm --prefix protocol ci
 npm --prefix protocol run check
 ```
 
-`npm run validate` compiles both JSON Schemas, validates the canonical fixture
-and manifest, checks canonical JSON formatting, derives capabilities through
-the recursive layout, and enforces cross-field IDs, references, actions,
-locales, products, and catalog invariants. It also compiles both Local Preview
-schemas, validates all generated preview messages and local-project state, and
-checks mock commerce and acknowledgement correlation. `npm test` covers the
-valid RC1 and Local Preview contracts plus invalid input and fallback policy.
+`npm run validate` compiles all Protocol and Local Preview schemas, checks
+canonical, migrated, edge, and invalid fixtures, validates capability and
+reference invariants, verifies generation drift, and checks Local Preview
+message correlation, negotiation, recovery, and accepted-revision runtime
+reset. `npm test` covers valid and invalid contract behavior, migration
+determinism, browser/Node parity, and byte hashes for immutable 0.1 artifacts.
 
-`browser/index.js` is the browser-safe canonical validation entry used by
-Studio. It compiles the canonical schemas directly, enforces the same semantic
-invariants as the Node validator, and returns structured diagnostics that can
-select an affected component and property. Its adjacent declarations are
-generated from the schemas; dashboard code must import these types and
-validators instead of copying protocol interfaces or redefining validation.
-
-Regenerate browser declarations after intentionally changing a canonical
-schema:
-
-```bash
-npm run generate:browser-contract
-```
-
-Regenerate Local Preview fixtures after intentionally changing their source:
+Regenerate repository-owned outputs with:
 
 ```bash
 npm run generate:preview-fixtures
+npm run generate:v0.2-fixtures
+npm run generate:preview-v0.2-contract
+npm run generate:browser-contract
 ```
 
-See `docs/protocol/v0.1.md` for normative semantics and
-`docs/protocol/local-preview-v0.1.md` for the local editing, WebSocket,
-diagnostic, import, and export contract. See `docs/protocol/versioning.md` for
-candidate and approval handling.
+Or run the complete deterministic sequence:
+
+```bash
+npm run generate
+```
+
+See:
+
+- `docs/protocol/v0.1.md`
+- `docs/protocol/v0.2.md`
+- `docs/protocol/migration-v0.1-to-v0.2.md`
+- `docs/protocol/local-preview-v0.1.md`
+- `docs/protocol/local-preview-v0.2.md`
+- `docs/protocol/versioning.md`

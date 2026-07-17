@@ -1,37 +1,341 @@
 import Ajv2020 from "ajv/dist/2020.js";
 
 import compatibilityManifest from "../compatibility/v0.1.json" with { type: "json" };
+import compatibilityManifestV02 from "../compatibility/v0.2.json" with { type: "json" };
+import incompatibleClientSchemaV02 from "../schema/local-preview/v0.2/incompatible-client.schema.json" with { type: "json" };
 import localProjectSchema from "../schema/local-preview/v0.1/local-project.schema.json" with { type: "json" };
+import localProjectSchemaV02 from "../schema/local-preview/v0.2/local-project.schema.json" with { type: "json" };
 import previewMessageSchema from "../schema/local-preview/v0.1/preview-message.schema.json" with { type: "json" };
+import previewMessageSchemaV02 from "../schema/local-preview/v0.2/preview-message.schema.json" with { type: "json" };
 import paywallSchema from "../schema/v0.1/paywall.schema.json" with { type: "json" };
+import paywallSchemaV02 from "../schema/v0.2/paywall.schema.json" with { type: "json" };
 
 export const localPreviewContractVersion =
   previewMessageSchema.properties.previewProtocolVersion.const;
 export const localPreviewWebSocketProtocol =
   `mosaic.local-preview.v${localPreviewContractVersion}`;
+export const localPreviewContractVersions = Object.freeze(["0.1", "0.2"]);
+export const localPreviewVersionPreference = Object.freeze(["0.2", "0.1"]);
+export const localPreviewWebSocketProtocols = Object.freeze({
+  "0.1": "mosaic.local-preview.v0.1",
+  "0.2": "mosaic.local-preview.v0.2",
+});
 export const previewMessageTypes = Object.freeze([
   ...previewMessageSchema.properties.type.enum,
 ]);
+export const previewMessageTypesByVersion = Object.freeze({
+  "0.1": previewMessageTypes,
+  "0.2": Object.freeze([...previewMessageSchemaV02.properties.type.enum]),
+});
 export const requiredPreviewCapabilities = Object.freeze([
   ...previewMessageSchema.$defs.previewCapabilityName.enum,
+]);
+const requiredPreviewCapabilitiesV02 = Object.freeze([
+  ...previewMessageSchemaV02.$defs.previewCapabilityName.enum,
 ]);
 export const canonicalSchemas = Object.freeze({
   paywall: paywallSchema,
   previewMessage: previewMessageSchema,
   localProject: localProjectSchema,
 });
+export const canonicalSchemasByVersion = Object.freeze({
+  "0.1": canonicalSchemas,
+  "0.2": Object.freeze({
+    paywall: paywallSchemaV02,
+    previewMessage: previewMessageSchemaV02,
+    localProject: localProjectSchemaV02,
+    incompatibleClient: incompatibleClientSchemaV02,
+  }),
+});
+
+function incompatibleSchemaVersionDiagnostic() {
+  return {
+    code: "preview.incompatibleSchemaVersion",
+    message:
+      "This Local Preview 0.1 client cannot receive a Protocol 0.2 draft.",
+    fallback: "keepLastAcceptedDraft",
+    recovery: {
+      action: "updatePreviewClient",
+      message:
+        "Update the preview client to a version that supports Local Preview and Protocol 0.2.",
+    },
+  };
+}
+
+function structuredDeliveryDiagnostic({
+  action = "updatePreviewClient",
+  code,
+  message,
+  recoveryMessage,
+}) {
+  return {
+    code,
+    message,
+    fallback: "keepLastAcceptedDraft",
+    recovery: {
+      action,
+      message: recoveryMessage,
+    },
+  };
+}
+
+export function negotiateLocalPreviewVersion(
+  localSupportedVersions,
+  remoteSupportedVersions,
+) {
+  const local = new Set(
+    Array.isArray(localSupportedVersions) ? localSupportedVersions : [],
+  );
+  const remote = new Set(
+    Array.isArray(remoteSupportedVersions) ? remoteSupportedVersions : [],
+  );
+  const selectedVersion = localPreviewVersionPreference.find(
+    (version) => local.has(version) && remote.has(version),
+  );
+  if (!selectedVersion) {
+    return {
+      ok: false,
+      selectedVersion: null,
+      selectedWebSocketSubprotocol: null,
+      diagnostic: {
+        code: "preview.noMutualVersion",
+        message:
+          "Studio and the preview client have no mutually supported Local Preview version.",
+        fallback: "keepLastAcceptedDraft",
+        recovery: {
+          action: "updatePreviewClient",
+          message:
+            "Update Studio or the preview client to a mutually supported version.",
+        },
+      },
+    };
+  }
+  return {
+    ok: true,
+    selectedVersion,
+    selectedWebSocketSubprotocol: `mosaic.local-preview.v${selectedVersion}`,
+  };
+}
+
+function isRecord(value) {
+  return value !== null && typeof value === "object" && !Array.isArray(value);
+}
+
+function hasValidUniqueCapabilities(value) {
+  if (!Array.isArray(value)) return false;
+  const seen = new Set();
+  for (const capability of value) {
+    if (
+      !isRecord(capability) ||
+      typeof capability.name !== "string" ||
+      capability.name.length === 0 ||
+      typeof capability.version !== "string" ||
+      capability.version.length === 0 ||
+      seen.has(capability.name)
+    ) {
+      return false;
+    }
+    seen.add(capability.name);
+  }
+  return true;
+}
+
+function isWellFormedCapabilityReport(capabilityReport) {
+  return (
+    isRecord(capabilityReport) &&
+    typeof capabilityReport.clientId === "string" &&
+    capabilityReport.clientId.length > 0 &&
+    Array.isArray(capabilityReport.supportedSchemaVersions) &&
+    capabilityReport.supportedSchemaVersions.length > 0 &&
+    capabilityReport.supportedSchemaVersions.every(
+      (version) => typeof version === "string" && version.length > 0,
+    ) &&
+    new Set(capabilityReport.supportedSchemaVersions).size ===
+      capabilityReport.supportedSchemaVersions.length &&
+    hasValidUniqueCapabilities(capabilityReport.supportedCapabilities) &&
+    hasValidUniqueCapabilities(capabilityReport.previewCapabilities) &&
+    isRecord(capabilityReport.limits) &&
+    Number.isInteger(capabilityReport.limits.maxDocumentBytes) &&
+    capabilityReport.limits.maxDocumentBytes > 0
+  );
+}
+
+function serializedDocumentBytes(document) {
+  try {
+    const serialized = JSON.stringify(document);
+    return typeof serialized === "string"
+      ? new TextEncoder().encode(serialized).byteLength
+      : null;
+  } catch {
+    return null;
+  }
+}
+
+export function decideLocalPreviewDraftDelivery({
+  capabilityReport,
+  document,
+  negotiation,
+} = {}) {
+  if (!isRecord(negotiation)) {
+    return {
+      delivery: "withhold",
+      diagnostic: structuredDeliveryDiagnostic({
+        code: "preview.invalidNegotiation",
+        message: "Local Preview negotiation state is missing or malformed.",
+        recoveryMessage:
+          "Renegotiate a supported Local Preview subprotocol before sending a draft.",
+      }),
+    };
+  }
+  if (negotiation.ok !== true) {
+    return {
+      delivery: "withhold",
+      diagnostic: isRecord(negotiation.diagnostic)
+        ? negotiation.diagnostic
+        : structuredDeliveryDiagnostic({
+            code: "preview.invalidNegotiation",
+            message: "Local Preview negotiation did not select a version.",
+            recoveryMessage:
+              "Renegotiate a supported Local Preview subprotocol before sending a draft.",
+          }),
+    };
+  }
+  if (
+    !isRecord(document) ||
+    typeof document.schemaVersion !== "string" ||
+    !isRecord(document.compatibility) ||
+    !Array.isArray(document.compatibility.requiredCapabilities)
+  ) {
+    return {
+      delivery: "withhold",
+      diagnostic: structuredDeliveryDiagnostic({
+        action: "editProperty",
+        code: "preview.invalidDraft",
+        message: "The preview draft is missing its version or capability contract.",
+        recoveryMessage: "Validate the complete draft before preview delivery.",
+      }),
+    };
+  }
+  if (negotiation.selectedVersion !== document.schemaVersion) {
+    return {
+      delivery: "withhold",
+      diagnostic: incompatibleSchemaVersionDiagnostic(),
+    };
+  }
+  if (!isWellFormedCapabilityReport(capabilityReport)) {
+    return {
+      delivery: "withhold",
+      diagnostic: structuredDeliveryDiagnostic({
+        code: "preview.invalidCapabilityReport",
+        message: "The preview client's capability report is missing or malformed.",
+        recoveryMessage:
+          "Reconnect or update the preview client so it sends a complete capability report.",
+      }),
+    };
+  }
+  if (!capabilityReport.supportedSchemaVersions.includes(document.schemaVersion)) {
+    return {
+      delivery: "withhold",
+      diagnostic: incompatibleSchemaVersionDiagnostic(),
+    };
+  }
+  const previewCapabilities = new Map(
+    capabilityReport.previewCapabilities.map(({ name, version }) => [
+      name,
+      version,
+    ]),
+  );
+  const missingPreviewCapabilities = requiredPreviewCapabilitiesV02.filter(
+    (name) => previewCapabilities.get(name) !== "0.2",
+  );
+  if (missingPreviewCapabilities.length > 0) {
+    return {
+      delivery: "withhold",
+      diagnostic: structuredDeliveryDiagnostic({
+        code: "preview.unsupportedPreviewCapability",
+        message:
+          "The preview client does not support every required Local Preview capability at version 0.2.",
+        recoveryMessage: `Update the preview client to support: ${missingPreviewCapabilities.join(", ")}@0.2.`,
+      }),
+    };
+  }
+  const supported = new Map(
+    capabilityReport.supportedCapabilities.map(({ name, version }) => [
+      name,
+      version,
+    ]),
+  );
+  const missingCapabilities = document.compatibility.requiredCapabilities
+    .filter(({ name, version }) => supported.get(name) !== version)
+    .map(({ name }) => name);
+  if (missingCapabilities.length > 0) {
+    return {
+      delivery: "withhold",
+      diagnostic: {
+        code: "preview.unsupportedCapability",
+        message:
+          "The preview client does not support every capability required by this draft.",
+        fallback: "keepLastAcceptedDraft",
+        recovery: {
+          action: "updatePreviewClient",
+          message: `Update the preview client to support: ${missingCapabilities.join(", ")}.`,
+        },
+      },
+    };
+  }
+  const documentBytes = serializedDocumentBytes(document);
+  if (documentBytes === null) {
+    return {
+      delivery: "withhold",
+      diagnostic: structuredDeliveryDiagnostic({
+        action: "editProperty",
+        code: "preview.invalidDraft",
+        message: "The preview draft cannot be serialized safely.",
+        recoveryMessage: "Validate and serialize the draft before preview delivery.",
+      }),
+    };
+  }
+  if (documentBytes > capabilityReport.limits.maxDocumentBytes) {
+    return {
+      delivery: "withhold",
+      diagnostic: structuredDeliveryDiagnostic({
+        action: "removeComponent",
+        code: "preview.documentTooLarge",
+        message:
+          "The serialized preview draft exceeds the client's document byte limit.",
+        recoveryMessage:
+          "Reduce the draft size or use a preview client with a larger document limit.",
+      }),
+    };
+  }
+  return { delivery: "send" };
+}
 
 const ajv = new Ajv2020({ allErrors: true, strict: true });
 ajv.addSchema(paywallSchema);
+ajv.addSchema(paywallSchemaV02);
+ajv.addSchema(previewMessageSchema);
+ajv.addSchema(previewMessageSchemaV02);
 const validatePaywallSchema = ajv.getSchema(paywallSchema.$id);
-const validatePreviewMessageSchema = ajv.compile(previewMessageSchema);
+const validatePaywallSchemaV02 = ajv.getSchema(paywallSchemaV02.$id);
+const validatePreviewMessageSchema = ajv.getSchema(previewMessageSchema.$id);
+const validatePreviewMessageSchemaV02 = ajv.getSchema(
+  previewMessageSchemaV02.$id,
+);
 const validateLocalProjectSchema = ajv.compile(localProjectSchema);
+const validateLocalProjectSchemaV02 = ajv.compile(localProjectSchemaV02);
 
-if (!validatePaywallSchema) {
-  throw new Error("Canonical Mosaic paywall schema was not registered.");
+if (
+  !validatePaywallSchema ||
+  !validatePaywallSchemaV02 ||
+  !validatePreviewMessageSchema ||
+  !validatePreviewMessageSchemaV02
+) {
+  throw new Error("Canonical Mosaic schemas were not registered.");
 }
 
 const capabilityByType = Object.freeze({
+  carousel: "component.carousel",
   closeButton: "component.closeButton",
   featureList: "component.featureList",
   image: "component.image",
@@ -40,8 +344,30 @@ const capabilityByType = Object.freeze({
   purchaseButton: "component.purchaseButton",
   restoreButton: "component.restoreButton",
   scrollContainer: "layout.scrollContainer",
+  stack: "layout.stack",
+  switch: "component.switch",
   text: "component.text",
   verticalStack: "layout.verticalStack",
+  countdown: "component.countdown",
+});
+
+const colorFieldNames = new Set([
+  "background",
+  "color",
+  "markerColor",
+  "offTrackColor",
+  "onTrackColor",
+  "productLabelColor",
+  "runtimePriceColor",
+  "textColor",
+  "thumbColor",
+]);
+
+const countdownUnitOrder = Object.freeze({
+  day: 0,
+  hour: 1,
+  minute: 2,
+  second: 3,
 });
 
 function success(value) {
@@ -186,20 +512,145 @@ function schemaDiagnostics(validator, value) {
 function walkDocumentNodes(document) {
   const entries = [];
 
-  function visit(node, path) {
+  function visit(node, path, ancestors = []) {
     if (!node || typeof node !== "object") return;
-    entries.push({ node, path });
+    entries.push({ node, path, ancestors });
     if (node.type === "scrollContainer") {
-      visit(node.content, `${path}/content`);
-    } else if (node.type === "verticalStack") {
+      visit(node.content, `${path}/content`, [...ancestors, node]);
+    } else if (node.type === "verticalStack" || node.type === "stack") {
       for (const [index, child] of (node.children ?? []).entries()) {
-        visit(child, `${path}/children/${index}`);
+        visit(child, `${path}/children/${index}`, [...ancestors, node]);
+      }
+    } else if (node.type === "carousel") {
+      for (const [index, page] of (node.pages ?? []).entries()) {
+        visit(
+          page.content,
+          `${path}/pages/${index}/content`,
+          [...ancestors, node],
+        );
       }
     }
   }
 
   visit(document.layout, "/layout");
   return entries;
+}
+
+function recursiveOverlay(base, override) {
+  if (
+    !base ||
+    typeof base !== "object" ||
+    Array.isArray(base) ||
+    !override ||
+    typeof override !== "object" ||
+    Array.isArray(override)
+  ) {
+    return structuredClone(override);
+  }
+  const resolved = structuredClone(base);
+  for (const [key, value] of Object.entries(override)) {
+    resolved[key] =
+      value &&
+      typeof value === "object" &&
+      !Array.isArray(value) &&
+      resolved[key] &&
+      typeof resolved[key] === "object" &&
+      !Array.isArray(resolved[key])
+        ? recursiveOverlay(resolved[key], value)
+        : structuredClone(value);
+  }
+  return resolved;
+}
+
+export function resolveProductCardStyle(productSelector, selected) {
+  if (!selected) return structuredClone(productSelector.cardStyles.default);
+  return recursiveOverlay(
+    productSelector.cardStyles.default,
+    productSelector.cardStyles.selected,
+  );
+}
+
+export function runtimeStateForAcceptedRevision(document) {
+  const entries = walkDocumentNodes(document);
+  return {
+    switches: Object.fromEntries(
+      entries
+        .filter(({ node }) => node.type === "switch")
+        .map(({ node }) => [node.id, node.initialValue]),
+    ),
+    carousels: Object.fromEntries(
+      entries
+        .filter(({ node }) => node.type === "carousel")
+        .map(({ node }) => [node.id, node.initialPageIndex]),
+    ),
+  };
+}
+
+export function evaluateVisibility(visibility, switchValues = {}) {
+  if (!visibility || visibility.mode === "always") return true;
+  if (visibility.mode === "hidden") return false;
+  return switchValues[visibility.switchId] === visibility.equals;
+}
+
+export function paywallRuntimeDiagnostics(document, switchValues) {
+  if (document?.schemaVersion !== "0.2") return [];
+  const entries = walkDocumentNodes(document);
+  const values =
+    switchValues ?? runtimeStateForAcceptedRevision(document).switches;
+  const selectors = new Map(
+    entries
+      .filter(({ node }) => node.type === "productSelector")
+      .map((entry) => [entry.node.id, entry]),
+  );
+  const diagnostics = [];
+  for (const { node } of entries) {
+    if (node.type !== "purchaseButton") continue;
+    const selector = selectors.get(node.action.productSelectorId);
+    const visible =
+      selector &&
+      [...selector.ancestors, selector.node].every((ancestor) =>
+        evaluateVisibility(ancestor.visibility, values),
+      );
+    if (selector && !visible) {
+      diagnostics.push({
+        code: "purchase.hiddenProductSelector",
+        componentId: node.id,
+        productSelectorId: selector.node.id,
+        behavior: "disablePurchase",
+        message: "Purchase is disabled because its Product Selector is hidden.",
+      });
+    }
+  }
+  return diagnostics;
+}
+
+export function resolveCountdownState(countdown, now) {
+  const nowMilliseconds =
+    now instanceof Date ? now.getTime() : new Date(now).getTime();
+  if (!Number.isFinite(nowMilliseconds)) {
+    throw new TypeError("Countdown resolution requires a valid controlled clock.");
+  }
+  const remainingMilliseconds = Math.max(
+    Date.parse(countdown.endsAt) - nowMilliseconds,
+    0,
+  );
+  return {
+    completed: remainingMilliseconds === 0,
+    remainingMilliseconds,
+    largestUnit: countdown.largestUnit,
+    smallestUnit: countdown.smallestUnit,
+    completedText: countdown.completedText,
+  };
+}
+
+function objectUsesColor(value) {
+  if (Array.isArray(value)) return value.some(objectUsesColor);
+  if (!value || typeof value !== "object") return false;
+  return Object.entries(value).some(
+    ([key, entry]) =>
+      (colorFieldNames.has(key) && typeof entry === "string") ||
+      objectUsesColor(entry),
+  );
 }
 
 function expectedDocumentCapabilities(document, nodeEntries) {
@@ -221,10 +672,42 @@ function expectedDocumentCapabilities(document, nodeEntries) {
   for (const { node } of nodeEntries) {
     const capability = capabilityByType[node.type];
     if (capability) capabilities.add(capability);
-    if (node.accessibility) capabilities.add("accessibility.metadata");
+    if (node.accessibility || node.type === "carousel") {
+      capabilities.add("accessibility.metadata");
+    }
+    if (document.schemaVersion === "0.2") {
+      if (node.typography) capabilities.add("style.typography");
+      if (
+        node.appearance ||
+        node.cardStyles ||
+        node.padding ||
+        (node.type === "scrollContainer" && node.background)
+      ) {
+        capabilities.add("style.box");
+      }
+      if (
+        node.sizing ||
+        node.type === "image"
+      ) {
+        capabilities.add("layout.sizing");
+      }
+      if (node.outerInsets) capabilities.add("layout.outerInsets");
+      if (Object.hasOwn(node.appearance ?? {}, "clipContent")) {
+        capabilities.add("style.clipping");
+      }
+      if (node.visibility?.mode === "switch") {
+        capabilities.add("condition.switchVisibility");
+      } else if (node.visibility) {
+        capabilities.add("visibility.static");
+      }
+      if (objectUsesColor(node)) capabilities.add("style.colors");
+    }
     if (node.type === "productSelector") {
       capabilities.add("fallback.product");
       capabilities.add("outcome.normalized");
+      if (document.schemaVersion === "0.2") {
+        capabilities.add("style.productCardStates");
+      }
     }
     if (node.action?.type) {
       capabilities.add(`action.${node.action.type}`);
@@ -285,6 +768,10 @@ function collectLocalizedText(value, path, entries) {
 
 function semanticPaywallDiagnostics(document) {
   const diagnostics = [];
+  const manifest =
+    document.schemaVersion === "0.2"
+      ? compatibilityManifestV02
+      : compatibilityManifest;
   const nodeEntries = walkDocumentNodes(document);
   const expectedCapabilities = expectedDocumentCapabilities(
     document,
@@ -293,7 +780,7 @@ function semanticPaywallDiagnostics(document) {
   const declaredCapabilities = document.compatibility.requiredCapabilities;
   const declaredByName = new Map();
   const supportedByName = new Map(
-    compatibilityManifest.capabilities.map((capability) => [
+    manifest.capabilities.map((capability) => [
       capability.name,
       capability.version,
     ]),
@@ -366,6 +853,23 @@ function semanticPaywallDiagnostics(document) {
       );
     }
     seenNodeIds.add(node.id);
+    if (node.type === "carousel") {
+      for (const [index, page] of node.pages.entries()) {
+        if (seenNodeIds.has(page.id)) {
+          diagnostics.push(
+            diagnostic({
+              code: "semantic.duplicateIdentifier",
+              message: `Layout tree contains duplicate id ${page.id}.`,
+              documentPath: `${path}/pages/${index}/id`,
+              componentId: node.id,
+              property: "id",
+              document,
+            }),
+          );
+        }
+        seenNodeIds.add(page.id);
+      }
+    }
   }
   for (const { node, path } of nodeEntries) {
     if (node.type === "featureList") {
@@ -627,6 +1131,126 @@ function semanticPaywallDiagnostics(document) {
     }
   }
 
+  if (document.schemaVersion === "0.2") {
+    if (document.layout.content.direction !== "vertical") {
+      diagnostics.push(
+        diagnostic({
+          code: "semantic.layout",
+          message: "Root scroll content must be a vertical stack.",
+          documentPath: "/layout/content/direction",
+          componentId: document.layout.content.id,
+          property: "direction",
+          document,
+        }),
+      );
+    }
+    if (document.layout.content.children.length === 0) {
+      diagnostics.push(
+        diagnostic({
+          code: "semantic.layout",
+          message: "Root scroll content must contain at least one child.",
+          documentPath: "/layout/content/children",
+          componentId: document.layout.content.id,
+          property: "children",
+          document,
+        }),
+      );
+    }
+    const switches = new Map(
+      nodeEntries
+        .filter(({ node }) => node.type === "switch")
+        .map(({ node }) => [node.id, node]),
+    );
+    for (const { node, path } of nodeEntries) {
+      if (node.type === "carousel" && path.includes("/pages/")) {
+        diagnostics.push(
+          diagnostic({
+            code: "semantic.layout",
+            message: `Carousel ${node.id} cannot be nested inside another carousel.`,
+            documentPath: path,
+            componentId: node.id,
+            document,
+          }),
+        );
+      }
+      if (
+        node.type === "carousel" &&
+        node.initialPageIndex >= node.pages.length
+      ) {
+        diagnostics.push(
+          diagnostic({
+            code: "semantic.invalidReference",
+            message: "Carousel initialPageIndex must reference an existing page.",
+            documentPath: `${path}/initialPageIndex`,
+            componentId: node.id,
+            property: "initialPageIndex",
+            document,
+          }),
+        );
+      }
+      if (node.visibility?.mode === "switch") {
+        const controller = switches.get(node.visibility.switchId);
+        if (!controller) {
+          diagnostics.push(
+            diagnostic({
+              code: "semantic.invalidReference",
+              message: `Visibility references unknown switch ${node.visibility.switchId}.`,
+              documentPath: `${path}/visibility/switchId`,
+              componentId: node.id,
+              property: "switchId",
+              document,
+            }),
+          );
+        } else if (node.id === controller.id) {
+          diagnostics.push(
+            diagnostic({
+              code: "semantic.invalidReference",
+              message: "Visibility cannot reference the same component Switch.",
+              documentPath: `${path}/visibility/switchId`,
+              componentId: node.id,
+              property: "switchId",
+              document,
+            }),
+          );
+        }
+      }
+      if (node.type === "countdown") {
+        const instant = Date.parse(node.endsAt);
+        const canonical = Number.isFinite(instant)
+          ? new Date(instant).toISOString().replace(".000Z", "Z")
+          : null;
+        if (canonical !== node.endsAt) {
+          diagnostics.push(
+            diagnostic({
+              code: "semantic.timestamp",
+              message: "Countdown endsAt must be a canonical UTC instant.",
+              documentPath: `${path}/endsAt`,
+              componentId: node.id,
+              property: "endsAt",
+              document,
+            }),
+          );
+        }
+        if (
+          countdownUnitOrder[node.largestUnit] >
+          countdownUnitOrder[node.smallestUnit]
+        ) {
+          diagnostics.push(
+            diagnostic({
+              code: "semantic.countdownUnits",
+              message:
+                "Countdown largestUnit must not be smaller than smallestUnit.",
+              documentPath: `${path}/largestUnit`,
+              componentId: node.id,
+              property: "largestUnit",
+              document,
+            }),
+          );
+        }
+      }
+    }
+  }
+
   return diagnostics;
 }
 
@@ -726,7 +1350,11 @@ function duplicateCapabilityDiagnostics(message) {
 }
 
 export function validatePaywallDocument(value) {
-  const schemaErrors = schemaDiagnostics(validatePaywallSchema, value);
+  const validator =
+    value?.schemaVersion === "0.2"
+      ? validatePaywallSchemaV02
+      : validatePaywallSchema;
+  const schemaErrors = schemaDiagnostics(validator, value);
   if (schemaErrors.length > 0) return failure(schemaErrors);
 
   const semanticErrors = semanticPaywallDiagnostics(value);
@@ -734,7 +1362,11 @@ export function validatePaywallDocument(value) {
 }
 
 export function validatePreviewMessage(value, options = {}) {
-  const schemaErrors = schemaDiagnostics(validatePreviewMessageSchema, value);
+  const validator =
+    value?.previewProtocolVersion === "0.2"
+      ? validatePreviewMessageSchemaV02
+      : validatePreviewMessageSchema;
+  const schemaErrors = schemaDiagnostics(validator, value);
   if (schemaErrors.length > 0) return failure(schemaErrors);
 
   const diagnostics = duplicateCapabilityDiagnostics(value);
@@ -754,7 +1386,11 @@ export function validatePreviewMessage(value, options = {}) {
 }
 
 export function validateLocalProject(value) {
-  const schemaErrors = schemaDiagnostics(validateLocalProjectSchema, value);
+  const validator =
+    value?.fileFormatVersion === "0.2"
+      ? validateLocalProjectSchemaV02
+      : validateLocalProjectSchema;
+  const schemaErrors = schemaDiagnostics(validator, value);
   if (schemaErrors.length > 0) return failure(schemaErrors);
 
   const documentResult = validatePaywallDocument(value.document);

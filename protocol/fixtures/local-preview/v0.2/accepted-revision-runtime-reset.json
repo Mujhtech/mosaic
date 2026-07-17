@@ -1,0 +1,25 @@
+{
+  "acceptedRevision": {
+    "editableDocumentId": "document_phase2_demo",
+    "revisionId": "revision_000002",
+    "sequence": 2
+  },
+  "runtimeBeforeAcceptance": {
+    "switches": {
+      "show-offer-details": false,
+      "show-technical-details": true
+    },
+    "carousels": {
+      "offer-highlights": 0
+    }
+  },
+  "expectedRuntimeAfterAcceptance": {
+    "switches": {
+      "show-offer-details": true,
+      "show-technical-details": false
+    },
+    "carousels": {
+      "offer-highlights": 1
+    }
+  }
+}

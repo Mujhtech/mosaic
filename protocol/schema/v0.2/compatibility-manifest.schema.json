@@ -1,0 +1,255 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:mosaic:protocol:schema:v0.2:compatibility-manifest",
+  "title": "Mosaic Protocol 0.2 Compatibility Manifest",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "status",
+    "releaseCandidate",
+    "predecessorVersion",
+    "schema",
+    "canonicalFixture",
+    "migration",
+    "capabilities",
+    "readerPolicy",
+    "normalizedOutcomes"
+  ],
+  "properties": {
+    "schemaVersion": {
+      "type": "string",
+      "const": "0.2"
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "draft",
+        "releaseCandidate",
+        "approved",
+        "deprecated"
+      ]
+    },
+    "releaseCandidate": {
+      "type": "string",
+      "const": "RC1"
+    },
+    "predecessorVersion": {
+      "type": "string",
+      "const": "0.1"
+    },
+    "schema": {
+      "type": "string",
+      "const": "../schema/v0.2/paywall.schema.json"
+    },
+    "canonicalFixture": {
+      "type": "string",
+      "const": "../fixtures/v0.2/complete-paywall.json"
+    },
+    "migration": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "from",
+        "to",
+        "tool",
+        "canonicalFixture"
+      ],
+      "properties": {
+        "from": {
+          "const": "0.1"
+        },
+        "to": {
+          "const": "0.2"
+        },
+        "tool": {
+          "const": "../tools/migrate-v0.1-to-v0.2.mjs"
+        },
+        "canonicalFixture": {
+          "const": "../fixtures/v0.2/migrated-v0.1.json"
+        }
+      }
+    },
+    "capabilities": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": {
+        "$ref": "#/$defs/capability"
+      }
+    },
+    "readerPolicy": {
+      "$ref": "#/$defs/readerPolicy"
+    },
+    "normalizedOutcomes": {
+      "$ref": "#/$defs/normalizedOutcomes"
+    }
+  },
+  "$defs": {
+    "capabilityName": {
+      "type": "string",
+      "enum": [
+        "layout.scrollContainer",
+        "layout.stack",
+        "layout.sizing",
+        "layout.outerInsets",
+        "component.text",
+        "component.image",
+        "component.featureList",
+        "component.productSelector",
+        "component.purchaseButton",
+        "component.restoreButton",
+        "component.closeButton",
+        "component.legalText",
+        "component.carousel",
+        "component.switch",
+        "component.countdown",
+        "localization.catalogs",
+        "localization.rtl",
+        "product.references",
+        "asset.bundledImage",
+        "action.purchase",
+        "action.restore",
+        "action.close",
+        "accessibility.metadata",
+        "fallback.asset",
+        "fallback.product",
+        "outcome.normalized",
+        "style.colors",
+        "style.box",
+        "style.clipping",
+        "style.typography",
+        "style.productCardStates",
+        "visibility.static",
+        "condition.switchVisibility"
+      ]
+    },
+    "capability": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "version",
+        "fallback"
+      ],
+      "properties": {
+        "name": {
+          "$ref": "#/$defs/capabilityName"
+        },
+        "version": {
+          "type": "string",
+          "const": "0.2"
+        },
+        "fallback": {
+          "type": "string",
+          "const": "rejectDocument"
+        }
+      }
+    },
+    "readerPolicy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "unknownSchemaVersion",
+        "unknownComponent",
+        "unknownProperty",
+        "unsupportedCapability",
+        "invalidReference",
+        "primaryDocumentRejected",
+        "bundledFallbackRejected",
+        "missingAsset",
+        "unavailableProduct",
+        "falseVisibilityCondition",
+        "completedCountdown"
+      ],
+      "properties": {
+        "unknownSchemaVersion": {
+          "const": "rejectDocument"
+        },
+        "unknownComponent": {
+          "const": "rejectDocument"
+        },
+        "unknownProperty": {
+          "const": "rejectDocument"
+        },
+        "unsupportedCapability": {
+          "const": "rejectDocument"
+        },
+        "invalidReference": {
+          "const": "rejectDocument"
+        },
+        "primaryDocumentRejected": {
+          "const": "loadBundledFallback"
+        },
+        "bundledFallbackRejected": {
+          "const": "configurationUnavailable"
+        },
+        "missingAsset": {
+          "const": "useDeclaredAssetFallback"
+        },
+        "unavailableProduct": {
+          "const": "useSelectorFallback"
+        },
+        "falseVisibilityCondition": {
+          "const": "removeFromLayoutAccessibilityAndFocus"
+        },
+        "completedCountdown": {
+          "const": "showLocalizedCompletedText"
+        }
+      }
+    },
+    "normalizedOutcomes": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "selectProduct",
+        "purchase",
+        "restore",
+        "close",
+        "presentation"
+      ],
+      "properties": {
+        "selectProduct": {
+          "const": [
+            "productSelected"
+          ]
+        },
+        "purchase": {
+          "const": [
+            "purchased",
+            "alreadyEntitled",
+            "cancelled",
+            "productUnavailable",
+            "purchaseFailed"
+          ]
+        },
+        "restore": {
+          "const": [
+            "restored",
+            "alreadyEntitled",
+            "restoreNoPurchases",
+            "restoreFailed"
+          ]
+        },
+        "close": {
+          "const": [
+            "dismissed"
+          ]
+        },
+        "presentation": {
+          "const": [
+            "purchased",
+            "restored",
+            "alreadyEntitled",
+            "dismissed",
+            "cancelled",
+            "productUnavailable",
+            "configurationUnavailable",
+            "purchaseFailed",
+            "renderingFailed"
+          ]
+        }
+      }
+    }
+  }
+}
