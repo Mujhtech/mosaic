@@ -1,0 +1,20 @@
+{
+  "name": "@mosaic/design-system",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "sideEffects": [
+    "**/*.css"
+  ],
+  "exports": {
+    ".": "./src/index.tsx",
+    "./styles.css": "./src/styles.css"
+  },
+  "files": [
+    "src"
+  ],
+  "peerDependencies": {
+    "@mosaic/design-tokens": "0.1.0",
+    "react": "^19.0.0"
+  }
+}
