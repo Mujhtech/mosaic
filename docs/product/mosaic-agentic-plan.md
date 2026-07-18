@@ -663,24 +663,28 @@ The protocol should support:
 - default locale
 - fallback locale
 - pluralization where required
-- interpolation
+- closed interpolation contexts where explicitly versioned
 - right-to-left layout
 - localized product metadata
 
 ## 9.8 Product interpolation
 
-Paywall text may reference safe product variables.
+Protocol `0.2` Product Card Text and Product Card accessibility labels may
+reference only the two safe product variables below. Product templates are
+invalid outside a Product Card context.
 
 Examples:
 
 ```text
-{{product.localizedPrice}}
-{{product.subscriptionPeriod}}
-{{product.trialDuration}}
-{{product.currencyCode}}
+{{ product.name }}
+{{ product.price }}
 ```
 
-The SDK must resolve these values from the purchase provider.
+The SDK resolves them from the Product Card's bound purchase-provider product
+after locale selection. Missing localized price makes the card unavailable.
+Unknown or malformed template syntax rejects the document. General-purpose
+expressions, executable code, subscription-period/trial/currency variables,
+and arbitrary interpolation remain outside Protocol `0.2`.
 
 ## 9.9 Schema compatibility
 

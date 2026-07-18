@@ -1,29 +1,9 @@
-import type { MosaicDocument, ProtocolNode } from "@/features/paywall-editor/types/editor"
+import type {
+  DocumentNode,
+  MosaicDocument,
+  ProtocolNode,
+} from "@/features/paywall-editor/types/editor"
 import { synchronizeProtocolMetadata } from "@/features/paywall-editor/utils/protocol-document"
-
-const REQUIRED_CAPABILITIES = [
-  "layout.scrollContainer",
-  "layout.verticalStack",
-  "component.text",
-  "component.image",
-  "component.featureList",
-  "component.productSelector",
-  "component.purchaseButton",
-  "component.restoreButton",
-  "component.closeButton",
-  "component.legalText",
-  "localization.catalogs",
-  "localization.rtl",
-  "product.references",
-  "asset.bundledImage",
-  "action.purchase",
-  "action.restore",
-  "action.close",
-  "accessibility.metadata",
-  "fallback.product",
-  "fallback.asset",
-  "outcome.normalized",
-] as const
 
 const STRINGS = {
   en: {
@@ -103,24 +83,43 @@ function text(
   localizationKey: string,
   defaultValue: string,
   style: "title" | "body" | "caption" = "body",
-): ProtocolNode {
+): Extract<ProtocolNode, { type: "text" }> {
   return {
     type: "text",
     id,
     value: { default: defaultValue, localizationKey },
-    style,
-    alignment: "center",
+    typography: {
+      style,
+      fontSize: style === "title" ? 32 : style === "caption" ? 13 : 16,
+      lineHeightMultiplier: style === "title" ? 1.2 : style === "caption" ? 1.4 : 1.5,
+      weight: style === "title" ? "bold" : "regular",
+      color: style === "caption" ? "text.secondary" : "text.primary",
+      alignment: "center",
+    },
+    sizing: { width: "fill", height: "fit" },
     accessibility: style === "title" ? { role: "heading", level: 1 } : { role: "text" },
   }
 }
 
-function baseDocument(id: string, children: ProtocolNode[]): MosaicDocument {
+function fitText(
+  id: string,
+  localizationKey: string,
+  defaultValue: string,
+  style: "title" | "body" | "caption" = "body",
+): Extract<ProtocolNode, { type: "text" }> {
+  return {
+    ...text(id, localizationKey, defaultValue, style),
+    sizing: { width: "fit", height: "fit" },
+  }
+}
+
+function baseDocument(id: string, children: DocumentNode[]): MosaicDocument {
   return synchronizeProtocolMetadata({
-    schemaVersion: "0.1",
+    schemaVersion: "0.2",
     id,
     revision: 1,
     compatibility: {
-      requiredCapabilities: REQUIRED_CAPABILITIES.map((name) => ({ name, version: "0.1" })),
+      requiredCapabilities: [],
     },
     localization: {
       defaultLocale: "en",
@@ -130,6 +129,11 @@ function baseDocument(id: string, children: ProtocolNode[]): MosaicDocument {
         de: { direction: "ltr", strings: { ...STRINGS.de } },
         ar: { direction: "rtl", strings: { ...STRINGS.ar } },
       },
+    },
+    designSystem: {
+      colors: [],
+      backgrounds: [],
+      shadows: [],
     },
     assets: [],
     products: [
@@ -142,41 +146,164 @@ function baseDocument(id: string, children: ProtocolNode[]): MosaicDocument {
         id: "yearly-plan",
         productId: "mosaic_pro_yearly",
         label: { default: "Yearly", localizationKey: "paywall.products.yearly" },
-        badge: { default: "Best value", localizationKey: "paywall.products.yearly.badge" },
       },
     ],
-    layout: {
-      type: "scrollContainer",
-      id: "paywall-scroll",
-      axis: "vertical",
-      safeArea: "respect",
-      showsIndicators: true,
-      content: {
-        type: "verticalStack",
-        id: "paywall-content",
-        spacing: 18,
-        padding: { top: 20, start: 24, bottom: 24, end: 24 },
-        horizontalAlignment: "stretch",
-        children,
+    initialScreenId: "main",
+    screens: [
+      {
+        id: "main",
+        presentation: { type: "screen" },
+        layout: {
+          type: "scrollContainer",
+          id: "paywall-scroll",
+          axis: "vertical",
+          safeArea: "respect",
+          showsIndicators: true,
+          content: {
+            type: "stack",
+            id: "paywall-content",
+            direction: "vertical",
+            gap: 18,
+            padding: { top: 20, start: 24, bottom: 24, end: 24 },
+            mainAxisDistribution: "start",
+            crossAxisAlignment: "stretch",
+            children,
+          },
+        },
       },
-    },
+    ],
   })
 }
 
-const CLOSE_BUTTON: ProtocolNode = {
-  type: "closeButton",
+const CLOSE_BUTTON: DocumentNode = {
+  type: "button",
   id: "close",
-  label: { default: "Close", localizationKey: "paywall.close" },
+  direction: "horizontal",
+  gap: 8,
+  mainAxisDistribution: "center",
+  crossAxisAlignment: "center",
+  children: [fitText("close-label", "paywall.close", "Close")],
   action: { type: "close" },
+  appearance: { background: { type: "color", value: "transparent" } },
   accessibility: { label: { default: "Close", localizationKey: "paywall.close" } },
 }
 
-const PRODUCT_SELECTOR: ProtocolNode = {
+const PRODUCT_SELECTOR: DocumentNode = {
   type: "productSelector",
   id: "plans",
-  productReferenceIds: ["monthly-plan", "yearly-plan"],
-  initiallySelectedProductReferenceId: "yearly-plan",
-  itemSpacing: 12,
+  direction: "horizontal",
+  gap: 12,
+  crossAxisAlignment: "stretch",
+  initialProductCardId: "yearly-card",
+  cards: [
+    {
+      type: "productCard",
+      id: "monthly-card",
+      productReferenceId: "monthly-plan",
+      direction: "vertical",
+      gap: 4,
+      mainAxisDistribution: "start",
+      crossAxisAlignment: "start",
+      children: [
+        {
+          ...text("monthly-name", "paywall.products.monthly.card_name", "{{ product.name }}"),
+          typography: {
+            ...text("monthly-name", "paywall.products.monthly.card_name", "{{ product.name }}")
+              .typography,
+            alignment: "start",
+            color: "text.secondary",
+          },
+        },
+        {
+          ...text("monthly-price", "paywall.products.monthly.card_price", "{{ product.price }}"),
+          typography: {
+            ...text("monthly-price", "paywall.products.monthly.card_price", "{{ product.price }}")
+              .typography,
+            alignment: "start",
+            weight: "semibold",
+          },
+        },
+      ],
+      styles: {
+        default: {
+          background: { type: "color", value: "surface.default" },
+          border: { color: "border.default", width: 1 },
+          cornerRadius: 12,
+          padding: { top: 14, start: 16, bottom: 14, end: 16 },
+          opacity: 1,
+        },
+        selected: {
+          background: { type: "color", value: "surface.elevated" },
+          border: { color: "action.primary", width: 2 },
+        },
+      },
+    },
+    {
+      type: "productCard",
+      id: "yearly-card",
+      productReferenceId: "yearly-plan",
+      direction: "vertical",
+      gap: 4,
+      mainAxisDistribution: "start",
+      crossAxisAlignment: "start",
+      children: [
+        {
+          ...text("yearly-name", "paywall.products.yearly.card_name", "{{ product.name }}"),
+          typography: {
+            ...text("yearly-name", "paywall.products.yearly.card_name", "{{ product.name }}")
+              .typography,
+            alignment: "start",
+            color: "text.secondary",
+          },
+        },
+        {
+          ...text("yearly-price", "paywall.products.yearly.card_price", "{{ product.price }}"),
+          typography: {
+            ...text("yearly-price", "paywall.products.yearly.card_price", "{{ product.price }}")
+              .typography,
+            alignment: "start",
+            weight: "semibold",
+          },
+        },
+        {
+          type: "productBadge",
+          id: "yearly-badge",
+          placement: { mode: "overlay", anchor: "topEnd", inset: 8 },
+          direction: "horizontal",
+          gap: 4,
+          mainAxisDistribution: "center",
+          crossAxisAlignment: "center",
+          children: [
+            text("yearly-badge-label", "paywall.products.yearly.badge", "Best value", "caption"),
+          ],
+          styles: {
+            default: {
+              background: { type: "color", value: "surface.elevated" },
+              border: { color: "border.default", width: 0 },
+              cornerRadius: 999,
+              padding: { top: 2, start: 8, bottom: 2, end: 8 },
+              opacity: 1,
+            },
+            selected: {},
+          },
+        },
+      ],
+      styles: {
+        default: {
+          background: { type: "color", value: "surface.default" },
+          border: { color: "border.default", width: 1 },
+          cornerRadius: 12,
+          padding: { top: 14, start: 16, bottom: 14, end: 16 },
+          opacity: 1,
+        },
+        selected: {
+          background: { type: "color", value: "surface.elevated" },
+          border: { color: "action.primary", width: 2 },
+        },
+      },
+    },
+  ],
+  sizing: { width: "fill", height: "fit" },
   unavailableFallback: {
     selection: "firstAvailable",
     whenNoneAvailable: "showMessageAndDisablePurchase",
@@ -194,14 +321,31 @@ const PRODUCT_SELECTOR: ProtocolNode = {
   },
 }
 
-const PURCHASE_BUTTON: ProtocolNode = {
-  type: "purchaseButton",
+const PURCHASE_BUTTON: DocumentNode = {
+  type: "button",
   id: "purchase",
-  label: { default: "Continue", localizationKey: "paywall.purchase" },
-  inProgressLabel: {
-    default: "Processing purchase…",
-    localizationKey: "paywall.purchase.progress",
+  direction: "horizontal",
+  gap: 8,
+  mainAxisDistribution: "center",
+  crossAxisAlignment: "center",
+  children: [
+    {
+      ...text("purchase-label", "paywall.purchase", "Continue"),
+      typography: {
+        ...text("purchase-label", "paywall.purchase", "Continue").typography,
+        color: "action.onPrimary",
+      },
+    },
+  ],
+  inProgressChildren: [
+    text("purchase-progress", "paywall.purchase.progress", "Processing purchase…"),
+  ],
+  appearance: {
+    background: { type: "color", value: "action.primary" },
+    cornerRadius: 12,
+    padding: { top: 12, start: 16, bottom: 12, end: 16 },
   },
+  sizing: { width: "fill", height: "fit" },
   action: { type: "purchase", productSelectorId: "plans" },
   accessibility: {
     label: {
@@ -211,14 +355,18 @@ const PURCHASE_BUTTON: ProtocolNode = {
   },
 }
 
-const RESTORE_BUTTON: ProtocolNode = {
-  type: "restoreButton",
+const RESTORE_BUTTON: DocumentNode = {
+  type: "button",
   id: "restore",
-  label: { default: "Restore purchases", localizationKey: "paywall.restore" },
-  inProgressLabel: {
-    default: "Restoring purchases…",
-    localizationKey: "paywall.restore.progress",
-  },
+  direction: "horizontal",
+  gap: 8,
+  mainAxisDistribution: "center",
+  crossAxisAlignment: "center",
+  children: [fitText("restore-label", "paywall.restore", "Restore purchases")],
+  inProgressChildren: [
+    text("restore-progress", "paywall.restore.progress", "Restoring purchases…"),
+  ],
+  sizing: { width: "fit", height: "fit" },
   action: { type: "restore" },
   accessibility: {
     label: {
@@ -228,22 +376,31 @@ const RESTORE_BUTTON: ProtocolNode = {
   },
 }
 
-const LEGAL_TEXT: ProtocolNode = {
-  type: "legalText",
+const LEGAL_TEXT: DocumentNode = {
+  type: "text",
   id: "legal",
   value: {
     default: "Subscriptions renew automatically unless cancelled before renewal.",
     localizationKey: "paywall.legal",
   },
-  alignment: "center",
+  typography: {
+    style: "caption",
+    fontSize: 13,
+    lineHeightMultiplier: 1.4,
+    weight: "regular",
+    color: "text.secondary",
+    alignment: "center",
+  },
+  sizing: { width: "fill", height: "fit" },
   accessibility: { role: "text" },
 }
 
-const FEATURE_LIST: ProtocolNode = {
+const FEATURE_LIST: DocumentNode = {
   type: "featureList",
   id: "features",
   marker: "checkmark",
-  itemSpacing: 12,
+  gap: 12,
+  markerColor: "action.primary",
   items: [
     {
       id: "native-everywhere",
@@ -257,6 +414,14 @@ const FEATURE_LIST: ProtocolNode = {
       },
     },
   ],
+  typography: {
+    style: "body",
+    fontSize: 16,
+    lineHeightMultiplier: 1.5,
+    weight: "regular",
+    color: "text.primary",
+    alignment: "start",
+  },
   accessibility: {
     label: { default: "What is included", localizationKey: "paywall.features.label" },
   },

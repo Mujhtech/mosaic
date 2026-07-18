@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react"
+import type { ReactNode } from "react"
 
 import { EditorShell } from "@/features/paywall-editor/components/editor-shell"
 import { TemplateSelection } from "@/features/paywall-editor/components/template-selection"
@@ -6,7 +7,10 @@ import { DEFAULT_MOCK_PRODUCTS } from "@/features/paywall-editor/constants/edito
 import { MAX_LOCAL_PROJECT_BYTES } from "@/features/paywall-editor/constants/editor-constants"
 import { EDITOR_TEMPLATES } from "@/features/paywall-editor/constants/templates"
 import {
-  createLocalProjectFile,
+  resolveRestoredPreviewContext,
+  useWorkspacePreviewContext,
+} from "@/features/paywall-editor/hooks/use-workspace-preview-context"
+import {
   parseImportedJson,
   readLocalMockPurchaseState,
   readLocalProjectResult,
@@ -14,19 +18,27 @@ import {
   reconcileMockProductsForDocument,
   type LocalProjectReadResult,
   unavailableMockProductsForDocument,
-  writeLocalProject,
 } from "@/features/paywall-editor/mutations/local-project-file"
 import {
   EditorStoreProvider,
   useEditorActions,
   useEditorStore,
 } from "@/features/paywall-editor/stores/editor-store-context"
+import {
+  StudioWorkspaceStoreProvider,
+  useStudioWorkspaceActions,
+  useStudioWorkspaceSelector,
+} from "@/features/paywall-editor/stores/studio-workspace-store-context"
+import type { StudioWorkspaceSnapshot } from "@/features/paywall-editor/stores/studio-workspace-store"
 import type {
   LocalProjectFile,
   MockProductDefinition,
   MockPurchaseState,
 } from "@/features/paywall-editor/types/editor"
 import { cloneValue } from "@/features/paywall-editor/utils/clone"
+
+const selectWorkspaceCanvas = (snapshot: StudioWorkspaceSnapshot) => snapshot.preferences.canvas
+const selectWorkspaceSource = (snapshot: StudioWorkspaceSnapshot) => snapshot.initialSource
 
 function presetForProject(project: LocalProjectFile): MockPurchaseState {
   if (
@@ -51,10 +63,11 @@ function presetForProject(project: LocalProjectFile): MockPurchaseState {
 }
 
 function WorkspaceContent() {
-  const { document, editableDocumentId, currentLocale, localRevisionSequence, textScale } =
-    useEditorStore()
-  const { loadTemplate, replaceDocument, restoreProject, importDocument, resetEditor } =
-    useEditorActions()
+  const { document } = useEditorStore()
+  const { loadTemplate, replaceDocument, restoreProject, importDocument } = useEditorActions()
+  const workspaceCanvas = useStudioWorkspaceSelector(selectWorkspaceCanvas)
+  const workspaceSource = useStudioWorkspaceSelector(selectWorkspaceSource)
+  const workspace = useStudioWorkspaceActions()
   const [autosave, setAutosave] = useState<LocalProjectReadResult>({ status: "empty" })
   const [importError, setImportError] = useState<string | null>(null)
   const [mockProducts, setMockProducts] = useState<MockProductDefinition[]>(() =>
@@ -66,6 +79,7 @@ function WorkspaceContent() {
     [document, mockProducts],
   )
   const activeMockPurchaseState = reconcileMockPurchaseState(mockPurchaseState, activeMockProducts)
+  useWorkspacePreviewContext()
 
   useEffect(() => {
     const timer = window.setTimeout(() => setAutosave(readLocalProjectResult()), 0)
@@ -73,12 +87,23 @@ function WorkspaceContent() {
   }, [])
 
   function applyProject(project: LocalProjectFile) {
+    const preview = resolveRestoredPreviewContext({
+      document: project.document,
+      localProjectPreview: project.preview,
+      workspaceCanvas,
+      workspaceSource,
+    })
+    workspace.setCanvasPreferences({
+      ...workspaceCanvas,
+      locale: preview.locale,
+      textScale: preview.textScale,
+    })
     restoreProject(
       project.document,
       project.editableDocumentId,
       project.revision.sequence,
-      project.preview.locale,
-      project.preview.textScale,
+      preview.locale,
+      preview.textScale,
     )
     setMockProducts(cloneValue(project.mockCommerce.state.products))
     setMockPurchaseState(readLocalMockPurchaseState(project) ?? presetForProject(project))
@@ -136,42 +161,22 @@ function WorkspaceContent() {
       onProductsChange={setMockProducts}
       onPurchaseStateChange={setMockPurchaseState}
       onImport={importFile}
-      onChooseTemplate={() => {
-        const safeToLeave = window.confirm(
-          "Choose another template? Studio will keep this draft in browser autosave. Export it first if you want a separate file.",
-        )
-        if (!safeToLeave) return
-        const project = createLocalProjectFile({
-          editableDocumentId: editableDocumentId!,
-          document,
-          locale: currentLocale,
-          textScale,
-          mockPurchaseState: activeMockPurchaseState,
-          mockProducts: activeMockProducts,
-          localRevisionSequence,
-        })
-        if (
-          !writeLocalProject(project, activeMockPurchaseState) &&
-          !window.confirm(
-            "Browser autosave failed. Continue only if you already exported a copy of this paywall.",
-          )
-        ) {
-          return
-        }
-        setAutosave(readLocalProjectResult())
-        setMockProducts(cloneValue([...DEFAULT_MOCK_PRODUCTS]))
-        setMockPurchaseState("productAvailable")
-        setImportError(null)
-        resetEditor()
-      }}
     />
+  )
+}
+
+export function PaywallEditorProviders({ children }: { children: ReactNode }) {
+  return (
+    <StudioWorkspaceStoreProvider>
+      <EditorStoreProvider>{children}</EditorStoreProvider>
+    </StudioWorkspaceStoreProvider>
   )
 }
 
 export function PaywallEditorWorkspace() {
   return (
-    <EditorStoreProvider>
+    <PaywallEditorProviders>
       <WorkspaceContent />
-    </EditorStoreProvider>
+    </PaywallEditorProviders>
   )
 }

@@ -2,11 +2,9 @@ package dev.mosaic.sdk
 
 import java.net.URI
 
-const val MOSAIC_LOCAL_PREVIEW_VERSION: String = "0.1"
-const val MOSAIC_LOCAL_PREVIEW_VERSION_V02: String = "0.2"
-const val MOSAIC_LOCAL_PREVIEW_LATEST_VERSION: String = MOSAIC_LOCAL_PREVIEW_VERSION_V02
-const val MOSAIC_LOCAL_PREVIEW_WEBSOCKET_PROTOCOL: String = "mosaic.local-preview.v0.1"
-const val MOSAIC_LOCAL_PREVIEW_WEBSOCKET_PROTOCOL_V02: String = "mosaic.local-preview.v0.2"
+const val MOSAIC_LOCAL_PREVIEW_VERSION: String = "0.2"
+const val MOSAIC_LOCAL_PREVIEW_LATEST_VERSION: String = MOSAIC_LOCAL_PREVIEW_VERSION
+const val MOSAIC_LOCAL_PREVIEW_WEBSOCKET_PROTOCOL: String = "mosaic.local-preview.v0.2"
 const val MOSAIC_LOCAL_PREVIEW_MAX_FRAME_BYTES: Int = 2 * 1024 * 1024
 const val MOSAIC_LOCAL_PREVIEW_DEFAULT_MAX_DOCUMENT_BYTES: Int = 1024 * 1024
 const val MOSAIC_LOCAL_PREVIEW_HEARTBEAT_MILLIS: Long = 5_000
@@ -18,7 +16,6 @@ data class MosaicLocalPreviewConfiguration(
     val client: MosaicPreviewClientIdentity,
     val maxDocumentBytes: Int = MOSAIC_LOCAL_PREVIEW_DEFAULT_MAX_DOCUMENT_BYTES,
     val supportedPreviewProtocolVersions: List<String> = listOf(
-        MOSAIC_LOCAL_PREVIEW_VERSION_V02,
         MOSAIC_LOCAL_PREVIEW_VERSION,
     ),
 ) {
@@ -47,9 +44,7 @@ data class MosaicLocalPreviewConfiguration(
         require(
             supportedPreviewProtocolVersions.isNotEmpty() &&
                 supportedPreviewProtocolVersions.distinct().size == supportedPreviewProtocolVersions.size &&
-                supportedPreviewProtocolVersions.all {
-                    it == MOSAIC_LOCAL_PREVIEW_VERSION || it == MOSAIC_LOCAL_PREVIEW_VERSION_V02
-                },
+                supportedPreviewProtocolVersions.all { it == MOSAIC_LOCAL_PREVIEW_VERSION },
         ) { "Invalid supported local preview protocol versions." }
     }
 
@@ -249,7 +244,7 @@ data class MosaicPreviewCapabilityReportPayload(
     override val type = MosaicPreviewMessageType.CAPABILITY_REPORT
 }
 
-/** The raw document remains an unchanged Protocol 0.1 object until the canonical decoder accepts it. */
+/** The raw document remains unchanged until the negotiated protocol decoder accepts it. */
 data class MosaicPreviewDraftUpdatedPayload(
     val editableDocumentId: String,
     val revision: MosaicLocalRevision,

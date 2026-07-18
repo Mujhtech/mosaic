@@ -3,17 +3,25 @@ import { pathToFileURL } from "node:url"
 import { WebSocket, WebSocketServer } from "ws"
 
 import {
-  localPreviewWebSocketProtocol,
+  decideLocalPreviewDraftDelivery,
+  localPreviewVersionPreference,
+  localPreviewWebSocketProtocols,
   validatePreviewMessage,
 } from "../../../protocol/browser/index.js"
 
-export const PREVIEW_SUBPROTOCOL = localPreviewWebSocketProtocol
+export const PREVIEW_SUBPROTOCOLS = Object.freeze(
+  localPreviewVersionPreference.map((version) => localPreviewWebSocketProtocols[version]),
+)
+export const PREVIEW_SUBPROTOCOL = localPreviewWebSocketProtocols["0.2"]
 const HEARTBEAT_TIMEOUT_MS = 15_000
 const STUDIO_MESSAGE_TYPES = new Set([
   "draftUpdated",
   "mockCommerceStateChanged",
   "previewHeartbeat",
 ])
+const VERSION_BY_SUBPROTOCOL = new Map(
+  Object.entries(localPreviewWebSocketProtocols).map(([version, protocol]) => [protocol, version]),
+)
 const CLIENT_MESSAGE_TYPES = new Set([
   "previewClientDisconnected",
   "draftAccepted",
@@ -34,15 +42,102 @@ function isLoopbackOrigin(origin) {
   }
 }
 
+function messageForVersion(message, targetVersion) {
+  if (message.previewProtocolVersion === targetVersion) return message
+  if (message.type === "draftUpdated" || message.type === "mockCommerceStateChanged") return null
+  const translated = {
+    ...message,
+    previewProtocolVersion: targetVersion,
+    payload:
+      message.type === "capabilityReport"
+        ? {
+            ...message.payload,
+            previewCapabilities: message.payload.previewCapabilities.map((capability) => ({
+              ...capability,
+              version: targetVersion,
+            })),
+          }
+        : message.payload,
+  }
+  return validatePreviewMessage(translated).ok ? translated : null
+}
+
+function sendCanonical(socket, meta, message) {
+  const translated = messageForVersion(message, meta.protocolVersion)
+  if (!translated) return false
+  socket.send(JSON.stringify(translated))
+  return true
+}
+
+function incompatibleDraftDecision(message, peerMeta) {
+  const document = message.payload.document
+  if (document.schemaVersion === "0.2") {
+    return decideLocalPreviewDraftDelivery({
+      capabilityReport: peerMeta.capabilityReport,
+      document,
+      negotiation: {
+        ok: true,
+        selectedVersion: peerMeta.protocolVersion,
+        selectedWebSocketSubprotocol: peerMeta.protocol,
+      },
+    })
+  }
+  if (document.schemaVersion === peerMeta.protocolVersion) return { delivery: "send" }
+  return {
+    delivery: "withhold",
+    diagnostic: {
+      code: "preview.incompatibleSchemaVersion",
+      message: `This Local Preview ${peerMeta.protocolVersion} client cannot receive a Protocol ${document.schemaVersion} draft.`,
+      fallback: "keepLastAcceptedDraft",
+      recovery: {
+        action: "updatePreviewClient",
+        message: "Update the preview client to a version that supports this paywall format.",
+      },
+    },
+  }
+}
+
+function rejectionReason(code) {
+  if (code === "preview.incompatibleSchemaVersion") return "unsupportedSchemaVersion"
+  if (code === "preview.unsupportedCapability") return "unsupportedCapability"
+  if (code === "preview.documentTooLarge") return "documentTooLarge"
+  return "validationFailed"
+}
+
+function draftRejection(message, clientId, diagnostic, protocolVersion) {
+  return {
+    previewProtocolVersion: protocolVersion,
+    messageId: `msg_relay_${Date.now()}_${Math.round(Math.random() * 1_000_000)}`,
+    sessionId: message.sessionId,
+    sentAt: new Date().toISOString(),
+    type: "draftRejected",
+    payload: {
+      clientId,
+      editableDocumentId: message.payload.editableDocumentId,
+      revision: message.payload.revision,
+      reason: rejectionReason(diagnostic.code),
+      diagnostics: [
+        {
+          code: diagnostic.code,
+          message: diagnostic.message,
+          location: { documentPath: "/schemaVersion", property: "schemaVersion" },
+          recovery: diagnostic.recovery,
+        },
+      ],
+    },
+  }
+}
+
 function relayMessage(
   server,
   metadata,
   sessionId,
   sender,
-  serialized,
+  message,
   targetRole,
   targetClientId = null,
 ) {
+  const senderMeta = metadata.get(sender)
   for (const peer of server.clients) {
     const peerMeta = metadata.get(peer)
     if (
@@ -53,14 +148,37 @@ function relayMessage(
       (!targetClientId || peerMeta.clientId === targetClientId) &&
       (targetRole !== "client" || peerMeta.phase === "ready")
     ) {
-      peer.send(serialized)
+      if (targetRole === "client" && message.type === "draftUpdated") {
+        const decision = incompatibleDraftDecision(message, peerMeta)
+        if (decision.delivery === "withhold") {
+          sendCanonical(
+            sender,
+            senderMeta,
+            draftRejection(
+              message,
+              peerMeta.clientId,
+              decision.diagnostic,
+              senderMeta.protocolVersion,
+            ),
+          )
+          continue
+        }
+      }
+      if (
+        targetRole === "client" &&
+        message.type === "mockCommerceStateChanged" &&
+        message.previewProtocolVersion !== peerMeta.protocolVersion
+      ) {
+        continue
+      }
+      sendCanonical(peer, peerMeta, message)
     }
   }
 }
 
-function relayEnvelope(sessionId, type, payload) {
+function relayEnvelope(protocolVersion, sessionId, type, payload) {
   return {
-    previewProtocolVersion: "0.1",
+    previewProtocolVersion: protocolVersion,
     messageId: `msg_relay_${Date.now()}_${Math.round(Math.random() * 1_000_000)}`,
     sessionId,
     sentAt: new Date().toISOString(),
@@ -82,14 +200,17 @@ export function createPreviewRelay({ host = "127.0.0.1", port = 4317, path = "/p
     path,
     maxPayload: 2_097_152,
     handleProtocols(protocols) {
-      return protocols.has(PREVIEW_SUBPROTOCOL) ? PREVIEW_SUBPROTOCOL : false
+      return PREVIEW_SUBPROTOCOLS.find((protocol) => protocols.has(protocol)) ?? false
     },
     verifyClient(info, done) {
       if (!isLoopbackOrigin(info.origin)) {
         done(false, 403, "Loopback origins only")
         return
       }
-      if (info.req.headers["sec-websocket-protocol"] !== PREVIEW_SUBPROTOCOL) {
+      const requestedProtocols = String(info.req.headers["sec-websocket-protocol"] ?? "")
+        .split(",")
+        .map((value) => value.trim())
+      if (!PREVIEW_SUBPROTOCOLS.some((protocol) => requestedProtocols.includes(protocol))) {
         done(false, 426, "Required WebSocket subprotocol missing")
         return
       }
@@ -113,9 +234,10 @@ export function createPreviewRelay({ host = "127.0.0.1", port = 4317, path = "/p
   function replayClients(socket, sessionId) {
     const cache = cachedClients.get(sessionId)
     if (!cache) return
+    const meta = metadata.get(socket)
     for (const client of cache.values()) {
-      if (client.connected) socket.send(client.connected)
-      if (client.capability) socket.send(client.capability)
+      if (client.connected) sendCanonical(socket, meta, client.connected)
+      if (client.capability) sendCanonical(socket, meta, client.capability)
     }
   }
 
@@ -127,11 +249,16 @@ export function createPreviewRelay({ host = "127.0.0.1", port = 4317, path = "/p
     if (cache?.get(meta.clientId)?.socket !== socket) return
     cache?.delete(meta.clientId)
     if (cache?.size === 0) cachedClients.delete(meta.sessionId)
-    const message = relayEnvelope(meta.sessionId, "previewClientDisconnected", {
-      clientId: meta.clientId,
-      reason,
-    })
-    relayMessage(server, metadata, meta.sessionId, socket, JSON.stringify(message), "studio")
+    const message = relayEnvelope(
+      meta.protocolVersion,
+      meta.sessionId,
+      "previewClientDisconnected",
+      {
+        clientId: meta.clientId,
+        reason,
+      },
+    )
+    relayMessage(server, metadata, meta.sessionId, socket, message, "studio")
   }
 
   server.on("connection", (socket, request) => {
@@ -139,6 +266,8 @@ export function createPreviewRelay({ host = "127.0.0.1", port = 4317, path = "/p
     const requestedRole = requestUrl.searchParams.get("role")
     const isStudio = requestedRole === "studio"
     const querySession = requestUrl.searchParams.get("sessionId")
+    const protocol = socket.protocol
+    const protocolVersion = VERSION_BY_SUBPROTOCOL.get(protocol)
     const meta = {
       role: isStudio ? "studio" : "client",
       sessionId: isStudio && querySession?.startsWith("session_") ? querySession : null,
@@ -146,9 +275,13 @@ export function createPreviewRelay({ host = "127.0.0.1", port = 4317, path = "/p
       phase: isStudio ? "ready" : "awaitingConnected",
       lastActivityAt: Date.now(),
       disconnected: false,
+      protocol,
+      protocolVersion,
+      capabilityReport: null,
     }
     metadata.set(socket, meta)
     if (
+      !protocolVersion ||
       (requestedRole && requestedRole !== "studio" && requestedRole !== "client") ||
       (isStudio && !meta.sessionId)
     ) {
@@ -172,6 +305,10 @@ export function createPreviewRelay({ host = "127.0.0.1", port = 4317, path = "/p
       }
       if (!validatePreviewMessage(message).ok) {
         socket.close(1008, "Invalid preview message")
+        return
+      }
+      if (message.previewProtocolVersion !== meta.protocolVersion) {
+        socket.close(1008, "Message version does not match the negotiated subprotocol")
         return
       }
 
@@ -211,15 +348,14 @@ export function createPreviewRelay({ host = "127.0.0.1", port = 4317, path = "/p
 
       meta.sessionId = message.sessionId
 
-      const serialized = JSON.stringify(message)
       if (message.type === "previewClientConnected") {
         meta.clientId = message.payload.client.clientId
         meta.phase = "awaitingCapability"
         meta.disconnected = false
-        meta.connected = serialized
+        meta.connected = message
         const cache = sessionCache(message.sessionId)
         if (!cache.has(meta.clientId)) {
-          cache.set(meta.clientId, { connected: serialized, capability: null, socket })
+          cache.set(meta.clientId, { connected: message, capability: null, socket })
         }
       } else if (message.type === "capabilityReport") {
         if (message.payload.clientId !== meta.clientId) {
@@ -227,11 +363,12 @@ export function createPreviewRelay({ host = "127.0.0.1", port = 4317, path = "/p
           return
         }
         meta.phase = "ready"
+        meta.capabilityReport = message.payload
         const cache = sessionCache(message.sessionId)
         const previousSocket = cache.get(meta.clientId)?.socket
         cache.set(meta.clientId, {
           connected: meta.connected,
-          capability: serialized,
+          capability: message,
           socket,
         })
         if (previousSocket && previousSocket !== socket) {
@@ -262,7 +399,7 @@ export function createPreviewRelay({ host = "127.0.0.1", port = 4317, path = "/p
         metadata,
         message.sessionId,
         socket,
-        serialized,
+        message,
         meta.role === "studio" ? "client" : "studio",
         meta.role === "studio" && message.type === "previewHeartbeat"
           ? message.payload.clientId
@@ -316,7 +453,7 @@ if (isMain) {
   const relay = createPreviewRelay()
   await relay.ready
   console.log(`Mosaic local preview relay listening at ${relay.address()}`)
-  console.log(`WebSocket subprotocol: ${PREVIEW_SUBPROTOCOL}`)
+  console.log(`WebSocket subprotocols: ${PREVIEW_SUBPROTOCOLS.join(", ")}`)
 
   async function shutdown() {
     await relay.close()

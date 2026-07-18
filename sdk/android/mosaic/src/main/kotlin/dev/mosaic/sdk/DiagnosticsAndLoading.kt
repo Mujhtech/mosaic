@@ -10,7 +10,11 @@ enum class MosaicDiagnosticCode(val wireName: String) {
     PRODUCT_LOAD_FAILED("product_load_failed"),
     PURCHASE_FAILED("purchase_failed"),
     RESTORE_FAILED("restore_failed"),
+    NAVIGATION_BACK_UNAVAILABLE("navigation_back_unavailable"),
+    EXTERNAL_URL_FAILED("external_url_failed"),
     IMAGE_UNAVAILABLE("image_unavailable"),
+    MEDIA_BACKGROUND_UNAVAILABLE("media_background_unavailable"),
+    LAYOUT_UNBOUNDED_FILL("layout_unbounded_fill"),
     RENDERING_FAILED("rendering_failed"),
 }
 
@@ -100,7 +104,7 @@ class MosaicLocalPaywallLoader(
     }
 }
 
-/** Reads the generated canonical RC1 fixture packaged into the SDK AAR's assets. */
+/** Reads the generated current canonical fixture packaged into the SDK AAR's assets. */
 class MosaicCanonicalBundleSource(
     context: Context,
 ) : MosaicPaywallDocumentSource {

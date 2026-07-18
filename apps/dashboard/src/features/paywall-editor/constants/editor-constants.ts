@@ -9,18 +9,20 @@ export const EDITOR_HISTORY_LIMIT = 50
 export const AUTOSAVE_DELAY_MS = 500
 export const MAX_LOCAL_PROJECT_BYTES = 1_048_576
 export const PREVIEW_ENDPOINT_DEFAULT = "ws://127.0.0.1:4317/preview"
-export const LOCAL_PROJECT_STORAGE_KEY = "mosaic:local-project:v0.1"
-export const LOCAL_EDITOR_UI_STORAGE_KEY = "mosaic:local-project-ui:v0.1"
+export const LOCAL_PROJECT_STORAGE_KEY = "mosaic:local-project:v0.2"
+export const LOCAL_EDITOR_UI_STORAGE_KEY = "mosaic:local-project-ui:v0.2"
 
 export const INSERTABLE_BLOCKS = [
+  { type: "stack", label: "Stack" },
+  { type: "carousel", label: "Carousel" },
+  { type: "switch", label: "Switch" },
+  { type: "countdown", label: "Countdown" },
   { type: "text", label: "Text" },
   { type: "image", label: "Image" },
   { type: "featureList", label: "Feature list" },
   { type: "productSelector", label: "Product selector" },
-  { type: "purchaseButton", label: "Purchase button" },
-  { type: "restoreButton", label: "Restore button" },
-  { type: "closeButton", label: "Close button" },
-  { type: "legalText", label: "Legal text" },
+  { type: "button", label: "Button" },
+  { type: "icon", label: "Icon" },
 ] as const satisfies readonly { type: InsertableBlockType; label: string }[]
 
 export const PREVIEW_MODES = [

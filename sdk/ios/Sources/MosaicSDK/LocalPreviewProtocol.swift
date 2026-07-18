@@ -1,13 +1,9 @@
 import Foundation
 
-public let mosaicLocalPreviewProtocolVersion = "0.1"
-public let mosaicLocalPreviewWebSocketProtocol = "mosaic.local-preview.v0.1"
-public let mosaicLocalPreviewProtocolVersionV02 = "0.2"
-public let mosaicLocalPreviewWebSocketProtocolV02 = "mosaic.local-preview.v0.2"
-public let mosaicLatestLocalPreviewProtocolVersion = mosaicLocalPreviewProtocolVersionV02
-public let mosaicSupportedLocalPreviewProtocolVersions = [
-  mosaicLocalPreviewProtocolVersionV02, mosaicLocalPreviewProtocolVersion,
-]
+public let mosaicLocalPreviewProtocolVersion = "0.2"
+public let mosaicLocalPreviewWebSocketProtocol = "mosaic.local-preview.v0.2"
+public let mosaicLatestLocalPreviewProtocolVersion = mosaicLocalPreviewProtocolVersion
+public let mosaicSupportedLocalPreviewProtocolVersions = [mosaicLocalPreviewProtocolVersion]
 public let mosaicLocalPreviewMaximumFrameBytes = 2 * 1_024 * 1_024
 public let mosaicIOSPreviewMaximumDocumentBytes = 1_024 * 1_024
 
@@ -150,10 +146,10 @@ public struct MosaicPreviewCapabilityReport: Sendable, Equatable {
       clientId: clientId,
       supportedSchemaVersions: mosaicSupportedProtocolVersions,
       supportedCapabilities: MosaicCapabilityCatalog.v02.map {
-        MosaicPreviewSupportedCapability(name: $0.rawValue, version: mosaicProtocolVersionV02)
+        MosaicPreviewSupportedCapability(name: $0.rawValue, version: mosaicProtocolVersion)
       },
       previewCapabilities: MosaicPreviewCapabilityName.allCases.map {
-        MosaicPreviewCapability(name: $0, version: mosaicLocalPreviewProtocolVersionV02)
+        MosaicPreviewCapability(name: $0, version: mosaicLocalPreviewProtocolVersion)
       },
       maxDocumentBytes: maxDocumentBytes
     )

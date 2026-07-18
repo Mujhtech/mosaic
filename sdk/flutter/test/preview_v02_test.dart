@@ -44,7 +44,10 @@ void main() {
     expect(v01.document.schemaVersion, '0.1');
     expect(v02.fileFormatVersion, '0.2');
     expect(v02.document.schemaVersion, '0.2');
-    expect(v02.commerceState.products, hasLength(2));
+    expect(
+      v02.commerceState.products.map((product) => product.productReferenceId),
+      <String>['monthly-plan', 'yearly-plan', 'lifetime-plan'],
+    );
   });
 
   test('local project loading is atomic across wrapper and document versions',

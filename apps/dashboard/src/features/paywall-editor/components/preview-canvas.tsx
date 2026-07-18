@@ -1,287 +1,188 @@
-import { CheckIcon } from "@phosphor-icons/react/dist/ssr/Check"
-import { XIcon } from "@phosphor-icons/react/dist/ssr/X"
-import { useState } from "react"
-import type { CSSProperties } from "react"
+import {
+  Background,
+  BackgroundVariant,
+  Handle,
+  MarkerType,
+  Panel,
+  Position,
+  ReactFlow,
+  useViewport,
+  type Edge,
+  type Node,
+  type NodeChange,
+  type NodeProps,
+  type NodeTypes,
+  type ReactFlowInstance,
+  type Viewport,
+} from "@xyflow/react"
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react"
+import type { DragEvent, KeyboardEvent, MouseEvent as ReactMouseEvent, ReactNode } from "react"
 
+import { CanvasPreviewDevice } from "@/features/paywall-editor/components/canvas-preview-device"
+import {
+  resolveCanvasDeviceGeometry,
+  resolveCanvasDeviceNodeGeometry,
+  type CanvasDeviceGeometry,
+  type CanvasDeviceNodeGeometry,
+} from "@/features/paywall-editor/components/canvas-preview-geometry"
+import {
+  PreviewNode,
+  type PreviewNodeProps,
+} from "@/features/paywall-editor/components/canvas-preview-node"
+import {
+  COMPONENT_CATALOG_BY_TYPE,
+  COMPONENT_LIBRARY_COUNTDOWN_ENDS_AT_DRAG_TYPE,
+  COMPONENT_LIBRARY_DRAG_TYPE,
+} from "@/features/paywall-editor/components/component-catalog"
+import { CanvasPreviewToolbar } from "@/features/paywall-editor/components/preview-controls"
+import {
+  getCanvasDevicePreset,
+  type CanvasDevicePreset,
+} from "@/features/paywall-editor/constants/canvas-devices"
+import {
+  STUDIO_CANVAS_FRAME_POSITION_BOUNDS,
+  STUDIO_CANVAS_ZOOM_BOUNDS,
+} from "@/features/paywall-editor/constants/studio-workspace"
 import {
   useEditorActions,
   useEditorStore,
 } from "@/features/paywall-editor/stores/editor-store-context"
+import type { StudioWorkspaceSnapshot } from "@/features/paywall-editor/stores/studio-workspace-store"
+import {
+  useStudioWorkspaceActions,
+  useStudioWorkspaceSelector,
+} from "@/features/paywall-editor/stores/studio-workspace-store-context"
 import type {
+  InsertableBlockType,
   MockProductDefinition,
   MockPurchaseState,
   MosaicDocument,
   ProtocolNode,
+  Screen,
 } from "@/features/paywall-editor/types/editor"
-import { resolveLocalizedText } from "@/features/paywall-editor/utils/document-tree"
+import type {
+  StudioCanvasFramePosition,
+  StudioCanvasPreferences,
+} from "@/features/paywall-editor/types/studio-workspace"
+import {
+  canvasNodeIsUnavailable,
+  getEditableCanvasText,
+} from "@/features/paywall-editor/utils/canvas-preview-interactions"
+import {
+  flattenDocument,
+  initialScreen,
+  resolveLegacyInsertionLocation,
+  screenContainingNode,
+} from "@/features/paywall-editor/utils/document-tree"
+import { isValidCountdownInstant } from "@/features/paywall-editor/utils/countdown"
 import { updateLocalizedProperty } from "@/features/paywall-editor/utils/editor-transforms"
+import {
+  evaluateVisibility,
+  paywallRuntimeDiagnostics,
+  runtimeStateForAcceptedRevision,
+} from "@/lib/mosaic-protocol"
 
-function productPrice(product: MockProductDefinition | undefined) {
-  return product?.availability === "available" ? product.localizedPrice : "Unavailable"
+const DEVICE_NODE_ID = "studio-device-preview"
+const selectCanvasPreferences = (snapshot: StudioWorkspaceSnapshot) => snapshot.preferences.canvas
+const selectFramePositions = (snapshot: StudioWorkspaceSnapshot) =>
+  snapshot.preferences.framePositions
+const selectLayerMetadata = (snapshot: StudioWorkspaceSnapshot) =>
+  snapshot.preferences.layerMetadata
+
+interface CanvasNotice {
+  readonly message: string
+  readonly tone: "ready" | "danger" | "success"
 }
 
-function PreviewNode({
-  node,
-  document,
-  locale,
-  selectedComponentId,
-  mockProducts,
-  mockPurchaseState,
-}: {
-  node: ProtocolNode
-  document: MosaicDocument
-  locale: string
-  selectedComponentId: string | null
-  mockProducts: readonly MockProductDefinition[]
-  mockPurchaseState: MockPurchaseState
-}) {
-  const { selectComponent, updateDocument } = useEditorActions()
-  const selected = selectedComponentId === node.id
-  const selectableClass = selected
-    ? "ring-primary ring-2 ring-offset-2 ring-offset-white"
-    : "hover:ring-primary/35 hover:ring-1"
+interface PreviewRuntimeState {
+  readonly document: MosaicDocument | null
+  readonly switchValues: Readonly<Record<string, boolean>>
+  readonly carouselPages: Readonly<Record<string, number>>
+  readonly selectedProducts: Readonly<Record<string, string>>
+}
 
-  function select() {
-    selectComponent(node.id)
+interface TransientFramePositions {
+  readonly workspaceBase: Readonly<Record<string, StudioCanvasFramePosition>>
+  readonly positions: Readonly<Record<string, StudioCanvasFramePosition>>
+}
+
+function previewRuntimeState(document: MosaicDocument | null): PreviewRuntimeState {
+  if (!document) {
+    return { document, switchValues: {}, carouselPages: {}, selectedProducts: {} }
   }
-
-  switch (node.type) {
-    case "verticalStack":
-      return (
-        <div className={`group relative rounded-lg ${selectableClass}`}>
-          <button
-            type="button"
-            className="focus-visible:ring-ring absolute -top-2 -right-2 z-10 rounded-full bg-slate-900 px-2 py-1 text-[10px] font-medium text-white opacity-0 group-hover:opacity-100 focus:opacity-100 focus-visible:ring-2"
-            aria-label="Select content group"
-            onClick={select}
-          >
-            Group
-          </button>
-          <div style={{ display: "flex", flexDirection: "column", gap: node.spacing }}>
-            {node.children.map((child) => (
-              <PreviewNode
-                key={`${child.id}:${document.revision}:${locale}`}
-                node={child}
-                document={document}
-                locale={locale}
-                selectedComponentId={selectedComponentId}
-                mockProducts={mockProducts}
-                mockPurchaseState={mockPurchaseState}
-              />
-            ))}
-          </div>
-        </div>
-      )
-    case "text": {
-      const value = resolveLocalizedText(document, node.value, locale)
-      const fontSize =
-        node.style === "title" ? "1.5em" : node.style === "caption" ? "0.75em" : "0.875em"
-      const typographyClass =
-        node.style === "title"
-          ? "font-semibold leading-tight"
-          : node.style === "caption"
-            ? "text-slate-500"
-            : "leading-6 text-slate-600"
-      return (
-        <div className={`rounded-md px-1 py-0.5 ${selectableClass}`}>
-          {selected ? (
-            <InlineEditor
-              className={`w-full resize-none bg-transparent focus:outline-none ${typographyClass}`}
-              ariaLabel={node.style === "title" ? "Edit headline inline" : "Edit text inline"}
-              rows={node.style === "title" ? 2 : 3}
-              value={value}
-              style={{ fontSize, textAlign: node.alignment }}
-              onFocus={select}
-              onCommit={(nextValue) =>
-                updateDocument((current) =>
-                  updateLocalizedProperty({
-                    document: current,
-                    componentId: node.id,
-                    property: "value",
-                    locale,
-                    value: nextValue,
-                  }),
-                )
-              }
-            />
-          ) : (
-            <button
-              type="button"
-              className={`w-full ${typographyClass}`}
-              style={{ fontSize, textAlign: node.alignment }}
-              aria-label={node.style === "title" ? "Select headline" : "Select text"}
-              onClick={select}
-            >
-              {value}
-            </button>
-          )}
-        </div>
-      )
-    }
-    case "image":
-      return (
-        <button
-          type="button"
-          className={`flex aspect-video w-full items-center justify-center rounded-xl bg-gradient-to-br from-cyan-100 to-teal-200 text-xs font-medium text-teal-900 ${selectableClass}`}
-          onClick={select}
-        >
-          Image preview
-        </button>
-      )
-    case "featureList":
-      return (
-        <button
-          type="button"
-          className={`w-full space-y-2 rounded-xl bg-slate-50 p-4 text-left ${selectableClass}`}
-          onClick={select}
-        >
-          {node.items.map((item) => (
-            <span key={item.id} className="flex items-start gap-2 text-sm">
-              <CheckIcon className="mt-0.5 shrink-0 text-teal-700" aria-hidden weight="bold" />
-              <span>{resolveLocalizedText(document, item.text, locale)}</span>
-            </span>
-          ))}
-        </button>
-      )
-    case "productSelector": {
-      const unavailable = mockPurchaseState === "productUnavailable"
-      return (
-        <button
-          type="button"
-          className={`grid w-full gap-2 rounded-xl text-left sm:grid-cols-2 ${selectableClass}`}
-          onClick={select}
-        >
-          {unavailable ? (
-            <span className="col-span-full rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
-              {resolveLocalizedText(document, node.unavailableFallback.message, locale)}
-            </span>
-          ) : (
-            node.productReferenceIds.map((referenceId) => {
-              const product = document.products.find((entry) => entry.id === referenceId)
-              const mock = mockProducts.find((entry) => entry.productReferenceId === referenceId)
-              const chosen = referenceId === node.initiallySelectedProductReferenceId
-              return (
-                <span
-                  key={referenceId}
-                  className={`rounded-lg border p-3 ${chosen ? "border-teal-600 bg-teal-50" : "border-slate-200"}`}
-                >
-                  <span className="block text-xs text-slate-500">
-                    {product ? resolveLocalizedText(document, product.label, locale) : referenceId}
-                  </span>
-                  <span className="mt-1 block font-semibold">{productPrice(mock)}</span>
-                </span>
-              )
-            })
-          )}
-        </button>
-      )
-    }
-    case "purchaseButton":
-      return (
-        <button
-          type="button"
-          className={`w-full rounded-xl bg-teal-700 px-4 py-3 text-sm font-semibold text-white ${selectableClass}`}
-          onClick={select}
-        >
-          {resolveLocalizedText(document, node.label, locale)}
-        </button>
-      )
-    case "restoreButton":
-      return (
-        <button
-          type="button"
-          className={`w-full rounded-lg px-4 py-2 text-sm font-medium text-teal-800 ${selectableClass}`}
-          onClick={select}
-        >
-          {resolveLocalizedText(document, node.label, locale)}
-        </button>
-      )
-    case "closeButton":
-      return (
-        <div className="flex justify-end">
-          <button
-            type="button"
-            className={`grid size-8 place-items-center rounded-full bg-slate-100 text-slate-700 ${selectableClass}`}
-            aria-label={resolveLocalizedText(document, node.label, locale)}
-            onClick={select}
-          >
-            <XIcon aria-hidden />
-          </button>
-        </div>
-      )
-    case "legalText": {
-      const value = resolveLocalizedText(document, node.value, locale)
-      return (
-        <div className={`rounded-md px-1 py-0.5 ${selectableClass}`}>
-          {selected ? (
-            <InlineEditor
-              className="w-full resize-none bg-transparent leading-5 text-slate-500 focus:outline-none"
-              ariaLabel="Edit legal text inline"
-              rows={4}
-              value={value}
-              style={{ fontSize: "0.6875em", textAlign: node.alignment }}
-              onFocus={select}
-              onCommit={(nextValue) =>
-                updateDocument((current) =>
-                  updateLocalizedProperty({
-                    document: current,
-                    componentId: node.id,
-                    property: "value",
-                    locale,
-                    value: nextValue,
-                  }),
-                )
-              }
-            />
-          ) : (
-            <button
-              type="button"
-              className="w-full leading-5 text-slate-500"
-              style={{ fontSize: "0.6875em", textAlign: node.alignment }}
-              aria-label="Select legal text"
-              onClick={select}
-            >
-              {value}
-            </button>
-          )}
-        </div>
-      )
-    }
+  const runtime = runtimeStateForAcceptedRevision(document)
+  return {
+    document,
+    switchValues: runtime.switches,
+    carouselPages: runtime.carousels,
+    selectedProducts: runtime.selectedProducts,
   }
 }
 
-function InlineEditor({
-  value,
-  rows,
-  className,
-  style,
-  ariaLabel,
-  onFocus,
-  onCommit,
-}: {
-  value: string
-  rows: number
-  className: string
-  style: CSSProperties
-  ariaLabel: string
-  onFocus: () => void
-  onCommit: (value: string) => void
-}) {
-  const [draft, setDraft] = useState(value)
+interface CanvasDeviceNodeData extends Record<string, unknown> {
+  readonly active: boolean
+  readonly canvas: StudioCanvasPreferences
+  readonly children: ReactNode
+  readonly direction: "ltr" | "rtl"
+  readonly document: MosaicDocument
+  readonly geometry: CanvasDeviceGeometry
+  readonly initial: boolean
+  readonly layout: Screen["layout"]
+  readonly nodeGeometry: CanvasDeviceNodeGeometry
+  readonly onFrameSelect: () => void
+  readonly onRootClick: (event: ReactMouseEvent<HTMLDivElement>) => void
+  readonly presentation: "screen" | "sheet"
+  readonly preset: CanvasDevicePreset
+  readonly rootHidden: boolean
+  readonly screenLabel: string
+  readonly selectedComponentId: string | null
+}
+
+type CanvasDeviceFlowNode = Node<CanvasDeviceNodeData, "device-preview">
+
+const DevicePreviewFlowNode = memo(function DevicePreviewFlowNode({
+  data,
+}: NodeProps<CanvasDeviceFlowNode>) {
+  const viewport = useViewport()
+  const zoom = data.canvas.fitMode === "manual" ? data.canvas.zoom : viewport.zoom
   return (
-    <textarea
-      className={className}
-      aria-label={ariaLabel}
-      rows={rows}
-      value={draft}
-      style={style}
-      onFocus={onFocus}
-      onChange={(event) => setDraft(event.target.value)}
-      onBlur={() => {
-        if (draft !== value) onCommit(draft)
-      }}
-    />
+    <>
+      <Handle className="pointer-events-none opacity-0" position={Position.Left} type="target" />
+      <CanvasPreviewDevice {...data} zoom={zoom} />
+      <Handle className="pointer-events-none opacity-0" position={Position.Right} type="source" />
+    </>
   )
+})
+
+const CANVAS_NODE_TYPES = {
+  "device-preview": DevicePreviewFlowNode,
+} satisfies NodeTypes
+
+function isFormControl(target: EventTarget | null) {
+  return (
+    target instanceof HTMLElement &&
+    (target.matches("input, textarea, select, button, [contenteditable='true']") ||
+      target.closest("input, textarea, select, button, [contenteditable='true']") !== null)
+  )
+}
+
+function fitViewOptions(duration: number) {
+  return {
+    duration,
+    maxZoom: STUDIO_CANVAS_ZOOM_BOUNDS.max,
+    minZoom: STUDIO_CANVAS_ZOOM_BOUNDS.min,
+    padding: { top: "32px", right: "36px", bottom: "88px", left: "36px" },
+  } as const
+}
+
+function safeFramePosition(position: StudioCanvasFramePosition): StudioCanvasFramePosition | null {
+  if (!Number.isFinite(position.x) || !Number.isFinite(position.y)) return null
+  const clamp = (value: number) =>
+    Math.min(
+      STUDIO_CANVAS_FRAME_POSITION_BOUNDS.max,
+      Math.max(STUDIO_CANVAS_FRAME_POSITION_BOUNDS.min, Number(value.toFixed(2))),
+    )
+  return { x: clamp(position.x), y: clamp(position.y) }
 }
 
 export function PreviewCanvas({
@@ -291,53 +192,472 @@ export function PreviewCanvas({
   mockProducts: readonly MockProductDefinition[]
   mockPurchaseState: MockPurchaseState
 }) {
-  const { document, selectedComponentId, currentLocale, previewMode, textScale } = useEditorStore()
+  const {
+    document,
+    hoveredComponentId,
+    isDocumentTransactionActive,
+    productLayerPreview,
+    selectedComponentId,
+  } = useEditorStore()
+  const editor = useEditorActions()
+  const canvas = useStudioWorkspaceSelector(selectCanvasPreferences)
+  const framePositions = useStudioWorkspaceSelector(selectFramePositions)
+  const layerMetadata = useStudioWorkspaceSelector(selectLayerMetadata)
+  const workspace = useStudioWorkspaceActions()
+  const flowRef = useRef<ReactFlowInstance<CanvasDeviceFlowNode> | null>(null)
+  const [dropNotice, setDropNotice] = useState<CanvasNotice | null>(null)
+  const [editingComponentId, setEditingComponentId] = useState<string | null>(null)
+  const [transientFramePositions, setTransientFramePositions] = useState<TransientFramePositions>(
+    () => ({ workspaceBase: framePositions, positions: {} }),
+  )
+  const [runtime, setRuntime] = useState(() => previewRuntimeState(document))
+  const now = Date.parse(canvas.countdownPreviewAt)
+
+  let activeRuntime = runtime
+  if (runtime.document !== document) {
+    activeRuntime = previewRuntimeState(document)
+    setRuntime(activeRuntime)
+  }
+  const { carouselPages, selectedProducts, switchValues } = activeRuntime
+
+  const lockedIds = useMemo(() => new Set(layerMetadata.lockedIds), [layerMetadata.lockedIds])
+  const hiddenIds = useMemo(
+    () => new Set(layerMetadata.canvasHiddenIds),
+    [layerMetadata.canvasHiddenIds],
+  )
+  const preset = useMemo(() => getCanvasDevicePreset(canvas.device), [canvas.device])
+  const geometry = useMemo(
+    () => resolveCanvasDeviceGeometry(canvas.device, canvas.orientation),
+    [canvas.device, canvas.orientation],
+  )
+  const nodeGeometry = useMemo(
+    () => resolveCanvasDeviceNodeGeometry(canvas.device, canvas.orientation),
+    [canvas.device, canvas.orientation],
+  )
+
+  const purchaseDisabledIds = useMemo(
+    () =>
+      new Set(
+        document
+          ? paywallRuntimeDiagnostics(document, switchValues)
+              .map((diagnostic) => diagnostic.componentId)
+              .filter((componentId): componentId is string => Boolean(componentId))
+          : [],
+      ),
+    [document, switchValues],
+  )
+
+  const syncViewport = useCallback(
+    (flow: ReactFlowInstance<CanvasDeviceFlowNode>, duration: number) => {
+      if (canvas.fitMode === "fit") {
+        void flow.fitView(fitViewOptions(duration))
+        return
+      }
+      void flow.zoomTo(canvas.zoom, { duration })
+    },
+    [canvas.fitMode, canvas.zoom],
+  )
+
+  useEffect(() => {
+    const flow = flowRef.current
+    if (!flow) return
+    syncViewport(flow, 0)
+  }, [canvas.device, canvas.orientation, nodeGeometry, syncViewport])
+
   if (!document) return null
-  const catalog = document.localization.locales[currentLocale]
-  const direction = catalog?.direction ?? "ltr"
-  const widthClass =
-    previewMode === "tablet"
-      ? "max-w-[640px]"
-      : previewMode === "landscape"
-        ? "max-w-[720px]"
-        : "max-w-[390px]"
+  const activeDocument = document
+  const activeScreen =
+    screenContainingNode(document, selectedComponentId) ?? initialScreen(document)
+  const direction = canvas.forceRTL
+    ? "rtl"
+    : (document.localization.locales[canvas.locale]?.direction ?? "ltr")
+  const visibleSelectableIds = [
+    ...document.screens.map((screen) => screen.layout.content),
+    ...flattenDocument(document).map((entry) => entry.node),
+  ]
+    .filter(
+      (node) =>
+        !canvasNodeIsUnavailable(document, node.id, hiddenIds) &&
+        !canvasNodeIsUnavailable(document, node.id, lockedIds),
+    )
+    .map((node) => node.id)
+
+  function hasPayload(event: DragEvent<HTMLElement>, type: string) {
+    return Array.from(event.dataTransfer.types ?? []).includes(type)
+  }
+
+  function insertionLockReason() {
+    const location = resolveLegacyInsertionLocation(activeDocument, selectedComponentId)
+    if (canvasNodeIsUnavailable(activeDocument, location.parentId, lockedIds)) {
+      return "The insertion Stack is locked. Unlock it in Layers before dropping content."
+    }
+    if (isDocumentTransactionActive) {
+      return "Finish the active text or property edit before dropping content."
+    }
+    return null
+  }
+
+  function handleCatalogDragOver(event: DragEvent<HTMLElement>) {
+    if (!hasPayload(event, COMPONENT_LIBRARY_DRAG_TYPE)) return
+    event.preventDefault()
+    const block = insertionLockReason()
+    event.dataTransfer.dropEffect = block ? "none" : "copy"
+    setDropNotice({
+      tone: block ? "danger" : "ready",
+      message: block ?? "Drop to insert at the current Layers selection.",
+    })
+  }
+
+  function handleCatalogDrop(event: DragEvent<HTMLElement>) {
+    if (!hasPayload(event, COMPONENT_LIBRARY_DRAG_TYPE)) return
+    event.preventDefault()
+    const block = insertionLockReason()
+    if (block) {
+      setDropNotice({ tone: "danger", message: block })
+      return
+    }
+    const rawType = event.dataTransfer.getData(COMPONENT_LIBRARY_DRAG_TYPE)
+    if (!COMPONENT_CATALOG_BY_TYPE.has(rawType as InsertableBlockType)) {
+      setDropNotice({
+        tone: "danger",
+        message: "That component is not supported. Drag a Protocol 0.2 component from Add content.",
+      })
+      return
+    }
+    const type = rawType as InsertableBlockType
+    const location = resolveLegacyInsertionLocation(activeDocument, selectedComponentId, type)
+    const label = COMPONENT_CATALOG_BY_TYPE.get(type)?.label ?? type
+    const countdownEndsAt = event.dataTransfer.getData(
+      COMPONENT_LIBRARY_COUNTDOWN_ENDS_AT_DRAG_TYPE,
+    )
+    if (type === "countdown" && !isValidCountdownInstant(countdownEndsAt)) {
+      setDropNotice({
+        tone: "danger",
+        message: "Countdown needs an explicit valid UTC deadline from Add content.",
+      })
+      return
+    }
+    const result = editor.insertComponentAt(
+      type,
+      location,
+      type === "countdown" ? { countdownEndsAt } : undefined,
+    )
+    if (result.status === "rejected") {
+      setDropNotice({ tone: "danger", message: `${result.message} ${result.recovery}` })
+      return
+    }
+    workspace.recordRecentInsertion(type)
+    setDropNotice({
+      tone: "success",
+      message: `${label} inserted. The change can be undone.`,
+    })
+  }
+
+  function beginInlineEdit(node: ProtocolNode) {
+    if (!getEditableCanvasText(node) || editingComponentId === node.id) return
+    if (!editor.beginDocumentTransaction()) {
+      setDropNotice({
+        tone: "danger",
+        message: "Finish the active edit before editing this label.",
+      })
+      return
+    }
+    setEditingComponentId(node.id)
+  }
+
+  function updateInlineEdit(node: ProtocolNode, value: string) {
+    const editable = getEditableCanvasText(node)
+    if (!editable) return
+    editor.updateDocumentInTransaction((current) =>
+      updateLocalizedProperty({
+        componentId: node.id,
+        document: current,
+        locale: canvas.locale,
+        property: editable.property,
+        value,
+      }),
+    )
+  }
+
+  function commitInlineEdit() {
+    if (!editingComponentId) return
+    editor.commitDocumentTransaction()
+    setEditingComponentId(null)
+  }
+
+  function cancelInlineEdit() {
+    if (!editingComponentId) return
+    editor.cancelDocumentTransaction()
+    setEditingComponentId(null)
+  }
+
+  function handleCanvasKeyboard(event: KeyboardEvent<HTMLElement>) {
+    if (event.target !== event.currentTarget || isFormControl(event.target)) return
+    if (event.key !== "ArrowUp" && event.key !== "ArrowDown") return
+    event.preventDefault()
+    const currentIndex = visibleSelectableIds.indexOf(selectedComponentId ?? "")
+    const offset = event.key === "ArrowDown" ? 1 : -1
+    const nextIndex =
+      currentIndex < 0
+        ? offset > 0
+          ? 0
+          : visibleSelectableIds.length - 1
+        : Math.min(visibleSelectableIds.length - 1, Math.max(0, currentIndex + offset))
+    editor.selectComponent(visibleSelectableIds[nextIndex] ?? null)
+  }
+
+  function handleNodeChanges(changes: NodeChange<CanvasDeviceFlowNode>[]) {
+    const positionChanges = changes.filter(
+      (change): change is Extract<NodeChange<CanvasDeviceFlowNode>, { type: "position" }> =>
+        change.type === "position" && Boolean(change.position),
+    )
+    if (positionChanges.length === 0) return
+    setTransientFramePositions((current) => {
+      const next = {
+        ...(current.workspaceBase === framePositions ? current.positions : {}),
+      }
+      positionChanges.forEach((change) => {
+        const screenId = [...deviceNodeIdByScreenId].find(([, nodeId]) => nodeId === change.id)?.[0]
+        const position = change.position ? safeFramePosition(change.position) : null
+        if (screenId && position) next[screenId] = position
+      })
+      return { workspaceBase: framePositions, positions: next }
+    })
+  }
+
+  function handleMoveEnd(event: globalThis.MouseEvent | TouchEvent | null, viewport: Viewport) {
+    if (!event) return
+    workspace.setCanvasPreference("fitMode", "manual")
+    workspace.setCanvasPreference(
+      "zoom",
+      Math.min(
+        STUDIO_CANVAS_ZOOM_BOUNDS.max,
+        Math.max(STUDIO_CANVAS_ZOOM_BOUNDS.min, Number(viewport.zoom.toFixed(2))),
+      ),
+    )
+  }
+
+  const sharedNodeProps = {
+    carouselPages,
+    document,
+    direction,
+    editingComponentId,
+    hiddenIds,
+    hoveredComponentId,
+    locale: canvas.locale,
+    lockedIds,
+    mockProducts,
+    mockPurchaseState,
+    now,
+    onBeginEdit: beginInlineEdit,
+    onCancelEdit: cancelInlineEdit,
+    onCarouselPageChange: (id: string, index: number) =>
+      setRuntime((current) => {
+        const base = current.document === document ? current : previewRuntimeState(document)
+        return { ...base, carouselPages: { ...base.carouselPages, [id]: index } }
+      }),
+    onCommitEdit: commitInlineEdit,
+    onProductSelect: (id: string, productCardId: string) =>
+      setRuntime((current) => {
+        const base = current.document === document ? current : previewRuntimeState(document)
+        return { ...base, selectedProducts: { ...base.selectedProducts, [id]: productCardId } }
+      }),
+    onSwitchChange: (id: string, value: boolean) =>
+      setRuntime((current) => {
+        const base = current.document === document ? current : previewRuntimeState(document)
+        return { ...base, switchValues: { ...base.switchValues, [id]: value } }
+      }),
+    onUpdateEdit: updateInlineEdit,
+    purchaseDisabledIds,
+    productLayerPreview,
+    selectedComponentId,
+    selectedProducts,
+    switchValues,
+  } satisfies Omit<PreviewNodeProps, "inheritedLocked" | "node">
+
+  const deviceNodeIdByScreenId = new Map(
+    document.screens.map((screen, index) => [
+      screen.id,
+      index === 0 ? DEVICE_NODE_ID : `${DEVICE_NODE_ID}-${screen.id}`,
+    ]),
+  )
+  const selectedScreen = screenContainingNode(document, selectedComponentId) ?? activeScreen
+  const columnGap = nodeGeometry.width + 140
+  const rowGap = nodeGeometry.height + 120
+  const columnCount = Math.max(1, Math.ceil(Math.sqrt(document.screens.length)))
+  const devicePositions =
+    transientFramePositions.workspaceBase === framePositions
+      ? transientFramePositions.positions
+      : {}
+  const deviceNodes: CanvasDeviceFlowNode[] = document.screens.map((screen, index) => {
+    const id = deviceNodeIdByScreenId.get(screen.id)!
+    const screenPresentation =
+      (screen as Screen & { presentation?: { type: "screen" | "sheet" } }).presentation?.type ??
+      "screen"
+    const previewChildren = screen.layout.content.children.map((node) => (
+      <PreviewNode
+        {...sharedNodeProps}
+        inheritedLocked={lockedIds.has(screen.layout.content.id)}
+        key={node.id}
+        node={node}
+      />
+    ))
+    const fallbackPosition = {
+      x: (index % columnCount) * columnGap,
+      y: Math.floor(index / columnCount) * rowGap,
+    }
+    return {
+      id,
+      type: "device-preview",
+      position: devicePositions[screen.id] ?? framePositions[screen.id] ?? fallbackPosition,
+      data: {
+        active: selectedScreen.id === screen.id,
+        canvas,
+        children: previewChildren,
+        direction,
+        document,
+        geometry,
+        initial: document.initialScreenId === screen.id,
+        layout: screen.layout,
+        nodeGeometry,
+        onFrameSelect: () => editor.selectComponent(screen.layout.id),
+        onRootClick: (event) => {
+          if (event.target === event.currentTarget && !lockedIds.has(screen.layout.content.id)) {
+            editor.selectComponent(screen.layout.content.id)
+          }
+        },
+        presentation: screenPresentation,
+        preset,
+        rootHidden:
+          hiddenIds.has(screen.layout.content.id) ||
+          !evaluateVisibility(screen.layout.content.visibility, switchValues),
+        screenLabel:
+          layerMetadata.labels[screen.id]?.trim() ||
+          screen.accessibilityLabel?.default ||
+          `Screen ${index + 1}`,
+        selectedComponentId,
+      },
+      connectable: false,
+      deletable: false,
+      dragHandle: ".mosaic-device-drag-handle",
+      draggable: true,
+      focusable: false,
+      height: nodeGeometry.height,
+      selectable: false,
+      style: {
+        height: nodeGeometry.height,
+        pointerEvents: "auto",
+        width: nodeGeometry.width,
+      },
+      width: nodeGeometry.width,
+    }
+  })
+
+  const navigationEdges: Edge[] = flattenDocument(document).flatMap(({ node }) => {
+    if (node.type !== "button" || node.action.type !== "navigateTo") return []
+    const sourceScreen = screenContainingNode(document, node.id)
+    const source = sourceScreen ? deviceNodeIdByScreenId.get(sourceScreen.id) : undefined
+    const target = deviceNodeIdByScreenId.get(node.action.screenId)
+    if (!source || !target) return []
+    return [
+      {
+        id: `navigation-${node.id}`,
+        source,
+        target,
+        type: "smoothstep",
+        label: layerMetadata.labels[node.id]?.trim() || "Navigate",
+        markerEnd: { type: MarkerType.ArrowClosed },
+        data: { componentId: node.id },
+        deletable: false,
+        focusable: true,
+        selectable: true,
+        style: { stroke: "var(--primary)", strokeWidth: 1.75 },
+        labelStyle: { fill: "var(--foreground)", fontSize: 11, fontWeight: 600 },
+        labelBgStyle: { fill: "var(--background)", fillOpacity: 0.94 },
+        labelBgPadding: [6, 4],
+        labelBgBorderRadius: 8,
+      },
+    ]
+  })
 
   return (
     <section
-      className="bg-muted/70 flex min-h-[38rem] items-start justify-center overflow-auto rounded-2xl p-5 lg:p-8"
       aria-label="Browser editing preview"
+      className={`relative h-full min-h-0 min-w-[420px] overflow-hidden ${
+        canvas.appearance === "dark" ? "bg-[#111315]" : "bg-[#f5f5f2]"
+      }`}
+      onDragOver={handleCatalogDragOver}
+      onDrop={handleCatalogDrop}
     >
       <div
-        className={`w-full ${widthClass} border-border bg-white text-slate-950 shadow-xl ${
-          previewMode === "landscape"
-            ? "min-h-[390px] rounded-[2rem]"
-            : "min-h-[680px] rounded-[2.4rem]"
-        }`}
-        dir={direction}
-        style={{ fontSize: `${16 * textScale}px` }}
+        className="h-full w-full focus-visible:ring-2 focus-visible:outline-none focus-visible:ring-inset"
+        data-testid="canvas-viewport"
+        onKeyDown={handleCanvasKeyboard}
+        tabIndex={0}
       >
-        <div
-          className="flex min-h-[inherit] flex-col"
-          style={{
-            gap: document.layout.content.spacing,
-            paddingTop: document.layout.content.padding.top,
-            paddingInlineStart: document.layout.content.padding.start,
-            paddingBottom: document.layout.content.padding.bottom,
-            paddingInlineEnd: document.layout.content.padding.end,
+        <ReactFlow<CanvasDeviceFlowNode>
+          colorMode={canvas.appearance}
+          defaultViewport={{ x: 0, y: 0, zoom: canvas.zoom }}
+          deleteKeyCode={null}
+          edges={navigationEdges}
+          elementsSelectable
+          fitView={canvas.fitMode === "fit"}
+          fitViewOptions={fitViewOptions(0)}
+          maxZoom={STUDIO_CANVAS_ZOOM_BOUNDS.max}
+          minZoom={STUDIO_CANVAS_ZOOM_BOUNDS.min}
+          nodeTypes={CANVAS_NODE_TYPES}
+          nodes={deviceNodes}
+          nodesConnectable={false}
+          nodesDraggable
+          onInit={(flow) => {
+            flowRef.current = flow
+            syncViewport(flow, 0)
           }}
+          onMoveEnd={handleMoveEnd}
+          onNodeDragStop={(_, node) => {
+            const screenId = [...deviceNodeIdByScreenId].find(
+              ([, nodeId]) => nodeId === node.id,
+            )?.[0]
+            const position = safeFramePosition(node.position)
+            if (screenId && position) workspace.setFramePosition(screenId, position)
+          }}
+          onNodesChange={handleNodeChanges}
+          onEdgeClick={(_, edge) => {
+            const componentId = edge.data?.componentId
+            if (typeof componentId === "string") editor.selectComponent(componentId)
+          }}
+          panOnDrag
+          panOnScroll
+          proOptions={{ hideAttribution: true }}
+          zoomOnDoubleClick={false}
         >
-          {document.layout.content.children.map((node) => (
-            <PreviewNode
-              key={`${node.id}:${document.revision}:${currentLocale}`}
-              node={node}
-              document={document}
-              locale={currentLocale}
-              selectedComponentId={selectedComponentId}
-              mockProducts={mockProducts}
-              mockPurchaseState={mockPurchaseState}
-            />
-          ))}
-        </div>
+          <Background
+            color={canvas.appearance === "dark" ? "#34383d" : "#d5d5cf"}
+            gap={24}
+            size={1.25}
+            variant={BackgroundVariant.Dots}
+          />
+
+          {dropNotice ? (
+            <Panel position="top-center">
+              <div
+                aria-live={dropNotice.tone === "danger" ? "assertive" : "polite"}
+                className={`rounded-full border px-3 py-1.5 text-xs font-medium shadow-sm backdrop-blur ${
+                  dropNotice.tone === "danger"
+                    ? "border-destructive/30 bg-background/95 text-destructive"
+                    : "border-primary/30 bg-background/95 text-primary"
+                }`}
+                role={dropNotice.tone === "danger" ? "alert" : "status"}
+              >
+                {dropNotice.message}
+              </div>
+            </Panel>
+          ) : null}
+
+          <Panel position="bottom-center">
+            <CanvasPreviewToolbar />
+          </Panel>
+        </ReactFlow>
       </div>
     </section>
   )

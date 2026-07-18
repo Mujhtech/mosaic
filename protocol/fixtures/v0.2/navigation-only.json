@@ -1,0 +1,269 @@
+{
+  "schemaVersion": "0.2",
+  "id": "navigation-only",
+  "revision": 1,
+  "compatibility": {
+    "requiredCapabilities": [
+      {
+        "name": "layout.scrollContainer",
+        "version": "0.2"
+      },
+      {
+        "name": "layout.stack",
+        "version": "0.2"
+      },
+      {
+        "name": "navigation.screens",
+        "version": "0.2"
+      },
+      {
+        "name": "component.text",
+        "version": "0.2"
+      },
+      {
+        "name": "component.button",
+        "version": "0.2"
+      },
+      {
+        "name": "localization.catalogs",
+        "version": "0.2"
+      },
+      {
+        "name": "action.navigateTo",
+        "version": "0.2"
+      },
+      {
+        "name": "action.navigateBack",
+        "version": "0.2"
+      },
+      {
+        "name": "action.openExternalUrl",
+        "version": "0.2"
+      },
+      {
+        "name": "accessibility.metadata",
+        "version": "0.2"
+      },
+      {
+        "name": "style.colors",
+        "version": "0.2"
+      },
+      {
+        "name": "style.box",
+        "version": "0.2"
+      },
+      {
+        "name": "style.typography",
+        "version": "0.2"
+      }
+    ]
+  },
+  "localization": {
+    "defaultLocale": "en",
+    "fallbackLocale": "en",
+    "locales": {
+      "en": {
+        "direction": "ltr",
+        "strings": {
+          "navigation.start.screen": "Start screen",
+          "navigation.details.screen": "Details screen",
+          "navigation.forward": "View details",
+          "navigation.back": "Back",
+          "navigation.privacy": "Privacy policy"
+        }
+      }
+    }
+  },
+  "assets": [],
+  "products": [],
+  "initialScreenId": "start",
+  "screens": [
+    {
+      "id": "start",
+      "accessibilityLabel": {
+        "default": "Start screen",
+        "localizationKey": "navigation.start.screen"
+      },
+      "layout": {
+        "type": "scrollContainer",
+        "id": "start-scroll",
+        "axis": "vertical",
+        "safeArea": "respect",
+        "showsIndicators": false,
+        "content": {
+          "type": "stack",
+          "id": "start-content",
+          "direction": "vertical",
+          "gap": 0,
+          "padding": {
+            "top": 0,
+            "start": 0,
+            "bottom": 0,
+            "end": 0
+          },
+          "mainAxisDistribution": "start",
+          "crossAxisAlignment": "stretch",
+          "children": [
+            {
+              "type": "button",
+              "id": "view-details",
+              "direction": "horizontal",
+              "gap": 8,
+              "mainAxisDistribution": "center",
+              "crossAxisAlignment": "center",
+              "children": [
+                {
+                  "type": "text",
+                  "id": "view-details-label",
+                  "value": {
+                    "default": "View details",
+                    "localizationKey": "navigation.forward"
+                  },
+                  "typography": {
+                    "style": "label",
+                    "fontSize": 16,
+                    "lineHeightMultiplier": 1.25,
+                    "weight": "semibold",
+                    "color": "text.primary",
+                    "alignment": "center"
+                  },
+                  "accessibility": {
+                    "role": "text"
+                  }
+                }
+              ],
+              "action": {
+                "type": "navigateTo",
+                "screenId": "details"
+              },
+              "accessibility": {
+                "label": {
+                  "default": "View details",
+                  "localizationKey": "navigation.forward"
+                }
+              }
+            },
+            {
+              "type": "button",
+              "id": "privacy-policy",
+              "direction": "horizontal",
+              "gap": 8,
+              "mainAxisDistribution": "center",
+              "crossAxisAlignment": "center",
+              "children": [
+                {
+                  "type": "text",
+                  "id": "privacy-policy-label",
+                  "value": {
+                    "default": "Privacy policy",
+                    "localizationKey": "navigation.privacy"
+                  },
+                  "typography": {
+                    "style": "label",
+                    "fontSize": 16,
+                    "lineHeightMultiplier": 1.25,
+                    "weight": "semibold",
+                    "color": "text.primary",
+                    "alignment": "center"
+                  },
+                  "accessibility": {
+                    "role": "text"
+                  }
+                }
+              ],
+              "action": {
+                "type": "openExternalUrl",
+                "url": "https://example.com/privacy"
+              },
+              "accessibility": {
+                "label": {
+                  "default": "Privacy policy",
+                  "localizationKey": "navigation.privacy"
+                }
+              }
+            }
+          ]
+        }
+      },
+      "presentation": {
+        "type": "screen"
+      }
+    },
+    {
+      "id": "details",
+      "accessibilityLabel": {
+        "default": "Details screen",
+        "localizationKey": "navigation.details.screen"
+      },
+      "layout": {
+        "type": "scrollContainer",
+        "id": "details-scroll",
+        "axis": "vertical",
+        "safeArea": "respect",
+        "showsIndicators": false,
+        "content": {
+          "type": "stack",
+          "id": "details-content",
+          "direction": "vertical",
+          "gap": 0,
+          "padding": {
+            "top": 0,
+            "start": 0,
+            "bottom": 0,
+            "end": 0
+          },
+          "mainAxisDistribution": "start",
+          "crossAxisAlignment": "stretch",
+          "children": [
+            {
+              "type": "button",
+              "id": "details-back",
+              "direction": "horizontal",
+              "gap": 8,
+              "mainAxisDistribution": "center",
+              "crossAxisAlignment": "center",
+              "children": [
+                {
+                  "type": "text",
+                  "id": "details-back-label",
+                  "value": {
+                    "default": "Back",
+                    "localizationKey": "navigation.back"
+                  },
+                  "typography": {
+                    "style": "label",
+                    "fontSize": 16,
+                    "lineHeightMultiplier": 1.25,
+                    "weight": "semibold",
+                    "color": "text.primary",
+                    "alignment": "center"
+                  },
+                  "accessibility": {
+                    "role": "text"
+                  }
+                }
+              ],
+              "action": {
+                "type": "navigateBack"
+              },
+              "accessibility": {
+                "label": {
+                  "default": "Back",
+                  "localizationKey": "navigation.back"
+                }
+              }
+            }
+          ]
+        }
+      },
+      "presentation": {
+        "type": "screen"
+      }
+    }
+  ],
+  "designSystem": {
+    "colors": [],
+    "backgrounds": [],
+    "shadows": []
+  }
+}

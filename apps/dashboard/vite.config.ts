@@ -8,6 +8,7 @@ export default defineConfig({
     port: 3000,
   },
   resolve: {
+    dedupe: ["react", "react-dom"],
     tsconfigPaths: true,
   },
   plugins: [tailwindcss(), tanstackStart(), viteReact()],

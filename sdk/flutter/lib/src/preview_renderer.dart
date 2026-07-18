@@ -12,19 +12,23 @@ import 'renderer.dart';
 final class MosaicPreviewPaywall extends StatefulWidget {
   const MosaicPreviewPaywall({
     required this.client,
-    required this.fallbackDocument,
     required this.fallbackPurchaseProvider,
     required this.onResult,
+    this.fallbackDocument,
+    this.showBundledFallback = true,
     this.imageResolver,
+    this.videoResolver,
     this.onInteraction,
     this.onDiagnostic,
     super.key,
   });
 
   final MosaicPreviewClient client;
-  final MosaicPaywallDocument fallbackDocument;
+  final MosaicPaywallDocument? fallbackDocument;
+  final bool showBundledFallback;
   final MosaicPurchaseProvider fallbackPurchaseProvider;
   final MosaicBundledImageResolver? imageResolver;
+  final MosaicBundledVideoResolver? videoResolver;
   final MosaicPresentationResultCallback onResult;
   final MosaicInteractionCallback? onInteraction;
   final MosaicDiagnosticCallback? onDiagnostic;
@@ -43,8 +47,16 @@ final class _MosaicPreviewPaywallState extends State<MosaicPreviewPaywall> {
     return AnimatedBuilder(
       animation: widget.client,
       builder: (context, _) {
-        final document =
-            widget.client.documentForRendering ?? widget.fallbackDocument;
+        final liveDocument = widget.client.documentForRendering;
+        final document = liveDocument ??
+            (widget.showBundledFallback ? widget.fallbackDocument : null);
+        if (document == null) {
+          return _PreviewConnectionState(
+            status: widget.client.connectionStatus,
+            hasIssue: widget.client.draftIssue != null,
+            onReconnect: widget.client.connect,
+          );
+        }
         final revision = widget.client.revisionForRendering;
         final previewContext = widget.client.previewContextForRendering;
         final commerceRevision = widget.client.mockCommerceRevision;
@@ -84,6 +96,7 @@ final class _MosaicPreviewPaywallState extends State<MosaicPreviewPaywall> {
             purchaseProvider: purchaseProvider,
             requestedLocale: previewContext?.locale,
             imageResolver: widget.imageResolver,
+            videoResolver: widget.videoResolver,
             onResult: widget.onResult,
             onInteraction: widget.onInteraction,
             onDiagnostic: (diagnostic) {
@@ -139,6 +152,78 @@ final class _MosaicPreviewPaywallState extends State<MosaicPreviewPaywall> {
           message: selectorFallback
               ? 'Review the mock product binding in Studio.'
               : 'Inspect the affected component and its preview fallback.',
+        ),
+      ),
+    );
+  }
+}
+
+final class _PreviewConnectionState extends StatelessWidget {
+  const _PreviewConnectionState({
+    required this.status,
+    required this.hasIssue,
+    required this.onReconnect,
+  });
+
+  final MosaicPreviewConnectionStatus status;
+  final bool hasIssue;
+  final Future<void> Function() onReconnect;
+
+  @override
+  Widget build(BuildContext context) {
+    final loading = status != MosaicPreviewConnectionStatus.disconnected;
+    final title = hasIssue
+        ? 'Design unavailable'
+        : switch (status) {
+            MosaicPreviewConnectionStatus.connecting ||
+            MosaicPreviewConnectionStatus.reconnecting =>
+              'Connecting to Studio',
+            MosaicPreviewConnectionStatus.connected =>
+              'Waiting for your design',
+            MosaicPreviewConnectionStatus.disconnected =>
+              "Can't connect to Studio",
+          };
+    final message = hasIssue
+        ? 'Studio sent a design this renderer could not display.'
+        : switch (status) {
+            MosaicPreviewConnectionStatus.connecting ||
+            MosaicPreviewConnectionStatus.reconnecting =>
+              'Keep Studio open while the preview connects.',
+            MosaicPreviewConnectionStatus.connected =>
+              'Connected. Send or edit a design in Studio to preview it here.',
+            MosaicPreviewConnectionStatus.disconnected =>
+              'Open Studio and confirm both apps use the same preview session.',
+          };
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: <Widget>[
+            if (loading)
+              const CircularProgressIndicator()
+            else
+              Icon(
+                Icons.wifi_off,
+                size: 40,
+                color: Theme.of(context).colorScheme.error,
+              ),
+            const SizedBox(height: 14),
+            Text(title, style: Theme.of(context).textTheme.titleMedium),
+            const SizedBox(height: 6),
+            Text(
+              message,
+              textAlign: TextAlign.center,
+              style: Theme.of(context).textTheme.bodyMedium,
+            ),
+            if (!loading) ...<Widget>[
+              const SizedBox(height: 14),
+              FilledButton.tonal(
+                onPressed: onReconnect,
+                child: const Text('Try again'),
+              ),
+            ],
+          ],
         ),
       ),
     );

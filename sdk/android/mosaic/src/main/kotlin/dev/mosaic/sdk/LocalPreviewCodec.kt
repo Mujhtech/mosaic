@@ -7,7 +7,7 @@ import com.google.gson.JsonParseException
 import com.google.gson.JsonParser
 import java.math.BigDecimal
 
-/** Strict JSON reader/writer for exact Local Preview 0.1 or 0.2 sessions. */
+/** Strict JSON reader/writer for exact Local Preview 0.2 sessions. */
 object MosaicLocalPreviewCodec {
     private val messageIdPattern = Regex("^msg_[A-Za-z0-9][A-Za-z0-9_-]*$")
     private val sessionIdPattern = Regex("^session_[A-Za-z0-9][A-Za-z0-9_-]*$")
@@ -205,7 +205,7 @@ object MosaicLocalPreviewCodec {
     }
 
     private fun requireSupportedVersion(version: String) {
-        if (version != MOSAIC_LOCAL_PREVIEW_VERSION && version != MOSAIC_LOCAL_PREVIEW_VERSION_V02) {
+        if (version != MOSAIC_LOCAL_PREVIEW_VERSION) {
             throw MosaicPreviewCodecException("Unsupported local preview protocol version.")
         }
     }

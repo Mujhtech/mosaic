@@ -1,12 +1,13 @@
 import SwiftUI
 
-/// Native SwiftUI host for a running Local Preview 0.1 client.
+/// Native SwiftUI host for a running Local Preview client.
 @MainActor
 public struct MosaicLocalPreviewScreen: View {
   @ObservedObject private var client: MosaicLocalPreviewClient
 
-  private let fallbackDocument: MosaicPaywallDocument
-  private let fallbackPurchaseProvider: any MosaicPurchaseProvider
+  private let fallbackDocument: MosaicPaywallDocument?
+  private let fallbackPurchaseProvider: (any MosaicPurchaseProvider)?
+  private let showsBundledFallback: Bool
   private let imageResolver: MosaicImageResolver
   private let onInteraction: @MainActor (MosaicInteractionOutcome) -> Void
   private let onResult: @MainActor (MosaicPresentationResult) -> Void
@@ -15,6 +16,7 @@ public struct MosaicLocalPreviewScreen: View {
     client: MosaicLocalPreviewClient,
     fallbackDocument: MosaicPaywallDocument,
     fallbackPurchaseProvider: any MosaicPurchaseProvider,
+    showsBundledFallback: Bool = true,
     imageResolver: MosaicImageResolver = .missing,
     onInteraction: @escaping @MainActor (MosaicInteractionOutcome) -> Void = { _ in },
     onResult: @escaping @MainActor (MosaicPresentationResult) -> Void = { _ in }
@@ -22,6 +24,22 @@ public struct MosaicLocalPreviewScreen: View {
     self.client = client
     self.fallbackDocument = fallbackDocument
     self.fallbackPurchaseProvider = fallbackPurchaseProvider
+    self.showsBundledFallback = showsBundledFallback
+    self.imageResolver = imageResolver
+    self.onInteraction = onInteraction
+    self.onResult = onResult
+  }
+
+  public init(
+    client: MosaicLocalPreviewClient,
+    imageResolver: MosaicImageResolver = .missing,
+    onInteraction: @escaping @MainActor (MosaicInteractionOutcome) -> Void = { _ in },
+    onResult: @escaping @MainActor (MosaicPresentationResult) -> Void = { _ in }
+  ) {
+    self.client = client
+    fallbackDocument = nil
+    fallbackPurchaseProvider = nil
+    showsBundledFallback = false
     self.imageResolver = imageResolver
     self.onInteraction = onInteraction
     self.onResult = onResult
@@ -65,7 +83,7 @@ public struct MosaicLocalPreviewScreen: View {
         await Task.yield()
         await client.markRevisionLive(draft.revision)
       }
-    } else {
+    } else if showsBundledFallback, let fallbackDocument, let fallbackPurchaseProvider {
       MosaicPaywall(
         document: fallbackDocument,
         requestedLocale: fallbackDocument.localization.defaultLocale,
@@ -83,6 +101,12 @@ public struct MosaicLocalPreviewScreen: View {
           .padding(.top, 8)
           .accessibilityLabel("Showing the bundled fallback paywall")
       }
+    } else {
+      MosaicPreviewConnectionState(
+        status: client.connectionStatus,
+        hasIssue: client.draftIssue != nil,
+        onReconnect: { client.connect() }
+      )
     }
   }
 
@@ -104,6 +128,66 @@ public struct MosaicLocalPreviewScreen: View {
     case ..<2.5: .accessibilityExtraLarge
     case ..<2.75: .accessibilityExtraExtraLarge
     default: .accessibilityExtraExtraExtraLarge
+    }
+  }
+}
+
+private struct MosaicPreviewConnectionState: View {
+  let status: MosaicPreviewConnectionStatus
+  let hasIssue: Bool
+  let onReconnect: @MainActor () -> Void
+
+  var body: some View {
+    VStack(spacing: 14) {
+      if isLoading {
+        ProgressView()
+          .controlSize(.large)
+        Text(title)
+          .font(.headline)
+        Text(message)
+          .foregroundStyle(.secondary)
+          .multilineTextAlignment(.center)
+      } else {
+        Image(systemName: "wifi.exclamationmark")
+          .font(.system(size: 36))
+          .foregroundStyle(.orange)
+          .accessibilityHidden(true)
+        Text(title)
+          .font(.headline)
+        Text(message)
+          .foregroundStyle(.secondary)
+          .multilineTextAlignment(.center)
+        Button("Try again", action: onReconnect)
+          .buttonStyle(.borderedProminent)
+      }
+    }
+    .frame(maxWidth: .infinity, maxHeight: .infinity)
+    .padding(24)
+    .accessibilityElement(children: .contain)
+  }
+
+  private var isLoading: Bool {
+    switch status {
+    case .connecting, .reconnecting, .connected: true
+    case .disconnected: false
+    }
+  }
+
+  private var title: String {
+    if hasIssue { return "Design unavailable" }
+    switch status {
+    case .connecting, .reconnecting: return "Connecting to Studio"
+    case .connected: return "Waiting for your design"
+    case .disconnected: return "Can't connect to Studio"
+    }
+  }
+
+  private var message: String {
+    if hasIssue { return "Studio sent a design this renderer could not display." }
+    switch status {
+    case .connecting, .reconnecting: return "Keep Studio open while the preview connects."
+    case .connected: return "Connected. Send or edit a design in Studio to preview it here."
+    case .disconnected: return "Open Studio and confirm both apps use the same preview session."
     }
   }
 }

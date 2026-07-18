@@ -10,7 +10,10 @@ final class MosaicProduct {
   /// Opaque provider product identifier requested by the protocol document.
   final String id;
   final String title;
-  final String localizedPrice;
+
+  /// Provider-localized display price, or `null` when the provider cannot
+  /// supply one. Price-dependent Product Cards are unavailable in that case.
+  final String? localizedPrice;
 
   /// Runtime-only localized period, such as "month" or "year".
   final String? localizedPeriod;

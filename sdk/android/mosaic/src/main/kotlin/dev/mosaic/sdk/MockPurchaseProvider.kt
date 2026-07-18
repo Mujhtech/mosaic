@@ -107,6 +107,11 @@ class MockMosaicPurchaseProvider(
                 localizedPrice = "$79.99",
                 subscriptionPeriod = "year",
             ),
+            MosaicProduct(
+                id = "mosaic_pro_lifetime",
+                title = "Mosaic Pro Lifetime",
+                localizedPrice = "$199.99",
+            ),
         )
     }
 }

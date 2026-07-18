@@ -26,6 +26,7 @@ class FakeWebSocket {
   readonly url: string
   readonly requestedProtocol: string | string[] | undefined
   readonly sent: unknown[] = []
+  protocol = ""
   readyState = FakeWebSocket.CONNECTING
   private readonly listeners = new Map<string, Set<SocketListener>>()
 
@@ -45,7 +46,12 @@ class FakeWebSocket {
     this.sent.push(JSON.parse(value))
   }
 
-  open() {
+  open(protocol?: string) {
+    this.protocol =
+      protocol ??
+      (Array.isArray(this.requestedProtocol)
+        ? (this.requestedProtocol[0] ?? "")
+        : (this.requestedProtocol ?? ""))
     this.readyState = FakeWebSocket.OPEN
     this.dispatch("open", {})
   }
@@ -73,9 +79,14 @@ class FakeWebSocket {
 const SESSION_ID = "session_local_01"
 const EDITABLE_DOCUMENT_ID = "document_phase2_test"
 
-function envelope(type: string, payload: object, sequence: number) {
+function envelope(
+  type: string,
+  payload: object,
+  sequence: number,
+  previewProtocolVersion: "0.1" | "0.2" = "0.2",
+) {
   return {
-    previewProtocolVersion: "0.1",
+    previewProtocolVersion,
     messageId: `msg_test_${sequence}`,
     sessionId: SESSION_ID,
     sentAt: "2026-07-17T08:00:00Z",
@@ -84,7 +95,11 @@ function envelope(type: string, payload: object, sequence: number) {
   }
 }
 
-function connected(clientId: string, sequence: number) {
+function connected(
+  clientId: string,
+  sequence: number,
+  previewProtocolVersion: "0.1" | "0.2" = "0.2",
+) {
   return envelope(
     "previewClientConnected",
     {
@@ -108,6 +123,22 @@ function connected(clientId: string, sequence: number) {
       },
     },
     sequence,
+    previewProtocolVersion,
+  )
+}
+
+function legacyCapability(clientId: string, sequence: number) {
+  return envelope(
+    "capabilityReport",
+    {
+      clientId,
+      supportedSchemaVersions: ["0.1"],
+      supportedCapabilities: [{ name: "component.text", version: "0.1" }],
+      previewCapabilities: [{ name: "preview.liveUpdate", version: "0.1" }],
+      limits: { maxDocumentBytes: 1_048_576 },
+    },
+    sequence,
+    "0.1",
   )
 }
 
@@ -121,14 +152,14 @@ function capability(
     "capabilityReport",
     {
       clientId,
-      supportedSchemaVersions: ["0.1"],
+      supportedSchemaVersions: ["0.2"],
       supportedCapabilities: document.compatibility.requiredCapabilities,
       previewCapabilities: [
-        { name: "preview.liveUpdate", version: "0.1" },
-        { name: "preview.mockCommerce", version: "0.1" },
-        { name: "preview.localeOverride", version: "0.1" },
-        { name: "preview.textScale", version: "0.1" },
-        { name: "preview.diagnostics", version: "0.1" },
+        { name: "preview.liveUpdate", version: "0.2" },
+        { name: "preview.mockCommerce", version: "0.2" },
+        { name: "preview.localeOverride", version: "0.2" },
+        { name: "preview.textScale", version: "0.2" },
+        { name: "preview.diagnostics", version: "0.2" },
       ],
       limits: { maxDocumentBytes },
     },
@@ -185,8 +216,17 @@ function warning(
   )
 }
 
-function heartbeat(clientId: string, sequence: number) {
-  return envelope("previewHeartbeat", { clientId, kind: "ping", sequence }, sequence)
+function heartbeat(
+  clientId: string,
+  sequence: number,
+  previewProtocolVersion: "0.1" | "0.2" = "0.2",
+) {
+  return envelope(
+    "previewHeartbeat",
+    { clientId, kind: "ping", sequence },
+    sequence,
+    previewProtocolVersion,
+  )
 }
 
 function client(clientId: string): PreviewClient {
@@ -198,7 +238,7 @@ function client(clientId: string): PreviewClient {
     renderer: { id: "mosaic.flutter", version: "0.1.0" },
     application: { id: "example.app", displayName: "Example", version: "0.1.0" },
     device: { displayName: "Device", systemName: "OS", systemVersion: "1" },
-    supportedSchemaVersions: ["0.1"],
+    supportedSchemaVersions: ["0.2"],
     supportedCapabilities: [],
     previewCapabilities: [],
     lastSeenAt: "2026-07-17T08:00:00Z",
@@ -318,7 +358,10 @@ describe("preview connection", () => {
     const firstSocket = FakeWebSocket.instances[0]
     expect(firstSocket).toBeDefined()
     expect(firstSocket?.url).toContain(`sessionId=${SESSION_ID}`)
-    expect(firstSocket?.requestedProtocol).toBe("mosaic.local-preview.v0.1")
+    expect(firstSocket?.requestedProtocol).toEqual([
+      "mosaic.local-preview.v0.2",
+      "mosaic.local-preview.v0.1",
+    ])
 
     await act(async () => firstSocket?.open())
     expect(firstSocket?.sent).toEqual([])
@@ -443,6 +486,50 @@ describe("preview connection", () => {
     expect(socket?.sent).toEqual([])
   })
 
+  it("negotiates 0.1 with an older endpoint and withholds the 0.2 draft", async () => {
+    const document = cloneValue(EDITOR_TEMPLATES[0]!.document)
+    const observed: { current?: ReturnType<typeof usePreviewConnection> } = {}
+
+    function Harness() {
+      observed.current = usePreviewConnection({
+        document,
+        editableDocumentId: EDITABLE_DOCUMENT_ID,
+        locale: "en",
+        textScale: 1,
+        isValid: true,
+        mockPurchaseState: "productAvailable",
+        mockProducts: DEFAULT_MOCK_PRODUCTS,
+      })
+      return null
+    }
+
+    render(<Harness />)
+    const socket = FakeWebSocket.instances[0]
+    await act(async () => socket?.open("mosaic.local-preview.v0.1"))
+    await act(async () => {
+      socket?.receive(connected("client_legacy", 1, "0.1"))
+      socket?.receive(legacyCapability("client_legacy", 2))
+      await Promise.resolve()
+    })
+
+    expect(socket?.sent).toEqual([])
+    expect(observed.current?.diagnostics).toContainEqual(
+      expect.objectContaining({ code: "preview.incompatibleSchemaVersion" }),
+    )
+
+    await act(async () => {
+      socket?.receive(heartbeat("client_legacy", 3, "0.1"))
+      await Promise.resolve()
+    })
+
+    expect(socket?.sent).toContainEqual(
+      expect.objectContaining({
+        previewProtocolVersion: "0.1",
+        type: "previewHeartbeat",
+      }),
+    )
+  })
+
   it("does not broadcast a draft above a connected client's reported byte limit", async () => {
     const document = cloneValue(EDITOR_TEMPLATES[0]!.document)
     for (let index = 0; index < 14; index += 1) {
@@ -480,9 +567,10 @@ describe("preview connection", () => {
 
   it("answers a heartbeat while the current draft is invalid", async () => {
     const invalidDocument = cloneValue(EDITOR_TEMPLATES[0]!.document)
-    invalidDocument.layout.content.children = invalidDocument.layout.content.children.filter(
-      (node) => node.type !== "purchaseButton",
-    )
+    invalidDocument.screens[0]!.layout.content.children =
+      invalidDocument.screens[0]!.layout.content.children.filter(
+        (node) => node.type !== "button" || node.action.type !== "purchase",
+      )
 
     function Harness() {
       usePreviewConnection({

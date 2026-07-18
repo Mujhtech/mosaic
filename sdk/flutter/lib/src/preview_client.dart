@@ -9,11 +9,10 @@ import 'preview_protocol.dart';
 import 'preview_transport.dart';
 import 'protocol.dart';
 
-const String mosaicLocalPreviewWebSocketProtocol = 'mosaic.local-preview.v0.1';
+const String mosaicLocalPreviewWebSocketProtocol = 'mosaic.local-preview.v0.2';
 const String mosaicLocalPreviewV02WebSocketProtocol =
-    'mosaic.local-preview.v0.2';
+    mosaicLocalPreviewWebSocketProtocol;
 const List<String> mosaicLocalPreviewWebSocketProtocols = <String>[
-  mosaicLocalPreviewV02WebSocketProtocol,
   mosaicLocalPreviewWebSocketProtocol,
 ];
 
@@ -136,7 +135,7 @@ final class MosaicPreviewClientConfiguration {
       throw ArgumentError.value(
         value,
         'sessionId',
-        'Must satisfy the Local Preview 0.1 session identifier contract.',
+        'Must satisfy the Local Preview session identifier contract.',
       );
     }
     return value;
@@ -421,7 +420,6 @@ final class MosaicPreviewClient extends ChangeNotifier {
       final reportsNegotiation = socket is MosaicNegotiatedPreviewSocket;
       final selected = reportsNegotiation ? socket.selectedProtocol : null;
       if (reportsNegotiation &&
-          selected != mosaicLocalPreviewV02WebSocketProtocol &&
           selected != mosaicLocalPreviewWebSocketProtocol) {
         _socket = null;
         _shouldReconnect = false;
@@ -433,13 +431,7 @@ final class MosaicPreviewClient extends ChangeNotifier {
         );
         return;
       }
-      _negotiatedPreviewVersion = switch (selected) {
-        mosaicLocalPreviewV02WebSocketProtocol =>
-          mosaicLocalPreviewV02ProtocolVersion,
-        mosaicLocalPreviewWebSocketProtocol =>
-          mosaicLocalPreviewProtocolVersion,
-        _ => mosaicLocalPreviewProtocolVersion,
-      };
+      _negotiatedPreviewVersion = mosaicLocalPreviewProtocolVersion;
       _lastInboundAt = _clock();
       _lastTrafficAt = _lastInboundAt;
       _reconnectAttempt = 0;

@@ -7,8 +7,10 @@ import {
   createHeartbeatPongMessage,
   createMockCommerceStateChangedMessage,
   parsePreviewMessage,
-  PREVIEW_WEBSOCKET_SUBPROTOCOL,
+  previewProtocolVersionForSubprotocol,
+  PREVIEW_WEBSOCKET_SUBPROTOCOLS,
   recordValue,
+  type PreviewProtocolVersion,
 } from "@/features/paywall-editor/schema/preview-message"
 import type {
   MockProductDefinition,
@@ -245,6 +247,7 @@ export function usePreviewConnection(options: {
   )
   const reconnectAttemptRef = useRef(0)
   const reconnectTimerRef = useRef<number | null>(null)
+  const negotiatedProtocolVersionRef = useRef<PreviewProtocolVersion | null>(null)
   const previewSequenceRef = useRef(options.initialRevisionSequence ?? 0)
   const lastSentFingerprintRef = useRef("")
   const latestDocumentRef = useRef(options.document)
@@ -310,6 +313,20 @@ export function usePreviewConnection(options: {
     (message: unknown) => {
       const socket = socketRef.current
       if (!socket || socket.readyState !== WebSocket.OPEN) return false
+      const negotiatedVersion = negotiatedProtocolVersionRef.current
+      const candidate = recordValue(message)
+      if (!negotiatedVersion || candidate?.previewProtocolVersion !== negotiatedVersion) {
+        addDiagnostic({
+          id: "studio:outgoing-contract:negotiated-version",
+          severity: "error",
+          code: "preview.negotiatedVersionMismatch",
+          message:
+            "Studio withheld an envelope because its version did not match the negotiated Local Preview version.",
+          recovery: "Reconnect the preview client and retry the update.",
+          createdAt: new Date().toISOString(),
+        })
+        return false
+      }
       const baseValidation = validatePreviewMessage(message)
       const reportContractFailure = (
         diagnostic: (typeof baseValidation.diagnostics)[number] | undefined,
@@ -396,6 +413,17 @@ export function usePreviewConnection(options: {
       ) {
         return false
       }
+      if (negotiatedProtocolVersionRef.current !== document.schemaVersion) {
+        addDiagnostic({
+          id: `studio:${currentEditableDocumentId}:incompatible-schema-version`,
+          severity: "error",
+          code: "preview.incompatibleSchemaVersion",
+          message: `This connection negotiated Local Preview ${negotiatedProtocolVersionRef.current ?? "unknown"}, so Studio withheld the Protocol ${document.schemaVersion} draft.`,
+          recovery: "Update the preview relay or client to Local Preview 0.2, then reconnect.",
+          createdAt: new Date().toISOString(),
+        })
+        return false
+      }
       const documentBytes = serializedDocumentBytes(document)
       const limitingClient = [...clientDocumentLimitsRef.current.entries()].find(
         ([clientId, limit]) =>
@@ -456,6 +484,7 @@ export function usePreviewConnection(options: {
       if (!document || !currentEditableDocumentId || capabilityClientIdsRef.current.size === 0) {
         return false
       }
+      if (negotiatedProtocolVersionRef.current !== document.schemaVersion) return false
       const state = mockCommerceState(
         latestMockPurchaseStateRef.current,
         latestMockProductsRef.current,
@@ -489,11 +518,28 @@ export function usePreviewConnection(options: {
     const connectionUrl = new URL(endpoint)
     connectionUrl.searchParams.set("role", "studio")
     connectionUrl.searchParams.set("sessionId", sessionId)
-    const socket = new WebSocket(connectionUrl, PREVIEW_WEBSOCKET_SUBPROTOCOL)
+    negotiatedProtocolVersionRef.current = null
+    const socket = new WebSocket(connectionUrl, [...PREVIEW_WEBSOCKET_SUBPROTOCOLS])
     socketRef.current = socket
 
     socket.addEventListener("open", () => {
       if (disposed) return
+      const negotiatedVersion = previewProtocolVersionForSubprotocol(socket.protocol)
+      if (!negotiatedVersion) {
+        addDiagnostic({
+          id: "studio:connection:no-mutual-version",
+          severity: "error",
+          code: "preview.noMutualVersion",
+          message:
+            "Studio and the local preview endpoint did not negotiate a supported Local Preview version.",
+          recovery: "Update the local preview relay or client, then reconnect.",
+          createdAt: new Date().toISOString(),
+        })
+        setStatus("disconnected")
+        socket.close(1002, "No supported Local Preview subprotocol was negotiated")
+        return
+      }
+      negotiatedProtocolVersionRef.current = negotiatedVersion
       reconnectAttemptRef.current = 0
       lastSentFingerprintRef.current = ""
       lastCommerceFingerprintRef.current = ""
@@ -502,13 +548,14 @@ export function usePreviewConnection(options: {
 
     socket.addEventListener("message", (event) => {
       if (disposed || typeof event.data !== "string") return
-      const message = parsePreviewMessage(event.data)
+      const negotiatedVersion = negotiatedProtocolVersionRef.current
+      const message = parsePreviewMessage(event.data, negotiatedVersion ?? undefined)
       if (!message) {
         addDiagnostic({
           id: `studio:invalid-message:${Date.now()}`,
           severity: "error",
           code: "preview.invalidMessage",
-          message: "Studio ignored a preview message that did not match Protocol 0.1.",
+          message: `Studio ignored a preview message that did not match Local Preview ${negotiatedVersion ?? "the negotiated version"}.`,
           recovery: "Update the local preview server or client, then reconnect.",
           createdAt: new Date().toISOString(),
         })
@@ -599,6 +646,7 @@ export function usePreviewConnection(options: {
               sessionId: message.sessionId,
               clientId,
               sequence,
+              protocolVersion: message.previewProtocolVersion,
             }),
           )
         }
@@ -726,6 +774,7 @@ export function usePreviewConnection(options: {
     socket.addEventListener("close", () => {
       if (disposed) return
       socketRef.current = null
+      negotiatedProtocolVersionRef.current = null
       connectedClientIdsRef.current.clear()
       capabilityClientIdsRef.current.clear()
       clientDocumentLimitsRef.current.clear()

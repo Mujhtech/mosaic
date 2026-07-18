@@ -1,5 +1,37 @@
 # Changelog
 
+## 0.1.0-dev.4
+
+- Add strict Protocol 0.2 decoding while preserving the approved Protocol 0.1
+  path without implicit migration.
+- Render Stack, Carousel, Switch, Countdown, expanded styling and visibility,
+  and inherited Product Card Default/Selected states with native SwiftUI.
+- Conform to Protocol 0.2 RC2 multi-screen navigation, semantic Icon, unified
+  container Button, async progress content, and safe external HTTPS actions;
+  retain the separate approved Protocol 0.1 reader and renderer behavior.
+- Conform to Protocol 0.2 RC3 authored Product Cards and Product Badges,
+  card-identity selection, localized safe product templates, unavailable-card
+  fallback, recursive selected styles, RTL overlay anchors, and merged native
+  selectable accessibility semantics.
+- Conform to Protocol 0.2 RC4 document design tokens, colour/gradient/media
+  backgrounds, one box shadow, bundled and HTTPS image/video assets, uniform
+  two-axis sizing, and explicit Screen/Sheet presentation.
+- Render decorative video with muted autoplaying `AVPlayerLooper`, native
+  poster/colour fallback and diagnostics; present Sheet destinations with
+  SwiftUI while retaining the most recent Screen and shared navigation state.
+- Add exact RC4 capability reporting, atomic invalid-token/media rejection,
+  unbounded-Fill fallback, fixed clipping, physical gradient geometry, and
+  Simulator coverage for native sheets and horizontal Product Cards.
+- Preserve component runtime state across forward/back navigation, reset the
+  navigation history for accepted revisions, merge button descendants into one
+  accessible target, and diagnose root-back no-ops and failed external opens.
+- Add Local Preview 0.2 negotiation, capability reporting, draft gating, mock
+  commerce, runtime-state reset, and structured last-accepted-draft recovery.
+- Add Protocol 0.2 fixture, interaction, accessibility, RTL, large-text,
+  SwiftUI consumer, and simulator golden coverage.
+- Package the current Protocol 0.2 fallback so disconnected previews exercise
+  horizontal Product Selector layout and the Phase 2.5 component set.
+
 ## 0.1.0-dev.3
 
 - Add the platform-neutral Local Preview 0.1 WebSocket codec, SwiftUI client,

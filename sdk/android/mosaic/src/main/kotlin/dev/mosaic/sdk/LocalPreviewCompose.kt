@@ -6,7 +6,11 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.height
+import androidx.compose.material3.Button
 import androidx.compose.material3.Card
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -17,6 +21,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.remember
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
@@ -27,6 +32,7 @@ fun MosaicLocalPreviewScreen(
     onResult: (MosaicPresentationResult) -> Unit,
     modifier: Modifier = Modifier,
     imageResolver: MosaicBundledImageResolver = MosaicBundledImageResolver.None,
+    videoResolver: MosaicBundledVideoResolver = MosaicBundledVideoResolver.None,
     diagnostics: MosaicDiagnosticSink = MosaicDiagnosticSink.None,
     onInteraction: (MosaicInteractionOutcome) -> Unit = {},
 ) {
@@ -44,6 +50,7 @@ fun MosaicLocalPreviewScreen(
                 client = client,
                 onResult = onResult,
                 imageResolver = imageResolver,
+                videoResolver = videoResolver,
                 diagnostics = diagnostics,
                 onInteraction = onInteraction,
                 modifier = Modifier.fillMaxSize(),
@@ -58,6 +65,7 @@ fun MosaicLocalPreviewPaywall(
     onResult: (MosaicPresentationResult) -> Unit,
     modifier: Modifier = Modifier,
     imageResolver: MosaicBundledImageResolver = MosaicBundledImageResolver.None,
+    videoResolver: MosaicBundledVideoResolver = MosaicBundledVideoResolver.None,
     diagnostics: MosaicDiagnosticSink = MosaicDiagnosticSink.None,
     onInteraction: (MosaicInteractionOutcome) -> Unit = {},
 ) {
@@ -68,15 +76,18 @@ fun MosaicLocalPreviewPaywall(
     val state by client.state.collectAsState()
     val render = state.render
     if (render == null) {
-        LaunchedEffect(Unit) {
-            onResult(MosaicPresentationResult.ConfigurationUnavailable("preview.configurationUnavailable"))
-        }
-        Box(modifier = modifier.testTag("mosaic-preview-configuration-unavailable"))
+        MosaicPreviewConnectionState(
+            status = state.connectionStatus,
+            onReconnect = client::start,
+            modifier = modifier.testTag("mosaic-preview-configuration-unavailable"),
+        )
         return
     }
 
     val reportingResolver = remember(render.document, imageResolver, client) {
-        val assetIdsByKey = render.document.assets.groupBy(MosaicImageAsset::sourceKey)
+        val assetIdsByKey = render.document.assets.filterIsInstance<MosaicImageAsset>()
+            .filter { it.source is MosaicAssetSource.Bundled }
+            .groupBy(MosaicImageAsset::sourceKey)
             .mapValues { (_, assets) -> assets.map(MosaicImageAsset::id).toSet() }
         val componentIdsByAsset = render.document.layout.content.walkDepthFirst()
             .filterIsInstance<MosaicImageComponent>()
@@ -109,11 +120,52 @@ fun MosaicLocalPreviewPaywall(
             requestedLocale = render.locale,
             previewTextScale = render.textScale,
             imageResolver = reportingResolver,
+            videoResolver = videoResolver,
             diagnostics = diagnostics,
             onInteraction = onInteraction,
             onResult = onResult,
             modifier = modifier,
         )
+    }
+}
+
+@Composable
+private fun MosaicPreviewConnectionState(
+    status: MosaicPreviewConnectionStatus,
+    onReconnect: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val isLoading = status != MosaicPreviewConnectionStatus.Disconnected
+    val title = when (status) {
+        MosaicPreviewConnectionStatus.Connected -> "Waiting for your design"
+        MosaicPreviewConnectionStatus.Connecting,
+        is MosaicPreviewConnectionStatus.Reconnecting,
+        -> "Connecting to Studio"
+        MosaicPreviewConnectionStatus.Disconnected -> "Can't connect to Studio"
+    }
+    val message = when (status) {
+        MosaicPreviewConnectionStatus.Connected ->
+            "Connected. Send or edit a design in Studio to preview it here."
+        MosaicPreviewConnectionStatus.Connecting,
+        is MosaicPreviewConnectionStatus.Reconnecting,
+        -> "Keep Studio open while the preview connects."
+        MosaicPreviewConnectionStatus.Disconnected ->
+            "Open Studio and confirm both apps use the same preview session."
+    }
+    Column(
+        modifier = modifier.padding(24.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center,
+    ) {
+        if (isLoading) CircularProgressIndicator()
+        Spacer(Modifier.height(14.dp))
+        Text(title, style = MaterialTheme.typography.titleMedium)
+        Spacer(Modifier.height(6.dp))
+        Text(message, style = MaterialTheme.typography.bodyMedium)
+        if (!isLoading) {
+            Spacer(Modifier.height(14.dp))
+            Button(onClick = onReconnect) { Text("Try again") }
+        }
     }
 }
 
@@ -164,7 +216,7 @@ fun MosaicLocalPreviewStatusPanel(
             )
             Text(
                 if (render?.revision == null) {
-                    "Bundled fallback"
+                    "Waiting for design"
                 } else {
                     "Live revision ${render.revision.sequence} · ${render.revision.revisionId}"
                 },

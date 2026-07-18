@@ -1,7 +1,7 @@
 # Mosaic Flutter Phase 2 local preview
 
 This native Flutter example connects to the account-free local Studio relay,
-reports its Protocol 0.1 and Local Preview 0.1 capabilities, and rerenders an
+reports its Protocol 0.2 and Local Preview 0.2 capabilities, and rerenders an
 accepted draft without rebuilding the app. When Studio is disconnected or a
 revision fails, the last accepted document remains visible; before the first
 accepted revision, the generated canonical bundle is the safe fallback.
@@ -14,6 +14,14 @@ The status panel visibly distinguishes:
 - active mock purchase and entitlement state;
 - invalid documents, unsupported components, and render failures; and
 - the latest safe interaction or connection diagnostic.
+
+The generated RC4 fallback demonstrates a native Screen→Sheet flow, unified
+Text/Icon Buttons, forward/back history, purchase/restore busy content, and an
+external HTTPS action plus three structurally different authored Product
+Cards, nested/overlay Product Badges, localized product templates, logical RTL
+anchors, design tokens, gradients, media fallbacks, shadows, and two-axis
+sizing. External links leave the native paywall presented and open through the
+platform browser rather than an embedded WebView.
 
 ## Run with local Studio
 
@@ -79,10 +87,16 @@ flutter build bundle --no-pub
 ```
 
 The sync command copies
-`protocol/fixtures/v0.1/complete-paywall.json` byte-for-byte into ignored
+`protocol/fixtures/v0.2/complete-paywall.json` byte-for-byte into ignored
 `assets/generated/` output. It is never maintained as a second canonical
-fixture. Local Preview contract tests consume the repository fixtures directly
-from `protocol/fixtures/local-preview/v0.1/`.
+fixture. The current fallback therefore exercises the same Screens, Button
+children, Icons, navigation, external URL handoff, horizontal Product Selector,
+authored Product Cards/Product Badges, safe product templates, and Protocol 0.2
+components as Studio. Local Preview contract tests consume the repository
+fixtures directly from `protocol/fixtures/local-preview/v0.2/`. The playground
+deliberately leaves bundled image/video resolvers empty so their declared
+native fallback and safe diagnostics remain visible; a host app maps those
+logical keys to its own `AssetImage` and Flutter asset path.
 
 `MosaicPreviewPaywall` reports terminal results but does not dismiss host UI.
 This playground intentionally keeps the native renderer visible so Studio

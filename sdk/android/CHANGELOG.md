@@ -1,5 +1,25 @@
 # Changelog
 
+## 0.1.0-dev.4
+
+- Complete the Protocol 0.2 RC4 Android contract with strict design-system
+  token resolution, gradients, media backgrounds, shadows, uniform two-axis
+  sizing/clipping, exact capability reporting, and atomic rejection fallback.
+- Present authored sheets with native Material 3 modal behavior while retaining
+  the most recent screen underneath, and render decorative video with a muted,
+  looping, control-free Media3 player plus poster/fallback handling.
+- Add strict Protocol 0.2 decoding while preserving the approved Protocol 0.1 path without
+  implicit migration.
+- Render Stack, Carousel, Switch, Countdown, expanded styling and visibility, and Protocol 0.2
+  RC3 authored Product Cards/Product Badges with inherited Default/Selected box states, safe
+  name/price templates, logical RTL overlays, and native radio semantics in Jetpack Compose.
+- Add Local Preview 0.2 negotiation, capability reporting, draft gating, mock commerce,
+  runtime-state reset, and structured last-accepted-draft recovery.
+- Package the current Protocol 0.2 fallback so disconnected previews retain the horizontal
+  Product Selector layout used by Studio.
+- Add Protocol 0.2 fixture, interaction, accessibility, RTL, large-text, Compose instrumentation,
+  and pixel-baseline coverage.
+
 ## 0.1.0-dev.3
 
 - Add a strict, platform-neutral Local Preview 0.1 message codec with canonical fixture

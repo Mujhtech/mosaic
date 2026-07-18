@@ -7,11 +7,14 @@ import androidx.compose.runtime.setValue
 data class MosaicAvailableProduct(
     val reference: MosaicProductReference,
     val storeProduct: MosaicProduct,
+    val productCardId: String = reference.id,
+    val card: MosaicProductCardComponent? = null,
 )
 
 data class MosaicProductSelectorState(
     val options: List<MosaicAvailableProduct>,
     val selectedProductReferenceId: String?,
+    val selectedProductCardId: String? = selectedProductReferenceId,
     val isLoading: Boolean,
 )
 
@@ -22,7 +25,7 @@ class MosaicPaywallState(
     private val diagnostics: MosaicDiagnosticSink = MosaicDiagnosticSink.None,
     private val clock: () -> Long = System::currentTimeMillis,
 ) {
-    private val allNodes = document.layout.content.walkDepthFirst().toList()
+    private val allNodes = document.walkNodesDepthFirst().toList()
     private val selectors = allNodes
         .filterIsInstance<MosaicProductSelectorComponent>()
         .associateBy(MosaicProductSelectorComponent::id)
@@ -36,7 +39,12 @@ class MosaicPaywallState(
 
     var selectorStates: Map<String, MosaicProductSelectorState> by mutableStateOf(
         selectors.keys.associateWith {
-            MosaicProductSelectorState(emptyList(), selectedProductReferenceId = null, isLoading = true)
+            MosaicProductSelectorState(
+                emptyList(),
+                selectedProductReferenceId = null,
+                selectedProductCardId = null,
+                isLoading = true,
+            )
         },
     )
         private set
@@ -56,6 +64,21 @@ class MosaicPaywallState(
         carousels.mapValues { (_, component) -> component.initialPageIndex },
     )
         private set
+
+    var currentScreenId: String by mutableStateOf(document.initialScreenId)
+        private set
+
+    var navigationHistory: List<String> by mutableStateOf(emptyList())
+        private set
+
+    val currentScreen: MosaicPaywallScreen
+        get() = document.screens.first { it.id == currentScreenId }
+
+    val backgroundScreen: MosaicPaywallScreen
+        get() = navigationHistory.asReversed()
+            .mapNotNull { id -> document.screens.firstOrNull { it.id == id } }
+            .firstOrNull { it.presentation == MosaicScreenPresentation.SCREEN }
+            ?: document.screens.first { it.id == document.initialScreenId }
 
     fun switchValue(switchId: String): Boolean = switchValues[switchId] ?: false
 
@@ -78,12 +101,47 @@ class MosaicPaywallState(
         is MosaicVisibility.SwitchValue -> switchValue(visibility.switchId) == visibility.equals
     }
 
-    fun isNodeVisible(nodeId: String): Boolean =
-        document.layout.content.findVisibility(nodeId, ancestorsVisible = true, ::isVisible) ?: false
+    fun isNodeVisible(nodeId: String): Boolean = document.screens.any { screen ->
+        screen.layout.content.findVisibility(nodeId, ancestorsVisible = true, ::isVisible) == true
+    }
+
+    fun navigateTo(screenId: String): Boolean {
+        if (screenId == currentScreenId || document.screens.none { it.id == screenId }) return false
+        navigationHistory = navigationHistory + currentScreenId
+        currentScreenId = screenId
+        return true
+    }
+
+    fun navigateBack(): Boolean {
+        val target = navigationHistory.lastOrNull()
+        if (target == null) {
+            diagnostics.record(
+                MosaicDiagnostic(
+                    MosaicDiagnosticCode.NAVIGATION_BACK_UNAVAILABLE,
+                    "The paywall is already at the start of its screen history.",
+                ),
+            )
+            return false
+        }
+        navigationHistory = navigationHistory.dropLast(1)
+        currentScreenId = target
+        return true
+    }
+
+    fun recordExternalUrlResult(opened: Boolean) {
+        if (opened) return
+        diagnostics.record(
+            MosaicDiagnostic(
+                MosaicDiagnosticCode.EXTERNAL_URL_FAILED,
+                "The external URL could not be opened.",
+            ),
+        )
+    }
 
     fun currentTimeMillis(): Long = clock()
 
-    suspend fun loadProducts(): List<MosaicPaywallEvent> {
+    suspend fun loadProducts(requestedLocale: String? = null): List<MosaicPaywallEvent> {
+        val localization = MosaicLocalizationResolver(document.localization, requestedLocale)
         val providerIds = document.products.map(MosaicProductReference::providerProductId)
         val result = try {
             purchaseProvider.loadProducts(providerIds)
@@ -98,24 +156,39 @@ class MosaicPaywallState(
         }
 
         val loadedProducts = when (result) {
-            is MosaicProductLoadResult.Loaded -> result.products
+            is MosaicProductLoadResult.Loaded -> result.products.filterNot { product ->
+                product.id in result.unavailableProductIds
+            }
             is MosaicProductLoadResult.Unavailable -> emptyList()
         }.filter { product -> providerIds.contains(product.id) }.associateBy(MosaicProduct::id)
 
         val events = mutableListOf<MosaicPaywallEvent>()
         selectorStates = selectors.mapValues { (_, selector) ->
-            val options = selector.productReferenceIds.mapNotNull { referenceId ->
-                val reference = productReferences.getValue(referenceId)
-                loadedProducts[reference.providerProductId]?.let { product ->
-                    MosaicAvailableProduct(reference, product)
+            val bindings = if (selector.cards.isNotEmpty()) {
+                selector.cards.map { card ->
+                    Triple(card.id, card.productReferenceId, card)
+                }
+            } else {
+                selector.productReferenceIds.map { referenceId ->
+                    Triple(referenceId, referenceId, null)
                 }
             }
-            val configuredSelection = selector.initiallySelectedProductReferenceId
-                .takeIf { selectedId -> options.any { it.reference.id == selectedId } }
-            val selected = configuredSelection ?: options.firstOrNull()?.reference?.id
-            if (selected == null) {
+            val options = bindings.mapNotNull { (cardId, referenceId, card) ->
+                val reference = productReferences.getValue(referenceId)
+                loadedProducts[reference.providerProductId]?.let { product ->
+                    val requiresPrice = card == null || cardRequiresPrice(card, localization)
+                    product.takeUnless { requiresPrice && it.localizedPrice.isBlank() }?.let {
+                        MosaicAvailableProduct(reference, it, cardId, card)
+                    }
+                }
+            }
+            val requestedCardId = selectorStates[selector.id]?.selectedProductCardId
+                ?: selector.initialProductCardId
+            val selectedOption = options.firstOrNull { it.productCardId == requestedCardId }
+                ?: options.firstOrNull()
+            if (selectedOption == null) {
                 val interaction = MosaicInteractionOutcome.ProductUnavailable(
-                    selector.initiallySelectedProductReferenceId,
+                    selector.initialProductReferenceId(),
                 )
                 events += MosaicPaywallEvent(
                     interaction = interaction,
@@ -123,26 +196,50 @@ class MosaicPaywallState(
             }
             MosaicProductSelectorState(
                 options = options,
-                selectedProductReferenceId = selected,
+                selectedProductReferenceId = selectedOption?.reference?.id,
+                selectedProductCardId = selectedOption?.productCardId,
                 isLoading = false,
             )
         }
         return events
     }
 
+    private fun cardRequiresPrice(
+        card: MosaicProductCardComponent,
+        localization: MosaicLocalizationResolver,
+    ): Boolean {
+        fun usesPrice(text: MosaicLocalizedText): Boolean =
+            PRODUCT_PRICE_TEMPLATE.containsMatchIn(localization.resolve(text))
+
+        fun nodeRequiresPrice(node: MosaicNode): Boolean = when (node) {
+            is MosaicStack -> node.children.any(::nodeRequiresPrice)
+            is MosaicTextComponent -> usesPrice(node.value)
+            is MosaicProductBadgeComponent -> node.children.any(::nodeRequiresPrice)
+            else -> false
+        }
+
+        return card.accessibilityLabel?.let(::usesPrice) == true ||
+            card.children.any(::nodeRequiresPrice)
+    }
+
     fun selectProduct(selectorId: String, productReferenceId: String): MosaicPaywallEvent? {
         val current = selectorStates[selectorId] ?: return null
-        if (current.options.none { it.reference.id == productReferenceId }) return null
-        if (current.selectedProductReferenceId == productReferenceId) return null
+        val selected = current.options.firstOrNull {
+            it.productCardId == productReferenceId || it.reference.id == productReferenceId
+        } ?: return null
+        if (current.selectedProductCardId == selected.productCardId) return null
         selectorStates = selectorStates + (
-            selectorId to current.copy(selectedProductReferenceId = productReferenceId)
+            selectorId to current.copy(
+                selectedProductReferenceId = selected.reference.id,
+                selectedProductCardId = selected.productCardId,
+            )
         )
-        return MosaicPaywallEvent(MosaicInteractionOutcome.ProductSelected(productReferenceId))
+        return MosaicPaywallEvent(MosaicInteractionOutcome.ProductSelected(selected.reference.id))
     }
 
     suspend fun purchase(selectorId: String): MosaicPaywallEvent {
         if (!isNodeVisible(selectorId)) {
-            val unavailableReferenceId = selectors[selectorId]?.initiallySelectedProductReferenceId
+            val unavailableReferenceId = selectors[selectorId]?.initialProductReferenceId()
             return MosaicPaywallEvent(
                 interaction = MosaicInteractionOutcome.ProductUnavailable(unavailableReferenceId),
                 presentationResult = MosaicPresentationResult.ProductUnavailable(unavailableReferenceId),
@@ -151,9 +248,9 @@ class MosaicPaywallState(
         val selectorState = selectorStates[selectorId]
         val selectedReferenceId = selectorState?.selectedProductReferenceId
         val unavailableReferenceId = selectedReferenceId
-            ?: selectors[selectorId]?.initiallySelectedProductReferenceId
+            ?: selectors[selectorId]?.initialProductReferenceId()
         val selected = selectorState?.options?.firstOrNull {
-            it.reference.id == selectedReferenceId
+            it.productCardId == selectorState.selectedProductCardId
         }
         if (selected == null) {
             return MosaicPaywallEvent(
@@ -269,6 +366,12 @@ class MosaicPaywallState(
     )
 }
 
+private val PRODUCT_PRICE_TEMPLATE = Regex("\\{\\{\\s*product\\.price\\s*\\}\\}")
+
+private fun MosaicProductSelectorComponent.initialProductReferenceId(): String? =
+    cards.firstOrNull { it.id == initialProductCardId }?.productReferenceId
+        ?: initiallySelectedProductReferenceId
+
 private fun MosaicStack.findVisibility(
     targetId: String,
     ancestorsVisible: Boolean,
@@ -285,10 +388,52 @@ private fun MosaicStack.findVisibility(
                 if (page.id == targetId) return nodeVisible
                 page.content.findVisibility(targetId, nodeVisible, visible)?.let { return it }
             }
+            is MosaicButtonComponent -> {
+                (node.children + node.inProgressChildren.orEmpty()).forEach { child ->
+                    child.findVisibility(targetId, nodeVisible, visible)?.let { return it }
+                }
+            }
+            is MosaicProductSelectorComponent -> node.cards.forEach { card ->
+                card.findVisibility(targetId, nodeVisible, visible)?.let { return it }
+            }
+            is MosaicProductCardComponent -> node.children.forEach { child ->
+                child.findVisibility(targetId, nodeVisible, visible)?.let { return it }
+            }
+            is MosaicProductBadgeComponent -> node.children.forEach { child ->
+                child.findVisibility(targetId, nodeVisible, visible)?.let { return it }
+            }
             else -> Unit
         }
     }
     return null
+}
+
+private fun MosaicNode.findVisibility(
+    targetId: String,
+    ancestorsVisible: Boolean,
+    visible: (MosaicVisibility) -> Boolean,
+): Boolean? {
+    val nodeVisible = ancestorsVisible && visible(visibilityOrAlways())
+    if (id == targetId) return nodeVisible
+    return when (this) {
+        is MosaicStack -> findVisibility(targetId, ancestorsVisible, visible)
+        is MosaicCarouselComponent -> pages.firstNotNullOfOrNull { page ->
+            page.content.findVisibility(targetId, nodeVisible, visible)
+        }
+        is MosaicButtonComponent -> (children + inProgressChildren.orEmpty()).firstNotNullOfOrNull {
+            child -> child.findVisibility(targetId, nodeVisible, visible)
+        }
+        is MosaicProductSelectorComponent -> cards.firstNotNullOfOrNull { card ->
+            card.findVisibility(targetId, nodeVisible, visible)
+        }
+        is MosaicProductCardComponent -> children.firstNotNullOfOrNull { child ->
+            child.findVisibility(targetId, nodeVisible, visible)
+        }
+        is MosaicProductBadgeComponent -> children.firstNotNullOfOrNull { child ->
+            child.findVisibility(targetId, nodeVisible, visible)
+        }
+        else -> null
+    }
 }
 
 internal fun MosaicNode.visibilityOrAlways(): MosaicVisibility = when (this) {
@@ -304,4 +449,9 @@ internal fun MosaicNode.visibilityOrAlways(): MosaicVisibility = when (this) {
     is MosaicCarouselComponent -> visibility
     is MosaicSwitchComponent -> visibility
     is MosaicCountdownComponent -> visibility
+    is MosaicButtonComponent -> visibility
+    is MosaicIconComponent -> visibility
+    is MosaicProductCardComponent,
+    is MosaicProductBadgeComponent,
+    -> MosaicVisibility.Always
 }

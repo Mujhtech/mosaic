@@ -11,6 +11,16 @@
     },
     "carousels": {
       "offer-highlights": 0
+    },
+    "navigation": {
+      "currentScreenId": "details",
+      "history": [
+        "offer",
+        "details"
+      ]
+    },
+    "selectedProducts": {
+      "plans": "plans-monthly-plan-card"
     }
   },
   "expectedRuntimeAfterAcceptance": {
@@ -20,6 +30,15 @@
     },
     "carousels": {
       "offer-highlights": 1
+    },
+    "navigation": {
+      "currentScreenId": "offer",
+      "history": [
+        "offer"
+      ]
+    },
+    "selectedProducts": {
+      "plans": "plans-yearly-plan-card"
     }
   }
 }

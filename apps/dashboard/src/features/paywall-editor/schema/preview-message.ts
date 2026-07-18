@@ -4,21 +4,29 @@ import type {
   MosaicDocument,
 } from "@/features/paywall-editor/types/editor"
 import {
-  localPreviewContractVersion,
-  localPreviewWebSocketProtocol,
-  previewMessageTypes,
+  localPreviewVersionPreference,
+  localPreviewWebSocketProtocols,
+  previewMessageTypesByVersion,
   validatePreviewMessage,
 } from "@/lib/mosaic-protocol"
 
-export const PREVIEW_PROTOCOL_VERSION = localPreviewContractVersion
-export const PREVIEW_WEBSOCKET_SUBPROTOCOL = localPreviewWebSocketProtocol
+export const PREVIEW_PROTOCOL_VERSION = "0.2" as const
+export const PREVIEW_WEBSOCKET_SUBPROTOCOL = localPreviewWebSocketProtocols["0.2"]
+export const PREVIEW_PROTOCOL_VERSIONS = localPreviewVersionPreference
+export const PREVIEW_WEBSOCKET_SUBPROTOCOLS = PREVIEW_PROTOCOL_VERSIONS.map(
+  (version) => localPreviewWebSocketProtocols[version],
+)
 
-export const PREVIEW_MESSAGE_TYPES = previewMessageTypes
+export type PreviewProtocolVersion = (typeof PREVIEW_PROTOCOL_VERSIONS)[number]
+
+export const PREVIEW_MESSAGE_TYPES = [
+  ...previewMessageTypesByVersion["0.2"],
+] as const
 
 export type PreviewMessageType = (typeof PREVIEW_MESSAGE_TYPES)[number]
 
 export interface PreviewMessageEnvelope<TPayload = Record<string, unknown>> {
-  previewProtocolVersion: typeof PREVIEW_PROTOCOL_VERSION
+  previewProtocolVersion: PreviewProtocolVersion
   messageId: string
   sessionId: string
   sentAt: string
@@ -46,9 +54,10 @@ function envelope<TPayload>(
   sessionId: string,
   type: PreviewMessageType,
   payload: TPayload,
+  protocolVersion: PreviewProtocolVersion = PREVIEW_PROTOCOL_VERSION,
 ): PreviewMessageEnvelope<TPayload> {
   return {
-    previewProtocolVersion: PREVIEW_PROTOCOL_VERSION,
+    previewProtocolVersion: protocolVersion,
     messageId: safeToken("msg"),
     sessionId,
     sentAt: new Date().toISOString(),
@@ -90,15 +99,34 @@ export function createHeartbeatPongMessage(options: {
   sessionId: string
   clientId: string
   sequence: number
+  protocolVersion?: PreviewProtocolVersion
 }) {
-  return envelope(options.sessionId, "previewHeartbeat", {
-    clientId: options.clientId,
-    kind: "pong" as const,
-    sequence: options.sequence,
-  })
+  return envelope(
+    options.sessionId,
+    "previewHeartbeat",
+    {
+      clientId: options.clientId,
+      kind: "pong" as const,
+      sequence: options.sequence,
+    },
+    options.protocolVersion,
+  )
 }
 
-export function parsePreviewMessage(value: string): PreviewMessageEnvelope | null {
+export function previewProtocolVersionForSubprotocol(
+  subprotocol: string,
+): PreviewProtocolVersion | null {
+  return (
+    PREVIEW_PROTOCOL_VERSIONS.find(
+      (version) => localPreviewWebSocketProtocols[version] === subprotocol,
+    ) ?? null
+  )
+}
+
+export function parsePreviewMessage(
+  value: string,
+  expectedVersion?: PreviewProtocolVersion,
+): PreviewMessageEnvelope | null {
   let parsed: unknown
   try {
     parsed = JSON.parse(value)
@@ -106,7 +134,10 @@ export function parsePreviewMessage(value: string): PreviewMessageEnvelope | nul
     return null
   }
   const result = validatePreviewMessage(parsed)
-  return result.ok ? (result.value as PreviewMessageEnvelope) : null
+  if (!result.ok || (expectedVersion && result.value.previewProtocolVersion !== expectedVersion)) {
+    return null
+  }
+  return result.value as PreviewMessageEnvelope
 }
 
 export function recordValue(value: unknown): Record<string, unknown> | null {

@@ -30,6 +30,12 @@ internal fun findNode(root: JsonObject, id: String): JsonObject {
         objectValue.getAsJsonArray("children")?.forEach { child ->
             find(child)?.let { return it }
         }
+        objectValue.getAsJsonArray("inProgressChildren")?.forEach { child ->
+            find(child)?.let { return it }
+        }
+        objectValue.getAsJsonArray("cards")?.forEach { card ->
+            find(card)?.let { return it }
+        }
         objectValue.getAsJsonObject("content")?.let { content ->
             find(content)?.let { return it }
         }
@@ -40,7 +46,13 @@ internal fun findNode(root: JsonObject, id: String): JsonObject {
         }
         return null
     }
-    return checkNotNull(find(root.getAsJsonObject("layout"))) { "Missing node $id." }
+    root.getAsJsonArray("screens")?.forEach { screen ->
+        screen.takeIf(JsonElement::isJsonObject)?.asJsonObject
+            ?.getAsJsonObject("layout")
+            ?.let { layout -> find(layout)?.let { return it } }
+    }
+    root.getAsJsonObject("layout")?.let { layout -> find(layout)?.let { return it } }
+    error("Missing node $id.")
 }
 
 private fun canonicalFixture(): Path {

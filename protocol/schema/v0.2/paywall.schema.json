@@ -1,8 +1,8 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "urn:mosaic:protocol:schema:v0.2:paywall",
-  "title": "Mosaic Paywall Protocol 0.2 RC1",
-  "description": "The platform-neutral Mosaic native-paywall document contract for constrained styling, generalized stacks, carousels, switches, countdowns, and product-card states.",
+  "title": "Mosaic Paywall Protocol 0.2 RC4",
+  "description": "The platform-neutral Mosaic native-paywall document contract for design tokens, visual effects, media backgrounds, two-axis sizing, screen and sheet presentation, generalized content, actions, and authored product-card states.",
   "type": "object",
   "additionalProperties": false,
   "required": [
@@ -11,9 +11,11 @@
     "revision",
     "compatibility",
     "localization",
+    "designSystem",
     "assets",
     "products",
-    "layout"
+    "initialScreenId",
+    "screens"
   ],
   "properties": {
     "schemaVersion": {
@@ -33,10 +35,13 @@
     "localization": {
       "$ref": "#/$defs/localization"
     },
+    "designSystem": {
+      "$ref": "#/$defs/designSystem"
+    },
     "assets": {
       "type": "array",
       "items": {
-        "$ref": "#/$defs/imageAsset"
+        "$ref": "#/$defs/asset"
       }
     },
     "products": {
@@ -45,10 +50,56 @@
         "$ref": "#/$defs/productReference"
       }
     },
-    "layout": {
-      "$ref": "#/$defs/scrollContainer"
+    "initialScreenId": {
+      "$ref": "#/$defs/identifier"
+    },
+    "screens": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 10,
+      "items": {
+        "$ref": "#/$defs/screen"
+      }
     }
   },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "screens": {
+            "type": "array",
+            "minItems": 2
+          }
+        },
+        "required": [
+          "screens"
+        ]
+      },
+      "then": {
+        "properties": {
+          "screens": {
+            "type": "array",
+            "items": {
+              "allOf": [
+                {
+                  "$ref": "#/$defs/screen"
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "accessibilityLabel": true
+                  },
+                  "required": [
+                    "accessibilityLabel"
+                  ]
+                }
+              ]
+            }
+          }
+        }
+      }
+    }
+  ],
   "$defs": {
     "version": {
       "type": "string",
@@ -149,30 +200,44 @@
         "layout.scrollContainer",
         "layout.stack",
         "layout.sizing",
+        "layout.heightSizing",
         "layout.outerInsets",
+        "navigation.screens",
+        "navigation.sheets",
         "component.text",
         "component.image",
+        "component.icon",
         "component.featureList",
         "component.productSelector",
-        "component.purchaseButton",
-        "component.restoreButton",
-        "component.closeButton",
-        "component.legalText",
+        "component.productCard",
+        "component.productBadge",
+        "component.button",
         "component.carousel",
         "component.switch",
         "component.countdown",
         "localization.catalogs",
         "localization.rtl",
+        "localization.productTemplate",
         "product.references",
         "asset.bundledImage",
+        "asset.remoteImage",
+        "asset.bundledVideo",
+        "asset.remoteVideo",
         "action.purchase",
         "action.restore",
         "action.close",
+        "action.navigateTo",
+        "action.navigateBack",
+        "action.openExternalUrl",
         "accessibility.metadata",
         "fallback.asset",
         "fallback.product",
         "outcome.normalized",
         "style.colors",
+        "style.designTokens",
+        "style.gradientBackground",
+        "style.mediaBackground",
+        "style.shadow",
         "style.box",
         "style.clipping",
         "style.typography",
@@ -273,6 +338,22 @@
       "type": "string",
       "pattern": "^#[0-9A-F]{8}$"
     },
+    "colorTokenReference": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "type",
+        "id"
+      ],
+      "properties": {
+        "type": {
+          "const": "colorToken"
+        },
+        "id": {
+          "$ref": "#/$defs/identifier"
+        }
+      }
+    },
     "color": {
       "oneOf": [
         {
@@ -280,15 +361,18 @@
         },
         {
           "$ref": "#/$defs/literalColor"
+        },
+        {
+          "$ref": "#/$defs/colorTokenReference"
         }
       ]
     },
-    "widthSizingValue": {
+    "axisSizingValue": {
       "oneOf": [
         {
           "type": "string",
           "enum": [
-            "content",
+            "fit",
             "fill"
           ]
         },
@@ -310,49 +394,381 @@
         }
       ]
     },
-    "safeHeightSizingValue": {
-      "oneOf": [
-        {
-          "const": "content"
-        },
-        {
-          "type": "object",
-          "additionalProperties": false,
-          "required": [
-            "mode",
-            "value"
-          ],
-          "properties": {
-            "mode": {
-              "const": "fixed"
-            },
-            "value": {
-              "$ref": "#/$defs/positiveLogicalSize"
-            }
-          }
-        }
-      ]
-    },
-    "widthOnlySizing": {
+    "boxSizing": {
       "type": "object",
       "additionalProperties": false,
-      "minProperties": 1,
+      "required": [
+        "width",
+        "height"
+      ],
       "properties": {
         "width": {
-          "$ref": "#/$defs/widthSizingValue"
+          "$ref": "#/$defs/axisSizingValue"
+        },
+        "height": {
+          "$ref": "#/$defs/axisSizingValue"
         }
       }
     },
-    "safeBoxSizing": {
+    "gradientStop": {
       "type": "object",
       "additionalProperties": false,
-      "minProperties": 1,
+      "required": [
+        "position",
+        "color"
+      ],
       "properties": {
-        "width": {
-          "$ref": "#/$defs/widthSizingValue"
+        "position": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
         },
-        "height": {
-          "$ref": "#/$defs/safeHeightSizingValue"
+        "color": {
+          "$ref": "#/$defs/color"
+        }
+      }
+    },
+    "gradientStops": {
+      "type": "array",
+      "minItems": 2,
+      "maxItems": 8,
+      "items": {
+        "$ref": "#/$defs/gradientStop"
+      }
+    },
+    "normalizedPoint": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "x",
+        "y"
+      ],
+      "properties": {
+        "x": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "y": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        }
+      }
+    },
+    "colorBackground": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "type",
+        "value"
+      ],
+      "properties": {
+        "type": {
+          "const": "color"
+        },
+        "value": {
+          "$ref": "#/$defs/color"
+        }
+      }
+    },
+    "linearGradientBackground": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "type",
+        "angle",
+        "stops"
+      ],
+      "properties": {
+        "type": {
+          "const": "linearGradient"
+        },
+        "angle": {
+          "description": "Physical canvas direction from the first stop to the last: 0 degrees is left-to-right, 90 degrees is top-to-bottom, angles increase clockwise, and RTL never mirrors the angle.",
+          "type": "number",
+          "minimum": 0,
+          "maximum": 360
+        },
+        "stops": {
+          "$ref": "#/$defs/gradientStops"
+        }
+      }
+    },
+    "radialGradientBackground": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "type",
+        "center",
+        "radius",
+        "stops"
+      ],
+      "properties": {
+        "type": {
+          "const": "radialGradient"
+        },
+        "center": {
+          "$ref": "#/$defs/normalizedPoint"
+        },
+        "radius": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "maximum": 2
+        },
+        "stops": {
+          "$ref": "#/$defs/gradientStops"
+        }
+      }
+    },
+    "mediaContentMode": {
+      "type": "string",
+      "enum": [
+        "fit",
+        "fill"
+      ]
+    },
+    "imageBackground": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "type",
+        "assetId",
+        "contentMode",
+        "fallbackColor"
+      ],
+      "properties": {
+        "type": {
+          "const": "image"
+        },
+        "assetId": {
+          "$ref": "#/$defs/identifier"
+        },
+        "contentMode": {
+          "$ref": "#/$defs/mediaContentMode"
+        },
+        "fallbackColor": {
+          "$ref": "#/$defs/color"
+        }
+      }
+    },
+    "videoBackground": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "type",
+        "assetId",
+        "contentMode",
+        "fallbackColor"
+      ],
+      "properties": {
+        "type": {
+          "const": "video"
+        },
+        "assetId": {
+          "$ref": "#/$defs/identifier"
+        },
+        "contentMode": {
+          "$ref": "#/$defs/mediaContentMode"
+        },
+        "posterAssetId": {
+          "$ref": "#/$defs/identifier"
+        },
+        "fallbackColor": {
+          "$ref": "#/$defs/color"
+        }
+      }
+    },
+    "backgroundTokenReference": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "type",
+        "id"
+      ],
+      "properties": {
+        "type": {
+          "const": "backgroundToken"
+        },
+        "id": {
+          "$ref": "#/$defs/identifier"
+        }
+      }
+    },
+    "background": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/colorBackground"
+        },
+        {
+          "$ref": "#/$defs/linearGradientBackground"
+        },
+        {
+          "$ref": "#/$defs/radialGradientBackground"
+        },
+        {
+          "$ref": "#/$defs/imageBackground"
+        },
+        {
+          "$ref": "#/$defs/videoBackground"
+        },
+        {
+          "$ref": "#/$defs/backgroundTokenReference"
+        }
+      ]
+    },
+    "inlineShadow": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "type",
+        "color",
+        "offsetX",
+        "offsetY",
+        "blurRadius"
+      ],
+      "properties": {
+        "type": {
+          "const": "shadow"
+        },
+        "color": {
+          "$ref": "#/$defs/color"
+        },
+        "offsetX": {
+          "type": "number",
+          "minimum": -4096,
+          "maximum": 4096
+        },
+        "offsetY": {
+          "type": "number",
+          "minimum": -4096,
+          "maximum": 4096
+        },
+        "blurRadius": {
+          "$ref": "#/$defs/logicalSize"
+        }
+      }
+    },
+    "shadowTokenReference": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "type",
+        "id"
+      ],
+      "properties": {
+        "type": {
+          "const": "shadowToken"
+        },
+        "id": {
+          "$ref": "#/$defs/identifier"
+        }
+      }
+    },
+    "shadow": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/inlineShadow"
+        },
+        {
+          "$ref": "#/$defs/shadowTokenReference"
+        }
+      ]
+    },
+    "designTokenName": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 80
+    },
+    "colorToken": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "name",
+        "value"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/identifier"
+        },
+        "name": {
+          "$ref": "#/$defs/designTokenName"
+        },
+        "value": {
+          "$ref": "#/$defs/color"
+        }
+      }
+    },
+    "backgroundToken": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "name",
+        "value"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/identifier"
+        },
+        "name": {
+          "$ref": "#/$defs/designTokenName"
+        },
+        "value": {
+          "$ref": "#/$defs/background"
+        }
+      }
+    },
+    "shadowToken": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "name",
+        "value"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/identifier"
+        },
+        "name": {
+          "$ref": "#/$defs/designTokenName"
+        },
+        "value": {
+          "$ref": "#/$defs/shadow"
+        }
+      }
+    },
+    "designSystem": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "colors",
+        "backgrounds",
+        "shadows"
+      ],
+      "properties": {
+        "colors": {
+          "type": "array",
+          "maxItems": 256,
+          "items": {
+            "$ref": "#/$defs/colorToken"
+          }
+        },
+        "backgrounds": {
+          "type": "array",
+          "maxItems": 256,
+          "items": {
+            "$ref": "#/$defs/backgroundToken"
+          }
+        },
+        "shadows": {
+          "type": "array",
+          "maxItems": 256,
+          "items": {
+            "$ref": "#/$defs/shadowToken"
+          }
         }
       }
     },
@@ -390,7 +806,7 @@
       "minProperties": 1,
       "properties": {
         "background": {
-          "$ref": "#/$defs/color"
+          "$ref": "#/$defs/background"
         },
         "border": {
           "$ref": "#/$defs/border"
@@ -405,6 +821,9 @@
         },
         "padding": {
           "$ref": "#/$defs/edgeInsets"
+        },
+        "shadow": {
+          "$ref": "#/$defs/shadow"
         }
       }
     },
@@ -414,7 +833,7 @@
       "minProperties": 1,
       "properties": {
         "background": {
-          "$ref": "#/$defs/color"
+          "$ref": "#/$defs/background"
         },
         "border": {
           "$ref": "#/$defs/border"
@@ -429,6 +848,9 @@
         },
         "clipContent": {
           "type": "boolean"
+        },
+        "shadow": {
+          "$ref": "#/$defs/shadow"
         }
       }
     },
@@ -647,21 +1069,6 @@
         }
       ]
     },
-    "legalTextAccessibility": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": [
-        "role"
-      ],
-      "properties": {
-        "role": {
-          "const": "text"
-        },
-        "label": {
-          "$ref": "#/$defs/localizedText"
-        }
-      }
-    },
     "imageAccessibility": {
       "oneOf": [
         {
@@ -694,7 +1101,7 @@
         }
       ]
     },
-    "bundledImageSource": {
+    "bundledAssetSource": {
       "type": "object",
       "additionalProperties": false,
       "required": [
@@ -712,6 +1119,32 @@
           "pattern": "^[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*$"
         }
       }
+    },
+    "remoteAssetSource": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "type",
+        "url"
+      ],
+      "properties": {
+        "type": {
+          "const": "remote"
+        },
+        "url": {
+          "$ref": "#/$defs/externalUrl"
+        }
+      }
+    },
+    "assetSource": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/bundledAssetSource"
+        },
+        {
+          "$ref": "#/$defs/remoteAssetSource"
+        }
+      ]
     },
     "imageAssetFallback": {
       "type": "object",
@@ -746,12 +1179,42 @@
           "$ref": "#/$defs/identifier"
         },
         "source": {
-          "$ref": "#/$defs/bundledImageSource"
+          "$ref": "#/$defs/assetSource"
         },
         "fallback": {
           "$ref": "#/$defs/imageAssetFallback"
         }
       }
+    },
+    "videoAsset": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "type",
+        "id",
+        "source"
+      ],
+      "properties": {
+        "type": {
+          "const": "video"
+        },
+        "id": {
+          "$ref": "#/$defs/identifier"
+        },
+        "source": {
+          "$ref": "#/$defs/assetSource"
+        }
+      }
+    },
+    "asset": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/imageAsset"
+        },
+        {
+          "$ref": "#/$defs/videoAsset"
+        }
+      ]
     },
     "productReference": {
       "type": "object",
@@ -773,9 +1236,57 @@
         },
         "label": {
           "$ref": "#/$defs/localizedText"
+        }
+      }
+    },
+    "screenPresentation": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "type"
+          ],
+          "properties": {
+            "type": {
+              "const": "screen"
+            }
+          }
         },
-        "badge": {
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "type"
+          ],
+          "properties": {
+            "type": {
+              "const": "sheet"
+            }
+          }
+        }
+      ]
+    },
+    "screen": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "presentation",
+        "layout"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/identifier"
+        },
+        "accessibilityLabel": {
           "$ref": "#/$defs/localizedText"
+        },
+        "presentation": {
+          "$ref": "#/$defs/screenPresentation"
+        },
+        "layout": {
+          "$ref": "#/$defs/scrollContainer"
         }
       }
     },
@@ -807,7 +1318,7 @@
           "type": "boolean"
         },
         "background": {
-          "$ref": "#/$defs/color"
+          "$ref": "#/$defs/background"
         },
         "content": {
           "$ref": "#/$defs/stack"
@@ -869,7 +1380,7 @@
           "$ref": "#/$defs/containerAppearance"
         },
         "sizing": {
-          "$ref": "#/$defs/safeBoxSizing"
+          "$ref": "#/$defs/boxSizing"
         },
         "outerInsets": {
           "$ref": "#/$defs/edgeInsets"
@@ -898,22 +1409,16 @@
           "$ref": "#/$defs/imageComponent"
         },
         {
+          "$ref": "#/$defs/iconComponent"
+        },
+        {
           "$ref": "#/$defs/featureListComponent"
         },
         {
           "$ref": "#/$defs/productSelectorComponent"
         },
         {
-          "$ref": "#/$defs/purchaseButtonComponent"
-        },
-        {
-          "$ref": "#/$defs/restoreButtonComponent"
-        },
-        {
-          "$ref": "#/$defs/closeButtonComponent"
-        },
-        {
-          "$ref": "#/$defs/legalTextComponent"
+          "$ref": "#/$defs/buttonComponent"
         },
         {
           "$ref": "#/$defs/carouselComponent"
@@ -953,7 +1458,7 @@
           "$ref": "#/$defs/boxAppearance"
         },
         "sizing": {
-          "$ref": "#/$defs/widthOnlySizing"
+          "$ref": "#/$defs/boxSizing"
         },
         "outerInsets": {
           "$ref": "#/$defs/edgeInsets"
@@ -973,7 +1478,6 @@
         "type",
         "id",
         "assetId",
-        "width",
         "contentMode",
         "accessibility"
       ],
@@ -987,16 +1491,10 @@
         "assetId": {
           "$ref": "#/$defs/identifier"
         },
-        "width": {
-          "$ref": "#/$defs/widthSizingValue"
-        },
         "aspectRatio": {
           "type": "number",
           "exclusiveMinimum": 0,
           "maximum": 10
-        },
-        "height": {
-          "$ref": "#/$defs/positiveLogicalSize"
         },
         "contentMode": {
           "type": "string",
@@ -1008,6 +1506,9 @@
         "appearance": {
           "$ref": "#/$defs/boxAppearance"
         },
+        "sizing": {
+          "$ref": "#/$defs/boxSizing"
+        },
         "outerInsets": {
           "$ref": "#/$defs/edgeInsets"
         },
@@ -1017,27 +1518,65 @@
         "accessibility": {
           "$ref": "#/$defs/imageAccessibility"
         }
-      },
-      "oneOf": [
-        {
-          "required": [
-            "aspectRatio"
-          ],
-          "properties": {
-            "aspectRatio": true,
-            "height": false
-          }
-        },
-        {
-          "required": [
-            "height"
-          ],
-          "properties": {
-            "aspectRatio": false,
-            "height": true
-          }
-        }
+      }
+    },
+    "iconName": {
+      "type": "string",
+      "enum": [
+        "checkmark",
+        "close",
+        "lock",
+        "restore",
+        "externalLink",
+        "arrowBackward",
+        "arrowForward",
+        "chevronBackward",
+        "chevronForward"
       ]
+    },
+    "iconComponent": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "type",
+        "id",
+        "name",
+        "size",
+        "color",
+        "accessibility"
+      ],
+      "properties": {
+        "type": {
+          "const": "icon"
+        },
+        "id": {
+          "$ref": "#/$defs/identifier"
+        },
+        "name": {
+          "$ref": "#/$defs/iconName"
+        },
+        "size": {
+          "$ref": "#/$defs/positiveLogicalSize"
+        },
+        "color": {
+          "$ref": "#/$defs/color"
+        },
+        "appearance": {
+          "$ref": "#/$defs/boxAppearance"
+        },
+        "sizing": {
+          "$ref": "#/$defs/boxSizing"
+        },
+        "outerInsets": {
+          "$ref": "#/$defs/edgeInsets"
+        },
+        "visibility": {
+          "$ref": "#/$defs/visibility"
+        },
+        "accessibility": {
+          "$ref": "#/$defs/imageAccessibility"
+        }
+      }
     },
     "featureListItem": {
       "type": "object",
@@ -1098,7 +1637,7 @@
           "$ref": "#/$defs/boxAppearance"
         },
         "sizing": {
-          "$ref": "#/$defs/widthOnlySizing"
+          "$ref": "#/$defs/boxSizing"
         },
         "outerInsets": {
           "$ref": "#/$defs/edgeInsets"
@@ -1139,15 +1678,11 @@
         "border",
         "cornerRadius",
         "padding",
-        "contentGap",
-        "contentAlignment",
-        "productLabelColor",
-        "runtimePriceColor",
-        "badge"
+        "opacity"
       ],
       "properties": {
         "background": {
-          "$ref": "#/$defs/color"
+          "$ref": "#/$defs/background"
         },
         "border": {
           "$ref": "#/$defs/border"
@@ -1158,54 +1693,13 @@
         "padding": {
           "$ref": "#/$defs/edgeInsets"
         },
-        "contentGap": {
-          "$ref": "#/$defs/logicalSize"
+        "opacity": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
         },
-        "contentAlignment": {
-          "type": "string",
-          "enum": [
-            "start",
-            "center",
-            "end",
-            "spaceBetween"
-          ]
-        },
-        "productLabelColor": {
-          "$ref": "#/$defs/color"
-        },
-        "runtimePriceColor": {
-          "$ref": "#/$defs/color"
-        },
-        "badge": {
-          "$ref": "#/$defs/productCardBadgeDefaultStyle"
-        }
-      }
-    },
-    "productCardBadgeDefaultStyle": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": [
-        "background",
-        "textColor",
-        "border",
-        "cornerRadius",
-        "padding"
-      ],
-      "properties": {
-        "background": {
-          "$ref": "#/$defs/color"
-        },
-        "textColor": {
-          "$ref": "#/$defs/color"
-        },
-        "border": {
-          "$ref": "#/$defs/border"
-        },
-        "cornerRadius": {
-          "$ref": "#/$defs/logicalSize"
-        },
-        "padding": {
-          "$ref": "#/$defs/edgeInsets"
+        "shadow": {
+          "$ref": "#/$defs/shadow"
         }
       }
     },
@@ -1227,33 +1721,12 @@
         }
       }
     },
-    "productCardBadgeSelectedStyle": {
-      "type": "object",
-      "additionalProperties": false,
-      "properties": {
-        "background": {
-          "$ref": "#/$defs/color"
-        },
-        "textColor": {
-          "$ref": "#/$defs/color"
-        },
-        "border": {
-          "$ref": "#/$defs/borderOverride"
-        },
-        "cornerRadius": {
-          "$ref": "#/$defs/logicalSize"
-        },
-        "padding": {
-          "$ref": "#/$defs/edgeInsetsOverride"
-        }
-      }
-    },
     "productCardSelectedStyle": {
       "type": "object",
       "additionalProperties": false,
       "properties": {
         "background": {
-          "$ref": "#/$defs/color"
+          "$ref": "#/$defs/background"
         },
         "border": {
           "$ref": "#/$defs/borderOverride"
@@ -1264,26 +1737,13 @@
         "padding": {
           "$ref": "#/$defs/edgeInsetsOverride"
         },
-        "contentGap": {
-          "$ref": "#/$defs/logicalSize"
+        "opacity": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
         },
-        "contentAlignment": {
-          "type": "string",
-          "enum": [
-            "start",
-            "center",
-            "end",
-            "spaceBetween"
-          ]
-        },
-        "productLabelColor": {
-          "$ref": "#/$defs/color"
-        },
-        "runtimePriceColor": {
-          "$ref": "#/$defs/color"
-        },
-        "badge": {
-          "$ref": "#/$defs/productCardBadgeSelectedStyle"
+        "shadow": {
+          "$ref": "#/$defs/shadow"
         }
       }
     },
@@ -1303,36 +1763,80 @@
         }
       }
     },
-    "productSelectorComponent": {
+    "productCardAccessibility": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "label"
+      ],
+      "properties": {
+        "label": {
+          "$ref": "#/$defs/localizedText"
+        }
+      }
+    },
+    "productBadgePlacement": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "mode"
+          ],
+          "properties": {
+            "mode": {
+              "const": "nested"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "mode",
+            "anchor",
+            "inset"
+          ],
+          "properties": {
+            "mode": {
+              "const": "overlay"
+            },
+            "anchor": {
+              "type": "string",
+              "enum": [
+                "topStart",
+                "topEnd",
+                "bottomStart",
+                "bottomEnd"
+              ]
+            },
+            "inset": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 64
+            }
+          }
+        }
+      ]
+    },
+    "productCardPassiveStack": {
       "type": "object",
       "additionalProperties": false,
       "required": [
         "type",
         "id",
-        "productReferenceIds",
-        "initiallySelectedProductReferenceId",
         "direction",
         "gap",
-        "cardStyles",
-        "unavailableFallback",
-        "accessibility"
+        "padding",
+        "mainAxisDistribution",
+        "crossAxisAlignment",
+        "children"
       ],
       "properties": {
         "type": {
-          "const": "productSelector"
+          "const": "stack"
         },
         "id": {
-          "$ref": "#/$defs/identifier"
-        },
-        "productReferenceIds": {
-          "type": "array",
-          "minItems": 1,
-          "uniqueItems": true,
-          "items": {
-            "$ref": "#/$defs/identifier"
-          }
-        },
-        "initiallySelectedProductReferenceId": {
           "$ref": "#/$defs/identifier"
         },
         "direction": {
@@ -1345,14 +1849,277 @@
         "gap": {
           "$ref": "#/$defs/logicalSize"
         },
-        "cardStyles": {
+        "padding": {
+          "$ref": "#/$defs/edgeInsets"
+        },
+        "mainAxisDistribution": {
+          "type": "string",
+          "enum": [
+            "start",
+            "center",
+            "end",
+            "spaceBetween"
+          ]
+        },
+        "crossAxisAlignment": {
+          "type": "string",
+          "enum": [
+            "start",
+            "center",
+            "end",
+            "stretch"
+          ]
+        },
+        "appearance": {
+          "$ref": "#/$defs/containerAppearance"
+        },
+        "sizing": {
+          "$ref": "#/$defs/boxSizing"
+        },
+        "outerInsets": {
+          "$ref": "#/$defs/edgeInsets"
+        },
+        "visibility": {
+          "$ref": "#/$defs/visibility"
+        },
+        "children": {
+          "type": "array",
+          "minItems": 0,
+          "items": {
+            "$ref": "#/$defs/productCardPassiveNode"
+          }
+        }
+      }
+    },
+    "productCardPassiveNode": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/productCardPassiveStack"
+        },
+        {
+          "$ref": "#/$defs/textComponent"
+        },
+        {
+          "$ref": "#/$defs/imageComponent"
+        },
+        {
+          "$ref": "#/$defs/iconComponent"
+        },
+        {
+          "$ref": "#/$defs/featureListComponent"
+        },
+        {
+          "$ref": "#/$defs/countdownComponent"
+        }
+      ]
+    },
+    "productBadgeComponent": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "type",
+        "id",
+        "placement",
+        "direction",
+        "gap",
+        "mainAxisDistribution",
+        "crossAxisAlignment",
+        "children",
+        "styles"
+      ],
+      "properties": {
+        "type": {
+          "const": "productBadge"
+        },
+        "id": {
+          "$ref": "#/$defs/identifier"
+        },
+        "placement": {
+          "$ref": "#/$defs/productBadgePlacement"
+        },
+        "direction": {
+          "type": "string",
+          "enum": [
+            "vertical",
+            "horizontal"
+          ]
+        },
+        "gap": {
+          "$ref": "#/$defs/logicalSize"
+        },
+        "mainAxisDistribution": {
+          "type": "string",
+          "enum": [
+            "start",
+            "center",
+            "end",
+            "spaceBetween"
+          ]
+        },
+        "crossAxisAlignment": {
+          "type": "string",
+          "enum": [
+            "start",
+            "center",
+            "end",
+            "stretch"
+          ]
+        },
+        "children": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 10,
+          "items": {
+            "$ref": "#/$defs/productCardPassiveNode"
+          }
+        },
+        "styles": {
           "$ref": "#/$defs/productCardStyles"
+        },
+        "sizing": {
+          "$ref": "#/$defs/boxSizing"
+        }
+      }
+    },
+    "productCardChild": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/productCardPassiveNode"
+        },
+        {
+          "$ref": "#/$defs/productBadgeComponent"
+        }
+      ]
+    },
+    "productCardComponent": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "type",
+        "id",
+        "productReferenceId",
+        "direction",
+        "gap",
+        "mainAxisDistribution",
+        "crossAxisAlignment",
+        "children",
+        "styles"
+      ],
+      "properties": {
+        "type": {
+          "const": "productCard"
+        },
+        "id": {
+          "$ref": "#/$defs/identifier"
+        },
+        "productReferenceId": {
+          "$ref": "#/$defs/identifier"
+        },
+        "direction": {
+          "type": "string",
+          "enum": [
+            "vertical",
+            "horizontal"
+          ]
+        },
+        "gap": {
+          "$ref": "#/$defs/logicalSize"
+        },
+        "mainAxisDistribution": {
+          "type": "string",
+          "enum": [
+            "start",
+            "center",
+            "end",
+            "spaceBetween"
+          ]
+        },
+        "crossAxisAlignment": {
+          "type": "string",
+          "enum": [
+            "start",
+            "center",
+            "end",
+            "stretch"
+          ]
+        },
+        "children": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/productCardChild"
+          }
+        },
+        "styles": {
+          "$ref": "#/$defs/productCardStyles"
+        },
+        "sizing": {
+          "$ref": "#/$defs/boxSizing"
+        },
+        "clipContent": {
+          "const": false
+        },
+        "accessibility": {
+          "$ref": "#/$defs/productCardAccessibility"
+        }
+      }
+    },
+    "productSelectorComponent": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "type",
+        "id",
+        "direction",
+        "gap",
+        "crossAxisAlignment",
+        "initialProductCardId",
+        "cards",
+        "unavailableFallback",
+        "accessibility"
+      ],
+      "properties": {
+        "type": {
+          "const": "productSelector"
+        },
+        "id": {
+          "$ref": "#/$defs/identifier"
+        },
+        "direction": {
+          "type": "string",
+          "enum": [
+            "vertical",
+            "horizontal"
+          ]
+        },
+        "gap": {
+          "$ref": "#/$defs/logicalSize"
+        },
+        "crossAxisAlignment": {
+          "type": "string",
+          "enum": [
+            "start",
+            "center",
+            "end",
+            "stretch"
+          ]
+        },
+        "initialProductCardId": {
+          "$ref": "#/$defs/identifier"
+        },
+        "cards": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 20,
+          "items": {
+            "$ref": "#/$defs/productCardComponent"
+          }
         },
         "appearance": {
           "$ref": "#/$defs/boxAppearance"
         },
         "sizing": {
-          "$ref": "#/$defs/widthOnlySizing"
+          "$ref": "#/$defs/boxSizing"
         },
         "outerInsets": {
           "$ref": "#/$defs/edgeInsets"
@@ -1408,131 +2175,146 @@
         }
       }
     },
-    "purchaseButtonComponent": {
+    "navigateToAction": {
       "type": "object",
       "additionalProperties": false,
       "required": [
         "type",
-        "id",
-        "label",
-        "inProgressLabel",
-        "typography",
-        "action",
-        "accessibility"
+        "screenId"
       ],
       "properties": {
         "type": {
-          "const": "purchaseButton"
+          "const": "navigateTo"
         },
-        "id": {
+        "screenId": {
           "$ref": "#/$defs/identifier"
+        }
+      }
+    },
+    "navigateBackAction": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "type"
+      ],
+      "properties": {
+        "type": {
+          "const": "navigateBack"
+        }
+      }
+    },
+    "externalUrl": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 2048,
+      "pattern": "^https://[A-Za-z0-9](?:[A-Za-z0-9.-]*[A-Za-z0-9])?(?::[0-9]{1,5})?(?:[/?#][^\\s\\\\\\u0000-\\u001F\\u007F]*)?$"
+    },
+    "openExternalUrlAction": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "type",
+        "url"
+      ],
+      "properties": {
+        "type": {
+          "const": "openExternalUrl"
         },
-        "label": {
-          "$ref": "#/$defs/localizedText"
-        },
-        "inProgressLabel": {
-          "$ref": "#/$defs/localizedText"
-        },
-        "typography": {
-          "$ref": "#/$defs/baseTypography"
-        },
-        "appearance": {
-          "$ref": "#/$defs/boxAppearance"
-        },
-        "sizing": {
-          "$ref": "#/$defs/widthOnlySizing"
-        },
-        "outerInsets": {
-          "$ref": "#/$defs/edgeInsets"
-        },
-        "visibility": {
-          "$ref": "#/$defs/visibility"
-        },
-        "action": {
+        "url": {
+          "$ref": "#/$defs/externalUrl"
+        }
+      }
+    },
+    "buttonAction": {
+      "oneOf": [
+        {
           "$ref": "#/$defs/purchaseAction"
         },
-        "accessibility": {
-          "$ref": "#/$defs/controlAccessibility"
-        }
-      }
-    },
-    "restoreButtonComponent": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": [
-        "type",
-        "id",
-        "label",
-        "inProgressLabel",
-        "typography",
-        "action",
-        "accessibility"
-      ],
-      "properties": {
-        "type": {
-          "const": "restoreButton"
-        },
-        "id": {
-          "$ref": "#/$defs/identifier"
-        },
-        "label": {
-          "$ref": "#/$defs/localizedText"
-        },
-        "inProgressLabel": {
-          "$ref": "#/$defs/localizedText"
-        },
-        "typography": {
-          "$ref": "#/$defs/baseTypography"
-        },
-        "appearance": {
-          "$ref": "#/$defs/boxAppearance"
-        },
-        "sizing": {
-          "$ref": "#/$defs/widthOnlySizing"
-        },
-        "outerInsets": {
-          "$ref": "#/$defs/edgeInsets"
-        },
-        "visibility": {
-          "$ref": "#/$defs/visibility"
-        },
-        "action": {
+        {
           "$ref": "#/$defs/restoreAction"
         },
-        "accessibility": {
-          "$ref": "#/$defs/controlAccessibility"
+        {
+          "$ref": "#/$defs/closeAction"
+        },
+        {
+          "$ref": "#/$defs/navigateToAction"
+        },
+        {
+          "$ref": "#/$defs/navigateBackAction"
+        },
+        {
+          "$ref": "#/$defs/openExternalUrlAction"
         }
-      }
+      ]
     },
-    "closeButtonComponent": {
+    "buttonComponent": {
       "type": "object",
       "additionalProperties": false,
       "required": [
         "type",
         "id",
-        "label",
-        "typography",
+        "direction",
+        "gap",
+        "mainAxisDistribution",
+        "crossAxisAlignment",
+        "children",
         "action",
         "accessibility"
       ],
       "properties": {
         "type": {
-          "const": "closeButton"
+          "const": "button"
         },
         "id": {
           "$ref": "#/$defs/identifier"
         },
-        "label": {
-          "$ref": "#/$defs/localizedText"
+        "direction": {
+          "type": "string",
+          "enum": [
+            "vertical",
+            "horizontal"
+          ]
         },
-        "typography": {
-          "$ref": "#/$defs/baseTypography"
+        "gap": {
+          "$ref": "#/$defs/logicalSize"
+        },
+        "mainAxisDistribution": {
+          "type": "string",
+          "enum": [
+            "start",
+            "center",
+            "end",
+            "spaceBetween"
+          ]
+        },
+        "crossAxisAlignment": {
+          "type": "string",
+          "enum": [
+            "start",
+            "center",
+            "end",
+            "stretch"
+          ]
+        },
+        "children": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/node"
+          }
+        },
+        "inProgressChildren": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/node"
+          }
         },
         "appearance": {
           "$ref": "#/$defs/boxAppearance"
         },
         "sizing": {
-          "$ref": "#/$defs/widthOnlySizing"
+          "$ref": "#/$defs/boxSizing"
         },
         "outerInsets": {
           "$ref": "#/$defs/edgeInsets"
@@ -1541,50 +2323,10 @@
           "$ref": "#/$defs/visibility"
         },
         "action": {
-          "$ref": "#/$defs/closeAction"
+          "$ref": "#/$defs/buttonAction"
         },
         "accessibility": {
           "$ref": "#/$defs/controlAccessibility"
-        }
-      }
-    },
-    "legalTextComponent": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": [
-        "type",
-        "id",
-        "value",
-        "typography",
-        "accessibility"
-      ],
-      "properties": {
-        "type": {
-          "const": "legalText"
-        },
-        "id": {
-          "$ref": "#/$defs/identifier"
-        },
-        "value": {
-          "$ref": "#/$defs/localizedText"
-        },
-        "typography": {
-          "$ref": "#/$defs/baseTypography"
-        },
-        "appearance": {
-          "$ref": "#/$defs/boxAppearance"
-        },
-        "sizing": {
-          "$ref": "#/$defs/widthOnlySizing"
-        },
-        "outerInsets": {
-          "$ref": "#/$defs/edgeInsets"
-        },
-        "visibility": {
-          "$ref": "#/$defs/visibility"
-        },
-        "accessibility": {
-          "$ref": "#/$defs/legalTextAccessibility"
         }
       }
     },
@@ -1646,7 +2388,7 @@
           "$ref": "#/$defs/containerAppearance"
         },
         "sizing": {
-          "$ref": "#/$defs/widthOnlySizing"
+          "$ref": "#/$defs/boxSizing"
         },
         "outerInsets": {
           "$ref": "#/$defs/edgeInsets"
@@ -1700,6 +2442,9 @@
         },
         "appearance": {
           "$ref": "#/$defs/boxAppearance"
+        },
+        "sizing": {
+          "$ref": "#/$defs/boxSizing"
         },
         "outerInsets": {
           "$ref": "#/$defs/edgeInsets"
@@ -1764,7 +2509,7 @@
           "$ref": "#/$defs/boxAppearance"
         },
         "sizing": {
-          "$ref": "#/$defs/widthOnlySizing"
+          "$ref": "#/$defs/boxSizing"
         },
         "outerInsets": {
           "$ref": "#/$defs/edgeInsets"

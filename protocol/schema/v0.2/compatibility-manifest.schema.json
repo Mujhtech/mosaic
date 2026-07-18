@@ -8,10 +8,8 @@
     "schemaVersion",
     "status",
     "releaseCandidate",
-    "predecessorVersion",
     "schema",
     "canonicalFixture",
-    "migration",
     "capabilities",
     "readerPolicy",
     "normalizedOutcomes"
@@ -32,11 +30,7 @@
     },
     "releaseCandidate": {
       "type": "string",
-      "const": "RC1"
-    },
-    "predecessorVersion": {
-      "type": "string",
-      "const": "0.1"
+      "const": "RC4"
     },
     "schema": {
       "type": "string",
@@ -45,30 +39,6 @@
     "canonicalFixture": {
       "type": "string",
       "const": "../fixtures/v0.2/complete-paywall.json"
-    },
-    "migration": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": [
-        "from",
-        "to",
-        "tool",
-        "canonicalFixture"
-      ],
-      "properties": {
-        "from": {
-          "const": "0.1"
-        },
-        "to": {
-          "const": "0.2"
-        },
-        "tool": {
-          "const": "../tools/migrate-v0.1-to-v0.2.mjs"
-        },
-        "canonicalFixture": {
-          "const": "../fixtures/v0.2/migrated-v0.1.json"
-        }
-      }
     },
     "capabilities": {
       "type": "array",
@@ -92,30 +62,44 @@
         "layout.scrollContainer",
         "layout.stack",
         "layout.sizing",
+        "layout.heightSizing",
         "layout.outerInsets",
+        "navigation.screens",
+        "navigation.sheets",
         "component.text",
         "component.image",
+        "component.icon",
         "component.featureList",
         "component.productSelector",
-        "component.purchaseButton",
-        "component.restoreButton",
-        "component.closeButton",
-        "component.legalText",
+        "component.productCard",
+        "component.productBadge",
+        "component.button",
         "component.carousel",
         "component.switch",
         "component.countdown",
         "localization.catalogs",
         "localization.rtl",
+        "localization.productTemplate",
         "product.references",
         "asset.bundledImage",
+        "asset.remoteImage",
+        "asset.bundledVideo",
+        "asset.remoteVideo",
         "action.purchase",
         "action.restore",
         "action.close",
+        "action.navigateTo",
+        "action.navigateBack",
+        "action.openExternalUrl",
         "accessibility.metadata",
         "fallback.asset",
         "fallback.product",
         "outcome.normalized",
         "style.colors",
+        "style.designTokens",
+        "style.gradientBackground",
+        "style.mediaBackground",
+        "style.shadow",
         "style.box",
         "style.clipping",
         "style.typography",
@@ -158,9 +142,16 @@
         "primaryDocumentRejected",
         "bundledFallbackRejected",
         "missingAsset",
+        "missingMediaBackground",
+        "fillInUnboundedAxis",
         "unavailableProduct",
+        "missingProductPrice",
+        "noAvailableProductCards",
+        "invalidProductTemplate",
         "falseVisibilityCondition",
-        "completedCountdown"
+        "completedCountdown",
+        "navigateBackWithoutHistory",
+        "externalUrlOpenFailure"
       ],
       "properties": {
         "unknownSchemaVersion": {
@@ -187,14 +178,35 @@
         "missingAsset": {
           "const": "useDeclaredAssetFallback"
         },
+        "missingMediaBackground": {
+          "const": "usePosterThenFallbackColorAndDiagnose"
+        },
+        "fillInUnboundedAxis": {
+          "const": "useFitAndDiagnose"
+        },
         "unavailableProduct": {
           "const": "useSelectorFallback"
+        },
+        "missingProductPrice": {
+          "const": "markCardUnavailable"
+        },
+        "noAvailableProductCards": {
+          "const": "showSelectorFallbackAndDisablePurchase"
+        },
+        "invalidProductTemplate": {
+          "const": "rejectDocument"
         },
         "falseVisibilityCondition": {
           "const": "removeFromLayoutAccessibilityAndFocus"
         },
         "completedCountdown": {
           "const": "showLocalizedCompletedText"
+        },
+        "navigateBackWithoutHistory": {
+          "const": "noOpAndDiagnose"
+        },
+        "externalUrlOpenFailure": {
+          "const": "remainAndDiagnose"
         }
       }
     },

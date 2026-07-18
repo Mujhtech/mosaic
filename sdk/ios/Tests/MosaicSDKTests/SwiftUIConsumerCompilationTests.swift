@@ -21,6 +21,22 @@ final class SwiftUIConsumerCompilationTests: XCTestCase {
     XCTAssertNotNil(view.body)
   }
 
+  func testProtocolV02CompleteFixtureBuildsPublicSwiftUIViewAPI() throws {
+    let document = try v02Document()
+    let view = MosaicPaywall(
+      document: document,
+      requestedLocale: "ar-EG",
+      purchaseProvider: MockMosaicPurchaseProvider(
+        products: MosaicProduct.phase1MockProducts
+      ),
+      imageResolver: .missing,
+      onInteraction: { _ in },
+      onResult: { _ in }
+    )
+
+    XCTAssertNotNil(view.body)
+  }
+
   func testConfiguredClientRemainsUsableAlongsideRenderer() throws {
     let mosaic = try Mosaic.configure(
       apiKey: "public_test_key",

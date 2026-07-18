@@ -1,35 +1,62 @@
-import { ArrowClockwiseIcon } from "@phosphor-icons/react/dist/ssr/ArrowClockwise"
-import { ArrowCounterClockwiseIcon } from "@phosphor-icons/react/dist/ssr/ArrowCounterClockwise"
 import { DownloadSimpleIcon } from "@phosphor-icons/react/dist/ssr/DownloadSimple"
-import { SquaresFourIcon } from "@phosphor-icons/react/dist/ssr/SquaresFour"
-import { UploadSimpleIcon } from "@phosphor-icons/react/dist/ssr/UploadSimple"
-import { useRef } from "react"
+import { StatusMessage } from "@mosaic/design-system"
+import { lazy, Suspense, useRef, useState } from "react"
 
 import { Button } from "@/components/ui/button"
-import { ComponentTree } from "@/features/paywall-editor/components/component-tree"
-import { MockCommercePanel } from "@/features/paywall-editor/components/mock-commerce-panel"
 import { PreviewCanvas } from "@/features/paywall-editor/components/preview-canvas"
 import { PreviewConnectionPanel } from "@/features/paywall-editor/components/preview-connection-panel"
-import { PreviewControls } from "@/features/paywall-editor/components/preview-controls"
 import { PropertyInspector } from "@/features/paywall-editor/components/property-inspector"
+import type { StudioWorkspaceCommand } from "@/features/paywall-editor/components/studio-command-palette"
+import {
+  StudioResizableWorkspace,
+  type StudioResizableWorkspaceHandle,
+} from "@/features/paywall-editor/components/studio-resizable-workspace"
+import { StudioToolbar } from "@/features/paywall-editor/components/studio-toolbar"
+import { StudioToolPanel } from "@/features/paywall-editor/components/studio-tool-panel"
 import { ValidationPanel } from "@/features/paywall-editor/components/validation-panel"
-import { useDraftAutosave } from "@/features/paywall-editor/hooks/use-draft-autosave"
+import { useDraftAutosaveController } from "@/features/paywall-editor/hooks/use-draft-autosave"
 import { useEditorHistory } from "@/features/paywall-editor/hooks/use-editor-history"
 import { useEditorKeyboardShortcuts } from "@/features/paywall-editor/hooks/use-editor-keyboard-shortcuts"
 import { useEditorSelection } from "@/features/paywall-editor/hooks/use-editor-selection"
 import { useEditorValidation } from "@/features/paywall-editor/hooks/use-editor-validation"
 import { usePreviewConnection } from "@/features/paywall-editor/hooks/use-preview-connection"
+import { useStudioViewportMode } from "@/features/paywall-editor/hooks/use-studio-viewport-mode"
 import { serializeDocument } from "@/features/paywall-editor/mutations/local-project-file"
+import type { EditorState } from "@/features/paywall-editor/stores/editor-store"
 import {
   useEditorActions,
-  useEditorStore,
+  useEditorStoreSelector,
 } from "@/features/paywall-editor/stores/editor-store-context"
+import {
+  useStudioWorkspaceActions,
+  useStudioWorkspaceSelector,
+} from "@/features/paywall-editor/stores/studio-workspace-store-context"
+import type { StudioWorkspaceSnapshot } from "@/features/paywall-editor/stores/studio-workspace-store"
 import type {
   MockProductDefinition,
   MockPurchaseState,
+  ValidationIssue,
 } from "@/features/paywall-editor/types/editor"
+import {
+  focusDocumentValidationIssue,
+  focusInspectorValidationIssue,
+} from "@/features/paywall-editor/utils/property-inspector-navigation"
 
-function downloadDocument(name: string, contents: string) {
+const selectDocument = (state: EditorState) => state.document
+const selectEditableDocumentId = (state: EditorState) => state.editableDocumentId
+const selectCurrentLocale = (state: EditorState) => state.currentLocale
+const selectTextScale = (state: EditorState) => state.textScale
+const selectLocalRevisionSequence = (state: EditorState) => state.localRevisionSequence
+const selectCanvasAppearance = (snapshot: StudioWorkspaceSnapshot) =>
+  snapshot.preferences.canvas.appearance
+
+const StudioCommandPalette = lazy(() =>
+  import("@/features/paywall-editor/components/studio-command-palette").then((module) => ({
+    default: module.StudioCommandPalette,
+  })),
+)
+
+function downloadStudioDocument(name: string, contents: string) {
   const blob = new Blob([contents], { type: "application/json" })
   const url = URL.createObjectURL(blob)
   const anchor = document.createElement("a")
@@ -39,6 +66,15 @@ function downloadDocument(name: string, contents: string) {
   URL.revokeObjectURL(url)
 }
 
+export interface EditorShellProps {
+  readonly mockProducts: readonly MockProductDefinition[]
+  readonly mockPurchaseState: MockPurchaseState
+  readonly importError: string | null
+  readonly onProductsChange: (products: MockProductDefinition[]) => void
+  readonly onPurchaseStateChange: (state: MockPurchaseState) => void
+  readonly onImport: (file: File) => void
+}
+
 export function EditorShell({
   mockProducts,
   mockPurchaseState,
@@ -46,25 +82,41 @@ export function EditorShell({
   onProductsChange,
   onPurchaseStateChange,
   onImport,
-  onChooseTemplate,
-}: {
-  mockProducts: readonly MockProductDefinition[]
-  mockPurchaseState: MockPurchaseState
-  importError: string | null
-  onProductsChange: (products: MockProductDefinition[]) => void
-  onPurchaseStateChange: (state: MockPurchaseState) => void
-  onImport: (file: File) => void
-  onChooseTemplate: () => void
-}) {
-  const fileInputRef = useRef<HTMLInputElement>(null)
-  const { document, editableDocumentId, currentLocale, textScale, localRevisionSequence } =
-    useEditorStore()
+}: EditorShellProps) {
+  const workspaceControllerRef = useRef<StudioResizableWorkspaceHandle | null>(null)
+  const importInputRef = useRef<HTMLInputElement | null>(null)
+  const [commandPaletteOpen, setCommandPaletteOpen] = useState(false)
+  const document = useEditorStoreSelector(selectDocument)
+  const editableDocumentId = useEditorStoreSelector(selectEditableDocumentId)
+  const currentLocale = useEditorStoreSelector(selectCurrentLocale)
+  const textScale = useEditorStoreSelector(selectTextScale)
+  const localRevisionSequence = useEditorStoreSelector(selectLocalRevisionSequence)
+  const canvasAppearance = useStudioWorkspaceSelector(selectCanvasAppearance)
   const { setLocalRevisionSequence } = useEditorActions()
+  const workspaceActions = useStudioWorkspaceActions()
   const { canUndo, canRedo, undo, redo } = useEditorHistory()
   const validation = useEditorValidation()
   const { selectComponent } = useEditorSelection()
-  const autosave = useDraftAutosave(mockPurchaseState, mockProducts)
-  useEditorKeyboardShortcuts()
+  const autosave = useDraftAutosaveController(mockPurchaseState, mockProducts)
+  const viewportMode = useStudioViewportMode()
+  useEditorKeyboardShortcuts({
+    onFitCanvas: () => workspaceActions.setCanvasPreference("fitMode", "fit"),
+    onOpenCommandPalette: () => setCommandPaletteOpen(true),
+    onOpenTool: (tool) => {
+      workspaceActions.setSelectedTool(tool)
+      workspaceControllerRef.current?.expand("left")
+    },
+    onResetZoom: () => {
+      workspaceActions.setCanvasPreference("fitMode", "manual")
+      workspaceActions.setCanvasPreference("zoom", 1)
+    },
+    onToggleAppearance: () =>
+      workspaceActions.setCanvasPreference(
+        "appearance",
+        canvasAppearance === "light" ? "dark" : "light",
+      ),
+    onTogglePanel: (panel) => workspaceControllerRef.current?.toggle(panel),
+  })
   const preview = usePreviewConnection({
     document,
     editableDocumentId,
@@ -78,142 +130,216 @@ export function EditorShell({
   })
 
   if (!document) return null
+  const activeDocument = document
+
+  function navigateToValidationIssue(issue: ValidationIssue) {
+    selectComponent(issue.componentId ?? null)
+    if (!issue.componentId) {
+      workspaceActions.setSelectedTool("localization")
+      workspaceControllerRef.current?.expand("left")
+    } else {
+      workspaceControllerRef.current?.expand("properties")
+    }
+    window.setTimeout(() => {
+      if (issue.componentId && focusInspectorValidationIssue(issue)) return
+      if (!issue.componentId && focusDocumentValidationIssue(issue)) return
+      const fallback = issue.componentId
+        ? window.document.querySelector<HTMLElement>("#property-inspector-title")
+        : window.document.querySelector<HTMLElement>("#preview-context-title")
+      fallback?.scrollIntoView?.({ block: "center" })
+      fallback?.focus()
+    }, 0)
+  }
+
+  function exportDocument() {
+    if (!validation.isValid) {
+      workspaceControllerRef.current?.expand("diagnostics")
+      const firstIssue = validation.errors[0]
+      if (firstIssue) navigateToValidationIssue(firstIssue)
+      return
+    }
+
+    downloadStudioDocument(activeDocument.id, serializeDocument(activeDocument))
+  }
+
+  function openPreviewConnections() {
+    workspaceControllerRef.current?.expand("diagnostics")
+    window.setTimeout(() => {
+      const panel = window.document.querySelector<HTMLElement>("#connected-preview-panel")
+      panel?.scrollIntoView?.({ block: "nearest" })
+      panel?.focus({ preventScroll: true })
+    }, 0)
+  }
+
+  function runWorkspaceCommand(command: StudioWorkspaceCommand) {
+    switch (command) {
+      case "expand-left":
+        workspaceControllerRef.current?.expand("left")
+        break
+      case "toggle-left":
+        workspaceControllerRef.current?.toggle("left")
+        break
+      case "toggle-properties":
+        workspaceControllerRef.current?.toggle("properties")
+        break
+      case "toggle-diagnostics":
+        workspaceControllerRef.current?.toggle("diagnostics")
+        break
+      case "reset":
+        workspaceControllerRef.current?.reset()
+        break
+    }
+  }
+
+  const validationSummary = validation.isValid
+    ? "Validation ready"
+    : `${validation.errors.length} validation ${validation.errors.length === 1 ? "issue" : "issues"}`
+  const diagnosticsPanel = (
+    <section
+      aria-label="Studio diagnostics"
+      className="bg-card h-full overflow-hidden"
+      data-slot="studio-diagnostics"
+    >
+      <div className="border-border flex h-8 items-center justify-between gap-3 border-b px-3 text-xs">
+        <span className="font-semibold">Diagnostics</span>
+        <span className="text-muted-foreground truncate">
+          {validationSummary} · Preview clients · {preview.aggregate.total}
+        </span>
+      </div>
+      <div className="h-[calc(100%-2rem)] overflow-y-auto p-4">
+        {importError ? (
+          <StatusMessage
+            className="border-destructive/25 bg-destructive/5 mb-4 rounded-lg border p-3 text-sm"
+            tone="danger"
+          >
+            <p className="font-semibold">Import was not applied</p>
+            <p className="text-muted-foreground mt-1">{importError}</p>
+            <p className="text-muted-foreground mt-1 text-xs">Your open paywall is unchanged.</p>
+          </StatusMessage>
+        ) : null}
+        <div className="grid items-start gap-6 xl:grid-cols-2">
+          <ValidationPanel issues={validation.issues} onNavigate={navigateToValidationIssue} />
+          <PreviewConnectionPanel
+            acknowledgements={preview.acknowledgements}
+            aggregate={preview.aggregate}
+            clients={preview.clients}
+            diagnostics={preview.diagnostics}
+            document={document}
+            endpoint={preview.endpoint}
+            latestSentEditableDocumentId={preview.latestSentEditableDocumentId}
+            latestSentRevisionId={preview.latestSentRevisionId}
+            onReconnect={preview.reconnect}
+            sessionId={preview.sessionId}
+            status={preview.status}
+          />
+        </div>
+      </div>
+    </section>
+  )
 
   return (
-    <div className="min-h-[calc(100svh-3.5rem)]">
-      <header className="border-border bg-background/95 sticky top-14 z-10 flex flex-wrap items-center gap-3 border-b px-4 py-3 backdrop-blur lg:px-6">
-        <div className="min-w-0 flex-1">
-          <h1 className="truncate text-sm font-semibold">{document.id.replaceAll("-", " ")}</h1>
-          <div
-            className="text-muted-foreground mt-0.5 flex items-center gap-2 text-xs"
-            aria-live="polite"
-          >
-            <span>{validation.isValid ? "Valid" : `${validation.errors.length} to fix`}</span>
-            <span aria-hidden>·</span>
-            <span>
-              {autosave === "saving"
-                ? "Saving locally…"
-                : autosave === "saved"
-                  ? "Saved in this browser"
-                  : autosave === "failed"
-                    ? "Autosave failed — export a copy"
-                    : "Local draft"}
-            </span>
-          </div>
-        </div>
-        <div className="flex items-center gap-1">
-          <Button
-            size="icon-sm"
-            variant="ghost"
-            aria-label="Undo"
-            disabled={!canUndo}
-            onClick={undo}
-          >
-            <ArrowCounterClockwiseIcon aria-hidden />
-          </Button>
-          <Button
-            size="icon-sm"
-            variant="ghost"
-            aria-label="Redo"
-            disabled={!canRedo}
-            onClick={redo}
-          >
-            <ArrowClockwiseIcon aria-hidden />
-          </Button>
-        </div>
-        <Button size="sm" variant="outline" onClick={onChooseTemplate}>
-          <SquaresFourIcon aria-hidden />
-          Templates
-        </Button>
-        <Button size="sm" variant="outline" onClick={() => fileInputRef.current?.click()}>
-          <UploadSimpleIcon aria-hidden />
-          Import
-        </Button>
-        <input
-          ref={fileInputRef}
-          className="sr-only"
-          type="file"
-          accept="application/json,.json"
-          aria-label="Import Mosaic JSON"
-          onChange={(event) => {
-            const file = event.target.files?.[0]
-            if (file) onImport(file)
-            event.target.value = ""
-          }}
-        />
-        <Button
-          size="sm"
-          title={validation.isValid ? "Export paywall JSON" : "Fix validation issues before export"}
-          onClick={() => {
-            if (!validation.isValid) {
-              selectComponent(validation.errors[0]?.componentId ?? null)
-              const heading = window.document.querySelector<HTMLElement>("#validation-title")
-              heading?.scrollIntoView({ behavior: "smooth", block: "center" })
-              heading?.focus()
-              return
-            }
-            downloadDocument(document.id, serializeDocument(document))
-          }}
-        >
-          <DownloadSimpleIcon aria-hidden />
-          Export
-        </Button>
-      </header>
+    <div className="bg-background flex h-full min-h-0 flex-col" data-testid="studio-editor-shell">
+      <StudioToolbar
+        autosave={autosave}
+        canRedo={canRedo}
+        canUndo={canUndo}
+        documentIdentity={document.id}
+        onBack={autosave.flush}
+        onExport={exportDocument}
+        onOpenPreviewConnections={openPreviewConnections}
+        onRequestImport={() => importInputRef.current?.click()}
+        onRedo={redo}
+        onUndo={undo}
+        previewClientCount={preview.aggregate.total}
+        previewSummary={preview.aggregate.label}
+      />
+      <input
+        ref={importInputRef}
+        accept="application/json,.json"
+        aria-label="Import Mosaic JSON file"
+        className="sr-only"
+        onChange={(event) => {
+          const file = event.target.files?.[0]
+          if (file) onImport(file)
+          event.target.value = ""
+        }}
+        type="file"
+      />
 
-      {importError ? (
-        <div
-          className="border-destructive/25 bg-destructive/5 mx-4 mt-4 rounded-xl border p-3 text-sm lg:mx-6"
-          role="alert"
+      {commandPaletteOpen ? (
+        <Suspense
+          fallback={
+            <span aria-live="polite" className="sr-only">
+              Loading Studio commands
+            </span>
+          }
         >
-          <p className="font-semibold">Import was not applied</p>
-          <p className="text-muted-foreground mt-1">{importError}</p>
-          <p className="text-muted-foreground mt-1 text-xs">Your open paywall is unchanged.</p>
-        </div>
+          <StudioCommandPalette
+            onExport={exportDocument}
+            onOpenChange={setCommandPaletteOpen}
+            onRequestImport={() => importInputRef.current?.click()}
+            onWorkspaceCommand={runWorkspaceCommand}
+            open
+          />
+        </Suspense>
       ) : null}
 
-      <div className="grid gap-4 p-4 lg:grid-cols-[15rem_minmax(0,1fr)] lg:p-6 xl:grid-cols-[15rem_minmax(30rem,1fr)_20rem]">
-        <aside className="border-border bg-card h-fit rounded-2xl border p-4 xl:sticky xl:top-32">
-          <ComponentTree />
-        </aside>
-
-        <div className="min-w-0 space-y-4">
-          <PreviewCanvas mockProducts={mockProducts} mockPurchaseState={mockPurchaseState} />
-          <div className="border-border bg-card rounded-2xl border p-5">
-            <ValidationPanel issues={validation.issues} />
-          </div>
-          <div className="border-border bg-card rounded-2xl border p-5">
-            <PreviewConnectionPanel
-              document={document}
-              endpoint={preview.endpoint}
-              sessionId={preview.sessionId}
-              status={preview.status}
-              clients={preview.clients}
-              diagnostics={preview.diagnostics}
-              acknowledgements={preview.acknowledgements}
-              aggregate={preview.aggregate}
-              latestSentEditableDocumentId={preview.latestSentEditableDocumentId}
-              latestSentRevisionId={preview.latestSentRevisionId}
-              onReconnect={preview.reconnect}
-            />
-          </div>
-        </div>
-
-        <aside className="space-y-4 lg:col-span-2 lg:grid lg:grid-cols-3 lg:gap-4 lg:space-y-0 xl:sticky xl:top-32 xl:col-span-1 xl:block xl:max-h-[calc(100svh-9rem)] xl:space-y-4 xl:overflow-y-auto xl:pr-1">
-          <div className="border-border bg-card rounded-2xl border p-4">
-            <PropertyInspector />
-          </div>
-          <div className="border-border bg-card rounded-2xl border p-4">
-            <PreviewControls />
-          </div>
-          <div className="border-border bg-card rounded-2xl border p-4">
-            <MockCommercePanel
+      <div className="min-h-0 flex-1">
+        <StudioResizableWorkspace
+          ref={workspaceControllerRef}
+          canvas={
+            <section
+              aria-labelledby="studio-canvas-title"
+              className="h-full min-h-0 overflow-hidden"
+            >
+              <h2 className="sr-only" id="studio-canvas-title">
+                Paywall canvas
+              </h2>
+              <PreviewCanvas mockProducts={mockProducts} mockPurchaseState={mockPurchaseState} />
+            </section>
+          }
+          desktopRequiredContent={
+            <div className="space-y-4">
+              <p className="text-muted-foreground text-sm leading-6">
+                Your single local draft remains in this browser. You can still export a valid copy
+                before moving to a larger display.
+              </p>
+              <Button
+                className="transition-none motion-reduce:transition-none"
+                onClick={exportDocument}
+                title={
+                  validation.isValid
+                    ? "Export paywall JSON"
+                    : "Fix validation issues on a larger display before export"
+                }
+                type="button"
+              >
+                <DownloadSimpleIcon aria-hidden />
+                Export local draft
+              </Button>
+            </div>
+          }
+          diagnosticsPanel={diagnosticsPanel}
+          onOpenCommands={() => setCommandPaletteOpen(true)}
+          leftPanel={
+            <StudioToolPanel
+              assets={document.assets}
               mockProducts={mockProducts}
               mockPurchaseState={mockPurchaseState}
               onProductsChange={onProductsChange}
               onPurchaseStateChange={onPurchaseStateChange}
+              previewClients={preview.clients}
+              viewportMode={viewportMode}
+              workspaceControllerRef={workspaceControllerRef}
             />
-          </div>
-        </aside>
+          }
+          propertiesPanel={
+            <aside aria-label="Component properties" className="bg-card h-full overflow-y-auto p-4">
+              <PropertyInspector issues={validation.issues} />
+            </aside>
+          }
+          viewportMode={viewportMode}
+        />
       </div>
     </div>
   )

@@ -6,10 +6,9 @@
   "scripts": {
     "check": "npm run validate && npm test",
     "generate:browser-contract": "node tools/generate-browser-contract.mjs",
-    "generate:preview-fixtures": "node tools/generate-local-preview-fixtures.mjs",
-    "generate:preview-v0.2-contract": "node tools/generate-local-preview-v0.2-contract.mjs",
-    "generate:v0.2-fixtures": "node tools/generate-v0.2-fixtures.mjs",
-    "generate": "npm run generate:preview-fixtures && npm run generate:v0.2-fixtures && npm run generate:preview-v0.2-contract && npm run generate:browser-contract",
+    "migrate:rc2-to-rc3": "node tools/migrate-v0.2-rc2-to-rc3.mjs",
+    "migrate:rc3-to-rc4": "node tools/migrate-v0.2-rc3-to-rc4.mjs",
+    "generate": "npm run generate:browser-contract",
     "test": "node --test tools/*.test.mjs",
     "validate": "node tools/validate.mjs"
   },

@@ -4,8 +4,6 @@ import { fileURLToPath } from "node:url";
 
 import Ajv2020 from "ajv/dist/2020.js";
 
-import { buildLocalPreviewV02Contract } from "./generate-local-preview-v0.2-contract.mjs";
-import { validateMockCommerceState } from "./preview-validation.mjs";
 import {
   loadProtocolV02Artifacts,
   runtimeStateForAcceptedV02Revision,
@@ -19,14 +17,6 @@ export const previewV02Paths = Object.freeze({
   acceptedRevisionRuntimeResetFixture: resolve(
     previewV02Root,
     "fixtures/local-preview/v0.2/accepted-revision-runtime-reset.json",
-  ),
-  incompatibleClientFixture: resolve(
-    previewV02Root,
-    "fixtures/local-preview/v0.2/incompatible-v0.1-client.json",
-  ),
-  incompatibleClientSchema: resolve(
-    previewV02Root,
-    "schema/local-preview/v0.2/incompatible-client.schema.json",
   ),
   localProjectFixture: resolve(
     previewV02Root,
@@ -56,10 +46,6 @@ export function loadPreviewV02Artifacts() {
     acceptedRevisionRuntimeReset: readJson(
       previewV02Paths.acceptedRevisionRuntimeResetFixture,
     ),
-    incompatibleClient: readJson(previewV02Paths.incompatibleClientFixture),
-    incompatibleClientSchema: readJson(
-      previewV02Paths.incompatibleClientSchema,
-    ),
     localProject: readJson(previewV02Paths.localProjectFixture),
     localProjectSchema: readJson(previewV02Paths.localProjectSchema),
     messages: readJson(previewV02Paths.messageFixture),
@@ -72,17 +58,48 @@ function schemaValidators(artifacts) {
   ajv.addSchema(artifacts.paywallSchema);
   ajv.addSchema(artifacts.previewMessageSchema);
   return {
-    incompatibleClient: ajv.compile(artifacts.incompatibleClientSchema),
     localProject: ajv.compile(artifacts.localProjectSchema),
     message: ajv.getSchema(artifacts.previewMessageSchema.$id),
   };
 }
 
-export const localPreviewV02VersionPreference = Object.freeze(["0.2", "0.1"]);
+export const localPreviewV02VersionPreference = Object.freeze(["0.2"]);
 export const requiredLocalPreviewV02Capabilities = Object.freeze([
   ...readJson(previewV02Paths.previewMessageSchema).$defs.previewCapabilityName
     .enum,
 ]);
+
+function validateMockCommerceState(document, state) {
+  const errors = [];
+  const documentProductIds = document.products.map((product) => product.id);
+  const mockProductIds = state.products.map(
+    (product) => product.productReferenceId,
+  );
+  const seen = new Set();
+  for (const productId of mockProductIds) {
+    if (seen.has(productId)) {
+      errors.push(`duplicate mock commerce product ${productId}`);
+    }
+    seen.add(productId);
+    if (!documentProductIds.includes(productId)) {
+      errors.push(`mock commerce references unknown product ${productId}`);
+    }
+  }
+  for (const productId of documentProductIds) {
+    if (!seen.has(productId)) {
+      errors.push(`mock commerce omits document product ${productId}`);
+    }
+  }
+  if (
+    state.entitlement.status === "active" &&
+    !documentProductIds.includes(state.entitlement.productReferenceId)
+  ) {
+    errors.push(
+      `mock entitlement references unknown product ${state.entitlement.productReferenceId}`,
+    );
+  }
+  return errors;
+}
 
 function structuredDeliveryDiagnostic({
   action = "updatePreviewClient",
@@ -104,8 +121,7 @@ function structuredDeliveryDiagnostic({
 function incompatibleSchemaDiagnostic() {
   return {
     code: "preview.incompatibleSchemaVersion",
-    message:
-      "This Local Preview 0.1 client cannot receive a Protocol 0.2 draft.",
+    message: "This preview client cannot receive the current Protocol 0.2 draft.",
     fallback: "keepLastAcceptedDraft",
     recovery: {
       action: "updatePreviewClient",
@@ -396,10 +412,10 @@ function validateFixtureFlow(errors, artifacts) {
     } else if (message.type === "capabilityReport") {
       if (
         JSON.stringify(message.payload.supportedSchemaVersions) !==
-        JSON.stringify(["0.1", "0.2"])
+        JSON.stringify(["0.2"])
       ) {
         errors.push(
-          "Local Preview 0.2 capability report must advertise 0.1 and 0.2 support",
+          "Local Preview capability report must advertise 0.2 support",
         );
       }
       const supported = new Map(
@@ -475,37 +491,7 @@ function validateFixtureFlow(errors, artifacts) {
   }
 }
 
-function validateNegotiationAndRuntimeReset(errors, artifacts) {
-  const fixture = artifacts.incompatibleClient;
-  const negotiation = negotiateLocalPreviewVersion(
-    fixture.studioSupportedPreviewVersions,
-    fixture.clientSupportedPreviewVersions,
-  );
-  if (
-    !negotiation.ok ||
-    negotiation.selectedVersion !== fixture.selectedPreviewVersion ||
-    negotiation.selectedWebSocketSubprotocol !==
-      fixture.selectedWebSocketSubprotocol
-  ) {
-    errors.push("Local Preview 0.2 incompatible-client negotiation is not highest-mutual");
-  }
-  const capabilityReport = artifacts.messages.find(
-    (message) => message.type === "capabilityReport",
-  )?.payload;
-  const decision = decideLocalPreviewDraftDelivery({
-    capabilityReport,
-    document: artifacts.document,
-    negotiation,
-  });
-  if (
-    decision.delivery !== fixture.delivery ||
-    JSON.stringify(decision.diagnostic) !== JSON.stringify(fixture.diagnostic)
-  ) {
-    errors.push(
-      "Local Preview 0.2 must withhold a 0.2 draft from a negotiated 0.1-only client",
-    );
-  }
-
+function validateRuntimeReset(errors, artifacts) {
   const resetFixture = artifacts.acceptedRevisionRuntimeReset;
   const acceptedMessage = artifacts.messages.find(
     (message) =>
@@ -530,7 +516,7 @@ function validateNegotiationAndRuntimeReset(errors, artifacts) {
     JSON.stringify(resetFixture.expectedRuntimeAfterAcceptance)
   ) {
     errors.push(
-      "Accepted Local Preview 0.2 revisions must reset Switch and Carousel runtime state",
+      "Accepted Local Preview 0.2 revisions must reset Switch, Carousel, navigation, and Product Card selection runtime state",
     );
   }
   if (
@@ -541,56 +527,11 @@ function validateNegotiationAndRuntimeReset(errors, artifacts) {
   }
 }
 
-function validateGeneration(errors, artifacts) {
-  const generated = buildLocalPreviewV02Contract();
-  for (const [name, actual] of [
-    [
-      "accepted revision runtime reset",
-      artifacts.acceptedRevisionRuntimeReset,
-    ],
-    ["incompatible client", artifacts.incompatibleClient],
-    ["incompatible client schema", artifacts.incompatibleClientSchema],
-    ["local project", artifacts.localProject],
-    ["messages", artifacts.messages],
-    ["local project schema", artifacts.localProjectSchema],
-    ["message schema", artifacts.previewMessageSchema],
-  ]) {
-    const expected =
-      name === "accepted revision runtime reset"
-        ? generated.acceptedRevisionRuntimeReset
-        : name === "incompatible client"
-          ? generated.incompatibleClient
-          : name === "incompatible client schema"
-            ? generated.incompatibleClientSchema
-            : name === "local project"
-        ? generated.localProject
-        : name === "messages"
-          ? generated.messages
-          : name === "local project schema"
-            ? generated.localProjectSchema
-            : generated.previewMessageSchema;
-    if (JSON.stringify(actual) !== JSON.stringify(expected)) {
-      errors.push(
-        `Local Preview 0.2 ${name} is stale; run ` +
-          "npm run generate:preview-v0.2-contract",
-      );
-    }
-  }
-}
-
 export function validatePreviewV02Artifacts(
   artifacts = loadPreviewV02Artifacts(),
 ) {
   const validators = schemaValidators(artifacts);
   const errors = [];
-  if (!validators.incompatibleClient(artifacts.incompatibleClient)) {
-    errors.push(
-      ...formatErrors(
-        "v0.2 incompatibleClient",
-        validators.incompatibleClient.errors,
-      ),
-    );
-  }
   for (const [index, message] of artifacts.messages.entries()) {
     if (!validators.message(message)) {
       errors.push(...formatErrors(`v0.2 messages/${index}`, validators.message.errors));
@@ -616,8 +557,7 @@ export function validatePreviewV02Artifacts(
     ),
   );
   validateFixtureFlow(errors, artifacts);
-  validateNegotiationAndRuntimeReset(errors, artifacts);
-  validateGeneration(errors, artifacts);
+  validateRuntimeReset(errors, artifacts);
   return errors;
 }
 

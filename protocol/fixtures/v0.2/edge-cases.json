@@ -17,6 +17,14 @@
         "version": "0.2"
       },
       {
+        "name": "layout.heightSizing",
+        "version": "0.2"
+      },
+      {
+        "name": "navigation.screens",
+        "version": "0.2"
+      },
+      {
         "name": "component.text",
         "version": "0.2"
       },
@@ -70,920 +78,941 @@
   },
   "assets": [],
   "products": [],
-  "layout": {
-    "type": "scrollContainer",
-    "id": "edge-scroll",
-    "axis": "vertical",
-    "safeArea": "respect",
-    "showsIndicators": false,
-    "background": "transparent",
-    "content": {
-      "type": "stack",
-      "id": "edge-content",
-      "direction": "vertical",
-      "gap": 0,
-      "padding": {
-        "top": 0,
-        "start": 0,
-        "bottom": 0,
-        "end": 0
-      },
-      "mainAxisDistribution": "start",
-      "crossAxisAlignment": "stretch",
-      "children": [
-        {
-          "type": "carousel",
-          "id": "edge-carousel",
-          "initialPageIndex": 19,
-          "showsIndicators": false,
-          "pages": [
-            {
-              "id": "edge-page-1",
-              "accessibilityLabel": {
-                "default": "Maximum carousel page",
-                "localizationKey": "edge.carousel.page"
-              },
-              "content": {
-                "type": "stack",
-                "id": "edge-page-content-1",
-                "direction": "vertical",
-                "gap": 0,
-                "padding": {
-                  "top": 0,
-                  "start": 0,
-                  "bottom": 0,
-                  "end": 0
-                },
-                "mainAxisDistribution": "start",
-                "crossAxisAlignment": "stretch",
-                "children": [
-                  {
-                    "type": "text",
-                    "id": "edge-page-text-1",
-                    "value": {
-                      "default": "Maximum carousel page",
-                      "localizationKey": "edge.carousel.page"
-                    },
-                    "typography": {
-                      "style": "body",
-                      "fontSize": 8,
-                      "lineHeightMultiplier": 0.8,
-                      "weight": "regular",
-                      "color": "text.primary",
-                      "alignment": "start"
-                    },
-                    "accessibility": {
-                      "role": "text"
-                    }
-                  }
-                ]
-              }
-            },
-            {
-              "id": "edge-page-2",
-              "accessibilityLabel": {
-                "default": "Maximum carousel page",
-                "localizationKey": "edge.carousel.page"
-              },
-              "content": {
-                "type": "stack",
-                "id": "edge-page-content-2",
-                "direction": "horizontal",
-                "gap": 0,
-                "padding": {
-                  "top": 0,
-                  "start": 0,
-                  "bottom": 0,
-                  "end": 0
-                },
-                "mainAxisDistribution": "start",
-                "crossAxisAlignment": "stretch",
-                "children": [
-                  {
-                    "type": "text",
-                    "id": "edge-page-text-2",
-                    "value": {
-                      "default": "Maximum carousel page",
-                      "localizationKey": "edge.carousel.page"
-                    },
-                    "typography": {
-                      "style": "body",
-                      "fontSize": 8,
-                      "lineHeightMultiplier": 0.8,
-                      "weight": "regular",
-                      "color": "text.primary",
-                      "alignment": "start"
-                    },
-                    "accessibility": {
-                      "role": "text"
-                    }
-                  }
-                ]
-              }
-            },
-            {
-              "id": "edge-page-3",
-              "accessibilityLabel": {
-                "default": "Maximum carousel page",
-                "localizationKey": "edge.carousel.page"
-              },
-              "content": {
-                "type": "stack",
-                "id": "edge-page-content-3",
-                "direction": "vertical",
-                "gap": 0,
-                "padding": {
-                  "top": 0,
-                  "start": 0,
-                  "bottom": 0,
-                  "end": 0
-                },
-                "mainAxisDistribution": "start",
-                "crossAxisAlignment": "stretch",
-                "children": [
-                  {
-                    "type": "text",
-                    "id": "edge-page-text-3",
-                    "value": {
-                      "default": "Maximum carousel page",
-                      "localizationKey": "edge.carousel.page"
-                    },
-                    "typography": {
-                      "style": "body",
-                      "fontSize": 8,
-                      "lineHeightMultiplier": 0.8,
-                      "weight": "regular",
-                      "color": "text.primary",
-                      "alignment": "start"
-                    },
-                    "accessibility": {
-                      "role": "text"
-                    }
-                  }
-                ]
-              }
-            },
-            {
-              "id": "edge-page-4",
-              "accessibilityLabel": {
-                "default": "Maximum carousel page",
-                "localizationKey": "edge.carousel.page"
-              },
-              "content": {
-                "type": "stack",
-                "id": "edge-page-content-4",
-                "direction": "horizontal",
-                "gap": 0,
-                "padding": {
-                  "top": 0,
-                  "start": 0,
-                  "bottom": 0,
-                  "end": 0
-                },
-                "mainAxisDistribution": "start",
-                "crossAxisAlignment": "stretch",
-                "children": [
-                  {
-                    "type": "text",
-                    "id": "edge-page-text-4",
-                    "value": {
-                      "default": "Maximum carousel page",
-                      "localizationKey": "edge.carousel.page"
-                    },
-                    "typography": {
-                      "style": "body",
-                      "fontSize": 8,
-                      "lineHeightMultiplier": 0.8,
-                      "weight": "regular",
-                      "color": "text.primary",
-                      "alignment": "start"
-                    },
-                    "accessibility": {
-                      "role": "text"
-                    }
-                  }
-                ]
-              }
-            },
-            {
-              "id": "edge-page-5",
-              "accessibilityLabel": {
-                "default": "Maximum carousel page",
-                "localizationKey": "edge.carousel.page"
-              },
-              "content": {
-                "type": "stack",
-                "id": "edge-page-content-5",
-                "direction": "vertical",
-                "gap": 0,
-                "padding": {
-                  "top": 0,
-                  "start": 0,
-                  "bottom": 0,
-                  "end": 0
-                },
-                "mainAxisDistribution": "start",
-                "crossAxisAlignment": "stretch",
-                "children": [
-                  {
-                    "type": "text",
-                    "id": "edge-page-text-5",
-                    "value": {
-                      "default": "Maximum carousel page",
-                      "localizationKey": "edge.carousel.page"
-                    },
-                    "typography": {
-                      "style": "body",
-                      "fontSize": 8,
-                      "lineHeightMultiplier": 0.8,
-                      "weight": "regular",
-                      "color": "text.primary",
-                      "alignment": "start"
-                    },
-                    "accessibility": {
-                      "role": "text"
-                    }
-                  }
-                ]
-              }
-            },
-            {
-              "id": "edge-page-6",
-              "accessibilityLabel": {
-                "default": "Maximum carousel page",
-                "localizationKey": "edge.carousel.page"
-              },
-              "content": {
-                "type": "stack",
-                "id": "edge-page-content-6",
-                "direction": "horizontal",
-                "gap": 0,
-                "padding": {
-                  "top": 0,
-                  "start": 0,
-                  "bottom": 0,
-                  "end": 0
-                },
-                "mainAxisDistribution": "start",
-                "crossAxisAlignment": "stretch",
-                "children": [
-                  {
-                    "type": "text",
-                    "id": "edge-page-text-6",
-                    "value": {
-                      "default": "Maximum carousel page",
-                      "localizationKey": "edge.carousel.page"
-                    },
-                    "typography": {
-                      "style": "body",
-                      "fontSize": 8,
-                      "lineHeightMultiplier": 0.8,
-                      "weight": "regular",
-                      "color": "text.primary",
-                      "alignment": "start"
-                    },
-                    "accessibility": {
-                      "role": "text"
-                    }
-                  }
-                ]
-              }
-            },
-            {
-              "id": "edge-page-7",
-              "accessibilityLabel": {
-                "default": "Maximum carousel page",
-                "localizationKey": "edge.carousel.page"
-              },
-              "content": {
-                "type": "stack",
-                "id": "edge-page-content-7",
-                "direction": "vertical",
-                "gap": 0,
-                "padding": {
-                  "top": 0,
-                  "start": 0,
-                  "bottom": 0,
-                  "end": 0
-                },
-                "mainAxisDistribution": "start",
-                "crossAxisAlignment": "stretch",
-                "children": [
-                  {
-                    "type": "text",
-                    "id": "edge-page-text-7",
-                    "value": {
-                      "default": "Maximum carousel page",
-                      "localizationKey": "edge.carousel.page"
-                    },
-                    "typography": {
-                      "style": "body",
-                      "fontSize": 8,
-                      "lineHeightMultiplier": 0.8,
-                      "weight": "regular",
-                      "color": "text.primary",
-                      "alignment": "start"
-                    },
-                    "accessibility": {
-                      "role": "text"
-                    }
-                  }
-                ]
-              }
-            },
-            {
-              "id": "edge-page-8",
-              "accessibilityLabel": {
-                "default": "Maximum carousel page",
-                "localizationKey": "edge.carousel.page"
-              },
-              "content": {
-                "type": "stack",
-                "id": "edge-page-content-8",
-                "direction": "horizontal",
-                "gap": 0,
-                "padding": {
-                  "top": 0,
-                  "start": 0,
-                  "bottom": 0,
-                  "end": 0
-                },
-                "mainAxisDistribution": "start",
-                "crossAxisAlignment": "stretch",
-                "children": [
-                  {
-                    "type": "text",
-                    "id": "edge-page-text-8",
-                    "value": {
-                      "default": "Maximum carousel page",
-                      "localizationKey": "edge.carousel.page"
-                    },
-                    "typography": {
-                      "style": "body",
-                      "fontSize": 8,
-                      "lineHeightMultiplier": 0.8,
-                      "weight": "regular",
-                      "color": "text.primary",
-                      "alignment": "start"
-                    },
-                    "accessibility": {
-                      "role": "text"
-                    }
-                  }
-                ]
-              }
-            },
-            {
-              "id": "edge-page-9",
-              "accessibilityLabel": {
-                "default": "Maximum carousel page",
-                "localizationKey": "edge.carousel.page"
-              },
-              "content": {
-                "type": "stack",
-                "id": "edge-page-content-9",
-                "direction": "vertical",
-                "gap": 0,
-                "padding": {
-                  "top": 0,
-                  "start": 0,
-                  "bottom": 0,
-                  "end": 0
-                },
-                "mainAxisDistribution": "start",
-                "crossAxisAlignment": "stretch",
-                "children": [
-                  {
-                    "type": "text",
-                    "id": "edge-page-text-9",
-                    "value": {
-                      "default": "Maximum carousel page",
-                      "localizationKey": "edge.carousel.page"
-                    },
-                    "typography": {
-                      "style": "body",
-                      "fontSize": 8,
-                      "lineHeightMultiplier": 0.8,
-                      "weight": "regular",
-                      "color": "text.primary",
-                      "alignment": "start"
-                    },
-                    "accessibility": {
-                      "role": "text"
-                    }
-                  }
-                ]
-              }
-            },
-            {
-              "id": "edge-page-10",
-              "accessibilityLabel": {
-                "default": "Maximum carousel page",
-                "localizationKey": "edge.carousel.page"
-              },
-              "content": {
-                "type": "stack",
-                "id": "edge-page-content-10",
-                "direction": "horizontal",
-                "gap": 0,
-                "padding": {
-                  "top": 0,
-                  "start": 0,
-                  "bottom": 0,
-                  "end": 0
-                },
-                "mainAxisDistribution": "start",
-                "crossAxisAlignment": "stretch",
-                "children": [
-                  {
-                    "type": "text",
-                    "id": "edge-page-text-10",
-                    "value": {
-                      "default": "Maximum carousel page",
-                      "localizationKey": "edge.carousel.page"
-                    },
-                    "typography": {
-                      "style": "body",
-                      "fontSize": 8,
-                      "lineHeightMultiplier": 0.8,
-                      "weight": "regular",
-                      "color": "text.primary",
-                      "alignment": "start"
-                    },
-                    "accessibility": {
-                      "role": "text"
-                    }
-                  }
-                ]
-              }
-            },
-            {
-              "id": "edge-page-11",
-              "accessibilityLabel": {
-                "default": "Maximum carousel page",
-                "localizationKey": "edge.carousel.page"
-              },
-              "content": {
-                "type": "stack",
-                "id": "edge-page-content-11",
-                "direction": "vertical",
-                "gap": 0,
-                "padding": {
-                  "top": 0,
-                  "start": 0,
-                  "bottom": 0,
-                  "end": 0
-                },
-                "mainAxisDistribution": "start",
-                "crossAxisAlignment": "stretch",
-                "children": [
-                  {
-                    "type": "text",
-                    "id": "edge-page-text-11",
-                    "value": {
-                      "default": "Maximum carousel page",
-                      "localizationKey": "edge.carousel.page"
-                    },
-                    "typography": {
-                      "style": "body",
-                      "fontSize": 8,
-                      "lineHeightMultiplier": 0.8,
-                      "weight": "regular",
-                      "color": "text.primary",
-                      "alignment": "start"
-                    },
-                    "accessibility": {
-                      "role": "text"
-                    }
-                  }
-                ]
-              }
-            },
-            {
-              "id": "edge-page-12",
-              "accessibilityLabel": {
-                "default": "Maximum carousel page",
-                "localizationKey": "edge.carousel.page"
-              },
-              "content": {
-                "type": "stack",
-                "id": "edge-page-content-12",
-                "direction": "horizontal",
-                "gap": 0,
-                "padding": {
-                  "top": 0,
-                  "start": 0,
-                  "bottom": 0,
-                  "end": 0
-                },
-                "mainAxisDistribution": "start",
-                "crossAxisAlignment": "stretch",
-                "children": [
-                  {
-                    "type": "text",
-                    "id": "edge-page-text-12",
-                    "value": {
-                      "default": "Maximum carousel page",
-                      "localizationKey": "edge.carousel.page"
-                    },
-                    "typography": {
-                      "style": "body",
-                      "fontSize": 8,
-                      "lineHeightMultiplier": 0.8,
-                      "weight": "regular",
-                      "color": "text.primary",
-                      "alignment": "start"
-                    },
-                    "accessibility": {
-                      "role": "text"
-                    }
-                  }
-                ]
-              }
-            },
-            {
-              "id": "edge-page-13",
-              "accessibilityLabel": {
-                "default": "Maximum carousel page",
-                "localizationKey": "edge.carousel.page"
-              },
-              "content": {
-                "type": "stack",
-                "id": "edge-page-content-13",
-                "direction": "vertical",
-                "gap": 0,
-                "padding": {
-                  "top": 0,
-                  "start": 0,
-                  "bottom": 0,
-                  "end": 0
-                },
-                "mainAxisDistribution": "start",
-                "crossAxisAlignment": "stretch",
-                "children": [
-                  {
-                    "type": "text",
-                    "id": "edge-page-text-13",
-                    "value": {
-                      "default": "Maximum carousel page",
-                      "localizationKey": "edge.carousel.page"
-                    },
-                    "typography": {
-                      "style": "body",
-                      "fontSize": 8,
-                      "lineHeightMultiplier": 0.8,
-                      "weight": "regular",
-                      "color": "text.primary",
-                      "alignment": "start"
-                    },
-                    "accessibility": {
-                      "role": "text"
-                    }
-                  }
-                ]
-              }
-            },
-            {
-              "id": "edge-page-14",
-              "accessibilityLabel": {
-                "default": "Maximum carousel page",
-                "localizationKey": "edge.carousel.page"
-              },
-              "content": {
-                "type": "stack",
-                "id": "edge-page-content-14",
-                "direction": "horizontal",
-                "gap": 0,
-                "padding": {
-                  "top": 0,
-                  "start": 0,
-                  "bottom": 0,
-                  "end": 0
-                },
-                "mainAxisDistribution": "start",
-                "crossAxisAlignment": "stretch",
-                "children": [
-                  {
-                    "type": "text",
-                    "id": "edge-page-text-14",
-                    "value": {
-                      "default": "Maximum carousel page",
-                      "localizationKey": "edge.carousel.page"
-                    },
-                    "typography": {
-                      "style": "body",
-                      "fontSize": 8,
-                      "lineHeightMultiplier": 0.8,
-                      "weight": "regular",
-                      "color": "text.primary",
-                      "alignment": "start"
-                    },
-                    "accessibility": {
-                      "role": "text"
-                    }
-                  }
-                ]
-              }
-            },
-            {
-              "id": "edge-page-15",
-              "accessibilityLabel": {
-                "default": "Maximum carousel page",
-                "localizationKey": "edge.carousel.page"
-              },
-              "content": {
-                "type": "stack",
-                "id": "edge-page-content-15",
-                "direction": "vertical",
-                "gap": 0,
-                "padding": {
-                  "top": 0,
-                  "start": 0,
-                  "bottom": 0,
-                  "end": 0
-                },
-                "mainAxisDistribution": "start",
-                "crossAxisAlignment": "stretch",
-                "children": [
-                  {
-                    "type": "text",
-                    "id": "edge-page-text-15",
-                    "value": {
-                      "default": "Maximum carousel page",
-                      "localizationKey": "edge.carousel.page"
-                    },
-                    "typography": {
-                      "style": "body",
-                      "fontSize": 8,
-                      "lineHeightMultiplier": 0.8,
-                      "weight": "regular",
-                      "color": "text.primary",
-                      "alignment": "start"
-                    },
-                    "accessibility": {
-                      "role": "text"
-                    }
-                  }
-                ]
-              }
-            },
-            {
-              "id": "edge-page-16",
-              "accessibilityLabel": {
-                "default": "Maximum carousel page",
-                "localizationKey": "edge.carousel.page"
-              },
-              "content": {
-                "type": "stack",
-                "id": "edge-page-content-16",
-                "direction": "horizontal",
-                "gap": 0,
-                "padding": {
-                  "top": 0,
-                  "start": 0,
-                  "bottom": 0,
-                  "end": 0
-                },
-                "mainAxisDistribution": "start",
-                "crossAxisAlignment": "stretch",
-                "children": [
-                  {
-                    "type": "text",
-                    "id": "edge-page-text-16",
-                    "value": {
-                      "default": "Maximum carousel page",
-                      "localizationKey": "edge.carousel.page"
-                    },
-                    "typography": {
-                      "style": "body",
-                      "fontSize": 8,
-                      "lineHeightMultiplier": 0.8,
-                      "weight": "regular",
-                      "color": "text.primary",
-                      "alignment": "start"
-                    },
-                    "accessibility": {
-                      "role": "text"
-                    }
-                  }
-                ]
-              }
-            },
-            {
-              "id": "edge-page-17",
-              "accessibilityLabel": {
-                "default": "Maximum carousel page",
-                "localizationKey": "edge.carousel.page"
-              },
-              "content": {
-                "type": "stack",
-                "id": "edge-page-content-17",
-                "direction": "vertical",
-                "gap": 0,
-                "padding": {
-                  "top": 0,
-                  "start": 0,
-                  "bottom": 0,
-                  "end": 0
-                },
-                "mainAxisDistribution": "start",
-                "crossAxisAlignment": "stretch",
-                "children": [
-                  {
-                    "type": "text",
-                    "id": "edge-page-text-17",
-                    "value": {
-                      "default": "Maximum carousel page",
-                      "localizationKey": "edge.carousel.page"
-                    },
-                    "typography": {
-                      "style": "body",
-                      "fontSize": 8,
-                      "lineHeightMultiplier": 0.8,
-                      "weight": "regular",
-                      "color": "text.primary",
-                      "alignment": "start"
-                    },
-                    "accessibility": {
-                      "role": "text"
-                    }
-                  }
-                ]
-              }
-            },
-            {
-              "id": "edge-page-18",
-              "accessibilityLabel": {
-                "default": "Maximum carousel page",
-                "localizationKey": "edge.carousel.page"
-              },
-              "content": {
-                "type": "stack",
-                "id": "edge-page-content-18",
-                "direction": "horizontal",
-                "gap": 0,
-                "padding": {
-                  "top": 0,
-                  "start": 0,
-                  "bottom": 0,
-                  "end": 0
-                },
-                "mainAxisDistribution": "start",
-                "crossAxisAlignment": "stretch",
-                "children": [
-                  {
-                    "type": "text",
-                    "id": "edge-page-text-18",
-                    "value": {
-                      "default": "Maximum carousel page",
-                      "localizationKey": "edge.carousel.page"
-                    },
-                    "typography": {
-                      "style": "body",
-                      "fontSize": 8,
-                      "lineHeightMultiplier": 0.8,
-                      "weight": "regular",
-                      "color": "text.primary",
-                      "alignment": "start"
-                    },
-                    "accessibility": {
-                      "role": "text"
-                    }
-                  }
-                ]
-              }
-            },
-            {
-              "id": "edge-page-19",
-              "accessibilityLabel": {
-                "default": "Maximum carousel page",
-                "localizationKey": "edge.carousel.page"
-              },
-              "content": {
-                "type": "stack",
-                "id": "edge-page-content-19",
-                "direction": "vertical",
-                "gap": 0,
-                "padding": {
-                  "top": 0,
-                  "start": 0,
-                  "bottom": 0,
-                  "end": 0
-                },
-                "mainAxisDistribution": "start",
-                "crossAxisAlignment": "stretch",
-                "children": [
-                  {
-                    "type": "text",
-                    "id": "edge-page-text-19",
-                    "value": {
-                      "default": "Maximum carousel page",
-                      "localizationKey": "edge.carousel.page"
-                    },
-                    "typography": {
-                      "style": "body",
-                      "fontSize": 8,
-                      "lineHeightMultiplier": 0.8,
-                      "weight": "regular",
-                      "color": "text.primary",
-                      "alignment": "start"
-                    },
-                    "accessibility": {
-                      "role": "text"
-                    }
-                  }
-                ]
-              }
-            },
-            {
-              "id": "edge-page-20",
-              "accessibilityLabel": {
-                "default": "Maximum carousel page",
-                "localizationKey": "edge.carousel.page"
-              },
-              "content": {
-                "type": "stack",
-                "id": "edge-page-content-20",
-                "direction": "horizontal",
-                "gap": 4096,
-                "padding": {
-                  "top": 4096,
-                  "start": 0,
-                  "bottom": 0,
-                  "end": 0
-                },
-                "mainAxisDistribution": "start",
-                "crossAxisAlignment": "stretch",
-                "children": [
-                  {
-                    "type": "text",
-                    "id": "edge-page-text-20",
-                    "value": {
-                      "default": "Maximum carousel page",
-                      "localizationKey": "edge.carousel.page"
-                    },
-                    "typography": {
-                      "style": "body",
-                      "fontSize": 96,
-                      "lineHeightMultiplier": 3,
-                      "weight": "regular",
-                      "color": "#FFFFFFFF",
-                      "alignment": "start"
-                    },
-                    "accessibility": {
-                      "role": "text"
-                    }
-                  }
-                ]
-              }
-            }
-          ],
-          "appearance": {
-            "background": "#00000000",
-            "border": {
-              "color": "#FFFFFFFF",
-              "width": 4096
-            },
-            "cornerRadius": 4096,
-            "opacity": 0,
-            "clipContent": false
-          },
-          "sizing": {
-            "width": {
-              "mode": "fixed",
-              "value": 4096
-            }
-          },
-          "accessibility": {
-            "label": {
-              "default": "Twenty page carousel",
-              "localizationKey": "edge.carousel.label"
-            }
-          }
+  "initialScreenId": "edge",
+  "screens": [
+    {
+      "id": "edge",
+      "layout": {
+        "type": "scrollContainer",
+        "id": "edge-scroll",
+        "axis": "vertical",
+        "safeArea": "respect",
+        "showsIndicators": false,
+        "background": {
+          "type": "color",
+          "value": "transparent"
         },
-        {
-          "type": "countdown",
-          "id": "edge-countdown",
-          "endsAt": "9999-12-31T23:59:59Z",
-          "largestUnit": "minute",
-          "smallestUnit": "second",
-          "completedText": {
-            "default": "Complete",
-            "localizationKey": "edge.countdown.completed"
+        "content": {
+          "type": "stack",
+          "id": "edge-content",
+          "direction": "vertical",
+          "gap": 0,
+          "padding": {
+            "top": 0,
+            "start": 0,
+            "bottom": 0,
+            "end": 0
           },
-          "typography": {
-            "style": "body",
-            "fontSize": 8,
-            "lineHeightMultiplier": 0.8,
-            "weight": "regular",
-            "color": "text.primary",
-            "alignment": "start"
-          },
-          "accessibility": {
-            "role": "text"
-          }
+          "mainAxisDistribution": "start",
+          "crossAxisAlignment": "stretch",
+          "children": [
+            {
+              "type": "carousel",
+              "id": "edge-carousel",
+              "initialPageIndex": 19,
+              "showsIndicators": false,
+              "pages": [
+                {
+                  "id": "edge-page-1",
+                  "accessibilityLabel": {
+                    "default": "Maximum carousel page",
+                    "localizationKey": "edge.carousel.page"
+                  },
+                  "content": {
+                    "type": "stack",
+                    "id": "edge-page-content-1",
+                    "direction": "vertical",
+                    "gap": 0,
+                    "padding": {
+                      "top": 0,
+                      "start": 0,
+                      "bottom": 0,
+                      "end": 0
+                    },
+                    "mainAxisDistribution": "start",
+                    "crossAxisAlignment": "stretch",
+                    "children": [
+                      {
+                        "type": "text",
+                        "id": "edge-page-text-1",
+                        "value": {
+                          "default": "Maximum carousel page",
+                          "localizationKey": "edge.carousel.page"
+                        },
+                        "typography": {
+                          "style": "body",
+                          "fontSize": 8,
+                          "lineHeightMultiplier": 0.8,
+                          "weight": "regular",
+                          "color": "text.primary",
+                          "alignment": "start"
+                        },
+                        "accessibility": {
+                          "role": "text"
+                        }
+                      }
+                    ]
+                  }
+                },
+                {
+                  "id": "edge-page-2",
+                  "accessibilityLabel": {
+                    "default": "Maximum carousel page",
+                    "localizationKey": "edge.carousel.page"
+                  },
+                  "content": {
+                    "type": "stack",
+                    "id": "edge-page-content-2",
+                    "direction": "horizontal",
+                    "gap": 0,
+                    "padding": {
+                      "top": 0,
+                      "start": 0,
+                      "bottom": 0,
+                      "end": 0
+                    },
+                    "mainAxisDistribution": "start",
+                    "crossAxisAlignment": "stretch",
+                    "children": [
+                      {
+                        "type": "text",
+                        "id": "edge-page-text-2",
+                        "value": {
+                          "default": "Maximum carousel page",
+                          "localizationKey": "edge.carousel.page"
+                        },
+                        "typography": {
+                          "style": "body",
+                          "fontSize": 8,
+                          "lineHeightMultiplier": 0.8,
+                          "weight": "regular",
+                          "color": "text.primary",
+                          "alignment": "start"
+                        },
+                        "accessibility": {
+                          "role": "text"
+                        }
+                      }
+                    ]
+                  }
+                },
+                {
+                  "id": "edge-page-3",
+                  "accessibilityLabel": {
+                    "default": "Maximum carousel page",
+                    "localizationKey": "edge.carousel.page"
+                  },
+                  "content": {
+                    "type": "stack",
+                    "id": "edge-page-content-3",
+                    "direction": "vertical",
+                    "gap": 0,
+                    "padding": {
+                      "top": 0,
+                      "start": 0,
+                      "bottom": 0,
+                      "end": 0
+                    },
+                    "mainAxisDistribution": "start",
+                    "crossAxisAlignment": "stretch",
+                    "children": [
+                      {
+                        "type": "text",
+                        "id": "edge-page-text-3",
+                        "value": {
+                          "default": "Maximum carousel page",
+                          "localizationKey": "edge.carousel.page"
+                        },
+                        "typography": {
+                          "style": "body",
+                          "fontSize": 8,
+                          "lineHeightMultiplier": 0.8,
+                          "weight": "regular",
+                          "color": "text.primary",
+                          "alignment": "start"
+                        },
+                        "accessibility": {
+                          "role": "text"
+                        }
+                      }
+                    ]
+                  }
+                },
+                {
+                  "id": "edge-page-4",
+                  "accessibilityLabel": {
+                    "default": "Maximum carousel page",
+                    "localizationKey": "edge.carousel.page"
+                  },
+                  "content": {
+                    "type": "stack",
+                    "id": "edge-page-content-4",
+                    "direction": "horizontal",
+                    "gap": 0,
+                    "padding": {
+                      "top": 0,
+                      "start": 0,
+                      "bottom": 0,
+                      "end": 0
+                    },
+                    "mainAxisDistribution": "start",
+                    "crossAxisAlignment": "stretch",
+                    "children": [
+                      {
+                        "type": "text",
+                        "id": "edge-page-text-4",
+                        "value": {
+                          "default": "Maximum carousel page",
+                          "localizationKey": "edge.carousel.page"
+                        },
+                        "typography": {
+                          "style": "body",
+                          "fontSize": 8,
+                          "lineHeightMultiplier": 0.8,
+                          "weight": "regular",
+                          "color": "text.primary",
+                          "alignment": "start"
+                        },
+                        "accessibility": {
+                          "role": "text"
+                        }
+                      }
+                    ]
+                  }
+                },
+                {
+                  "id": "edge-page-5",
+                  "accessibilityLabel": {
+                    "default": "Maximum carousel page",
+                    "localizationKey": "edge.carousel.page"
+                  },
+                  "content": {
+                    "type": "stack",
+                    "id": "edge-page-content-5",
+                    "direction": "vertical",
+                    "gap": 0,
+                    "padding": {
+                      "top": 0,
+                      "start": 0,
+                      "bottom": 0,
+                      "end": 0
+                    },
+                    "mainAxisDistribution": "start",
+                    "crossAxisAlignment": "stretch",
+                    "children": [
+                      {
+                        "type": "text",
+                        "id": "edge-page-text-5",
+                        "value": {
+                          "default": "Maximum carousel page",
+                          "localizationKey": "edge.carousel.page"
+                        },
+                        "typography": {
+                          "style": "body",
+                          "fontSize": 8,
+                          "lineHeightMultiplier": 0.8,
+                          "weight": "regular",
+                          "color": "text.primary",
+                          "alignment": "start"
+                        },
+                        "accessibility": {
+                          "role": "text"
+                        }
+                      }
+                    ]
+                  }
+                },
+                {
+                  "id": "edge-page-6",
+                  "accessibilityLabel": {
+                    "default": "Maximum carousel page",
+                    "localizationKey": "edge.carousel.page"
+                  },
+                  "content": {
+                    "type": "stack",
+                    "id": "edge-page-content-6",
+                    "direction": "horizontal",
+                    "gap": 0,
+                    "padding": {
+                      "top": 0,
+                      "start": 0,
+                      "bottom": 0,
+                      "end": 0
+                    },
+                    "mainAxisDistribution": "start",
+                    "crossAxisAlignment": "stretch",
+                    "children": [
+                      {
+                        "type": "text",
+                        "id": "edge-page-text-6",
+                        "value": {
+                          "default": "Maximum carousel page",
+                          "localizationKey": "edge.carousel.page"
+                        },
+                        "typography": {
+                          "style": "body",
+                          "fontSize": 8,
+                          "lineHeightMultiplier": 0.8,
+                          "weight": "regular",
+                          "color": "text.primary",
+                          "alignment": "start"
+                        },
+                        "accessibility": {
+                          "role": "text"
+                        }
+                      }
+                    ]
+                  }
+                },
+                {
+                  "id": "edge-page-7",
+                  "accessibilityLabel": {
+                    "default": "Maximum carousel page",
+                    "localizationKey": "edge.carousel.page"
+                  },
+                  "content": {
+                    "type": "stack",
+                    "id": "edge-page-content-7",
+                    "direction": "vertical",
+                    "gap": 0,
+                    "padding": {
+                      "top": 0,
+                      "start": 0,
+                      "bottom": 0,
+                      "end": 0
+                    },
+                    "mainAxisDistribution": "start",
+                    "crossAxisAlignment": "stretch",
+                    "children": [
+                      {
+                        "type": "text",
+                        "id": "edge-page-text-7",
+                        "value": {
+                          "default": "Maximum carousel page",
+                          "localizationKey": "edge.carousel.page"
+                        },
+                        "typography": {
+                          "style": "body",
+                          "fontSize": 8,
+                          "lineHeightMultiplier": 0.8,
+                          "weight": "regular",
+                          "color": "text.primary",
+                          "alignment": "start"
+                        },
+                        "accessibility": {
+                          "role": "text"
+                        }
+                      }
+                    ]
+                  }
+                },
+                {
+                  "id": "edge-page-8",
+                  "accessibilityLabel": {
+                    "default": "Maximum carousel page",
+                    "localizationKey": "edge.carousel.page"
+                  },
+                  "content": {
+                    "type": "stack",
+                    "id": "edge-page-content-8",
+                    "direction": "horizontal",
+                    "gap": 0,
+                    "padding": {
+                      "top": 0,
+                      "start": 0,
+                      "bottom": 0,
+                      "end": 0
+                    },
+                    "mainAxisDistribution": "start",
+                    "crossAxisAlignment": "stretch",
+                    "children": [
+                      {
+                        "type": "text",
+                        "id": "edge-page-text-8",
+                        "value": {
+                          "default": "Maximum carousel page",
+                          "localizationKey": "edge.carousel.page"
+                        },
+                        "typography": {
+                          "style": "body",
+                          "fontSize": 8,
+                          "lineHeightMultiplier": 0.8,
+                          "weight": "regular",
+                          "color": "text.primary",
+                          "alignment": "start"
+                        },
+                        "accessibility": {
+                          "role": "text"
+                        }
+                      }
+                    ]
+                  }
+                },
+                {
+                  "id": "edge-page-9",
+                  "accessibilityLabel": {
+                    "default": "Maximum carousel page",
+                    "localizationKey": "edge.carousel.page"
+                  },
+                  "content": {
+                    "type": "stack",
+                    "id": "edge-page-content-9",
+                    "direction": "vertical",
+                    "gap": 0,
+                    "padding": {
+                      "top": 0,
+                      "start": 0,
+                      "bottom": 0,
+                      "end": 0
+                    },
+                    "mainAxisDistribution": "start",
+                    "crossAxisAlignment": "stretch",
+                    "children": [
+                      {
+                        "type": "text",
+                        "id": "edge-page-text-9",
+                        "value": {
+                          "default": "Maximum carousel page",
+                          "localizationKey": "edge.carousel.page"
+                        },
+                        "typography": {
+                          "style": "body",
+                          "fontSize": 8,
+                          "lineHeightMultiplier": 0.8,
+                          "weight": "regular",
+                          "color": "text.primary",
+                          "alignment": "start"
+                        },
+                        "accessibility": {
+                          "role": "text"
+                        }
+                      }
+                    ]
+                  }
+                },
+                {
+                  "id": "edge-page-10",
+                  "accessibilityLabel": {
+                    "default": "Maximum carousel page",
+                    "localizationKey": "edge.carousel.page"
+                  },
+                  "content": {
+                    "type": "stack",
+                    "id": "edge-page-content-10",
+                    "direction": "horizontal",
+                    "gap": 0,
+                    "padding": {
+                      "top": 0,
+                      "start": 0,
+                      "bottom": 0,
+                      "end": 0
+                    },
+                    "mainAxisDistribution": "start",
+                    "crossAxisAlignment": "stretch",
+                    "children": [
+                      {
+                        "type": "text",
+                        "id": "edge-page-text-10",
+                        "value": {
+                          "default": "Maximum carousel page",
+                          "localizationKey": "edge.carousel.page"
+                        },
+                        "typography": {
+                          "style": "body",
+                          "fontSize": 8,
+                          "lineHeightMultiplier": 0.8,
+                          "weight": "regular",
+                          "color": "text.primary",
+                          "alignment": "start"
+                        },
+                        "accessibility": {
+                          "role": "text"
+                        }
+                      }
+                    ]
+                  }
+                },
+                {
+                  "id": "edge-page-11",
+                  "accessibilityLabel": {
+                    "default": "Maximum carousel page",
+                    "localizationKey": "edge.carousel.page"
+                  },
+                  "content": {
+                    "type": "stack",
+                    "id": "edge-page-content-11",
+                    "direction": "vertical",
+                    "gap": 0,
+                    "padding": {
+                      "top": 0,
+                      "start": 0,
+                      "bottom": 0,
+                      "end": 0
+                    },
+                    "mainAxisDistribution": "start",
+                    "crossAxisAlignment": "stretch",
+                    "children": [
+                      {
+                        "type": "text",
+                        "id": "edge-page-text-11",
+                        "value": {
+                          "default": "Maximum carousel page",
+                          "localizationKey": "edge.carousel.page"
+                        },
+                        "typography": {
+                          "style": "body",
+                          "fontSize": 8,
+                          "lineHeightMultiplier": 0.8,
+                          "weight": "regular",
+                          "color": "text.primary",
+                          "alignment": "start"
+                        },
+                        "accessibility": {
+                          "role": "text"
+                        }
+                      }
+                    ]
+                  }
+                },
+                {
+                  "id": "edge-page-12",
+                  "accessibilityLabel": {
+                    "default": "Maximum carousel page",
+                    "localizationKey": "edge.carousel.page"
+                  },
+                  "content": {
+                    "type": "stack",
+                    "id": "edge-page-content-12",
+                    "direction": "horizontal",
+                    "gap": 0,
+                    "padding": {
+                      "top": 0,
+                      "start": 0,
+                      "bottom": 0,
+                      "end": 0
+                    },
+                    "mainAxisDistribution": "start",
+                    "crossAxisAlignment": "stretch",
+                    "children": [
+                      {
+                        "type": "text",
+                        "id": "edge-page-text-12",
+                        "value": {
+                          "default": "Maximum carousel page",
+                          "localizationKey": "edge.carousel.page"
+                        },
+                        "typography": {
+                          "style": "body",
+                          "fontSize": 8,
+                          "lineHeightMultiplier": 0.8,
+                          "weight": "regular",
+                          "color": "text.primary",
+                          "alignment": "start"
+                        },
+                        "accessibility": {
+                          "role": "text"
+                        }
+                      }
+                    ]
+                  }
+                },
+                {
+                  "id": "edge-page-13",
+                  "accessibilityLabel": {
+                    "default": "Maximum carousel page",
+                    "localizationKey": "edge.carousel.page"
+                  },
+                  "content": {
+                    "type": "stack",
+                    "id": "edge-page-content-13",
+                    "direction": "vertical",
+                    "gap": 0,
+                    "padding": {
+                      "top": 0,
+                      "start": 0,
+                      "bottom": 0,
+                      "end": 0
+                    },
+                    "mainAxisDistribution": "start",
+                    "crossAxisAlignment": "stretch",
+                    "children": [
+                      {
+                        "type": "text",
+                        "id": "edge-page-text-13",
+                        "value": {
+                          "default": "Maximum carousel page",
+                          "localizationKey": "edge.carousel.page"
+                        },
+                        "typography": {
+                          "style": "body",
+                          "fontSize": 8,
+                          "lineHeightMultiplier": 0.8,
+                          "weight": "regular",
+                          "color": "text.primary",
+                          "alignment": "start"
+                        },
+                        "accessibility": {
+                          "role": "text"
+                        }
+                      }
+                    ]
+                  }
+                },
+                {
+                  "id": "edge-page-14",
+                  "accessibilityLabel": {
+                    "default": "Maximum carousel page",
+                    "localizationKey": "edge.carousel.page"
+                  },
+                  "content": {
+                    "type": "stack",
+                    "id": "edge-page-content-14",
+                    "direction": "horizontal",
+                    "gap": 0,
+                    "padding": {
+                      "top": 0,
+                      "start": 0,
+                      "bottom": 0,
+                      "end": 0
+                    },
+                    "mainAxisDistribution": "start",
+                    "crossAxisAlignment": "stretch",
+                    "children": [
+                      {
+                        "type": "text",
+                        "id": "edge-page-text-14",
+                        "value": {
+                          "default": "Maximum carousel page",
+                          "localizationKey": "edge.carousel.page"
+                        },
+                        "typography": {
+                          "style": "body",
+                          "fontSize": 8,
+                          "lineHeightMultiplier": 0.8,
+                          "weight": "regular",
+                          "color": "text.primary",
+                          "alignment": "start"
+                        },
+                        "accessibility": {
+                          "role": "text"
+                        }
+                      }
+                    ]
+                  }
+                },
+                {
+                  "id": "edge-page-15",
+                  "accessibilityLabel": {
+                    "default": "Maximum carousel page",
+                    "localizationKey": "edge.carousel.page"
+                  },
+                  "content": {
+                    "type": "stack",
+                    "id": "edge-page-content-15",
+                    "direction": "vertical",
+                    "gap": 0,
+                    "padding": {
+                      "top": 0,
+                      "start": 0,
+                      "bottom": 0,
+                      "end": 0
+                    },
+                    "mainAxisDistribution": "start",
+                    "crossAxisAlignment": "stretch",
+                    "children": [
+                      {
+                        "type": "text",
+                        "id": "edge-page-text-15",
+                        "value": {
+                          "default": "Maximum carousel page",
+                          "localizationKey": "edge.carousel.page"
+                        },
+                        "typography": {
+                          "style": "body",
+                          "fontSize": 8,
+                          "lineHeightMultiplier": 0.8,
+                          "weight": "regular",
+                          "color": "text.primary",
+                          "alignment": "start"
+                        },
+                        "accessibility": {
+                          "role": "text"
+                        }
+                      }
+                    ]
+                  }
+                },
+                {
+                  "id": "edge-page-16",
+                  "accessibilityLabel": {
+                    "default": "Maximum carousel page",
+                    "localizationKey": "edge.carousel.page"
+                  },
+                  "content": {
+                    "type": "stack",
+                    "id": "edge-page-content-16",
+                    "direction": "horizontal",
+                    "gap": 0,
+                    "padding": {
+                      "top": 0,
+                      "start": 0,
+                      "bottom": 0,
+                      "end": 0
+                    },
+                    "mainAxisDistribution": "start",
+                    "crossAxisAlignment": "stretch",
+                    "children": [
+                      {
+                        "type": "text",
+                        "id": "edge-page-text-16",
+                        "value": {
+                          "default": "Maximum carousel page",
+                          "localizationKey": "edge.carousel.page"
+                        },
+                        "typography": {
+                          "style": "body",
+                          "fontSize": 8,
+                          "lineHeightMultiplier": 0.8,
+                          "weight": "regular",
+                          "color": "text.primary",
+                          "alignment": "start"
+                        },
+                        "accessibility": {
+                          "role": "text"
+                        }
+                      }
+                    ]
+                  }
+                },
+                {
+                  "id": "edge-page-17",
+                  "accessibilityLabel": {
+                    "default": "Maximum carousel page",
+                    "localizationKey": "edge.carousel.page"
+                  },
+                  "content": {
+                    "type": "stack",
+                    "id": "edge-page-content-17",
+                    "direction": "vertical",
+                    "gap": 0,
+                    "padding": {
+                      "top": 0,
+                      "start": 0,
+                      "bottom": 0,
+                      "end": 0
+                    },
+                    "mainAxisDistribution": "start",
+                    "crossAxisAlignment": "stretch",
+                    "children": [
+                      {
+                        "type": "text",
+                        "id": "edge-page-text-17",
+                        "value": {
+                          "default": "Maximum carousel page",
+                          "localizationKey": "edge.carousel.page"
+                        },
+                        "typography": {
+                          "style": "body",
+                          "fontSize": 8,
+                          "lineHeightMultiplier": 0.8,
+                          "weight": "regular",
+                          "color": "text.primary",
+                          "alignment": "start"
+                        },
+                        "accessibility": {
+                          "role": "text"
+                        }
+                      }
+                    ]
+                  }
+                },
+                {
+                  "id": "edge-page-18",
+                  "accessibilityLabel": {
+                    "default": "Maximum carousel page",
+                    "localizationKey": "edge.carousel.page"
+                  },
+                  "content": {
+                    "type": "stack",
+                    "id": "edge-page-content-18",
+                    "direction": "horizontal",
+                    "gap": 0,
+                    "padding": {
+                      "top": 0,
+                      "start": 0,
+                      "bottom": 0,
+                      "end": 0
+                    },
+                    "mainAxisDistribution": "start",
+                    "crossAxisAlignment": "stretch",
+                    "children": [
+                      {
+                        "type": "text",
+                        "id": "edge-page-text-18",
+                        "value": {
+                          "default": "Maximum carousel page",
+                          "localizationKey": "edge.carousel.page"
+                        },
+                        "typography": {
+                          "style": "body",
+                          "fontSize": 8,
+                          "lineHeightMultiplier": 0.8,
+                          "weight": "regular",
+                          "color": "text.primary",
+                          "alignment": "start"
+                        },
+                        "accessibility": {
+                          "role": "text"
+                        }
+                      }
+                    ]
+                  }
+                },
+                {
+                  "id": "edge-page-19",
+                  "accessibilityLabel": {
+                    "default": "Maximum carousel page",
+                    "localizationKey": "edge.carousel.page"
+                  },
+                  "content": {
+                    "type": "stack",
+                    "id": "edge-page-content-19",
+                    "direction": "vertical",
+                    "gap": 0,
+                    "padding": {
+                      "top": 0,
+                      "start": 0,
+                      "bottom": 0,
+                      "end": 0
+                    },
+                    "mainAxisDistribution": "start",
+                    "crossAxisAlignment": "stretch",
+                    "children": [
+                      {
+                        "type": "text",
+                        "id": "edge-page-text-19",
+                        "value": {
+                          "default": "Maximum carousel page",
+                          "localizationKey": "edge.carousel.page"
+                        },
+                        "typography": {
+                          "style": "body",
+                          "fontSize": 8,
+                          "lineHeightMultiplier": 0.8,
+                          "weight": "regular",
+                          "color": "text.primary",
+                          "alignment": "start"
+                        },
+                        "accessibility": {
+                          "role": "text"
+                        }
+                      }
+                    ]
+                  }
+                },
+                {
+                  "id": "edge-page-20",
+                  "accessibilityLabel": {
+                    "default": "Maximum carousel page",
+                    "localizationKey": "edge.carousel.page"
+                  },
+                  "content": {
+                    "type": "stack",
+                    "id": "edge-page-content-20",
+                    "direction": "horizontal",
+                    "gap": 4096,
+                    "padding": {
+                      "top": 4096,
+                      "start": 0,
+                      "bottom": 0,
+                      "end": 0
+                    },
+                    "mainAxisDistribution": "start",
+                    "crossAxisAlignment": "stretch",
+                    "children": [
+                      {
+                        "type": "text",
+                        "id": "edge-page-text-20",
+                        "value": {
+                          "default": "Maximum carousel page",
+                          "localizationKey": "edge.carousel.page"
+                        },
+                        "typography": {
+                          "style": "body",
+                          "fontSize": 96,
+                          "lineHeightMultiplier": 3,
+                          "weight": "regular",
+                          "color": "#FFFFFFFF",
+                          "alignment": "start"
+                        },
+                        "accessibility": {
+                          "role": "text"
+                        }
+                      }
+                    ]
+                  }
+                }
+              ],
+              "appearance": {
+                "background": {
+                  "type": "color",
+                  "value": "#00000000"
+                },
+                "border": {
+                  "color": "#FFFFFFFF",
+                  "width": 4096
+                },
+                "cornerRadius": 4096,
+                "opacity": 0,
+                "clipContent": false
+              },
+              "sizing": {
+                "width": {
+                  "mode": "fixed",
+                  "value": 4096
+                },
+                "height": "fit"
+              },
+              "accessibility": {
+                "label": {
+                  "default": "Twenty page carousel",
+                  "localizationKey": "edge.carousel.label"
+                }
+              }
+            },
+            {
+              "type": "countdown",
+              "id": "edge-countdown",
+              "endsAt": "9999-12-31T23:59:59Z",
+              "largestUnit": "minute",
+              "smallestUnit": "second",
+              "completedText": {
+                "default": "Complete",
+                "localizationKey": "edge.countdown.completed"
+              },
+              "typography": {
+                "style": "body",
+                "fontSize": 8,
+                "lineHeightMultiplier": 0.8,
+                "weight": "regular",
+                "color": "text.primary",
+                "alignment": "start"
+              },
+              "accessibility": {
+                "role": "text"
+              }
+            }
+          ]
         }
-      ]
+      },
+      "presentation": {
+        "type": "screen"
+      }
     }
+  ],
+  "designSystem": {
+    "colors": [],
+    "backgrounds": [],
+    "shadows": []
   }
 }

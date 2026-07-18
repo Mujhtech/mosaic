@@ -1,15 +1,16 @@
-# Mosaic Flutter SDK — Protocol and Local Preview 0.2
+# Mosaic Flutter SDK — Protocol and Local Preview 0.2 RC4
 
-This package provides separate strict readers for Mosaic Protocol 0.1 and 0.2
-and renders both with native Flutter widgets. It includes localization and RTL,
+This package provides a strict reader for Mosaic Protocol 0.2
+and renders it with native Flutter widgets. It includes localization and RTL,
 bundled fallback loading, mock commerce, normalized results, diagnostics,
-accessibility semantics, native rendering, and Local Preview 0.1/0.2 support.
+accessibility semantics, native rendering, and Local Preview 0.2 support.
 
-Protocol 0.2 adds generalized Stack layout, contextual sizing, outer insets,
-semantic and literal colors, border/corner/clip/opacity styling, typography,
-complete Product Card default/selected styles, Carousel, Switch, Countdown,
-and switch-controlled visibility. The 0.1 behavior remains unchanged and the
-SDK never migrates a document implicitly.
+Protocol 0.2 RC4 adds document design-system tokens, solid/linear/radial/media
+backgrounds, native shadows, uniform width and height Fit/Fill/Fixed sizing,
+remote and bundled image/video assets, and native Screen/Sheet presentation.
+It retains RC3's generalized Buttons and Stacks, authored Product Cards and
+Badges, safe product templates, navigation, Carousel, Switch, Countdown, and
+conditional visibility. The SDK never migrates a document implicitly.
 
 Phase 2 remains account-free and local-only. It does not include remote
 configuration, hosted publishing, REST fetching, caching, placements,
@@ -51,14 +52,20 @@ MosaicPaywallHost(
     'mosaic.paywall.hero' => const AssetImage('assets/hero.png'),
     _ => null,
   },
+  videoResolver: (key) => switch (key) {
+    'mosaic.paywall.offer_video' => 'assets/offer.mp4',
+    _ => null,
+  },
   onResult: (result) {
-    // The host owns route, sheet, or dialog dismissal.
+    // The host owns terminal paywall dismissal.
   },
 )
 ```
 
 `MosaicPaywall` is the lower-level widget for an already decoded and validated
-`MosaicPaywallDocument`. Neither widget owns modal presentation or dismissal.
+`MosaicPaywallDocument`. Mosaic presents protocol-internal Sheet destinations
+with Flutter's native modal bottom sheet and maintains their Screen history.
+The host still owns terminal paywall presentation and dismissal.
 
 ## Local Studio preview
 
@@ -95,15 +102,14 @@ await preview.connect();
 ```
 
 Render the latest safe revision with `MosaicPreviewPaywall`. Supply the
-existing bundled document/provider as the disconnected and pre-first-revision
-fallback. The widget applies the message's locale and text scale, rerenders
+existing provider for mock commerce. Before the first revision it shows an
+explicit loading or connection-failure state. The widget applies the message's locale and text scale, rerenders
 without rebuilding the app, and sends `draftAccepted` only after the revision
 completes a Flutter frame.
 
 The client:
 
-- advertises `mosaic.local-preview.v0.2` then `mosaic.local-preview.v0.1` and
-  uses the exact server-selected version for the full connection;
+- advertises and uses `mosaic.local-preview.v0.2` for the full connection;
 - sends `previewClientConnected` then `capabilityReport`;
 - reports exact schema, renderer, and preview capability versions for the
   negotiated protocol;
@@ -138,19 +144,25 @@ and withhold incompatible or oversized compact UTF-8 drafts before sending.
 
 - `MosaicProtocolDecoder` rejects unknown fields, components, versions,
   capabilities, invalid bounds, and inconsistent references atomically.
-- Semantic validation covers unique IDs, asset/product/action references,
-  exact capability derivation, localization catalog consistency, switch
-  visibility references, carousel nesting, and countdown ordering.
+- Semantic validation traverses every Screen, Carousel page, Stack, Button
+  child, Button in-progress child, Product Card, Product Badge, and passive
+  authored descendant. It covers unique IDs, exact capability derivation,
+  localization catalogs and safe product templates, multi-Screen accessibility
+  labels, safe HTTPS actions, reachable acyclic navigation, same-Screen
+  purchase/Switch references, passive content bounds, Carousel nesting, and
+  Countdown ordering.
 - The package contains no JSON Schema or fixture copy. Conformance tests read
-  the canonical Protocol and Local Preview 0.1/0.2 fixtures directly.
+  the canonical Protocol and Local Preview 0.2 fixtures directly.
 - `MosaicPaywallLoader` resolves only local candidate → bundled fallback →
   `configurationUnavailable` in Phase 1.
-- A missing or undecodable bundled image uses the document's localized
-  same-aspect placeholder.
-- Unavailable products are omitted. The configured selection is retained when
-  possible, otherwise the first available product is selected. No available
-  product shows the declared message, disables purchase, and reports
-  `productUnavailable`.
+- A missing component image uses its declared placeholder. Decorative media
+  backgrounds fall back safely: video → poster → colour and image → colour,
+  with one diagnostic per failed asset.
+- Unavailable or price-dependent products without a non-blank localized price
+  remove their Product Card. The configured/current Product Card ID is retained
+  when available, otherwise source order selects the first available card,
+  including after locale changes. No card shows the declared message, disables
+  Purchase, and reports `productUnavailable`.
 
 Locale resolution is exact requested locale → requested base language →
 `fallbackLocale` → `defaultLocale` → inline default. Direction comes from the
@@ -180,17 +192,61 @@ errors or credentials.
 - One protocol logical unit maps to one Flutter logical pixel.
 - `start`/`end` use `EdgeInsetsDirectional`, `TextAlign.start/end`, and native
   `Directionality`.
+- Linear-gradient angles are physical and never mirror in RTL: 0° points
+  left-to-right, 90° top-to-bottom, and angles increase clockwise.
+- Colour, background, and shadow tokens resolve before painting. Linear and
+  radial gradients use Flutter gradients; a supported shadow maps to one
+  native `BoxShadow`.
+- Width and height independently support Fit, Fill, and Fixed. Unbounded Fill
+  falls back to Fit with `layout.unboundedFill`; Fixed clips visuals to the
+  authored box while preserving the component's complete semantics.
+- Remote assets use validated HTTPS URLs. Bundled image/video logical keys are
+  resolved only by the host, so protocol documents never contain host paths.
+- Decorative video uses `video_player` without controls, muted, autoplaying,
+  looping, and excluded from semantics. Loading failures never block content.
 - The renderer uses `SafeArea`, `SingleChildScrollView`, Material buttons,
   native text scaling, and Flutter semantics. It does not use a WebView.
 - Carousel uses native `PageView`, measures its pages to a stable maximum
   height, and announces user-driven page changes. Switch uses native `Switch`.
+- Screen navigation starts at `initialScreenId`, retains Switch, Carousel,
+  product-selection, scroll, and other presentation state while moving, opens
+  forward destinations at the top, restores prior scroll on back, and resets
+  to the initial Screen for an accepted revision. Back at the root is the safe
+  diagnostic no-op `navigation.noBackTarget`; it never dismisses the paywall.
+- A Sheet destination uses a full-height safe-area `showModalBottomSheet` with
+  its own scroll controller. Protocol Back, navigation to another destination,
+  and system swipe/back dismissal reconcile the same history deterministically.
+- Protocol 0.2 Button descendants render as native Flutter content inside one
+  48-point-minimum hit target and one merged semantics control. Purchase and
+  restore swap to localized `inProgressChildren` and all asynchronous actions
+  reject duplicate taps while busy.
+- Icons map the exact Mosaic names to Material glyphs. Arrow and chevron names
+  mirror in RTL; decorative Icons are excluded from semantics and informative
+  Icons expose their required localized label.
+- `openExternalUrl` delegates only prevalidated absolute HTTPS URLs to
+  `url_launcher` with `LaunchMode.externalApplication`. Failure keeps the
+  current Screen/history presented and reports `externalUrl.openFailed`.
 - Hidden conditional content is absent from layout, hit testing, and semantics
   while retaining its runtime state; an accepted document revision resets all
   Switch and Carousel state deterministically.
 - Countdown accepts an injected clock for deterministic hosts/tests, updates
   from a non-blocking timer, and intentionally avoids a per-second live region.
-- Product Card selected styling recursively inherits every omitted default
-  leaf rather than replacing the complete style object.
+- A Product Selector renders authored Product Cards and Product Badges rather
+  than generated pricing rows. Each whole card is one native mutually
+  exclusive selection target; descendants remain passive and merge into that
+  target. Without an explicit card accessibility label, visible informative
+  Text, Image, Icon, Stack, Product Badge, Feature List, and Countdown labels
+  merge in authored source order after localization and template resolution;
+  hidden and decorative content stays excluded. Horizontal and vertical
+  selectors preserve source order.
+- Product Card and Product Badge Selected styling recursively inherits every
+  omitted Default leaf rather than replacing the complete style object.
+- Text below a Product Card resolves only whitespace-tolerant
+  `{{ product.name }}` and `{{ product.price }}` after locale selection.
+  Provider title wins, the localized Product Reference label is its fallback,
+  and unresolved raw template tokens are never rendered.
+- Overlay Product Badges use `PositionedDirectional`, so logical start/end
+  anchors mirror in RTL without introducing absolute protocol coordinates.
 - Heading roles map to `Semantics.header`; RC1 heading levels are validated,
   while the supported Flutter semantics API exposes the heading role rather
   than the numeric level.
@@ -227,7 +283,7 @@ flutter test --no-pub \
 ```
 
 That opt-in test verifies the negotiated WebSocket subprotocol, identity and
-capability relay, an edited Protocol 0.1 draft, and the returned
+capability relay, an edited Protocol 0.2 draft, and the returned
 `draftAccepted` acknowledgement. The normal offline suite compiles and skips
 it when no relay is running.
 

@@ -30,7 +30,7 @@
 /* Begin PBXFileReference section */
 		A20000000000000000000001 /* MosaicExampleApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MosaicExampleApp.swift; sourceTree = "<group>"; };
 		A20000000000000000000002 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
-		A20000000000000000000003 /* complete-paywall.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "Resources/v0.1/complete-paywall.json"; sourceTree = SOURCE_ROOT; };
+		A20000000000000000000003 /* complete-paywall.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "../../protocol/fixtures/v0.2/complete-paywall.json"; sourceTree = SOURCE_ROOT; };
 		A20000000000000000000004 /* MosaicExample.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = MosaicExample.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		A20000000000000000000005 /* MosaicExampleTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = MosaicExampleTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		A20000000000000000000006 /* SwiftUISnapshotTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SwiftUISnapshotTests.swift; sourceTree = "<group>"; };

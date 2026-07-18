@@ -1,50 +1,39 @@
 import Ajv2020 from "ajv/dist/2020.js";
 
-import compatibilityManifest from "../compatibility/v0.1.json" with { type: "json" };
-import compatibilityManifestV02 from "../compatibility/v0.2.json" with { type: "json" };
-import incompatibleClientSchemaV02 from "../schema/local-preview/v0.2/incompatible-client.schema.json" with { type: "json" };
-import localProjectSchema from "../schema/local-preview/v0.1/local-project.schema.json" with { type: "json" };
-import localProjectSchemaV02 from "../schema/local-preview/v0.2/local-project.schema.json" with { type: "json" };
-import previewMessageSchema from "../schema/local-preview/v0.1/preview-message.schema.json" with { type: "json" };
-import previewMessageSchemaV02 from "../schema/local-preview/v0.2/preview-message.schema.json" with { type: "json" };
-import paywallSchema from "../schema/v0.1/paywall.schema.json" with { type: "json" };
-import paywallSchemaV02 from "../schema/v0.2/paywall.schema.json" with { type: "json" };
+import compatibilityManifest from "../compatibility/v0.2.json" with { type: "json" };
+import localProjectSchema from "../schema/local-preview/v0.2/local-project.schema.json" with { type: "json" };
+import previewMessageSchema from "../schema/local-preview/v0.2/preview-message.schema.json" with { type: "json" };
+import paywallSchema from "../schema/v0.2/paywall.schema.json" with { type: "json" };
 
 export const localPreviewContractVersion =
   previewMessageSchema.properties.previewProtocolVersion.const;
 export const localPreviewWebSocketProtocol =
   `mosaic.local-preview.v${localPreviewContractVersion}`;
-export const localPreviewContractVersions = Object.freeze(["0.1", "0.2"]);
-export const localPreviewVersionPreference = Object.freeze(["0.2", "0.1"]);
+export const localPreviewContractVersions = Object.freeze(["0.2"]);
+export const localPreviewVersionPreference = Object.freeze(["0.2"]);
 export const localPreviewWebSocketProtocols = Object.freeze({
-  "0.1": "mosaic.local-preview.v0.1",
   "0.2": "mosaic.local-preview.v0.2",
 });
 export const previewMessageTypes = Object.freeze([
   ...previewMessageSchema.properties.type.enum,
 ]);
 export const previewMessageTypesByVersion = Object.freeze({
-  "0.1": previewMessageTypes,
-  "0.2": Object.freeze([...previewMessageSchemaV02.properties.type.enum]),
+  "0.2": previewMessageTypes,
 });
 export const requiredPreviewCapabilities = Object.freeze([
   ...previewMessageSchema.$defs.previewCapabilityName.enum,
 ]);
-const requiredPreviewCapabilitiesV02 = Object.freeze([
-  ...previewMessageSchemaV02.$defs.previewCapabilityName.enum,
-]);
+const requiredPreviewCapabilitiesV02 = requiredPreviewCapabilities;
 export const canonicalSchemas = Object.freeze({
   paywall: paywallSchema,
   previewMessage: previewMessageSchema,
   localProject: localProjectSchema,
 });
 export const canonicalSchemasByVersion = Object.freeze({
-  "0.1": canonicalSchemas,
   "0.2": Object.freeze({
-    paywall: paywallSchemaV02,
-    previewMessage: previewMessageSchemaV02,
-    localProject: localProjectSchemaV02,
-    incompatibleClient: incompatibleClientSchemaV02,
+    paywall: paywallSchema,
+    previewMessage: previewMessageSchema,
+    localProject: localProjectSchema,
   }),
 });
 
@@ -52,7 +41,7 @@ function incompatibleSchemaVersionDiagnostic() {
   return {
     code: "preview.incompatibleSchemaVersion",
     message:
-      "This Local Preview 0.1 client cannot receive a Protocol 0.2 draft.",
+      "This preview client cannot receive the current Protocol 0.2 draft.",
     fallback: "keepLastAcceptedDraft",
     recovery: {
       action: "updatePreviewClient",
@@ -313,33 +302,25 @@ export function decideLocalPreviewDraftDelivery({
 
 const ajv = new Ajv2020({ allErrors: true, strict: true });
 ajv.addSchema(paywallSchema);
-ajv.addSchema(paywallSchemaV02);
 ajv.addSchema(previewMessageSchema);
-ajv.addSchema(previewMessageSchemaV02);
 const validatePaywallSchema = ajv.getSchema(paywallSchema.$id);
-const validatePaywallSchemaV02 = ajv.getSchema(paywallSchemaV02.$id);
 const validatePreviewMessageSchema = ajv.getSchema(previewMessageSchema.$id);
-const validatePreviewMessageSchemaV02 = ajv.getSchema(
-  previewMessageSchemaV02.$id,
-);
 const validateLocalProjectSchema = ajv.compile(localProjectSchema);
-const validateLocalProjectSchemaV02 = ajv.compile(localProjectSchemaV02);
 
-if (
-  !validatePaywallSchema ||
-  !validatePaywallSchemaV02 ||
-  !validatePreviewMessageSchema ||
-  !validatePreviewMessageSchemaV02
-) {
+if (!validatePaywallSchema || !validatePreviewMessageSchema) {
   throw new Error("Canonical Mosaic schemas were not registered.");
 }
 
 const capabilityByType = Object.freeze({
+  button: "component.button",
   carousel: "component.carousel",
   closeButton: "component.closeButton",
   featureList: "component.featureList",
+  icon: "component.icon",
   image: "component.image",
   legalText: "component.legalText",
+  productBadge: "component.productBadge",
+  productCard: "component.productCard",
   productSelector: "component.productSelector",
   purchaseButton: "component.purchaseButton",
   restoreButton: "component.restoreButton",
@@ -369,6 +350,31 @@ const countdownUnitOrder = Object.freeze({
   minute: 2,
   second: 3,
 });
+
+const externalUrlPattern =
+  /^https:\/\/([A-Za-z0-9](?:[A-Za-z0-9.-]*[A-Za-z0-9])?)(?::([0-9]{1,5}))?(?:[/?#][^\s\\\u0000-\u001F\u007F]*)?$/u;
+const productTemplatePattern = /\{\{\s*product\.(name|price)\s*\}\}/gu;
+
+function safeAbsoluteHttps(value) {
+  const match = externalUrlPattern.exec(value);
+  let url;
+  try {
+    url = new URL(value);
+  } catch {
+    return false;
+  }
+  return (
+    url.protocol === "https:" &&
+    Boolean(url.hostname) &&
+    !url.username &&
+    !url.password &&
+    Boolean(match) &&
+    !match[1].includes("..") &&
+    match[1].toLowerCase() === url.hostname.toLowerCase() &&
+    (match[2] === undefined || Number(match[2]) <= 65535) &&
+    [...value].length <= 2048
+  );
+}
 
 function success(value) {
   return { ok: true, value, diagnostics: [] };
@@ -512,27 +518,54 @@ function schemaDiagnostics(validator, value) {
 function walkDocumentNodes(document) {
   const entries = [];
 
-  function visit(node, path, ancestors = []) {
+  function visit(node, path, screenId, ancestors = []) {
     if (!node || typeof node !== "object") return;
-    entries.push({ node, path, ancestors });
+    entries.push({ node, path, screenId, ancestors });
     if (node.type === "scrollContainer") {
-      visit(node.content, `${path}/content`, [...ancestors, node]);
+      visit(node.content, `${path}/content`, screenId, [...ancestors, node]);
     } else if (node.type === "verticalStack" || node.type === "stack") {
       for (const [index, child] of (node.children ?? []).entries()) {
-        visit(child, `${path}/children/${index}`, [...ancestors, node]);
+        visit(child, `${path}/children/${index}`, screenId, [...ancestors, node]);
       }
     } else if (node.type === "carousel") {
       for (const [index, page] of (node.pages ?? []).entries()) {
         visit(
           page.content,
           `${path}/pages/${index}/content`,
+          screenId,
           [...ancestors, node],
         );
+      }
+    } else if (node.type === "button") {
+      for (const [index, child] of node.children.entries()) {
+        visit(child, `${path}/children/${index}`, screenId, [...ancestors, node]);
+      }
+      for (const [index, child] of (node.inProgressChildren ?? []).entries()) {
+        visit(
+          child,
+          `${path}/inProgressChildren/${index}`,
+          screenId,
+          [...ancestors, node],
+        );
+      }
+    } else if (node.type === "productSelector") {
+      for (const [index, card] of (node.cards ?? []).entries()) {
+        visit(card, `${path}/cards/${index}`, screenId, [...ancestors, node]);
+      }
+    } else if (node.type === "productCard" || node.type === "productBadge") {
+      for (const [index, child] of (node.children ?? []).entries()) {
+        visit(child, `${path}/children/${index}`, screenId, [...ancestors, node]);
       }
     }
   }
 
-  visit(document.layout, "/layout");
+  if (document.schemaVersion === "0.2") {
+    for (const [index, screen] of document.screens.entries()) {
+      visit(screen.layout, `/screens/${index}/layout`, screen.id);
+    }
+  } else {
+    visit(document.layout, "/layout", null);
+  }
   return entries;
 }
 
@@ -562,12 +595,171 @@ function recursiveOverlay(base, override) {
   return resolved;
 }
 
-export function resolveProductCardStyle(productSelector, selected) {
-  if (!selected) return structuredClone(productSelector.cardStyles.default);
-  return recursiveOverlay(
-    productSelector.cardStyles.default,
-    productSelector.cardStyles.selected,
+export function resolveProductCardStyle(productCard, selected) {
+  if (!selected) return structuredClone(productCard.styles.default);
+  return recursiveOverlay(productCard.styles.default, productCard.styles.selected);
+}
+
+export function resolveProductBadgeStyle(productBadge, selected) {
+  return resolveProductCardStyle(productBadge, selected);
+}
+
+function resolveTokenValue(document, category, referenceType, value) {
+  let current = value;
+  const seen = new Set();
+  const catalog = new Map(
+    (document.designSystem?.[category] ?? []).map((token) => [token.id, token.value]),
   );
+  while (current?.type === referenceType) {
+    if (seen.has(current.id) || !catalog.has(current.id)) return null;
+    seen.add(current.id);
+    current = catalog.get(current.id);
+  }
+  return structuredClone(current);
+}
+
+export function resolveColorToken(document, color) {
+  return resolveTokenValue(document, "colors", "colorToken", color);
+}
+
+export function resolveBackgroundToken(document, background) {
+  return resolveTokenValue(
+    document,
+    "backgrounds",
+    "backgroundToken",
+    background,
+  );
+}
+
+export function resolveShadowToken(document, shadow) {
+  return resolveTokenValue(document, "shadows", "shadowToken", shadow);
+}
+
+export function resolveAxisSizing(
+  value,
+  { axis = "width", bounded = true, componentId = null } = {},
+) {
+  if (value === "fill" && !bounded) {
+    return {
+      value: "fit",
+      diagnostic: {
+        code: "layout.unboundedFill",
+        componentId,
+        axis,
+        behavior: "useFit",
+        message: `Fill ${axis} has no bounded parent axis and safely uses Fit.`,
+      },
+    };
+  }
+  return { value: structuredClone(value), diagnostic: null };
+}
+
+export function resolveMediaBackgroundFallback(
+  document,
+  background,
+  availableAssetIds,
+) {
+  const resolved = resolveBackgroundToken(document, background);
+  if (!resolved || (resolved.type !== "image" && resolved.type !== "video")) {
+    return { background: resolved, diagnostic: null };
+  }
+  const available = new Set(availableAssetIds);
+  if (available.has(resolved.assetId)) {
+    return { background: resolved, diagnostic: null };
+  }
+  if (
+    resolved.type === "video" &&
+    resolved.posterAssetId &&
+    available.has(resolved.posterAssetId)
+  ) {
+    return {
+      background: {
+        type: "image",
+        assetId: resolved.posterAssetId,
+        contentMode: resolved.contentMode,
+        fallbackColor: structuredClone(resolved.fallbackColor),
+      },
+      diagnostic: {
+        code: "background.videoUnavailable",
+        assetId: resolved.assetId,
+        behavior: "usePoster",
+        message: "Video background is unavailable; the declared poster is used.",
+      },
+    };
+  }
+  return {
+    background: { type: "color", value: structuredClone(resolved.fallbackColor) },
+    diagnostic: {
+      code: `background.${resolved.type}Unavailable`,
+      assetId: resolved.assetId,
+      behavior: "useFallbackColor",
+      message: `${resolved.type === "video" ? "Video" : "Image"} background is unavailable; the declared fallback colour is used.`,
+    },
+  };
+}
+
+function analyzeProductTemplate(value) {
+  const variables = [];
+  const remainder = value.replace(productTemplatePattern, (_match, variable) => {
+    variables.push(variable);
+    return "";
+  });
+  return {
+    malformed: remainder.includes("{{") || remainder.includes("}}"),
+    variables,
+  };
+}
+
+export function interpolateProductText(value, product) {
+  if (typeof value !== "string") {
+    return { available: false, value: null, diagnostic: "invalidTemplate" };
+  }
+  const analysis = analyzeProductTemplate(value);
+  if (analysis.malformed) {
+    return { available: false, value: null, diagnostic: "invalidTemplate" };
+  }
+  if (
+    analysis.variables.includes("price") &&
+    (typeof product?.price !== "string" || product.price.trim().length === 0)
+  ) {
+    return { available: false, value: null, diagnostic: "missingPrice" };
+  }
+  const resolvedName =
+    typeof product?.name === "string" && product.name.trim().length > 0
+      ? product.name
+      : product?.fallbackName;
+  if (
+    analysis.variables.includes("name") &&
+    (typeof resolvedName !== "string" || resolvedName.trim().length === 0)
+  ) {
+    return { available: false, value: null, diagnostic: "missingName" };
+  }
+  return {
+    available: true,
+    value: value.replace(productTemplatePattern, (_match, variable) =>
+      variable === "name" ? resolvedName : product.price,
+    ),
+    diagnostic: null,
+  };
+}
+
+export function resolveProductSelectorSelection(
+  productSelector,
+  availableProductReferenceIds,
+  currentProductCardId = productSelector.initialProductCardId,
+) {
+  const available = new Set(availableProductReferenceIds);
+  const availableCards = productSelector.cards.filter((card) =>
+    available.has(card.productReferenceId),
+  );
+  const current = availableCards.find((card) => card.id === currentProductCardId);
+  const selected = current ?? availableCards[0] ?? null;
+  return {
+    selectedProductCardId: selected?.id ?? null,
+    selectedProductReferenceId: selected?.productReferenceId ?? null,
+    purchaseEnabled: selected !== null,
+    showUnavailableFallback: selected === null,
+  };
 }
 
 export function runtimeStateForAcceptedRevision(document) {
@@ -583,6 +775,41 @@ export function runtimeStateForAcceptedRevision(document) {
         .filter(({ node }) => node.type === "carousel")
         .map(({ node }) => [node.id, node.initialPageIndex]),
     ),
+    navigation: {
+      currentScreenId: document.initialScreenId,
+      history: [document.initialScreenId],
+    },
+    selectedProducts: Object.fromEntries(
+      entries
+        .filter(({ node }) => node.type === "productSelector")
+        .map(({ node }) => [node.id, node.initialProductCardId]),
+    ),
+  };
+}
+
+export function applyNavigationAction(navigationState, action) {
+  const history = [...navigationState.history];
+  if (action.type === "navigateTo") {
+    history.push(action.screenId);
+    return {
+      state: { currentScreenId: action.screenId, history },
+      diagnostic: null,
+    };
+  }
+  if (history.length <= 1) {
+    return {
+      state: structuredClone(navigationState),
+      diagnostic: {
+        code: "navigation.noBackTarget",
+        behavior: "noOp",
+        message: "Navigate Back has no earlier screen and safely does nothing.",
+      },
+    };
+  }
+  history.pop();
+  return {
+    state: { currentScreenId: history.at(-1), history },
+    diagnostic: null,
   };
 }
 
@@ -592,19 +819,41 @@ export function evaluateVisibility(visibility, switchValues = {}) {
   return switchValues[visibility.switchId] === visibility.equals;
 }
 
-export function paywallRuntimeDiagnostics(document, switchValues) {
+export function paywallRuntimeDiagnostics(
+  document,
+  switchValues,
+  navigationState,
+) {
   if (document?.schemaVersion !== "0.2") return [];
   const entries = walkDocumentNodes(document);
   const values =
     switchValues ?? runtimeStateForAcceptedRevision(document).switches;
+  const navigation = navigationState ?? {
+    currentScreenId: document.initialScreenId,
+    history: [document.initialScreenId],
+  };
   const selectors = new Map(
     entries
       .filter(({ node }) => node.type === "productSelector")
       .map((entry) => [entry.node.id, entry]),
   );
   const diagnostics = [];
-  for (const { node } of entries) {
-    if (node.type !== "purchaseButton") continue;
+  for (const { node, screenId } of entries) {
+    if (
+      node.type === "button" &&
+      node.action.type === "navigateBack" &&
+      screenId === navigation.currentScreenId &&
+      navigation.history.length <= 1
+    ) {
+      diagnostics.push({
+        code: "navigation.noBackTarget",
+        componentId: node.id,
+        screenId,
+        behavior: "noOp",
+        message: "Navigate Back has no earlier screen and safely does nothing.",
+      });
+    }
+    if (node.type !== "button" || node.action.type !== "purchase") continue;
     const selector = selectors.get(node.action.productSelectorId);
     const visible =
       selector &&
@@ -643,18 +892,97 @@ export function resolveCountdownState(countdown, now) {
   };
 }
 
+function walkObjectValues(value, visit, path = "") {
+  if (Array.isArray(value)) {
+    value.forEach((entry, index) =>
+      walkObjectValues(entry, visit, `${path}/${index}`),
+    );
+    return;
+  }
+  if (!value || typeof value !== "object") return;
+  visit(value, path);
+  for (const [key, entry] of Object.entries(value)) {
+    walkObjectValues(entry, visit, `${path}/${key}`);
+  }
+}
+
 function objectUsesColor(value) {
-  if (Array.isArray(value)) return value.some(objectUsesColor);
-  if (!value || typeof value !== "object") return false;
-  return Object.entries(value).some(
-    ([key, entry]) =>
-      (colorFieldNames.has(key) && typeof entry === "string") ||
-      objectUsesColor(entry),
+  let usesColor = false;
+  walkObjectValues(value, (entry) => {
+    if (entry.type === "colorToken") usesColor = true;
+    if (
+      Object.entries(entry).some(
+        ([key, fieldValue]) => colorFieldNames.has(key) && fieldValue !== undefined,
+      )
+    ) {
+      usesColor = true;
+    }
+  });
+  return usesColor;
+}
+
+function objectUsesType(value, types) {
+  let match = false;
+  walkObjectValues(value, (entry) => {
+    if (types.has(entry.type)) match = true;
+  });
+  return match;
+}
+
+function objectUsesMediaBackground(value) {
+  let match = false;
+  walkObjectValues(value, (entry) => {
+    if (
+      (entry.type === "image" || entry.type === "video") &&
+      Object.hasOwn(entry, "fallbackColor")
+    ) {
+      match = true;
+    }
+  });
+  return match;
+}
+
+function localizedTextValues(document, localizedText) {
+  const values = [localizedText.default];
+  for (const catalog of Object.values(document.localization?.locales ?? {})) {
+    if (Object.hasOwn(catalog.strings, localizedText.localizationKey)) {
+      values.push(catalog.strings[localizedText.localizationKey]);
+    }
+  }
+  return values;
+}
+
+function localizedTextUsesProductTemplate(document, localizedText) {
+  return localizedTextValues(document, localizedText).some((value) => {
+    const analysis = analyzeProductTemplate(value);
+    return analysis.malformed || analysis.variables.length > 0;
+  });
+}
+
+function documentUsesProductTemplates(document, nodeEntries) {
+  if (document.schemaVersion !== "0.2") return false;
+  return nodeEntries.some(({ node, ancestors }) =>
+    (node.type === "text" &&
+      ancestors.some((ancestor) => ancestor.type === "productCard") &&
+      localizedTextUsesProductTemplate(document, node.value)) ||
+    (node.type === "productCard" &&
+      node.accessibility?.label &&
+      localizedTextUsesProductTemplate(document, node.accessibility.label)),
   );
 }
 
 function expectedDocumentCapabilities(document, nodeEntries) {
   const capabilities = new Set(["localization.catalogs"]);
+
+  if (document.schemaVersion === "0.2") {
+    capabilities.add("navigation.screens");
+    if (document.screens.some((screen) => screen.presentation?.type === "sheet")) {
+      capabilities.add("navigation.sheets");
+    }
+    if (documentUsesProductTemplates(document, nodeEntries)) {
+      capabilities.add("localization.productTemplate");
+    }
+  }
 
   if (
     Object.values(document.localization.locales).some(
@@ -664,7 +992,53 @@ function expectedDocumentCapabilities(document, nodeEntries) {
     capabilities.add("localization.rtl");
   }
   if (document.products.length > 0) capabilities.add("product.references");
-  if (document.assets.length > 0) {
+  if (document.schemaVersion === "0.2") {
+    const designSystem = document.designSystem ?? {
+      colors: [],
+      backgrounds: [],
+      shadows: [],
+    };
+    if (
+      designSystem.colors.length > 0 ||
+      designSystem.backgrounds.length > 0 ||
+      designSystem.shadows.length > 0
+    ) {
+      capabilities.add("style.designTokens");
+    }
+    const authoredValues = [
+      designSystem,
+      ...nodeEntries.map(({ node }) => node),
+    ];
+    if (
+      authoredValues.some((value) =>
+        objectUsesType(value, new Set(["linearGradient", "radialGradient"])),
+      )
+    ) {
+      capabilities.add("style.gradientBackground");
+    }
+    if (authoredValues.some((value) => objectUsesMediaBackground(value))) {
+      capabilities.add("style.mediaBackground");
+    }
+    if (
+      authoredValues.some((value) =>
+        objectUsesType(value, new Set(["shadow", "shadowToken"])),
+      )
+    ) {
+      capabilities.add("style.shadow");
+    }
+    if (designSystem.colors.length > 0 || objectUsesColor(designSystem)) {
+      capabilities.add("style.colors");
+    }
+    for (const asset of document.assets) {
+      const sourceKind = asset.source?.type === "remote" ? "remote" : "bundled";
+      if (asset.type === "image") {
+        capabilities.add(`asset.${sourceKind}Image`);
+        capabilities.add("fallback.asset");
+      } else if (asset.type === "video") {
+        capabilities.add(`asset.${sourceKind}Video`);
+      }
+    }
+  } else if (document.assets.length > 0) {
     capabilities.add("asset.bundledImage");
     capabilities.add("fallback.asset");
   }
@@ -679,17 +1053,17 @@ function expectedDocumentCapabilities(document, nodeEntries) {
       if (node.typography) capabilities.add("style.typography");
       if (
         node.appearance ||
-        node.cardStyles ||
+        node.styles ||
         node.padding ||
         (node.type === "scrollContainer" && node.background)
       ) {
         capabilities.add("style.box");
       }
-      if (
-        node.sizing ||
-        node.type === "image"
-      ) {
+      if (node.sizing) {
         capabilities.add("layout.sizing");
+        if (Object.hasOwn(node.sizing, "height")) {
+          capabilities.add("layout.heightSizing");
+        }
       }
       if (node.outerInsets) capabilities.add("layout.outerInsets");
       if (Object.hasOwn(node.appearance ?? {}, "clipContent")) {
@@ -709,13 +1083,417 @@ function expectedDocumentCapabilities(document, nodeEntries) {
         capabilities.add("style.productCardStates");
       }
     }
+    if (
+      document.schemaVersion === "0.2" &&
+      (node.type === "productCard" || node.type === "productBadge")
+    ) {
+      capabilities.add("style.productCardStates");
+    }
     if (node.action?.type) {
       capabilities.add(`action.${node.action.type}`);
-      capabilities.add("outcome.normalized");
+      if (["purchase", "restore", "close"].includes(node.action.type)) {
+        capabilities.add("outcome.normalized");
+      }
     }
   }
 
   return capabilities;
+}
+
+function orderedV02CapabilitiesForDocument(document) {
+  const expected = expectedDocumentCapabilities(
+    document,
+    walkDocumentNodes(document),
+  );
+  return paywallSchema.$defs.capabilityName.enum
+    .filter((name) => expected.has(name))
+    .map((name) => ({ name, version: "0.2" }));
+}
+
+function allocateRC3Identifier(usedIds, preferred) {
+  let sequence = 1;
+  while (true) {
+    const suffix = sequence === 1 ? "" : `-${sequence}`;
+    const base = preferred
+      .slice(0, 128 - suffix.length)
+      .replace(/[-_]+$/u, "");
+    const candidate = `${base}${suffix}`;
+    if (!usedIds.has(candidate)) {
+      usedIds.add(candidate);
+      return candidate;
+    }
+    sequence += 1;
+  }
+}
+
+function collectRC3Identifiers(value, identifiers = new Set()) {
+  if (Array.isArray(value)) {
+    for (const entry of value) collectRC3Identifiers(entry, identifiers);
+    return identifiers;
+  }
+  if (!isRecord(value)) return identifiers;
+  if (typeof value.id === "string") identifiers.add(value.id);
+  for (const entry of Object.values(value)) {
+    collectRC3Identifiers(entry, identifiers);
+  }
+  return identifiers;
+}
+
+function addRC3TemplateLocalization(state, variable) {
+  let key;
+  do {
+    state.templateKeySequence += 1;
+    key =
+      `mosaic.migration.rc2_product_card_${state.templateKeySequence}.` +
+      variable;
+  } while (
+    Object.values(state.document.localization.locales).some((locale) =>
+      Object.hasOwn(locale.strings, key),
+    )
+  );
+  const value = `{{ product.${variable} }}`;
+  for (const locale of Object.values(state.document.localization.locales)) {
+    locale.strings[key] = value;
+  }
+  return { default: value, localizationKey: key };
+}
+
+function rc3TextChild(state, cardId, variable, color) {
+  return {
+    type: "text",
+    id: allocateRC3Identifier(state.usedIds, `${cardId}-${variable}`),
+    value: addRC3TemplateLocalization(state, variable),
+    typography: {
+      style: "body",
+      fontSize: 16,
+      lineHeightMultiplier: 1.5,
+      weight: "regular",
+      color,
+      alignment: "start",
+    },
+    accessibility: { role: "text" },
+  };
+}
+
+function rc3StateStyles(defaultStyle, selectedStyle = {}) {
+  return {
+    default: {
+      background: defaultStyle.background,
+      border: structuredClone(defaultStyle.border),
+      cornerRadius: defaultStyle.cornerRadius,
+      padding: structuredClone(defaultStyle.padding),
+      opacity: 1,
+    },
+    selected: Object.fromEntries(
+      ["background", "border", "cornerRadius", "padding"]
+        .filter((field) => Object.hasOwn(selectedStyle, field))
+        .map((field) => [field, structuredClone(selectedStyle[field])]),
+    ),
+  };
+}
+
+function addRC3MigrationDiagnostic(state, selector, field, message) {
+  const key = `${selector.id}:${field}`;
+  if (state.diagnosticFields.has(key)) return;
+  state.diagnosticFields.add(key);
+  state.diagnostics.push({
+    code: "migration.reviewRequired",
+    severity: "reviewRequired",
+    selectorId: selector.id,
+    field,
+    message,
+  });
+}
+
+function reportRC3UnrepresentableOverrides(state, selector) {
+  const { default: base, selected } = selector.cardStyles;
+  for (const field of ["contentGap", "contentAlignment"]) {
+    if (Object.hasOwn(selected, field) && selected[field] !== base[field]) {
+      addRC3MigrationDiagnostic(
+        state,
+        selector,
+        `cardStyles.selected.${field}`,
+        `Selected-only ${field} is layout in RC3 and requires author review.`,
+      );
+    }
+  }
+  for (const field of ["productLabelColor", "runtimePriceColor"]) {
+    if (Object.hasOwn(selected, field) && selected[field] !== base[field]) {
+      addRC3MigrationDiagnostic(
+        state,
+        selector,
+        `cardStyles.selected.${field}`,
+        `Selected-only ${field} cannot be represented by state-independent Text styling.`,
+      );
+    }
+  }
+  if (
+    selected.badge?.textColor !== undefined &&
+    selected.badge.textColor !== base.badge.textColor
+  ) {
+    addRC3MigrationDiagnostic(
+      state,
+      selector,
+      "cardStyles.selected.badge.textColor",
+      "Selected-only badge textColor cannot be represented by state-independent Text styling.",
+    );
+  }
+}
+
+function rc3BadgeForProduct(state, selector, cardId, product) {
+  if (!product?.badge) return null;
+  const badgeId = allocateRC3Identifier(state.usedIds, `${cardId}-badge`);
+  return {
+    type: "productBadge",
+    id: badgeId,
+    placement: { mode: "nested" },
+    direction: "horizontal",
+    gap: 0,
+    mainAxisDistribution: "center",
+    crossAxisAlignment: "center",
+    children: [
+      {
+        type: "text",
+        id: allocateRC3Identifier(state.usedIds, `${badgeId}-label`),
+        value: structuredClone(product.badge),
+        typography: {
+          style: "label",
+          fontSize: 16,
+          lineHeightMultiplier: 1.25,
+          weight: "semibold",
+          color: selector.cardStyles.default.badge.textColor,
+          alignment: "center",
+        },
+        accessibility: { role: "text" },
+      },
+    ],
+    styles: rc3StateStyles(
+      selector.cardStyles.default.badge,
+      selector.cardStyles.selected.badge,
+    ),
+  };
+}
+
+function migrateRC3Selector(selector, state) {
+  reportRC3UnrepresentableOverrides(state, selector);
+  const cards = selector.productReferenceIds.map((productReferenceId) => {
+    const product = state.products.get(productReferenceId);
+    const cardId = allocateRC3Identifier(
+      state.usedIds,
+      `${selector.id}-${productReferenceId}-card`,
+    );
+    const children = [
+      rc3TextChild(
+        state,
+        cardId,
+        "name",
+        selector.cardStyles.default.productLabelColor,
+      ),
+      rc3TextChild(
+        state,
+        cardId,
+        "price",
+        selector.cardStyles.default.runtimePriceColor,
+      ),
+    ];
+    const badge = rc3BadgeForProduct(state, selector, cardId, product);
+    if (badge) children.push(badge);
+    return {
+      type: "productCard",
+      id: cardId,
+      productReferenceId,
+      direction: "vertical",
+      gap: selector.cardStyles.default.contentGap,
+      mainAxisDistribution: selector.cardStyles.default.contentAlignment,
+      crossAxisAlignment: "stretch",
+      children,
+      styles: rc3StateStyles(
+        selector.cardStyles.default,
+        selector.cardStyles.selected,
+      ),
+    };
+  });
+  return {
+    type: "productSelector",
+    id: selector.id,
+    direction: selector.direction,
+    gap: selector.gap,
+    crossAxisAlignment: "stretch",
+    initialProductCardId: cards.find(
+      (card) =>
+        card.productReferenceId ===
+        selector.initiallySelectedProductReferenceId,
+    )?.id,
+    cards,
+    ...(selector.appearance
+      ? { appearance: structuredClone(selector.appearance) }
+      : {}),
+    ...(selector.sizing ? { sizing: structuredClone(selector.sizing) } : {}),
+    ...(selector.outerInsets
+      ? { outerInsets: structuredClone(selector.outerInsets) }
+      : {}),
+    ...(selector.visibility
+      ? { visibility: structuredClone(selector.visibility) }
+      : {}),
+    unavailableFallback: structuredClone(selector.unavailableFallback),
+    accessibility: structuredClone(selector.accessibility),
+  };
+}
+
+function migrateRC3Node(node, state) {
+  if (!isRecord(node)) return node;
+  if (
+    node.type === "productSelector" &&
+    Array.isArray(node.productReferenceIds) &&
+    isRecord(node.cardStyles)
+  ) {
+    return migrateRC3Selector(node, state);
+  }
+  const migrated = structuredClone(node);
+  if (migrated.type === "scrollContainer") {
+    migrated.content = migrateRC3Node(migrated.content, state);
+  } else if (migrated.type === "stack") {
+    migrated.children = migrated.children.map((child) =>
+      migrateRC3Node(child, state),
+    );
+  } else if (migrated.type === "carousel") {
+    migrated.pages = migrated.pages.map((page) => ({
+      ...page,
+      content: migrateRC3Node(page.content, state),
+    }));
+  } else if (migrated.type === "button") {
+    migrated.children = migrated.children.map((child) =>
+      migrateRC3Node(child, state),
+    );
+    if (migrated.inProgressChildren) {
+      migrated.inProgressChildren = migrated.inProgressChildren.map((child) =>
+        migrateRC3Node(child, state),
+      );
+    }
+  }
+  return migrated;
+}
+
+const rc4AuthoredBoxTypes = new Set([
+  "button",
+  "carousel",
+  "countdown",
+  "featureList",
+  "icon",
+  "image",
+  "productBadge",
+  "productCard",
+  "productSelector",
+  "stack",
+  "switch",
+  "text",
+]);
+
+function rc4AxisSizing(value, fallback = "fit") {
+  if (value === undefined) return fallback;
+  if (value === "content") return "fit";
+  return structuredClone(value);
+}
+
+function migrateRC4BackgroundFields(value) {
+  if (Array.isArray(value)) return value.map(migrateRC4BackgroundFields);
+  if (!isRecord(value)) return value;
+  return Object.fromEntries(
+    Object.entries(value).map(([key, entry]) => [
+      key,
+      key === "background" &&
+      (typeof entry === "string" || entry?.type === "colorToken")
+        ? { type: "color", value: structuredClone(entry) }
+        : migrateRC4BackgroundFields(entry),
+    ]),
+  );
+}
+
+function migrateRC4Node(source) {
+  const node = migrateRC4BackgroundFields(source);
+  if (node.type === "scrollContainer") {
+    node.content = migrateRC4Node(node.content);
+    return node;
+  }
+  if (rc4AuthoredBoxTypes.has(node.type)) {
+    if (node.type === "image") {
+      node.sizing = {
+        width: rc4AxisSizing(node.width ?? node.sizing?.width),
+        height:
+          node.height === undefined
+            ? rc4AxisSizing(node.sizing?.height)
+            : { mode: "fixed", value: node.height },
+      };
+      delete node.width;
+      delete node.height;
+    } else if (node.sizing) {
+      node.sizing = {
+        width: rc4AxisSizing(node.sizing.width),
+        height: rc4AxisSizing(node.sizing.height),
+      };
+    }
+  }
+  if (node.type === "stack") {
+    node.children = node.children.map(migrateRC4Node);
+  } else if (node.type === "carousel") {
+    node.pages = node.pages.map((page) => ({
+      ...page,
+      content: migrateRC4Node(page.content),
+    }));
+  } else if (node.type === "button") {
+    node.children = node.children.map(migrateRC4Node);
+    if (node.inProgressChildren) {
+      node.inProgressChildren = node.inProgressChildren.map(migrateRC4Node);
+    }
+  } else if (node.type === "productSelector") {
+    node.cards = node.cards.map(migrateRC4Node);
+  } else if (node.type === "productCard" || node.type === "productBadge") {
+    node.children = node.children.map(migrateRC4Node);
+  }
+  return node;
+}
+
+export function migrateV02RC3CandidateToRC4(document) {
+  if (!isRecord(document) || document.schemaVersion !== "0.2") {
+    throw new Error("RC3 candidate recovery requires a Protocol 0.2 document.");
+  }
+  const migrated = migrateRC4BackgroundFields(structuredClone(document));
+  migrated.designSystem ??= { colors: [], backgrounds: [], shadows: [] };
+  migrated.screens = migrated.screens.map((screen) => ({
+    ...screen,
+    presentation: screen.presentation ?? { type: "screen" },
+    layout: migrateRC4Node(screen.layout),
+  }));
+  migrated.compatibility.requiredCapabilities =
+    orderedV02CapabilitiesForDocument(migrated);
+  return { document: migrated, diagnostics: [] };
+}
+
+export function migrateV02RC2CandidateToRC3(document) {
+  if (!isRecord(document) || document.schemaVersion !== "0.2") {
+    throw new Error("RC2 candidate recovery requires a Protocol 0.2 document.");
+  }
+  const migrated = structuredClone(document);
+  const state = {
+    diagnosticFields: new Set(),
+    diagnostics: [],
+    document: migrated,
+    products: new Map(migrated.products.map((product) => [product.id, product])),
+    templateKeySequence: 0,
+    usedIds: collectRC3Identifiers(migrated),
+  };
+  migrated.screens = migrated.screens.map((screen) => ({
+    ...screen,
+    layout: migrateRC3Node(screen.layout, state),
+  }));
+  for (const product of migrated.products) delete product.badge;
+  migrated.compatibility.requiredCapabilities =
+    orderedV02CapabilitiesForDocument(migrated);
+  const rc4 = migrateV02RC3CandidateToRC4(migrated);
+  return {
+    document: rc4.document,
+    diagnostics: [...state.diagnostics, ...rc4.diagnostics],
+  };
 }
 
 function addDuplicateDiagnostics({
@@ -768,10 +1546,7 @@ function collectLocalizedText(value, path, entries) {
 
 function semanticPaywallDiagnostics(document) {
   const diagnostics = [];
-  const manifest =
-    document.schemaVersion === "0.2"
-      ? compatibilityManifestV02
-      : compatibilityManifest;
+  const manifest = compatibilityManifest;
   const nodeEntries = walkDocumentNodes(document);
   const expectedCapabilities = expectedDocumentCapabilities(
     document,
@@ -785,6 +1560,116 @@ function semanticPaywallDiagnostics(document) {
       capability.version,
     ]),
   );
+
+  if (document.schemaVersion === "0.2") {
+    const catalogs = {
+      colorToken: document.designSystem.colors,
+      backgroundToken: document.designSystem.backgrounds,
+      shadowToken: document.designSystem.shadows,
+    };
+    for (const [type, catalog] of Object.entries(catalogs)) {
+      const category =
+        type === "colorToken"
+          ? "colors"
+          : type === "backgroundToken"
+            ? "backgrounds"
+            : "shadows";
+      addDuplicateDiagnostics({
+        diagnostics,
+        entries: catalog,
+        field: "id",
+        path: `/designSystem/${category}`,
+        label: `${type} catalog`,
+        document,
+      });
+      addDuplicateDiagnostics({
+        diagnostics,
+        entries: catalog,
+        field: "name",
+        path: `/designSystem/${category}`,
+        label: `${type} catalog`,
+        document,
+      });
+    }
+    const known = Object.fromEntries(
+      Object.entries(catalogs).map(([type, catalog]) => [
+        type,
+        new Set(catalog.map((token) => token.id)),
+      ]),
+    );
+    const roots = [document.designSystem, ...nodeEntries.map(({ node }) => node)];
+    for (const root of roots) {
+      walkObjectValues(root, (value, path) => {
+        if (!Object.hasOwn(catalogs, value.type)) return;
+        if (!known[value.type].has(value.id)) {
+          diagnostics.push(
+            diagnostic({
+              code: "semantic.invalidReference",
+              message: `${value.type} references unknown token ${value.id}.`,
+              documentPath: path,
+              property: "id",
+              document,
+            }),
+          );
+        }
+      });
+    }
+    for (const [type, catalog] of Object.entries(catalogs)) {
+      const graph = new Map(catalog.map((token) => [token.id, new Set()]));
+      for (const token of catalog) {
+        walkObjectValues(token.value, (value) => {
+          if (value.type === type) graph.get(token.id).add(value.id);
+        });
+      }
+      const visiting = new Set();
+      const visited = new Set();
+      function hasCycle(id) {
+        if (visiting.has(id)) return true;
+        if (visited.has(id)) return false;
+        visiting.add(id);
+        for (const target of graph.get(id) ?? []) {
+          if (graph.has(target) && hasCycle(target)) return true;
+        }
+        visiting.delete(id);
+        visited.add(id);
+        return false;
+      }
+      if ([...graph.keys()].some(hasCycle)) {
+        diagnostics.push(
+          diagnostic({
+            code: "semantic.tokenCycle",
+            message: `${type} catalog contains a reference cycle.`,
+            documentPath: "/designSystem",
+            property: "designSystem",
+            document,
+          }),
+        );
+      }
+    }
+    for (const root of roots) {
+      walkObjectValues(root, (value, path) => {
+        if (value.type !== "linearGradient" && value.type !== "radialGradient") {
+          return;
+        }
+        let prior = -1;
+        for (const stop of value.stops) {
+          if (stop.position <= prior) {
+            diagnostics.push(
+              diagnostic({
+                code: "semantic.gradientStops",
+                message: "Gradient stops must be ordered with unique positions.",
+                documentPath: `${path}/stops`,
+                property: "stops",
+                document,
+              }),
+            );
+            break;
+          }
+          prior = stop.position;
+        }
+      });
+    }
+  }
 
   addDuplicateDiagnostics({
     diagnostics,
@@ -836,6 +1721,17 @@ function semanticPaywallDiagnostics(document) {
         }),
       );
     }
+  }
+
+  if (document.schemaVersion === "0.2") {
+    addDuplicateDiagnostics({
+      diagnostics,
+      entries: document.screens,
+      field: "id",
+      path: "/screens",
+      label: "Screen catalog",
+      document,
+    });
   }
 
   const seenNodeIds = new Set();
@@ -897,7 +1793,8 @@ function semanticPaywallDiagnostics(document) {
   const referencedAssets = new Set();
   for (const { node, path } of nodeEntries) {
     if (node.type !== "image") continue;
-    if (!assetsById.has(node.assetId)) {
+    const asset = assetsById.get(node.assetId);
+    if (!asset || asset.type !== "image") {
       diagnostics.push(
         diagnostic({
           code: "semantic.invalidReference",
@@ -912,6 +1809,62 @@ function semanticPaywallDiagnostics(document) {
       );
     }
     referencedAssets.add(node.assetId);
+  }
+  if (document.schemaVersion === "0.2") {
+    for (const [index, asset] of document.assets.entries()) {
+      if (asset.source.type === "remote" && !safeAbsoluteHttps(asset.source.url)) {
+        diagnostics.push(
+          diagnostic({
+            code: "semantic.externalUrl",
+            message: "Remote asset URL must be safe absolute HTTPS without credentials.",
+            documentPath: `/assets/${index}/source/url`,
+            property: "url",
+            document,
+          }),
+        );
+      }
+    }
+    const backgroundRoots = [document.designSystem, ...nodeEntries.map(({ node }) => node)];
+    for (const root of backgroundRoots) {
+      walkObjectValues(root, (value, path) => {
+        if (
+          (value.type !== "image" && value.type !== "video") ||
+          !Object.hasOwn(value, "fallbackColor")
+        ) {
+          return;
+        }
+        const asset = assetsById.get(value.assetId);
+        if (!asset || asset.type !== value.type) {
+          diagnostics.push(
+            diagnostic({
+              code: "semantic.invalidReference",
+              message: `${value.type} background must reference a declared ${value.type} asset.`,
+              documentPath: `${path}/assetId`,
+              property: "assetId",
+              document,
+            }),
+          );
+        } else {
+          referencedAssets.add(value.assetId);
+        }
+        if (value.type === "video" && value.posterAssetId) {
+          const poster = assetsById.get(value.posterAssetId);
+          if (!poster || poster.type !== "image") {
+            diagnostics.push(
+              diagnostic({
+                code: "semantic.invalidReference",
+                message: "Video poster must reference a declared image asset.",
+                documentPath: `${path}/posterAssetId`,
+                property: "posterAssetId",
+                document,
+              }),
+            );
+          } else {
+            referencedAssets.add(value.posterAssetId);
+          }
+        }
+      });
+    }
   }
   for (const [index, asset] of document.assets.entries()) {
     if (!referencedAssets.has(asset.id)) {
@@ -950,42 +1903,75 @@ function semanticPaywallDiagnostics(document) {
   );
   const referencedProducts = new Set();
   const selectorsById = new Map();
-  const selectorPaths = new Map();
   const purchaseSelectorIds = new Set();
 
-  for (const { node, path } of nodeEntries) {
+  for (const entry of nodeEntries) {
+    const { node, path, screenId } = entry;
     if (node.type === "productSelector") {
-      selectorsById.set(node.id, node);
-      selectorPaths.set(node.id, path);
-      for (const [index, referenceId] of node.productReferenceIds.entries()) {
+      selectorsById.set(node.id, entry);
+      const references =
+        document.schemaVersion === "0.2"
+          ? node.cards.map((card) => card.productReferenceId)
+          : node.productReferenceIds;
+      const selectorReferences = new Set();
+      for (const [index, referenceId] of references.entries()) {
         if (!productsById.has(referenceId)) {
           diagnostics.push(
             diagnostic({
               code: "semantic.invalidReference",
               message: `Product selector ${node.id} references unknown product ${referenceId}.`,
-              documentPath: `${path}/productReferenceIds/${index}`,
+              documentPath:
+                document.schemaVersion === "0.2"
+                  ? `${path}/cards/${index}/productReferenceId`
+                  : `${path}/productReferenceIds/${index}`,
               componentId: node.id,
-              property: "productReferenceIds",
+              property:
+                document.schemaVersion === "0.2"
+                  ? "productReferenceId"
+                  : "productReferenceIds",
               recoveryAction: "bindProduct",
               recoveryMessage: "Bind a product declared by this paywall.",
               document,
             }),
           );
         }
+        if (selectorReferences.has(referenceId)) {
+          diagnostics.push(
+            diagnostic({
+              code: "semantic.duplicateReference",
+              message: `Product selector ${node.id} contains duplicate product reference ${referenceId}.`,
+              documentPath: `${path}/cards/${index}/productReferenceId`,
+              componentId: node.id,
+              property: "productReferenceId",
+              recoveryAction: "bindProduct",
+              recoveryMessage: "Bind every Product Card to a unique product reference.",
+              document,
+            }),
+          );
+        }
+        selectorReferences.add(referenceId);
         referencedProducts.add(referenceId);
       }
-      if (
-        !node.productReferenceIds.includes(
-          node.initiallySelectedProductReferenceId,
-        )
-      ) {
+      const initialIsValid =
+        document.schemaVersion === "0.2"
+          ? node.cards.some((card) => card.id === node.initialProductCardId)
+          : node.productReferenceIds.includes(
+              node.initiallySelectedProductReferenceId,
+            );
+      if (!initialIsValid) {
         diagnostics.push(
           diagnostic({
             code: "semantic.invalidReference",
-            message: `Product selector ${node.id} initially selects an unlisted product.`,
-            documentPath: `${path}/initiallySelectedProductReferenceId`,
+            message: `Product selector ${node.id} initially selects an unlisted ${document.schemaVersion === "0.2" ? "Product Card" : "product"}.`,
+            documentPath:
+              document.schemaVersion === "0.2"
+                ? `${path}/initialProductCardId`
+                : `${path}/initiallySelectedProductReferenceId`,
             componentId: node.id,
-            property: "initiallySelectedProductReferenceId",
+            property:
+              document.schemaVersion === "0.2"
+                ? "initialProductCardId"
+                : "initiallySelectedProductReferenceId",
             recoveryAction: "bindProduct",
             recoveryMessage: "Choose one of the products bound to this selector.",
             document,
@@ -993,17 +1979,26 @@ function semanticPaywallDiagnostics(document) {
         );
       }
     }
-    if (node.type === "purchaseButton") {
-      purchaseSelectorIds.add(node.action.productSelectorId);
+    if (
+      node.type === "purchaseButton" ||
+      (node.type === "button" && node.action.type === "purchase")
+    ) {
+      purchaseSelectorIds.add(`${screenId ?? "root"}:${node.action.productSelectorId}`);
     }
   }
-  for (const { node, path } of nodeEntries) {
-    if (node.type !== "purchaseButton") continue;
-    if (!selectorsById.has(node.action.productSelectorId)) {
+  for (const { node, path, screenId } of nodeEntries) {
+    if (
+      node.type !== "purchaseButton" &&
+      !(node.type === "button" && node.action.type === "purchase")
+    ) {
+      continue;
+    }
+    const selectorEntry = selectorsById.get(node.action.productSelectorId);
+    if (!selectorEntry) {
       diagnostics.push(
         diagnostic({
           code: "semantic.invalidReference",
-          message: `Purchase button ${node.id} references an unknown product selector.`,
+          message: `Button ${node.id} references an unknown product selector.`,
           documentPath: `${path}/action/productSelectorId`,
           componentId: node.id,
           property: "productSelectorId",
@@ -1012,15 +2007,32 @@ function semanticPaywallDiagnostics(document) {
           document,
         }),
       );
+    } else if (
+      document.schemaVersion === "0.2" &&
+      selectorEntry.screenId !== screenId
+    ) {
+      diagnostics.push(
+        diagnostic({
+          code: "semantic.invalidReference",
+          message: `Purchase button ${node.id} must target a Product Selector on the same screen.`,
+          documentPath: `${path}/action/productSelectorId`,
+          componentId: node.id,
+          property: "productSelectorId",
+          recoveryAction: "bindProduct",
+          recoveryMessage: "Choose a product selector on this screen.",
+          document,
+        }),
+      );
     }
   }
-  for (const [selectorId] of selectorsById) {
-    if (!purchaseSelectorIds.has(selectorId)) {
+  for (const [selectorId, selectorEntry] of selectorsById) {
+    const selectorScreen = selectorEntry.screenId ?? "root";
+    if (!purchaseSelectorIds.has(`${selectorScreen}:${selectorId}`)) {
       diagnostics.push(
         diagnostic({
           code: "semantic.invalidReference",
           message: `Product selector ${selectorId} has no purchase action.`,
-          documentPath: selectorPaths.get(selectorId),
+          documentPath: selectorEntry.path,
           componentId: selectorId,
           recoveryAction: "bindProduct",
           recoveryMessage: "Add or bind a purchase button to this selector.",
@@ -1072,9 +2084,27 @@ function semanticPaywallDiagnostics(document) {
     const localizedEntries = [];
     collectLocalizedText(document.assets, "/assets", localizedEntries);
     collectLocalizedText(document.products, "/products", localizedEntries);
-    collectLocalizedText(document.layout, "/layout", localizedEntries);
+    if (document.schemaVersion === "0.2") {
+      collectLocalizedText(document.screens, "/screens", localizedEntries);
+    } else {
+      collectLocalizedText(document.layout, "/layout", localizedEntries);
+    }
     const referencedKeys = new Set();
     const defaultStrings = locales[defaultLocale].strings;
+    const templateAllowed = new Set();
+    if (document.schemaVersion === "0.2") {
+      for (const { node, ancestors } of nodeEntries) {
+        if (
+          node.type === "text" &&
+          ancestors.some((ancestor) => ancestor.type === "productCard")
+        ) {
+          templateAllowed.add(node.value);
+        }
+        if (node.type === "productCard" && node.accessibility?.label) {
+          templateAllowed.add(node.accessibility.label);
+        }
+      }
+    }
 
     for (const { path, text } of localizedEntries) {
       referencedKeys.add(text.localizationKey);
@@ -1098,6 +2128,35 @@ function semanticPaywallDiagnostics(document) {
             document,
           }),
         );
+      }
+      if (document.schemaVersion === "0.2") {
+        for (const value of localizedTextValues(document, text)) {
+          const analysis = analyzeProductTemplate(value);
+          if (analysis.malformed) {
+            diagnostics.push(
+              diagnostic({
+                code: "semantic.productTemplate",
+                message: "The product template expression is malformed or unsupported.",
+                documentPath: `${path}/default`,
+                componentId: locationFor(document, path).componentId,
+                property: "default",
+                document,
+              }),
+            );
+          }
+          if (analysis.variables.length > 0 && !templateAllowed.has(text)) {
+            diagnostics.push(
+              diagnostic({
+                code: "semantic.productTemplate",
+                message: "Product templates are valid only in Text or a card accessibility label within Product Card content.",
+                documentPath: `${path}/default`,
+                componentId: locationFor(document, path).componentId,
+                property: "default",
+                document,
+              }),
+            );
+          }
+        }
       }
     }
     for (const key of Object.keys(defaultStrings)) {
@@ -1132,37 +2191,176 @@ function semanticPaywallDiagnostics(document) {
   }
 
   if (document.schemaVersion === "0.2") {
-    if (document.layout.content.direction !== "vertical") {
+    const screensById = new Map(
+      document.screens.map((screen) => [screen.id, screen]),
+    );
+    if (!screensById.has(document.initialScreenId)) {
       diagnostics.push(
         diagnostic({
-          code: "semantic.layout",
-          message: "Root scroll content must be a vertical stack.",
-          documentPath: "/layout/content/direction",
-          componentId: document.layout.content.id,
-          property: "direction",
+          code: "semantic.invalidReference",
+          message: `Initial screen ${document.initialScreenId} does not exist.`,
+          documentPath: "/initialScreenId",
+          property: "initialScreenId",
+          document,
+        }),
+      );
+    } else if (
+      screensById.get(document.initialScreenId).presentation.type !== "screen"
+    ) {
+      diagnostics.push(
+        diagnostic({
+          code: "semantic.presentation",
+          message: "Initial screen presentation must be Screen.",
+          documentPath: "/initialScreenId",
+          property: "initialScreenId",
           document,
         }),
       );
     }
-    if (document.layout.content.children.length === 0) {
-      diagnostics.push(
-        diagnostic({
-          code: "semantic.layout",
-          message: "Root scroll content must contain at least one child.",
-          documentPath: "/layout/content/children",
-          componentId: document.layout.content.id,
-          property: "children",
-          document,
-        }),
-      );
+    for (const [index, screen] of document.screens.entries()) {
+      const root = screen.layout.content;
+      if (root.direction !== "vertical") {
+        diagnostics.push(
+          diagnostic({
+            code: "semantic.layout",
+            message: `Screen ${screen.id} root scroll content must be a vertical stack.`,
+            documentPath: `/screens/${index}/layout/content/direction`,
+            componentId: root.id,
+            property: "direction",
+            document,
+          }),
+        );
+      }
+      if (root.children.length === 0) {
+        diagnostics.push(
+          diagnostic({
+            code: "semantic.layout",
+            message: `Screen ${screen.id} root scroll content must contain at least one child.`,
+            documentPath: `/screens/${index}/layout/content/children`,
+            componentId: root.id,
+            property: "children",
+            document,
+          }),
+        );
+      }
     }
     const switches = new Map(
       nodeEntries
         .filter(({ node }) => node.type === "switch")
-        .map(({ node }) => [node.id, node]),
+        .map((entry) => [entry.node.id, entry]),
     );
-    for (const { node, path } of nodeEntries) {
-      if (node.type === "carousel" && path.includes("/pages/")) {
+    const navigationEdges = new Map(
+      document.screens.map((screen) => [screen.id, new Set()]),
+    );
+    const interactiveButtonDescendants = new Set([
+      "button",
+      "productSelector",
+      "switch",
+      "carousel",
+    ]);
+    for (const { node, path, screenId, ancestors } of nodeEntries) {
+      if (node.type === "productCard") {
+        if (ancestors.at(-1)?.type !== "productSelector") {
+          diagnostics.push(
+            diagnostic({
+              code: "semantic.layout",
+              message: "Product Card must be directly owned by a Product Selector.",
+              documentPath: path,
+              componentId: node.id,
+              document,
+            }),
+          );
+        }
+        const badges = node.children.filter(
+          (child) => child.type === "productBadge",
+        );
+        if (badges.length > 1) {
+          diagnostics.push(
+            diagnostic({
+              code: "semantic.layout",
+              message: "Product Card may contain at most one direct Product Badge.",
+              documentPath: `${path}/children`,
+              componentId: node.id,
+              property: "children",
+              document,
+            }),
+          );
+        }
+        let passiveDescendants = 0;
+        let maximumStackDepth = 0;
+        const visitPassive = (child, stackDepth = 0) => {
+          passiveDescendants += 1;
+          const nextDepth = child.type === "stack" ? stackDepth + 1 : stackDepth;
+          maximumStackDepth = Math.max(maximumStackDepth, nextDepth);
+          for (const descendant of child.children ?? []) {
+            visitPassive(descendant, nextDepth);
+          }
+        };
+        for (const child of node.children) visitPassive(child);
+        if (passiveDescendants > 20 || maximumStackDepth > 4) {
+          diagnostics.push(
+            diagnostic({
+              code: "semantic.layout",
+              message:
+                passiveDescendants > 20
+                  ? "Product Card exceeds 20 passive descendants."
+                  : "Product Card exceeds nested Stack depth 4.",
+              documentPath: `${path}/children`,
+              componentId: node.id,
+              property: "children",
+              document,
+            }),
+          );
+        }
+      }
+      if (
+        node.type === "productBadge" &&
+        ancestors.at(-1)?.type !== "productCard"
+      ) {
+        diagnostics.push(
+          diagnostic({
+            code: "semantic.layout",
+            message: "Product Badge must be a direct Product Card child.",
+            documentPath: path,
+            componentId: node.id,
+            document,
+          }),
+        );
+      }
+      if (
+        ancestors.some((ancestor) => ancestor.type === "button") &&
+        interactiveButtonDescendants.has(node.type)
+      ) {
+        diagnostics.push(
+          diagnostic({
+            code: "semantic.layout",
+            message: `Button content cannot contain interactive ${node.type}.`,
+            documentPath: path,
+            componentId: node.id,
+            document,
+          }),
+        );
+      }
+      if (
+        node.type === "button" &&
+        node.inProgressChildren &&
+        !["purchase", "restore"].includes(node.action.type)
+      ) {
+        diagnostics.push(
+          diagnostic({
+            code: "semantic.action",
+            message: "inProgressChildren are valid only for purchase or restore.",
+            documentPath: `${path}/inProgressChildren`,
+            componentId: node.id,
+            property: "inProgressChildren",
+            document,
+          }),
+        );
+      }
+      if (
+        node.type === "carousel" &&
+        ancestors.some((ancestor) => ancestor.type === "carousel")
+      ) {
         diagnostics.push(
           diagnostic({
             code: "semantic.layout",
@@ -1201,7 +2399,7 @@ function semanticPaywallDiagnostics(document) {
               document,
             }),
           );
-        } else if (node.id === controller.id) {
+        } else if (node.id === controller.node.id) {
           diagnostics.push(
             diagnostic({
               code: "semantic.invalidReference",
@@ -1209,6 +2407,60 @@ function semanticPaywallDiagnostics(document) {
               documentPath: `${path}/visibility/switchId`,
               componentId: node.id,
               property: "switchId",
+              document,
+            }),
+          );
+        } else if (controller.screenId !== screenId) {
+          diagnostics.push(
+            diagnostic({
+              code: "semantic.invalidReference",
+              message: "Visibility must reference a Switch on the same screen.",
+              documentPath: `${path}/visibility/switchId`,
+              componentId: node.id,
+              property: "switchId",
+              document,
+            }),
+          );
+        }
+      }
+      if (node.type === "button" && node.action.type === "navigateTo") {
+        const target = node.action.screenId;
+        if (!screensById.has(target)) {
+          diagnostics.push(
+            diagnostic({
+              code: "semantic.invalidReference",
+              message: `Navigate To references unknown screen ${target}.`,
+              documentPath: `${path}/action/screenId`,
+              componentId: node.id,
+              property: "screenId",
+              document,
+            }),
+          );
+        } else if (target === screenId) {
+          diagnostics.push(
+            diagnostic({
+              code: "semantic.invalidReference",
+              message: "Navigate To target must differ from its source screen.",
+              documentPath: `${path}/action/screenId`,
+              componentId: node.id,
+              property: "screenId",
+              document,
+            }),
+          );
+        } else {
+          navigationEdges.get(screenId)?.add(target);
+        }
+      }
+      if (node.type === "button" && node.action.type === "openExternalUrl") {
+        const value = node.action.url;
+        if (!safeAbsoluteHttps(value)) {
+          diagnostics.push(
+            diagnostic({
+              code: "semantic.externalUrl",
+              message: "External URL must be safe absolute HTTPS without credentials.",
+              documentPath: `${path}/action/url`,
+              componentId: node.id,
+              property: "url",
               document,
             }),
           );
@@ -1248,6 +2500,55 @@ function semanticPaywallDiagnostics(document) {
           );
         }
       }
+    }
+
+    if (screensById.has(document.initialScreenId)) {
+      const reachable = new Set();
+      const pending = [document.initialScreenId];
+      while (pending.length > 0) {
+        const screenId = pending.pop();
+        if (reachable.has(screenId)) continue;
+        reachable.add(screenId);
+        pending.push(...(navigationEdges.get(screenId) ?? []));
+      }
+      for (const [index, screen] of document.screens.entries()) {
+        if (!reachable.has(screen.id)) {
+          diagnostics.push(
+            diagnostic({
+              code: "semantic.invalidReference",
+              message: `Screen ${screen.id} is unreachable from the initial screen.`,
+              documentPath: `/screens/${index}/id`,
+              property: "id",
+              document,
+            }),
+          );
+        }
+      }
+    }
+
+    const visiting = new Set();
+    const visited = new Set();
+    function graphHasCycle(screenId) {
+      if (visiting.has(screenId)) return true;
+      if (visited.has(screenId)) return false;
+      visiting.add(screenId);
+      for (const target of navigationEdges.get(screenId) ?? []) {
+        if (graphHasCycle(target)) return true;
+      }
+      visiting.delete(screenId);
+      visited.add(screenId);
+      return false;
+    }
+    if (document.screens.some((screen) => graphHasCycle(screen.id))) {
+      diagnostics.push(
+        diagnostic({
+          code: "semantic.navigationCycle",
+          message: "Navigate To graph must be acyclic.",
+          documentPath: "/screens",
+          property: "screens",
+          document,
+        }),
+      );
     }
   }
 
@@ -1350,11 +2651,7 @@ function duplicateCapabilityDiagnostics(message) {
 }
 
 export function validatePaywallDocument(value) {
-  const validator =
-    value?.schemaVersion === "0.2"
-      ? validatePaywallSchemaV02
-      : validatePaywallSchema;
-  const schemaErrors = schemaDiagnostics(validator, value);
+  const schemaErrors = schemaDiagnostics(validatePaywallSchema, value);
   if (schemaErrors.length > 0) return failure(schemaErrors);
 
   const semanticErrors = semanticPaywallDiagnostics(value);
@@ -1362,11 +2659,7 @@ export function validatePaywallDocument(value) {
 }
 
 export function validatePreviewMessage(value, options = {}) {
-  const validator =
-    value?.previewProtocolVersion === "0.2"
-      ? validatePreviewMessageSchemaV02
-      : validatePreviewMessageSchema;
-  const schemaErrors = schemaDiagnostics(validator, value);
+  const schemaErrors = schemaDiagnostics(validatePreviewMessageSchema, value);
   if (schemaErrors.length > 0) return failure(schemaErrors);
 
   const diagnostics = duplicateCapabilityDiagnostics(value);
@@ -1386,11 +2679,7 @@ export function validatePreviewMessage(value, options = {}) {
 }
 
 export function validateLocalProject(value) {
-  const validator =
-    value?.fileFormatVersion === "0.2"
-      ? validateLocalProjectSchemaV02
-      : validateLocalProjectSchema;
-  const schemaErrors = schemaDiagnostics(validator, value);
+  const schemaErrors = schemaDiagnostics(validateLocalProjectSchema, value);
   if (schemaErrors.length > 0) return failure(schemaErrors);
 
   const documentResult = validatePaywallDocument(value.document);

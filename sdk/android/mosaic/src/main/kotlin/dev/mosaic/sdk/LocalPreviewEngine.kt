@@ -158,7 +158,7 @@ class MosaicLocalPreviewEngine(
         val diagnostic = MosaicPreviewValidationDiagnostic(
             code = "render.failed",
             message = "The preview client could not render this revision.",
-            location = MosaicPreviewDiagnosticLocation(documentPath = "/layout"),
+            location = MosaicPreviewDiagnosticLocation(documentPath = "/screens/0/layout"),
             recovery = MosaicPreviewRecoveryAction(
                 MosaicPreviewRecoveryActionName.RETRY,
                 "Retry the revision or restore the last accepted draft.",
@@ -591,8 +591,12 @@ class MosaicLocalPreviewEngine(
         "stack",
         "text",
         "image",
+        "icon",
         "featureList",
         "productSelector",
+        "productCard",
+        "productBadge",
+        "button",
         "purchaseButton",
         "restoreButton",
         "closeButton",
@@ -602,8 +606,19 @@ class MosaicLocalPreviewEngine(
         "countdown",
     )
 
+    private fun rawLayouts(root: JsonObject): List<Pair<JsonObject, String>> {
+        val screens = root.getAsJsonArray("screens")
+        if (screens != null) {
+            return screens.mapIndexedNotNull { index, screenElement ->
+                screenElement.takeIf(JsonElement::isJsonObject)?.asJsonObject
+                    ?.getAsJsonObject("layout")
+                    ?.let { it to "/screens/$index/layout" }
+            }
+        }
+        return root.getAsJsonObject("layout")?.let { listOf(it to "/layout") }.orEmpty()
+    }
+
     private fun findUnknownComponent(root: JsonObject): ComponentIssue? {
-        val content = root.getAsJsonObject("layout")?.getAsJsonObject("content") ?: return null
         fun walk(node: JsonObject, pointer: String): ComponentIssue? {
             val type = node.stringProperty("type") ?: return null
             if (type !in supportedComponentTypes) {
@@ -621,10 +636,35 @@ class MosaicLocalPreviewEngine(
                         }
                     }
                 }
+            } else if (type == "button") {
+                listOf("children", "inProgressChildren").forEach { property ->
+                    node.getAsJsonArray(property)?.forEachIndexed { index, child ->
+                        if (child.isJsonObject) {
+                            walk(child.asJsonObject, "$pointer/$property/$index")?.let { return it }
+                        }
+                    }
+                }
+            } else if (type == "productSelector") {
+                node.getAsJsonArray("cards")?.forEachIndexed { index, card ->
+                    if (card.isJsonObject) {
+                        walk(card.asJsonObject, "$pointer/cards/$index")?.let { return it }
+                    }
+                }
+            } else if (type == "productCard" || type == "productBadge") {
+                node.getAsJsonArray("children")?.forEachIndexed { index, child ->
+                    if (child.isJsonObject) {
+                        walk(child.asJsonObject, "$pointer/children/$index")?.let { return it }
+                    }
+                }
             }
             return null
         }
-        return walk(content, "/layout/content")
+        rawLayouts(root).forEach { (layout, pointer) ->
+            layout.getAsJsonObject("content")?.let { content ->
+                walk(content, "$pointer/content")?.let { return it }
+            }
+        }
+        return null
     }
 
     private data class ReferenceIssue(
@@ -643,7 +683,6 @@ class MosaicLocalPreviewEngine(
         }?.toSet().orEmpty()
         val selectorIds = mutableSetOf<String>()
         val nodes = mutableListOf<Pair<JsonObject, String>>()
-        val content = root.getAsJsonObject("layout")?.getAsJsonObject("content")
         fun collect(node: JsonObject, pointer: String) {
             nodes += node to pointer
             if (node.stringProperty("type") == "productSelector") {
@@ -659,23 +698,64 @@ class MosaicLocalPreviewEngine(
                         ?.getAsJsonObject("content")
                         ?.let { collect(it, "$pointer/pages/$index/content") }
                 }
+            } else if (node.stringProperty("type") == "button") {
+                listOf("children", "inProgressChildren").forEach { property ->
+                    node.getAsJsonArray(property)?.forEachIndexed { index, child ->
+                        if (child.isJsonObject) collect(child.asJsonObject, "$pointer/$property/$index")
+                    }
+                }
+            } else if (node.stringProperty("type") == "productSelector") {
+                node.getAsJsonArray("cards")?.forEachIndexed { index, card ->
+                    if (card.isJsonObject) collect(card.asJsonObject, "$pointer/cards/$index")
+                }
+            } else if (node.stringProperty("type") in setOf("productCard", "productBadge")) {
+                node.getAsJsonArray("children")?.forEachIndexed { index, child ->
+                    if (child.isJsonObject) collect(child.asJsonObject, "$pointer/children/$index")
+                }
             }
         }
-        if (content != null) collect(content, "/layout/content")
+        rawLayouts(root).forEach { (layout, pointer) ->
+            layout.getAsJsonObject("content")?.let { collect(it, "$pointer/content") }
+        }
         nodes.forEach { (node, pointer) ->
             val id = node.stringProperty("id")
             when (node.stringProperty("type")) {
-                "productSelector" -> node.getAsJsonArray("productReferenceIds")?.forEachIndexed { index, value ->
-                    val reference = value.takeIf(JsonElement::isJsonPrimitive)?.asString
-                    if (reference != null && reference !in productIds) {
+                "productSelector" -> {
+                    node.getAsJsonArray("productReferenceIds")?.forEachIndexed { index, value ->
+                        val reference = value.takeIf(JsonElement::isJsonPrimitive)?.asString
+                        if (reference != null && reference !in productIds) {
+                            return ReferenceIssue(
+                                "This product selector references an undeclared product.",
+                                "$pointer/productReferenceIds/$index",
+                                id,
+                                "productReferenceIds",
+                            )
+                        }
+                    }
+                    val cardIds = node.getAsJsonArray("cards")?.mapNotNull { card ->
+                        card.takeIf(JsonElement::isJsonObject)?.asJsonObject?.stringProperty("id")
+                    }.orEmpty()
+                    node.stringProperty("initialProductCardId")
+                        ?.takeIf { it !in cardIds }
+                        ?.let {
+                            return ReferenceIssue(
+                                "This product selector initially selects an undeclared Product Card.",
+                                "$pointer/initialProductCardId",
+                                id,
+                                "initialProductCardId",
+                            )
+                        }
+                }
+                "productCard" -> node.stringProperty("productReferenceId")
+                    ?.takeIf { it !in productIds }
+                    ?.let {
                         return ReferenceIssue(
-                            "This product selector references an undeclared product.",
-                            "$pointer/productReferenceIds/$index",
+                            "This Product Card references an undeclared product.",
+                            "$pointer/productReferenceId",
                             id,
-                            "productReferenceIds",
+                            "productReferenceId",
                         )
                     }
-                }
                 "image" -> node.stringProperty("assetId")?.takeIf { it !in assetIds }?.let {
                     return ReferenceIssue(
                         "This image references an undeclared asset.",
@@ -686,6 +766,18 @@ class MosaicLocalPreviewEngine(
                 }
                 "purchaseButton" -> node.getAsJsonObject("action")?.stringProperty("productSelectorId")
                     ?.takeIf { it !in selectorIds }?.let {
+                        return ReferenceIssue(
+                            "This purchase action references an undeclared product selector.",
+                            "$pointer/action/productSelectorId",
+                            id,
+                            "productSelectorId",
+                        )
+                    }
+                "button" -> node.getAsJsonObject("action")
+                    ?.takeIf { it.stringProperty("type") == "purchase" }
+                    ?.stringProperty("productSelectorId")
+                    ?.takeIf { it !in selectorIds }
+                    ?.let {
                         return ReferenceIssue(
                             "This purchase action references an undeclared product selector.",
                             "$pointer/action/productSelectorId",
@@ -728,22 +820,43 @@ class MosaicLocalPreviewEngine(
     }
 
     private fun componentPointer(document: MosaicPaywallDocument, componentId: String): String {
-        fun walk(stack: MosaicStack, pointer: String): String? {
-            stack.children.forEachIndexed { index, node ->
-                val childPointer = "$pointer/children/$index"
-                if (node.id == componentId) return childPointer
-                when (node) {
-                    is MosaicStack -> walk(node, childPointer)?.let { return it }
-                    is MosaicCarouselComponent -> node.pages.forEachIndexed { pageIndex, page ->
-                        if (page.id == componentId) return "$childPointer/pages/$pageIndex"
-                        walk(page.content, "$childPointer/pages/$pageIndex/content")?.let { return it }
-                    }
-                    else -> Unit
+        fun walkNode(node: MosaicNode, pointer: String): String? {
+            if (node.id == componentId) return pointer
+            when (node) {
+                is MosaicStack -> node.children.forEachIndexed { index, child ->
+                    walkNode(child, "$pointer/children/$index")?.let { return it }
                 }
+                is MosaicCarouselComponent -> node.pages.forEachIndexed { index, page ->
+                    if (page.id == componentId) return "$pointer/pages/$index"
+                    walkNode(page.content, "$pointer/pages/$index/content")?.let { return it }
+                }
+                is MosaicButtonComponent -> {
+                    node.children.forEachIndexed { index, child ->
+                        walkNode(child, "$pointer/children/$index")?.let { return it }
+                    }
+                    node.inProgressChildren.orEmpty().forEachIndexed { index, child ->
+                        walkNode(child, "$pointer/inProgressChildren/$index")?.let { return it }
+                    }
+                }
+                is MosaicProductSelectorComponent -> node.cards.forEachIndexed { index, card ->
+                    walkNode(card, "$pointer/cards/$index")?.let { return it }
+                }
+                is MosaicProductCardComponent -> node.children.forEachIndexed { index, child ->
+                    walkNode(child, "$pointer/children/$index")?.let { return it }
+                }
+                is MosaicProductBadgeComponent -> node.children.forEachIndexed { index, child ->
+                    walkNode(child, "$pointer/children/$index")?.let { return it }
+                }
+                else -> Unit
             }
             return null
         }
-        return walk(document.layout.content, "/layout/content") ?: "/layout"
+        document.screens.forEachIndexed { index, screen ->
+            val layoutPointer = "/screens/$index/layout"
+            if (screen.layout.id == componentId) return layoutPointer
+            walkNode(screen.layout.content, "$layoutPointer/content")?.let { return it }
+        }
+        return "/screens/0/layout"
     }
 
     private fun blockingWarning(
@@ -782,7 +895,7 @@ class MosaicLocalPreviewEngine(
                 MosaicPreviewRecoveryActionName.UPDATE_PREVIEW_CLIENT ->
                     "Update the preview client or remove the unsupported capability."
                 MosaicPreviewRecoveryActionName.SELECT_SUPPORTED_TEMPLATE ->
-                    "Choose a template that uses Protocol 0.1."
+                    "Choose a template that uses a supported Protocol version."
                 MosaicPreviewRecoveryActionName.RESTORE_LAST_VALID_DRAFT ->
                     "Keep the last valid preview and send a corrected increasing revision."
                 else -> "Select the affected component and correct the highlighted property."

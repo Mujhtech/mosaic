@@ -56,4 +56,67 @@ public struct MosaicLocalizationResolver: Sendable, Equatable {
     }
     return value.defaultValue
   }
+
+  public func resolve(
+    _ value: MosaicLocalizedText,
+    for option: MosaicResolvedProductOption
+  ) -> String {
+    let localized = resolve(value)
+    let fallbackName = resolve(option.reference.label)
+    let providerName = option.product.title.trimmingCharacters(in: .whitespacesAndNewlines)
+    return MosaicProductTemplate.interpolate(
+      localized,
+      productName: providerName.isEmpty ? fallbackName : option.product.title,
+      localizedPrice: option.product.localizedPrice
+    )
+  }
+}
+
+enum MosaicProductTemplate {
+  private static let expression = try? NSRegularExpression(
+    pattern: #"\{\{\s*product\.(name|price)\s*\}\}"#
+  )
+
+  struct Analysis: Equatable {
+    let variables: [String]
+    let malformed: Bool
+  }
+
+  static func analyze(_ value: String) -> Analysis {
+    guard let expression else { return Analysis(variables: [], malformed: true) }
+    let range = NSRange(value.startIndex..<value.endIndex, in: value)
+    let matches = expression.matches(in: value, range: range)
+    let variables = matches.compactMap { match -> String? in
+      guard let range = Range(match.range(at: 1), in: value) else { return nil }
+      return String(value[range])
+    }
+    let remainder = expression.stringByReplacingMatches(
+      in: value, range: range, withTemplate: ""
+    )
+    return Analysis(
+      variables: variables,
+      malformed: remainder.contains("{{") || remainder.contains("}}")
+    )
+  }
+
+  static func interpolate(
+    _ value: String,
+    productName: String,
+    localizedPrice: String
+  ) -> String {
+    guard let expression else { return value }
+    let range = NSRange(value.startIndex..<value.endIndex, in: value)
+    var result = value
+    for match in expression.matches(in: value, range: range).reversed() {
+      guard
+        let fullRange = Range(match.range(at: 0), in: result),
+        let variableRange = Range(match.range(at: 1), in: value)
+      else { continue }
+      result.replaceSubrange(
+        fullRange,
+        with: value[variableRange] == "name" ? productName : localizedPrice
+      )
+    }
+    return result
+  }
 }

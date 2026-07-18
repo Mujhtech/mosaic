@@ -2,7 +2,6 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:mosaic_sdk/mosaic_sdk.dart';
 
 const String _previewEndpoint = String.fromEnvironment(
@@ -32,7 +31,10 @@ final class MosaicFlutterExample extends StatelessWidget {
       title: 'Mosaic Flutter local preview',
       theme: ThemeData(
         useMaterial3: true,
-        colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xff6750a4)),
+        colorScheme: ColorScheme.fromSeed(
+          seedColor: const Color(0xff007f73),
+        ).copyWith(primary: const Color(0xff007f73), surface: Colors.white),
+        scaffoldBackgroundColor: Colors.white,
       ),
       home: const PaywallPlayground(),
     );
@@ -40,14 +42,9 @@ final class MosaicFlutterExample extends StatelessWidget {
 }
 
 final class PaywallPlayground extends StatefulWidget {
-  const PaywallPlayground({
-    this.previewClient,
-    this.fallbackDocument,
-    super.key,
-  });
+  const PaywallPlayground({this.previewClient, super.key});
 
   final MosaicPreviewClient? previewClient;
-  final MosaicPaywallDocument? fallbackDocument;
 
   @override
   State<PaywallPlayground> createState() => _PaywallPlaygroundState();
@@ -55,7 +52,6 @@ final class PaywallPlayground extends StatefulWidget {
 
 final class _PaywallPlaygroundState extends State<PaywallPlayground> {
   late final MosaicPreviewClient _previewClient;
-  late final Future<MosaicPaywallDocument> _fallbackDocument;
   late final bool _ownsPreviewClient;
   String _lastEvent = 'Waiting for a Studio revision';
 
@@ -64,9 +60,6 @@ final class _PaywallPlaygroundState extends State<PaywallPlayground> {
     super.initState();
     _ownsPreviewClient = widget.previewClient == null;
     _previewClient = widget.previewClient ?? _createPreviewClient();
-    _fallbackDocument = widget.fallbackDocument == null
-        ? _loadFallbackDocument()
-        : Future<MosaicPaywallDocument>.value(widget.fallbackDocument);
     if (_ownsPreviewClient) {
       unawaited(_previewClient.connect());
     }
@@ -107,31 +100,19 @@ final class _PaywallPlaygroundState extends State<PaywallPlayground> {
             lastEvent: _lastEvent,
           ),
           Expanded(
-            child: FutureBuilder<MosaicPaywallDocument>(
-              future: _fallbackDocument,
-              builder: (context, snapshot) {
-                final fallback = snapshot.data;
-                if (fallback == null) {
-                  if (snapshot.hasError) {
-                    return const _FallbackLoadFailure();
-                  }
-                  return const Center(child: CircularProgressIndicator());
-                }
-                return MosaicPreviewPaywall(
-                  client: _previewClient,
-                  fallbackDocument: fallback,
-                  fallbackPurchaseProvider: _fallbackPurchaseProvider(),
-                  // The placeholder proves the protocol-owned asset fallback.
-                  imageResolver: (logicalKey) => null,
-                  onResult: (result) =>
-                      _recordEvent('Presentation: ${result.outcome.wireValue}'),
-                  onInteraction: (interaction) => _recordEvent(
-                    'Interaction: ${interaction.outcome.wireValue}',
-                  ),
-                  onDiagnostic: (diagnostic) =>
-                      _recordEvent('Diagnostic: ${diagnostic.code}'),
-                );
-              },
+            child: MosaicPreviewPaywall(
+              client: _previewClient,
+              showBundledFallback: false,
+              fallbackPurchaseProvider: _fallbackPurchaseProvider(),
+              // Empty host mappings prove protocol-owned media fallback.
+              imageResolver: (logicalKey) => null,
+              videoResolver: (logicalKey) => null,
+              onResult: (result) =>
+                  _recordEvent('Presentation: ${result.outcome.wireValue}'),
+              onInteraction: (interaction) =>
+                  _recordEvent('Interaction: ${interaction.outcome.wireValue}'),
+              onDiagnostic: (diagnostic) =>
+                  _recordEvent('Diagnostic: ${diagnostic.code}'),
             ),
           ),
         ],
@@ -164,7 +145,7 @@ final class _PaywallPlaygroundState extends State<PaywallPlayground> {
           application: MosaicPreviewApplicationIdentity(
             id: 'mosaic.flutter.example',
             displayName: 'Mosaic Flutter Example',
-            version: '0.1.0',
+            version: '0.2.0',
           ),
           device: MosaicPreviewDeviceIdentity(
             displayName: 'Flutter $platformName preview',
@@ -176,13 +157,6 @@ final class _PaywallPlaygroundState extends State<PaywallPlayground> {
       onDiagnostic: (diagnostic) =>
           _recordEvent('Connection: ${diagnostic.code}'),
     );
-  }
-
-  Future<MosaicPaywallDocument> _loadFallbackDocument() async {
-    final source = await rootBundle.loadString(
-      'assets/generated/complete-paywall.json',
-    );
-    return const MosaicProtocolDecoder().decode(source);
   }
 }
 
@@ -228,7 +202,7 @@ final class _PreviewStatusPanel extends StatelessWidget {
                     _StatusChip(
                       icon: Icons.commit,
                       label: client.liveRevision == null
-                          ? 'Bundled fallback'
+                          ? 'Waiting for design'
                           : 'Revision ${client.liveRevision!.sequence}',
                     ),
                     _StatusChip(
@@ -247,7 +221,7 @@ final class _PreviewStatusPanel extends StatelessWidget {
                       key: const ValueKey<String>('mock-purchase-state'),
                       icon: Icons.shopping_bag_outlined,
                       label: commerce == null
-                          ? 'Mock purchase: local fallback'
+                          ? 'Mock purchase: waiting'
                           : 'Mock purchase: ${commerce.purchaseOutcome.name}',
                     ),
                     _StatusChip(
@@ -393,20 +367,6 @@ final class _DraftIssueBanner extends StatelessWidget {
   }
 }
 
-final class _FallbackLoadFailure extends StatelessWidget {
-  const _FallbackLoadFailure();
-
-  @override
-  Widget build(BuildContext context) {
-    return Center(
-      child: Semantics(
-        liveRegion: true,
-        child: const Text('The bundled fallback document could not be loaded.'),
-      ),
-    );
-  }
-}
-
 MockMosaicPurchaseProvider _fallbackPurchaseProvider() {
   return MockMosaicPurchaseProvider(
     products: const <MosaicProduct>[
@@ -421,6 +381,11 @@ MockMosaicPurchaseProvider _fallbackPurchaseProvider() {
         title: 'Mosaic Pro Yearly',
         localizedPrice: r'$49.99',
         localizedPeriod: 'year',
+      ),
+      MosaicProduct(
+        id: 'mosaic_pro_lifetime',
+        title: 'Mosaic Pro Lifetime',
+        localizedPrice: r'$149.99',
       ),
     ],
   );

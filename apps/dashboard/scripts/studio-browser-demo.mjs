@@ -9,7 +9,7 @@ import { validatePaywallDocument } from "../../../protocol/browser/index.js"
 const debuggingEndpoint = process.env.MOSAIC_CHROME_DEBUG_URL ?? "http://127.0.0.1:9223"
 const startedAt = Date.now()
 const finalHeadline = "Edit once, preview natively everywhere"
-const artifactsDirectory = await mkdtemp(join(tmpdir(), "mosaic-phase2-browser-demo-"))
+const artifactsDirectory = await mkdtemp(join(tmpdir(), "mosaic-phase2c-browser-demo-"))
 const validationScreenshot = join(artifactsDirectory, "studio-validation-error.png")
 const finalScreenshot = join(artifactsDirectory, "studio-final.png")
 
@@ -44,23 +44,42 @@ await waitFor("Studio hydration", async () =>
 await clickButtonContaining("Focused offer")
 await waitFor("editor shell", async () => (await bodyText()).includes("Paywall order"))
 
-await clickIndexedButton("Text", 0)
+await clickCanvasComponent("headline")
 await waitFor("headline inspector", async () =>
   Boolean(await elementValue("#property-headline-value")),
 )
 await setElementValue("#property-headline-value", finalHeadline)
-await clickButtonWithAriaLabel("Move selected component down")
+await moveSelectedLayerDown()
 
-await clickIndexedButton("Product selector", 0)
+await clickCanvasComponent("monthly-card")
 await waitFor(
-  "product selector inspector",
-  async () => (await elementValue("#initial-product")) !== null,
+  "monthly Product Card inspector",
+  async () => (await elementChecked("#property-monthly-card-initialProductCardId")) !== null,
 )
-await setElementValue("#initial-product", "monthly-plan")
-await setElementValue("#initial-product", "yearly-plan")
+await clickElement("#property-monthly-card-initialProductCardId")
+await waitFor("monthly Product Card selection", async () =>
+  Boolean(await elementChecked("#property-monthly-card-initialProductCardId")),
+)
+await clickCanvasComponent("yearly-card")
+await waitFor(
+  "yearly Product Card inspector",
+  async () => (await elementChecked("#property-yearly-card-initialProductCardId")) === false,
+)
+await clickElement("#property-yearly-card-initialProductCardId")
+await waitFor("yearly Product Card selection", async () =>
+  Boolean(await elementChecked("#property-yearly-card-initialProductCardId")),
+)
 await setElementValue("#mock-outcome", "purchaseSuccess")
 
-await clickIndexedButton("Text", 1)
+await clickButtonContaining("Layers")
+await waitFor("Layers panel", async () =>
+  (await bodyText()).includes("Drag anywhere on a layer row to reorder."),
+)
+await clickButtonByLabel("Add screen or sheet")
+await clickRoleContaining("menuitem", "Add sheet")
+await waitFor("Sheet destination", async () => (await bodyText()).includes("Sheet · screen-2"))
+
+await clickCanvasComponent("headline")
 await waitFor(
   "headline re-selection",
   async () => (await elementValue("#property-headline-value")) !== null,
@@ -99,21 +118,42 @@ await clickButtonContaining("Export")
 const exportedFile = await waitForExport()
 const exported = JSON.parse(await readFile(exportedFile, "utf8"))
 const validation = validatePaywallDocument(exported)
-if (!validation.ok) throw new Error("The browser-exported document is not Protocol 0.1 valid.")
+if (!validation.ok) throw new Error("The browser-exported document is not Protocol 0.2 valid.")
 
-const children = exported.layout.content.children
+const initialScreen = exported.screens.find((screen) => screen.id === exported.initialScreenId)
+if (!initialScreen || initialScreen.presentation?.type !== "screen") {
+  throw new Error("The browser export does not preserve its initial Screen.")
+}
+const children = initialScreen.layout.content.children
 const headlineIndex = children.findIndex((node) => node.id === "headline")
 const subtitleIndex = children.findIndex((node) => node.id === "subtitle")
 const headlineNode = children.find((node) => node.id === "headline")
 const productSelector = children.find((node) => node.id === "plans")
+const selectedProductCard = productSelector?.cards?.find(
+  (card) => card.id === productSelector.initialProductCardId,
+)
+const sheet = exported.screens.find((screen) => screen.id === "screen-2")
+const sheetNavigation = children.find(
+  (node) =>
+    node.type === "button" &&
+    node.action?.type === "navigateTo" &&
+    node.action.screenId === sheet?.id,
+)
 if (headlineNode?.value?.default !== finalHeadline) {
   throw new Error("The exported headline does not match the browser edit.")
 }
 if (subtitleIndex < 0 || headlineIndex !== subtitleIndex + 1) {
   throw new Error("The exported document does not preserve the browser reorder.")
 }
-if (productSelector?.initiallySelectedProductReferenceId !== "yearly-plan") {
-  throw new Error("The exported document does not select the yearly product.")
+if (
+  productSelector?.type !== "productSelector" ||
+  productSelector.initialProductCardId !== "yearly-card" ||
+  selectedProductCard?.productReferenceId !== "yearly-plan"
+) {
+  throw new Error("The exported Product Selector does not select the authored yearly Product Card.")
+}
+if (sheet?.presentation?.type !== "sheet" || !sheetNavigation) {
+  throw new Error("The exported document does not preserve the new Sheet and its navigation edge.")
 }
 
 await scrollTo("#native-preview-title")
@@ -123,7 +163,13 @@ const result = {
   template: "Focused offer",
   headline: finalHeadline,
   reorder: "headline-after-subtitle",
+  selectedProductCard: "yearly-card",
   selectedMockProduct: "yearly-plan",
+  destinations: exported.screens.map((screen) => ({
+    id: screen.id,
+    presentation: screen.presentation.type,
+  })),
+  sheetNavigationButton: sheetNavigation.id,
   validationErrorObserved: true,
   validationRecovered: true,
   connectedNativeClients: 3,
@@ -152,6 +198,12 @@ async function elementValue(selector) {
   )
 }
 
+async function elementChecked(selector) {
+  return cdp.evaluate(
+    `(() => { const element = document.querySelector(${JSON.stringify(selector)}); return element instanceof HTMLInputElement ? element.checked : null })()`,
+  )
+}
+
 async function exactTextCount(text) {
   return cdp.evaluate(
     `([...document.querySelectorAll("body *")].filter((element) => element.children.length === 0 && element.textContent?.trim() === ${JSON.stringify(text)})).length`,
@@ -170,29 +222,65 @@ async function clickButtonContaining(text) {
   if (!clicked) throw new Error(`Could not find a button containing: ${text}.`)
 }
 
-async function clickIndexedButton(text, index) {
-  const clicked = await cdp.evaluate(`(() => {
-    const buttons = [...document.querySelectorAll("button")].filter((candidate) =>
-      candidate.textContent?.trim() === ${JSON.stringify(text)}
-    )
-    const button = buttons[${index}]
-    if (!button) return false
-    button.click()
-    return true
-  })()`)
-  if (!clicked) throw new Error(`Could not find button ${index} with text: ${text}.`)
-}
-
-async function clickButtonWithAriaLabel(label) {
+async function clickButtonByLabel(label) {
   const clicked = await cdp.evaluate(`(() => {
     const button = [...document.querySelectorAll("button")].find((candidate) =>
       candidate.getAttribute("aria-label") === ${JSON.stringify(label)}
     )
-    if (!button || button.disabled) return false
+    if (!button) return false
     button.click()
     return true
   })()`)
-  if (!clicked) throw new Error(`Could not click button with aria-label: ${label}.`)
+  if (!clicked) throw new Error(`Could not find a button labelled: ${label}.`)
+}
+
+async function clickRoleContaining(role, text) {
+  const selector = `[role="${role}"]`
+  const clicked = await cdp.evaluate(`(() => {
+    const element = [...document.querySelectorAll(${JSON.stringify(selector)})].find((candidate) =>
+      candidate.textContent?.includes(${JSON.stringify(text)})
+    )
+    if (!element) return false
+    element.click()
+    return true
+  })()`)
+  if (!clicked) throw new Error(`Could not find ${role} containing: ${text}.`)
+}
+
+async function clickElement(selector) {
+  const clicked = await cdp.evaluate(`(() => {
+    const element = document.querySelector(${JSON.stringify(selector)})
+    if (!(element instanceof HTMLElement)) return false
+    element.click()
+    return true
+  })()`)
+  if (!clicked) throw new Error(`Could not click element: ${selector}.`)
+}
+
+async function clickCanvasComponent(componentId) {
+  const selector = `[data-component-id="${componentId}"][data-preview-node-type]`
+  const clicked = await cdp.evaluate(`(() => {
+    const component = document.querySelector(${JSON.stringify(selector)})
+    if (!component) return false
+    component.click()
+    return true
+  })()`)
+  if (!clicked) throw new Error(`Could not select canvas component: ${componentId}.`)
+}
+
+async function moveSelectedLayerDown() {
+  const moved = await cdp.evaluate(`(() => {
+    const row = document.querySelector('[role="treeitem"][aria-selected="true"]')
+    if (!row) return false
+    row.focus()
+    row.dispatchEvent(new KeyboardEvent("keydown", {
+      altKey: true,
+      bubbles: true,
+      key: "ArrowDown",
+    }))
+    return true
+  })()`)
+  if (!moved) throw new Error("Could not move the selected layer down.")
 }
 
 async function setElementValue(selector, value) {

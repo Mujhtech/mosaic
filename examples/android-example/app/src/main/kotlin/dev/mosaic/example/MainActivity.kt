@@ -9,28 +9,27 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import dev.mosaic.sdk.MosaicAndroidPreviewIdentity
 import dev.mosaic.sdk.MosaicBundledImageResolver
-import dev.mosaic.sdk.MosaicCanonicalBundleSource
-import dev.mosaic.sdk.MosaicLocalPaywallLoader
+import dev.mosaic.sdk.MosaicBundledVideoResolver
 import dev.mosaic.sdk.MosaicLocalPreviewClient
 import dev.mosaic.sdk.MosaicLocalPreviewConfiguration
 import dev.mosaic.sdk.MosaicLocalPreviewScreen
+import dev.mosaic.sdk.MosaicPaywallLoadResult
 
 class MainActivity : ComponentActivity() {
     private lateinit var previewClient: MosaicLocalPreviewClient
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        val fallback = MosaicLocalPaywallLoader(
-            MosaicCanonicalBundleSource(applicationContext),
-        ).load(primaryDocumentJson = null)
         val requestedEndpoint = intent.getStringExtra(PREVIEW_ENDPOINT_EXTRA)
         val endpoint = requestedEndpoint?.takeIf {
             it.startsWith("ws://") || it.startsWith("wss://")
@@ -49,14 +48,20 @@ class MainActivity : ComponentActivity() {
                     displayName = "Android example preview",
                 ),
             ),
-            fallback = fallback,
+            fallback = MosaicPaywallLoadResult.ConfigurationUnavailable(),
         )
 
         setContent {
-            MaterialTheme {
+            MaterialTheme(
+                colorScheme = lightColorScheme(
+                    primary = Color(0xFF007F73),
+                    surface = Color.White,
+                    background = Color.White,
+                ),
+            ) {
                 Surface(modifier = Modifier.fillMaxSize()) {
                     var hostStatus by remember {
-                        mutableStateOf("Waiting for Studio. Bundled fallback remains available.")
+                        mutableStateOf("Waiting for Studio.")
                     }
                     Column(modifier = Modifier.fillMaxSize()) {
                         Text(
@@ -67,6 +72,7 @@ class MainActivity : ComponentActivity() {
                         MosaicLocalPreviewScreen(
                             client = previewClient,
                             imageResolver = MosaicBundledImageResolver.None,
+                            videoResolver = MosaicBundledVideoResolver.None,
                             onInteraction = { hostStatus = "Interaction: ${it.wireName}" },
                             onResult = { hostStatus = "Presentation result: ${it.wireName}" },
                             modifier = Modifier.weight(1f),

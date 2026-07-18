@@ -3,7 +3,7 @@ import { readFile } from "node:fs/promises"
 import WebSocket from "ws"
 
 import {
-  localPreviewWebSocketProtocol,
+  localPreviewWebSocketProtocols,
   validatePreviewMessage,
 } from "../../../protocol/browser/index.js"
 
@@ -26,7 +26,7 @@ const deadline = Date.now() + 20_000
 const fixtures = JSON.parse(
   await readFile(
     new URL(
-      "../../../protocol/fixtures/local-preview/v0.1/session-flow.messages.json",
+      "../../../protocol/fixtures/local-preview/v0.2/session-flow.messages.json",
       import.meta.url,
     ),
     "utf8",
@@ -41,7 +41,7 @@ const diagnostics = []
 const studioUrl = new URL(endpoint)
 studioUrl.searchParams.set("role", "studio")
 studioUrl.searchParams.set("sessionId", sessionId)
-const socket = new WebSocket(studioUrl, localPreviewWebSocketProtocol)
+const socket = new WebSocket(studioUrl, localPreviewWebSocketProtocols["0.2"])
 
 socket.on("message", (frame) => {
   const message = JSON.parse(frame.toString())
@@ -160,7 +160,7 @@ while (Date.now() < holdDeadline) {
   heartbeatSequence += 1
   for (const client of result.clients) {
     const heartbeat = {
-      previewProtocolVersion: "0.1",
+      previewProtocolVersion: "0.2",
       messageId: `msg_phase2_live_demo_heartbeat_${revisionSuffix}_${heartbeatSequence}_${client.renderer.replaceAll(".", "_")}`,
       sessionId,
       sentAt: new Date().toISOString(),

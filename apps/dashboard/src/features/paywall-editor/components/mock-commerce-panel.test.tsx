@@ -41,8 +41,8 @@ function Harness() {
     imported.localization.locales.en!.strings["paywall.products.monthly"] = "Starter"
     const selector = findNode(imported, "plans")
     if (selector?.type === "productSelector") {
-      selector.productReferenceIds = ["starter-plan"]
-      selector.initiallySelectedProductReferenceId = "starter-plan"
+      selector.cards = [{ ...selector.cards[0]!, productReferenceId: "starter-plan" }]
+      selector.initialProductCardId = selector.cards[0]!.id
     }
     replaceDocument(imported)
   }, [document, replaceDocument])

@@ -1,3 +1,5 @@
+import Ajv2020 from "ajv/dist/2020.js"
+
 import {
   DEFAULT_MOCK_PRODUCTS,
   LOCAL_EDITOR_UI_STORAGE_KEY,
@@ -13,20 +15,62 @@ import type {
 } from "@/features/paywall-editor/types/editor"
 import { cloneValue } from "@/features/paywall-editor/utils/clone"
 import {
-  canonicalSchemas,
+  canonicalSchemasByVersion,
+  migrateV02RC2CandidateToRC3,
+  migrateV02RC3CandidateToRC4,
   parsePortablePaywallJson,
   serializePortablePaywallJson,
   validateLocalProject,
+  validatePaywallDocument,
 } from "@/lib/mosaic-protocol"
+import type {
+  MosaicPaywallV02RC2Candidate,
+  MosaicPaywallV02RC3Candidate,
+} from "@/lib/mosaic-protocol"
+
+function containsRC2ProductSelector(value: unknown): boolean {
+  if (Array.isArray(value)) return value.some(containsRC2ProductSelector)
+  if (!value || typeof value !== "object") return false
+  const record = value as Record<string, unknown>
+  if (
+    record.type === "productSelector" &&
+    Array.isArray(record.productReferenceIds) &&
+    record.cardStyles !== undefined
+  ) {
+    return true
+  }
+  return Object.values(record).some(containsRC2ProductSelector)
+}
+
+function migrateLegacyV02Document(value: unknown): MosaicDocument | null {
+  if (
+    !value ||
+    typeof value !== "object" ||
+    (value as Record<string, unknown>).schemaVersion !== "0.2"
+  ) {
+    return null
+  }
+  try {
+    const rc3 = containsRC2ProductSelector(value)
+      ? migrateV02RC2CandidateToRC3(value as MosaicPaywallV02RC2Candidate).document
+      : value
+    const migrated = migrateV02RC3CandidateToRC4(rc3 as MosaicPaywallV02RC3Candidate).document
+    const validation = validatePaywallDocument(migrated)
+    return validation.ok ? (cloneValue(validation.value) as MosaicDocument) : null
+  } catch {
+    return null
+  }
+}
 
 let validateRecoverableProject: ReturnType<Ajv2020["compile"]> | null = null
 
 function isRecoverableLocalProject(value: unknown): value is LocalProjectFile {
   if (!validateRecoverableProject) {
     const ajv = new Ajv2020({ allErrors: true, strict: true })
-    ajv.addSchema(canonicalSchemas.paywall)
-    ajv.addSchema(canonicalSchemas.previewMessage)
-    validateRecoverableProject = ajv.compile(canonicalSchemas.localProject)
+    const schemas = canonicalSchemasByVersion["0.2"]
+    ajv.addSchema(schemas.paywall)
+    ajv.addSchema(schemas.previewMessage)
+    validateRecoverableProject = ajv.compile(schemas.localProject)
   }
   return validateRecoverableProject(value) as boolean
 }
@@ -124,21 +168,26 @@ export function createLocalProjectFile(options: {
   localRevisionSequence?: number
 }): LocalProjectFile {
   const revision = localRevision(options.document, options.localRevisionSequence)
+  const products = reconcileMockProductsForDocument(
+    options.document,
+    options.mockProducts ?? DEFAULT_MOCK_PRODUCTS,
+  )
   return {
-    fileFormatVersion: "0.1",
+    fileFormatVersion: "0.2",
     editableDocumentId: options.editableDocumentId,
     revision,
     document: cloneValue(options.document),
     preview: { locale: options.locale, textScale: options.textScale },
     mockCommerce: {
       revision,
-      state: mockCommerceState(options.mockPurchaseState, options.mockProducts),
+      state: mockCommerceState(options.mockPurchaseState, products),
     },
   }
 }
 
 export function isLocalProjectFile(value: unknown): value is LocalProjectFile {
-  return validateLocalProject(value).ok
+  const result = validateLocalProject(value)
+  return result.ok && result.value.fileFormatVersion === "0.2"
 }
 
 function importFailure(
@@ -150,7 +199,7 @@ function importFailure(
   const first = diagnostics[0]
   return first
     ? `${first.message} ${first.recovery.message}`
-    : "Import a valid Mosaic Protocol 0.1 document or local project file."
+    : "Import a valid Mosaic Protocol document or local project file."
 }
 
 export function parseImportedJson(json: string): {
@@ -161,8 +210,11 @@ export function parseImportedJson(json: string): {
     maxDocumentBytes: MAX_LOCAL_PROJECT_BYTES,
   })
   if (documentResult.ok) {
+    const document = documentResult.value as MosaicDocument
+    const validatedResult = validatePaywallDocument(document)
+    if (!validatedResult.ok) throw new Error(importFailure(validatedResult.diagnostics))
     return {
-      document: cloneValue(documentResult.value) as MosaicDocument,
+      document: cloneValue(document),
       project: null,
     }
   }
@@ -184,9 +236,11 @@ export function parseImportedJson(json: string): {
 
   if (validateLocalProject(parsed).ok) {
     throw new Error(
-      "Import a Protocol 0.1 paywall JSON file. Local autosaves can only be resumed from this browser.",
+      "Import a raw Mosaic paywall JSON file. Local autosaves can only be resumed from this browser.",
     )
   }
+  const migratedV02 = migrateLegacyV02Document(parsed)
+  if (migratedV02) return { document: migratedV02, project: null }
   throw new Error(importFailure(documentResult.diagnostics))
 }
 
@@ -262,6 +316,20 @@ export function readLocalProjectResult(): LocalProjectReadResult {
     if (!stored) return { status: "empty" }
     const parsed: unknown = JSON.parse(stored)
     if (isLocalProjectFile(parsed)) return { status: "valid", project: parsed }
+    if (parsed && typeof parsed === "object") {
+      const record = parsed as Record<string, unknown>
+      const migratedDocument = migrateLegacyV02Document(record.document)
+      if (record.fileFormatVersion === "0.2" && migratedDocument) {
+        const migratedProject = { ...record, document: migratedDocument }
+        const validation = validateLocalProject(migratedProject)
+        if (validation.ok) {
+          return {
+            status: "valid",
+            project: cloneValue(validation.value) as LocalProjectFile,
+          }
+        }
+      }
+    }
     if (isRecoverableLocalProject(parsed)) {
       return {
         status: "recoverable",
@@ -273,7 +341,7 @@ export function readLocalProjectResult(): LocalProjectReadResult {
     return {
       status: "corrupt",
       message:
-        "The autosave does not match the Mosaic local-project 0.1 contract. Your current editor remains unchanged.",
+        "The autosave does not match the Mosaic local-project 0.2 contract. Your current editor remains unchanged.",
     }
   } catch {
     return {
@@ -289,4 +357,3 @@ export function serializeDocument(document: MosaicDocument) {
   if (!result.ok) throw new Error(importFailure(result.diagnostics))
   return result.value
 }
-import Ajv2020 from "ajv/dist/2020.js"

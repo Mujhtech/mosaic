@@ -1,5 +1,6 @@
 import type { MosaicDocument, PreviewClient } from "@/features/paywall-editor/types/editor"
-import { localPreviewContractVersion, requiredPreviewCapabilities } from "@/lib/mosaic-protocol"
+import { PREVIEW_PROTOCOL_VERSION } from "@/features/paywall-editor/schema/preview-message"
+import { requiredPreviewCapabilities } from "@/lib/mosaic-protocol"
 
 function supportsCapability(
   capabilities: readonly { name: string; version: string }[],
@@ -35,7 +36,7 @@ export function compatibilityWarnings(document: MosaicDocument, clients: readonl
       (name) =>
         !supportsCapability(client.previewCapabilities, {
           name,
-          version: localPreviewContractVersion,
+          version: PREVIEW_PROTOCOL_VERSION,
         }),
     )
     if (missingPreviewCapabilities.length > 0) {

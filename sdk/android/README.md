@@ -1,8 +1,7 @@
-# Mosaic Android SDK — Phase 2 local preview
+# Mosaic Android SDK — Protocol 0.2 native rendering
 
-The Android SDK strictly decodes Mosaic Protocol 0.1 RC1 and renders its sole
-canonical fixture with Jetpack Compose primitives. Phase 2 adds a native,
-local-development preview client for the frozen Local Preview 0.1 contract.
+The Android SDK strictly decodes Mosaic Protocol 0.2 and renders it with
+Jetpack Compose primitives. Local Preview uses the exact 0.2 contract.
 It uses injected mock commerce and a generated bundled fallback. It has no
 accounts, hosted configuration, remote publishing, analytics, experiments,
 cloud storage, RevenueCat, or Play Billing.
@@ -18,23 +17,24 @@ cloud storage, RevenueCat, or Play Billing.
 
 ## Canonical protocol ownership
 
-`protocol/fixtures/v0.1/complete-paywall.json` is the only RC1 fixture. The
-library build copies it into an ignored
+The canonical fixtures live under `protocol/fixtures/v0.2/`. The library build copies the current Protocol 0.2
+fixture as its bundled fallback into an ignored
 `mosaic/build/generated/mosaic/canonical-assets/` directory and packages that
 generated output into the AAR. Android source contains neither a fixture fork
 nor a JSON Schema copy. JVM conformance tests read the repository file
 directly.
 
-Local Preview 0.1 remains owned by `protocol/schema/local-preview/v0.1/` and
-`docs/protocol/local-preview-v0.1.md`. Android keeps no schema or fixture fork.
-Its codec reads the canonical message fixture during JVM conformance tests,
-while received draft documents still pass through the canonical Protocol 0.1
-decoder before rendering.
+Local Preview 0.2 remains owned by `protocol/schema/local-preview/` and
+`docs/protocol/`. Android keeps no schema or fixture fork. Its codec reads both
+canonical message flows during JVM conformance tests, and every received draft
+still passes through the matching strict protocol decoder before rendering.
 
 The decoder rejects unknown versions, fields, components, capabilities,
 invalid references, duplicate IDs, invalid catalogs, mismatched inline
-defaults, unused declarations, unsupported accessibility payloads, and
-capability/content drift before any rendering starts.
+defaults, unused declarations, unsafe product templates, invalid Product
+Card/Product Badge ownership or passive-content bounds, unsupported
+accessibility payloads, and capability/content drift before any rendering
+starts.
 
 ## Local loading and rendering
 
@@ -51,6 +51,10 @@ MosaicPaywall(
     requestedLocale = "ar",
     imageResolver = MosaicBundledImageResolver { logicalKey ->
         // Return a decoded ImageBitmap for "mosaic.paywall.hero", or null.
+        null
+    },
+    videoResolver = MosaicBundledVideoResolver { logicalKey ->
+        // Return a content/file/resource Uri for authored bundled video, or null.
         null
     },
     onInteraction = { interaction -> /* includes restore-only outcomes */ },
@@ -108,7 +112,7 @@ are rejected. Cleartext traffic is enabled only by the example application for
 its local development socket, not by the library.
 
 The client sends `previewClientConnected` followed by `capabilityReport`,
-including the Protocol schema version, all supported Protocol capabilities,
+including both supported Protocol schema versions, exact Protocol capabilities,
 the five Android preview capabilities, and its document-size limit. It
 consumes draft identity and revision, raw Protocol document, locale and text
 scale; independently ordered mock products, purchase/restore outcomes and
@@ -135,16 +139,36 @@ message for 15 seconds is safely re-established.
 
 - `Column`, native vertical scrolling, `Text`, `Image`, Material buttons, and
   radio-button selection semantics render the protocol tree in source order.
+- Protocol 0.2 design-system color, background, and shadow tokens are resolved
+  strictly by category. Native Compose draws solid, linear-gradient, and
+  radial-gradient backgrounds plus one authored shadow; invalid references or
+  token cycles reject the whole candidate before it replaces a valid document.
+- Bundled and HTTPS remote image/video backgrounds use the authored content
+  mode and fallback color. Decorative video uses a muted, looping, autoplaying
+  Media3 player without controls or accessibility focus; its poster remains
+  visible while loading or after playback failure.
+- Width and height independently honor `fit`, `fill`, and `fixed`. Fixed bounds
+  clip visual overflow without removing descendant semantics. A `fill` axis in
+  an unbounded parent degrades to `fit` and emits `layout_unbounded_fill`.
+- A screen presented as `sheet` uses Material 3 `ModalBottomSheet` over the most
+  recent full screen. Back, the authored `navigateBack` action, and native
+  sheet dismissal all restore the previous navigation entry.
+- Protocol 0.2 Product Cards and Product Badges render their authored passive
+  child trees. Default and Selected box leaves resolve independently; logical
+  badge overlay anchors mirror in RTL without absolute protocol coordinates.
 - `WindowInsets.safeDrawing`, font scaling, direction-relative padding and
   alignment, and `LayoutDirection.Rtl` are honored.
-- Store price and subscription-period strings come only from runtime
-  `MosaicProduct` values. The provider receives the opaque `productId`; host
-  outcomes carry the document-local product reference ID.
+- After locale resolution, Product Card Text may substitute only
+  `product.name` and `product.price`. A nonblank provider title wins, with the
+  localized Product Reference label as its fallback. Store prices come only
+  from runtime `MosaicProduct` values.
 - Missing or undecodable logical images use the localized placeholder inside
   the same aspect-ratio frame.
-- A missing configured product selection falls back to the first available
-  reference in source order. No products shows the configured message,
-  disables purchase, and reports a recoverable interaction.
+- Runtime selection is keyed by selector ID and Product Card ID. A missing
+  initial/current card falls back to the first available authored card in
+  source order. A blank localized price removes a card only when its Text or
+  card accessibility resolves `product.price` for the active locale. No cards
+  shows the configured message, disables purchase, and reports a recoverable interaction.
   `productUnavailable` becomes a terminal presentation result only when a
   purchase attempt or provider response is unavailable.
 
@@ -175,7 +199,8 @@ From `sdk/android`:
 ```
 
 The instrumentation suite checks accessibility semantics, selection,
-unavailable and busy states, RTL, placeholder geometry, host outcomes, and a
+unavailable and busy states, RTL, placeholder geometry, native sheet
+navigation, host outcomes, and a
 real `captureToImage` SHA-256 baseline recorded for `Pixel_3a_API_34`. Phase 2
 adds preview status, locale/RTL/text-scale, commerce, invalid-document, and
 unsupported-component UI checks. JVM tests consume both canonical Protocol and

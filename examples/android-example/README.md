@@ -9,12 +9,18 @@ active entitlement states.
 
 The app includes the SDK module from `sdk/android`. During every build that
 module generates `build/generated/mosaic/canonical-assets/mosaic/complete-paywall.json`
-from `protocol/fixtures/v0.1/complete-paywall.json`; there is no committed
+from `protocol/fixtures/v0.2/complete-paywall.json`; there is no committed
 Android fixture copy. Android's resource merger then packages that generated
 asset into the example APK.
 
-Until the first valid live revision arrives, the sole canonical Protocol 0.1
-fixture is the bundled fallback. A stale, invalid, unsupported, or failed live
+Until the first valid live revision arrives, the canonical Protocol 0.2
+fixture is the bundled fallback, including its three structurally authored
+Product Cards, nested and logical-overlay Product Badges, and horizontal
+Product Selector. It also demonstrates native design-system gradients and
+shadows, fixed/fit/fill sizing, and a button-driven Material 3 details sheet.
+Bundled video intentionally has no example resolver, so its declared fallback
+is visible and the recoverable media diagnostic can be inspected. A stale,
+invalid, unsupported, or failed live
 revision leaves the last accepted draft (or that fallback) visible. The hero
 resolver is deliberately `None`, so the app also demonstrates the localized,
 same-aspect-ratio asset fallback and reports it to Studio. Result callbacks

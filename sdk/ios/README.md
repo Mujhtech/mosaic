@@ -1,6 +1,6 @@
-# Mosaic Apple SDK (Phase 2)
+# Mosaic Apple SDK — Protocol 0.2 native rendering
 
-The Phase 2 SDK decodes and renders Mosaic Protocol 0.1 RC1 with native
+The SDK strictly decodes Mosaic Protocol 0.2 and renders it with native
 SwiftUI, and can receive validated draft and mock-commerce revisions from a
 local Mosaic Studio session over WebSockets. It preserves the Phase 1 bundled
 fallback and provider-neutral commerce APIs; no account, hosted service,
@@ -16,6 +16,63 @@ remote publishing, analytics, StoreKit, or RevenueCat integration is involved.
 The package declares macOS 14 only so its SwiftUI surface can compile in the
 development-host test process. Mosaic does not expose a macOS renderer in this
 phase.
+
+## Protocol 0.2 RC4 rendering
+
+Protocol 0.2 RC4 uses one to ten named screens.
+The renderer starts at `initialScreenId`, keeps a presentation-local history,
+pushes Screen destinations, presents Sheet destinations with SwiftUI's native
+modal surface over the most recent Screen, and safely pops or dismisses with
+`navigateBack`. Navigating does not reset
+product selection, Switch values, or Carousel pages; accepting a new preview
+revision creates a fresh renderer model and resets all runtime state.
+
+RC4 resolves document-scoped colour, background, and shadow tokens within
+their own category. Native surfaces support solid colour, physical clockwise
+linear gradients, radial gradients, decorative images, decorative muted
+looping video, and one shadow. Bundled media stays behind host resolvers;
+remote media is limited to validated HTTPS assets. Video failure uses its
+poster and then fallback colour, while every media failure remains nonfatal
+and emits a safe rendering diagnostic.
+
+Eligible components share two-axis Fit, Fill, and Fixed sizing. Fixed content
+clips visual overflow without replacing its accessibility value. Fill on the
+vertically unbounded Scroll Container axis resolves to Fit and records
+`layout.unboundedFill` instead of producing infinite SwiftUI layout.
+
+Protocol 0.2 also replaces the specialized action components with one native
+SwiftUI `Button` whose vertical or horizontal label may contain noninteractive
+protocol content. Purchase and restore buttons may supply
+`inProgressChildren`; while the provider is running, the button swaps content
+and rejects duplicate activation. Descendant semantics are merged into the
+button's one localized accessibility target.
+
+RC3 makes Product Selector cards authored protocol content. Each `productCard`
+binds one product reference, renders passive children in its authored vertical
+or horizontal layout, and applies recursive Default/Selected box-style
+overrides. A direct `productBadge` may participate in the card layout or use a
+logical start/end overlay anchor, which mirrors under RTL. The whole card is
+one native selectable accessibility target; passive descendant labels are
+merged in source order.
+
+Selection state is keyed by selector ID and Product Card ID, then mapped back
+through the card's product reference for provider loading and purchase. Missing
+products remove their cards; an empty localized price removes only a card whose
+Text descendants or accessibility label resolve to `product.price` in the active
+locale. If the authored initial or current card is unavailable, selection falls
+back to the first authored available card; when none remain, the declared
+message is shown and purchase is disabled. Product Card text and its optional
+accessibility label interpolate
+only `product.name` and `product.price` after locale resolution, using the
+localized product-reference label when the provider supplies no name.
+
+`icon` maps the frozen semantic icon vocabulary to SF Symbols. Backward and
+forward symbols use direction-relative system names and mirror with the
+resolved RTL layout. Decorative icons are hidden from VoiceOver; informative
+icons retain their localized label. `openExternalUrl` accepts only safe,
+absolute HTTPS URLs and delegates to SwiftUI's system `openURL` action. The
+paywall and navigation history stay mounted, and an unsuccessful handoff adds
+the safe `external_url_open_failed` rendering diagnostic.
 
 ## Connect a native preview
 
@@ -66,8 +123,7 @@ struct PaywallPreview: View {
 ```
 
 The default endpoint is `ws://127.0.0.1:4317/preview`, the default session is
-`session_local_01`, and the negotiated WebSocket subprotocol is
-`mosaic.local-preview.v0.1`. A custom endpoint must remain local: localhost,
+`session_local_01`, and the client uses `mosaic.local-preview.v0.2`. A custom endpoint must remain local: localhost,
 loopback, private LAN, `.local`, IPv6 ULA, and IPv6 link-local hosts are
 accepted; public remote hosts are rejected.
 
@@ -94,15 +150,14 @@ preview overrides without rebuilding the application.
   attempts are exhausted.
 - Frames are bounded at 2 MiB and documents at 1 MiB.
 
-The client reports Protocol 0.1 capabilities without adding SwiftUI concepts
-to the platform-neutral contract. It consumes the repository canonical
-preview flow directly from
-`protocol/fixtures/local-preview/v0.1/session-flow.messages.json` in tests.
+The client reports the exact capabilities for the negotiated Protocol version
+without adding SwiftUI concepts to the platform-neutral contract. Tests consume
+the canonical Local Preview 0.2 flow directly from the repository.
 
 ## Mock commerce
 
 `MosaicPreviewPurchaseProvider` translates Studio mock-product references into
-the provider product IDs declared by the active Protocol 0.1 document. It
+the provider product IDs declared by the active validated document. It
 supports explicit purchase, restore, unavailable-product, and active-
 entitlement outcomes. It never opens StoreKit, handles receipts, or contacts a
 billing provider.
@@ -123,6 +178,7 @@ MosaicPaywall(
     products: MosaicProduct.phase1MockProducts
   ),
   imageResolver: .missing,
+  videoResolver: .missing,
   onInteraction: { interaction in
     print(interaction.name.rawValue)
   },
@@ -132,14 +188,18 @@ MosaicPaywall(
 )
 ```
 
-`MosaicPaywall` reports terminal outcomes but never dismisses its container.
-The host owns `sheet` or `fullScreenCover` dismissal. Images remain host-
-resolved through `MosaicImageResolver`; an unavailable image follows the
-protocol's localized, same-geometry placeholder behavior.
+`MosaicPaywall` reports terminal outcomes but never dismisses its host
+container. Protocol Sheet destinations are presented and dismissed internally
+through their navigation history. The host still owns the outer paywall sheet
+or full-screen cover. Bundled images and videos remain host-resolved through
+`MosaicImageResolver` and `MosaicVideoResolver`; unavailable media follows its
+declared placeholder, poster, or colour fallback.
 
-The packaged resource is a repository-relative symlink to
-`protocol/fixtures/v0.1/complete-paywall.json`. It is not an SDK-owned schema or
-fixture fork.
+The packaged resource is a byte-identical checked-in copy of the current
+`protocol/fixtures/v0.2/complete-paywall.json`. SwiftPM copies symbolic links
+without rebasing their targets, so using a repository-relative symlink would
+produce a broken fallback in a built package. A package test prevents the copy
+from drifting; it is not an SDK-owned schema or fixture fork.
 
 ## Platform-specific rendering notes
 
@@ -148,6 +208,10 @@ fixture fork.
   Flutter or Compose.
 - Protocol start/end alignment maps to SwiftUI leading/trailing and follows the
   resolved locale direction.
+- Linear-gradient geometry uses physical coordinates: 0° is left-to-right,
+  90° is top-to-bottom, angles increase clockwise, and RTL does not mirror it.
+- Each multi-screen root exposes its localized screen label as a containing
+  VoiceOver group while preserving the source-order focus of its descendants.
 - Protocol heading levels are preserved in the accessibility projection. On
   iOS 15, SwiftUI exposes the native header trait but not a public per-level
   heading API.

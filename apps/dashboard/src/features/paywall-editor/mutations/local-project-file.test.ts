@@ -1,8 +1,11 @@
 import { beforeEach, describe, expect, it } from "vitest"
 
-import canonicalFixture from "../../../../../../protocol/fixtures/v0.1/complete-paywall.json"
+import canonicalFixture from "../../../../../../protocol/fixtures/v0.2/complete-paywall.json"
 
-import { MAX_LOCAL_PROJECT_BYTES } from "@/features/paywall-editor/constants/editor-constants"
+import {
+  LOCAL_PROJECT_STORAGE_KEY,
+  MAX_LOCAL_PROJECT_BYTES,
+} from "@/features/paywall-editor/constants/editor-constants"
 import {
   createLocalProjectFile,
   mockCommerceState,
@@ -31,8 +34,74 @@ function semanticInvalidDocument(document: MosaicDocument) {
   if (!selector || selector.type !== "productSelector") {
     throw new Error("Canonical fixture is missing its product selector")
   }
-  selector.initiallySelectedProductReferenceId = "missing-plan"
+  selector.initialProductCardId = "missing-card"
   return invalid
+}
+
+function rc2CandidateDocument(document: MosaicDocument) {
+  const candidate = cloneValue(document)
+  const selector = findNode(candidate, "plans")
+  if (!selector || selector.type !== "productSelector") {
+    throw new Error("Canonical fixture is missing its product selector")
+  }
+  const initialCard = selector.cards.find((card) => card.id === selector.initialProductCardId)
+  if (!initialCard) throw new Error("Canonical fixture is missing its initial Product Card")
+
+  const rc2Selector = selector as unknown as Record<string, unknown>
+  const yearlyProduct = candidate.products.find((product) => product.id === "yearly-plan")
+  const lifetimeProduct = candidate.products.find((product) => product.id === "lifetime-plan")
+  if (!yearlyProduct || !lifetimeProduct) {
+    throw new Error("Canonical fixture is missing its badged products")
+  }
+  ;(yearlyProduct as unknown as Record<string, unknown>).badge = {
+    default: "Best value",
+    localizationKey: "paywall.products.best_value",
+  }
+  ;(lifetimeProduct as unknown as Record<string, unknown>).badge = {
+    default: "Own it forever",
+    localizationKey: "paywall.products.lifetime_badge",
+  }
+  for (const locale of Object.values(candidate.localization.locales)) {
+    for (const key of Object.keys(locale.strings)) {
+      if (
+        key.startsWith("mosaic.migration.product_card_") ||
+        key.endsWith("_name_template") ||
+        key.endsWith("_price_template") ||
+        key.endsWith("_accessibility_template")
+      ) {
+        delete locale.strings[key]
+      }
+    }
+  }
+  rc2Selector.productReferenceIds = selector.cards.map((card) => card.productReferenceId)
+  rc2Selector.initiallySelectedProductReferenceId = initialCard.productReferenceId
+  rc2Selector.cardStyles = {
+    default: {
+      background: "surface.elevated",
+      border: { color: "border.default", width: 1 },
+      cornerRadius: 12,
+      padding: { top: 12, start: 12, bottom: 12, end: 12 },
+      contentGap: 8,
+      contentAlignment: "spaceBetween",
+      productLabelColor: "text.primary",
+      runtimePriceColor: "text.secondary",
+      badge: {
+        background: "surface.default",
+        textColor: "text.primary",
+        border: { color: "border.default", width: 1 },
+        cornerRadius: 999,
+        padding: { top: 4, start: 8, bottom: 4, end: 8 },
+      },
+    },
+    selected: {
+      background: "surface.default",
+      border: { color: "action.primary", width: 2 },
+    },
+  }
+  delete rc2Selector.cards
+  delete rc2Selector.initialProductCardId
+  delete rc2Selector.crossAxisAlignment
+  return candidate as unknown
 }
 
 function project(document: MosaicDocument = canonicalDocument) {
@@ -57,6 +126,31 @@ describe("local project import and export", () => {
     const imported = parseImportedJson(exported)
     expect(imported.project).toBeNull()
     expect(imported.document).toEqual(canonicalFixture)
+  })
+
+  it("recovers superseded RC2 Product Selectors in raw imports and local autosaves", () => {
+    const candidate = rc2CandidateDocument(canonicalDocument)
+    const imported = parseImportedJson(JSON.stringify(candidate))
+    const importedSelector = findNode(imported.document, "plans")
+    expect(importedSelector?.type).toBe("productSelector")
+    if (!importedSelector || importedSelector.type !== "productSelector") return
+    expect(importedSelector.cards.map((card) => card.productReferenceId)).toEqual([
+      "monthly-plan",
+      "yearly-plan",
+      "lifetime-plan",
+    ])
+    expect(
+      importedSelector.cards.find((card) => card.id === importedSelector.initialProductCardId)
+        ?.productReferenceId,
+    ).toBe("yearly-plan")
+
+    const autosave = project()
+    ;(autosave as unknown as Record<string, unknown>).document = candidate
+    window.localStorage.setItem(LOCAL_PROJECT_STORAGE_KEY, JSON.stringify(autosave))
+    expect(readLocalProjectResult()).toMatchObject({
+      status: "valid",
+      project: { document: imported.document },
+    })
   })
 
   it("rejects the autosave-only local project wrapper as a portable import", () => {
@@ -87,14 +181,15 @@ describe("local project import and export", () => {
       ...importedDocument.products[1]!,
       id: "pro-plan",
     }
-    const selector = importedDocument.layout.content.children.find(
+    const selector = importedDocument.screens[0]!.layout.content.children.find(
       (node) => node.type === "productSelector",
     )
     if (!selector || selector.type !== "productSelector") {
       throw new Error("Canonical fixture is missing its selector")
     }
-    selector.productReferenceIds = ["starter-plan", "pro-plan"]
-    selector.initiallySelectedProductReferenceId = "pro-plan"
+    selector.cards[0]!.productReferenceId = "starter-plan"
+    selector.cards[1]!.productReferenceId = "pro-plan"
+    selector.initialProductCardId = selector.cards[1]!.id
 
     const imported = parseImportedJson(JSON.stringify(importedDocument))
     expect(unavailableMockProductsForDocument(imported.document)).toEqual([
@@ -105,6 +200,11 @@ describe("local project import and export", () => {
       },
       {
         productReferenceId: "pro-plan",
+        availability: "unavailable",
+        reason: "notConfigured",
+      },
+      {
+        productReferenceId: "lifetime-plan",
         availability: "unavailable",
         reason: "notConfigured",
       },
@@ -123,18 +223,18 @@ describe("local project import and export", () => {
 
     const unfinished = cloneValue(valid)
     unfinished.document = semanticInvalidDocument(unfinished.document)
-    window.localStorage.setItem("mosaic:local-project:v0.1", JSON.stringify(unfinished))
+    window.localStorage.setItem(LOCAL_PROJECT_STORAGE_KEY, JSON.stringify(unfinished))
     expect(readLocalProjectResult()).toMatchObject({
       status: "recoverable",
       project: unfinished as LocalProjectFile,
     })
 
-    window.localStorage.setItem("mosaic:local-project:v0.1", "not-json")
+    window.localStorage.setItem(LOCAL_PROJECT_STORAGE_KEY, "not-json")
     expect(readLocalProjectResult()).toMatchObject({ status: "corrupt" })
 
     window.localStorage.setItem(
-      "mosaic:local-project:v0.1",
-      JSON.stringify({ fileFormatVersion: "0.1", document: {} }),
+      LOCAL_PROJECT_STORAGE_KEY,
+      JSON.stringify({ fileFormatVersion: "0.2", document: {} }),
     )
     expect(readLocalProjectResult()).toMatchObject({ status: "corrupt" })
   })
@@ -164,6 +264,11 @@ describe("local project import and export", () => {
       },
       {
         productReferenceId: "yearly-plan",
+        availability: "unavailable",
+        reason: "notConfigured",
+      },
+      {
+        productReferenceId: "lifetime-plan",
         availability: "unavailable",
         reason: "notConfigured",
       },

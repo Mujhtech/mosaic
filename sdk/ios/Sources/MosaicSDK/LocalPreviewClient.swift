@@ -140,7 +140,8 @@ public final class MosaicLocalPreviewClient: ObservableObject {
   ) {
     self.configuration = configuration
     self.connector = connector
-    let fallbackCodecs = fallbackProtocolVersions
+    let fallbackCodecs =
+      fallbackProtocolVersions
       .filter { $0 != codec.protocolVersion }
       .map { MosaicPreviewMessageCodec(protocolVersion: $0) }
     codecs = [codec] + fallbackCodecs
@@ -347,9 +348,7 @@ public final class MosaicLocalPreviewClient: ObservableObject {
     )
     try await send(
       .capabilityReport(
-        activeCodec.protocolVersion == mosaicLocalPreviewProtocolVersionV02
-          ? .v02(clientId: configuration.identity.clientId)
-          : MosaicPreviewCapabilityReport(clientId: configuration.identity.clientId)
+        .v02(clientId: configuration.identity.clientId)
       )
     )
   }
@@ -844,7 +843,7 @@ public final class MosaicLocalPreviewClient: ObservableObject {
   private func genericValidationDiagnostic() -> MosaicPreviewValidationDiagnostic {
     MosaicPreviewValidationDiagnostic(
       code: "preview.validation.failed",
-      message: "The draft does not conform to Mosaic Protocol 0.1.",
+      message: "The draft does not conform to a supported Mosaic Protocol version.",
       location: MosaicPreviewDiagnosticLocation(documentPath: ""),
       recovery: MosaicPreviewRecovery(
         action: .editProperty,
@@ -870,7 +869,7 @@ public final class MosaicLocalPreviewClient: ObservableObject {
           ),
           recovery: MosaicPreviewRecovery(
             action: .updatePreviewClient,
-            message: "Use Protocol 0.1 or update the preview client."
+            message: "Use a supported Protocol version or update the preview client."
           )
         )
       )
@@ -921,15 +920,8 @@ public final class MosaicLocalPreviewClient: ObservableObject {
     if let compatibility = root["compatibility"] as? [String: Any],
       let capabilities = compatibility["requiredCapabilities"] as? [[String: Any]]
     {
-      let expectedDocumentVersion =
-        activeCodec.protocolVersion == mosaicLocalPreviewProtocolVersionV02
-        ? mosaicProtocolVersionV02
-        : mosaicProtocolVersion
-      let supported = Set(
-        (expectedDocumentVersion == mosaicProtocolVersionV02
-          ? MosaicCapabilityCatalog.v02
-          : MosaicCapabilityCatalog.v01).map(\.rawValue)
-      )
+      let expectedDocumentVersion = mosaicProtocolVersion
+      let supported = Set(MosaicCapabilityCatalog.v02.map(\.rawValue))
       for (index, capability) in capabilities.enumerated() {
         guard
           let name = capability["name"] as? String,
@@ -949,6 +941,19 @@ public final class MosaicLocalPreviewClient: ObservableObject {
         }
       }
     }
+    if let screens = root["screens"] as? [[String: Any]] {
+      for (index, screen) in screens.enumerated() {
+        guard let layout = screen["layout"] as? [String: Any] else { continue }
+        if let unsupported = unsupportedNode(
+          layout,
+          path: "/screens/\(index)/layout",
+          permitsScrollContainer: true
+        ) {
+          return unsupported
+        }
+      }
+      return nil
+    }
     guard let layout = root["layout"] as? [String: Any] else { return nil }
     return unsupportedNode(layout, path: "/layout", permitsScrollContainer: true)
   }
@@ -959,16 +964,13 @@ public final class MosaicLocalPreviewClient: ObservableObject {
     permitsScrollContainer: Bool
   ) -> MosaicPreviewUnsupportedRequirement? {
     guard let type = node["type"] as? String else { return nil }
-    let isV02 = activeCodec.protocolVersion == mosaicLocalPreviewProtocolVersionV02
-    let supported = Set(
-      (isV02 ? MosaicLayoutNodeKind.v02PreviewCases : MosaicLayoutNodeKind.v01PreviewCases)
-        .map(\.rawValue)
-    )
+    var supported = Set(MosaicLayoutNodeKind.v02PreviewCases.map(\.rawValue))
+    supported.formUnion(["productCard", "productBadge"])
     if !supported.contains(type) || (!permitsScrollContainer && type == "scrollContainer") {
       let id = (node["id"] as? String).flatMap(safeComponentId)
       return MosaicPreviewUnsupportedRequirement(
         capabilityName: safeMachineIdentifier("component.\(type)"),
-        capabilityVersion: isV02 ? mosaicProtocolVersionV02 : mosaicProtocolVersion,
+        capabilityVersion: mosaicProtocolVersion,
         location: MosaicPreviewDiagnosticLocation(
           documentPath: "\(path)/type",
           componentId: id,
@@ -979,7 +981,45 @@ public final class MosaicLocalPreviewClient: ObservableObject {
     if type == "scrollContainer", let content = node["content"] as? [String: Any] {
       return unsupportedNode(content, path: "\(path)/content", permitsScrollContainer: false)
     }
-    if (type == "verticalStack" || type == "stack"),
+    if type == "verticalStack" || type == "stack",
+      let children = node["children"] as? [[String: Any]]
+    {
+      for (index, child) in children.enumerated() {
+        if let unsupported = unsupportedNode(
+          child,
+          path: "\(path)/children/\(index)",
+          permitsScrollContainer: false
+        ) {
+          return unsupported
+        }
+      }
+    }
+    if type == "button" {
+      for collection in ["children", "inProgressChildren"] {
+        guard let children = node[collection] as? [[String: Any]] else { continue }
+        for (index, child) in children.enumerated() {
+          if let unsupported = unsupportedNode(
+            child,
+            path: "\(path)/\(collection)/\(index)",
+            permitsScrollContainer: false
+          ) {
+            return unsupported
+          }
+        }
+      }
+    }
+    if type == "productSelector", let cards = node["cards"] as? [[String: Any]] {
+      for (index, card) in cards.enumerated() {
+        if let unsupported = unsupportedNode(
+          card,
+          path: "\(path)/cards/\(index)",
+          permitsScrollContainer: false
+        ) {
+          return unsupported
+        }
+      }
+    }
+    if type == "productCard" || type == "productBadge",
       let children = node["children"] as? [[String: Any]]
     {
       for (index, child) in children.enumerated() {
@@ -1000,7 +1040,9 @@ public final class MosaicLocalPreviewClient: ObservableObject {
             path: "\(path)/pages/\(index)/content",
             permitsScrollContainer: false
           )
-        { return unsupported }
+        {
+          return unsupported
+        }
       }
     }
     return nil
@@ -1042,7 +1084,8 @@ public final class MosaicLocalPreviewClient: ObservableObject {
     editableDocumentId: String
   ) -> [MosaicPreviewCompatibilityWarning] {
     var warnings: [MosaicPreviewCompatibilityWarning] = []
-    for asset in document.assets where !configuration.bundledAssetKeys.contains(asset.source.key) {
+    for asset in document.assets
+    where asset.source.bundledKey.map({ !configuration.bundledAssetKeys.contains($0) }) == true {
       warnings.append(
         MosaicPreviewCompatibilityWarning(
           code: "preview.asset.fallback",
@@ -1188,30 +1231,15 @@ private struct MosaicPreviewUnsupportedRequirement {
 }
 
 extension MosaicLayoutNodeKind {
-  fileprivate static let v01PreviewCases: [MosaicLayoutNodeKind] = [
-    .scrollContainer,
-    .verticalStack,
-    .text,
-    .image,
-    .featureList,
-    .productSelector,
-    .purchaseButton,
-    .restoreButton,
-    .closeButton,
-    .legalText,
-  ]
-
   fileprivate static let v02PreviewCases: [MosaicLayoutNodeKind] = [
     .scrollContainer,
     .stack,
     .text,
     .image,
+    .icon,
     .featureList,
     .productSelector,
-    .purchaseButton,
-    .restoreButton,
-    .closeButton,
-    .legalText,
+    .button,
     .carousel,
     .switchControl,
     .countdown,

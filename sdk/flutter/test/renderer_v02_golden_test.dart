@@ -12,7 +12,7 @@ void main() {
       File('${root.path}/protocol/fixtures/v0.2/complete-paywall.json')
           .readAsStringSync(),
     );
-    tester.view.physicalSize = const Size(600, 1200);
+    tester.view.physicalSize = const Size(600, 1800);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
@@ -40,6 +40,11 @@ void main() {
                     title: 'Yearly',
                     localizedPrice: r'$79.99',
                     localizedPeriod: 'year',
+                  ),
+                  MosaicProduct(
+                    id: 'mosaic_pro_lifetime',
+                    title: 'Lifetime Access',
+                    localizedPrice: r'$199.99',
                   ),
                 ],
               ),

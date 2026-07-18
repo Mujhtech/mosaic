@@ -123,7 +123,7 @@ final class AccessibilityTests: XCTestCase {
     XCTAssertNil(MosaicImageResolver.missing.image(for: asset.source.key))
     XCTAssertEqual(asset.source.key, "mosaic.paywall.hero")
     XCTAssertEqual(
-      resolver.resolve(asset.fallback.value),
+      resolver.resolve(try XCTUnwrap(asset.fallback).value),
       "الرسم التوضيحي المميز غير متاح"
     )
   }

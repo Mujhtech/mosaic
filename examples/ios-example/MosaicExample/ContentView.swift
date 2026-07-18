@@ -8,11 +8,8 @@ struct ContentView: View {
 
   var body: some View {
     switch bootstrap {
-    case .ready(let configuration, let fallbackDocument):
-      RunningLocalPreview(
-        configuration: configuration,
-        fallbackDocument: fallbackDocument
-      )
+    case .ready(let configuration):
+      RunningLocalPreview(configuration: configuration)
     case .unavailable(let message):
       VStack(spacing: 12) {
         Image(systemName: "exclamationmark.triangle.fill")
@@ -37,27 +34,16 @@ private struct RunningLocalPreview: View {
   @StateObject private var client: MosaicLocalPreviewClient
   @State private var lastEvent = "Waiting for Studio"
 
-  private let fallbackDocument: MosaicPaywallDocument
-  private let fallbackPurchaseProvider = MockMosaicPurchaseProvider(
-    products: MosaicProduct.phase1MockProducts
-  )
-
-  init(
-    configuration: MosaicPreviewClientConfiguration,
-    fallbackDocument: MosaicPaywallDocument
-  ) {
+  init(configuration: MosaicPreviewClientConfiguration) {
     _client = StateObject(
       wrappedValue: MosaicLocalPreviewClient(configuration: configuration)
     )
-    self.fallbackDocument = fallbackDocument
   }
 
   var body: some View {
     VStack(spacing: 0) {
       MosaicLocalPreviewScreen(
         client: client,
-        fallbackDocument: fallbackDocument,
-        fallbackPurchaseProvider: fallbackPurchaseProvider,
         imageResolver: .missing,
         onInteraction: { interaction in
           lastEvent = "Interaction · \(interaction.name.rawValue)"
@@ -66,6 +52,7 @@ private struct RunningLocalPreview: View {
           lastEvent = "Result · \(result.name.rawValue)"
         }
       )
+      .tint(Color(red: 0, green: 127 / 255, blue: 115 / 255))
 
       Divider()
       Text(lastEvent)
@@ -82,29 +69,10 @@ private struct RunningLocalPreview: View {
 
 @MainActor
 private enum ExamplePreviewBootstrap {
-  case ready(
-    configuration: MosaicPreviewClientConfiguration,
-    fallbackDocument: MosaicPaywallDocument
-  )
+  case ready(configuration: MosaicPreviewClientConfiguration)
   case unavailable(message: String)
 
   static func load() -> ExamplePreviewBootstrap {
-    let candidate = Bundle.main.url(
-      forResource: "complete-paywall",
-      withExtension: "json"
-    ).flatMap { try? Data(contentsOf: $0) }
-
-    let fallbackDocument: MosaicPaywallDocument
-    switch MosaicPaywallLoader.load(candidateData: candidate) {
-    case .loaded(let document, _, _):
-      fallbackDocument = document
-    case .unavailable(_, let diagnostics):
-      let codes = diagnostics.map(\.code).joined(separator: ", ")
-      return .unavailable(
-        message: "The bundled canonical fixture could not load. \(codes)"
-      )
-    }
-
     let environment = ProcessInfo.processInfo.environment
     let endpoint: URL
     if let source = environment["MOSAIC_PREVIEW_ENDPOINT"] {
@@ -144,8 +112,7 @@ private enum ExamplePreviewBootstrap {
           sessionId: environment["MOSAIC_PREVIEW_SESSION_ID"]
             ?? MosaicPreviewDefaults.sessionId,
           identity: identity
-        ),
-        fallbackDocument: fallbackDocument
+        )
       )
     } catch {
       return .unavailable(

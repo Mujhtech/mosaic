@@ -103,6 +103,63 @@ Do not use a global store as a replacement for application architecture.
 
 Business components belong to features.
 
+## Design-System Packages
+
+The dashboard consumes two private local packages:
+
+```text
+@mosaic/design-tokens
+@mosaic/design-system
+```
+
+Declare them as explicit `file:` dependencies in the dashboard package. Do not add a root
+JavaScript workspace solely to share frontend foundations.
+
+Import `@mosaic/design-tokens/theme.css` and then `@mosaic/design-system/styles.css` once from
+`src/styles/globals.css`. The token package owns light, dark, and semantic values. Keep Tailwind
+`@theme` mappings and application base rules in the dashboard stylesheet.
+
+Use `--mosaic-*` semantic roles for shared styling. The unprefixed color and radius variables remain
+compatibility inputs for existing shadcn primitives and Tailwind utilities. Token inventory and
+usage rules are documented in [`docs/architecture/design-system.md`](../design-system.md).
+
+The only approved React runtime exports are `ToolbarGroup`, `PanelSection`, and `StatusMessage`.
+Use them as compositional patterns: name toolbar groups, connect panel sections to visible headings,
+and provide concise visible status text. The design-system package does not own feature state,
+business behavior, application icons, or shadcn primitives. React remains its peer dependency; keep
+the dashboard TypeScript symlink preservation and Vite/Vitest React deduplication settings when
+using the local file-linked package.
+
+## Responsive Workspace Styling
+
+Studio is desktop-first. Preserve canvas space before showing every panel simultaneously:
+
+1. Reduce side panels toward their documented minimums.
+2. Collapse the inactive side panel.
+3. Present the inspector through an accessible sheet or drawer when constrained.
+4. Keep persisted layout state outside design tokens and outside the paywall document.
+
+Use logical CSS properties for bidirectional layouts. Responsive changes must preserve keyboard
+access, visible focus, accessible names, and the selected editor component.
+
+## Resizable Workspaces
+
+Feature code must consume the app-local shadcn wrapper from `components/ui/resizable`. Only that
+wrapper may import `react-resizable-panels`; do not add pointer/mouse resize calculations, CSS
+`resize`, another split-pane dependency, or feature-owned resize primitives. Keep panels and
+handles as direct group children so upstream separator semantics, keyboard resizing, collapse, and
+double-click reset remain intact.
+
+Persist completed user layouts from the upstream completed-layout callback, not from pointer-move
+events. Validate the entire versioned workspace payload before applying it, and restore complete
+defaults when any field is malformed, incompatible, non-finite, or outside its current viewport
+constraint. Workspace preferences remain separate from TanStack Query data, paywall documents,
+undo history, document autosave, portable exports, and preview document contracts.
+
+Use one feature-owned global shortcut registry for editor commands. It must ignore keystrokes while
+an input, textarea, select, contenteditable, or command search owns focus, avoid browser and OS
+conflicts, and expose the same command hints in the palette and relevant tooltips.
+
 ## Forms
 
 Use TanStack Form for complex forms.
@@ -121,6 +178,10 @@ All interactive controls must support:
 - disabled and loading states
 - screen-reader semantics
 
+Use the semantic focus-ring tokens for custom interactive treatments. Never remove the focus
+behavior supplied by Base UI or shadcn. Status colors require accompanying text or semantics, and
+motion must remain understandable when `prefers-reduced-motion` reduces shared durations.
+
 ## Generated Code
 
 Do not edit:
@@ -130,7 +191,6 @@ Do not edit:
 - generated protocol types
 
 Change the source and regenerate.
-
 
 ## Dashboard Scaffolding
 
@@ -144,21 +204,21 @@ npx shadcn@latest add signup-05
 
 Use:
 
-* `sidebar-07` for the authenticated dashboard shell
-* `login-05` for the login route
-* `signup-05` for the registration route
+- `sidebar-07` for the authenticated dashboard shell
+- `login-05` for the login route
+- `signup-05` for the registration route
 
 These templates are starting points, not immutable generated output.
 
 Adapt them to Mosaic’s:
 
-* routing
-* branding
-* permissions
-* responsive behaviour
-* feature-oriented architecture
-* authentication APIs
-* loading and error states
+- routing
+- branding
+- permissions
+- responsive behaviour
+- feature-oriented architecture
+- authentication APIs
+- loading and error states
 
 Generated template components must be moved into the correct ownership locations rather than leaving all files inside generic component directories.
 
@@ -229,21 +289,17 @@ Example usage:
 For icon-only buttons, always provide an accessible label:
 
 ```tsx
-<Button
-  variant="ghost"
-  size="icon"
-  aria-label="Open settings"
->
+<Button variant="ghost" size="icon" aria-label="Open settings">
   <Gear size={18} aria-hidden />
 </Button>
 ```
 
 Do not create a generic icon wrapper unless Mosaic needs shared behaviour such as:
 
-* standardized sizing
-* accessibility defaults
-* dynamic icon lookup
-* consistent weights
-* shared animation behaviour
+- standardized sizing
+- accessibility defaults
+- dynamic icon lookup
+- consistent weights
+- shared animation behaviour
 
 ---

@@ -42,6 +42,9 @@ final class PaywallLoaderTests: XCTestCase {
       return XCTFail("Expected the packaged canonical fallback.")
     }
     XCTAssertEqual(document.id, "phase1-complete-paywall")
+    XCTAssertEqual(document.schemaVersion, "0.2")
+    XCTAssertEqual(document.productSelectors.count, 1)
+    XCTAssertEqual(document.productSelectors.first?.direction, .horizontal)
     XCTAssertEqual(source, .bundledFallback)
     XCTAssertTrue(diagnostics.isEmpty)
   }

@@ -1,73 +1,57 @@
 # Mosaic Protocol Versioning
 
-## Exact versions
+## Current pre-release rule
 
-`schemaVersion` and every capability version are exact identifiers, not numeric
-compatibility ranges. A reader declaring `0.1` accepts only `0.1` and only the
-capability names and `0.1` versions it explicitly supports. It must not infer
+Protocol `0.2` RC4 and Local Preview `0.2` are the only supported contracts
+while Mosaic is iterating before its first stable release. Earlier experimental
+contracts have been retired rather than carried as compatibility readers.
+
+`schemaVersion`, Local Preview versions, and capability versions are exact
+identifiers. A reader declaring `0.2` accepts only `0.2`; it must not infer
 forward or backward support from numeric ordering.
-
-This conservative rule remains in force through the Protocol review gate. A
-future range, migration, or compatibility policy is a public-contract decision
-and cannot be introduced by one SDK.
 
 ## Artifact lifecycle
 
-The compatibility manifest status is one of:
+Compatibility manifest status is one of:
 
-- `draft`: actively being designed and not ready for cross-platform review;
-- `releaseCandidate`: coherent candidate implemented for the review gate;
-- `approved`: product-owner-approved and immutable;
-- `deprecated`: still readable where supported but discouraged for new work.
+- `draft`: under active design;
+- `releaseCandidate`: coherent and implemented for a review gate;
+- `approved`: product-owner-approved and immutable; or
+- `deprecated`: still readable where explicitly supported.
 
-Protocol `0.1` is `approved` with provenance `RC1`. The product owner approved
-the unchanged RC1 bytes on 2026-07-17 after the Protocol and cross-platform
-prototype gates. The lifecycle status changed without redesigning the schema,
-fixture, capabilities, fallback rules, or renderer semantics.
-
-Approval occurs only after the Protocol and cross-platform prototype gates.
-The approved RC1 bytes are now the immutable Protocol `0.1` baseline.
-
-After approval, schema, manifest contract, and canonical fixtures must not be
-edited in place. A correction that changes decoding, validation, rendering,
-fallback, accessibility, action, or outcome behavior creates a new protocol
-version and migration note. Deprecation does not make approved artifacts
-mutable.
-
-## Change requirements
-
-Every pre-approval candidate change and every future version requires:
-
-1. schema and manifest review;
-2. canonical fixture update when the contract is exercised differently;
-3. valid and invalid validation coverage;
-4. compatibility, accessibility, and fallback review;
-5. documentation and changelog updates;
-6. implementation or defined atomic rejection in Flutter, SwiftUI, and
-   Jetpack Compose; and
-7. explicit notification to every platform owner when a shared candidate
-   changes.
-
-The protocol stays platform-neutral. Framework convenience, native resource
-names, billing-provider models, and platform-only UI behavior are not valid
-reasons to fork or weaken the shared contract.
+Protocol `0.2` remains a release candidate. Corrections update its canonical
+schemas, fixtures, generated browser contract, Studio, and all three native
+renderers together. After the first contract is approved and published,
+behavior-changing corrections require a new version and an explicit
+compatibility policy.
 
 ## Reader sequence
 
 A reader must:
 
-1. check the exact schema version;
-2. compare every required capability and exact version;
-3. validate the closed document plus semantic references;
-4. render only after complete validation succeeds;
-5. attempt its bundled fallback when the primary document is rejected; and
-6. return `configurationUnavailable` when the bundled fallback also fails.
+1. require exact version `0.2`;
+2. compare every required capability at exact version `0.2`;
+3. validate the complete closed document and semantic references;
+4. render only after validation succeeds;
+5. retain the last accepted production configuration or use the host's bundled
+   fallback according to the production SDK policy; and
+6. return `configurationUnavailable` when no valid production document exists.
 
-No version policy permits best-effort partial rendering of unknown content.
+Local Preview example apps intentionally do not display a bundled paywall while
+waiting for Studio. They show connecting, waiting, or connection-failure state
+so a demo cannot be mistaken for a synchronized design.
 
-## Current review gate
+## Local Preview negotiation
 
-Protocol `0.1` RC1 passed product-owner review and is immutable. Local Preview
-`0.1` is a separate frozen Phase 2 integration contract whose Phase 2 review is
-still pending. Approval or revision of the preview transport does not reopen or
-mutate the Paywall Protocol `0.1` component and rendering semantics.
+Local Preview uses one exact WebSocket subprotocol:
+
+```text
+mosaic.local-preview.v0.2
+```
+
+The selected connection still does not imply support for every capability, so
+Studio checks the client's capability report before sending a draft.
+
+The protocol remains platform-neutral. Framework convenience, native resource
+names, billing-provider models, and platform-only view behavior are not reasons
+to fork the shared schema.

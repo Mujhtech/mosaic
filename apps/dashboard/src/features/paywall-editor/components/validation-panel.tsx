@@ -4,7 +4,13 @@ import { WarningCircleIcon } from "@phosphor-icons/react/dist/ssr/WarningCircle"
 import { useEditorSelection } from "@/features/paywall-editor/hooks/use-editor-selection"
 import type { ValidationIssue } from "@/features/paywall-editor/types/editor"
 
-export function ValidationPanel({ issues }: { issues: readonly ValidationIssue[] }) {
+export function ValidationPanel({
+  issues,
+  onNavigate,
+}: {
+  issues: readonly ValidationIssue[]
+  onNavigate?: (issue: ValidationIssue) => void
+}) {
   const { selectComponent } = useEditorSelection()
 
   return (
@@ -53,15 +59,16 @@ export function ValidationPanel({ issues }: { issues: readonly ValidationIssue[]
                 <div className="min-w-0 flex-1">
                   <p className="text-sm font-medium">{issue.message}</p>
                   <p className="text-muted-foreground mt-1 text-xs">{issue.recovery}</p>
-                  {issue.componentId ? (
-                    <button
-                      type="button"
-                      className="text-primary mt-2 text-xs font-semibold hover:underline"
-                      onClick={() => selectComponent(issue.componentId ?? null)}
-                    >
-                      Show affected content
-                    </button>
-                  ) : null}
+                  <button
+                    type="button"
+                    className="text-primary mt-2 text-xs font-semibold hover:underline"
+                    onClick={() => {
+                      if (onNavigate) onNavigate(issue)
+                      else selectComponent(issue.componentId ?? null)
+                    }}
+                  >
+                    {issue.componentId ? "Fix in Properties" : "Show recovery controls"}
+                  </button>
                   <details className="text-muted-foreground mt-2 text-[11px]">
                     <summary className="cursor-pointer">Diagnostic details</summary>
                     <dl className="mt-1 grid grid-cols-[auto_1fr] gap-x-2">

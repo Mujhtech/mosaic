@@ -17,6 +17,14 @@
         "version": "0.2"
       },
       {
+        "name": "layout.heightSizing",
+        "version": "0.2"
+      },
+      {
+        "name": "navigation.screens",
+        "version": "0.2"
+      },
+      {
         "name": "component.text",
         "version": "0.2"
       },
@@ -33,19 +41,15 @@
         "version": "0.2"
       },
       {
-        "name": "component.purchaseButton",
+        "name": "component.productCard",
         "version": "0.2"
       },
       {
-        "name": "component.restoreButton",
+        "name": "component.productBadge",
         "version": "0.2"
       },
       {
-        "name": "component.closeButton",
-        "version": "0.2"
-      },
-      {
-        "name": "component.legalText",
+        "name": "component.button",
         "version": "0.2"
       },
       {
@@ -54,6 +58,10 @@
       },
       {
         "name": "localization.rtl",
+        "version": "0.2"
+      },
+      {
+        "name": "localization.productTemplate",
         "version": "0.2"
       },
       {
@@ -144,7 +152,11 @@
           "paywall.restore.progress": "Restoring purchases…",
           "paywall.restore.accessibility": "Restore previous purchases",
           "paywall.restore.hint": "Checks the purchase provider for restorable access",
-          "paywall.legal": "Payment is charged to your store account. Subscriptions renew automatically unless cancelled before the end of the current period. Terms and privacy policy apply."
+          "paywall.legal": "Payment is charged to your store account. Subscriptions renew automatically unless cancelled before the end of the current period. Terms and privacy policy apply.",
+          "mosaic.migration.product_card_1.name": "{{ product.name }}",
+          "mosaic.migration.product_card_2.price": "{{ product.price }}",
+          "mosaic.migration.product_card_3.name": "{{ product.name }}",
+          "mosaic.migration.product_card_4.price": "{{ product.price }}"
         }
       },
       "de": {
@@ -173,7 +185,11 @@
           "paywall.restore.progress": "Käufe werden wiederhergestellt…",
           "paywall.restore.accessibility": "Frühere Käufe wiederherstellen",
           "paywall.restore.hint": "Prüft beim Kaufanbieter, ob Zugriff wiederhergestellt werden kann",
-          "paywall.legal": "Die Zahlung wird deinem Store-Konto belastet. Abonnements verlängern sich automatisch, sofern sie nicht vor Ablauf des aktuellen Zeitraums gekündigt werden. Es gelten die Nutzungsbedingungen und die Datenschutzrichtlinie."
+          "paywall.legal": "Die Zahlung wird deinem Store-Konto belastet. Abonnements verlängern sich automatisch, sofern sie nicht vor Ablauf des aktuellen Zeitraums gekündigt werden. Es gelten die Nutzungsbedingungen und die Datenschutzrichtlinie.",
+          "mosaic.migration.product_card_1.name": "{{ product.name }}",
+          "mosaic.migration.product_card_2.price": "{{ product.price }}",
+          "mosaic.migration.product_card_3.name": "{{ product.name }}",
+          "mosaic.migration.product_card_4.price": "{{ product.price }}"
         }
       },
       "ar": {
@@ -202,7 +218,11 @@
           "paywall.restore.progress": "تجري استعادة المشتريات…",
           "paywall.restore.accessibility": "استعادة المشتريات السابقة",
           "paywall.restore.hint": "يتحقق من موفر الشراء بحثًا عن وصول قابل للاستعادة",
-          "paywall.legal": "يتم تحصيل المبلغ من حساب المتجر. تتجدد الاشتراكات تلقائيًا ما لم تُلغَ قبل نهاية الفترة الحالية. تطبق الشروط وسياسة الخصوصية."
+          "paywall.legal": "يتم تحصيل المبلغ من حساب المتجر. تتجدد الاشتراكات تلقائيًا ما لم تُلغَ قبل نهاية الفترة الحالية. تطبق الشروط وسياسة الخصوصية.",
+          "mosaic.migration.product_card_1.name": "{{ product.name }}",
+          "mosaic.migration.product_card_2.price": "{{ product.price }}",
+          "mosaic.migration.product_card_3.name": "{{ product.name }}",
+          "mosaic.migration.product_card_4.price": "{{ product.price }}"
         }
       }
     }
@@ -239,343 +259,585 @@
       "label": {
         "default": "Yearly",
         "localizationKey": "paywall.products.yearly"
-      },
-      "badge": {
-        "default": "Best value",
-        "localizationKey": "paywall.products.best_value"
       }
     }
   ],
-  "layout": {
-    "type": "scrollContainer",
-    "id": "paywall-scroll",
-    "axis": "vertical",
-    "safeArea": "respect",
-    "showsIndicators": true,
-    "content": {
-      "type": "stack",
-      "id": "paywall-content",
-      "padding": {
-        "top": 16,
-        "start": 24,
-        "bottom": 24,
-        "end": 24
-      },
-      "children": [
-        {
+  "initialScreenId": "main",
+  "screens": [
+    {
+      "id": "main",
+      "layout": {
+        "type": "scrollContainer",
+        "id": "paywall-scroll",
+        "axis": "vertical",
+        "safeArea": "respect",
+        "showsIndicators": true,
+        "content": {
           "type": "stack",
-          "id": "close-actions",
+          "id": "paywall-content",
           "padding": {
-            "top": 0,
-            "start": 0,
-            "bottom": 0,
-            "end": 0
+            "top": 16,
+            "start": 24,
+            "bottom": 24,
+            "end": 24
           },
           "children": [
             {
-              "type": "closeButton",
-              "id": "close",
-              "label": {
-                "default": "Close",
-                "localizationKey": "paywall.close"
-              },
-              "action": {
-                "type": "close"
-              },
-              "accessibility": {
-                "label": {
-                  "default": "Close",
-                  "localizationKey": "paywall.close"
-                }
-              },
-              "typography": {
-                "style": "label",
-                "fontSize": 16,
-                "lineHeightMultiplier": 1.25,
-                "weight": "semibold",
-                "color": "text.primary",
-                "alignment": "center"
-              }
-            }
-          ],
-          "direction": "vertical",
-          "gap": 0,
-          "mainAxisDistribution": "start",
-          "crossAxisAlignment": "end"
-        },
-        {
-          "type": "image",
-          "id": "hero",
-          "assetId": "hero-image",
-          "width": "fill",
-          "aspectRatio": 1.7777777777777777,
-          "contentMode": "fill",
-          "accessibility": {
-            "hidden": false,
-            "label": {
-              "default": "A mosaic of native mobile paywall screens",
-              "localizationKey": "paywall.hero.alt"
-            }
-          }
-        },
-        {
-          "type": "text",
-          "id": "headline",
-          "value": {
-            "default": "Unlock every Mosaic Pro feature",
-            "localizationKey": "paywall.headline"
-          },
-          "accessibility": {
-            "role": "heading",
-            "level": 1
-          },
-          "typography": {
-            "style": "title",
-            "fontSize": 32,
-            "lineHeightMultiplier": 1.1875,
-            "weight": "bold",
-            "color": "text.primary",
-            "alignment": "center"
-          }
-        },
-        {
-          "type": "text",
-          "id": "subtitle",
-          "value": {
-            "default": "Build, preview, and improve native paywalls across every supported platform without giving up platform conventions.",
-            "localizationKey": "paywall.subtitle"
-          },
-          "accessibility": {
-            "role": "text"
-          },
-          "typography": {
-            "style": "body",
-            "fontSize": 16,
-            "lineHeightMultiplier": 1.5,
-            "weight": "regular",
-            "color": "text.primary",
-            "alignment": "center"
-          }
-        },
-        {
-          "type": "featureList",
-          "id": "features",
-          "marker": "checkmark",
-          "items": [
-            {
-              "id": "unlimited-projects",
-              "text": {
-                "default": "Create unlimited paywall projects",
-                "localizationKey": "paywall.feature.unlimited_projects"
-              }
-            },
-            {
-              "id": "native-rendering",
-              "text": {
-                "default": "Render with native Flutter, SwiftUI, and Compose controls",
-                "localizationKey": "paywall.feature.native_rendering"
-              }
-            },
-            {
-              "id": "offline-ready",
-              "text": {
-                "default": "Keep a bundled paywall ready when the network is unavailable",
-                "localizationKey": "paywall.feature.offline_ready"
-              }
-            }
-          ],
-          "accessibility": {
-            "label": {
-              "default": "Included with Mosaic Pro",
-              "localizationKey": "paywall.features.label"
-            }
-          },
-          "gap": 12,
-          "markerColor": "text.primary",
-          "typography": {
-            "style": "body",
-            "fontSize": 16,
-            "lineHeightMultiplier": 1.5,
-            "weight": "regular",
-            "color": "text.primary",
-            "alignment": "start"
-          }
-        },
-        {
-          "type": "productSelector",
-          "id": "plans",
-          "productReferenceIds": [
-            "monthly-plan",
-            "yearly-plan"
-          ],
-          "initiallySelectedProductReferenceId": "yearly-plan",
-          "unavailableFallback": {
-            "selection": "firstAvailable",
-            "whenNoneAvailable": "showMessageAndDisablePurchase",
-            "message": {
-              "default": "Plans are temporarily unavailable.",
-              "localizationKey": "paywall.products.unavailable"
-            }
-          },
-          "accessibility": {
-            "label": {
-              "default": "Choose a plan",
-              "localizationKey": "paywall.products.label"
-            },
-            "hint": {
-              "default": "Select one available subscription plan before continuing",
-              "localizationKey": "paywall.products.hint"
-            }
-          },
-          "direction": "vertical",
-          "gap": 12,
-          "cardStyles": {
-            "default": {
-              "background": "surface.default",
-              "border": {
-                "color": "border.default",
-                "width": 0
-              },
-              "cornerRadius": 0,
+              "type": "stack",
+              "id": "close-actions",
               "padding": {
                 "top": 0,
                 "start": 0,
                 "bottom": 0,
                 "end": 0
               },
-              "contentGap": 0,
-              "contentAlignment": "start",
-              "productLabelColor": "text.primary",
-              "runtimePriceColor": "text.primary",
-              "badge": {
-                "background": "transparent",
-                "textColor": "text.primary",
-                "border": {
-                  "color": "border.default",
-                  "width": 0
-                },
-                "cornerRadius": 0,
-                "padding": {
-                  "top": 0,
-                  "start": 0,
-                  "bottom": 0,
-                  "end": 0
+              "children": [
+                {
+                  "type": "button",
+                  "id": "close",
+                  "action": {
+                    "type": "close"
+                  },
+                  "accessibility": {
+                    "label": {
+                      "default": "Close",
+                      "localizationKey": "paywall.close"
+                    }
+                  },
+                  "direction": "horizontal",
+                  "gap": 0,
+                  "mainAxisDistribution": "center",
+                  "crossAxisAlignment": "center",
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "close-label",
+                      "value": {
+                        "default": "Close",
+                        "localizationKey": "paywall.close"
+                      },
+                      "typography": {
+                        "style": "label",
+                        "fontSize": 16,
+                        "lineHeightMultiplier": 1.25,
+                        "weight": "semibold",
+                        "color": "text.primary",
+                        "alignment": "center"
+                      },
+                      "accessibility": {
+                        "role": "text"
+                      }
+                    }
+                  ]
                 }
+              ],
+              "direction": "vertical",
+              "gap": 0,
+              "mainAxisDistribution": "start",
+              "crossAxisAlignment": "end"
+            },
+            {
+              "type": "image",
+              "id": "hero",
+              "assetId": "hero-image",
+              "aspectRatio": 1.7777777777777777,
+              "contentMode": "fill",
+              "accessibility": {
+                "hidden": false,
+                "label": {
+                  "default": "A mosaic of native mobile paywall screens",
+                  "localizationKey": "paywall.hero.alt"
+                }
+              },
+              "sizing": {
+                "width": "fill",
+                "height": "fit"
               }
             },
-            "selected": {}
-          },
-          "visibility": {
-            "mode": "hidden"
-          }
-        },
-        {
-          "type": "stack",
-          "id": "commerce-actions",
-          "padding": {
-            "top": 0,
-            "start": 0,
-            "bottom": 0,
-            "end": 0
-          },
-          "children": [
             {
-              "type": "purchaseButton",
-              "id": "purchase",
-              "label": {
-                "default": "Continue",
-                "localizationKey": "paywall.purchase"
-              },
-              "inProgressLabel": {
-                "default": "Processing purchase…",
-                "localizationKey": "paywall.purchase.progress"
-              },
-              "action": {
-                "type": "purchase",
-                "productSelectorId": "plans"
+              "type": "text",
+              "id": "headline",
+              "value": {
+                "default": "Unlock every Mosaic Pro feature",
+                "localizationKey": "paywall.headline"
               },
               "accessibility": {
-                "label": {
-                  "default": "Continue with the selected plan",
-                  "localizationKey": "paywall.purchase.accessibility"
-                },
-                "hint": {
-                  "default": "Starts the purchase for the selected subscription plan",
-                  "localizationKey": "paywall.purchase.hint"
-                }
+                "role": "heading",
+                "level": 1
               },
               "typography": {
-                "style": "label",
-                "fontSize": 16,
-                "lineHeightMultiplier": 1.25,
-                "weight": "semibold",
+                "style": "title",
+                "fontSize": 32,
+                "lineHeightMultiplier": 1.1875,
+                "weight": "bold",
                 "color": "text.primary",
                 "alignment": "center"
               }
             },
             {
-              "type": "restoreButton",
-              "id": "restore",
-              "label": {
-                "default": "Restore purchases",
-                "localizationKey": "paywall.restore"
+              "type": "text",
+              "id": "subtitle",
+              "value": {
+                "default": "Build, preview, and improve native paywalls across every supported platform without giving up platform conventions.",
+                "localizationKey": "paywall.subtitle"
               },
-              "inProgressLabel": {
-                "default": "Restoring purchases…",
-                "localizationKey": "paywall.restore.progress"
+              "accessibility": {
+                "role": "text"
               },
-              "action": {
-                "type": "restore"
+              "typography": {
+                "style": "body",
+                "fontSize": 16,
+                "lineHeightMultiplier": 1.5,
+                "weight": "regular",
+                "color": "text.primary",
+                "alignment": "center"
+              }
+            },
+            {
+              "type": "featureList",
+              "id": "features",
+              "marker": "checkmark",
+              "items": [
+                {
+                  "id": "unlimited-projects",
+                  "text": {
+                    "default": "Create unlimited paywall projects",
+                    "localizationKey": "paywall.feature.unlimited_projects"
+                  }
+                },
+                {
+                  "id": "native-rendering",
+                  "text": {
+                    "default": "Render with native Flutter, SwiftUI, and Compose controls",
+                    "localizationKey": "paywall.feature.native_rendering"
+                  }
+                },
+                {
+                  "id": "offline-ready",
+                  "text": {
+                    "default": "Keep a bundled paywall ready when the network is unavailable",
+                    "localizationKey": "paywall.feature.offline_ready"
+                  }
+                }
+              ],
+              "accessibility": {
+                "label": {
+                  "default": "Included with Mosaic Pro",
+                  "localizationKey": "paywall.features.label"
+                }
+              },
+              "gap": 12,
+              "markerColor": "text.primary",
+              "typography": {
+                "style": "body",
+                "fontSize": 16,
+                "lineHeightMultiplier": 1.5,
+                "weight": "regular",
+                "color": "text.primary",
+                "alignment": "start"
+              }
+            },
+            {
+              "type": "productSelector",
+              "id": "plans",
+              "unavailableFallback": {
+                "selection": "firstAvailable",
+                "whenNoneAvailable": "showMessageAndDisablePurchase",
+                "message": {
+                  "default": "Plans are temporarily unavailable.",
+                  "localizationKey": "paywall.products.unavailable"
+                }
               },
               "accessibility": {
                 "label": {
-                  "default": "Restore previous purchases",
-                  "localizationKey": "paywall.restore.accessibility"
+                  "default": "Choose a plan",
+                  "localizationKey": "paywall.products.label"
                 },
                 "hint": {
-                  "default": "Checks the purchase provider for restorable access",
-                  "localizationKey": "paywall.restore.hint"
+                  "default": "Select one available subscription plan before continuing",
+                  "localizationKey": "paywall.products.hint"
                 }
               },
+              "direction": "vertical",
+              "gap": 12,
+              "crossAxisAlignment": "stretch",
+              "cards": [
+                {
+                  "type": "productCard",
+                  "id": "plans-monthly-plan-card",
+                  "productReferenceId": "monthly-plan",
+                  "direction": "vertical",
+                  "gap": 0,
+                  "mainAxisDistribution": "start",
+                  "crossAxisAlignment": "stretch",
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "plans-monthly-plan-card-name",
+                      "value": {
+                        "default": "{{ product.name }}",
+                        "localizationKey": "mosaic.migration.product_card_1.name"
+                      },
+                      "typography": {
+                        "style": "body",
+                        "fontSize": 16,
+                        "lineHeightMultiplier": 1.5,
+                        "weight": "regular",
+                        "color": "text.primary",
+                        "alignment": "start"
+                      },
+                      "accessibility": {
+                        "role": "text"
+                      }
+                    },
+                    {
+                      "type": "text",
+                      "id": "plans-monthly-plan-card-price",
+                      "value": {
+                        "default": "{{ product.price }}",
+                        "localizationKey": "mosaic.migration.product_card_2.price"
+                      },
+                      "typography": {
+                        "style": "body",
+                        "fontSize": 16,
+                        "lineHeightMultiplier": 1.5,
+                        "weight": "regular",
+                        "color": "text.primary",
+                        "alignment": "start"
+                      },
+                      "accessibility": {
+                        "role": "text"
+                      }
+                    }
+                  ],
+                  "styles": {
+                    "default": {
+                      "background": {
+                        "type": "color",
+                        "value": "surface.default"
+                      },
+                      "border": {
+                        "color": "border.default",
+                        "width": 0
+                      },
+                      "cornerRadius": 0,
+                      "padding": {
+                        "top": 0,
+                        "start": 0,
+                        "bottom": 0,
+                        "end": 0
+                      },
+                      "opacity": 1
+                    },
+                    "selected": {}
+                  }
+                },
+                {
+                  "type": "productCard",
+                  "id": "plans-yearly-plan-card",
+                  "productReferenceId": "yearly-plan",
+                  "direction": "vertical",
+                  "gap": 0,
+                  "mainAxisDistribution": "start",
+                  "crossAxisAlignment": "stretch",
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "plans-yearly-plan-card-name",
+                      "value": {
+                        "default": "{{ product.name }}",
+                        "localizationKey": "mosaic.migration.product_card_3.name"
+                      },
+                      "typography": {
+                        "style": "body",
+                        "fontSize": 16,
+                        "lineHeightMultiplier": 1.5,
+                        "weight": "regular",
+                        "color": "text.primary",
+                        "alignment": "start"
+                      },
+                      "accessibility": {
+                        "role": "text"
+                      }
+                    },
+                    {
+                      "type": "text",
+                      "id": "plans-yearly-plan-card-price",
+                      "value": {
+                        "default": "{{ product.price }}",
+                        "localizationKey": "mosaic.migration.product_card_4.price"
+                      },
+                      "typography": {
+                        "style": "body",
+                        "fontSize": 16,
+                        "lineHeightMultiplier": 1.5,
+                        "weight": "regular",
+                        "color": "text.primary",
+                        "alignment": "start"
+                      },
+                      "accessibility": {
+                        "role": "text"
+                      }
+                    },
+                    {
+                      "type": "productBadge",
+                      "id": "plans-yearly-plan-card-badge",
+                      "placement": {
+                        "mode": "nested"
+                      },
+                      "direction": "horizontal",
+                      "gap": 0,
+                      "mainAxisDistribution": "center",
+                      "crossAxisAlignment": "center",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "plans-yearly-plan-card-badge-label",
+                          "value": {
+                            "default": "Best value",
+                            "localizationKey": "paywall.products.best_value"
+                          },
+                          "typography": {
+                            "style": "label",
+                            "fontSize": 16,
+                            "lineHeightMultiplier": 1.25,
+                            "weight": "semibold",
+                            "color": "text.primary",
+                            "alignment": "center"
+                          },
+                          "accessibility": {
+                            "role": "text"
+                          }
+                        }
+                      ],
+                      "styles": {
+                        "default": {
+                          "background": {
+                            "type": "color",
+                            "value": "surface.default"
+                          },
+                          "border": {
+                            "color": "border.default",
+                            "width": 0
+                          },
+                          "cornerRadius": 0,
+                          "padding": {
+                            "top": 0,
+                            "start": 0,
+                            "bottom": 0,
+                            "end": 0
+                          },
+                          "opacity": 1
+                        },
+                        "selected": {}
+                      }
+                    }
+                  ],
+                  "styles": {
+                    "default": {
+                      "background": {
+                        "type": "color",
+                        "value": "surface.default"
+                      },
+                      "border": {
+                        "color": "border.default",
+                        "width": 0
+                      },
+                      "cornerRadius": 0,
+                      "padding": {
+                        "top": 0,
+                        "start": 0,
+                        "bottom": 0,
+                        "end": 0
+                      },
+                      "opacity": 1
+                    },
+                    "selected": {}
+                  }
+                }
+              ],
+              "initialProductCardId": "plans-yearly-plan-card",
+              "visibility": {
+                "mode": "hidden"
+              }
+            },
+            {
+              "type": "stack",
+              "id": "commerce-actions",
+              "padding": {
+                "top": 0,
+                "start": 0,
+                "bottom": 0,
+                "end": 0
+              },
+              "children": [
+                {
+                  "type": "button",
+                  "id": "purchase",
+                  "action": {
+                    "type": "purchase",
+                    "productSelectorId": "plans"
+                  },
+                  "accessibility": {
+                    "label": {
+                      "default": "Continue with the selected plan",
+                      "localizationKey": "paywall.purchase.accessibility"
+                    },
+                    "hint": {
+                      "default": "Starts the purchase for the selected subscription plan",
+                      "localizationKey": "paywall.purchase.hint"
+                    }
+                  },
+                  "direction": "horizontal",
+                  "gap": 0,
+                  "mainAxisDistribution": "center",
+                  "crossAxisAlignment": "center",
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "purchase-label",
+                      "value": {
+                        "default": "Continue",
+                        "localizationKey": "paywall.purchase"
+                      },
+                      "typography": {
+                        "style": "label",
+                        "fontSize": 16,
+                        "lineHeightMultiplier": 1.25,
+                        "weight": "semibold",
+                        "color": "text.primary",
+                        "alignment": "center"
+                      },
+                      "accessibility": {
+                        "role": "text"
+                      }
+                    }
+                  ],
+                  "inProgressChildren": [
+                    {
+                      "type": "text",
+                      "id": "purchase-progress-label",
+                      "value": {
+                        "default": "Processing purchase…",
+                        "localizationKey": "paywall.purchase.progress"
+                      },
+                      "typography": {
+                        "style": "label",
+                        "fontSize": 16,
+                        "lineHeightMultiplier": 1.25,
+                        "weight": "semibold",
+                        "color": "text.primary",
+                        "alignment": "center"
+                      },
+                      "accessibility": {
+                        "role": "text"
+                      }
+                    }
+                  ]
+                },
+                {
+                  "type": "button",
+                  "id": "restore",
+                  "action": {
+                    "type": "restore"
+                  },
+                  "accessibility": {
+                    "label": {
+                      "default": "Restore previous purchases",
+                      "localizationKey": "paywall.restore.accessibility"
+                    },
+                    "hint": {
+                      "default": "Checks the purchase provider for restorable access",
+                      "localizationKey": "paywall.restore.hint"
+                    }
+                  },
+                  "direction": "horizontal",
+                  "gap": 0,
+                  "mainAxisDistribution": "center",
+                  "crossAxisAlignment": "center",
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "restore-label",
+                      "value": {
+                        "default": "Restore purchases",
+                        "localizationKey": "paywall.restore"
+                      },
+                      "typography": {
+                        "style": "label",
+                        "fontSize": 16,
+                        "lineHeightMultiplier": 1.25,
+                        "weight": "semibold",
+                        "color": "text.primary",
+                        "alignment": "center"
+                      },
+                      "accessibility": {
+                        "role": "text"
+                      }
+                    }
+                  ],
+                  "inProgressChildren": [
+                    {
+                      "type": "text",
+                      "id": "restore-progress-label",
+                      "value": {
+                        "default": "Restoring purchases…",
+                        "localizationKey": "paywall.restore.progress"
+                      },
+                      "typography": {
+                        "style": "label",
+                        "fontSize": 16,
+                        "lineHeightMultiplier": 1.25,
+                        "weight": "semibold",
+                        "color": "text.primary",
+                        "alignment": "center"
+                      },
+                      "accessibility": {
+                        "role": "text"
+                      }
+                    }
+                  ]
+                }
+              ],
+              "direction": "vertical",
+              "gap": 12,
+              "mainAxisDistribution": "start",
+              "crossAxisAlignment": "stretch"
+            },
+            {
+              "type": "text",
+              "id": "legal",
+              "value": {
+                "default": "Payment is charged to your store account. Subscriptions renew automatically unless cancelled before the end of the current period. Terms and privacy policy apply.",
+                "localizationKey": "paywall.legal"
+              },
+              "accessibility": {
+                "role": "text"
+              },
               "typography": {
-                "style": "label",
-                "fontSize": 16,
-                "lineHeightMultiplier": 1.25,
-                "weight": "semibold",
-                "color": "text.primary",
+                "style": "caption",
+                "fontSize": 13,
+                "lineHeightMultiplier": 1.3846153846153846,
+                "weight": "regular",
+                "color": "text.secondary",
                 "alignment": "center"
               }
             }
           ],
           "direction": "vertical",
-          "gap": 12,
+          "gap": 20,
           "mainAxisDistribution": "start",
           "crossAxisAlignment": "stretch"
-        },
-        {
-          "type": "legalText",
-          "id": "legal",
-          "value": {
-            "default": "Payment is charged to your store account. Subscriptions renew automatically unless cancelled before the end of the current period. Terms and privacy policy apply.",
-            "localizationKey": "paywall.legal"
-          },
-          "accessibility": {
-            "role": "text"
-          },
-          "typography": {
-            "style": "caption",
-            "fontSize": 13,
-            "lineHeightMultiplier": 1.3846153846153846,
-            "weight": "regular",
-            "color": "text.secondary",
-            "alignment": "center"
-          }
         }
-      ],
-      "direction": "vertical",
-      "gap": 20,
-      "mainAxisDistribution": "start",
-      "crossAxisAlignment": "stretch"
+      },
+      "presentation": {
+        "type": "screen"
+      }
     }
+  ],
+  "designSystem": {
+    "colors": [],
+    "backgrounds": [],
+    "shadows": []
   }
 }

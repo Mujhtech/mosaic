@@ -49,19 +49,21 @@ final class CanonicalFixtureTests: XCTestCase {
     )
   }
 
-  func testPackagedResourceIsARepositoryRelativeLinkToCanonicalSource() throws {
-    let canonical = try canonicalFixtureURL().standardizedFileURL.resolvingSymlinksInPath()
+  func testPackagedResourceIsAByteIdenticalCopyOfCurrentV02Source() throws {
+    let canonical = try v02FixtureURL().standardizedFileURL.resolvingSymlinksInPath()
     let packageResource =
       canonical
       .deletingLastPathComponent()
       .deletingLastPathComponent()
       .deletingLastPathComponent()
       .deletingLastPathComponent()
-      .appendingPathComponent("sdk/ios/Sources/MosaicSDK/Resources/v0.1/complete-paywall.json")
+      .appendingPathComponent("sdk/ios/Sources/MosaicSDK/Resources/v0.2/complete-paywall.json")
 
-    let values = try packageResource.resourceValues(forKeys: [.isSymbolicLinkKey])
-    XCTAssertEqual(values.isSymbolicLink, true)
-    XCTAssertEqual(packageResource.resolvingSymlinksInPath(), canonical)
+    let values = try packageResource.resourceValues(forKeys: [
+      .isRegularFileKey, .isSymbolicLinkKey,
+    ])
+    XCTAssertEqual(values.isRegularFile, true)
+    XCTAssertEqual(values.isSymbolicLink, false)
     XCTAssertEqual(try Data(contentsOf: packageResource), try Data(contentsOf: canonical))
   }
 

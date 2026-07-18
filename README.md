@@ -4,7 +4,7 @@ Mosaic is an open-source, cross-platform app monetization platform built around
 one platform-neutral protocol, three native SDKs, and one Studio.
 
 Phase 0 and Phase 1 are accepted. Phase 2 adds an account-free, local-first
-Studio, the Local Preview `0.1` WebSocket contract, and live preview clients for
+Studio, the Local Preview `0.2` WebSocket contract, and live preview clients for
 Flutter, SwiftUI, and Jetpack Compose. The workflow remains local-only: no
 hosted projects, publishing, analytics, experiments, or real billing provider
 is required.
@@ -15,7 +15,7 @@ is required.
 apps/api/         Go API foundation
 apps/dashboard/   TanStack Start dashboard and local Studio
 apps/worker/      deferred worker-boundary documentation
-protocol/         Protocol 0.1 RC1 plus the Local Preview 0.1 contract and fixtures
+protocol/         Protocol 0.2 plus its Local Preview contract and fixtures
 sdk/flutter/      Flutter native renderer, fallback, mock commerce, and preview client
 sdk/ios/          SwiftUI native renderer, fallback, mock commerce, and preview client
 sdk/android/      Compose native renderer, fallback, mock commerce, and preview client
@@ -110,7 +110,7 @@ application. `npm run dev` remains available when only the dashboard is needed.
 
 - [Product roadmap](docs/product/roadmap.md)
 - [Architecture overview](docs/architecture/overview.md)
-- [Protocol 0.1](docs/protocol/v0.1.md)
+- [Protocol 0.2](docs/protocol/v0.2.md)
 - [Backend foundation](docs/backend/api-foundation.md)
 - [Dashboard foundation](docs/dashboard/foundation.md)
 - [Phase 1 SDK renderers](docs/sdk/README.md)

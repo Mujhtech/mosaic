@@ -1,16 +1,4 @@
-import {
-  loadProtocolArtifacts,
-  protocolPaths,
-  protocolRoot,
-  validateCanonicalFixtureCoverage,
-  validateJsonFormatting,
-  validateProtocol,
-} from "./validation.mjs";
-import {
-  loadPreviewArtifacts,
-  validatePreviewArtifacts,
-  validatePreviewJsonFormatting,
-} from "./preview-validation.mjs";
+import { protocolV02Paths, protocolV02Root } from "./validation-v0.2.mjs";
 import { validateBrowserContractGeneration } from "./browser-contract-validation.mjs";
 import {
   loadProtocolV02Artifacts,
@@ -26,16 +14,9 @@ import {
 import { relative } from "node:path";
 
 try {
-  const artifacts = loadProtocolArtifacts();
-  const previewArtifacts = loadPreviewArtifacts();
   const artifactsV02 = loadProtocolV02Artifacts();
   const previewArtifactsV02 = loadPreviewV02Artifacts();
   const errors = [
-    ...validateProtocol(artifacts),
-    ...validateCanonicalFixtureCoverage(artifacts.document),
-    ...validateJsonFormatting(),
-    ...validatePreviewArtifacts(previewArtifacts),
-    ...validatePreviewJsonFormatting(),
     ...validateBrowserContractGeneration(),
     ...validateProtocolV02(artifactsV02),
     ...validateProtocolV02({
@@ -44,15 +25,15 @@ try {
     }),
     ...validateProtocolV02({
       ...artifactsV02,
-      document: artifactsV02.migratedDocument,
-    }),
-    ...validateProtocolV02({
-      ...artifactsV02,
       document: artifactsV02.expiredCountdownDocument,
     }),
     ...validateProtocolV02({
       ...artifactsV02,
       document: artifactsV02.hiddenPurchaseTargetDocument,
+    }),
+    ...validateProtocolV02({
+      ...artifactsV02,
+      document: artifactsV02.navigationOnlyDocument,
     }),
     ...validateCanonicalV02Coverage(artifactsV02.document),
     ...validateV02JsonFormatting(),
@@ -67,10 +48,9 @@ try {
     process.exitCode = 1;
   } else {
     console.log(
-      `Validated ${relative(protocolRoot, protocolPaths.canonicalFixture)} ` +
-        "against Mosaic Protocol 0.1 RC1 and its compatibility manifest; " +
-        "validated Protocol and Local Preview 0.1/0.2 schemas, fixtures, " +
-        "migrations, and browser contract.",
+      `Validated ${relative(protocolV02Root, protocolV02Paths.canonicalFixture)} ` +
+        "against the Mosaic Protocol 0.2 schema and compatibility manifest; " +
+        "validated Local Preview 0.2 fixtures and the browser contract.",
     );
   }
 } catch (error) {

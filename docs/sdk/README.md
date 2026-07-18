@@ -1,15 +1,15 @@
 # Mosaic Native SDKs
 
-Mosaic Protocol `0.1` RC1 drives three idiomatic native paywall renderers from
-one repository-owned fixture. Local Preview `0.1` adds a shared, local-only
+Mosaic Protocol `0.2` drives three idiomatic native paywall renderers from
+one repository-owned fixture. Local Preview `0.2` adds a shared, local-only
 WebSocket contract so each renderer can apply Studio revisions without an app
 rebuild:
 
-| Platform | Native surface | Local fallback | Phase 2 verification |
-| --- | --- | --- | --- |
-| Flutter | Flutter and Material widgets | Host bundle loader | Analyzer, 82 tests, widget coverage, real-relay example proof |
-| iOS | SwiftUI | SwiftPM packaged canonical resource | Swift build, 59 package tests, 6 simulator tests, real-relay example proof |
-| Android | Jetpack Compose and Material 3 | Generated AAR asset | Assemble/lint, 52 JVM tests, 7 emulator tests, real-relay example proof |
+| Platform | Native surface                 | Local fallback                      | Phase 2 verification                                                       |
+| -------- | ------------------------------ | ----------------------------------- | -------------------------------------------------------------------------- |
+| Flutter  | Flutter and Material widgets   | Host bundle loader                  | Analyzer, 82 tests, widget coverage, real-relay example proof              |
+| iOS      | SwiftUI                        | SwiftPM packaged canonical resource | Swift build, 59 package tests, 6 simulator tests, real-relay example proof |
+| Android  | Jetpack Compose and Material 3 | Generated AAR asset                 | Assemble/lint, 52 JVM tests, 7 emulator tests, real-relay example proof    |
 
 Phase 2 remains deliberately local-only. None of these packages fetch hosted
 configuration, publish content, authenticate users, ingest analytics, evaluate
@@ -20,7 +20,7 @@ placements, or call a real billing provider.
 The sole source fixture is:
 
 ```text
-protocol/fixtures/v0.1/complete-paywall.json
+protocol/fixtures/v0.2/complete-paywall.json
 ```
 
 It covers the RC1 scroll container, recursive vertical stacks, text, bundled
@@ -77,12 +77,12 @@ Diagnostics likewise use platform-native types while exposing only safe codes.
 
 ## Local preview behaviour
 
-All three SDKs negotiate `mosaic.local-preview.v0.1`, identify the preview
-client, and report supported schema, renderer, and preview capabilities before
+All three SDKs use `mosaic.local-preview.v0.2`. They identify the preview
+client and report supported schema, renderer, and preview capabilities before
 receiving a draft. They independently order document and mock-commerce
 revisions, reject stale or conflicting updates, acknowledge only after the
 native view applies a revision, reconnect with bounded backoff, and keep the
-last accepted document or bundled fallback on failure.
+last accepted document on failure.
 
 Local endpoints are credential-free and restricted to loopback, emulator-host,
 private, link-local, or local-development hosts. Unsupported components,

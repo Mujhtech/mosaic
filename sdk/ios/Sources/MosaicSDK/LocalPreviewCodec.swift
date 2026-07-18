@@ -10,17 +10,14 @@ public struct MosaicPreviewMessageCodec: Sendable {
 
   public init(protocolVersion: String = mosaicLocalPreviewProtocolVersion) {
     precondition(
-      protocolVersion == mosaicLocalPreviewProtocolVersion
-        || protocolVersion == mosaicLocalPreviewProtocolVersionV02,
+      protocolVersion == mosaicLocalPreviewProtocolVersion,
       "Unsupported Mosaic Local Preview codec version."
     )
     self.protocolVersion = protocolVersion
   }
 
   public var webSocketSubprotocol: String {
-    protocolVersion == mosaicLocalPreviewProtocolVersionV02
-      ? mosaicLocalPreviewWebSocketProtocolV02
-      : mosaicLocalPreviewWebSocketProtocol
+    mosaicLocalPreviewWebSocketProtocol
   }
 
   public func decode(

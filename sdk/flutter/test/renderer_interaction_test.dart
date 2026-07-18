@@ -161,6 +161,36 @@ void main() {
     expect(interactions, isEmpty);
   });
 
+  testWidgets('legacy selector treats whitespace-only prices as unavailable',
+      (tester) async {
+    await _pumpPaywall(
+      tester,
+      MockMosaicPurchaseProvider(
+        products: const <MosaicProduct>[
+          MosaicProduct(
+            id: 'mosaic_pro_monthly',
+            title: 'Mosaic Pro Monthly',
+            localizedPrice: ' \n\t ',
+          ),
+          MosaicProduct(
+            id: 'mosaic_pro_yearly',
+            title: 'Mosaic Pro Yearly',
+            localizedPrice: r'$49.99',
+          ),
+        ],
+      ),
+    );
+
+    expect(
+      find.byKey(const ValueKey<String>('mosaic-plans-monthly-plan')),
+      findsNothing,
+    );
+    final yearly = tester.getSemantics(
+      find.byKey(const ValueKey<String>('mosaic-plans-yearly-plan')),
+    );
+    expect(yearly.flagsCollection.isSelected, Tristate.isTrue);
+  });
+
   testWidgets('none available shows message, disables purchase, and notifies',
       (tester) async {
     final results = <MosaicPresentationResult>[];
@@ -299,7 +329,13 @@ void main() {
     expect(interactions.single.outcome,
         MosaicInteractionOutcome.productUnavailable);
     expect(interactions.single.productReferenceId, 'yearly-plan');
-    expect(diagnostics.single.code, 'product_provider_load_failed');
+    expect(
+      diagnostics.map((diagnostic) => diagnostic.code),
+      containsAll(<String>[
+        'product_provider_load_failed',
+        'product.unavailable',
+      ]),
+    );
     expect(find.text('Plans are temporarily unavailable.'), findsOneWidget);
     expect(find.byType(MosaicPaywall), findsOneWidget);
   });

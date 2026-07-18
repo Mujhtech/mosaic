@@ -4,12 +4,23 @@ plugins {
 }
 
 val canonicalFixture = layout.projectDirectory.file(
-    "../../../protocol/fixtures/v0.1/complete-paywall.json",
+    "../../../protocol/fixtures/v0.2/complete-paywall.json",
 )
 val generatedCanonicalAssets = layout.buildDirectory.dir("generated/mosaic/canonical-assets")
+val protocolV02Fixture = layout.projectDirectory.file(
+    "../../../protocol/fixtures/v0.2/complete-paywall.json",
+)
+val generatedProtocolV02TestAssets = layout.buildDirectory.dir(
+    "generated/mosaic/protocol-v02-test-assets",
+)
 val generateCanonicalPaywallAsset by tasks.registering(Copy::class) {
     from(canonicalFixture)
     into(generatedCanonicalAssets.map { it.dir("mosaic") })
+    rename { "complete-paywall.json" }
+}
+val generateProtocolV02TestAsset by tasks.registering(Copy::class) {
+    from(protocolV02Fixture)
+    into(generatedProtocolV02TestAssets.map { it.dir("mosaic/v0.2") })
     rename { "complete-paywall.json" }
 }
 
@@ -45,10 +56,14 @@ android {
         // The directory is generated and ignored; the explicit preBuild edge keeps it current.
         assets.srcDir(generatedCanonicalAssets.get().asFile)
     }
+    sourceSets.named("androidTest") {
+        assets.srcDir(generatedProtocolV02TestAssets.get().asFile)
+    }
 }
 
 tasks.named("preBuild") {
     dependsOn(generateCanonicalPaywallAsset)
+    dependsOn(generateProtocolV02TestAsset)
 }
 
 dependencies {
@@ -61,6 +76,9 @@ dependencies {
     implementation("com.google.code.gson:gson:2.11.0")
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.10.2")
+    implementation("io.coil-kt:coil-compose:2.4.0")
+    implementation("androidx.media3:media3-exoplayer:1.8.0")
+    implementation("androidx.media3:media3-ui:1.8.0")
 
     testImplementation("junit:junit:4.13.2")
     testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.10.2")

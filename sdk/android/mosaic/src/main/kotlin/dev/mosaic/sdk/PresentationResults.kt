@@ -103,6 +103,7 @@ sealed interface MosaicInteractionOutcome {
     data object Dismissed : MosaicInteractionOutcome {
         override val wireName: String = "dismissed"
     }
+
 }
 
 data class MosaicPaywallEvent(

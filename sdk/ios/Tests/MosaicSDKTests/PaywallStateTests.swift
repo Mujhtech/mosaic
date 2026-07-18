@@ -181,6 +181,41 @@ final class PaywallStateTests: XCTestCase {
     XCTAssertEqual(recorder.results, [.purchased(productReferenceID: "yearly-plan")])
   }
 
+  func testUnifiedButtonUsesProgressContentAndRejectsDuplicateAsyncActions() async throws {
+    let document = try v02Document()
+    let provider = DeferredPurchaseProvider(products: MosaicProduct.phase1MockProducts)
+    let recorder = OutcomeRecorder()
+    let model = MosaicPaywallModel(
+      document: document,
+      purchaseProvider: provider,
+      onInteraction: recorder.record,
+      onResult: recorder.record
+    )
+    await model.prepare()
+    let button = try XCTUnwrap(
+      document.allNodes.compactMap { node -> MosaicButtonComponent? in
+        guard case .button(let value) = node, value.action.type == .purchase else { return nil }
+        return value
+      }.first)
+    let progressIDs = try XCTUnwrap(button.inProgressChildren).map(\.id)
+
+    let operation = Task { await model.purchase(using: button) }
+    while !model.isButtonBusy(button.id) { await Task.yield() }
+    XCTAssertFalse(model.isButtonEnabled(button))
+    XCTAssertEqual(button.content(isInProgress: true).map(\.id), progressIDs)
+
+    await model.purchase(using: button)
+    let purchaseRequestCount = await provider.purchaseRequestCount()
+    XCTAssertEqual(purchaseRequestCount, 1)
+
+    await provider.completePurchase(
+      with: .purchased(productID: "mosaic_pro_yearly", transactionID: "deferred-v02")
+    )
+    await operation.value
+    XCTAssertFalse(model.isButtonBusy(button.id))
+    XCTAssertEqual(recorder.results, [.purchased(productReferenceID: "yearly-plan")])
+  }
+
   func testNormalizedPresentationNamesExactlyMatchRC1() {
     XCTAssertEqual(
       MosaicPresentationOutcomeName.allCases.map(\.rawValue),
@@ -262,6 +297,7 @@ private final class OutcomeRecorder {
 private actor DeferredPurchaseProvider: MosaicPurchaseProvider {
   let products: [MosaicProduct]
   private var purchaseContinuation: CheckedContinuation<MosaicPurchaseResult, Never>?
+  private var purchaseRequests = 0
 
   init(products: [MosaicProduct]) {
     self.products = products
@@ -272,10 +308,13 @@ private actor DeferredPurchaseProvider: MosaicPurchaseProvider {
   }
 
   func purchase(productID: String) async -> MosaicPurchaseResult {
-    await withCheckedContinuation { continuation in
+    purchaseRequests += 1
+    return await withCheckedContinuation { continuation in
       purchaseContinuation = continuation
     }
   }
+
+  func purchaseRequestCount() -> Int { purchaseRequests }
 
   func completePurchase(with result: MosaicPurchaseResult) {
     purchaseContinuation?.resume(returning: result)

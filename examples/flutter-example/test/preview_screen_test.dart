@@ -20,8 +20,16 @@ void main() {
       );
       final fallback = const MosaicProtocolDecoder().decode(
         _repositoryFile(
-          'protocol/fixtures/v0.1/complete-paywall.json',
+          'protocol/fixtures/v0.2/complete-paywall.json',
         ).readAsStringSync(),
+      );
+      final fallbackSelector = fallback.nodes
+          .whereType<MosaicProductSelectorComponent>()
+          .single;
+      expect(fallback.schemaVersion, '0.2');
+      expect(
+        fallbackSelector.direction,
+        MosaicProductSelectorDirection.horizontal,
       );
       await tester.pumpWidget(
         MaterialApp(
@@ -91,12 +99,12 @@ MosaicPreviewClient _client(
         displayName: 'Flutter example preview',
         renderer: MosaicPreviewSoftwareIdentity(
           id: 'mosaic.flutter',
-          version: '0.1.0',
+          version: '0.2.0',
         ),
         application: MosaicPreviewApplicationIdentity(
           id: 'mosaic.flutter.example',
           displayName: 'Mosaic Flutter Example',
-          version: '0.1.0',
+          version: '0.2.0',
         ),
         device: MosaicPreviewDeviceIdentity(
           displayName: 'Widget test',
@@ -117,7 +125,7 @@ List<Map<String, Object?>> _flow() {
   final messages =
       (jsonDecode(
                 _repositoryFile(
-                  'protocol/fixtures/local-preview/v0.1/session-flow.messages.json',
+                  'protocol/fixtures/local-preview/v0.2/session-flow.messages.json',
                 ).readAsStringSync(),
               )
               as List<Object?>)
@@ -137,8 +145,10 @@ Map<String, Object?> _unsupportedUpdate(Map<String, Object?> valid) {
     'sequence': 4,
   };
   final document = payload['document']! as Map<String, Object?>;
+  final screens = document['screens']! as List<Object?>;
+  final initialScreen = screens.first! as Map<String, Object?>;
   final content =
-      (document['layout']! as Map<String, Object?>)['content']!
+      (initialScreen['layout']! as Map<String, Object?>)['content']!
           as Map<String, Object?>;
   final children = content['children']! as List<Object?>;
   final headline = children.cast<Map<String, Object?>>().firstWhere(
@@ -175,10 +185,13 @@ final class _ExampleConnector implements MosaicPreviewSocketConnector {
   }) async => _sockets.removeAt(0);
 }
 
-final class _ExampleSocket implements MosaicPreviewSocket {
+final class _ExampleSocket implements MosaicNegotiatedPreviewSocket {
   final StreamController<Object?> _controller =
       StreamController<Object?>.broadcast(sync: true);
   final List<String> sent = <String>[];
+
+  @override
+  String get selectedProtocol => mosaicLocalPreviewV02WebSocketProtocol;
 
   @override
   Stream<Object?> get messages => _controller.stream;

@@ -13,7 +13,7 @@ object MosaicAndroidPreviewIdentity {
         val packageName = applicationContext.packageName
         val version = runCatching {
             applicationContext.packageManager.getPackageInfo(packageName, 0).versionName
-        }.getOrNull().orEmpty().ifBlank { "0.1.0" }
+        }.getOrNull().orEmpty().ifBlank { "0.2.0" }
         return MosaicPreviewClientIdentity(
             clientId = clientId,
             displayName = safeDisplayName(displayName, "Android preview"),
@@ -27,7 +27,7 @@ object MosaicAndroidPreviewIdentity {
                     applicationContext.applicationInfo.loadLabel(applicationContext.packageManager).toString(),
                     "Android application",
                 ),
-                version = safeSingleLine(version, 64, "0.1.0"),
+                version = safeSingleLine(version, 64, "0.2.0"),
             ),
             device = MosaicPreviewDeviceIdentity(
                 displayName = safeDisplayName(Build.MODEL, "Android device"),

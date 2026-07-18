@@ -442,23 +442,11 @@ class MosaicLocalPreviewClient(
         val previewVersion = selectedPreviewProtocolVersion
             ?: configuration.supportedPreviewProtocolVersions.first()
         val report = MosaicProtocolCapabilities.report()
-        val capabilityCatalog = if (previewVersion == MOSAIC_LOCAL_PREVIEW_VERSION_V02) {
-            MosaicCapabilityCatalog.v02
-        } else {
-            MosaicCapabilityCatalog.v01
-        }
-        val paywallVersion = if (previewVersion == MOSAIC_LOCAL_PREVIEW_VERSION_V02) {
-            MOSAIC_PROTOCOL_VERSION_V02
-        } else {
-            MOSAIC_PROTOCOL_VERSION
-        }
+        val capabilityCatalog = MosaicCapabilityCatalog.v02
+        val paywallVersion = MOSAIC_PROTOCOL_VERSION
         return MosaicPreviewCapabilityReportPayload(
             clientId = configuration.client.clientId,
-            supportedSchemaVersions = if (previewVersion == MOSAIC_LOCAL_PREVIEW_VERSION_V02) {
-                report.supportedSchemaVersions.sorted()
-            } else {
-                listOf(MOSAIC_PROTOCOL_VERSION)
-            },
+            supportedSchemaVersions = report.supportedSchemaVersions.sorted(),
             supportedCapabilities = capabilityCatalog.map { capability ->
                 MosaicPreviewSupportedCapability(
                     capability.wireName,
@@ -515,15 +503,15 @@ class MosaicLocalPreviewClient(
     private fun isCurrent(connectionGeneration: Int): Boolean =
         synchronized(lifecycleLock) { started && generation == connectionGeneration }
 
-    private fun previewSubprotocol(version: String): String = when (version) {
-        MOSAIC_LOCAL_PREVIEW_VERSION -> MOSAIC_LOCAL_PREVIEW_WEBSOCKET_PROTOCOL
-        MOSAIC_LOCAL_PREVIEW_VERSION_V02 -> MOSAIC_LOCAL_PREVIEW_WEBSOCKET_PROTOCOL_V02
-        else -> error("Unsupported local preview version $version")
-    }
+    private fun previewSubprotocol(version: String): String =
+        if (version == MOSAIC_LOCAL_PREVIEW_VERSION) {
+            MOSAIC_LOCAL_PREVIEW_WEBSOCKET_PROTOCOL
+        } else {
+            error("Unsupported local preview version $version")
+        }
 
-    private fun previewVersionForSubprotocol(subprotocol: String): String? = when (subprotocol) {
-        MOSAIC_LOCAL_PREVIEW_WEBSOCKET_PROTOCOL -> MOSAIC_LOCAL_PREVIEW_VERSION
-        MOSAIC_LOCAL_PREVIEW_WEBSOCKET_PROTOCOL_V02 -> MOSAIC_LOCAL_PREVIEW_VERSION_V02
-        else -> null
-    }
+    private fun previewVersionForSubprotocol(subprotocol: String): String? =
+        MOSAIC_LOCAL_PREVIEW_VERSION.takeIf {
+            subprotocol == MOSAIC_LOCAL_PREVIEW_WEBSOCKET_PROTOCOL
+        }
 }

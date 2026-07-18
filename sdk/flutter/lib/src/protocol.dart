@@ -1,63 +1,52 @@
 import 'dart:convert';
 
-const String mosaicProtocolVersion = '0.1';
-const String mosaicProtocolV02Version = '0.2';
-const String mosaicFlutterSdkVersion = '0.2.0-dev.2';
-
-/// Every Protocol 0.1 capability implemented by this Flutter SDK.
-const Set<String> mosaicProtocolV01Capabilities = <String>{
-  'layout.scrollContainer',
-  'layout.verticalStack',
-  'component.text',
-  'component.image',
-  'component.featureList',
-  'component.productSelector',
-  'component.purchaseButton',
-  'component.restoreButton',
-  'component.closeButton',
-  'component.legalText',
-  'localization.catalogs',
-  'localization.rtl',
-  'product.references',
-  'asset.bundledImage',
-  'action.purchase',
-  'action.restore',
-  'action.close',
-  'accessibility.metadata',
-  'fallback.asset',
-  'fallback.product',
-  'outcome.normalized',
-};
+const String mosaicProtocolVersion = '0.2';
+const String mosaicProtocolV02Version = mosaicProtocolVersion;
+const String mosaicFlutterSdkVersion = '0.2.0-dev.5';
 
 /// Every Protocol 0.2 capability implemented by this Flutter SDK.
 const Set<String> mosaicProtocolV02Capabilities = <String>{
   'layout.scrollContainer',
   'layout.stack',
   'layout.sizing',
+  'layout.heightSizing',
   'layout.outerInsets',
+  'navigation.screens',
+  'navigation.sheets',
   'component.text',
   'component.image',
+  'component.icon',
   'component.featureList',
   'component.productSelector',
-  'component.purchaseButton',
-  'component.restoreButton',
-  'component.closeButton',
-  'component.legalText',
+  'component.productCard',
+  'component.productBadge',
+  'component.button',
   'component.carousel',
   'component.switch',
   'component.countdown',
   'localization.catalogs',
   'localization.rtl',
+  'localization.productTemplate',
   'product.references',
   'asset.bundledImage',
+  'asset.remoteImage',
+  'asset.bundledVideo',
+  'asset.remoteVideo',
   'action.purchase',
   'action.restore',
   'action.close',
+  'action.navigateTo',
+  'action.navigateBack',
+  'action.openExternalUrl',
   'accessibility.metadata',
   'fallback.asset',
   'fallback.product',
   'outcome.normalized',
   'style.colors',
+  'style.designTokens',
+  'style.gradientBackground',
+  'style.mediaBackground',
+  'style.shadow',
   'style.box',
   'style.clipping',
   'style.typography',
@@ -83,15 +72,10 @@ final class MosaicCapabilityReport {
 final MosaicCapabilityReport mosaicFlutterCapabilityReport =
     MosaicCapabilityReport(
   sdkVersion: mosaicFlutterSdkVersion,
-  supportedSchemaVersions: const <String>{
-    mosaicProtocolVersion,
-    mosaicProtocolV02Version,
-  },
+  supportedSchemaVersions: const <String>{mosaicProtocolVersion},
   supportedCapabilities: <String, String>{
-    for (final capability in mosaicProtocolV01Capabilities)
-      capability: mosaicProtocolVersion,
     for (final capability in mosaicProtocolV02Capabilities)
-      capability: mosaicProtocolV02Version,
+      capability: mosaicProtocolVersion,
   },
 );
 
@@ -113,24 +97,38 @@ enum MosaicMainAxisDistribution { start, center, end, spaceBetween }
 
 enum MosaicProductSelectorDirection { vertical, horizontal }
 
+enum MosaicProductBadgeAnchor { topStart, topEnd, bottomStart, bottomEnd }
+
 enum MosaicFontWeight { regular, medium, semibold, bold }
 
 enum MosaicTextOverflow { clip, ellipsis }
 
 enum MosaicCountdownUnit { day, hour, minute, second }
 
-enum MosaicSizingMode { content, fill, fixed }
+enum MosaicSizingMode { fit, fill, fixed }
+
+enum MosaicIconName {
+  checkmark,
+  close,
+  lock,
+  restore,
+  externalLink,
+  arrowBackward,
+  arrowForward,
+  chevronBackward,
+  chevronForward,
+}
 
 /// A frozen Protocol 0.2 semantic token or canonical literal sRGB color.
 final class MosaicColorValue {
-  const MosaicColorValue._(this.value, this.isLiteral);
+  const MosaicColorValue._(this.value, this.isLiteral, this.isToken);
 
   factory MosaicColorValue.parse(String value) {
     if (_semanticColors.contains(value)) {
-      return MosaicColorValue._(value, false);
+      return MosaicColorValue._(value, false, false);
     }
     if (RegExp(r'^#[0-9A-F]{8}$').hasMatch(value)) {
-      return MosaicColorValue._(value, true);
+      return MosaicColorValue._(value, true, false);
     }
     throw MosaicProtocolException(
       'Expected a semantic color or uppercase #RRGGBBAA literal.',
@@ -139,6 +137,9 @@ final class MosaicColorValue {
 
   final String value;
   final bool isLiteral;
+  final bool isToken;
+
+  const MosaicColorValue.token(String id) : this._(id, false, true);
 }
 
 const Set<String> _semanticColors = <String>{
@@ -155,7 +156,7 @@ const Set<String> _semanticColors = <String>{
 final class MosaicSizingValue {
   const MosaicSizingValue._(this.mode, this.value);
 
-  const MosaicSizingValue.content() : this._(MosaicSizingMode.content, null);
+  const MosaicSizingValue.fit() : this._(MosaicSizingMode.fit, null);
 
   const MosaicSizingValue.fill() : this._(MosaicSizingMode.fill, null);
 
@@ -167,10 +168,135 @@ final class MosaicSizingValue {
 }
 
 final class MosaicSizing {
-  const MosaicSizing({this.width, this.height});
+  const MosaicSizing({required this.width, required this.height});
 
-  final MosaicSizingValue? width;
-  final MosaicSizingValue? height;
+  final MosaicSizingValue width;
+  final MosaicSizingValue height;
+}
+
+sealed class MosaicBackground {
+  const MosaicBackground();
+
+  /// Compatibility view for solid backgrounds.
+  String get value => switch (this) {
+        MosaicColorBackground(:final color) => color.value,
+        _ => '',
+      };
+}
+
+final class MosaicColorBackground extends MosaicBackground {
+  const MosaicColorBackground(this.color);
+
+  final MosaicColorValue color;
+}
+
+final class MosaicGradientStop {
+  const MosaicGradientStop({required this.position, required this.color});
+
+  final double position;
+  final MosaicColorValue color;
+}
+
+final class MosaicLinearGradientBackground extends MosaicBackground {
+  MosaicLinearGradientBackground(
+      {required this.angle, required Iterable<MosaicGradientStop> stops})
+      : stops = List.unmodifiable(stops);
+
+  final double angle;
+  final List<MosaicGradientStop> stops;
+}
+
+final class MosaicRadialGradientBackground extends MosaicBackground {
+  MosaicRadialGradientBackground({
+    required this.centerX,
+    required this.centerY,
+    required this.radius,
+    required Iterable<MosaicGradientStop> stops,
+  }) : stops = List.unmodifiable(stops);
+
+  final double centerX;
+  final double centerY;
+  final double radius;
+  final List<MosaicGradientStop> stops;
+}
+
+final class MosaicImageBackground extends MosaicBackground {
+  const MosaicImageBackground({
+    required this.assetId,
+    required this.contentMode,
+    required this.fallbackColor,
+  });
+
+  final String assetId;
+  final MosaicImageContentMode contentMode;
+  final MosaicColorValue fallbackColor;
+}
+
+final class MosaicVideoBackground extends MosaicBackground {
+  const MosaicVideoBackground({
+    required this.assetId,
+    required this.contentMode,
+    required this.fallbackColor,
+    this.posterAssetId,
+  });
+
+  final String assetId;
+  final String? posterAssetId;
+  final MosaicImageContentMode contentMode;
+  final MosaicColorValue fallbackColor;
+}
+
+final class MosaicBackgroundTokenReference extends MosaicBackground {
+  const MosaicBackgroundTokenReference(this.id);
+
+  final String id;
+}
+
+sealed class MosaicShadow {
+  const MosaicShadow();
+}
+
+final class MosaicInlineShadow extends MosaicShadow {
+  const MosaicInlineShadow({
+    required this.color,
+    required this.offsetX,
+    required this.offsetY,
+    required this.blurRadius,
+  });
+
+  final MosaicColorValue color;
+  final double offsetX;
+  final double offsetY;
+  final double blurRadius;
+}
+
+final class MosaicShadowTokenReference extends MosaicShadow {
+  const MosaicShadowTokenReference(this.id);
+
+  final String id;
+}
+
+final class MosaicDesignToken<T> {
+  const MosaicDesignToken(
+      {required this.id, required this.name, required this.value});
+
+  final String id;
+  final String name;
+  final T value;
+}
+
+final class MosaicDesignSystem {
+  MosaicDesignSystem({
+    required Iterable<MosaicDesignToken<MosaicColorValue>> colors,
+    required Iterable<MosaicDesignToken<MosaicBackground>> backgrounds,
+    required Iterable<MosaicDesignToken<MosaicShadow>> shadows,
+  })  : colors = List.unmodifiable(colors),
+        backgrounds = List.unmodifiable(backgrounds),
+        shadows = List.unmodifiable(shadows);
+
+  final List<MosaicDesignToken<MosaicColorValue>> colors;
+  final List<MosaicDesignToken<MosaicBackground>> backgrounds;
+  final List<MosaicDesignToken<MosaicShadow>> shadows;
 }
 
 final class MosaicBorderStyle {
@@ -188,14 +314,16 @@ final class MosaicBoxAppearance {
     this.opacity,
     this.padding,
     this.clipContent,
+    this.shadow,
   });
 
-  final MosaicColorValue? background;
+  final MosaicBackground? background;
   final MosaicBorderStyle? border;
   final double? cornerRadius;
   final double? opacity;
   final MosaicEdgeInsets? padding;
   final bool? clipContent;
+  final MosaicShadow? shadow;
 }
 
 final class MosaicTypography {
@@ -246,24 +374,44 @@ final class MosaicPaywallDocument {
     required this.revision,
     required this.compatibility,
     required this.localization,
-    required Iterable<MosaicImageAsset> assets,
+    required Iterable<MosaicAsset> assets,
     required Iterable<MosaicProductReference> products,
     required this.layout,
+    this.designSystem,
+    this.initialScreenId,
+    Iterable<MosaicPaywallScreen> screens = const <MosaicPaywallScreen>[],
   })  : assets = List.unmodifiable(assets),
-        products = List.unmodifiable(products);
+        products = List.unmodifiable(products),
+        screens = List.unmodifiable(screens);
 
   final String schemaVersion;
   final String id;
   final int revision;
   final MosaicDocumentCompatibility compatibility;
   final MosaicLocalization localization;
-  final List<MosaicImageAsset> assets;
+  final MosaicDesignSystem? designSystem;
+  final List<MosaicAsset> assets;
   final List<MosaicProductReference> products;
+
+  /// Projection of the initial screen root. Prefer [screens] when traversing
+  /// the document.
   final MosaicScrollContainer layout;
+  final String? initialScreenId;
+  final List<MosaicPaywallScreen> screens;
+
+  MosaicPaywallScreen? get initialScreen =>
+      initialScreenId == null ? null : screen(initialScreenId!);
 
   Iterable<MosaicNode> get nodes sync* {
-    yield layout;
-    yield* _walkStack(layout.content);
+    if (screens.isEmpty) {
+      yield layout;
+      yield* _walkStack(layout.content);
+      return;
+    }
+    for (final screen in screens) {
+      yield screen.layout;
+      yield* _walkStack(screen.layout.content);
+    }
   }
 
   static Iterable<MosaicNode> _walkStack(MosaicStackNode stack) sync* {
@@ -273,6 +421,60 @@ final class MosaicPaywallDocument {
       if (child is MosaicStackNode) {
         for (final descendant in _walkStack(child).skip(1)) {
           yield descendant;
+        }
+      } else if (child is MosaicCarouselComponent) {
+        for (final page in child.pages) {
+          yield* _walkStack(page.content);
+        }
+      } else if (child is MosaicButtonComponent) {
+        yield* _walkButtonChildren(child.children);
+        if (child.inProgressChildren case final inProgress?) {
+          yield* _walkButtonChildren(inProgress);
+        }
+      } else if (child is MosaicProductSelectorComponent) {
+        yield* _walkProductCards(child.cards);
+      }
+    }
+  }
+
+  static Iterable<MosaicNode> _walkProductCards(
+    Iterable<MosaicProductCardComponent> cards,
+  ) sync* {
+    for (final card in cards) {
+      yield card;
+      for (final child in card.children) {
+        yield child;
+        if (child is MosaicProductBadgeComponent) {
+          yield* _walkPassiveChildren(child.children);
+        } else if (child is MosaicStackNode) {
+          yield* _walkPassiveChildren(<MosaicNode>[child]).skip(1);
+        }
+      }
+    }
+  }
+
+  static Iterable<MosaicNode> _walkPassiveChildren(
+    Iterable<MosaicNode> children,
+  ) sync* {
+    for (final child in children) {
+      yield child;
+      if (child is MosaicStackNode) {
+        yield* _walkPassiveChildren(child.children);
+      }
+    }
+  }
+
+  static Iterable<MosaicNode> _walkButtonChildren(
+    Iterable<MosaicNode> children,
+  ) sync* {
+    for (final child in children) {
+      yield child;
+      if (child is MosaicStackNode) {
+        yield* _walkStack(child).skip(1);
+      } else if (child is MosaicButtonComponent) {
+        yield* _walkButtonChildren(child.children);
+        if (child.inProgressChildren case final inProgress?) {
+          yield* _walkButtonChildren(inProgress);
         }
       } else if (child is MosaicCarouselComponent) {
         for (final page in child.pages) {
@@ -293,13 +495,101 @@ final class MosaicPaywallDocument {
 
   MosaicImageAsset? imageAsset(String id) {
     for (final asset in assets) {
-      if (asset.id == id) {
+      if (asset is MosaicImageAsset && asset.id == id) {
         return asset;
       }
     }
     return null;
   }
+
+  MosaicVideoAsset? videoAsset(String id) {
+    for (final asset in assets) {
+      if (asset is MosaicVideoAsset && asset.id == id) return asset;
+    }
+    return null;
+  }
+
+  MosaicColorValue resolveColor(MosaicColorValue color) {
+    var current = color;
+    final visited = <String>{};
+    while (current.isToken) {
+      if (!visited.add(current.value)) {
+        throw const MosaicProtocolException('Cyclic color token reference.');
+      }
+      final token = designSystem?.colors
+          .where((candidate) => candidate.id == current.value)
+          .firstOrNull;
+      if (token == null) {
+        throw MosaicProtocolException('Unknown color token ${current.value}.');
+      }
+      current = token.value;
+    }
+    return current;
+  }
+
+  MosaicBackground resolveBackground(MosaicBackground background) {
+    var current = background;
+    final visited = <String>{};
+    while (current is MosaicBackgroundTokenReference) {
+      final id = current.id;
+      if (!visited.add(id)) {
+        throw const MosaicProtocolException(
+          'Cyclic background token reference.',
+        );
+      }
+      final token = designSystem?.backgrounds
+          .where((candidate) => candidate.id == id)
+          .firstOrNull;
+      if (token == null) {
+        throw MosaicProtocolException('Unknown background token $id.');
+      }
+      current = token.value;
+    }
+    return current;
+  }
+
+  MosaicInlineShadow resolveShadow(MosaicShadow shadow) {
+    var current = shadow;
+    final visited = <String>{};
+    while (current is MosaicShadowTokenReference) {
+      final id = current.id;
+      if (!visited.add(id)) {
+        throw const MosaicProtocolException('Cyclic shadow token reference.');
+      }
+      final token = designSystem?.shadows
+          .where((candidate) => candidate.id == id)
+          .firstOrNull;
+      if (token == null) {
+        throw MosaicProtocolException('Unknown shadow token $id.');
+      }
+      current = token.value;
+    }
+    return current as MosaicInlineShadow;
+  }
+
+  MosaicPaywallScreen? screen(String id) {
+    for (final screen in screens) {
+      if (screen.id == id) return screen;
+    }
+    return null;
+  }
 }
+
+final class MosaicPaywallScreen {
+  const MosaicPaywallScreen({
+    required this.id,
+    required this.layout,
+    this.presentation = MosaicScreenPresentation.screen,
+    this.accessibilityLabel,
+  });
+
+  final String id;
+  final MosaicLocalizedText? accessibilityLabel;
+  final MosaicScreenPresentation presentation;
+  final MosaicScrollContainer layout;
+}
+
+enum MosaicScreenPresentation { screen, sheet }
 
 final class MosaicDocumentCompatibility {
   MosaicDocumentCompatibility(Iterable<MosaicRequiredCapability> capabilities)
@@ -347,16 +637,46 @@ final class MosaicLocalizedText {
   final String localizationKey;
 }
 
-final class MosaicImageAsset {
-  const MosaicImageAsset({
-    required this.id,
-    required this.sourceKey,
-    required this.placeholder,
-  });
+sealed class MosaicAsset {
+  const MosaicAsset({required this.id, required this.source});
 
   final String id;
-  final String sourceKey;
+  final MosaicAssetSource source;
+
+  String? get sourceKey => switch (source) {
+        MosaicBundledAssetSource(:final key) => key,
+        MosaicRemoteAssetSource() => null,
+      };
+}
+
+sealed class MosaicAssetSource {
+  const MosaicAssetSource();
+}
+
+final class MosaicBundledAssetSource extends MosaicAssetSource {
+  const MosaicBundledAssetSource(this.key);
+
+  final String key;
+}
+
+final class MosaicRemoteAssetSource extends MosaicAssetSource {
+  const MosaicRemoteAssetSource(this.url);
+
+  final Uri url;
+}
+
+final class MosaicImageAsset extends MosaicAsset {
+  const MosaicImageAsset({
+    required super.id,
+    required MosaicAssetSource source,
+    required this.placeholder,
+  }) : super(source: source);
+
   final MosaicLocalizedText placeholder;
+}
+
+final class MosaicVideoAsset extends MosaicAsset {
+  const MosaicVideoAsset({required super.id, required super.source});
 }
 
 final class MosaicProductReference {
@@ -407,7 +727,7 @@ final class MosaicScrollContainer extends MosaicNode {
 
   final bool showsIndicators;
   final MosaicStackNode content;
-  final MosaicColorValue? background;
+  final MosaicBackground? background;
 
   @override
   String get type => 'scrollContainer';
@@ -439,8 +759,7 @@ final class MosaicVerticalStack extends MosaicStackNode {
   String get type => 'verticalStack';
 }
 
-/// Protocol 0.2 generalized Stack. Protocol 0.1 continues to decode to
-/// [MosaicVerticalStack] so its immutable model and behavior remain distinct.
+/// Protocol 0.2 generalized Stack.
 final class MosaicStackComponent extends MosaicStackNode {
   MosaicStackComponent({
     required super.id,
@@ -539,6 +858,7 @@ final class MosaicImageComponent extends MosaicComponent {
     required this.accessibility,
     this.fixedHeight,
     this.width,
+    this.sizing,
     this.appearance,
     this.outerInsets,
     this.visibility = const MosaicAlwaysVisible(),
@@ -548,6 +868,7 @@ final class MosaicImageComponent extends MosaicComponent {
   final double? aspectRatio;
   final double? fixedHeight;
   final MosaicSizingValue? width;
+  final MosaicSizing? sizing;
   final MosaicImageContentMode contentMode;
   final MosaicImageAccessibility accessibility;
   final MosaicBoxAppearance? appearance;
@@ -599,90 +920,27 @@ final class MosaicUnavailableProductFallback {
   final MosaicLocalizedText message;
 }
 
-final class MosaicProductCardBadgeStyle {
-  const MosaicProductCardBadgeStyle({
-    required this.background,
-    required this.textColor,
-    required this.border,
-    required this.cornerRadius,
-    required this.padding,
-  });
-
-  final MosaicColorValue background;
-  final MosaicColorValue textColor;
-  final MosaicBorderStyle border;
-  final double cornerRadius;
-  final MosaicEdgeInsets padding;
-}
-
 final class MosaicProductCardStyle {
   const MosaicProductCardStyle({
     required this.background,
     required this.border,
     required this.cornerRadius,
     required this.padding,
-    required this.contentGap,
-    required this.contentAlignment,
-    required this.productLabelColor,
-    required this.runtimePriceColor,
-    required this.badge,
+    required this.opacity,
+    this.shadow,
   });
 
-  final MosaicColorValue background;
+  final MosaicBackground background;
   final MosaicBorderStyle border;
   final double cornerRadius;
   final MosaicEdgeInsets padding;
-  final double contentGap;
-  final MosaicMainAxisDistribution contentAlignment;
-  final MosaicColorValue productLabelColor;
-  final MosaicColorValue runtimePriceColor;
-  final MosaicProductCardBadgeStyle badge;
+  final double opacity;
+  final MosaicShadow? shadow;
 }
 
 /// Presence-aware, recursive Protocol 0.2 Selected overrides.
 ///
 /// Nullable fields are absent overrides, never serialized `null` values.
-final class MosaicProductCardBadgeStyleOverride {
-  const MosaicProductCardBadgeStyleOverride({
-    this.background,
-    this.textColor,
-    this.borderColor,
-    this.borderWidth,
-    this.cornerRadius,
-    this.paddingTop,
-    this.paddingStart,
-    this.paddingBottom,
-    this.paddingEnd,
-  });
-
-  final MosaicColorValue? background;
-  final MosaicColorValue? textColor;
-  final MosaicColorValue? borderColor;
-  final double? borderWidth;
-  final double? cornerRadius;
-  final double? paddingTop;
-  final double? paddingStart;
-  final double? paddingBottom;
-  final double? paddingEnd;
-
-  MosaicProductCardBadgeStyle resolve(MosaicProductCardBadgeStyle base) =>
-      MosaicProductCardBadgeStyle(
-        background: background ?? base.background,
-        textColor: textColor ?? base.textColor,
-        border: MosaicBorderStyle(
-          color: borderColor ?? base.border.color,
-          width: borderWidth ?? base.border.width,
-        ),
-        cornerRadius: cornerRadius ?? base.cornerRadius,
-        padding: MosaicEdgeInsets(
-          top: paddingTop ?? base.padding.top,
-          start: paddingStart ?? base.padding.start,
-          bottom: paddingBottom ?? base.padding.bottom,
-          end: paddingEnd ?? base.padding.end,
-        ),
-      );
-}
-
 final class MosaicProductCardStyleOverride {
   const MosaicProductCardStyleOverride({
     this.background,
@@ -693,14 +951,11 @@ final class MosaicProductCardStyleOverride {
     this.paddingStart,
     this.paddingBottom,
     this.paddingEnd,
-    this.contentGap,
-    this.contentAlignment,
-    this.productLabelColor,
-    this.runtimePriceColor,
-    this.badge,
+    this.opacity,
+    this.shadow,
   });
 
-  final MosaicColorValue? background;
+  final MosaicBackground? background;
   final MosaicColorValue? borderColor;
   final double? borderWidth;
   final double? cornerRadius;
@@ -708,11 +963,8 @@ final class MosaicProductCardStyleOverride {
   final double? paddingStart;
   final double? paddingBottom;
   final double? paddingEnd;
-  final double? contentGap;
-  final MosaicMainAxisDistribution? contentAlignment;
-  final MosaicColorValue? productLabelColor;
-  final MosaicColorValue? runtimePriceColor;
-  final MosaicProductCardBadgeStyleOverride? badge;
+  final double? opacity;
+  final MosaicShadow? shadow;
 
   MosaicProductCardStyle resolve(MosaicProductCardStyle base) =>
       MosaicProductCardStyle(
@@ -728,11 +980,8 @@ final class MosaicProductCardStyleOverride {
           bottom: paddingBottom ?? base.padding.bottom,
           end: paddingEnd ?? base.padding.end,
         ),
-        contentGap: contentGap ?? base.contentGap,
-        contentAlignment: contentAlignment ?? base.contentAlignment,
-        productLabelColor: productLabelColor ?? base.productLabelColor,
-        runtimePriceColor: runtimePriceColor ?? base.runtimePriceColor,
-        badge: badge?.resolve(base.badge) ?? base.badge,
+        opacity: opacity ?? base.opacity,
+        shadow: shadow ?? base.shadow,
       );
 }
 
@@ -749,29 +998,118 @@ final class MosaicProductCardStyles {
       selected ? selectedOverride.resolve(defaultStyle) : defaultStyle;
 }
 
+sealed class MosaicProductBadgePlacement {
+  const MosaicProductBadgePlacement();
+}
+
+final class MosaicNestedProductBadgePlacement
+    extends MosaicProductBadgePlacement {
+  const MosaicNestedProductBadgePlacement();
+}
+
+final class MosaicOverlayProductBadgePlacement
+    extends MosaicProductBadgePlacement {
+  const MosaicOverlayProductBadgePlacement({
+    required this.anchor,
+    required this.inset,
+  });
+
+  final MosaicProductBadgeAnchor anchor;
+  final double inset;
+}
+
+/// Authored passive Product Badge structure owned directly by a Product Card.
+final class MosaicProductBadgeComponent extends MosaicComponent {
+  MosaicProductBadgeComponent({
+    required super.id,
+    required this.placement,
+    required this.direction,
+    required this.gap,
+    required this.mainAxisDistribution,
+    required this.crossAxisAlignment,
+    required Iterable<MosaicNode> children,
+    required this.styles,
+    this.sizing,
+  }) : children = List.unmodifiable(children);
+
+  final MosaicProductBadgePlacement placement;
+  final MosaicStackDirection direction;
+  final double gap;
+  final MosaicMainAxisDistribution mainAxisDistribution;
+  final MosaicStackHorizontalAlignment crossAxisAlignment;
+  final List<MosaicNode> children;
+  final MosaicProductCardStyles styles;
+  final MosaicSizing? sizing;
+
+  @override
+  String get type => 'productBadge';
+}
+
+/// One authored, provider-bound selectable layer inside a Product Selector.
+final class MosaicProductCardComponent extends MosaicComponent {
+  MosaicProductCardComponent({
+    required super.id,
+    required this.productReferenceId,
+    required this.direction,
+    required this.gap,
+    required this.mainAxisDistribution,
+    required this.crossAxisAlignment,
+    required Iterable<MosaicNode> children,
+    required this.styles,
+    this.accessibilityLabel,
+    this.sizing,
+  }) : children = List.unmodifiable(children);
+
+  final String productReferenceId;
+  final MosaicStackDirection direction;
+  final double gap;
+  final MosaicMainAxisDistribution mainAxisDistribution;
+  final MosaicStackHorizontalAlignment crossAxisAlignment;
+  final List<MosaicNode> children;
+  final MosaicProductCardStyles styles;
+  final MosaicLocalizedText? accessibilityLabel;
+  final MosaicSizing? sizing;
+
+  MosaicProductBadgeComponent? get badge {
+    for (final child in children) {
+      if (child is MosaicProductBadgeComponent) return child;
+    }
+    return null;
+  }
+
+  @override
+  String get type => 'productCard';
+}
+
 final class MosaicProductSelectorComponent extends MosaicComponent {
   MosaicProductSelectorComponent({
     required super.id,
-    required Iterable<String> productReferenceIds,
-    required this.initiallySelectedProductReferenceId,
+    Iterable<String> productReferenceIds = const <String>[],
+    this.initiallySelectedProductReferenceId,
+    Iterable<MosaicProductCardComponent> cards =
+        const <MosaicProductCardComponent>[],
+    this.initialProductCardId,
     required this.itemSpacing,
     required this.unavailableFallback,
     required this.accessibility,
     this.direction = MosaicProductSelectorDirection.vertical,
-    this.cardStyles,
+    this.crossAxisAlignment = MosaicStackHorizontalAlignment.stretch,
     this.appearance,
     this.sizing,
     this.outerInsets,
     this.visibility = const MosaicAlwaysVisible(),
-  }) : productReferenceIds = List.unmodifiable(productReferenceIds);
+  })  : productReferenceIds = List.unmodifiable(productReferenceIds),
+        cards = List.unmodifiable(cards);
 
   final List<String> productReferenceIds;
-  final String initiallySelectedProductReferenceId;
+  final String? initiallySelectedProductReferenceId;
+  final List<MosaicProductCardComponent> cards;
+  final String? initialProductCardId;
   final double itemSpacing;
   final MosaicUnavailableProductFallback unavailableFallback;
   final MosaicControlAccessibility accessibility;
   final MosaicProductSelectorDirection direction;
-  final MosaicProductCardStyles? cardStyles;
+  final MosaicStackHorizontalAlignment crossAxisAlignment;
   final MosaicBoxAppearance? appearance;
   final MosaicSizing? sizing;
   final MosaicEdgeInsets? outerInsets;
@@ -808,6 +1146,104 @@ final class MosaicCloseAction extends MosaicAction {
 
   @override
   String get type => 'close';
+}
+
+final class MosaicNavigateToAction extends MosaicAction {
+  const MosaicNavigateToAction({required this.screenId});
+
+  final String screenId;
+
+  @override
+  String get type => 'navigateTo';
+}
+
+final class MosaicNavigateBackAction extends MosaicAction {
+  const MosaicNavigateBackAction();
+
+  @override
+  String get type => 'navigateBack';
+}
+
+final class MosaicOpenExternalUrlAction extends MosaicAction {
+  const MosaicOpenExternalUrlAction({required this.url});
+
+  final Uri url;
+
+  @override
+  String get type => 'openExternalUrl';
+}
+
+/// Protocol 0.2's single native control container.
+final class MosaicButtonComponent extends MosaicComponent {
+  MosaicButtonComponent({
+    required super.id,
+    required this.direction,
+    required this.gap,
+    required this.mainAxisDistribution,
+    required this.crossAxisAlignment,
+    required Iterable<MosaicNode> children,
+    required this.action,
+    required this.accessibility,
+    Iterable<MosaicNode>? inProgressChildren,
+    this.appearance,
+    this.sizing,
+    this.outerInsets,
+    this.visibility = const MosaicAlwaysVisible(),
+  })  : children = List.unmodifiable(children),
+        inProgressChildren = inProgressChildren == null
+            ? null
+            : List.unmodifiable(inProgressChildren);
+
+  final MosaicStackDirection direction;
+  final double gap;
+  final MosaicMainAxisDistribution mainAxisDistribution;
+  final MosaicStackHorizontalAlignment crossAxisAlignment;
+  final List<MosaicNode> children;
+  final List<MosaicNode>? inProgressChildren;
+  final MosaicAction action;
+  final MosaicControlAccessibility accessibility;
+  final MosaicBoxAppearance? appearance;
+  final MosaicSizing? sizing;
+  final MosaicEdgeInsets? outerInsets;
+  final MosaicVisibility visibility;
+
+  @override
+  String get type => 'button';
+}
+
+final class MosaicIconComponent extends MosaicComponent {
+  const MosaicIconComponent({
+    required super.id,
+    required this.name,
+    required this.size,
+    required this.color,
+    required this.accessibility,
+    this.appearance,
+    this.sizing,
+    this.outerInsets,
+    this.visibility = const MosaicAlwaysVisible(),
+  });
+
+  final MosaicIconName name;
+  final double size;
+  final MosaicColorValue color;
+  final MosaicImageAccessibility accessibility;
+  final MosaicBoxAppearance? appearance;
+  final MosaicSizing? sizing;
+  final MosaicEdgeInsets? outerInsets;
+  final MosaicVisibility visibility;
+
+  bool get mirrorsInRightToLeft => switch (name) {
+        MosaicIconName.arrowBackward ||
+        MosaicIconName.arrowForward ||
+        MosaicIconName.chevronBackward ||
+        MosaicIconName.chevronForward =>
+          true,
+        _ => false,
+      };
+
+  @override
+  String get type => 'icon';
 }
 
 final class MosaicPurchaseButtonComponent extends MosaicComponent {
@@ -967,6 +1403,7 @@ final class MosaicSwitchComponent extends MosaicComponent {
     required this.thumbColor,
     required this.accessibility,
     this.appearance,
+    this.sizing,
     this.outerInsets,
     this.visibility = const MosaicAlwaysVisible(),
   });
@@ -979,6 +1416,7 @@ final class MosaicSwitchComponent extends MosaicComponent {
   final MosaicColorValue thumbColor;
   final MosaicControlAccessibility accessibility;
   final MosaicBoxAppearance? appearance;
+  final MosaicSizing? sizing;
   final MosaicEdgeInsets? outerInsets;
   final MosaicVisibility visibility;
 
@@ -1016,7 +1454,7 @@ final class MosaicCountdownComponent extends MosaicComponent {
   String get type => 'countdown';
 }
 
-/// Strict native reader for the closed Protocol 0.1 and 0.2 contracts.
+/// Strict native reader for the current protocol contract.
 ///
 /// The JSON Schemas remain canonical under `protocol/`; this reader dispatches
 /// by exact version and never migrates, downgrades, or partially renders.
@@ -1032,6 +1470,16 @@ final class MosaicProtocolDecoder {
     }
 
     final root = _object(value, r'$');
+    final schemaVersion = _string(root['schemaVersion'], r'$.schemaVersion');
+    if (schemaVersion != mosaicProtocolVersion) {
+      throw MosaicProtocolException(
+        'Unsupported schemaVersion "$schemaVersion" at \$.schemaVersion.',
+      );
+    }
+    return _decodeV02(root);
+  }
+
+  MosaicPaywallDocument _decodeV02(Map<String, Object?> root) {
     _expectKeys(
       root,
       const <String>{
@@ -1040,38 +1488,40 @@ final class MosaicProtocolDecoder {
         'revision',
         'compatibility',
         'localization',
+        'designSystem',
         'assets',
         'products',
-        'layout',
+        'initialScreenId',
+        'screens',
       },
       r'$',
     );
-
-    final schemaVersion = _string(root['schemaVersion'], r'$.schemaVersion');
-    if (schemaVersion == mosaicProtocolV02Version) {
-      return _decodeV02(root);
-    }
-    if (schemaVersion != mosaicProtocolVersion) {
-      throw MosaicProtocolException(
-        'Unsupported schemaVersion "$schemaVersion" at \$.schemaVersion.',
+    final screenValues = _list(root['screens'], r'$.screens');
+    if (screenValues.isEmpty || screenValues.length > 10) {
+      throw const MosaicProtocolException(
+        'Protocol 0.2 screens must contain between 1 and 10 entries.',
       );
     }
-
-    final document = MosaicPaywallDocument(
-      schemaVersion: schemaVersion,
-      id: _identifier(root['id'], r'$.id'),
-      revision: _positiveInteger(root['revision'], r'$.revision'),
-      compatibility: _compatibility(root['compatibility']),
-      localization: _localization(root['localization']),
-      assets: _assets(root['assets']),
-      products: _products(root['products']),
-      layout: _scrollContainer(root['layout'], r'$.layout'),
-    );
-    _validateDocumentSemantics(document);
-    return document;
-  }
-
-  MosaicPaywallDocument _decodeV02(Map<String, Object?> root) {
+    final screens = <MosaicPaywallScreen>[
+      for (var index = 0; index < screenValues.length; index += 1)
+        _v02Screen(screenValues[index], '\$.screens[$index]'),
+    ];
+    if (screens.length > 1 &&
+        screens.any((screen) => screen.accessibilityLabel == null)) {
+      throw const MosaicProtocolException(
+        'Every Protocol 0.2 Paywall Screen must have an accessibilityLabel '
+        'when the document contains multiple screens.',
+      );
+    }
+    final initialScreenId =
+        _identifier(root['initialScreenId'], r'$.initialScreenId');
+    final initialScreen =
+        screens.where((screen) => screen.id == initialScreenId);
+    if (initialScreen.length != 1) {
+      throw MosaicProtocolException(
+        'initialScreenId "$initialScreenId" must resolve exactly once.',
+      );
+    }
     final document = MosaicPaywallDocument(
       schemaVersion: mosaicProtocolV02Version,
       id: _identifier(root['id'], r'$.id'),
@@ -1082,12 +1532,55 @@ final class MosaicProtocolDecoder {
         supported: mosaicProtocolV02Capabilities,
       ),
       localization: _localization(root['localization']),
-      assets: _assets(root['assets']),
-      products: _products(root['products']),
-      layout: _v02ScrollContainer(root['layout'], r'$.layout'),
+      designSystem: _v02DesignSystem(root['designSystem']),
+      assets: _v02Assets(root['assets']),
+      products: _v02Products(root['products']),
+      layout: initialScreen.single.layout,
+      initialScreenId: initialScreenId,
+      screens: screens,
     );
     _validateDocumentSemantics(document);
     return document;
+  }
+
+  MosaicPaywallScreen _v02Screen(Object? value, String path) {
+    final object = _object(value, path);
+    _expectKeys(
+      object,
+      const <String>{'id', 'presentation', 'layout'},
+      path,
+      optional: const <String>{'accessibilityLabel'},
+    );
+    return MosaicPaywallScreen(
+      id: _identifier(object['id'], '$path.id'),
+      accessibilityLabel: object.containsKey('accessibilityLabel')
+          ? _localizedText(
+              object['accessibilityLabel'],
+              '$path.accessibilityLabel',
+            )
+          : null,
+      presentation: _v02ScreenPresentation(
+        object['presentation'],
+        '$path.presentation',
+      ),
+      layout: _v02ScrollContainer(object['layout'], '$path.layout'),
+    );
+  }
+
+  MosaicScreenPresentation _v02ScreenPresentation(
+    Object? value,
+    String path,
+  ) {
+    final object = _object(value, path);
+    _expectKeys(object, const <String>{'type'}, path);
+    return _enumValue(
+              object['type'],
+              const <String>{'screen', 'sheet'},
+              '$path.type',
+            ) ==
+            'sheet'
+        ? MosaicScreenPresentation.sheet
+        : MosaicScreenPresentation.screen;
   }
 
   MosaicDocumentCompatibility _compatibilityFor(
@@ -1159,7 +1652,7 @@ final class MosaicProtocolDecoder {
       ),
       content: _v02Stack(object['content'], '$path.content'),
       background: object.containsKey('background')
-          ? _v02Color(object['background'], '$path.background')
+          ? _v02Background(object['background'], '$path.background')
           : null,
     );
   }
@@ -1217,7 +1710,7 @@ final class MosaicProtocolDecoder {
         path,
         container: true,
       ),
-      sizing: _v02OptionalSizing(object, path, allowHeight: true),
+      sizing: _v02OptionalSizing(object, path),
       outerInsets: _v02OptionalInsets(object, path, 'outerInsets'),
       visibility: _v02OptionalVisibility(object, path),
     );
@@ -1232,10 +1725,8 @@ final class MosaicProtocolDecoder {
       'image' => _v02Image(object, path),
       'featureList' => _v02FeatureList(object, path),
       'productSelector' => _v02ProductSelector(object, path),
-      'purchaseButton' => _v02PurchaseButton(object, path),
-      'restoreButton' => _v02RestoreButton(object, path),
-      'closeButton' => _v02CloseButton(object, path),
-      'legalText' => _v02LegalText(object, path),
+      'button' => _v02Button(object, path),
+      'icon' => _v02Icon(object, path),
       'carousel' => _v02Carousel(object, path),
       'switch' => _v02Switch(object, path),
       'countdown' => _v02Countdown(object, path),
@@ -1294,29 +1785,21 @@ final class MosaicProtocolDecoder {
         'type',
         'id',
         'assetId',
-        'width',
         'contentMode',
         'accessibility',
       },
       optional: const <String>{
         'aspectRatio',
-        'height',
         'appearance',
+        'sizing',
         'outerInsets',
         'visibility',
       },
     );
-    final hasAspect = object.containsKey('aspectRatio');
-    final hasHeight = object.containsKey('height');
-    if (hasAspect == hasHeight) {
-      throw MosaicProtocolException(
-        'Image must define exactly one of aspectRatio or height at $path.',
-      );
-    }
     return MosaicImageComponent(
       id: _identifier(object['id'], '$path.id'),
       assetId: _identifier(object['assetId'], '$path.assetId'),
-      aspectRatio: hasAspect
+      aspectRatio: object.containsKey('aspectRatio')
           ? _boundedNumber(
               object['aspectRatio'],
               '$path.aspectRatio',
@@ -1324,19 +1807,7 @@ final class MosaicProtocolDecoder {
               maximum: 10,
             )
           : null,
-      fixedHeight: hasHeight
-          ? _boundedNumber(
-              object['height'],
-              '$path.height',
-              minimumExclusive: 0,
-              maximum: 4096,
-            )
-          : null,
-      width: _v02SizingValue(
-        object['width'],
-        '$path.width',
-        allowFill: true,
-      ),
+      sizing: _v02OptionalSizing(object, path),
       contentMode: _enumValue(
                 object['contentMode'],
                 const <String>{'fit', 'fill'},
@@ -1416,11 +1887,11 @@ final class MosaicProtocolDecoder {
       required: const <String>{
         'type',
         'id',
-        'productReferenceIds',
-        'initiallySelectedProductReferenceId',
         'direction',
         'gap',
-        'cardStyles',
+        'crossAxisAlignment',
+        'initialProductCardId',
+        'cards',
         'unavailableFallback',
         'accessibility',
       },
@@ -1431,17 +1902,11 @@ final class MosaicProtocolDecoder {
         'visibility',
       },
     );
-    final values = _nonEmptyList(
-      object['productReferenceIds'],
-      '$path.productReferenceIds',
-    );
-    final referenceIds = <String>[
-      for (var index = 0; index < values.length; index += 1)
-        _identifier(values[index], '$path.productReferenceIds[$index]'),
-    ];
-    if (referenceIds.toSet().length != referenceIds.length) {
+    final cardValues = _nonEmptyList(object['cards'], '$path.cards');
+    if (cardValues.length > 20) {
       throw MosaicProtocolException(
-        'Duplicate product reference ID at $path.productReferenceIds.',
+        'Product Selector cards must contain at most 20 entries at '
+        '$path.cards.',
       );
     }
     final direction = _enumValue(
@@ -1451,10 +1916,13 @@ final class MosaicProtocolDecoder {
     );
     return MosaicProductSelectorComponent(
       id: _identifier(object['id'], '$path.id'),
-      productReferenceIds: referenceIds,
-      initiallySelectedProductReferenceId: _identifier(
-        object['initiallySelectedProductReferenceId'],
-        '$path.initiallySelectedProductReferenceId',
+      cards: <MosaicProductCardComponent>[
+        for (var index = 0; index < cardValues.length; index += 1)
+          _v02ProductCard(cardValues[index], '$path.cards[$index]'),
+      ],
+      initialProductCardId: _identifier(
+        object['initialProductCardId'],
+        '$path.initialProductCardId',
       ),
       itemSpacing: _logicalSize(object['gap'], '$path.gap'),
       unavailableFallback: _unavailableProductFallback(
@@ -1468,9 +1936,9 @@ final class MosaicProtocolDecoder {
       direction: direction == 'vertical'
           ? MosaicProductSelectorDirection.vertical
           : MosaicProductSelectorDirection.horizontal,
-      cardStyles: _v02ProductCardStyles(
-        object['cardStyles'],
-        '$path.cardStyles',
+      crossAxisAlignment: _stackAlignment(
+        object['crossAxisAlignment'],
+        '$path.crossAxisAlignment',
       ),
       appearance: _v02OptionalAppearance(object, path),
       sizing: _v02OptionalSizing(object, path),
@@ -1479,65 +1947,244 @@ final class MosaicProtocolDecoder {
     );
   }
 
-  MosaicPurchaseButtonComponent _v02PurchaseButton(
+  MosaicProductCardComponent _v02ProductCard(Object? value, String path) {
+    final object = _object(value, path);
+    _expectKeys(
+      object,
+      const <String>{
+        'type',
+        'id',
+        'productReferenceId',
+        'direction',
+        'gap',
+        'mainAxisDistribution',
+        'crossAxisAlignment',
+        'children',
+        'styles',
+      },
+      path,
+      optional: const <String>{'clipContent', 'accessibility', 'sizing'},
+    );
+    _expectConst(object['type'], 'productCard', '$path.type');
+    if (object.containsKey('clipContent') &&
+        _boolean(object['clipContent'], '$path.clipContent')) {
+      throw MosaicProtocolException(
+        'Product Card clipContent must be false at $path.clipContent.',
+      );
+    }
+    final children = _nonEmptyList(object['children'], '$path.children');
+    return MosaicProductCardComponent(
+      id: _identifier(object['id'], '$path.id'),
+      productReferenceId: _identifier(
+        object['productReferenceId'],
+        '$path.productReferenceId',
+      ),
+      direction: _v02StackDirection(object['direction'], '$path.direction'),
+      gap: _logicalSize(object['gap'], '$path.gap'),
+      mainAxisDistribution: _v02Distribution(
+        object['mainAxisDistribution'],
+        '$path.mainAxisDistribution',
+      ),
+      crossAxisAlignment: _stackAlignment(
+        object['crossAxisAlignment'],
+        '$path.crossAxisAlignment',
+      ),
+      children: <MosaicNode>[
+        for (var index = 0; index < children.length; index += 1)
+          _v02ProductCardChild(children[index], '$path.children[$index]'),
+      ],
+      styles: _v02ProductCardStyles(object['styles'], '$path.styles'),
+      accessibilityLabel: object.containsKey('accessibility')
+          ? _v02ProductCardAccessibility(
+              object['accessibility'],
+              '$path.accessibility',
+            )
+          : null,
+      sizing: _v02OptionalSizing(object, path),
+    );
+  }
+
+  MosaicLocalizedText _v02ProductCardAccessibility(
+    Object? value,
+    String path,
+  ) {
+    final object = _object(value, path);
+    _expectKeys(object, const <String>{'label'}, path);
+    return _localizedText(object['label'], '$path.label');
+  }
+
+  MosaicNode _v02ProductCardChild(Object? value, String path) {
+    final object = _object(value, path);
+    if (object['type'] == 'productBadge') {
+      return _v02ProductBadge(object, path);
+    }
+    return _v02ProductCardPassiveNode(object, path);
+  }
+
+  MosaicProductBadgeComponent _v02ProductBadge(
     Map<String, Object?> object,
     String path,
   ) {
-    _expectV02ActionButtonKeys(object, path);
-    return MosaicPurchaseButtonComponent(
+    _expectKeys(
+      object,
+      const <String>{
+        'type',
+        'id',
+        'placement',
+        'direction',
+        'gap',
+        'mainAxisDistribution',
+        'crossAxisAlignment',
+        'children',
+        'styles',
+      },
+      path,
+      optional: const <String>{'sizing'},
+    );
+    _expectConst(object['type'], 'productBadge', '$path.type');
+    final children = _nonEmptyList(object['children'], '$path.children');
+    if (children.length > 10) {
+      throw MosaicProtocolException(
+        'Product Badge children must contain at most 10 entries at '
+        '$path.children.',
+      );
+    }
+    return MosaicProductBadgeComponent(
       id: _identifier(object['id'], '$path.id'),
-      label: _localizedText(object['label'], '$path.label'),
-      inProgressLabel: _localizedText(
-        object['inProgressLabel'],
-        '$path.inProgressLabel',
+      placement: _v02ProductBadgePlacement(
+        object['placement'],
+        '$path.placement',
       ),
-      action: _purchaseAction(object['action'], '$path.action'),
-      accessibility: _controlAccessibility(
-        object['accessibility'],
-        '$path.accessibility',
+      direction: _v02StackDirection(object['direction'], '$path.direction'),
+      gap: _logicalSize(object['gap'], '$path.gap'),
+      mainAxisDistribution: _v02Distribution(
+        object['mainAxisDistribution'],
+        '$path.mainAxisDistribution',
       ),
-      typography: _v02Typography(
-        object['typography'],
-        '$path.typography',
-        allowMaximumLines: false,
+      crossAxisAlignment: _stackAlignment(
+        object['crossAxisAlignment'],
+        '$path.crossAxisAlignment',
       ),
-      appearance: _v02OptionalAppearance(object, path),
+      children: <MosaicNode>[
+        for (var index = 0; index < children.length; index += 1)
+          _v02ProductCardPassiveNode(
+            children[index],
+            '$path.children[$index]',
+          ),
+      ],
+      styles: _v02ProductCardStyles(object['styles'], '$path.styles'),
       sizing: _v02OptionalSizing(object, path),
-      outerInsets: _v02OptionalInsets(object, path, 'outerInsets'),
-      visibility: _v02OptionalVisibility(object, path),
     );
   }
 
-  MosaicRestoreButtonComponent _v02RestoreButton(
+  MosaicProductBadgePlacement _v02ProductBadgePlacement(
+    Object? value,
+    String path,
+  ) {
+    final object = _object(value, path);
+    final mode = _enumValue(
+      object['mode'],
+      const <String>{'nested', 'overlay'},
+      '$path.mode',
+    );
+    if (mode == 'nested') {
+      _expectKeys(object, const <String>{'mode'}, path);
+      return const MosaicNestedProductBadgePlacement();
+    }
+    _expectKeys(object, const <String>{'mode', 'anchor', 'inset'}, path);
+    final anchor = _enumValue(
+      object['anchor'],
+      const <String>{'topStart', 'topEnd', 'bottomStart', 'bottomEnd'},
+      '$path.anchor',
+    );
+    return MosaicOverlayProductBadgePlacement(
+      anchor: MosaicProductBadgeAnchor.values.byName(anchor),
+      inset: _boundedNumber(
+        object['inset'],
+        '$path.inset',
+        minimum: 0,
+        maximum: 64,
+      ),
+    );
+  }
+
+  MosaicNode _v02ProductCardPassiveNode(Object? value, String path) {
+    final object = _object(value, path);
+    final type = _string(object['type'], '$path.type');
+    return switch (type) {
+      'stack' => _v02ProductCardPassiveStack(object, path),
+      'text' => _v02Text(object, path),
+      'image' => _v02Image(object, path),
+      'icon' => _v02Icon(object, path),
+      'featureList' => _v02FeatureList(object, path),
+      'countdown' => _v02Countdown(object, path),
+      _ => throw MosaicProtocolException(
+          'Product Card content must be passive; found "$type" at '
+          '$path.type.',
+        ),
+    };
+  }
+
+  MosaicStackComponent _v02ProductCardPassiveStack(
     Map<String, Object?> object,
     String path,
   ) {
-    _expectV02ActionButtonKeys(object, path);
-    return MosaicRestoreButtonComponent(
+    _expectKeys(
+      object,
+      const <String>{
+        'type',
+        'id',
+        'direction',
+        'gap',
+        'padding',
+        'mainAxisDistribution',
+        'crossAxisAlignment',
+        'children',
+      },
+      path,
+      optional: const <String>{
+        'appearance',
+        'sizing',
+        'outerInsets',
+        'visibility',
+      },
+    );
+    _expectConst(object['type'], 'stack', '$path.type');
+    final children = _list(object['children'], '$path.children');
+    return MosaicStackComponent(
       id: _identifier(object['id'], '$path.id'),
-      label: _localizedText(object['label'], '$path.label'),
-      inProgressLabel: _localizedText(
-        object['inProgressLabel'],
-        '$path.inProgressLabel',
+      direction: _v02StackDirection(object['direction'], '$path.direction'),
+      gap: _logicalSize(object['gap'], '$path.gap'),
+      padding: _edgeInsets(object['padding'], '$path.padding'),
+      mainAxisDistribution: _v02Distribution(
+        object['mainAxisDistribution'],
+        '$path.mainAxisDistribution',
       ),
-      action: _restoreAction(object['action'], '$path.action'),
-      accessibility: _controlAccessibility(
-        object['accessibility'],
-        '$path.accessibility',
+      crossAxisAlignment: _stackAlignment(
+        object['crossAxisAlignment'],
+        '$path.crossAxisAlignment',
       ),
-      typography: _v02Typography(
-        object['typography'],
-        '$path.typography',
-        allowMaximumLines: false,
-      ),
-      appearance: _v02OptionalAppearance(object, path),
+      children: <MosaicNode>[
+        for (var index = 0; index < children.length; index += 1)
+          _v02ProductCardPassiveNode(
+            children[index],
+            '$path.children[$index]',
+          ),
+      ],
+      appearance: _v02OptionalAppearance(object, path, container: true),
       sizing: _v02OptionalSizing(object, path),
       outerInsets: _v02OptionalInsets(object, path, 'outerInsets'),
       visibility: _v02OptionalVisibility(object, path),
     );
   }
 
-  MosaicCloseButtonComponent _v02CloseButton(
+  MosaicStackDirection _v02StackDirection(Object? value, String path) =>
+      _enumValue(value, const <String>{'vertical', 'horizontal'}, path) ==
+              'vertical'
+          ? MosaicStackDirection.vertical
+          : MosaicStackDirection.horizontal;
+
+  MosaicButtonComponent _v02Button(
     Map<String, Object?> object,
     String path,
   ) {
@@ -1547,30 +2194,74 @@ final class MosaicProtocolDecoder {
       required: const <String>{
         'type',
         'id',
-        'label',
-        'typography',
+        'direction',
+        'gap',
+        'mainAxisDistribution',
+        'crossAxisAlignment',
+        'children',
         'action',
         'accessibility',
       },
       optional: const <String>{
+        'inProgressChildren',
         'appearance',
         'sizing',
         'outerInsets',
         'visibility',
       },
     );
-    return MosaicCloseButtonComponent(
+    final children = _nonEmptyList(object['children'], '$path.children');
+    final inProgress = object.containsKey('inProgressChildren')
+        ? _nonEmptyList(
+            object['inProgressChildren'],
+            '$path.inProgressChildren',
+          )
+        : null;
+    final action = _v02ButtonAction(object['action'], '$path.action');
+    if (inProgress != null &&
+        action is! MosaicPurchaseAction &&
+        action is! MosaicRestoreAction) {
+      throw MosaicProtocolException(
+        'inProgressChildren is valid only for purchase and restore Buttons '
+        'at $path.',
+      );
+    }
+    return MosaicButtonComponent(
       id: _identifier(object['id'], '$path.id'),
-      label: _localizedText(object['label'], '$path.label'),
-      action: _closeAction(object['action'], '$path.action'),
+      direction: _enumValue(
+                object['direction'],
+                const <String>{'vertical', 'horizontal'},
+                '$path.direction',
+              ) ==
+              'vertical'
+          ? MosaicStackDirection.vertical
+          : MosaicStackDirection.horizontal,
+      gap: _logicalSize(object['gap'], '$path.gap'),
+      mainAxisDistribution: _v02Distribution(
+        object['mainAxisDistribution'],
+        '$path.mainAxisDistribution',
+      ),
+      crossAxisAlignment: _stackAlignment(
+        object['crossAxisAlignment'],
+        '$path.crossAxisAlignment',
+      ),
+      children: <MosaicNode>[
+        for (var index = 0; index < children.length; index += 1)
+          _v02Node(children[index], '$path.children[$index]'),
+      ],
+      inProgressChildren: inProgress == null
+          ? null
+          : <MosaicNode>[
+              for (var index = 0; index < inProgress.length; index += 1)
+                _v02Node(
+                  inProgress[index],
+                  '$path.inProgressChildren[$index]',
+                ),
+            ],
+      action: action,
       accessibility: _controlAccessibility(
         object['accessibility'],
         '$path.accessibility',
-      ),
-      typography: _v02Typography(
-        object['typography'],
-        '$path.typography',
-        allowMaximumLines: false,
       ),
       appearance: _v02OptionalAppearance(object, path),
       sizing: _v02OptionalSizing(object, path),
@@ -1579,7 +2270,7 @@ final class MosaicProtocolDecoder {
     );
   }
 
-  MosaicLegalTextComponent _v02LegalText(
+  MosaicIconComponent _v02Icon(
     Map<String, Object?> object,
     String path,
   ) {
@@ -1589,8 +2280,9 @@ final class MosaicProtocolDecoder {
       required: const <String>{
         'type',
         'id',
-        'value',
-        'typography',
+        'name',
+        'size',
+        'color',
         'accessibility',
       },
       optional: const <String>{
@@ -1600,26 +2292,97 @@ final class MosaicProtocolDecoder {
         'visibility',
       },
     );
-    final typography = _v02Typography(
-      object['typography'],
-      '$path.typography',
-      allowMaximumLines: false,
+    final iconName = _enumValue(
+      object['name'],
+      const <String>{
+        'checkmark',
+        'close',
+        'lock',
+        'restore',
+        'externalLink',
+        'arrowBackward',
+        'arrowForward',
+        'chevronBackward',
+        'chevronForward',
+      },
+      '$path.name',
     );
-    return MosaicLegalTextComponent(
+    return MosaicIconComponent(
       id: _identifier(object['id'], '$path.id'),
-      value: _localizedText(object['value'], '$path.value'),
-      alignment: typography.alignment,
-      accessibility: _v02TextAccessibility(
+      name: MosaicIconName.values.byName(iconName),
+      size: _boundedNumber(
+        object['size'],
+        '$path.size',
+        minimumExclusive: 0,
+        maximum: 4096,
+      ),
+      color: _v02Color(object['color'], '$path.color'),
+      accessibility: _imageAccessibility(
         object['accessibility'],
         '$path.accessibility',
-        allowHeading: false,
       ),
-      typography: typography,
       appearance: _v02OptionalAppearance(object, path),
       sizing: _v02OptionalSizing(object, path),
       outerInsets: _v02OptionalInsets(object, path, 'outerInsets'),
       visibility: _v02OptionalVisibility(object, path),
     );
+  }
+
+  MosaicAction _v02ButtonAction(Object? value, String path) {
+    final object = _object(value, path);
+    final type = _string(object['type'], '$path.type');
+    return switch (type) {
+      'purchase' => _purchaseAction(object, path),
+      'restore' => _restoreAction(object, path),
+      'close' => _closeAction(object, path),
+      'navigateTo' => () {
+          _expectKeys(object, const <String>{'type', 'screenId'}, path);
+          return MosaicNavigateToAction(
+            screenId: _identifier(object['screenId'], '$path.screenId'),
+          );
+        }(),
+      'navigateBack' => () {
+          _expectKeys(object, const <String>{'type'}, path);
+          return const MosaicNavigateBackAction();
+        }(),
+      'openExternalUrl' => () {
+          _expectKeys(object, const <String>{'type', 'url'}, path);
+          return MosaicOpenExternalUrlAction(
+            url: _v02ExternalUrl(object['url'], '$path.url'),
+          );
+        }(),
+      _ => throw MosaicProtocolException(
+          'Unsupported Button action "$type" at $path.type.',
+        ),
+    };
+  }
+
+  Uri _v02ExternalUrl(Object? value, String path) {
+    final source = _string(value, path);
+    final uri = Uri.tryParse(source);
+    final match = RegExp(
+      r'^https://([A-Za-z0-9](?:[A-Za-z0-9.-]*[A-Za-z0-9])?)(?::([0-9]{1,5}))?(?:[/?#][^\s\\\u0000-\u001F\u007F]*)?$',
+      unicode: true,
+    ).firstMatch(source);
+    final rawHost = match?.group(1);
+    final rawPort = int.tryParse(match?.group(2) ?? '');
+    if (source.runes.length > 2048 ||
+        match == null ||
+        uri == null ||
+        uri.scheme != 'https' ||
+        !uri.hasAuthority ||
+        uri.host.isEmpty ||
+        uri.userInfo.isNotEmpty ||
+        rawHost == null ||
+        rawHost.contains('..') ||
+        rawHost.toLowerCase() != uri.host.toLowerCase() ||
+        (rawPort != null && rawPort > 65535)) {
+      throw MosaicProtocolException(
+        'External URL must be an absolute HTTPS URL without credentials at '
+        '$path.',
+      );
+    }
+    return uri;
   }
 
   MosaicCarouselComponent _v02Carousel(
@@ -1716,7 +2479,12 @@ final class MosaicProtocolDecoder {
         'thumbColor',
         'accessibility',
       },
-      optional: const <String>{'appearance', 'outerInsets', 'visibility'},
+      optional: const <String>{
+        'appearance',
+        'sizing',
+        'outerInsets',
+        'visibility',
+      },
     );
     return MosaicSwitchComponent(
       id: _identifier(object['id'], '$path.id'),
@@ -1741,6 +2509,7 @@ final class MosaicProtocolDecoder {
         '$path.accessibility',
       ),
       appearance: _v02OptionalAppearance(object, path),
+      sizing: _v02OptionalSizing(object, path),
       outerInsets: _v02OptionalInsets(object, path, 'outerInsets'),
       visibility: _v02OptionalVisibility(object, path),
     );
@@ -1827,31 +2596,6 @@ final class MosaicProtocolDecoder {
     );
   }
 
-  void _expectV02ActionButtonKeys(
-    Map<String, Object?> object,
-    String path,
-  ) {
-    _expectV02ComponentKeys(
-      object,
-      path,
-      required: const <String>{
-        'type',
-        'id',
-        'label',
-        'inProgressLabel',
-        'typography',
-        'action',
-        'accessibility',
-      },
-      optional: const <String>{
-        'appearance',
-        'sizing',
-        'outerInsets',
-        'visibility',
-      },
-    );
-  }
-
   void _expectV02ComponentKeys(
     Map<String, Object?> object,
     String path, {
@@ -1862,12 +2606,177 @@ final class MosaicProtocolDecoder {
   }
 
   MosaicColorValue _v02Color(Object? value, String path) {
+    if (value is Map<String, Object?>) {
+      _expectKeys(value, const <String>{'type', 'id'}, path);
+      _expectConst(value['type'], 'colorToken', '$path.type');
+      return MosaicColorValue.token(_identifier(value['id'], '$path.id'));
+    }
     final source = _string(value, path);
     try {
       return MosaicColorValue.parse(source);
     } on MosaicProtocolException {
       throw MosaicProtocolException('Invalid color "$source" at $path.');
     }
+  }
+
+  MosaicBackground _v02Background(Object? value, String path) {
+    final object = _object(value, path);
+    final type = _string(object['type'], '$path.type');
+    switch (type) {
+      case 'color':
+        _expectKeys(object, const <String>{'type', 'value'}, path);
+        return MosaicColorBackground(_v02Color(object['value'], '$path.value'));
+      case 'linearGradient':
+        _expectKeys(object, const <String>{'type', 'angle', 'stops'}, path);
+        return MosaicLinearGradientBackground(
+          angle: _boundedNumber(
+            object['angle'],
+            '$path.angle',
+            minimum: 0,
+            maximum: 360,
+          ),
+          stops: _v02GradientStops(object['stops'], '$path.stops'),
+        );
+      case 'radialGradient':
+        _expectKeys(
+          object,
+          const <String>{'type', 'center', 'radius', 'stops'},
+          path,
+        );
+        final center = _object(object['center'], '$path.center');
+        _expectKeys(center, const <String>{'x', 'y'}, '$path.center');
+        return MosaicRadialGradientBackground(
+          centerX: _boundedNumber(
+            center['x'],
+            '$path.center.x',
+            minimum: 0,
+            maximum: 1,
+          ),
+          centerY: _boundedNumber(
+            center['y'],
+            '$path.center.y',
+            minimum: 0,
+            maximum: 1,
+          ),
+          radius: _boundedNumber(
+            object['radius'],
+            '$path.radius',
+            minimumExclusive: 0,
+            maximum: 2,
+          ),
+          stops: _v02GradientStops(object['stops'], '$path.stops'),
+        );
+      case 'image':
+      case 'video':
+        _expectKeys(
+          object,
+          const <String>{'type', 'assetId', 'contentMode', 'fallbackColor'},
+          path,
+          optional: type == 'video'
+              ? const <String>{'posterAssetId'}
+              : const <String>{},
+        );
+        final mode = _enumValue(
+          object['contentMode'],
+          const <String>{'fit', 'fill'},
+          '$path.contentMode',
+        );
+        final contentMode = mode == 'fit'
+            ? MosaicImageContentMode.fit
+            : MosaicImageContentMode.fill;
+        final fallback = _v02Color(
+          object['fallbackColor'],
+          '$path.fallbackColor',
+        );
+        if (type == 'image') {
+          return MosaicImageBackground(
+            assetId: _identifier(object['assetId'], '$path.assetId'),
+            contentMode: contentMode,
+            fallbackColor: fallback,
+          );
+        }
+        return MosaicVideoBackground(
+          assetId: _identifier(object['assetId'], '$path.assetId'),
+          posterAssetId: object.containsKey('posterAssetId')
+              ? _identifier(object['posterAssetId'], '$path.posterAssetId')
+              : null,
+          contentMode: contentMode,
+          fallbackColor: fallback,
+        );
+      case 'backgroundToken':
+        _expectKeys(object, const <String>{'type', 'id'}, path);
+        return MosaicBackgroundTokenReference(
+          _identifier(object['id'], '$path.id'),
+        );
+      default:
+        throw MosaicProtocolException('Unsupported background at $path.type.');
+    }
+  }
+
+  List<MosaicGradientStop> _v02GradientStops(Object? value, String path) {
+    final values = _list(value, path);
+    if (values.length < 2 || values.length > 8) {
+      throw MosaicProtocolException(
+        'Gradient stops must contain 2 through 8 entries at $path.',
+      );
+    }
+    final stops = <MosaicGradientStop>[];
+    var previous = -1.0;
+    for (var index = 0; index < values.length; index += 1) {
+      final stopPath = '$path[$index]';
+      final object = _object(values[index], stopPath);
+      _expectKeys(object, const <String>{'position', 'color'}, stopPath);
+      final position = _boundedNumber(
+        object['position'],
+        '$stopPath.position',
+        minimum: 0,
+        maximum: 1,
+      );
+      if (position <= previous) {
+        throw MosaicProtocolException(
+          'Gradient stop positions must be strictly increasing at $path.',
+        );
+      }
+      previous = position;
+      stops.add(
+        MosaicGradientStop(
+          position: position,
+          color: _v02Color(object['color'], '$stopPath.color'),
+        ),
+      );
+    }
+    return stops;
+  }
+
+  MosaicShadow _v02Shadow(Object? value, String path) {
+    final object = _object(value, path);
+    final type = _string(object['type'], '$path.type');
+    if (type == 'shadowToken') {
+      _expectKeys(object, const <String>{'type', 'id'}, path);
+      return MosaicShadowTokenReference(_identifier(object['id'], '$path.id'));
+    }
+    _expectKeys(
+      object,
+      const <String>{'type', 'color', 'offsetX', 'offsetY', 'blurRadius'},
+      path,
+    );
+    _expectConst(type, 'shadow', '$path.type');
+    return MosaicInlineShadow(
+      color: _v02Color(object['color'], '$path.color'),
+      offsetX: _boundedNumber(
+        object['offsetX'],
+        '$path.offsetX',
+        minimum: -4096,
+        maximum: 4096,
+      ),
+      offsetY: _boundedNumber(
+        object['offsetY'],
+        '$path.offsetY',
+        minimum: -4096,
+        maximum: 4096,
+      ),
+      blurRadius: _logicalSize(object['blurRadius'], '$path.blurRadius'),
+    );
   }
 
   MosaicBoxAppearance? _v02OptionalAppearance(
@@ -1885,6 +2794,7 @@ final class MosaicProtocolDecoder {
       'opacity',
       if (!container) 'padding',
       if (container) 'clipContent',
+      'shadow',
     };
     if (object.isEmpty) {
       throw MosaicProtocolException(
@@ -1894,7 +2804,7 @@ final class MosaicProtocolDecoder {
     _expectKeys(object, const <String>{}, path, optional: allowed);
     return MosaicBoxAppearance(
       background: object.containsKey('background')
-          ? _v02Color(object['background'], '$path.background')
+          ? _v02Background(object['background'], '$path.background')
           : null,
       border: object.containsKey('border')
           ? _v02Border(object['border'], '$path.border')
@@ -1916,6 +2826,9 @@ final class MosaicProtocolDecoder {
       clipContent: object.containsKey('clipContent')
           ? _boolean(object['clipContent'], '$path.clipContent')
           : null,
+      shadow: object.containsKey('shadow')
+          ? _v02Shadow(object['shadow'], '$path.shadow')
+          : null,
     );
   }
 
@@ -1930,52 +2843,24 @@ final class MosaicProtocolDecoder {
 
   MosaicSizing? _v02OptionalSizing(
     Map<String, Object?> parent,
-    String parentPath, {
-    bool allowHeight = false,
-  }) {
+    String parentPath,
+  ) {
     if (!parent.containsKey('sizing')) return null;
     final path = '$parentPath.sizing';
     final object = _object(parent['sizing'], path);
-    if (object.isEmpty) {
-      throw MosaicProtocolException(
-        'Expected at least one sizing property at $path.',
-      );
-    }
-    _expectKeys(
-      object,
-      const <String>{},
-      path,
-      optional: <String>{'width', if (allowHeight) 'height'},
-    );
+    _expectKeys(object, const <String>{'width', 'height'}, path);
     return MosaicSizing(
-      width: object.containsKey('width')
-          ? _v02SizingValue(
-              object['width'],
-              '$path.width',
-              allowFill: true,
-            )
-          : null,
-      height: object.containsKey('height')
-          ? _v02SizingValue(
-              object['height'],
-              '$path.height',
-              allowFill: false,
-            )
-          : null,
+      width: _v02SizingValue(object['width'], '$path.width'),
+      height: _v02SizingValue(object['height'], '$path.height'),
     );
   }
 
-  MosaicSizingValue _v02SizingValue(
-    Object? value,
-    String path, {
-    required bool allowFill,
-  }) {
+  MosaicSizingValue _v02SizingValue(Object? value, String path) {
     if (value is String) {
-      final allowed = <String>{'content', if (allowFill) 'fill'};
-      final mode = _enumValue(value, allowed, path);
+      final mode = _enumValue(value, const <String>{'fit', 'fill'}, path);
       return mode == 'fill'
           ? const MosaicSizingValue.fill()
-          : const MosaicSizingValue.content();
+          : const MosaicSizingValue.fit();
     }
     final object = _object(value, path);
     _expectKeys(object, const <String>{'mode', 'value'}, path);
@@ -2172,67 +3057,28 @@ final class MosaicProtocolDecoder {
         'border',
         'cornerRadius',
         'padding',
-        'contentGap',
-        'contentAlignment',
-        'productLabelColor',
-        'runtimePriceColor',
-        'badge',
+        'opacity',
       },
       path,
+      optional: const <String>{'shadow'},
     );
     return MosaicProductCardStyle(
-      background: _v02Color(object['background'], '$path.background'),
+      background: _v02Background(object['background'], '$path.background'),
       border: _v02Border(object['border'], '$path.border'),
       cornerRadius: _logicalSize(
         object['cornerRadius'],
         '$path.cornerRadius',
       ),
       padding: _edgeInsets(object['padding'], '$path.padding'),
-      contentGap: _logicalSize(object['contentGap'], '$path.contentGap'),
-      contentAlignment: _v02Distribution(
-        object['contentAlignment'],
-        '$path.contentAlignment',
+      opacity: _boundedNumber(
+        object['opacity'],
+        '$path.opacity',
+        minimum: 0,
+        maximum: 1,
       ),
-      productLabelColor: _v02Color(
-        object['productLabelColor'],
-        '$path.productLabelColor',
-      ),
-      runtimePriceColor: _v02Color(
-        object['runtimePriceColor'],
-        '$path.runtimePriceColor',
-      ),
-      badge: _v02ProductCardBadgeDefault(
-        object['badge'],
-        '$path.badge',
-      ),
-    );
-  }
-
-  MosaicProductCardBadgeStyle _v02ProductCardBadgeDefault(
-    Object? value,
-    String path,
-  ) {
-    final object = _object(value, path);
-    _expectKeys(
-      object,
-      const <String>{
-        'background',
-        'textColor',
-        'border',
-        'cornerRadius',
-        'padding',
-      },
-      path,
-    );
-    return MosaicProductCardBadgeStyle(
-      background: _v02Color(object['background'], '$path.background'),
-      textColor: _v02Color(object['textColor'], '$path.textColor'),
-      border: _v02Border(object['border'], '$path.border'),
-      cornerRadius: _logicalSize(
-        object['cornerRadius'],
-        '$path.cornerRadius',
-      ),
-      padding: _edgeInsets(object['padding'], '$path.padding'),
+      shadow: object.containsKey('shadow')
+          ? _v02Shadow(object['shadow'], '$path.shadow')
+          : null,
     );
   }
 
@@ -2250,11 +3096,8 @@ final class MosaicProtocolDecoder {
         'border',
         'cornerRadius',
         'padding',
-        'contentGap',
-        'contentAlignment',
-        'productLabelColor',
-        'runtimePriceColor',
-        'badge',
+        'opacity',
+        'shadow',
       },
     );
     final border = object.containsKey('border')
@@ -2273,7 +3116,7 @@ final class MosaicProtocolDecoder {
         : null;
     return MosaicProductCardStyleOverride(
       background: object.containsKey('background')
-          ? _v02Color(object['background'], '$path.background')
+          ? _v02Background(object['background'], '$path.background')
           : null,
       borderColor: border?.containsKey('color') ?? false
           ? _v02Color(border!['color'], '$path.border.color')
@@ -2288,84 +3131,17 @@ final class MosaicProtocolDecoder {
       paddingStart: padding?['start'],
       paddingBottom: padding?['bottom'],
       paddingEnd: padding?['end'],
-      contentGap: object.containsKey('contentGap')
-          ? _logicalSize(object['contentGap'], '$path.contentGap')
-          : null,
-      contentAlignment: object.containsKey('contentAlignment')
-          ? _v02Distribution(
-              object['contentAlignment'],
-              '$path.contentAlignment',
+      opacity: object.containsKey('opacity')
+          ? _boundedNumber(
+              object['opacity'],
+              '$path.opacity',
+              minimum: 0,
+              maximum: 1,
             )
           : null,
-      productLabelColor: object.containsKey('productLabelColor')
-          ? _v02Color(
-              object['productLabelColor'],
-              '$path.productLabelColor',
-            )
+      shadow: object.containsKey('shadow')
+          ? _v02Shadow(object['shadow'], '$path.shadow')
           : null,
-      runtimePriceColor: object.containsKey('runtimePriceColor')
-          ? _v02Color(
-              object['runtimePriceColor'],
-              '$path.runtimePriceColor',
-            )
-          : null,
-      badge: object.containsKey('badge')
-          ? _v02ProductCardBadgeOverride(object['badge'], '$path.badge')
-          : null,
-    );
-  }
-
-  MosaicProductCardBadgeStyleOverride _v02ProductCardBadgeOverride(
-    Object? value,
-    String path,
-  ) {
-    final object = _object(value, path);
-    _expectKeys(
-      object,
-      const <String>{},
-      path,
-      optional: const <String>{
-        'background',
-        'textColor',
-        'border',
-        'cornerRadius',
-        'padding',
-      },
-    );
-    final border = object.containsKey('border')
-        ? _object(object['border'], '$path.border')
-        : null;
-    if (border != null) {
-      _expectKeys(
-        border,
-        const <String>{},
-        '$path.border',
-        optional: const <String>{'color', 'width'},
-      );
-    }
-    final padding = object.containsKey('padding')
-        ? _v02InsetsOverride(object['padding'], '$path.padding')
-        : null;
-    return MosaicProductCardBadgeStyleOverride(
-      background: object.containsKey('background')
-          ? _v02Color(object['background'], '$path.background')
-          : null,
-      textColor: object.containsKey('textColor')
-          ? _v02Color(object['textColor'], '$path.textColor')
-          : null,
-      borderColor: border?.containsKey('color') ?? false
-          ? _v02Color(border!['color'], '$path.border.color')
-          : null,
-      borderWidth: border?.containsKey('width') ?? false
-          ? _logicalSize(border!['width'], '$path.border.width')
-          : null,
-      cornerRadius: object.containsKey('cornerRadius')
-          ? _logicalSize(object['cornerRadius'], '$path.cornerRadius')
-          : null,
-      paddingTop: padding?['top'],
-      paddingStart: padding?['start'],
-      paddingBottom: padding?['bottom'],
-      paddingEnd: padding?['end'],
     );
   }
 
@@ -2423,45 +3199,6 @@ final class MosaicProtocolDecoder {
       path,
     );
     return MosaicCountdownUnit.values.byName(source);
-  }
-
-  MosaicDocumentCompatibility _compatibility(Object? value) {
-    const path = r'$.compatibility';
-    final object = _object(value, path);
-    _expectKeys(object, const <String>{'requiredCapabilities'}, path);
-    final entries = _nonEmptyList(
-      object['requiredCapabilities'],
-      '$path.requiredCapabilities',
-    );
-    final capabilities = <MosaicRequiredCapability>[];
-    final seen = <String>{};
-    for (var index = 0; index < entries.length; index += 1) {
-      final capabilityPath = '$path.requiredCapabilities[$index]';
-      final capability = _object(entries[index], capabilityPath);
-      _expectKeys(
-        capability,
-        const <String>{'name', 'version'},
-        capabilityPath,
-      );
-      final name = _string(capability['name'], '$capabilityPath.name');
-      final version = _string(
-        capability['version'],
-        '$capabilityPath.version',
-      );
-      if (!mosaicProtocolV01Capabilities.contains(name) ||
-          version != mosaicProtocolVersion) {
-        throw MosaicProtocolException(
-          'Unsupported capability "$name@$version" at $capabilityPath.',
-        );
-      }
-      if (!seen.add(name)) {
-        throw MosaicProtocolException(
-          'Duplicate capability "$name" at $capabilityPath.',
-        );
-      }
-      capabilities.add(MosaicRequiredCapability(name: name, version: version));
-    }
-    return MosaicDocumentCompatibility(capabilities);
   }
 
   MosaicLocalization _localization(Object? value) {
@@ -2530,121 +3267,133 @@ final class MosaicProtocolDecoder {
     );
   }
 
-  List<MosaicImageAsset> _assets(Object? value) {
-    const path = r'$.assets';
-    final values = _list(value, path);
-    return <MosaicImageAsset>[
-      for (var index = 0; index < values.length; index += 1)
-        _imageAsset(values[index], '$path[$index]'),
-    ];
-  }
-
-  MosaicImageAsset _imageAsset(Object? value, String path) {
+  MosaicDesignSystem _v02DesignSystem(Object? value) {
+    const path = r'$.designSystem';
     final object = _object(value, path);
     _expectKeys(
       object,
-      const <String>{'type', 'id', 'source', 'fallback'},
+      const <String>{'colors', 'backgrounds', 'shadows'},
       path,
     );
-    _expectConst(object['type'], 'image', '$path.type');
+    List<MosaicDesignToken<T>> decode<T>(
+      String key,
+      T Function(Object? value, String path) decodeValue,
+    ) {
+      final tokenPath = '$path.$key';
+      final values = _list(object[key], tokenPath);
+      if (values.length > 256) {
+        throw MosaicProtocolException(
+          'Design-system $key must contain at most 256 entries.',
+        );
+      }
+      return <MosaicDesignToken<T>>[
+        for (var index = 0; index < values.length; index += 1)
+          () {
+            final entryPath = '$tokenPath[$index]';
+            final entry = _object(values[index], entryPath);
+            _expectKeys(
+              entry,
+              const <String>{'id', 'name', 'value'},
+              entryPath,
+            );
+            return MosaicDesignToken<T>(
+              id: _identifier(entry['id'], '$entryPath.id'),
+              name: _boundedNonEmptyString(
+                entry['name'],
+                '$entryPath.name',
+                maximumLength: 80,
+              ),
+              value: decodeValue(entry['value'], '$entryPath.value'),
+            );
+          }(),
+      ];
+    }
 
-    final source = _object(object['source'], '$path.source');
-    _expectKeys(source, const <String>{'type', 'key'}, '$path.source');
-    _expectConst(source['type'], 'bundled', '$path.source.type');
-
-    final fallback = _object(object['fallback'], '$path.fallback');
-    _expectKeys(fallback, const <String>{'type', 'value'}, '$path.fallback');
-    _expectConst(fallback['type'], 'placeholder', '$path.fallback.type');
-
-    return MosaicImageAsset(
-      id: _identifier(object['id'], '$path.id'),
-      sourceKey: _assetKey(source['key'], '$path.source.key'),
-      placeholder: _localizedText(fallback['value'], '$path.fallback.value'),
+    return MosaicDesignSystem(
+      colors: decode<MosaicColorValue>('colors', _v02Color),
+      backgrounds: decode<MosaicBackground>('backgrounds', _v02Background),
+      shadows: decode<MosaicShadow>('shadows', _v02Shadow),
     );
   }
 
-  List<MosaicProductReference> _products(Object? value) {
+  List<MosaicAsset> _v02Assets(Object? value) {
+    const path = r'$.assets';
+    final values = _list(value, path);
+    return <MosaicAsset>[
+      for (var index = 0; index < values.length; index += 1)
+        _v02Asset(values[index], '$path[$index]'),
+    ];
+  }
+
+  MosaicAsset _v02Asset(Object? value, String path) {
+    final object = _object(value, path);
+    final type = _enumValue(
+      object['type'],
+      const <String>{'image', 'video'},
+      '$path.type',
+    );
+    _expectKeys(
+      object,
+      type == 'image'
+          ? const <String>{'type', 'id', 'source', 'fallback'}
+          : const <String>{'type', 'id', 'source'},
+      path,
+    );
+    final source = _v02AssetSource(object['source'], '$path.source');
+    final id = _identifier(object['id'], '$path.id');
+    if (type == 'video') return MosaicVideoAsset(id: id, source: source);
+    final fallback = _object(object['fallback'], '$path.fallback');
+    _expectKeys(
+      fallback,
+      const <String>{'type', 'value'},
+      '$path.fallback',
+    );
+    _expectConst(fallback['type'], 'placeholder', '$path.fallback.type');
+    return MosaicImageAsset(
+      id: id,
+      source: source,
+      placeholder: _localizedText(
+        fallback['value'],
+        '$path.fallback.value',
+      ),
+    );
+  }
+
+  MosaicAssetSource _v02AssetSource(Object? value, String path) {
+    final object = _object(value, path);
+    final type = _enumValue(
+      object['type'],
+      const <String>{'bundled', 'remote'},
+      '$path.type',
+    );
+    if (type == 'bundled') {
+      _expectKeys(object, const <String>{'type', 'key'}, path);
+      return MosaicBundledAssetSource(_assetKey(object['key'], '$path.key'));
+    }
+    _expectKeys(object, const <String>{'type', 'url'}, path);
+    return MosaicRemoteAssetSource(_v02ExternalUrl(object['url'], '$path.url'));
+  }
+
+  List<MosaicProductReference> _v02Products(Object? value) {
     const path = r'$.products';
     final values = _list(value, path);
     return <MosaicProductReference>[
       for (var index = 0; index < values.length; index += 1)
-        _productReference(values[index], '$path[$index]'),
+        _v02ProductReference(values[index], '$path[$index]'),
     ];
   }
 
-  MosaicProductReference _productReference(Object? value, String path) {
+  MosaicProductReference _v02ProductReference(Object? value, String path) {
     final object = _object(value, path);
     _expectKeys(
       object,
       const <String>{'id', 'productId', 'label'},
       path,
-      optional: const <String>{'badge'},
     );
     return MosaicProductReference(
       id: _identifier(object['id'], '$path.id'),
       productId: _productId(object['productId'], '$path.productId'),
       label: _localizedText(object['label'], '$path.label'),
-      badge: object.containsKey('badge')
-          ? _localizedText(object['badge'], '$path.badge')
-          : null,
-    );
-  }
-
-  MosaicScrollContainer _scrollContainer(Object? value, String path) {
-    final object = _object(value, path);
-    _expectKeys(
-      object,
-      const <String>{
-        'type',
-        'id',
-        'axis',
-        'safeArea',
-        'showsIndicators',
-        'content',
-      },
-      path,
-    );
-    _expectConst(object['type'], 'scrollContainer', '$path.type');
-    _expectConst(object['axis'], 'vertical', '$path.axis');
-    _expectConst(object['safeArea'], 'respect', '$path.safeArea');
-    return MosaicScrollContainer(
-      id: _identifier(object['id'], '$path.id'),
-      showsIndicators: _boolean(
-        object['showsIndicators'],
-        '$path.showsIndicators',
-      ),
-      content: _verticalStack(object['content'], '$path.content'),
-    );
-  }
-
-  MosaicVerticalStack _verticalStack(Object? value, String path) {
-    final object = _object(value, path);
-    _expectKeys(
-      object,
-      const <String>{
-        'type',
-        'id',
-        'spacing',
-        'padding',
-        'horizontalAlignment',
-        'children',
-      },
-      path,
-    );
-    _expectConst(object['type'], 'verticalStack', '$path.type');
-    final children = _nonEmptyList(object['children'], '$path.children');
-    return MosaicVerticalStack(
-      id: _identifier(object['id'], '$path.id'),
-      spacing: _logicalSize(object['spacing'], '$path.spacing'),
-      padding: _edgeInsets(object['padding'], '$path.padding'),
-      horizontalAlignment: _stackAlignment(
-        object['horizontalAlignment'],
-        '$path.horizontalAlignment',
-      ),
-      children: <MosaicNode>[
-        for (var index = 0; index < children.length; index += 1)
-          _node(children[index], '$path.children[$index]'),
-      ],
     );
   }
 
@@ -2663,192 +3412,12 @@ final class MosaicProtocolDecoder {
     );
   }
 
-  MosaicNode _node(Object? value, String path) {
-    final object = _object(value, path);
-    final type = _string(object['type'], '$path.type');
-    switch (type) {
-      case 'verticalStack':
-        return _verticalStack(value, path);
-      case 'text':
-        return _textComponent(object, path);
-      case 'image':
-        return _imageComponent(object, path);
-      case 'featureList':
-        return _featureListComponent(object, path);
-      case 'productSelector':
-        return _productSelectorComponent(object, path);
-      case 'purchaseButton':
-        return _purchaseButtonComponent(object, path);
-      case 'restoreButton':
-        return _restoreButtonComponent(object, path);
-      case 'closeButton':
-        return _closeButtonComponent(object, path);
-      case 'legalText':
-        return _legalTextComponent(object, path);
-      default:
-        throw MosaicProtocolException(
-          'Unsupported component "$type" at $path.type.',
-        );
-    }
-  }
-
-  MosaicTextComponent _textComponent(
-    Map<String, Object?> object,
-    String path,
-  ) {
-    _expectKeys(
-      object,
-      const <String>{
-        'type',
-        'id',
-        'value',
-        'style',
-        'alignment',
-        'accessibility',
-      },
-      path,
-    );
-    return MosaicTextComponent(
-      id: _identifier(object['id'], '$path.id'),
-      value: _localizedText(object['value'], '$path.value'),
-      style: _textStyle(object['style'], '$path.style'),
-      alignment: _textAlignment(object['alignment'], '$path.alignment'),
-      accessibility: _textAccessibility(
-        object['accessibility'],
-        '$path.accessibility',
-      ),
-    );
-  }
-
-  MosaicImageComponent _imageComponent(
-    Map<String, Object?> object,
-    String path,
-  ) {
-    _expectKeys(
-      object,
-      const <String>{
-        'type',
-        'id',
-        'assetId',
-        'width',
-        'aspectRatio',
-        'contentMode',
-        'accessibility',
-      },
-      path,
-    );
-    _expectConst(object['width'], 'fill', '$path.width');
-    final mode = _enumValue(
-      object['contentMode'],
-      const <String>{'fit', 'fill'},
-      '$path.contentMode',
-    );
-    return MosaicImageComponent(
-      id: _identifier(object['id'], '$path.id'),
-      assetId: _identifier(object['assetId'], '$path.assetId'),
-      aspectRatio: _boundedNumber(
-        object['aspectRatio'],
-        '$path.aspectRatio',
-        minimumExclusive: 0,
-        maximum: 10,
-      ),
-      contentMode: mode == 'fit'
-          ? MosaicImageContentMode.fit
-          : MosaicImageContentMode.fill,
-      accessibility: _imageAccessibility(
-        object['accessibility'],
-        '$path.accessibility',
-      ),
-    );
-  }
-
-  MosaicFeatureListComponent _featureListComponent(
-    Map<String, Object?> object,
-    String path,
-  ) {
-    _expectKeys(
-      object,
-      const <String>{
-        'type',
-        'id',
-        'marker',
-        'itemSpacing',
-        'items',
-        'accessibility',
-      },
-      path,
-    );
-    _expectConst(object['marker'], 'checkmark', '$path.marker');
-    final values = _nonEmptyList(object['items'], '$path.items');
-    return MosaicFeatureListComponent(
-      id: _identifier(object['id'], '$path.id'),
-      itemSpacing: _logicalSize(object['itemSpacing'], '$path.itemSpacing'),
-      items: <MosaicFeatureListItem>[
-        for (var index = 0; index < values.length; index += 1)
-          _featureListItem(values[index], '$path.items[$index]'),
-      ],
-      accessibility: _controlAccessibility(
-        object['accessibility'],
-        '$path.accessibility',
-      ),
-    );
-  }
-
   MosaicFeatureListItem _featureListItem(Object? value, String path) {
     final object = _object(value, path);
     _expectKeys(object, const <String>{'id', 'text'}, path);
     return MosaicFeatureListItem(
       id: _identifier(object['id'], '$path.id'),
       text: _localizedText(object['text'], '$path.text'),
-    );
-  }
-
-  MosaicProductSelectorComponent _productSelectorComponent(
-    Map<String, Object?> object,
-    String path,
-  ) {
-    _expectKeys(
-      object,
-      const <String>{
-        'type',
-        'id',
-        'productReferenceIds',
-        'initiallySelectedProductReferenceId',
-        'itemSpacing',
-        'unavailableFallback',
-        'accessibility',
-      },
-      path,
-    );
-    final values = _nonEmptyList(
-      object['productReferenceIds'],
-      '$path.productReferenceIds',
-    );
-    final referenceIds = <String>[
-      for (var index = 0; index < values.length; index += 1)
-        _identifier(values[index], '$path.productReferenceIds[$index]'),
-    ];
-    if (referenceIds.toSet().length != referenceIds.length) {
-      throw MosaicProtocolException(
-        'Duplicate product reference ID at $path.productReferenceIds.',
-      );
-    }
-    return MosaicProductSelectorComponent(
-      id: _identifier(object['id'], '$path.id'),
-      productReferenceIds: referenceIds,
-      initiallySelectedProductReferenceId: _identifier(
-        object['initiallySelectedProductReferenceId'],
-        '$path.initiallySelectedProductReferenceId',
-      ),
-      itemSpacing: _logicalSize(object['itemSpacing'], '$path.itemSpacing'),
-      unavailableFallback: _unavailableProductFallback(
-        object['unavailableFallback'],
-        '$path.unavailableFallback',
-      ),
-      accessibility: _controlAccessibility(
-        object['accessibility'],
-        '$path.accessibility',
-      ),
     );
   }
 
@@ -2870,108 +3439,6 @@ final class MosaicProtocolDecoder {
     );
     return MosaicUnavailableProductFallback(
       message: _localizedText(object['message'], '$path.message'),
-    );
-  }
-
-  MosaicPurchaseButtonComponent _purchaseButtonComponent(
-    Map<String, Object?> object,
-    String path,
-  ) {
-    _expectKeys(
-      object,
-      const <String>{
-        'type',
-        'id',
-        'label',
-        'inProgressLabel',
-        'action',
-        'accessibility',
-      },
-      path,
-    );
-    return MosaicPurchaseButtonComponent(
-      id: _identifier(object['id'], '$path.id'),
-      label: _localizedText(object['label'], '$path.label'),
-      inProgressLabel: _localizedText(
-        object['inProgressLabel'],
-        '$path.inProgressLabel',
-      ),
-      action: _purchaseAction(object['action'], '$path.action'),
-      accessibility: _controlAccessibility(
-        object['accessibility'],
-        '$path.accessibility',
-      ),
-    );
-  }
-
-  MosaicRestoreButtonComponent _restoreButtonComponent(
-    Map<String, Object?> object,
-    String path,
-  ) {
-    _expectKeys(
-      object,
-      const <String>{
-        'type',
-        'id',
-        'label',
-        'inProgressLabel',
-        'action',
-        'accessibility',
-      },
-      path,
-    );
-    return MosaicRestoreButtonComponent(
-      id: _identifier(object['id'], '$path.id'),
-      label: _localizedText(object['label'], '$path.label'),
-      inProgressLabel: _localizedText(
-        object['inProgressLabel'],
-        '$path.inProgressLabel',
-      ),
-      action: _restoreAction(object['action'], '$path.action'),
-      accessibility: _controlAccessibility(
-        object['accessibility'],
-        '$path.accessibility',
-      ),
-    );
-  }
-
-  MosaicCloseButtonComponent _closeButtonComponent(
-    Map<String, Object?> object,
-    String path,
-  ) {
-    _expectKeys(
-      object,
-      const <String>{'type', 'id', 'label', 'action', 'accessibility'},
-      path,
-    );
-    return MosaicCloseButtonComponent(
-      id: _identifier(object['id'], '$path.id'),
-      label: _localizedText(object['label'], '$path.label'),
-      action: _closeAction(object['action'], '$path.action'),
-      accessibility: _controlAccessibility(
-        object['accessibility'],
-        '$path.accessibility',
-      ),
-    );
-  }
-
-  MosaicLegalTextComponent _legalTextComponent(
-    Map<String, Object?> object,
-    String path,
-  ) {
-    _expectKeys(
-      object,
-      const <String>{'type', 'id', 'value', 'alignment', 'accessibility'},
-      path,
-    );
-    return MosaicLegalTextComponent(
-      id: _identifier(object['id'], '$path.id'),
-      value: _localizedText(object['value'], '$path.value'),
-      alignment: _textAlignment(object['alignment'], '$path.alignment'),
-      accessibility: _textAccessibility(
-        object['accessibility'],
-        '$path.accessibility',
-      ),
     );
   }
 
@@ -3014,32 +3481,6 @@ final class MosaicProtocolDecoder {
         object['localizationKey'],
         '$path.localizationKey',
       ),
-    );
-  }
-
-  MosaicTextAccessibility _textAccessibility(Object? value, String path) {
-    final object = _object(value, path);
-    final role = _string(object['role'], '$path.role');
-    if (role == 'text') {
-      _expectKeys(object, const <String>{'role'}, path);
-      return const MosaicTextAccessibility(
-        role: MosaicTextAccessibilityRole.text,
-      );
-    }
-    if (role == 'heading') {
-      _expectKeys(object, const <String>{'role', 'level'}, path);
-      return MosaicTextAccessibility(
-        role: MosaicTextAccessibilityRole.heading,
-        level: _integerInRange(
-          object['level'],
-          '$path.level',
-          minimum: 1,
-          maximum: 6,
-        ),
-      );
-    }
-    throw MosaicProtocolException(
-      'Expected text or heading accessibility role at $path.role.',
     );
   }
 
@@ -3091,17 +3532,37 @@ void _validateDocumentSemantics(MosaicPaywallDocument document) {
     );
   }
   if (document.schemaVersion == mosaicProtocolV02Version) {
-    if (document.layout.content is! MosaicStackComponent ||
-        (document.layout.content as MosaicStackComponent).direction !=
-            MosaicStackDirection.vertical) {
+    if (document.designSystem == null) {
       throw const MosaicProtocolException(
-        'Protocol 0.2 root scroll content must be a vertical Stack.',
+        'Protocol 0.2 requires a document design system.',
       );
     }
-    if (document.layout.content.children.isEmpty) {
+    _requireUnique(
+      document.screens.map((screen) => screen.id),
+      'Paywall Screen identifier',
+    );
+    if (document.initialScreen?.presentation !=
+        MosaicScreenPresentation.screen) {
       throw const MosaicProtocolException(
-        'Protocol 0.2 root Stack must contain at least one child.',
+        'Protocol 0.2 initial screen must use Screen presentation.',
       );
+    }
+    _validateV02DesignSystem(document);
+    for (final screen in document.screens) {
+      if (screen.layout.content is! MosaicStackComponent ||
+          (screen.layout.content as MosaicStackComponent).direction !=
+              MosaicStackDirection.vertical) {
+        throw MosaicProtocolException(
+          'Protocol 0.2 screen ${screen.id} root scroll content must be a '
+          'vertical Stack.',
+        );
+      }
+      if (screen.layout.content.children.isEmpty) {
+        throw MosaicProtocolException(
+          'Protocol 0.2 screen ${screen.id} root Stack must contain at least '
+          'one child.',
+        );
+      }
     }
     final pageIds = <String>[];
     for (final carousel in nodes.whereType<MosaicCarouselComponent>()) {
@@ -3132,17 +3593,48 @@ void _validateDocumentSemantics(MosaicPaywallDocument document) {
     'provider product identifier',
   );
 
-  final assetsById = <String, MosaicImageAsset>{
+  final assetsById = <String, MosaicAsset>{
     for (final asset in document.assets) asset.id: asset,
   };
   final referencedAssets = <String>{};
   for (final image in nodes.whereType<MosaicImageComponent>()) {
-    if (!assetsById.containsKey(image.assetId)) {
+    if (assetsById[image.assetId] is! MosaicImageAsset) {
       throw MosaicProtocolException(
-        'Image ${image.id} references unknown asset ${image.assetId}.',
+        'Image ${image.id} must reference an image asset ${image.assetId}.',
       );
     }
     referencedAssets.add(image.assetId);
+  }
+  if (document.schemaVersion == mosaicProtocolV02Version) {
+    for (final background in _allV02Backgrounds(document)) {
+      final resolved = document.resolveBackground(background);
+      switch (resolved) {
+        case MosaicImageBackground():
+          if (assetsById[resolved.assetId] is! MosaicImageAsset) {
+            throw MosaicProtocolException(
+              'Image background must reference image asset ${resolved.assetId}.',
+            );
+          }
+          referencedAssets.add(resolved.assetId);
+        case MosaicVideoBackground():
+          if (assetsById[resolved.assetId] is! MosaicVideoAsset) {
+            throw MosaicProtocolException(
+              'Video background must reference video asset ${resolved.assetId}.',
+            );
+          }
+          referencedAssets.add(resolved.assetId);
+          if (resolved.posterAssetId case final poster?) {
+            if (assetsById[poster] is! MosaicImageAsset) {
+              throw MosaicProtocolException(
+                'Video poster must reference image asset $poster.',
+              );
+            }
+            referencedAssets.add(poster);
+          }
+        default:
+          break;
+      }
+    }
   }
   for (final asset in document.assets) {
     if (!referencedAssets.contains(asset.id)) {
@@ -3157,7 +3649,19 @@ void _validateDocumentSemantics(MosaicPaywallDocument document) {
   final selectors = <String, MosaicProductSelectorComponent>{};
   for (final selector in nodes.whereType<MosaicProductSelectorComponent>()) {
     selectors[selector.id] = selector;
-    for (final referenceId in selector.productReferenceIds) {
+    final referenceIds = selector.cards.isEmpty
+        ? selector.productReferenceIds
+        : selector.cards
+            .map((card) => card.productReferenceId)
+            .toList(growable: false);
+    if (selector.cards.isNotEmpty &&
+        referenceIds.toSet().length != referenceIds.length) {
+      throw MosaicProtocolException(
+        'Product selector ${selector.id} contains duplicate product '
+        'reference bindings.',
+      );
+    }
+    for (final referenceId in referenceIds) {
       if (!productsById.containsKey(referenceId)) {
         throw MosaicProtocolException(
           'Product selector ${selector.id} references unknown product '
@@ -3166,22 +3670,52 @@ void _validateDocumentSemantics(MosaicPaywallDocument document) {
       }
       referencedProducts.add(referenceId);
     }
-    if (!selector.productReferenceIds
-        .contains(selector.initiallySelectedProductReferenceId)) {
-      throw MosaicProtocolException(
-        'Product selector ${selector.id} initially selects an undeclared '
-        'product.',
-      );
+    if (selector.cards.isEmpty) {
+      if (!selector.productReferenceIds
+          .contains(selector.initiallySelectedProductReferenceId)) {
+        throw MosaicProtocolException(
+          'Product selector ${selector.id} initially selects an undeclared '
+          'product.',
+        );
+      }
+    } else {
+      if (!selector.cards
+          .any((card) => card.id == selector.initialProductCardId)) {
+        throw MosaicProtocolException(
+          'Product selector ${selector.id} initially selects an undeclared '
+          'Product Card.',
+        );
+      }
+      for (final card in selector.cards) {
+        _validateProductCardStructure(card);
+      }
     }
   }
 
   final selectorsWithPurchaseActions = <String>{};
-  for (final button in nodes.whereType<MosaicPurchaseButtonComponent>()) {
-    final selectorId = button.action.productSelectorId;
+  final purchaseActions = <({String buttonId, MosaicPurchaseAction action})>[
+    for (final button in nodes.whereType<MosaicPurchaseButtonComponent>())
+      (buttonId: button.id, action: button.action),
+    for (final button in nodes.whereType<MosaicButtonComponent>())
+      if (button.action case final MosaicPurchaseAction action)
+        (buttonId: button.id, action: action),
+  ];
+  final screenByNodeId = document.schemaVersion == mosaicProtocolV02Version
+      ? _v02ScreenByNodeId(document)
+      : const <String, String>{};
+  for (final entry in purchaseActions) {
+    final selectorId = entry.action.productSelectorId;
     if (!selectors.containsKey(selectorId)) {
       throw MosaicProtocolException(
-        'Purchase button ${button.id} references unknown product selector '
+        'Purchase button ${entry.buttonId} references unknown product selector '
         '$selectorId.',
+      );
+    }
+    if (document.schemaVersion == mosaicProtocolV02Version &&
+        screenByNodeId[entry.buttonId] != screenByNodeId[selectorId]) {
+      throw MosaicProtocolException(
+        'Purchase Button ${entry.buttonId} must reference a Product Selector '
+        'in the same Paywall Screen.',
       );
     }
     selectorsWithPurchaseActions.add(selectorId);
@@ -3203,11 +3737,202 @@ void _validateDocumentSemantics(MosaicPaywallDocument document) {
   _validateCapabilities(document, nodes);
 }
 
+void _validateProductCardStructure(MosaicProductCardComponent card) {
+  final directBadges = card.children.whereType<MosaicProductBadgeComponent>();
+  if (directBadges.length > 1) {
+    throw MosaicProtocolException(
+      'Product Card ${card.id} may contain at most one direct Product Badge.',
+    );
+  }
+
+  var descendantCount = 0;
+  var maximumStackDepth = 0;
+  void visit(MosaicNode node, int stackDepth) {
+    descendantCount += 1;
+    final nextDepth = node is MosaicStackNode ? stackDepth + 1 : stackDepth;
+    if (nextDepth > maximumStackDepth) maximumStackDepth = nextDepth;
+    final children = switch (node) {
+      MosaicStackNode() => node.children,
+      MosaicProductBadgeComponent() => node.children,
+      _ => const <MosaicNode>[],
+    };
+    for (final child in children) {
+      visit(child, nextDepth);
+    }
+  }
+
+  for (final child in card.children) {
+    visit(child, 0);
+  }
+  if (descendantCount > 20) {
+    throw MosaicProtocolException(
+      'Product Card ${card.id} exceeds 20 passive descendants.',
+    );
+  }
+  if (maximumStackDepth > 4) {
+    throw MosaicProtocolException(
+      'Product Card ${card.id} exceeds nested Stack depth 4.',
+    );
+  }
+}
+
+void _validateV02DesignSystem(MosaicPaywallDocument document) {
+  final designSystem = document.designSystem!;
+  for (final category in <Iterable<({String id, String name})>>[
+    designSystem.colors.map((token) => (id: token.id, name: token.name)),
+    designSystem.backgrounds.map((token) => (id: token.id, name: token.name)),
+    designSystem.shadows.map((token) => (id: token.id, name: token.name)),
+  ]) {
+    _requireUnique(
+        category.map((token) => token.id), 'design token identifier');
+    _requireUnique(category.map((token) => token.name), 'design token name');
+  }
+
+  for (final color in _allV02Colors(document)) {
+    document.resolveColor(color);
+  }
+  for (final background in _allV02Backgrounds(document)) {
+    final resolved = document.resolveBackground(background);
+    for (final color in _backgroundColors(resolved)) {
+      document.resolveColor(color);
+    }
+  }
+  for (final shadow in _allV02Shadows(document)) {
+    final resolved = document.resolveShadow(shadow);
+    document.resolveColor(resolved.color);
+  }
+}
+
+Iterable<MosaicBackground> _allV02Backgrounds(
+  MosaicPaywallDocument document,
+) sync* {
+  yield* document.designSystem!.backgrounds.map((token) => token.value);
+  for (final screen in document.screens) {
+    if (screen.layout.background case final background?) yield background;
+  }
+  for (final node in document.nodes) {
+    if (_nodeAppearance(node)?.background case final background?) {
+      yield background;
+    }
+    if (node is MosaicProductCardComponent) {
+      yield node.styles.defaultStyle.background;
+      if (node.styles.selectedOverride.background case final background?) {
+        yield background;
+      }
+    } else if (node is MosaicProductBadgeComponent) {
+      yield node.styles.defaultStyle.background;
+      if (node.styles.selectedOverride.background case final background?) {
+        yield background;
+      }
+    }
+  }
+}
+
+Iterable<MosaicShadow> _allV02Shadows(MosaicPaywallDocument document) sync* {
+  yield* document.designSystem!.shadows.map((token) => token.value);
+  for (final node in document.nodes) {
+    if (_nodeAppearance(node)?.shadow case final shadow?) yield shadow;
+    if (node is MosaicProductCardComponent) {
+      if (node.styles.defaultStyle.shadow case final shadow?) yield shadow;
+      if (node.styles.selectedOverride.shadow case final shadow?) yield shadow;
+    } else if (node is MosaicProductBadgeComponent) {
+      if (node.styles.defaultStyle.shadow case final shadow?) yield shadow;
+      if (node.styles.selectedOverride.shadow case final shadow?) yield shadow;
+    }
+  }
+}
+
+Iterable<MosaicColorValue> _backgroundColors(
+    MosaicBackground background) sync* {
+  switch (background) {
+    case MosaicColorBackground():
+      yield background.color;
+    case MosaicLinearGradientBackground():
+      yield* background.stops.map((stop) => stop.color);
+    case MosaicRadialGradientBackground():
+      yield* background.stops.map((stop) => stop.color);
+    case MosaicImageBackground():
+      yield background.fallbackColor;
+    case MosaicVideoBackground():
+      yield background.fallbackColor;
+    case MosaicBackgroundTokenReference():
+      break;
+  }
+}
+
+Iterable<MosaicColorValue> _allV02Colors(MosaicPaywallDocument document) sync* {
+  yield* document.designSystem!.colors.map((token) => token.value);
+  for (final background in _allV02Backgrounds(document)) {
+    yield* _backgroundColors(document.resolveBackground(background));
+  }
+  for (final node in document.nodes) {
+    final appearance = _nodeAppearance(node);
+    if (appearance?.border?.color case final color?) yield color;
+    if (_nodeTypography(node)?.color case final color?) yield color;
+    switch (node) {
+      case MosaicFeatureListComponent():
+        if (node.markerColor case final color?) yield color;
+      case MosaicIconComponent():
+        yield node.color;
+      case MosaicSwitchComponent():
+        yield node.offTrackColor;
+        yield node.onTrackColor;
+        yield node.thumbColor;
+      case MosaicProductCardComponent():
+        yield node.styles.defaultStyle.border.color;
+        if (node.styles.selectedOverride.borderColor case final color?) {
+          yield color;
+        }
+      case MosaicProductBadgeComponent():
+        yield node.styles.defaultStyle.border.color;
+        if (node.styles.selectedOverride.borderColor case final color?) {
+          yield color;
+        }
+      default:
+        break;
+    }
+  }
+}
+
 void _validateV02RuntimeSemantics(MosaicPaywallDocument document) {
+  final screenByNodeId = _v02ScreenByNodeId(document);
   final switches = <String, MosaicSwitchComponent>{
     for (final node in document.nodes.whereType<MosaicSwitchComponent>())
       node.id: node,
   };
+
+  void validateButtonChildren(
+    MosaicButtonComponent button,
+    Iterable<MosaicNode> children,
+  ) {
+    void visitChild(MosaicNode child) {
+      if (child is MosaicButtonComponent ||
+          child is MosaicProductSelectorComponent ||
+          child is MosaicSwitchComponent ||
+          child is MosaicCarouselComponent) {
+        throw MosaicProtocolException(
+          'Button ${button.id} cannot contain interactive descendant '
+          '${child.type} ${child.id}.',
+        );
+      }
+      if (child is MosaicStackNode) {
+        for (final descendant in child.children) {
+          visitChild(descendant);
+        }
+      }
+    }
+
+    for (final child in children) {
+      visitChild(child);
+    }
+  }
+
+  for (final button in document.nodes.whereType<MosaicButtonComponent>()) {
+    validateButtonChildren(button, button.children);
+    if (button.inProgressChildren case final inProgress?) {
+      validateButtonChildren(button, inProgress);
+    }
+  }
 
   void visit(MosaicNode node, {required bool insideCarousel}) {
     final visibility = _nodeVisibility(node);
@@ -3221,6 +3946,12 @@ void _validateV02RuntimeSemantics(MosaicPaywallDocument document) {
       if (visibility.switchId == node.id) {
         throw MosaicProtocolException(
           '${node.type} ${node.id} visibility cannot reference itself.',
+        );
+      }
+      if (screenByNodeId[visibility.switchId] != screenByNodeId[node.id]) {
+        throw MosaicProtocolException(
+          '${node.type} ${node.id} visibility must reference a Switch in the '
+          'same Paywall Screen.',
         );
       }
     }
@@ -3238,12 +3969,94 @@ void _validateV02RuntimeSemantics(MosaicPaywallDocument document) {
         for (final page in node.pages) {
           visit(page.content, insideCarousel: true);
         }
+      case MosaicButtonComponent():
+        for (final child in node.children) {
+          visit(child, insideCarousel: insideCarousel);
+        }
+        if (node.inProgressChildren case final inProgress?) {
+          for (final child in inProgress) {
+            visit(child, insideCarousel: insideCarousel);
+          }
+        }
+      case MosaicProductSelectorComponent():
+        for (final card in node.cards) {
+          visit(card, insideCarousel: insideCarousel);
+        }
+      case MosaicProductCardComponent():
+        for (final child in node.children) {
+          visit(child, insideCarousel: insideCarousel);
+        }
+      case MosaicProductBadgeComponent():
+        for (final child in node.children) {
+          visit(child, insideCarousel: insideCarousel);
+        }
       default:
         break;
     }
   }
 
-  visit(document.layout.content, insideCarousel: false);
+  for (final screen in document.screens) {
+    visit(screen.layout.content, insideCarousel: false);
+  }
+
+  final screenIds = document.screens.map((screen) => screen.id).toSet();
+  final forwardEdges = <String, Set<String>>{
+    for (final screen in document.screens) screen.id: <String>{},
+  };
+  for (final button in document.nodes.whereType<MosaicButtonComponent>()) {
+    if (button.action case final MosaicNavigateToAction action) {
+      final sourceScreen = screenByNodeId[button.id]!;
+      if (!screenIds.contains(action.screenId)) {
+        throw MosaicProtocolException(
+          'Button ${button.id} navigateTo references unknown Paywall Screen '
+          '${action.screenId}.',
+        );
+      }
+      if (sourceScreen == action.screenId) {
+        throw MosaicProtocolException(
+          'Button ${button.id} cannot navigateTo its own Paywall Screen.',
+        );
+      }
+      forwardEdges[sourceScreen]!.add(action.screenId);
+    }
+  }
+
+  final visited = <String>{};
+  final active = <String>{};
+  void visitGraph(String screenId) {
+    if (!active.add(screenId)) {
+      throw const MosaicProtocolException(
+        'Protocol 0.2 navigateTo graph must be acyclic.',
+      );
+    }
+    if (visited.add(screenId)) {
+      for (final target in forwardEdges[screenId]!) {
+        visitGraph(target);
+      }
+    }
+    active.remove(screenId);
+  }
+
+  visitGraph(document.initialScreenId!);
+  final unreachable = screenIds.difference(visited);
+  if (unreachable.isNotEmpty) {
+    throw MosaicProtocolException(
+      'Protocol 0.2 contains unreachable Paywall Screens: '
+      '${unreachable.join(', ')}.',
+    );
+  }
+}
+
+Map<String, String> _v02ScreenByNodeId(MosaicPaywallDocument document) {
+  final result = <String, String>{};
+  for (final screen in document.screens) {
+    result[screen.layout.id] = screen.id;
+    for (final node
+        in MosaicPaywallDocument._walkStack(screen.layout.content)) {
+      result[node.id] = screen.id;
+    }
+  }
+  return result;
 }
 
 void _validateLocalizationSemantics(MosaicPaywallDocument document) {
@@ -3258,6 +4071,10 @@ void _validateLocalizationSemantics(MosaicPaywallDocument document) {
     throw MosaicProtocolException(
       'Fallback locale ${localization.fallbackLocale} is not declared.',
     );
+  }
+
+  if (document.schemaVersion == mosaicProtocolV02Version) {
+    _validateV02ProductTemplates(document);
   }
 
   final localizedTexts = _localizedTexts(document);
@@ -3304,10 +4121,70 @@ void _validateLocalizationSemantics(MosaicPaywallDocument document) {
   }
 }
 
+final RegExp _productTemplatePattern =
+    RegExp(r'\{\{\s*product\.(name|price)\s*\}\}');
+
+void _validateV02ProductTemplates(MosaicPaywallDocument document) {
+  final allowed = Set<MosaicLocalizedText>.identity();
+  void visitCardNode(MosaicNode node) {
+    if (node case final MosaicTextComponent text) {
+      allowed.add(text.value);
+    }
+    final children = switch (node) {
+      MosaicStackNode() => node.children,
+      MosaicProductBadgeComponent() => node.children,
+      _ => const <MosaicNode>[],
+    };
+    for (final child in children) {
+      visitCardNode(child);
+    }
+  }
+
+  for (final selector
+      in document.nodes.whereType<MosaicProductSelectorComponent>()) {
+    for (final card in selector.cards) {
+      if (card.accessibilityLabel case final label?) allowed.add(label);
+      for (final child in card.children) {
+        visitCardNode(child);
+      }
+    }
+  }
+
+  for (final text in _localizedTexts(document)) {
+    final values = <String>[text.defaultValue];
+    for (final catalog in document.localization.locales.values) {
+      if (catalog.strings[text.localizationKey] case final value?) {
+        values.add(value);
+      }
+    }
+    for (final value in values) {
+      final remainder = value.replaceAll(_productTemplatePattern, '');
+      final malformed = remainder.contains('{{') || remainder.contains('}}');
+      if (malformed) {
+        throw MosaicProtocolException(
+          'Localized text ${text.localizationKey} contains a malformed '
+          'product template expression.',
+        );
+      }
+      if (_productTemplatePattern.hasMatch(value) && !allowed.contains(text)) {
+        throw MosaicProtocolException(
+          'Localized text ${text.localizationKey} uses a product template '
+          'outside Product Card content.',
+        );
+      }
+    }
+  }
+}
+
 Iterable<MosaicLocalizedText> _localizedTexts(
   MosaicPaywallDocument document,
 ) sync* {
-  for (final asset in document.assets) {
+  for (final screen in document.screens) {
+    if (screen.accessibilityLabel case final label?) {
+      yield label;
+    }
+  }
+  for (final asset in document.assets.whereType<MosaicImageAsset>()) {
     yield asset.placeholder;
   }
   for (final product in document.products) {
@@ -3341,6 +4218,12 @@ Iterable<MosaicLocalizedText> _localizedTexts(
         if (node.accessibility.hint case final hint?) {
           yield hint;
         }
+      case MosaicProductCardComponent():
+        if (node.accessibilityLabel case final label?) {
+          yield label;
+        }
+      case MosaicProductBadgeComponent():
+        break;
       case MosaicPurchaseButtonComponent():
         yield node.label;
         yield node.inProgressLabel;
@@ -3382,6 +4265,15 @@ Iterable<MosaicLocalizedText> _localizedTexts(
         }
       case MosaicCountdownComponent():
         yield node.completedText;
+        if (node.accessibility.label case final label?) {
+          yield label;
+        }
+      case MosaicButtonComponent():
+        yield node.accessibility.label;
+        if (node.accessibility.hint case final hint?) {
+          yield hint;
+        }
+      case MosaicIconComponent():
         if (node.accessibility.label case final label?) {
           yield label;
         }
@@ -3465,19 +4357,57 @@ void _validateV02Capabilities(
   MosaicPaywallDocument document,
   List<MosaicNode> nodes,
 ) {
-  final expected = <String>{'localization.catalogs'};
+  final expected = <String>{
+    'localization.catalogs',
+    'navigation.screens',
+  };
+  if (document.screens.any(
+    (screen) => screen.presentation == MosaicScreenPresentation.sheet,
+  )) {
+    expected.add('navigation.sheets');
+  }
+  if (_documentUsesProductTemplates(document)) {
+    expected.add('localization.productTemplate');
+  }
   if (document.localization.locales.values.any(
     (catalog) => catalog.direction == MosaicLocaleDirection.rtl,
   )) {
     expected.add('localization.rtl');
   }
   if (document.products.isNotEmpty) expected.add('product.references');
-  if (document.assets.isNotEmpty) {
-    expected
-      ..add('asset.bundledImage')
-      ..add('fallback.asset');
+  final designSystem = document.designSystem!;
+  if (designSystem.colors.isNotEmpty ||
+      designSystem.backgrounds.isNotEmpty ||
+      designSystem.shadows.isNotEmpty) {
+    expected.add('style.designTokens');
   }
-  if (document.layout.background != null) {
+  if (_allV02Backgrounds(document).map(document.resolveBackground).any(
+        (background) =>
+            background is MosaicLinearGradientBackground ||
+            background is MosaicRadialGradientBackground,
+      )) {
+    expected.add('style.gradientBackground');
+  }
+  if (_allV02Backgrounds(document).map(document.resolveBackground).any(
+        (background) =>
+            background is MosaicImageBackground ||
+            background is MosaicVideoBackground,
+      )) {
+    expected.add('style.mediaBackground');
+  }
+  if (_allV02Shadows(document).isNotEmpty) expected.add('style.shadow');
+  if (_allV02Colors(document).isNotEmpty) expected.add('style.colors');
+  for (final asset in document.assets) {
+    final remote = asset.source is MosaicRemoteAssetSource;
+    if (asset is MosaicImageAsset) {
+      expected
+        ..add(remote ? 'asset.remoteImage' : 'asset.bundledImage')
+        ..add('fallback.asset');
+    } else {
+      expected.add(remote ? 'asset.remoteVideo' : 'asset.bundledVideo');
+    }
+  }
+  if (document.screens.any((screen) => screen.layout.background != null)) {
     expected
       ..add('style.colors')
       ..add('style.box');
@@ -3498,11 +4428,13 @@ void _validateV02Capabilities(
     final appearance = _nodeAppearance(node);
     if (appearance != null ||
         node is MosaicStackComponent && node.padding != _zeroInsets ||
-        node is MosaicProductSelectorComponent && node.cardStyles != null) {
+        node is MosaicProductCardComponent ||
+        node is MosaicProductBadgeComponent) {
       expected.add('style.box');
     }
-    if (_nodeSizing(node) != null || node is MosaicImageComponent) {
+    if (_nodeSizing(node) != null) {
       expected.add('layout.sizing');
+      if (_nodeSizing(node) != null) expected.add('layout.heightSizing');
     }
     if (_nodeOuterInsets(node) != null) expected.add('layout.outerInsets');
     if (appearance?.clipContent != null) expected.add('style.clipping');
@@ -3520,7 +4452,26 @@ void _validateV02Capabilities(
         ..add('outcome.normalized')
         ..add('style.productCardStates');
     }
+    if (node is MosaicProductCardComponent ||
+        node is MosaicProductBadgeComponent) {
+      expected.add('style.productCardStates');
+    }
     switch (node) {
+      case MosaicButtonComponent():
+        final actionCapability = switch (node.action) {
+          MosaicPurchaseAction() => 'action.purchase',
+          MosaicRestoreAction() => 'action.restore',
+          MosaicCloseAction() => 'action.close',
+          MosaicNavigateToAction() => 'action.navigateTo',
+          MosaicNavigateBackAction() => 'action.navigateBack',
+          MosaicOpenExternalUrlAction() => 'action.openExternalUrl',
+        };
+        expected.add(actionCapability);
+        if (node.action is MosaicPurchaseAction ||
+            node.action is MosaicRestoreAction ||
+            node.action is MosaicCloseAction) {
+          expected.add('outcome.normalized');
+        }
       case MosaicPurchaseButtonComponent():
         expected
           ..add('action.purchase')
@@ -3571,6 +4522,8 @@ MosaicVisibility _nodeVisibility(MosaicNode node) => switch (node) {
       MosaicCarouselComponent() => node.visibility,
       MosaicSwitchComponent() => node.visibility,
       MosaicCountdownComponent() => node.visibility,
+      MosaicButtonComponent() => node.visibility,
+      MosaicIconComponent() => node.visibility,
       _ => const MosaicAlwaysVisible(),
     };
 
@@ -3583,6 +4536,7 @@ MosaicTypography? _nodeTypography(MosaicNode node) => switch (node) {
       MosaicLegalTextComponent() => node.typography,
       MosaicSwitchComponent() => node.typography,
       MosaicCountdownComponent() => node.typography,
+      MosaicButtonComponent() || MosaicIconComponent() => null,
       _ => null,
     };
 
@@ -3599,20 +4553,28 @@ MosaicBoxAppearance? _nodeAppearance(MosaicNode node) => switch (node) {
       MosaicCarouselComponent() => node.appearance,
       MosaicSwitchComponent() => node.appearance,
       MosaicCountdownComponent() => node.appearance,
+      MosaicButtonComponent() => node.appearance,
+      MosaicIconComponent() => node.appearance,
       _ => null,
     };
 
 MosaicSizing? _nodeSizing(MosaicNode node) => switch (node) {
       MosaicStackComponent() => node.sizing,
       MosaicTextComponent() => node.sizing,
+      MosaicImageComponent() => node.sizing,
       MosaicFeatureListComponent() => node.sizing,
       MosaicProductSelectorComponent() => node.sizing,
+      MosaicProductCardComponent() => node.sizing,
+      MosaicProductBadgeComponent() => node.sizing,
       MosaicPurchaseButtonComponent() => node.sizing,
       MosaicRestoreButtonComponent() => node.sizing,
       MosaicCloseButtonComponent() => node.sizing,
       MosaicLegalTextComponent() => node.sizing,
       MosaicCarouselComponent() => node.sizing,
+      MosaicSwitchComponent() => node.sizing,
       MosaicCountdownComponent() => node.sizing,
+      MosaicButtonComponent() => node.sizing,
+      MosaicIconComponent() => node.sizing,
       _ => null,
     };
 
@@ -3629,6 +4591,8 @@ MosaicEdgeInsets? _nodeOuterInsets(MosaicNode node) => switch (node) {
       MosaicCarouselComponent() => node.outerInsets,
       MosaicSwitchComponent() => node.outerInsets,
       MosaicCountdownComponent() => node.outerInsets,
+      MosaicButtonComponent() => node.outerInsets,
+      MosaicIconComponent() => node.outerInsets,
       _ => null,
     };
 
@@ -3636,8 +4600,58 @@ bool _nodeUsesColor(MosaicNode node) =>
     _nodeTypography(node) != null ||
     _nodeAppearance(node) != null ||
     node is MosaicFeatureListComponent && node.markerColor != null ||
-    node is MosaicProductSelectorComponent && node.cardStyles != null ||
-    node is MosaicSwitchComponent;
+    node is MosaicProductCardComponent ||
+    node is MosaicProductBadgeComponent ||
+    node is MosaicSwitchComponent ||
+    node is MosaicIconComponent;
+
+bool _documentUsesProductTemplates(MosaicPaywallDocument document) {
+  for (final selector
+      in document.nodes.whereType<MosaicProductSelectorComponent>()) {
+    for (final card in selector.cards) {
+      if (card.accessibilityLabel case final label?) {
+        if (_localizedTextUsesProductTemplate(document, label)) return true;
+      }
+      for (final node in _cardDescendants(card)) {
+        if (node is MosaicTextComponent &&
+            _localizedTextUsesProductTemplate(document, node.value)) {
+          return true;
+        }
+      }
+    }
+  }
+  return false;
+}
+
+Iterable<MosaicNode> _cardDescendants(MosaicProductCardComponent card) sync* {
+  Iterable<MosaicNode> visit(MosaicNode node) sync* {
+    yield node;
+    final children = switch (node) {
+      MosaicStackNode() => node.children,
+      MosaicProductBadgeComponent() => node.children,
+      _ => const <MosaicNode>[],
+    };
+    for (final child in children) {
+      yield* visit(child);
+    }
+  }
+
+  for (final child in card.children) {
+    yield* visit(child);
+  }
+}
+
+bool _localizedTextUsesProductTemplate(
+  MosaicPaywallDocument document,
+  MosaicLocalizedText text,
+) {
+  if (_productTemplatePattern.hasMatch(text.defaultValue)) return true;
+  for (final catalog in document.localization.locales.values) {
+    final value = catalog.strings[text.localizationKey];
+    if (value != null && _productTemplatePattern.hasMatch(value)) return true;
+  }
+  return false;
+}
 
 // Explicit `always` is semantically different from absence for capability
 // derivation, but the typed model intentionally normalizes both. Canonical
@@ -3867,19 +4881,6 @@ MosaicTextAlignment _textAlignment(Object? value, String path) {
   };
 }
 
-MosaicTextStyle _textStyle(Object? value, String path) {
-  final style = _enumValue(
-    value,
-    const <String>{'title', 'body', 'caption'},
-    path,
-  );
-  return switch (style) {
-    'title' => MosaicTextStyle.title,
-    'body' => MosaicTextStyle.body,
-    _ => MosaicTextStyle.caption,
-  };
-}
-
 void _expectKeys(
   Map<String, Object?> object,
   Set<String> required,
@@ -3908,4 +4909,11 @@ final class MosaicProtocolException implements Exception {
 
   @override
   String toString() => 'MosaicProtocolException: $message';
+}
+
+extension<T> on Iterable<T> {
+  T? get firstOrNull {
+    final iterator = this.iterator;
+    return iterator.moveNext() ? iterator.current : null;
+  }
 }

@@ -346,28 +346,35 @@ The Phase 2 demo is:
 
 ## Phase 2.5: Production Studio UX & Design System
 
-Phase 2.5 now has two explicit owner-approved gates:
+Phase 2.5 now has three explicit owner-approved gates:
 
 - **Gate 2.5A — Production Studio UX and Design System:** the current canvas-first Studio,
   Layers, contextual Protocol `0.1` inspector, resizable workspace, local preview, and design-system
   work described in this section and in
   `docs/plans/phase-2.5-studio-implementation.md`.
-- **Gate 2.5B — Protocol 0.2 Styling and Component Expansion:** the versioned styling contract,
-  generalized Stack, Carousel, Switch, Countdown, Product Card Default/Selected states, Studio
-  coverage, and matching Flutter, SwiftUI, and Compose support described in
+- **Gate 2.5B — Protocol 0.2 Styling, Component, and Navigation Expansion:** the versioned styling
+  contract, bounded screens/navigation, one composable Button, semantic Icon, generalized Stack,
+  Carousel, Switch, Countdown, Product Card Default/Selected states, Studio coverage, and matching
+  Flutter, SwiftUI, and Compose support described in
   `docs/plans/phase-2.5b-protocol-0.2-expansion.md`.
+- **Gate 2.5C — Visual Systems and Presentation Surfaces:** Protocol `0.2` RC4 reusable paywall
+  colours/backgrounds/shadows, gradients and decorative media backgrounds, uniform two-axis
+  Fit/Fill/Fixed sizing, Screen/Sheet presentation, Studio flow frames and navigation connections,
+  plus matching Flutter, SwiftUI, and Compose behavior described in
+  `docs/plans/phase-2.5c-protocol-rc4-visual-system-and-presentation.md`.
 
 Gate 2.5A does not authorize protocol or SDK expansion. Gate 2.5B is the separate explicit owner
-authorization for Protocol `0.2` and its complete cross-platform vertical slice. Phase 2.5 is not
-accepted, and Phase 3 must not begin, until both gates pass.
+authorization for Protocol `0.2` RC3 and its complete cross-platform vertical slice. Gate 2.5C
+supersedes RC3 with the owner-approved RC4 visual-system and presentation contract. Phase 2.5 is
+not accepted, and Phase 3 must not begin, until all three gates pass.
 
 ### Objectives
 
 Transform the functional Phase 2 prototype into a production-quality editor that developers and designers genuinely enjoy using.
 
-The goal of Gate 2.5A is **not** to add more product functionality. Gate 2.5B then adds only the
-bounded Protocol `0.2` capabilities required to make those contextual editing workflows useful for
-production paywalls.
+The goal of Gate 2.5A is **not** to add more product functionality. Gates 2.5B and 2.5C add only
+the owner-approved bounded Protocol `0.2` capabilities required to make those contextual editing
+workflows useful for production paywalls.
 
 The goal is to dramatically improve:
 
@@ -935,8 +942,12 @@ solely for this phase unless:
 5. conformance tests exist
 6. the product owner explicitly approves the expansion
 
-Gate 2.5A is not a protocol-expansion gate. Gate 2.5B is the sole approved Protocol `0.2`
-expansion; components and properties outside its frozen contract remain excluded.
+Gate 2.5A is not a protocol-expansion gate. Gates 2.5B and 2.5C are the approved Protocol `0.2`
+expansions. Gate 2.5B authorizes bounded screens/navigation, Icon, unified Button, authored Product
+Card/Product Badge structure, and safe name/price product templates. Gate 2.5C supersedes the
+unapproved RC3 candidate with RC4 and authorizes only the visual-system, media-background,
+two-axis-sizing, Screen/Sheet, and flow-canvas capabilities in its contract; capabilities outside
+those contracts remain excluded.
 
 ---
 
@@ -972,8 +983,9 @@ fixed action discriminators, and fixed protocol policies belong in Advanced. Str
 editing remains in Layers.
 
 For Gate 2.5A, the examples below remain vocabulary only and are not Protocol `0.1` acceptance
-criteria. Gate 2.5B approves the bounded subset defined in the Protocol `0.2` expansion contract;
-that contract, rather than these examples, is authoritative for exact fields and semantics.
+criteria. Gates 2.5B and 2.5C approve the bounded subsets defined in their Protocol `0.2`
+contracts; those contracts, rather than these examples, are authoritative for exact fields and
+semantics.
 
 #### Text example
 
@@ -1308,8 +1320,18 @@ Phase 2.5 is complete only when:
 - Workspace preferences are excluded from exported paywall JSON.
 - Canvas selection and layer selection remain synchronized.
 - Nested layers can be expanded, collapsed, and reordered.
+- Every Screen and Sheet remains visible as its own authoring frame on the canvas.
+- Navigate To Buttons produce labelled, selectable connections between authoring frames.
+- Adding a destination offers Screen or Sheet and links it from the focused source frame.
+- Screen/Sheet conversion preserves destination identity, content, links, and workspace position.
 - Supported components can be inserted visually.
 - Property editing is contextual to the selected component.
+- Eligible boxes expose Width and Height as Fit, Fill, or Fixed with defined unbounded Fill fallback.
+- Eligible backgrounds support colour, linear/radial gradient, image, and decorative muted video
+  with explicit safe fallback.
+- Eligible box appearances support one native shadow directly or through a reusable style.
+- Studio provides a paywall Design System panel for reusable colours, backgrounds, and shadows,
+  and linked colours appear in relevant colour controls.
 - Supported text can be edited inline.
 - Validation identifies and navigates to the affected property.
 - Validation does not block unrelated editing.
@@ -1444,7 +1466,7 @@ The review must include:
 - one-minute demo result
 - founder-review answers
 
-The report must evaluate the two gates separately before issuing one final Phase 2.5
+The report must evaluate the three gates separately before issuing one final Phase 2.5
 classification.
 
 #### Gate 2.5A evidence
@@ -1462,16 +1484,35 @@ classification.
 - Local Preview `0.2` schemas, messages, local-project and session-flow fixtures, exact WebSocket
   subprotocol, and capability negotiation, while Local Preview `0.1` remains unchanged and
   supported;
+- one through ten reachable screens, acyclic forward navigation, safe back navigation, unified
+  passive-content Button, semantic RTL-aware Icon, and the closed Purchase, Restore, Close,
+  Navigate To, Navigate Back, and HTTPS External URL action set;
 - generalized vertical/horizontal Stack, Carousel, Switch, Countdown, approved styling, and
   Product Card complete Default plus deterministic Selected overrides in Studio and all three
   native renderers, including per-field and full Selected reset;
-- exact runtime-versus-document state boundaries for selection, Carousel page, Switch value,
-  Countdown time, and Studio preview controls;
+- exact runtime-versus-document state boundaries for screen history, selection, Carousel page,
+  Switch value, Countdown time, and Studio preview controls;
 - long localization, RTL, accessibility scaling, contrast, truncation, unavailable product,
   expired Countdown, hidden-content, unsupported-client, fallback, and migration conformance;
 - atomic rejection and last-accepted or bundled fallback when a client cannot render Protocol
   `0.2` completely;
 - the complete task workflow and demo defined in the Gate 2.5B implementation contract.
+
+#### Gate 2.5C evidence
+
+- Protocol `0.2` RC4 schema, manifest, semantic validation, exact capability derivation, fixtures,
+  browser declarations, Local Preview `0.2`, RC3 recovery, documentation, and changelog;
+- document-level reusable colour, background, and shadow catalogs with reference/cycle validation;
+- literal, semantic, and reusable colours; colour, linear/radial gradient, image, video, and reusable
+  backgrounds; one inline or reusable shadow; and safe missing-media fallback;
+- consistent Width and Height Fit/Fill/Fixed semantics, fixed-overflow accessibility behavior, and
+  unbounded Fill diagnostics in Studio, Flutter, SwiftUI, and Compose;
+- one authoring frame per Screen/Sheet, workspace-only frame organization, visible Navigate To
+  connections, focused-source creation, and content-preserving Screen/Sheet conversion;
+- native Sheet presentation and navigation-history behavior on Flutter, SwiftUI, and Compose;
+- retained Layers full-row reorder, right-click menu, rename, canvas selection, inline editing,
+  undo/autosave/export, and Protocol/Local Preview `0.1` immutability; and
+- the complete task workflow and demo defined in the Gate 2.5C implementation contract.
 
 Classify the phase as:
 
@@ -1479,7 +1520,7 @@ Classify the phase as:
 - Accepted with tracked follow-ups
 - Rejected pending fixes
 
-Do not begin Phase 3 until both Gate 2.5A and Gate 2.5B are accepted and the consolidated Phase 2.5
+Do not begin Phase 3 until Gates 2.5A, 2.5B, and 2.5C are accepted and the consolidated Phase 2.5
 report is accepted.
 
 ## Phase 3: Hosted Publishing

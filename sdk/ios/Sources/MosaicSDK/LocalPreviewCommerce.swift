@@ -2,9 +2,8 @@ import Foundation
 
 /// Local-only provider driven by `mockCommerceStateChanged` messages.
 ///
-/// Product-reference IDs are resolved through the active Protocol 0.1
-/// document. No StoreKit product, receipt, transaction, or credential enters
-/// this boundary.
+/// Product-reference IDs are resolved through the active validated document.
+/// No StoreKit product, receipt, transaction, or credential enters this boundary.
 public actor MosaicPreviewPurchaseProvider: MosaicPurchaseProvider {
   private struct Binding: Sendable {
     let productReferenceId: String

@@ -20,7 +20,7 @@ File _findCanonicalFixture(Directory start) {
   var directory = start.absolute;
   while (true) {
     final candidate = File(
-      '${directory.path}/protocol/fixtures/v0.1/complete-paywall.json',
+      '${directory.path}/protocol/fixtures/v0.2/complete-paywall.json',
     );
     if (candidate.existsSync()) {
       return candidate;
@@ -28,7 +28,7 @@ File _findCanonicalFixture(Directory start) {
     final parent = directory.parent;
     if (parent.path == directory.path) {
       stderr.writeln(
-        'Cannot locate protocol/fixtures/v0.1/complete-paywall.json from '
+        'Cannot locate protocol/fixtures/v0.2/complete-paywall.json from '
         '${start.path}. Run this example inside the Mosaic checkout.',
       );
       exitCode = 1;

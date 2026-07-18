@@ -1,0 +1,1996 @@
+{
+  "schemaVersion": "0.2",
+  "id": "invalid-product-card-default",
+  "revision": 1,
+  "compatibility": {
+    "requiredCapabilities": [
+      {
+        "name": "layout.scrollContainer",
+        "version": "0.2"
+      },
+      {
+        "name": "layout.stack",
+        "version": "0.2"
+      },
+      {
+        "name": "layout.sizing",
+        "version": "0.2"
+      },
+      {
+        "name": "layout.heightSizing",
+        "version": "0.2"
+      },
+      {
+        "name": "layout.outerInsets",
+        "version": "0.2"
+      },
+      {
+        "name": "navigation.screens",
+        "version": "0.2"
+      },
+      {
+        "name": "navigation.sheets",
+        "version": "0.2"
+      },
+      {
+        "name": "component.text",
+        "version": "0.2"
+      },
+      {
+        "name": "component.image",
+        "version": "0.2"
+      },
+      {
+        "name": "component.icon",
+        "version": "0.2"
+      },
+      {
+        "name": "component.featureList",
+        "version": "0.2"
+      },
+      {
+        "name": "component.productSelector",
+        "version": "0.2"
+      },
+      {
+        "name": "component.productCard",
+        "version": "0.2"
+      },
+      {
+        "name": "component.productBadge",
+        "version": "0.2"
+      },
+      {
+        "name": "component.button",
+        "version": "0.2"
+      },
+      {
+        "name": "component.carousel",
+        "version": "0.2"
+      },
+      {
+        "name": "component.switch",
+        "version": "0.2"
+      },
+      {
+        "name": "component.countdown",
+        "version": "0.2"
+      },
+      {
+        "name": "localization.catalogs",
+        "version": "0.2"
+      },
+      {
+        "name": "localization.rtl",
+        "version": "0.2"
+      },
+      {
+        "name": "localization.productTemplate",
+        "version": "0.2"
+      },
+      {
+        "name": "product.references",
+        "version": "0.2"
+      },
+      {
+        "name": "asset.bundledImage",
+        "version": "0.2"
+      },
+      {
+        "name": "asset.remoteImage",
+        "version": "0.2"
+      },
+      {
+        "name": "asset.bundledVideo",
+        "version": "0.2"
+      },
+      {
+        "name": "asset.remoteVideo",
+        "version": "0.2"
+      },
+      {
+        "name": "action.purchase",
+        "version": "0.2"
+      },
+      {
+        "name": "action.restore",
+        "version": "0.2"
+      },
+      {
+        "name": "action.close",
+        "version": "0.2"
+      },
+      {
+        "name": "action.navigateTo",
+        "version": "0.2"
+      },
+      {
+        "name": "action.navigateBack",
+        "version": "0.2"
+      },
+      {
+        "name": "action.openExternalUrl",
+        "version": "0.2"
+      },
+      {
+        "name": "accessibility.metadata",
+        "version": "0.2"
+      },
+      {
+        "name": "fallback.asset",
+        "version": "0.2"
+      },
+      {
+        "name": "fallback.product",
+        "version": "0.2"
+      },
+      {
+        "name": "outcome.normalized",
+        "version": "0.2"
+      },
+      {
+        "name": "style.colors",
+        "version": "0.2"
+      },
+      {
+        "name": "style.designTokens",
+        "version": "0.2"
+      },
+      {
+        "name": "style.gradientBackground",
+        "version": "0.2"
+      },
+      {
+        "name": "style.mediaBackground",
+        "version": "0.2"
+      },
+      {
+        "name": "style.shadow",
+        "version": "0.2"
+      },
+      {
+        "name": "style.box",
+        "version": "0.2"
+      },
+      {
+        "name": "style.clipping",
+        "version": "0.2"
+      },
+      {
+        "name": "style.typography",
+        "version": "0.2"
+      },
+      {
+        "name": "style.productCardStates",
+        "version": "0.2"
+      },
+      {
+        "name": "visibility.static",
+        "version": "0.2"
+      },
+      {
+        "name": "condition.switchVisibility",
+        "version": "0.2"
+      }
+    ]
+  },
+  "localization": {
+    "defaultLocale": "en",
+    "fallbackLocale": "en",
+    "locales": {
+      "en": {
+        "direction": "ltr",
+        "strings": {
+          "paywall.close": "Close",
+          "paywall.hero.alt": "A mosaic of native mobile paywall screens",
+          "paywall.hero.placeholder": "Premium illustration unavailable",
+          "paywall.headline": "Unlock every Mosaic Pro feature",
+          "paywall.subtitle": "Build, preview, and improve native paywalls across every supported platform without giving up platform conventions.",
+          "paywall.features.label": "Included with Mosaic Pro",
+          "paywall.feature.unlimited_projects": "Create unlimited paywall projects",
+          "paywall.feature.native_rendering": "Render with native Flutter, SwiftUI, and Compose controls",
+          "paywall.feature.offline_ready": "Keep a bundled paywall ready when the network is unavailable",
+          "paywall.products.monthly": "Monthly",
+          "paywall.products.yearly": "Yearly",
+          "paywall.products.best_value": "Best value",
+          "paywall.products.label": "Choose a plan",
+          "paywall.products.hint": "Select one available subscription plan before continuing",
+          "paywall.products.unavailable": "Plans are temporarily unavailable.",
+          "paywall.purchase": "Continue",
+          "paywall.purchase.progress": "Processing purchase…",
+          "paywall.purchase.accessibility": "Continue with the selected plan",
+          "paywall.purchase.hint": "Starts the purchase for the selected subscription plan",
+          "paywall.restore": "Restore purchases",
+          "paywall.restore.progress": "Restoring purchases…",
+          "paywall.restore.accessibility": "Restore previous purchases",
+          "paywall.restore.hint": "Checks the purchase provider for restorable access",
+          "paywall.legal": "Payment is charged to your store account. Subscriptions renew automatically unless cancelled before the end of the current period. Terms and privacy policy apply.",
+          "mosaic.migration.product_card_1.name": "{{ product.name }}",
+          "mosaic.migration.product_card_2.price": "{{ product.price }}",
+          "mosaic.migration.product_card_3.name": "{{ product.name }}",
+          "mosaic.migration.product_card_4.price": "{{ product.price }}",
+          "paywall.screen.offer": "Subscription offer",
+          "paywall.assets.offer_texture_fallback": "Offer background unavailable",
+          "paywall.screen.details": "Purchase details",
+          "paywall.navigation.details": "Review purchase details",
+          "paywall.navigation.details.hint": "Opens the purchase details screen",
+          "paywall.navigation.back": "Back to offer",
+          "paywall.details.title": "Purchase and policy details",
+          "paywall.details.privacy": "Open privacy policy",
+          "paywall.details.privacy.hint": "Opens the privacy policy in the system browser",
+          "paywall.offer.switch": "Show offer details",
+          "paywall.offer.switch.hint": "Shows or hides optional offer content",
+          "paywall.offer.technical_switch": "Show technical details",
+          "paywall.offer.page_one.label": "Native renderers",
+          "paywall.offer.page_one": "One paywall, three native renderers",
+          "paywall.offer.page_two.label": "Remote updates",
+          "paywall.offer.page_two": "Update without an app release",
+          "paywall.offer.carousel": "Offer highlights",
+          "paywall.offer.carousel.hint": "Swipe horizontally between offer highlights",
+          "paywall.offer.completed": "Offer ended",
+          "paywall.offer.countdown.accessibility": "Time remaining for this offer",
+          "paywall.products.lifetime": "Lifetime",
+          "paywall.products.lifetime_name_template": "{{ product.name }}",
+          "paywall.products.lifetime_price_template": "{{ product.price }}",
+          "paywall.products.lifetime_accessibility_template": "{{ product.name }}, {{ product.price }}",
+          "paywall.products.lifetime_badge": "Own it forever"
+        }
+      },
+      "de": {
+        "direction": "ltr",
+        "strings": {
+          "paywall.close": "Schließen",
+          "paywall.hero.alt": "Ein Mosaik aus nativen mobilen Bezahlschranken",
+          "paywall.hero.placeholder": "Premiumillustration ist nicht verfügbar",
+          "paywall.headline": "Schalte sämtliche professionellen Funktionen von Mosaic auf allen unterstützten Plattformen frei",
+          "paywall.subtitle": "Erstelle, überprüfe und verbessere vollständig native Bezahlschranken für Flutter, SwiftUI und Jetpack Compose, ohne dabei die vertrauten Konventionen, die Barrierefreiheit oder das Verhalten der jeweiligen Plattform aufzugeben.",
+          "paywall.features.label": "In Mosaic Pro enthalten",
+          "paywall.feature.unlimited_projects": "Erstelle unbegrenzt viele Bezahlschrankenprojekte",
+          "paywall.feature.native_rendering": "Nutze native Steuerelemente für Flutter, SwiftUI und Compose",
+          "paywall.feature.offline_ready": "Halte bei fehlender Netzwerkverbindung eine gebündelte Bezahlschranke bereit",
+          "paywall.products.monthly": "Monatlich",
+          "paywall.products.yearly": "Jährlich",
+          "paywall.products.best_value": "Bestes Angebot",
+          "paywall.products.label": "Wähle einen Tarif",
+          "paywall.products.hint": "Wähle vor dem Fortfahren einen verfügbaren Abonnementtarif aus",
+          "paywall.products.unavailable": "Tarife sind vorübergehend nicht verfügbar.",
+          "paywall.purchase": "Weiter",
+          "paywall.purchase.progress": "Kauf wird verarbeitet…",
+          "paywall.purchase.accessibility": "Mit dem ausgewählten Tarif fortfahren",
+          "paywall.purchase.hint": "Startet den Kauf des ausgewählten Abonnementtarifs",
+          "paywall.restore": "Käufe wiederherstellen",
+          "paywall.restore.progress": "Käufe werden wiederhergestellt…",
+          "paywall.restore.accessibility": "Frühere Käufe wiederherstellen",
+          "paywall.restore.hint": "Prüft beim Kaufanbieter, ob Zugriff wiederhergestellt werden kann",
+          "paywall.legal": "Die Zahlung wird deinem Store-Konto belastet. Abonnements verlängern sich automatisch, sofern sie nicht vor Ablauf des aktuellen Zeitraums gekündigt werden. Es gelten die Nutzungsbedingungen und die Datenschutzrichtlinie.",
+          "mosaic.migration.product_card_1.name": "{{ product.name }}",
+          "mosaic.migration.product_card_2.price": "{{ product.price }}",
+          "mosaic.migration.product_card_3.name": "{{ product.name }}",
+          "mosaic.migration.product_card_4.price": "{{ product.price }}",
+          "paywall.offer.switch": "Angebotsdetails anzeigen",
+          "paywall.offer.technical_switch": "Technische Details anzeigen",
+          "paywall.offer.page_one.label": "Native Renderer",
+          "paywall.offer.page_one": "Eine Paywall, drei native Renderer",
+          "paywall.offer.page_two.label": "Remote-Aktualisierungen",
+          "paywall.offer.page_two": "Aktualisieren ohne neue App-Version",
+          "paywall.offer.carousel": "Angebotshighlights",
+          "paywall.offer.completed": "Angebot beendet",
+          "paywall.products.lifetime": "Lebenslang",
+          "paywall.products.lifetime_name_template": "{{ product.name }}",
+          "paywall.products.lifetime_price_template": "{{ product.price }}",
+          "paywall.products.lifetime_accessibility_template": "{{ product.name }}, {{ product.price }}",
+          "paywall.products.lifetime_badge": "Für immer behalten"
+        }
+      },
+      "ar": {
+        "direction": "rtl",
+        "strings": {
+          "paywall.close": "إغلاق",
+          "paywall.hero.alt": "فسيفساء من شاشات الدفع الأصلية على الهاتف",
+          "paywall.hero.placeholder": "الرسم التوضيحي المميز غير متاح",
+          "paywall.headline": "افتح جميع مزايا Mosaic Pro",
+          "paywall.subtitle": "أنشئ شاشات دفع أصلية وعاينها وحسّنها على كل منصة مدعومة من دون التخلي عن أساليب المنصة المألوفة.",
+          "paywall.features.label": "متضمن مع Mosaic Pro",
+          "paywall.feature.unlimited_projects": "أنشئ عددًا غير محدود من مشاريع شاشات الدفع",
+          "paywall.feature.native_rendering": "اعرض باستخدام عناصر Flutter وSwiftUI وCompose الأصلية",
+          "paywall.feature.offline_ready": "احتفظ بشاشة دفع مضمنة عند عدم توفر الشبكة",
+          "paywall.products.monthly": "شهري",
+          "paywall.products.yearly": "سنوي",
+          "paywall.products.best_value": "أفضل قيمة",
+          "paywall.products.label": "اختر خطة",
+          "paywall.products.hint": "اختر خطة اشتراك متاحة قبل المتابعة",
+          "paywall.products.unavailable": "الخطط غير متاحة مؤقتًا.",
+          "paywall.purchase": "متابعة",
+          "paywall.purchase.progress": "تجري معالجة الشراء…",
+          "paywall.purchase.accessibility": "المتابعة باستخدام الخطة المحددة",
+          "paywall.purchase.hint": "يبدأ شراء خطة الاشتراك المحددة",
+          "paywall.restore": "استعادة المشتريات",
+          "paywall.restore.progress": "تجري استعادة المشتريات…",
+          "paywall.restore.accessibility": "استعادة المشتريات السابقة",
+          "paywall.restore.hint": "يتحقق من موفر الشراء بحثًا عن وصول قابل للاستعادة",
+          "paywall.legal": "يتم تحصيل المبلغ من حساب المتجر. تتجدد الاشتراكات تلقائيًا ما لم تُلغَ قبل نهاية الفترة الحالية. تطبق الشروط وسياسة الخصوصية.",
+          "mosaic.migration.product_card_1.name": "{{ product.name }}",
+          "mosaic.migration.product_card_2.price": "{{ product.price }}",
+          "mosaic.migration.product_card_3.name": "{{ product.name }}",
+          "mosaic.migration.product_card_4.price": "{{ product.price }}",
+          "paywall.offer.switch": "إظهار تفاصيل العرض",
+          "paywall.offer.technical_switch": "إظهار التفاصيل التقنية",
+          "paywall.offer.page_one.label": "العارضات الأصلية",
+          "paywall.offer.page_one": "جدار دفع واحد وثلاثة عارضات أصلية",
+          "paywall.offer.page_two.label": "التحديثات عن بُعد",
+          "paywall.offer.page_two": "حدّث من دون إصدار جديد للتطبيق",
+          "paywall.offer.carousel": "أبرز مزايا العرض",
+          "paywall.offer.completed": "انتهى العرض",
+          "paywall.products.lifetime": "مدى الحياة",
+          "paywall.products.lifetime_name_template": "{{ product.name }}",
+          "paywall.products.lifetime_price_template": "{{ product.price }}",
+          "paywall.products.lifetime_accessibility_template": "{{ product.name }}, {{ product.price }}",
+          "paywall.products.lifetime_badge": "امتلكها إلى الأبد"
+        }
+      }
+    }
+  },
+  "assets": [
+    {
+      "type": "image",
+      "id": "hero-image",
+      "source": {
+        "type": "bundled",
+        "key": "mosaic.paywall.hero"
+      },
+      "fallback": {
+        "type": "placeholder",
+        "value": {
+          "default": "Premium illustration unavailable",
+          "localizationKey": "paywall.hero.placeholder"
+        }
+      }
+    },
+    {
+      "type": "image",
+      "id": "remote-texture",
+      "source": {
+        "type": "remote",
+        "url": "https://assets.example.com/mosaic/offer-texture.webp"
+      },
+      "fallback": {
+        "type": "placeholder",
+        "value": {
+          "default": "Offer background unavailable",
+          "localizationKey": "paywall.assets.offer_texture_fallback"
+        }
+      }
+    },
+    {
+      "type": "video",
+      "id": "bundled-ambient-video",
+      "source": {
+        "type": "bundled",
+        "key": "mosaic.offer.ambient-video"
+      }
+    },
+    {
+      "type": "video",
+      "id": "remote-sheet-video",
+      "source": {
+        "type": "remote",
+        "url": "https://assets.example.com/mosaic/details-background.mp4"
+      }
+    }
+  ],
+  "products": [
+    {
+      "id": "monthly-plan",
+      "productId": "mosaic_pro_monthly",
+      "label": {
+        "default": "Monthly",
+        "localizationKey": "paywall.products.monthly"
+      }
+    },
+    {
+      "id": "yearly-plan",
+      "productId": "mosaic_pro_yearly",
+      "label": {
+        "default": "Yearly",
+        "localizationKey": "paywall.products.yearly"
+      }
+    },
+    {
+      "id": "lifetime-plan",
+      "productId": "mosaic_pro_lifetime",
+      "label": {
+        "default": "Lifetime",
+        "localizationKey": "paywall.products.lifetime"
+      }
+    }
+  ],
+  "initialScreenId": "offer",
+  "screens": [
+    {
+      "id": "offer",
+      "layout": {
+        "type": "scrollContainer",
+        "id": "paywall-scroll",
+        "axis": "vertical",
+        "safeArea": "respect",
+        "showsIndicators": true,
+        "content": {
+          "type": "stack",
+          "id": "paywall-content",
+          "padding": {
+            "top": 16,
+            "start": 24,
+            "bottom": 24,
+            "end": 24
+          },
+          "children": [
+            {
+              "type": "stack",
+              "id": "close-actions",
+              "padding": {
+                "top": 0,
+                "start": 0,
+                "bottom": 0,
+                "end": 0
+              },
+              "children": [
+                {
+                  "type": "button",
+                  "id": "close",
+                  "action": {
+                    "type": "close"
+                  },
+                  "accessibility": {
+                    "label": {
+                      "default": "Close",
+                      "localizationKey": "paywall.close"
+                    }
+                  },
+                  "direction": "horizontal",
+                  "gap": 0,
+                  "mainAxisDistribution": "center",
+                  "crossAxisAlignment": "center",
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "close-label",
+                      "value": {
+                        "default": "Close",
+                        "localizationKey": "paywall.close"
+                      },
+                      "typography": {
+                        "style": "label",
+                        "fontSize": 16,
+                        "lineHeightMultiplier": 1.25,
+                        "weight": "semibold",
+                        "color": "text.primary",
+                        "alignment": "center"
+                      },
+                      "accessibility": {
+                        "role": "text"
+                      }
+                    }
+                  ],
+                  "sizing": {
+                    "width": "fit",
+                    "height": "fit"
+                  }
+                }
+              ],
+              "direction": "horizontal",
+              "gap": 0,
+              "mainAxisDistribution": "end",
+              "crossAxisAlignment": "center",
+              "outerInsets": {
+                "top": 0,
+                "start": 0,
+                "bottom": 4,
+                "end": 0
+              }
+            },
+            {
+              "type": "image",
+              "id": "hero",
+              "assetId": "hero-image",
+              "aspectRatio": 1.7777777777777777,
+              "contentMode": "fill",
+              "accessibility": {
+                "hidden": false,
+                "label": {
+                  "default": "A mosaic of native mobile paywall screens",
+                  "localizationKey": "paywall.hero.alt"
+                }
+              },
+              "sizing": {
+                "width": "fill",
+                "height": {
+                  "mode": "fixed",
+                  "value": 180
+                }
+              },
+              "appearance": {
+                "cornerRadius": 18,
+                "opacity": 0.98,
+                "shadow": {
+                  "type": "shadow",
+                  "color": "#00000033",
+                  "offsetX": 0,
+                  "offsetY": 4,
+                  "blurRadius": 12
+                }
+              },
+              "outerInsets": {
+                "top": 0,
+                "start": 4,
+                "bottom": 0,
+                "end": 4
+              }
+            },
+            {
+              "type": "text",
+              "id": "headline",
+              "value": {
+                "default": "Unlock every Mosaic Pro feature",
+                "localizationKey": "paywall.headline"
+              },
+              "accessibility": {
+                "role": "heading",
+                "level": 1
+              },
+              "typography": {
+                "style": "title",
+                "fontSize": 32,
+                "lineHeightMultiplier": 1.1875,
+                "weight": "bold",
+                "color": "#17324DFF",
+                "alignment": "center"
+              },
+              "appearance": {
+                "background": {
+                  "type": "color",
+                  "value": "transparent"
+                },
+                "padding": {
+                  "top": 4,
+                  "start": 8,
+                  "bottom": 4,
+                  "end": 8
+                }
+              },
+              "sizing": {
+                "width": "fill",
+                "height": "fit"
+              }
+            },
+            {
+              "type": "text",
+              "id": "subtitle",
+              "value": {
+                "default": "Build, preview, and improve native paywalls across every supported platform without giving up platform conventions.",
+                "localizationKey": "paywall.subtitle"
+              },
+              "accessibility": {
+                "role": "text",
+                "label": {
+                  "default": "Build, preview, and improve native paywalls across every supported platform without giving up platform conventions.",
+                  "localizationKey": "paywall.subtitle"
+                }
+              },
+              "typography": {
+                "style": "body",
+                "fontSize": 16,
+                "lineHeightMultiplier": 1.5,
+                "weight": "regular",
+                "color": "text.primary",
+                "alignment": "center",
+                "maxLines": 3,
+                "overflow": "ellipsis"
+              },
+              "outerInsets": {
+                "top": 0,
+                "start": 8,
+                "bottom": 0,
+                "end": 8
+              }
+            },
+            {
+              "type": "switch",
+              "id": "show-offer-details",
+              "label": {
+                "default": "Show offer details",
+                "localizationKey": "paywall.offer.switch"
+              },
+              "initialValue": true,
+              "typography": {
+                "style": "label",
+                "fontSize": 16,
+                "lineHeightMultiplier": 1.5,
+                "weight": "semibold",
+                "color": "text.primary",
+                "alignment": "start"
+              },
+              "offTrackColor": "border.default",
+              "onTrackColor": "action.primary",
+              "thumbColor": "action.onPrimary",
+              "appearance": {
+                "background": {
+                  "type": "color",
+                  "value": "surface.elevated"
+                },
+                "cornerRadius": 10,
+                "opacity": 1,
+                "padding": {
+                  "top": 12,
+                  "start": 12,
+                  "bottom": 12,
+                  "end": 12
+                }
+              },
+              "outerInsets": {
+                "top": 4,
+                "start": 0,
+                "bottom": 0,
+                "end": 0
+              },
+              "accessibility": {
+                "label": {
+                  "default": "Show offer details",
+                  "localizationKey": "paywall.offer.switch"
+                },
+                "hint": {
+                  "default": "Shows or hides optional offer content",
+                  "localizationKey": "paywall.offer.switch.hint"
+                }
+              }
+            },
+            {
+              "type": "switch",
+              "id": "show-technical-details",
+              "label": {
+                "default": "Show technical details",
+                "localizationKey": "paywall.offer.technical_switch"
+              },
+              "initialValue": false,
+              "typography": {
+                "style": "label",
+                "fontSize": 16,
+                "lineHeightMultiplier": 1.5,
+                "weight": "medium",
+                "color": "text.primary",
+                "alignment": "start"
+              },
+              "offTrackColor": "border.default",
+              "onTrackColor": "#17324DFF",
+              "thumbColor": "action.onPrimary",
+              "visibility": {
+                "mode": "switch",
+                "switchId": "show-offer-details",
+                "equals": true
+              },
+              "accessibility": {
+                "label": {
+                  "default": "Show technical details",
+                  "localizationKey": "paywall.offer.technical_switch"
+                }
+              }
+            },
+            {
+              "type": "carousel",
+              "id": "offer-highlights",
+              "initialPageIndex": 1,
+              "showsIndicators": true,
+              "pages": [
+                {
+                  "id": "native-renderers-page",
+                  "accessibilityLabel": {
+                    "default": "Native renderers",
+                    "localizationKey": "paywall.offer.page_one.label"
+                  },
+                  "content": {
+                    "type": "stack",
+                    "id": "offer-page-one-content",
+                    "direction": "vertical",
+                    "gap": 8,
+                    "padding": {
+                      "top": 16,
+                      "start": 16,
+                      "bottom": 16,
+                      "end": 16
+                    },
+                    "mainAxisDistribution": "start",
+                    "crossAxisAlignment": "stretch",
+                    "children": [
+                      {
+                        "type": "text",
+                        "id": "offer-page-one-title",
+                        "value": {
+                          "default": "One paywall, three native renderers",
+                          "localizationKey": "paywall.offer.page_one"
+                        },
+                        "typography": {
+                          "style": "heading",
+                          "fontSize": 22,
+                          "lineHeightMultiplier": 1.2727272727272727,
+                          "weight": "bold",
+                          "color": "text.primary",
+                          "alignment": "start"
+                        },
+                        "accessibility": {
+                          "role": "heading",
+                          "level": 2
+                        }
+                      }
+                    ]
+                  }
+                },
+                {
+                  "id": "remote-update-page",
+                  "accessibilityLabel": {
+                    "default": "Remote updates",
+                    "localizationKey": "paywall.offer.page_two.label"
+                  },
+                  "content": {
+                    "type": "stack",
+                    "id": "offer-page-two-content",
+                    "direction": "horizontal",
+                    "gap": 12,
+                    "padding": {
+                      "top": 24,
+                      "start": 16,
+                      "bottom": 24,
+                      "end": 16
+                    },
+                    "mainAxisDistribution": "center",
+                    "crossAxisAlignment": "center",
+                    "children": [
+                      {
+                        "type": "text",
+                        "id": "offer-page-two-title",
+                        "value": {
+                          "default": "Update without an app release",
+                          "localizationKey": "paywall.offer.page_two"
+                        },
+                        "typography": {
+                          "style": "heading",
+                          "fontSize": 22,
+                          "lineHeightMultiplier": 1.2727272727272727,
+                          "weight": "bold",
+                          "color": "action.onPrimary",
+                          "alignment": "center"
+                        },
+                        "accessibility": {
+                          "role": "heading",
+                          "level": 2
+                        }
+                      }
+                    ]
+                  }
+                }
+              ],
+              "appearance": {
+                "background": {
+                  "type": "color",
+                  "value": "#17324DFF"
+                },
+                "border": {
+                  "color": "#8AB4F8FF",
+                  "width": 1
+                },
+                "cornerRadius": 16,
+                "opacity": 0.96,
+                "clipContent": true
+              },
+              "sizing": {
+                "width": "fill",
+                "height": "fit"
+              },
+              "outerInsets": {
+                "top": 4,
+                "start": 0,
+                "bottom": 4,
+                "end": 0
+              },
+              "visibility": {
+                "mode": "switch",
+                "switchId": "show-offer-details",
+                "equals": true
+              },
+              "accessibility": {
+                "label": {
+                  "default": "Offer highlights",
+                  "localizationKey": "paywall.offer.carousel"
+                },
+                "hint": {
+                  "default": "Swipe horizontally between offer highlights",
+                  "localizationKey": "paywall.offer.carousel.hint"
+                }
+              }
+            },
+            {
+              "type": "countdown",
+              "id": "offer-countdown",
+              "endsAt": "2030-12-31T23:59:59Z",
+              "largestUnit": "day",
+              "smallestUnit": "second",
+              "completedText": {
+                "default": "Offer ended",
+                "localizationKey": "paywall.offer.completed"
+              },
+              "typography": {
+                "style": "display",
+                "fontSize": 28,
+                "lineHeightMultiplier": 1.2142857142857142,
+                "weight": "bold",
+                "color": "action.primary",
+                "alignment": "center"
+              },
+              "appearance": {
+                "background": {
+                  "type": "color",
+                  "value": "surface.default"
+                },
+                "border": {
+                  "color": "border.default",
+                  "width": 1
+                },
+                "cornerRadius": 12,
+                "opacity": 1,
+                "padding": {
+                  "top": 12,
+                  "start": 12,
+                  "bottom": 12,
+                  "end": 12
+                }
+              },
+              "sizing": {
+                "width": "fill",
+                "height": "fit"
+              },
+              "outerInsets": {
+                "top": 4,
+                "start": 0,
+                "bottom": 4,
+                "end": 0
+              },
+              "visibility": {
+                "mode": "switch",
+                "switchId": "show-offer-details",
+                "equals": false
+              },
+              "accessibility": {
+                "role": "text",
+                "label": {
+                  "default": "Time remaining for this offer",
+                  "localizationKey": "paywall.offer.countdown.accessibility"
+                }
+              }
+            },
+            {
+              "type": "stack",
+              "id": "future-content",
+              "direction": "vertical",
+              "gap": 0,
+              "padding": {
+                "top": 0,
+                "start": 0,
+                "bottom": 0,
+                "end": 0
+              },
+              "mainAxisDistribution": "start",
+              "crossAxisAlignment": "stretch",
+              "children": [],
+              "sizing": {
+                "width": "fill",
+                "height": {
+                  "mode": "fixed",
+                  "value": 48
+                }
+              },
+              "visibility": {
+                "mode": "hidden"
+              }
+            },
+            {
+              "type": "featureList",
+              "id": "features",
+              "marker": "checkmark",
+              "items": [
+                {
+                  "id": "unlimited-projects",
+                  "text": {
+                    "default": "Create unlimited paywall projects",
+                    "localizationKey": "paywall.feature.unlimited_projects"
+                  }
+                },
+                {
+                  "id": "native-rendering",
+                  "text": {
+                    "default": "Render with native Flutter, SwiftUI, and Compose controls",
+                    "localizationKey": "paywall.feature.native_rendering"
+                  }
+                },
+                {
+                  "id": "offline-ready",
+                  "text": {
+                    "default": "Keep a bundled paywall ready when the network is unavailable",
+                    "localizationKey": "paywall.feature.offline_ready"
+                  }
+                }
+              ],
+              "accessibility": {
+                "label": {
+                  "default": "Included with Mosaic Pro",
+                  "localizationKey": "paywall.features.label"
+                }
+              },
+              "gap": 12,
+              "markerColor": "action.primary",
+              "typography": {
+                "style": "body",
+                "fontSize": 16,
+                "lineHeightMultiplier": 1.5,
+                "weight": "regular",
+                "color": "text.primary",
+                "alignment": "start"
+              },
+              "appearance": {
+                "background": {
+                  "type": "backgroundToken",
+                  "id": "highlight-glow"
+                },
+                "border": {
+                  "color": "border.default",
+                  "width": 1
+                },
+                "cornerRadius": 12,
+                "opacity": 1,
+                "padding": {
+                  "top": 12,
+                  "start": 12,
+                  "bottom": 12,
+                  "end": 12
+                }
+              },
+              "sizing": {
+                "width": "fill",
+                "height": "fit"
+              }
+            },
+            {
+              "type": "productSelector",
+              "id": "plans",
+              "unavailableFallback": {
+                "selection": "firstAvailable",
+                "whenNoneAvailable": "showMessageAndDisablePurchase",
+                "message": {
+                  "default": "Plans are temporarily unavailable.",
+                  "localizationKey": "paywall.products.unavailable"
+                }
+              },
+              "accessibility": {
+                "label": {
+                  "default": "Choose a plan",
+                  "localizationKey": "paywall.products.label"
+                },
+                "hint": {
+                  "default": "Select one available subscription plan before continuing",
+                  "localizationKey": "paywall.products.hint"
+                }
+              },
+              "direction": "horizontal",
+              "gap": 12,
+              "crossAxisAlignment": "stretch",
+              "cards": [
+                {
+                  "type": "productCard",
+                  "id": "plans-monthly-plan-card",
+                  "productReferenceId": "monthly-plan",
+                  "direction": "horizontal",
+                  "gap": 10,
+                  "mainAxisDistribution": "spaceBetween",
+                  "crossAxisAlignment": "center",
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "plans-monthly-plan-card-name",
+                      "value": {
+                        "default": "{{ product.name }}",
+                        "localizationKey": "mosaic.migration.product_card_1.name"
+                      },
+                      "typography": {
+                        "style": "body",
+                        "fontSize": 16,
+                        "lineHeightMultiplier": 1.5,
+                        "weight": "regular",
+                        "color": "#17324DFF",
+                        "alignment": "start"
+                      },
+                      "accessibility": {
+                        "role": "text"
+                      }
+                    },
+                    {
+                      "type": "text",
+                      "id": "plans-monthly-plan-card-price",
+                      "value": {
+                        "default": "{{ product.price }}",
+                        "localizationKey": "mosaic.migration.product_card_2.price"
+                      },
+                      "typography": {
+                        "style": "body",
+                        "fontSize": 16,
+                        "lineHeightMultiplier": 1.5,
+                        "weight": "regular",
+                        "color": "text.secondary",
+                        "alignment": "start"
+                      },
+                      "accessibility": {
+                        "role": "text"
+                      }
+                    }
+                  ],
+                  "styles": {
+                    "default": {
+                      "background": {
+                        "type": "color",
+                        "value": "surface.elevated"
+                      },
+                      "border": {
+                        "color": "border.default",
+                        "width": 1
+                      },
+                      "cornerRadius": 8,
+                      "padding": {
+                        "top": 12,
+                        "start": 14,
+                        "bottom": 12,
+                        "end": 14
+                      }
+                    },
+                    "selected": {
+                      "border": {
+                        "color": "action.primary",
+                        "width": 2
+                      },
+                      "opacity": 1
+                    }
+                  }
+                },
+                {
+                  "type": "productCard",
+                  "id": "plans-yearly-plan-card",
+                  "productReferenceId": "yearly-plan",
+                  "direction": "vertical",
+                  "gap": 8,
+                  "mainAxisDistribution": "start",
+                  "crossAxisAlignment": "stretch",
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "plans-yearly-plan-card-name",
+                      "value": {
+                        "default": "{{ product.name }}",
+                        "localizationKey": "mosaic.migration.product_card_3.name"
+                      },
+                      "typography": {
+                        "style": "body",
+                        "fontSize": 16,
+                        "lineHeightMultiplier": 1.5,
+                        "weight": "regular",
+                        "color": "text.primary",
+                        "alignment": "start"
+                      },
+                      "accessibility": {
+                        "role": "text"
+                      }
+                    },
+                    {
+                      "type": "text",
+                      "id": "plans-yearly-plan-card-price",
+                      "value": {
+                        "default": "{{ product.price }}",
+                        "localizationKey": "mosaic.migration.product_card_4.price"
+                      },
+                      "typography": {
+                        "style": "body",
+                        "fontSize": 16,
+                        "lineHeightMultiplier": 1.5,
+                        "weight": "regular",
+                        "color": "text.primary",
+                        "alignment": "start"
+                      },
+                      "accessibility": {
+                        "role": "text"
+                      }
+                    },
+                    {
+                      "type": "productBadge",
+                      "id": "plans-yearly-plan-card-badge",
+                      "placement": {
+                        "mode": "nested"
+                      },
+                      "direction": "horizontal",
+                      "gap": 4,
+                      "mainAxisDistribution": "center",
+                      "crossAxisAlignment": "center",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "plans-yearly-plan-card-badge-label",
+                          "value": {
+                            "default": "Best value",
+                            "localizationKey": "paywall.products.best_value"
+                          },
+                          "typography": {
+                            "style": "label",
+                            "fontSize": 16,
+                            "lineHeightMultiplier": 1.25,
+                            "weight": "semibold",
+                            "color": "action.onPrimary",
+                            "alignment": "center"
+                          },
+                          "accessibility": {
+                            "role": "text"
+                          }
+                        }
+                      ],
+                      "styles": {
+                        "default": {
+                          "background": {
+                            "type": "color",
+                            "value": "surface.default"
+                          },
+                          "border": {
+                            "color": "border.default",
+                            "width": 1
+                          },
+                          "cornerRadius": 999,
+                          "padding": {
+                            "top": 4,
+                            "start": 8,
+                            "bottom": 4,
+                            "end": 8
+                          },
+                          "opacity": 1
+                        },
+                        "selected": {
+                          "background": {
+                            "type": "color",
+                            "value": "action.primary"
+                          },
+                          "border": {
+                            "color": "action.primary",
+                            "width": 1
+                          }
+                        }
+                      }
+                    }
+                  ],
+                  "styles": {
+                    "default": {
+                      "background": {
+                        "type": "color",
+                        "value": "surface.default"
+                      },
+                      "border": {
+                        "color": "border.default",
+                        "width": 1
+                      },
+                      "cornerRadius": 14,
+                      "padding": {
+                        "top": 16,
+                        "start": 16,
+                        "bottom": 16,
+                        "end": 16
+                      },
+                      "opacity": 1
+                    },
+                    "selected": {
+                      "background": {
+                        "type": "color",
+                        "value": "surface.elevated"
+                      },
+                      "border": {
+                        "color": "action.primary",
+                        "width": 2
+                      },
+                      "padding": {
+                        "start": 18,
+                        "end": 18
+                      }
+                    }
+                  }
+                },
+                {
+                  "type": "productCard",
+                  "id": "plans-lifetime-plan-card",
+                  "productReferenceId": "lifetime-plan",
+                  "direction": "vertical",
+                  "gap": 6,
+                  "mainAxisDistribution": "center",
+                  "crossAxisAlignment": "center",
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "plans-lifetime-plan-card-name",
+                      "value": {
+                        "default": "{{ product.name }}",
+                        "localizationKey": "paywall.products.lifetime_name_template"
+                      },
+                      "typography": {
+                        "style": "heading",
+                        "fontSize": 20,
+                        "lineHeightMultiplier": 1.3,
+                        "weight": "bold",
+                        "color": "action.primary",
+                        "alignment": "center"
+                      },
+                      "accessibility": {
+                        "role": "heading",
+                        "level": 3
+                      }
+                    },
+                    {
+                      "type": "text",
+                      "id": "plans-lifetime-plan-card-price",
+                      "value": {
+                        "default": "{{ product.price }}",
+                        "localizationKey": "paywall.products.lifetime_price_template"
+                      },
+                      "typography": {
+                        "style": "body",
+                        "fontSize": 16,
+                        "lineHeightMultiplier": 1.5,
+                        "weight": "medium",
+                        "color": "text.secondary",
+                        "alignment": "center"
+                      },
+                      "accessibility": {
+                        "role": "text"
+                      }
+                    },
+                    {
+                      "type": "productBadge",
+                      "id": "plans-lifetime-plan-card-badge",
+                      "placement": {
+                        "mode": "overlay",
+                        "anchor": "topEnd",
+                        "inset": 8
+                      },
+                      "direction": "horizontal",
+                      "gap": 4,
+                      "mainAxisDistribution": "center",
+                      "crossAxisAlignment": "center",
+                      "children": [
+                        {
+                          "type": "icon",
+                          "id": "plans-lifetime-plan-card-badge-icon",
+                          "name": "checkmark",
+                          "size": 14,
+                          "color": "text.primary",
+                          "accessibility": {
+                            "hidden": true
+                          }
+                        },
+                        {
+                          "type": "text",
+                          "id": "plans-lifetime-plan-card-badge-label",
+                          "value": {
+                            "default": "Own it forever",
+                            "localizationKey": "paywall.products.lifetime_badge"
+                          },
+                          "typography": {
+                            "style": "label",
+                            "fontSize": 13,
+                            "lineHeightMultiplier": 1.3846153846153846,
+                            "weight": "semibold",
+                            "color": "action.onPrimary",
+                            "alignment": "center"
+                          },
+                          "accessibility": {
+                            "role": "text"
+                          }
+                        }
+                      ],
+                      "styles": {
+                        "default": {
+                          "background": {
+                            "type": "color",
+                            "value": "#17324DFF"
+                          },
+                          "border": {
+                            "color": "#8AB4F8FF",
+                            "width": 1
+                          },
+                          "cornerRadius": 999,
+                          "padding": {
+                            "top": 4,
+                            "start": 8,
+                            "bottom": 4,
+                            "end": 8
+                          },
+                          "opacity": 0.92
+                        },
+                        "selected": {
+                          "opacity": 1
+                        }
+                      }
+                    }
+                  ],
+                  "styles": {
+                    "default": {
+                      "background": {
+                        "type": "color",
+                        "value": "#F2F7FFFF"
+                      },
+                      "border": {
+                        "color": "#8AB4F8FF",
+                        "width": 1
+                      },
+                      "cornerRadius": 20,
+                      "padding": {
+                        "top": 20,
+                        "start": 18,
+                        "bottom": 20,
+                        "end": 18
+                      },
+                      "opacity": 0.96
+                    },
+                    "selected": {
+                      "border": {
+                        "color": "#17324DFF",
+                        "width": 3
+                      },
+                      "cornerRadius": 24,
+                      "opacity": 1
+                    }
+                  },
+                  "accessibility": {
+                    "label": {
+                      "default": "{{ product.name }}, {{ product.price }}",
+                      "localizationKey": "paywall.products.lifetime_accessibility_template"
+                    }
+                  }
+                }
+              ],
+              "initialProductCardId": "plans-yearly-plan-card",
+              "appearance": {
+                "opacity": 1
+              },
+              "sizing": {
+                "width": "fill",
+                "height": "fit"
+              },
+              "outerInsets": {
+                "top": 4,
+                "start": 0,
+                "bottom": 4,
+                "end": 0
+              }
+            },
+            {
+              "type": "button",
+              "id": "view-details",
+              "direction": "horizontal",
+              "gap": 8,
+              "mainAxisDistribution": "center",
+              "crossAxisAlignment": "center",
+              "children": [
+                {
+                  "type": "text",
+                  "id": "view-details-label",
+                  "value": {
+                    "default": "Review purchase details",
+                    "localizationKey": "paywall.navigation.details"
+                  },
+                  "typography": {
+                    "style": "label",
+                    "fontSize": 16,
+                    "lineHeightMultiplier": 1.25,
+                    "weight": "semibold",
+                    "color": "text.primary",
+                    "alignment": "center"
+                  },
+                  "accessibility": {
+                    "role": "text"
+                  }
+                },
+                {
+                  "type": "icon",
+                  "id": "view-details-icon",
+                  "name": "chevronForward",
+                  "size": 20,
+                  "color": "action.primary",
+                  "accessibility": {
+                    "hidden": true
+                  }
+                }
+              ],
+              "action": {
+                "type": "navigateTo",
+                "screenId": "details"
+              },
+              "accessibility": {
+                "label": {
+                  "default": "Review purchase details",
+                  "localizationKey": "paywall.navigation.details"
+                },
+                "hint": {
+                  "default": "Opens the purchase details screen",
+                  "localizationKey": "paywall.navigation.details.hint"
+                }
+              },
+              "appearance": {
+                "background": {
+                  "type": "color",
+                  "value": "surface.elevated"
+                },
+                "border": {
+                  "color": "border.default",
+                  "width": 1
+                },
+                "cornerRadius": 10,
+                "padding": {
+                  "top": 12,
+                  "start": 16,
+                  "bottom": 12,
+                  "end": 16
+                }
+              },
+              "sizing": {
+                "width": "fill",
+                "height": "fit"
+              }
+            },
+            {
+              "type": "stack",
+              "id": "commerce-actions",
+              "padding": {
+                "top": 0,
+                "start": 0,
+                "bottom": 0,
+                "end": 0
+              },
+              "children": [
+                {
+                  "type": "button",
+                  "id": "purchase",
+                  "action": {
+                    "type": "purchase",
+                    "productSelectorId": "plans"
+                  },
+                  "accessibility": {
+                    "label": {
+                      "default": "Continue with the selected plan",
+                      "localizationKey": "paywall.purchase.accessibility"
+                    },
+                    "hint": {
+                      "default": "Starts the purchase for the selected subscription plan",
+                      "localizationKey": "paywall.purchase.hint"
+                    }
+                  },
+                  "direction": "horizontal",
+                  "gap": 0,
+                  "mainAxisDistribution": "center",
+                  "crossAxisAlignment": "center",
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "purchase-label",
+                      "value": {
+                        "default": "Continue",
+                        "localizationKey": "paywall.purchase"
+                      },
+                      "typography": {
+                        "style": "label",
+                        "fontSize": 16,
+                        "lineHeightMultiplier": 1.25,
+                        "weight": "semibold",
+                        "color": "action.onPrimary",
+                        "alignment": "center"
+                      },
+                      "accessibility": {
+                        "role": "text"
+                      }
+                    }
+                  ],
+                  "inProgressChildren": [
+                    {
+                      "type": "text",
+                      "id": "purchase-progress-label",
+                      "value": {
+                        "default": "Processing purchase…",
+                        "localizationKey": "paywall.purchase.progress"
+                      },
+                      "typography": {
+                        "style": "label",
+                        "fontSize": 16,
+                        "lineHeightMultiplier": 1.25,
+                        "weight": "semibold",
+                        "color": "action.onPrimary",
+                        "alignment": "center"
+                      },
+                      "accessibility": {
+                        "role": "text"
+                      }
+                    }
+                  ],
+                  "appearance": {
+                    "background": {
+                      "type": "color",
+                      "value": "action.primary"
+                    },
+                    "cornerRadius": 12,
+                    "opacity": 1,
+                    "padding": {
+                      "top": 14,
+                      "start": 20,
+                      "bottom": 14,
+                      "end": 20
+                    }
+                  },
+                  "sizing": {
+                    "width": "fill",
+                    "height": "fit"
+                  }
+                },
+                {
+                  "type": "button",
+                  "id": "restore",
+                  "action": {
+                    "type": "restore"
+                  },
+                  "accessibility": {
+                    "label": {
+                      "default": "Restore previous purchases",
+                      "localizationKey": "paywall.restore.accessibility"
+                    },
+                    "hint": {
+                      "default": "Checks the purchase provider for restorable access",
+                      "localizationKey": "paywall.restore.hint"
+                    }
+                  },
+                  "direction": "horizontal",
+                  "gap": 0,
+                  "mainAxisDistribution": "center",
+                  "crossAxisAlignment": "center",
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "restore-label",
+                      "value": {
+                        "default": "Restore purchases",
+                        "localizationKey": "paywall.restore"
+                      },
+                      "typography": {
+                        "style": "label",
+                        "fontSize": 16,
+                        "lineHeightMultiplier": 1.25,
+                        "weight": "semibold",
+                        "color": "text.primary",
+                        "alignment": "center"
+                      },
+                      "accessibility": {
+                        "role": "text"
+                      }
+                    }
+                  ],
+                  "inProgressChildren": [
+                    {
+                      "type": "text",
+                      "id": "restore-progress-label",
+                      "value": {
+                        "default": "Restoring purchases…",
+                        "localizationKey": "paywall.restore.progress"
+                      },
+                      "typography": {
+                        "style": "label",
+                        "fontSize": 16,
+                        "lineHeightMultiplier": 1.25,
+                        "weight": "semibold",
+                        "color": "text.primary",
+                        "alignment": "center"
+                      },
+                      "accessibility": {
+                        "role": "text"
+                      }
+                    }
+                  ],
+                  "appearance": {
+                    "background": {
+                      "type": "color",
+                      "value": "transparent"
+                    },
+                    "border": {
+                      "color": "border.default",
+                      "width": 1
+                    },
+                    "cornerRadius": 10,
+                    "opacity": 0.9,
+                    "padding": {
+                      "top": 12,
+                      "start": 16,
+                      "bottom": 12,
+                      "end": 16
+                    }
+                  },
+                  "sizing": {
+                    "width": "fill",
+                    "height": "fit"
+                  },
+                  "outerInsets": {
+                    "top": 2,
+                    "start": 0,
+                    "bottom": 0,
+                    "end": 0
+                  }
+                }
+              ],
+              "direction": "vertical",
+              "gap": 12,
+              "mainAxisDistribution": "start",
+              "crossAxisAlignment": "stretch"
+            },
+            {
+              "type": "text",
+              "id": "legal",
+              "value": {
+                "default": "Payment is charged to your store account. Subscriptions renew automatically unless cancelled before the end of the current period. Terms and privacy policy apply.",
+                "localizationKey": "paywall.legal"
+              },
+              "accessibility": {
+                "role": "text",
+                "label": {
+                  "default": "Payment is charged to your store account. Subscriptions renew automatically unless cancelled before the end of the current period. Terms and privacy policy apply.",
+                  "localizationKey": "paywall.legal"
+                }
+              },
+              "typography": {
+                "style": "caption",
+                "fontSize": 13,
+                "lineHeightMultiplier": 1.3846153846153846,
+                "weight": "regular",
+                "color": "text.secondary",
+                "alignment": "center"
+              },
+              "appearance": {
+                "background": {
+                  "type": "color",
+                  "value": "transparent"
+                },
+                "opacity": 0.85
+              },
+              "sizing": {
+                "width": "fill",
+                "height": "fit"
+              }
+            }
+          ],
+          "direction": "vertical",
+          "gap": 20,
+          "mainAxisDistribution": "start",
+          "crossAxisAlignment": "stretch",
+          "appearance": {
+            "background": {
+              "type": "backgroundToken",
+              "id": "offer-gradient"
+            },
+            "opacity": 1,
+            "clipContent": false,
+            "shadow": {
+              "type": "shadowToken",
+              "id": "elevated"
+            }
+          },
+          "sizing": {
+            "width": "fill",
+            "height": "fit"
+          }
+        },
+        "background": {
+          "type": "backgroundToken",
+          "id": "offer-gradient"
+        }
+      },
+      "presentation": {
+        "type": "screen"
+      },
+      "accessibilityLabel": {
+        "default": "Subscription offer",
+        "localizationKey": "paywall.screen.offer"
+      }
+    },
+    {
+      "id": "details",
+      "presentation": {
+        "type": "sheet"
+      },
+      "accessibilityLabel": {
+        "default": "Purchase details",
+        "localizationKey": "paywall.screen.details"
+      },
+      "layout": {
+        "type": "scrollContainer",
+        "id": "details-scroll",
+        "axis": "vertical",
+        "safeArea": "respect",
+        "showsIndicators": true,
+        "background": {
+          "type": "backgroundToken",
+          "id": "sheet-video"
+        },
+        "content": {
+          "type": "stack",
+          "id": "details-content",
+          "direction": "vertical",
+          "gap": 16,
+          "padding": {
+            "top": 16,
+            "start": 24,
+            "bottom": 24,
+            "end": 24
+          },
+          "mainAxisDistribution": "start",
+          "crossAxisAlignment": "stretch",
+          "children": [
+            {
+              "type": "button",
+              "id": "details-back",
+              "direction": "horizontal",
+              "gap": 8,
+              "mainAxisDistribution": "start",
+              "crossAxisAlignment": "center",
+              "children": [
+                {
+                  "type": "icon",
+                  "id": "details-back-icon",
+                  "name": "arrowBackward",
+                  "size": 20,
+                  "color": "text.primary",
+                  "accessibility": {
+                    "hidden": true
+                  }
+                },
+                {
+                  "type": "text",
+                  "id": "details-back-label",
+                  "value": {
+                    "default": "Back to offer",
+                    "localizationKey": "paywall.navigation.back"
+                  },
+                  "typography": {
+                    "style": "label",
+                    "fontSize": 16,
+                    "lineHeightMultiplier": 1.25,
+                    "weight": "semibold",
+                    "color": "text.primary",
+                    "alignment": "center"
+                  },
+                  "accessibility": {
+                    "role": "text"
+                  }
+                }
+              ],
+              "action": {
+                "type": "navigateBack"
+              },
+              "accessibility": {
+                "label": {
+                  "default": "Back to offer",
+                  "localizationKey": "paywall.navigation.back"
+                }
+              }
+            },
+            {
+              "type": "text",
+              "id": "details-title",
+              "value": {
+                "default": "Purchase and policy details",
+                "localizationKey": "paywall.details.title"
+              },
+              "typography": {
+                "style": "title",
+                "fontSize": 28,
+                "lineHeightMultiplier": 1.2142857142857142,
+                "weight": "bold",
+                "color": "text.primary",
+                "alignment": "start"
+              },
+              "accessibility": {
+                "role": "heading",
+                "level": 1
+              }
+            },
+            {
+              "type": "button",
+              "id": "privacy-policy",
+              "direction": "horizontal",
+              "gap": 8,
+              "mainAxisDistribution": "center",
+              "crossAxisAlignment": "center",
+              "children": [
+                {
+                  "type": "text",
+                  "id": "privacy-policy-label",
+                  "value": {
+                    "default": "Open privacy policy",
+                    "localizationKey": "paywall.details.privacy"
+                  },
+                  "typography": {
+                    "style": "label",
+                    "fontSize": 16,
+                    "lineHeightMultiplier": 1.25,
+                    "weight": "semibold",
+                    "color": "text.primary",
+                    "alignment": "center"
+                  },
+                  "accessibility": {
+                    "role": "text"
+                  }
+                },
+                {
+                  "type": "icon",
+                  "id": "privacy-policy-icon",
+                  "name": "externalLink",
+                  "size": 20,
+                  "color": "action.primary",
+                  "accessibility": {
+                    "hidden": true
+                  }
+                }
+              ],
+              "action": {
+                "type": "openExternalUrl",
+                "url": "https://example.com/privacy"
+              },
+              "accessibility": {
+                "label": {
+                  "default": "Open privacy policy",
+                  "localizationKey": "paywall.details.privacy"
+                },
+                "hint": {
+                  "default": "Opens the privacy policy in the system browser",
+                  "localizationKey": "paywall.details.privacy.hint"
+                }
+              }
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "designSystem": {
+    "colors": [
+      {
+        "id": "brand-primary",
+        "name": "Brand primary",
+        "value": "#007F73FF"
+      },
+      {
+        "id": "brand-accent",
+        "name": "Brand accent",
+        "value": {
+          "type": "colorToken",
+          "id": "brand-primary"
+        }
+      }
+    ],
+    "backgrounds": [
+      {
+        "id": "offer-gradient",
+        "name": "Offer gradient",
+        "value": {
+          "type": "linearGradient",
+          "angle": 135,
+          "stops": [
+            {
+              "position": 0,
+              "color": "surface.default"
+            },
+            {
+              "position": 1,
+              "color": {
+                "type": "colorToken",
+                "id": "brand-accent"
+              }
+            }
+          ]
+        }
+      },
+      {
+        "id": "highlight-glow",
+        "name": "Highlight glow",
+        "value": {
+          "type": "radialGradient",
+          "center": {
+            "x": 0.5,
+            "y": 0.25
+          },
+          "radius": 1,
+          "stops": [
+            {
+              "position": 0,
+              "color": "surface.elevated"
+            },
+            {
+              "position": 1,
+              "color": "transparent"
+            }
+          ]
+        }
+      },
+      {
+        "id": "offer-texture",
+        "name": "Offer texture",
+        "value": {
+          "type": "image",
+          "assetId": "remote-texture",
+          "contentMode": "fill",
+          "fallbackColor": "surface.elevated"
+        }
+      },
+      {
+        "id": "ambient-video",
+        "name": "Ambient video",
+        "value": {
+          "type": "video",
+          "assetId": "bundled-ambient-video",
+          "contentMode": "fill",
+          "fallbackColor": "surface.default"
+        }
+      },
+      {
+        "id": "sheet-video",
+        "name": "Sheet video",
+        "value": {
+          "type": "video",
+          "assetId": "remote-sheet-video",
+          "posterAssetId": "remote-texture",
+          "contentMode": "fill",
+          "fallbackColor": "surface.default"
+        }
+      }
+    ],
+    "shadows": [
+      {
+        "id": "floating",
+        "name": "Floating",
+        "value": {
+          "type": "shadow",
+          "color": "#001A2633",
+          "offsetX": 0,
+          "offsetY": 8,
+          "blurRadius": 24
+        }
+      },
+      {
+        "id": "elevated",
+        "name": "Elevated",
+        "value": {
+          "type": "shadowToken",
+          "id": "floating"
+        }
+      }
+    ]
+  }
+}

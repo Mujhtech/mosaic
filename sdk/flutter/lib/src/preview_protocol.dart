@@ -2,8 +2,9 @@ import 'dart:convert';
 
 import 'protocol.dart';
 
-const String mosaicLocalPreviewProtocolVersion = '0.1';
-const String mosaicLocalPreviewV02ProtocolVersion = '0.2';
+const String mosaicLocalPreviewProtocolVersion = '0.2';
+const String mosaicLocalPreviewV02ProtocolVersion =
+    mosaicLocalPreviewProtocolVersion;
 const int mosaicFlutterPreviewMaximumDocumentBytes = 1048576;
 
 const Set<String> mosaicFlutterPreviewCapabilities = <String>{
@@ -461,7 +462,7 @@ final class MosaicPreviewDecodedMessage {
   final String protocolVersion;
   final String messageId;
 
-  /// Raw timestamp accepted by the normative Local Preview 0.1 regex.
+  /// Raw timestamp accepted by the normative Local Preview timestamp regex.
   final String sentAt;
   final MosaicPreviewIncomingMessage message;
 }
@@ -559,8 +560,7 @@ final class MosaicPreviewMessageCodec {
   const MosaicPreviewMessageCodec();
 
   /// Decodes the canonical Local Preview project container and its embedded
-  /// protocol document atomically. A 0.1 project remains a strict 0.1 read;
-  /// no implicit migration is performed.
+  /// current protocol document atomically. No implicit migration is performed.
   MosaicLocalPreviewProject decodeLocalProject(
     String source, {
     String expectedFileFormatVersion = mosaicLocalPreviewProtocolVersion,
@@ -1861,26 +1861,21 @@ Map<String, Object?> mosaicFlutterCapabilityPayload(
   String clientId, {
   String previewProtocolVersion = mosaicLocalPreviewProtocolVersion,
 }) {
-  final v02 = previewProtocolVersion == mosaicLocalPreviewV02ProtocolVersion;
-  if (!v02 && previewProtocolVersion != mosaicLocalPreviewProtocolVersion) {
+  if (previewProtocolVersion != mosaicLocalPreviewProtocolVersion) {
     throw ArgumentError.value(
       previewProtocolVersion,
       'previewProtocolVersion',
-      'Must be 0.1 or 0.2.',
+      'Must be 0.2.',
     );
   }
   return <String, Object?>{
     'clientId': clientId,
-    'supportedSchemaVersions': v02
-        ? <String>[mosaicProtocolVersion, mosaicProtocolV02Version]
-        : <String>[mosaicProtocolVersion],
+    'supportedSchemaVersions': <String>[mosaicProtocolVersion],
     'supportedCapabilities': <Map<String, String>>[
-      for (final capability in v02
-          ? mosaicProtocolV02Capabilities
-          : mosaicProtocolV01Capabilities)
+      for (final capability in mosaicProtocolV02Capabilities)
         <String, String>{
           'name': capability,
-          'version': v02 ? mosaicProtocolV02Version : mosaicProtocolVersion,
+          'version': mosaicProtocolVersion,
         },
     ],
     'previewCapabilities': <Map<String, String>>[

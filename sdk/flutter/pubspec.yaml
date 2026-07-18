@@ -1,6 +1,6 @@
 name: mosaic_sdk
-description: Native Mosaic Protocol 0.1 and 0.2 renderer with Local Preview for Flutter.
-version: 0.2.0-dev.2
+description: Native Mosaic Protocol 0.2 renderer with Local Preview for Flutter.
+version: 0.2.0-dev.5
 publish_to: none
 
 environment:
@@ -10,6 +10,11 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
+  # 6.3.0 is the newest release whose package-level SDK bounds retain the
+  # public Flutter 3.19 / Dart 3.3 minimum declared above.
+  url_launcher: 6.3.0
+  # Last release supporting Mosaic's Flutter 3.19 / Dart 3.3 floor.
+  video_player: 2.9.2
 
 dev_dependencies:
   flutter_test:

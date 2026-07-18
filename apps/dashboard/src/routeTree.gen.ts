@@ -9,17 +9,13 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
-import { Route as StudioRouteImport } from './routes/studio'
 import { Route as SignupRouteImport } from './routes/signup'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as FoundationRouteImport } from './routes/foundation'
+import { Route as Studio_layoutRouteImport } from './routes/_studio_layout'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as Studio_layoutStudioRouteImport } from './routes/_studio_layout/studio'
 
-const StudioRoute = StudioRouteImport.update({
-  id: '/studio',
-  path: '/studio',
-  getParentRoute: () => rootRouteImport,
-} as any)
 const SignupRoute = SignupRouteImport.update({
   id: '/signup',
   path: '/signup',
@@ -35,10 +31,19 @@ const FoundationRoute = FoundationRouteImport.update({
   path: '/foundation',
   getParentRoute: () => rootRouteImport,
 } as any)
+const Studio_layoutRoute = Studio_layoutRouteImport.update({
+  id: '/_studio_layout',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
   getParentRoute: () => rootRouteImport,
+} as any)
+const Studio_layoutStudioRoute = Studio_layoutStudioRouteImport.update({
+  id: '/studio',
+  path: '/studio',
+  getParentRoute: () => Studio_layoutRoute,
 } as any)
 
 export interface FileRoutesByFullPath {
@@ -46,48 +51,49 @@ export interface FileRoutesByFullPath {
   '/foundation': typeof FoundationRoute
   '/login': typeof LoginRoute
   '/signup': typeof SignupRoute
-  '/studio': typeof StudioRoute
+  '/studio': typeof Studio_layoutStudioRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/foundation': typeof FoundationRoute
   '/login': typeof LoginRoute
   '/signup': typeof SignupRoute
-  '/studio': typeof StudioRoute
+  '/studio': typeof Studio_layoutStudioRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/_studio_layout': typeof Studio_layoutRouteWithChildren
   '/foundation': typeof FoundationRoute
   '/login': typeof LoginRoute
   '/signup': typeof SignupRoute
-  '/studio': typeof StudioRoute
+  '/_studio_layout/studio': typeof Studio_layoutStudioRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths: '/' | '/foundation' | '/login' | '/signup' | '/studio'
   fileRoutesByTo: FileRoutesByTo
   to: '/' | '/foundation' | '/login' | '/signup' | '/studio'
-  id: '__root__' | '/' | '/foundation' | '/login' | '/signup' | '/studio'
+  id:
+    | '__root__'
+    | '/'
+    | '/_studio_layout'
+    | '/foundation'
+    | '/login'
+    | '/signup'
+    | '/_studio_layout/studio'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  Studio_layoutRoute: typeof Studio_layoutRouteWithChildren
   FoundationRoute: typeof FoundationRoute
   LoginRoute: typeof LoginRoute
   SignupRoute: typeof SignupRoute
-  StudioRoute: typeof StudioRoute
 }
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
-    '/studio': {
-      id: '/studio'
-      path: '/studio'
-      fullPath: '/studio'
-      preLoaderRoute: typeof StudioRouteImport
-      parentRoute: typeof rootRouteImport
-    }
     '/signup': {
       id: '/signup'
       path: '/signup'
@@ -109,6 +115,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof FoundationRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/_studio_layout': {
+      id: '/_studio_layout'
+      path: ''
+      fullPath: '/'
+      preLoaderRoute: typeof Studio_layoutRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/': {
       id: '/'
       path: '/'
@@ -116,15 +129,34 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/_studio_layout/studio': {
+      id: '/_studio_layout/studio'
+      path: '/studio'
+      fullPath: '/studio'
+      preLoaderRoute: typeof Studio_layoutStudioRouteImport
+      parentRoute: typeof Studio_layoutRoute
+    }
   }
 }
 
+interface Studio_layoutRouteChildren {
+  Studio_layoutStudioRoute: typeof Studio_layoutStudioRoute
+}
+
+const Studio_layoutRouteChildren: Studio_layoutRouteChildren = {
+  Studio_layoutStudioRoute: Studio_layoutStudioRoute,
+}
+
+const Studio_layoutRouteWithChildren = Studio_layoutRoute._addFileChildren(
+  Studio_layoutRouteChildren,
+)
+
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  Studio_layoutRoute: Studio_layoutRouteWithChildren,
   FoundationRoute: FoundationRoute,
   LoginRoute: LoginRoute,
   SignupRoute: SignupRoute,
-  StudioRoute: StudioRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

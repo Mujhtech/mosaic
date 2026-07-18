@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest"
 
-import canonicalDocumentFixture from "../../../../../../protocol/fixtures/v0.1/complete-paywall.json"
-import sessionFlowFixture from "../../../../../../protocol/fixtures/local-preview/v0.1/session-flow.messages.json"
+import canonicalDocumentFixture from "../../../../../../protocol/fixtures/v0.2/complete-paywall.json"
+import sessionFlowFixture from "../../../../../../protocol/fixtures/local-preview/v0.2/session-flow.messages.json"
 
 import { EDITOR_TEMPLATES } from "@/features/paywall-editor/constants/templates"
 import { mockCommerceState } from "@/features/paywall-editor/mutations/local-project-file"
@@ -11,6 +11,7 @@ import {
   createMockCommerceStateChangedMessage,
   parsePreviewMessage,
   PREVIEW_WEBSOCKET_SUBPROTOCOL,
+  PREVIEW_WEBSOCKET_SUBPROTOCOLS,
 } from "@/features/paywall-editor/schema/preview-message"
 import { validatePaywallDocument, validatePreviewMessage } from "@/lib/mosaic-protocol"
 
@@ -29,7 +30,7 @@ describe("preview message adapter", () => {
     expect(results.filter((entry) => !entry.result.ok).map((entry) => entry.messageId)).toEqual([
       "msg_000009",
     ])
-    expect(canonicalDocument.value.schemaVersion).toBe("0.1")
+    expect(canonicalDocument.value.schemaVersion).toBe("0.2")
   })
 
   it("emits exact canonical draft, commerce, and heartbeat envelopes", () => {
@@ -58,7 +59,8 @@ describe("preview message adapter", () => {
     const canonicalDocument = validatePaywallDocument(document)
     if (!canonicalDocument.ok) throw new Error("Editor template must validate")
 
-    expect(PREVIEW_WEBSOCKET_SUBPROTOCOL).toBe("mosaic.local-preview.v0.1")
+    expect(PREVIEW_WEBSOCKET_SUBPROTOCOL).toBe("mosaic.local-preview.v0.2")
+    expect(PREVIEW_WEBSOCKET_SUBPROTOCOLS).toEqual(["mosaic.local-preview.v0.2"])
     expect(validatePreviewMessage(draft).ok).toBe(true)
     expect(validatePreviewMessage(commerce, { document: canonicalDocument.value }).ok).toBe(true)
     expect(validatePreviewMessage(heartbeat).ok).toBe(true)
