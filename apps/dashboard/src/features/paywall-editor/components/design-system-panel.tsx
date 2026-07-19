@@ -392,7 +392,7 @@ function BackgroundEditor({
       {value.type === "linearGradient" || value.type === "radialGradient" ? (
         <div className="space-y-2">
           {value.stops.map((stop, index) => (
-            <div className="grid grid-cols-[1fr_4rem_auto] items-end gap-1.5" key={index}>
+            <div className="grid grid-cols-[1fr_4rem_auto] items-end gap-1.5" key={stop.position}>
               <ColorControl
                 document={document}
                 id={`${id}-stop-${index}`}
@@ -557,6 +557,9 @@ function ShadowEditor({
   )
 }
 
+// This coordinator owns one atomic token-editing workflow; individual controls and token graph
+// operations are already separate, while delete/replacement state must remain shared.
+// oxlint-disable-next-line react-doctor/no-giant-component
 export function DesignSystemPanel() {
   const { document } = useEditorStore()
   const editor = useEditorActions()
@@ -849,20 +852,20 @@ export function DesignSystemPanel() {
               value={replacementId}
             >
               <option value="detach">Detach current values</option>
-              {tokensFor(designSystem, pendingDelete.category)
-                .filter((token) =>
-                  isSafeTokenReplacement(
-                    designSystem,
-                    pendingDelete.category,
-                    pendingDelete.id,
-                    token.id,
-                  ),
-                )
-                .map((token) => (
+              {tokensFor(designSystem, pendingDelete.category).flatMap((token) =>
+                isSafeTokenReplacement(
+                  designSystem,
+                  pendingDelete.category,
+                  pendingDelete.id,
+                  token.id,
+                ) ? (
                   <option key={token.id} value={token.id}>
                     Replace usages with {token.name}
                   </option>
-                ))}
+                ) : (
+                  []
+                ),
+              )}
             </select>
           </label>
           <div className="flex justify-end gap-2">

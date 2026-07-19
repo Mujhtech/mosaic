@@ -291,18 +291,6 @@ export function readLocalMockPurchaseState(project: LocalProjectFile): MockPurch
   }
 }
 
-export function readLocalProject(): LocalProjectFile | null {
-  if (typeof window === "undefined") return null
-  try {
-    const stored = window.localStorage.getItem(LOCAL_PROJECT_STORAGE_KEY)
-    if (!stored) return null
-    const parsed: unknown = JSON.parse(stored)
-    return isLocalProjectFile(parsed) ? parsed : null
-  } catch {
-    return null
-  }
-}
-
 export type LocalProjectReadResult =
   | { status: "empty" }
   | { status: "valid"; project: LocalProjectFile }

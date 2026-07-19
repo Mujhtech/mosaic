@@ -115,11 +115,15 @@ function DeviceSelect({ toolbar }: { toolbar: boolean }) {
         >
           {CANVAS_DEVICE_GROUPS.map((group) => (
             <optgroup key={group} label={group}>
-              {CANVAS_DEVICE_PRESETS.filter((entry) => entry.group === group).map((entry) => (
-                <option key={entry.id} value={entry.id}>
-                  {entry.label}
-                </option>
-              ))}
+              {CANVAS_DEVICE_PRESETS.flatMap((entry) =>
+                entry.group === group ? (
+                  <option key={entry.id} value={entry.id}>
+                    {entry.label}
+                  </option>
+                ) : (
+                  []
+                ),
+              )}
             </optgroup>
           ))}
         </select>

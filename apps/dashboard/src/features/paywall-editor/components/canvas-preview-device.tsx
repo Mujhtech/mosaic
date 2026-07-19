@@ -350,6 +350,7 @@ export function CanvasPreviewDevice({
   zoom,
   onFrameSelect,
   onRootClick,
+  onRootSelect,
 }: {
   active: boolean
   canvas: StudioCanvasPreferences
@@ -368,6 +369,7 @@ export function CanvasPreviewDevice({
   zoom: number
   onFrameSelect: () => void
   onRootClick: (event: MouseEvent<HTMLDivElement>) => void
+  onRootSelect: () => void
 }) {
   const root = layout.content
   const layoutBackground = resolvedBackground(document, layout.background)
@@ -417,7 +419,7 @@ export function CanvasPreviewDevice({
           <span className="sr-only">{preset.label}</span>
         </button>
         <span
-          className="border-border/60 bg-background/90 text-muted-foreground pointer-events-none rounded-full border px-3 py-1.5 font-medium shadow-sm backdrop-blur"
+          className="border-border/60 bg-background/90 text-muted-foreground pointer-events-none truncate rounded-full border px-3 py-1.5 font-medium shadow-sm backdrop-blur"
           data-testid="device-size-label"
         >
           {preset.label} · {preset.displayLabel}
@@ -499,6 +501,12 @@ export function CanvasPreviewDevice({
             data-component-id={root.id}
             data-sheet-surface={presentation === "sheet" ? "true" : undefined}
             onClick={onRootClick}
+            onKeyDown={(event) => {
+              if (event.key !== "Enter" && event.key !== " ") return
+              event.preventDefault()
+              onRootSelect()
+            }}
+            role="button"
             style={{
               alignItems: alignmentStyle(root.crossAxisAlignment),
               ...rootBackground.style,
@@ -530,6 +538,7 @@ export function CanvasPreviewDevice({
               paddingInlineEnd: root.padding.end + safeArea.right,
               paddingInlineStart: root.padding.start + safeArea.left,
             }}
+            tabIndex={0}
           >
             {rootBackground.video ? (
               <video

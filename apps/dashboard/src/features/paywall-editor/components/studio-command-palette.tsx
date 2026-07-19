@@ -126,6 +126,9 @@ function commandIconForEdit(commandId: string): ReactNode {
   return <PaletteIcon name="edit" />
 }
 
+// Command filtering, roving focus, and execution share one dialog lifecycle; command metadata and
+// editor/workspace operations remain in their owning modules.
+// oxlint-disable-next-line react-doctor/no-giant-component
 export function StudioCommandPalette({
   onExport,
   onOpenChange,
@@ -144,10 +147,11 @@ export function StudioCommandPalette({
   const editorSnapshot = editor.getSnapshot()
   const document = editorSnapshot.document
   const selectedNode = document ? findNode(document, editorSnapshot.selectedComponentId) : null
+  const lockedIdSet = new Set(preferences.layerMetadata.lockedIds)
   const selectedLocked = Boolean(
     selectedNode &&
     [selectedNode.id, ...findAncestorNodeIds(document as MosaicDocument, selectedNode.id)].some(
-      (id) => preferences.layerMetadata.lockedIds.includes(id),
+      (id) => lockedIdSet.has(id),
     ),
   )
 
@@ -483,7 +487,6 @@ export function StudioCommandPalette({
             />
             <span className="sr-only">Search Studio commands</span>
             <input
-              autoFocus
               className="focus-visible:ring-ring h-12 w-full bg-transparent pr-4 pl-11 text-sm outline-none focus-visible:ring-2 focus-visible:ring-inset"
               onChange={(event) => {
                 setQuery(event.target.value)

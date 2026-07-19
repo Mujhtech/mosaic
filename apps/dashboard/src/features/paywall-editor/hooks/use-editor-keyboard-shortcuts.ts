@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react"
+import { useEffect, useEffectEvent, useRef } from "react"
 
 import { useEditorActions } from "@/features/paywall-editor/stores/editor-store-context"
 import type {
@@ -54,13 +54,16 @@ export interface EditorKeyboardShortcutHandlers {
 
 export function useEditorKeyboardShortcuts(handlers: EditorKeyboardShortcutHandlers = {}) {
   const editor = useEditorActions()
-  const handlersRef = useRef(handlers)
   const chordRef = useRef<"g" | null>(null)
   const chordTimeoutRef = useRef<number | null>(null)
-
-  useEffect(() => {
-    handlersRef.current = handlers
-  }, [handlers])
+  const invokeHandler = useEffectEvent(
+    (name: keyof EditorKeyboardShortcutHandlers, argument?: StudioTool | StudioWorkspacePanel) => {
+      const handler = handlers[name]
+      if (!handler) return
+      if (argument === undefined) (handler as () => void)()
+      else (handler as (value: StudioTool | StudioWorkspacePanel) => void)(argument)
+    },
+  )
 
   useEffect(() => {
     function onKeyDown(event: KeyboardEvent) {
@@ -80,7 +83,7 @@ export function useEditorKeyboardShortcuts(handlers: EditorKeyboardShortcutHandl
         }
         const tool = TOOL_CHORDS[key]
         if (tool && !modifier && !event.altKey) {
-          handlersRef.current.onOpenTool?.(tool)
+          invokeHandler("onOpenTool", tool)
           event.preventDefault()
         }
         return
@@ -100,7 +103,7 @@ export function useEditorKeyboardShortcuts(handlers: EditorKeyboardShortcutHandl
       }
 
       if (modifier && event.shiftKey && key === "k") {
-        handlersRef.current.onOpenCommandPalette?.()
+        invokeHandler("onOpenCommandPalette")
         event.preventDefault()
         return
       }
@@ -139,16 +142,16 @@ export function useEditorKeyboardShortcuts(handlers: EditorKeyboardShortcutHandl
       }
 
       if (!modifier && !event.altKey && !event.shiftKey && event.key === "[") {
-        handlersRef.current.onTogglePanel?.("left")
+        invokeHandler("onTogglePanel", "left")
         event.preventDefault()
       } else if (!modifier && !event.altKey && !event.shiftKey && event.key === "]") {
-        handlersRef.current.onTogglePanel?.("properties")
+        invokeHandler("onTogglePanel", "properties")
         event.preventDefault()
       } else if (!modifier && !event.altKey && !event.shiftKey && event.key === "\\") {
-        handlersRef.current.onTogglePanel?.("diagnostics")
+        invokeHandler("onTogglePanel", "diagnostics")
         event.preventDefault()
       } else if (!modifier && !event.altKey && !event.shiftKey && key === "f") {
-        handlersRef.current.onFitCanvas?.()
+        invokeHandler("onFitCanvas")
         event.preventDefault()
       } else if (
         !modifier &&
@@ -156,10 +159,10 @@ export function useEditorKeyboardShortcuts(handlers: EditorKeyboardShortcutHandl
         event.shiftKey &&
         (event.code === "Digit0" || event.key === ")" || event.key === "0")
       ) {
-        handlersRef.current.onResetZoom?.()
+        invokeHandler("onResetZoom")
         event.preventDefault()
       } else if (!modifier && !event.altKey && event.shiftKey && key === "a") {
-        handlersRef.current.onToggleAppearance?.()
+        invokeHandler("onToggleAppearance")
         event.preventDefault()
       }
     }

@@ -54,9 +54,7 @@ interface MutableStudioWorkspacePreferences {
 }
 
 function mutableDefaults(): MutableStudioWorkspacePreferences {
-  return JSON.parse(
-    JSON.stringify(DEFAULT_STUDIO_WORKSPACE_PREFERENCES),
-  ) as MutableStudioWorkspacePreferences
+  return structuredClone(DEFAULT_STUDIO_WORKSPACE_PREFERENCES) as MutableStudioWorkspacePreferences
 }
 
 function createMemoryStorage(initial: string | null = null) {

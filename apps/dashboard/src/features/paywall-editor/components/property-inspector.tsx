@@ -20,7 +20,7 @@ import { PlusIcon } from "@phosphor-icons/react/dist/ssr/Plus"
 import { RowsIcon } from "@phosphor-icons/react/dist/ssr/Rows"
 import { TextTIcon } from "@phosphor-icons/react/dist/ssr/TextT"
 import { TrashIcon } from "@phosphor-icons/react/dist/ssr/Trash"
-import { createContext, useCallback, useContext, useEffect, useRef, useState } from "react"
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react"
 import type { KeyboardEvent, ReactNode } from "react"
 
 import { Button } from "@/components/ui/button"
@@ -163,6 +163,7 @@ interface InspectorContextValue {
 }
 
 const InspectorContext = createContext<InspectorContextValue | null>(null)
+const EMPTY_VALIDATION_ISSUES: readonly ValidationIssue[] = []
 
 function useInspectorContext() {
   const context = useContext(InspectorContext)
@@ -1000,6 +1001,9 @@ function defaultBackground(
   }
 }
 
+// All background variants share one transaction boundary so switching variants preserves the
+// previous authored value; primitive controls and style transforms are already extracted.
+// oxlint-disable-next-line react-doctor/no-giant-component
 function DocumentBackgroundEditor({
   address,
   colorLabel = "Background",
@@ -1027,14 +1031,16 @@ function DocumentBackgroundEditor({
     value: type === "none" ? undefined : value,
   })
 
-  if (preservedBackground.current.key !== backgroundKey) {
-    preservedBackground.current = {
-      key: backgroundKey,
-      value: type === "none" ? undefined : value,
+  useEffect(() => {
+    if (preservedBackground.current.key !== backgroundKey) {
+      preservedBackground.current = {
+        key: backgroundKey,
+        value: type === "none" ? undefined : value,
+      }
+    } else if (type !== "none") {
+      preservedBackground.current.value = value
     }
-  } else if (type !== "none") {
-    preservedBackground.current.value = value
-  }
+  }, [backgroundKey, type, value])
 
   function update(next: ProtocolBackground | undefined) {
     editor.updateDocument((current) => onUpdate(current, next))
@@ -1291,7 +1297,7 @@ function DocumentBackgroundEditor({
             </Button>
           </div>
           {value.stops.map((stop, index) => (
-            <div className="grid grid-cols-[1fr_4.5rem_auto] items-end gap-1.5" key={index}>
+            <div className="grid grid-cols-[1fr_4.5rem_auto] items-end gap-1.5" key={stop.position}>
               <InspectorColorControl
                 disabled={false}
                 document={document}
@@ -1374,13 +1380,15 @@ function DocumentBackgroundEditor({
               value={value.posterAssetId ?? ""}
             >
               <option value="">No poster</option>
-              {document.assets
-                .filter((asset) => asset.type === "image")
-                .map((asset) => (
+              {document.assets.flatMap((asset) =>
+                asset.type === "image" ? (
                   <option key={asset.id} value={asset.id}>
                     {asset.id}
                   </option>
-                ))}
+                ) : (
+                  []
+                ),
+              )}
             </SelectField>
           ) : null}
           <DocumentColorField
@@ -2776,13 +2784,15 @@ function ImageInspector({ node }: { node: Extract<ProtocolNode, { type: "image" 
           onChange={(assetId) => updateImage((current) => ({ ...current, assetId }))}
           value={node.assetId}
         >
-          {document.assets
-            .filter((asset) => asset.type === "image")
-            .map((asset) => (
+          {document.assets.flatMap((asset) =>
+            asset.type === "image" ? (
               <option key={asset.id} value={asset.id}>
                 {asset.id}
               </option>
-            ))}
+            ) : (
+              []
+            ),
+          )}
         </SelectField>
         <SelectField
           address="contentMode"
@@ -3105,6 +3115,9 @@ function removeProductStyleOverride(
   return remove(style as Record<string, unknown>, path) as MosaicPaywallV02ProductCardSelectedStyle
 }
 
+// Selected/unselected product-layer styles are edited as one atomic inspector section; extracting
+// either branch would duplicate transaction, validation, and preview-state coordination.
+// oxlint-disable-next-line react-doctor/no-giant-component
 function ProductLayerStyleSection({ node }: { node: ProductLayerNode }) {
   const { disabled, document, issues } = useInspectorContext()
   const editor = useEditorActions()
@@ -3494,7 +3507,7 @@ function ProductCardInspector({ node }: { node: Extract<ProtocolNode, { type: "p
   const selector = parent?.parent.type === "productSelector" ? parent.parent : null
   const product = document.products.find((candidate) => candidate.id === node.productReferenceId)
   const usedProductIds = new Set(
-    selector?.cards.filter((card) => card.id !== node.id).map((card) => card.productReferenceId),
+    selector?.cards.flatMap((card) => (card.id === node.id ? [] : card.productReferenceId)),
   )
   const badge = node.children.find((child) => child.type === "productBadge")
 
@@ -4277,7 +4290,11 @@ function InspectorForNode({ node }: { node: ProtocolNode }) {
   }
 }
 
-export function PropertyInspector({ issues = [] }: { issues?: readonly ValidationIssue[] }) {
+export function PropertyInspector({
+  issues = EMPTY_VALIDATION_ISSUES,
+}: {
+  issues?: readonly ValidationIssue[]
+}) {
   const { selectedComponent, selectedComponentId } = useEditorSelection()
   const { currentLocale, document } = useEditorStore()
   const metadata = useStudioWorkspaceSelector(selectLayerMetadata)
@@ -4291,25 +4308,24 @@ export function PropertyInspector({ issues = [] }: { issues?: readonly Validatio
       ? layerDisplayLabel(document, selectedTarget.id, metadata.labels)
       : null
   const selectedType = selectedScrollContainer?.type ?? selectedComponent?.type
-  const selectionPath =
+  const ancestorIds =
+    selectedComponent && document ? findAncestorNodeIds(document, selectedComponent.id) : []
+  const ancestorIdSet = new Set(ancestorIds)
+  const rawSelectionPath =
     selectedTarget && document
-      ? [
+      ? ([
           selectedScrollContainer?.id ??
             document.screens.find((screen) =>
               selectedComponent
-                ? findAncestorNodeIds(document, selectedComponent.id).includes(
-                    screen.layout.content.id,
-                  ) || selectedComponent.id === screen.layout.content.id
+                ? ancestorIdSet.has(screen.layout.content.id) ||
+                  selectedComponent.id === screen.layout.content.id
                 : false,
             )?.layout.id ??
             document.screens[0]?.layout.id,
-          ...(selectedComponent
-            ? [...findAncestorNodeIds(document, selectedComponent.id), selectedComponent.id]
-            : []),
-        ]
-          .filter((id): id is string => Boolean(id))
-          .filter((id, index, ids) => ids.indexOf(id) === index)
+          ...(selectedComponent ? [...ancestorIds, selectedComponent.id] : []),
+        ] as Array<string | undefined>)
       : []
+  const selectionPath = [...new Set(rawSelectionPath.filter((id): id is string => Boolean(id)))]
   const selectedIssueCount = selectedTarget
     ? issues.filter((issue) => issue.componentId === selectedTarget.id).length
     : 0
@@ -4322,6 +4338,19 @@ export function PropertyInspector({ issues = [] }: { issues?: readonly Validatio
       : undefined
   const lockedLabel =
     lockedBy && document ? layerDisplayLabel(document, lockedBy, metadata.labels) : null
+  const inspectorContext = useMemo(
+    () =>
+      document && selectedTarget
+        ? {
+            componentId: selectedTarget.id,
+            disabled: lockedBy !== undefined,
+            document,
+            issues,
+            locale: currentLocale,
+          }
+        : null,
+    [currentLocale, document, issues, lockedBy, selectedTarget],
+  )
 
   return (
     <section aria-labelledby="property-inspector-title">
@@ -4372,15 +4401,7 @@ export function PropertyInspector({ issues = [] }: { issues?: readonly Validatio
           Select a block in Layers or the Canvas to edit its Protocol 0.2 properties.
         </div>
       ) : (
-        <InspectorContext.Provider
-          value={{
-            componentId: selectedTarget.id,
-            disabled: lockedBy !== undefined,
-            document,
-            issues,
-            locale: currentLocale,
-          }}
-        >
+        <InspectorContext.Provider value={inspectorContext!}>
           {lockedBy ? (
             <div
               className="border-border bg-muted mt-4 rounded-lg border p-3 text-xs"

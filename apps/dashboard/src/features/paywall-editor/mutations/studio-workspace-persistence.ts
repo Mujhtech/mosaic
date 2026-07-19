@@ -92,7 +92,8 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 function hasExactKeys(record: Record<string, unknown>, keys: readonly string[]) {
   const actualKeys = Object.keys(record)
-  return actualKeys.length === keys.length && actualKeys.every((key) => keys.includes(key))
+  const expectedKeys = new Set(keys)
+  return actualKeys.length === keys.length && actualKeys.every((key) => expectedKeys.has(key))
 }
 
 function isBoundedNumber(value: unknown, min: number, max: number): value is number {

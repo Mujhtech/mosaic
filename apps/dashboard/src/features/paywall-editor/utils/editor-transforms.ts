@@ -129,26 +129,3 @@ export function createSeededLocalizedText(options: {
     text,
   }
 }
-
-export function updateCatalogString(options: {
-  document: MosaicDocument
-  locale: string
-  localizationKey: string
-  value: string
-}): MosaicDocument {
-  const catalog = options.document.localization.locales[options.locale]
-  if (!catalog) return options.document
-  return {
-    ...options.document,
-    localization: {
-      ...options.document.localization,
-      locales: {
-        ...options.document.localization.locales,
-        [options.locale]: {
-          ...catalog,
-          strings: { ...catalog.strings, [options.localizationKey]: options.value },
-        },
-      },
-    },
-  }
-}

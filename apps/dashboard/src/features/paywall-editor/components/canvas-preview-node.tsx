@@ -338,6 +338,12 @@ function NodeFrame({
         event.stopPropagation()
         if (!locked) editor.selectComponent(node.id)
       }}
+      onKeyDown={(event) => {
+        if (locked || (event.key !== "Enter" && event.key !== " ")) return
+        event.preventDefault()
+        event.stopPropagation()
+        editor.selectComponent(node.id)
+      }}
       onMouseEnter={(event) => {
         event.stopPropagation()
         editor.hoverComponent(node.id)
@@ -351,6 +357,8 @@ function NodeFrame({
         ...(background.video ? background.style : {}),
         isolation: "isolate",
       }}
+      role="button"
+      tabIndex={locked ? -1 : 0}
       title={locked ? "Locked in Studio Layers" : undefined}
     >
       {background.video ? (
@@ -391,6 +399,9 @@ function countdownText(node: Extract<ProtocolNode, { type: "countdown" }>, now: 
     .join("  ")
 }
 
+// This is the single exhaustive Protocol-node renderer; splitting the switch would duplicate the
+// shared selection, locking, editing, and product context that every native-preview node needs.
+// oxlint-disable-next-line react-doctor/no-giant-component
 export function PreviewNode(props: PreviewNodeProps) {
   const {
     carouselPages,
@@ -469,7 +480,7 @@ export function PreviewNode(props: PreviewNodeProps) {
             </div>
           ) : (
             node.children.map((child) => (
-              <PreviewNode {...props} inheritedLocked={locked} key={child.id} node={child} />
+              <PreviewNode key={child.id} {...props} inheritedLocked={locked} node={child} />
             ))
           )}
         </div>
@@ -664,9 +675,9 @@ export function PreviewNode(props: PreviewNodeProps) {
                 }
                 return (
                   <PreviewNode
+                    key={card.id}
                     {...props}
                     inheritedLocked={locked}
-                    key={card.id}
                     node={card}
                     productContext={productContext}
                   />
@@ -718,6 +729,7 @@ export function PreviewNode(props: PreviewNodeProps) {
             />
           ) : null}
           <input
+            aria-label={accessibleLabel ?? product.name}
             checked={product.selected}
             className="sr-only"
             disabled={locked}
@@ -728,9 +740,9 @@ export function PreviewNode(props: PreviewNodeProps) {
           />
           {node.children.map((child) => (
             <PreviewNode
+              key={child.id}
               {...props}
               inheritedLocked={locked}
-              key={child.id}
               node={child}
               productContext={product}
             />
@@ -783,9 +795,9 @@ export function PreviewNode(props: PreviewNodeProps) {
           ) : null}
           {node.children.map((child) => (
             <PreviewNode
+              key={child.id}
               {...props}
               inheritedLocked={locked}
-              key={child.id}
               node={child}
               productContext={product}
             />
@@ -828,7 +840,7 @@ export function PreviewNode(props: PreviewNodeProps) {
             }}
           >
             {children.map((child) => (
-              <PreviewNode {...props} inheritedLocked={locked} key={child.id} node={child} />
+              <PreviewNode key={child.id} {...props} inheritedLocked={locked} node={child} />
             ))}
           </div>
         </div>

@@ -263,6 +263,9 @@ export function usePreviewConnection(options: {
   const latestMockPurchaseStateRef = useRef(options.mockPurchaseState)
   const onRevisionDispatchedRef = useRef(options.onRevisionDispatched)
 
+  // The editable document identifies the external preview session. Its acknowledgements and
+  // diagnostics cannot survive an identity change, so this is synchronization, not derived UI.
+  // oxlint-disable react-doctor/no-adjust-state-on-prop-change
   useEffect(() => {
     if (latestEditableDocumentIdRef.current !== options.editableDocumentId) {
       previewSequenceRef.current = options.initialRevisionSequence ?? 0
@@ -301,6 +304,7 @@ export function usePreviewConnection(options: {
     options.onRevisionDispatched,
     options.textScale,
   ])
+  // oxlint-enable react-doctor/no-adjust-state-on-prop-change
 
   const addDiagnostic = useCallback((diagnostic: PreviewDiagnostic) => {
     setDiagnostics((current) => {
@@ -522,7 +526,7 @@ export function usePreviewConnection(options: {
     const socket = new WebSocket(connectionUrl, [...PREVIEW_WEBSOCKET_SUBPROTOCOLS])
     socketRef.current = socket
 
-    socket.addEventListener("open", () => {
+    const onOpen = () => {
       if (disposed) return
       const negotiatedVersion = previewProtocolVersionForSubprotocol(socket.protocol)
       if (!negotiatedVersion) {
@@ -544,9 +548,9 @@ export function usePreviewConnection(options: {
       lastSentFingerprintRef.current = ""
       lastCommerceFingerprintRef.current = ""
       setStatus("connected")
-    })
+    }
 
-    socket.addEventListener("message", (event) => {
+    const onMessage = (event: MessageEvent) => {
       if (disposed || typeof event.data !== "string") return
       const negotiatedVersion = negotiatedProtocolVersionRef.current
       const message = parsePreviewMessage(event.data, negotiatedVersion ?? undefined)
@@ -765,13 +769,13 @@ export function usePreviewConnection(options: {
           }),
         )
       }
-    })
+    }
 
-    socket.addEventListener("error", () => {
+    const onError = () => {
       if (!disposed) setStatus("reconnecting")
-    })
+    }
 
-    socket.addEventListener("close", () => {
+    const onClose = () => {
       if (disposed) return
       socketRef.current = null
       negotiatedProtocolVersionRef.current = null
@@ -791,11 +795,20 @@ export function usePreviewConnection(options: {
         () => setConnectionEpoch((current) => current + 1),
         delay,
       )
-    })
+    }
+
+    socket.addEventListener("open", onOpen)
+    socket.addEventListener("message", onMessage)
+    socket.addEventListener("error", onError)
+    socket.addEventListener("close", onClose)
 
     return () => {
       disposed = true
       if (reconnectTimerRef.current !== null) window.clearTimeout(reconnectTimerRef.current)
+      socket.removeEventListener?.("open", onOpen)
+      socket.removeEventListener?.("message", onMessage)
+      socket.removeEventListener?.("error", onError)
+      socket.removeEventListener?.("close", onClose)
       if (socket.readyState === WebSocket.CONNECTING || socket.readyState === WebSocket.OPEN) {
         socket.close()
       }

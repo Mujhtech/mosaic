@@ -19,11 +19,7 @@ export const PREVIEW_WEBSOCKET_SUBPROTOCOLS = PREVIEW_PROTOCOL_VERSIONS.map(
 
 export type PreviewProtocolVersion = (typeof PREVIEW_PROTOCOL_VERSIONS)[number]
 
-export const PREVIEW_MESSAGE_TYPES = [
-  ...previewMessageTypesByVersion["0.2"],
-] as const
-
-export type PreviewMessageType = (typeof PREVIEW_MESSAGE_TYPES)[number]
+export type PreviewMessageType = (typeof previewMessageTypesByVersion)["0.2"][number]
 
 export interface PreviewMessageEnvelope<TPayload = Record<string, unknown>> {
   previewProtocolVersion: PreviewProtocolVersion
@@ -37,10 +33,6 @@ export interface PreviewMessageEnvelope<TPayload = Record<string, unknown>> {
 function safeToken(prefix: string) {
   const random = globalThis.crypto?.randomUUID?.().replaceAll("-", "_")
   return `${prefix}_${random ?? `${Date.now()}_${Math.round(Math.random() * 1_000_000)}`}`
-}
-
-export function createSessionId() {
-  return safeToken("session")
 }
 
 export function localRevision(document: MosaicDocument): LocalRevision {

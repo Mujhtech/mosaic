@@ -131,6 +131,7 @@ interface CanvasDeviceNodeData extends Record<string, unknown> {
   readonly nodeGeometry: CanvasDeviceNodeGeometry
   readonly onFrameSelect: () => void
   readonly onRootClick: (event: ReactMouseEvent<HTMLDivElement>) => void
+  readonly onRootSelect: () => void
   readonly presentation: "screen" | "sheet"
   readonly preset: CanvasDevicePreset
   readonly rootHidden: boolean
@@ -157,6 +158,10 @@ const DevicePreviewFlowNode = memo(function DevicePreviewFlowNode({
 const CANVAS_NODE_TYPES = {
   "device-preview": DevicePreviewFlowNode,
 } satisfies NodeTypes
+
+function hasPayload(event: DragEvent<HTMLElement>, type: string) {
+  return Array.from(event.dataTransfer.types ?? []).includes(type)
+}
 
 function isFormControl(target: EventTarget | null) {
   return (
@@ -185,6 +190,9 @@ function safeFramePosition(position: StudioCanvasFramePosition): StudioCanvasFra
   return { x: clamp(position.x), y: clamp(position.y) }
 }
 
+// React Flow viewport, selection, and protocol insertion state form one canvas transaction
+// boundary; device rendering and geometry calculations are already extracted.
+// oxlint-disable-next-line react-doctor/no-giant-component
 export function PreviewCanvas({
   mockProducts,
   mockPurchaseState,
@@ -274,17 +282,12 @@ export function PreviewCanvas({
   const visibleSelectableIds = [
     ...document.screens.map((screen) => screen.layout.content),
     ...flattenDocument(document).map((entry) => entry.node),
-  ]
-    .filter(
-      (node) =>
-        !canvasNodeIsUnavailable(document, node.id, hiddenIds) &&
-        !canvasNodeIsUnavailable(document, node.id, lockedIds),
-    )
-    .map((node) => node.id)
-
-  function hasPayload(event: DragEvent<HTMLElement>, type: string) {
-    return Array.from(event.dataTransfer.types ?? []).includes(type)
-  }
+  ].flatMap((node) =>
+    !canvasNodeIsUnavailable(document, node.id, hiddenIds) &&
+    !canvasNodeIsUnavailable(document, node.id, lockedIds)
+      ? node.id
+      : [],
+  )
 
   function insertionLockReason() {
     const location = resolveLegacyInsertionLocation(activeDocument, selectedComponentId)
@@ -526,6 +529,11 @@ export function PreviewCanvas({
             editor.selectComponent(screen.layout.content.id)
           }
         },
+        onRootSelect: () => {
+          if (!lockedIds.has(screen.layout.content.id)) {
+            editor.selectComponent(screen.layout.content.id)
+          }
+        },
         presentation: screenPresentation,
         preset,
         rootHidden:
@@ -590,9 +598,11 @@ export function PreviewCanvas({
       onDrop={handleCatalogDrop}
     >
       <div
+        aria-label="Paywall canvas viewport"
         className="h-full w-full focus-visible:ring-2 focus-visible:outline-none focus-visible:ring-inset"
         data-testid="canvas-viewport"
         onKeyDown={handleCanvasKeyboard}
+        role="region"
         tabIndex={0}
       >
         <ReactFlow<CanvasDeviceFlowNode>

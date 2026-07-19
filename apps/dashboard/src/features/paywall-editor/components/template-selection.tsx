@@ -77,8 +77,8 @@ export function TemplateSelection({
             <p className="font-semibold">Autosave needs recovery</p>
             <p className="text-muted-foreground mt-1 text-sm">{autosave.message}</p>
             <p className="text-muted-foreground mt-2 text-sm">
-              Start from a template or import a known-good Protocol 0.2 file. Nothing will
-              overwrite an open editor without your action.
+              Start from a template or import a known-good Protocol 0.2 file. Nothing will overwrite
+              an open editor without your action.
             </p>
           </div>
         ) : null}

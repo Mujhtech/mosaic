@@ -1,4 +1,3 @@
-import { fireEvent } from "@testing-library/react"
 import { vi } from "vitest"
 
 export class ResizeObserverStub {
@@ -174,36 +173,4 @@ export function restoreResizableGeometry() {
     else Reflect.deleteProperty(HTMLElement.prototype, key)
   }
   originalDescriptors.clear()
-}
-
-export function dragResizableSeparator(
-  separator: HTMLElement,
-  start: { x: number; y: number },
-  end: { x: number; y: number },
-) {
-  fireEvent.pointerDown(separator, {
-    button: 0,
-    buttons: 1,
-    clientX: start.x,
-    clientY: start.y,
-    pointerId: 7,
-    pointerType: "mouse",
-  })
-  fireEvent.pointerMove(separator, {
-    buttons: 1,
-    clientX: end.x,
-    clientY: end.y,
-    movementX: end.x - start.x,
-    movementY: end.y - start.y,
-    pointerId: 7,
-    pointerType: "mouse",
-  })
-  fireEvent.pointerUp(separator, {
-    button: 0,
-    buttons: 0,
-    clientX: end.x,
-    clientY: end.y,
-    pointerId: 7,
-    pointerType: "mouse",
-  })
 }

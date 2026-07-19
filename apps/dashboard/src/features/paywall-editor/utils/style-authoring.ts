@@ -20,7 +20,7 @@ export function clampGradientAngle(angle: number) {
 export function insertGradientStop(stops: readonly GradientStop[]): GradientStop[] {
   if (stops.length >= 8) return [...stops]
 
-  const ordered = [...stops].sort((left, right) => left.position - right.position)
+  const ordered = stops.toSorted((left, right) => left.position - right.position)
   if (ordered.length < 2) return [...ordered]
 
   let insertionIndex = 1

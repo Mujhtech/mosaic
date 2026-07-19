@@ -1,7 +1,6 @@
 import type { InsertableBlockType, ProtocolNode } from "@/features/paywall-editor/types/editor"
 
 export const COMPONENT_LIBRARY_DRAG_TYPE = "application/x-mosaic-component-type"
-export const COMPONENT_LIBRARY_SELECTOR_DRAG_TYPE = "application/x-mosaic-product-selector-id"
 export const COMPONENT_LIBRARY_COUNTDOWN_ENDS_AT_DRAG_TYPE =
   "application/x-mosaic-countdown-ends-at"
 

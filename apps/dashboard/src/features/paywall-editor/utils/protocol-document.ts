@@ -280,11 +280,3 @@ export function synchronizeProtocolMetadata(document: MosaicDocument): MosaicDoc
   }))
   return next
 }
-
-export function referencedLocalizationKeys(document: MosaicDocument) {
-  const localized: LocalizedText[] = []
-  collectLocalizedText(document.assets, localized)
-  collectLocalizedText(document.products, localized)
-  collectLocalizedText(document.screens, localized)
-  return new Map(localized.map((entry) => [entry.localizationKey, entry.default]))
-}

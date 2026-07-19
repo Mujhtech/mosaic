@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs"
 
-import { createRef } from "react"
+import { createRef, useEffect } from "react"
 import type { ReactNode } from "react"
 import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
@@ -8,14 +8,16 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import type { ResizablePanelImperativeHandle } from "@/components/ui/resizable"
 import { TooltipProvider } from "@/components/ui/tooltip"
 import {
-  commitCompletedPanelLayout,
-  commitUpstreamDoubleClickResult,
-  restorePanelPreference,
-  restoreWorkspacePanelPreferences,
   StudioResizableWorkspace,
   type StudioResizableWorkspaceHandle,
   type StudioResizableWorkspaceProps,
 } from "@/features/paywall-editor/components/studio-resizable-workspace"
+import {
+  commitCompletedPanelLayout,
+  commitUpstreamDoubleClickResult,
+  restorePanelPreference,
+  restoreWorkspacePanelPreferences,
+} from "@/features/paywall-editor/utils/resizable-workspace-layout"
 import {
   DEFAULT_STUDIO_WORKSPACE_PREFERENCES,
   STUDIO_WORKSPACE_STORAGE_KEY,
@@ -104,7 +106,10 @@ function WorkspaceActionsCapture({
 }: {
   capture: (actions: StudioWorkspaceActions) => void
 }) {
-  capture(useStudioWorkspaceActions())
+  const actions = useStudioWorkspaceActions()
+  useEffect(() => {
+    capture(actions)
+  }, [actions, capture])
   return null
 }
 

@@ -72,6 +72,13 @@ import {
   parentEntryChildren,
   screenContainingNode,
 } from "@/features/paywall-editor/utils/document-tree"
+
+function hasCatalogPayload(event: DragEvent<HTMLDivElement>) {
+  return (
+    Array.from(event.dataTransfer.types ?? []).includes(COMPONENT_LIBRARY_DRAG_TYPE) ||
+    Boolean(event.dataTransfer.getData(COMPONENT_LIBRARY_DRAG_TYPE))
+  )
+}
 import { isValidCountdownInstant } from "@/features/paywall-editor/utils/countdown"
 
 const LAYER_DRAG_TYPE = "application/x-mosaic-layer-id"
@@ -158,14 +165,15 @@ interface LayerIssueSummary {
 }
 
 interface LayerActionItemsProps {
-  readonly canDelete: boolean
-  readonly canDuplicate: boolean
-  readonly canIndent: boolean
-  readonly canMoveDown: boolean
-  readonly canMoveUp: boolean
-  readonly canOutdent: boolean
-  readonly hidden: boolean
-  readonly locked: boolean
+  readonly availability: {
+    readonly delete: boolean
+    readonly duplicate: boolean
+    readonly indent: boolean
+    readonly moveDown: boolean
+    readonly moveUp: boolean
+    readonly outdent: boolean
+  }
+  readonly state: { readonly hidden: boolean; readonly locked: boolean }
   readonly onDelete: () => void
   readonly onDuplicate: () => void
   readonly onIndent: () => void
@@ -235,14 +243,8 @@ function componentLabel(
 }
 
 function LayerActionItems({
-  canDelete,
-  canDuplicate,
-  canIndent,
-  canMoveDown,
-  canMoveUp,
-  canOutdent,
-  hidden,
-  locked,
+  availability,
+  state,
   onDelete,
   onDuplicate,
   onIndent,
@@ -259,36 +261,36 @@ function LayerActionItems({
         <PencilSimpleIcon aria-hidden /> Rename layer
       </DropdownMenuItem>
       <DropdownMenuSeparator />
-      <DropdownMenuItem disabled={!canMoveUp} onClick={onMoveUp}>
+      <DropdownMenuItem disabled={!availability.moveUp} onClick={onMoveUp}>
         <ArrowUpIcon aria-hidden /> Move up
       </DropdownMenuItem>
-      <DropdownMenuItem disabled={!canMoveDown} onClick={onMoveDown}>
+      <DropdownMenuItem disabled={!availability.moveDown} onClick={onMoveDown}>
         <ArrowDownIcon aria-hidden /> Move down
       </DropdownMenuItem>
-      {canIndent ? (
+      {availability.indent ? (
         <DropdownMenuItem onClick={onIndent}>
           <ArrowLineRightIcon aria-hidden /> Indent
         </DropdownMenuItem>
       ) : null}
-      {canOutdent ? (
+      {availability.outdent ? (
         <DropdownMenuItem onClick={onOutdent}>
           <ArrowLineLeftIcon aria-hidden /> Outdent
         </DropdownMenuItem>
       ) : null}
-      <DropdownMenuItem disabled={!canDuplicate} onClick={onDuplicate}>
+      <DropdownMenuItem disabled={!availability.duplicate} onClick={onDuplicate}>
         <CopyIcon aria-hidden /> Duplicate
       </DropdownMenuItem>
       <DropdownMenuSeparator />
       <DropdownMenuItem onClick={onToggleLocked}>
-        {locked ? <LockOpenIcon aria-hidden /> : <LockIcon aria-hidden />}
-        {locked ? "Unlock canvas layer" : "Lock canvas layer"}
+        {state.locked ? <LockOpenIcon aria-hidden /> : <LockIcon aria-hidden />}
+        {state.locked ? "Unlock canvas layer" : "Lock canvas layer"}
       </DropdownMenuItem>
       <DropdownMenuItem onClick={onToggleHidden}>
-        {hidden ? <EyeIcon aria-hidden /> : <EyeSlashIcon aria-hidden />}
-        {hidden ? "Show on canvas" : "Hide on canvas"}
+        {state.hidden ? <EyeIcon aria-hidden /> : <EyeSlashIcon aria-hidden />}
+        {state.hidden ? "Show on canvas" : "Hide on canvas"}
       </DropdownMenuItem>
       <DropdownMenuSeparator />
-      <DropdownMenuItem disabled={!canDelete} onClick={onDelete} variant="destructive">
+      <DropdownMenuItem disabled={!availability.delete} onClick={onDelete} variant="destructive">
         <TrashIcon aria-hidden /> Delete
       </DropdownMenuItem>
     </>
@@ -307,48 +309,48 @@ function ContextLayerActionItems(props: LayerActionItemsProps) {
       <ContextMenuPrimitive.Separator className="bg-border -mx-1 my-1 h-px" />
       <ContextMenuPrimitive.Item
         className={contextMenuItemClass}
-        disabled={!props.canMoveUp}
+        disabled={!props.availability.moveUp}
         onClick={props.onMoveUp}
       >
         <ArrowUpIcon aria-hidden /> Move up
       </ContextMenuPrimitive.Item>
       <ContextMenuPrimitive.Item
         className={contextMenuItemClass}
-        disabled={!props.canMoveDown}
+        disabled={!props.availability.moveDown}
         onClick={props.onMoveDown}
       >
         <ArrowDownIcon aria-hidden /> Move down
       </ContextMenuPrimitive.Item>
-      {props.canIndent ? (
+      {props.availability.indent ? (
         <ContextMenuPrimitive.Item className={contextMenuItemClass} onClick={props.onIndent}>
           <ArrowLineRightIcon aria-hidden /> Indent
         </ContextMenuPrimitive.Item>
       ) : null}
-      {props.canOutdent ? (
+      {props.availability.outdent ? (
         <ContextMenuPrimitive.Item className={contextMenuItemClass} onClick={props.onOutdent}>
           <ArrowLineLeftIcon aria-hidden /> Outdent
         </ContextMenuPrimitive.Item>
       ) : null}
       <ContextMenuPrimitive.Item
         className={contextMenuItemClass}
-        disabled={!props.canDuplicate}
+        disabled={!props.availability.duplicate}
         onClick={props.onDuplicate}
       >
         <CopyIcon aria-hidden /> Duplicate
       </ContextMenuPrimitive.Item>
       <ContextMenuPrimitive.Separator className="bg-border -mx-1 my-1 h-px" />
       <ContextMenuPrimitive.Item className={contextMenuItemClass} onClick={props.onToggleLocked}>
-        {props.locked ? <LockOpenIcon aria-hidden /> : <LockIcon aria-hidden />}
-        {props.locked ? "Unlock canvas layer" : "Lock canvas layer"}
+        {props.state.locked ? <LockOpenIcon aria-hidden /> : <LockIcon aria-hidden />}
+        {props.state.locked ? "Unlock canvas layer" : "Lock canvas layer"}
       </ContextMenuPrimitive.Item>
       <ContextMenuPrimitive.Item className={contextMenuItemClass} onClick={props.onToggleHidden}>
-        {props.hidden ? <EyeIcon aria-hidden /> : <EyeSlashIcon aria-hidden />}
-        {props.hidden ? "Show on canvas" : "Hide on canvas"}
+        {props.state.hidden ? <EyeIcon aria-hidden /> : <EyeSlashIcon aria-hidden />}
+        {props.state.hidden ? "Show on canvas" : "Hide on canvas"}
       </ContextMenuPrimitive.Item>
       <ContextMenuPrimitive.Separator className="bg-border -mx-1 my-1 h-px" />
       <ContextMenuPrimitive.Item
         className={`${contextMenuItemClass} text-destructive focus:bg-destructive/10 focus:text-destructive`}
-        disabled={!props.canDelete}
+        disabled={!props.availability.delete}
         onClick={props.onDelete}
       >
         <TrashIcon aria-hidden /> Delete
@@ -450,6 +452,9 @@ function actionDisabledReason(
   return null
 }
 
+// Tree interaction state must remain coordinated for roving focus, drag/drop, context menus, and
+// layer transactions; leaf renderers and transformation rules are already extracted.
+// oxlint-disable-next-line react-doctor/no-giant-component
 export function ComponentTree({ previewClients }: { previewClients: readonly PreviewClient[] }) {
   const {
     document,
@@ -467,7 +472,7 @@ export function ComponentTree({ previewClients }: { previewClients: readonly Pre
   const [pendingRenameId, setPendingRenameId] = useState<string | null>(null)
   const [renameId, setRenameId] = useState<string | null>(null)
   const [renameDraft, setRenameDraft] = useState("")
-  const [dragSourceId, setDragSourceId] = useState<string | null>(null)
+  const dragSourceIdRef = useRef<string | null>(null)
   const [dropPreview, setDropPreview] = useState<DropPreview | null>(null)
   const [catalogDropPreview, setCatalogDropPreview] = useState<CatalogDropPreview | null>(null)
   const [notice, setNotice] = useState<OperationNotice | null>(null)
@@ -638,12 +643,12 @@ export function ComponentTree({ previewClients }: { previewClients: readonly Pre
   function clearLayerDrag() {
     pointerLayerDragRef.current = null
     dropPreviewRef.current = null
-    setDragSourceId(null)
+    dragSourceIdRef.current = null
     setDropPreview(null)
   }
 
   function dragOverTarget(event: DragEvent<HTMLDivElement>, key: string, target: TreeMoveTarget) {
-    const sourceId = dragSourceId || event.dataTransfer.getData(LAYER_DRAG_TYPE)
+    const sourceId = dragSourceIdRef.current || event.dataTransfer.getData(LAYER_DRAG_TYPE)
     if (!sourceId) return
     event.preventDefault()
     const result = previewDrop(key, sourceId, target)
@@ -651,7 +656,7 @@ export function ComponentTree({ previewClients }: { previewClients: readonly Pre
   }
 
   function dropOnTarget(event: DragEvent<HTMLDivElement>, key: string, target: TreeMoveTarget) {
-    const sourceId = dragSourceId || event.dataTransfer.getData(LAYER_DRAG_TYPE)
+    const sourceId = dragSourceIdRef.current || event.dataTransfer.getData(LAYER_DRAG_TYPE)
     if (!sourceId) return
     event.preventDefault()
     const preview =
@@ -678,16 +683,9 @@ export function ComponentTree({ previewClients }: { previewClients: readonly Pre
     return parent ? { parentId: parent.parent.id, index: parent.index + 1 } : null
   }
 
-  function hasCatalogPayload(event: DragEvent<HTMLDivElement>) {
-    return (
-      Array.from(event.dataTransfer.types ?? []).includes(COMPONENT_LIBRARY_DRAG_TYPE) ||
-      Boolean(event.dataTransfer.getData(COMPONENT_LIBRARY_DRAG_TYPE))
-    )
-  }
-
   function hasLayerPayload(event: DragEvent<HTMLDivElement>) {
     return (
-      Boolean(dragSourceId) ||
+      Boolean(dragSourceIdRef.current) ||
       Array.from(event.dataTransfer.types ?? []).includes(LAYER_DRAG_TYPE) ||
       Boolean(event.dataTransfer.getData(LAYER_DRAG_TYPE))
     )
@@ -790,7 +788,7 @@ export function ComponentTree({ previewClients }: { previewClients: readonly Pre
       const distance = Math.hypot(event.clientX - drag.startX, event.clientY - drag.startY)
       if (distance < 5) return
       drag.active = true
-      setDragSourceId(drag.sourceId)
+      dragSourceIdRef.current = drag.sourceId
       setNotice(null)
     }
 
@@ -1195,16 +1193,16 @@ export function ComponentTree({ previewClients }: { previewClients: readonly Pre
             !immutable && !effectivelyLocked && rowBoundaries?.canOutdent === true
           const layerActions: LayerActionItemsProps | null = node
             ? {
-                canDelete: rowCanDelete,
-                canDuplicate: !immutable && !effectivelyLocked && node.type !== "productBadge",
-                canIndent: rowCanIndent,
-                canMoveDown:
-                  !immutable && !effectivelyLocked && rowBoundaries?.canMoveNext === true,
-                canMoveUp:
-                  !immutable && !effectivelyLocked && rowBoundaries?.canMovePrevious === true,
-                canOutdent: rowCanOutdent,
-                hidden: directlyHidden,
-                locked: directlyLocked,
+                availability: {
+                  delete: rowCanDelete,
+                  duplicate: !immutable && !effectivelyLocked && node.type !== "productBadge",
+                  indent: rowCanIndent,
+                  moveDown: !immutable && !effectivelyLocked && rowBoundaries?.canMoveNext === true,
+                  moveUp:
+                    !immutable && !effectivelyLocked && rowBoundaries?.canMovePrevious === true,
+                  outdent: rowCanOutdent,
+                },
+                state: { hidden: directlyHidden, locked: directlyLocked },
                 onDelete: () => {
                   editor.selectComponent(row.id)
                   reportOperation(editor.deleteSelectedComponent(), "Layer deleted")
@@ -1315,7 +1313,7 @@ export function ComponentTree({ previewClients }: { previewClients: readonly Pre
                     event.dataTransfer.effectAllowed = "move"
                     event.dataTransfer.setData(LAYER_DRAG_TYPE, row.id)
                     event.dataTransfer.setData("text/plain", row.id)
-                    setDragSourceId(row.id)
+                    dragSourceIdRef.current = row.id
                     setDropPreview(null)
                     setNotice(null)
                   }}

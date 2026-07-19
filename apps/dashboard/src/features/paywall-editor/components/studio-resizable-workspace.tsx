@@ -1,4 +1,3 @@
-/* eslint-disable react-refresh/only-export-components -- deterministic panel lifecycle adapters are colocated with the layout they constrain. */
 import { SlidersHorizontalIcon } from "@phosphor-icons/react/dist/ssr/SlidersHorizontal"
 import { useCallback, useEffect, useImperativeHandle, useRef, useState } from "react"
 import type { ReactNode, Ref } from "react"
@@ -32,6 +31,11 @@ import type {
   StudioWorkspacePanel,
   StudioWorkspacePanelPreference,
 } from "@/features/paywall-editor/types/studio-workspace"
+import {
+  commitCompletedPanelLayout,
+  commitUpstreamDoubleClickResult,
+  restoreWorkspacePanelPreferences,
+} from "@/features/paywall-editor/utils/resizable-workspace-layout"
 
 const selectPanelPreferences = (snapshot: StudioWorkspaceSnapshot) => snapshot.preferences.panels
 const selectSelectedTool = (snapshot: StudioWorkspaceSnapshot) => snapshot.preferences.selectedTool
@@ -53,89 +57,6 @@ export interface StudioResizableWorkspaceHandle {
   expand: (panel: StudioWorkspacePanel) => boolean
   toggle: (panel: StudioWorkspacePanel) => boolean
   reset: () => boolean
-}
-
-interface CompletedPanelLayoutInput {
-  readonly meta: Pick<ResizableLayoutChangedMeta, "isUserInteraction">
-  readonly panel: StudioWorkspacePanel
-  readonly panelHandle: ResizablePanelImperativeHandle | null
-  readonly preference: StudioWorkspacePanelPreference
-  readonly actions: Pick<StudioWorkspaceActions, "commitPanelLayout">
-}
-
-export function restorePanelPreference(
-  panelHandle: ResizablePanelImperativeHandle | null,
-  preference: StudioWorkspacePanelPreference,
-) {
-  if (!panelHandle) return false
-  // A zero measurement means the group is still deferred (SSR/jsdom or before layout).
-  // The viewport remount path will retry once real panel geometry exists.
-  if (panelHandle.getSize().inPixels === 0 && !panelHandle.isCollapsed()) return false
-
-  panelHandle.resize(`${preference.size}px`)
-  if (preference.collapsed) {
-    panelHandle.collapse()
-  } else {
-    panelHandle.expand()
-  }
-  return true
-}
-
-export function restoreWorkspacePanelPreferences({
-  leftPanelHandle,
-  propertiesPanelHandle,
-  diagnosticsPanelHandle,
-  preferences,
-  includeProperties,
-}: {
-  readonly leftPanelHandle: ResizablePanelImperativeHandle | null
-  readonly propertiesPanelHandle: ResizablePanelImperativeHandle | null
-  readonly diagnosticsPanelHandle: ResizablePanelImperativeHandle | null
-  readonly preferences: StudioWorkspaceSnapshot["preferences"]["panels"]
-  readonly includeProperties: boolean
-}) {
-  const leftReady =
-    leftPanelHandle !== null &&
-    (leftPanelHandle.getSize().inPixels > 0 || leftPanelHandle.isCollapsed())
-  const diagnosticsReady =
-    diagnosticsPanelHandle !== null &&
-    (diagnosticsPanelHandle.getSize().inPixels > 0 || diagnosticsPanelHandle.isCollapsed())
-  const propertiesReady =
-    !includeProperties ||
-    (propertiesPanelHandle !== null &&
-      (propertiesPanelHandle.getSize().inPixels > 0 || propertiesPanelHandle.isCollapsed()))
-
-  if (!leftReady || !diagnosticsReady || !propertiesReady) return false
-
-  const leftApplied = restorePanelPreference(leftPanelHandle, preferences.left)
-  const diagnosticsApplied = restorePanelPreference(diagnosticsPanelHandle, preferences.diagnostics)
-  const propertiesApplied = includeProperties
-    ? restorePanelPreference(propertiesPanelHandle, preferences.properties)
-    : true
-
-  return leftApplied && diagnosticsApplied && propertiesApplied
-}
-
-export function commitCompletedPanelLayout({
-  meta,
-  panel,
-  panelHandle,
-  preference,
-  actions,
-}: CompletedPanelLayoutInput) {
-  if (!meta.isUserInteraction || !panelHandle) return false
-
-  const collapsed = panelHandle.isCollapsed()
-  const measuredSize = panelHandle.getSize().inPixels
-
-  return actions.commitPanelLayout(panel, {
-    collapsed,
-    size: collapsed ? preference.size : measuredSize,
-  })
-}
-
-export function commitUpstreamDoubleClickResult(input: Omit<CompletedPanelLayoutInput, "meta">) {
-  return commitCompletedPanelLayout({ ...input, meta: { isUserInteraction: true } })
 }
 
 function CompactPropertiesSheet({
@@ -198,6 +119,9 @@ function DesktopRequiredWorkspace({ children }: { readonly children: ReactNode }
   )
 }
 
+// The workspace coordinates one upstream panel group and its imperative handles; geometry helpers,
+// persistence, compact-sheet UI, and activity rail are separate modules/components.
+// oxlint-disable-next-line react-doctor/no-giant-component
 export function StudioResizableWorkspace({
   ref,
   viewportMode,
@@ -233,11 +157,15 @@ export function StudioResizableWorkspace({
     [viewportMode],
   )
 
+  // Leaving compact mode closes an external Sheet surface; this synchronizes a Base UI boundary,
+  // rather than deriving display state from viewportMode.
+  // oxlint-disable react-doctor/no-adjust-state-on-prop-change, react-doctor/no-reset-all-state-on-prop-change
   useEffect(() => {
     if (viewportMode === "compact" || !compactPropertiesOpenRef.current) return
     compactPropertiesOpenRef.current = false
     setCompactPropertiesOpenState(false)
   }, [viewportMode])
+  // oxlint-enable react-doctor/no-adjust-state-on-prop-change, react-doctor/no-reset-all-state-on-prop-change
 
   const restoreVisiblePanelPreferences = useCallback(
     (preferences: StudioWorkspaceSnapshot["preferences"]["panels"]) => {

@@ -125,6 +125,9 @@ function insertionBlockedByLock(
   )
 }
 
+// The catalog is one cohesive keyboard/drag insertion workflow and delegates catalog metadata,
+// icons, mutations, and validation to feature-owned modules.
+// oxlint-disable-next-line react-doctor/no-giant-component
 export function ComponentLibrary() {
   const { document, isDocumentTransactionActive, selectedComponentId } =
     useEditorStoreSelector(selectInsertionState)
@@ -154,15 +157,15 @@ export function ComponentLibrary() {
     layerMetadata.lockedIds,
   )
   const normalizedQuery = query.trim().toLocaleLowerCase()
-  const filteredCategories = COMPONENT_CATEGORIES.map((category) => ({
-    ...category,
-    entries: category.entries.filter(
+  const filteredCategories = COMPONENT_CATEGORIES.flatMap((category) => {
+    const entries = category.entries.filter(
       (entry) =>
         !normalizedQuery ||
         entry.label.toLocaleLowerCase().includes(normalizedQuery) ||
         entry.description.toLocaleLowerCase().includes(normalizedQuery),
-    ),
-  })).filter((category) => category.entries.length > 0)
+    )
+    return entries.length > 0 ? [{ ...category, entries }] : []
+  })
   const selectedEntry = COMPONENT_CATALOG_BY_TYPE.get(selectedType)
   const countdownEndsAt = countdownInstantFromLocalInput(countdownDeadlineInput)
   const countdownDeadlineReady = selectedType !== "countdown" || Boolean(countdownEndsAt)
@@ -304,26 +307,27 @@ export function ComponentLibrary() {
       {recentInsertions.length > 0 ? (
         <div>
           <h3 className="text-muted-foreground mb-1.5 text-xs font-semibold">Recent</h3>
-          <div aria-label="Recent insertions" className="flex flex-wrap gap-1.5" role="list">
+          <ul aria-label="Recent insertions" className="flex flex-wrap gap-1.5">
             {recentInsertions.map((type) => {
               const entry = COMPONENT_CATALOG_BY_TYPE.get(type)
               if (!entry) return null
               return (
-                <Button
-                  aria-pressed={selectedType === type}
-                  className="h-7 transition-none motion-reduce:transition-none"
-                  key={type}
-                  onClick={() => selectType(type)}
-                  size="sm"
-                  type="button"
-                  variant="outline"
-                >
-                  <CatalogIcon type={type} />
-                  {entry.label}
-                </Button>
+                <li key={type}>
+                  <Button
+                    aria-pressed={selectedType === type}
+                    className="h-7 transition-none motion-reduce:transition-none"
+                    onClick={() => selectType(type)}
+                    size="sm"
+                    type="button"
+                    variant="outline"
+                  >
+                    <CatalogIcon type={type} />
+                    {entry.label}
+                  </Button>
+                </li>
               )
             })}
-          </div>
+          </ul>
         </div>
       ) : null}
 

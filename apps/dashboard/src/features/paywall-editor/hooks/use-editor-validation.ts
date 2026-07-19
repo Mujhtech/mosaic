@@ -232,27 +232,22 @@ export function collectEditorValidation(document: MosaicDocument) {
     }
   }
 
-  const additionalCanonicalIssues = canonical.diagnostics
-    .map(canonicalIssue)
-    .map((issue) => resolveInspectorValidationIssue(document, issue))
-    .filter((issue) => !isSchemaBranchNoise(document, issue))
-    .filter(
-      (issue, index, issues) =>
-        issues.findIndex(
-          (candidate) =>
-            candidate.code === issue.code && candidate.documentPath === issue.documentPath,
-        ) === index,
+  const additionalCanonicalIssues: ValidationIssue[] = []
+  const seenCanonicalIssues = new Set<string>()
+  for (const diagnostic of canonical.diagnostics) {
+    const contractIssue = resolveInspectorValidationIssue(document, canonicalIssue(diagnostic))
+    const issueKey = `${contractIssue.code}:${contractIssue.documentPath}`
+    if (isSchemaBranchNoise(document, contractIssue) || seenCanonicalIssues.has(issueKey)) continue
+    seenCanonicalIssues.add(issueKey)
+    const coveredByEditorIssue = editorIssues.some(
+      (editorIssue) =>
+        editorIssue.documentPath === contractIssue.documentPath ||
+        contractIssue.documentPath.startsWith(`${editorIssue.documentPath}/`) ||
+        (editorIssue.componentId === contractIssue.componentId &&
+          editorIssue.property === contractIssue.property),
     )
-    .filter(
-      (contractIssue) =>
-        !editorIssues.some(
-          (editorIssue) =>
-            editorIssue.documentPath === contractIssue.documentPath ||
-            contractIssue.documentPath.startsWith(`${editorIssue.documentPath}/`) ||
-            (editorIssue.componentId === contractIssue.componentId &&
-              editorIssue.property === contractIssue.property),
-        ),
-    )
+    if (!coveredByEditorIssue) additionalCanonicalIssues.push(contractIssue)
+  }
   return {
     issues: [
       ...displayEditorIssues.map((issue) => resolveInspectorValidationIssue(document, issue)),

@@ -476,7 +476,7 @@ export function validateEditorDocument(document: MosaicDocument): ValidationIssu
   const seenIds = new Set<string>()
   const productIds = new Set(document.products.map((product) => product.id))
   const selectorIds = new Set(
-    entries.filter((entry) => entry.node.type === "productSelector").map((entry) => entry.node.id),
+    entries.flatMap((entry) => (entry.node.type === "productSelector" ? entry.node.id : [])),
   )
   const assetIds = new Set(document.assets.map((asset) => asset.id))
   let emittedCannotVerifyContrast = false
@@ -754,26 +754,4 @@ export function validateEditorDocument(document: MosaicDocument): ValidationIssu
   })
 
   return issues
-}
-
-export function isMosaicDocument(value: unknown): value is MosaicDocument {
-  if (!value || typeof value !== "object") return false
-  const candidate = value as Partial<MosaicDocument>
-  return (
-    candidate.schemaVersion === "0.2" &&
-    typeof candidate.id === "string" &&
-    Number.isInteger(candidate.revision) &&
-    typeof candidate.initialScreenId === "string" &&
-    Array.isArray(candidate.screens) &&
-    candidate.screens.length > 0 &&
-    candidate.screens.every(
-      (screen) =>
-        screen.layout?.type === "scrollContainer" &&
-        screen.layout.content?.type === "stack" &&
-        Array.isArray(screen.layout.content.children),
-    ) &&
-    !!candidate.localization?.locales &&
-    Array.isArray(candidate.products) &&
-    Array.isArray(candidate.assets)
-  )
 }

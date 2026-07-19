@@ -151,6 +151,9 @@ function DiagnosticCard({
   )
 }
 
+// The panel intentionally presents one connection aggregate; diagnostic cards and protocol state
+// derivation are extracted, while the remaining markup is a single accessible status surface.
+// oxlint-disable-next-line react-doctor/no-giant-component
 export function PreviewConnectionPanel({
   document,
   endpoint,

@@ -31,7 +31,6 @@
     "@mosaic/design-system": "file:../../packages/design-system",
     "@mosaic/design-tokens": "file:../../packages/design-tokens",
     "@phosphor-icons/react": "^2.1.10",
-    "@tanstack/react-form": "^1.33.2",
     "@tanstack/react-query": "^5.101.2",
     "@tanstack/react-router": "^1.170.18",
     "@tanstack/react-router-ssr-query": "^1.167.1",

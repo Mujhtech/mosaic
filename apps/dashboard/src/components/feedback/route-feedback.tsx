@@ -2,16 +2,6 @@ import type { ErrorComponentProps } from "@tanstack/react-router"
 
 import { EmptyState } from "@/components/feedback/empty-state"
 import { ErrorState } from "@/components/feedback/error-state"
-import { LoadingState } from "@/components/feedback/loading-state"
-
-export function RoutePendingState() {
-  return (
-    <LoadingState
-      className="mx-auto my-10 max-w-3xl"
-      description="Preparing this dashboard view."
-    />
-  )
-}
 
 export function RouteErrorState({ reset }: ErrorComponentProps) {
   return (

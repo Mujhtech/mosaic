@@ -393,6 +393,9 @@ function CustomColorPicker({
     <div className="space-y-3 p-3 pt-2">
       <div
         aria-label="Colour saturation and brightness"
+        aria-valuemax={100}
+        aria-valuemin={0}
+        aria-valuenow={Math.round(hsv.saturation * 100)}
         aria-valuetext={`Saturation ${Math.round(hsv.saturation * 100)}%, brightness ${Math.round(hsv.value * 100)}%`}
         className="focus-visible:ring-ring/50 relative h-36 cursor-crosshair touch-none overflow-hidden rounded-lg border border-black/10 outline-none focus-visible:ring-2"
         onBlur={onCommit}
@@ -610,6 +613,7 @@ export function InspectorColorControl({
           <ColorSwatch className="size-4" color={value} document={document} />
         </PopoverTrigger>
         <input
+          aria-label={label}
           aria-describedby={describedBy}
           aria-invalid={invalid || undefined}
           className="min-w-0 flex-1 bg-transparent px-1.5 font-mono text-[11px] outline-none"

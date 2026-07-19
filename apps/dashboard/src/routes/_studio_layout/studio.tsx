@@ -1,6 +1,6 @@
 import { createFileRoute, lazyRouteComponent } from "@tanstack/react-router"
 
-export const PaywallEditorWorkspace = lazyRouteComponent(
+const PaywallEditorWorkspace = lazyRouteComponent(
   () => import("@/features/paywall-editor/components/paywall-editor-workspace"),
   "PaywallEditorWorkspace",
 )

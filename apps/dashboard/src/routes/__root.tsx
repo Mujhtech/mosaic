@@ -1,15 +1,10 @@
 /// <reference types="vite/client" />
 
-import {
-  HeadContent,
-  Outlet,
-  Scripts,
-  createRootRouteWithContext,
-  type ErrorComponentProps,
-} from "@tanstack/react-router"
-import type { ReactNode } from "react"
+import { Outlet, createRootRouteWithContext } from "@tanstack/react-router"
 
-import { RouteErrorState, RouteNotFoundState } from "@/components/feedback/route-feedback"
+import { RootErrorComponent } from "@/components/feedback/root-error-component"
+import { RouteNotFoundState } from "@/components/feedback/route-feedback"
+import { RootDocument } from "@/components/layout/root-document"
 import { AppProviders } from "@/providers/app-providers"
 import type { RouterContext } from "@/router-context"
 import globalStyles from "@/styles/globals.css?url"
@@ -41,29 +36,5 @@ function RootComponent() {
         <Outlet />
       </AppProviders>
     </RootDocument>
-  )
-}
-
-function RootErrorComponent(props: ErrorComponentProps) {
-  return (
-    <RootDocument>
-      <main id="main-content">
-        <RouteErrorState {...props} />
-      </main>
-    </RootDocument>
-  )
-}
-
-function RootDocument({ children }: { children: ReactNode }) {
-  return (
-    <html lang="en">
-      <head>
-        <HeadContent />
-      </head>
-      <body>
-        <div className="app-root">{children}</div>
-        <Scripts />
-      </body>
-    </html>
   )
 }
