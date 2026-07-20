@@ -1,86 +1,999 @@
 openapi: 3.1.0
 info:
   title: Mosaic API
-  version: 0.1.0
-  description: Phase 0 operational API surface. Product APIs are not implemented yet.
+  version: 0.3.0-phase3a
+  description: |
+    Phase 3A cloud-workspace and provider-neutral Catalog API. Hosted endpoints
+    require an authenticated Principal, but the credential and browser-session
+    mechanism is intentionally not selected by this contract.
+servers:
+  - url: /
 paths:
   /health:
     get:
       operationId: getHealth
-      summary: Check API process liveness
+      tags: [Lifecycle]
       responses:
         "200":
-          description: The API process is accepting HTTP requests.
-          headers:
-            X-Request-ID:
-              description: Request correlation identifier.
-              schema:
-                type: string
+          description: Process liveness.
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/HealthEnvelope"
-        "500":
-          description: The request failed safely after an unexpected server error.
-          headers:
-            X-Request-ID:
-              description: Request correlation identifier.
-              schema:
-                type: string
+  /ready:
+    get:
+      operationId: getReadiness
+      tags: [Lifecycle]
+      responses:
+        "200":
+          description: The configured in-memory service is ready.
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/ErrorEnvelope"
-        "504":
-          description: The cooperative handler deadline expired.
-          headers:
-            X-Request-ID:
-              description: Request correlation identifier.
-              schema:
-                type: string
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorEnvelope"
+                $ref: "#/components/schemas/HealthEnvelope"
+  /v1/organizations:
+    get:
+      operationId: listOrganizations
+      tags: [Organizations]
+      parameters:
+        - $ref: "#/components/parameters/Cursor"
+        - $ref: "#/components/parameters/Limit"
+      responses:
+        "200": { $ref: "#/components/responses/OrganizationList" }
+        "401": { $ref: "#/components/responses/Error" }
+        "422": { $ref: "#/components/responses/Error" }
+    post:
+      operationId: createOrganization
+      tags: [Organizations]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CreateOrganizationRequest" }
+      responses:
+        "201": { $ref: "#/components/responses/Organization" }
+        "401": { $ref: "#/components/responses/Error" }
+        "422": { $ref: "#/components/responses/Error" }
+  /v1/organizations/{organizationId}:
+    parameters:
+      - $ref: "#/components/parameters/OrganizationID"
+    get:
+      operationId: getOrganization
+      tags: [Organizations]
+      responses:
+        "200": { $ref: "#/components/responses/Organization" }
+        "401": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+    patch:
+      operationId: updateOrganization
+      tags: [Organizations]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/UpdateOrganizationRequest" }
+      responses:
+        "200": { $ref: "#/components/responses/Organization" }
+        "401": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "422": { $ref: "#/components/responses/Error" }
+  /v1/organizations/{organizationId}/members:
+    parameters:
+      - $ref: "#/components/parameters/OrganizationID"
+    get:
+      operationId: listMembers
+      tags: [Members]
+      parameters:
+        - $ref: "#/components/parameters/Cursor"
+        - $ref: "#/components/parameters/Limit"
+      responses:
+        "200": { $ref: "#/components/responses/MembershipList" }
+        "401": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "422": { $ref: "#/components/responses/Error" }
+    post:
+      operationId: addMember
+      tags: [Members]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/AddMemberRequest" }
+      responses:
+        "201": { $ref: "#/components/responses/Membership" }
+        "401": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+        "422": { $ref: "#/components/responses/Error" }
+  /v1/organizations/{organizationId}/members/{actorId}:
+    parameters:
+      - $ref: "#/components/parameters/OrganizationID"
+      - $ref: "#/components/parameters/ActorID"
+    patch:
+      operationId: updateMember
+      tags: [Members]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/UpdateMemberRequest" }
+      responses:
+        "200": { $ref: "#/components/responses/Membership" }
+        "401": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+    delete:
+      operationId: removeMember
+      tags: [Members]
+      responses:
+        "204": { description: Member removed. }
+        "401": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+  /v1/organizations/{organizationId}/audit-events:
+    parameters:
+      - $ref: "#/components/parameters/OrganizationID"
+    get:
+      operationId: listAuditEvents
+      tags: [Audit]
+      parameters:
+        - $ref: "#/components/parameters/Cursor"
+        - $ref: "#/components/parameters/Limit"
+        - in: query
+          name: projectId
+          schema: { type: string }
+        - in: query
+          name: action
+          schema: { type: string }
+      responses:
+        "200": { $ref: "#/components/responses/AuditEventList" }
+        "401": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "422": { $ref: "#/components/responses/Error" }
+  /v1/projects:
+    get:
+      operationId: listProjects
+      tags: [Projects]
+      parameters:
+        - in: query
+          name: organizationId
+          required: true
+          schema: { type: string }
+        - in: query
+          name: status
+          schema: { $ref: "#/components/schemas/ProjectStatus" }
+        - $ref: "#/components/parameters/Cursor"
+        - $ref: "#/components/parameters/Limit"
+      responses:
+        "200": { $ref: "#/components/responses/ProjectList" }
+        "401": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "422": { $ref: "#/components/responses/Error" }
+    post:
+      operationId: createProject
+      tags: [Projects]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CreateProjectRequest" }
+      responses:
+        "201": { $ref: "#/components/responses/Project" }
+        "401": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+        "422": { $ref: "#/components/responses/Error" }
+  /v1/projects/{projectId}:
+    parameters:
+      - $ref: "#/components/parameters/ProjectID"
+    get:
+      operationId: getProject
+      tags: [Projects]
+      responses:
+        "200": { $ref: "#/components/responses/Project" }
+        "401": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+    patch:
+      operationId: updateProject
+      tags: [Projects]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/UpdateNameRequest" }
+      responses:
+        "200": { $ref: "#/components/responses/Project" }
+        default: { $ref: "#/components/responses/Error" }
+  /v1/projects/{projectId}/archive:
+    parameters:
+      - $ref: "#/components/parameters/ProjectID"
+    post:
+      operationId: archiveProject
+      tags: [Projects]
+      responses:
+        "200": { $ref: "#/components/responses/Project" }
+        default: { $ref: "#/components/responses/Error" }
+  /v1/projects/{projectId}/restore:
+    parameters:
+      - $ref: "#/components/parameters/ProjectID"
+    post:
+      operationId: restoreProject
+      tags: [Projects]
+      responses:
+        "200": { $ref: "#/components/responses/Project" }
+        default: { $ref: "#/components/responses/Error" }
+  /v1/projects/{projectId}/applications:
+    parameters:
+      - $ref: "#/components/parameters/ProjectID"
+    get:
+      operationId: listApplications
+      tags: [Applications]
+      parameters:
+        - $ref: "#/components/parameters/Cursor"
+        - $ref: "#/components/parameters/Limit"
+      responses:
+        "200": { $ref: "#/components/responses/ApplicationList" }
+        default: { $ref: "#/components/responses/Error" }
+    post:
+      operationId: createApplication
+      tags: [Applications]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CreateApplicationRequest" }
+      responses:
+        "201": { $ref: "#/components/responses/Application" }
+        default: { $ref: "#/components/responses/Error" }
+  /v1/projects/{projectId}/environments:
+    parameters:
+      - $ref: "#/components/parameters/ProjectID"
+    get:
+      operationId: listEnvironments
+      tags: [Environments]
+      parameters:
+        - $ref: "#/components/parameters/Cursor"
+        - $ref: "#/components/parameters/Limit"
+      responses:
+        "200": { $ref: "#/components/responses/EnvironmentList" }
+        default: { $ref: "#/components/responses/Error" }
+  /v1/environments/{environmentId}/api-keys:
+    parameters:
+      - $ref: "#/components/parameters/EnvironmentID"
+    get:
+      operationId: listAPIKeys
+      tags: [API Keys]
+      parameters:
+        - $ref: "#/components/parameters/Cursor"
+        - $ref: "#/components/parameters/Limit"
+        - in: query
+          name: kind
+          schema: { $ref: "#/components/schemas/APIKeyKind" }
+        - in: query
+          name: state
+          schema: { type: string, enum: [active, revoked] }
+      responses:
+        "200": { $ref: "#/components/responses/APIKeyList" }
+        default: { $ref: "#/components/responses/Error" }
+    post:
+      operationId: createAPIKey
+      tags: [API Keys]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CreateAPIKeyRequest" }
+      responses:
+        "201": { $ref: "#/components/responses/APIKeySecret" }
+        default: { $ref: "#/components/responses/Error" }
+  /v1/environments/{environmentId}:
+    parameters:
+      - $ref: "#/components/parameters/EnvironmentID"
+    patch:
+      operationId: updateEnvironment
+      tags: [Environments]
+      description: Updates the display name; the Environment key is immutable.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/UpdateNameRequest" }
+      responses:
+        "200": { $ref: "#/components/responses/Environment" }
+        default: { $ref: "#/components/responses/Error" }
+  /v1/api-keys/{apiKeyId}/rotate:
+    parameters:
+      - $ref: "#/components/parameters/APIKeyID"
+    post:
+      operationId: rotateAPIKey
+      tags: [API Keys]
+      responses:
+        "200": { $ref: "#/components/responses/APIKeySecret" }
+        default: { $ref: "#/components/responses/Error" }
+  /v1/api-keys/{apiKeyId}/revoke:
+    parameters:
+      - $ref: "#/components/parameters/APIKeyID"
+    post:
+      operationId: revokeAPIKey
+      tags: [API Keys]
+      responses:
+        "200": { $ref: "#/components/responses/APIKey" }
+        default: { $ref: "#/components/responses/Error" }
+  /v1/projects/{projectId}/plans:
+    parameters:
+      - $ref: "#/components/parameters/ProjectID"
+    get:
+      operationId: listPlans
+      tags: [Plans]
+      parameters:
+        - $ref: "#/components/parameters/Cursor"
+        - $ref: "#/components/parameters/Limit"
+      responses:
+        "200": { $ref: "#/components/responses/PlanList" }
+        default: { $ref: "#/components/responses/Error" }
+    post:
+      operationId: createPlan
+      tags: [Plans]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CreateCatalogResourceRequest" }
+      responses:
+        "201": { $ref: "#/components/responses/Plan" }
+        default: { $ref: "#/components/responses/Error" }
+  /v1/plans/{planId}:
+    parameters:
+      - $ref: "#/components/parameters/PlanID"
+    get:
+      operationId: getPlan
+      tags: [Plans]
+      responses:
+        "200": { $ref: "#/components/responses/Plan" }
+        default: { $ref: "#/components/responses/Error" }
+    patch:
+      operationId: updatePlan
+      tags: [Plans]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CreateCatalogResourceRequest" }
+      responses:
+        "200": { $ref: "#/components/responses/Plan" }
+        default: { $ref: "#/components/responses/Error" }
+  /v1/plans/{planId}/products:
+    parameters:
+      - $ref: "#/components/parameters/PlanID"
+    get:
+      operationId: listPlanProducts
+      tags: [Plans]
+      parameters:
+        - $ref: "#/components/parameters/Cursor"
+        - $ref: "#/components/parameters/Limit"
+      responses:
+        "200": { $ref: "#/components/responses/ProductList" }
+        default: { $ref: "#/components/responses/Error" }
+    post:
+      operationId: addPlanProduct
+      tags: [Plans]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ProductReferenceRequest" }
+      responses:
+        "201": { $ref: "#/components/responses/PlanProduct" }
+        default: { $ref: "#/components/responses/Error" }
+  /v1/plans/{planId}/products/{productId}:
+    parameters:
+      - $ref: "#/components/parameters/PlanID"
+      - $ref: "#/components/parameters/ProductID"
+    delete:
+      operationId: removePlanProduct
+      tags: [Plans]
+      responses:
+        "204": { description: Product removed from Plan. }
+        default: { $ref: "#/components/responses/Error" }
+  /v1/projects/{projectId}/products:
+    parameters:
+      - $ref: "#/components/parameters/ProjectID"
+    get:
+      operationId: listProducts
+      tags: [Products]
+      parameters:
+        - $ref: "#/components/parameters/Cursor"
+        - $ref: "#/components/parameters/Limit"
+        - in: query
+          name: status
+          schema: { $ref: "#/components/schemas/ProductStatus" }
+        - in: query
+          name: type
+          schema: { $ref: "#/components/schemas/ProductType" }
+        - in: query
+          name: search
+          schema: { type: string, maxLength: 100 }
+      responses:
+        "200": { $ref: "#/components/responses/ProductList" }
+        default: { $ref: "#/components/responses/Error" }
+    post:
+      operationId: createProduct
+      tags: [Products]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CreateProductRequest" }
+      responses:
+        "201": { $ref: "#/components/responses/Product" }
+        default: { $ref: "#/components/responses/Error" }
+  /v1/products/{productId}:
+    parameters:
+      - $ref: "#/components/parameters/ProductID"
+    get:
+      operationId: getProduct
+      tags: [Products]
+      responses:
+        "200": { $ref: "#/components/responses/Product" }
+        default: { $ref: "#/components/responses/Error" }
+    patch:
+      operationId: updateProduct
+      tags: [Products]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CreateProductRequest" }
+      responses:
+        "200": { $ref: "#/components/responses/Product" }
+        default: { $ref: "#/components/responses/Error" }
+    delete:
+      operationId: deleteProduct
+      tags: [Products]
+      responses:
+        "204": { description: Unreferenced Product deleted. }
+        default: { $ref: "#/components/responses/Error" }
+  /v1/products/{productId}/archive:
+    parameters:
+      - $ref: "#/components/parameters/ProductID"
+    post:
+      operationId: archiveProduct
+      tags: [Products]
+      responses:
+        "200": { $ref: "#/components/responses/Product" }
+        default: { $ref: "#/components/responses/Error" }
+  /v1/products/{productId}/restore:
+    parameters:
+      - $ref: "#/components/parameters/ProductID"
+    post:
+      operationId: restoreProduct
+      tags: [Products]
+      responses:
+        "200": { $ref: "#/components/responses/Product" }
+        default: { $ref: "#/components/responses/Error" }
+  /v1/products/{productId}/replacement:
+    parameters:
+      - $ref: "#/components/parameters/ProductID"
+    put:
+      operationId: setProductReplacement
+      tags: [Products]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ProductReferenceRequest" }
+      responses:
+        "200": { $ref: "#/components/responses/Product" }
+        default: { $ref: "#/components/responses/Error" }
+  /v1/products/{productId}/usage:
+    parameters:
+      - $ref: "#/components/parameters/ProductID"
+    get:
+      operationId: getProductUsage
+      tags: [Products]
+      responses:
+        "200": { $ref: "#/components/responses/ProductUsage" }
+        default: { $ref: "#/components/responses/Error" }
+  /v1/products/{productId}/readiness:
+    parameters:
+      - $ref: "#/components/parameters/ProductID"
+    get:
+      operationId: getProductReadiness
+      tags: [Products]
+      responses:
+        "200": { $ref: "#/components/responses/ProductReadiness" }
+        default: { $ref: "#/components/responses/Error" }
+  /v1/products/{productId}/provider-mappings:
+    parameters:
+      - $ref: "#/components/parameters/ProductID"
+    get:
+      operationId: listProviderMappings
+      tags: [Provider Placeholders]
+      parameters:
+        - $ref: "#/components/parameters/Cursor"
+        - $ref: "#/components/parameters/Limit"
+      responses:
+        "200": { $ref: "#/components/responses/ProviderMappingList" }
+        default: { $ref: "#/components/responses/Error" }
+    post:
+      operationId: createProviderMapping
+      tags: [Provider Placeholders]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CreateProviderMappingRequest" }
+      responses:
+        "201": { $ref: "#/components/responses/ProviderMapping" }
+        default: { $ref: "#/components/responses/Error" }
+  /v1/projects/{projectId}/entitlements:
+    parameters:
+      - $ref: "#/components/parameters/ProjectID"
+    get:
+      operationId: listEntitlements
+      tags: [Entitlements]
+      parameters:
+        - $ref: "#/components/parameters/Cursor"
+        - $ref: "#/components/parameters/Limit"
+      responses:
+        "200": { $ref: "#/components/responses/EntitlementList" }
+        default: { $ref: "#/components/responses/Error" }
+    post:
+      operationId: createEntitlement
+      tags: [Entitlements]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CreateCatalogResourceRequest" }
+      responses:
+        "201": { $ref: "#/components/responses/Entitlement" }
+        default: { $ref: "#/components/responses/Error" }
+  /v1/entitlements/{entitlementId}:
+    parameters:
+      - $ref: "#/components/parameters/EntitlementID"
+    get:
+      operationId: getEntitlement
+      tags: [Entitlements]
+      responses:
+        "200": { $ref: "#/components/responses/Entitlement" }
+        default: { $ref: "#/components/responses/Error" }
+    patch:
+      operationId: updateEntitlement
+      tags: [Entitlements]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CreateCatalogResourceRequest" }
+      responses:
+        "200": { $ref: "#/components/responses/Entitlement" }
+        default: { $ref: "#/components/responses/Error" }
+  /v1/products/{productId}/entitlements:
+    parameters:
+      - $ref: "#/components/parameters/ProductID"
+    get:
+      operationId: listProductEntitlements
+      tags: [Entitlements]
+      parameters:
+        - $ref: "#/components/parameters/Cursor"
+        - $ref: "#/components/parameters/Limit"
+      responses:
+        "200": { $ref: "#/components/responses/EntitlementList" }
+        default: { $ref: "#/components/responses/Error" }
+    post:
+      operationId: addProductEntitlement
+      tags: [Entitlements]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/EntitlementReferenceRequest" }
+      responses:
+        "201": { $ref: "#/components/responses/ProductEntitlementGrant" }
+        default: { $ref: "#/components/responses/Error" }
+  /v1/products/{productId}/entitlements/{entitlementId}:
+    parameters:
+      - $ref: "#/components/parameters/ProductID"
+      - $ref: "#/components/parameters/EntitlementID"
+    delete:
+      operationId: removeProductEntitlement
+      tags: [Entitlements]
+      responses:
+        "204": { description: Entitlement grant removed. }
+        default: { $ref: "#/components/responses/Error" }
 components:
+  parameters:
+    Cursor:
+      in: query
+      name: cursor
+      description: Opaque cursor from the immediately preceding list response. Malformed or stale values return validation_failed.
+      schema: { type: string }
+    Limit:
+      in: query
+      name: limit
+      schema: { type: integer, minimum: 1, maximum: 100, default: 25 }
+    OrganizationID: { in: path, name: organizationId, required: true, schema: { type: string } }
+    ActorID: { in: path, name: actorId, required: true, schema: { type: string } }
+    ProjectID: { in: path, name: projectId, required: true, schema: { type: string } }
+    EnvironmentID: { in: path, name: environmentId, required: true, schema: { type: string } }
+    APIKeyID: { in: path, name: apiKeyId, required: true, schema: { type: string } }
+    PlanID: { in: path, name: planId, required: true, schema: { type: string } }
+    ProductID: { in: path, name: productId, required: true, schema: { type: string } }
+    EntitlementID: { in: path, name: entitlementId, required: true, schema: { type: string } }
+  responses:
+    Error:
+      description: Stable machine-readable failure.
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/ErrorEnvelope" }
+    Organization: { description: Organization, content: { application/json: { schema: { $ref: "#/components/schemas/OrganizationEnvelope" } } } }
+    OrganizationList: { description: Organizations, content: { application/json: { schema: { $ref: "#/components/schemas/OrganizationListEnvelope" } } } }
+    Membership: { description: Membership, content: { application/json: { schema: { $ref: "#/components/schemas/MembershipEnvelope" } } } }
+    MembershipList: { description: Memberships, content: { application/json: { schema: { $ref: "#/components/schemas/MembershipListEnvelope" } } } }
+    Project: { description: Project, content: { application/json: { schema: { $ref: "#/components/schemas/ProjectEnvelope" } } } }
+    ProjectList: { description: Projects, content: { application/json: { schema: { $ref: "#/components/schemas/ProjectListEnvelope" } } } }
+    Application: { description: Application, content: { application/json: { schema: { $ref: "#/components/schemas/ApplicationEnvelope" } } } }
+    ApplicationList: { description: Applications, content: { application/json: { schema: { $ref: "#/components/schemas/ApplicationListEnvelope" } } } }
+    Environment: { description: Environment, content: { application/json: { schema: { $ref: "#/components/schemas/EnvironmentEnvelope" } } } }
+    EnvironmentList: { description: Environments, content: { application/json: { schema: { $ref: "#/components/schemas/EnvironmentListEnvelope" } } } }
+    APIKey: { description: API key metadata, content: { application/json: { schema: { $ref: "#/components/schemas/APIKeyEnvelope" } } } }
+    APIKeyList: { description: API keys without secrets, content: { application/json: { schema: { $ref: "#/components/schemas/APIKeyListEnvelope" } } } }
+    APIKeySecret: { description: One-time secret result, content: { application/json: { schema: { $ref: "#/components/schemas/APIKeySecretEnvelope" } } } }
+    Plan: { description: Plan, content: { application/json: { schema: { $ref: "#/components/schemas/PlanEnvelope" } } } }
+    PlanList: { description: Plans, content: { application/json: { schema: { $ref: "#/components/schemas/PlanListEnvelope" } } } }
+    PlanProduct: { description: Plan membership, content: { application/json: { schema: { $ref: "#/components/schemas/PlanProductEnvelope" } } } }
+    Product: { description: Product, content: { application/json: { schema: { $ref: "#/components/schemas/ProductEnvelope" } } } }
+    ProductList: { description: Products, content: { application/json: { schema: { $ref: "#/components/schemas/ProductListEnvelope" } } } }
+    ProductUsage: { description: Product usage, content: { application/json: { schema: { $ref: "#/components/schemas/ProductUsageEnvelope" } } } }
+    ProductReadiness: { description: Product readiness, content: { application/json: { schema: { $ref: "#/components/schemas/ProductReadinessEnvelope" } } } }
+    ProviderMapping: { description: Placeholder mapping, content: { application/json: { schema: { $ref: "#/components/schemas/ProviderMappingEnvelope" } } } }
+    ProviderMappingList: { description: Placeholder mappings, content: { application/json: { schema: { $ref: "#/components/schemas/ProviderMappingListEnvelope" } } } }
+    Entitlement: { description: Entitlement definition, content: { application/json: { schema: { $ref: "#/components/schemas/EntitlementEnvelope" } } } }
+    EntitlementList: { description: Entitlement definitions, content: { application/json: { schema: { $ref: "#/components/schemas/EntitlementListEnvelope" } } } }
+    ProductEntitlementGrant: { description: Product grant, content: { application/json: { schema: { $ref: "#/components/schemas/ProductEntitlementGrantEnvelope" } } } }
+    AuditEventList: { description: Audit events, content: { application/json: { schema: { $ref: "#/components/schemas/AuditEventListEnvelope" } } } }
   schemas:
-    HealthEnvelope:
+    Timestamp: { type: string, format: date-time }
+    Page:
       type: object
       additionalProperties: false
-      required:
-        - data
       properties:
-        data:
-          type: object
-          additionalProperties: false
-          required:
-            - status
-          properties:
-            status:
-              type: string
-              const: ok
+        nextCursor: { type: string }
+    Role: { type: string, enum: [owner, admin, member] }
+    ProjectStatus: { type: string, enum: [active, archived] }
+    Platform: { type: string, enum: [ios, android] }
+    APIKeyKind: { type: string, enum: [public_sdk, secret_server] }
+    ProductType: { type: string, enum: [subscription, one_time_non_consumable] }
+    ProductStatus: { type: string, enum: [draft, connected, attention_required, archived] }
+    MetadataSource: { type: string, enum: [mock, provider] }
+    ProviderKind: { type: string, enum: [revenuecat, app_store, google_play, custom] }
+    CreateOrganizationRequest:
+      type: object
+      additionalProperties: false
+      required: [name]
+      properties:
+        name: { type: string, minLength: 1, maxLength: 120 }
+    UpdateOrganizationRequest: { $ref: "#/components/schemas/CreateOrganizationRequest" }
+    UpdateNameRequest: { $ref: "#/components/schemas/CreateOrganizationRequest" }
+    AddMemberRequest:
+      type: object
+      additionalProperties: false
+      required: [actorId, role]
+      properties:
+        actorId: { type: string, minLength: 1, maxLength: 200 }
+        role: { $ref: "#/components/schemas/Role" }
+    UpdateMemberRequest:
+      type: object
+      additionalProperties: false
+      required: [role]
+      properties:
+        role: { $ref: "#/components/schemas/Role" }
+    CreateProjectRequest:
+      type: object
+      additionalProperties: false
+      required: [organizationId, key, name]
+      properties:
+        organizationId: { type: string }
+        key: { type: string, pattern: "^[a-z][a-z0-9_-]{1,62}$" }
+        name: { type: string, minLength: 1, maxLength: 120 }
+    CreateApplicationRequest:
+      type: object
+      additionalProperties: false
+      required: [name, platform, identifier]
+      properties:
+        name: { type: string, minLength: 1, maxLength: 120 }
+        platform: { $ref: "#/components/schemas/Platform" }
+        identifier: { type: string, minLength: 3, maxLength: 255 }
+    CreateAPIKeyRequest:
+      type: object
+      additionalProperties: false
+      required: [kind]
+      properties:
+        kind: { $ref: "#/components/schemas/APIKeyKind" }
+    CreateCatalogResourceRequest:
+      type: object
+      additionalProperties: false
+      required: [key, name]
+      properties:
+        key: { type: string, pattern: "^[a-z][a-z0-9_-]{1,62}$" }
+        name: { type: string, minLength: 1, maxLength: 120 }
+        description: { type: string, maxLength: 1000 }
+    CreateProductRequest:
+      type: object
+      additionalProperties: false
+      required: [key, internalName, type]
+      properties:
+        key: { type: string, pattern: "^[a-z][a-z0-9_-]{1,62}$" }
+        internalName: { type: string, minLength: 1, maxLength: 120 }
+        description: { type: string, maxLength: 1000 }
+        type: { $ref: "#/components/schemas/ProductType" }
+    ProductReferenceRequest:
+      type: object
+      additionalProperties: false
+      required: [productId]
+      properties:
+        productId: { type: string }
+    EntitlementReferenceRequest:
+      type: object
+      additionalProperties: false
+      required: [entitlementId]
+      properties:
+        entitlementId: { type: string }
+    CreateProviderMappingRequest:
+      type: object
+      additionalProperties: false
+      required: [applicationId, provider, providerProductIdentifier]
+      properties:
+        applicationId: { type: string }
+        provider: { $ref: "#/components/schemas/ProviderKind" }
+        providerProductIdentifier: { type: string, minLength: 1, maxLength: 255 }
+    Organization:
+      type: object
+      additionalProperties: false
+      required: [id, name, createdAt, updatedAt]
+      properties:
+        id: { type: string }
+        name: { type: string }
+        createdAt: { $ref: "#/components/schemas/Timestamp" }
+        updatedAt: { $ref: "#/components/schemas/Timestamp" }
+    Membership:
+      type: object
+      additionalProperties: false
+      required: [organizationId, actorId, role, createdAt, updatedAt]
+      properties:
+        organizationId: { type: string }
+        actorId: { type: string }
+        role: { $ref: "#/components/schemas/Role" }
+        createdAt: { $ref: "#/components/schemas/Timestamp" }
+        updatedAt: { $ref: "#/components/schemas/Timestamp" }
+    Project:
+      type: object
+      additionalProperties: false
+      required: [id, organizationId, key, name, status, createdAt, updatedAt]
+      properties:
+        id: { type: string }
+        organizationId: { type: string }
+        key: { type: string }
+        name: { type: string }
+        status: { $ref: "#/components/schemas/ProjectStatus" }
+        archivedAt: { $ref: "#/components/schemas/Timestamp" }
+        createdAt: { $ref: "#/components/schemas/Timestamp" }
+        updatedAt: { $ref: "#/components/schemas/Timestamp" }
+    Application:
+      type: object
+      additionalProperties: false
+      required: [id, projectId, name, platform, identifier, createdAt, updatedAt]
+      properties:
+        id: { type: string }
+        projectId: { type: string }
+        name: { type: string }
+        platform: { $ref: "#/components/schemas/Platform" }
+        identifier: { type: string }
+        createdAt: { $ref: "#/components/schemas/Timestamp" }
+        updatedAt: { $ref: "#/components/schemas/Timestamp" }
+    Environment:
+      type: object
+      additionalProperties: false
+      required: [id, projectId, key, name, createdAt, updatedAt]
+      properties:
+        id: { type: string }
+        projectId: { type: string }
+        key: { type: string }
+        name: { type: string }
+        createdAt: { $ref: "#/components/schemas/Timestamp" }
+        updatedAt: { $ref: "#/components/schemas/Timestamp" }
+    APIKey:
+      type: object
+      additionalProperties: false
+      required: [id, environmentId, kind, prefix, createdByActorId, createdAt]
+      properties:
+        id: { type: string }
+        environmentId: { type: string }
+        kind: { $ref: "#/components/schemas/APIKeyKind" }
+        prefix: { type: string }
+        createdByActorId: { type: string }
+        createdAt: { $ref: "#/components/schemas/Timestamp" }
+        rotatedAt: { $ref: "#/components/schemas/Timestamp" }
+        revokedAt: { $ref: "#/components/schemas/Timestamp" }
+        lastUsedAt: { $ref: "#/components/schemas/Timestamp" }
+    APIKeySecretResult:
+      type: object
+      additionalProperties: false
+      required: [apiKey, secret]
+      properties:
+        apiKey: { $ref: "#/components/schemas/APIKey" }
+        secret:
+          type: string
+          description: Returned only by create and rotate operations and never available again.
+          x-mosaic-one-time-secret: true
+    Plan:
+      type: object
+      additionalProperties: false
+      required: [id, projectId, key, name, createdAt, updatedAt]
+      properties:
+        id: { type: string }
+        projectId: { type: string }
+        key: { type: string }
+        name: { type: string }
+        description: { type: string }
+        createdAt: { $ref: "#/components/schemas/Timestamp" }
+        updatedAt: { $ref: "#/components/schemas/Timestamp" }
+    ProductReadiness:
+      type: object
+      additionalProperties: false
+      required: [ready, reasons, metadataSource]
+      properties:
+        ready: { type: boolean }
+        reasons: { type: array, items: { type: string } }
+        metadataSource: { $ref: "#/components/schemas/MetadataSource" }
+    Product:
+      type: object
+      additionalProperties: false
+      required: [id, projectId, key, internalName, type, status, metadataSource, readiness, createdAt, updatedAt]
+      properties:
+        id: { type: string }
+        projectId: { type: string }
+        key: { type: string }
+        internalName: { type: string }
+        description: { type: string }
+        type: { $ref: "#/components/schemas/ProductType" }
+        status: { $ref: "#/components/schemas/ProductStatus" }
+        metadataSource: { $ref: "#/components/schemas/MetadataSource" }
+        readiness: { $ref: "#/components/schemas/ProductReadiness" }
+        replacementProductId: { type: string }
+        archivedAt: { $ref: "#/components/schemas/Timestamp" }
+        createdAt: { $ref: "#/components/schemas/Timestamp" }
+        updatedAt: { $ref: "#/components/schemas/Timestamp" }
+    Entitlement:
+      type: object
+      additionalProperties: false
+      required: [id, projectId, key, name, createdAt, updatedAt]
+      properties:
+        id: { type: string }
+        projectId: { type: string }
+        key: { type: string }
+        name: { type: string }
+        description: { type: string }
+        createdAt: { $ref: "#/components/schemas/Timestamp" }
+        updatedAt: { $ref: "#/components/schemas/Timestamp" }
+    PlanProduct:
+      type: object
+      additionalProperties: false
+      required: [planId, productId, createdAt]
+      properties:
+        planId: { type: string }
+        productId: { type: string }
+        createdAt: { $ref: "#/components/schemas/Timestamp" }
+    ProductEntitlementGrant:
+      type: object
+      additionalProperties: false
+      required: [productId, entitlementId, createdAt]
+      properties:
+        productId: { type: string }
+        entitlementId: { type: string }
+        createdAt: { $ref: "#/components/schemas/Timestamp" }
+    ProviderProductMapping:
+      type: object
+      additionalProperties: false
+      required: [id, productId, applicationId, provider, providerProductIdentifier, status, createdAt, updatedAt]
+      properties:
+        id: { type: string }
+        productId: { type: string }
+        applicationId: { type: string }
+        provider: { $ref: "#/components/schemas/ProviderKind" }
+        providerProductIdentifier: { type: string }
+        status: { type: string, const: placeholder }
+        createdAt: { $ref: "#/components/schemas/Timestamp" }
+        updatedAt: { $ref: "#/components/schemas/Timestamp" }
+    ProductUsage:
+      type: object
+      additionalProperties: false
+      required: [productId, plans, entitlements, providerMappings, historicalReferences]
+      properties:
+        productId: { type: string }
+        plans: { type: array, items: { $ref: "#/components/schemas/Plan" } }
+        entitlements: { type: array, items: { $ref: "#/components/schemas/Entitlement" } }
+        providerMappings: { type: array, items: { $ref: "#/components/schemas/ProviderProductMapping" } }
+        historicalReferences: { type: array, items: { type: string } }
+    AuditEvent:
+      type: object
+      additionalProperties: false
+      required: [id, actorId, organizationId, action, resourceType, resourceId, metadata, createdAt]
+      properties:
+        id: { type: string }
+        actorId: { type: string }
+        organizationId: { type: string }
+        projectId: { type: string }
+        environmentId: { type: string }
+        action: { type: string }
+        resourceType: { type: string }
+        resourceId: { type: string }
+        metadata: { type: object, additionalProperties: { type: string } }
+        createdAt: { $ref: "#/components/schemas/Timestamp" }
     ErrorEnvelope:
       type: object
       additionalProperties: false
-      required:
-        - error
+      required: [error]
       properties:
         error:
           type: object
           additionalProperties: false
-          required:
-            - code
-            - message
+          required: [code, message]
           properties:
-            code:
-              type: string
-            message:
-              type: string
-            fields:
-              type: object
-              additionalProperties:
-                type: array
-                items:
-                  type: string
-            requestId:
-              type: string
+            code: { type: string }
+            message: { type: string }
+            fields: { type: object, additionalProperties: { type: array, items: { type: string } } }
+            requestId: { type: string }
+    HealthEnvelope:
+      type: object
+      additionalProperties: false
+      required: [data]
+      properties:
+        data:
+          type: object
+          additionalProperties: false
+          required: [status]
+          properties: { status: { type: string, const: ok } }
+    OrganizationEnvelope: { type: object, required: [data], properties: { data: { $ref: "#/components/schemas/Organization" } } }
+    MembershipEnvelope: { type: object, required: [data], properties: { data: { $ref: "#/components/schemas/Membership" } } }
+    ProjectEnvelope: { type: object, required: [data], properties: { data: { $ref: "#/components/schemas/Project" } } }
+    ApplicationEnvelope: { type: object, required: [data], properties: { data: { $ref: "#/components/schemas/Application" } } }
+    EnvironmentEnvelope: { type: object, required: [data], properties: { data: { $ref: "#/components/schemas/Environment" } } }
+    APIKeyEnvelope: { type: object, required: [data], properties: { data: { $ref: "#/components/schemas/APIKey" } } }
+    APIKeySecretEnvelope: { type: object, required: [data], properties: { data: { $ref: "#/components/schemas/APIKeySecretResult" } } }
+    PlanEnvelope: { type: object, required: [data], properties: { data: { $ref: "#/components/schemas/Plan" } } }
+    ProductEnvelope: { type: object, required: [data], properties: { data: { $ref: "#/components/schemas/Product" } } }
+    ProductReadinessEnvelope: { type: object, required: [data], properties: { data: { $ref: "#/components/schemas/ProductReadiness" } } }
+    EntitlementEnvelope: { type: object, required: [data], properties: { data: { $ref: "#/components/schemas/Entitlement" } } }
+    PlanProductEnvelope: { type: object, required: [data], properties: { data: { $ref: "#/components/schemas/PlanProduct" } } }
+    ProductEntitlementGrantEnvelope: { type: object, required: [data], properties: { data: { $ref: "#/components/schemas/ProductEntitlementGrant" } } }
+    ProviderMappingEnvelope: { type: object, required: [data], properties: { data: { $ref: "#/components/schemas/ProviderProductMapping" } } }
+    ProductUsageEnvelope: { type: object, required: [data], properties: { data: { $ref: "#/components/schemas/ProductUsage" } } }
+    OrganizationListEnvelope: { $ref: "#/components/schemas/OrganizationList" }
+    MembershipListEnvelope: { $ref: "#/components/schemas/MembershipList" }
+    ProjectListEnvelope: { $ref: "#/components/schemas/ProjectList" }
+    ApplicationListEnvelope: { $ref: "#/components/schemas/ApplicationList" }
+    EnvironmentListEnvelope: { $ref: "#/components/schemas/EnvironmentList" }
+    APIKeyListEnvelope: { $ref: "#/components/schemas/APIKeyList" }
+    PlanListEnvelope: { $ref: "#/components/schemas/PlanList" }
+    ProductListEnvelope: { $ref: "#/components/schemas/ProductList" }
+    EntitlementListEnvelope: { $ref: "#/components/schemas/EntitlementList" }
+    ProviderMappingListEnvelope: { $ref: "#/components/schemas/ProviderMappingList" }
+    AuditEventListEnvelope: { $ref: "#/components/schemas/AuditEventList" }
+    OrganizationList: { type: object, required: [data], properties: { data: { type: object, required: [items, page], properties: { items: { type: array, items: { $ref: "#/components/schemas/Organization" } }, page: { $ref: "#/components/schemas/Page" } } } } }
+    MembershipList: { type: object, required: [data], properties: { data: { type: object, required: [items, page], properties: { items: { type: array, items: { $ref: "#/components/schemas/Membership" } }, page: { $ref: "#/components/schemas/Page" } } } } }
+    ProjectList: { type: object, required: [data], properties: { data: { type: object, required: [items, page], properties: { items: { type: array, items: { $ref: "#/components/schemas/Project" } }, page: { $ref: "#/components/schemas/Page" } } } } }
+    ApplicationList: { type: object, required: [data], properties: { data: { type: object, required: [items, page], properties: { items: { type: array, items: { $ref: "#/components/schemas/Application" } }, page: { $ref: "#/components/schemas/Page" } } } } }
+    EnvironmentList: { type: object, required: [data], properties: { data: { type: object, required: [items, page], properties: { items: { type: array, items: { $ref: "#/components/schemas/Environment" } }, page: { $ref: "#/components/schemas/Page" } } } } }
+    APIKeyList: { type: object, required: [data], properties: { data: { type: object, required: [items, page], properties: { items: { type: array, items: { $ref: "#/components/schemas/APIKey" } }, page: { $ref: "#/components/schemas/Page" } } } } }
+    PlanList: { type: object, required: [data], properties: { data: { type: object, required: [items, page], properties: { items: { type: array, items: { $ref: "#/components/schemas/Plan" } }, page: { $ref: "#/components/schemas/Page" } } } } }
+    ProductList: { type: object, required: [data], properties: { data: { type: object, required: [items, page], properties: { items: { type: array, items: { $ref: "#/components/schemas/Product" } }, page: { $ref: "#/components/schemas/Page" } } } } }
+    EntitlementList: { type: object, required: [data], properties: { data: { type: object, required: [items, page], properties: { items: { type: array, items: { $ref: "#/components/schemas/Entitlement" } }, page: { $ref: "#/components/schemas/Page" } } } } }
+    ProviderMappingList: { type: object, required: [data], properties: { data: { type: object, required: [items, page], properties: { items: { type: array, items: { $ref: "#/components/schemas/ProviderProductMapping" } }, page: { $ref: "#/components/schemas/Page" } } } } }
+    AuditEventList: { type: object, required: [data], properties: { data: { type: object, required: [items, page], properties: { items: { type: array, items: { $ref: "#/components/schemas/AuditEvent" } }, page: { $ref: "#/components/schemas/Page" } } } } }

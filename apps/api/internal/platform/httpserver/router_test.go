@@ -1,6 +1,7 @@
 package httpserver
 
 import (
+	"bytes"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -10,6 +11,10 @@ import (
 	"time"
 
 	"github.com/rs/zerolog"
+
+	"github.com/Mujhtech/mosaic/apps/api/internal/cloudworkspace"
+	"github.com/Mujhtech/mosaic/apps/api/internal/platform/authn"
+	"github.com/Mujhtech/mosaic/apps/api/internal/platform/cloudworkspacememory"
 )
 
 type healthEnvelope struct {
@@ -160,6 +165,29 @@ func TestMiddlewareOrder(t *testing.T) {
 
 	if got := MiddlewareOrder(); !reflect.DeepEqual(got, want) {
 		t.Fatalf("middleware order = %#v, want %#v", got, want)
+	}
+}
+
+func TestCloudWorkspaceIsMountedAtV1WithInjectedPrincipal(t *testing.T) {
+	service := cloudworkspace.NewService(cloudworkspacememory.New())
+	handler := NewWithDependencies(Config{
+		ServiceName:    "mosaic-api-test",
+		AllowedOrigins: []string{"http://localhost:3000"},
+		RequestTimeout: time.Second,
+	}, zerolog.Nop(), Dependencies{
+		CloudWorkspace: service,
+		PrincipalResolver: authn.ResolverFunc(func(*http.Request) (authn.Principal, error) {
+			return authn.Principal{ActorID: "actor-owner", Method: "test"}, nil
+		}),
+	})
+	request := httptest.NewRequest(http.MethodPost, "/v1/organizations", bytes.NewBufferString(`{"name":"Acme"}`))
+	request.Header.Set("Content-Type", "application/json")
+	recorder := httptest.NewRecorder()
+
+	handler.ServeHTTP(recorder, request)
+
+	if recorder.Code != http.StatusCreated {
+		t.Fatalf("status = %d, want %d; body=%s", recorder.Code, http.StatusCreated, recorder.Body.String())
 	}
 }
 

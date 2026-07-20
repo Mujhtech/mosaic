@@ -1,0 +1,478 @@
+import { ArchiveIcon } from "@phosphor-icons/react/dist/ssr/Archive"
+import { ArrowCounterClockwiseIcon } from "@phosphor-icons/react/dist/ssr/ArrowCounterClockwise"
+import { useForm } from "@tanstack/react-form"
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
+import { Link } from "@tanstack/react-router"
+import { useState } from "react"
+
+import { Button } from "@/components/ui/button"
+import { buttonVariants } from "@/components/ui/button-variants"
+import { Field, FieldDescription, FieldLabel } from "@/components/ui/field"
+import { Input } from "@/components/ui/input"
+import { HostedResourceBoundary } from "@/features/auth/components/hosted-resource-boundary"
+import { resolveHostedQueryState } from "@/features/auth/types/hosted-query-state"
+import { CatalogTabs } from "@/features/catalog/components/catalog-tabs"
+import {
+  createProviderPlaceholderMutationOptions,
+  grantEntitlementMutationOptions,
+  productLifecycleMutationOptions,
+  removeEntitlementGrantMutationOptions,
+  setProductReplacementMutationOptions,
+} from "@/features/catalog/mutations/catalog-mutations"
+import {
+  entitlementsQueryOptions,
+  productEntitlementsQueryOptions,
+  productQueryOptions,
+  productReadinessQueryOptions,
+  productsQueryOptions,
+  productUsageQueryOptions,
+  providerMappingsQueryOptions,
+} from "@/features/catalog/queries/catalog-query"
+import {
+  canConfirmProductArchive,
+  countProductUsage,
+  replacementCandidates,
+} from "@/features/catalog/types/product-lifecycle"
+import { WorkspacePage, WorkflowPanel } from "@/features/organizations/components/workspace-page"
+import { ScopeMismatchRecovery } from "@/features/organizations/components/scope-mismatch-recovery"
+import { detectNestedScopeMismatch } from "@/features/organizations/types/nested-scope"
+import { projectQueryOptions } from "@/features/projects/queries/projects-query"
+
+interface ProductDetailPageProps {
+  organizationId: string
+  productId: string
+  projectId: string
+}
+
+export function ProductDetailPage({
+  organizationId,
+  productId,
+  projectId,
+}: ProductDetailPageProps) {
+  const queryClient = useQueryClient()
+  const [showLifecycle, setShowLifecycle] = useState(false)
+  const [selectedReplacementId, setSelectedReplacementId] = useState<string | null>(null)
+  const project = useQuery(projectQueryOptions(projectId))
+  const product = useQuery(productQueryOptions(productId))
+  const scopeMismatch = detectNestedScopeMismatch({
+    expectedOrganizationId: organizationId,
+    expectedProjectId: projectId,
+    expectedResourceId: productId,
+    project: project.data,
+    resource: product.data,
+  })
+  const scopeReady = project.isSuccess && product.isSuccess && scopeMismatch === null
+  const usage = useQuery({ ...productUsageQueryOptions(productId), enabled: scopeReady })
+  const readiness = useQuery({ ...productReadinessQueryOptions(productId), enabled: scopeReady })
+  const mappings = useQuery({ ...providerMappingsQueryOptions(productId), enabled: scopeReady })
+  const grants = useQuery({ ...productEntitlementsQueryOptions(productId), enabled: scopeReady })
+  const entitlements = useQuery({ ...entitlementsQueryOptions(projectId), enabled: scopeReady })
+  const replacements = useQuery({ ...productsQueryOptions(projectId), enabled: scopeReady })
+  const archive = useMutation(productLifecycleMutationOptions(queryClient, "archive"))
+  const restore = useMutation(productLifecycleMutationOptions(queryClient, "restore"))
+  const setReplacement = useMutation(setProductReplacementMutationOptions(productId, queryClient))
+  const grant = useMutation(grantEntitlementMutationOptions(productId, projectId, queryClient))
+  const removeGrant = useMutation(
+    removeEntitlementGrantMutationOptions(productId, projectId, queryClient),
+  )
+  const createMapping = useMutation(
+    createProviderPlaceholderMutationOptions(productId, projectId, queryClient),
+  )
+  const mappingForm = useForm({
+    defaultValues: {
+      applicationId: "",
+      provider: "custom" as "app_store" | "custom" | "google_play" | "revenuecat",
+      providerProductIdentifier: "",
+    },
+    onSubmit: async ({ value }) => {
+      await createMapping.mutateAsync(value)
+      mappingForm.reset()
+    },
+  })
+  const error = project.error ?? product.error ?? usage.error ?? readiness.error
+  const state = resolveHostedQueryState({
+    emptyDescription: "Return to Products and choose an existing Product.",
+    emptyTitle: "Product unavailable",
+    error,
+    isEmpty: product.isSuccess && !product.data,
+    isPending:
+      project.isPending ||
+      product.isPending ||
+      (scopeReady && (usage.isPending || readiness.isPending)),
+    loadingDescription: "Loading Product identity, readiness, and usage.",
+    onRetry: () => {
+      void project.refetch()
+      void product.refetch()
+      void usage.refetch()
+      void readiness.refetch()
+    },
+    permissionAction: (
+      <Link
+        className={buttonVariants({ variant: "outline" })}
+        params={{ organizationId, projectId }}
+        to="/organizations/$organizationId/projects/$projectId"
+      >
+        Return to Project
+      </Link>
+    ),
+    permissionDescription: "Project membership is required to inspect Product usage.",
+  })
+  const usageCount = countProductUsage(usage.data)
+  const isArchived = product.data?.status === "archived"
+  const replacementOptions = replacementCandidates(
+    replacements.data?.items ?? [],
+    productId,
+    product.data?.type,
+  )
+  const effectiveReplacementId = selectedReplacementId ?? product.data?.replacementProductId
+  const replacementNeedsSave = Boolean(
+    selectedReplacementId && selectedReplacementId !== product.data?.replacementProductId,
+  )
+
+  async function confirmArchive() {
+    try {
+      if (replacementNeedsSave && selectedReplacementId) {
+        await setReplacement.mutateAsync({
+          previousReplacementProductId: product.data?.replacementProductId,
+          replacementProductId: selectedReplacementId,
+        })
+      }
+      await archive.mutateAsync(productId)
+      setSelectedReplacementId(null)
+      setShowLifecycle(false)
+    } catch {
+      // TanStack Mutation exposes the actionable API error in the workflow below.
+    }
+  }
+
+  function cancelArchiveReview() {
+    setSelectedReplacementId(null)
+    setShowLifecycle(false)
+  }
+
+  if (scopeMismatch) {
+    return (
+      <WorkspacePage
+        description="The routed parent identifiers do not match this Product."
+        title="Product unavailable in this Project"
+      >
+        <ScopeMismatchRecovery
+          mismatch={scopeMismatch}
+          organizationId={organizationId}
+          projectId={projectId}
+        />
+      </WorkspacePage>
+    )
+  }
+
+  return (
+    <WorkspacePage
+      description={product.data?.description ?? "Stable provider-neutral Product identity."}
+      eyebrow="Catalog · Product"
+      title={product.data?.internalName ?? "Product"}
+    >
+      <CatalogTabs organizationId={organizationId} projectId={projectId} />
+      <HostedResourceBoundary state={state}>
+        <div className="grid gap-4 md:grid-cols-3">
+          <Metric label="Status" value={product.data?.status.replaceAll("_", " ") ?? "—"} />
+          <Metric
+            label="Metadata"
+            value={product.data?.metadataSource === "provider" ? "Provider-owned" : "Mock metadata"}
+          />
+          <Metric
+            label="Readiness"
+            value={
+              readiness.data?.ready ? "Ready" : `${readiness.data?.reasons.length ?? 0} issue(s)`
+            }
+          />
+        </div>
+
+        <WorkflowPanel
+          description="Usage is always shown before lifecycle controls. Historical references keep this Mosaic Product ID stable."
+          title="Used in"
+        >
+          <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
+            <UsageList items={usage.data?.plans.map((item) => item.name) ?? []} label="Plans" />
+            <UsageList
+              items={usage.data?.entitlements.map((item) => item.name) ?? []}
+              label="Entitlements"
+            />
+            <UsageList
+              items={
+                usage.data?.providerMappings.map(
+                  (item) => `${item.provider}: ${item.providerProductIdentifier}`,
+                ) ?? []
+              }
+              label="Provider placeholders"
+            />
+            <UsageList
+              items={usage.data?.historicalReferences ?? []}
+              label="Historical references"
+            />
+          </div>
+        </WorkflowPanel>
+
+        <WorkflowPanel
+          description="These definitions describe access a Product grants. They are not customer entitlement state."
+          title="Entitlement grants"
+        >
+          <ul className="mb-4 divide-y">
+            {grants.data?.items.map((entitlement) => (
+              <li
+                className="flex items-center justify-between gap-4 py-3 text-sm"
+                key={entitlement.id}
+              >
+                <span>
+                  {entitlement.name}{" "}
+                  <span className="text-muted-foreground font-mono text-xs">
+                    · {entitlement.key}
+                  </span>
+                </span>
+                <Button
+                  disabled={removeGrant.isPending}
+                  onClick={() => removeGrant.mutate(entitlement.id)}
+                  size="sm"
+                  variant="ghost"
+                >
+                  Remove grant
+                </Button>
+              </li>
+            ))}
+          </ul>
+          <div className="flex flex-wrap gap-2">
+            {entitlements.data?.items
+              .filter(
+                (entitlement) =>
+                  !grants.data?.items.some((granted) => granted.id === entitlement.id),
+              )
+              .map((entitlement) => (
+                <Button
+                  key={entitlement.id}
+                  onClick={() => grant.mutate(entitlement.id)}
+                  size="sm"
+                  variant="outline"
+                >
+                  Grant {entitlement.name}
+                </Button>
+              ))}
+          </div>
+          {grant.error || removeGrant.error ? (
+            <p className="text-destructive mt-3 text-sm" role="alert">
+              {(grant.error ?? removeGrant.error)?.message}
+            </p>
+          ) : null}
+        </WorkflowPanel>
+
+        <WorkflowPanel
+          description="Mappings are non-operative placeholders. They do not connect, validate, import, or synchronize provider data; continue using Mock metadata until Phase 4."
+          title="Provider placeholders"
+        >
+          <ul className="mb-4 divide-y">
+            {mappings.data?.items.map((mapping) => (
+              <li className="py-3 text-sm" key={mapping.id}>
+                <span className="font-medium capitalize">
+                  {mapping.provider.replaceAll("_", " ")}
+                </span>
+                <span className="text-muted-foreground ml-2 font-mono text-xs">
+                  {mapping.providerProductIdentifier}
+                </span>
+                <span className="bg-muted ml-2 rounded-full px-2 py-0.5 text-xs">Placeholder</span>
+              </li>
+            ))}
+          </ul>
+          <form
+            className="grid gap-3 md:grid-cols-4"
+            onSubmit={(event) => {
+              event.preventDefault()
+              event.stopPropagation()
+              void mappingForm.handleSubmit()
+            }}
+          >
+            <mappingForm.Field name="applicationId">
+              {(field) => (
+                <Field>
+                  <FieldLabel htmlFor="mapping-app">Application ID</FieldLabel>
+                  <Input
+                    id="mapping-app"
+                    onChange={(event) => field.handleChange(event.target.value)}
+                    value={field.state.value}
+                  />
+                </Field>
+              )}
+            </mappingForm.Field>
+            <mappingForm.Field name="provider">
+              {(field) => (
+                <Field>
+                  <FieldLabel htmlFor="mapping-provider">Provider label</FieldLabel>
+                  <select
+                    className="border-input bg-background h-9 rounded-md border px-3 text-sm"
+                    id="mapping-provider"
+                    onChange={(event) =>
+                      field.handleChange(event.target.value as typeof field.state.value)
+                    }
+                    value={field.state.value}
+                  >
+                    <option value="app_store">App Store</option>
+                    <option value="google_play">Google Play</option>
+                    <option value="revenuecat">RevenueCat</option>
+                    <option value="custom">Custom</option>
+                  </select>
+                </Field>
+              )}
+            </mappingForm.Field>
+            <mappingForm.Field name="providerProductIdentifier">
+              {(field) => (
+                <Field>
+                  <FieldLabel htmlFor="mapping-product">Provider Product ID</FieldLabel>
+                  <Input
+                    id="mapping-product"
+                    onChange={(event) => field.handleChange(event.target.value)}
+                    value={field.state.value}
+                  />
+                  <FieldDescription>Label only; no network work.</FieldDescription>
+                </Field>
+              )}
+            </mappingForm.Field>
+            <Button className="self-end" disabled={createMapping.isPending} type="submit">
+              Add placeholder
+            </Button>
+          </form>
+          {createMapping.error ? (
+            <p className="text-destructive mt-3 text-sm" role="alert">
+              {createMapping.error.message}
+            </p>
+          ) : null}
+        </WorkflowPanel>
+
+        <WorkflowPanel
+          description="Archive removes this Product from future selection without deleting history. Restore preserves the same ID."
+          title="Lifecycle"
+        >
+          {isArchived ? (
+            <Button onClick={() => restore.mutate(productId)} variant="outline">
+              <ArrowCounterClockwiseIcon aria-hidden size={16} />
+              Restore Product
+            </Button>
+          ) : (
+            <Button
+              onClick={() => {
+                setSelectedReplacementId(null)
+                setShowLifecycle(true)
+              }}
+              variant="outline"
+            >
+              <ArchiveIcon aria-hidden size={16} />
+              Review archive
+            </Button>
+          )}
+          {showLifecycle && !isArchived ? (
+            <div className="border-border bg-muted/35 mt-4 rounded-lg border p-4">
+              <p className="text-sm font-semibold">
+                {usageCount > 0
+                  ? `This Product has ${usageCount} usage reference(s). Choose a replacement before archiving.`
+                  : "This Product has no known usage and can be archived safely."}
+              </p>
+              {usageCount > 0 ? (
+                <label className="mt-3 flex max-w-md flex-col gap-2 text-sm font-medium">
+                  Replacement Product
+                  <select
+                    className="border-input bg-background h-9 rounded-md border px-3"
+                    onChange={(event) => setSelectedReplacementId(event.target.value || null)}
+                    value={effectiveReplacementId ?? ""}
+                  >
+                    <option disabled value="">
+                      Choose an active Product
+                    </option>
+                    {replacementOptions.map((item) => (
+                      <option key={item.id} value={item.id}>
+                        {item.internalName}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              ) : null}
+              {usageCount > 0 && product.data?.replacementProductId ? (
+                <p className="text-muted-foreground mt-2 text-sm">
+                  An existing replacement is already recorded. Choose another only if it should be
+                  changed before archive.
+                </p>
+              ) : null}
+              {usageCount > 0 && replacementOptions.length === 0 && !effectiveReplacementId ? (
+                <div className="mt-4">
+                  <Link
+                    className={buttonVariants({ variant: "outline" })}
+                    params={{ organizationId, projectId }}
+                    to="/organizations/$organizationId/projects/$projectId/catalog/products"
+                  >
+                    Create Replacement Product
+                  </Link>
+                </div>
+              ) : null}
+              <div className="mt-4 flex gap-2">
+                <Button
+                  disabled={
+                    archive.isPending ||
+                    setReplacement.isPending ||
+                    !canConfirmProductArchive(usageCount, Boolean(effectiveReplacementId))
+                  }
+                  onClick={() => void confirmArchive()}
+                >
+                  {setReplacement.isPending
+                    ? "Saving replacement…"
+                    : archive.isPending
+                      ? "Archiving…"
+                      : replacementNeedsSave
+                        ? "Save replacement and archive"
+                        : "Archive Product"}
+                </Button>
+                <Button
+                  disabled={archive.isPending || setReplacement.isPending}
+                  onClick={cancelArchiveReview}
+                  variant="ghost"
+                >
+                  Cancel
+                </Button>
+              </div>
+            </div>
+          ) : null}
+          <p className="text-muted-foreground mt-4 text-sm">
+            Destructive deletion is unavailable once referenced. Archive, replacement, and restore
+            are the recovery paths.
+          </p>
+          {archive.error || restore.error || setReplacement.error ? (
+            <p className="text-destructive mt-3 text-sm" role="alert">
+              {(archive.error ?? restore.error ?? setReplacement.error)?.message}
+            </p>
+          ) : null}
+        </WorkflowPanel>
+      </HostedResourceBoundary>
+    </WorkspacePage>
+  )
+}
+
+function Metric({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-xl border p-4">
+      <p className="text-muted-foreground text-xs font-medium uppercase">{label}</p>
+      <p className="mt-2 text-sm font-semibold capitalize">{value}</p>
+    </div>
+  )
+}
+function UsageList({ items, label }: { items: string[]; label: string }) {
+  return (
+    <section aria-label={label}>
+      <p className="text-xs font-semibold tracking-wide uppercase">{label}</p>
+      {items.length ? (
+        <ul className="mt-2 space-y-1">
+          {items.map((item) => (
+            <li className="text-muted-foreground text-sm" key={item}>
+              {item}
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <p className="text-muted-foreground mt-2 text-sm">None</p>
+      )}
+    </section>
+  )
+}

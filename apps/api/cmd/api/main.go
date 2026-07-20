@@ -11,6 +11,9 @@ import (
 
 	"github.com/rs/zerolog"
 
+	"github.com/Mujhtech/mosaic/apps/api/internal/cloudworkspace"
+	"github.com/Mujhtech/mosaic/apps/api/internal/platform/authn"
+	"github.com/Mujhtech/mosaic/apps/api/internal/platform/cloudworkspacememory"
 	"github.com/Mujhtech/mosaic/apps/api/internal/platform/config"
 	"github.com/Mujhtech/mosaic/apps/api/internal/platform/httpserver"
 	"github.com/Mujhtech/mosaic/apps/api/internal/platform/logging"
@@ -72,11 +75,16 @@ func run() (runErr error) {
 		}
 	}()
 
-	handler := httpserver.New(httpserver.Config{
+	workspaceRepository := cloudworkspacememory.New()
+	workspaceService := cloudworkspace.NewService(workspaceRepository)
+	handler := httpserver.NewWithDependencies(httpserver.Config{
 		ServiceName:    cfg.Telemetry.ServiceName,
 		AllowedOrigins: cfg.HTTP.CORSAllowedOrigins,
 		RequestTimeout: cfg.HTTP.HandlerTimeout,
-	}, logger)
+	}, logger, httpserver.Dependencies{
+		CloudWorkspace:    workspaceService,
+		PrincipalResolver: authn.AnonymousResolver{},
+	})
 
 	server := &http.Server{
 		Addr:              cfg.HTTP.Address,
