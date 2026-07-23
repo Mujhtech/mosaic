@@ -32,6 +32,11 @@ required capability before Studio sends a draft. Accepted revisions reset
 navigation, Carousel, Switch, and Product Selector runtime state from the new
 document.
 
+Configuration Delivery `1` is a separate immutable hosted-release envelope
+around accepted Protocol `0.2` documents. Its schemas, compatibility manifest,
+fixtures, atomic validation rules, and fallback behavior are documented in
+`docs/protocol/configuration-delivery-v1.md`.
+
 ## Generate and validate
 
 From the repository root:
@@ -40,6 +45,7 @@ From the repository root:
 npm --prefix protocol ci
 npm --prefix protocol run generate
 npm --prefix protocol run validate
+npm --prefix protocol test
 ```
 
 Generation refreshes the browser declarations from the canonical `0.2`
@@ -52,3 +58,4 @@ See:
 - `docs/protocol/v0.2.md`
 - `docs/protocol/local-preview-v0.2.md`
 - `docs/protocol/versioning.md`
+- `docs/protocol/configuration-delivery-v1.md`

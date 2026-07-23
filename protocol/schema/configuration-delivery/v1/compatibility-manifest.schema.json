@@ -1,0 +1,108 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:mosaic:protocol:schema:configuration-delivery:v1:compatibility-manifest",
+  "title": "Mosaic Configuration Delivery v1 Compatibility Manifest",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "configurationDeliveryVersion",
+    "status",
+    "releaseSchema",
+    "capabilityRequestSchema",
+    "canonicalFixture",
+    "supportedPaywallProtocols",
+    "readerPolicy"
+  ],
+  "properties": {
+    "configurationDeliveryVersion": {
+      "const": "1"
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "draft",
+        "releaseCandidate",
+        "approved",
+        "deprecated"
+      ]
+    },
+    "releaseSchema": {
+      "const": "../../schema/configuration-delivery/v1/release.schema.json"
+    },
+    "capabilityRequestSchema": {
+      "const": "../../schema/configuration-delivery/v1/capability-request.schema.json"
+    },
+    "canonicalFixture": {
+      "const": "../../fixtures/configuration-delivery/v1/valid-release.json"
+    },
+    "supportedPaywallProtocols": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 1,
+      "items": {
+        "const": "0.2"
+      }
+    },
+    "readerPolicy": {
+      "$ref": "#/$defs/readerPolicy"
+    }
+  },
+  "$defs": {
+    "readerPolicy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "unknownDeliveryVersion",
+        "unknownField",
+        "unsupportedPaywallProtocol",
+        "unsupportedPaywallCapability",
+        "invalidReference",
+        "invalidDigest",
+        "candidateRejected",
+        "noAcceptedRelease",
+        "bundledReleaseRejected",
+        "partialAcceptance",
+        "unknownPlacement",
+        "assetUnavailable"
+      ],
+      "properties": {
+        "unknownDeliveryVersion": {
+          "const": "rejectRelease"
+        },
+        "unknownField": {
+          "const": "rejectRelease"
+        },
+        "unsupportedPaywallProtocol": {
+          "const": "rejectRelease"
+        },
+        "unsupportedPaywallCapability": {
+          "const": "rejectRelease"
+        },
+        "invalidReference": {
+          "const": "rejectRelease"
+        },
+        "invalidDigest": {
+          "const": "rejectRelease"
+        },
+        "candidateRejected": {
+          "const": "keepLastAcceptedRelease"
+        },
+        "noAcceptedRelease": {
+          "const": "loadBundledRelease"
+        },
+        "bundledReleaseRejected": {
+          "const": "configurationUnavailable"
+        },
+        "partialAcceptance": {
+          "const": "forbidden"
+        },
+        "unknownPlacement": {
+          "const": "placementUnavailable"
+        },
+        "assetUnavailable": {
+          "const": "usePaywallDeclaredFallbackAndDiagnose"
+        }
+      }
+    }
+  }
+}

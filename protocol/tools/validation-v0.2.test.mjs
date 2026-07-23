@@ -1,6 +1,4 @@
 import assert from "node:assert/strict";
-import { createHash } from "node:crypto";
-import { readFileSync } from "node:fs";
 import test from "node:test";
 
 import {
@@ -28,10 +26,6 @@ import {
   validatePaywallDocument,
   validatePreviewMessage,
 } from "../browser/index.js";
-import {
-  migrateCanonicalV01Fixture,
-  migrateV01ToV02,
-} from "./migrate-v0.1-to-v0.2.mjs";
 import { migrateV02RC2CandidateToRC3 } from "./migrate-v0.2-rc2-to-rc3.mjs";
 import { migrateV02RC3CandidateToRC4 } from "./migrate-v0.2-rc3-to-rc4.mjs";
 import {
@@ -79,25 +73,6 @@ function node(document, id) {
   return entry.node;
 }
 
-function v01Node(document, id) {
-  let match;
-  function visit(candidate) {
-    if (!candidate || typeof candidate !== "object" || match) return;
-    if (candidate.id === id) {
-      match = candidate;
-      return;
-    }
-    if (candidate.type === "scrollContainer") {
-      visit(candidate.content);
-    } else if (candidate.type === "verticalStack") {
-      for (const child of candidate.children ?? []) visit(child);
-    }
-  }
-  visit(document.layout);
-  assert.ok(match, `expected Protocol 0.1 node ${id}`);
-  return match;
-}
-
 function screen(document, id) {
   const value = document.screens.find((candidate) => candidate.id === id);
   assert.ok(value, `expected screen ${id}`);
@@ -131,7 +106,6 @@ test("Protocol 0.2 release-candidate fixtures validate without approving the ver
   const input = artifacts();
   for (const document of [
     input.document,
-    input.migratedDocument,
     input.edgeDocument,
     input.expiredCountdownDocument,
     input.hiddenPurchaseTargetDocument,
@@ -233,10 +207,25 @@ test("screens are bounded, labelled when plural, reachable, and forward-acyclic"
     canonical.document.screens.every((candidate) => candidate.accessibilityLabel),
     true,
   );
-  assert.equal(
-    Object.hasOwn(canonical.migratedDocument.screens[0], "accessibilityLabel"),
-    false,
-  );
+
+  const singleScreen = artifacts();
+  singleScreen.document.screens = [screen(singleScreen.document, "offer")];
+  node(singleScreen.document, "view-details").action = { type: "close" };
+  delete singleScreen.document.screens[0].accessibilityLabel;
+  for (const locale of Object.values(singleScreen.document.localization.locales)) {
+    for (const key of [
+      "paywall.screen.offer",
+      "paywall.screen.details",
+      "paywall.navigation.back",
+      "paywall.details.title",
+      "paywall.details.privacy",
+      "paywall.details.privacy.hint",
+    ]) {
+      delete locale.strings[key];
+    }
+  }
+  refreshCapabilities(singleScreen);
+  assert.deepEqual(errors(singleScreen), []);
 
   const missingPluralLabel = artifacts();
   delete screen(missingPluralLabel.document, "details").accessibilityLabel;
@@ -563,27 +552,24 @@ test("RC4 requires explicit Screen or Sheet presentation and keeps the initial r
   assert.deepEqual(screen(converted.document, "details").layout, before.layout);
 });
 
-test("Product Selector owns direction and gap, including deterministic v0.1 migration", () => {
+test("Product Selector and Feature List own their current 0.2 layout fields", () => {
   const input = artifacts();
   const selector = node(input.document, "plans");
   assert.deepEqual(protocolV02AuthoringWarnings(input.document), []);
   assert.equal(selector.direction, "horizontal");
   assert.equal(typeof selector.gap, "number");
 
-  const migratedSelector = node(input.migratedDocument, "plans");
-  assert.equal(migratedSelector.direction, "vertical");
-  assert.equal(migratedSelector.gap, 12);
-  assert.equal(Object.hasOwn(migratedSelector, "itemSpacing"), false);
-  const migratedFeatureList = node(input.migratedDocument, "features");
-  assert.equal(migratedFeatureList.gap, 12);
-  assert.equal(migratedFeatureList.markerColor, "text.primary");
+  const featureList = node(input.document, "features");
+  assert.equal(typeof featureList.gap, "number");
+  assert.ok(featureList.markerColor);
 
   const invalid = artifacts();
-  selector.direction = "grid";
-  assertInvalid(input);
+  node(invalid.document, "plans").direction = "grid";
+  assertInvalid(invalid);
 
-  delete migratedFeatureList.markerColor;
-  assertInvalid({ ...input, document: input.migratedDocument });
+  const missingMarker = artifacts();
+  delete node(missingMarker.document, "features").markerColor;
+  assertInvalid(missingMarker);
 });
 
 test("Carousel has 2–20 labelled pages, Stack content, and a bounded initial index", () => {
@@ -1091,125 +1077,9 @@ test("navigation history is runtime-only and root Navigate Back is a safe no-op"
   );
 });
 
-test("0.1 to 0.2 migration is deterministic and outputs the frozen RC4 contract", () => {
-  const input = artifacts();
-  const first = migrateCanonicalV01Fixture();
-  const second = migrateCanonicalV01Fixture();
-  assert.deepEqual(first, second);
-  assert.deepEqual(first, input.migratedDocument);
-  assert.equal(first.schemaVersion, "0.2");
-  assert.equal(Object.hasOwn(first, "layout"), false);
-  assert.equal(first.initialScreenId, "main");
-  assert.equal(first.screens.length, 1);
-  assert.deepEqual(first.designSystem, {
-    colors: [],
-    backgrounds: [],
-    shadows: [],
-  });
-  assert.deepEqual(first.screens[0].presentation, { type: "screen" });
-  assert.equal(Object.hasOwn(first.screens[0], "accessibilityLabel"), false);
-  for (const { node: candidate } of walkV02DocumentNodes(first)) {
-    assert.notEqual(candidate.type, "verticalStack");
-    if (candidate.type === "stack") {
-      assert.equal(Object.hasOwn(candidate, "spacing"), false);
-      assert.equal(Object.hasOwn(candidate, "horizontalAlignment"), false);
-      assert.equal(candidate.direction, "vertical");
-      assert.equal(candidate.mainAxisDistribution, "start");
-    }
-  }
-  const migratedPurchase = node(first, "purchase");
-  assert.equal(migratedPurchase.type, "button");
-  assert.equal(migratedPurchase.children[0].typography.color, "text.primary");
-  assert.equal(migratedPurchase.children[0].value.default, "Continue");
-  assert.equal(
-    migratedPurchase.inProgressChildren[0].value.default,
-    "Processing purchase…",
-  );
-  assert.equal(Object.hasOwn(migratedPurchase, "appearance"), false);
-  assert.equal(Object.hasOwn(migratedPurchase, "sizing"), false);
-  const migratedSelector = node(first, "plans");
-  assert.equal(Object.hasOwn(migratedSelector, "productReferenceIds"), false);
-  assert.equal(migratedSelector.cards.length, 2);
-  assert.equal(
-    migratedSelector.cards.every((card) => card.type === "productCard"),
-    true,
-  );
-  assert.equal(
-    node(first, "plans-yearly-plan-card-badge").placement.mode,
-    "nested",
-  );
-  assert.equal(Object.hasOwn(first.products[1], "badge"), false);
-
-  const headingLegalSource = JSON.parse(
-    readFileSync(
-      new URL("../fixtures/v0.1/complete-paywall.json", import.meta.url),
-    ),
-  );
-  const sourceLegal = headingLegalSource.layout.content.children.find(
-    ({ id }) => id === "legal",
-  );
-  assert.ok(sourceLegal);
-  sourceLegal.accessibility = { role: "heading", level: 2 };
-  const normalizedLegal = node(
-    migrateV01ToV02(headingLegalSource, input.paywallSchema),
-    "legal",
-  );
-  assert.equal(normalizedLegal.type, "text");
-  assert.deepEqual(normalizedLegal.accessibility, { role: "text" });
-
-  const migratedIds = walkV02DocumentNodes(first).map(({ node }) => node.id);
-  assert.equal(new Set(migratedIds).size, migratedIds.length);
-
-  const collidingSource = JSON.parse(
-    readFileSync(
-      new URL("../fixtures/v0.1/complete-paywall.json", import.meta.url),
-    ),
-  );
-  collidingSource.layout.content.children.find(
-    ({ id }) => id === "headline",
-  ).id = "purchase-label";
-  const collisionSafe = migrateV01ToV02(collidingSource, input.paywallSchema);
-  assert.equal(node(collisionSafe, "purchase").children[0].id, "purchase-label-2");
-
-  const maximumIdSource = JSON.parse(
-    readFileSync(
-      new URL("../fixtures/v0.1/complete-paywall.json", import.meta.url),
-    ),
-  );
-  const maximumButtonId = `p${"a".repeat(124)}-ab`;
-  v01Node(maximumIdSource, "purchase").id = maximumButtonId;
-  const maximumIdMigrated = migrateV01ToV02(
-    maximumIdSource,
-    input.paywallSchema,
-  );
-  const maximumIdButton = node(maximumIdMigrated, maximumButtonId);
-  for (const child of [
-    maximumIdButton.children[0],
-    maximumIdButton.inProgressChildren[0],
-  ]) {
-    assert.ok(child.id.length <= 128);
-    assert.match(child.id, /^[a-z][a-z0-9]*(?:[-_][a-z0-9]+)*$/u);
-  }
-
-  assert.throws(
-    () => migrateV01ToV02(first, input.paywallSchema),
-    /requires a 0\.1/,
-  );
-  const invalidSource = JSON.parse(
-    readFileSync(
-      new URL("../fixtures/v0.1/complete-paywall.json", import.meta.url),
-    ),
-  );
-  invalidSource.executable = "never";
-  assert.throws(
-    () => migrateV01ToV02(invalidSource, input.paywallSchema),
-    /requires a valid 0\.1/,
-  );
-});
-
 test("RC3 candidate recovery upgrades backgrounds, sizing, presentation, and capabilities to RC4", () => {
   const input = artifacts();
-  const candidate = structuredClone(input.migratedDocument);
+  const candidate = structuredClone(input.hiddenPurchaseTargetDocument);
   delete candidate.designSystem;
   function downgrade(value) {
     if (Array.isArray(value)) {
@@ -1258,7 +1128,7 @@ test("RC3 candidate recovery upgrades backgrounds, sizing, presentation, and cap
 
 test("RC2 candidate recovery preserves representable card state and emits review diagnostics", () => {
   const input = artifacts();
-  const candidate = structuredClone(input.migratedDocument);
+  const candidate = structuredClone(input.hiddenPurchaseTargetDocument);
   const selector = node(candidate, "plans");
   const sourceCards = structuredClone(selector.cards);
   candidate.products[1].badge = {
@@ -1331,30 +1201,30 @@ test("RC2 candidate recovery preserves representable card state and emits review
   );
 });
 
-test("Local Preview 0.2 negotiates highest-mutual and withholds from a 0.1-only client", () => {
+test("Local Preview negotiates only 0.2 and withholds from an incompatible client", () => {
   const preview = loadPreviewV02Artifacts();
   assert.deepEqual(validatePreviewV02Artifacts(preview), []);
   assert.deepEqual(validatePreviewV02JsonFormatting(), []);
-  assert.deepEqual(localPreviewContractVersions, ["0.1", "0.2"]);
-  assert.deepEqual(localPreviewVersionPreference, ["0.2", "0.1"]);
+  assert.deepEqual(localPreviewContractVersions, ["0.2"]);
+  assert.deepEqual(localPreviewVersionPreference, ["0.2"]);
   assert.equal(
     localPreviewWebSocketProtocols["0.2"],
     "mosaic.local-preview.v0.2",
   );
 
-  const both = negotiateLocalPreviewVersion(["0.1", "0.2"], ["0.1", "0.2"]);
-  assert.equal(both.selectedVersion, "0.2");
+  const supported = negotiateLocalPreviewVersion(["0.2"], ["0.2"]);
+  assert.equal(supported.selectedVersion, "0.2");
   assert.deepEqual(
-    both,
-    negotiateBrowserPreview(["0.1", "0.2"], ["0.1", "0.2"]),
+    supported,
+    negotiateBrowserPreview(["0.2"], ["0.2"]),
   );
-  const older = negotiateLocalPreviewVersion(["0.1", "0.2"], ["0.1"]);
-  assert.equal(older.selectedVersion, "0.1");
-  assert.equal(
-    older.selectedWebSocketSubprotocol,
-    "mosaic.local-preview.v0.1",
+  const incompatible = negotiateLocalPreviewVersion(["0.2"], ["0.1"]);
+  assert.deepEqual(
+    incompatible,
+    negotiateBrowserPreview(["0.2"], ["0.1"]),
   );
-  assert.equal(negotiateLocalPreviewVersion(["0.2"], ["0.1"]).ok, false);
+  assert.equal(incompatible.ok, false);
+  assert.equal(incompatible.diagnostic.code, "preview.noMutualVersion");
 
   const report = preview.messages.find(
     (message) => message.type === "capabilityReport",
@@ -1362,25 +1232,25 @@ test("Local Preview 0.2 negotiates highest-mutual and withholds from a 0.1-only 
   const withheld = decideLocalPreviewDraftDelivery({
     capabilityReport: report,
     document: preview.document,
-    negotiation: older,
+    negotiation: incompatible,
   });
   assert.deepEqual(withheld, {
-    delivery: preview.incompatibleClient.delivery,
-    diagnostic: preview.incompatibleClient.diagnostic,
+    delivery: "withhold",
+    diagnostic: incompatible.diagnostic,
   });
   assert.deepEqual(
     withheld,
     decideBrowserDraftDelivery({
       capabilityReport: report,
       document: preview.document,
-      negotiation: older,
+      negotiation: incompatible,
     }),
   );
   assert.deepEqual(
     decideLocalPreviewDraftDelivery({
       capabilityReport: report,
       document: preview.document,
-      negotiation: both,
+      negotiation: supported,
     }),
     { delivery: "send" },
   );
@@ -1388,7 +1258,7 @@ test("Local Preview 0.2 negotiates highest-mutual and withholds from a 0.1-only 
     decideBrowserDraftDelivery({
       capabilityReport: report,
       document: preview.document,
-      negotiation: both,
+      negotiation: supported,
     }),
     { delivery: "send" },
   );
@@ -1399,7 +1269,7 @@ test("Local Preview 0.2 negotiates highest-mutual and withholds from a 0.1-only 
     {
       capabilityReport: incomplete,
       document: preview.document,
-      negotiation: both,
+      negotiation: supported,
     },
     "preview.unsupportedCapability",
   );
@@ -1410,18 +1280,18 @@ test("Local Preview 0.2 negotiates highest-mutual and withholds from a 0.1-only 
     {
       capabilityReport: missingPreviewCapability,
       document: preview.document,
-      negotiation: both,
+      negotiation: supported,
     },
     "preview.unsupportedPreviewCapability",
   );
 
   const wrongPreviewCapabilityVersion = structuredClone(report);
-  wrongPreviewCapabilityVersion.previewCapabilities[0].version = "0.1";
+  wrongPreviewCapabilityVersion.previewCapabilities[0].version = "9.9";
   assertWithheldDeliveryParity(
     {
       capabilityReport: wrongPreviewCapabilityVersion,
       document: preview.document,
-      negotiation: both,
+      negotiation: supported,
     },
     "preview.unsupportedPreviewCapability",
   );
@@ -1433,7 +1303,7 @@ test("Local Preview 0.2 negotiates highest-mutual and withholds from a 0.1-only 
     {
       capabilityReport: insufficientByteLimit,
       document: preview.document,
-      negotiation: both,
+      negotiation: supported,
     },
     "preview.documentTooLarge",
   );
@@ -1441,7 +1311,7 @@ test("Local Preview 0.2 negotiates highest-mutual and withholds from a 0.1-only 
   assertWithheldDeliveryParity(
     {
       document: preview.document,
-      negotiation: both,
+      negotiation: supported,
     },
     "preview.invalidCapabilityReport",
   );
@@ -1449,19 +1319,14 @@ test("Local Preview 0.2 negotiates highest-mutual and withholds from a 0.1-only 
     {
       capabilityReport: { ...report, previewCapabilities: null },
       document: preview.document,
-      negotiation: both,
+      negotiation: supported,
     },
     "preview.invalidCapabilityReport",
   );
   assertWithheldDeliveryParity(undefined, "preview.invalidNegotiation");
-
-  assert.equal(
-    canonicalSchemasByVersion["0.2"].incompatibleClient.$id,
-    preview.incompatibleClientSchema.$id,
-  );
 });
 
-test("browser validation dispatches Protocol and Local Preview 0.2 without weakening 0.1", () => {
+test("browser validation dispatches the sole Protocol and Local Preview 0.2 contract", () => {
   const preview = loadPreviewV02Artifacts();
   assert.equal(validatePaywallDocument(preview.document).ok, true);
   assert.equal(validateLocalProject(preview.localProject).ok, true);
@@ -1473,46 +1338,4 @@ test("browser validation dispatches Protocol and Local Preview 0.2 without weake
     canonicalSchemasByVersion["0.2"].paywall.$id,
     preview.paywallSchema.$id,
   );
-});
-
-test("approved Protocol and Local Preview 0.1 bytes remain immutable", () => {
-  const expected = new Map([
-    [
-      "schema/v0.1/paywall.schema.json",
-      "a860ecd41a7606db996019193a928ff832754c3c3715b2f95376d3e104606ad4",
-    ],
-    [
-      "schema/v0.1/compatibility-manifest.schema.json",
-      "8efe299834fa051b6b9d73d8e9fc1e99d5a28e2136723af34d30b348303bae14",
-    ],
-    [
-      "compatibility/v0.1.json",
-      "0f91cdb616d56aec5d4ed9c14c6f8dd71707893d5414fc39afcf49ed4c626d92",
-    ],
-    [
-      "fixtures/v0.1/complete-paywall.json",
-      "a93994ec99924110cb05d4778c227466aa8e44aadd2097dab5153b55212810c6",
-    ],
-    [
-      "schema/local-preview/v0.1/preview-message.schema.json",
-      "570a32f6e6d2680f10906af332f53eee779fc13b2ba9b25b3aea6d8cb37afd5c",
-    ],
-    [
-      "schema/local-preview/v0.1/local-project.schema.json",
-      "22762ba0f6ddcf167f3192fd2b4c4fc9c36eb676434973762f3a29d336b451f3",
-    ],
-    [
-      "fixtures/local-preview/v0.1/local-project.json",
-      "90d20452605d1333fdebfc1a6ce71e60724fb622e338c8c6242964f599709272",
-    ],
-    [
-      "fixtures/local-preview/v0.1/session-flow.messages.json",
-      "12cf4602db63fb2782e0d8777f3873dde952060dda13215fb891409018ed7acd",
-    ],
-  ]);
-  const root = new URL("../", import.meta.url);
-  for (const [path, hash] of expected) {
-    const bytes = readFileSync(new URL(path, root));
-    assert.equal(createHash("sha256").update(bytes).digest("hex"), hash, path);
-  }
 });
