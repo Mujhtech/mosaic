@@ -242,6 +242,12 @@ func writeError(w http.ResponseWriter, r *http.Request, err error) {
 		status, code, message = http.StatusConflict, "placement_unpublished", "Every active Placement binding must resolve to a published Paywall."
 	case errors.Is(err, hostedpublishing.ErrProductInvalid):
 		status, code, message = http.StatusConflict, "product_invalid", "A referenced Product is missing, archived, or outside the Project."
+	case errors.Is(err, hostedpublishing.ErrProviderReadiness):
+		status, code, message = http.StatusConflict, "provider_readiness_unavailable", "Production publishing requires every referenced Product to be connected for every Project Application."
+		var readinessError *hostedpublishing.ProviderReadinessError
+		if errors.As(err, &readinessError) {
+			apiError.Details = map[string]any{"blockers": readinessError.Blockers}
+		}
 	case errors.Is(err, hostedpublishing.ErrValidationFailed):
 		status, code, message = http.StatusUnprocessableEntity, "validation_failed", "The Draft cannot be published until validation errors are resolved."
 		var validationError *hostedpublishing.ValidationError

@@ -896,6 +896,202 @@ export type MosaicLocalProjectV02 = {
   };
 };
 
+export type MosaicCommerceProviderV1Identifier = string;
+
+export type MosaicCommerceProviderV1SafeText = string;
+
+export type MosaicCommerceProviderV1SafeProviderCode = string;
+
+export type MosaicCommerceProviderV1UtcTimestamp = string;
+
+export type MosaicCommerceProviderV1RecordType = "providerProfile" | "productLoadRequest" | "productLoadResult" | "purchaseRequest" | "purchaseOutcome" | "restoreOutcome" | "activeEntitlementOutcome" | "providerDiagnostics";
+
+export type MosaicCommerceProviderV1ProviderIdentity = {
+  "id": MosaicCommerceProviderV1Identifier;
+  "displayName": MosaicCommerceProviderV1SafeText;
+  "adapterVersion": string;
+};
+
+export type MosaicCommerceProviderV1CapabilityName = "productLoading" | "subscriptions" | "oneTimeNonConsumables" | "trials" | "introductoryOffers" | "promotionalOffers" | "restore" | "activeEntitlementLookup" | "pendingPurchases" | "deferredPurchases" | "serverConfirmedTransactions" | "productSynchronization" | "providerDiagnostics";
+
+export type MosaicCommerceProviderV1ProviderCapability = {
+  "name": MosaicCommerceProviderV1CapabilityName;
+  "support": "supported" | "unsupported" | "conditional";
+  "reasonCode"?: string;
+};
+
+export type MosaicCommerceProviderV1ProviderProfile = {
+  "provider": MosaicCommerceProviderV1ProviderIdentity;
+  "capabilities": Array<MosaicCommerceProviderV1ProviderCapability>;
+};
+
+export type MosaicCommerceProviderV1ProductType = "subscription" | "one_time_non_consumable";
+
+export type MosaicCommerceProviderV1MosaicProduct = {
+  "mosaicProductId": MosaicCommerceProviderV1Identifier;
+  "key": MosaicCommerceProviderV1Identifier;
+  "type": MosaicCommerceProviderV1ProductType;
+  "entitlementKeys": Array<MosaicCommerceProviderV1Identifier>;
+};
+
+export type MosaicCommerceProviderV1ProviderProductBinding = {
+  "mappingId": MosaicCommerceProviderV1Identifier;
+  "providerProductReference": string;
+};
+
+export type MosaicCommerceProviderV1ProductLoadRequestItem = {
+  "product": MosaicCommerceProviderV1MosaicProduct;
+  "binding": MosaicCommerceProviderV1ProviderProductBinding;
+};
+
+export type MosaicCommerceProviderV1ProductLoadRequest = {
+  "requestId": MosaicCommerceProviderV1Identifier;
+  "providerId": MosaicCommerceProviderV1Identifier;
+  "products": Array<MosaicCommerceProviderV1ProductLoadRequestItem>;
+};
+
+export type MosaicCommerceProviderV1Period = {
+  "unit": "day" | "week" | "month" | "year";
+  "value": number;
+};
+
+export type MosaicCommerceProviderV1OfferEligibility = "eligible" | "ineligible" | "unknown";
+
+export type MosaicCommerceProviderV1Trial = {
+  "period": MosaicCommerceProviderV1Period;
+  "eligibility"?: MosaicCommerceProviderV1OfferEligibility;
+};
+
+export type MosaicCommerceProviderV1IntroductoryOffer = {
+  "localizedPrice": MosaicCommerceProviderV1SafeText;
+  "period": MosaicCommerceProviderV1Period;
+  "cycles": number;
+  "paymentMode": "payAsYouGo" | "payUpFront";
+  "eligibility"?: MosaicCommerceProviderV1OfferEligibility;
+};
+
+export type MosaicCommerceProviderV1ResolvedProductMetadata = {
+  "localizedDisplayName": MosaicCommerceProviderV1SafeText;
+  "localizedPrice": MosaicCommerceProviderV1SafeText;
+  "locale"?: string;
+  "currencyCode"?: string;
+  "billingPeriod"?: MosaicCommerceProviderV1Period;
+  "trial"?: MosaicCommerceProviderV1Trial;
+  "introductoryOffer"?: MosaicCommerceProviderV1IntroductoryOffer;
+};
+
+export type MosaicCommerceProviderV1MetadataFreshness = {
+  "source": "liveProvider" | "providerCache" | "mosaicSynchronization" | "simulated";
+  "status": "fresh" | "stale" | "unknown";
+  "observedAt": MosaicCommerceProviderV1UtcTimestamp;
+  "expiresAt"?: MosaicCommerceProviderV1UtcTimestamp;
+};
+
+export type MosaicCommerceProviderV1ProductAvailability = {
+  "status": "available" | "unavailable" | "unknown";
+  "reason"?: "mappingMissing" | "mappingInvalid" | "productNotFound" | "temporarilyUnavailable" | "providerUnavailable" | "unsupportedProductType" | "metadataUnavailable";
+};
+
+export type MosaicCommerceProviderV1Diagnostic = {
+  "code": string;
+  "safeMessage": MosaicCommerceProviderV1SafeText;
+  "severity": "info" | "warning" | "error";
+  "retryable": boolean;
+  "retryAfterSeconds"?: number;
+  "correlationId": MosaicCommerceProviderV1Identifier;
+  "providerCode"?: MosaicCommerceProviderV1SafeProviderCode;
+  "mosaicProductId"?: MosaicCommerceProviderV1Identifier;
+  "recoveryAction"?: "retry" | "reconnectProvider" | "fixProductMapping" | "updateProviderConfiguration" | "contactProvider" | "none";
+};
+
+export type MosaicCommerceProviderV1Diagnostics = Array<MosaicCommerceProviderV1Diagnostic>;
+
+export type MosaicCommerceProviderV1ResolvedProduct = {
+  "product": MosaicCommerceProviderV1MosaicProduct;
+  "availability": MosaicCommerceProviderV1ProductAvailability;
+  "metadata"?: MosaicCommerceProviderV1ResolvedProductMetadata;
+  "freshness": MosaicCommerceProviderV1MetadataFreshness;
+  "diagnostics": MosaicCommerceProviderV1Diagnostics;
+};
+
+export type MosaicCommerceProviderV1ProductLoadResult = {
+  "requestId": MosaicCommerceProviderV1Identifier;
+  "providerId": MosaicCommerceProviderV1Identifier;
+  "products": Array<MosaicCommerceProviderV1ResolvedProduct>;
+  "diagnostics": MosaicCommerceProviderV1Diagnostics;
+};
+
+export type MosaicCommerceProviderV1PurchaseRequest = {
+  "operationId": MosaicCommerceProviderV1Identifier;
+  "providerId": MosaicCommerceProviderV1Identifier;
+  "mosaicProductId": MosaicCommerceProviderV1Identifier;
+};
+
+export type MosaicCommerceProviderV1PurchaseOutcomeName = "purchased" | "pending" | "deferred" | "cancelled" | "alreadyEntitled" | "productUnavailable" | "providerUnavailable" | "failed";
+
+export type MosaicCommerceProviderV1PurchaseOutcome = {
+  "operationId": MosaicCommerceProviderV1Identifier;
+  "providerId": MosaicCommerceProviderV1Identifier;
+  "mosaicProductId": MosaicCommerceProviderV1Identifier;
+  "outcome": MosaicCommerceProviderV1PurchaseOutcomeName;
+  "transactionReference"?: MosaicCommerceProviderV1SafeProviderCode;
+  "activeEntitlementKeys"?: Array<MosaicCommerceProviderV1Identifier>;
+  "occurredAt": MosaicCommerceProviderV1UtcTimestamp;
+  "diagnostics": MosaicCommerceProviderV1Diagnostics;
+};
+
+export type MosaicCommerceProviderV1RestoreOutcomeName = "restored" | "nothingToRestore" | "cancelled" | "providerUnavailable" | "failed";
+
+export type MosaicCommerceProviderV1RestoreOutcome = {
+  "operationId": MosaicCommerceProviderV1Identifier;
+  "providerId": MosaicCommerceProviderV1Identifier;
+  "outcome": MosaicCommerceProviderV1RestoreOutcomeName;
+  "activeEntitlementKeys"?: Array<MosaicCommerceProviderV1Identifier>;
+  "occurredAt": MosaicCommerceProviderV1UtcTimestamp;
+  "diagnostics": MosaicCommerceProviderV1Diagnostics;
+};
+
+export type MosaicCommerceProviderV1ActiveEntitlementOutcomeName = "available" | "unknown" | "providerUnavailable" | "failed";
+
+export type MosaicCommerceProviderV1ActiveEntitlementOutcome = {
+  "lookupId": MosaicCommerceProviderV1Identifier;
+  "providerId": MosaicCommerceProviderV1Identifier;
+  "outcome": MosaicCommerceProviderV1ActiveEntitlementOutcomeName;
+  "activeEntitlementKeys"?: Array<MosaicCommerceProviderV1Identifier>;
+  "freshness"?: MosaicCommerceProviderV1MetadataFreshness;
+  "checkedAt": MosaicCommerceProviderV1UtcTimestamp;
+  "diagnostics": MosaicCommerceProviderV1Diagnostics;
+};
+
+export type MosaicCommerceProviderV1ProviderHealth = "healthy" | "degraded" | "unavailable" | "unknown";
+
+export type MosaicCommerceProviderV1ProviderDiagnostics = {
+  "providerId": MosaicCommerceProviderV1Identifier;
+  "health": MosaicCommerceProviderV1ProviderHealth;
+  "freshness": MosaicCommerceProviderV1MetadataFreshness;
+  "diagnostics": MosaicCommerceProviderV1Diagnostics;
+};
+
+export type MosaicCommerceProviderV1Envelope<
+  TRecordType extends MosaicCommerceProviderV1RecordType,
+  TPayload,
+> = {
+  "commerceProviderContractVersion": "1";
+} & {
+  "recordType": TRecordType;
+  "payload": TPayload;
+};
+
+export type MosaicCommerceProviderV1Record =
+  | MosaicCommerceProviderV1Envelope<"providerProfile", MosaicCommerceProviderV1ProviderProfile>
+  | MosaicCommerceProviderV1Envelope<"productLoadRequest", MosaicCommerceProviderV1ProductLoadRequest>
+  | MosaicCommerceProviderV1Envelope<"productLoadResult", MosaicCommerceProviderV1ProductLoadResult>
+  | MosaicCommerceProviderV1Envelope<"purchaseRequest", MosaicCommerceProviderV1PurchaseRequest>
+  | MosaicCommerceProviderV1Envelope<"purchaseOutcome", MosaicCommerceProviderV1PurchaseOutcome>
+  | MosaicCommerceProviderV1Envelope<"restoreOutcome", MosaicCommerceProviderV1RestoreOutcome>
+  | MosaicCommerceProviderV1Envelope<"activeEntitlementOutcome", MosaicCommerceProviderV1ActiveEntitlementOutcome>
+  | MosaicCommerceProviderV1Envelope<"providerDiagnostics", MosaicCommerceProviderV1ProviderDiagnostics>;
+
 export type MosaicPaywallDocument = MosaicPaywallV02Document;
 export type MosaicPreviewMessage = MosaicPreviewV02Message;
 export type MosaicLocalProject = MosaicLocalProjectV02;

@@ -1,0 +1,26 @@
+{
+  "commerceProviderContractVersion": "1",
+  "recordType": "providerDiagnostics",
+  "payload": {
+    "providerId": "revenuecat",
+    "health": "degraded",
+    "freshness": {
+      "source": "liveProvider",
+      "status": "fresh",
+      "observedAt": "2026-07-23T12:06:00Z",
+      "expiresAt": "2026-07-23T12:11:00Z"
+    },
+    "diagnostics": [
+      {
+        "code": "commerce.providerRateLimited",
+        "safeMessage": "The provider is temporarily rate limited.",
+        "severity": "warning",
+        "retryable": true,
+        "retryAfterSeconds": 60,
+        "correlationId": "provider_health_000001",
+        "providerCode": "rate_limit",
+        "recoveryAction": "retry"
+      }
+    ]
+  }
+}

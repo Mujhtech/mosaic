@@ -213,7 +213,12 @@ function HostedCatalogProductBindingsContent({
                 </span>
                 {selected?.metadataSource === "mock" ? (
                   <span className="text-muted-foreground text-[11px]">
-                    Mock metadata only; publishing requires acknowledgement.
+                    Simulated metadata only; publishing requires acknowledgement.
+                  </span>
+                ) : selected ? (
+                  <span className="text-muted-foreground text-[11px]">
+                    Connected Product identity only. Provider price and availability are unavailable
+                    in this response; simulated preview remains active.
                   </span>
                 ) : null}
               </label>

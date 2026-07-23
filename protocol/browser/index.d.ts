@@ -1,5 +1,6 @@
 // Generated public declarations for protocol/browser/index.js. Do not edit.
 import type {
+  MosaicCommerceProviderV1Record,
   MosaicLocalProject,
   MosaicLocalProjectV02,
   MosaicPaywallDocument,
@@ -30,6 +31,7 @@ export type MosaicContractDiagnostic = MosaicPreviewValidationDiagnostic;
 export type MosaicAnyPaywallDocument = MosaicPaywallV02Document;
 export type MosaicAnyPreviewMessage = MosaicPreviewV02Message;
 export type MosaicAnyLocalProject = MosaicLocalProjectV02;
+export type MosaicAnyCommerceProviderRecord = MosaicCommerceProviderV1Record;
 
 export type MosaicLocalPreviewNegotiationDiagnostic = {
   readonly code: "preview.noMutualVersion" | "preview.incompatibleSchemaVersion" | "preview.invalidNegotiation" | "preview.invalidCapabilityReport" | "preview.invalidDraft" | "preview.unsupportedPreviewCapability" | "preview.unsupportedCapability" | "preview.documentTooLarge";

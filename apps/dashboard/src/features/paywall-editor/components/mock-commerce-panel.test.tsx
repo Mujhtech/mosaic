@@ -16,6 +16,7 @@ import type {
   MockProductDefinition,
   MockPurchaseState,
 } from "@/features/paywall-editor/types/editor"
+import type { ProductList } from "@/generated/api"
 import { cloneValue } from "@/features/paywall-editor/utils/clone"
 import { findNode } from "@/features/paywall-editor/utils/document-tree"
 
@@ -107,6 +108,7 @@ function HostedHarness() {
         onPurchaseStateChange={setPurchaseState}
       />
       <output aria-label="hosted document product">{document?.products[0]?.productId}</output>
+      <output aria-label="hosted document">{JSON.stringify(document)}</output>
       <output aria-label="hosted mock state">{JSON.stringify({ products, purchaseState })}</output>
     </>
   )
@@ -155,27 +157,28 @@ describe("mock commerce controls", () => {
     )
   })
 
-  it("binds hosted Product References to stable Project Product IDs without removing mock preview controls", async () => {
+  it("binds reachable Product identity without changing simulated preview metadata", async () => {
     const queryClient = new QueryClient({
       defaultOptions: { queries: { retry: false, staleTime: Number.POSITIVE_INFINITY } },
     })
-    queryClient.setQueryData(catalogKeys.products("project_01"), {
+    const connectedProducts = {
       items: [
         {
           createdAt: "2026-07-22T12:00:00Z",
           id: "product_mosaic_monthly",
           internalName: "Monthly",
           key: "monthly",
-          metadataSource: "mock",
+          metadataSource: "provider",
           projectId: "project_01",
-          readiness: { metadataSource: "mock", ready: false, reasons: ["mock_metadata"] },
-          status: "draft",
+          readiness: { metadataSource: "provider", ready: true, reasons: [] },
+          status: "connected",
           type: "subscription",
           updatedAt: "2026-07-22T12:00:00Z",
         },
       ],
       page: {},
-    })
+    } satisfies ProductList["data"]
+    queryClient.setQueryData(catalogKeys.products("project_01"), connectedProducts)
 
     render(
       <QueryClientProvider client={queryClient}>
@@ -205,6 +208,10 @@ describe("mock commerce controls", () => {
       ),
     )
     expect(screen.getByLabelText("Starter mock availability")).toBeVisible()
+    expect(
+      screen.getByText(/Provider price and availability are unavailable in this response/),
+    ).toBeVisible()
     expect(screen.getByLabelText("hosted mock state")).toHaveTextContent('"localizedPrice":"$4.99"')
+    expect(screen.getByLabelText("hosted document")).not.toHaveTextContent("$4.99")
   })
 })

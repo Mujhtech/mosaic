@@ -3,6 +3,19 @@
 All notable Mosaic protocol changes are recorded here. Versioned artifacts are
 not immutable until their review gate is approved.
 
+## Commerce Provider Contract v1 - 2026-07-23
+
+Status: release candidate
+
+- Added a separately versioned provider-neutral commerce contract for explicit
+  capabilities, stable Mosaic Product resolution, localized metadata,
+  availability, periods, trials, introductory offers, freshness, safe
+  diagnostics, purchase, restore, and active Entitlement outcomes.
+- Preserved Paywall Protocol `0.2`, Local Preview `0.2`, and Configuration
+  Delivery `1` semantics.
+- Added minimum cross-platform fixtures, semantic validation, generated
+  browser declarations, documentation, and a dedicated commerce changelog.
+
 ## Protocol 0.1 retirement test alignment - 2026-07-22
 
 Status: accepted by ADR-0016

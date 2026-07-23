@@ -65,8 +65,20 @@ func RegisterWorkspaceRoutes(router chi.Router, service *cloudworkspace.Service)
 		router.Post("/", handler.createAPIKey)
 	})
 	router.Patch("/environments/{environmentId}", handler.updateEnvironment)
+	router.Put("/environments/{environmentId}/mode", handler.setEnvironmentMode)
+	router.Route("/environments/{environmentId}/applications/{applicationId}/active-provider", func(router chi.Router) {
+		router.Get("/", handler.getActiveProviderAssignment)
+		router.Put("/", handler.setActiveProviderAssignment)
+		router.Delete("/", handler.clearActiveProviderAssignment)
+	})
 	router.Post("/api-keys/{apiKeyId}/rotate", handler.rotateAPIKey)
 	router.Post("/api-keys/{apiKeyId}/revoke", handler.revokeAPIKey)
+	router.Route("/provider-connections/{connectionId}", func(router chi.Router) {
+		router.Get("/", handler.getProviderConnection)
+		router.Put("/scopes", handler.replaceProviderConnectionScopes)
+		router.Post("/revoke", handler.revokeProviderConnection)
+	})
+	router.Post("/provider-mappings/{mappingId}/archive", handler.archiveProviderMapping)
 	router.Get("/plans/{planId}", handler.getPlan)
 	router.Patch("/plans/{planId}", handler.updatePlan)
 	router.Get("/plans/{planId}/products", handler.listPlanProducts)
@@ -83,6 +95,8 @@ func RegisterWorkspaceRoutes(router chi.Router, service *cloudworkspace.Service)
 		router.Get("/readiness", handler.getProductReadiness)
 		router.Get("/provider-mappings", handler.listProviderMappings)
 		router.Post("/provider-mappings", handler.createProviderMapping)
+		router.Post("/provider-mapping-drafts", handler.createProviderMappingDraft)
+		router.Get("/provider-readiness", handler.getProviderReadiness)
 		router.Get("/entitlements", handler.listProductEntitlements)
 		router.Post("/entitlements", handler.addProductEntitlement)
 		router.Delete("/entitlements/{entitlementId}", handler.removeProductEntitlement)
@@ -100,6 +114,8 @@ func RegisterProjectRoutes(router chi.Router, service *cloudworkspace.Service) {
 	router.Get("/applications", handler.listApplications)
 	router.Post("/applications", handler.createApplication)
 	router.Get("/environments", handler.listEnvironments)
+	router.Get("/provider-connections", handler.listProviderConnections)
+	router.Post("/provider-connections", handler.createProviderConnection)
 	router.Get("/plans", handler.listPlans)
 	router.Post("/plans", handler.createPlan)
 	router.Get("/products", handler.listProducts)
@@ -169,6 +185,20 @@ func writeServiceError(w http.ResponseWriter, r *http.Request, err error) {
 		status, code, message = http.StatusConflict, "key_revoked", "A revoked API key cannot be rotated."
 	case errors.Is(err, cloudworkspace.ErrSecretUnavailable):
 		status, code, message = http.StatusConflict, "secret_unavailable", "The secret is available only when created or rotated."
+	case errors.Is(err, cloudworkspace.ErrScopeMismatch):
+		status, code, message = http.StatusConflict, string(cloudworkspace.ProviderErrorScopeMismatch), "The provider connection does not cover the requested project scope."
+	case errors.Is(err, cloudworkspace.ErrModeMismatch):
+		status, code, message = http.StatusConflict, string(cloudworkspace.ProviderErrorModeMismatch), "The provider connection mode is incompatible with the Environment mode."
+	case errors.Is(err, cloudworkspace.ErrConnectionRevoked):
+		status, code, message = http.StatusConflict, string(cloudworkspace.ProviderErrorConnectionRevoked), "The provider connection has been revoked."
+	case errors.Is(err, cloudworkspace.ErrProductionConnectionAcknowledgementRequired):
+		status, code, message = http.StatusConflict, "productionConnectionAcknowledgementRequired", "Production provider use outside a production Environment requires explicit acknowledgement."
+	case errors.Is(err, cloudworkspace.ErrProviderUnsupported):
+		status, code, message = http.StatusUnprocessableEntity, "providerIntegrationUnsupported", "The provider and integration mode combination is not supported."
+	case errors.Is(err, cloudworkspace.ErrMappingAmbiguous):
+		status, code, message = http.StatusConflict, string(cloudworkspace.ProviderErrorMappingAmbiguous), "More than one provider mapping matches the requested scope."
+	case errors.Is(err, cloudworkspace.ErrMappingTargetInvalid):
+		status, code, message = http.StatusUnprocessableEntity, "mappingTargetInvalid", "The provider mapping target is invalid for the selected provider."
 	case errors.Is(err, cloudworkspace.ErrConflict):
 		status, code, message = http.StatusConflict, "conflict", "The resource conflicts with existing data."
 	}

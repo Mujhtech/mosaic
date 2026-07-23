@@ -1,18 +1,16 @@
 import { ArchiveIcon } from "@phosphor-icons/react/dist/ssr/Archive"
 import { ArrowCounterClockwiseIcon } from "@phosphor-icons/react/dist/ssr/ArrowCounterClockwise"
-import { useForm } from "@tanstack/react-form"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { Link } from "@tanstack/react-router"
 import { useState } from "react"
 
 import { Button } from "@/components/ui/button"
 import { buttonVariants } from "@/components/ui/button-variants"
-import { Field, FieldDescription, FieldLabel } from "@/components/ui/field"
-import { Input } from "@/components/ui/input"
 import { HostedResourceBoundary } from "@/features/auth/components/hosted-resource-boundary"
 import { resolveHostedQueryState } from "@/features/auth/types/hosted-query-state"
+import { ProductReadinessPanel } from "@/features/catalog/components/product-readiness-panel"
+import { ProviderMappingsPanel } from "@/features/catalog/components/provider-mappings-panel"
 import {
-  createProviderPlaceholderMutationOptions,
   grantEntitlementMutationOptions,
   productLifecycleMutationOptions,
   removeEntitlementGrantMutationOptions,
@@ -32,21 +30,37 @@ import {
   countProductUsage,
   replacementCandidates,
 } from "@/features/catalog/types/product-lifecycle"
+import {
+  productReadinessView,
+  providerMappingView,
+  readinessStateLabel,
+} from "@/features/catalog/types/connected-product-view"
+import { environmentsQueryOptions } from "@/features/environments/queries/environments-query"
 import { WorkspacePage, WorkflowPanel } from "@/features/organizations/components/workspace-page"
 import { ScopeMismatchRecovery } from "@/features/organizations/components/scope-mismatch-recovery"
 import { detectNestedScopeMismatch } from "@/features/organizations/types/nested-scope"
-import { projectQueryOptions } from "@/features/projects/queries/projects-query"
+import { providerConnectionsQueryOptions } from "@/features/provider-connections/queries/provider-connection-queries"
+import {
+  applicationsQueryOptions,
+  projectQueryOptions,
+} from "@/features/projects/queries/projects-query"
 
 interface ProductDetailPageProps {
+  onReadinessScopeChange: (scope: { applicationId?: string; environmentId?: string }) => void
   organizationId: string
   productId: string
   projectId: string
+  readinessApplicationId?: string
+  readinessEnvironmentId?: string
 }
 
 export function ProductDetailPage({
+  onReadinessScopeChange,
   organizationId,
   productId,
   projectId,
+  readinessApplicationId,
+  readinessEnvironmentId,
 }: ProductDetailPageProps) {
   const queryClient = useQueryClient()
   const [showLifecycle, setShowLifecycle] = useState(false)
@@ -62,11 +76,33 @@ export function ProductDetailPage({
   })
   const scopeReady = project.isSuccess && product.isSuccess && scopeMismatch === null
   const usage = useQuery({ ...productUsageQueryOptions(productId), enabled: scopeReady })
-  const readiness = useQuery({ ...productReadinessQueryOptions(productId), enabled: scopeReady })
   const mappings = useQuery({ ...providerMappingsQueryOptions(productId), enabled: scopeReady })
   const grants = useQuery({ ...productEntitlementsQueryOptions(productId), enabled: scopeReady })
   const entitlements = useQuery({ ...entitlementsQueryOptions(projectId), enabled: scopeReady })
   const replacements = useQuery({ ...productsQueryOptions(projectId), enabled: scopeReady })
+  const applications = useQuery({ ...applicationsQueryOptions(projectId), enabled: scopeReady })
+  const environments = useQuery({ ...environmentsQueryOptions(projectId), enabled: scopeReady })
+  const connections = useQuery({
+    ...providerConnectionsQueryOptions(projectId),
+    enabled: scopeReady,
+  })
+  const selectedReadinessApplication = applications.data?.items.find(
+    (application) => application.id === readinessApplicationId,
+  )
+  const selectedReadinessEnvironment = environments.data?.items.find(
+    (environment) => environment.id === readinessEnvironmentId,
+  )
+  const hasExplicitReadinessScope = Boolean(
+    selectedReadinessApplication && selectedReadinessEnvironment,
+  )
+  const readiness = useQuery({
+    ...productReadinessQueryOptions(
+      productId,
+      readinessEnvironmentId ?? "unselected",
+      readinessApplicationId ?? "unselected",
+    ),
+    enabled: scopeReady && hasExplicitReadinessScope,
+  })
   const archive = useMutation(productLifecycleMutationOptions(queryClient, "archive"))
   const restore = useMutation(productLifecycleMutationOptions(queryClient, "restore"))
   const setReplacement = useMutation(setProductReplacementMutationOptions(productId, queryClient))
@@ -74,21 +110,15 @@ export function ProductDetailPage({
   const removeGrant = useMutation(
     removeEntitlementGrantMutationOptions(productId, projectId, queryClient),
   )
-  const createMapping = useMutation(
-    createProviderPlaceholderMutationOptions(productId, projectId, queryClient),
-  )
-  const mappingForm = useForm({
-    defaultValues: {
-      applicationId: "",
-      provider: "custom" as "app_store" | "custom" | "google_play" | "revenuecat",
-      providerProductIdentifier: "",
-    },
-    onSubmit: async ({ value }) => {
-      await createMapping.mutateAsync(value)
-      mappingForm.reset()
-    },
-  })
-  const error = project.error ?? product.error ?? usage.error ?? readiness.error
+  const error =
+    project.error ??
+    product.error ??
+    usage.error ??
+    readiness.error ??
+    mappings.error ??
+    applications.error ??
+    environments.error ??
+    connections.error
   const state = resolveHostedQueryState({
     emptyDescription: "Return to Products and choose an existing Product.",
     emptyTitle: "Product unavailable",
@@ -97,13 +127,23 @@ export function ProductDetailPage({
     isPending:
       project.isPending ||
       product.isPending ||
-      (scopeReady && (usage.isPending || readiness.isPending)),
+      (scopeReady &&
+        (usage.isPending ||
+          (hasExplicitReadinessScope && readiness.isPending) ||
+          mappings.isPending ||
+          applications.isPending ||
+          environments.isPending ||
+          connections.isPending)),
     loadingDescription: "Loading Product identity, readiness, and usage.",
     onRetry: () => {
       void project.refetch()
       void product.refetch()
       void usage.refetch()
-      void readiness.refetch()
+      if (hasExplicitReadinessScope) void readiness.refetch()
+      void mappings.refetch()
+      void applications.refetch()
+      void environments.refetch()
+      void connections.refetch()
     },
     permissionAction: (
       <Link
@@ -127,6 +167,17 @@ export function ProductDetailPage({
   const replacementNeedsSave = Boolean(
     selectedReplacementId && selectedReplacementId !== product.data?.replacementProductId,
   )
+  const connectedReadiness = readiness.data ? productReadinessView(readiness.data) : null
+  const mappingViews =
+    mappings.data?.items.map((mapping) =>
+      providerMappingView(
+        mapping,
+        applications.data?.items ?? [],
+        environments.data?.items ?? [],
+        connections.data?.items ?? [],
+      ),
+    ) ?? []
+  const manageProvidersHref = `/organizations/${encodeURIComponent(organizationId)}/projects/${encodeURIComponent(projectId)}/catalog/providers`
 
   async function confirmArchive() {
     try {
@@ -180,10 +231,69 @@ export function ProductDetailPage({
           <Metric
             label="Readiness"
             value={
-              readiness.data?.ready ? "Ready" : `${readiness.data?.reasons.length ?? 0} issue(s)`
+              readiness.data
+                ? readinessStateLabel(readiness.data.state)
+                : hasExplicitReadinessScope
+                  ? "Checking…"
+                  : "Select scope"
             }
           />
         </div>
+
+        <WorkflowPanel
+          description="Choose one Environment and one registered Application. Mosaic does not fall back to project-wide or another platform’s readiness."
+          title="Readiness scope"
+        >
+          <div className="grid gap-3 sm:grid-cols-2">
+            <label className="text-sm font-medium">
+              Environment
+              <select
+                className="border-input bg-background mt-2 h-9 w-full rounded border px-3"
+                onChange={(event) =>
+                  onReadinessScopeChange({
+                    applicationId: selectedReadinessApplication?.id,
+                    environmentId: event.currentTarget.value || undefined,
+                  })
+                }
+                value={selectedReadinessEnvironment?.id ?? ""}
+              >
+                <option value="">Select Environment</option>
+                {environments.data?.items.map((environment) => (
+                  <option key={environment.id} value={environment.id}>
+                    {environment.name} · {environment.mode}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="text-sm font-medium">
+              Application
+              <select
+                className="border-input bg-background mt-2 h-9 w-full rounded border px-3"
+                onChange={(event) =>
+                  onReadinessScopeChange({
+                    applicationId: event.currentTarget.value || undefined,
+                    environmentId: selectedReadinessEnvironment?.id,
+                  })
+                }
+                value={selectedReadinessApplication?.id ?? ""}
+              >
+                <option value="">Select Application</option>
+                {applications.data?.items.map((application) => (
+                  <option key={application.id} value={application.id}>
+                    {application.name} · {application.platform.toUpperCase()}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </div>
+          {!hasExplicitReadinessScope ? (
+            <p className="text-muted-foreground mt-3 text-xs">
+              Readiness is not requested until both scope values are explicitly selected.
+            </p>
+          ) : null}
+        </WorkflowPanel>
+
+        {connectedReadiness ? <ProductReadinessPanel readiness={connectedReadiness} /> : null}
 
         <WorkflowPanel
           description="Usage is always shown before lifecycle controls. Historical references keep this Mosaic Product ID stable."
@@ -261,86 +371,7 @@ export function ProductDetailPage({
           ) : null}
         </WorkflowPanel>
 
-        <WorkflowPanel
-          description="Mappings are non-operative placeholders. They do not connect, validate, import, or synchronize provider data; continue using Mock metadata until a billing provider is connected."
-          title="Provider placeholders"
-        >
-          <ul className="mb-4 divide-y">
-            {mappings.data?.items.map((mapping) => (
-              <li className="py-3 text-sm" key={mapping.id}>
-                <span className="font-medium capitalize">
-                  {mapping.provider.replaceAll("_", " ")}
-                </span>
-                <span className="text-muted-foreground ml-2 font-mono text-xs">
-                  {mapping.providerProductIdentifier}
-                </span>
-                <span className="bg-muted ml-2 rounded-full px-2 py-0.5 text-xs">Placeholder</span>
-              </li>
-            ))}
-          </ul>
-          <form
-            className="grid gap-3 md:grid-cols-4"
-            onSubmit={(event) => {
-              event.preventDefault()
-              event.stopPropagation()
-              void mappingForm.handleSubmit()
-            }}
-          >
-            <mappingForm.Field name="applicationId">
-              {(field) => (
-                <Field>
-                  <FieldLabel htmlFor="mapping-app">Application ID</FieldLabel>
-                  <Input
-                    id="mapping-app"
-                    onChange={(event) => field.handleChange(event.target.value)}
-                    value={field.state.value}
-                  />
-                </Field>
-              )}
-            </mappingForm.Field>
-            <mappingForm.Field name="provider">
-              {(field) => (
-                <Field>
-                  <FieldLabel htmlFor="mapping-provider">Provider label</FieldLabel>
-                  <select
-                    className="border-input bg-background h-9 rounded border px-3 text-sm"
-                    id="mapping-provider"
-                    onChange={(event) =>
-                      field.handleChange(event.target.value as typeof field.state.value)
-                    }
-                    value={field.state.value}
-                  >
-                    <option value="app_store">App Store</option>
-                    <option value="google_play">Google Play</option>
-                    <option value="revenuecat">RevenueCat</option>
-                    <option value="custom">Custom</option>
-                  </select>
-                </Field>
-              )}
-            </mappingForm.Field>
-            <mappingForm.Field name="providerProductIdentifier">
-              {(field) => (
-                <Field>
-                  <FieldLabel htmlFor="mapping-product">Provider Product ID</FieldLabel>
-                  <Input
-                    id="mapping-product"
-                    onChange={(event) => field.handleChange(event.target.value)}
-                    value={field.state.value}
-                  />
-                  <FieldDescription>Label only; no network work.</FieldDescription>
-                </Field>
-              )}
-            </mappingForm.Field>
-            <Button className="self-end" disabled={createMapping.isPending} type="submit">
-              Add placeholder
-            </Button>
-          </form>
-          {createMapping.error ? (
-            <p className="text-destructive mt-3 text-sm" role="alert">
-              {createMapping.error.message}
-            </p>
-          ) : null}
-        </WorkflowPanel>
+        <ProviderMappingsPanel manageProvidersHref={manageProvidersHref} mappings={mappingViews} />
 
         <WorkflowPanel
           description="Archive removes this Product from future selection without deleting history. Restore preserves the same ID."

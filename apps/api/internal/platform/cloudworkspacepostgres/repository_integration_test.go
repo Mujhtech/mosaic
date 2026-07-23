@@ -267,6 +267,70 @@ func TestPhase3APersistenceRisks(t *testing.T) {
 	if err != nil || len(environments.Items) == 0 {
 		t.Fatalf("list environments: %#v %v", environments, err)
 	}
+	application, err := service.CreateApplication(ctx, owner, project.ID, "Provider iOS", cloudworkspace.PlatformIOS, "com.example.provider")
+	if err != nil {
+		t.Fatalf("create provider application: %v", err)
+	}
+	var development, production cloudworkspace.Environment
+	for _, environment := range environments.Items {
+		if environment.Mode == cloudworkspace.EnvironmentDevelopment {
+			development = environment
+		}
+		if environment.Mode == cloudworkspace.EnvironmentProduction {
+			production = environment
+		}
+	}
+	connection, err := service.CreateProviderConnection(ctx, owner, project.ID, cloudworkspace.CreateProviderConnectionInput{
+		Name: "RevenueCat sandbox", Provider: cloudworkspace.ProviderRevenueCat,
+		IntegrationMode: cloudworkspace.ProviderServerConnected, Mode: cloudworkspace.ProviderSandbox,
+		EnvironmentIDs: []string{development.ID, production.ID}, ApplicationIDs: []string{application.ID},
+	})
+	if err != nil {
+		t.Fatalf("persist provider connection: %v", err)
+	}
+	if _, err := service.SetActiveProviderAssignment(ctx, owner, development.ID, application.ID, connection.ID, false); err != nil {
+		t.Fatalf("persist provider assignment: %v", err)
+	}
+	if _, err := service.ReplaceProviderConnectionScopes(ctx, owner, connection.ID, cloudworkspace.ReplaceProviderConnectionScopesInput{
+		EnvironmentIDs: []string{development.ID, production.ID}, ApplicationIDs: []string{application.ID},
+	}); err != nil {
+		t.Fatalf("idempotently retain in-use provider scopes: %v", err)
+	}
+	if _, err := service.ReplaceProviderConnectionScopes(ctx, owner, connection.ID, cloudworkspace.ReplaceProviderConnectionScopesInput{
+		EnvironmentIDs: []string{production.ID}, ApplicationIDs: []string{application.ID},
+	}); !errors.Is(err, cloudworkspace.ErrScopeMismatch) {
+		t.Fatalf("remove in-use provider Environment scope error=%v, want scope mismatch", err)
+	}
+	mapping, err := service.CreateProviderMappingDraft(ctx, owner, product.ID, cloudworkspace.CreateProviderMappingDraftInput{
+		ConnectionID: connection.ID, EnvironmentID: development.ID, ApplicationID: application.ID,
+		ProviderProductIdentifier: "monthly",
+	})
+	if err != nil {
+		t.Fatalf("persist provider mapping draft: %v", err)
+	}
+	if _, err := pool.Exec(ctx, `UPDATE provider_product_mappings SET provider_package_identifier='monthly' WHERE id=$1`, mapping.ID); err == nil {
+		t.Fatal("database accepted an unpaired provider Package identifier")
+	}
+	snapshot := cloudworkspace.ProviderProductMetadataSnapshot{
+		ID: "provider_snapshot_000001", ProjectID: project.ID, MappingID: mapping.ID,
+		Source: cloudworkspace.ProviderMetadataProvider, Digest: strings.Repeat("a", 64),
+		Availability: cloudworkspace.ProviderAvailabilityAvailable,
+		ObservedAt:   now, SyncedAt: now, CreatedAt: now,
+	}
+	if err := repository.Transact(ctx, func(tx cloudworkspace.Transaction) error {
+		tx.SaveProviderMetadataSnapshot(snapshot)
+		return nil
+	}); err != nil {
+		t.Fatalf("persist safe provider metadata snapshot: %v", err)
+	}
+	if _, err := pool.Exec(ctx, `UPDATE provider_product_metadata_snapshots SET availability='unavailable' WHERE id=$1`, snapshot.ID); err == nil {
+		t.Fatal("immutable provider metadata snapshot accepted an update")
+	}
+	if got, err := reconstructed.GetProviderConnection(ctx, owner, connection.ID); err != nil ||
+		!reflect.DeepEqual(got.EnvironmentIDs, []string{development.ID, production.ID}) ||
+		!reflect.DeepEqual(got.ApplicationIDs, []string{application.ID}) {
+		t.Fatalf("reconstructed provider connection = %#v, %v", got, err)
+	}
 	createdKey, err := service.CreateAPIKey(ctx, owner, environments.Items[0].ID, cloudworkspace.APIKeySecretServer)
 	if err != nil {
 		t.Fatalf("create API key: %v", err)
@@ -369,9 +433,22 @@ func TestPhase3BPublishingPersistenceRisks(t *testing.T) {
 	if err != nil || len(environments.Items) < 2 {
 		t.Fatalf("list environments: %#v %v", environments, err)
 	}
-	environment := environments.Items[0]
-	otherEnvironment := environments.Items[1]
-	if _, err := workspace.CreateProduct(ctx, owner, project.ID, "monthly", "Monthly", "", cloudworkspace.ProductSubscription); err != nil {
+	var environment, otherEnvironment, productionEnvironment cloudworkspace.Environment
+	for _, candidate := range environments.Items {
+		switch candidate.Mode {
+		case cloudworkspace.EnvironmentDevelopment:
+			environment = candidate
+		case cloudworkspace.EnvironmentStaging:
+			otherEnvironment = candidate
+		case cloudworkspace.EnvironmentProduction:
+			productionEnvironment = candidate
+		}
+	}
+	if environment.ID == "" || otherEnvironment.ID == "" || productionEnvironment.ID == "" {
+		t.Fatalf("explicit Environment modes missing: %#v", environments.Items)
+	}
+	catalogProduct, err := workspace.CreateProduct(ctx, owner, project.ID, "monthly", "Monthly", "", cloudworkspace.ProductSubscription)
+	if err != nil {
 		t.Fatalf("create product: %v", err)
 	}
 	publicKey, err := workspace.CreateAPIKey(ctx, owner, environment.ID, cloudworkspace.APIKeyPublicSDK)
@@ -511,6 +588,39 @@ func TestPhase3BPublishingPersistenceRisks(t *testing.T) {
 		firstConfiguration.Release.ID != published.Release.ID || otherConfiguration.Release.ID != otherPublished.Release.ID ||
 		bytes.Contains(firstConfiguration.Release.Payload, []byte("other Environment")) || !bytes.Contains(otherConfiguration.Release.Payload, []byte("other Environment")) {
 		t.Fatalf("two-key Environment isolation failed: first=%#v/%v other=%#v/%v", firstConfiguration, firstErr, otherConfiguration, otherErr)
+	}
+	yearlyProduct, err := workspace.CreateProduct(ctx, owner, project.ID, "yearly", "Yearly", "", cloudworkspace.ProductSubscription)
+	if err != nil {
+		t.Fatalf("create second production Product: %v", err)
+	}
+	productionDocument, err := os.ReadFile(filepath.Join("../../../../../protocol/fixtures/v0.2/hidden-purchase-target.json"))
+	if err != nil {
+		t.Fatalf("read production Protocol fixture: %v", err)
+	}
+	var productionProtocol map[string]any
+	if err := json.Unmarshal(productionDocument, &productionProtocol); err != nil {
+		t.Fatalf("decode production Protocol fixture: %v", err)
+	}
+	productionProtocol["id"] = paywall.ID
+	productionProducts := productionProtocol["products"].([]any)
+	productionProducts[0].(map[string]any)["productId"] = catalogProduct.ID
+	productionProducts[1].(map[string]any)["productId"] = yearlyProduct.ID
+	productionDocument, err = json.Marshal(productionProtocol)
+	if err != nil {
+		t.Fatalf("encode production Protocol document: %v", err)
+	}
+	productionDraft, err := publishing.CreateDraft(ctx, actor, project.ID, paywall.ID, productionEnvironment.ID, productionDocument, "", "create-production-draft")
+	if err != nil {
+		t.Fatalf("create production Draft: %v", err)
+	}
+	if _, err := publishing.BindPlacement(ctx, actor, project.ID, productionEnvironment.ID, placement.ID, paywall.ID); err != nil {
+		t.Fatalf("bind production placement: %v", err)
+	}
+	if _, err := publishing.Publish(ctx, actor, hostedpublishing.PublishCommand{
+		ProjectID: project.ID, EnvironmentID: productionEnvironment.ID, DraftID: productionDraft.Draft.ID,
+		ExpectedRevision: productionDraft.Draft.CurrentRevision, AcknowledgeMockProducts: true, IdempotencyKey: "publish-production-not-ready",
+	}); !errors.Is(err, hostedpublishing.ErrProviderReadiness) {
+		t.Fatalf("production publish without scoped provider readiness error=%v, want provider readiness", err)
 	}
 	usage, err := publishing.GetAssetUsage(ctx, actor, project.ID, asset.ID)
 	if err != nil || usage.DraftReferences < 2 || usage.VersionReferences != 2 || usage.ReleaseReferences != 2 {

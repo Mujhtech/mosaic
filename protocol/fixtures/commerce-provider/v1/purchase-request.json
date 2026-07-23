@@ -1,0 +1,9 @@
+{
+  "commerceProviderContractVersion": "1",
+  "recordType": "purchaseRequest",
+  "payload": {
+    "operationId": "purchase_000001",
+    "providerId": "revenuecat",
+    "mosaicProductId": "product_pro_yearly"
+  }
+}

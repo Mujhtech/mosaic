@@ -65,13 +65,22 @@ type Application struct {
 }
 
 type Environment struct {
-	ID        string    `json:"id"`
-	ProjectID string    `json:"projectId"`
-	Key       string    `json:"key"`
-	Name      string    `json:"name"`
-	CreatedAt time.Time `json:"createdAt"`
-	UpdatedAt time.Time `json:"updatedAt"`
+	ID        string          `json:"id"`
+	ProjectID string          `json:"projectId"`
+	Key       string          `json:"key"`
+	Name      string          `json:"name"`
+	Mode      EnvironmentMode `json:"mode"`
+	CreatedAt time.Time       `json:"createdAt"`
+	UpdatedAt time.Time       `json:"updatedAt"`
 }
+
+type EnvironmentMode string
+
+const (
+	EnvironmentDevelopment EnvironmentMode = "development"
+	EnvironmentStaging     EnvironmentMode = "staging"
+	EnvironmentProduction  EnvironmentMode = "production"
+)
 
 type APIKeyKind string
 
@@ -195,15 +204,197 @@ const (
 	ProviderCustom     ProviderKind = "custom"
 )
 
+type ProviderIntegrationMode string
+
+const (
+	ProviderServerConnected ProviderIntegrationMode = "server_connected"
+	ProviderSDKOnly         ProviderIntegrationMode = "sdk_only"
+)
+
+type ProviderConnectionMode string
+
+const (
+	ProviderSandbox    ProviderConnectionMode = "sandbox"
+	ProviderProduction ProviderConnectionMode = "production"
+)
+
+type ProviderConnectionStatus string
+
+const (
+	ProviderConnectionPending ProviderConnectionStatus = "pending"
+	ProviderConnectionActive  ProviderConnectionStatus = "active"
+	ProviderConnectionRevoked ProviderConnectionStatus = "revoked"
+)
+
+type ProviderHealthStatus string
+
+const (
+	ProviderHealthUntested    ProviderHealthStatus = "untested"
+	ProviderHealthHealthy     ProviderHealthStatus = "healthy"
+	ProviderHealthDegraded    ProviderHealthStatus = "degraded"
+	ProviderHealthUnavailable ProviderHealthStatus = "unavailable"
+	ProviderHealthRevoked     ProviderHealthStatus = "revoked"
+)
+
+type ProviderConnection struct {
+	ID                   string                   `json:"id"`
+	ProjectID            string                   `json:"projectId"`
+	Name                 string                   `json:"name"`
+	Provider             ProviderKind             `json:"provider"`
+	IntegrationMode      ProviderIntegrationMode  `json:"integrationMode"`
+	Mode                 ProviderConnectionMode   `json:"mode"`
+	Status               ProviderConnectionStatus `json:"status"`
+	HealthStatus         ProviderHealthStatus     `json:"healthStatus"`
+	ExternalProjectID    string                   `json:"externalProjectId,omitempty"`
+	EnvironmentIDs       []string                 `json:"environmentIds"`
+	ApplicationIDs       []string                 `json:"applicationIds"`
+	LastSuccessfulTestAt *time.Time               `json:"lastSuccessfulTestAt,omitempty"`
+	LastSuccessfulSyncAt *time.Time               `json:"lastSuccessfulSyncAt,omitempty"`
+	LastErrorCode        ProviderErrorCode        `json:"lastErrorCode,omitempty"`
+	RevokedAt            *time.Time               `json:"revokedAt,omitempty"`
+	CreatedAt            time.Time                `json:"createdAt"`
+	UpdatedAt            time.Time                `json:"updatedAt"`
+}
+
+type ActiveProviderAssignment struct {
+	ProjectID                           string    `json:"projectId"`
+	EnvironmentID                       string    `json:"environmentId"`
+	ApplicationID                       string    `json:"applicationId"`
+	Platform                            Platform  `json:"platform"`
+	ConnectionID                        string    `json:"connectionId"`
+	ProductionConnectionUseAcknowledged bool      `json:"productionConnectionUseAcknowledged"`
+	CreatedByActorID                    string    `json:"createdByActorId"`
+	CreatedAt                           time.Time `json:"createdAt"`
+	UpdatedAt                           time.Time `json:"updatedAt"`
+}
+
+type ProviderMappingStatus string
+
+const (
+	ProviderMappingPlaceholder       ProviderMappingStatus = "placeholder"
+	ProviderMappingDraft             ProviderMappingStatus = "draft"
+	ProviderMappingActive            ProviderMappingStatus = "active"
+	ProviderMappingAttentionRequired ProviderMappingStatus = "attention_required"
+	ProviderMappingArchived          ProviderMappingStatus = "archived"
+)
+
+type ProviderAvailability string
+
+const (
+	ProviderAvailabilityUnknown     ProviderAvailability = "unknown"
+	ProviderAvailabilityAvailable   ProviderAvailability = "available"
+	ProviderAvailabilityUnavailable ProviderAvailability = "unavailable"
+)
+
+type ProviderSyncState string
+
+const (
+	ProviderSyncNeverSynced ProviderSyncState = "never_synced"
+	ProviderSyncCurrent     ProviderSyncState = "current"
+	ProviderSyncStale       ProviderSyncState = "stale"
+	ProviderSyncFailed      ProviderSyncState = "failed"
+)
+
 type ProviderProductMapping struct {
-	ID                        string       `json:"id"`
-	ProductID                 string       `json:"productId"`
-	ApplicationID             string       `json:"applicationId"`
-	Provider                  ProviderKind `json:"provider"`
-	ProviderProductIdentifier string       `json:"providerProductIdentifier"`
-	Status                    string       `json:"status"`
-	CreatedAt                 time.Time    `json:"createdAt"`
-	UpdatedAt                 time.Time    `json:"updatedAt"`
+	ID                         string                `json:"id"`
+	ProjectID                  string                `json:"projectId"`
+	ProductID                  string                `json:"productId"`
+	ConnectionID               string                `json:"connectionId,omitempty"`
+	EnvironmentID              string                `json:"environmentId,omitempty"`
+	ApplicationID              string                `json:"applicationId"`
+	Platform                   Platform              `json:"platform,omitempty"`
+	Provider                   ProviderKind          `json:"provider"`
+	ProviderProductIdentifier  string                `json:"providerProductIdentifier"`
+	ProviderPackageIdentifier  string                `json:"providerPackageIdentifier,omitempty"`
+	ProviderOfferingIdentifier string                `json:"providerOfferingIdentifier,omitempty"`
+	ExpectedStoreProductID     string                `json:"expectedStoreProductId,omitempty"`
+	Status                     ProviderMappingStatus `json:"status"`
+	Availability               ProviderAvailability  `json:"availability"`
+	SyncState                  ProviderSyncState     `json:"syncState"`
+	CurrentSnapshotID          string                `json:"currentSnapshotId,omitempty"`
+	LastErrorCode              ProviderErrorCode     `json:"lastErrorCode,omitempty"`
+	ArchivedAt                 *time.Time            `json:"archivedAt,omitempty"`
+	CreatedAt                  time.Time             `json:"createdAt"`
+	UpdatedAt                  time.Time             `json:"updatedAt"`
+}
+
+type ProviderMetadataSource string
+
+const (
+	ProviderMetadataProvider    ProviderMetadataSource = "provider"
+	ProviderMetadataSDKSnapshot ProviderMetadataSource = "sdk_snapshot"
+	ProviderMetadataManual      ProviderMetadataSource = "manual"
+)
+
+// ProviderProductMetadataSnapshot is immutable provider-observation history.
+// It intentionally excludes raw provider responses and credentials.
+type ProviderProductMetadataSnapshot struct {
+	ID            string                 `json:"id"`
+	ProjectID     string                 `json:"projectId"`
+	MappingID     string                 `json:"mappingId"`
+	Source        ProviderMetadataSource `json:"source"`
+	Digest        string                 `json:"digest"`
+	Availability  ProviderAvailability   `json:"availability"`
+	ObservedAt    time.Time              `json:"observedAt"`
+	SyncedAt      time.Time              `json:"syncedAt"`
+	ExpiresAt     *time.Time             `json:"expiresAt,omitempty"`
+	LastErrorCode ProviderErrorCode      `json:"lastErrorCode,omitempty"`
+	CreatedAt     time.Time              `json:"createdAt"`
+}
+
+type ProviderErrorCode string
+
+const (
+	ProviderErrorCredentialInvalid   ProviderErrorCode = "credentialInvalid"
+	ProviderErrorCredentialExpired   ProviderErrorCode = "credentialExpired"
+	ProviderErrorPermissionDenied    ProviderErrorCode = "permissionDenied"
+	ProviderErrorConnectionRevoked   ProviderErrorCode = "connectionRevoked"
+	ProviderErrorScopeMismatch       ProviderErrorCode = "scopeMismatch"
+	ProviderErrorModeMismatch        ProviderErrorCode = "modeMismatch"
+	ProviderErrorRateLimited         ProviderErrorCode = "rateLimited"
+	ProviderErrorTimeout             ProviderErrorCode = "timeout"
+	ProviderErrorProviderUnavailable ProviderErrorCode = "providerUnavailable"
+	ProviderErrorInvalidResponse     ProviderErrorCode = "invalidResponse"
+	ProviderErrorProductNotFound     ProviderErrorCode = "productNotFound"
+	ProviderErrorProductUnavailable  ProviderErrorCode = "productUnavailable"
+	ProviderErrorMappingMissing      ProviderErrorCode = "mappingMissing"
+	ProviderErrorMappingAmbiguous    ProviderErrorCode = "mappingAmbiguous"
+	ProviderErrorSyncInProgress      ProviderErrorCode = "syncInProgress"
+	ProviderErrorSyncPartial         ProviderErrorCode = "syncPartial"
+	ProviderErrorSyncFailed          ProviderErrorCode = "syncFailed"
+	ProviderErrorMetadataStale       ProviderErrorCode = "metadataStale"
+	ProviderErrorIdempotencyConflict ProviderErrorCode = "idempotencyConflict"
+)
+
+type ProviderReadinessState string
+
+const (
+	ProviderReadinessDraft             ProviderReadinessState = "draft"
+	ProviderReadinessMockOnly          ProviderReadinessState = "mockOnly"
+	ProviderReadinessConnected         ProviderReadinessState = "connected"
+	ProviderReadinessAttentionRequired ProviderReadinessState = "attentionRequired"
+	ProviderReadinessUnavailable       ProviderReadinessState = "unavailable"
+	ProviderReadinessArchived          ProviderReadinessState = "archived"
+)
+
+type ProviderReadinessIssue struct {
+	Code           ProviderErrorCode `json:"code"`
+	ResourceType   string            `json:"resourceType"`
+	ResourceID     string            `json:"resourceId"`
+	RecoveryAction string            `json:"recoveryAction"`
+}
+
+type ProviderReadiness struct {
+	State         ProviderReadinessState   `json:"state"`
+	ProductID     string                   `json:"productId"`
+	EnvironmentID string                   `json:"environmentId"`
+	ApplicationID string                   `json:"applicationId"`
+	Platform      Platform                 `json:"platform"`
+	ConnectionID  string                   `json:"connectionId,omitempty"`
+	MappingID     string                   `json:"mappingId,omitempty"`
+	Blockers      []ProviderReadinessIssue `json:"blockers"`
+	Warnings      []ProviderReadinessIssue `json:"warnings"`
+	EvaluatedAt   time.Time                `json:"evaluatedAt"`
 }
 
 type ProductUsage struct {

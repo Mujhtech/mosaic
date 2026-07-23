@@ -618,7 +618,20 @@ func (s *Service) CreateProviderMapping(ctx context.Context, actor Actor, produc
 			}
 		}
 		now := s.now()
-		result = ProviderProductMapping{ID: tx.NextID("mapping"), ProductID: productID, ApplicationID: applicationID, Provider: provider, ProviderProductIdentifier: providerProductIdentifier, Status: "placeholder", CreatedAt: now, UpdatedAt: now}
+		result = ProviderProductMapping{
+			ID:                        tx.NextID("mapping"),
+			ProjectID:                 project.ID,
+			ProductID:                 productID,
+			ApplicationID:             applicationID,
+			Platform:                  application.Platform,
+			Provider:                  provider,
+			ProviderProductIdentifier: providerProductIdentifier,
+			Status:                    ProviderMappingPlaceholder,
+			Availability:              ProviderAvailabilityUnknown,
+			SyncState:                 ProviderSyncNeverSynced,
+			CreatedAt:                 now,
+			UpdatedAt:                 now,
+		}
 		tx.SaveProviderMapping(result)
 		s.audit(tx, actor, project.OrganizationID, project.ID, "", "provider_mapping.placeholder_created", "provider_mapping", result.ID, map[string]string{"provider": string(provider)})
 		return nil

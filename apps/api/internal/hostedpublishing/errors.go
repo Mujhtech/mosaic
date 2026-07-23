@@ -17,6 +17,7 @@ var (
 	ErrIdempotencyConflict     = errors.New("idempotency conflict")
 	ErrValidationFailed        = errors.New("validation failed")
 	ErrProductInvalid          = errors.New("product invalid")
+	ErrProviderReadiness       = errors.New("provider readiness unavailable")
 	ErrPlacementUnpublished    = errors.New("placement has no published paywall")
 	ErrAssetStorageUnavailable = errors.New("hosted asset storage unavailable")
 	ErrAssetInvalid            = errors.New("asset is invalid")
@@ -45,3 +46,12 @@ func (e *ValidationError) Error() string {
 	return fmt.Sprintf("document validation failed: %v", e.Errors)
 }
 func (e *ValidationError) Unwrap() error { return ErrValidationFailed }
+
+type ProviderReadinessError struct {
+	Blockers []ProviderPublicationIssue
+}
+
+func (e *ProviderReadinessError) Error() string {
+	return fmt.Sprintf("provider readiness unavailable: %v", e.Blockers)
+}
+func (e *ProviderReadinessError) Unwrap() error { return ErrProviderReadiness }

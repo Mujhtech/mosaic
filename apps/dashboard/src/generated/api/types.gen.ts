@@ -26,6 +26,26 @@ export type MetadataSource = 'mock' | 'provider';
 
 export type ProviderKind = 'revenuecat' | 'app_store' | 'google_play' | 'custom';
 
+export type ProviderConnectionKind = 'revenuecat' | 'custom';
+
+export type ProviderIntegrationMode = 'server_connected' | 'sdk_only';
+
+export type ProviderConnectionMode = 'sandbox' | 'production';
+
+export type ProviderConnectionStatus = 'pending' | 'active' | 'revoked';
+
+export type ProviderHealthStatus = 'untested' | 'healthy' | 'degraded' | 'unavailable' | 'revoked';
+
+export type EnvironmentMode = 'development' | 'staging' | 'production';
+
+export type ProviderMappingStatus = 'placeholder' | 'draft' | 'active' | 'attention_required' | 'archived';
+
+export type ProviderAvailability = 'unknown' | 'available' | 'unavailable';
+
+export type ProviderSyncState = 'never_synced' | 'current' | 'stale' | 'failed';
+
+export type ProviderErrorCode = 'credentialInvalid' | 'credentialExpired' | 'permissionDenied' | 'connectionRevoked' | 'scopeMismatch' | 'modeMismatch' | 'rateLimited' | 'timeout' | 'providerUnavailable' | 'invalidResponse' | 'productNotFound' | 'productUnavailable' | 'mappingMissing' | 'mappingAmbiguous' | 'syncInProgress' | 'syncPartial' | 'syncFailed' | 'metadataStale' | 'idempotencyConflict';
+
 export type SignUpRequest = {
     email: string;
     name: string;
@@ -141,6 +161,62 @@ export type CreateProviderMappingRequest = {
     providerProductIdentifier: string;
 };
 
+export type SetEnvironmentModeRequest = {
+    mode: EnvironmentMode;
+};
+
+/**
+ * Non-secret metadata only. Credential, token, secret, and authorization-code properties are unsupported.
+ */
+export type CreateProviderConnectionRequest = {
+    name: string;
+    provider: ProviderConnectionKind;
+    integrationMode: ProviderIntegrationMode;
+    mode: ProviderConnectionMode;
+    externalProjectId?: string;
+    environmentIds: Array<string>;
+    applicationIds: Array<string>;
+};
+
+export type ReplaceProviderConnectionScopesRequest = {
+    environmentIds: Array<string>;
+    applicationIds: Array<string>;
+};
+
+export type SetProviderAssignmentRequest = {
+    connectionId: string;
+    /**
+     * Required when explicitly assigning a production connection outside a production Environment.
+     */
+    acknowledgeProductionConnectionUse?: boolean;
+};
+
+/**
+ * providerProductIdentifier is copied unchanged into Commerce Provider Contract
+ * providerProductReference for the selected adapter. Package and Offering identifiers
+ * are optional RevenueCat metadata and must be supplied together; custom providers
+ * cannot receive them.
+ *
+ */
+export type CreateProviderMappingDraftRequest = {
+    connectionId: string;
+    environmentId: string;
+    applicationId: string;
+    /**
+     * Opaque adapter-owned value mapped exactly to Commerce Provider Contract providerProductReference.
+     */
+    providerProductIdentifier: string;
+    /**
+     * RevenueCat-only metadata; requires providerOfferingIdentifier.
+     */
+    providerPackageIdentifier?: string;
+    /**
+     * RevenueCat-only metadata; requires providerPackageIdentifier.
+     */
+    providerOfferingIdentifier?: string;
+    expectedStoreProductId?: string;
+};
+
 export type Organization = {
     id: string;
     name: string;
@@ -182,6 +258,42 @@ export type Environment = {
     projectId: string;
     key: string;
     name: string;
+    mode: EnvironmentMode;
+    createdAt: Timestamp;
+    updatedAt: Timestamp;
+};
+
+/**
+ * Contains no provider credential, token, secret, nonce, or ciphertext.
+ */
+export type ProviderConnection = {
+    id: string;
+    projectId: string;
+    name: string;
+    provider: ProviderConnectionKind;
+    integrationMode: ProviderIntegrationMode;
+    mode: ProviderConnectionMode;
+    status: ProviderConnectionStatus;
+    healthStatus: ProviderHealthStatus;
+    externalProjectId?: string;
+    environmentIds: Array<string>;
+    applicationIds: Array<string>;
+    lastSuccessfulTestAt?: Timestamp;
+    lastSuccessfulSyncAt?: Timestamp;
+    lastErrorCode?: ProviderErrorCode;
+    revokedAt?: Timestamp;
+    createdAt: Timestamp;
+    updatedAt: Timestamp;
+};
+
+export type ActiveProviderAssignment = {
+    projectId: string;
+    environmentId: string;
+    applicationId: string;
+    platform: Platform;
+    connectionId: string;
+    productionConnectionUseAcknowledged: boolean;
+    createdByActorId: string;
     createdAt: Timestamp;
     updatedAt: Timestamp;
 };
@@ -216,6 +328,9 @@ export type Plan = {
     updatedAt: Timestamp;
 };
 
+/**
+ * Legacy catalog lifecycle summary embedded in Product responses; never sufficient for publication.
+ */
 export type ProductReadiness = {
     ready: boolean;
     reasons: Array<string>;
@@ -262,13 +377,71 @@ export type ProductEntitlementGrant = {
 
 export type ProviderProductMapping = {
     id: string;
+    projectId: string;
     productId: string;
+    connectionId?: string;
+    environmentId?: string;
     applicationId: string;
+    platform: Platform;
     provider: ProviderKind;
+    /**
+     * Opaque value emitted unchanged as Commerce Provider Contract providerProductReference.
+     */
     providerProductIdentifier: string;
-    status: 'placeholder';
+    /**
+     * Optional RevenueCat Package metadata; present only with providerOfferingIdentifier.
+     */
+    providerPackageIdentifier?: string;
+    /**
+     * Optional RevenueCat Offering metadata; present only with providerPackageIdentifier.
+     */
+    providerOfferingIdentifier?: string;
+    expectedStoreProductId?: string;
+    status: ProviderMappingStatus;
+    availability: ProviderAvailability;
+    syncState: ProviderSyncState;
+    currentSnapshotId?: string;
+    lastErrorCode?: ProviderErrorCode;
+    archivedAt?: Timestamp;
     createdAt: Timestamp;
     updatedAt: Timestamp;
+};
+
+/**
+ * Immutable safe metadata evidence; raw provider responses and credentials are excluded.
+ */
+export type ProviderProductMetadataSnapshot = {
+    id: string;
+    projectId: string;
+    mappingId: string;
+    source: 'provider' | 'sdk_snapshot' | 'manual';
+    digest: string;
+    availability: ProviderAvailability;
+    observedAt: Timestamp;
+    syncedAt: Timestamp;
+    expiresAt?: Timestamp;
+    lastErrorCode?: ProviderErrorCode;
+    createdAt: Timestamp;
+};
+
+export type ProviderReadinessIssue = {
+    code: ProviderErrorCode;
+    resourceType: string;
+    resourceId: string;
+    recoveryAction: string;
+};
+
+export type ProviderReadiness = {
+    state: 'draft' | 'mockOnly' | 'connected' | 'attentionRequired' | 'unavailable' | 'archived';
+    productId: string;
+    environmentId: string;
+    applicationId: string;
+    platform: Platform;
+    connectionId?: string;
+    mappingId?: string;
+    blockers: Array<ProviderReadinessIssue>;
+    warnings: Array<ProviderReadinessIssue>;
+    evaluatedAt: Timestamp;
 };
 
 export type ProductUsage = {
@@ -463,6 +636,18 @@ export type EnvironmentEnvelope = {
     data: Environment;
 };
 
+export type ProviderConnectionEnvelope = {
+    data: ProviderConnection;
+};
+
+export type ProviderAssignmentEnvelope = {
+    data: ActiveProviderAssignment;
+};
+
+export type ProviderReadinessEnvelope = {
+    data: ProviderReadiness;
+};
+
 export type ApiKeyEnvelope = {
     data: ApiKey;
 };
@@ -512,6 +697,8 @@ export type ProjectListEnvelope = ProjectList;
 export type ApplicationListEnvelope = ApplicationList;
 
 export type EnvironmentListEnvelope = EnvironmentList;
+
+export type ProviderConnectionListEnvelope = ProviderConnectionList;
 
 export type ApiKeyListEnvelope = ApiKeyList;
 
@@ -639,6 +826,13 @@ export type EnvironmentList = {
     };
 };
 
+export type ProviderConnectionList = {
+    data: {
+        items: Array<ProviderConnection>;
+        page: Page;
+    };
+};
+
 export type ApiKeyList = {
     data: {
         items: Array<ApiKey>;
@@ -695,6 +889,12 @@ export type ActorId = string;
 export type ProjectId = string;
 
 export type EnvironmentId = string;
+
+export type ApplicationId = string;
+
+export type ProviderConnectionId = string;
+
+export type ProviderMappingId = string;
 
 export type ApiKeyId = string;
 
@@ -1488,6 +1688,66 @@ export type ListEnvironmentsResponses = {
 
 export type ListEnvironmentsResponse = ListEnvironmentsResponses[keyof ListEnvironmentsResponses];
 
+export type ListProviderConnectionsData = {
+    body?: never;
+    path: {
+        projectId: string;
+    };
+    query?: {
+        /**
+         * Opaque cursor from the immediately preceding list response. Malformed or stale values return validation_failed.
+         */
+        cursor?: string;
+        limit?: number;
+    };
+    url: '/v1/projects/{projectId}/provider-connections';
+};
+
+export type ListProviderConnectionsErrors = {
+    /**
+     * Stable machine-readable failure.
+     */
+    default: ErrorEnvelope;
+};
+
+export type ListProviderConnectionsError = ListProviderConnectionsErrors[keyof ListProviderConnectionsErrors];
+
+export type ListProviderConnectionsResponses = {
+    /**
+     * Non-secret Provider Connections
+     */
+    200: ProviderConnectionList;
+};
+
+export type ListProviderConnectionsResponse = ListProviderConnectionsResponses[keyof ListProviderConnectionsResponses];
+
+export type CreateProviderConnectionData = {
+    body: CreateProviderConnectionRequest;
+    path: {
+        projectId: string;
+    };
+    query?: never;
+    url: '/v1/projects/{projectId}/provider-connections';
+};
+
+export type CreateProviderConnectionErrors = {
+    /**
+     * Stable machine-readable failure.
+     */
+    default: ErrorEnvelope;
+};
+
+export type CreateProviderConnectionError = CreateProviderConnectionErrors[keyof CreateProviderConnectionErrors];
+
+export type CreateProviderConnectionResponses = {
+    /**
+     * Non-secret Provider Connection metadata
+     */
+    201: ProviderConnectionEnvelope;
+};
+
+export type CreateProviderConnectionResponse = CreateProviderConnectionResponses[keyof CreateProviderConnectionResponses];
+
 export type ListApiKeysData = {
     body?: never;
     path: {
@@ -1576,6 +1836,198 @@ export type UpdateEnvironmentResponses = {
 };
 
 export type UpdateEnvironmentResponse = UpdateEnvironmentResponses[keyof UpdateEnvironmentResponses];
+
+export type SetEnvironmentModeData = {
+    body: SetEnvironmentModeRequest;
+    path: {
+        environmentId: string;
+    };
+    query?: never;
+    url: '/v1/environments/{environmentId}/mode';
+};
+
+export type SetEnvironmentModeErrors = {
+    /**
+     * Stable machine-readable failure.
+     */
+    default: ErrorEnvelope;
+};
+
+export type SetEnvironmentModeError = SetEnvironmentModeErrors[keyof SetEnvironmentModeErrors];
+
+export type SetEnvironmentModeResponses = {
+    /**
+     * Environment
+     */
+    200: EnvironmentEnvelope;
+};
+
+export type SetEnvironmentModeResponse = SetEnvironmentModeResponses[keyof SetEnvironmentModeResponses];
+
+export type ClearActiveProviderAssignmentData = {
+    body?: never;
+    path: {
+        environmentId: string;
+        applicationId: string;
+    };
+    query?: never;
+    url: '/v1/environments/{environmentId}/applications/{applicationId}/active-provider';
+};
+
+export type ClearActiveProviderAssignmentErrors = {
+    /**
+     * Stable machine-readable failure.
+     */
+    default: ErrorEnvelope;
+};
+
+export type ClearActiveProviderAssignmentError = ClearActiveProviderAssignmentErrors[keyof ClearActiveProviderAssignmentErrors];
+
+export type ClearActiveProviderAssignmentResponses = {
+    /**
+     * The current assignment was cleared; its audit history remains immutable.
+     */
+    204: void;
+};
+
+export type ClearActiveProviderAssignmentResponse = ClearActiveProviderAssignmentResponses[keyof ClearActiveProviderAssignmentResponses];
+
+export type GetActiveProviderAssignmentData = {
+    body?: never;
+    path: {
+        environmentId: string;
+        applicationId: string;
+    };
+    query?: never;
+    url: '/v1/environments/{environmentId}/applications/{applicationId}/active-provider';
+};
+
+export type GetActiveProviderAssignmentErrors = {
+    /**
+     * Stable machine-readable failure.
+     */
+    default: ErrorEnvelope;
+};
+
+export type GetActiveProviderAssignmentError = GetActiveProviderAssignmentErrors[keyof GetActiveProviderAssignmentErrors];
+
+export type GetActiveProviderAssignmentResponses = {
+    /**
+     * Active provider assignment
+     */
+    200: ProviderAssignmentEnvelope;
+};
+
+export type GetActiveProviderAssignmentResponse = GetActiveProviderAssignmentResponses[keyof GetActiveProviderAssignmentResponses];
+
+export type SetActiveProviderAssignmentData = {
+    body: SetProviderAssignmentRequest;
+    path: {
+        environmentId: string;
+        applicationId: string;
+    };
+    query?: never;
+    url: '/v1/environments/{environmentId}/applications/{applicationId}/active-provider';
+};
+
+export type SetActiveProviderAssignmentErrors = {
+    /**
+     * Stable machine-readable failure.
+     */
+    default: ErrorEnvelope;
+};
+
+export type SetActiveProviderAssignmentError = SetActiveProviderAssignmentErrors[keyof SetActiveProviderAssignmentErrors];
+
+export type SetActiveProviderAssignmentResponses = {
+    /**
+     * Active provider assignment
+     */
+    200: ProviderAssignmentEnvelope;
+};
+
+export type SetActiveProviderAssignmentResponse = SetActiveProviderAssignmentResponses[keyof SetActiveProviderAssignmentResponses];
+
+export type GetProviderConnectionData = {
+    body?: never;
+    path: {
+        connectionId: string;
+    };
+    query?: never;
+    url: '/v1/provider-connections/{connectionId}';
+};
+
+export type GetProviderConnectionErrors = {
+    /**
+     * Stable machine-readable failure.
+     */
+    default: ErrorEnvelope;
+};
+
+export type GetProviderConnectionError = GetProviderConnectionErrors[keyof GetProviderConnectionErrors];
+
+export type GetProviderConnectionResponses = {
+    /**
+     * Non-secret Provider Connection metadata
+     */
+    200: ProviderConnectionEnvelope;
+};
+
+export type GetProviderConnectionResponse = GetProviderConnectionResponses[keyof GetProviderConnectionResponses];
+
+export type ReplaceProviderConnectionScopesData = {
+    body: ReplaceProviderConnectionScopesRequest;
+    path: {
+        connectionId: string;
+    };
+    query?: never;
+    url: '/v1/provider-connections/{connectionId}/scopes';
+};
+
+export type ReplaceProviderConnectionScopesErrors = {
+    /**
+     * Stable machine-readable failure.
+     */
+    default: ErrorEnvelope;
+};
+
+export type ReplaceProviderConnectionScopesError = ReplaceProviderConnectionScopesErrors[keyof ReplaceProviderConnectionScopesErrors];
+
+export type ReplaceProviderConnectionScopesResponses = {
+    /**
+     * Non-secret Provider Connection metadata
+     */
+    200: ProviderConnectionEnvelope;
+};
+
+export type ReplaceProviderConnectionScopesResponse = ReplaceProviderConnectionScopesResponses[keyof ReplaceProviderConnectionScopesResponses];
+
+export type RevokeProviderConnectionData = {
+    body?: never;
+    path: {
+        connectionId: string;
+    };
+    query?: never;
+    url: '/v1/provider-connections/{connectionId}/revoke';
+};
+
+export type RevokeProviderConnectionErrors = {
+    /**
+     * Stable machine-readable failure.
+     */
+    default: ErrorEnvelope;
+};
+
+export type RevokeProviderConnectionError = RevokeProviderConnectionErrors[keyof RevokeProviderConnectionErrors];
+
+export type RevokeProviderConnectionResponses = {
+    /**
+     * Non-secret Provider Connection metadata
+     */
+    200: ProviderConnectionEnvelope;
+};
+
+export type RevokeProviderConnectionResponse = RevokeProviderConnectionResponses[keyof RevokeProviderConnectionResponses];
 
 export type RotateApiKeyData = {
     body?: never;
@@ -2090,7 +2542,10 @@ export type GetProductReadinessData = {
     path: {
         productId: string;
     };
-    query?: never;
+    query: {
+        environmentId: string;
+        applicationId: string;
+    };
     url: '/v1/products/{productId}/readiness';
 };
 
@@ -2105,9 +2560,9 @@ export type GetProductReadinessError = GetProductReadinessErrors[keyof GetProduc
 
 export type GetProductReadinessResponses = {
     /**
-     * Product readiness
+     * Scoped provider readiness and stable recovery codes
      */
-    200: ProductReadinessEnvelope;
+    200: ProviderReadinessEnvelope;
 };
 
 export type GetProductReadinessResponse = GetProductReadinessResponses[keyof GetProductReadinessResponses];
@@ -2171,6 +2626,90 @@ export type CreateProviderMappingResponses = {
 };
 
 export type CreateProviderMappingResponse = CreateProviderMappingResponses[keyof CreateProviderMappingResponses];
+
+export type CreateProviderMappingDraftData = {
+    body: CreateProviderMappingDraftRequest;
+    path: {
+        productId: string;
+    };
+    query?: never;
+    url: '/v1/products/{productId}/provider-mapping-drafts';
+};
+
+export type CreateProviderMappingDraftErrors = {
+    /**
+     * Stable machine-readable failure.
+     */
+    default: ErrorEnvelope;
+};
+
+export type CreateProviderMappingDraftError = CreateProviderMappingDraftErrors[keyof CreateProviderMappingDraftErrors];
+
+export type CreateProviderMappingDraftResponses = {
+    /**
+     * Placeholder mapping
+     */
+    201: ProviderMappingEnvelope;
+};
+
+export type CreateProviderMappingDraftResponse = CreateProviderMappingDraftResponses[keyof CreateProviderMappingDraftResponses];
+
+export type GetProviderReadinessData = {
+    body?: never;
+    path: {
+        productId: string;
+    };
+    query: {
+        environmentId: string;
+        applicationId: string;
+    };
+    url: '/v1/products/{productId}/provider-readiness';
+};
+
+export type GetProviderReadinessErrors = {
+    /**
+     * Stable machine-readable failure.
+     */
+    default: ErrorEnvelope;
+};
+
+export type GetProviderReadinessError = GetProviderReadinessErrors[keyof GetProviderReadinessErrors];
+
+export type GetProviderReadinessResponses = {
+    /**
+     * Scoped provider readiness and stable recovery codes
+     */
+    200: ProviderReadinessEnvelope;
+};
+
+export type GetProviderReadinessResponse = GetProviderReadinessResponses[keyof GetProviderReadinessResponses];
+
+export type ArchiveProviderMappingData = {
+    body?: never;
+    path: {
+        mappingId: string;
+    };
+    query?: never;
+    url: '/v1/provider-mappings/{mappingId}/archive';
+};
+
+export type ArchiveProviderMappingErrors = {
+    /**
+     * Stable machine-readable failure.
+     */
+    default: ErrorEnvelope;
+};
+
+export type ArchiveProviderMappingError = ArchiveProviderMappingErrors[keyof ArchiveProviderMappingErrors];
+
+export type ArchiveProviderMappingResponses = {
+    /**
+     * Placeholder mapping
+     */
+    200: ProviderMappingEnvelope;
+};
+
+export type ArchiveProviderMappingResponse = ArchiveProviderMappingResponses[keyof ArchiveProviderMappingResponses];
 
 export type ListEntitlementsData = {
     body?: never;

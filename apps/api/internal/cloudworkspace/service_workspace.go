@@ -25,8 +25,16 @@ func (s *Service) CreateProject(ctx context.Context, actor Actor, organizationID
 		now := s.now()
 		result = Project{ID: tx.NextID("project"), OrganizationID: organizationID, Key: key, Name: name, Status: ProjectActive, CreatedAt: now, UpdatedAt: now}
 		tx.SaveProject(result)
-		for _, environment := range []struct{ key, name string }{{"development", "Development"}, {"staging", "Staging"}, {"production", "Production"}} {
-			tx.SaveEnvironment(Environment{ID: tx.NextID("env"), ProjectID: result.ID, Key: environment.key, Name: environment.name, CreatedAt: now, UpdatedAt: now})
+		for _, environment := range []struct {
+			key  string
+			name string
+			mode EnvironmentMode
+		}{
+			{"development", "Development", EnvironmentDevelopment},
+			{"staging", "Staging", EnvironmentStaging},
+			{"production", "Production", EnvironmentProduction},
+		} {
+			tx.SaveEnvironment(Environment{ID: tx.NextID("env"), ProjectID: result.ID, Key: environment.key, Name: environment.name, Mode: environment.mode, CreatedAt: now, UpdatedAt: now})
 		}
 		s.audit(tx, actor, organizationID, result.ID, "", "project.created", "project", result.ID, map[string]string{"key": key})
 		return nil
@@ -209,6 +217,51 @@ func (s *Service) UpdateEnvironment(ctx context.Context, actor Actor, environmen
 	})
 	if err == nil {
 		logMutation(ctx, "environment.updated", actor, organizationID, result.ProjectID, environmentID)
+	}
+	return result, err
+}
+
+func (s *Service) SetEnvironmentMode(ctx context.Context, actor Actor, environmentID string, mode EnvironmentMode) (Environment, error) {
+	ctx, span := s.operation(ctx, "environment.mode.set", actor, attribute.String("mosaic.environment.id", environmentID))
+	defer span.End()
+	var result Environment
+	var organizationID string
+	err := s.repository.Transact(ctx, func(tx Transaction) error {
+		environment, project, err := environmentScope(tx, actor, environmentID, true)
+		if err != nil {
+			return err
+		}
+		if project.Status == ProjectArchived {
+			return ErrResourceArchived
+		}
+		if environment.Mode == mode {
+			result, organizationID = environment, project.OrganizationID
+			return nil
+		}
+		for _, application := range tx.Applications(project.ID) {
+			assignment, ok := tx.ActiveProviderAssignment(environmentID, application.ID)
+			if !ok {
+				continue
+			}
+			connection, ok := tx.ProviderConnection(assignment.ConnectionID)
+			if !ok {
+				return ErrNotFound
+			}
+			if mode == EnvironmentProduction && connection.Mode == ProviderSandbox {
+				return ErrModeMismatch
+			}
+			if mode != EnvironmentProduction && connection.Mode == ProviderProduction && !assignment.ProductionConnectionUseAcknowledged {
+				return ErrProductionConnectionAcknowledgementRequired
+			}
+		}
+		environment.Mode, environment.UpdatedAt = mode, s.now()
+		tx.SaveEnvironment(environment)
+		s.audit(tx, actor, project.OrganizationID, project.ID, environment.ID, "environment.mode_changed", "environment", environment.ID, map[string]string{"mode": string(mode)})
+		organizationID, result = project.OrganizationID, environment
+		return nil
+	})
+	if err == nil {
+		logMutation(ctx, "environment.mode_changed", actor, organizationID, result.ProjectID, environmentID)
 	}
 	return result, err
 }

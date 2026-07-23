@@ -15,7 +15,7 @@ describe("Catalog impact invalidation", () => {
       catalogKeys.planProducts("plan_one"),
       catalogKeys.product("product_one"),
       catalogKeys.productUsage("product_one"),
-      catalogKeys.productReadiness("product_one"),
+      catalogKeys.productReadiness("product_one", "environment_one", "application_one"),
       catalogKeys.productEntitlements("product_one"),
       catalogKeys.providerMappings("product_one"),
       catalogKeys.entitlement("entitlement_one"),

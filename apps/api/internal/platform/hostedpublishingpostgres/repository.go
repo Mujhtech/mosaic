@@ -129,11 +129,19 @@ func (r reader) Role(organizationID, actorID string) (string, bool) {
 }
 
 func (r reader) Environment(id string) (hostedpublishing.Environment, bool) {
-	return one(r, `SELECT id,project_id,key FROM environments WHERE id=$1`, func(row pgx.Row) (hostedpublishing.Environment, error) {
+	return one(r, `SELECT id,project_id,key,mode FROM environments WHERE id=$1`, func(row pgx.Row) (hostedpublishing.Environment, error) {
 		var value hostedpublishing.Environment
-		err := row.Scan(&value.ID, &value.ProjectID, &value.Key)
+		err := row.Scan(&value.ID, &value.ProjectID, &value.Key, &value.Mode)
 		return value, err
 	}, id)
+}
+
+func (r reader) Applications(projectID string) []hostedpublishing.Application {
+	return many(r, `SELECT id,project_id,platform FROM applications WHERE project_id=$1 ORDER BY id`, func(row pgx.Row) (hostedpublishing.Application, error) {
+		var value hostedpublishing.Application
+		err := row.Scan(&value.ID, &value.ProjectID, &value.Platform)
+		return value, err
+	}, projectID)
 }
 
 func (r reader) Product(id string) (hostedpublishing.Product, bool) {
@@ -149,6 +157,73 @@ func (r reader) ProviderMappingCount(productID string) int {
 	err := r.q.QueryRow(r.ctx, `SELECT count(*) FROM provider_product_mappings WHERE product_id=$1`, productID).Scan(&count)
 	r.fail(err)
 	return count
+}
+
+func (r reader) ProductGrantCount(productID string) int {
+	var count int
+	err := r.q.QueryRow(r.ctx, `SELECT count(*) FROM product_entitlement_grants WHERE product_id=$1`, productID).Scan(&count)
+	r.fail(err)
+	return count
+}
+
+func (r reader) ProviderAssignment(environmentID, applicationID string) (hostedpublishing.ProviderAssignment, bool) {
+	return one(r, `SELECT connection_id FROM active_provider_assignments WHERE environment_id=$1 AND application_id=$2`, func(row pgx.Row) (hostedpublishing.ProviderAssignment, error) {
+		var value hostedpublishing.ProviderAssignment
+		err := row.Scan(&value.ConnectionID)
+		return value, err
+	}, environmentID, applicationID)
+}
+
+func (r reader) ProviderConnection(id string) (hostedpublishing.ProviderConnection, bool) {
+	return one(r, `SELECT id,project_id,mode,status,health_status FROM provider_connections WHERE id=$1`, func(row pgx.Row) (hostedpublishing.ProviderConnection, error) {
+		var value hostedpublishing.ProviderConnection
+		err := row.Scan(&value.ID, &value.ProjectID, &value.Mode, &value.Status, &value.HealthStatus)
+		return value, err
+	}, id)
+}
+
+func (r reader) ProviderConnectionEnvironmentScoped(connectionID, environmentID string) bool {
+	var scoped bool
+	err := r.q.QueryRow(r.ctx, `SELECT EXISTS(
+		SELECT 1 FROM provider_connection_environment_scopes
+		WHERE connection_id=$1 AND environment_id=$2
+	)`, connectionID, environmentID).Scan(&scoped)
+	r.fail(err)
+	return scoped
+}
+
+func (r reader) ProviderConnectionApplicationScoped(connectionID, applicationID string) bool {
+	var scoped bool
+	err := r.q.QueryRow(r.ctx, `SELECT EXISTS(
+		SELECT 1 FROM provider_connection_application_scopes
+		WHERE connection_id=$1 AND application_id=$2
+	)`, connectionID, applicationID).Scan(&scoped)
+	r.fail(err)
+	return scoped
+}
+
+func (r reader) ProviderMappingsForReadiness(productID, connectionID, environmentID, applicationID, platform string) []hostedpublishing.ProviderMappingReadiness {
+	return many(r, `SELECT id,availability,sync_state,current_snapshot_id
+		FROM provider_product_mappings
+		WHERE product_id=$1 AND connection_id=$2 AND environment_id=$3 AND application_id=$4
+		  AND platform=$5 AND status='active'
+		ORDER BY id`, func(row pgx.Row) (hostedpublishing.ProviderMappingReadiness, error) {
+		var value hostedpublishing.ProviderMappingReadiness
+		var currentSnapshotID *string
+		err := row.Scan(&value.ID, &value.Availability, &value.SyncState, &currentSnapshotID)
+		if currentSnapshotID != nil {
+			value.CurrentSnapshotID = *currentSnapshotID
+		}
+		return value, err
+	}, productID, connectionID, environmentID, applicationID, platform)
+}
+
+func (r reader) ProviderMetadataSnapshot(id string) (hostedpublishing.ProviderMetadataSnapshot, bool) {
+	return one(r, `SELECT id,expires_at FROM provider_product_metadata_snapshots WHERE id=$1`, func(row pgx.Row) (hostedpublishing.ProviderMetadataSnapshot, error) {
+		var value hostedpublishing.ProviderMetadataSnapshot
+		err := row.Scan(&value.ID, &value.ExpiresAt)
+		return value, err
+	}, id)
 }
 
 func scanAsset(row pgx.Row) (hostedpublishing.Asset, error) {

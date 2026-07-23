@@ -11,8 +11,16 @@ type Reader interface {
 	Project(string) (Project, bool)
 	Role(string, string) (string, bool)
 	Environment(string) (Environment, bool)
+	Applications(string) []Application
 	Product(string) (Product, bool)
 	ProviderMappingCount(string) int
+	ProductGrantCount(string) int
+	ProviderAssignment(string, string) (ProviderAssignment, bool)
+	ProviderConnection(string) (ProviderConnection, bool)
+	ProviderConnectionEnvironmentScoped(string, string) bool
+	ProviderConnectionApplicationScoped(string, string) bool
+	ProviderMappingsForReadiness(string, string, string, string, string) []ProviderMappingReadiness
+	ProviderMetadataSnapshot(string) (ProviderMetadataSnapshot, bool)
 	Asset(string) (Asset, bool)
 	Assets(string) []Asset
 	AssetUsage(string) AssetUsage

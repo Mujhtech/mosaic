@@ -1,0 +1,43 @@
+{
+  "commerceProviderContractVersion": "1",
+  "recordType": "productLoadResult",
+  "payload": {
+    "requestId": "load_products_000002",
+    "providerId": "custom.example",
+    "products": [
+      {
+        "product": {
+          "mosaicProductId": "product_pro_monthly",
+          "key": "pro_monthly",
+          "type": "subscription",
+          "entitlementKeys": [
+            "pro"
+          ]
+        },
+        "availability": {
+          "status": "unavailable",
+          "reason": "temporarilyUnavailable"
+        },
+        "freshness": {
+          "source": "providerCache",
+          "status": "stale",
+          "observedAt": "2026-07-22T12:00:00Z",
+          "expiresAt": "2026-07-22T12:15:00Z"
+        },
+        "diagnostics": [
+          {
+            "code": "commerce.productUnavailable",
+            "safeMessage": "This Product is temporarily unavailable.",
+            "severity": "error",
+            "retryable": true,
+            "retryAfterSeconds": 30,
+            "correlationId": "load_products_000002",
+            "mosaicProductId": "product_pro_monthly",
+            "recoveryAction": "retry"
+          }
+        ]
+      }
+    ],
+    "diagnostics": []
+  }
+}

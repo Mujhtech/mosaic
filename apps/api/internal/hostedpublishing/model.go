@@ -23,6 +23,13 @@ type Environment struct {
 	ID        string `json:"id"`
 	ProjectID string `json:"projectId"`
 	Key       string `json:"key"`
+	Mode      string `json:"mode"`
+}
+
+type Application struct {
+	ID        string
+	ProjectID string
+	Platform  string
 }
 
 type Product struct {
@@ -32,6 +39,39 @@ type Product struct {
 	Status         string
 	MetadataSource string
 	InternalName   string
+}
+
+type ProviderAssignment struct {
+	ConnectionID string
+}
+
+type ProviderConnection struct {
+	ID           string
+	ProjectID    string
+	Mode         string
+	Status       string
+	HealthStatus string
+}
+
+type ProviderMappingReadiness struct {
+	ID                string
+	Availability      string
+	SyncState         string
+	CurrentSnapshotID string
+}
+
+type ProviderMetadataSnapshot struct {
+	ID        string
+	ExpiresAt *time.Time
+}
+
+type ProviderPublicationIssue struct {
+	Code           string `json:"code"`
+	ProductID      string `json:"productId"`
+	ApplicationID  string `json:"applicationId"`
+	ResourceType   string `json:"resourceType"`
+	ResourceID     string `json:"resourceId"`
+	RecoveryAction string `json:"recoveryAction"`
 }
 
 type Asset struct {

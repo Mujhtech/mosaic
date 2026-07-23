@@ -159,15 +159,6 @@ func (s *Service) Publish(ctx context.Context, actor Actor, command PublishComma
 			if !ok || product.ProjectID != project.ID || product.Status == "archived" {
 				return ErrProductInvalid
 			}
-			if product.MetadataSource == "mock" {
-				if !command.AcknowledgeMockProducts {
-					return &ValidationError{Errors: []string{"mock_product_acknowledgement_required"}}
-				}
-				warnings = append(warnings, "product_mock_metadata:"+product.ID)
-			}
-			if tx.ProviderMappingCount(product.ID) == 0 {
-				warnings = append(warnings, "product_provider_mapping_missing:"+product.ID)
-			}
 			products[product.ID] = product
 		}
 		tx.LockScope("paywall-version:" + draft.PaywallID + ":" + environment.ID)
@@ -242,6 +233,22 @@ func (s *Service) Publish(ctx context.Context, actor Actor, command PublishComma
 		if !publishedDraft {
 			return ErrPlacementUnpublished
 		}
+		for _, product := range products {
+			if product.MetadataSource != "mock" {
+				continue
+			}
+			if !command.AcknowledgeMockProducts {
+				return &ValidationError{Errors: []string{"mock_product_acknowledgement_required"}}
+			}
+			warnings = append(warnings, "product_mock_metadata:"+product.ID)
+		}
+		providerIssues := providerPublicationIssues(tx, environment, products, s.now())
+		if environment.Mode == "production" && len(providerIssues) != 0 {
+			return &ProviderReadinessError{Blockers: providerIssues}
+		}
+		for _, issue := range providerIssues {
+			warnings = append(warnings, providerPublicationWarning(issue))
+		}
 		state, ok := tx.ReleaseState(environment.ID)
 		if !ok || state.ProjectID != project.ID {
 			return ErrNotFound
@@ -295,6 +302,95 @@ func (s *Service) Publish(ctx context.Context, actor Actor, command PublishComma
 		zerolog.Ctx(ctx).Info().Str("environment_id", command.EnvironmentID).Str("release_id", result.Release.ID).Int64("release_number", result.Release.ReleaseNumber).Msg("configuration published")
 	}
 	return result, err
+}
+
+func providerPublicationWarning(issue ProviderPublicationIssue) string {
+	return "provider_readiness:" + issue.Code + ":" + issue.ProductID + ":" + issue.ApplicationID
+}
+
+func publicationIssue(code string, product Product, application Application, resourceType, resourceID, recoveryAction string) ProviderPublicationIssue {
+	return ProviderPublicationIssue{
+		Code: code, ProductID: product.ID, ApplicationID: application.ID,
+		ResourceType: resourceType, ResourceID: resourceID, RecoveryAction: recoveryAction,
+	}
+}
+
+func providerPublicationIssues(reader Reader, environment Environment, products map[string]Product, now time.Time) []ProviderPublicationIssue {
+	applications := reader.Applications(environment.ProjectID)
+	if len(applications) == 0 {
+		issues := make([]ProviderPublicationIssue, 0, len(products))
+		for _, product := range products {
+			issues = append(issues, publicationIssue(
+				"scopeMismatch", product, Application{}, "project", environment.ProjectID, "createApplication",
+			))
+		}
+		return issues
+	}
+	productIDs := make([]string, 0, len(products))
+	for productID := range products {
+		productIDs = append(productIDs, productID)
+	}
+	sort.Strings(productIDs)
+	issues := make([]ProviderPublicationIssue, 0)
+	for _, productID := range productIDs {
+		product := products[productID]
+		for _, application := range applications {
+			if product.Status != "connected" {
+				issues = append(issues, publicationIssue("productUnavailable", product, application, "product", product.ID, "connectProduct"))
+			}
+			if product.MetadataSource != "provider" {
+				issues = append(issues, publicationIssue("metadataStale", product, application, "product", product.ID, "syncProviderMetadata"))
+			}
+			if reader.ProductGrantCount(product.ID) == 0 {
+				issues = append(issues, publicationIssue("productUnavailable", product, application, "product", product.ID, "grantEntitlement"))
+			}
+			assignment, ok := reader.ProviderAssignment(environment.ID, application.ID)
+			if !ok {
+				issues = append(issues, publicationIssue("providerUnavailable", product, application, "provider_assignment", environment.ID+":"+application.ID, "assignProviderConnection"))
+				continue
+			}
+			connection, ok := reader.ProviderConnection(assignment.ConnectionID)
+			if !ok || connection.ProjectID != environment.ProjectID {
+				issues = append(issues, publicationIssue("scopeMismatch", product, application, "provider_connection", assignment.ConnectionID, "assignProviderConnection"))
+				continue
+			}
+			if connection.Status == "revoked" {
+				issues = append(issues, publicationIssue("connectionRevoked", product, application, "provider_connection", connection.ID, "reconnectProvider"))
+				continue
+			}
+			if connection.Status != "active" || connection.HealthStatus != "healthy" {
+				issues = append(issues, publicationIssue("providerUnavailable", product, application, "provider_connection", connection.ID, "testOrReconnectProvider"))
+			}
+			if !reader.ProviderConnectionEnvironmentScoped(connection.ID, environment.ID) ||
+				!reader.ProviderConnectionApplicationScoped(connection.ID, application.ID) {
+				issues = append(issues, publicationIssue("scopeMismatch", product, application, "provider_connection", connection.ID, "updateConnectionScopes"))
+			}
+			if environment.Mode == "production" && connection.Mode != "production" {
+				issues = append(issues, publicationIssue("modeMismatch", product, application, "provider_connection", connection.ID, "assignProductionConnection"))
+			}
+			mappings := reader.ProviderMappingsForReadiness(product.ID, connection.ID, environment.ID, application.ID, application.Platform)
+			switch len(mappings) {
+			case 0:
+				issues = append(issues, publicationIssue("mappingMissing", product, application, "product", product.ID, "createOrSyncProviderMapping"))
+			case 1:
+				mapping := mappings[0]
+				if mapping.Availability != "available" {
+					issues = append(issues, publicationIssue("productUnavailable", product, application, "provider_mapping", mapping.ID, "reviewProviderProduct"))
+				}
+				if mapping.SyncState != "current" || mapping.CurrentSnapshotID == "" {
+					issues = append(issues, publicationIssue("metadataStale", product, application, "provider_mapping", mapping.ID, "syncProviderMetadata"))
+					continue
+				}
+				snapshot, ok := reader.ProviderMetadataSnapshot(mapping.CurrentSnapshotID)
+				if !ok || snapshot.ExpiresAt != nil && !snapshot.ExpiresAt.After(now) {
+					issues = append(issues, publicationIssue("metadataStale", product, application, "provider_mapping", mapping.ID, "syncProviderMetadata"))
+				}
+			default:
+				issues = append(issues, publicationIssue("mappingAmbiguous", product, application, "product", product.ID, "archiveDuplicateMappings"))
+			}
+		}
+	}
+	return issues
 }
 
 func (s *Service) resolveDocumentAssets(reader Reader, projectID string, references []documentAssetReference) ([]VersionAsset, map[string]Asset, error) {

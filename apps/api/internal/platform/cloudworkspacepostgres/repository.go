@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
@@ -150,14 +151,14 @@ func (r reader) Applications(projectID string) []cloudworkspace.Application {
 
 func scanEnvironment(row pgx.Row) (cloudworkspace.Environment, error) {
 	var v cloudworkspace.Environment
-	err := row.Scan(&v.ID, &v.ProjectID, &v.Key, &v.Name, &v.CreatedAt, &v.UpdatedAt)
+	err := row.Scan(&v.ID, &v.ProjectID, &v.Key, &v.Name, &v.Mode, &v.CreatedAt, &v.UpdatedAt)
 	return v, err
 }
 func (r reader) Environment(id string) (cloudworkspace.Environment, bool) {
-	return one(r, `SELECT id,project_id,key,name,created_at,updated_at FROM environments WHERE id=$1`, scanEnvironment, id)
+	return one(r, `SELECT id,project_id,key,name,mode,created_at,updated_at FROM environments WHERE id=$1`, scanEnvironment, id)
 }
 func (r reader) Environments(projectID string) []cloudworkspace.Environment {
-	return many(r, `SELECT id,project_id,key,name,created_at,updated_at FROM environments WHERE project_id=$1 ORDER BY key`, scanEnvironment, projectID)
+	return many(r, `SELECT id,project_id,key,name,mode,created_at,updated_at FROM environments WHERE project_id=$1 ORDER BY key`, scanEnvironment, projectID)
 }
 
 func scanAPIKey(row pgx.Row) (cloudworkspace.APIKeyRecord, error) {
@@ -251,13 +252,118 @@ func scanReplacement(row pgx.Row) (cloudworkspace.ProductReplacementHistory, err
 func (r reader) ProductReplacementHistory(productID string) []cloudworkspace.ProductReplacementHistory {
 	return many(r, `SELECT project_id,product_id,replacement_product_id,changed_at FROM product_replacement_history WHERE product_id=$1 OR replacement_product_id=$1 ORDER BY id`, scanReplacement, productID)
 }
-func scanMapping(row pgx.Row) (cloudworkspace.ProviderProductMapping, error) {
-	var v cloudworkspace.ProviderProductMapping
-	err := row.Scan(&v.ID, &v.ProductID, &v.ApplicationID, &v.Provider, &v.ProviderProductIdentifier, &v.Status, &v.CreatedAt, &v.UpdatedAt)
+
+func scanProviderConnection(row pgx.Row) (cloudworkspace.ProviderConnection, error) {
+	var v cloudworkspace.ProviderConnection
+	var externalProjectID, lastErrorCode *string
+	err := row.Scan(
+		&v.ID, &v.ProjectID, &v.Name, &v.Provider, &v.IntegrationMode, &v.Mode,
+		&v.Status, &v.HealthStatus, &externalProjectID, &v.LastSuccessfulTestAt,
+		&v.LastSuccessfulSyncAt, &lastErrorCode, &v.RevokedAt, &v.CreatedAt, &v.UpdatedAt,
+	)
+	if externalProjectID != nil {
+		v.ExternalProjectID = *externalProjectID
+	}
+	if lastErrorCode != nil {
+		v.LastErrorCode = cloudworkspace.ProviderErrorCode(*lastErrorCode)
+	}
 	return v, err
 }
+
+const providerConnectionColumns = `id,project_id,name,provider,integration_mode,mode,status,health_status,external_project_id,last_successful_test_at,last_successful_sync_at,last_error_code,revoked_at,created_at,updated_at`
+
+func (r reader) ProviderConnection(id string) (cloudworkspace.ProviderConnection, bool) {
+	return one(r, `SELECT `+providerConnectionColumns+` FROM provider_connections WHERE id=$1`, scanProviderConnection, id)
+}
+func (r reader) ProviderConnections(projectID string) []cloudworkspace.ProviderConnection {
+	return many(r, `SELECT `+providerConnectionColumns+` FROM provider_connections WHERE project_id=$1 ORDER BY id`, scanProviderConnection, projectID)
+}
+func scanString(row pgx.Row) (string, error) {
+	var value string
+	err := row.Scan(&value)
+	return value, err
+}
+func (r reader) ProviderConnectionEnvironmentIDs(connectionID string) []string {
+	return many(r, `SELECT environment_id FROM provider_connection_environment_scopes WHERE connection_id=$1 ORDER BY environment_id`, scanString, connectionID)
+}
+func (r reader) ProviderConnectionApplicationIDs(connectionID string) []string {
+	return many(r, `SELECT application_id FROM provider_connection_application_scopes WHERE connection_id=$1 ORDER BY application_id`, scanString, connectionID)
+}
+
+func scanProviderAssignment(row pgx.Row) (cloudworkspace.ActiveProviderAssignment, error) {
+	var v cloudworkspace.ActiveProviderAssignment
+	err := row.Scan(
+		&v.ProjectID, &v.EnvironmentID, &v.ApplicationID, &v.Platform, &v.ConnectionID,
+		&v.ProductionConnectionUseAcknowledged, &v.CreatedByActorID, &v.CreatedAt, &v.UpdatedAt,
+	)
+	return v, err
+}
+
+const providerAssignmentColumns = `project_id,environment_id,application_id,platform,connection_id,production_connection_use_acknowledged,created_by_actor_id,created_at,updated_at`
+
+func (r reader) ActiveProviderAssignment(environmentID, applicationID string) (cloudworkspace.ActiveProviderAssignment, bool) {
+	return one(r, `SELECT `+providerAssignmentColumns+` FROM active_provider_assignments WHERE environment_id=$1 AND application_id=$2`, scanProviderAssignment, environmentID, applicationID)
+}
+func (r reader) ProviderAssignments(connectionID string) []cloudworkspace.ActiveProviderAssignment {
+	return many(r, `SELECT `+providerAssignmentColumns+` FROM active_provider_assignments WHERE connection_id=$1 ORDER BY environment_id,application_id`, scanProviderAssignment, connectionID)
+}
+
+func scanMapping(row pgx.Row) (cloudworkspace.ProviderProductMapping, error) {
+	var v cloudworkspace.ProviderProductMapping
+	var connectionID, environmentID, packageID, offeringID, expectedStoreID, currentSnapshotID, lastErrorCode *string
+	err := row.Scan(
+		&v.ID, &v.ProjectID, &v.ProductID, &connectionID, &environmentID, &v.ApplicationID,
+		&v.Platform, &v.Provider, &v.ProviderProductIdentifier, &packageID, &offeringID,
+		&expectedStoreID, &v.Status, &v.Availability, &v.SyncState, &currentSnapshotID,
+		&lastErrorCode, &v.ArchivedAt, &v.CreatedAt, &v.UpdatedAt,
+	)
+	if connectionID != nil {
+		v.ConnectionID = *connectionID
+	}
+	if environmentID != nil {
+		v.EnvironmentID = *environmentID
+	}
+	if packageID != nil {
+		v.ProviderPackageIdentifier = *packageID
+	}
+	if offeringID != nil {
+		v.ProviderOfferingIdentifier = *offeringID
+	}
+	if expectedStoreID != nil {
+		v.ExpectedStoreProductID = *expectedStoreID
+	}
+	if currentSnapshotID != nil {
+		v.CurrentSnapshotID = *currentSnapshotID
+	}
+	if lastErrorCode != nil {
+		v.LastErrorCode = cloudworkspace.ProviderErrorCode(*lastErrorCode)
+	}
+	return v, err
+}
+
+const providerMappingColumns = `id,project_id,product_id,connection_id,environment_id,application_id,platform,provider,provider_product_identifier,provider_package_identifier,provider_offering_identifier,expected_store_product_id,status,availability,sync_state,current_snapshot_id,last_error_code,archived_at,created_at,updated_at`
+
+func (r reader) ProviderMapping(id string) (cloudworkspace.ProviderProductMapping, bool) {
+	return one(r, `SELECT `+providerMappingColumns+` FROM provider_product_mappings WHERE id=$1`, scanMapping, id)
+}
 func (r reader) ProviderMappings(productID string) []cloudworkspace.ProviderProductMapping {
-	return many(r, `SELECT id,product_id,application_id,provider,provider_product_identifier,status,created_at,updated_at FROM provider_product_mappings WHERE product_id=$1 ORDER BY id`, scanMapping, productID)
+	return many(r, `SELECT `+providerMappingColumns+` FROM provider_product_mappings WHERE product_id=$1 ORDER BY id`, scanMapping, productID)
+}
+
+func scanProviderMetadataSnapshot(row pgx.Row) (cloudworkspace.ProviderProductMetadataSnapshot, error) {
+	var v cloudworkspace.ProviderProductMetadataSnapshot
+	var lastErrorCode *string
+	err := row.Scan(
+		&v.ID, &v.ProjectID, &v.MappingID, &v.Source, &v.Digest, &v.Availability,
+		&v.ObservedAt, &v.SyncedAt, &v.ExpiresAt, &lastErrorCode, &v.CreatedAt,
+	)
+	if lastErrorCode != nil {
+		v.LastErrorCode = cloudworkspace.ProviderErrorCode(*lastErrorCode)
+	}
+	return v, err
+}
+func (r reader) ProviderMetadataSnapshot(id string) (cloudworkspace.ProviderProductMetadataSnapshot, bool) {
+	return one(r, `SELECT id,project_id,mapping_id,source,digest,availability,observed_at,synced_at,expires_at,last_error_code,created_at FROM provider_product_metadata_snapshots WHERE id=$1`, scanProviderMetadataSnapshot, id)
 }
 func scanAudit(row pgx.Row) (cloudworkspace.AuditEvent, error) {
 	var v cloudworkspace.AuditEvent
@@ -323,7 +429,7 @@ func (t *transaction) SaveApplication(v cloudworkspace.Application) {
 	t.exec(`INSERT INTO applications(id,project_id,name,platform,identifier,created_at,updated_at) VALUES($1,$2,$3,$4,$5,$6,$7) ON CONFLICT(id) DO UPDATE SET name=excluded.name,platform=excluded.platform,identifier=excluded.identifier,updated_at=excluded.updated_at`, v.ID, v.ProjectID, v.Name, v.Platform, v.Identifier, v.CreatedAt, v.UpdatedAt)
 }
 func (t *transaction) SaveEnvironment(v cloudworkspace.Environment) {
-	t.exec(`INSERT INTO environments(id,project_id,key,name,created_at,updated_at) VALUES($1,$2,$3,$4,$5,$6) ON CONFLICT(id) DO UPDATE SET name=excluded.name,updated_at=excluded.updated_at`, v.ID, v.ProjectID, v.Key, v.Name, v.CreatedAt, v.UpdatedAt)
+	t.exec(`INSERT INTO environments(id,project_id,key,name,mode,created_at,updated_at) VALUES($1,$2,$3,$4,$5,$6,$7) ON CONFLICT(id) DO UPDATE SET name=excluded.name,mode=excluded.mode,updated_at=excluded.updated_at`, v.ID, v.ProjectID, v.Key, v.Name, v.Mode, v.CreatedAt, v.UpdatedAt)
 }
 func (t *transaction) SaveAPIKey(v cloudworkspace.APIKeyRecord) {
 	t.exec(`INSERT INTO api_keys(id,environment_id,kind,prefix,secret_digest,created_by_actor_id,created_at,rotated_at,revoked_at,last_used_at) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) ON CONFLICT(id) DO UPDATE SET secret_digest=excluded.secret_digest,rotated_at=excluded.rotated_at,revoked_at=COALESCE(api_keys.revoked_at,excluded.revoked_at),last_used_at=excluded.last_used_at`, v.ID, v.EnvironmentID, v.Kind, v.Prefix, v.SecretDigest[:], v.CreatedByActorID, v.CreatedAt, v.RotatedAt, v.RevokedAt, v.LastUsedAt)
@@ -361,8 +467,78 @@ func (t *transaction) SaveProductReplacement(v cloudworkspace.ProductReplacement
 func (t *transaction) DeleteProductGrant(productID, entitlementID string) {
 	t.exec(`DELETE FROM product_entitlement_grants WHERE product_id=$1 AND entitlement_id=$2`, productID, entitlementID)
 }
+func emptyStringAsNil(value string) any {
+	if value == "" {
+		return nil
+	}
+	return value
+}
+func (t *transaction) SaveProviderConnection(v cloudworkspace.ProviderConnection) {
+	t.exec(
+		`INSERT INTO provider_connections(id,project_id,name,provider,integration_mode,mode,status,health_status,external_project_id,last_successful_test_at,last_successful_sync_at,last_error_code,revoked_at,created_at,updated_at)
+		 VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)
+		 ON CONFLICT(id) DO UPDATE SET name=excluded.name,status=excluded.status,health_status=excluded.health_status,external_project_id=excluded.external_project_id,last_successful_test_at=excluded.last_successful_test_at,last_successful_sync_at=excluded.last_successful_sync_at,last_error_code=excluded.last_error_code,revoked_at=excluded.revoked_at,updated_at=excluded.updated_at`,
+		v.ID, v.ProjectID, v.Name, v.Provider, v.IntegrationMode, v.Mode, v.Status, v.HealthStatus,
+		emptyStringAsNil(v.ExternalProjectID), v.LastSuccessfulTestAt, v.LastSuccessfulSyncAt,
+		emptyStringAsNil(string(v.LastErrorCode)), v.RevokedAt, v.CreatedAt, v.UpdatedAt,
+	)
+}
+func (t *transaction) ReplaceProviderConnectionScopes(connectionID, projectID string, environmentIDs, applicationIDs []string, createdAt time.Time) {
+	t.exec(
+		`DELETE FROM provider_connection_environment_scopes
+		 WHERE connection_id=$1 AND NOT (environment_id = ANY($2::text[]))`,
+		connectionID, environmentIDs,
+	)
+	t.exec(
+		`DELETE FROM provider_connection_application_scopes
+		 WHERE connection_id=$1 AND NOT (application_id = ANY($2::text[]))`,
+		connectionID, applicationIDs,
+	)
+	t.exec(
+		`INSERT INTO provider_connection_environment_scopes(project_id,connection_id,environment_id,created_at)
+		 SELECT $1,$2,scope_id,$3 FROM unnest($4::text[]) AS scope_id
+		 ON CONFLICT(connection_id,environment_id) DO NOTHING`,
+		projectID, connectionID, createdAt, environmentIDs,
+	)
+	t.exec(
+		`INSERT INTO provider_connection_application_scopes(project_id,connection_id,application_id,created_at)
+		 SELECT $1,$2,scope_id,$3 FROM unnest($4::text[]) AS scope_id
+		 ON CONFLICT(connection_id,application_id) DO NOTHING`,
+		projectID, connectionID, createdAt, applicationIDs,
+	)
+}
+func (t *transaction) SaveActiveProviderAssignment(v cloudworkspace.ActiveProviderAssignment) {
+	t.exec(
+		`INSERT INTO active_provider_assignments(project_id,environment_id,application_id,platform,connection_id,production_connection_use_acknowledged,created_by_actor_id,created_at,updated_at)
+		 VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9)
+		 ON CONFLICT(environment_id,application_id) DO UPDATE SET connection_id=excluded.connection_id,platform=excluded.platform,production_connection_use_acknowledged=excluded.production_connection_use_acknowledged,created_by_actor_id=excluded.created_by_actor_id,updated_at=excluded.updated_at`,
+		v.ProjectID, v.EnvironmentID, v.ApplicationID, v.Platform, v.ConnectionID,
+		v.ProductionConnectionUseAcknowledged, v.CreatedByActorID, v.CreatedAt, v.UpdatedAt,
+	)
+}
+func (t *transaction) DeleteActiveProviderAssignment(environmentID, applicationID string) {
+	t.exec(`DELETE FROM active_provider_assignments WHERE environment_id=$1 AND application_id=$2`, environmentID, applicationID)
+}
 func (t *transaction) SaveProviderMapping(v cloudworkspace.ProviderProductMapping) {
-	t.exec(`INSERT INTO provider_product_mappings(id,project_id,product_id,application_id,provider,provider_product_identifier,status,created_at,updated_at) SELECT $1,p.project_id,$2,$3,$4,$5,$6,$7,$8 FROM products p WHERE p.id=$2 ON CONFLICT(id) DO UPDATE SET provider_product_identifier=excluded.provider_product_identifier,status=excluded.status,updated_at=excluded.updated_at`, v.ID, v.ProductID, v.ApplicationID, v.Provider, v.ProviderProductIdentifier, v.Status, v.CreatedAt, v.UpdatedAt)
+	t.exec(
+		`INSERT INTO provider_product_mappings(id,project_id,product_id,connection_id,environment_id,application_id,platform,provider,provider_product_identifier,provider_package_identifier,provider_offering_identifier,expected_store_product_id,status,availability,sync_state,current_snapshot_id,last_error_code,archived_at,created_at,updated_at)
+		 SELECT $1,p.project_id,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19 FROM products p WHERE p.id=$2
+		 ON CONFLICT(id) DO UPDATE SET provider_product_identifier=excluded.provider_product_identifier,provider_package_identifier=excluded.provider_package_identifier,provider_offering_identifier=excluded.provider_offering_identifier,expected_store_product_id=excluded.expected_store_product_id,status=excluded.status,availability=excluded.availability,sync_state=excluded.sync_state,current_snapshot_id=excluded.current_snapshot_id,last_error_code=excluded.last_error_code,archived_at=excluded.archived_at,updated_at=excluded.updated_at`,
+		v.ID, v.ProductID, emptyStringAsNil(v.ConnectionID), emptyStringAsNil(v.EnvironmentID),
+		v.ApplicationID, emptyStringAsNil(string(v.Platform)), v.Provider, v.ProviderProductIdentifier,
+		emptyStringAsNil(v.ProviderPackageIdentifier), emptyStringAsNil(v.ProviderOfferingIdentifier),
+		emptyStringAsNil(v.ExpectedStoreProductID), v.Status, v.Availability, v.SyncState,
+		emptyStringAsNil(v.CurrentSnapshotID), emptyStringAsNil(string(v.LastErrorCode)), v.ArchivedAt,
+		v.CreatedAt, v.UpdatedAt,
+	)
+}
+func (t *transaction) SaveProviderMetadataSnapshot(v cloudworkspace.ProviderProductMetadataSnapshot) {
+	t.exec(
+		`INSERT INTO provider_product_metadata_snapshots(id,project_id,mapping_id,source,digest,availability,observed_at,synced_at,expires_at,last_error_code,created_at)
+		 VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`,
+		v.ID, v.ProjectID, v.MappingID, v.Source, v.Digest, v.Availability, v.ObservedAt,
+		v.SyncedAt, v.ExpiresAt, emptyStringAsNil(string(v.LastErrorCode)), v.CreatedAt,
+	)
 }
 func (t *transaction) SaveAuditEvent(v cloudworkspace.AuditEvent) {
 	metadata, _ := json.Marshal(v.Metadata)
@@ -403,6 +579,14 @@ func persistenceError(err error) error {
 			resource, field = "product_entitlement", "entitlementId"
 		case "provider_product_mappings_product_id_application_id_provider_key":
 			resource, field = "provider_mapping", "applicationId"
+		case "provider_product_mappings_placeholder_scope_key":
+			resource, field = "provider_mapping", "applicationId"
+		case "provider_product_mappings_current_scope_key", "provider_product_mappings_active_scope_key":
+			resource, field = "provider_mapping", "scope"
+		case "provider_connections_project_id_name_key":
+			resource, field = "provider_connection", "name"
+		case "active_provider_assignments_pkey":
+			resource, field = "provider_assignment", "scope"
 		}
 		return &cloudworkspace.ConflictError{Resource: resource, Field: field}
 	}

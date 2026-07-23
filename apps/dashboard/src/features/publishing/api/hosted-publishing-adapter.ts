@@ -76,9 +76,17 @@ export interface HostedAsset {
 }
 
 export interface PublishValidationIssue {
+  readonly applicationId?: string
   readonly code: string
+  readonly connectionId?: string
+  readonly environmentId?: string
   readonly message: string
+  readonly productId?: string
+  readonly recoveryAction?: string
+  readonly recoveryLabel?: string
   readonly recoveryHref?: string
+  readonly resourceId?: string
+  readonly resourceType?: string
   readonly severity: "error" | "warning"
 }
 
