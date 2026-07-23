@@ -2,7 +2,7 @@
 
 ## Status
 
-**Inspection complete; implementation blocked on the provider-credential encryption decision.**
+**Stage 1 accepted for implementation; RevenueCat credential authorization remains an owner gate.**
 
 The product owner explicitly authorized Phase 4A inspection and planning on 2026-07-23 despite the
 inherited Phase 2.5 and Phase 3 review records. This authorization does not silently repair or
@@ -10,8 +10,10 @@ reclassify the known Phase 3 defects. Cross-platform canonical JSON digest equiv
 Draft-create/clone idempotency replay, and the missing Phase 3 demonstrations remain outside this
 work package.
 
-No provider credential may be persisted until the security decision in this plan is approved and
-recorded in an ADR.
+The product owner approved the recommended encryption design on 2026-07-23. ADR-0019 freezes the
+versioned AES-256-GCM envelope, operator keyring, rotation, and failure behavior. Provider
+credentials may not be persisted until the separate RevenueCat OAuth-versus-v2-secret-key decision
+is approved.
 
 ## Baseline and isolation
 
@@ -287,8 +289,8 @@ required read operations. OAuth is the preferred future hosted third-party autho
 adds consent, refresh-token, revocation, and self-hosting complexity not required for the first
 alpha.
 
-**Owner approval is required for Option A and the direct least-privilege v2 credential path before
-credential persistence is implemented.**
+Option A is accepted in ADR-0019. Owner approval is still required for the direct least-privilege
+v2 credential path before RevenueCat credential persistence is implemented.
 
 ## Active-provider resolution
 
@@ -641,11 +643,13 @@ No agent modifies another owner's files concurrently. Gate 4B does not begin.
 
 ## Decisions requiring owner approval
 
+Accepted:
+
+1. Versioned AES-256-GCM envelopes with an operator-supplied keyring, frozen by ADR-0019.
+
 Blocking:
 
-1. Approve Option A: versioned AES-256-GCM envelopes with an operator-supplied keyring, with the
-   exact keyring contract frozen in an ADR before implementation.
-2. Approve least-privilege RevenueCat v2 secret keys for the first alpha; defer OAuth.
+1. Approve least-privilege RevenueCat v2 secret keys for the first alpha; defer OAuth.
 
 Recorded defaults unless the owner objects:
 
