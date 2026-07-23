@@ -116,13 +116,11 @@ final class LocalPreviewClientTests: XCTestCase {
     var payload = try XCTUnwrap(unsupported["payload"] as? [String: Any])
     payload["revision"] = ["revisionId": "revision_unsupported_000005", "sequence": 5]
     var document = try XCTUnwrap(payload["document"] as? [String: Any])
-    var layout = try XCTUnwrap(document["layout"] as? [String: Any])
-    var content = try XCTUnwrap(layout["content"] as? [String: Any])
-    var children = try XCTUnwrap(content["children"] as? [[String: Any]])
-    children[1]["type"] = "video"
-    content["children"] = children
-    layout["content"] = content
-    document["layout"] = layout
+    var compatibility = try XCTUnwrap(document["compatibility"] as? [String: Any])
+    var capabilities = try XCTUnwrap(compatibility["requiredCapabilities"] as? [[String: Any]])
+    capabilities.append(["name": "component.future", "version": "0.2"])
+    compatibility["requiredCapabilities"] = capabilities
+    document["compatibility"] = compatibility
     payload["document"] = document
     unsupported["payload"] = payload
     await socket.enqueue(.text(try source(unsupported)))
@@ -131,7 +129,6 @@ final class LocalPreviewClientTests: XCTestCase {
       client.draftIssue?.kind == .unsupportedComponent
     }
     XCTAssertTrue(didReportUnsupportedComponent)
-    XCTAssertEqual(client.draftIssue?.location.componentId, "hero")
     XCTAssertEqual(client.draftIssue?.recovery.action, .removeComponent)
     XCTAssertEqual(client.liveDraft?.revision.sequence, 2)
     let didRejectUnsupported = await socket.containsRejection(reason: "unsupportedCapability")

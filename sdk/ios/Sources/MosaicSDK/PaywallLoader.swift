@@ -7,6 +7,10 @@ public enum MosaicPaywallDocumentSource: String, Sendable {
 
 public enum MosaicDiagnosticStage: String, Sendable {
   case candidateValidation
+  case deliveryTransport
+  case deliveryValidation
+  case cache
+  case placement
   case fallbackLookup
   case fallbackValidation
   case commerce

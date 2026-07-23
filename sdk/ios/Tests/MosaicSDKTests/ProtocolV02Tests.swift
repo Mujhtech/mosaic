@@ -114,7 +114,7 @@ final class ProtocolV02Tests: XCTestCase {
 
     XCTAssertEqual(
       MosaicSDKCapabilityReport.current.supportedSchemaVersions,
-      ["0.1", "0.2"]
+      ["0.2"]
     )
     XCTAssertEqual(
       Set(
@@ -770,7 +770,7 @@ final class ProtocolV02Tests: XCTestCase {
   }
 
   func testLocalPreviewV02CodecIsExactAndCarriesTheV02DraftUnchanged() throws {
-    let codec = MosaicPreviewMessageCodec(protocolVersion: mosaicLocalPreviewProtocolVersionV02)
+    let codec = MosaicPreviewMessageCodec(protocolVersion: mosaicLocalPreviewProtocolVersion)
     let messages = try localPreviewV02Objects()
     var decodedDraft: MosaicPreviewDraftUpdate?
     for message in messages {
@@ -781,17 +781,15 @@ final class ProtocolV02Tests: XCTestCase {
 
     let draft = try XCTUnwrap(decodedDraft)
     XCTAssertEqual(try MosaicProtocolDecoder.decode(draft.documentData).schemaVersion, "0.2")
-    XCTAssertThrowsError(
+    XCTAssertNoThrow(
       try MosaicPreviewMessageCodec().decode(
         try JSONSerialization.data(withJSONObject: messages[0], options: [.sortedKeys])
       )
-    ) { error in
-      XCTAssertEqual(error as? MosaicPreviewProtocolError, .unsupportedVersion)
-    }
+    )
   }
 
   func testLocalPreviewV02CapabilityReportAdvertisesExactImplementedCoverage() throws {
-    let codec = MosaicPreviewMessageCodec(protocolVersion: mosaicLocalPreviewProtocolVersionV02)
+    let codec = MosaicPreviewMessageCodec(protocolVersion: mosaicLocalPreviewProtocolVersion)
     let report = MosaicPreviewCapabilityReport.v02(clientId: "client_ios_tests")
     let source = try codec.encode(
       .capabilityReport(report),
@@ -804,7 +802,7 @@ final class ProtocolV02Tests: XCTestCase {
     )
     XCTAssertEqual(object["previewProtocolVersion"] as? String, "0.2")
     let payload = try XCTUnwrap(object["payload"] as? [String: Any])
-    XCTAssertEqual(payload["supportedSchemaVersions"] as? [String], ["0.1", "0.2"])
+    XCTAssertEqual(payload["supportedSchemaVersions"] as? [String], ["0.2"])
     let capabilities = try XCTUnwrap(payload["supportedCapabilities"] as? [[String: Any]])
     XCTAssertEqual(
       Set(capabilities.compactMap { $0["name"] as? String }),

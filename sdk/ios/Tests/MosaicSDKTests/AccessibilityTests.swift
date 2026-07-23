@@ -21,20 +21,22 @@ final class AccessibilityTests: XCTestCase {
     XCTAssertEqual(
       projection.elements.map(\.id),
       [
-        "close", "hero", "headline", "subtitle", "features",
+        "offer", "close", "hero", "headline", "subtitle", "show-offer-details",
+        "show-technical-details", "offer-highlights", "offer-page-two-title", "features",
         "features.unlimited-projects", "features.native-rendering", "features.offline-ready",
-        "plans", "plans.monthly-plan", "plans.yearly-plan", "purchase", "restore", "legal",
+        "plans", "plans.plans-monthly-plan-card", "plans.plans-yearly-plan-card",
+        "view-details", "purchase", "restore", "legal",
       ]
     )
     XCTAssertEqual(projection.elements.first { $0.id == "headline" }?.role, .heading(level: 1))
     XCTAssertEqual(projection.elements.first { $0.id == "hero" }?.role, .image)
     XCTAssertEqual(
-      projection.elements.first { $0.id == "plans.yearly-plan" }?.isSelected,
+      projection.elements.first { $0.id == "plans.plans-yearly-plan-card" }?.isSelected,
       true
     )
     XCTAssertEqual(
-      projection.elements.first { $0.id == "plans.yearly-plan" }?.value,
-      "Best value, $49.99, per year"
+      projection.elements.first { $0.id == "plans.plans-yearly-plan-card" }?.label,
+      "Mosaic Pro Yearly, $49.99, Best value"
     )
     XCTAssertEqual(projection.elements.first { $0.id == "purchase" }?.isEnabled, true)
     XCTAssertEqual(
@@ -77,8 +79,8 @@ final class AccessibilityTests: XCTestCase {
     XCTAssertEqual(projection.direction, .rightToLeft)
     XCTAssertEqual(projection.elements.first { $0.id == "close" }?.label, "إغلاق")
     XCTAssertEqual(
-      projection.elements.first { $0.id == "plans.yearly-plan" }?.label,
-      "سنوي"
+      projection.elements.first { $0.id == "plans.plans-yearly-plan-card" }?.label,
+      "Mosaic Pro Yearly, $49.99, أفضل قيمة"
     )
   }
 
@@ -114,7 +116,7 @@ final class AccessibilityTests: XCTestCase {
 
   func testMissingLogicalAssetUsesDeclaredLocalizedPlaceholderPath() throws {
     let document = try canonicalDocument()
-    let asset = try XCTUnwrap(document.assets.single)
+    let asset = try XCTUnwrap(document.assets.first { $0.id == "hero-image" })
     let resolver = MosaicLocalizationResolver(
       localization: document.localization,
       requestedLocale: "ar"

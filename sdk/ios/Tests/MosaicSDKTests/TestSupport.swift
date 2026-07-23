@@ -30,7 +30,7 @@ func canonicalFixtureURL(filePath: StaticString = #filePath) throws -> URL {
       directory
       .appendingPathComponent("protocol")
       .appendingPathComponent("fixtures")
-      .appendingPathComponent("v0.1")
+      .appendingPathComponent("v0.2")
       .appendingPathComponent("complete-paywall.json")
     if fileManager.fileExists(atPath: candidate.path) {
       return candidate
@@ -75,6 +75,27 @@ func v02Document(named name: String = "complete-paywall.json") throws
   try MosaicProtocolDecoder.decode(v02FixtureData(named: name))
 }
 
+func deliveryFixtureURL(named name: String = "valid-release.json") throws -> URL {
+  let fileManager = FileManager.default
+  var directory = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
+  while directory.path != "/" {
+    let candidate =
+      directory
+      .appendingPathComponent("protocol")
+      .appendingPathComponent("fixtures")
+      .appendingPathComponent("configuration-delivery")
+      .appendingPathComponent("v1")
+      .appendingPathComponent(name)
+    if fileManager.fileExists(atPath: candidate.path) { return candidate }
+    directory.deleteLastPathComponent()
+  }
+  throw CanonicalFixtureLookupError.notFound
+}
+
+func deliveryFixtureData(named name: String = "valid-release.json") throws -> Data {
+  try Data(contentsOf: deliveryFixtureURL(named: name))
+}
+
 func localPreviewFlowURL(filePath: StaticString = #filePath) throws -> URL {
   let fileManager = FileManager.default
   var directory = URL(fileURLWithPath: "\(filePath)").deletingLastPathComponent()
@@ -85,7 +106,7 @@ func localPreviewFlowURL(filePath: StaticString = #filePath) throws -> URL {
       .appendingPathComponent("protocol")
       .appendingPathComponent("fixtures")
       .appendingPathComponent("local-preview")
-      .appendingPathComponent("v0.1")
+      .appendingPathComponent("v0.2")
       .appendingPathComponent("session-flow.messages.json")
     if fileManager.fileExists(atPath: candidate.path) {
       return candidate
@@ -146,6 +167,12 @@ func mutateFirstNode(
   in object: inout [String: Any],
   mutation: (inout [String: Any]) -> Void
 ) throws {
+  if object["screens"] != nil {
+    let mutateV02: (String, inout [String: Any], (inout [String: Any]) -> Void) throws -> Void =
+      mutateFirstV02Node
+    try mutateV02(type, &object, mutation)
+    return
+  }
   guard var layout = object["layout"] as? [String: Any],
     var content = layout["content"] as? [String: Any]
   else {
@@ -322,10 +349,12 @@ private func mutateFirstNode(
 
 func flattenedNodes(_ stack: MosaicVerticalStack) -> [MosaicNode] {
   stack.children.flatMap { node in
-    if case .verticalStack(let nested) = node {
+    switch node {
+    case .verticalStack(let nested), .stack(let nested):
       return [node] + flattenedNodes(nested)
+    default:
+      return [node]
     }
-    return [node]
   }
 }
 
@@ -333,23 +362,23 @@ func canonicalDocument() throws -> MosaicPaywallDocument {
   try MosaicProtocolDecoder.decode(canonicalFixtureData())
 }
 
-func purchaseButton(in document: MosaicPaywallDocument) throws -> MosaicPurchaseButtonComponent {
-  for node in flattenedNodes(document.layout.content) {
-    if case .purchaseButton(let button) = node { return button }
+func purchaseButton(in document: MosaicPaywallDocument) throws -> MosaicButtonComponent {
+  for node in document.allNodes {
+    if case .button(let button) = node, button.action.type == .purchase { return button }
   }
   throw CanonicalFixtureLookupError.invalidShape
 }
 
-func restoreButton(in document: MosaicPaywallDocument) throws -> MosaicRestoreButtonComponent {
-  for node in flattenedNodes(document.layout.content) {
-    if case .restoreButton(let button) = node { return button }
+func restoreButton(in document: MosaicPaywallDocument) throws -> MosaicButtonComponent {
+  for node in document.allNodes {
+    if case .button(let button) = node, button.action.type == .restore { return button }
   }
   throw CanonicalFixtureLookupError.invalidShape
 }
 
-func closeButton(in document: MosaicPaywallDocument) throws -> MosaicCloseButtonComponent {
-  for node in flattenedNodes(document.layout.content) {
-    if case .closeButton(let button) = node { return button }
+func closeButton(in document: MosaicPaywallDocument) throws -> MosaicButtonComponent {
+  for node in document.allNodes {
+    if case .button(let button) = node, button.action.type == .close { return button }
   }
   throw CanonicalFixtureLookupError.invalidShape
 }
