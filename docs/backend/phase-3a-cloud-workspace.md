@@ -7,20 +7,21 @@ customer subscription state.
 
 ## Runtime boundary
 
-The API mounts the hosted routes at `/v1`. `/health` is liveness and `/ready`
-reports readiness of the currently configured process-local adapter.
+The API mounts hosted routes at `/v1`. `/health/live` is liveness and
+`/health/ready` verifies PostgreSQL connectivity.
 
-The default binary uses a concurrency-safe in-memory repository. Data is lost
-when the process exits. This is deliberate: PostgreSQL is approved, but the Go
-driver, SQL/query strategy, migration runner, transaction implementation, and
-API/worker sharing boundary remain owner decisions. No database dependency or
-placeholder migration was introduced.
+The default binary requires `DATABASE_URL`, verifies a pgx pool at startup, and
+uses the PostgreSQL repository. There is no in-memory runtime fallback. The
+in-memory implementation remains test-only. Versioned Goose SQL migrations live
+in `apps/api/migrations` and run only through `cmd/migrate` or the Compose
+migration service, never during normal API startup.
 
 Application services own authorization and transaction boundaries. Every
 service operation accepts an explicit Actor. Repositories do not know about
-HTTP, status codes, or authentication credentials. The in-memory adapter clones
-state for each write transaction and commits only when the application callback
-succeeds.
+HTTP, status codes, or authentication credentials. The PostgreSQL adapter maps
+each application-owned transaction callback to one database transaction.
+Multi-record mutations and their audit events therefore commit or roll back
+together; Product replacement records durable history in that same transaction.
 
 ## Authentication
 
@@ -84,7 +85,7 @@ diagnostic without resolver error text, and return `internal_error`.
 Meaningful mutations create OpenTelemetry spans, structured Zerolog context,
 and non-secret audit events.
 
-## Verification and blocked checks
+## Verification
 
 Run from `apps/api`:
 
@@ -94,7 +95,27 @@ go test ./...
 go vet ./...
 ```
 
-PostgreSQL repository tests, forward migration checks, and rollback/operational
-migration checks are blocked until the owner approves persistence tooling.
+Database-bound checks require a disposable PostgreSQL database:
+
+```bash
+docker compose up -d postgres
+docker compose exec -T postgres createdb -U mosaic mosaic_test
+```
+
+If the database already exists, `createdb` may report that fact. Then run this required acceptance
+command from `apps/api`:
+
+```bash
+DATABASE_TEST_URL='postgres://mosaic:mosaic_dev@localhost:5432/mosaic_test?sslmode=disable' \
+  go test ./internal/platform/cloudworkspacepostgres -run TestPhase3APersistenceRisks -count=1 -v
+```
+
+The focused integration test owns and resets the named test database schema; do
+not point it at a database containing useful data. `go test ./...` without
+`DATABASE_TEST_URL` skips this suite and must not be reported as database acceptance evidence. The
+suite verifies empty-database migration, reconstruction persistence, Catalog relationships, tenant
+constraints, error precedence, stable constraint mapping, owner/Product concurrency,
+replacement atomicity/history, monotonic revocation, and API-key digest-only storage.
+
 Hosted sign-in and an authenticated runtime demo are blocked until the owner
 approves the authentication/session mechanism.

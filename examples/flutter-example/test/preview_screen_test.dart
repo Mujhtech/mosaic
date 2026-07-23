@@ -18,30 +18,13 @@ void main() {
         _ExampleConnector(<_ExampleSocket>[first, second]),
         delay: (_) => reconnect.future,
       );
-      final fallback = const MosaicProtocolDecoder().decode(
-        _repositoryFile(
-          'protocol/fixtures/v0.2/complete-paywall.json',
-        ).readAsStringSync(),
-      );
-      final fallbackSelector = fallback.nodes
-          .whereType<MosaicProductSelectorComponent>()
-          .single;
-      expect(fallback.schemaVersion, '0.2');
-      expect(
-        fallbackSelector.direction,
-        MosaicProductSelectorDirection.horizontal,
-      );
       await tester.pumpWidget(
-        MaterialApp(
-          home: PaywallPlayground(
-            previewClient: client,
-            fallbackDocument: fallback,
-          ),
-        ),
+        MaterialApp(home: PaywallPlayground(previewClient: client)),
       );
 
       expect(find.text('Disconnected'), findsOneWidget);
-      expect(find.text('Mock purchase: local fallback'), findsOneWidget);
+      expect(find.text('Mock purchase: waiting'), findsOneWidget);
+      expect(find.text('Waiting for design'), findsOneWidget);
 
       await client.connect();
       await tester.pump();

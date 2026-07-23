@@ -1,0 +1,110 @@
+services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-mosaic}
+      POSTGRES_USER: ${POSTGRES_USER:-mosaic}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-mosaic_dev}
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-mosaic} -d ${POSTGRES_DB:-mosaic}"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    volumes:
+      - mosaic_postgres_data:/var/lib/postgresql/data
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+
+  migrate:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+    entrypoint: ["/usr/local/bin/migrate"]
+    command: ["up"]
+    environment:
+      DATABASE_URL: postgres://${POSTGRES_USER:-mosaic}:${POSTGRES_PASSWORD:-mosaic_dev}@postgres:5432/${POSTGRES_DB:-mosaic}?sslmode=disable
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  minio:
+    image: minio/minio:RELEASE.2025-07-23T15-54-02Z
+    command: ["server", "/data", "--console-address", ":9001"]
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-mosaic}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-mosaic_dev_secret}
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    volumes:
+      - mosaic_minio_data:/data
+    ports:
+      - "${MINIO_API_PORT:-9000}:9000"
+      - "${MINIO_CONSOLE_PORT:-9001}:9001"
+
+  minio-init:
+    image: minio/mc:RELEASE.2025-07-21T05-28-08Z
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - >-
+        mc alias set mosaic http://minio:9000 "$${MINIO_ROOT_USER}" "$${MINIO_ROOT_PASSWORD}" &&
+        mc mb --ignore-existing mosaic/"$${MOSAIC_OBJECT_STORAGE_BUCKET}"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-mosaic}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-mosaic_dev_secret}
+      MOSAIC_OBJECT_STORAGE_BUCKET: ${MOSAIC_OBJECT_STORAGE_BUCKET:-mosaic-assets}
+    depends_on:
+      minio:
+        condition: service_healthy
+
+  api:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+    environment:
+      DATABASE_URL: postgres://${POSTGRES_USER:-mosaic}:${POSTGRES_PASSWORD:-mosaic_dev}@postgres:5432/${POSTGRES_DB:-mosaic}?sslmode=disable
+      DATABASE_MAX_CONNECTIONS: ${DATABASE_MAX_CONNECTIONS:-10}
+      DATABASE_MIN_CONNECTIONS: ${DATABASE_MIN_CONNECTIONS:-2}
+      DATABASE_CONNECT_TIMEOUT: ${DATABASE_CONNECT_TIMEOUT:-5s}
+      MOSAIC_HTTP_ADDRESS: :8080
+      MOSAIC_OBJECT_STORAGE_ENDPOINT: minio:9000
+      MOSAIC_OBJECT_STORAGE_ACCESS_KEY: ${MINIO_ROOT_USER:-mosaic}
+      MOSAIC_OBJECT_STORAGE_SECRET_KEY: ${MINIO_ROOT_PASSWORD:-mosaic_dev_secret}
+      MOSAIC_OBJECT_STORAGE_BUCKET: ${MOSAIC_OBJECT_STORAGE_BUCKET:-mosaic-assets}
+      MOSAIC_OBJECT_STORAGE_TLS: "false"
+      MOSAIC_PUBLIC_ASSET_BASE_URL: ${MOSAIC_PUBLIC_ASSET_BASE_URL:-https://localhost:8443/v1/sdk/assets}
+      MOSAIC_SESSION_COOKIE_SECURE: ${MOSAIC_SESSION_COOKIE_SECURE:-false}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+      minio-init:
+        condition: service_completed_successfully
+    ports:
+      - "${MOSAIC_API_PORT:-8080}:8080"
+
+  local-edge:
+    image: caddy:2.10-alpine
+    restart: unless-stopped
+    volumes:
+      - ./deploy/local/Caddyfile:/etc/caddy/Caddyfile:ro
+      - mosaic_caddy_data:/data
+      - mosaic_caddy_config:/config
+    depends_on:
+      api:
+        condition: service_started
+    ports:
+      - "${MOSAIC_HTTPS_PORT:-8443}:8443"
+
+volumes:
+  mosaic_postgres_data:
+    name: mosaic_postgres_data
+  mosaic_minio_data:
+    name: mosaic_minio_data
+  mosaic_caddy_data:
+    name: mosaic_caddy_data
+  mosaic_caddy_config:
+    name: mosaic_caddy_config

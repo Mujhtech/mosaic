@@ -1,9 +1,9 @@
 # Mosaic API foundation
 
 This document records the Phase 0 HTTP foundation. Phase 3A now adds the
-isolated cloud-workspace and Catalog slice documented in
-`docs/backend/phase-3a-cloud-workspace.md`; publishing and configuration
-delivery remain unimplemented.
+cloud-workspace and Catalog slice documented in
+`docs/backend/phase-3a-cloud-workspace.md`. Hosted publishing, browser authentication, Assets,
+and configuration delivery are documented in `docs/backend/phase-3b-hosted-publishing.md`.
 
 ## Run and verify
 
@@ -13,13 +13,16 @@ the repository's approved backend toolchain version.
 ```bash
 cd apps/api
 go mod download
+# apps/api/.env contains the local development configuration.
+go run ./cmd/migrate up
 go run ./cmd/api
 ```
 
 In another terminal:
 
 ```bash
-curl -i http://localhost:8080/health
+curl -i http://localhost:8080/health/live
+curl -i http://localhost:8080/health/ready
 ```
 
 Run the local checks from `apps/api`:
@@ -32,8 +35,9 @@ go vet ./...
 
 ## Health contract
 
-`GET /health` is a process-liveness check. It does not currently check a
-database, object store, Redis, or another dependency.
+`GET /health/live` is a process-liveness check. `GET /health/ready` pings
+PostgreSQL and returns `503 not_ready` while it is unavailable. `/health` and
+`/ready` remain compatibility aliases.
 
 Successful response:
 
@@ -111,15 +115,17 @@ Request logging precedes recovery so recovered panics retain request and trace
 correlation. Recovery returns the standard safe error envelope.
 
 The security middleware emits `Content-Security-Policy`, `Referrer-Policy`,
-`X-Content-Type-Options`, and `X-Frame-Options`. CORS has no credential support
-in Phase 0 because dashboard authentication has not been designed. An empty
+`X-Content-Type-Options`, and `X-Frame-Options`. CORS permits credentials only for configured
+Studio origins so the HttpOnly browser session can cross the Studio/API origin boundary. An empty
 origin list installs a no-op CORS boundary, so it emits no cross-origin headers;
 this avoids the permissive default in `go-chi/cors`.
 
 ## Configuration
 
-Configuration is read from environment variables with no additional config
-framework.
+At startup, the API and migration command load `apps/api/.env` with
+`github.com/joho/godotenv`, then decode and validate the typed configuration
+with `github.com/kelseyhightower/envconfig`. Existing process environment
+variables take precedence because `.env` loading does not overwrite them.
 
 | Variable                          | Default                              | Purpose                                                                                                     |
 | --------------------------------- | ------------------------------------ | ----------------------------------------------------------------------------------------------------------- |
@@ -136,17 +142,52 @@ framework.
 | `MOSAIC_LOG_FORMAT`               | `json`                               | `json` or developer-friendly `console`.                                                                     |
 | `OTEL_SERVICE_NAME`               | `mosaic-api`                         | OpenTelemetry service name.                                                                                 |
 | `OTEL_EXPORTER_OTLP_ENDPOINT`     | empty                                | Optional OTLP/HTTP trace endpoint. With no endpoint, trace context still exists but spans are not exported. |
+| `DATABASE_URL`                    | none; required                       | PostgreSQL connection URL. It is parsed but never logged.                                                   |
+| `DATABASE_MAX_CONNECTIONS`        | `10`                                 | Maximum pgx pool connections.                                                                               |
+| `DATABASE_MIN_CONNECTIONS`        | `2`                                  | Minimum pgx pool connections; cannot exceed the maximum.                                                    |
+| `DATABASE_CONNECT_TIMEOUT`        | `5s`                                 | Startup connectivity-verification deadline.                                                                 |
+| `MOSAIC_SESSION_LIFETIME`         | `168h`                               | Absolute opaque browser-session lifetime.                                                                   |
+| `MOSAIC_SESSION_COOKIE_SECURE`    | `false`; required true outside development/test | Requires HTTPS transport for the browser-session cookie.                                            |
+| `MOSAIC_SESSION_COOKIE_DOMAIN`    | empty                                | Optional browser-session cookie domain.                                                                     |
+| `MOSAIC_AUTH_REQUESTS_PER_MINUTE` | `12`                                 | Refill rate for each authentication IP and hashed-account bucket.                                           |
+| `MOSAIC_AUTH_BURST`               | `4`                                  | Burst size for each authentication limiter bucket.                                                          |
+| `MOSAIC_AUTH_LIMITER_ENTRIES`     | `10000`                              | Bound on in-process authentication limiter keys.                                                            |
+| `MOSAIC_PROTOCOL_V02_SCHEMA_PATH` | repository canonical schema path     | Canonical Protocol 0.2 JSON Schema compiled at startup.                                                      |
+| `MOSAIC_OBJECT_STORAGE_ENDPOINT`  | `localhost:9000`                     | S3-compatible object-storage endpoint.                                                                      |
+| `MOSAIC_OBJECT_STORAGE_ACCESS_KEY`| `mosaic`                             | Object-storage access key; development value is rejected in hosted environments.                            |
+| `MOSAIC_OBJECT_STORAGE_SECRET_KEY`| `mosaic_dev_secret`                  | Object-storage secret; never logged and development value is rejected in hosted environments.               |
+| `MOSAIC_OBJECT_STORAGE_BUCKET`    | `mosaic-assets`                      | Existing private Asset bucket checked at API startup.                                                        |
+| `MOSAIC_OBJECT_STORAGE_TLS`       | `false`                              | TLS for the S3-compatible endpoint.                                                                          |
+| `MOSAIC_PUBLIC_ASSET_BASE_URL`    | `https://localhost:8443/v1/sdk/assets` | Public Mosaic Asset URL prefix; HTTPS is required in every environment.                                   |
+| `MOSAIC_ASSET_MAX_UPLOAD_BYTES`   | `10485760`                           | Maximum Asset bytes accepted by the application service.                                                     |
+| `MOSAIC_DELIVERY_REQUESTS_PER_MINUTE` | `120`                           | Refill rate for each SDK delivery IP/API-key bucket.                                                         |
+| `MOSAIC_DELIVERY_BURST`           | `30`                                 | Burst size for each SDK delivery limiter bucket.                                                             |
+| `MOSAIC_DELIVERY_LIMITER_ENTRIES` | `10000`                              | Bound on in-process delivery limiter keys.                                                                   |
 
-The process listens only after configuration, logging, and telemetry initialize.
+The process listens only after configuration, logging, telemetry, and a verified
+PostgreSQL pool initialize. It fails startup instead of selecting volatile storage.
 It handles `SIGINT` and `SIGTERM`, stops accepting HTTP traffic, waits for
 in-flight requests within the shutdown budget, then flushes telemetry.
 
-## Deferred boundaries
+## PostgreSQL and migrations
 
-No migrations or deployment files exist. Phase 3A uses an explicit repository
-port and a concurrency-safe in-memory adapter because the PostgreSQL driver,
-query strategy, migration runner, and transaction implementation remain owner
-decisions.
+Normal startup never applies migrations. Run them explicitly from `apps/api`:
+
+```bash
+go run ./cmd/migrate status
+go run ./cmd/migrate up
+go run ./cmd/migrate version
+go run ./cmd/migrate down
+```
+
+For the durable Compose workflow, copy `.env.example`, then run
+`docker compose up --build`. The `migrate` service completes before the API
+starts, and PostgreSQL data lives in the named `mosaic_postgres_data` volume.
+Stopping or recreating the API container does not remove data. Back up the
+PostgreSQL volume with `pg_dump` before destructive migrations or environment
+changes; named volumes are durability, not a backup policy.
+
+## Deferred boundaries
 
 No runnable worker is created because Phase 3A has no background job. A
 root/shared Go module decision is still required before API and worker

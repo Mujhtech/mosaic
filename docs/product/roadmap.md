@@ -1622,74 +1622,1093 @@ The Phase 3 demo is:
 
 ---
 
-## Phase 4: Commerce Providers
+## Phase 4: Connected Product Catalog and Commerce Providers
+
+Phase 4 connects the Mosaic Product Catalog created in Phase 3 to real commerce providers.
+
+The phase is divided into two gates:
+
+- **Gate 4A — RevenueCat and Custom Providers**
+- **Gate 4B — Native Store Providers**
+
+Gate 4A provides the fastest adoption path for teams already using RevenueCat or an existing commerce abstraction.
+
+Gate 4B adds first-party StoreKit 2 and Google Play Billing support.
+
+Phase 4 does not make Mosaic the authoritative subscription backend. Authoritative Mosaic-managed transaction validation, subscription state, and customer Entitlements remain part of Phase 9.
+
+---
 
 ### Objectives
 
-- connect Mosaic paywalls to real purchase systems
+- connect Mosaic Products to real purchasable items
 - preserve provider independence
-- allow existing RevenueCat users to adopt Mosaic without migration
+- allow existing RevenueCat users to adopt Mosaic without migrating billing infrastructure
+- support custom commerce implementations
+- add first-party StoreKit 2 and Google Play Billing adapters
+- resolve localized Product metadata safely at runtime
+- maintain clear separation between Products and Entitlements
+- expose provider capabilities without pretending every provider behaves identically
+- provide complete Product connection, readiness, replacement, and diagnostic workflows
+- preserve historical Product references across published Paywall Versions
+- complete real sandbox and test purchases across supported platforms
 
-### Deliverables
+---
 
-- provider-independent product model
-- RevenueCat adapter
-- StoreKit 2 adapter
-- Google Play Billing adapter
-- custom provider interfaces
-- product loading
-- localized pricing
-- subscription periods
+### Commerce Domain Boundaries
+
+Phase 4 must preserve the following domain model:
+
+```text
+Plan
+└── Products
+    ├── Provider Product Mappings
+    └── Entitlement Grants
+
+Paywall
+└── Product References
+
+Placement
+└── Paywall
+
+Purchase
+└── Product
+
+Customer Entitlement State
+└── Provider-owned until Mosaic Billing
+```
+
+#### Product
+
+A Product is a stable, project-scoped Mosaic representation of something a customer can purchase.
+
+Examples:
+
+- Pro Monthly
+- Pro Yearly
+- Lifetime Access
+
+A Mosaic Product is not the same thing as:
+
+- an Apple Product identifier
+- a Google Play Product identifier
+- a Google Play base plan
+- a RevenueCat Package
+- a RevenueCat Offering
+- a custom-provider SKU
+
+#### Plan
+
+A Plan is an optional user-facing grouping of related Products.
+
+Example:
+
+```text
+Plan: Pro
+├── Pro Monthly
+├── Pro Yearly
+└── Lifetime Access
+```
+
+A Plan is not a store Product and is not sent to a commerce provider.
+
+#### Entitlement
+
+An Entitlement describes the access granted by purchasing a Product.
+
+Example:
+
+```text
+Pro Monthly ─┐
+Pro Yearly  ──┼── grants → pro
+Lifetime    ──┘
+```
+
+Mosaic may define:
+
+- Entitlement keys
+- Entitlement descriptions
+- Product-to-Entitlement grants
+
+Before Phase 9, the configured commerce provider remains authoritative for the customer’s active Entitlement state.
+
+Mosaic must not claim to own authoritative cross-platform customer Entitlement state during Phase 4.
+
+#### Provider Product Mapping
+
+A Provider Product Mapping connects one Mosaic Product to a purchasable item managed by a commerce provider.
+
+A mapping may include:
+
+- provider type
+- provider connection
+- platform
+- application
+- environment
+- provider Product identifier
+- Package reference
+- Offering reference
+- base-plan reference
+- offer reference
+- connection status
+- availability status
+- synchronization status
+- last successful synchronization
+- diagnostic information
+
+Provider-specific concepts remain inside Provider Product Mappings and provider adapters.
+
+RevenueCat Packages, RevenueCat Offerings, Google base plans, and Google offers must not become mandatory top-level Mosaic concepts.
+
+---
+
+### Active Provider Resolution
+
+Each Application, Environment, and Platform combination must have an explicit active commerce provider.
+
+Example:
+
+```text
+Project: Example App
+└── Production
+    ├── iOS
+    │   └── Active provider: RevenueCat
+    └── Android
+        └── Active provider: RevenueCat
+```
+
+A Mosaic Product may contain mappings for more than one provider to support:
+
+- migration
+- testing
+- provider replacement
+- staged rollout
+- platform differences
+
+The runtime must not guess which provider to use.
+
+Provider resolution must use:
+
+- Project
+- Environment
+- Application
+- Platform
+- configured active provider
+- verified Provider Product Mapping
+
+The SDK must never select a Provider Product through unverified string matching.
+
+---
+
+## Gate 4A: RevenueCat and Custom Providers
+
+### Objectives
+
+- connect the Mosaic Catalog to RevenueCat
+- allow current RevenueCat users to adopt Mosaic without billing migration
+- establish the provider-capability contract
+- establish provider connection and synchronization workflows
+- support app-owned custom commerce providers
+- complete real RevenueCat sandbox purchases
+- preserve Mosaic’s provider-independent renderer and Product model
+
+---
+
+### Provider Capability Model
+
+Define provider capabilities explicitly.
+
+Capabilities may include:
+
+- Product loading
+- subscriptions
+- one-time non-consumables
+- trials
 - introductory offers
-- trial information
-- entitlement checks
-- purchase handling
-- restore flows
-- normalized purchase results
-- normalized provider errors
-- unavailable-product handling
+- promotional offers
+- restore
+- active Entitlement lookup
+- pending purchases
+- deferred purchases
+- server-confirmed transactions
+- Product synchronization
+- provider diagnostics
 
-### Product rules
+Capabilities may vary by:
 
-Paywall configuration stores product identifiers, not formatted prices.
+- provider
+- platform
+- application
+- environment
+- Product type
 
-At runtime, SDKs resolve:
+Do not falsely normalize unsupported capabilities.
 
+Studio and the SDK should be able to communicate differences such as:
+
+```text
+RevenueCat on iOS
+
+✓ Subscriptions
+✓ One-time non-consumables
+✓ Trials
+✓ Restore
+✓ Active Entitlements
+! Promotional offers depend on provider configuration
+```
+
+A missing capability must not be represented as a generic provider failure.
+
+---
+
+### Provider Connections
+
+Implement server-side Provider Connections.
+
+A Provider Connection should contain:
+
+- stable connection ID
+- Project ID
+- provider type
+- connection name
+- environment scope
+- application scope where required
+- encrypted credentials
+- connection status
+- last successful test
+- last successful synchronization
+- credential-expiry status where available
+- diagnostic information
+- creation metadata
+- revocation metadata
+- audit history
+
+Support:
+
+- create connection
+- test connection
+- reconnect
+- rotate credentials
+- revoke connection
+- inspect connection status
+- inspect synchronization status
+- retry synchronization
+- separate sandbox and production connections
+
+Provider secrets must:
+
+- be encrypted at rest
+- never appear in logs
+- never appear in exported paywall documents
+- never be delivered through the public SDK configuration endpoint
+- never be returned after their accepted one-time entry where avoidable
+- be redacted in diagnostics and audit events
+
+Only explicitly client-safe provider configuration may be delivered to an SDK.
+
+---
+
+### RevenueCat Adapter
+
+Implement a RevenueCat adapter across the backend, dashboard, and supported SDKs.
+
+#### Backend and Dashboard
+
+Support:
+
+- RevenueCat Provider Connection
+- connection validation
+- application mapping
+- environment mapping
+- Product import
+- Product synchronization
+- Package mapping
+- Offering mapping
+- Entitlement synchronization where appropriate
+- localized Product metadata synchronization
+- stale metadata detection
+- synchronization diagnostics
+- credential-expiry diagnostics
+- connection revocation
+- audit events
+
+RevenueCat-specific Packages and Offerings remain adapter details.
+
+The primary Mosaic Catalog experience remains:
+
+```text
+Catalog
+├── Plans
+├── Products
+└── Entitlements
+```
+
+Do not make users navigate through a mandatory hierarchy such as:
+
+```text
+Product
+→ Package
+→ Offering
+→ Entitlement
+```
+
+#### SDK Integration
+
+Support RevenueCat through a Mosaic purchase-provider adapter.
+
+The adapter should conceptually support:
+
+- loading mapped Products
+- resolving localized Product metadata
+- purchasing a Product
+- handling purchase cancellation
+- handling pending or deferred outcomes
+- restoring purchases
+- reading active Entitlements
+- normalizing provider errors
+- reporting provider capabilities
+- exposing safe diagnostics
+
+The RevenueCat adapter should work with an already configured RevenueCat SDK where practical.
+
+Mosaic must not initialize a second conflicting RevenueCat instance when the host application already owns initialization.
+
+---
+
+### Custom Provider Interface
+
+Provide a documented custom commerce-provider interface for Flutter, Swift, and Kotlin.
+
+The interface should conceptually support:
+
+- provider identity
+- capability reporting
+- Product loading
+- localized Product metadata
+- purchase
+- cancellation
+- pending outcome
+- failure
+- restore
+- active Entitlements
+- provider diagnostics
+
+A custom provider must be able to map a Mosaic Product to an app-owned commerce object without changing the paywall document.
+
+Custom providers must not require Mosaic backend credentials unless the provider implementation explicitly needs a backend integration.
+
+---
+
+### Catalog Workflows
+
+Complete the connected Catalog experience.
+
+Support:
+
+- Product creation
+- Product import
+- Product synchronization
+- Product search
+- Product filtering
+- Product platform availability
+- Provider Product Mapping
+- active-provider selection
+- Product readiness validation
+- Product archive and restore
+- Product replacement
+- Product usage graph
+- stale metadata indicators
+- Entitlement grants
+- Plan membership
+- synchronization retry
+- connection diagnostics
+
+Each Product should show:
+
+- Mosaic-owned metadata
+- provider mappings
+- supported platforms
+- current active provider
+- live availability
+- metadata freshness
+- Entitlement grants
+- Paywall usage
+- Placement usage
+- published-version usage
+- readiness state
+- recovery actions
+
+---
+
+### Product Readiness
+
+A Product should expose an environment-specific readiness state.
+
+Suggested readiness states:
+
+- Draft
+- Mock Only
+- Connected
+- Attention Required
+- Unavailable
+- Archived
+
+Readiness should consider:
+
+- Product lifecycle
+- active provider
+- application mapping
+- environment mapping
+- Provider Product Mapping
+- provider Product availability
+- required platform mappings
+- Entitlement grants
+- metadata freshness
+- provider connection health
+
+Readiness failures must explain:
+
+- what is missing
+- which platform is affected
+- whether publishing is blocked
+- how to resolve the problem
+
+Examples:
+
+```text
+Pro Yearly has no Android RevenueCat mapping.
+
+[Add Mapping]
+```
+
+```text
+RevenueCat has not synchronized this Product successfully.
+
+[Retry Synchronization]
+```
+
+```text
+This Product has no active Entitlement grant.
+
+[Add Entitlement]
+```
+
+---
+
+### Product Metadata Ownership
+
+Mosaic-owned metadata may be edited directly:
+
+- internal Product name
+- internal description
+- Product key
+- Plan membership
+- Entitlement grants
+- internal tags
+- internal notes
+
+Provider-owned metadata should be synchronized and read-only where appropriate:
+
+- localized display name
 - localized price
 - currency
 - billing period
 - trial duration
 - introductory offer
-- product availability
+- promotional offer
+- store availability
+- provider Product status
 
-### Explicit exclusions
+Studio may use synchronized metadata for preview, but it must show when that data is:
+
+- stale
+- simulated
+- unavailable
+- environment-specific
+
+Runtime SDKs should prefer live provider metadata for final commerce presentation.
+
+---
+
+### Gate 4A Exit Criteria
+
+Gate 4A is complete only when:
+
+- the provider-capability model is documented
+- capabilities can vary by provider and platform
+- RevenueCat connections can be created, tested, rotated, and revoked
+- provider secrets are encrypted and never exposed to SDKs
+- sandbox and production connections are separated
+- RevenueCat Products can be imported
+- RevenueCat Products can be synchronized
+- RevenueCat Packages and Offerings remain adapter details
+- Mosaic Products can be mapped to RevenueCat Products
+- Plans can group connected Products
+- Products can grant Entitlements
+- Product readiness is visible
+- stale metadata is visible
+- connection and synchronization failures provide recovery actions
+- the custom provider interface is documented
+- custom providers can load Products
+- custom providers can complete and restore purchases
+- RevenueCat sandbox purchases work on supported platforms
+- RevenueCat restore works
+- RevenueCat active Entitlements can be read through the adapter
+- localized pricing is resolved correctly
+- purchase cancellation is distinguished from failure
+- pending or deferred purchases are represented explicitly
+- the paywall renderer remains provider-independent
+- published paywalls continue referencing stable Mosaic Product IDs
+- no Mosaic-owned authoritative customer Entitlement state is introduced
+
+### Review Gate 4A
+
+Create:
+
+```text
+docs/reviews/phase-4a.md
+```
+
+The Gate 4A demo is:
+
+> Connect RevenueCat, import Monthly and Yearly Products, group them into a Pro Plan, grant the Pro Entitlement, bind both Products to a paywall, and complete a RevenueCat sandbox purchase without changing the paywall document.
+
+Classify Gate 4A as:
+
+- Accepted
+- Accepted with tracked follow-ups
+- Rejected pending fixes
+
+Gate 4B must not begin until Gate 4A is accepted.
+
+---
+
+## Gate 4B: Native Store Providers
+
+### Objectives
+
+- add first-party StoreKit 2 support
+- add first-party Google Play Billing support
+- allow Mosaic to operate without RevenueCat
+- preserve the same Mosaic Product and Entitlement model
+- preserve provider-independent paywall documents
+- complete native sandbox and test purchases
+- expose platform capability differences clearly
+
+---
+
+### StoreKit 2 Adapter
+
+Implement:
+
+- Apple Product loading
+- Apple Product mapping
+- application and environment mapping
+- localized pricing
+- currency resolution
+- subscription-period resolution
+- trial resolution
+- introductory-offer resolution
+- Product availability
+- purchase handling
+- pending and deferred outcomes
+- cancellation handling
+- restore handling
+- current Entitlement checks
+- transaction outcome normalization
+- sandbox diagnostics
+- provider capability reporting
+- safe error normalization
+
+The StoreKit adapter must remain behind the Mosaic purchase-provider boundary.
+
+The paywall renderer must not depend directly on StoreKit types.
+
+---
+
+### Google Play Billing Adapter
+
+Implement:
+
+- Google Play Product loading
+- Product mapping
+- application and environment mapping
+- base-plan mapping
+- offer mapping
+- localized pricing
+- currency resolution
+- subscription-period resolution
+- trial resolution
+- introductory-offer resolution
+- Product availability
+- purchase handling
+- pending outcomes
+- cancellation handling
+- restore or purchase-history handling
+- current Entitlement checks where supported
+- transaction outcome normalization
+- test-environment diagnostics
+- provider capability reporting
+- safe error normalization
+
+Google-specific base plans and offers remain Provider Product Mapping details.
+
+They must not become required top-level Mosaic concepts.
+
+---
+
+### Flutter Native Commerce Integration
+
+Provide a provider-independent Dart commerce API.
+
+Support:
+
+- StoreKit 2 bridge where required
+- Google Play Billing bridge where required
+- native Product loading
+- native purchase presentation
+- restore
+- active Entitlement lookup
+- provider capability reporting
+- normalized purchase outcomes
+- normalized diagnostics
+
+The Flutter API should not expose incompatible native objects as its primary public contract.
+
+Provider-native objects may be retained internally when required to complete a purchase.
+
+---
+
+### Native SDK Requirements
+
+Flutter, Swift, and Kotlin SDKs must support the same conceptual commerce contract while remaining idiomatic to their languages.
+
+The shared conceptual operations are:
+
+- load Products
+- inspect capabilities
+- purchase Product
+- restore purchases
+- retrieve active Entitlements
+- inspect diagnostics
+
+The SDKs must not:
+
+- hardcode formatted prices from Mosaic configuration
+- block the UI while loading Products
+- treat cancellation as an error
+- silently convert provider failure into inactive Entitlements
+- silently select a fallback Product through string matching
+- allow analytics failure to block purchasing
+- mutate the published paywall document with runtime Product state
+
+---
+
+### Runtime Product Model
+
+The runtime Product model should expose normalized fields such as:
+
+- Mosaic Product ID
+- Product key
+- Product type
+- localized display name
+- localized price
+- currency code
+- billing period
+- trial information
+- introductory-offer information
+- availability
+- provider
+- provider capabilities
+- Entitlement grants
+
+The SDK may retain an internal provider object needed to complete the purchase.
+
+Provider-specific capabilities must remain inspectable.
+
+Unsupported provider fields should be absent or explicitly unavailable rather than populated with misleading defaults.
+
+---
+
+### Product Binding and Runtime Resolution
+
+Paywalls bind to stable Mosaic Product IDs.
+
+At runtime:
+
+```text
+Paywall Product Reference
+→ Mosaic Product
+→ Active Provider for Application and Environment
+→ Verified Provider Product Mapping
+→ Provider Product
+→ Localized Commerce Metadata
+```
+
+The SDK must reject ambiguous or invalid resolution safely.
+
+The SDK must not:
+
+- match by display name
+- guess by billing period
+- guess by price
+- use a Product from another Environment
+- use a Product from another Application
+- select an archived Product
+- silently substitute another Product
+
+---
+
+### Purchase Result Model
+
+Normalize purchase outcomes without discarding provider-specific diagnostics.
+
+Suggested outcomes include:
+
+- Purchased
+- Pending
+- Deferred
+- Cancelled
+- Already Entitled
+- Product Unavailable
+- Provider Unavailable
+- Failed
+
+A successful result should include where available:
+
+- Mosaic Product ID
+- provider
+- provider transaction reference safe for the client
+- active Entitlement keys
+- transaction timestamp
+- diagnostic metadata safe for the application
+
+A failure result should include:
+
+- stable Mosaic error code
+- user-safe message
+- retryability
+- provider code where safe
+- diagnostic correlation ID
+
+Raw provider errors must not be exposed as the only public contract.
+
+---
+
+### Restore Result Model
+
+Normalize restore outcomes such as:
+
+- Restored
+- Nothing to Restore
+- Cancelled
+- Provider Unavailable
+- Failed
+
+Restoration should return the current active Entitlements where available.
+
+A provider failure must not be interpreted as an empty Entitlement set.
+
+---
+
+### Entitlement State Boundary
+
+During Phase 4:
+
+- Mosaic defines Entitlement keys
+- Products grant Entitlements
+- provider adapters read active customer Entitlements
+- the SDK exposes normalized Entitlement state
+- the provider remains authoritative
+
+If Entitlement lookup fails, the result should represent:
+
+```text
+Unknown or unavailable
+```
+
+It must not silently become:
+
+```text
+Inactive
+```
+
+Authoritative Mosaic-managed Entitlement state remains Phase 9.
+
+---
+
+### Production Publishing Validation
+
+Before publishing a production commerce paywall, validate:
+
+- every referenced Product exists
+- every Product belongs to the Project
+- every Product is active
+- every targeted Application has a mapping
+- every targeted Platform has a mapping
+- the selected provider is active
+- the provider connection is healthy
+- the provider can load the Product
+- Product types are compatible
+- required Entitlement grants exist
+- archived Products are not newly introduced
+- synchronized metadata is sufficiently recent
+- every targeted platform has a safe fallback
+- no Provider Product Mapping is ambiguous
+
+Validation failures must provide recovery actions.
+
+Examples:
+
+```text
+Pro Yearly has no Android mapping.
+
+[Add Android Mapping]
+```
+
+```text
+Pro Monthly is archived but used by this Draft.
+
+[Choose Replacement]
+```
+
+```text
+RevenueCat connection has expired.
+
+[Reconnect RevenueCat]
+```
+
+```text
+Google Play has two active mappings for Pro Monthly.
+
+[Resolve Mapping]
+```
+
+Publishing validation must not claim that a store purchase will succeed merely because a Product identifier exists.
+
+---
+
+### Product Editing and Replacement Rules
+
+Mosaic-owned Product metadata may be edited safely.
+
+When a provider-controlled Product identifier cannot be changed:
+
+- create a replacement Product or Provider Product Mapping
+- preserve the previous mapping for historical releases
+- show affected Paywalls
+- show affected Placements
+- show affected Experiments where applicable
+- allow active Drafts to adopt the replacement
+- never rewrite immutable Paywall Versions
+- never rewrite historical Configuration Releases
+- never erase the meaning of existing purchases
+
+Every blocked edit must provide a recovery action.
+
+Do not end with:
+
+> This Product cannot be edited.
+
+Prefer:
+
+> This provider identifier is already live. Create a replacement while preserving existing releases?
+
+```text
+[Create Replacement]
+```
+
+---
+
+### Diagnostics and Recovery
+
+Provide diagnostics for:
+
+- provider disconnected
+- credentials expired
+- Product not found
+- Product unavailable
+- stale synchronization
+- missing platform mapping
+- missing application mapping
+- ambiguous mapping
+- unsupported Product type
+- unsupported trial
+- invalid offer
+- restore failure
+- pending purchase
+- provider timeout
+- provider SDK unavailable
+- Entitlement lookup unavailable
+
+Every diagnostic should explain:
+
+- what failed
+- which Product is affected
+- which provider is affected
+- which platform is affected
+- whether publishing or purchasing is blocked
+- how to recover
+
+---
+
+### Security Requirements
+
+Provider integration must ensure:
+
+- provider secrets are encrypted at rest
+- secret values are never logged
+- secrets are never included in SDK configuration
+- client-safe keys are explicitly identified
+- credentials are scoped to the correct Project and Environment
+- connection tests do not expose secret values
+- rotation and revocation are audited
+- provider web requests use bounded timeouts
+- provider responses are validated
+- cross-tenant access is prevented
+- diagnostics redact sensitive fields
+
+---
+
+### Explicit Exclusions
 
 Do not implement:
 
 - Mosaic receipt validation
+- Mosaic transaction validation
 - Mosaic subscription-state engine
-- cross-platform entitlement backend
-- Stripe billing infrastructure
-- full revenue reporting
+- authoritative cross-platform customer Entitlement state
+- Apple server notifications
+- Google real-time developer notifications
+- Stripe Billing
+- Paddle
+- Lemon Squeezy
+- full financial reporting
+- MRR
+- ARR
+- LTV
+- reconciliation
+- consumable Products
+- credit-based Products
+- metered Products
+- quantity-based Products
+- automatic store Product creation
+- advanced Placement targeting
+- analytics ingestion
+- Experiments
 
-### Exit criteria
+Any additional provider or Product type requires explicit product approval.
 
-- sandbox purchases work on iOS
-- test purchases work on Android
+---
+
+### Gate 4B Exit Criteria
+
+Gate 4B is complete only when:
+
+- StoreKit 2 Products can be loaded
+- StoreKit 2 Products can be mapped to Mosaic Products
+- StoreKit sandbox purchases work
+- StoreKit restore works
+- StoreKit localized pricing is correct
+- StoreKit trial and introductory-offer metadata is resolved
+- Google Play Products can be loaded
+- Google Play Products can be mapped to Mosaic Products
+- Google Play base plans and offers remain adapter details
+- Google Play test purchases work
+- Google Play restore or purchase-history recovery works
+- Google Play localized pricing is correct
+- Google Play trial and offer metadata is resolved
+- Flutter can use native StoreKit and Google Play adapters
+- SwiftUI can use the StoreKit adapter
+- Compose can use the Google Play Billing adapter
+- purchase cancellation is not reported as a generic failure
+- pending and deferred outcomes are represented explicitly
+- unavailable Products fail safely
+- ambiguous Product mappings fail safely
+- Entitlement lookup failures return unknown rather than inactive
+- Product replacement preserves immutable history
+- publishing validation checks provider readiness
+- provider-specific capabilities remain visible
+- the renderer remains independent of the active provider
+- no Mosaic-owned authoritative customer Entitlement state is introduced
+
+### Review Gate 4B
+
+Create:
+
+```text
+docs/reviews/phase-4b.md
+```
+
+The Gate 4B demo is:
+
+> Use the same Mosaic paywall document to complete an Apple StoreKit sandbox purchase on iOS and a Google Play test purchase on Android without changing the paywall’s Product references.
+
+Classify Gate 4B as:
+
+- Accepted
+- Accepted with tracked follow-ups
+- Rejected pending fixes
+
+---
+
+### Phase 4 Exit Criteria
+
+Phase 4 is complete only when both Gate 4A and Gate 4B are accepted.
+
+The consolidated Phase 4 review must confirm:
+
+- Mosaic Products remain stable across providers
+- Plans group Products without becoming provider objects
+- Products grant Entitlements
+- provider-specific concepts remain adapter details
 - RevenueCat integration works
-- restore flows work
+- custom provider integration works
+- StoreKit 2 integration works
+- Google Play Billing integration works
+- Products can be imported, synchronized, connected, archived, and replaced
+- Product usage is visible
+- Product readiness is visible
+- stale metadata is visible
+- missing mappings provide recovery actions
 - localized pricing is correct
-- unavailable products fail safely
-- commerce failures provide useful diagnostics
-- the renderer remains independent of any specific provider
+- trial and introductory-offer metadata is resolved correctly
+- purchase results are normalized without hiding provider differences
+- restore results are normalized
+- active Entitlement state remains provider-owned
+- published Product references remain historically valid
+- the paywall renderer remains provider-independent
+- no Phase 5 targeting work was introduced
+- no Phase 6 analytics work was introduced
+- no Phase 9 billing infrastructure was introduced
+
+---
 
 ### Review Gate 4
 
+Create:
+
+```text
+docs/reviews/phase-4.md
+```
+
+The review must evaluate Gate 4A and Gate 4B separately before issuing one final Phase 4 decision.
+
 The Phase 4 demo is:
 
-> One Mosaic paywall completing a real purchase through RevenueCat, StoreKit 2, or Google Play Billing.
+> Connect RevenueCat, import Monthly and Yearly Products, group them into a Pro Plan, grant the Pro Entitlement, bind them to a paywall, complete a RevenueCat sandbox purchase, then use the same Mosaic Product references to complete native StoreKit and Google Play test purchases.
 
----
+Classify Phase 4 as:
+
+- Accepted
+- Accepted with tracked follow-ups
+- Rejected pending fixes
+
+Release milestone:
+
+> Design-Partner Alpha
+
+Do not begin Phase 5 until Gate 4A, Gate 4B, and the consolidated Phase 4 review are accepted.
 
 ## Phase 5: Placements and Targeting
 

@@ -119,9 +119,9 @@ npx shadcn@latest add signup-05
 
 Use:
 
-* `sidebar-07` as the dashboard-shell foundation
-* `login-05` as the login-page foundation
-* `signup-05` as the registration-page foundation
+- `sidebar-07` as the dashboard-shell foundation
+- `login-05` as the login-page foundation
+- `signup-05` as the registration-page foundation
 
 Treat generated templates as starting points.
 
@@ -143,16 +143,15 @@ Authentication templates provide only visual scaffolding.
 
 The frontend agent must still implement:
 
-* validation
-* TanStack Form integration
-* REST mutations
-* loading states
-* API error handling
-* session handling
-* redirects
-* accessibility
-* permission-aware behaviour
-
+- validation
+- TanStack Form integration
+- REST mutations
+- loading states
+- API error handling
+- session handling
+- redirects
+- accessibility
+- permission-aware behaviour
 
 ### Protocol
 
@@ -543,3 +542,108 @@ Every subagent must return:
 - failures or unavailable checks
 - unresolved questions
 - suggested next step
+
+## Testing Policy: Minimum Sufficient Coverage
+
+Tests are risk controls, not deliverables measured by quantity.
+
+Add a test only when it protects at least one of the following:
+
+- externally observable behaviour
+- a domain invariant
+- authorization or security boundaries
+- data integrity
+- an important state transition
+- protocol or API compatibility
+- idempotency, concurrency, or transaction behaviour
+- failure recovery
+- a confirmed regression
+- a critical accessibility interaction owned by Mosaic
+
+Before adding a test, identify:
+
+1. the behaviour being protected
+2. the realistic failure it would catch
+3. why an existing test does not already cover it
+
+If those three points cannot be stated clearly, do not add the test.
+
+Prefer the smallest test at the lowest useful layer:
+
+1. unit test for isolated domain logic
+2. integration test for boundaries such as PostgreSQL, HTTP, storage, or WebSocket behaviour
+3. end-to-end test only for a critical user journey spanning several boundaries
+
+Do not create tests merely to:
+
+- increase coverage percentages
+- test every function or file
+- mirror the implementation
+- test trivial getters, setters, constants, or type declarations
+- test generated code
+- test third-party library behaviour
+- test framework behaviour already covered by the framework
+- duplicate an existing scenario at several layers
+- snapshot large amounts of markup without a meaningful contract
+- test visual styling that has no behavioural or accessibility consequence
+- satisfy a mechanical “one test file per source file” pattern
+
+Do not introduce a new test runner, test framework, browser harness, snapshot system, mock library, or test suite unless:
+
+- the existing test infrastructure cannot verify a required acceptance criterion
+- the reason is documented
+- the smallest viable addition is proposed
+- the owner or orchestrator approves it
+
+Prefer extending an existing relevant test over creating a new test suite.
+
+A feature does not require every possible test category. Select only the categories justified by its risks.
+
+Documentation-only, generated-code-only, type-only, formatting-only, and non-behavioural token changes may require no new tests. Run the existing relevant checks instead.
+
+Every agent report must list:
+
+- tests added
+- the risk protected by each test
+- existing tests modified
+- checks run
+- why no new tests were added when none were necessary
+
+### Database and Persistence
+
+PostgreSQL is mandatory for every non-test Mosaic backend execution.
+
+Use:
+
+- `github.com/jackc/pgx/v5/pgxpool` for runtime PostgreSQL access
+- `github.com/pressly/goose/v3` for versioned SQL migrations
+
+The API runtime must not use in-memory repositories.
+
+In-memory repository implementations are permitted only when:
+
+- they are used by focused unit tests
+- they are explicitly named as test or mock implementations
+- they are not wired into `cmd/api`
+- they cannot be selected accidentally in production
+
+Every persistent domain feature must include:
+
+- a PostgreSQL schema migration
+- appropriate primary keys
+- foreign keys
+- uniqueness constraints
+- check constraints where useful
+- indexes justified by actual access patterns
+- a PostgreSQL repository implementation
+- transaction boundaries where one operation changes several related records
+
+The API must fail startup when PostgreSQL is required but unavailable.
+
+Do not silently fall back to in-memory storage.
+
+Database migrations must be explicit and versioned.
+
+The API process must not automatically mutate the production schema during normal startup. Use the migration command or deployment migration step.
+
+Do not introduce an ORM, alternate database driver, alternate migration system, or embedded production database without an approved ADR.

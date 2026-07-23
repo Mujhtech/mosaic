@@ -1,4 +1,4 @@
-# Mosaic Android Phase 2 local-preview example
+# Mosaic Android local-preview and hosted-delivery example
 
 This native Android app connects a Jetpack Compose renderer to a running local
 Mosaic Studio preview session. Studio draft revisions rerender immediately,
@@ -50,5 +50,20 @@ adb shell am start -n dev.mosaic.example/.MainActivity \
 
 The SDK accepts only credential-free local `ws://` or `wss://` endpoints. The
 example enables Android cleartext traffic solely for this local development
-connection. It does not add accounts, hosted fetching, remote publishing,
-cloud storage, analytics, experiments, RevenueCat, or Google Play Billing.
+connection.
+
+For the Phase 3B hosted path, pass an environment-scoped public SDK key. The
+app fetches Configuration Delivery v1, resolves the requested Placement,
+caches the last valid release, and renders with the same native Compose
+renderer. Commerce remains the deterministic mock provider:
+
+```bash
+adb shell am start -n dev.mosaic.example/.MainActivity \
+  --es mosaic.sdk.key mosaic_sdk_example \
+  --es mosaic.sdk.endpoint http://10.0.2.2:8080 \
+  --es mosaic.placement onboarding_complete
+```
+
+Omit `mosaic.sdk.endpoint` to use Mosaic's hosted API. The example does not
+add analytics, experiments, RevenueCat, Google Play Billing, or authoritative
+entitlement state.

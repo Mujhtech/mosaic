@@ -1,0 +1,7 @@
+{
+	local_certs
+}
+
+https://localhost:8443 {
+	reverse_proxy api:8080
+}
