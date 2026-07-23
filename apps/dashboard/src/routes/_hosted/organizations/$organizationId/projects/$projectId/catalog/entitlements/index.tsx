@@ -3,7 +3,7 @@ import { createFileRoute } from "@tanstack/react-router"
 import { EntitlementsPage } from "@/features/catalog/components/entitlements-page"
 
 export const Route = createFileRoute(
-  "/_hosted/organizations/$organizationId/projects/$projectId/catalog/entitlements",
+  "/_hosted/organizations/$organizationId/projects/$projectId/catalog/entitlements/",
 )({
   component: CatalogEntitlementsRoute,
 })

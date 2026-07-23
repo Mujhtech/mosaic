@@ -15,7 +15,7 @@ function isProductType(value: unknown): value is ProductFilters["type"] {
 }
 
 export const Route = createFileRoute(
-  "/_hosted/organizations/$organizationId/projects/$projectId/catalog/products",
+  "/_hosted/organizations/$organizationId/projects/$projectId/catalog/products/",
 )({
   component: CatalogProductsRoute,
   validateSearch: (search: Record<string, unknown>): ProductFilters => ({

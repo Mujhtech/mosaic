@@ -6,7 +6,7 @@ interface OrganizationSearch {
   projectStatus?: "archived"
 }
 
-export const Route = createFileRoute("/_hosted/organizations/$organizationId")({
+export const Route = createFileRoute("/_hosted/organizations/$organizationId/")({
   component: OrganizationRoute,
   validateSearch: (search: Record<string, unknown>): OrganizationSearch => ({
     projectStatus: search.projectStatus === "archived" ? "archived" : undefined,
