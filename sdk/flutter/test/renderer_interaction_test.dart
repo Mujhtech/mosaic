@@ -32,6 +32,8 @@ void main() {
         'alreadyEntitled',
         'dismissed',
         'cancelled',
+        'pending',
+        'deferred',
         'productUnavailable',
         'placementUnavailable',
         'configurationUnavailable',
@@ -214,7 +216,7 @@ void main() {
 
   for (final entry in <(MockMosaicRestoreScenario, String)>[
     (MockMosaicRestoreScenario.success, 'restored'),
-    (MockMosaicRestoreScenario.alreadyEntitled, 'alreadyEntitled'),
+    (MockMosaicRestoreScenario.alreadyEntitled, 'restored'),
     (MockMosaicRestoreScenario.noPurchases, 'restoreNoPurchases'),
     (MockMosaicRestoreScenario.failure, 'restoreFailed'),
   ]) {
@@ -237,7 +239,7 @@ void main() {
       if (entry.$1 == MockMosaicRestoreScenario.success) {
         expect(results.single, isA<MosaicRestoredPresentationResult>());
       } else if (entry.$1 == MockMosaicRestoreScenario.alreadyEntitled) {
-        expect(results.single, isA<MosaicAlreadyEntitledPresentationResult>());
+        expect(results.single, isA<MosaicRestoredPresentationResult>());
       } else {
         expect(results, isEmpty);
       }

@@ -87,7 +87,7 @@ final class PaywallStateTests: XCTestCase {
     )
   }
 
-  func testRestoreSuccessAndAlreadyEntitledAreTerminal() async throws {
+  func testRestoreSuccessAndLegacyAlreadyEntitledNormalizeToRestored() async throws {
     try await assertRestore(
       behavior: .success([MosaicEntitlement(id: "pro")]),
       interaction: .restored,
@@ -95,8 +95,8 @@ final class PaywallStateTests: XCTestCase {
     )
     try await assertRestore(
       behavior: .alreadyEntitled([MosaicEntitlement(id: "pro")]),
-      interaction: .alreadyEntitled(productReferenceID: nil),
-      presentation: .alreadyEntitled(productReferenceID: nil)
+      interaction: .restored,
+      presentation: .restored
     )
   }
 
@@ -192,9 +192,10 @@ final class PaywallStateTests: XCTestCase {
     XCTAssertEqual(
       MosaicPresentationOutcomeName.allCases.map(\.rawValue),
       [
-        "purchased", "restored", "alreadyEntitled", "dismissed", "cancelled",
-        "productUnavailable", "configurationUnavailable", "purchaseFailed",
-        "renderingFailed",
+        "purchased", "purchasePending", "purchaseDeferred", "restored",
+        "alreadyEntitled", "dismissed", "cancelled", "restoreCancelled",
+        "productUnavailable", "providerUnavailable", "configurationUnavailable",
+        "purchaseFailed", "renderingFailed",
       ]
     )
   }
@@ -295,7 +296,7 @@ private actor DeferredPurchaseProvider: MosaicPurchaseProvider {
 
   func restore() async -> MosaicRestoreResult { .nothingToRestore }
 
-  func activeEntitlements() async -> MosaicActiveEntitlementsResult { .active([]) }
+  func activeEntitlements() async -> MosaicActiveEntitlementsResult { .available([]) }
 }
 
 extension Collection {

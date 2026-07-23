@@ -16,6 +16,7 @@ public actor MosaicPreviewPurchaseProvider: MosaicPurchaseProvider {
   private var purchaseOutcome = MosaicPreviewPurchaseOutcome.purchaseFailed
   private var restoreOutcome = MosaicPreviewRestoreOutcome.restoreFailed
   private var activeProductReferenceId: String?
+  private var diagnosticSequence = 0
 
   public init() {}
 
@@ -100,7 +101,17 @@ public actor MosaicPreviewPurchaseProvider: MosaicPurchaseProvider {
     case .cancelled:
       return .cancelled(productID: productID)
     case .purchaseFailed:
-      return .failed(productID: productID, diagnosticCode: "preview.purchase.failed")
+      let diagnostic = failureDiagnostic(
+        code: "preview.purchase.failed",
+        operation: "purchase",
+        safeMessage: "The preview purchase failed.",
+        mosaicProductID: productID
+      )
+      return .failed(
+        productID: productID,
+        diagnosticCode: diagnostic.code,
+        diagnostic: diagnostic
+      )
     }
   }
 
@@ -115,16 +126,21 @@ public actor MosaicPreviewPurchaseProvider: MosaicPurchaseProvider {
       guard let entitlements = activeEntitlementSet(), !entitlements.isEmpty else {
         return .nothingToRestore
       }
-      return .alreadyEntitled(entitlements)
+      return .restored(entitlements)
     case .restoreNoPurchases:
       return .nothingToRestore
     case .restoreFailed:
-      return .failed(diagnosticCode: "preview.restore.failed")
+      let diagnostic = failureDiagnostic(
+        code: "preview.restore.failed",
+        operation: "restore",
+        safeMessage: "The preview restore failed."
+      )
+      return .failed(diagnosticCode: diagnostic.code, diagnostic: diagnostic)
     }
   }
 
   public func activeEntitlements() async -> MosaicActiveEntitlementsResult {
-    .active(activeEntitlementSet() ?? [])
+    .available(activeEntitlementSet() ?? [])
   }
 
   private func activeEntitlementSet() -> Set<MosaicEntitlement>? {
@@ -137,5 +153,24 @@ public actor MosaicPreviewPurchaseProvider: MosaicPurchaseProvider {
       return []
     }
     return [MosaicEntitlement(id: binding.providerProductId)]
+  }
+
+  private func failureDiagnostic(
+    code: String,
+    operation: String,
+    safeMessage: String,
+    mosaicProductID: String? = nil
+  ) -> MosaicCommerceDiagnostic {
+    diagnosticSequence += 1
+    return MosaicCommerceDiagnostic(
+      code: code,
+      safeMessage: safeMessage,
+      severity: .error,
+      retryable: false,
+      correlationID: "ios_preview_\(operation)_\(diagnosticSequence)",
+      providerCode: "preview_configured_failure",
+      mosaicProductID: mosaicProductID,
+      recoveryAction: .none
+    )
   }
 }

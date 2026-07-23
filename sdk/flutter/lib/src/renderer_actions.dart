@@ -305,8 +305,42 @@ extension on _MosaicPaywallState {
               productReferenceId: referenceId,
             ),
           );
+        case MosaicPurchasePending():
+          widget.onInteraction?.call(
+            MosaicInteraction(
+              outcome: MosaicInteractionOutcome.pending,
+              productReferenceId: referenceId,
+              productSelectorId: selectorId,
+            ),
+          );
+          widget.onResult(
+            MosaicPendingPresentationResult(productReferenceId: referenceId),
+          );
+        case MosaicPurchaseDeferred():
+          widget.onInteraction?.call(
+            MosaicInteraction(
+              outcome: MosaicInteractionOutcome.deferred,
+              productReferenceId: referenceId,
+              productSelectorId: selectorId,
+            ),
+          );
+          widget.onResult(
+            MosaicDeferredPresentationResult(productReferenceId: referenceId),
+          );
         case MosaicPurchaseProductUnavailable():
           _notifyProductUnavailable(selectorId, referenceId: referenceId);
+        case MosaicPurchaseProviderUnavailable():
+          _reportPurchaseFailure(
+            selectorId: selectorId,
+            referenceId: referenceId,
+            diagnosticCode: 'purchase_provider_unavailable',
+          );
+        case MosaicPurchaseConfigurationUnavailable():
+          widget.onResult(
+            const MosaicConfigurationUnavailablePresentationResult(
+              diagnosticCode: 'commerce_configuration_unavailable',
+            ),
+          );
         case MosaicPurchaseFailed():
           _reportPurchaseFailure(
             selectorId: selectorId,
@@ -380,20 +414,24 @@ extension on _MosaicPaywallState {
             ),
           );
           widget.onResult(MosaicRestoredPresentationResult(references));
-        case MosaicRestoreAlreadyEntitled():
-          final references = _referenceIds(result.entitlements);
-          widget.onInteraction?.call(
-            const MosaicInteraction(
-              outcome: MosaicInteractionOutcome.alreadyEntitled,
-            ),
-          );
-          widget.onResult(
-            MosaicAlreadyEntitledPresentationResult(references),
-          );
         case MosaicNothingToRestore():
           widget.onInteraction?.call(
             const MosaicInteraction(
               outcome: MosaicInteractionOutcome.restoreNoPurchases,
+            ),
+          );
+        case MosaicRestoreCancelled():
+          widget.onInteraction?.call(
+            const MosaicInteraction(
+              outcome: MosaicInteractionOutcome.restoreCancelled,
+            ),
+          );
+        case MosaicRestoreProviderUnavailable():
+          _reportRestoreFailure('restore_provider_unavailable');
+        case MosaicRestoreConfigurationUnavailable():
+          widget.onResult(
+            const MosaicConfigurationUnavailablePresentationResult(
+              diagnosticCode: 'commerce_configuration_unavailable',
             ),
           );
         case MosaicRestoreFailed():

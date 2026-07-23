@@ -19,7 +19,7 @@ class MockPurchaseProviderTest {
         assertTrue(provider.purchase("mosaic_pro_yearly") is MosaicPurchaseResult.Purchased)
         assertTrue(provider.purchase("mosaic_pro_yearly") is MosaicPurchaseResult.AlreadyEntitled)
         assertTrue(provider.restore() is MosaicRestoreResult.Restored)
-        assertTrue(provider.activeEntitlements() is MosaicActiveEntitlementsResult.Active)
+        assertTrue(provider.activeEntitlements() is MosaicActiveEntitlementsResult.Available)
     }
 
     @Test
@@ -66,7 +66,7 @@ class MockPurchaseProviderTest {
         assertTrue(
             MockMosaicPurchaseProvider(
                 restoreScenario = MosaicMockRestoreScenario.ALREADY_ENTITLED,
-            ).restore() is MosaicRestoreResult.AlreadyEntitled,
+            ).restore() is MosaicRestoreResult.Restored,
         )
         assertEquals(
             MosaicRestoreResult.NothingToRestore,

@@ -164,4 +164,18 @@ public struct Mosaic: Sendable {
     }
     return await configurationClient.resolve(placement: placement)
   }
+
+  /// Returns the exact accepted Configuration Release association required to
+  /// validate a Commerce Configuration sidecar. No sidecar should be decoded
+  /// or cached without this binding.
+  public func commerceConfigurationAssociation(
+    applicationID: String,
+    storePlatform: MosaicCommerceStorePlatform = .ios
+  ) async -> MosaicCommerceConfigurationAssociation? {
+    guard let configurationClient else { return nil }
+    return await configurationClient.commerceConfigurationAssociation(
+      applicationID: applicationID,
+      storePlatform: storePlatform
+    )
+  }
 }

@@ -16,8 +16,16 @@ import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
 import okhttp3.Request
+import okhttp3.HttpUrl.Companion.toHttpUrl
 
-data class MosaicCachedConfiguration(val etag: String?, val payload: String)
+private const val MOSAIC_COMMERCE_CONFIGURATION_MEDIA_TYPE =
+    "application/vnd.mosaic.commerce-configuration+json;version=1"
+
+data class MosaicCachedConfiguration(
+    val etag: String?,
+    val payload: String,
+    val commercePayload: String? = null,
+)
 
 interface MosaicConfigurationCache {
     suspend fun read(): MosaicCachedConfiguration?
@@ -73,6 +81,23 @@ sealed interface MosaicConfigurationResponse {
     data class Failed(val reason: String) : MosaicConfigurationResponse
 }
 
+sealed interface MosaicCommerceConfigurationResponse {
+    data class Modified(
+        val payload: String,
+        val etag: String?,
+        val configurationReleaseId: String?,
+    ) : MosaicCommerceConfigurationResponse
+    data class NotModified(
+        val etag: String?,
+        val configurationReleaseId: String?,
+    ) : MosaicCommerceConfigurationResponse
+    data class Failed(val reason: String) : MosaicCommerceConfigurationResponse
+}
+
+fun interface MosaicCommerceConfigurationTransport {
+    suspend fun fetch(etag: String?): MosaicCommerceConfigurationResponse
+}
+
 fun interface MosaicConfigurationTransport {
     suspend fun fetch(etag: String?): MosaicConfigurationResponse
 }
@@ -110,12 +135,80 @@ class MosaicHTTPConfigurationTransport(
     }
 }
 
+class MosaicHTTPCommerceConfigurationTransport(
+    private val configuration: MosaicConfiguration,
+    private val client: OkHttpClient = OkHttpClient.Builder().callTimeout(15, TimeUnit.SECONDS).build(),
+) : MosaicCommerceConfigurationTransport {
+    init {
+        requireNotNull(configuration.applicationId) {
+            "applicationId is required for hosted Commerce Configuration."
+        }
+    }
+
+    override suspend fun fetch(etag: String?): MosaicCommerceConfigurationResponse =
+        withContext(Dispatchers.IO) {
+            val request = Request.Builder()
+                .url(configuration.commerceConfigurationURL())
+                .header("Authorization", "Bearer ${configuration.apiKey}")
+                .header(
+                    "Accept",
+                    MOSAIC_COMMERCE_CONFIGURATION_MEDIA_TYPE,
+                )
+                .header("Mosaic-Commerce-Configuration-Versions", "1")
+                .header("Mosaic-Commerce-Provider-Contract-Versions", "1")
+                .header("Mosaic-SDK-Platform", "android")
+                .header("Mosaic-SDK-Version", MOSAIC_ANDROID_SDK_VERSION)
+                .apply { etag?.let { header("If-None-Match", it) } }
+                .build()
+            try {
+                client.newCall(request).execute().use { response ->
+                    when (response.code) {
+                        304 -> MosaicCommerceConfigurationResponse.NotModified(
+                            etag = response.header("ETag"),
+                            configurationReleaseId =
+                                response.header("Mosaic-Configuration-Release-Id"),
+                        )
+                        200 -> {
+                            if (
+                                response.header("Content-Type") !=
+                                MOSAIC_COMMERCE_CONFIGURATION_MEDIA_TYPE
+                            ) {
+                                MosaicCommerceConfigurationResponse.Failed(
+                                    "The Commerce Configuration response Content-Type was invalid.",
+                                )
+                            } else {
+                                response.body?.string()?.let {
+                                    MosaicCommerceConfigurationResponse.Modified(
+                                        payload = it,
+                                        etag = response.header("ETag"),
+                                        configurationReleaseId =
+                                            response.header("Mosaic-Configuration-Release-Id"),
+                                    )
+                                } ?: MosaicCommerceConfigurationResponse.Failed(
+                                    "The Commerce Configuration response was empty.",
+                                )
+                            }
+                        }
+                        else -> MosaicCommerceConfigurationResponse.Failed(
+                            "Commerce Configuration request failed with HTTP ${response.code}.",
+                        )
+                    }
+                }
+            } catch (error: IOException) {
+                MosaicCommerceConfigurationResponse.Failed(
+                    error.message ?: "Commerce Configuration request failed.",
+                )
+            }
+        }
+}
+
 enum class MosaicConfigurationSource { REMOTE, CACHE, BUNDLED_FALLBACK }
 
 data class MosaicAcceptedConfiguration(
     val release: MosaicConfigurationRelease,
     val source: MosaicConfigurationSource,
     val etag: String,
+    val commerceConfiguration: MosaicCommerceConfiguration? = null,
 )
 
 sealed interface MosaicConfigurationRefreshResult {
@@ -126,6 +219,21 @@ sealed interface MosaicConfigurationRefreshResult {
         val diagnosticCode: String,
     ) : MosaicConfigurationRefreshResult
     data class Unavailable(val diagnosticCode: String) : MosaicConfigurationRefreshResult
+}
+
+sealed interface MosaicCommerceConfigurationRefreshResult {
+    data class Updated(
+        val configuration: MosaicCommerceConfiguration,
+    ) : MosaicCommerceConfigurationRefreshResult
+    data class NotModified(
+        val configuration: MosaicCommerceConfiguration,
+    ) : MosaicCommerceConfigurationRefreshResult
+    data class Retained(
+        val configuration: MosaicCommerceConfiguration,
+        val diagnosticCode: String,
+    ) : MosaicCommerceConfigurationRefreshResult
+    data class Unavailable(val diagnosticCode: String) :
+        MosaicCommerceConfigurationRefreshResult
 }
 
 sealed interface MosaicPlacementResult {
@@ -142,9 +250,12 @@ sealed interface MosaicPlacementResult {
 /** Serializes refreshes so an older response can never replace a newer accepted release. */
 class MosaicHostedConfigurationClient(
     private val transport: MosaicConfigurationTransport,
+    private val commerceTransport: MosaicCommerceConfigurationTransport? = null,
     private val cache: MosaicConfigurationCache,
     private val bundledFallback: MosaicPaywallDocumentSource? = null,
     private val capabilityReport: MosaicCapabilityReport = MosaicProtocolCapabilities.report(),
+    private val applicationId: String? = null,
+    private val configurablePurchaseProvider: MosaicConfigurablePurchaseProvider? = null,
     private val diagnostics: MosaicDiagnosticSink = MosaicDiagnosticSink.None,
 ) {
     private val refreshLock = Mutex()
@@ -181,8 +292,20 @@ class MosaicHostedConfigurationClient(
                 if (current != null && candidate.number < current.release.number) {
                     return@withLock retainOrUnavailable(MosaicDiagnosticCode.CONFIGURATION_REFRESH_RELEASE_REJECTED)
                 }
+                val retainedCommerce = current?.commerceConfiguration?.takeIf {
+                    it.configurationReleaseId == candidate.id &&
+                        it.configurationReleaseDigest == candidate.contentDigest &&
+                        it.environmentId == candidate.environment.id &&
+                        it.productMappings.keys == candidate.productReferences.keys
+                }
                 try {
-                    cache.write(MosaicCachedConfiguration(acceptedETag, response.payload))
+                    cache.write(
+                        MosaicCachedConfiguration(
+                            acceptedETag,
+                            response.payload,
+                            retainedCommerce?.encoded,
+                        ),
+                    )
                 } catch (error: CancellationException) {
                     throw error
                 } catch (_: Exception) {
@@ -192,7 +315,13 @@ class MosaicHostedConfigurationClient(
                     release = candidate,
                     source = MosaicConfigurationSource.REMOTE,
                     etag = acceptedETag,
+                    commerceConfiguration = retainedCommerce,
                 )
+                if (retainedCommerce == null) {
+                    configurablePurchaseProvider?.clearConfiguration()
+                } else {
+                    configurablePurchaseProvider?.accept(retainedCommerce)
+                }
                 accepted = updated
                 MosaicConfigurationRefreshResult.Updated(updated)
             }
@@ -207,6 +336,65 @@ class MosaicHostedConfigurationClient(
             is MosaicConfigurationResponse.Failed ->
                 retainOrUnavailable(MosaicDiagnosticCode.CONFIGURATION_REFRESH_TRANSPORT_FAILED)
         }
+    }
+
+    suspend fun refreshCommerceConfiguration(): MosaicCommerceConfigurationRefreshResult =
+        refreshLock.withLock {
+            val release = loadValidCache()
+                ?: return@withLock MosaicCommerceConfigurationRefreshResult.Unavailable(
+                    MosaicDiagnosticCode.COMMERCE_CONFIGURATION_UNAVAILABLE.wireName,
+                )
+            val transport = commerceTransport
+                ?: return@withLock retainCommerceOrUnavailable(
+                    MosaicDiagnosticCode.COMMERCE_CONFIGURATION_UNAVAILABLE,
+                )
+            val response = try {
+                transport.fetch(release.commerceConfiguration?.let { "\"${it.contentDigest}\"" })
+            } catch (error: CancellationException) {
+                throw error
+            } catch (_: Exception) {
+                return@withLock retainCommerceOrUnavailable(
+                    MosaicDiagnosticCode.COMMERCE_PROVIDER_UNAVAILABLE,
+                )
+            }
+            when (response) {
+                is MosaicCommerceConfigurationResponse.NotModified -> {
+                    val current = validRetainedCommercePair()
+                    if (
+                        current == null ||
+                        response.etag != "\"${current.contentDigest}\"" ||
+                        response.configurationReleaseId != current.configurationReleaseId
+                    ) {
+                        retainCommerceOrUnavailable(
+                            MosaicDiagnosticCode.COMMERCE_CONFIGURATION_REJECTED,
+                        )
+                    } else {
+                        MosaicCommerceConfigurationRefreshResult.NotModified(current)
+                    }
+                }
+                is MosaicCommerceConfigurationResponse.Failed ->
+                    retainCommerceOrUnavailable(
+                        MosaicDiagnosticCode.COMMERCE_PROVIDER_UNAVAILABLE,
+                    )
+                is MosaicCommerceConfigurationResponse.Modified ->
+                    acceptCommerceCandidate(
+                        response.payload,
+                        response.etag,
+                        response.configurationReleaseId,
+                        requireHostedHeaders = true,
+                    )
+            }
+        }
+
+    /** Accepts an equivalently verified SDK-local custom-provider snapshot. */
+    suspend fun acceptCommerceConfiguration(
+        payload: String,
+    ): MosaicCommerceConfigurationRefreshResult = refreshLock.withLock {
+        loadValidCache()
+            ?: return@withLock MosaicCommerceConfigurationRefreshResult.Unavailable(
+                MosaicDiagnosticCode.COMMERCE_CONFIGURATION_UNAVAILABLE.wireName,
+            )
+        acceptCommerceCandidate(payload, null, null, requireHostedHeaders = false)
     }
 
     suspend fun paywall(placement: String, refresh: Boolean = false): MosaicPlacementResult {
@@ -273,8 +461,116 @@ class MosaicHostedConfigurationClient(
             )
             return null
         }
-        return MosaicAcceptedConfiguration(release, MosaicConfigurationSource.CACHE, acceptedETag).also {
+        val commerce = cached.commercePayload?.let { payload ->
+            val appId = applicationId ?: return@let null
+            runCatching {
+                MosaicCommerceConfigurationDecoder.decode(payload, release, appId)
+            }.getOrNull()
+        }
+        if (cached.commercePayload != null && commerce == null) {
+            diagnose(
+                MosaicDiagnosticCode.COMMERCE_CONFIGURATION_REJECTED,
+                "The cached Commerce Configuration was unavailable or invalid.",
+            )
+        }
+        return MosaicAcceptedConfiguration(
+            release,
+            MosaicConfigurationSource.CACHE,
+            acceptedETag,
+            commerce,
+        ).also {
+            if (commerce == null) {
+                configurablePurchaseProvider?.clearConfiguration()
+            } else {
+                configurablePurchaseProvider?.accept(commerce)
+            }
             accepted = it
+        }
+    }
+
+    private suspend fun acceptCommerceCandidate(
+        payload: String,
+        etag: String?,
+        releaseHeader: String?,
+        requireHostedHeaders: Boolean,
+    ): MosaicCommerceConfigurationRefreshResult {
+        val current = accepted
+            ?: return MosaicCommerceConfigurationRefreshResult.Unavailable(
+                MosaicDiagnosticCode.COMMERCE_CONFIGURATION_UNAVAILABLE.wireName,
+            )
+        val appId = applicationId
+            ?: return retainCommerceOrUnavailable(
+                MosaicDiagnosticCode.COMMERCE_CONFIGURATION_UNAVAILABLE,
+            )
+        val candidate = try {
+            MosaicCommerceConfigurationDecoder.decode(payload, current.release, appId)
+        } catch (_: RuntimeException) {
+            return retainCommerceOrUnavailable(
+                MosaicDiagnosticCode.COMMERCE_CONFIGURATION_REJECTED,
+            )
+        }
+        if (
+            (requireHostedHeaders && releaseHeader == null) ||
+            (releaseHeader != null && releaseHeader != candidate.configurationReleaseId)
+        ) {
+            return retainCommerceOrUnavailable(
+                MosaicDiagnosticCode.COMMERCE_CONFIGURATION_REJECTED,
+            )
+        }
+        if (
+            (requireHostedHeaders && etag == null) ||
+            (
+                etag != null &&
+                    (!mosaicIsStrongETag(etag) || etag != "\"${candidate.contentDigest}\"")
+            )
+        ) {
+            return retainCommerceOrUnavailable(
+                MosaicDiagnosticCode.COMMERCE_CONFIGURATION_REJECTED,
+            )
+        }
+        try {
+            cache.write(
+                MosaicCachedConfiguration(
+                    current.etag,
+                    current.release.encoded,
+                    payload,
+                ),
+            )
+        } catch (error: CancellationException) {
+            throw error
+        } catch (_: Exception) {
+            return retainCommerceOrUnavailable(
+                MosaicDiagnosticCode.COMMERCE_CONFIGURATION_CACHE_WRITE_FAILED,
+            )
+        }
+        configurablePurchaseProvider?.accept(candidate)
+        accepted = current.copy(commerceConfiguration = candidate)
+        return MosaicCommerceConfigurationRefreshResult.Updated(candidate)
+    }
+
+    private fun validRetainedCommercePair(): MosaicCommerceConfiguration? {
+        val current = accepted ?: return null
+        val commerce = current.commerceConfiguration ?: return null
+        val appId = applicationId ?: return null
+        return commerce.takeIf {
+            it.applicationId == appId &&
+                it.environmentId == current.release.environment.id &&
+                it.configurationReleaseId == current.release.id &&
+                it.configurationReleaseDigest == current.release.contentDigest &&
+                it.productMappings.keys == current.release.productReferences.keys &&
+                mosaicIsStrongETag("\"${it.contentDigest}\"")
+        }
+    }
+
+    private fun retainCommerceOrUnavailable(
+        code: MosaicDiagnosticCode,
+    ): MosaicCommerceConfigurationRefreshResult {
+        diagnose(code, "The last accepted Commerce Configuration was preserved.")
+        val current = accepted?.commerceConfiguration
+        return if (current == null) {
+            MosaicCommerceConfigurationRefreshResult.Unavailable(code.wireName)
+        } else {
+            MosaicCommerceConfigurationRefreshResult.Retained(current, code.wireName)
         }
     }
 
@@ -294,7 +590,8 @@ class MosaicHostedConfigurationClient(
 }
 
 internal fun mosaicConfigurationCacheNamespace(configuration: MosaicConfiguration): String {
-    val identity = "${configuration.configurationURL()}\n${configuration.apiKey.trim()}"
+    val identity =
+        "${configuration.configurationURL()}\n${configuration.apiKey.trim()}\n${configuration.applicationId.orEmpty()}"
     return MessageDigest.getInstance("SHA-256")
         .digest(identity.toByteArray(Charsets.UTF_8))
         .joinToString(separator = "") { byte -> "%02x".format(byte.toInt() and 0xff) }
@@ -326,4 +623,14 @@ private fun MosaicConfiguration.configurationURL(): URI {
     val base = endpoint ?: URI("https://api.mosaic.dev")
     val normalized = base.toString().trimEnd('/')
     return URI("$normalized/v1/sdk/configuration")
+}
+
+private fun MosaicConfiguration.commerceConfigurationURL(): String {
+    val base = endpoint ?: URI("https://api.mosaic.dev")
+    val normalized = base.toString().trimEnd('/')
+    return "$normalized/v1/sdk/commerce-configuration".toHttpUrl()
+        .newBuilder()
+        .addQueryParameter("applicationId", requireNotNull(applicationId))
+        .build()
+        .toString()
 }

@@ -21,8 +21,8 @@ final class MockPurchaseProviderTests: XCTestCase {
     guard case .restored = await provider.restore() else {
       return XCTFail("Expected an explicit restored result.")
     }
-    guard case .active = await provider.activeEntitlements() else {
-      return XCTFail("Expected explicit active entitlements.")
+    guard case .available = await provider.activeEntitlements() else {
+      return XCTFail("Expected explicit available entitlements.")
     }
   }
 
@@ -42,20 +42,33 @@ final class MockPurchaseProviderTests: XCTestCase {
     XCTAssertEqual(products.map(\.id), ["mosaic_pro_monthly"])
 
     let failedPurchase = await provider.purchase(productID: "mosaic_pro_monthly")
-    XCTAssertEqual(
-      failedPurchase,
-      .failed(productID: "mosaic_pro_monthly", diagnosticCode: "mock_purchase_failed")
-    )
+    guard case .failed(let productID, let diagnosticCode, let diagnostic) = failedPurchase else {
+      return XCTFail("Expected a complete mock purchase failure.")
+    }
+    XCTAssertEqual(productID, "mosaic_pro_monthly")
+    XCTAssertEqual(diagnosticCode, diagnostic.code)
+    XCTAssertEqual(diagnostic.code, "mock_purchase_failed")
+    XCTAssertEqual(diagnostic.safeMessage, "The mock purchase failed.")
+    XCTAssertEqual(diagnostic.providerCode, "mock_configured_failure")
+    XCTAssertEqual(diagnostic.mosaicProductID, "mosaic_pro_monthly")
+    XCTAssertEqual(diagnostic.recoveryAction, .none)
+    XCTAssertTrue(diagnostic.correlationID.hasPrefix("ios_mock_purchase_"))
     let unavailablePurchase = await provider.purchase(productID: "missing")
     XCTAssertEqual(
       unavailablePurchase,
       .productUnavailable(productID: "missing")
     )
     let failedRestore = await provider.restore()
-    XCTAssertEqual(
-      failedRestore,
-      .failed(diagnosticCode: "mock_restore_failed")
-    )
+    guard case .failed(let diagnosticCode, let diagnostic) = failedRestore else {
+      return XCTFail("Expected a complete mock restore failure.")
+    }
+    XCTAssertEqual(diagnosticCode, diagnostic.code)
+    XCTAssertEqual(diagnostic.code, "mock_restore_failed")
+    XCTAssertEqual(diagnostic.safeMessage, "The mock restore failed.")
+    XCTAssertEqual(diagnostic.providerCode, "mock_configured_failure")
+    XCTAssertNil(diagnostic.mosaicProductID)
+    XCTAssertEqual(diagnostic.recoveryAction, .none)
+    XCTAssertTrue(diagnostic.correlationID.hasPrefix("ios_mock_restore_"))
   }
 
   func testMockProviderSupportsCancellationAlreadyEntitledAndRestoreVariants() async {
@@ -79,8 +92,8 @@ final class MockPurchaseProviderTests: XCTestCase {
       entitledPurchase,
       .alreadyEntitled(productID: "mosaic_pro_yearly")
     )
-    guard case .alreadyEntitled = await already.restore() else {
-      return XCTFail("Expected an already-entitled restore.")
+    guard case .restored = await already.restore() else {
+      return XCTFail("Expected legacy already-entitled input to normalize to restored.")
     }
 
     let empty = MockMosaicPurchaseProvider(restoreBehavior: .noPurchases)

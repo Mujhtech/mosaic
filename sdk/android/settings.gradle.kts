@@ -16,3 +16,4 @@ dependencyResolutionManagement {
 
 rootProject.name = "mosaic-android-sdk"
 include(":mosaic")
+include(":mosaic-revenuecat")

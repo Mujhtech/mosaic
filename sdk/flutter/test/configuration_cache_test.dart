@@ -20,12 +20,23 @@ void main() {
     final original = MosaicConfigurationCacheEntry(
       etag: '"release-1"',
       releaseSource: deliveryFixtureSource(),
+      commerceConfigurationSource: '{"sidecar":"accepted-as-one-record"}',
+      commerceConfigurationEtag:
+          '"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"',
     );
     await cache.write(namespace, original);
 
     final reconstructed = await cache.read(namespace);
     expect(reconstructed!.etag, original.etag);
     expect(reconstructed.releaseSource, original.releaseSource);
+    expect(
+      reconstructed.commerceConfigurationSource,
+      original.commerceConfigurationSource,
+    );
+    expect(
+      reconstructed.commerceConfigurationEtag,
+      original.commerceConfigurationEtag,
+    );
 
     await expectLater(
       cache.write(
@@ -40,5 +51,9 @@ void main() {
     final preserved = await cache.read(namespace);
     expect(preserved!.etag, original.etag);
     expect(preserved.releaseSource, original.releaseSource);
+    expect(
+      preserved.commerceConfigurationSource,
+      original.commerceConfigurationSource,
+    );
   });
 }

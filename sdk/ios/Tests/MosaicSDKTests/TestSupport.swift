@@ -96,6 +96,27 @@ func deliveryFixtureData(named name: String = "valid-release.json") throws -> Da
   try Data(contentsOf: deliveryFixtureURL(named: name))
 }
 
+func commerceConfigurationFixtureData(
+  named name: String = "revenuecat-configuration.json"
+) throws -> Data {
+  let fileManager = FileManager.default
+  var directory = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
+  while directory.path != "/" {
+    let candidate =
+      directory
+      .appendingPathComponent("protocol")
+      .appendingPathComponent("fixtures")
+      .appendingPathComponent("commerce-configuration")
+      .appendingPathComponent("v1")
+      .appendingPathComponent(name)
+    if fileManager.fileExists(atPath: candidate.path) {
+      return try Data(contentsOf: candidate)
+    }
+    directory.deleteLastPathComponent()
+  }
+  throw CanonicalFixtureLookupError.notFound
+}
+
 func localPreviewFlowURL(filePath: StaticString = #filePath) throws -> URL {
   let fileManager = FileManager.default
   var directory = URL(fileURLWithPath: "\(filePath)").deletingLastPathComponent()

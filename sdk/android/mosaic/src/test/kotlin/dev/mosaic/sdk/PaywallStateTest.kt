@@ -259,7 +259,7 @@ class PaywallStateTest {
 
         assertEquals("restored", event(MosaicMockRestoreScenario.RESTORED).presentationResult?.wireName)
         assertEquals(
-            "alreadyEntitled",
+            "restored",
             event(MosaicMockRestoreScenario.ALREADY_ENTITLED).presentationResult?.wireName,
         )
 

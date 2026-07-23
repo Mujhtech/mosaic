@@ -1,0 +1,19 @@
+name: mosaic_revenuecat
+description: Optional RevenueCat commerce adapter for the Mosaic Flutter SDK.
+version: 0.1.0-dev.1
+publish_to: none
+
+environment:
+  sdk: ">=3.4.0 <4.0.0"
+  flutter: ">=3.22.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+  mosaic_sdk:
+    path: ../..
+  purchases_flutter: 10.4.3
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter

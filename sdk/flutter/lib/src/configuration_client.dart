@@ -1,6 +1,8 @@
 import 'dart:async';
 import 'dart:isolate';
 
+import 'commerce_configuration.dart';
+import 'commerce_configuration_transport.dart';
 import 'configuration_cache.dart';
 import 'configuration_delivery.dart';
 import 'configuration_transport.dart';
@@ -8,6 +10,12 @@ import 'presentation.dart';
 import 'protocol.dart';
 
 typedef MosaicBundledConfigurationLoader = Future<String?> Function();
+typedef MosaicCommerceConfigurationLoader = Future<String?> Function(
+  MosaicConfigurationRelease release,
+);
+typedef MosaicAcceptedConfigurationCallback = void Function(
+  MosaicAcceptedConfiguration configuration,
+);
 
 enum MosaicConfigurationSource { remote, cache, bundledFallback }
 
@@ -16,11 +24,17 @@ final class MosaicAcceptedConfiguration {
     required this.envelope,
     required this.source,
     this.etag,
+    this.commerceEnvelope,
+    this.commerceSource,
+    this.commerceEtag,
   });
 
   final MosaicConfigurationDeliveryEnvelope envelope;
   final MosaicConfigurationSource source;
   final String? etag;
+  final MosaicCommerceConfigurationEnvelope? commerceEnvelope;
+  final String? commerceSource;
+  final String? commerceEtag;
 }
 
 sealed class MosaicConfigurationLoadResult {
@@ -118,18 +132,45 @@ final class MosaicConfigurationClient {
     required this.cache,
     required this.timeout,
     this.applicationVersion,
+    this.applicationId,
+    this.storePlatform,
     this.bundledFallbackLoader,
+    this.commerceConfigurationLoader,
+    this.commerceConfigurationTransport,
+    this.bundledCommerceConfigurationLoader,
+    this.onAcceptedConfiguration,
     this.onDiagnostic,
   }) : cacheNamespace =
-            mosaicConfigurationCacheNamespace(baseUrl, publicSdkKey);
+            mosaicConfigurationCacheNamespace(baseUrl, publicSdkKey) {
+    if ((commerceConfigurationLoader != null ||
+            commerceConfigurationTransport != null ||
+            bundledCommerceConfigurationLoader != null) &&
+        (applicationId == null || storePlatform == null)) {
+      throw ArgumentError(
+        'applicationId and storePlatform are required for Commerce Configuration.',
+      );
+    }
+    if (commerceConfigurationLoader != null &&
+        commerceConfigurationTransport != null) {
+      throw ArgumentError(
+        'Use either a Commerce Configuration loader or transport, not both.',
+      );
+    }
+  }
 
   final Uri baseUrl;
   final String publicSdkKey;
   final String? applicationVersion;
+  final String? applicationId;
+  final MosaicStorePlatform? storePlatform;
   final MosaicConfigurationTransport transport;
   final MosaicConfigurationCache cache;
   final Duration timeout;
   final MosaicBundledConfigurationLoader? bundledFallbackLoader;
+  final MosaicCommerceConfigurationLoader? commerceConfigurationLoader;
+  final MosaicCommerceConfigurationTransport? commerceConfigurationTransport;
+  final MosaicCommerceConfigurationLoader? bundledCommerceConfigurationLoader;
+  final MosaicAcceptedConfigurationCallback? onAcceptedConfiguration;
   final MosaicDiagnosticCallback? onDiagnostic;
   final String cacheNamespace;
 
@@ -161,12 +202,24 @@ final class MosaicConfigurationClient {
       final record = await cache.read(cacheNamespace);
       if (record != null) {
         final envelope = await _decode(record.releaseSource);
+        final commerceEnvelope = await _decodeCommerceIfRequired(
+          record.commerceConfigurationSource,
+          envelope.release,
+          required: _requiresRemoteCommerce,
+        );
+        final commerceEtag = _validatedCommerceEtag(
+          record.commerceConfigurationEtag,
+          commerceEnvelope,
+        );
         final configuration = MosaicAcceptedConfiguration(
           envelope: envelope,
           source: MosaicConfigurationSource.cache,
           etag: record.etag,
+          commerceEnvelope: commerceEnvelope,
+          commerceSource: record.commerceConfigurationSource,
+          commerceEtag: commerceEtag,
         );
-        _accepted = configuration;
+        _accept(configuration);
         return MosaicConfigurationReady(configuration);
       }
     } on Object {
@@ -189,11 +242,20 @@ final class MosaicConfigurationClient {
         return _unavailable('configuration.bundledFallback.missing');
       }
       final envelope = await _decode(source);
+      final commerceSource =
+          await bundledCommerceConfigurationLoader?.call(envelope.release);
+      final commerceEnvelope = await _decodeCommerceIfRequired(
+        commerceSource,
+        envelope.release,
+        required: bundledCommerceConfigurationLoader != null,
+      );
       final configuration = MosaicAcceptedConfiguration(
         envelope: envelope,
         source: MosaicConfigurationSource.bundledFallback,
+        commerceEnvelope: commerceEnvelope,
+        commerceSource: commerceSource,
       );
-      _accepted = configuration;
+      _accept(configuration);
       return MosaicConfigurationReady(configuration);
     } on Object {
       return _unavailable('configuration.bundledFallback.rejected');
@@ -240,6 +302,9 @@ final class MosaicConfigurationClient {
     MosaicConfigurationUpdatedResponse response,
   ) async {
     final MosaicConfigurationDeliveryEnvelope envelope;
+    final String? commerceSource;
+    final String? commerceEtag;
+    final MosaicCommerceConfigurationEnvelope? commerceEnvelope;
     try {
       envelope = await _decode(response.source);
       final current = _accepted;
@@ -258,8 +323,14 @@ final class MosaicConfigurationClient {
           'The release is older than the last accepted release.',
         );
       }
+      final commerce = await _loadRemoteCommerce(envelope.release, current);
+      commerceSource = commerce.source;
+      commerceEtag = commerce.etag;
+      commerceEnvelope = commerce.envelope;
     } on Object {
-      return _retainOrUnavailable('configuration.refresh.releaseRejected');
+      return _retainOrUnavailable(
+        'configuration.refresh.releaseOrCommerceRejected',
+      );
     }
     try {
       await cache.write(
@@ -267,6 +338,8 @@ final class MosaicConfigurationClient {
         MosaicConfigurationCacheEntry(
           etag: response.etag,
           releaseSource: response.source,
+          commerceConfigurationSource: commerceSource,
+          commerceConfigurationEtag: commerceEtag,
         ),
       );
     } on Object {
@@ -276,9 +349,134 @@ final class MosaicConfigurationClient {
       envelope: envelope,
       source: MosaicConfigurationSource.remote,
       etag: response.etag,
+      commerceEnvelope: commerceEnvelope,
+      commerceSource: commerceSource,
+      commerceEtag: commerceEtag,
     );
-    _accepted = configuration;
+    _accept(configuration);
     return MosaicConfigurationUpdated(configuration);
+  }
+
+  Future<MosaicCommerceConfigurationEnvelope?> _decodeCommerceIfRequired(
+    String? source,
+    MosaicConfigurationRelease release, {
+    required bool required,
+  }) async {
+    if (source == null) {
+      if (required) {
+        throw const MosaicCommerceConfigurationException(
+          'The release-associated commerce configuration is missing.',
+        );
+      }
+      return null;
+    }
+    if (applicationId == null || storePlatform == null) {
+      return null;
+    }
+    return _decodeCommerce(
+      source,
+      release,
+      applicationId!,
+      storePlatform!,
+    );
+  }
+
+  bool get _requiresRemoteCommerce =>
+      commerceConfigurationLoader != null ||
+      commerceConfigurationTransport != null;
+
+  Future<
+      ({
+        String? source,
+        String? etag,
+        MosaicCommerceConfigurationEnvelope? envelope,
+      })> _loadRemoteCommerce(
+    MosaicConfigurationRelease release,
+    MosaicAcceptedConfiguration? current,
+  ) async {
+    final hostedTransport = commerceConfigurationTransport;
+    if (hostedTransport == null) {
+      final source = await commerceConfigurationLoader?.call(release);
+      return (
+        source: source,
+        etag: null,
+        envelope: await _decodeCommerceIfRequired(
+          source,
+          release,
+          required: commerceConfigurationLoader != null,
+        ),
+      );
+    }
+    final retained = current != null &&
+            current.envelope.release.id == release.id &&
+            current.commerceSource != null &&
+            current.commerceEtag != null
+        ? MosaicRetainedCommerceConfiguration(
+            source: current.commerceSource!,
+            etag: current.commerceEtag!,
+          )
+        : null;
+    final response = await hostedTransport.fetch(
+      MosaicCommerceConfigurationRequest(
+        release: release,
+        retained: retained,
+      ),
+    );
+    switch (response) {
+      case MosaicCommerceConfigurationUpdatedResponse():
+        final envelope = await _decodeCommerceIfRequired(
+          response.source,
+          release,
+          required: true,
+        );
+        if (_validatedCommerceEtag(response.etag, envelope) == null) {
+          throw const MosaicCommerceConfigurationException(
+            'The Commerce Configuration ETag does not match its content.',
+          );
+        }
+        return (
+          source: response.source,
+          etag: response.etag,
+          envelope: envelope,
+        );
+      case MosaicCommerceConfigurationNotModifiedResponse():
+        if (retained == null || current?.commerceEnvelope == null) {
+          throw const MosaicCommerceConfigurationException(
+            'A Commerce Configuration 304 has no valid retained pair.',
+          );
+        }
+        return (
+          source: retained.source,
+          etag: retained.etag,
+          envelope: current!.commerceEnvelope,
+        );
+      case MosaicCommerceConfigurationFailedResponse():
+        throw const MosaicCommerceConfigurationException(
+          'The Commerce Configuration request failed.',
+        );
+    }
+  }
+
+  String? _validatedCommerceEtag(
+    String? etag,
+    MosaicCommerceConfigurationEnvelope? envelope,
+  ) {
+    if (etag == null || envelope == null) return null;
+    final expected = '"${envelope.configuration.contentDigest}"';
+    return etag == expected ? etag : null;
+  }
+
+  void _accept(MosaicAcceptedConfiguration configuration) {
+    _accepted = configuration;
+    try {
+      onAcceptedConfiguration?.call(configuration);
+    } on Object {
+      _diagnose(
+        'commerce.provider.activationFailed',
+        'The accepted commerce Provider could not be activated.',
+        severity: MosaicDiagnosticSeverity.error,
+      );
+    }
   }
 
   MosaicConfigurationRefreshResult _notModified() {
@@ -314,4 +512,19 @@ final class MosaicConfigurationClient {
 Future<MosaicConfigurationDeliveryEnvelope> _decode(String source) =>
     Isolate.run(
       () => const MosaicConfigurationDeliveryDecoder().decode(source),
+    );
+
+Future<MosaicCommerceConfigurationEnvelope> _decodeCommerce(
+  String source,
+  MosaicConfigurationRelease release,
+  String applicationId,
+  MosaicStorePlatform storePlatform,
+) =>
+    Isolate.run(
+      () => const MosaicCommerceConfigurationDecoder().decode(
+        source,
+        expectedRelease: release,
+        expectedApplicationId: applicationId,
+        expectedStorePlatform: storePlatform,
+      ),
     );

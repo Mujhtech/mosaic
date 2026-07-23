@@ -82,7 +82,7 @@ class MockMosaicPurchaseProvider(
             }
             MosaicMockRestoreScenario.ALREADY_ENTITLED -> {
                 entitlements += restoredEntitlements
-                MosaicRestoreResult.AlreadyEntitled(restoredEntitlements)
+                MosaicRestoreResult.Restored(restoredEntitlements)
             }
             MosaicMockRestoreScenario.NOTHING_TO_RESTORE -> MosaicRestoreResult.NothingToRestore
             MosaicMockRestoreScenario.FAILURE -> MosaicRestoreResult.Failed()
@@ -90,7 +90,7 @@ class MockMosaicPurchaseProvider(
     }
 
     override suspend fun activeEntitlements(): MosaicActiveEntitlementsResult = synchronized(lock) {
-        MosaicActiveEntitlementsResult.Active(entitlements.toSet())
+        MosaicActiveEntitlementsResult.Available(entitlements.toSet())
     }
 
     companion object {

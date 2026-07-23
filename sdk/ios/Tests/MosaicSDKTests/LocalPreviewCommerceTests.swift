@@ -26,7 +26,7 @@ final class LocalPreviewCommerceTests: XCTestCase {
     XCTAssertEqual(productID, "mosaic_pro_yearly")
     XCTAssertEqual(transactionID, "preview-yearly-plan")
     let entitlements = await provider.activeEntitlements()
-    XCTAssertEqual(entitlements, .active([MosaicEntitlement(id: "mosaic_pro_yearly")]))
+    XCTAssertEqual(entitlements, .available([MosaicEntitlement(id: "mosaic_pro_yearly")]))
 
     let restore = await provider.restore()
     XCTAssertEqual(restore, .restored([MosaicEntitlement(id: "mosaic_pro_yearly")]))
@@ -61,7 +61,13 @@ final class LocalPreviewCommerceTests: XCTestCase {
     let cancelledPurchase = await provider.purchase(productID: "mosaic_pro_yearly")
     XCTAssertEqual(cancelledPurchase, .cancelled(productID: "mosaic_pro_yearly"))
     let restore = await provider.restore()
-    XCTAssertEqual(restore, .failed(diagnosticCode: "preview.restore.failed"))
+    guard case .failed(let diagnosticCode, let diagnostic) = restore else {
+      return XCTFail("Expected a complete preview restore failure.")
+    }
+    XCTAssertEqual(diagnosticCode, diagnostic.code)
+    XCTAssertEqual(diagnostic.code, "preview.restore.failed")
+    XCTAssertEqual(diagnostic.providerCode, "preview_configured_failure")
+    XCTAssertTrue(diagnostic.correlationID.hasPrefix("ios_preview_restore_"))
   }
 
   private func canonicalCommerceState() throws -> MosaicPreviewMockCommerceState {

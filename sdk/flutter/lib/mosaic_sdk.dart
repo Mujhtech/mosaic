@@ -1,6 +1,8 @@
 library;
 
 export 'src/commerce.dart';
+export 'src/commerce_configuration.dart';
+export 'src/commerce_configuration_transport.dart';
 export 'src/configuration.dart';
 export 'src/configuration_cache.dart';
 export 'src/configuration_client.dart';

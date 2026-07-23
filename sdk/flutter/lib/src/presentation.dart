@@ -122,6 +122,8 @@ enum MosaicPresentationOutcome {
   alreadyEntitled('alreadyEntitled'),
   dismissed('dismissed'),
   cancelled('cancelled'),
+  pending('pending'),
+  deferred('deferred'),
   productUnavailable('productUnavailable'),
   placementUnavailable('placementUnavailable'),
   configurationUnavailable('configurationUnavailable'),
@@ -187,6 +189,24 @@ final class MosaicCancelledPresentationResult extends MosaicPresentationResult {
 
   @override
   MosaicPresentationOutcome get outcome => MosaicPresentationOutcome.cancelled;
+}
+
+final class MosaicPendingPresentationResult extends MosaicPresentationResult {
+  const MosaicPendingPresentationResult({required this.productReferenceId});
+
+  final String productReferenceId;
+
+  @override
+  MosaicPresentationOutcome get outcome => MosaicPresentationOutcome.pending;
+}
+
+final class MosaicDeferredPresentationResult extends MosaicPresentationResult {
+  const MosaicDeferredPresentationResult({required this.productReferenceId});
+
+  final String productReferenceId;
+
+  @override
+  MosaicPresentationOutcome get outcome => MosaicPresentationOutcome.deferred;
 }
 
 final class MosaicProductUnavailablePresentationResult
@@ -269,9 +289,13 @@ enum MosaicInteractionOutcome {
   alreadyEntitled('alreadyEntitled'),
   dismissed('dismissed'),
   cancelled('cancelled'),
+  pending('pending'),
+  deferred('deferred'),
   productUnavailable('productUnavailable'),
+  providerUnavailable('providerUnavailable'),
   purchaseFailed('purchaseFailed'),
   restoreNoPurchases('restoreNoPurchases'),
+  restoreCancelled('restoreCancelled'),
   restoreFailed('restoreFailed');
 
   const MosaicInteractionOutcome(this.wireValue);

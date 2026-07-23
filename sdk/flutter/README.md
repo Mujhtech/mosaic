@@ -5,7 +5,8 @@ and renders it with native Flutter widgets. It includes hosted Configuration
 Delivery v1, persistent cache and bundled-release fallback, Placements,
 localization and RTL,
 bundled fallback loading, mock commerce, normalized results, diagnostics,
-accessibility semantics, native rendering, and Local Preview 0.2 support.
+accessibility semantics, native rendering, Local Preview 0.2 support, and the
+provider-neutral Commerce Configuration v1/custom-provider boundary.
 
 Protocol 0.2 RC4 adds document design-system tokens, solid/linear/radial/media
 backgrounds, native shadows, uniform width and height Fit/Fill/Fixed sizing,
@@ -14,7 +15,9 @@ It retains RC3's generalized Buttons and Stacks, authored Product Cards and
 Badges, safe product templates, navigation, Carousel, Switch, Countdown, and
 conditional visibility. The SDK never migrates a document implicitly.
 
-Analytics, experiments, and real billing adapters remain outside this package.
+Analytics and experiments remain outside this package. Real billing adapters
+remain optional sibling packages so applications that do not use RevenueCat
+do not resolve or embed it.
 
 ## Requirements
 
@@ -71,8 +74,72 @@ An accepted release is strict and atomic: every embedded Protocol 0.2 paywall,
 digest, Placement reference, product reference, asset binding, and capability
 set must validate before the SDK replaces memory or its cache. Requests send
 Flutter SDK capability metadata, use a short timeout, and revalidate strong
-ETags with `If-None-Match`; `304` preserves the current release. Concurrent
-manual refreshes coalesce. Presentation never fetches.
+ETags with `If-None-Match`; `304` preserves the current release only when the
+response repeats the exact retained ETag and Configuration Release ID.
+Concurrent manual refreshes coalesce. Presentation never fetches.
+
+## Commerce Configuration and custom Providers
+
+Commerce Configuration v1 is an optional immutable sidecar. When configured,
+the SDK requires its Environment, Application, store platform, Configuration
+Release ID, release digest, Product set, and canonical content digest to match
+the accepted Delivery v1 release. Unknown fields, mappings, versions,
+credentials, ambiguous mappings, and mismatches reject the complete pair. The
+release and sidecar bytes share one crash-safe cache record.
+
+When `applicationId` and `storePlatform` are provided, Mosaic uses the frozen
+hosted route automatically:
+
+`GET /v1/sdk/commerce-configuration?applicationId=<registered-application-id>`
+
+The request reuses the public SDK key and sends the Flutter SDK, Commerce
+Configuration v1, and Provider Contract v1 capability headers. Tests, local
+Studio integrations, and self-hosted deployments may replace this narrow
+transport with `commerceConfigurationLoader`. Hosted responses are revalidated
+with `If-None-Match` only after the exact sidecar ETag, canonical content
+digest, and associated Delivery release have been retained together.
+
+```dart
+final mosaic = Mosaic.configure(
+  publicSdkKey: 'public_sdk_key',
+  baseUrl: Uri.parse('https://mosaic.example.com'),
+  applicationId: 'application_ios',
+  storePlatform: MosaicStorePlatform.ios,
+  purchaseProvider: localFallbackProvider,
+  commerceProviderFactories: [MyCommerceProviderFactory()],
+);
+```
+
+An app-owned custom integration implements `MosaicCommerceProviderFactory` and
+`MosaicCommerceProvider`. The factory receives only a validated
+`MosaicCommerceConfiguration` and its exact `MosaicConfigurationRelease`.
+Products must resolve stable Mosaic Product IDs through `mappingForProduct`;
+the renderer never receives a provider SKU. Custom Providers report identity,
+explicit capabilities, normalized purchase/restore/Entitlement results, and
+bounded safe diagnostics.
+Provider-failure results attach the same diagnostic record, including its
+stable code, safe message, retryability, correlation ID, optional safe provider
+code, and recovery action.
+
+The optional RevenueCat adapter is at `packages/mosaic_revenuecat`. It pins
+`purchases_flutter 10.4.3` and requires Flutter 3.22/Dart 3.4 without raising
+Mosaic Core's Flutter 3.19/Dart 3.3 floor. The host configures RevenueCat and
+owns login/logout/customer identity:
+
+```dart
+await Purchases.configure(PurchasesConfiguration(revenueCatPublicSdkKey));
+
+final mosaic = Mosaic.configure(
+  // Delivery and sidecar settings omitted.
+  purchaseProvider: localFallbackProvider,
+  commerceProviderFactories: const [
+    MosaicRevenueCatProviderFactory(),
+  ],
+);
+```
+
+Never put a RevenueCat public SDK key, server key, app-user identifier,
+authorization header, or customer payload in the sidecar or diagnostics.
 
 `MosaicPaywall` is the lower-level widget for an already decoded and validated
 `MosaicPaywallDocument`. Mosaic presents protocol-internal Sheet destinations
@@ -190,6 +257,8 @@ The sealed presentation union maps one-to-one to RC1:
 - `MosaicAlreadyEntitledPresentationResult`
 - `MosaicDismissedPresentationResult`
 - `MosaicCancelledPresentationResult`
+- `MosaicPendingPresentationResult`
+- `MosaicDeferredPresentationResult`
 - `MosaicProductUnavailablePresentationResult`
 - `MosaicConfigurationUnavailablePresentationResult`
 - `MosaicPurchaseFailedPresentationResult`

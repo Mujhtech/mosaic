@@ -148,6 +148,21 @@ actor MosaicConfigurationClient {
     )
   }
 
+  func commerceConfigurationAssociation(
+    applicationID: String,
+    storePlatform: MosaicCommerceStorePlatform
+  ) -> MosaicCommerceConfigurationAssociation? {
+    guard let accepted else { return nil }
+    return MosaicCommerceConfigurationAssociation(
+      environmentID: accepted.release.metadata.environmentID,
+      applicationID: applicationID,
+      storePlatform: storePlatform,
+      configurationReleaseID: accepted.release.metadata.id,
+      configurationReleaseDigest: accepted.release.metadata.contentDigest,
+      mosaicProductIDs: accepted.release.productReferences.map(\.id)
+    )
+  }
+
   func refreshIfNeeded() async -> MosaicConfigurationRefreshResult {
     if let accepted, clock() < accepted.refreshAfter {
       return .skippedFresh(metadata: accepted.release.metadata)

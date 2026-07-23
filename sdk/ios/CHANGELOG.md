@@ -1,5 +1,34 @@
 # Changelog
 
+## 0.1.0-dev.5
+
+- Add strict Commerce Configuration v1 decoding, canonical digest validation,
+  exact Configuration Release association, atomic last-known-valid caching,
+  bundled fallback, safe diagnostics, and the frozen hosted sidecar wire
+  contract.
+- Add the core `MosaicCommerceProvider` boundary, installable provider router,
+  direct and Offering/Package mappings, mapped Entitlements, and explicit
+  pending, deferred, provider-unavailable, and restore-cancelled outcomes.
+- Add an optional `MosaicRevenueCat` package pinned to purchases-ios 5.81.2.
+  The host owns `Purchases.configure`; the adapter resolves exact native
+  purchase handles and sanitizes typed purchase, restore, and lookup failures.
+- Add canonical sidecar, hosted request, cache recovery, app-owned provider,
+  RevenueCat mapping, result, and failure tests.
+- Invalidate provider-native purchase handles whenever Commerce Configuration
+  is installed or replaced, reject stale in-flight RevenueCat loads, and
+  require an exact-mapping product reload before purchase.
+- Align Commerce Provider v1 restore and active-Entitlement results: restore
+  existing access as `restored`, and distinguish available, unknown,
+  provider-unavailable, and failed lookup outcomes without treating failures
+  as inactive.
+- Require installed commerce adapters to report their runtime capabilities,
+  reject identity, Mosaic adapter-version, or declared-capability drift before
+  accepting mappings, and keep RevenueCat's Mosaic adapter version `1.0.0`
+  separate from the pinned purchases-ios version.
+- Carry one complete bounded diagnostic on every purchase, restore, and active
+  Entitlement provider failure. The configured boundary repairs unsafe custom
+  values while renderer outcomes continue exposing only stable safe codes.
+
 ## 0.1.0-dev.4
 
 - Add strict Protocol 0.2 decoding while preserving the approved Protocol 0.1

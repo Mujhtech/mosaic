@@ -214,7 +214,7 @@ class LocalPreviewEngineTest {
         assertEquals(listOf("$9.99", "$79.99"), products.products.map(MosaicProduct::localizedPrice))
         assertTrue(engine.purchaseProvider.purchase("mosaic_pro_yearly") is MosaicPurchaseResult.Purchased)
         assertTrue(engine.purchaseProvider.restore() is MosaicRestoreResult.Restored)
-        assertNull((engine.purchaseProvider.activeEntitlements() as MosaicActiveEntitlementsResult.Active)
+        assertNull((engine.purchaseProvider.activeEntitlements() as MosaicActiveEntitlementsResult.Available)
             .entitlements.firstOrNull())
     }
 

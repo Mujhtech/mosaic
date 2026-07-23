@@ -26,6 +26,7 @@ public actor MockMosaicPurchaseProvider: MosaicPurchaseProvider {
   private let purchaseBehavior: MockMosaicPurchaseBehavior
   private let restoreBehavior: MockMosaicRestoreBehavior
   private var entitlements: Set<MosaicEntitlement>
+  private var diagnosticSequence = 0
 
   public init(
     products: [MosaicProduct] = [],
@@ -72,7 +73,18 @@ public actor MockMosaicPurchaseProvider: MosaicPurchaseProvider {
     case .cancellation:
       return .cancelled(productID: productID)
     case .failure(let diagnosticCode):
-      return .failed(productID: productID, diagnosticCode: diagnosticCode)
+      let diagnostic = failureDiagnostic(
+        code: diagnosticCode,
+        fallbackCode: "purchase_provider_failed",
+        operation: "purchase",
+        safeMessage: "The mock purchase failed.",
+        mosaicProductID: productID
+      )
+      return .failed(
+        productID: productID,
+        diagnosticCode: diagnostic.code,
+        diagnostic: diagnostic
+      )
     case .unavailable:
       return .productUnavailable(productID: productID)
     case .alreadyEntitled:
@@ -90,16 +102,49 @@ public actor MockMosaicPurchaseProvider: MosaicPurchaseProvider {
       return .restored(restored)
     case .alreadyEntitled(let existing):
       entitlements.formUnion(existing)
-      return .alreadyEntitled(existing)
+      return .restored(existing)
     case .noPurchases:
       return .nothingToRestore
     case .failure(let diagnosticCode):
-      return .failed(diagnosticCode: diagnosticCode)
+      let diagnostic = failureDiagnostic(
+        code: diagnosticCode,
+        fallbackCode: "restore_provider_failed",
+        operation: "restore",
+        safeMessage: "The mock restore failed."
+      )
+      return .failed(diagnosticCode: diagnostic.code, diagnostic: diagnostic)
     }
   }
 
   public func activeEntitlements() async -> MosaicActiveEntitlementsResult {
-    .active(entitlements)
+    .available(entitlements)
+  }
+
+  private func failureDiagnostic(
+    code: String,
+    fallbackCode: String,
+    operation: String,
+    safeMessage: String,
+    mosaicProductID: String? = nil
+  ) -> MosaicCommerceDiagnostic {
+    diagnosticSequence += 1
+    let safeCode =
+      code.count <= 96
+        && code.range(
+          of: "^[a-z][a-zA-Z0-9]*(?:[._-][a-zA-Z0-9]+)*$",
+          options: .regularExpression
+        ) != nil
+      ? code : fallbackCode
+    return MosaicCommerceDiagnostic(
+      code: safeCode,
+      safeMessage: safeMessage,
+      severity: .error,
+      retryable: false,
+      correlationID: "ios_mock_\(operation)_\(diagnosticSequence)",
+      providerCode: "mock_configured_failure",
+      mosaicProductID: mosaicProductID,
+      recoveryAction: .none
+    )
   }
 }
 

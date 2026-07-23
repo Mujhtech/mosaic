@@ -99,8 +99,8 @@ final class MosaicPreviewPurchaseProvider implements MosaicPurchaseProvider {
   @override
   Future<MosaicRestoreResult> restore() async {
     return switch (state.restoreOutcome) {
-      MosaicPreviewRestoreOutcome.restored => _restored(already: false),
-      MosaicPreviewRestoreOutcome.alreadyEntitled => _restored(already: true),
+      MosaicPreviewRestoreOutcome.restored => _restored(),
+      MosaicPreviewRestoreOutcome.alreadyEntitled => _restored(),
       MosaicPreviewRestoreOutcome.restoreNoPurchases =>
         const MosaicNothingToRestore(),
       MosaicPreviewRestoreOutcome.restoreFailed => const MosaicRestoreFailed(
@@ -109,7 +109,7 @@ final class MosaicPreviewPurchaseProvider implements MosaicPurchaseProvider {
     };
   }
 
-  MosaicRestoreResult _restored({required bool already}) {
+  MosaicRestoreResult _restored() {
     _activeReferenceId ??= _firstAvailableReferenceId();
     final referenceId = _activeReferenceId;
     if (referenceId == null) {
@@ -122,9 +122,7 @@ final class MosaicPreviewPurchaseProvider implements MosaicPurchaseProvider {
     final entitlements = <MosaicEntitlement>{
       MosaicEntitlement(id: reference.productId),
     };
-    return already
-        ? MosaicRestoreAlreadyEntitled(entitlements)
-        : MosaicRestored(entitlements);
+    return MosaicRestored(entitlements);
   }
 
   @override

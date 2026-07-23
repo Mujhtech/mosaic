@@ -2,9 +2,10 @@
 
 The Android SDK strictly decodes Mosaic Protocol 0.2 and renders it with
 Jetpack Compose primitives. Local Preview uses the exact 0.2 contract.
-It uses injected mock commerce, a generated bundled fallback, and Hosted
-Configuration Delivery v1. It does not include accounts, analytics,
-experiments, RevenueCat, or Play Billing.
+It uses provider-neutral commerce, a generated bundled fallback, and Hosted
+Configuration Delivery v1. RevenueCat support is isolated in the optional
+`:mosaic-revenuecat` module; the core `:mosaic` AAR has no RevenueCat or Play
+Billing dependency.
 
 ## Requirements
 
@@ -86,6 +87,7 @@ val diagnostics = MosaicDiagnosticSink { diagnostic ->
 val hosted = Mosaic.configure(
     apiKey = publicSdkKey,
     purchaseProvider = purchaseProvider,
+    applicationId = "application_android",
 ).hostedConfiguration(
     context = applicationContext,
     diagnostics = diagnostics,
@@ -114,6 +116,77 @@ Each request advertises the full sorted Protocol 0.2 capability catalog as
 exact `name@version` pairs for backend compatibility validation.
 Diagnostics contain stable codes and safe messages, never SDK keys, response
 documents, or transport internals.
+
+## Commerce Configuration and providers
+
+`MosaicConfiguredPurchaseProvider` keeps stable Mosaic Product and Entitlement
+IDs independent of provider identifiers. It fails safely until an exact
+Commerce Configuration v1 snapshot associated with the accepted release,
+application, Android platform, and complete Product Reference set is verified.
+The hosted client fetches that sidecar only when the host explicitly calls
+`refreshCommerceConfiguration()`:
+
+```kotlin
+val configuredProvider = MosaicConfiguredPurchaseProvider(providerAdapter)
+val hosted = Mosaic.configure(
+    apiKey = publicSdkKey,
+    purchaseProvider = configuredProvider,
+    applicationId = "application_android",
+).hostedConfiguration(applicationContext)
+
+hosted.refresh()
+hosted.refreshCommerceConfiguration()
+```
+
+The release and sidecar are committed as one cache record. Invalid, stale,
+mismatched, or unavailable sidecars preserve the prior valid pair; accepting a
+new release without a matching sidecar makes provider operations unavailable
+until the matching sidecar arrives. A changed sidecar invalidates every
+provider-native Product handle before it becomes current; purchases remain
+unavailable until the exact new mappings finish loading. Custom integrations
+implement the
+SDK-local `MosaicCommerceProviderAdapter`, including stable `identity`, truthful
+`capabilities`, and a bounded secret-free `diagnostics` list in addition to
+load, purchase, restore, and active-Access operations. They can instead pass an equivalent
+sidecar from their trusted delivery path to
+`hosted.acceptCommerceConfiguration(payload)`.
+Before any mapping becomes active, the configured provider requires the
+sidecar Provider ID and Mosaic adapter version to equal the installed adapter
+and requires exact equality of every `(name, support, reasonCode)` capability
+tuple. The installed adapter is the authority for runtime capabilities;
+sidecar claims cannot upgrade, omit, or otherwise replace them.
+
+For RevenueCat, add the optional `:mosaic-revenuecat` artifact and configure
+RevenueCat in host code exactly once. Pass the already-configured instance to
+Mosaic; the adapter intentionally has no API-key or app-user-ID parameter:
+
+```kotlin
+val configuredProvider = MosaicConfiguredPurchaseProvider(
+    MosaicRevenueCatAdapter(Purchases.sharedInstance) { currentActivity },
+)
+```
+
+Hosted Commerce Configuration `200` responses require the exact v1 media type,
+a strong quoted ETag equal to the decoded body `contentDigest`, and the exact
+`Mosaic-Configuration-Release-Id`. A `304` is accepted only when the SDK still
+holds a fully validated release-sidecar pair and the response repeats both the
+exact retained sidecar digest ETag and Configuration Release ID. Missing, weak,
+malformed, or mismatched validation headers preserve the last valid pair and
+fail revalidation safely.
+
+Commerce Configuration supports exact direct product mappings and exact
+Offering/Package mappings. The adapter normalizes purchase, pending,
+cancelled, already-entitled, unavailable, and failed outcomes; restore and
+active-entitlement results use the same stable Mosaic IDs. Restore exposes
+`restored`, `nothingToRestore`, `cancelled`, `providerUnavailable`, or `failed`;
+active Entitlement lookup exposes exactly `available`, `unknown`,
+`providerUnavailable`, or `failed`. Mosaic never infers an inactive
+Entitlement set from provider failure. Mosaic does not
+cache provider credentials, purchase tokens, or customer data, and diagnostics
+carry a stable code, safe message, retryability, correlation ID, optional safe
+provider code, and recovery action. Provider-failure results reference that
+complete diagnostic instead of exposing raw provider exceptions; secrets never
+appear in either surface.
 
 ## Local Studio preview
 

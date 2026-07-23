@@ -75,15 +75,15 @@ class MosaicLocalPreviewPurchaseProvider : MosaicPurchaseProvider {
         val entitlements = previewEntitlements(current, fallbackToFirstAvailable = true)
         return when (current.state.restoreOutcome) {
             MosaicPreviewRestoreOutcome.RESTORED -> MosaicRestoreResult.Restored(entitlements)
-            MosaicPreviewRestoreOutcome.ALREADY_ENTITLED -> MosaicRestoreResult.AlreadyEntitled(entitlements)
+            MosaicPreviewRestoreOutcome.ALREADY_ENTITLED -> MosaicRestoreResult.Restored(entitlements)
             MosaicPreviewRestoreOutcome.RESTORE_NO_PURCHASES -> MosaicRestoreResult.NothingToRestore
             MosaicPreviewRestoreOutcome.RESTORE_FAILED -> MosaicRestoreResult.Failed("preview.restoreFailed")
         }
     }
 
     override suspend fun activeEntitlements(): MosaicActiveEntitlementsResult {
-        val current = snapshot ?: return MosaicActiveEntitlementsResult.Active(emptySet())
-        return MosaicActiveEntitlementsResult.Active(
+        val current = snapshot ?: return MosaicActiveEntitlementsResult.Available(emptySet())
+        return MosaicActiveEntitlementsResult.Available(
             previewEntitlements(current, fallbackToFirstAvailable = false),
         )
     }
