@@ -21,10 +21,28 @@ const maxRequestBodyBytes = 1 << 20
 type Handler struct{ service *cloudworkspace.Service }
 
 func Routes(service *cloudworkspace.Service, resolver authn.Resolver) http.Handler {
-	handler := &Handler{service: service}
 	router := chi.NewRouter()
-	router.Use(authn.Middleware(resolver))
+	RegisterRoutes(router, service, resolver)
+	return router
+}
 
+func RegisterProjectDetailRoute(router chi.Router, service *cloudworkspace.Service, resolver authn.Resolver) {
+	handler := &Handler{service: service}
+	router.With(authn.Middleware(resolver)).Get("/projects/{projectId}", handler.getProject)
+}
+
+func RegisterRoutes(router chi.Router, service *cloudworkspace.Service, resolver authn.Resolver) {
+	router.Group(func(router chi.Router) {
+		router.Use(authn.Middleware(resolver))
+		RegisterWorkspaceRoutes(router, service)
+		router.Route("/projects/{projectId}", func(router chi.Router) {
+			RegisterProjectRoutes(router, service)
+		})
+	})
+}
+
+func RegisterWorkspaceRoutes(router chi.Router, service *cloudworkspace.Service) {
+	handler := &Handler{service: service}
 	router.Route("/organizations", func(router chi.Router) {
 		router.Get("/", handler.listOrganizations)
 		router.Post("/", handler.createOrganization)
@@ -41,21 +59,6 @@ func Routes(service *cloudworkspace.Service, resolver authn.Resolver) http.Handl
 	router.Route("/projects", func(router chi.Router) {
 		router.Get("/", handler.listProjects)
 		router.Post("/", handler.createProject)
-		router.Route("/{projectId}", func(router chi.Router) {
-			router.Get("/", handler.getProject)
-			router.Patch("/", handler.updateProject)
-			router.Post("/archive", handler.archiveProject)
-			router.Post("/restore", handler.restoreProject)
-			router.Get("/applications", handler.listApplications)
-			router.Post("/applications", handler.createApplication)
-			router.Get("/environments", handler.listEnvironments)
-			router.Get("/plans", handler.listPlans)
-			router.Post("/plans", handler.createPlan)
-			router.Get("/products", handler.listProducts)
-			router.Post("/products", handler.createProduct)
-			router.Get("/entitlements", handler.listEntitlements)
-			router.Post("/entitlements", handler.createEntitlement)
-		})
 	})
 	router.Route("/environments/{environmentId}/api-keys", func(router chi.Router) {
 		router.Get("/", handler.listAPIKeys)
@@ -86,7 +89,23 @@ func Routes(service *cloudworkspace.Service, resolver authn.Resolver) http.Handl
 	})
 	router.Get("/entitlements/{entitlementId}", handler.getEntitlement)
 	router.Patch("/entitlements/{entitlementId}", handler.updateEntitlement)
-	return router
+}
+
+func RegisterProjectRoutes(router chi.Router, service *cloudworkspace.Service) {
+	handler := &Handler{service: service}
+	router.Get("/", handler.getProject)
+	router.Patch("/", handler.updateProject)
+	router.Post("/archive", handler.archiveProject)
+	router.Post("/restore", handler.restoreProject)
+	router.Get("/applications", handler.listApplications)
+	router.Post("/applications", handler.createApplication)
+	router.Get("/environments", handler.listEnvironments)
+	router.Get("/plans", handler.listPlans)
+	router.Post("/plans", handler.createPlan)
+	router.Get("/products", handler.listProducts)
+	router.Post("/products", handler.createProduct)
+	router.Get("/entitlements", handler.listEntitlements)
+	router.Post("/entitlements", handler.createEntitlement)
 }
 
 func actor(r *http.Request) cloudworkspace.Actor {

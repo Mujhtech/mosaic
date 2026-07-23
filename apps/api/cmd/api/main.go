@@ -11,13 +11,21 @@ import (
 
 	"github.com/rs/zerolog"
 
+	"github.com/Mujhtech/mosaic/apps/api/internal/browserauth"
 	"github.com/Mujhtech/mosaic/apps/api/internal/cloudworkspace"
+	"github.com/Mujhtech/mosaic/apps/api/internal/hostedpublishing"
 	"github.com/Mujhtech/mosaic/apps/api/internal/platform/authn"
-	"github.com/Mujhtech/mosaic/apps/api/internal/platform/cloudworkspacememory"
+	"github.com/Mujhtech/mosaic/apps/api/internal/platform/browserauthpostgres"
+	"github.com/Mujhtech/mosaic/apps/api/internal/platform/cloudworkspacepostgres"
 	"github.com/Mujhtech/mosaic/apps/api/internal/platform/config"
+	"github.com/Mujhtech/mosaic/apps/api/internal/platform/database"
+	"github.com/Mujhtech/mosaic/apps/api/internal/platform/hostedpublishingpostgres"
 	"github.com/Mujhtech/mosaic/apps/api/internal/platform/httpserver"
 	"github.com/Mujhtech/mosaic/apps/api/internal/platform/logging"
+	"github.com/Mujhtech/mosaic/apps/api/internal/platform/objectstoreminio"
+	"github.com/Mujhtech/mosaic/apps/api/internal/platform/ratelimit"
 	"github.com/Mujhtech/mosaic/apps/api/internal/platform/telemetry"
+	browserauthhttp "github.com/Mujhtech/mosaic/apps/api/internal/transport/browserauth"
 )
 
 func main() {
@@ -75,15 +83,63 @@ func run() (runErr error) {
 		}
 	}()
 
-	workspaceRepository := cloudworkspacememory.New()
+	databasePool, err := database.Open(runContext, database.Config{
+		URL:            cfg.Database.URL,
+		MaxConnections: cfg.Database.MaxConnections,
+		MinConnections: cfg.Database.MinConnections,
+		ConnectTimeout: cfg.Database.ConnectTimeout,
+	})
+	if err != nil {
+		return fmt.Errorf("initialize database: %w", err)
+	}
+	defer databasePool.Close()
+
+	protocolSchema, err := os.Open(cfg.Protocol.V02SchemaPath)
+	if err != nil {
+		return fmt.Errorf("open canonical Protocol 0.2 schema: %w", err)
+	}
+	protocolValidator, err := hostedpublishing.CompileProtocolValidator(protocolSchema)
+	closeSchemaErr := protocolSchema.Close()
+	if err != nil {
+		return err
+	}
+	if closeSchemaErr != nil {
+		return fmt.Errorf("close canonical Protocol 0.2 schema: %w", closeSchemaErr)
+	}
+
+	objectStore, err := objectstoreminio.New(objectstoreminio.Config{
+		Endpoint: cfg.ObjectStore.Endpoint, AccessKey: cfg.ObjectStore.AccessKey,
+		SecretKey: cfg.ObjectStore.SecretKey, Bucket: cfg.ObjectStore.Bucket, UseTLS: cfg.ObjectStore.UseTLS,
+	})
+	if err != nil {
+		return err
+	}
+	if err := objectStore.Check(runContext); err != nil {
+		return fmt.Errorf("initialize object storage: %w", err)
+	}
+
+	workspaceRepository := cloudworkspacepostgres.New(databasePool)
 	workspaceService := cloudworkspace.NewService(workspaceRepository)
+	browserAuthService := browserauth.NewService(browserauthpostgres.New(databasePool), cfg.BrowserAuth.SessionLifetime)
+	publishingRepository := hostedpublishingpostgres.New(databasePool)
+	publishingService := hostedpublishing.NewService(publishingRepository,
+		hostedpublishing.WithProtocolValidator(protocolValidator),
+		hostedpublishing.WithObjectStore(objectStore, cfg.ObjectStore.PublicAssetBaseURL, cfg.ObjectStore.MaxUploadBytes),
+	)
+	deliveryLimiter := ratelimit.New(cfg.Delivery.RequestsPerMinute, cfg.Delivery.Burst, cfg.Delivery.LimiterEntries)
+	authenticationLimiter := ratelimit.New(cfg.BrowserAuth.RequestsPerMinute, cfg.BrowserAuth.Burst, cfg.BrowserAuth.LimiterEntries)
 	handler := httpserver.NewWithDependencies(httpserver.Config{
 		ServiceName:    cfg.Telemetry.ServiceName,
 		AllowedOrigins: cfg.HTTP.CORSAllowedOrigins,
 		RequestTimeout: cfg.HTTP.HandlerTimeout,
 	}, logger, httpserver.Dependencies{
+		BrowserAuth:       browserAuthService,
+		BrowserAuthConfig: browserauthhttp.Config{CookieSecure: cfg.BrowserAuth.CookieSecure, CookieDomain: cfg.BrowserAuth.CookieDomain, AllowedOrigins: cfg.HTTP.CORSAllowedOrigins, RateLimiter: authenticationLimiter},
 		CloudWorkspace:    workspaceService,
-		PrincipalResolver: authn.AnonymousResolver{},
+		HostedPublishing:  publishingService,
+		PrincipalResolver: authn.NewBrowserSessionResolver(browserAuthService),
+		DeliveryLimiter:   deliveryLimiter,
+		ReadinessChecker:  database.HealthChecker{Pinger: databasePool},
 	})
 
 	server := &http.Server{

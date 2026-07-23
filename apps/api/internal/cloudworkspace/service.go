@@ -276,6 +276,7 @@ func (s *Service) AddMember(ctx context.Context, actor Actor, organizationID, me
 	defer span.End()
 	var result Membership
 	err := s.repository.Transact(ctx, func(tx Transaction) error {
+		tx.LockScope("organization:" + organizationID)
 		if _, ok := tx.Organization(organizationID); !ok {
 			return ErrNotFound
 		}
@@ -316,6 +317,7 @@ func (s *Service) UpdateMember(ctx context.Context, actor Actor, organizationID,
 	defer span.End()
 	var result Membership
 	err := s.repository.Transact(ctx, func(tx Transaction) error {
+		tx.LockScope("organization:" + organizationID)
 		actorRole, err := requireWriter(tx, actor, organizationID)
 		if err != nil {
 			return err
@@ -346,6 +348,7 @@ func (s *Service) RemoveMember(ctx context.Context, actor Actor, organizationID,
 	ctx, span := s.operation(ctx, "member.remove", actor, attribute.String("mosaic.organization.id", organizationID))
 	defer span.End()
 	err := s.repository.Transact(ctx, func(tx Transaction) error {
+		tx.LockScope("organization:" + organizationID)
 		actorRole, err := requireWriter(tx, actor, organizationID)
 		if err != nil {
 			return err

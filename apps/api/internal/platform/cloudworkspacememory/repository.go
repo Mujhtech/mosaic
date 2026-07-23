@@ -29,6 +29,7 @@ type state struct {
 	entitlements  map[string]cloudworkspace.Entitlement
 	planProducts  map[string]cloudworkspace.PlanProduct
 	productGrants map[string]cloudworkspace.ProductEntitlementGrant
+	replacements  []cloudworkspace.ProductReplacementHistory
 	mappings      map[string]cloudworkspace.ProviderProductMapping
 	auditEvents   map[string]cloudworkspace.AuditEvent
 }
@@ -97,6 +98,7 @@ func (s *state) clone() *state {
 	copyMap(cloned.entitlements, s.entitlements)
 	copyMap(cloned.planProducts, s.planProducts)
 	copyMap(cloned.productGrants, s.productGrants)
+	cloned.replacements = append(cloned.replacements, s.replacements...)
 	copyMap(cloned.mappings, s.mappings)
 	for key, event := range s.auditEvents {
 		event.Metadata = cloneMetadata(event.Metadata)
@@ -195,6 +197,15 @@ func (r reader) PlanProducts(planID string) []cloudworkspace.PlanProduct {
 func (r reader) ProductGrants(productID string) []cloudworkspace.ProductEntitlementGrant {
 	return filteredSorted(r.state.productGrants, func(value cloudworkspace.ProductEntitlementGrant) bool { return value.ProductID == productID }, func(value cloudworkspace.ProductEntitlementGrant) string { return value.EntitlementID })
 }
+func (r reader) ProductReplacementHistory(productID string) []cloudworkspace.ProductReplacementHistory {
+	values := make([]cloudworkspace.ProductReplacementHistory, 0)
+	for _, value := range r.state.replacements {
+		if value.ProductID == productID || value.ReplacementProductID == productID {
+			values = append(values, value)
+		}
+	}
+	return values
+}
 func (r reader) ProviderMappings(productID string) []cloudworkspace.ProviderProductMapping {
 	return filteredSorted(r.state.mappings, func(value cloudworkspace.ProviderProductMapping) bool { return value.ProductID == productID }, func(value cloudworkspace.ProviderProductMapping) string { return value.ID })
 }
@@ -207,6 +218,10 @@ func (r reader) AuditEvents(organizationID string) []cloudworkspace.AuditEvent {
 }
 
 type transaction struct{ reader }
+
+// LockScope is a no-op because the in-memory repository already holds its
+// process-wide write mutex for the complete application transaction.
+func (tx transaction) LockScope(string) {}
 
 func (tx transaction) NextID(prefix string) string {
 	tx.state.sequence[prefix]++
@@ -247,6 +262,9 @@ func (tx transaction) DeletePlanProduct(planID, productID string) {
 func grantKey(productID, entitlementID string) string { return productID + "\x00" + entitlementID }
 func (tx transaction) SaveProductGrant(value cloudworkspace.ProductEntitlementGrant) {
 	tx.state.productGrants[grantKey(value.ProductID, value.EntitlementID)] = value
+}
+func (tx transaction) SaveProductReplacement(value cloudworkspace.ProductReplacementHistory) {
+	tx.state.replacements = append(tx.state.replacements, value)
 }
 func (tx transaction) DeleteProductGrant(productID, entitlementID string) {
 	delete(tx.state.productGrants, grantKey(productID, entitlementID))

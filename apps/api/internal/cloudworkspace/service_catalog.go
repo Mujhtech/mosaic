@@ -243,6 +243,11 @@ func (s *Service) UpdateProduct(ctx context.Context, actor Actor, productID, key
 		if err != nil {
 			return err
 		}
+		tx.LockScope("project:" + project.ID)
+		product, project, err = productScope(tx, actor, productID, true)
+		if err != nil {
+			return err
+		}
 		if product.Status == ProductArchived {
 			return ErrResourceArchived
 		}
@@ -295,6 +300,11 @@ func (s *Service) setProductArchived(ctx context.Context, actor Actor, productID
 		if err != nil {
 			return err
 		}
+		tx.LockScope("project:" + project.ID)
+		product, project, err = productScope(tx, actor, productID, true)
+		if err != nil {
+			return err
+		}
 		now := s.now()
 		if archived {
 			for _, candidate := range tx.Products(product.ProjectID) {
@@ -334,6 +344,11 @@ func (s *Service) SetProductReplacement(ctx context.Context, actor Actor, produc
 		if err != nil {
 			return err
 		}
+		tx.LockScope("project:" + project.ID)
+		product, project, err = productScope(tx, actor, productID, true)
+		if err != nil {
+			return err
+		}
 		replacement, ok := tx.Product(replacementID)
 		if !ok || !replacementChainValid(tx, product, replacement) {
 			return ErrReplacementInvalid
@@ -341,6 +356,7 @@ func (s *Service) SetProductReplacement(ctx context.Context, actor Actor, produc
 		product.ReplacementProductID, product.UpdatedAt = replacementID, s.now()
 		product = withReadiness(tx, product)
 		tx.SaveProduct(product)
+		tx.SaveProductReplacement(ProductReplacementHistory{ProjectID: project.ID, ProductID: product.ID, ReplacementProductID: replacementID, ChangedAt: product.UpdatedAt})
 		s.audit(tx, actor, project.OrganizationID, project.ID, "", "product.replacement_set", "product", product.ID, map[string]string{"replacementProductId": replacementID})
 		result = product
 		return nil
@@ -647,6 +663,14 @@ func productUsage(reader Reader, product Product) ProductUsage {
 			usage.HistoricalReferences = append(usage.HistoricalReferences, "replacement_target:"+candidate.ID)
 		}
 	}
+	for _, history := range reader.ProductReplacementHistory(product.ID) {
+		if history.ProductID == product.ID {
+			usage.HistoricalReferences = append(usage.HistoricalReferences, "replacement_history_source:"+history.ReplacementProductID)
+		}
+		if history.ReplacementProductID == product.ID {
+			usage.HistoricalReferences = append(usage.HistoricalReferences, "replacement_history_target:"+history.ProductID)
+		}
+	}
 	return usage
 }
 
@@ -672,6 +696,11 @@ func (s *Service) DeleteProduct(ctx context.Context, actor Actor, productID stri
 	defer span.End()
 	err := s.repository.Transact(ctx, func(tx Transaction) error {
 		product, project, err := productScope(tx, actor, productID, true)
+		if err != nil {
+			return err
+		}
+		tx.LockScope("project:" + project.ID)
+		product, project, err = productScope(tx, actor, productID, true)
 		if err != nil {
 			return err
 		}
