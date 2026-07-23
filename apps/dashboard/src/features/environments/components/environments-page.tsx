@@ -45,7 +45,7 @@ export function EnvironmentsPage({ organizationId, projectId }: EnvironmentsPage
 
   return (
     <WorkspacePage
-      description="Environments isolate runtime credentials now and hosted configuration in Gate 3B."
+      description="Environments isolate runtime credentials, hosted Drafts, Placements, and published configuration."
       title="Environments"
     >
       <HostedResourceBoundary state={state}>
@@ -55,7 +55,7 @@ export function EnvironmentsPage({ organizationId, projectId }: EnvironmentsPage
         >
           <ul className="grid gap-3 md:grid-cols-3">
             {items.map((environment) => (
-              <li className="rounded-xl border p-4" key={environment.id}>
+              <li className="rounded border p-4" key={environment.id}>
                 <p className="font-semibold">{environment.name}</p>
                 <p className="text-muted-foreground mt-1 font-mono text-xs">{environment.key}</p>
               </li>

@@ -19,7 +19,7 @@ export function ErrorState({
   return (
     <section
       className={cn(
-        "border-destructive/20 bg-destructive/5 flex min-h-48 flex-col items-start justify-center rounded-xl border p-6",
+        "border-destructive/20 bg-destructive/5 flex min-h-48 flex-col items-start justify-center rounded border p-6",
         className,
       )}
       role="alert"

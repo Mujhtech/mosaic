@@ -145,7 +145,7 @@ export function PreviewNode(props: PreviewNodeProps) {
           }}
         >
           {node.children.length === 0 ? (
-            <div className="border-border text-muted-foreground w-full rounded-lg border border-dashed p-3 text-center text-xs">
+            <div className="border-border text-muted-foreground w-full rounded border border-dashed p-3 text-center text-xs">
               Empty Stack
             </div>
           ) : (
@@ -316,7 +316,7 @@ export function PreviewNode(props: PreviewNodeProps) {
             </span>
           ) : null}
           {availableCards.length === 0 ? (
-            <p className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
+            <p className="rounded border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
               {resolveLocalizedText(document, node.unavailableFallback.message, locale)}
             </p>
           ) : (

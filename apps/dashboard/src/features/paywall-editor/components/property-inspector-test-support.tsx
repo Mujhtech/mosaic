@@ -210,15 +210,18 @@ export function expectReadOnlyField(componentId: string, address: string, value:
   expect(field).toHaveValue(value)
 }
 
-export function expectOnlySectionOpen(title: string) {
+export function expectSectionsOpen(...titles: string[]) {
   const sections = Array.from(
     document.querySelectorAll<HTMLDetailsElement>("[data-inspector-section]"),
   )
+  const openTitles = new Set(titles)
   expect(sections.length).toBeGreaterThan(1)
   for (const section of sections) {
-    expect(section.open).toBe(section.dataset.inspectorSection === title)
+    expect(section.open).toBe(openTitles.has(section.dataset.inspectorSection ?? ""))
   }
-  expect(getInspectorSection("Advanced")).not.toHaveAttribute("open")
+  if (!openTitles.has("Advanced")) {
+    expect(getInspectorSection("Advanced")).not.toHaveAttribute("open")
+  }
 }
 
 export function renderedPropertyAddresses() {

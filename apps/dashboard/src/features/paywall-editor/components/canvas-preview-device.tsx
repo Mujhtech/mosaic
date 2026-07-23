@@ -556,7 +556,7 @@ export function CanvasPreviewDevice({
               />
             ) : null}
             {rootHidden ? (
-              <div className="m-auto max-w-xs rounded-xl border border-dashed border-slate-300 p-5 text-center text-sm opacity-70">
+              <div className="m-auto max-w-xs rounded border border-dashed border-slate-300 p-5 text-center text-sm opacity-70">
                 Content Stack is hidden on the canvas. Show it from Layers to preview its content.
               </div>
             ) : (

@@ -11,7 +11,6 @@ import { Field, FieldDescription, FieldLabel } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
 import { HostedResourceBoundary } from "@/features/auth/components/hosted-resource-boundary"
 import { resolveHostedQueryState } from "@/features/auth/types/hosted-query-state"
-import { CatalogTabs } from "@/features/catalog/components/catalog-tabs"
 import {
   createProviderPlaceholderMutationOptions,
   grantEntitlementMutationOptions,
@@ -171,7 +170,6 @@ export function ProductDetailPage({
       eyebrow="Catalog · Product"
       title={product.data?.internalName ?? "Product"}
     >
-      <CatalogTabs organizationId={organizationId} projectId={projectId} />
       <HostedResourceBoundary state={state}>
         <div className="grid gap-4 md:grid-cols-3">
           <Metric label="Status" value={product.data?.status.replaceAll("_", " ") ?? "—"} />
@@ -264,7 +262,7 @@ export function ProductDetailPage({
         </WorkflowPanel>
 
         <WorkflowPanel
-          description="Mappings are non-operative placeholders. They do not connect, validate, import, or synchronize provider data; continue using Mock metadata until Phase 4."
+          description="Mappings are non-operative placeholders. They do not connect, validate, import, or synchronize provider data; continue using Mock metadata until a billing provider is connected."
           title="Provider placeholders"
         >
           <ul className="mb-4 divide-y">
@@ -305,7 +303,7 @@ export function ProductDetailPage({
                 <Field>
                   <FieldLabel htmlFor="mapping-provider">Provider label</FieldLabel>
                   <select
-                    className="border-input bg-background h-9 rounded-md border px-3 text-sm"
+                    className="border-input bg-background h-9 rounded border px-3 text-sm"
                     id="mapping-provider"
                     onChange={(event) =>
                       field.handleChange(event.target.value as typeof field.state.value)
@@ -366,7 +364,7 @@ export function ProductDetailPage({
             </Button>
           )}
           {showLifecycle && !isArchived ? (
-            <div className="border-border bg-muted/35 mt-4 rounded-lg border p-4">
+            <div className="border-border bg-muted/35 mt-4 rounded border p-4">
               <p className="text-sm font-semibold">
                 {usageCount > 0
                   ? `This Product has ${usageCount} usage reference(s). Choose a replacement before archiving.`
@@ -376,7 +374,7 @@ export function ProductDetailPage({
                 <label className="mt-3 flex max-w-md flex-col gap-2 text-sm font-medium">
                   Replacement Product
                   <select
-                    className="border-input bg-background h-9 rounded-md border px-3"
+                    className="border-input bg-background h-9 rounded border px-3"
                     onChange={(event) => setSelectedReplacementId(event.target.value || null)}
                     value={effectiveReplacementId ?? ""}
                   >
@@ -452,7 +450,7 @@ export function ProductDetailPage({
 
 function Metric({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-xl border p-4">
+    <div className="rounded border p-4">
       <p className="text-muted-foreground text-xs font-medium uppercase">{label}</p>
       <p className="mt-2 text-sm font-semibold capitalize">{value}</p>
     </div>

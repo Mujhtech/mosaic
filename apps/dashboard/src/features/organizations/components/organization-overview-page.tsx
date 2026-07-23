@@ -99,7 +99,7 @@ export function OrganizationOverviewPage({
         <WorkflowPanel title={projectStatus === "active" ? "Active Projects" : "Archived Projects"}>
           <ul className="grid gap-3 md:grid-cols-2">
             {projectItems.map((project) => (
-              <li className="rounded-xl border p-4" key={project.id}>
+              <li className="rounded border p-4" key={project.id}>
                 <p className="font-semibold">{project.name}</p>
                 <p className="text-muted-foreground mt-1 font-mono text-xs">{project.key}</p>
                 <Link

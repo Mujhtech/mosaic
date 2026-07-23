@@ -1,6 +1,6 @@
 import { DownloadSimpleIcon } from "@phosphor-icons/react/dist/ssr/DownloadSimple"
 import { StatusMessage } from "@mosaic/design-system"
-import { lazy, Suspense, useRef, useState } from "react"
+import { lazy, Suspense, useCallback, useRef, useState } from "react"
 
 import { Button } from "@/components/ui/button"
 import { PreviewCanvas } from "@/features/paywall-editor/components/preview-canvas"
@@ -27,6 +27,7 @@ import {
   useEditorActions,
   useEditorStoreSelector,
 } from "@/features/paywall-editor/stores/editor-store-context"
+import { useStudioSource } from "@/features/paywall-editor/stores/use-studio-source"
 import {
   useStudioWorkspaceActions,
   useStudioWorkspaceSelector,
@@ -41,6 +42,13 @@ import {
   focusDocumentValidationIssue,
   focusInspectorValidationIssue,
 } from "@/features/paywall-editor/utils/property-inspector-navigation"
+import { HostedDraftConflict } from "@/features/paywalls/components/hosted-draft-conflict"
+import { useHostedDraftAutosave } from "@/features/paywalls/hooks/use-hosted-draft-autosave"
+import { useHostedDraftRecovery } from "@/features/paywalls/hooks/use-hosted-draft-recovery"
+import { serializeHostedRecoveryDocument } from "@/features/paywalls/mutations/hosted-draft-recovery"
+import { useHostedDraftSession } from "@/features/paywalls/stores/use-hosted-draft-session"
+import { HostedPublishPanel } from "@/features/publishing/components/hosted-publish-panel"
+import { hostedStudioBackHref } from "@/features/paywall-editor/types/studio-source"
 
 const selectDocument = (state: EditorState) => state.document
 const selectEditableDocumentId = (state: EditorState) => state.editableDocumentId
@@ -83,22 +91,63 @@ export function EditorShell({
   onPurchaseStateChange,
   onImport,
 }: EditorShellProps) {
+  const source = useStudioSource()
+  const hostedSession = useHostedDraftSession()
   const workspaceControllerRef = useRef<StudioResizableWorkspaceHandle | null>(null)
   const importInputRef = useRef<HTMLInputElement | null>(null)
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false)
+  const [publishReviewOpen, setPublishReviewOpen] = useState(false)
   const document = useEditorStoreSelector(selectDocument)
   const editableDocumentId = useEditorStoreSelector(selectEditableDocumentId)
   const currentLocale = useEditorStoreSelector(selectCurrentLocale)
   const textScale = useEditorStoreSelector(selectTextScale)
   const localRevisionSequence = useEditorStoreSelector(selectLocalRevisionSequence)
   const canvasAppearance = useStudioWorkspaceSelector(selectCanvasAppearance)
-  const { setLocalRevisionSequence } = useEditorActions()
+  const editor = useEditorActions()
   const workspaceActions = useStudioWorkspaceActions()
   const { canUndo, canRedo, undo, redo } = useEditorHistory()
   const validation = useEditorValidation()
   const { selectComponent } = useEditorSelection()
-  const autosave = useDraftAutosaveController(mockPurchaseState, mockProducts)
+  const localAutosave = useDraftAutosaveController(
+    mockPurchaseState,
+    mockProducts,
+    source.kind === "local",
+  )
+  const onHostedSaved = useCallback(
+    (saved: NonNullable<typeof hostedSession>["draft"]) => {
+      hostedSession?.acceptSavedDraft(saved)
+      editor.markSaved(saved.document.revision)
+    },
+    [editor, hostedSession],
+  )
+  const hostedAutosave = useHostedDraftAutosave({
+    document,
+    draftId: source.kind === "hosted" ? source.draftId : "local",
+    enabled: source.kind === "hosted" && !!hostedSession,
+    initialDocument: hostedSession?.draft.document ?? null,
+    initialRevision: hostedSession?.draft.revision ?? 0,
+    onSaved: onHostedSaved,
+    saveDraft:
+      hostedSession?.saveDraft ??
+      (() => Promise.reject(new Error("Hosted Draft session unavailable"))),
+  })
+  const autosave = source.kind === "local" ? localAutosave : hostedAutosave
+  const recovery = useHostedDraftRecovery({
+    document,
+    expectedRevision: hostedSession?.draft.revision ?? 0,
+    scope:
+      source.kind === "hosted"
+        ? {
+            draftId: source.draftId,
+            environmentId: source.environmentId,
+            paywallId: source.paywallId,
+            projectId: source.projectId,
+          }
+        : null,
+    status: hostedAutosave.status,
+  })
   const viewportMode = useStudioViewportMode()
+  const hostedEnvironmentName = source.kind === "hosted" ? source.environmentName : undefined
   useEditorKeyboardShortcuts({
     onFitCanvas: () => workspaceActions.setCanvasPreference("fitMode", "fit"),
     onOpenCommandPalette: () => setCommandPaletteOpen(true),
@@ -126,7 +175,7 @@ export function EditorShell({
     mockPurchaseState,
     mockProducts,
     initialRevisionSequence: localRevisionSequence,
-    onRevisionDispatched: setLocalRevisionSequence,
+    onRevisionDispatched: editor.setLocalRevisionSequence,
   })
 
   if (!document) return null
@@ -160,6 +209,14 @@ export function EditorShell({
     }
 
     downloadStudioDocument(activeDocument.id, serializeDocument(activeDocument))
+  }
+
+  function exportRecoveryDocument() {
+    recovery.persist(hostedAutosave.conflict ? "conflict" : "unsaved")
+    downloadStudioDocument(
+      `${activeDocument.id}-recovery`,
+      `${JSON.stringify(activeDocument, null, 2)}\n`,
+    )
   }
 
   function openPreviewConnections() {
@@ -207,9 +264,82 @@ export function EditorShell({
         </span>
       </div>
       <div className="h-[calc(100%-2rem)] overflow-y-auto p-4">
+        {hostedAutosave.conflict ? (
+          <div className="mb-4">
+            <HostedDraftConflict
+              conflict={hostedAutosave.conflict}
+              onExportLocal={exportRecoveryDocument}
+              onInspectLatest={() =>
+                hostedSession?.fetchLatestDraft() ??
+                Promise.reject(new Error("Hosted Draft session unavailable"))
+              }
+              onReconcile={(latest) => {
+                recovery.persist("conflict")
+                hostedSession?.acceptSavedDraft(latest)
+                hostedAutosave.reconcileWithLatest(latest)
+              }}
+              onReloadLatest={(latest) => {
+                recovery.persist("conflict")
+                hostedAutosave.reloadLatest(latest)
+                hostedSession?.acceptSavedDraft(latest)
+                editor.openHostedDraft(latest.document, latest.id)
+              }}
+            />
+          </div>
+        ) : null}
+        {source.kind === "hosted" && recovery.record && !hostedAutosave.conflict ? (
+          <StatusMessage
+            className="border-border bg-muted/35 mb-4 rounded border p-3 text-sm"
+            tone="warning"
+          >
+            <p className="font-semibold">A browser recovery copy is available</p>
+            <p className="text-muted-foreground mt-1 leading-6">
+              Mosaic preserved edits from {new Date(recovery.record.savedAt).toLocaleString()}.
+              Restore them to the canvas or download them before dismissing this copy.
+            </p>
+            <div className="mt-3 flex flex-wrap gap-2">
+              <Button
+                onClick={() =>
+                  editor.openHostedDraft(recovery.record!.document, recovery.record!.draftId)
+                }
+                size="sm"
+                type="button"
+              >
+                Restore recovered edits
+              </Button>
+              <Button
+                onClick={() =>
+                  downloadStudioDocument(
+                    `${recovery.record!.document.id}-recovery`,
+                    serializeHostedRecoveryDocument(recovery.record!),
+                  )
+                }
+                size="sm"
+                type="button"
+                variant="outline"
+              >
+                Download recovery copy
+              </Button>
+              <Button onClick={recovery.clear} size="sm" type="button" variant="ghost">
+                Dismiss copy
+              </Button>
+            </div>
+          </StatusMessage>
+        ) : null}
+        {source.kind === "hosted" && publishReviewOpen ? (
+          <div className="mb-4">
+            <HostedPublishPanel
+              environmentId={source.environmentId}
+              environmentName={hostedEnvironmentName ?? "Selected Environment"}
+              organizationId={source.organizationId}
+              paywallId={source.paywallId}
+              projectId={source.projectId}
+            />
+          </div>
+        ) : null}
         {importError ? (
           <StatusMessage
-            className="border-destructive/25 bg-destructive/5 mb-4 rounded-lg border p-3 text-sm"
+            className="border-destructive/25 bg-destructive/5 mb-4 rounded border p-3 text-sm"
             tone="danger"
           >
             <p className="font-semibold">Import was not applied</p>
@@ -238,20 +368,43 @@ export function EditorShell({
   )
 
   return (
-    <div className="bg-background flex h-full min-h-0 flex-col" data-testid="studio-editor-shell">
+    <div
+      className="bg-background flex h-full min-h-0 flex-col"
+      data-studio-mode={source.kind}
+      data-testid="studio-editor-shell"
+    >
       <StudioToolbar
         autosave={autosave}
         canRedo={canRedo}
         canUndo={canUndo}
         documentIdentity={document.id}
-        onBack={autosave.flush}
+        backHref={source.kind === "hosted" ? hostedStudioBackHref(source) : "/foundation"}
+        backLabel={source.kind === "hosted" ? "Paywall" : "Foundation"}
+        environmentLabel={
+          source.kind === "hosted" ? `Environment · ${hostedEnvironmentName}` : undefined
+        }
+        mode={source.kind}
+        onBack={source.kind === "hosted" ? recovery.prepareNavigation : autosave.flush}
+        onConnectHosted={source.kind === "local" ? autosave.flush : undefined}
         onExport={exportDocument}
         onOpenPreviewConnections={openPreviewConnections}
+        onPublish={
+          source.kind === "hosted"
+            ? () => {
+                setPublishReviewOpen(true)
+                workspaceControllerRef.current?.expand("diagnostics")
+              }
+            : undefined
+        }
         onRequestImport={() => importInputRef.current?.click()}
         onRedo={redo}
         onUndo={undo}
         previewClientCount={preview.aggregate.total}
         previewSummary={preview.aggregate.label}
+        publishDisabled={
+          !validation.isValid ||
+          ["conflict", "failed", "offline", "saving", "unsaved"].includes(autosave.status)
+        }
       />
       <input
         ref={importInputRef}

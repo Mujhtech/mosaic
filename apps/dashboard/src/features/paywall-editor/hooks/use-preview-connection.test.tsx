@@ -127,21 +127,6 @@ function connected(
   )
 }
 
-function legacyCapability(clientId: string, sequence: number) {
-  return envelope(
-    "capabilityReport",
-    {
-      clientId,
-      supportedSchemaVersions: ["0.1"],
-      supportedCapabilities: [{ name: "component.text", version: "0.1" }],
-      previewCapabilities: [{ name: "preview.liveUpdate", version: "0.1" }],
-      limits: { maxDocumentBytes: 1_048_576 },
-    },
-    sequence,
-    "0.1",
-  )
-}
-
 function capability(
   document: MosaicDocument,
   clientId: string,
@@ -358,10 +343,7 @@ describe("preview connection", () => {
     const firstSocket = FakeWebSocket.instances[0]
     expect(firstSocket).toBeDefined()
     expect(firstSocket?.url).toContain(`sessionId=${SESSION_ID}`)
-    expect(firstSocket?.requestedProtocol).toEqual([
-      "mosaic.local-preview.v0.2",
-      "mosaic.local-preview.v0.1",
-    ])
+    expect(firstSocket?.requestedProtocol).toEqual(["mosaic.local-preview.v0.2"])
 
     await act(async () => firstSocket?.open())
     expect(firstSocket?.sent).toEqual([])
@@ -486,7 +468,7 @@ describe("preview connection", () => {
     expect(socket?.sent).toEqual([])
   })
 
-  it("negotiates 0.1 with an older endpoint and withholds the 0.2 draft", async () => {
+  it("rejects an endpoint that only negotiates the retired 0.1 protocol", async () => {
     const document = cloneValue(EDITOR_TEMPLATES[0]!.document)
     const observed: { current?: ReturnType<typeof usePreviewConnection> } = {}
 
@@ -505,28 +487,13 @@ describe("preview connection", () => {
 
     render(<Harness />)
     const socket = FakeWebSocket.instances[0]
+    expect(socket?.requestedProtocol).toEqual(["mosaic.local-preview.v0.2"])
     await act(async () => socket?.open("mosaic.local-preview.v0.1"))
-    await act(async () => {
-      socket?.receive(connected("client_legacy", 1, "0.1"))
-      socket?.receive(legacyCapability("client_legacy", 2))
-      await Promise.resolve()
-    })
 
+    expect(socket?.readyState).toBe(FakeWebSocket.CLOSED)
     expect(socket?.sent).toEqual([])
     expect(observed.current?.diagnostics).toContainEqual(
-      expect.objectContaining({ code: "preview.incompatibleSchemaVersion" }),
-    )
-
-    await act(async () => {
-      socket?.receive(heartbeat("client_legacy", 3, "0.1"))
-      await Promise.resolve()
-    })
-
-    expect(socket?.sent).toContainEqual(
-      expect.objectContaining({
-        previewProtocolVersion: "0.1",
-        type: "previewHeartbeat",
-      }),
+      expect.objectContaining({ code: "preview.noMutualVersion" }),
     )
   })
 

@@ -270,7 +270,7 @@ function TokenPalette({
                 <button
                   aria-pressed={selected}
                   className={cn(
-                    "hover:bg-muted focus-visible:ring-ring/40 flex min-w-0 items-center gap-2 rounded-lg border px-2 py-2 text-left text-xs outline-none focus-visible:ring-2 active:scale-[0.98] motion-reduce:transform-none",
+                    "hover:bg-muted focus-visible:ring-ring/40 flex min-w-0 items-center gap-2 rounded border px-2 py-2 text-left text-xs outline-none focus-visible:ring-2 active:scale-[0.98] motion-reduce:transform-none",
                     selected ? "border-primary bg-primary/8" : "border-transparent",
                   )}
                   disabled={disabled}
@@ -301,7 +301,7 @@ function TokenPalette({
               <button
                 aria-pressed={selected}
                 className={cn(
-                  "hover:bg-muted focus-visible:ring-ring/40 flex min-w-0 items-center gap-2 rounded-lg border px-2 py-2 text-left text-xs transition-colors outline-none focus-visible:ring-2 active:scale-[0.98] motion-reduce:transform-none",
+                  "hover:bg-muted focus-visible:ring-ring/40 flex min-w-0 items-center gap-2 rounded border px-2 py-2 text-left text-xs transition-colors outline-none focus-visible:ring-2 active:scale-[0.98] motion-reduce:transform-none",
                   selected ? "border-primary bg-primary/8" : "border-transparent",
                 )}
                 disabled={disabled}
@@ -397,7 +397,7 @@ function CustomColorPicker({
         aria-valuemin={0}
         aria-valuenow={Math.round(hsv.saturation * 100)}
         aria-valuetext={`Saturation ${Math.round(hsv.saturation * 100)}%, brightness ${Math.round(hsv.value * 100)}%`}
-        className="focus-visible:ring-ring/50 relative h-36 cursor-crosshair touch-none overflow-hidden rounded-lg border border-black/10 outline-none focus-visible:ring-2"
+        className="focus-visible:ring-ring/50 relative h-36 cursor-crosshair touch-none overflow-hidden rounded border border-black/10 outline-none focus-visible:ring-2"
         onBlur={onCommit}
         onKeyDown={keyboardPlane}
         onKeyUp={(event) => {
@@ -446,7 +446,7 @@ function CustomColorPicker({
 
       <div className="flex items-center gap-2.5">
         <label
-          className="hover:bg-muted focus-within:ring-ring/40 flex size-7 shrink-0 cursor-pointer items-center justify-center rounded-md focus-within:ring-2"
+          className="hover:bg-muted focus-within:ring-ring/40 flex size-7 shrink-0 cursor-pointer items-center justify-center rounded focus-within:ring-2"
           title="Open system colour picker"
         >
           <EyedropperIcon aria-hidden className="size-4" />
@@ -516,7 +516,7 @@ function CustomColorPicker({
         </div>
       </div>
 
-      <div className="border-input bg-background focus-within:border-ring focus-within:ring-ring/30 flex h-8 overflow-hidden rounded-md border focus-within:ring-2">
+      <div className="border-input bg-background focus-within:border-ring focus-within:ring-ring/30 flex h-8 overflow-hidden rounded border focus-within:ring-2">
         <span className="text-muted-foreground flex w-12 shrink-0 items-center justify-center border-r text-[10px] font-semibold tracking-wide">
           HEX
         </span>
@@ -594,7 +594,7 @@ export function InspectorColorControl({
     >
       <div
         className={cn(
-          "border-input bg-background focus-within:border-ring focus-within:ring-ring/30 flex h-8 min-w-0 overflow-hidden rounded-md border focus-within:ring-2",
+          "border-input bg-background focus-within:border-ring focus-within:ring-ring/30 flex h-8 min-w-0 overflow-hidden rounded border focus-within:ring-2",
           invalid && "border-destructive ring-destructive/20",
           disabled && "cursor-not-allowed opacity-60",
         )}
@@ -685,12 +685,12 @@ export function InspectorColorControl({
           Choose a Mosaic semantic token or define a custom RGBA colour.
         </PopoverDescription>
         <div className="border-border flex items-center justify-between border-b px-2 py-2">
-          <div className="bg-muted flex rounded-lg p-0.5" role="tablist">
+          <div className="bg-muted flex rounded p-0.5" role="tablist">
             {(["custom", "tokens"] as const).map((candidate) => (
               <button
                 aria-selected={panel === candidate}
                 className={cn(
-                  "focus-visible:ring-ring/40 rounded-md px-3 py-1.5 text-xs font-medium capitalize transition-colors outline-none focus-visible:ring-2",
+                  "focus-visible:ring-ring/40 rounded px-3 py-1.5 text-xs font-medium capitalize transition-colors outline-none focus-visible:ring-2",
                   panel === candidate
                     ? "bg-primary text-primary-foreground shadow-sm"
                     : "text-muted-foreground hover:text-foreground",

@@ -7,7 +7,6 @@ import { Field, FieldDescription, FieldLabel } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
 import { HostedResourceBoundary } from "@/features/auth/components/hosted-resource-boundary"
 import { resolveHostedQueryState } from "@/features/auth/types/hosted-query-state"
-import { CatalogTabs } from "@/features/catalog/components/catalog-tabs"
 import { createProductMutationOptions } from "@/features/catalog/mutations/catalog-mutations"
 import { productsQueryOptions, type ProductFilters } from "@/features/catalog/queries/catalog-query"
 import { WorkspacePage, WorkflowPanel } from "@/features/organizations/components/workspace-page"
@@ -83,11 +82,10 @@ export function ProductsPage({
 
   return (
     <WorkspacePage
-      description="Products are stable provider-neutral purchase options. Mock metadata remains explicit until Phase 4."
+      description="Products are stable provider-neutral purchase options. Mock metadata remains explicit until a billing provider is connected."
       eyebrow="Catalog · Project-wide"
       title="Products"
     >
-      <CatalogTabs organizationId={organizationId} projectId={projectId} />
       <WorkflowPanel title="Filters">
         <div className="grid gap-3 sm:grid-cols-3">
           <label className="text-sm font-medium">
@@ -104,7 +102,7 @@ export function ProductsPage({
           <label className="text-sm font-medium">
             Status
             <select
-              className="border-input bg-background mt-2 h-9 w-full rounded-md border px-3"
+              className="border-input bg-background mt-2 h-9 w-full rounded border px-3"
               onChange={(event) =>
                 onFiltersChange({
                   ...filters,
@@ -122,7 +120,7 @@ export function ProductsPage({
           <label className="text-sm font-medium">
             Type
             <select
-              className="border-input bg-background mt-2 h-9 w-full rounded-md border px-3"
+              className="border-input bg-background mt-2 h-9 w-full rounded border px-3"
               onChange={(event) =>
                 onFiltersChange({
                   ...filters,
@@ -165,7 +163,7 @@ export function ProductsPage({
       </HostedResourceBoundary>
       {canManageProducts ? (
         <WorkflowPanel
-          description="Provider connection and metadata synchronization arrive in Phase 4."
+          description="Provider connection and metadata synchronization are not enabled yet."
           title="Create Product"
         >
           <form
@@ -207,7 +205,7 @@ export function ProductsPage({
                 <Field>
                   <FieldLabel htmlFor="product-type">Type</FieldLabel>
                   <select
-                    className="border-input bg-background h-9 rounded-md border px-3"
+                    className="border-input bg-background h-9 rounded border px-3"
                     id="product-type"
                     onChange={(event) =>
                       field.handleChange(

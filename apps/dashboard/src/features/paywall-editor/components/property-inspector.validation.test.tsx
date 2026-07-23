@@ -10,7 +10,7 @@ import { getInspectorFieldId } from "@/features/paywall-editor/utils/property-in
 import {
   InspectorHarness,
   documentWithBlock,
-  expectOnlySectionOpen,
+  expectSectionsOpen,
   expectReadOnlyField,
   getInspectorSection,
   openInspectorSection,
@@ -28,7 +28,6 @@ describe("property inspector safety", () => {
       0,
       [
         "Layout",
-        "Size",
         "Spacing",
         "Background",
         "Shadow",
@@ -44,7 +43,7 @@ describe("property inspector safety", () => {
       [
         "Content",
         "Typography",
-        "Size",
+        "Layout",
         "Spacing",
         "Background",
         "Shadow",
@@ -61,7 +60,7 @@ describe("property inspector safety", () => {
       [
         "Content",
         "Typography",
-        "Size",
+        "Layout",
         "Spacing",
         "Background",
         "Shadow",
@@ -78,7 +77,7 @@ describe("property inspector safety", () => {
       [
         "Content",
         "Typography",
-        "Size",
+        "Layout",
         "Spacing",
         "Background",
         "Shadow",
@@ -95,7 +94,6 @@ describe("property inspector safety", () => {
       [
         "Product Cards",
         "Layout",
-        "Size",
         "Spacing",
         "Background",
         "Shadow",
@@ -113,7 +111,6 @@ describe("property inspector safety", () => {
         "Content",
         "Actions",
         "Layout",
-        "Size",
         "Spacing",
         "Background",
         "Shadow",
@@ -131,7 +128,6 @@ describe("property inspector safety", () => {
         "Content",
         "Actions",
         "Layout",
-        "Size",
         "Spacing",
         "Background",
         "Shadow",
@@ -149,7 +145,6 @@ describe("property inspector safety", () => {
         "Content",
         "Actions",
         "Layout",
-        "Size",
         "Spacing",
         "Background",
         "Shadow",
@@ -174,7 +169,7 @@ describe("property inspector safety", () => {
       "image",
       [
         "Content",
-        "Size",
+        "Layout",
         "Ratio",
         "Spacing",
         "Background",
@@ -191,7 +186,6 @@ describe("property inspector safety", () => {
       [
         "Content",
         "Layout",
-        "Size",
         "Spacing",
         "Background",
         "Shadow",
@@ -207,7 +201,7 @@ describe("property inspector safety", () => {
       [
         "Content",
         "Appearance",
-        "Size",
+        "Layout",
         "Background",
         "Shadow",
         "Border",
@@ -222,7 +216,7 @@ describe("property inspector safety", () => {
       [
         "Content",
         "Typography",
-        "Size",
+        "Layout",
         "Spacing",
         "Background",
         "Shadow",
@@ -521,7 +515,7 @@ describe("property inspector safety", () => {
       renderInspector(selection, templateIndex)
 
       await waitFor(() => expect(getInspectorSection(primarySection)).toBeInTheDocument())
-      expectOnlySectionOpen(primarySection)
+      expectSectionsOpen(primarySection, "Layout")
       openInspectorSection("Advanced")
       expectReadOnlyField(selection, advancedAddress, advancedValue)
     },
@@ -532,7 +526,7 @@ describe("property inspector safety", () => {
 
     const indicators = await screen.findByRole("checkbox", { name: "Show scroll indicators" })
     expect(indicators).toBeChecked()
-    expectOnlySectionOpen("Layout")
+    expectSectionsOpen("Layout")
     expect(renderedPropertyAddresses()).toEqual(
       expect.arrayContaining([
         "showsIndicators",

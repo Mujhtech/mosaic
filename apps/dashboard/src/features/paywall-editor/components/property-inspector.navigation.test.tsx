@@ -14,7 +14,7 @@ import {
 } from "@/features/paywall-editor/utils/property-inspector-navigation"
 import {
   InspectorHarness,
-  expectOnlySectionOpen,
+  expectSectionsOpen,
   expectReadOnlyField,
   expectValidationIssueFocus,
   getInspectorSection,
@@ -51,7 +51,7 @@ describe("property inspector safety", () => {
     renderSeedMode("image")
 
     await waitFor(() => expect(getInspectorSection("Content")).toBeInTheDocument())
-    expectOnlySectionOpen("Content")
+    expectSectionsOpen("Content", "Layout")
     expect(renderedPropertyAddresses()).toEqual(
       expect.arrayContaining([
         "assetId",

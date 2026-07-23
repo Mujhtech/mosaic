@@ -106,7 +106,7 @@ function DesktopRequiredWorkspace({ children }: { readonly children: ReactNode }
       data-studio-viewport-mode="desktop-required"
       data-testid="studio-desktop-required"
     >
-      <div className="border-border bg-card w-full max-w-xl rounded-xl border p-6 shadow-sm">
+      <div className="border-border bg-card w-full max-w-xl rounded border p-6 shadow-sm">
         <h1 id="studio-desktop-required-title" className="text-lg font-semibold">
           Studio requires a larger screen
         </h1>

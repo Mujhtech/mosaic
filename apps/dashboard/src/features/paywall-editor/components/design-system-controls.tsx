@@ -39,7 +39,7 @@ export interface PendingDelete {
 }
 
 export const FIELD_CLASS =
-  "border-input bg-background focus:border-ring focus:ring-ring/30 h-8 min-w-0 rounded-md border px-2 text-xs outline-none focus:ring-2"
+  "border-input bg-background focus:border-ring focus:ring-ring/30 h-8 min-w-0 rounded border px-2 text-xs outline-none focus:ring-2"
 
 export function replaceTokenReferences(
   value: unknown,
@@ -310,7 +310,7 @@ export function BackgroundEditor({
         </option>
       </select>
       {images.length === 0 || videos.length === 0 || !selectedMediaExists ? (
-        <div className="border-border bg-muted/30 flex flex-wrap gap-1.5 rounded-md border p-2">
+        <div className="border-border bg-muted/30 flex flex-wrap gap-1.5 rounded border p-2">
           {!selectedMediaExists ? (
             <p className="text-muted-foreground w-full text-[11px] leading-4">
               The selected media asset is missing. Add a replacement to keep this style valid.

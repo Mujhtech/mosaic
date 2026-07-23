@@ -39,7 +39,7 @@ export function ValidationPanel({
         </span>
       </div>
       {issues.length === 0 ? (
-        <div className="flex items-start gap-2 rounded-xl bg-emerald-50 p-3 text-sm text-emerald-900">
+        <div className="flex items-start gap-2 rounded bg-emerald-50 p-3 text-sm text-emerald-900">
           <CheckCircleIcon className="mt-0.5 shrink-0" aria-hidden weight="fill" />
           <p>This paywall is valid and ready to send to native previews or export.</p>
         </div>
@@ -48,7 +48,7 @@ export function ValidationPanel({
           {issues.map((issue) => (
             <li
               key={`${issue.code}:${issue.documentPath}`}
-              className="border-destructive/25 rounded-xl border p-3"
+              className="border-destructive/25 rounded border p-3"
             >
               <div className="flex items-start gap-2">
                 <WarningCircleIcon

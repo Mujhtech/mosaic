@@ -116,7 +116,7 @@ export function ApiKeysPage({ environmentId, organizationId, projectId }: ApiKey
         <label className="flex max-w-md flex-col gap-2 text-sm font-medium">
           Selected environment
           <select
-            className="border-input bg-background h-9 rounded-md border px-3 text-sm"
+            className="border-input bg-background h-9 rounded border px-3 text-sm"
             onChange={(event) => {
               dismissSecret()
               setPendingAction(null)

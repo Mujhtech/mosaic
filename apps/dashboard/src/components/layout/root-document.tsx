@@ -3,11 +3,11 @@ import type { ReactNode } from "react"
 
 export function RootDocument({ children }: { children: ReactNode }) {
   return (
-    <html lang="en">
+    <html lang="en" suppressHydrationWarning>
       <head>
         <HeadContent />
       </head>
-      <body>
+      <body suppressHydrationWarning>
         <div className="app-root">{children}</div>
         <Scripts />
       </body>

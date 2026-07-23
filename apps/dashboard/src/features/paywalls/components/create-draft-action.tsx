@@ -1,0 +1,91 @@
+import { useMutation, useQueryClient } from "@tanstack/react-query"
+import { useNavigate } from "@tanstack/react-router"
+import { useRef, useState } from "react"
+
+import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
+import { EDITOR_TEMPLATES } from "@/features/paywall-editor/constants/templates"
+import { parseImportedJson } from "@/features/paywall-editor/mutations/local-project-file"
+import type { MosaicDocument } from "@/features/paywall-editor/types/editor"
+import { cloneValue } from "@/features/paywall-editor/utils/clone"
+import { createHostedDraftMutationOptions } from "@/features/paywalls/mutations/paywall-mutations"
+import { useHostedPublishingAdapter } from "@/features/publishing/api/use-hosted-publishing-adapter"
+
+export function CreateDraftAction({
+  environmentId,
+  organizationId,
+  paywallId,
+  projectId,
+}: {
+  environmentId: string
+  organizationId: string
+  paywallId: string
+  projectId: string
+}) {
+  const adapter = useHostedPublishingAdapter()
+  const inputRef = useRef<HTMLInputElement | null>(null)
+  const navigate = useNavigate()
+  const queryClient = useQueryClient()
+  const [error, setError] = useState<string | null>(null)
+  const createDraft = useMutation(
+    createHostedDraftMutationOptions({ environmentId, paywallId, projectId }, adapter, queryClient),
+  )
+
+  async function create(document: MosaicDocument) {
+    const draft = await createDraft.mutateAsync(cloneValue(document))
+    await navigate({
+      params: { draftId: draft.id, environmentId, organizationId, paywallId, projectId },
+      to: "/studio-hosted/$organizationId/$projectId/$environmentId/$paywallId/$draftId",
+    })
+  }
+
+  return (
+    <div>
+      <div className="flex flex-wrap gap-2">
+        <Button
+          disabled={createDraft.isPending}
+          onClick={() => void create(EDITOR_TEMPLATES[0]!.document)}
+          size="sm"
+          type="button"
+        >
+          {createDraft.isPending ? "Creating Draft…" : "Create Draft from starter"}
+        </Button>
+        <Button
+          disabled={createDraft.isPending}
+          onClick={() => inputRef.current?.click()}
+          size="sm"
+          type="button"
+          variant="outline"
+        >
+          Import JSON as Draft
+        </Button>
+      </div>
+      <Input
+        ref={inputRef}
+        accept="application/json,.json"
+        aria-label="Import Mosaic JSON as a hosted Draft"
+        className="sr-only"
+        onChange={(event) => {
+          const file = event.currentTarget.files?.[0]
+          if (!file) return
+          void file
+            .text()
+            .then((contents) => parseImportedJson(contents).document)
+            .then(create)
+            .catch((caught: unknown) =>
+              setError(
+                caught instanceof Error ? caught.message : "The file could not be imported.",
+              ),
+            )
+          event.currentTarget.value = ""
+        }}
+        type="file"
+      />
+      {error || createDraft.error ? (
+        <p className="text-destructive mt-2 text-sm" role="alert">
+          {error ?? createDraft.error?.message}
+        </p>
+      ) : null}
+    </div>
+  )
+}

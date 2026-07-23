@@ -256,7 +256,7 @@ export function SizingAxisField({
   return (
     <Field address={`sizing.${axis}`} hideLabel label={axisLabel}>
       {(fieldProps) => (
-        <div className="border-input bg-background focus-within:border-ring focus-within:ring-ring/30 flex h-9 min-w-0 items-center overflow-hidden rounded-md border focus-within:ring-2">
+        <div className="border-input bg-background focus-within:border-ring focus-within:ring-ring/30 flex h-9 min-w-0 items-center overflow-hidden rounded border focus-within:ring-2">
           <span className="text-muted-foreground ps-2 text-xs font-medium" aria-hidden>
             {prefix}
           </span>

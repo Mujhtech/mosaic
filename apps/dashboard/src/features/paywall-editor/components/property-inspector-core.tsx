@@ -36,9 +36,9 @@ import type {
 } from "@/lib/mosaic-protocol"
 
 export const CONTROL_CLASS =
-  "border-input bg-background focus-visible:border-ring focus-visible:ring-ring/30 h-8 w-full rounded-md border px-2 text-sm outline-none focus-visible:ring-2 disabled:cursor-not-allowed disabled:opacity-60"
+  "border-input bg-background focus-visible:border-ring focus-visible:ring-ring/30 h-8 w-full rounded border px-2 text-sm outline-none focus-visible:ring-2 disabled:cursor-not-allowed disabled:opacity-60"
 export const TEXTAREA_CLASS =
-  "border-input bg-background focus-visible:border-ring focus-visible:ring-ring/30 min-h-24 w-full resize-y rounded-md border px-2 py-2 text-sm outline-none focus-visible:ring-2 disabled:cursor-not-allowed disabled:opacity-60"
+  "border-input bg-background focus-visible:border-ring focus-visible:ring-ring/30 min-h-24 w-full resize-y rounded border px-2 py-2 text-sm outline-none focus-visible:ring-2 disabled:cursor-not-allowed disabled:opacity-60"
 export const ZERO_INSETS: MosaicPaywallV02EdgeInsets = {
   top: 0,
   start: 0,
@@ -264,7 +264,7 @@ export function CompactOptionField({
       {(fieldProps) => (
         <div
           {...fieldProps}
-          className="border-input bg-muted/35 grid h-9 overflow-hidden rounded-md border p-0.5"
+          className="border-input bg-muted/35 grid h-9 overflow-hidden rounded border p-0.5"
           role="group"
           style={{ gridTemplateColumns: `repeat(${options.length}, minmax(0, 1fr))` }}
         >

@@ -177,7 +177,7 @@ export function ProductLayerStyleSection({ node }: { node: ProductLayerNode }) {
     <InspectorSection title="Appearance">
       <div
         aria-label="Product layer state"
-        className="bg-muted grid grid-cols-2 rounded-md p-0.5"
+        className="bg-muted grid grid-cols-2 rounded p-0.5"
         role="group"
       >
         {(["default", "selected"] as const).map((candidate) => (
@@ -193,7 +193,7 @@ export function ProductLayerStyleSection({ node }: { node: ProductLayerNode }) {
         ))}
       </div>
       {state === "selected" ? (
-        <div className="bg-muted/60 space-y-2 rounded-md p-2 text-[11px] leading-4">
+        <div className="bg-muted/60 space-y-2 rounded p-2 text-[11px] leading-4">
           <p>Selected values inherit from Default until you change them.</p>
           {activeOverrides.length > 0 ? (
             <div aria-label="Selected appearance overrides" className="flex flex-wrap gap-1">

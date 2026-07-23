@@ -93,7 +93,6 @@ describe("property inspector safety", () => {
       "Badge",
       "Content",
       "Layout",
-      "Size",
       "Appearance",
       "Advanced",
     ])
@@ -104,7 +103,7 @@ describe("property inspector safety", () => {
 
   it("authors Product Card sizing, including fixed width", async () => {
     renderInspector("monthly-card")
-    const size = within(await waitFor(() => openInspectorSection("Size")))
+    const size = within(await waitFor(() => openInspectorSection("Layout")))
 
     fireEvent.change(size.getByRole("combobox", { name: "Width behaviour" }), {
       target: { value: "fixed" },
@@ -119,7 +118,7 @@ describe("property inspector safety", () => {
       target: { value: "fill" },
     })
     expect(size.getByRole("combobox", { name: "Width behaviour" })).toHaveValue("fill")
-    expect(size.getByText(/horizontal axis is unbounded/)).toBeVisible()
+    expect(size.getByText(/Width Fill is unbounded/)).toBeVisible()
     expect(screen.getByTestId("inspector-document")).toHaveTextContent('"sizing":{"width":"fill"')
   })
 
@@ -127,10 +126,9 @@ describe("property inspector safety", () => {
     renderInspector("close")
     openInspectorSection("Background")
 
-    expect(screen.getByRole("combobox", { name: "Type" })).toHaveAccessibleName("Type")
+    expect(screen.getByRole("group", { name: "Background type" })).toBeVisible()
     fireEvent.click(screen.getByRole("button", { name: "Add video" }))
 
-    await waitFor(() => expect(screen.getByRole("combobox", { name: "Type" })).toHaveValue("video"))
     expect(screen.getByTestId("inspector-document")).toHaveTextContent(
       '"type":"video","id":"video-1"',
     )

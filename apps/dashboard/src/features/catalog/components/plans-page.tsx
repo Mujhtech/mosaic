@@ -7,7 +7,6 @@ import { Field, FieldLabel } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
 import { HostedResourceBoundary } from "@/features/auth/components/hosted-resource-boundary"
 import { resolveHostedQueryState } from "@/features/auth/types/hosted-query-state"
-import { CatalogTabs } from "@/features/catalog/components/catalog-tabs"
 import { createPlanMutationOptions } from "@/features/catalog/mutations/catalog-mutations"
 import { plansQueryOptions } from "@/features/catalog/queries/catalog-query"
 import { WorkspacePage, WorkflowPanel } from "@/features/organizations/components/workspace-page"
@@ -71,12 +70,11 @@ export function PlansPage({ organizationId, projectId }: PlansPageProps) {
       eyebrow="Catalog · Project-wide"
       title="Plans"
     >
-      <CatalogTabs organizationId={organizationId} projectId={projectId} />
       <HostedResourceBoundary state={state}>
         <WorkflowPanel title="Plans">
           <ul className="grid gap-3 md:grid-cols-2">
             {items.map((plan) => (
-              <li className="rounded-xl border p-4" key={plan.id}>
+              <li className="rounded border p-4" key={plan.id}>
                 <p className="font-semibold">{plan.name}</p>
                 <p className="text-muted-foreground mt-1 font-mono text-xs">{plan.key}</p>
                 <p className="text-muted-foreground mt-2 text-sm">

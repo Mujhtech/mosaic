@@ -25,7 +25,7 @@ export function OneTimeSecret({
   return (
     <section
       aria-labelledby="secret-title"
-      className="border-primary/30 bg-primary/5 rounded-xl border p-5"
+      className="border-primary/30 bg-primary/5 rounded border p-5"
       role="status"
     >
       <div className="flex items-start justify-between gap-4">
@@ -47,7 +47,7 @@ export function OneTimeSecret({
           <XIcon aria-hidden size={17} />
         </Button>
       </div>
-      <code className="bg-background mt-4 block overflow-x-auto rounded-lg border p-3 text-sm">
+      <code className="bg-background mt-4 block overflow-x-auto rounded border p-3 text-sm">
         {secret}
       </code>
       <Button className="mt-3" onClick={() => void copySecret()} variant="outline">

@@ -11,6 +11,7 @@ import { WorkspacePage, WorkflowPanel } from "@/features/organizations/component
 import { ScopeMismatchRecovery } from "@/features/organizations/components/scope-mismatch-recovery"
 import { detectNestedScopeMismatch } from "@/features/organizations/types/nested-scope"
 import { projectLifecycleMutationOptions } from "@/features/projects/mutations/project-mutations"
+import { environmentsQueryOptions } from "@/features/environments/queries/environments-query"
 import {
   applicationsQueryOptions,
   projectQueryOptions,
@@ -31,6 +32,10 @@ export function ProjectOverviewPage({ organizationId, projectId }: ProjectOvervi
   })
   const applications = useQuery({
     ...applicationsQueryOptions(projectId),
+    enabled: project.isSuccess && scopeMismatch === null,
+  })
+  const environments = useQuery({
+    ...environmentsQueryOptions(projectId),
     enabled: project.isSuccess && scopeMismatch === null,
   })
   const archive = useMutation(projectLifecycleMutationOptions(queryClient, "archive"))
@@ -55,6 +60,10 @@ export function ProjectOverviewPage({ organizationId, projectId }: ProjectOvervi
     permissionDescription: "Organization membership is required to read this project.",
   })
   const isArchived = project.data?.status === "archived"
+  const monetizationEnvironment =
+    environments.data?.items.find((environment) => environment.key === "staging") ??
+    environments.data?.items.find((environment) => environment.key === "development") ??
+    environments.data?.items[0]
 
   if (scopeMismatch) {
     return (
@@ -99,9 +108,9 @@ export function ProjectOverviewPage({ organizationId, projectId }: ProjectOvervi
       title={project.data?.name ?? "Project"}
     >
       <HostedResourceBoundary state={state}>
-        <div className="grid gap-4 md:grid-cols-3">
+        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
           <Link
-            className="hover:bg-muted/35 rounded-xl border p-5"
+            className="hover:bg-muted/35 rounded border p-5"
             params={{ organizationId, projectId }}
             to="/organizations/$organizationId/projects/$projectId/apps"
           >
@@ -110,8 +119,24 @@ export function ProjectOverviewPage({ organizationId, projectId }: ProjectOvervi
               {applications.data?.items.length ?? 0} registered iOS or Android apps
             </span>
           </Link>
+          {monetizationEnvironment ? (
+            <Link
+              className="hover:bg-muted/35 rounded border p-5"
+              params={{
+                environmentId: monetizationEnvironment.id,
+                organizationId,
+                projectId,
+              }}
+              to="/organizations/$organizationId/projects/$projectId/monetization/$environmentId/paywalls"
+            >
+              <span className="text-sm font-semibold">Monetization</span>
+              <span className="text-muted-foreground mt-2 block text-sm">
+                Paywalls, Placements, Assets, and Publish history in {monetizationEnvironment.name}
+              </span>
+            </Link>
+          ) : null}
           <Link
-            className="hover:bg-muted/35 rounded-xl border p-5"
+            className="hover:bg-muted/35 rounded border p-5"
             params={{ organizationId, projectId }}
             to="/organizations/$organizationId/projects/$projectId/catalog/plans"
           >
@@ -121,7 +146,7 @@ export function ProjectOverviewPage({ organizationId, projectId }: ProjectOvervi
             </span>
           </Link>
           <Link
-            className="hover:bg-muted/35 rounded-xl border p-5"
+            className="hover:bg-muted/35 rounded border p-5"
             params={{ organizationId, projectId }}
             to="/organizations/$organizationId/projects/$projectId/settings/environments"
           >
@@ -138,8 +163,8 @@ export function ProjectOverviewPage({ organizationId, projectId }: ProjectOvervi
         ) : null}
         <WorkflowPanel title="Hosted publishing">
           <p className="text-muted-foreground text-sm leading-6">
-            Drafts, versions, releases, Publish, rollback, remote configuration delivery, and CDN
-            behavior belong to Gate 3B and are intentionally absent.
+            Choose a named Environment in Monetization to create hosted Drafts, bind Placements,
+            review publish readiness, and restore immutable Releases.
           </p>
         </WorkflowPanel>
       </HostedResourceBoundary>

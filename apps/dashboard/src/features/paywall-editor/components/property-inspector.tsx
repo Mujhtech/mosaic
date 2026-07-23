@@ -89,7 +89,7 @@ export function PropertyInspector({
           {selectedType ? (
             <span
               aria-hidden
-              className="bg-muted text-muted-foreground mt-0.5 grid size-8 shrink-0 place-items-center rounded-lg"
+              className="bg-muted text-muted-foreground mt-0.5 grid size-8 shrink-0 place-items-center rounded"
             >
               <LayerTypeIcon type={selectedType} />
             </span>
@@ -127,16 +127,13 @@ export function PropertyInspector({
         ) : null}
       </div>
       {!selectedTarget || !document ? (
-        <div className="bg-muted text-muted-foreground mt-4 rounded-xl p-4 text-sm">
+        <div className="bg-muted text-muted-foreground mt-4 rounded p-4 text-sm">
           Select a block in Layers or the Canvas to edit its Protocol 0.2 properties.
         </div>
       ) : (
         <InspectorContext.Provider value={inspectorContext!}>
           {lockedBy ? (
-            <div
-              className="border-border bg-muted mt-4 rounded-lg border p-3 text-xs"
-              role="status"
-            >
+            <div className="border-border bg-muted mt-4 rounded border p-3 text-xs" role="status">
               <p className="font-semibold">Properties are read-only</p>
               <p className="text-muted-foreground mt-1">
                 {lockedBy === selectedTarget.id

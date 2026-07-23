@@ -61,6 +61,7 @@ export interface EditorStore {
     locale: string,
     textScale: number,
   ) => void
+  openHostedDraft: (document: MosaicDocument, draftId: string) => void
   importDocument: (document: MosaicDocument) => void
   resetEditor: () => void
   updateDocument: (updater: (document: MosaicDocument) => MosaicDocument) => void
@@ -402,6 +403,24 @@ export function createEditorStore(initialState: Partial<EditorState> = {}): Edit
         isDocumentTransactionActive: false,
         lastSavedRevision: cloned.revision,
         localRevisionSequence: sequence,
+      })
+    },
+    openHostedDraft: (document, draftId) => {
+      documentTransaction = null
+      const cloned = cloneValue(document)
+      const selectedComponentId = initialLayout(cloned).content.children[0]?.id ?? null
+      emit({
+        ...INITIAL_STATE,
+        document: cloned,
+        editableDocumentId: draftId,
+        ...reconcileTreeState(
+          cloned,
+          selectedComponentId,
+          new Set([initialLayout(cloned).content.id]),
+        ),
+        currentLocale: cloned.localization.defaultLocale,
+        lastSavedRevision: cloned.revision,
+        localRevisionSequence: Math.max(1, cloned.revision),
       })
     },
     importDocument: (document) => {

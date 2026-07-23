@@ -17,7 +17,8 @@ import type {
   MockPurchaseState,
 } from "@/features/paywall-editor/types/editor"
 
-export type AutosaveStatus = "idle" | "saving" | "saved" | "failed"
+export type AutosaveStatus =
+  "idle" | "unsaved" | "saving" | "saved" | "offline" | "conflict" | "failed"
 
 export interface DraftAutosaveController {
   status: AutosaveStatus
@@ -35,6 +36,7 @@ interface PendingAutosave {
 export function useDraftAutosaveController(
   mockPurchaseState: MockPurchaseState,
   mockProducts: readonly MockProductDefinition[] = DEFAULT_MOCK_PRODUCTS,
+  enabled = true,
 ): DraftAutosaveController {
   const {
     document,
@@ -82,23 +84,24 @@ export function useDraftAutosaveController(
   )
 
   const retry = useCallback(() => {
-    if (isDocumentTransactionActive) return
+    if (!enabled || isDocumentTransactionActive) return
     const pending = pendingAutosaveRef.current
     if (!pending) return
     setStatus("saving")
     attemptSave(pending)
-  }, [attemptSave, isDocumentTransactionActive])
+  }, [attemptSave, enabled, isDocumentTransactionActive])
 
   const flush = useCallback(() => {
+    if (!enabled) return true
     if (isDocumentTransactionActive) return false
     const pending = pendingAutosaveRef.current
     if (!pending) return true
     setStatus("saving")
     return attemptSave(pending)
-  }, [attemptSave, isDocumentTransactionActive])
+  }, [attemptSave, enabled, isDocumentTransactionActive])
 
   useEffect(() => {
-    if (!document || !editableDocumentId || isDocumentTransactionActive) return
+    if (!enabled || !document || !editableDocumentId || isDocumentTransactionActive) return
     const compatibilityPreview = compatibilityPreviewRef.current
     const project = createLocalProjectFile({
       editableDocumentId,
@@ -128,6 +131,7 @@ export function useDraftAutosaveController(
     document,
     editableDocumentId,
     attemptSave,
+    enabled,
     isDocumentTransactionActive,
     mockProducts,
     mockPurchaseState,
@@ -139,6 +143,7 @@ export function useDraftAutosaveController(
 export function useDraftAutosave(
   mockPurchaseState: MockPurchaseState,
   mockProducts: readonly MockProductDefinition[] = DEFAULT_MOCK_PRODUCTS,
+  enabled = true,
 ) {
-  return useDraftAutosaveController(mockPurchaseState, mockProducts).status
+  return useDraftAutosaveController(mockPurchaseState, mockProducts, enabled).status
 }

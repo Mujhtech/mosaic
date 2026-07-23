@@ -48,7 +48,7 @@ export function WorkspaceHome() {
             {items.map((organization) => (
               <li key={organization.id}>
                 <Link
-                  className="hover:bg-muted/45 focus-visible:ring-ring flex items-center justify-between gap-4 rounded-lg px-3 py-4 focus-visible:ring-2 focus-visible:outline-none"
+                  className="hover:bg-muted/45 focus-visible:ring-ring flex items-center justify-between gap-4 rounded px-3 py-4 focus-visible:ring-2 focus-visible:outline-none"
                   params={{ organizationId: organization.id }}
                   to="/organizations/$organizationId"
                 >

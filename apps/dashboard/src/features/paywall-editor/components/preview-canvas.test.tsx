@@ -284,11 +284,9 @@ describe("PreviewCanvas layer metadata", () => {
   })
 
   it("previews a Product Card state without changing runtime selection or document history", async () => {
-    const view = renderPreview("product-state-preview")
+    renderPreview("product-state-preview")
     const monthly = await screen.findByRole("radio", { name: /Monthly/ })
-    const card = view.container.querySelector<HTMLElement>(
-      '[data-component-id="monthly-card"] label',
-    )
+    const card = monthly.parentElement
 
     expect(monthly).not.toBeChecked()
     expect(card).toHaveStyle({ borderWidth: "2px" })

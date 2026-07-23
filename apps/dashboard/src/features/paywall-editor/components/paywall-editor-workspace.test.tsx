@@ -88,6 +88,9 @@ describe("PaywallEditorWorkspace", () => {
 
     fireEvent.click(screen.getByRole("button", { name: /Focused offer/ }))
     await screen.findByTestId("studio-editor-shell")
+    expect(screen.getByTestId("studio-editor-shell")).toHaveAttribute("data-studio-mode", "local")
+    expect(screen.getByText(/Saving locally|Saved locally/)).toBeVisible()
+    expect(screen.queryByText(/hosted Draft/i)).not.toBeInTheDocument()
     fireEvent.click(screen.getByRole("button", { name: "Templates" }))
 
     await waitFor(() =>

@@ -12,7 +12,7 @@ export function LoadingState({ className, description, title = "Loading" }: Load
       aria-busy="true"
       aria-live="polite"
       className={cn(
-        "border-border/70 bg-card/75 flex min-h-36 items-center justify-center gap-3 rounded-xl border p-6 text-left shadow-xs",
+        "border-border/70 bg-card/75 flex min-h-36 items-center justify-center gap-3 rounded border p-6 text-left shadow-xs",
         className,
       )}
       role="status"

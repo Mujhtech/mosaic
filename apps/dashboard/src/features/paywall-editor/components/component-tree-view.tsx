@@ -165,7 +165,7 @@ export function ComponentTreeView({ model }: { model: ComponentTreeModel }) {
 
       {notice ? (
         <StatusMessage
-          className={`mb-3 rounded-lg border p-2 text-xs ${
+          className={`mb-3 rounded border p-2 text-xs ${
             notice.tone === "danger"
               ? "border-destructive/25 bg-destructive/5"
               : "border-primary/20 bg-primary/5"
@@ -303,7 +303,7 @@ export function ComponentTreeView({ model }: { model: ComponentTreeModel }) {
                   aria-expanded={expandable ? expanded : undefined}
                   aria-level={row.depth}
                   aria-selected={selected}
-                  className={`focus-visible:ring-ring group relative flex min-h-9 items-center gap-1 rounded-md border pr-1 text-sm outline-none focus-visible:ring-2 ${
+                  className={`focus-visible:ring-ring group relative flex min-h-9 items-center gap-1 rounded border pr-1 text-sm outline-none focus-visible:ring-2 ${
                     activeRowDrop
                       ? dropPreview.result.status === "accepted"
                         ? "border-primary/50 bg-primary/10 ring-primary/30 ring-1"

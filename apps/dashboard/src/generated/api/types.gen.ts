@@ -26,6 +26,61 @@ export type MetadataSource = 'mock' | 'provider';
 
 export type ProviderKind = 'revenuecat' | 'app_store' | 'google_play' | 'custom';
 
+export type SignUpRequest = {
+    email: string;
+    name: string;
+    password: string;
+};
+
+export type LoginRequest = {
+    email: string;
+    password: string;
+};
+
+export type CreatePaywallRequest = {
+    key: string;
+    name: string;
+};
+
+export type UpdatePaywallRequest = {
+    name: string;
+};
+
+export type CreateDraftRequest = {
+    environmentId: string;
+    sourceVersionId?: string;
+    document: {
+        [key: string]: unknown;
+    };
+};
+
+export type UpdateDraftRequest = {
+    document: {
+        [key: string]: unknown;
+    };
+};
+
+export type CreatePlacementRequest = {
+    key: string;
+    name: string;
+    description?: string;
+};
+
+export type UpdatePlacementRequest = {
+    name: string;
+    description?: string;
+};
+
+export type BindPlacementRequest = {
+    paywallId: string;
+};
+
+export type PublishRequest = {
+    draftId: string;
+    expectedRevision: number;
+    acknowledgeMockProducts: boolean;
+};
+
 export type CreateOrganizationRequest = {
     name: string;
 };
@@ -239,12 +294,144 @@ export type AuditEvent = {
     createdAt: Timestamp;
 };
 
+export type ValidationSummary = {
+    errors: Array<string>;
+    warnings: Array<string>;
+};
+
+export type Paywall = {
+    id: string;
+    projectId: string;
+    key: string;
+    name: string;
+    status: 'active' | 'archived';
+    archivedAt?: Timestamp;
+    createdByActorId: string;
+    createdAt: Timestamp;
+    updatedAt: Timestamp;
+};
+
+export type Draft = {
+    id: string;
+    projectId: string;
+    paywallId: string;
+    environmentId: string;
+    status: 'active' | 'published' | 'archived';
+    revision: number;
+    sourceVersionId?: string;
+    protocolVersion: '0.2';
+    validationStatus: 'valid' | 'invalid';
+    validation: ValidationSummary;
+    createdByActorId: string;
+    updatedByActorId: string;
+    createdAt: Timestamp;
+    updatedAt: Timestamp;
+};
+
+export type DraftResource = {
+    draft: Draft;
+    document: {
+        [key: string]: unknown;
+    };
+};
+
+export type PaywallVersion = {
+    id: string;
+    projectId: string;
+    paywallId: string;
+    environmentId: string;
+    versionNumber: number;
+    sourceDraftId: string;
+    sourceRevision: number;
+    protocolVersion: '0.2';
+    document: {
+        [key: string]: unknown;
+    };
+    documentHash: string;
+    validation: ValidationSummary;
+    createdByActorId: string;
+    createdAt: Timestamp;
+    productIds: Array<string>;
+};
+
+export type Placement = {
+    id: string;
+    projectId: string;
+    key: string;
+    name: string;
+    description?: string;
+    status: 'active' | 'archived';
+    archivedAt?: Timestamp;
+    createdByActorId: string;
+    createdAt: Timestamp;
+    updatedAt: Timestamp;
+};
+
+export type PlacementBinding = {
+    projectId: string;
+    environmentId: string;
+    placementId: string;
+    paywallId: string;
+    updatedByActorId: string;
+    updatedAt: Timestamp;
+};
+
+export type User = {
+    id: string;
+    email: string;
+    name: string;
+    createdAt: Timestamp;
+};
+
+export type Asset = {
+    id: string;
+    projectId: string;
+    kind: 'image' | 'video';
+    originalFilename: string;
+    mediaType: 'image/jpeg' | 'image/png' | 'image/webp' | 'image/gif' | 'video/mp4';
+    byteLength: number;
+    contentDigest: string;
+    url: string;
+    status: 'pending' | 'ready' | 'failed' | 'archived' | 'deleted';
+    createdByActorId: string;
+    archivedAt?: Timestamp;
+    createdAt: Timestamp;
+    updatedAt: Timestamp;
+};
+
+export type AssetUsage = {
+    draftReferences: number;
+    versionReferences: number;
+    releaseReferences: number;
+};
+
+export type ConfigurationRelease = {
+    id: string;
+    projectId: string;
+    environmentId: string;
+    releaseNumber: number;
+    deliveryContractVersion: '1';
+    contentHash: string;
+    sourceReleaseId?: string;
+    rollbackSourceReleaseId?: string;
+    publishedByActorId: string;
+    publishedAt: Timestamp;
+};
+
+export type PublishResult = {
+    release: ConfigurationRelease;
+    warnings: Array<string>;
+};
+
 export type ErrorEnvelope = {
     error: {
         code: string;
         message: string;
         fields?: {
             [key: string]: Array<string>;
+        };
+        details?: {
+            [key: string]: unknown;
         };
         requestId?: string;
     };
@@ -337,6 +524,85 @@ export type EntitlementListEnvelope = EntitlementList;
 export type ProviderMappingListEnvelope = ProviderMappingList;
 
 export type AuditEventListEnvelope = AuditEventList;
+
+export type PaywallEnvelope = {
+    data: Paywall;
+};
+
+export type DraftEnvelope = {
+    data: DraftResource;
+};
+
+export type ValidationSummaryEnvelope = {
+    data: ValidationSummary;
+};
+
+export type PaywallVersionEnvelope = {
+    data: PaywallVersion;
+};
+
+export type PlacementEnvelope = {
+    data: Placement;
+};
+
+export type PlacementBindingEnvelope = {
+    data: PlacementBinding;
+};
+
+export type AssetEnvelope = {
+    data: Asset;
+};
+
+export type AssetUsageEnvelope = {
+    data: AssetUsage;
+};
+
+export type AssetListEnvelope = {
+    data: {
+        items: Array<Asset>;
+        page: Page;
+    };
+};
+
+export type UserEnvelope = {
+    data: User;
+};
+
+export type ReleaseEnvelope = {
+    data: ConfigurationRelease;
+};
+
+export type PublishResultEnvelope = {
+    data: PublishResult;
+};
+
+export type PaywallListEnvelope = {
+    data: {
+        items: Array<Paywall>;
+        page: Page;
+    };
+};
+
+export type PaywallVersionListEnvelope = {
+    data: {
+        items: Array<PaywallVersion>;
+        page: Page;
+    };
+};
+
+export type PlacementListEnvelope = {
+    data: {
+        items: Array<Placement>;
+        page: Page;
+    };
+};
+
+export type ReleaseListEnvelope = {
+    data: {
+        items: Array<ConfigurationRelease>;
+        page: Page;
+    };
+};
 
 export type OrganizationList = {
     data: {
@@ -438,11 +704,27 @@ export type ProductId = string;
 
 export type EntitlementId = string;
 
+export type PaywallId = string;
+
+export type DraftId = string;
+
+export type VersionId = string;
+
+export type PlacementId = string;
+
+export type AssetId = string;
+
+export type ReleaseId = string;
+
+export type IdempotencyKey = string;
+
+export type IfMatch = string;
+
 export type GetHealthData = {
     body?: never;
     path?: never;
     query?: never;
-    url: '/health';
+    url: '/health/live';
 };
 
 export type GetHealthResponses = {
@@ -458,17 +740,125 @@ export type GetReadinessData = {
     body?: never;
     path?: never;
     query?: never;
-    url: '/ready';
+    url: '/health/ready';
 };
+
+export type GetReadinessErrors = {
+    /**
+     * PostgreSQL is unavailable.
+     */
+    503: ErrorEnvelope;
+};
+
+export type GetReadinessError = GetReadinessErrors[keyof GetReadinessErrors];
 
 export type GetReadinessResponses = {
     /**
-     * The configured in-memory service is ready.
+     * PostgreSQL is reachable and the API is ready to serve traffic.
      */
     200: HealthEnvelope;
 };
 
 export type GetReadinessResponse = GetReadinessResponses[keyof GetReadinessResponses];
+
+export type SignUpData = {
+    body: SignUpRequest;
+    path?: never;
+    query?: never;
+    url: '/v1/auth/signup';
+};
+
+export type SignUpErrors = {
+    /**
+     * Stable machine-readable failure.
+     */
+    409: ErrorEnvelope;
+    /**
+     * Stable machine-readable failure.
+     */
+    422: ErrorEnvelope;
+};
+
+export type SignUpError = SignUpErrors[keyof SignUpErrors];
+
+export type SignUpResponses = {
+    /**
+     * Authenticated browser user. Login and signup also set the session cookie.
+     */
+    201: UserEnvelope;
+};
+
+export type SignUpResponse = SignUpResponses[keyof SignUpResponses];
+
+export type LoginData = {
+    body: LoginRequest;
+    path?: never;
+    query?: never;
+    url: '/v1/auth/login';
+};
+
+export type LoginErrors = {
+    /**
+     * Stable machine-readable failure.
+     */
+    401: ErrorEnvelope;
+    /**
+     * Stable machine-readable failure.
+     */
+    422: ErrorEnvelope;
+};
+
+export type LoginError = LoginErrors[keyof LoginErrors];
+
+export type LoginResponses = {
+    /**
+     * Authenticated browser user. Login and signup also set the session cookie.
+     */
+    200: UserEnvelope;
+};
+
+export type LoginResponse = LoginResponses[keyof LoginResponses];
+
+export type LogoutData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/v1/auth/logout';
+};
+
+export type LogoutResponses = {
+    /**
+     * Session revoked and cookie cleared.
+     */
+    204: void;
+};
+
+export type LogoutResponse = LogoutResponses[keyof LogoutResponses];
+
+export type GetSessionData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/v1/auth/session';
+};
+
+export type GetSessionErrors = {
+    /**
+     * Stable machine-readable failure.
+     */
+    401: ErrorEnvelope;
+};
+
+export type GetSessionError = GetSessionErrors[keyof GetSessionErrors];
+
+export type GetSessionResponses = {
+    /**
+     * Authenticated browser user. Login and signup also set the session cookie.
+     */
+    200: UserEnvelope;
+};
+
+export type GetSessionResponse = GetSessionResponses[keyof GetSessionResponses];
 
 export type ListOrganizationsData = {
     body?: never;
@@ -1983,3 +2373,832 @@ export type RemoveProductEntitlementResponses = {
 };
 
 export type RemoveProductEntitlementResponse = RemoveProductEntitlementResponses[keyof RemoveProductEntitlementResponses];
+
+export type ListAssetsData = {
+    body?: never;
+    path: {
+        projectId: string;
+    };
+    query?: never;
+    url: '/v1/projects/{projectId}/assets';
+};
+
+export type ListAssetsErrors = {
+    /**
+     * Stable machine-readable failure.
+     */
+    default: ErrorEnvelope;
+};
+
+export type ListAssetsError = ListAssetsErrors[keyof ListAssetsErrors];
+
+export type ListAssetsResponses = {
+    /**
+     * Hosted Assets
+     */
+    200: AssetListEnvelope;
+};
+
+export type ListAssetsResponse = ListAssetsResponses[keyof ListAssetsResponses];
+
+export type UploadAssetData = {
+    body: {
+        file: Blob | File;
+    };
+    path: {
+        projectId: string;
+    };
+    query?: never;
+    url: '/v1/projects/{projectId}/assets';
+};
+
+export type UploadAssetErrors = {
+    /**
+     * Stable machine-readable failure.
+     */
+    413: ErrorEnvelope;
+    /**
+     * Stable machine-readable failure.
+     */
+    422: ErrorEnvelope;
+    /**
+     * Stable machine-readable failure.
+     */
+    default: ErrorEnvelope;
+};
+
+export type UploadAssetError = UploadAssetErrors[keyof UploadAssetErrors];
+
+export type UploadAssetResponses = {
+    /**
+     * Hosted Asset metadata
+     */
+    201: AssetEnvelope;
+};
+
+export type UploadAssetResponse = UploadAssetResponses[keyof UploadAssetResponses];
+
+export type ArchiveAssetData = {
+    body?: never;
+    path: {
+        projectId: string;
+        assetId: string;
+    };
+    query?: never;
+    url: '/v1/projects/{projectId}/assets/{assetId}';
+};
+
+export type ArchiveAssetErrors = {
+    /**
+     * Stable machine-readable failure.
+     */
+    default: ErrorEnvelope;
+};
+
+export type ArchiveAssetError = ArchiveAssetErrors[keyof ArchiveAssetErrors];
+
+export type ArchiveAssetResponses = {
+    /**
+     * Hosted Asset metadata
+     */
+    200: AssetEnvelope;
+};
+
+export type ArchiveAssetResponse = ArchiveAssetResponses[keyof ArchiveAssetResponses];
+
+export type GetAssetData = {
+    body?: never;
+    path: {
+        projectId: string;
+        assetId: string;
+    };
+    query?: never;
+    url: '/v1/projects/{projectId}/assets/{assetId}';
+};
+
+export type GetAssetErrors = {
+    /**
+     * Stable machine-readable failure.
+     */
+    default: ErrorEnvelope;
+};
+
+export type GetAssetError = GetAssetErrors[keyof GetAssetErrors];
+
+export type GetAssetResponses = {
+    /**
+     * Hosted Asset metadata
+     */
+    200: AssetEnvelope;
+};
+
+export type GetAssetResponse = GetAssetResponses[keyof GetAssetResponses];
+
+export type GetAssetUsageData = {
+    body?: never;
+    path: {
+        projectId: string;
+        assetId: string;
+    };
+    query?: never;
+    url: '/v1/projects/{projectId}/assets/{assetId}/usage';
+};
+
+export type GetAssetUsageErrors = {
+    /**
+     * Stable machine-readable failure.
+     */
+    default: ErrorEnvelope;
+};
+
+export type GetAssetUsageError = GetAssetUsageErrors[keyof GetAssetUsageErrors];
+
+export type GetAssetUsageResponses = {
+    /**
+     * Hosted Asset reference counts
+     */
+    200: AssetUsageEnvelope;
+};
+
+export type GetAssetUsageResponse = GetAssetUsageResponses[keyof GetAssetUsageResponses];
+
+export type ListPaywallsData = {
+    body?: never;
+    path: {
+        projectId: string;
+    };
+    query?: never;
+    url: '/v1/projects/{projectId}/paywalls';
+};
+
+export type ListPaywallsErrors = {
+    /**
+     * Stable machine-readable failure.
+     */
+    default: ErrorEnvelope;
+};
+
+export type ListPaywallsError = ListPaywallsErrors[keyof ListPaywallsErrors];
+
+export type ListPaywallsResponses = {
+    /**
+     * Paywalls
+     */
+    200: PaywallListEnvelope;
+};
+
+export type ListPaywallsResponse = ListPaywallsResponses[keyof ListPaywallsResponses];
+
+export type CreatePaywallData = {
+    body: CreatePaywallRequest;
+    path: {
+        projectId: string;
+    };
+    query?: never;
+    url: '/v1/projects/{projectId}/paywalls';
+};
+
+export type CreatePaywallErrors = {
+    /**
+     * Stable machine-readable failure.
+     */
+    default: ErrorEnvelope;
+};
+
+export type CreatePaywallError = CreatePaywallErrors[keyof CreatePaywallErrors];
+
+export type CreatePaywallResponses = {
+    /**
+     * Paywall
+     */
+    201: PaywallEnvelope;
+};
+
+export type CreatePaywallResponse = CreatePaywallResponses[keyof CreatePaywallResponses];
+
+export type GetPaywallData = {
+    body?: never;
+    path: {
+        projectId: string;
+        paywallId: string;
+    };
+    query?: never;
+    url: '/v1/projects/{projectId}/paywalls/{paywallId}';
+};
+
+export type GetPaywallErrors = {
+    /**
+     * Stable machine-readable failure.
+     */
+    default: ErrorEnvelope;
+};
+
+export type GetPaywallError = GetPaywallErrors[keyof GetPaywallErrors];
+
+export type GetPaywallResponses = {
+    /**
+     * Paywall
+     */
+    200: PaywallEnvelope;
+};
+
+export type GetPaywallResponse = GetPaywallResponses[keyof GetPaywallResponses];
+
+export type UpdatePaywallData = {
+    body: UpdatePaywallRequest;
+    path: {
+        projectId: string;
+        paywallId: string;
+    };
+    query?: never;
+    url: '/v1/projects/{projectId}/paywalls/{paywallId}';
+};
+
+export type UpdatePaywallErrors = {
+    /**
+     * Stable machine-readable failure.
+     */
+    default: ErrorEnvelope;
+};
+
+export type UpdatePaywallError = UpdatePaywallErrors[keyof UpdatePaywallErrors];
+
+export type UpdatePaywallResponses = {
+    /**
+     * Paywall
+     */
+    200: PaywallEnvelope;
+};
+
+export type UpdatePaywallResponse = UpdatePaywallResponses[keyof UpdatePaywallResponses];
+
+export type CreatePaywallDraftData = {
+    body: CreateDraftRequest;
+    headers: {
+        'Idempotency-Key': string;
+    };
+    path: {
+        projectId: string;
+        paywallId: string;
+    };
+    query?: never;
+    url: '/v1/projects/{projectId}/paywalls/{paywallId}/drafts';
+};
+
+export type CreatePaywallDraftErrors = {
+    /**
+     * Stable machine-readable failure.
+     */
+    default: ErrorEnvelope;
+};
+
+export type CreatePaywallDraftError = CreatePaywallDraftErrors[keyof CreatePaywallDraftErrors];
+
+export type CreatePaywallDraftResponses = {
+    /**
+     * Hosted Draft and current immutable revision document.
+     */
+    201: DraftEnvelope;
+};
+
+export type CreatePaywallDraftResponse = CreatePaywallDraftResponses[keyof CreatePaywallDraftResponses];
+
+export type GetActivePaywallDraftData = {
+    body?: never;
+    path: {
+        projectId: string;
+        paywallId: string;
+    };
+    query: {
+        environmentId: string;
+    };
+    url: '/v1/projects/{projectId}/paywalls/{paywallId}/drafts/active';
+};
+
+export type GetActivePaywallDraftErrors = {
+    /**
+     * Stable machine-readable failure.
+     */
+    404: ErrorEnvelope;
+    /**
+     * Stable machine-readable failure.
+     */
+    default: ErrorEnvelope;
+};
+
+export type GetActivePaywallDraftError = GetActivePaywallDraftErrors[keyof GetActivePaywallDraftErrors];
+
+export type GetActivePaywallDraftResponses = {
+    /**
+     * Hosted Draft and current immutable revision document.
+     */
+    200: DraftEnvelope;
+};
+
+export type GetActivePaywallDraftResponse = GetActivePaywallDraftResponses[keyof GetActivePaywallDraftResponses];
+
+export type GetPaywallDraftData = {
+    body?: never;
+    path: {
+        projectId: string;
+        paywallId: string;
+        draftId: string;
+    };
+    query?: never;
+    url: '/v1/projects/{projectId}/paywalls/{paywallId}/drafts/{draftId}';
+};
+
+export type GetPaywallDraftErrors = {
+    /**
+     * Stable machine-readable failure.
+     */
+    default: ErrorEnvelope;
+};
+
+export type GetPaywallDraftError = GetPaywallDraftErrors[keyof GetPaywallDraftErrors];
+
+export type GetPaywallDraftResponses = {
+    /**
+     * Hosted Draft and current immutable revision document.
+     */
+    200: DraftEnvelope;
+};
+
+export type GetPaywallDraftResponse = GetPaywallDraftResponses[keyof GetPaywallDraftResponses];
+
+export type UpdatePaywallDraftData = {
+    body: UpdateDraftRequest;
+    headers: {
+        'If-Match': string;
+        'Idempotency-Key': string;
+    };
+    path: {
+        projectId: string;
+        paywallId: string;
+        draftId: string;
+    };
+    query?: never;
+    url: '/v1/projects/{projectId}/paywalls/{paywallId}/drafts/{draftId}';
+};
+
+export type UpdatePaywallDraftErrors = {
+    /**
+     * Stable machine-readable failure.
+     */
+    412: ErrorEnvelope;
+    /**
+     * Stable machine-readable failure.
+     */
+    428: ErrorEnvelope;
+    /**
+     * Stable machine-readable failure.
+     */
+    default: ErrorEnvelope;
+};
+
+export type UpdatePaywallDraftError = UpdatePaywallDraftErrors[keyof UpdatePaywallDraftErrors];
+
+export type UpdatePaywallDraftResponses = {
+    /**
+     * Hosted Draft and current immutable revision document.
+     */
+    200: DraftEnvelope;
+};
+
+export type UpdatePaywallDraftResponse = UpdatePaywallDraftResponses[keyof UpdatePaywallDraftResponses];
+
+export type ValidatePaywallDraftData = {
+    body?: never;
+    path: {
+        projectId: string;
+        paywallId: string;
+        draftId: string;
+    };
+    query?: never;
+    url: '/v1/projects/{projectId}/paywalls/{paywallId}/drafts/{draftId}/validate';
+};
+
+export type ValidatePaywallDraftErrors = {
+    /**
+     * Stable machine-readable failure.
+     */
+    default: ErrorEnvelope;
+};
+
+export type ValidatePaywallDraftError = ValidatePaywallDraftErrors[keyof ValidatePaywallDraftErrors];
+
+export type ValidatePaywallDraftResponses = {
+    /**
+     * Draft validation
+     */
+    200: ValidationSummaryEnvelope;
+};
+
+export type ValidatePaywallDraftResponse = ValidatePaywallDraftResponses[keyof ValidatePaywallDraftResponses];
+
+export type ListPaywallVersionsData = {
+    body?: never;
+    path: {
+        projectId: string;
+        paywallId: string;
+    };
+    query?: never;
+    url: '/v1/projects/{projectId}/paywalls/{paywallId}/versions';
+};
+
+export type ListPaywallVersionsErrors = {
+    /**
+     * Stable machine-readable failure.
+     */
+    default: ErrorEnvelope;
+};
+
+export type ListPaywallVersionsError = ListPaywallVersionsErrors[keyof ListPaywallVersionsErrors];
+
+export type ListPaywallVersionsResponses = {
+    /**
+     * Immutable Paywall Versions
+     */
+    200: PaywallVersionListEnvelope;
+};
+
+export type ListPaywallVersionsResponse = ListPaywallVersionsResponses[keyof ListPaywallVersionsResponses];
+
+export type GetPaywallVersionData = {
+    body?: never;
+    path: {
+        projectId: string;
+        paywallId: string;
+        versionId: string;
+    };
+    query?: never;
+    url: '/v1/projects/{projectId}/paywalls/{paywallId}/versions/{versionId}';
+};
+
+export type GetPaywallVersionErrors = {
+    /**
+     * Stable machine-readable failure.
+     */
+    default: ErrorEnvelope;
+};
+
+export type GetPaywallVersionError = GetPaywallVersionErrors[keyof GetPaywallVersionErrors];
+
+export type GetPaywallVersionResponses = {
+    /**
+     * Immutable Paywall Version
+     */
+    200: PaywallVersionEnvelope;
+};
+
+export type GetPaywallVersionResponse = GetPaywallVersionResponses[keyof GetPaywallVersionResponses];
+
+export type ClonePaywallVersionToDraftData = {
+    body?: never;
+    headers: {
+        'Idempotency-Key': string;
+    };
+    path: {
+        projectId: string;
+        paywallId: string;
+        versionId: string;
+    };
+    query?: never;
+    url: '/v1/projects/{projectId}/paywalls/{paywallId}/versions/{versionId}/drafts';
+};
+
+export type ClonePaywallVersionToDraftErrors = {
+    /**
+     * Stable machine-readable failure.
+     */
+    default: ErrorEnvelope;
+};
+
+export type ClonePaywallVersionToDraftError = ClonePaywallVersionToDraftErrors[keyof ClonePaywallVersionToDraftErrors];
+
+export type ClonePaywallVersionToDraftResponses = {
+    /**
+     * Hosted Draft and current immutable revision document.
+     */
+    201: DraftEnvelope;
+};
+
+export type ClonePaywallVersionToDraftResponse = ClonePaywallVersionToDraftResponses[keyof ClonePaywallVersionToDraftResponses];
+
+export type ListPlacementsData = {
+    body?: never;
+    path: {
+        projectId: string;
+    };
+    query?: never;
+    url: '/v1/projects/{projectId}/placements';
+};
+
+export type ListPlacementsErrors = {
+    /**
+     * Stable machine-readable failure.
+     */
+    default: ErrorEnvelope;
+};
+
+export type ListPlacementsError = ListPlacementsErrors[keyof ListPlacementsErrors];
+
+export type ListPlacementsResponses = {
+    /**
+     * Placements
+     */
+    200: PlacementListEnvelope;
+};
+
+export type ListPlacementsResponse = ListPlacementsResponses[keyof ListPlacementsResponses];
+
+export type CreatePlacementData = {
+    body: CreatePlacementRequest;
+    path: {
+        projectId: string;
+    };
+    query?: never;
+    url: '/v1/projects/{projectId}/placements';
+};
+
+export type CreatePlacementErrors = {
+    /**
+     * Stable machine-readable failure.
+     */
+    default: ErrorEnvelope;
+};
+
+export type CreatePlacementError = CreatePlacementErrors[keyof CreatePlacementErrors];
+
+export type CreatePlacementResponses = {
+    /**
+     * Placement
+     */
+    201: PlacementEnvelope;
+};
+
+export type CreatePlacementResponse = CreatePlacementResponses[keyof CreatePlacementResponses];
+
+export type UpdatePlacementData = {
+    body: UpdatePlacementRequest;
+    path: {
+        projectId: string;
+        placementId: string;
+    };
+    query?: never;
+    url: '/v1/projects/{projectId}/placements/{placementId}';
+};
+
+export type UpdatePlacementErrors = {
+    /**
+     * Stable machine-readable failure.
+     */
+    default: ErrorEnvelope;
+};
+
+export type UpdatePlacementError = UpdatePlacementErrors[keyof UpdatePlacementErrors];
+
+export type UpdatePlacementResponses = {
+    /**
+     * Placement
+     */
+    200: PlacementEnvelope;
+};
+
+export type UpdatePlacementResponse = UpdatePlacementResponses[keyof UpdatePlacementResponses];
+
+export type GetPlacementBindingData = {
+    body?: never;
+    path: {
+        projectId: string;
+        environmentId: string;
+        placementId: string;
+    };
+    query?: never;
+    url: '/v1/projects/{projectId}/environments/{environmentId}/placements/{placementId}/binding';
+};
+
+export type GetPlacementBindingErrors = {
+    /**
+     * Stable machine-readable failure.
+     */
+    404: ErrorEnvelope;
+    /**
+     * Stable machine-readable failure.
+     */
+    default: ErrorEnvelope;
+};
+
+export type GetPlacementBindingError = GetPlacementBindingErrors[keyof GetPlacementBindingErrors];
+
+export type GetPlacementBindingResponses = {
+    /**
+     * Environment Placement binding
+     */
+    200: PlacementBindingEnvelope;
+};
+
+export type GetPlacementBindingResponse = GetPlacementBindingResponses[keyof GetPlacementBindingResponses];
+
+export type BindPlacementData = {
+    body: BindPlacementRequest;
+    path: {
+        projectId: string;
+        environmentId: string;
+        placementId: string;
+    };
+    query?: never;
+    url: '/v1/projects/{projectId}/environments/{environmentId}/placements/{placementId}/binding';
+};
+
+export type BindPlacementErrors = {
+    /**
+     * Stable machine-readable failure.
+     */
+    default: ErrorEnvelope;
+};
+
+export type BindPlacementError = BindPlacementErrors[keyof BindPlacementErrors];
+
+export type BindPlacementResponses = {
+    /**
+     * Environment Placement binding
+     */
+    200: PlacementBindingEnvelope;
+};
+
+export type BindPlacementResponse = BindPlacementResponses[keyof BindPlacementResponses];
+
+export type PublishConfigurationData = {
+    body: PublishRequest;
+    headers: {
+        'Idempotency-Key': string;
+    };
+    path: {
+        projectId: string;
+        environmentId: string;
+    };
+    query?: never;
+    url: '/v1/projects/{projectId}/environments/{environmentId}/publish';
+};
+
+export type PublishConfigurationErrors = {
+    /**
+     * Stable machine-readable failure.
+     */
+    default: ErrorEnvelope;
+};
+
+export type PublishConfigurationError = PublishConfigurationErrors[keyof PublishConfigurationErrors];
+
+export type PublishConfigurationResponses = {
+    /**
+     * Publication result and nonblocking warnings
+     */
+    201: PublishResultEnvelope;
+};
+
+export type PublishConfigurationResponse = PublishConfigurationResponses[keyof PublishConfigurationResponses];
+
+export type ListConfigurationReleasesData = {
+    body?: never;
+    path: {
+        projectId: string;
+        environmentId: string;
+    };
+    query?: never;
+    url: '/v1/projects/{projectId}/environments/{environmentId}/releases';
+};
+
+export type ListConfigurationReleasesErrors = {
+    /**
+     * Stable machine-readable failure.
+     */
+    default: ErrorEnvelope;
+};
+
+export type ListConfigurationReleasesError = ListConfigurationReleasesErrors[keyof ListConfigurationReleasesErrors];
+
+export type ListConfigurationReleasesResponses = {
+    /**
+     * Configuration Release history
+     */
+    200: ReleaseListEnvelope;
+};
+
+export type ListConfigurationReleasesResponse = ListConfigurationReleasesResponses[keyof ListConfigurationReleasesResponses];
+
+export type RollbackConfigurationReleaseData = {
+    body?: never;
+    headers: {
+        'Idempotency-Key': string;
+    };
+    path: {
+        projectId: string;
+        environmentId: string;
+        releaseId: string;
+    };
+    query?: never;
+    url: '/v1/projects/{projectId}/environments/{environmentId}/releases/{releaseId}/rollback';
+};
+
+export type RollbackConfigurationReleaseErrors = {
+    /**
+     * Stable machine-readable failure.
+     */
+    default: ErrorEnvelope;
+};
+
+export type RollbackConfigurationReleaseError = RollbackConfigurationReleaseErrors[keyof RollbackConfigurationReleaseErrors];
+
+export type RollbackConfigurationReleaseResponses = {
+    /**
+     * Immutable Configuration Release metadata
+     */
+    201: ReleaseEnvelope;
+};
+
+export type RollbackConfigurationReleaseResponse = RollbackConfigurationReleaseResponses[keyof RollbackConfigurationReleaseResponses];
+
+export type GetSdkConfigurationData = {
+    body?: never;
+    headers: {
+        'Mosaic-SDK-Platform': 'flutter' | 'ios' | 'android';
+        'Mosaic-SDK-Version': string;
+        'Mosaic-Configuration-Versions': '1';
+        'Mosaic-Paywall-Protocol-Versions': '0.2';
+        /**
+         * Comma-separated unique exact Protocol capability pairs (`name@0.2`), bounded to 128 pairs. The selected Release is returned only when every required pair is reported.
+         */
+        'Mosaic-Paywall-Capabilities': string;
+        'Mosaic-App-Version'?: string;
+        'If-None-Match'?: string;
+    };
+    path?: never;
+    query?: never;
+    url: '/v1/sdk/configuration';
+};
+
+export type GetSdkConfigurationErrors = {
+    /**
+     * Stable machine-readable failure.
+     */
+    401: ErrorEnvelope;
+    /**
+     * Stable machine-readable failure.
+     */
+    404: ErrorEnvelope;
+    /**
+     * Stable machine-readable failure.
+     */
+    406: ErrorEnvelope;
+    /**
+     * Stable machine-readable failure.
+     */
+    429: ErrorEnvelope;
+};
+
+export type GetSdkConfigurationError = GetSdkConfigurationErrors[keyof GetSdkConfigurationErrors];
+
+export type GetSdkConfigurationResponses = {
+    /**
+     * Complete immutable Configuration Delivery v1 envelope.
+     */
+    200: {
+        [key: string]: unknown;
+    };
+};
+
+export type GetSdkConfigurationResponse = GetSdkConfigurationResponses[keyof GetSdkConfigurationResponses];
+
+export type GetAssetContentData = {
+    body?: never;
+    path: {
+        assetId: string;
+        contentDigest: string;
+    };
+    query?: never;
+    url: '/v1/sdk/assets/{assetId}/{contentDigest}';
+};
+
+export type GetAssetContentErrors = {
+    /**
+     * Stable machine-readable failure.
+     */
+    404: ErrorEnvelope;
+    /**
+     * Stable machine-readable failure.
+     */
+    503: ErrorEnvelope;
+};
+
+export type GetAssetContentError = GetAssetContentErrors[keyof GetAssetContentErrors];
+
+export type GetAssetContentResponses = {
+    /**
+     * Immutable Asset content.
+     */
+    200: Blob | File;
+};
+
+export type GetAssetContentResponse = GetAssetContentResponses[keyof GetAssetContentResponses];

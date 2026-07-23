@@ -7,7 +7,6 @@ import { Field, FieldDescription, FieldLabel } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
 import { HostedResourceBoundary } from "@/features/auth/components/hosted-resource-boundary"
 import { resolveHostedQueryState } from "@/features/auth/types/hosted-query-state"
-import { CatalogTabs } from "@/features/catalog/components/catalog-tabs"
 import { createEntitlementMutationOptions } from "@/features/catalog/mutations/catalog-mutations"
 import { entitlementsQueryOptions } from "@/features/catalog/queries/catalog-query"
 import { WorkspacePage, WorkflowPanel } from "@/features/organizations/components/workspace-page"
@@ -67,11 +66,10 @@ export function EntitlementsPage({ organizationId, projectId }: EntitlementsPage
 
   return (
     <WorkspacePage
-      description="Entitlements define access Products unlock. Mosaic does not calculate or assert customer subscription state in Phase 3A."
+      description="Entitlements define access Products unlock. Mosaic does not calculate or assert customer subscription state here."
       eyebrow="Catalog · Project-wide"
       title="Entitlements"
     >
-      <CatalogTabs organizationId={organizationId} projectId={projectId} />
       <HostedResourceBoundary state={state}>
         <WorkflowPanel title="Entitlement definitions">
           <ul className="divide-y">
