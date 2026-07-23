@@ -10,7 +10,7 @@ class CanonicalFixtureTest {
     fun decodesRepositoryCanonicalProtocolFixtureDirectly() {
         val document = canonicalDocument()
 
-        assertEquals("0.1", document.schemaVersion)
+        assertEquals(MOSAIC_PROTOCOL_VERSION, document.schemaVersion)
         assertEquals("phase1-complete-paywall", document.id)
         assertEquals(1, document.revision)
         assertEquals("paywall-scroll", document.layout.id)
@@ -19,31 +19,23 @@ class CanonicalFixtureTest {
         assertEquals(20.0, document.layout.content.spacing, 0.0)
         assertEquals(MosaicHorizontalAlignment.STRETCH, document.layout.content.horizontalAlignment)
         assertEquals(
-            MosaicCapabilityCatalog.v01,
+            MosaicCapabilityCatalog.v02,
             document.compatibility.requiredCapabilities.map { it.name }.toSet(),
         )
-        assertEquals(
-            listOf(
-                "verticalStack",
-                "verticalStack",
-                "closeButton",
-                "image",
-                "text",
-                "text",
-                "featureList",
-                "productSelector",
-                "verticalStack",
-                "purchaseButton",
-                "restoreButton",
-                "legalText",
+        val nodeTypes = document.layout.content.walkDepthFirst().map { it.type }.toSet()
+        assertTrue(
+            nodeTypes.containsAll(
+                setOf(
+                    "stack", "image", "text", "featureList", "productSelector",
+                    "productCard", "productBadge", "button", "icon", "switch", "countdown",
+                ),
             ),
-            document.layout.content.walkDepthFirst().map { it.type }.toList(),
         )
         assertEquals(setOf("en", "de", "ar"), document.localization.locales.keys)
         assertEquals(MosaicLayoutDirection.RTL, document.localization.locales.getValue("ar").direction)
-        assertEquals("mosaic.paywall.hero", document.assets.single().sourceKey)
+        assertEquals("mosaic.paywall.hero", document.assets.first().sourceKey)
         assertEquals(
-            listOf("mosaic_pro_monthly", "mosaic_pro_yearly"),
+            listOf("mosaic_pro_monthly", "mosaic_pro_yearly", "mosaic_pro_lifetime"),
             document.products.map { it.providerProductId },
         )
         val selector = document.layout.content.walkDepthFirst()
@@ -53,15 +45,16 @@ class CanonicalFixtureTest {
     }
 
     @Test
-    fun capabilityReportDeclaresExactProtocol01And02Capabilities() {
+    fun capabilityReportDeclaresExactProtocol02Capabilities() {
         val report = MosaicProtocolCapabilities.report("test-sdk")
 
         assertEquals("test-sdk", report.sdkVersion)
-        assertEquals(setOf("0.1", "0.2"), report.supportedSchemaVersions)
-        assertEquals(MosaicCapabilityName.entries.toSet(), report.supportedCapabilities.keys)
+        assertEquals(setOf(MOSAIC_PROTOCOL_VERSION), report.supportedSchemaVersions)
+        assertEquals(MosaicCapabilityCatalog.v02, report.supportedCapabilities.keys)
         assertEquals(
-            MosaicCapabilityCatalog.v01.map { MosaicRequiredCapability(it, "0.1") }.toSet() +
-                MosaicCapabilityCatalog.v02.map { MosaicRequiredCapability(it, "0.2") }.toSet(),
+            MosaicCapabilityCatalog.v02.map {
+                MosaicRequiredCapability(it, MOSAIC_PROTOCOL_VERSION)
+            }.toSet(),
             report.supportedCapabilityVersions,
         )
     }

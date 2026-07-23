@@ -66,7 +66,7 @@ class ProtocolSemanticValidationTest {
         val root = canonicalFixtureObject()
         val compatibility = root.getAsJsonObject("compatibility")
         val filtered = compatibility.getAsJsonArray("requiredCapabilities")
-            .filterNot { it.asJsonObject.get("name").asString == "layout.verticalStack" }
+            .filterNot { it.asJsonObject.get("name").asString == "layout.stack" }
         compatibility.add("requiredCapabilities", JsonArray().apply { filtered.forEach(::add) })
 
         assertRejected(root.toString())
@@ -108,7 +108,7 @@ class ProtocolSemanticValidationTest {
     @Test
     fun rejectsOutOfRangeOrNonFiniteLayoutNumbers() {
         assertRejected(
-            canonicalFixtureReplacing("\"spacing\": 20", "\"spacing\": 1e400"),
+            canonicalFixtureReplacing("\"gap\": 20", "\"gap\": 1e400"),
         )
         assertRejected(
             canonicalFixtureReplacing("\"aspectRatio\": 1.7777777777777777", "\"aspectRatio\": 0"),

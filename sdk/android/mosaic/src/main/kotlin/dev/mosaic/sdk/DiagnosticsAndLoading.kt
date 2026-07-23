@@ -16,6 +16,14 @@ enum class MosaicDiagnosticCode(val wireName: String) {
     MEDIA_BACKGROUND_UNAVAILABLE("media_background_unavailable"),
     LAYOUT_UNBOUNDED_FILL("layout_unbounded_fill"),
     RENDERING_FAILED("rendering_failed"),
+    CONFIGURATION_CACHE_REJECTED("configuration.cache.rejected"),
+    CONFIGURATION_BUNDLED_FALLBACK_MISSING("configuration.bundledFallback.missing"),
+    CONFIGURATION_BUNDLED_FALLBACK_REJECTED("configuration.bundledFallback.rejected"),
+    CONFIGURATION_REFRESH_ETAG_REJECTED("configuration.refresh.etagRejected"),
+    CONFIGURATION_REFRESH_RELEASE_REJECTED("configuration.refresh.releaseRejected"),
+    CONFIGURATION_REFRESH_TRANSPORT_FAILED("configuration.refresh.transportFailed"),
+    CONFIGURATION_REFRESH_UNEXPECTED_NOT_MODIFIED("configuration.refresh.unexpected304"),
+    CONFIGURATION_CACHE_WRITE_FAILED("configuration.cache.writeFailed"),
 }
 
 data class MosaicDiagnostic(

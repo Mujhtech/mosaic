@@ -55,8 +55,8 @@ class LocalizationTest {
             .remove("paywall.legal")
         val document = MosaicProtocolDecoder.decode(root.toString())
         val legal = document.layout.content.walkDepthFirst()
-            .filterIsInstance<MosaicLegalTextComponent>()
-            .single()
+            .filterIsInstance<MosaicTextComponent>()
+            .single { it.id == "legal" }
         val resolver = MosaicLocalizationResolver(document.localization, "ar")
 
         assertEquals(MosaicLayoutDirection.RTL, resolver.direction)

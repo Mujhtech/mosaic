@@ -2,6 +2,14 @@
 
 ## 0.1.0-dev.4
 
+- Add Hosted Configuration Delivery v1 with endpoint/key-isolated persistent
+  cache namespaces, mandatory strong ETags, durable persist-before-swap
+  acceptance, explicit refresh outcomes, and safe hosted diagnostics.
+- Preserve Environment identity, monotonic release ordering, and the prior
+  last-known-valid release when validation, transport, or cache persistence
+  fails.
+- Advertise the complete sorted Protocol 0.2 exact-capability catalog on every
+  hosted delivery request.
 - Complete the Protocol 0.2 RC4 Android contract with strict design-system
   token resolution, gradients, media backgrounds, shadows, uniform two-axis
   sizing/clipping, exact capability reporting, and atomic rejection fallback.

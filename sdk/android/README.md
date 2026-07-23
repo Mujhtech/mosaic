@@ -2,9 +2,9 @@
 
 The Android SDK strictly decodes Mosaic Protocol 0.2 and renders it with
 Jetpack Compose primitives. Local Preview uses the exact 0.2 contract.
-It uses injected mock commerce and a generated bundled fallback. It has no
-accounts, hosted configuration, remote publishing, analytics, experiments,
-cloud storage, RevenueCat, or Play Billing.
+It uses injected mock commerce, a generated bundled fallback, and Hosted
+Configuration Delivery v1. It does not include accounts, analytics,
+experiments, RevenueCat, or Play Billing.
 
 ## Requirements
 
@@ -70,6 +70,50 @@ paywall usable.
 The exact presentation union is `purchased`, `restored`, `alreadyEntitled`,
 `dismissed`, `cancelled`, `productUnavailable`, `configurationUnavailable`,
 `purchaseFailed`, and `renderingFailed`.
+
+## Hosted configuration
+
+An environment-scoped public SDK key selects the Configuration Delivery v1
+release. Presentation is cache-first; networking occurs only when the host
+explicitly calls `refresh()`, and the returned sealed result distinguishes an
+update, `304` revalidation, retained last-known-valid state, and unavailable
+state.
+
+```kotlin
+val diagnostics = MosaicDiagnosticSink { diagnostic ->
+    Log.w("Mosaic", "${diagnostic.code.wireName}: ${diagnostic.message}")
+}
+val hosted = Mosaic.configure(
+    apiKey = publicSdkKey,
+    purchaseProvider = purchaseProvider,
+).hostedConfiguration(
+    context = applicationContext,
+    diagnostics = diagnostics,
+)
+
+when (val refresh = hosted.refresh()) {
+    is MosaicConfigurationRefreshResult.Updated -> Unit
+    is MosaicConfigurationRefreshResult.NotModified -> Unit
+    is MosaicConfigurationRefreshResult.Retained -> {
+        // refresh.configuration remains safe to present
+    }
+    is MosaicConfigurationRefreshResult.Unavailable -> {
+        // paywall() may still resolve the bundled fallback
+    }
+}
+val placement = hosted.paywall("onboarding_complete")
+```
+
+A remote `200` is accepted only after its strong ETag, complete release,
+Environment identity, and non-decreasing release number validate and the
+release is durably committed to the app-private cache. Failed writes and
+rejected candidates preserve the prior in-memory and persistent release. Cache
+files are isolated by a SHA-256 namespace derived from the delivery endpoint
+and public SDK key; neither value is written into the cache path or record.
+Each request advertises the full sorted Protocol 0.2 capability catalog as
+exact `name@version` pairs for backend compatibility validation.
+Diagnostics contain stable codes and safe messages, never SDK keys, response
+documents, or transport internals.
 
 ## Local Studio preview
 
