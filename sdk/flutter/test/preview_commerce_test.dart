@@ -59,7 +59,7 @@ void main() {
             productReferenceId: 'monthly-plan',
             reason: MosaicPreviewUnavailableReason.temporarilyUnavailable,
           ),
-          state.products.last,
+          state.products[1],
         ],
         purchaseOutcome: state.purchaseOutcome,
         restoreOutcome: state.restoreOutcome,
@@ -91,7 +91,7 @@ MosaicPreviewPurchaseProvider _provider() => MosaicPreviewPurchaseProvider(
 MosaicPreviewMockCommerceState _commerceState() {
   final flow = jsonDecode(
     repositoryFile(
-      'protocol/fixtures/local-preview/v0.1/session-flow.messages.json',
+      'protocol/fixtures/local-preview/v0.2/session-flow.messages.json',
     ).readAsStringSync(),
   ) as List<Object?>;
   final message = flow[2]! as Map<String, Object?>;

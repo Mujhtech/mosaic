@@ -1,7 +1,9 @@
-# Mosaic Flutter SDK — Protocol and Local Preview 0.2 RC4
+# Mosaic Flutter SDK — Configuration Delivery v1
 
 This package provides a strict reader for Mosaic Protocol 0.2
-and renders it with native Flutter widgets. It includes localization and RTL,
+and renders it with native Flutter widgets. It includes hosted Configuration
+Delivery v1, persistent cache and bundled-release fallback, Placements,
+localization and RTL,
 bundled fallback loading, mock commerce, normalized results, diagnostics,
 accessibility semantics, native rendering, and Local Preview 0.2 support.
 
@@ -12,9 +14,7 @@ It retains RC3's generalized Buttons and Stacks, authored Product Cards and
 Badges, safe product templates, navigation, Carousel, Switch, Countdown, and
 conditional visibility. The SDK never migrates a document implicitly.
 
-Phase 2 remains account-free and local-only. It does not include remote
-configuration, hosted publishing, REST fetching, caching, placements,
-analytics, experiments, or real billing adapters.
+Analytics, experiments, and real billing adapters remain outside this package.
 
 ## Requirements
 
@@ -23,12 +23,17 @@ analytics, experiments, or real billing adapters.
 
 ## Public boundary
 
-Configure the existing provider-neutral client, then give `MosaicPaywallHost`
-a local candidate and a host-owned bundled fallback loader:
+Configure the provider-neutral client with an environment-scoped public SDK
+key and hosted/self-hosted base URL. Loading reads cache then the bundled
+Delivery v1 release without networking; refresh is an explicit host action:
 
 ```dart
 final mosaic = Mosaic.configure(
-  apiKey: 'public_key',
+  publicSdkKey: 'public_sdk_key',
+  baseUrl: Uri.parse('https://mosaic.example.com'),
+  bundledFallbackLoader: () => rootBundle.loadString(
+    'assets/configuration-release.json',
+  ),
   purchaseProvider: MockMosaicPurchaseProvider(
     products: const [
       MosaicProduct(
@@ -41,12 +46,12 @@ final mosaic = Mosaic.configure(
   ),
 );
 
-MosaicPaywallHost(
+await mosaic.loadConfiguration();
+await mosaic.refreshConfiguration();
+
+MosaicPlacementHost(
   mosaic: mosaic,
-  candidateDocument: localCandidate,
-  bundledFallbackLoader: () => rootBundle.loadString(
-    'assets/generated/complete-paywall.json',
-  ),
+  placementKey: 'onboarding_complete',
   requestedLocale: 'ar',
   imageResolver: (key) => switch (key) {
     'mosaic.paywall.hero' => const AssetImage('assets/hero.png'),
@@ -61,6 +66,13 @@ MosaicPaywallHost(
   },
 )
 ```
+
+An accepted release is strict and atomic: every embedded Protocol 0.2 paywall,
+digest, Placement reference, product reference, asset binding, and capability
+set must validate before the SDK replaces memory or its cache. Requests send
+Flutter SDK capability metadata, use a short timeout, and revalidate strong
+ETags with `If-None-Match`; `304` preserves the current release. Concurrent
+manual refreshes coalesce. Presentation never fetches.
 
 `MosaicPaywall` is the lower-level widget for an already decoded and validated
 `MosaicPaywallDocument`. Mosaic presents protocol-internal Sheet destinations
@@ -153,8 +165,9 @@ and withhold incompatible or oversized compact UTF-8 drafts before sending.
   Countdown ordering.
 - The package contains no JSON Schema or fixture copy. Conformance tests read
   the canonical Protocol and Local Preview 0.2 fixtures directly.
-- `MosaicPaywallLoader` resolves only local candidate → bundled fallback →
-  `configurationUnavailable` in Phase 1.
+- Configuration resolves last-known-valid cache → bundled Delivery v1 release
+  → `configurationUnavailable`; explicit refresh may replace it with a fully
+  validated remote release.
 - A missing component image uses its declared placeholder. Decorative media
   backgrounds fall back safely: video → poster → colour and image → colour,
   with one diagnostic per failed asset.

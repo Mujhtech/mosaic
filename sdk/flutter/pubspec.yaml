@@ -10,6 +10,9 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
+  # Provides the application-private directory used by the crash-safe
+  # Configuration Delivery cache. 2.1.4 retains the package's Dart 3.3 floor.
+  path_provider: 2.1.4
   # 6.3.0 is the newest release whose package-level SDK bounds retain the
   # public Flutter 3.19 / Dart 3.3 minimum declared above.
   url_launcher: 6.3.0

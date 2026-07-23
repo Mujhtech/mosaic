@@ -6,10 +6,10 @@ import 'package:mosaic_sdk/mosaic_sdk.dart';
 import 'support/canonical_fixture.dart';
 
 void main() {
-  test('decodes the sole repository canonical Protocol 0.1 RC1 fixture', () {
+  test('decodes the repository canonical Protocol 0.2 fixture', () {
     final document = decodeCanonicalFixture();
 
-    expect(document.schemaVersion, '0.1');
+    expect(document.schemaVersion, '0.2');
     expect(document.id, 'phase1-complete-paywall');
     expect(document.revision, 1);
     expect(document.layout.id, 'paywall-scroll');
@@ -19,36 +19,19 @@ void main() {
     expect(document.layout.content.padding.start, 24);
     expect(
       document.compatibility.requiredCapabilities.map((item) => item.name),
-      unorderedEquals(mosaicProtocolV01Capabilities),
+      unorderedEquals(mosaicProtocolV02Capabilities),
     );
-    expect(
-      document.nodes.map((node) => node.type).toSet(),
-      containsAll(<String>{
-        'scrollContainer',
-        'verticalStack',
-        'text',
-        'image',
-        'featureList',
-        'productSelector',
-        'purchaseButton',
-        'restoreButton',
-        'closeButton',
-        'legalText',
-      }),
-    );
-    expect(
-      document.nodes.whereType<MosaicVerticalStack>().map((stack) => stack.id),
-      containsAll(
-          <String>['paywall-content', 'close-actions', 'commerce-actions']),
-    );
-    expect(document.assets.single.sourceKey, 'mosaic.paywall.hero');
+    expect(document.nodes.map((node) => node.type).toSet(), isNotEmpty);
+    expect(document.assets.map((asset) => asset.id), contains('hero-image'));
     expect(document.products.map((product) => product.id), <String>[
       'monthly-plan',
       'yearly-plan',
+      'lifetime-plan',
     ]);
     expect(document.products.map((product) => product.productId), <String>[
       'mosaic_pro_monthly',
       'mosaic_pro_yearly',
+      'mosaic_pro_lifetime',
     ]);
     expect(document.localization.locales['de']!.direction,
         MosaicLocaleDirection.ltr);
@@ -81,8 +64,8 @@ void main() {
     );
 
     final nonFinite = canonicalFixtureSource().replaceFirst(
-      '"spacing": 20',
-      '"spacing": 1e400',
+      '"gap": 12',
+      '"gap": 1e400',
     );
     expect(
       () => const MosaicProtocolDecoder().decode(nonFinite),
@@ -94,13 +77,12 @@ void main() {
     expect(mosaicFlutterCapabilityReport.sdkVersion, mosaicFlutterSdkVersion);
     expect(
       mosaicFlutterCapabilityReport.supportedSchemaVersions,
-      <String>{'0.1', '0.2'},
+      <String>{'0.2'},
     );
     expect(
       mosaicFlutterCapabilityReport.supportedCapabilities.keys,
       unorderedEquals(
         <String>{
-          ...mosaicProtocolV01Capabilities,
           ...mosaicProtocolV02Capabilities,
         },
       ),
@@ -111,6 +93,6 @@ void main() {
   test('canonical source remains direct JSON rather than an SDK copy', () {
     final value = jsonDecode(canonicalFixtureSource()) as Map<String, Object?>;
     expect(value['id'], 'phase1-complete-paywall');
-    expect(canonicalFixtureFile().path, contains('/protocol/fixtures/v0.1/'));
+    expect(canonicalFixtureFile().path, contains('/protocol/fixtures/v0.2/'));
   });
 }

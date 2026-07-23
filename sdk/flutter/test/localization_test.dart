@@ -70,7 +70,9 @@ void main() {
     final arabic = locales['ar']! as Map<String, Object?>;
     (arabic['strings']! as Map<String, Object?>).remove('paywall.legal');
     final document = const MosaicProtocolDecoder().decode(jsonEncode(source));
-    final legal = document.nodes.whereType<MosaicLegalTextComponent>().single;
+    final legal = document.nodes
+        .whereType<MosaicTextComponent>()
+        .firstWhere((component) => component.id == 'legal');
     final resolved = const MosaicLocaleResolver().resolve(
       document,
       requestedLocale: 'ar',

@@ -28,20 +28,14 @@ void main() {
     }
   });
 
-  test('strictly loads both canonical local project formats', () {
+  test('strictly loads the canonical Local Preview 0.2 project', () {
     const codec = MosaicPreviewMessageCodec();
-    final v01 = codec.decodeLocalProject(
-      File('${root.path}/protocol/fixtures/local-preview/v0.1/local-project.json')
-          .readAsStringSync(),
-    );
     final v02 = codec.decodeLocalProject(
       File('${root.path}/protocol/fixtures/local-preview/v0.2/local-project.json')
           .readAsStringSync(),
       expectedFileFormatVersion: mosaicLocalPreviewV02ProtocolVersion,
     );
 
-    expect(v01.fileFormatVersion, '0.1');
-    expect(v01.document.schemaVersion, '0.1');
     expect(v02.fileFormatVersion, '0.2');
     expect(v02.document.schemaVersion, '0.2');
     expect(
@@ -77,23 +71,16 @@ void main() {
 
   test('negotiates the highest mutual exact WebSocket subprotocol', () {
     final v02 = negotiateMosaicLocalPreviewVersion(
-      const <String>['0.1', '0.2'],
-      const <String>['0.2', '0.1'],
+      const <String>['0.2'],
+      const <String>['0.2'],
     );
     expect(v02.selectedVersion, '0.2');
     expect(v02.selectedWebSocketSubprotocol, 'mosaic.local-preview.v0.2');
 
-    final fallback = negotiateMosaicLocalPreviewVersion(
-      const <String>['0.1', '0.2'],
-      const <String>['0.1'],
-    );
-    expect(fallback.selectedVersion, '0.1');
-    expect(fallback.selectedWebSocketSubprotocol, 'mosaic.local-preview.v0.1');
-
     expect(
       negotiateMosaicLocalPreviewVersion(
         const <String>['0.2'],
-        const <String>['0.1'],
+        const <String>['0.3'],
       ).diagnosticCode,
       'preview.noMutualVersion',
     );
@@ -110,8 +97,8 @@ void main() {
         as Map<String, Object?>;
     final document = project['document']! as Map<String, Object?>;
     final negotiation = negotiateMosaicLocalPreviewVersion(
-      const <String>['0.1', '0.2'],
-      const <String>['0.1', '0.2'],
+      const <String>['0.2'],
+      const <String>['0.2'],
     );
 
     expect(
@@ -140,43 +127,7 @@ void main() {
     expect(withheld.fallback, 'keepLastAcceptedDraft');
   });
 
-  test('matches the canonical 0.1-client withholding decision', () {
-    final fixture = jsonFixture(
-      'local-preview/v0.2/incompatible-v0.1-client.json',
-    )! as Map<String, Object?>;
-    final project = jsonFixture('local-preview/v0.2/local-project.json')!
-        as Map<String, Object?>;
-    final negotiation = negotiateMosaicLocalPreviewVersion(
-      (fixture['studioSupportedPreviewVersions']! as List<Object?>)
-          .cast<String>(),
-      (fixture['clientSupportedPreviewVersions']! as List<Object?>)
-          .cast<String>(),
-    );
-    final decision = decideMosaicPreviewDraftDelivery(
-      negotiation: negotiation,
-      capabilityReport: mosaicFlutterCapabilityPayload(
-        'client_flutter_example',
-      ),
-      document: project['document']! as Map<String, Object?>,
-    );
-    final expected = fixture['diagnostic']! as Map<String, Object?>;
-    final expectedRecovery = expected['recovery']! as Map<String, Object?>;
-
-    expect(negotiation.selectedVersion, fixture['selectedPreviewVersion']);
-    expect(
-      negotiation.selectedWebSocketSubprotocol,
-      fixture['selectedWebSocketSubprotocol'],
-    );
-    expect(decision, isA<MosaicPreviewDraftWithhold>());
-    final withheld = decision as MosaicPreviewDraftWithhold;
-    expect(withheld.code, expected['code']);
-    expect(withheld.message, expected['message']);
-    expect(withheld.fallback, expected['fallback']);
-    expect(withheld.recoveryAction, expectedRecovery['action']);
-    expect(withheld.recoveryMessage, expectedRecovery['message']);
-  });
-
-  test('0.2 capability report is exact and retains 0.1 reader support', () {
+  test('0.2 capability report is exact', () {
     final messages = jsonFixture(
       'local-preview/v0.2/session-flow.messages.json',
     )! as List<Object?>;
@@ -241,7 +192,7 @@ void main() {
         outbound.firstWhere((message) => message['type'] == 'capabilityReport');
     expect(
       (report['payload']! as Map<String, Object?>)['supportedSchemaVersions'],
-      <String>['0.1', '0.2'],
+      <String>['0.2'],
     );
 
     socket.add(jsonEncode(valid));

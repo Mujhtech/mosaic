@@ -42,14 +42,14 @@ void main() {
     expect(features.label, 'Included with Mosaic Pro');
     expect(find.text('Create unlimited paywall projects'), findsOneWidget);
 
-    final yearly = _semantics(tester, 'mosaic-plans-yearly-plan');
+    final yearly = _semantics(tester, 'mosaic-plans-yearly-plan-card');
     expect(yearly.flagsCollection.isButton, isTrue);
     expect(yearly.flagsCollection.isSelected, Tristate.isTrue);
     expect(yearly.flagsCollection.isEnabled, Tristate.isTrue);
     expect(yearly.label, contains('Yearly'));
     expect(yearly.label, contains(r'$49.99'));
 
-    final monthly = _semantics(tester, 'mosaic-plans-monthly-plan');
+    final monthly = _semantics(tester, 'mosaic-plans-monthly-plan-card');
     expect(monthly.flagsCollection.isSelected, Tristate.isFalse);
 
     final purchase = _semantics(tester, 'mosaic-purchase');
@@ -76,8 +76,8 @@ void main() {
 
     for (final key in <String>[
       'mosaic-close',
-      'mosaic-plans-monthly-plan',
-      'mosaic-plans-yearly-plan',
+      'mosaic-plans-monthly-plan-card',
+      'mosaic-plans-yearly-plan-card',
       'mosaic-purchase',
       'mosaic-restore',
     ]) {
@@ -122,7 +122,7 @@ void main() {
     final imageSize = tester.getSize(
       find.byKey(const ValueKey<String>('mosaic-hero')),
     );
-    expect(imageSize.width / imageSize.height, closeTo(16 / 9, 0.001));
+    expect(imageSize.height, closeTo(180, 0.001));
   });
 
   testWidgets('long German and large text remain scrollable without clipping',
@@ -137,7 +137,10 @@ void main() {
       find.textContaining('Erstelle, überprüfe und verbessere'),
       findsOneWidget,
     );
-    expect(find.byType(SingleChildScrollView), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey<String>('mosaic-paywall-scroll')),
+      findsOneWidget,
+    );
     expect(tester.takeException(), isNull);
   });
 
@@ -172,7 +175,7 @@ void main() {
     final size = tester.getSize(
       find.byKey(const ValueKey<String>('mosaic-hero')),
     );
-    expect(size.width / size.height, closeTo(16 / 9, 0.001));
+    expect(size.height, closeTo(180, 0.001));
   });
 
   testWidgets('valid and undecodable host images resolve without layout change',

@@ -14,7 +14,6 @@ void main() {
   test('strictly decodes every canonical valid Protocol 0.2 fixture', () {
     for (final name in <String>[
       'complete-paywall.json',
-      'migrated-v0.1.json',
       'edge-cases.json',
       'expired-countdown.json',
       'hidden-purchase-target.json',
@@ -52,39 +51,6 @@ void main() {
         reason: name,
       );
     }
-  });
-
-  test('migration fixture preserves the 0.1 document identity and node IDs',
-      () {
-    final v01 = const MosaicProtocolDecoder().decode(
-      File('${root.path}/protocol/fixtures/v0.1/complete-paywall.json')
-          .readAsStringSync(),
-    );
-    final migrated = const MosaicProtocolDecoder().decode(
-      fixture('migrated-v0.1.json'),
-    );
-
-    expect(migrated.id, v01.id);
-    expect(migrated.revision, v01.revision);
-    expect(
-      migrated.nodes.map((node) => node.id).toSet(),
-      containsAll(v01.nodes.map((node) => node.id)),
-    );
-    expect(v01.layout.content, isA<MosaicVerticalStack>());
-    expect(migrated.layout.content, isA<MosaicStackComponent>());
-    expect(migrated.screens, hasLength(1));
-    expect(
-      migrated.nodes.whereType<MosaicButtonComponent>().map((node) => node.id),
-      containsAll(<String>['purchase', 'restore', 'close']),
-    );
-    expect(
-      migrated.nodes
-          .whereType<MosaicTextComponent>()
-          .singleWhere((node) => node.id == 'legal')
-          .typography
-          ?.maxLines,
-      isNull,
-    );
   });
 
   test('0.2 reader rejects unknown fields and unknown components atomically',
@@ -200,13 +166,13 @@ void main() {
     expect(result.source, MosaicPaywallDocumentSource.bundledFallback);
   });
 
-  test('capability report is exact for strict dual-version support', () {
+  test('capability report is exact for Protocol 0.2 support', () {
     final document = const MosaicProtocolDecoder().decode(
       fixture('complete-paywall.json'),
     );
     expect(
       mosaicFlutterCapabilityReport.supportedSchemaVersions,
-      <String>{'0.1', '0.2'},
+      <String>{'0.2'},
     );
     expect(
       mosaicProtocolV02Capabilities,

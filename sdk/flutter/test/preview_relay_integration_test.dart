@@ -121,7 +121,7 @@ Map<String, Object?> _editedDraft() {
 Map<String, Object?> _messageForSession(int index) {
   final messages = jsonDecode(
     repositoryFile(
-      'protocol/fixtures/local-preview/v0.1/session-flow.messages.json',
+      'protocol/fixtures/local-preview/v0.2/session-flow.messages.json',
     ).readAsStringSync(),
   ) as List<Object?>;
   final message =

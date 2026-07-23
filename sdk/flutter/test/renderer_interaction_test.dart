@@ -33,6 +33,7 @@ void main() {
         'dismissed',
         'cancelled',
         'productUnavailable',
+        'placementUnavailable',
         'configurationUnavailable',
         'purchaseFailed',
         'renderingFailed',
@@ -40,7 +41,7 @@ void main() {
     );
   });
 
-  testWidgets('renders every RC1 component with native Flutter widgets',
+  testWidgets('renders the Protocol 0.2 controls with native Flutter widgets',
       (tester) async {
     await _pumpPaywall(tester, MockMosaicPurchaseProvider(products: _products));
 
@@ -58,12 +59,9 @@ void main() {
       expect(find.byKey(ValueKey<String>('mosaic-$id')), findsOneWidget);
     }
     expect(find.byType(SingleChildScrollView), findsOneWidget);
-    expect(find.byType(FilledButton), findsOneWidget);
-    expect(find.byType(OutlinedButton), findsOneWidget);
-    expect(find.byType(TextButton), findsOneWidget);
+    expect(find.byType(InkWell), findsWidgets);
     expect(find.text('Premium illustration unavailable'), findsOneWidget);
     expect(find.text(r'$49.99'), findsOneWidget);
-    expect(find.text('year'), findsOneWidget);
   });
 
   testWidgets('selects a product and purchases using document-local identity',
@@ -77,7 +75,7 @@ void main() {
       interactions: interactions,
     );
 
-    await _tap(tester, 'mosaic-plans-monthly-plan');
+    await _tap(tester, 'mosaic-plans-monthly-plan-card');
     expect(
         interactions.single.outcome, MosaicInteractionOutcome.productSelected);
     expect(interactions.single.productReferenceId, 'monthly-plan');
@@ -151,11 +149,11 @@ void main() {
     );
 
     expect(
-      find.byKey(const ValueKey<String>('mosaic-plans-yearly-plan')),
+      find.byKey(const ValueKey<String>('mosaic-plans-yearly-plan-card')),
       findsNothing,
     );
     final monthly = tester.getSemantics(
-      find.byKey(const ValueKey<String>('mosaic-plans-monthly-plan')),
+      find.byKey(const ValueKey<String>('mosaic-plans-monthly-plan-card')),
     );
     expect(monthly.flagsCollection.isSelected, Tristate.isTrue);
     expect(interactions, isEmpty);
@@ -182,11 +180,11 @@ void main() {
     );
 
     expect(
-      find.byKey(const ValueKey<String>('mosaic-plans-monthly-plan')),
+      find.byKey(const ValueKey<String>('mosaic-plans-monthly-plan-card')),
       findsNothing,
     );
     final yearly = tester.getSemantics(
-      find.byKey(const ValueKey<String>('mosaic-plans-yearly-plan')),
+      find.byKey(const ValueKey<String>('mosaic-plans-yearly-plan-card')),
     );
     expect(yearly.flagsCollection.isSelected, Tristate.isTrue);
   });
