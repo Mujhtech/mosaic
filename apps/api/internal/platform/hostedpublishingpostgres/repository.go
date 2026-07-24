@@ -175,9 +175,9 @@ func (r reader) ProviderAssignment(environmentID, applicationID string) (hostedp
 }
 
 func (r reader) ProviderConnection(id string) (hostedpublishing.ProviderConnection, bool) {
-	return one(r, `SELECT id,project_id,mode,status,health_status FROM provider_connections WHERE id=$1`, func(row pgx.Row) (hostedpublishing.ProviderConnection, error) {
+	return one(r, `SELECT id,project_id,provider,mode,status,health_status FROM provider_connections WHERE id=$1`, func(row pgx.Row) (hostedpublishing.ProviderConnection, error) {
 		var value hostedpublishing.ProviderConnection
-		err := row.Scan(&value.ID, &value.ProjectID, &value.Mode, &value.Status, &value.HealthStatus)
+		err := row.Scan(&value.ID, &value.ProjectID, &value.Provider, &value.Mode, &value.Status, &value.HealthStatus)
 		return value, err
 	}, id)
 }
@@ -218,10 +218,58 @@ func (r reader) ProviderMappingsForReadiness(productID, connectionID, environmen
 	}, productID, connectionID, environmentID, applicationID, platform)
 }
 
+func (r reader) ProviderMappingsForCommerce(connectionID, environmentID, applicationID, platform string, productIDs []string) []hostedpublishing.CommerceProductMapping {
+	return many(r, `SELECT id,product_id,provider_product_identifier,provider_package_identifier,provider_offering_identifier,expected_store_product_id,current_snapshot_id
+		FROM provider_product_mappings
+		WHERE connection_id=$1 AND environment_id=$2 AND application_id=$3 AND platform=$4
+		  AND product_id=ANY($5::text[]) AND status='active'
+		ORDER BY product_id,id`, func(row pgx.Row) (hostedpublishing.CommerceProductMapping, error) {
+		var value hostedpublishing.CommerceProductMapping
+		var packageID, offeringID, storeID, snapshotID *string
+		err := row.Scan(
+			&value.ID, &value.ProductID, &value.ProviderProductIdentifier,
+			&packageID, &offeringID, &storeID, &snapshotID,
+		)
+		if packageID != nil {
+			value.ProviderPackageIdentifier = *packageID
+		}
+		if offeringID != nil {
+			value.ProviderOfferingIdentifier = *offeringID
+		}
+		if storeID != nil {
+			value.ExpectedStoreProductID = *storeID
+		}
+		if snapshotID != nil {
+			value.CurrentSnapshotID = *snapshotID
+		}
+		return value, err
+	}, connectionID, environmentID, applicationID, platform, productIDs)
+}
+
+func (r reader) ProviderEntitlementMappingsForCommerce(connectionID, environmentID, applicationID string, productIDs []string) []hostedpublishing.CommerceEntitlementMapping {
+	return many(r, `SELECT entitlement.id,entitlement.key,mapping.provider_entitlement_identifier
+		FROM provider_entitlement_mappings mapping
+		JOIN entitlements entitlement ON entitlement.id=mapping.entitlement_id
+		WHERE mapping.connection_id=$1 AND mapping.environment_id=$2 AND mapping.application_id=$3
+		  AND mapping.status='active'
+		  AND EXISTS (
+		      SELECT 1 FROM product_entitlement_grants grant_row
+		      WHERE grant_row.entitlement_id=mapping.entitlement_id
+		        AND grant_row.product_id=ANY($4::text[])
+		  )
+		ORDER BY entitlement.key,mapping.provider_entitlement_identifier`, func(row pgx.Row) (hostedpublishing.CommerceEntitlementMapping, error) {
+		var value hostedpublishing.CommerceEntitlementMapping
+		err := row.Scan(&value.EntitlementID, &value.EntitlementKey, &value.ProviderEntitlementIdentifier)
+		return value, err
+	}, connectionID, environmentID, applicationID, productIDs)
+}
+
 func (r reader) ProviderMetadataSnapshot(id string) (hostedpublishing.ProviderMetadataSnapshot, bool) {
-	return one(r, `SELECT id,expires_at FROM provider_product_metadata_snapshots WHERE id=$1`, func(row pgx.Row) (hostedpublishing.ProviderMetadataSnapshot, error) {
+	return one(r, `SELECT id,observed_at,synced_at,stale_at,expires_at FROM provider_product_metadata_snapshots WHERE id=$1`, func(row pgx.Row) (hostedpublishing.ProviderMetadataSnapshot, error) {
 		var value hostedpublishing.ProviderMetadataSnapshot
-		err := row.Scan(&value.ID, &value.ExpiresAt)
+		err := row.Scan(&value.ID, &value.ObservedAt, &value.SyncedAt, &value.StaleAt, &value.ExpiresAt)
+		value.ObservedAt, value.SyncedAt, value.StaleAt = utc(value.ObservedAt), utc(value.SyncedAt), utc(value.StaleAt)
+		value.ExpiresAt = utcPtr(value.ExpiresAt)
 		return value, err
 	}, id)
 }
@@ -499,6 +547,23 @@ func (r reader) APIKeyByPrefix(prefix string) (hostedpublishing.APIKeyRecord, bo
 	}, prefix)
 }
 
+func scanCommerceConfiguration(row pgx.Row) (hostedpublishing.CommerceConfigurationSnapshot, error) {
+	var value hostedpublishing.CommerceConfigurationSnapshot
+	var payload []byte
+	err := row.Scan(
+		&value.ID, &value.ProjectID, &value.EnvironmentID, &value.ApplicationID,
+		&value.StorePlatform, &value.ConfigurationReleaseID,
+		&value.ConfigurationReleaseDigest, &value.ContentDigest, &payload, &value.CreatedAt,
+	)
+	value.Payload = append(json.RawMessage(nil), payload...)
+	value.CreatedAt = utc(value.CreatedAt)
+	return value, err
+}
+
+func (r reader) CommerceConfiguration(releaseID, applicationID string) (hostedpublishing.CommerceConfigurationSnapshot, bool) {
+	return one(r, `SELECT id,project_id,environment_id,application_id,store_platform,configuration_release_id,configuration_release_digest,content_digest,payload::text::bytea,created_at FROM commerce_configuration_snapshots WHERE configuration_release_id=$1 AND application_id=$2`, scanCommerceConfiguration, releaseID, applicationID)
+}
+
 type transaction struct {
 	reader
 	tx pgx.Tx
@@ -591,6 +656,15 @@ func (t *transaction) SaveReleaseProduct(releaseID, environmentID, projectID, pr
 
 func (t *transaction) SaveReleaseAsset(releaseID, environmentID, projectID, assetID string) {
 	t.exec(`INSERT INTO configuration_release_assets(release_id,environment_id,project_id,asset_id) VALUES($1,$2,$3,$4)`, releaseID, environmentID, projectID, assetID)
+}
+
+func (t *transaction) SaveCommerceConfiguration(value hostedpublishing.CommerceConfigurationSnapshot) {
+	t.exec(`INSERT INTO commerce_configuration_snapshots(id,project_id,environment_id,application_id,store_platform,configuration_release_id,configuration_release_digest,content_digest,payload,created_at)
+		VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
+		value.ID, value.ProjectID, value.EnvironmentID, value.ApplicationID,
+		value.StorePlatform, value.ConfigurationReleaseID, value.ConfigurationReleaseDigest,
+		value.ContentDigest, value.Payload, value.CreatedAt,
+	)
 }
 
 func (t *transaction) SaveReleaseState(value hostedpublishing.ReleaseState) {

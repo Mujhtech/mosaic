@@ -1,4 +1,4 @@
-import { useQueries, useQuery } from "@tanstack/react-query"
+import { useMutation, useQueries, useQuery, useQueryClient } from "@tanstack/react-query"
 import { useNavigate } from "@tanstack/react-router"
 
 import { HostedResourceBoundary } from "@/features/auth/components/hosted-resource-boundary"
@@ -7,8 +7,9 @@ import { environmentsQueryOptions } from "@/features/environments/queries/enviro
 import { WorkspacePage, WorkflowPanel } from "@/features/organizations/components/workspace-page"
 import { ScopeMismatchRecovery } from "@/features/organizations/components/scope-mismatch-recovery"
 import { ActiveProviderMatrix } from "@/features/provider-connections/components/active-provider-matrix"
-import { ProviderAuthorizationGate } from "@/features/provider-connections/components/provider-authorization-gate"
+import { ConnectRevenueCatSheet } from "@/features/provider-connections/components/connect-revenuecat-sheet"
 import { ProviderConnectionsList } from "@/features/provider-connections/components/provider-connections-list"
+import { createAndTestRevenueCatMutationOptions } from "@/features/provider-connections/mutations/provider-connection-mutations"
 import {
   activeProviderAssignmentQueryOptions,
   providerConnectionsQueryOptions,
@@ -26,6 +27,7 @@ export function ProviderConnectionsPage({
   projectId: string
 }) {
   const navigate = useNavigate()
+  const queryClient = useQueryClient()
   const { project, scopeMismatch, scopeReady } = useValidatedProjectScope(organizationId, projectId)
   const applications = useQuery({
     ...applicationsQueryOptions(projectId),
@@ -39,6 +41,9 @@ export function ProviderConnectionsPage({
     ...providerConnectionsQueryOptions(projectId),
     enabled: scopeReady,
   })
+  const connectRevenueCat = useMutation(
+    createAndTestRevenueCatMutationOptions(projectId, queryClient),
+  )
   const applicationItems = applications.data?.items ?? []
   const environmentItems = environments.data?.items ?? []
   const selectedEnvironment =
@@ -107,13 +112,28 @@ export function ProviderConnectionsPage({
       title="Commerce providers"
     >
       <HostedResourceBoundary state={state}>
-        <ProviderAuthorizationGate />
-
         <WorkflowPanel
           description="Persisted records contain only non-secret provider metadata and explicit scopes."
           title="Connections"
         >
-          <ProviderConnectionsList connections={connections.data?.items ?? []} />
+          <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+            <p className="text-muted-foreground max-w-2xl text-sm">
+              RevenueCat credentials are entered once, encrypted by the API, and never returned.
+            </p>
+            <ConnectRevenueCatSheet
+              applications={applicationItems}
+              environments={environmentItems}
+              onConnect={async (input) => {
+                await connectRevenueCat.mutateAsync(input)
+              }}
+              providerBaseHref={`/organizations/${encodeURIComponent(organizationId)}/projects/${encodeURIComponent(projectId)}/catalog/providers`}
+            />
+          </div>
+          <ProviderConnectionsList
+            connections={connections.data?.items ?? []}
+            organizationId={organizationId}
+            projectId={projectId}
+          />
         </WorkflowPanel>
 
         <WorkflowPanel
@@ -148,6 +168,9 @@ export function ProviderConnectionsPage({
               assignments={activeAssignments}
               connections={connections.data?.items ?? []}
               environment={selectedEnvironment}
+              managementEnabled
+              organizationId={organizationId}
+              projectId={projectId}
             />
           ) : null}
         </WorkflowPanel>

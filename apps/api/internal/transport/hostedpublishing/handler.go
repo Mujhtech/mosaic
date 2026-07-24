@@ -27,6 +27,7 @@ const (
 	idempotencyHeader       = "Idempotency-Key"
 	ifMatchHeader           = "If-Match"
 	deliveryContentType     = "application/vnd.mosaic.configuration+json;version=1"
+	commerceContentType     = "application/vnd.mosaic.commerce-configuration+json;version=1"
 	capabilitiesHeader      = "Mosaic-Paywall-Capabilities"
 	maxCapabilityHeaderSize = 16 << 10
 )
@@ -85,6 +86,7 @@ func RegisterPublicRoutes(router chi.Router, service *hostedpublishing.Service, 
 		handler.limiter = limiters[0]
 	}
 	router.Get("/sdk/configuration", handler.sdkConfiguration)
+	router.Get("/sdk/commerce-configuration", handler.sdkCommerceConfiguration)
 	router.Get("/sdk/assets/{assetId}/{contentDigest}", handler.assetContent)
 }
 
@@ -697,6 +699,53 @@ func (h *Handler) sdkConfiguration(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	response.Representation(w, http.StatusOK, deliveryContentType, payload)
+}
+
+func (h *Handler) sdkCommerceConfiguration(w http.ResponseWriter, r *http.Request) {
+	if !h.allowDelivery(w, r, "ip:"+requestIP(r)) {
+		return
+	}
+	if !headerContains(r.Header.Get("Accept"), commerceContentType) {
+		writeError(w, r, hostedpublishing.ErrUnsupportedCapability)
+		return
+	}
+	sdkPlatform := strings.TrimSpace(r.Header.Get("Mosaic-SDK-Platform"))
+	if err := hostedpublishing.ValidateSDKCommerceCapabilityRequest(
+		sdkPlatform,
+		strings.TrimSpace(r.Header.Get("Mosaic-SDK-Version")),
+		headerValues(r.Header.Get("Mosaic-Commerce-Configuration-Versions")),
+		headerValues(r.Header.Get("Mosaic-Commerce-Provider-Contract-Versions")),
+	); err != nil {
+		writeError(w, r, err)
+		return
+	}
+	applicationID := strings.TrimSpace(r.URL.Query().Get("applicationId"))
+	if applicationID == "" {
+		response.Error(w, r, response.ValidationFailed(map[string][]string{
+			"applicationId": {"Application ID is required."},
+		}))
+		return
+	}
+	configuration, err := h.service.AuthenticateSDKCommerceKey(
+		r.Context(), bearer(r), applicationID, sdkPlatform,
+	)
+	if err != nil {
+		writeError(w, r, err)
+		return
+	}
+	if !h.allowDelivery(w, r, "key:"+configuration.APIKeyID) {
+		return
+	}
+	etag := `"` + configuration.Snapshot.ContentDigest + `"`
+	w.Header().Set("Cache-Control", "private, max-age=60, stale-if-error=86400")
+	w.Header().Set("ETag", etag)
+	w.Header().Set("Mosaic-Configuration-Release-Id", configuration.Snapshot.ConfigurationReleaseID)
+	w.Header().Set("Vary", "Authorization, Accept, Mosaic-SDK-Platform, Mosaic-SDK-Version, Mosaic-Commerce-Configuration-Versions, Mosaic-Commerce-Provider-Contract-Versions")
+	if r.Header.Get("If-None-Match") == etag {
+		response.Representation(w, http.StatusNotModified, commerceContentType, nil)
+		return
+	}
+	response.Representation(w, http.StatusOK, commerceContentType, configuration.Snapshot.Payload)
 }
 
 func (h *Handler) allowDelivery(w http.ResponseWriter, r *http.Request, key string) bool {

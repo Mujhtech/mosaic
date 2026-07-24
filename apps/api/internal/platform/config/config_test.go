@@ -40,6 +40,9 @@ func TestLoadUsesFoundationDefaults(t *testing.T) {
 	if cfg.BrowserAuth.RequestsPerMinute != defaultAuthRequestsMinute || cfg.BrowserAuth.Burst != defaultAuthBurst {
 		t.Fatalf("authentication rate limits = %#v", cfg.BrowserAuth)
 	}
+	if cfg.Providers.OperationTimeout != 60*time.Second {
+		t.Fatalf("provider operation timeout = %s, want 60s", cfg.Providers.OperationTimeout)
+	}
 }
 
 func TestLoadRejectsInvalidAuthenticationRateLimits(t *testing.T) {
@@ -57,6 +60,15 @@ func TestLoadRequiresDatabaseURL(t *testing.T) {
 	_, err := load()
 	if err == nil || !strings.Contains(err.Error(), "DATABASE_URL") {
 		t.Fatalf("error = %v, want required DATABASE_URL", err)
+	}
+}
+
+func TestProviderOperationsRequireCredentialKeyringWhenEnabled(t *testing.T) {
+	_, err := loadTestConfig(t, map[string]string{
+		"MOSAIC_PROVIDER_INTEGRATIONS_ENABLED": "true",
+	})
+	if err == nil || !strings.Contains(err.Error(), "MOSAIC_PROVIDER_CREDENTIAL_KEYRING") {
+		t.Fatalf("error = %v, want required provider credential keyring", err)
 	}
 }
 
@@ -102,6 +114,25 @@ func TestLoadRejectsHandlerTimeoutAtOrAboveWriteTimeout(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "MOSAIC_HTTP_HANDLER_TIMEOUT") {
 		t.Fatalf("error = %q, want handler-timeout key", err)
+	}
+}
+
+func TestLoadRejectsProviderOperationTimeoutBelowRequestTimeout(t *testing.T) {
+	_, err := loadTestConfig(t, map[string]string{
+		"MOSAIC_PROVIDER_REQUEST_TIMEOUT":   "8s",
+		"MOSAIC_PROVIDER_OPERATION_TIMEOUT": "7s",
+	})
+	if err == nil || !strings.Contains(err.Error(), "MOSAIC_PROVIDER_OPERATION_TIMEOUT") {
+		t.Fatalf("error = %q, want provider operation-timeout validation", err)
+	}
+}
+
+func TestLoadRejectsExcessiveProviderOperationTimeout(t *testing.T) {
+	_, err := loadTestConfig(t, map[string]string{
+		"MOSAIC_PROVIDER_OPERATION_TIMEOUT": "6m",
+	})
+	if err == nil || !strings.Contains(err.Error(), "MOSAIC_PROVIDER_OPERATION_TIMEOUT") {
+		t.Fatalf("error = %q, want bounded provider operation-timeout validation", err)
 	}
 }
 
@@ -189,6 +220,12 @@ func clearConfigEnvironment(t *testing.T) {
 		"MOSAIC_OBJECT_STORAGE_BUCKET", "MOSAIC_OBJECT_STORAGE_TLS", "MOSAIC_PUBLIC_ASSET_BASE_URL",
 		"MOSAIC_ASSET_MAX_UPLOAD_BYTES", "MOSAIC_DELIVERY_REQUESTS_PER_MINUTE",
 		"MOSAIC_DELIVERY_BURST", "MOSAIC_DELIVERY_LIMITER_ENTRIES",
+		"MOSAIC_COMMERCE_PROVIDER_SCHEMA_PATH", "MOSAIC_COMMERCE_CONFIGURATION_SCHEMA_PATH",
+		"MOSAIC_PROVIDER_INTEGRATIONS_ENABLED", "MOSAIC_PROVIDER_CREDENTIAL_KEYRING",
+		"MOSAIC_REVENUECAT_BASE_URL", "MOSAIC_PROVIDER_REQUEST_TIMEOUT",
+		"MOSAIC_PROVIDER_OPERATION_TIMEOUT", "MOSAIC_PROVIDER_CONNECT_TIMEOUT", "MOSAIC_PROVIDER_MAX_RESPONSE_BYTES",
+		"MOSAIC_PROVIDER_MAX_ATTEMPTS", "MOSAIC_PROVIDER_SNAPSHOT_TTL",
+		"MOSAIC_PROVIDER_WORKER_POLL_INTERVAL",
 	}
 	for _, key := range keys {
 		value, existed := os.LookupEnv(key)

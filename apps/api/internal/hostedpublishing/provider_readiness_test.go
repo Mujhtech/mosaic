@@ -7,15 +7,17 @@ import (
 
 type readinessReader struct {
 	Reader
-	application Application
-	assignment  *ProviderAssignment
-	connection  ProviderConnection
-	mapping     ProviderMappingReadiness
-	snapshot    ProviderMetadataSnapshot
+	application  Application
+	assignment   *ProviderAssignment
+	connection   ProviderConnection
+	mapping      ProviderMappingReadiness
+	snapshot     ProviderMetadataSnapshot
+	grantCount   int
+	entitlements []CommerceEntitlementMapping
 }
 
 func (r readinessReader) Applications(string) []Application { return []Application{r.application} }
-func (r readinessReader) ProductGrantCount(string) int      { return 1 }
+func (r readinessReader) ProductGrantCount(string) int      { return r.grantCount }
 func (r readinessReader) ProviderAssignment(string, string) (ProviderAssignment, bool) {
 	if r.assignment == nil {
 		return ProviderAssignment{}, false
@@ -33,6 +35,9 @@ func (r readinessReader) ProviderMappingsForReadiness(string, string, string, st
 func (r readinessReader) ProviderMetadataSnapshot(string) (ProviderMetadataSnapshot, bool) {
 	return r.snapshot, r.snapshot.ID != ""
 }
+func (r readinessReader) ProviderEntitlementMappingsForCommerce(string, string, string, []string) []CommerceEntitlementMapping {
+	return append([]CommerceEntitlementMapping(nil), r.entitlements...)
+}
 
 func TestProviderPublicationReadinessRequiresAssignmentAndFreshAvailableMapping(t *testing.T) {
 	now := time.Date(2026, time.July, 23, 12, 0, 0, 0, time.UTC)
@@ -42,7 +47,11 @@ func TestProviderPublicationReadinessRequiresAssignmentAndFreshAvailableMapping(
 		assignment:  assignment,
 		connection:  ProviderConnection{ID: "connection_1", ProjectID: "project_1", Mode: "production", Status: "active", HealthStatus: "healthy"},
 		mapping:     ProviderMappingReadiness{ID: "mapping_1", Availability: "available", SyncState: "current", CurrentSnapshotID: "snapshot_1"},
-		snapshot:    ProviderMetadataSnapshot{ID: "snapshot_1"},
+		snapshot:    ProviderMetadataSnapshot{ID: "snapshot_1", StaleAt: now.Add(time.Minute)},
+		grantCount:  1,
+		entitlements: []CommerceEntitlementMapping{{
+			EntitlementID: "entitlement_1", EntitlementKey: "pro", ProviderEntitlementIdentifier: "pro",
+		}},
 	}
 	product := Product{ID: "product_1", ProjectID: "project_1", Status: "connected", MetadataSource: "provider"}
 	environment := Environment{ID: "environment_1", ProjectID: "project_1", Mode: "production"}
@@ -57,10 +66,24 @@ func TestProviderPublicationReadinessRequiresAssignmentAndFreshAvailableMapping(
 	}
 
 	reader.assignment = assignment
-	expired := now.Add(-time.Minute)
-	reader.snapshot.ExpiresAt = &expired
+	reader.snapshot.StaleAt = now
 	issues = providerPublicationIssues(reader, environment, map[string]Product{product.ID: product}, now)
 	if len(issues) != 1 || issues[0].Code != "metadataStale" {
-		t.Fatalf("expired metadata issues = %#v", issues)
+		t.Fatalf("stale boundary issues = %#v", issues)
+	}
+
+	reader.snapshot.StaleAt = now.Add(time.Minute)
+	expired := now
+	reader.snapshot.ExpiresAt = &expired
+	issues = providerPublicationIssues(reader, environment, map[string]Product{product.ID: product}, now)
+	if len(issues) != 1 || issues[0].Code != "productUnavailable" {
+		t.Fatalf("expiry boundary issues = %#v", issues)
+	}
+
+	reader.snapshot.ExpiresAt = nil
+	reader.grantCount = 2
+	issues = providerPublicationIssues(reader, environment, map[string]Product{product.ID: product}, now)
+	if len(issues) != 1 || issues[0].Code != "mappingMissing" {
+		t.Fatalf("multi-grant entitlement coverage issues = %#v", issues)
 	}
 }

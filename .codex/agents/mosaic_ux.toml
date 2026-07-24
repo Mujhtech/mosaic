@@ -2,7 +2,7 @@ name = "mosaic_ux"
 description = "Owns Mosaic's user experience, information architecture, workflow simplicity, interaction design, onboarding flow, and developer ergonomics. Reviews UX without writing production code."
 
 model = "gpt-5.6-sol"
-model_reasoning_effort = "high"
+model_reasoning_effort = "medium"
 sandbox_mode = "read-only"
 
 developer_instructions = """

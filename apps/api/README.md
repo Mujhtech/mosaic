@@ -16,6 +16,11 @@ See [`../../docs/backend/phase-3b-hosted-publishing.md`](../../docs/backend/phas
 for hosted Draft concurrency, immutable publishing and rollback, and public SDK configuration
 delivery, browser sessions, canonical Protocol validation, and S3-compatible hosted Assets.
 
-Both `cmd/api` and `cmd/migrate` load this directory's `.env` with `godotenv`
+See [`../../docs/backend/phase-4a-provider-integrations.md`](../../docs/backend/phase-4a-provider-integrations.md)
+for RevenueCat v2 credentials, required read permissions, import and mapping
+semantics, synchronization workers, Commerce Configuration sidecars, and
+operational recovery.
+
+`cmd/api`, `cmd/worker`, and `cmd/migrate` load this directory's `.env` with `godotenv`
 and decode it with `envconfig`. Existing process environment variables override
 matching `.env` entries.

@@ -3,6 +3,7 @@ package cloudworkspacehttp
 import (
 	"errors"
 	"regexp"
+	"strconv"
 
 	validation "github.com/go-ozzo/ozzo-validation/v4"
 
@@ -134,6 +135,7 @@ type providerConnectionRequest struct {
 	ExternalProjectID string                                 `json:"externalProjectId"`
 	EnvironmentIDs    []string                               `json:"environmentIds"`
 	ApplicationIDs    []string                               `json:"applicationIds"`
+	Credential        string                                 `json:"credential"`
 }
 
 func (request *providerConnectionRequest) Validate() error {
@@ -142,9 +144,25 @@ func (request *providerConnectionRequest) Validate() error {
 		validation.Field(&request.Provider, validation.Required, validation.In(cloudworkspace.ProviderRevenueCat, cloudworkspace.ProviderCustom)),
 		validation.Field(&request.IntegrationMode, validation.Required, validation.In(cloudworkspace.ProviderServerConnected, cloudworkspace.ProviderSDKOnly)),
 		validation.Field(&request.Mode, validation.Required, validation.In(cloudworkspace.ProviderSandbox, cloudworkspace.ProviderProduction)),
-		validation.Field(&request.ExternalProjectID, validation.Length(0, 255)),
+		validation.Field(&request.ExternalProjectID, validation.Length(0, 255),
+			validation.When(request.Provider == cloudworkspace.ProviderRevenueCat,
+				validation.Required, validation.Match(nonWhitespacePattern))),
 		validation.Field(&request.EnvironmentIDs, validation.Required, validation.Length(1, 100), validation.Each(validation.Required)),
 		validation.Field(&request.ApplicationIDs, validation.Required, validation.Length(1, 100), validation.Each(validation.Required)),
+		validation.Field(&request.Credential, validation.Length(0, 4096),
+			validation.When(request.Provider == cloudworkspace.ProviderRevenueCat,
+				validation.Required, validation.Match(regexp.MustCompile(`^sk_[^\s]+$`))),
+			validation.When(request.Provider == cloudworkspace.ProviderCustom, validation.Empty)),
+	)
+}
+
+type providerCredentialRequest struct {
+	Credential string `json:"credential"`
+}
+
+func (request *providerCredentialRequest) Validate() error {
+	return validation.ValidateStruct(request,
+		validation.Field(&request.Credential, validation.Required, validation.Length(6, 4096), validation.Match(regexp.MustCompile(`^sk_[^\s]+$`))),
 	)
 }
 
@@ -196,6 +214,94 @@ func (request *providerMappingDraftRequest) Validate() error {
 			"providerPackageIdentifier":  errors.New("package and offering identifiers must be supplied together"),
 			"providerOfferingIdentifier": errors.New("package and offering identifiers must be supplied together"),
 		}
+	}
+	return nil
+}
+
+type providerMappingReplacementRequest struct {
+	ProviderProductIdentifier  string `json:"providerProductIdentifier"`
+	ProviderPackageIdentifier  string `json:"providerPackageIdentifier"`
+	ProviderOfferingIdentifier string `json:"providerOfferingIdentifier"`
+}
+
+func (request *providerMappingReplacementRequest) Validate() error {
+	if err := validation.ValidateStruct(request,
+		validation.Field(&request.ProviderProductIdentifier, validation.Required, validation.Length(1, 255), validation.Match(nonWhitespacePattern)),
+		validation.Field(&request.ProviderPackageIdentifier, validation.Length(0, 255), validation.When(request.ProviderPackageIdentifier != "", validation.Match(nonWhitespacePattern))),
+		validation.Field(&request.ProviderOfferingIdentifier, validation.Length(0, 255), validation.When(request.ProviderOfferingIdentifier != "", validation.Match(nonWhitespacePattern))),
+	); err != nil {
+		return err
+	}
+	if (request.ProviderPackageIdentifier == "") != (request.ProviderOfferingIdentifier == "") {
+		return validation.Errors{
+			"providerPackageIdentifier":  errors.New("package and offering identifiers must be supplied together"),
+			"providerOfferingIdentifier": errors.New("package and offering identifiers must be supplied together"),
+		}
+	}
+	return nil
+}
+
+type providerEntitlementImportRequest struct {
+	ProviderIdentifier    string `json:"providerIdentifier"`
+	ExistingEntitlementID string `json:"existingEntitlementId"`
+	Key                   string `json:"key"`
+	Name                  string `json:"name"`
+}
+
+type providerProductImportItemRequest struct {
+	ProviderProductIdentifier  string                             `json:"providerProductIdentifier"`
+	ProviderPackageIdentifier  string                             `json:"providerPackageIdentifier"`
+	ProviderOfferingIdentifier string                             `json:"providerOfferingIdentifier"`
+	ExistingProductID          string                             `json:"existingProductId"`
+	Key                        string                             `json:"key"`
+	InternalName               string                             `json:"internalName"`
+	EnvironmentID              string                             `json:"environmentId"`
+	ApplicationID              string                             `json:"applicationId"`
+	Entitlements               []providerEntitlementImportRequest `json:"entitlements"`
+}
+
+type providerImportRequest struct {
+	ConnectionID string                             `json:"connectionId"`
+	Items        []providerProductImportItemRequest `json:"items"`
+}
+
+func (request *providerImportRequest) Validate() error {
+	if err := validation.ValidateStruct(request,
+		validation.Field(&request.ConnectionID, validation.Required),
+		validation.Field(&request.Items, validation.Required, validation.Length(1, 100)),
+	); err != nil {
+		return err
+	}
+	fields := validation.Errors{}
+	for index, item := range request.Items {
+		prefix := "items[" + strconv.Itoa(index) + "]."
+		if item.ProviderProductIdentifier == "" || len(item.ProviderProductIdentifier) > 255 {
+			fields[prefix+"providerProductIdentifier"] = errors.New("provider Product identifier is required")
+		}
+		if item.EnvironmentID == "" {
+			fields[prefix+"environmentId"] = errors.New("Environment ID is required")
+		}
+		if item.ApplicationID == "" {
+			fields[prefix+"applicationId"] = errors.New("Application ID is required")
+		}
+		if (item.ProviderPackageIdentifier == "") != (item.ProviderOfferingIdentifier == "") {
+			fields[prefix+"providerPackageIdentifier"] = errors.New("package and offering identifiers must be supplied together")
+		}
+		if item.ExistingProductID == "" && (!keyPattern.MatchString(item.Key) || item.InternalName == "") {
+			fields[prefix+"key"] = errors.New("key and internal name are required for a new Product")
+		}
+		for entitlementIndex, entitlement := range item.Entitlements {
+			entitlementPrefix := prefix + "entitlements[" + strconv.Itoa(entitlementIndex) + "]."
+			if entitlement.ProviderIdentifier == "" {
+				fields[entitlementPrefix+"providerIdentifier"] = errors.New("provider Entitlement identifier is required")
+			}
+			if entitlement.ExistingEntitlementID == "" && (!keyPattern.MatchString(entitlement.Key) || entitlement.Name == "") {
+				fields[entitlementPrefix+"key"] = errors.New("key and name are required for a new Entitlement")
+			}
+		}
+	}
+	if len(fields) != 0 {
+		return fields
 	}
 	return nil
 }

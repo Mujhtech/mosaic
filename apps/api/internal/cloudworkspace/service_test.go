@@ -3,6 +3,7 @@ package cloudworkspace_test
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
@@ -18,6 +19,8 @@ import (
 
 	"github.com/Mujhtech/mosaic/apps/api/internal/cloudworkspace"
 	"github.com/Mujhtech/mosaic/apps/api/internal/platform/cloudworkspacememory"
+	"github.com/Mujhtech/mosaic/apps/api/internal/providercatalog"
+	"github.com/Mujhtech/mosaic/apps/api/internal/providercredential"
 )
 
 var fixedTime = time.Date(2026, time.July, 20, 18, 0, 0, 0, time.UTC)
@@ -236,18 +239,37 @@ func TestProviderFoundationEnforcesScopesModesLifecycleAndReadiness(t *testing.T
 	}
 
 	if _, err := service.CreateProviderConnection(ctx, actor, project.ID, cloudworkspace.CreateProviderConnectionInput{
+		Name: "Missing RevenueCat project", Provider: cloudworkspace.ProviderRevenueCat,
+		IntegrationMode: cloudworkspace.ProviderServerConnected, Mode: cloudworkspace.ProviderSandbox,
+		EnvironmentIDs: []string{development.ID}, ApplicationIDs: []string{application.ID},
+	}); !errors.Is(err, cloudworkspace.ErrProviderProjectInvalid) {
+		t.Fatalf("missing RevenueCat project error = %v, want provider project invalid", err)
+	}
+
+	if _, err := service.CreateProviderConnection(ctx, actor, project.ID, cloudworkspace.CreateProviderConnectionInput{
 		Name: "Cross-project", Provider: cloudworkspace.ProviderRevenueCat,
 		IntegrationMode: cloudworkspace.ProviderServerConnected, Mode: cloudworkspace.ProviderSandbox,
-		EnvironmentIDs: []string{otherEnvironments.Items[0].ID}, ApplicationIDs: []string{application.ID},
+		ExternalProjectID: "rc-project-reference",
+		EnvironmentIDs:    []string{otherEnvironments.Items[0].ID}, ApplicationIDs: []string{application.ID},
 	}); !errors.Is(err, cloudworkspace.ErrScopeMismatch) {
 		t.Fatalf("cross-project connection scope error = %v, want scope mismatch", err)
+	}
+
+	if _, err := service.CreateProviderConnection(ctx, actor, project.ID, cloudworkspace.CreateProviderConnectionInput{
+		Name: "RevenueCat invalid mixed scope", Provider: cloudworkspace.ProviderRevenueCat,
+		IntegrationMode: cloudworkspace.ProviderServerConnected, Mode: cloudworkspace.ProviderSandbox,
+		ExternalProjectID: "rc-project-reference",
+		EnvironmentIDs:    []string{development.ID, production.ID},
+		ApplicationIDs:    []string{application.ID},
+	}); !errors.Is(err, cloudworkspace.ErrModeMismatch) {
+		t.Fatalf("sandbox production scope error = %v, want mode mismatch", err)
 	}
 
 	connection, err := service.CreateProviderConnection(ctx, actor, project.ID, cloudworkspace.CreateProviderConnectionInput{
 		Name: "RevenueCat sandbox", Provider: cloudworkspace.ProviderRevenueCat,
 		IntegrationMode: cloudworkspace.ProviderServerConnected, Mode: cloudworkspace.ProviderSandbox,
 		ExternalProjectID: "rc-project-reference",
-		EnvironmentIDs:    []string{development.ID, production.ID},
+		EnvironmentIDs:    []string{development.ID},
 		ApplicationIDs:    []string{application.ID},
 	})
 	if err != nil {
@@ -256,8 +278,11 @@ func TestProviderFoundationEnforcesScopesModesLifecycleAndReadiness(t *testing.T
 	if connection.Status != cloudworkspace.ProviderConnectionPending || connection.HealthStatus != cloudworkspace.ProviderHealthUntested {
 		t.Fatalf("new connection asserted provider health: %#v", connection)
 	}
-	if _, err := service.SetActiveProviderAssignment(ctx, actor, production.ID, application.ID, connection.ID, false); !errors.Is(err, cloudworkspace.ErrModeMismatch) {
-		t.Fatalf("sandbox production assignment error = %v, want mode mismatch", err)
+	if _, err := service.SetEnvironmentMode(ctx, actor, development.ID, cloudworkspace.EnvironmentProduction); !errors.Is(err, cloudworkspace.ErrModeMismatch) {
+		t.Fatalf("scoped sandbox connection allowed production mode transition: %v", err)
+	}
+	if _, err := service.SetActiveProviderAssignment(ctx, actor, production.ID, application.ID, connection.ID, false); !errors.Is(err, cloudworkspace.ErrScopeMismatch) {
+		t.Fatalf("out-of-scope production assignment error = %v, want scope mismatch", err)
 	}
 	assignment, err := service.SetActiveProviderAssignment(ctx, actor, development.ID, application.ID, connection.ID, false)
 	if err != nil {
@@ -310,8 +335,8 @@ func TestProviderFoundationEnforcesScopesModesLifecycleAndReadiness(t *testing.T
 	}
 	if _, err := service.ReplaceProviderConnectionScopes(ctx, actor, connection.ID, cloudworkspace.ReplaceProviderConnectionScopesInput{
 		EnvironmentIDs: []string{production.ID}, ApplicationIDs: []string{application.ID},
-	}); !errors.Is(err, cloudworkspace.ErrScopeMismatch) {
-		t.Fatalf("scope removal used by assignment/mapping error = %v, want scope mismatch", err)
+	}); !errors.Is(err, cloudworkspace.ErrModeMismatch) {
+		t.Fatalf("sandbox production replacement scope error = %v, want mode mismatch", err)
 	}
 
 	revoked, err := service.RevokeProviderConnection(ctx, actor, connection.ID)
@@ -328,6 +353,297 @@ func TestProviderFoundationEnforcesScopesModesLifecycleAndReadiness(t *testing.T
 	}
 }
 
+type providerCatalogStub struct {
+	catalog providercatalog.Catalog
+	secrets []string
+}
+
+func (stub *providerCatalogStub) FetchCatalog(_ context.Context, credential providercatalog.Credential) (providercatalog.Catalog, error) {
+	stub.secrets = append(stub.secrets, string(credential.Secret))
+	return stub.catalog, nil
+}
+
+func TestProviderImportNormalizesSDKLookupKeysAndReusesEntitlementMapping(t *testing.T) {
+	key := base64.RawURLEncoding.EncodeToString(bytes.Repeat([]byte{7}, 32))
+	cipher, err := providercredential.NewAESGCMCipher(
+		`{"version":1,"activeKeyId":"test-key","keys":{"test-key":"`+key+`"}}`,
+		bytes.NewReader(bytes.Repeat([]byte{3}, 128)),
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	catalog := &providerCatalogStub{catalog: providercatalog.Catalog{
+		ObservedAt: fixedTime.Add(-time.Minute),
+		Apps: []providercatalog.App{{
+			ID: "app_resource", Name: "iOS", Platform: "app_store", Identifier: "com.example.app",
+		}},
+		Products: []providercatalog.Product{
+			{ID: "prod_monthly", AppID: "app_resource", StoreIdentifier: "com.example.monthly", Type: "subscription", State: "active"},
+			{ID: "prod_yearly", AppID: "app_resource", StoreIdentifier: "com.example.yearly", Type: "subscription", State: "active"},
+			{ID: "prod_replacement", AppID: "app_resource", StoreIdentifier: "com.example.monthly.v2", Type: "subscription", State: "active"},
+		},
+		Entitlements: []providercatalog.Entitlement{{
+			ID: "ent_resource", LookupKey: "pro", DisplayName: "Pro", State: "active",
+		}},
+		Offerings: []providercatalog.Offering{{
+			ID: "off_resource", LookupKey: "default", State: "active",
+			Packages: []providercatalog.Package{{
+				ID: "pkg_resource", LookupKey: "$rc_annual",
+				ProductIDs: []string{"prod_monthly", "prod_yearly", "prod_replacement"},
+			}},
+		}},
+	}}
+	service, repository := newService(cloudworkspace.WithProviderOperations(cipher, catalog, 6*time.Hour))
+	actor := cloudworkspace.Actor{ID: "actor-owner"}
+	ctx := context.Background()
+	organization, _ := service.CreateOrganization(ctx, actor, "Acme")
+	project, _ := service.CreateProject(ctx, actor, organization.ID, "mobile", "Mobile")
+	application, _ := service.CreateApplication(ctx, actor, project.ID, "iOS", cloudworkspace.PlatformIOS, "com.example.app")
+	environments, _ := service.ListEnvironments(ctx, actor, project.ID, cloudworkspace.ListOptions{})
+	var development, staging cloudworkspace.Environment
+	for _, environment := range environments.Items {
+		if environment.Mode == cloudworkspace.EnvironmentDevelopment {
+			development = environment
+		} else if environment.Mode == cloudworkspace.EnvironmentStaging {
+			staging = environment
+		}
+	}
+	connection, err := service.CreateProviderConnection(ctx, actor, project.ID, cloudworkspace.CreateProviderConnectionInput{
+		Name: "RevenueCat", Provider: cloudworkspace.ProviderRevenueCat,
+		IntegrationMode: cloudworkspace.ProviderServerConnected, Mode: cloudworkspace.ProviderSandbox,
+		ExternalProjectID: "proj_resource", EnvironmentIDs: []string{development.ID},
+		ApplicationIDs: []string{application.ID}, Credential: "sk_least_privilege",
+	})
+	if err != nil {
+		t.Fatalf("create provider connection: %v", err)
+	}
+	health, err := service.ProviderConnectionHealth(ctx, actor, connection.ID)
+	if err != nil {
+		t.Fatalf("provider capability health: %v", err)
+	}
+	for _, capabilityName := range []string{"trials", "introductoryOffers"} {
+		found := false
+		for _, capability := range health.Capabilities {
+			if capability.Name == capabilityName {
+				found = capability.Support == "conditional" &&
+					capability.ReasonCode == "provider.platformCapabilityVaries"
+			}
+		}
+		if !found {
+			t.Fatalf("%s capability overstated: %#v", capabilityName, health.Capabilities)
+		}
+	}
+	result, err := service.ImportProviderProducts(ctx, actor, project.ID, connection.ID, cloudworkspace.ImportProviderProductsInput{
+		IdempotencyKey: "import-lookup-normalization",
+		Items: []cloudworkspace.ProviderProductImportInput{
+			{
+				ProviderProductIdentifier: "prod_monthly", ProviderOfferingIdentifier: "off_resource",
+				ProviderPackageIdentifier: "pkg_resource", Key: "monthly", InternalName: "Monthly",
+				EnvironmentID: development.ID, ApplicationID: application.ID,
+				Entitlements: []cloudworkspace.ProviderEntitlementImportInput{{
+					ProviderIdentifier: "ent_resource", Key: "pro", Name: "Pro",
+				}},
+			},
+			{
+				ProviderProductIdentifier: "prod_yearly", ProviderOfferingIdentifier: "off_resource",
+				ProviderPackageIdentifier: "pkg_resource", Key: "yearly", InternalName: "Yearly",
+				EnvironmentID: development.ID, ApplicationID: application.ID,
+				Entitlements: []cloudworkspace.ProviderEntitlementImportInput{{
+					ProviderIdentifier: "ent_resource", Key: "pro", Name: "Pro",
+				}},
+			},
+		},
+	})
+	if err != nil {
+		t.Fatalf("import provider products: %v", err)
+	}
+	if result.Import.Status != cloudworkspace.ProviderImportCompleted || len(result.Items) != 2 {
+		t.Fatalf("import result = %#v", result)
+	}
+	replay, err := service.ImportProviderProducts(ctx, actor, project.ID, connection.ID, cloudworkspace.ImportProviderProductsInput{
+		IdempotencyKey: "import-lookup-normalization",
+		Items: []cloudworkspace.ProviderProductImportInput{
+			{
+				ProviderProductIdentifier: "prod_monthly", ProviderOfferingIdentifier: "off_resource",
+				ProviderPackageIdentifier: "pkg_resource", Key: "monthly", InternalName: "Monthly",
+				EnvironmentID: development.ID, ApplicationID: application.ID,
+				Entitlements: []cloudworkspace.ProviderEntitlementImportInput{{ProviderIdentifier: "ent_resource", Key: "pro", Name: "Pro"}},
+			},
+			{
+				ProviderProductIdentifier: "prod_yearly", ProviderOfferingIdentifier: "off_resource",
+				ProviderPackageIdentifier: "pkg_resource", Key: "yearly", InternalName: "Yearly",
+				EnvironmentID: development.ID, ApplicationID: application.ID,
+				Entitlements: []cloudworkspace.ProviderEntitlementImportInput{{ProviderIdentifier: "ent_resource", Key: "pro", Name: "Pro"}},
+			},
+		},
+	})
+	if err != nil || replay.Import.ID != result.Import.ID {
+		t.Fatalf("idempotent replay = %#v, %v", replay, err)
+	}
+	replacement, err := service.ReplaceProviderMapping(ctx, actor, result.Items[0].MappingID, cloudworkspace.ReplaceProviderMappingInput{
+		ProviderProductIdentifier: "prod_replacement", ProviderOfferingIdentifier: "off_resource",
+		ProviderPackageIdentifier: "pkg_resource",
+	})
+	if err != nil {
+		t.Fatalf("replace verified provider mapping: %v", err)
+	}
+	if replacement.ProviderOfferingIdentifier != "default" ||
+		replacement.ProviderPackageIdentifier != "$rc_annual" ||
+		replacement.ExpectedStoreProductID != "com.example.monthly.v2" {
+		t.Fatalf("replacement mapping did not use canonical values: %#v", replacement)
+	}
+	metadata, err := service.GetProviderMappingMetadata(ctx, actor, replacement.ID)
+	if err != nil || metadata.MappingID != replacement.ID ||
+		!bytes.Contains(metadata.Metadata, []byte(`"storeIdentifier":"com.example.monthly.v2"`)) {
+		t.Fatalf("current normalized provider metadata = %#v, %v", metadata, err)
+	}
+	err = repository.View(ctx, func(reader cloudworkspace.Reader) error {
+		for index, item := range result.Items {
+			mapping, ok := reader.ProviderMapping(item.MappingID)
+			if index == 0 {
+				if !ok || mapping.Status != cloudworkspace.ProviderMappingArchived {
+					t.Fatalf("replaced mapping was not archived: %#v", mapping)
+				}
+				continue
+			}
+			if !ok || mapping.ProviderOfferingIdentifier != "default" ||
+				mapping.ProviderPackageIdentifier != "$rc_annual" ||
+				!strings.HasPrefix(mapping.ExpectedStoreProductID, "com.example.") {
+				t.Fatalf("mapping did not persist canonical SDK lookup values: %#v", mapping)
+			}
+		}
+		entitlementMappings := reader.ProviderEntitlementMappings(connection.ID, development.ID, application.ID)
+		if len(entitlementMappings) != 1 || entitlementMappings[0].ProviderEntitlementIdentifier != "pro" {
+			t.Fatalf("entitlement mappings = %#v, want one canonical lookup mapping", entitlementMappings)
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := service.SetActiveProviderAssignment(
+		ctx, actor, development.ID, application.ID, connection.ID, false,
+	); err != nil {
+		t.Fatalf("set active provider assignment: %v", err)
+	}
+	extraEntitlement, err := service.CreateEntitlement(ctx, actor, project.ID, "bonus", "Bonus", "")
+	if err != nil {
+		t.Fatalf("create second entitlement: %v", err)
+	}
+	if _, err := service.AddProductEntitlement(
+		ctx, actor, result.Items[1].MosaicProductID, extraEntitlement.ID,
+	); err != nil {
+		t.Fatalf("grant second entitlement: %v", err)
+	}
+	multiGrantReadiness, err := service.ProviderReadiness(
+		ctx, actor, result.Items[1].MosaicProductID, development.ID, application.ID,
+	)
+	if err != nil || !providerIssuePresent(multiGrantReadiness.Blockers, cloudworkspace.ProviderErrorMappingMissing) {
+		t.Fatalf("multi-grant readiness = %#v, %v", multiGrantReadiness, err)
+	}
+	catalog.catalog.Products = []providercatalog.Product{{
+		ID: "prod_yearly", AppID: "app_resource", StoreIdentifier: "com.example.yearly",
+		Type: "subscription", State: "active",
+	}}
+	if _, err := service.EnqueueProviderSync(ctx, actor, connection.ID); err != nil {
+		t.Fatalf("enqueue provider synchronization: %v", err)
+	}
+	processed, err := service.ProcessNextProviderSync(ctx, "worker_test")
+	if err != nil || !processed {
+		t.Fatalf("process provider synchronization: processed=%t err=%v", processed, err)
+	}
+	err = repository.View(ctx, func(reader cloudworkspace.Reader) error {
+		afterFailure, ok := reader.ProviderMapping(replacement.ID)
+		if !ok || afterFailure.SyncState != cloudworkspace.ProviderSyncFailed ||
+			afterFailure.CurrentSnapshotID != replacement.CurrentSnapshotID {
+			t.Fatalf("failed synchronization replaced last known-good snapshot: %#v", afterFailure)
+		}
+		runs := reader.ProviderSyncRuns(connection.ID)
+		if len(runs) != 1 || runs[0].Status != "partial" ||
+			runs[0].SuccessCount != 1 || runs[0].FailureCount != 1 {
+			t.Fatalf("synchronization run = %#v", runs)
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := service.ArchiveProviderMapping(ctx, actor, replacement.ID); err != nil {
+		t.Fatalf("archive replacement mapping before scope check: %v", err)
+	}
+	if _, err := service.ArchiveProviderMapping(ctx, actor, result.Items[1].MappingID); err != nil {
+		t.Fatalf("archive second mapping before scope check: %v", err)
+	}
+	if err := service.ClearActiveProviderAssignment(ctx, actor, development.ID, application.ID); err != nil {
+		t.Fatalf("clear assignment before entitlement-scope check: %v", err)
+	}
+	if _, err := service.ReplaceProviderConnectionScopes(
+		ctx, actor, connection.ID,
+		cloudworkspace.ReplaceProviderConnectionScopesInput{
+			EnvironmentIDs: []string{staging.ID}, ApplicationIDs: []string{application.ID},
+		},
+	); !errors.Is(err, cloudworkspace.ErrScopeMismatch) {
+		t.Fatalf("entitlement mapping scope replacement error = %v, want scope mismatch", err)
+	}
+	staleInput := cloudworkspace.ImportProviderProductsInput{
+		IdempotencyKey: "expired-provider-import",
+		Items: []cloudworkspace.ProviderProductImportInput{{
+			ProviderProductIdentifier: "prod_yearly",
+			ExistingProductID:         result.Items[1].MosaicProductID,
+			EnvironmentID:             development.ID,
+			ApplicationID:             application.ID,
+		}},
+	}
+	requestMaterial, _ := json.Marshal(struct {
+		ConnectionID string
+		Items        []cloudworkspace.ProviderProductImportInput
+	}{ConnectionID: connection.ID, Items: staleInput.Items})
+	staleKeyHash := sha256.Sum256([]byte(staleInput.IdempotencyKey))
+	staleRequestHash := sha256.Sum256(requestMaterial)
+	staleImport := cloudworkspace.ProviderImportRequest{
+		ID: "provider_import_expired", ProjectID: project.ID, ConnectionID: connection.ID,
+		IdempotencyKeyHash: staleKeyHash, RequestHash: staleRequestHash,
+		Status: cloudworkspace.ProviderImportInProgress, CreatedByActorID: actor.ID,
+		CreatedAt: fixedTime.Add(-16 * time.Minute),
+	}
+	productCount := 0
+	if err := repository.Transact(ctx, func(tx cloudworkspace.Transaction) error {
+		tx.SaveProviderImport(staleImport)
+		productCount = len(tx.Products(project.ID))
+		return nil
+	}); err != nil {
+		t.Fatalf("seed expired provider import: %v", err)
+	}
+	expiredReplay, err := service.ImportProviderProducts(ctx, actor, project.ID, connection.ID, staleInput)
+	if err != nil || expiredReplay.Import.Status != cloudworkspace.ProviderImportPartial ||
+		expiredReplay.Import.CompletedAt == nil || len(expiredReplay.Items) != 0 {
+		t.Fatalf("expired provider import replay = %#v, %v", expiredReplay, err)
+	}
+	secondExpiredReplay, err := service.ImportProviderProducts(ctx, actor, project.ID, connection.ID, staleInput)
+	if err != nil || secondExpiredReplay.Import.ID != staleImport.ID ||
+		secondExpiredReplay.Import.Status != cloudworkspace.ProviderImportPartial {
+		t.Fatalf("stable expired provider import replay = %#v, %v", secondExpiredReplay, err)
+	}
+	if err := repository.View(ctx, func(reader cloudworkspace.Reader) error {
+		if got := len(reader.Products(project.ID)); got != productCount {
+			t.Fatalf("expired import created duplicate Products: got %d want %d", got, productCount)
+		}
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	publicConnection, err := service.GetProviderConnection(ctx, actor, connection.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	material, _ := json.Marshal(publicConnection)
+	if strings.Contains(string(material), "sk_least_privilege") || len(catalog.secrets) != 3 ||
+		catalog.secrets[0] != "sk_least_privilege" || catalog.secrets[1] != "sk_least_privilege" ||
+		catalog.secrets[2] != "sk_least_privilege" {
+		t.Fatalf("credential handling leaked or replayed secret: response=%s calls=%d", material, len(catalog.secrets))
+	}
+}
+
 func providerIssuePresent(issues []cloudworkspace.ProviderReadinessIssue, code cloudworkspace.ProviderErrorCode) bool {
 	for _, issue := range issues {
 		if issue.Code == code {
@@ -335,6 +651,85 @@ func providerIssuePresent(issues []cloudworkspace.ProviderReadinessIssue, code c
 		}
 	}
 	return false
+}
+
+func TestProviderSyncLeaseFencesConcurrentExpiredWorker(t *testing.T) {
+	repository := cloudworkspacememory.New()
+	ctx := context.Background()
+	now := fixedTime
+	job := cloudworkspace.ProviderSyncJob{
+		ID: "sync_job_1", ProjectID: "project_1", ConnectionID: "connection_1",
+		Status: cloudworkspace.ProviderSyncJobQueued, MaxAttempts: 5,
+		AvailableAt: now, RequestedByActorID: "actor_1", CreatedAt: now, UpdatedAt: now,
+	}
+	if err := repository.Transact(ctx, func(tx cloudworkspace.Transaction) error {
+		tx.SaveProviderSyncJob(job)
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	var firstLease cloudworkspace.ProviderSyncJob
+	if err := repository.Transact(ctx, func(tx cloudworkspace.Transaction) error {
+		var ok bool
+		firstLease, ok = tx.LeaseProviderSyncJob("worker_1", now, now.Add(time.Minute))
+		if !ok {
+			return errors.New("first worker did not lease sync job")
+		}
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	expiredAt := now.Add(time.Minute)
+	start := make(chan struct{})
+	errs := make(chan error, 2)
+	var secondLease cloudworkspace.ProviderSyncJob
+	var waitGroup sync.WaitGroup
+	waitGroup.Add(2)
+	go func() {
+		defer waitGroup.Done()
+		<-start
+		errs <- repository.Transact(ctx, func(tx cloudworkspace.Transaction) error {
+			if tx.OwnsProviderSyncJobLease(firstLease.ID, "worker_1", firstLease.AttemptCount, expiredAt) {
+				return errors.New("expired worker retained fenced lease")
+			}
+			return nil
+		})
+	}()
+	go func() {
+		defer waitGroup.Done()
+		<-start
+		errs <- repository.Transact(ctx, func(tx cloudworkspace.Transaction) error {
+			var ok bool
+			secondLease, ok = tx.LeaseProviderSyncJob("worker_2", expiredAt, expiredAt.Add(time.Minute))
+			if !ok {
+				return errors.New("second worker did not re-lease expired sync job")
+			}
+			return nil
+		})
+	}()
+	close(start)
+	waitGroup.Wait()
+	close(errs)
+	for err := range errs {
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+	if secondLease.AttemptCount != firstLease.AttemptCount+1 {
+		t.Fatalf("second lease attempt = %d, want %d", secondLease.AttemptCount, firstLease.AttemptCount+1)
+	}
+	if err := repository.Transact(ctx, func(tx cloudworkspace.Transaction) error {
+		if tx.OwnsProviderSyncJobLease(firstLease.ID, "worker_1", firstLease.AttemptCount, expiredAt) {
+			return errors.New("stale worker passed fencing after re-lease")
+		}
+		if !tx.OwnsProviderSyncJobLease(secondLease.ID, "worker_2", secondLease.AttemptCount, expiredAt) {
+			return errors.New("current worker failed fencing check")
+		}
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
 }
 
 func TestListRejectsMalformedAndStaleCursors(t *testing.T) {

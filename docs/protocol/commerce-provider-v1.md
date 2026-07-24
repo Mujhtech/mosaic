@@ -40,11 +40,11 @@ Configuration Delivery `1` remains unchanged. Its immutable Product records
 continue carrying stable Product identity, type, and fallback display name,
 and continue excluding Provider Product Mappings and provider configuration.
 
-The separate Commerce Configuration resource selects one provider and supplies
-verified mappings for an Environment, Application, store platform, and accepted
-Configuration Release. Commerce Provider Contract `1` defines the adapter
-records consumed after that sidecar has been accepted. It does not define the
-sidecar transport.
+The separate Commerce Configuration `1` resource selects one provider and
+supplies verified mappings for an Environment, Application, store platform,
+and accepted Configuration Release. Commerce Provider Contract `1` defines the
+adapter records consumed after that sidecar has been accepted. The sidecar is
+defined independently in `docs/protocol/commerce-configuration-v1.md`.
 
 ## Record envelope
 

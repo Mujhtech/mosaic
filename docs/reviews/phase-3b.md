@@ -2,7 +2,7 @@
 
 ## Status
 
-**Rejected pending fixes**
+**Approved**
 
 The final remediation candidate passes the repository's automated protocol, Go/PostgreSQL/MinIO,
 dashboard, Flutter, iOS, Android, build, lint, and diff checks. The earlier authentication, Asset

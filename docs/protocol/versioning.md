@@ -6,9 +6,10 @@ Protocol `0.2` RC4 and Local Preview `0.2` are the only supported contracts
 while Mosaic is iterating before its first stable release. Earlier experimental
 contracts have been retired rather than carried as compatibility readers.
 
-Configuration Delivery `1` and Commerce Provider Contract `1` are independent
-versioned contracts. Their exact version `1` values do not imply compatibility
-with one another and do not change the Paywall `schemaVersion`.
+Configuration Delivery `1`, Commerce Provider Contract `1`, and Commerce
+Configuration `1` are independent versioned contracts. Their exact version `1`
+values do not imply compatibility with one another and do not change the
+Paywall `schemaVersion`.
 
 `schemaVersion`, Local Preview versions, and capability versions are exact
 identifiers. A reader declaring `0.2` accepts only `0.2`; it must not infer
@@ -71,3 +72,20 @@ An additive field, capability, record type, or outcome requires a reviewed
 compatibility decision and normally a later Commerce Provider contract version.
 Changing the Commerce Provider contract does not authorize a Paywall Protocol
 or Configuration Delivery change.
+
+## Commerce Configuration versioning
+
+Commerce Configuration sidecars require exact
+`commerceConfigurationVersion: "1"`. Readers reject unknown versions, fields,
+activation sources, and mapping variants.
+
+The sidecar is immutable and associated with one exact Environment,
+Application, platform, Configuration Release ID, and Configuration Release
+digest. Its own canonical content digest excludes only the digest member
+itself. A reader rejects any digest or association mismatch and replaces the
+sidecar atomically with its Configuration Delivery release.
+
+Changing activation, mapping, freshness, or association semantics requires a
+reviewed compatibility decision and normally a later Commerce Configuration
+version. It does not authorize changes to Paywall Protocol `0.2`,
+Configuration Delivery `1`, or Commerce Provider Contract `1`.

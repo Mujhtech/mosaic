@@ -2,7 +2,7 @@
 
 import { type Client, type ClientMeta, formDataBodySerializer, type Options as Options2, type RequestResult, type TDataShape } from './client';
 import { client } from './client.gen';
-import type { AddMemberData, AddMemberErrors, AddMemberResponses, AddPlanProductData, AddPlanProductErrors, AddPlanProductResponses, AddProductEntitlementData, AddProductEntitlementErrors, AddProductEntitlementResponses, ArchiveAssetData, ArchiveAssetErrors, ArchiveAssetResponses, ArchiveProductData, ArchiveProductErrors, ArchiveProductResponses, ArchiveProjectData, ArchiveProjectErrors, ArchiveProjectResponses, ArchiveProviderMappingData, ArchiveProviderMappingErrors, ArchiveProviderMappingResponses, BindPlacementData, BindPlacementErrors, BindPlacementResponses, ClearActiveProviderAssignmentData, ClearActiveProviderAssignmentErrors, ClearActiveProviderAssignmentResponses, ClonePaywallVersionToDraftData, ClonePaywallVersionToDraftErrors, ClonePaywallVersionToDraftResponses, CreateApiKeyData, CreateApiKeyErrors, CreateApiKeyResponses, CreateApplicationData, CreateApplicationErrors, CreateApplicationResponses, CreateEntitlementData, CreateEntitlementErrors, CreateEntitlementResponses, CreateOrganizationData, CreateOrganizationErrors, CreateOrganizationResponses, CreatePaywallData, CreatePaywallDraftData, CreatePaywallDraftErrors, CreatePaywallDraftResponses, CreatePaywallErrors, CreatePaywallResponses, CreatePlacementData, CreatePlacementErrors, CreatePlacementResponses, CreatePlanData, CreatePlanErrors, CreatePlanResponses, CreateProductData, CreateProductErrors, CreateProductResponses, CreateProjectData, CreateProjectErrors, CreateProjectResponses, CreateProviderConnectionData, CreateProviderConnectionErrors, CreateProviderConnectionResponses, CreateProviderMappingData, CreateProviderMappingDraftData, CreateProviderMappingDraftErrors, CreateProviderMappingDraftResponses, CreateProviderMappingErrors, CreateProviderMappingResponses, DeleteProductData, DeleteProductErrors, DeleteProductResponses, GetActivePaywallDraftData, GetActivePaywallDraftErrors, GetActivePaywallDraftResponses, GetActiveProviderAssignmentData, GetActiveProviderAssignmentErrors, GetActiveProviderAssignmentResponses, GetAssetContentData, GetAssetContentErrors, GetAssetContentResponses, GetAssetData, GetAssetErrors, GetAssetResponses, GetAssetUsageData, GetAssetUsageErrors, GetAssetUsageResponses, GetEntitlementData, GetEntitlementErrors, GetEntitlementResponses, GetHealthData, GetHealthResponses, GetOrganizationData, GetOrganizationErrors, GetOrganizationResponses, GetPaywallData, GetPaywallDraftData, GetPaywallDraftErrors, GetPaywallDraftResponses, GetPaywallErrors, GetPaywallResponses, GetPaywallVersionData, GetPaywallVersionErrors, GetPaywallVersionResponses, GetPlacementBindingData, GetPlacementBindingErrors, GetPlacementBindingResponses, GetPlanData, GetPlanErrors, GetPlanResponses, GetProductData, GetProductErrors, GetProductReadinessData, GetProductReadinessErrors, GetProductReadinessResponses, GetProductResponses, GetProductUsageData, GetProductUsageErrors, GetProductUsageResponses, GetProjectData, GetProjectErrors, GetProjectResponses, GetProviderConnectionData, GetProviderConnectionErrors, GetProviderConnectionResponses, GetProviderReadinessData, GetProviderReadinessErrors, GetProviderReadinessResponses, GetReadinessData, GetReadinessErrors, GetReadinessResponses, GetSdkConfigurationData, GetSdkConfigurationErrors, GetSdkConfigurationResponses, GetSessionData, GetSessionErrors, GetSessionResponses, ListApiKeysData, ListApiKeysErrors, ListApiKeysResponses, ListApplicationsData, ListApplicationsErrors, ListApplicationsResponses, ListAssetsData, ListAssetsErrors, ListAssetsResponses, ListAuditEventsData, ListAuditEventsErrors, ListAuditEventsResponses, ListConfigurationReleasesData, ListConfigurationReleasesErrors, ListConfigurationReleasesResponses, ListEntitlementsData, ListEntitlementsErrors, ListEntitlementsResponses, ListEnvironmentsData, ListEnvironmentsErrors, ListEnvironmentsResponses, ListMembersData, ListMembersErrors, ListMembersResponses, ListOrganizationsData, ListOrganizationsErrors, ListOrganizationsResponses, ListPaywallsData, ListPaywallsErrors, ListPaywallsResponses, ListPaywallVersionsData, ListPaywallVersionsErrors, ListPaywallVersionsResponses, ListPlacementsData, ListPlacementsErrors, ListPlacementsResponses, ListPlanProductsData, ListPlanProductsErrors, ListPlanProductsResponses, ListPlansData, ListPlansErrors, ListPlansResponses, ListProductEntitlementsData, ListProductEntitlementsErrors, ListProductEntitlementsResponses, ListProductsData, ListProductsErrors, ListProductsResponses, ListProjectsData, ListProjectsErrors, ListProjectsResponses, ListProviderConnectionsData, ListProviderConnectionsErrors, ListProviderConnectionsResponses, ListProviderMappingsData, ListProviderMappingsErrors, ListProviderMappingsResponses, LoginData, LoginErrors, LoginResponses, LogoutData, LogoutResponses, PublishConfigurationData, PublishConfigurationErrors, PublishConfigurationResponses, RemoveMemberData, RemoveMemberErrors, RemoveMemberResponses, RemovePlanProductData, RemovePlanProductErrors, RemovePlanProductResponses, RemoveProductEntitlementData, RemoveProductEntitlementErrors, RemoveProductEntitlementResponses, ReplaceProviderConnectionScopesData, ReplaceProviderConnectionScopesErrors, ReplaceProviderConnectionScopesResponses, RestoreProductData, RestoreProductErrors, RestoreProductResponses, RestoreProjectData, RestoreProjectErrors, RestoreProjectResponses, RevokeApiKeyData, RevokeApiKeyErrors, RevokeApiKeyResponses, RevokeProviderConnectionData, RevokeProviderConnectionErrors, RevokeProviderConnectionResponses, RollbackConfigurationReleaseData, RollbackConfigurationReleaseErrors, RollbackConfigurationReleaseResponses, RotateApiKeyData, RotateApiKeyErrors, RotateApiKeyResponses, SetActiveProviderAssignmentData, SetActiveProviderAssignmentErrors, SetActiveProviderAssignmentResponses, SetEnvironmentModeData, SetEnvironmentModeErrors, SetEnvironmentModeResponses, SetProductReplacementData, SetProductReplacementErrors, SetProductReplacementResponses, SignUpData, SignUpErrors, SignUpResponses, UpdateEntitlementData, UpdateEntitlementErrors, UpdateEntitlementResponses, UpdateEnvironmentData, UpdateEnvironmentErrors, UpdateEnvironmentResponses, UpdateMemberData, UpdateMemberErrors, UpdateMemberResponses, UpdateOrganizationData, UpdateOrganizationErrors, UpdateOrganizationResponses, UpdatePaywallData, UpdatePaywallDraftData, UpdatePaywallDraftErrors, UpdatePaywallDraftResponses, UpdatePaywallErrors, UpdatePaywallResponses, UpdatePlacementData, UpdatePlacementErrors, UpdatePlacementResponses, UpdatePlanData, UpdatePlanErrors, UpdatePlanResponses, UpdateProductData, UpdateProductErrors, UpdateProductResponses, UpdateProjectData, UpdateProjectErrors, UpdateProjectResponses, UploadAssetData, UploadAssetErrors, UploadAssetResponses, ValidatePaywallDraftData, ValidatePaywallDraftErrors, ValidatePaywallDraftResponses } from './types.gen';
+import type { AddMemberData, AddMemberErrors, AddMemberResponses, AddPlanProductData, AddPlanProductErrors, AddPlanProductResponses, AddProductEntitlementData, AddProductEntitlementErrors, AddProductEntitlementResponses, ArchiveAssetData, ArchiveAssetErrors, ArchiveAssetResponses, ArchiveProductData, ArchiveProductErrors, ArchiveProductResponses, ArchiveProjectData, ArchiveProjectErrors, ArchiveProjectResponses, ArchiveProviderMappingData, ArchiveProviderMappingErrors, ArchiveProviderMappingResponses, BindPlacementData, BindPlacementErrors, BindPlacementResponses, ClearActiveProviderAssignmentData, ClearActiveProviderAssignmentErrors, ClearActiveProviderAssignmentResponses, ClonePaywallVersionToDraftData, ClonePaywallVersionToDraftErrors, ClonePaywallVersionToDraftResponses, CreateApiKeyData, CreateApiKeyErrors, CreateApiKeyResponses, CreateApplicationData, CreateApplicationErrors, CreateApplicationResponses, CreateEntitlementData, CreateEntitlementErrors, CreateEntitlementResponses, CreateOrganizationData, CreateOrganizationErrors, CreateOrganizationResponses, CreatePaywallData, CreatePaywallDraftData, CreatePaywallDraftErrors, CreatePaywallDraftResponses, CreatePaywallErrors, CreatePaywallResponses, CreatePlacementData, CreatePlacementErrors, CreatePlacementResponses, CreatePlanData, CreatePlanErrors, CreatePlanResponses, CreateProductData, CreateProductErrors, CreateProductResponses, CreateProjectData, CreateProjectErrors, CreateProjectResponses, CreateProviderConnectionData, CreateProviderConnectionErrors, CreateProviderConnectionResponses, CreateProviderMappingData, CreateProviderMappingDraftData, CreateProviderMappingDraftErrors, CreateProviderMappingDraftResponses, CreateProviderMappingErrors, CreateProviderMappingResponses, DeleteProductData, DeleteProductErrors, DeleteProductResponses, EnqueueProviderSyncData, EnqueueProviderSyncErrors, EnqueueProviderSyncResponses, GetActivePaywallDraftData, GetActivePaywallDraftErrors, GetActivePaywallDraftResponses, GetActiveProviderAssignmentData, GetActiveProviderAssignmentErrors, GetActiveProviderAssignmentResponses, GetAssetContentData, GetAssetContentErrors, GetAssetContentResponses, GetAssetData, GetAssetErrors, GetAssetResponses, GetAssetUsageData, GetAssetUsageErrors, GetAssetUsageResponses, GetEntitlementData, GetEntitlementErrors, GetEntitlementResponses, GetHealthData, GetHealthResponses, GetOrganizationData, GetOrganizationErrors, GetOrganizationResponses, GetPaywallData, GetPaywallDraftData, GetPaywallDraftErrors, GetPaywallDraftResponses, GetPaywallErrors, GetPaywallResponses, GetPaywallVersionData, GetPaywallVersionErrors, GetPaywallVersionResponses, GetPlacementBindingData, GetPlacementBindingErrors, GetPlacementBindingResponses, GetPlanData, GetPlanErrors, GetPlanResponses, GetProductData, GetProductErrors, GetProductReadinessData, GetProductReadinessErrors, GetProductReadinessResponses, GetProductResponses, GetProductUsageData, GetProductUsageErrors, GetProductUsageResponses, GetProjectData, GetProjectErrors, GetProjectResponses, GetProviderConnectionCapabilitiesData, GetProviderConnectionCapabilitiesErrors, GetProviderConnectionCapabilitiesResponses, GetProviderConnectionData, GetProviderConnectionErrors, GetProviderConnectionHealthData, GetProviderConnectionHealthErrors, GetProviderConnectionHealthResponses, GetProviderConnectionResponses, GetProviderMappingMetadataData, GetProviderMappingMetadataErrors, GetProviderMappingMetadataResponses, GetProviderReadinessData, GetProviderReadinessErrors, GetProviderReadinessResponses, GetReadinessData, GetReadinessErrors, GetReadinessResponses, GetSdkCommerceConfigurationData, GetSdkCommerceConfigurationErrors, GetSdkCommerceConfigurationResponses, GetSdkConfigurationData, GetSdkConfigurationErrors, GetSdkConfigurationResponses, GetSessionData, GetSessionErrors, GetSessionResponses, ImportProviderProductsData, ImportProviderProductsErrors, ImportProviderProductsResponses, ListApiKeysData, ListApiKeysErrors, ListApiKeysResponses, ListApplicationsData, ListApplicationsErrors, ListApplicationsResponses, ListAssetsData, ListAssetsErrors, ListAssetsResponses, ListAuditEventsData, ListAuditEventsErrors, ListAuditEventsResponses, ListConfigurationReleasesData, ListConfigurationReleasesErrors, ListConfigurationReleasesResponses, ListEntitlementsData, ListEntitlementsErrors, ListEntitlementsResponses, ListEnvironmentsData, ListEnvironmentsErrors, ListEnvironmentsResponses, ListMembersData, ListMembersErrors, ListMembersResponses, ListOrganizationsData, ListOrganizationsErrors, ListOrganizationsResponses, ListPaywallsData, ListPaywallsErrors, ListPaywallsResponses, ListPaywallVersionsData, ListPaywallVersionsErrors, ListPaywallVersionsResponses, ListPlacementsData, ListPlacementsErrors, ListPlacementsResponses, ListPlanProductsData, ListPlanProductsErrors, ListPlanProductsResponses, ListPlansData, ListPlansErrors, ListPlansResponses, ListProductEntitlementsData, ListProductEntitlementsErrors, ListProductEntitlementsResponses, ListProductsData, ListProductsErrors, ListProductsResponses, ListProjectsData, ListProjectsErrors, ListProjectsResponses, ListProviderConnectionDiagnosticsData, ListProviderConnectionDiagnosticsErrors, ListProviderConnectionDiagnosticsResponses, ListProviderConnectionsData, ListProviderConnectionsErrors, ListProviderConnectionsResponses, ListProviderMappingsData, ListProviderMappingsErrors, ListProviderMappingsResponses, ListProviderSyncRunsData, ListProviderSyncRunsErrors, ListProviderSyncRunsResponses, LoginData, LoginErrors, LoginResponses, LogoutData, LogoutResponses, PreviewProviderCatalogData, PreviewProviderCatalogErrors, PreviewProviderCatalogResponses, PublishConfigurationData, PublishConfigurationErrors, PublishConfigurationResponses, ReconnectProviderConnectionData, ReconnectProviderConnectionErrors, ReconnectProviderConnectionResponses, RemoveMemberData, RemoveMemberErrors, RemoveMemberResponses, RemovePlanProductData, RemovePlanProductErrors, RemovePlanProductResponses, RemoveProductEntitlementData, RemoveProductEntitlementErrors, RemoveProductEntitlementResponses, ReplaceProviderConnectionScopesData, ReplaceProviderConnectionScopesErrors, ReplaceProviderConnectionScopesResponses, ReplaceProviderMappingData, ReplaceProviderMappingErrors, ReplaceProviderMappingResponses, RestoreProductData, RestoreProductErrors, RestoreProductResponses, RestoreProjectData, RestoreProjectErrors, RestoreProjectResponses, RevokeApiKeyData, RevokeApiKeyErrors, RevokeApiKeyResponses, RevokeProviderConnectionData, RevokeProviderConnectionErrors, RevokeProviderConnectionResponses, RollbackConfigurationReleaseData, RollbackConfigurationReleaseErrors, RollbackConfigurationReleaseResponses, RotateApiKeyData, RotateApiKeyErrors, RotateApiKeyResponses, RotateProviderCredentialData, RotateProviderCredentialErrors, RotateProviderCredentialResponses, SetActiveProviderAssignmentData, SetActiveProviderAssignmentErrors, SetActiveProviderAssignmentResponses, SetEnvironmentModeData, SetEnvironmentModeErrors, SetEnvironmentModeResponses, SetProductReplacementData, SetProductReplacementErrors, SetProductReplacementResponses, SignUpData, SignUpErrors, SignUpResponses, TestProviderConnectionData, TestProviderConnectionErrors, TestProviderConnectionResponses, UpdateEntitlementData, UpdateEntitlementErrors, UpdateEntitlementResponses, UpdateEnvironmentData, UpdateEnvironmentErrors, UpdateEnvironmentResponses, UpdateMemberData, UpdateMemberErrors, UpdateMemberResponses, UpdateOrganizationData, UpdateOrganizationErrors, UpdateOrganizationResponses, UpdatePaywallData, UpdatePaywallDraftData, UpdatePaywallDraftErrors, UpdatePaywallDraftResponses, UpdatePaywallErrors, UpdatePaywallResponses, UpdatePlacementData, UpdatePlacementErrors, UpdatePlacementResponses, UpdatePlanData, UpdatePlanErrors, UpdatePlanResponses, UpdateProductData, UpdateProductErrors, UpdateProductResponses, UpdateProjectData, UpdateProjectErrors, UpdateProjectResponses, UploadAssetData, UploadAssetErrors, UploadAssetResponses, ValidatePaywallDraftData, ValidatePaywallDraftErrors, ValidatePaywallDraftResponses } from './types.gen';
 
 export type Options<TData extends TDataShape = TDataShape, ThrowOnError extends boolean = boolean, TResponse = unknown> = Options2<TData, ThrowOnError, TResponse> & {
     /**
@@ -279,8 +279,9 @@ export const listProviderConnections = <ThrowOnError extends boolean = false>(op
 });
 
 /**
- * Creates non-secret provider metadata and explicit Environment/Application scopes.
- * The connection starts pending and untested. Credential fields are not accepted.
+ * Creates a RevenueCat v2 connection with explicit Environment/Application scopes
+ * and a one-time least-privilege secret key. The secret is encrypted at rest and
+ * never returned. Custom SDK-local connections do not accept a credential.
  *
  */
 export const createProviderConnection = <ThrowOnError extends boolean = false>(options: Options<CreateProviderConnectionData, ThrowOnError>): RequestResult<CreateProviderConnectionResponses, CreateProviderConnectionErrors, ThrowOnError> => (options.client ?? client).post<CreateProviderConnectionResponses, CreateProviderConnectionErrors, ThrowOnError>({
@@ -290,6 +291,23 @@ export const createProviderConnection = <ThrowOnError extends boolean = false>(o
             type: 'apiKey'
         }],
     url: '/v1/projects/{projectId}/provider-connections',
+    ...options,
+    headers: {
+        'Content-Type': 'application/json',
+        ...options.headers
+    }
+});
+
+/**
+ * Imports selected live-catalog Products and optional Entitlements with item-level results.
+ */
+export const importProviderProducts = <ThrowOnError extends boolean = false>(options: Options<ImportProviderProductsData, ThrowOnError>): RequestResult<ImportProviderProductsResponses, ImportProviderProductsErrors, ThrowOnError> => (options.client ?? client).post<ImportProviderProductsResponses, ImportProviderProductsErrors, ThrowOnError>({
+    security: [{
+            in: 'cookie',
+            name: 'mosaic_session',
+            type: 'apiKey'
+        }],
+    url: '/v1/projects/{projectId}/provider-imports',
     ...options,
     headers: {
         'Content-Type': 'application/json',
@@ -426,6 +444,104 @@ export const revokeProviderConnection = <ThrowOnError extends boolean = false>(o
             type: 'apiKey'
         }],
     url: '/v1/provider-connections/{connectionId}/revoke',
+    ...options
+});
+
+export const testProviderConnection = <ThrowOnError extends boolean = false>(options: Options<TestProviderConnectionData, ThrowOnError>): RequestResult<TestProviderConnectionResponses, TestProviderConnectionErrors, ThrowOnError> => (options.client ?? client).post<TestProviderConnectionResponses, TestProviderConnectionErrors, ThrowOnError>({
+    security: [{
+            in: 'cookie',
+            name: 'mosaic_session',
+            type: 'apiKey'
+        }],
+    url: '/v1/provider-connections/{connectionId}/test',
+    ...options
+});
+
+export const getProviderConnectionHealth = <ThrowOnError extends boolean = false>(options: Options<GetProviderConnectionHealthData, ThrowOnError>): RequestResult<GetProviderConnectionHealthResponses, GetProviderConnectionHealthErrors, ThrowOnError> => (options.client ?? client).get<GetProviderConnectionHealthResponses, GetProviderConnectionHealthErrors, ThrowOnError>({
+    security: [{
+            in: 'cookie',
+            name: 'mosaic_session',
+            type: 'apiKey'
+        }],
+    url: '/v1/provider-connections/{connectionId}/health',
+    ...options
+});
+
+export const getProviderConnectionCapabilities = <ThrowOnError extends boolean = false>(options: Options<GetProviderConnectionCapabilitiesData, ThrowOnError>): RequestResult<GetProviderConnectionCapabilitiesResponses, GetProviderConnectionCapabilitiesErrors, ThrowOnError> => (options.client ?? client).get<GetProviderConnectionCapabilitiesResponses, GetProviderConnectionCapabilitiesErrors, ThrowOnError>({
+    security: [{
+            in: 'cookie',
+            name: 'mosaic_session',
+            type: 'apiKey'
+        }],
+    url: '/v1/provider-connections/{connectionId}/capabilities',
+    ...options
+});
+
+export const listProviderConnectionDiagnostics = <ThrowOnError extends boolean = false>(options: Options<ListProviderConnectionDiagnosticsData, ThrowOnError>): RequestResult<ListProviderConnectionDiagnosticsResponses, ListProviderConnectionDiagnosticsErrors, ThrowOnError> => (options.client ?? client).get<ListProviderConnectionDiagnosticsResponses, ListProviderConnectionDiagnosticsErrors, ThrowOnError>({
+    security: [{
+            in: 'cookie',
+            name: 'mosaic_session',
+            type: 'apiKey'
+        }],
+    url: '/v1/provider-connections/{connectionId}/diagnostics',
+    ...options
+});
+
+export const previewProviderCatalog = <ThrowOnError extends boolean = false>(options: Options<PreviewProviderCatalogData, ThrowOnError>): RequestResult<PreviewProviderCatalogResponses, PreviewProviderCatalogErrors, ThrowOnError> => (options.client ?? client).get<PreviewProviderCatalogResponses, PreviewProviderCatalogErrors, ThrowOnError>({
+    security: [{
+            in: 'cookie',
+            name: 'mosaic_session',
+            type: 'apiKey'
+        }],
+    url: '/v1/provider-connections/{connectionId}/catalog-preview',
+    ...options
+});
+
+export const rotateProviderCredential = <ThrowOnError extends boolean = false>(options: Options<RotateProviderCredentialData, ThrowOnError>): RequestResult<RotateProviderCredentialResponses, RotateProviderCredentialErrors, ThrowOnError> => (options.client ?? client).post<RotateProviderCredentialResponses, RotateProviderCredentialErrors, ThrowOnError>({
+    security: [{
+            in: 'cookie',
+            name: 'mosaic_session',
+            type: 'apiKey'
+        }],
+    url: '/v1/provider-connections/{connectionId}/rotate-credential',
+    ...options,
+    headers: {
+        'Content-Type': 'application/json',
+        ...options.headers
+    }
+});
+
+export const reconnectProviderConnection = <ThrowOnError extends boolean = false>(options: Options<ReconnectProviderConnectionData, ThrowOnError>): RequestResult<ReconnectProviderConnectionResponses, ReconnectProviderConnectionErrors, ThrowOnError> => (options.client ?? client).post<ReconnectProviderConnectionResponses, ReconnectProviderConnectionErrors, ThrowOnError>({
+    security: [{
+            in: 'cookie',
+            name: 'mosaic_session',
+            type: 'apiKey'
+        }],
+    url: '/v1/provider-connections/{connectionId}/reconnect',
+    ...options,
+    headers: {
+        'Content-Type': 'application/json',
+        ...options.headers
+    }
+});
+
+export const enqueueProviderSync = <ThrowOnError extends boolean = false>(options: Options<EnqueueProviderSyncData, ThrowOnError>): RequestResult<EnqueueProviderSyncResponses, EnqueueProviderSyncErrors, ThrowOnError> => (options.client ?? client).post<EnqueueProviderSyncResponses, EnqueueProviderSyncErrors, ThrowOnError>({
+    security: [{
+            in: 'cookie',
+            name: 'mosaic_session',
+            type: 'apiKey'
+        }],
+    url: '/v1/provider-connections/{connectionId}/sync',
+    ...options
+});
+
+export const listProviderSyncRuns = <ThrowOnError extends boolean = false>(options: Options<ListProviderSyncRunsData, ThrowOnError>): RequestResult<ListProviderSyncRunsResponses, ListProviderSyncRunsErrors, ThrowOnError> => (options.client ?? client).get<ListProviderSyncRunsResponses, ListProviderSyncRunsErrors, ThrowOnError>({
+    security: [{
+            in: 'cookie',
+            name: 'mosaic_session',
+            type: 'apiKey'
+        }],
+    url: '/v1/provider-connections/{connectionId}/sync-runs',
     ...options
 });
 
@@ -711,6 +827,36 @@ export const archiveProviderMapping = <ThrowOnError extends boolean = false>(opt
             type: 'apiKey'
         }],
     url: '/v1/provider-mappings/{mappingId}/archive',
+    ...options
+});
+
+/**
+ * Verifies the replacement against the live provider catalog, archives the old mapping, and atomically creates a new active mapping and metadata snapshot.
+ */
+export const replaceProviderMapping = <ThrowOnError extends boolean = false>(options: Options<ReplaceProviderMappingData, ThrowOnError>): RequestResult<ReplaceProviderMappingResponses, ReplaceProviderMappingErrors, ThrowOnError> => (options.client ?? client).post<ReplaceProviderMappingResponses, ReplaceProviderMappingErrors, ThrowOnError>({
+    security: [{
+            in: 'cookie',
+            name: 'mosaic_session',
+            type: 'apiKey'
+        }],
+    url: '/v1/provider-mappings/{mappingId}/replace',
+    ...options,
+    headers: {
+        'Content-Type': 'application/json',
+        ...options.headers
+    }
+});
+
+/**
+ * Returns the current immutable normalized metadata snapshot selected by the mapping. Raw provider payloads are never returned.
+ */
+export const getProviderMappingMetadata = <ThrowOnError extends boolean = false>(options: Options<GetProviderMappingMetadataData, ThrowOnError>): RequestResult<GetProviderMappingMetadataResponses, GetProviderMappingMetadataErrors, ThrowOnError> => (options.client ?? client).get<GetProviderMappingMetadataResponses, GetProviderMappingMetadataErrors, ThrowOnError>({
+    security: [{
+            in: 'cookie',
+            name: 'mosaic_session',
+            type: 'apiKey'
+        }],
+    url: '/v1/provider-mappings/{mappingId}/metadata',
     ...options
 });
 
@@ -1100,6 +1246,12 @@ export const rollbackConfigurationRelease = <ThrowOnError extends boolean = fals
 export const getSdkConfiguration = <ThrowOnError extends boolean = false>(options: Options<GetSdkConfigurationData, ThrowOnError>): RequestResult<GetSdkConfigurationResponses, GetSdkConfigurationErrors, ThrowOnError> => (options.client ?? client).get<GetSdkConfigurationResponses, GetSdkConfigurationErrors, ThrowOnError>({
     security: [{ scheme: 'bearer', type: 'http' }],
     url: '/v1/sdk/configuration',
+    ...options
+});
+
+export const getSdkCommerceConfiguration = <ThrowOnError extends boolean = false>(options: Options<GetSdkCommerceConfigurationData, ThrowOnError>): RequestResult<GetSdkCommerceConfigurationResponses, GetSdkCommerceConfigurationErrors, ThrowOnError> => (options.client ?? client).get<GetSdkCommerceConfigurationResponses, GetSdkCommerceConfigurationErrors, ThrowOnError>({
+    security: [{ scheme: 'bearer', type: 'http' }],
+    url: '/v1/sdk/commerce-configuration',
     ...options
 });
 

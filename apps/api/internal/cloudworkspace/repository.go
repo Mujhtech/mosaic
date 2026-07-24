@@ -38,11 +38,19 @@ type Reader interface {
 	ProviderConnections(string) []ProviderConnection
 	ProviderConnectionEnvironmentIDs(string) []string
 	ProviderConnectionApplicationIDs(string) []string
+	ProviderCredential(string) (ProviderCredentialRecord, bool)
+	ProviderDiagnostics(string) []ProviderDiagnostic
 	ActiveProviderAssignment(string, string) (ActiveProviderAssignment, bool)
 	ProviderAssignments(string) []ActiveProviderAssignment
 	ProviderMapping(string) (ProviderProductMapping, bool)
 	ProviderMappings(string) []ProviderProductMapping
+	ProviderMappingsByConnection(string) []ProviderProductMapping
 	ProviderMetadataSnapshot(string) (ProviderProductMetadataSnapshot, bool)
+	ProviderEntitlementMappings(string, string, string) []ProviderEntitlementMapping
+	ProviderImportByKeyHash(string, [32]byte) (ProviderImportRequest, bool)
+	ProviderImportItems(string) []ProviderImportItem
+	ProviderSyncJobs(string) []ProviderSyncJob
+	ProviderSyncRuns(string) []ProviderSyncRun
 	AuditEvents(string) []AuditEvent
 }
 
@@ -68,9 +76,19 @@ type Transaction interface {
 	DeleteProductGrant(string, string)
 	SaveProviderConnection(ProviderConnection)
 	ReplaceProviderConnectionScopes(string, string, []string, []string, time.Time)
+	SaveProviderCredential(ProviderCredentialRecord)
+	SaveProviderDiagnostic(ProviderDiagnostic)
 	SaveActiveProviderAssignment(ActiveProviderAssignment)
 	DeleteActiveProviderAssignment(string, string)
 	SaveProviderMapping(ProviderProductMapping)
 	SaveProviderMetadataSnapshot(ProviderProductMetadataSnapshot)
+	SaveProviderEntitlementMapping(ProviderEntitlementMapping)
+	SaveProviderImport(ProviderImportRequest)
+	SaveProviderImportItem(ProviderImportItem)
+	SaveProviderSyncJob(ProviderSyncJob)
+	LeaseProviderSyncJob(string, time.Time, time.Time) (ProviderSyncJob, bool)
+	OwnsProviderSyncJobLease(string, string, int, time.Time) bool
+	SaveProviderSyncRun(ProviderSyncRun)
+	SaveProviderSyncRunItem(ProviderSyncRunItem)
 	SaveAuditEvent(AuditEvent)
 }

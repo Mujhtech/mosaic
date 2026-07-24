@@ -20,6 +20,8 @@ type Reader interface {
 	ProviderConnectionEnvironmentScoped(string, string) bool
 	ProviderConnectionApplicationScoped(string, string) bool
 	ProviderMappingsForReadiness(string, string, string, string, string) []ProviderMappingReadiness
+	ProviderMappingsForCommerce(string, string, string, string, []string) []CommerceProductMapping
+	ProviderEntitlementMappingsForCommerce(string, string, string, []string) []CommerceEntitlementMapping
 	ProviderMetadataSnapshot(string) (ProviderMetadataSnapshot, bool)
 	Asset(string) (Asset, bool)
 	Assets(string) []Asset
@@ -47,6 +49,7 @@ type Reader interface {
 	ReleaseState(string) (ReleaseState, bool)
 	PublicationRequest(string, string, string) (PublicationRequest, bool)
 	APIKeyByPrefix(string) (APIKeyRecord, bool)
+	CommerceConfiguration(string, string) (CommerceConfigurationSnapshot, bool)
 }
 
 type Transaction interface {
@@ -66,6 +69,7 @@ type Transaction interface {
 	SaveReleasePlacement(ReleasePlacement)
 	SaveReleaseProduct(string, string, string, string)
 	SaveReleaseAsset(string, string, string, string)
+	SaveCommerceConfiguration(CommerceConfigurationSnapshot)
 	SaveReleaseState(ReleaseState)
 	SavePublicationRequest(PublicationRequest)
 	SaveAuditEvent(AuditEvent)

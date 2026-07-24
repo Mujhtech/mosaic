@@ -2,7 +2,7 @@
 
 ## Status
 
-**Stage 1 accepted for implementation; RevenueCat credential authorization remains an owner gate.**
+**Stage 1 accepted for implementation; RevenueCat v2 secret-key authorization is owner-approved.**
 
 The product owner explicitly authorized Phase 4A inspection and planning on 2026-07-23 despite the
 inherited Phase 2.5 and Phase 3 review records. This authorization does not silently repair or
@@ -10,16 +10,16 @@ reclassify the known Phase 3 defects. Cross-platform canonical JSON digest equiv
 Draft-create/clone idempotency replay, and the missing Phase 3 demonstrations remain outside this
 work package.
 
-The product owner approved the recommended encryption design on 2026-07-23. ADR-0019 freezes the
-versioned AES-256-GCM envelope, operator keyring, rotation, and failure behavior. Provider
-credentials may not be persisted until the separate RevenueCat OAuth-versus-v2-secret-key decision
-is approved.
+The product owner approved the recommended encryption design and the direct least-privilege
+RevenueCat API v2 secret-key path on 2026-07-23. ADR-0019 freezes the versioned AES-256-GCM
+envelope, operator keyring, rotation, and failure behavior. OAuth remains deferred for the first
+alpha.
 
 ## Baseline and isolation
 
 - Base commit: `8fd78c9f58a46343b743c64b4abade58dea8cd12`
-- Branch: `phase/4a-revenuecat-custom-providers`
-- Worktree: `/Users/muhideenmujeeb/Projects/mosaic-phase-4a`
+- Continuation branch: `codex/phase-4a-integration`
+- Worktree: none; the owner explicitly required continuation in the primary Project directory
 - Phase 3 runtime: PostgreSQL through `pgxpool`; explicit Goose migrations; no production
   in-memory repository
 - Paywall authority: Protocol `0.2` RC4 only, per ADR-0016
@@ -45,9 +45,9 @@ Implementation must continue using official RevenueCat documentation and reposit
 
 Versions verified on 2026-07-23:
 
-- Flutter adapter candidate: `purchases_flutter 10.4.2`
+- Flutter adapter candidate: `purchases_flutter 10.4.3`
 - Apple adapter candidate: `purchases-ios 5.81.2`
-- Android adapter candidate: `purchases-android 10.14.1`
+- Android adapter candidate: `purchases-android 10.15.0`
 - RevenueCat REST API: v2, `https://api.revenuecat.com/v2`
 
 The adapter packages pin these candidates independently of Mosaic Core. Versions must be rechecked
@@ -289,8 +289,8 @@ required read operations. OAuth is the preferred future hosted third-party autho
 adds consent, refresh-token, revocation, and self-hosting complexity not required for the first
 alpha.
 
-Option A is accepted in ADR-0019. Owner approval is still required for the direct least-privilege
-v2 credential path before RevenueCat credential persistence is implemented.
+Option A is accepted in ADR-0019. The owner also approved the direct least-privilege v2 credential
+path for the first alpha; OAuth is deferred.
 
 ## Active-provider resolution
 
@@ -418,10 +418,10 @@ Mosaic Core
 └── optional RevenueCat adapter package/module
 ```
 
-- Flutter: nested `mosaic_revenuecat` package using `purchases_flutter 10.4.2`; adapter-only
+- Flutter: nested `mosaic_revenuecat` package using `purchases_flutter 10.4.3`; adapter-only
   Dart/Flutter floors may be higher than core.
 - iOS: separate nested Swift package `MosaicRevenueCat` using `purchases-ios 5.81.2`.
-- Android: separate `:mosaic-revenuecat` module using `purchases-android 10.14.1`.
+- Android: separate `:mosaic-revenuecat` module using `purchases-android 10.15.0`.
 
 Host-owned RevenueCat initialization is the default on all platforms. The host supplies only its
 platform-specific public key directly to RevenueCat and owns app-user identity/login/logout.
@@ -646,10 +646,7 @@ No agent modifies another owner's files concurrently. Gate 4B does not begin.
 Accepted:
 
 1. Versioned AES-256-GCM envelopes with an operator-supplied keyring, frozen by ADR-0019.
-
-Blocking:
-
-1. Approve least-privilege RevenueCat v2 secret keys for the first alpha; defer OAuth.
+2. Least-privilege RevenueCat v2 secret keys for the first alpha; OAuth is deferred.
 
 Recorded defaults unless the owner objects:
 

@@ -3,7 +3,9 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:mosaic_revenuecat/mosaic_revenuecat.dart';
 import 'package:mosaic_sdk/mosaic_sdk.dart';
+import 'package:purchases_flutter/purchases_flutter.dart' as revenuecat;
 
 const String _previewEndpoint = String.fromEnvironment(
   'MOSAIC_PREVIEW_ENDPOINT',
@@ -25,8 +27,42 @@ const String _publicSdkKey = String.fromEnvironment(
   'MOSAIC_PUBLIC_SDK_KEY',
   defaultValue: 'public_example_key',
 );
+const String _mosaicApplicationId = String.fromEnvironment(
+  'MOSAIC_APPLICATION_ID',
+  defaultValue: 'application_flutter_example',
+);
+const bool _commerceEnabled = bool.fromEnvironment('MOSAIC_COMMERCE_ENABLED');
+const String _revenueCatPublicSdkKey = String.fromEnvironment(
+  'REVENUECAT_PUBLIC_SDK_KEY',
+);
 
-void main() {
+var _revenueCatReady = false;
+
+MosaicStorePlatform? get _runtimeStorePlatform =>
+    switch (defaultTargetPlatform) {
+      TargetPlatform.iOS => MosaicStorePlatform.ios,
+      TargetPlatform.android => MosaicStorePlatform.android,
+      _ => null,
+    };
+
+bool get _connectedCommerceEnabled =>
+    _commerceEnabled && _runtimeStorePlatform != null;
+
+Future<void> main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  if (_revenueCatPublicSdkKey.isNotEmpty) {
+    try {
+      // The example host owns RevenueCat initialization and customer identity.
+      await revenuecat.Purchases.configure(
+        revenuecat.PurchasesConfiguration(_revenueCatPublicSdkKey),
+      );
+      _revenueCatReady = true;
+    } on Object {
+      // Keep the deterministic local Provider available without exposing the
+      // RevenueCat key or raw initialization error.
+      _revenueCatReady = false;
+    }
+  }
   runApp(const MosaicFlutterExample());
 }
 
@@ -212,7 +248,14 @@ final class _HostedPaywallPlaygroundState
     publicSdkKey: _publicSdkKey,
     baseUrl: Uri.parse(_hostedBaseUrl),
     applicationVersion: '0.2.0',
+    applicationId: !_connectedCommerceEnabled ? null : _mosaicApplicationId,
+    storePlatform: _connectedCommerceEnabled ? _runtimeStorePlatform : null,
     purchaseProvider: _fallbackPurchaseProvider(),
+    commerceProviderFactories: _revenueCatReady
+        ? const <MosaicCommerceProviderFactory>[
+            MosaicRevenueCatProviderFactory(),
+          ]
+        : const <MosaicCommerceProviderFactory>[],
     bundledFallbackLoader: () async =>
         rootBundle.loadString('assets/generated/configuration-release.json'),
     onDiagnostic: (diagnostic) {

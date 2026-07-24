@@ -7,6 +7,10 @@ const protocolRoot = resolve(toolsDirectory, "..");
 const generatedDirectory = resolve(protocolRoot, "browser/generated");
 
 const schemaPaths = Object.freeze({
+  commerceConfigurationV1: resolve(
+    protocolRoot,
+    "schema/commerce-configuration/v1/configuration.schema.json",
+  ),
   commerceProviderV1: resolve(
     protocolRoot,
     "schema/commerce-provider/v1/contract.schema.json",
@@ -47,6 +51,9 @@ function definitionTypeName(context, definitionName) {
   }
   if (context === "commerceProviderV1") {
     return `MosaicCommerceProviderV1${name}`;
+  }
+  if (context === "commerceConfigurationV1") {
+    return `MosaicCommerceConfigurationV1${name}`;
   }
   throw new Error(`Unsupported declaration context ${context}`);
 }
@@ -90,6 +97,17 @@ function refType(ref, context) {
           fragment.slice("/$defs/".length),
         )
       : "MosaicCommerceProviderV1Record";
+  }
+  if (
+    schemaId ===
+    "urn:mosaic:protocol:schema:commerce-configuration:v1:configuration"
+  ) {
+    return fragment?.startsWith("/$defs/")
+      ? definitionTypeName(
+          "commerceConfigurationV1",
+          fragment.slice("/$defs/".length),
+        )
+      : "MosaicCommerceConfigurationV1";
   }
 
   throw new Error(`Unsupported schema reference ${ref}`);
@@ -278,6 +296,9 @@ function commerceProviderRecordSource(schema) {
 }
 
 export function buildBrowserContractDeclarations() {
+  const commerceConfigurationV1 = readJson(
+    schemaPaths.commerceConfigurationV1,
+  );
   const commerceProviderV1 = readJson(schemaPaths.commerceProviderV1);
   const paywallV02 = readJson(schemaPaths.paywallV02);
   const previewV02 = readJson(schemaPaths.previewV02);
@@ -300,6 +321,16 @@ export function buildBrowserContractDeclarations() {
     "",
     commerceProviderRecordSource(commerceProviderV1),
     "",
+    definitionsSource(
+      commerceConfigurationV1,
+      "commerceConfigurationV1",
+    ),
+    "",
+    `export type MosaicCommerceConfigurationV1 = ${schemaType(
+      commerceConfigurationV1,
+      "commerceConfigurationV1",
+    )};`,
+    "",
     "export type MosaicPaywallDocument = MosaicPaywallV02Document;",
     "export type MosaicPreviewMessage = MosaicPreviewV02Message;",
     "export type MosaicLocalProject = MosaicLocalProjectV02;",
@@ -311,6 +342,7 @@ export function buildBrowserContractDeclarations() {
 
   const indexDeclaration = `// Generated public declarations for protocol/browser/index.js. Do not edit.
 import type {
+  MosaicCommerceConfigurationV1,
   MosaicCommerceProviderV1Record,
   MosaicLocalProject,
   MosaicLocalProjectV02,
@@ -343,6 +375,7 @@ export type MosaicAnyPaywallDocument = MosaicPaywallV02Document;
 export type MosaicAnyPreviewMessage = MosaicPreviewV02Message;
 export type MosaicAnyLocalProject = MosaicLocalProjectV02;
 export type MosaicAnyCommerceProviderRecord = MosaicCommerceProviderV1Record;
+export type MosaicAnyCommerceConfiguration = MosaicCommerceConfigurationV1;
 
 export type MosaicLocalPreviewNegotiationDiagnostic = {
   readonly code: "preview.noMutualVersion" | "preview.incompatibleSchemaVersion" | "preview.invalidNegotiation" | "preview.invalidCapabilityReport" | "preview.invalidDraft" | "preview.unsupportedPreviewCapability" | "preview.unsupportedCapability" | "preview.documentTooLarge";

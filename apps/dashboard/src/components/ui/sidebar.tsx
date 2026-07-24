@@ -681,5 +681,7 @@ export {
   SidebarRail,
   SidebarSeparator,
   SidebarTrigger,
+  // This hook intentionally shares the context defined by the sidebar components.
+  // eslint-disable-next-line react-refresh/only-export-components
   useSidebar,
 }

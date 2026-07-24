@@ -286,6 +286,17 @@ func (s *Service) Publish(ctx context.Context, actor Actor, command PublishComma
 		for _, assetID := range assetIDs {
 			tx.SaveReleaseAsset(release.ID, environment.ID, project.ID, assetID)
 		}
+		if shouldBuildCommerceConfigurations(productIDs, providerIssues) {
+			for _, application := range tx.Applications(project.ID) {
+				commerceConfiguration, err := s.buildCommerceConfiguration(
+					tx, release, environment, application, productIDs, now,
+				)
+				if err != nil {
+					return err
+				}
+				tx.SaveCommerceConfiguration(commerceConfiguration)
+			}
+		}
 		state.CurrentReleaseID, state.LastReleaseNumber, state.UpdatedAt = release.ID, releaseNumber, now
 		tx.SaveReleaseState(state)
 		draft.Status, draft.UpdatedByActorID, draft.UpdatedAt = "published", actor.ID, now
@@ -315,6 +326,29 @@ func publicationIssue(code string, product Product, application Application, res
 	}
 }
 
+func providerEntitlementCoverageIssue(reader Reader, connectionID, environmentID, applicationID, productID string, grantCount int) string {
+	mappings := reader.ProviderEntitlementMappingsForCommerce(
+		connectionID, environmentID, applicationID, []string{productID},
+	)
+	entitlements := make(map[string]struct{}, len(mappings))
+	providerIdentifiers := make(map[string]string, len(mappings))
+	for _, mapping := range mappings {
+		if _, duplicate := entitlements[mapping.EntitlementID]; duplicate {
+			return "mappingAmbiguous"
+		}
+		entitlements[mapping.EntitlementID] = struct{}{}
+		if existing, duplicate := providerIdentifiers[mapping.ProviderEntitlementIdentifier]; duplicate &&
+			existing != mapping.EntitlementID {
+			return "mappingAmbiguous"
+		}
+		providerIdentifiers[mapping.ProviderEntitlementIdentifier] = mapping.EntitlementID
+	}
+	if len(entitlements) != grantCount {
+		return "mappingMissing"
+	}
+	return ""
+}
+
 func providerPublicationIssues(reader Reader, environment Environment, products map[string]Product, now time.Time) []ProviderPublicationIssue {
 	applications := reader.Applications(environment.ProjectID)
 	if len(applications) == 0 {
@@ -341,7 +375,8 @@ func providerPublicationIssues(reader Reader, environment Environment, products 
 			if product.MetadataSource != "provider" {
 				issues = append(issues, publicationIssue("metadataStale", product, application, "product", product.ID, "syncProviderMetadata"))
 			}
-			if reader.ProductGrantCount(product.ID) == 0 {
+			grantCount := reader.ProductGrantCount(product.ID)
+			if grantCount == 0 {
 				issues = append(issues, publicationIssue("productUnavailable", product, application, "product", product.ID, "grantEntitlement"))
 			}
 			assignment, ok := reader.ProviderAssignment(environment.ID, application.ID)
@@ -368,6 +403,19 @@ func providerPublicationIssues(reader Reader, environment Environment, products 
 			if environment.Mode == "production" && connection.Mode != "production" {
 				issues = append(issues, publicationIssue("modeMismatch", product, application, "provider_connection", connection.ID, "assignProductionConnection"))
 			}
+			if grantCount > 0 {
+				if code := providerEntitlementCoverageIssue(
+					reader, connection.ID, environment.ID, application.ID, product.ID, grantCount,
+				); code != "" {
+					recoveryAction := "importProviderEntitlementMapping"
+					if code == "mappingAmbiguous" {
+						recoveryAction = "replaceProviderEntitlementMapping"
+					}
+					issues = append(issues, publicationIssue(
+						code, product, application, "product", product.ID, recoveryAction,
+					))
+				}
+			}
 			mappings := reader.ProviderMappingsForReadiness(product.ID, connection.ID, environment.ID, application.ID, application.Platform)
 			switch len(mappings) {
 			case 0:
@@ -382,7 +430,11 @@ func providerPublicationIssues(reader Reader, environment Environment, products 
 					continue
 				}
 				snapshot, ok := reader.ProviderMetadataSnapshot(mapping.CurrentSnapshotID)
-				if !ok || snapshot.ExpiresAt != nil && !snapshot.ExpiresAt.After(now) {
+				if !ok {
+					issues = append(issues, publicationIssue("metadataStale", product, application, "provider_mapping", mapping.ID, "syncProviderMetadata"))
+				} else if snapshot.ExpiresAt != nil && !snapshot.ExpiresAt.After(now) {
+					issues = append(issues, publicationIssue("productUnavailable", product, application, "provider_mapping", mapping.ID, "syncProviderMetadata"))
+				} else if snapshot.StaleAt.IsZero() || !snapshot.StaleAt.After(now) {
 					issues = append(issues, publicationIssue("metadataStale", product, application, "provider_mapping", mapping.ID, "syncProviderMetadata"))
 				}
 			default:
@@ -556,6 +608,18 @@ func (s *Service) ListReleases(ctx context.Context, actor Actor, projectID, envi
 	return result, err
 }
 
+func shouldBuildCommerceConfigurations(productIDs []string, providerIssues []ProviderPublicationIssue) bool {
+	if len(productIDs) == 0 {
+		return false
+	}
+	for _, issue := range providerIssues {
+		if issue.Code != "metadataStale" {
+			return false
+		}
+	}
+	return true
+}
+
 func (s *Service) Rollback(ctx context.Context, actor Actor, projectID, environmentID, targetReleaseID, idempotencyKey string) (Release, error) {
 	ctx, span := s.operation(ctx, "release.rollback", actor, attribute.String("mosaic.environment.id", environmentID), attribute.String("mosaic.release.id", targetReleaseID))
 	defer span.End()
@@ -610,6 +674,17 @@ func (s *Service) Rollback(ctx context.Context, actor Actor, projectID, environm
 		}
 		for _, assetID := range assetIDs {
 			tx.SaveReleaseAsset(result.ID, environment.ID, project.ID, assetID)
+		}
+		for _, application := range tx.Applications(project.ID) {
+			targetCommerce, ok := tx.CommerceConfiguration(target.ID, application.ID)
+			if !ok {
+				continue
+			}
+			commerceConfiguration, err := s.cloneCommerceConfiguration(targetCommerce, result, now)
+			if err != nil {
+				return err
+			}
+			tx.SaveCommerceConfiguration(commerceConfiguration)
 		}
 		state.CurrentReleaseID, state.LastReleaseNumber, state.UpdatedAt = result.ID, releaseNumber, now
 		tx.SaveReleaseState(state)

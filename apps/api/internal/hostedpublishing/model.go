@@ -48,6 +48,7 @@ type ProviderAssignment struct {
 type ProviderConnection struct {
 	ID           string
 	ProjectID    string
+	Provider     string
 	Mode         string
 	Status       string
 	HealthStatus string
@@ -61,8 +62,40 @@ type ProviderMappingReadiness struct {
 }
 
 type ProviderMetadataSnapshot struct {
-	ID        string
-	ExpiresAt *time.Time
+	ID         string
+	ObservedAt time.Time
+	SyncedAt   time.Time
+	StaleAt    time.Time
+	ExpiresAt  *time.Time
+}
+
+type CommerceProductMapping struct {
+	ID                         string
+	ProductID                  string
+	ProviderProductIdentifier  string
+	ProviderPackageIdentifier  string
+	ProviderOfferingIdentifier string
+	ExpectedStoreProductID     string
+	CurrentSnapshotID          string
+}
+
+type CommerceEntitlementMapping struct {
+	EntitlementID                 string
+	EntitlementKey                string
+	ProviderEntitlementIdentifier string
+}
+
+type CommerceConfigurationSnapshot struct {
+	ID                         string
+	ProjectID                  string
+	EnvironmentID              string
+	ApplicationID              string
+	StorePlatform              string
+	ConfigurationReleaseID     string
+	ConfigurationReleaseDigest string
+	ContentDigest              string
+	Payload                    json.RawMessage
+	CreatedAt                  time.Time
 }
 
 type ProviderPublicationIssue struct {
@@ -282,6 +315,12 @@ type PublishResult struct {
 
 type SDKConfiguration struct {
 	Release     Release
+	Environment Environment
+	APIKeyID    string
+}
+
+type SDKCommerceConfiguration struct {
+	Snapshot    CommerceConfigurationSnapshot
 	Environment Environment
 	APIKeyID    string
 }

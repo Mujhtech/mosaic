@@ -3,6 +3,7 @@ import type {
   Application,
   Environment,
   ProviderConnection,
+  ProviderHealthStatus,
 } from "@/generated/api"
 
 export interface ActiveProviderAssignmentView {
@@ -39,4 +40,25 @@ export function activeProviderScopes(
     assignment: assignmentByApplication.get(application.id),
     environment,
   }))
+}
+
+export function providerCredentialActions(
+  connection: Pick<ProviderConnection, "lastErrorCode" | "status">,
+  healthStatus: ProviderHealthStatus,
+): { reconnect: boolean; rotate: boolean } {
+  const recoveryErrors = new Set([
+    "credentialExpired",
+    "credentialInvalid",
+    "permissionDenied",
+    "providerUnavailable",
+  ])
+  const revoked = connection.status === "revoked"
+  return {
+    reconnect:
+      revoked ||
+      healthStatus === "degraded" ||
+      healthStatus === "unavailable" ||
+      Boolean(connection.lastErrorCode && recoveryErrors.has(connection.lastErrorCode)),
+    rotate: !revoked,
+  }
 }

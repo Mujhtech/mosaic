@@ -22,22 +22,17 @@ import { useQuery } from "@tanstack/react-query"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { Separator } from "@/components/ui/separator"
 import { ArrowsLeftRightIcon } from "@phosphor-icons/react/dist/ssr/ArrowsLeftRight"
-import { projectsQueryOptions } from "@/features/projects/queries/projects-query"
 
 const AVATAR_CLASSNAMES =
   "bg-sidebar-primary text-sidebar-primary-foreground size-4 rounded data-[size=lg]:size-4 data-[size=sm]:size-4 after:rounded-none"
 
 export function OrganizationSwitcher() {
   const { isMobile } = useSidebar()
-  const { data, isLoading } = useQuery(organizationsQueryOptions())
+  const { data } = useQuery(organizationsQueryOptions())
 
   const organizations = React.useMemo(() => {
     return data?.items ?? []
   }, [data?.items])
-
-  const [activeOrganization, setActiveOrganization] = React.useState(organizations[0])
-
-  // const projects = useQuery(projectsQueryOptions(activeOrganization, "active"))
 
   return (
     <SidebarMenu>
@@ -80,11 +75,7 @@ export function OrganizationSwitcher() {
                 Projects
               </DropdownMenuLabel>
               {organizations.map((organization) => (
-                <DropdownMenuItem
-                  key={organization.id}
-                  onClick={() => setActiveOrganization(organization)}
-                  className="gap-2 p-2"
-                >
+                <DropdownMenuItem key={organization.id} className="gap-2 p-2">
                   <Avatar className={AVATAR_CLASSNAMES}>
                     <AvatarFallback className="rounded! text-[10px]">
                       {organization.name.charAt(0)}

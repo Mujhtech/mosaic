@@ -1,6 +1,9 @@
 package cloudworkspace
 
-import "time"
+import (
+	"encoding/json"
+	"time"
+)
 
 type Actor struct {
 	ID string
@@ -251,9 +254,66 @@ type ProviderConnection struct {
 	LastSuccessfulTestAt *time.Time               `json:"lastSuccessfulTestAt,omitempty"`
 	LastSuccessfulSyncAt *time.Time               `json:"lastSuccessfulSyncAt,omitempty"`
 	LastErrorCode        ProviderErrorCode        `json:"lastErrorCode,omitempty"`
+	Credential           *ProviderCredential      `json:"credential,omitempty"`
 	RevokedAt            *time.Time               `json:"revokedAt,omitempty"`
 	CreatedAt            time.Time                `json:"createdAt"`
 	UpdatedAt            time.Time                `json:"updatedAt"`
+}
+
+type ProviderCredential struct {
+	Class           string     `json:"class"`
+	Fingerprint     string     `json:"fingerprint"`
+	KeyID           string     `json:"keyId"`
+	EnvelopeVersion int        `json:"envelopeVersion"`
+	CreatedAt       time.Time  `json:"createdAt"`
+	RotatedAt       *time.Time `json:"rotatedAt,omitempty"`
+	RevokedAt       *time.Time `json:"revokedAt,omitempty"`
+}
+
+// ProviderCredentialRecord is persistence-only. Ciphertext, nonce, and the
+// complete fingerprint are never serialized into public API responses.
+type ProviderCredentialRecord struct {
+	ConnectionID   string
+	ProjectID      string
+	OrganizationID string
+	Class          string
+	Version        int
+	Algorithm      string
+	KeyID          string
+	Nonce          []byte
+	Ciphertext     []byte
+	Fingerprint    []byte
+	CreatedAt      time.Time
+	RotatedAt      *time.Time
+	RevokedAt      *time.Time
+	UpdatedAt      time.Time
+}
+
+type ProviderCapability struct {
+	Name       string `json:"name"`
+	Support    string `json:"support"`
+	ReasonCode string `json:"reasonCode,omitempty"`
+}
+
+type ProviderConnectionHealth struct {
+	ConnectionID        string               `json:"connectionId"`
+	Status              ProviderHealthStatus `json:"status"`
+	LastSuccessfulAt    *time.Time           `json:"lastSuccessfulAt,omitempty"`
+	LastErrorCode       ProviderErrorCode    `json:"lastErrorCode,omitempty"`
+	Capabilities        []ProviderCapability `json:"capabilities"`
+	RequiredPermissions []string             `json:"requiredPermissions"`
+}
+
+type ProviderDiagnostic struct {
+	ID                string            `json:"id"`
+	ProjectID         string            `json:"projectId"`
+	ConnectionID      string            `json:"connectionId"`
+	Operation         string            `json:"operation"`
+	Code              ProviderErrorCode `json:"code"`
+	Retryable         bool              `json:"retryable"`
+	RetryAfterSeconds *int              `json:"retryAfterSeconds,omitempty"`
+	CorrelationID     string            `json:"correlationId"`
+	OccurredAt        time.Time         `json:"occurredAt"`
 }
 
 type ActiveProviderAssignment struct {
@@ -337,9 +397,158 @@ type ProviderProductMetadataSnapshot struct {
 	Availability  ProviderAvailability   `json:"availability"`
 	ObservedAt    time.Time              `json:"observedAt"`
 	SyncedAt      time.Time              `json:"syncedAt"`
+	StaleAt       time.Time              `json:"staleAt"`
 	ExpiresAt     *time.Time             `json:"expiresAt,omitempty"`
 	LastErrorCode ProviderErrorCode      `json:"lastErrorCode,omitempty"`
+	Metadata      json.RawMessage        `json:"metadata"`
 	CreatedAt     time.Time              `json:"createdAt"`
+}
+
+type ProviderCatalogPreview struct {
+	ConnectionID string                       `json:"connectionId"`
+	ObservedAt   time.Time                    `json:"observedAt"`
+	Applications []ProviderCatalogApplication `json:"applications"`
+	Products     []ProviderCatalogProduct     `json:"products"`
+	Entitlements []ProviderCatalogEntitlement `json:"entitlements"`
+	Offerings    []ProviderCatalogOffering    `json:"offerings"`
+}
+
+type ProviderCatalogApplication struct {
+	ID         string `json:"id"`
+	Name       string `json:"name"`
+	Platform   string `json:"platform"`
+	Identifier string `json:"identifier,omitempty"`
+}
+
+type ProviderCatalogProduct struct {
+	ID              string `json:"id"`
+	ApplicationID   string `json:"applicationId"`
+	StoreIdentifier string `json:"storeIdentifier"`
+	DisplayName     string `json:"displayName,omitempty"`
+	Type            string `json:"type"`
+	State           string `json:"state"`
+	Importable      bool   `json:"importable"`
+}
+
+type ProviderCatalogEntitlement struct {
+	ID          string `json:"id"`
+	LookupKey   string `json:"lookupKey"`
+	DisplayName string `json:"displayName"`
+	State       string `json:"state"`
+}
+
+type ProviderCatalogPackage struct {
+	ID          string   `json:"id"`
+	LookupKey   string   `json:"lookupKey"`
+	DisplayName string   `json:"displayName"`
+	ProductIDs  []string `json:"productIds"`
+}
+
+type ProviderCatalogOffering struct {
+	ID          string                   `json:"id"`
+	LookupKey   string                   `json:"lookupKey"`
+	DisplayName string                   `json:"displayName"`
+	State       string                   `json:"state"`
+	IsCurrent   bool                     `json:"isCurrent"`
+	Packages    []ProviderCatalogPackage `json:"packages"`
+}
+
+type ProviderEntitlementMapping struct {
+	ID                            string                `json:"id"`
+	ProjectID                     string                `json:"projectId"`
+	EntitlementID                 string                `json:"entitlementId"`
+	ConnectionID                  string                `json:"connectionId"`
+	EnvironmentID                 string                `json:"environmentId"`
+	ApplicationID                 string                `json:"applicationId"`
+	ProviderEntitlementIdentifier string                `json:"providerEntitlementIdentifier"`
+	Status                        ProviderMappingStatus `json:"status"`
+	ArchivedAt                    *time.Time            `json:"archivedAt,omitempty"`
+	CreatedAt                     time.Time             `json:"createdAt"`
+	UpdatedAt                     time.Time             `json:"updatedAt"`
+}
+
+type ProviderImportStatus string
+
+const (
+	ProviderImportInProgress ProviderImportStatus = "in_progress"
+	ProviderImportCompleted  ProviderImportStatus = "completed"
+	ProviderImportPartial    ProviderImportStatus = "partial"
+)
+
+type ProviderImportRequest struct {
+	ID                 string               `json:"id"`
+	ProjectID          string               `json:"projectId"`
+	ConnectionID       string               `json:"connectionId"`
+	IdempotencyKeyHash [32]byte             `json:"-"`
+	RequestHash        [32]byte             `json:"-"`
+	Status             ProviderImportStatus `json:"status"`
+	CreatedByActorID   string               `json:"createdByActorId"`
+	CreatedAt          time.Time            `json:"createdAt"`
+	CompletedAt        *time.Time           `json:"completedAt,omitempty"`
+}
+
+type ProviderImportItem struct {
+	ImportID                  string            `json:"importId"`
+	ProjectID                 string            `json:"projectId"`
+	ProviderProductIdentifier string            `json:"providerProductIdentifier"`
+	MosaicProductID           string            `json:"mosaicProductId,omitempty"`
+	MappingID                 string            `json:"mappingId,omitempty"`
+	Status                    string            `json:"status"`
+	ErrorCode                 ProviderErrorCode `json:"errorCode,omitempty"`
+	CreatedAt                 time.Time         `json:"createdAt"`
+}
+
+type ProviderImportResult struct {
+	Import ProviderImportRequest `json:"import"`
+	Items  []ProviderImportItem  `json:"items"`
+}
+
+type ProviderSyncJobStatus string
+
+const (
+	ProviderSyncJobQueued    ProviderSyncJobStatus = "queued"
+	ProviderSyncJobLeased    ProviderSyncJobStatus = "leased"
+	ProviderSyncJobCompleted ProviderSyncJobStatus = "completed"
+	ProviderSyncJobFailed    ProviderSyncJobStatus = "failed"
+)
+
+type ProviderSyncJob struct {
+	ID                 string                `json:"id"`
+	ProjectID          string                `json:"projectId"`
+	ConnectionID       string                `json:"connectionId"`
+	Status             ProviderSyncJobStatus `json:"status"`
+	AttemptCount       int                   `json:"attemptCount"`
+	MaxAttempts        int                   `json:"maxAttempts"`
+	AvailableAt        time.Time             `json:"availableAt"`
+	LeaseOwner         string                `json:"-"`
+	LeaseExpiresAt     *time.Time            `json:"-"`
+	RequestedByActorID string                `json:"requestedByActorId"`
+	CreatedAt          time.Time             `json:"createdAt"`
+	UpdatedAt          time.Time             `json:"updatedAt"`
+}
+
+type ProviderSyncRun struct {
+	ID           string     `json:"id"`
+	ProjectID    string     `json:"projectId"`
+	ConnectionID string     `json:"connectionId"`
+	JobID        string     `json:"jobId"`
+	Status       string     `json:"status"`
+	ItemCount    int        `json:"itemCount"`
+	SuccessCount int        `json:"successCount"`
+	FailureCount int        `json:"failureCount"`
+	StartedAt    time.Time  `json:"startedAt"`
+	CompletedAt  *time.Time `json:"completedAt,omitempty"`
+	CreatedAt    time.Time  `json:"createdAt"`
+}
+
+type ProviderSyncRunItem struct {
+	RunID       string            `json:"runId"`
+	ProjectID   string            `json:"projectId"`
+	MappingID   string            `json:"mappingId"`
+	Status      string            `json:"status"`
+	SnapshotID  string            `json:"snapshotId,omitempty"`
+	ErrorCode   ProviderErrorCode `json:"errorCode,omitempty"`
+	CompletedAt time.Time         `json:"completedAt"`
 }
 
 type ProviderErrorCode string

@@ -209,7 +209,9 @@ describe("mock commerce controls", () => {
     )
     expect(screen.getByLabelText("Starter mock availability")).toBeVisible()
     expect(
-      screen.getByText(/Provider price and availability are unavailable in this response/),
+      screen.getByText(
+        /Synchronized catalog evidence is unavailable; simulated preview remains active/,
+      ),
     ).toBeVisible()
     expect(screen.getByLabelText("hosted mock state")).toHaveTextContent('"localizedPrice":"$4.99"')
     expect(screen.getByLabelText("hosted document")).not.toHaveTextContent("$4.99")

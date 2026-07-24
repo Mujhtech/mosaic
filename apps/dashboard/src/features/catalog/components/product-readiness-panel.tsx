@@ -5,7 +5,15 @@ import {
   type ProductReadinessView,
 } from "@/features/catalog/types/connected-product-view"
 
-export function ProductReadinessPanel({ readiness }: { readiness: ProductReadinessView }) {
+export function ProductReadinessPanel({
+  accessHref,
+  manageProvidersHref,
+  readiness,
+}: {
+  accessHref: string
+  manageProvidersHref: string
+  readiness: ProductReadinessView
+}) {
   const blockers = readiness.issues.filter((issue) => issue.severity === "blocker")
   const warnings = readiness.issues.filter((issue) => issue.severity === "warning")
   const healthy = readiness.state === "connected" && blockers.length === 0
@@ -53,10 +61,22 @@ export function ProductReadinessPanel({ readiness }: { readiness: ProductReadine
         ) : (
           <div className="space-y-3">
             {blockers.length > 0 ? (
-              <IssueList issues={blockers} title="Blocking issues" tone="danger" />
+              <IssueList
+                accessHref={accessHref}
+                issues={blockers}
+                manageProvidersHref={manageProvidersHref}
+                title="Blocking issues"
+                tone="danger"
+              />
             ) : null}
             {warnings.length > 0 ? (
-              <IssueList issues={warnings} title="Warnings" tone="neutral" />
+              <IssueList
+                accessHref={accessHref}
+                issues={warnings}
+                manageProvidersHref={manageProvidersHref}
+                title="Warnings"
+                tone="neutral"
+              />
             ) : null}
           </div>
         )}
@@ -67,10 +87,14 @@ export function ProductReadinessPanel({ readiness }: { readiness: ProductReadine
 
 function IssueList({
   issues,
+  accessHref,
+  manageProvidersHref,
   title,
   tone,
 }: {
   issues: ProductReadinessView["issues"]
+  accessHref: string
+  manageProvidersHref: string
   title: string
   tone: "danger" | "neutral"
 }) {
@@ -95,13 +119,52 @@ function IssueList({
       <ul className="mt-2 space-y-2 text-sm">
         {issues.map((issue) => (
           <li key={`${issue.code}:${issue.resourceType}:${issue.resourceId}`}>
-            <p>
-              {issue.code} · {issue.resourceType} {issue.resourceId}
-            </p>
-            <p className="text-muted-foreground mt-1 text-xs">Recovery: {issue.recoveryAction}</p>
+            <p>{readinessIssueLabel(issue.code)}</p>
+            <a
+              className="text-primary mt-1 inline-flex text-xs font-semibold"
+              href={recoveryHref(issue.recoveryAction, accessHref, manageProvidersHref)}
+            >
+              {recoveryLabel(issue.recoveryAction)}
+            </a>
           </li>
         ))}
       </ul>
     </section>
   )
+}
+
+function readinessIssueLabel(code: string) {
+  switch (code) {
+    case "mappingMissing":
+      return "This Product is not mapped to the active commerce provider."
+    case "metadataStale":
+      return "Connected Product details need to be synchronized."
+    case "entitlementGrantMissing":
+      return "This Product does not grant an Access definition."
+    case "connectionUnavailable":
+      return "The active commerce connection is unavailable."
+    default:
+      return "Connected commerce setup needs attention before publishing."
+  }
+}
+
+function recoveryHref(action: string, accessHref: string, manageProvidersHref: string) {
+  return action === "addEntitlementGrant" ? accessHref : manageProvidersHref
+}
+
+function recoveryLabel(action: string) {
+  switch (action) {
+    case "addEntitlementGrant":
+      return "Add Access"
+    case "fixProductMapping":
+      return "Review Product mapping"
+    case "reconnectProvider":
+      return "Reconnect provider"
+    case "selectActiveProvider":
+      return "Select active provider"
+    case "syncProviderMetadata":
+      return "Synchronize Product details"
+    default:
+      return "Review commerce setup"
+  }
 }

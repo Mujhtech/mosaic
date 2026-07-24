@@ -1,0 +1,68 @@
+{
+  "commerceConfigurationVersion": "1",
+  "configuration": {
+    "id": "commerce_configuration_local_android",
+    "environmentId": "environment_development",
+    "applicationId": "application_android",
+    "storePlatform": "android",
+    "configurationRelease": {
+      "id": "configuration_release_local_7",
+      "contentDigest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+    },
+    "contentDigest": "sha256:a363f526638d14ed16ca454043f31964ee8e48593815cdb6a092186236a6cdf3",
+    "activeProvider": {
+      "identity": {
+        "id": "acme-commerce",
+        "displayName": "Acme Commerce",
+        "adapterVersion": "2.3.1"
+      },
+      "activation": {
+        "source": "sdkLocal",
+        "localSnapshotId": "acme_android_snapshot_7"
+      },
+      "capabilities": [
+        {
+          "name": "productLoading",
+          "support": "supported"
+        },
+        {
+          "name": "subscriptions",
+          "support": "supported"
+        },
+        {
+          "name": "restore",
+          "support": "conditional",
+          "reasonCode": "host.sessionRequired"
+        },
+        {
+          "name": "activeEntitlementLookup",
+          "support": "supported"
+        }
+      ]
+    },
+    "productMappings": [
+      {
+        "mosaicProductId": "product_pro_monthly",
+        "mappingId": "mapping_acme_pro_monthly_android",
+        "providerProductReference": "acme.pro.monthly",
+        "adapterMapping": {
+          "kind": "directProduct"
+        }
+      }
+    ],
+    "entitlementMappings": [
+      {
+        "mosaicEntitlementKey": "pro",
+        "providerEntitlementIdentifier": "premium_access"
+      }
+    ],
+    "freshness": {
+      "source": "sdkLocalSnapshot",
+      "status": "fresh",
+      "providerObservedAt": "2026-07-23T12:00:00Z",
+      "synchronizedAt": "2026-07-23T12:00:00Z",
+      "staleAt": "2026-07-24T12:00:00Z"
+    },
+    "diagnostics": []
+  }
+}

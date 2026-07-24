@@ -1,4 +1,3 @@
-import { BuildingsIcon } from "@phosphor-icons/react/dist/ssr/Buildings"
 import { CodeIcon } from "@phosphor-icons/react/dist/ssr/Code"
 import { GearSixIcon } from "@phosphor-icons/react/dist/ssr/GearSix"
 import { KeyIcon } from "@phosphor-icons/react/dist/ssr/Key"
@@ -6,82 +5,22 @@ import { PackageIcon } from "@phosphor-icons/react/dist/ssr/Package"
 import { StorefrontIcon } from "@phosphor-icons/react/dist/ssr/Storefront"
 import { SquaresFourIcon } from "@phosphor-icons/react/dist/ssr/SquaresFour"
 import { UsersThreeIcon } from "@phosphor-icons/react/dist/ssr/UsersThree"
-import { Link, useNavigate, useRouterState } from "@tanstack/react-router"
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
-import type { ReactNode } from "react"
+import { useRouterState } from "@tanstack/react-router"
 
-import { HostedAccessBanner } from "@/features/auth/components/hosted-access-banner"
-import { Button } from "@/components/ui/button"
-import { logoutMutationOptions } from "@/features/auth/mutations/auth-mutations"
-import { sessionQueryOptions } from "@/features/auth/queries/session-query"
-import {
-  isEnvironmentSurface,
-  isProjectWideSurface,
-  readWorkspaceScope,
-} from "@/features/organizations/types/workspace-navigation"
-import { environmentsQueryOptions } from "@/features/environments/queries/environments-query"
-import { organizationQueryOptions } from "@/features/organizations/queries/organizations-query"
-import { projectQueryOptions } from "@/features/projects/queries/projects-query"
-import { ApiError } from "@/lib/api/errors"
-
-import { NotePencilIcon } from "@phosphor-icons/react/dist/ssr/NotePencil"
-
-import type { ComponentProps } from "react"
-
-import { NavMain, type NavigationItem } from "@/components/navigation/nav-main"
+import { NavMain } from "@/components/navigation/nav-main"
 import {
   Sidebar,
   SidebarContent,
   SidebarFooter,
   SidebarHeader,
-  SidebarMenu,
-  SidebarMenuButton,
-  SidebarMenuItem,
   SidebarRail,
 } from "@/components/ui/sidebar"
+import { readWorkspaceScope } from "@/features/organizations/types/workspace-navigation"
 import { OrganizationSwitcher } from "./organization-switcher"
 
-interface WorkspaceNavLinkProps {
-  children: ReactNode
-  icon: ReactNode
-  params?: Record<string, string>
-  to: string
-}
-
 export function CloudWorkspaceShell() {
-  const navigate = useNavigate()
-  const queryClient = useQueryClient()
   const pathname = useRouterState({ select: (state) => state.location.pathname })
   const scope = readWorkspaceScope(pathname)
-  const showProjectNavigation = Boolean(scope.organizationId && scope.projectId)
-  const session = useQuery(sessionQueryOptions())
-  const signOut = useMutation({
-    ...logoutMutationOptions(queryClient),
-    onSuccess: async () => {
-      queryClient.clear()
-      await navigate({ to: "/login" })
-    },
-  })
-  // Scope metadata is independent and begins in parallel; shared page reads are query-deduplicated.
-  const organization = useQuery({
-    ...organizationQueryOptions(scope.organizationId ?? "unselected"),
-    enabled: Boolean(scope.organizationId),
-  })
-  const project = useQuery({
-    ...projectQueryOptions(scope.projectId ?? "unselected"),
-    enabled: Boolean(scope.projectId),
-  })
-  const environments = useQuery({
-    ...environmentsQueryOptions(scope.projectId ?? "unselected"),
-    enabled: Boolean(scope.projectId),
-  })
-  const environmentItems = environments.data?.items ?? []
-  const selectedEnvironment = environmentItems.find((item) => item.id === scope.environmentId)
-  const defaultEnvironment =
-    selectedEnvironment ??
-    environmentItems.find((item) => item.key === "staging") ??
-    environmentItems.find((item) => item.key === "development") ??
-    environmentItems[0]
 
   return (
     <Sidebar collapsible="icon">

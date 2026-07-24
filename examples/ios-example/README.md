@@ -4,8 +4,11 @@ This native SwiftUI application has separate Local Studio and Hosted modes.
 Local Studio renders Protocol 0.2 revisions immediately without an account.
 Hosted mode fetches Configuration Delivery v1 with an Environment-scoped
 public SDK key, resolves a Placement, caches the last valid release, and falls
-back safely when delivery is unavailable. Both modes use the native SwiftUI
-renderer and deterministic mock commerce; no real billing provider is used.
+back safely when delivery is unavailable. Local Studio remains deterministic.
+Hosted mode uses mock commerce unless RevenueCat settings are present; with
+those settings it configures the optional adapter, fetches the release-bound
+Commerce Configuration sidecar, installs exact Product mappings, and loads
+native Products.
 
 Open `MosaicExample.xcodeproj`, select the `MosaicExample` scheme, and run on an
 iOS 15-or-newer simulator. With Studio running at the default local endpoint,
@@ -55,6 +58,8 @@ example, and use Refresh:
 MOSAIC_PUBLIC_SDK_KEY=<environment public SDK key>
 MOSAIC_SDK_BASE_URL=http://127.0.0.1:8080
 MOSAIC_PLACEMENT=onboarding_complete
+MOSAIC_APPLICATION_ID=<Mosaic Application ID>
+REVENUECAT_PUBLIC_SDK_KEY=<platform public SDK key>
 ```
 
 The base URL is the configuration API origin. Releases containing hosted
@@ -63,6 +68,11 @@ or device testing against the local Compose edge therefore requires trusting
 its development certificate; production Asset URLs must use a publicly trusted
 HTTPS origin. Stop the API and restart the app to verify last-known-valid cache
 fallback. Clearing app data demonstrates the bundled Delivery v1 fallback.
+
+Omit the last two variables to use the app-owned deterministic provider without
+changing the Paywall document. RevenueCat remains optional. Its public SDK key
+is read only by the host app and passed directly to RevenueCat; Mosaic remote
+configuration and diagnostics never contain it.
 
 ## Canonical fixture ownership
 

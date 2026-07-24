@@ -1,0 +1,27 @@
+{
+  "commerceConfigurationVersion": "1",
+  "status": "releaseCandidate",
+  "schema": "../../schema/commerce-configuration/v1/configuration.schema.json",
+  "canonicalFixtures": [
+    "../../fixtures/commerce-configuration/v1/revenuecat-configuration.json",
+    "../../fixtures/commerce-configuration/v1/sdk-local-configuration.json"
+  ],
+  "activationSources": [
+    "providerConnection",
+    "sdkLocal"
+  ],
+  "adapterMappingKinds": [
+    "directProduct",
+    "revenueCatPackage"
+  ],
+  "readerPolicy": {
+    "unknownVersion": "rejectSidecar",
+    "unknownField": "rejectSidecar",
+    "unknownAdapterMapping": "rejectSidecar",
+    "releaseAssociationMismatch": "rejectSidecar",
+    "digestMismatch": "rejectSidecar",
+    "ambiguousMapping": "rejectSidecar",
+    "cacheAssociation": "atomicallyWithConfigurationRelease",
+    "credentialMaterial": "forbidden"
+  }
+}

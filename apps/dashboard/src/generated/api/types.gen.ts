@@ -165,17 +165,57 @@ export type SetEnvironmentModeRequest = {
     mode: EnvironmentMode;
 };
 
-/**
- * Non-secret metadata only. Credential, token, secret, and authorization-code properties are unsupported.
- */
-export type CreateProviderConnectionRequest = {
+export type CreateProviderConnectionRequest = unknown & {
     name: string;
     provider: ProviderConnectionKind;
     integrationMode: ProviderIntegrationMode;
     mode: ProviderConnectionMode;
+    /**
+     * Required RevenueCat v2 Project resource ID.
+     */
     externalProjectId?: string;
     environmentIds: Array<string>;
     applicationIds: Array<string>;
+};
+
+export type ProviderCredentialRequest = {
+    credential: string;
+};
+
+export type ReplaceProviderMappingRequest = {
+    providerProductIdentifier: string;
+    /**
+     * RevenueCat v2 Package ID or SDK lookup key; persisted as the verified lookup key.
+     */
+    providerPackageIdentifier?: string;
+    /**
+     * RevenueCat v2 Offering ID or SDK lookup key; persisted as the verified lookup key.
+     */
+    providerOfferingIdentifier?: string;
+};
+
+export type ProviderEntitlementImportRequest = {
+    providerIdentifier: string;
+    existingEntitlementId?: string;
+    key?: string;
+    name?: string;
+};
+
+export type ProviderProductImportItemRequest = {
+    providerProductIdentifier: string;
+    providerPackageIdentifier?: string;
+    providerOfferingIdentifier?: string;
+    existingProductId?: string;
+    key?: string;
+    internalName?: string;
+    environmentId: string;
+    applicationId: string;
+    entitlements: Array<ProviderEntitlementImportRequest>;
+};
+
+export type ProviderImportRequest = {
+    connectionId: string;
+    items: Array<ProviderProductImportItemRequest>;
 };
 
 export type ReplaceProviderConnectionScopesRequest = {
@@ -192,10 +232,9 @@ export type SetProviderAssignmentRequest = {
 };
 
 /**
- * providerProductIdentifier is copied unchanged into Commerce Provider Contract
- * providerProductReference for the selected adapter. Package and Offering identifiers
- * are optional RevenueCat metadata and must be supplied together; custom providers
- * cannot receive them.
+ * Creates an unverified draft only. RevenueCat Product, Package, and Offering
+ * identifiers are server-side catalog references and never become the SDK
+ * providerProductReference until verified and normalized.
  *
  */
 export type CreateProviderMappingDraftRequest = {
@@ -203,7 +242,7 @@ export type CreateProviderMappingDraftRequest = {
     environmentId: string;
     applicationId: string;
     /**
-     * Opaque adapter-owned value mapped exactly to Commerce Provider Contract providerProductReference.
+     * Opaque provider catalog resource identifier.
      */
     providerProductIdentifier: string;
     /**
@@ -281,9 +320,158 @@ export type ProviderConnection = {
     lastSuccessfulTestAt?: Timestamp;
     lastSuccessfulSyncAt?: Timestamp;
     lastErrorCode?: ProviderErrorCode;
+    credential?: ProviderCredential;
     revokedAt?: Timestamp;
     createdAt: Timestamp;
     updatedAt: Timestamp;
+};
+
+/**
+ * Safe credential metadata only; contains no plaintext, ciphertext, nonce, or authorization material.
+ */
+export type ProviderCredential = {
+    class: 'serverSecret';
+    fingerprint: string;
+    keyId: string;
+    envelopeVersion: number;
+    createdAt: Timestamp;
+    rotatedAt?: Timestamp;
+    revokedAt?: Timestamp;
+};
+
+export type ProviderCapability = {
+    name: string;
+    support: 'supported' | 'conditional' | 'unsupported';
+    reasonCode?: string;
+};
+
+export type ProviderConnectionHealth = {
+    connectionId: string;
+    status: ProviderHealthStatus;
+    lastSuccessfulAt?: Timestamp;
+    lastErrorCode?: ProviderErrorCode;
+    capabilities: Array<ProviderCapability>;
+    requiredPermissions: Array<string>;
+};
+
+export type ProviderConnectionCapabilities = {
+    connectionId: string;
+    capabilities: Array<ProviderCapability>;
+    requiredPermissions: Array<string>;
+};
+
+export type ProviderDiagnostic = {
+    id: string;
+    projectId: string;
+    connectionId: string;
+    operation: string;
+    code: ProviderErrorCode;
+    retryable: boolean;
+    retryAfterSeconds?: number;
+    correlationId: string;
+    occurredAt: Timestamp;
+};
+
+export type ProviderCatalogApplication = {
+    id: string;
+    name: string;
+    platform: 'app_store' | 'play_store';
+    identifier?: string;
+};
+
+export type ProviderCatalogProduct = {
+    id: string;
+    applicationId: string;
+    storeIdentifier: string;
+    displayName?: string;
+    type: 'subscription' | 'non_consumable' | 'consumable' | 'unknown';
+    state: string;
+    importable: boolean;
+};
+
+export type ProviderCatalogEntitlement = {
+    id: string;
+    lookupKey: string;
+    displayName: string;
+    state: string;
+};
+
+export type ProviderCatalogPackage = {
+    id: string;
+    lookupKey: string;
+    displayName: string;
+    productIds: Array<string>;
+};
+
+export type ProviderCatalogOffering = {
+    id: string;
+    lookupKey: string;
+    displayName: string;
+    state: string;
+    isCurrent: boolean;
+    packages: Array<ProviderCatalogPackage>;
+};
+
+export type ProviderCatalogPreview = {
+    connectionId: string;
+    observedAt: Timestamp;
+    applications: Array<ProviderCatalogApplication>;
+    products: Array<ProviderCatalogProduct>;
+    entitlements: Array<ProviderCatalogEntitlement>;
+    offerings: Array<ProviderCatalogOffering>;
+};
+
+export type ProviderImport = {
+    id: string;
+    projectId: string;
+    connectionId: string;
+    status: 'in_progress' | 'completed' | 'partial';
+    createdByActorId: string;
+    createdAt: Timestamp;
+    completedAt?: Timestamp;
+};
+
+export type ProviderImportItem = {
+    importId: string;
+    projectId: string;
+    providerProductIdentifier: string;
+    mosaicProductId?: string;
+    mappingId?: string;
+    status: 'imported' | 'failed';
+    errorCode?: ProviderErrorCode;
+    createdAt: Timestamp;
+};
+
+export type ProviderImportResult = {
+    import: ProviderImport;
+    items: Array<ProviderImportItem>;
+};
+
+export type ProviderSyncJob = {
+    id: string;
+    projectId: string;
+    connectionId: string;
+    status: 'queued' | 'leased' | 'completed' | 'failed';
+    attemptCount: number;
+    maxAttempts: number;
+    availableAt: Timestamp;
+    requestedByActorId: string;
+    createdAt: Timestamp;
+    updatedAt: Timestamp;
+};
+
+export type ProviderSyncRun = {
+    id: string;
+    projectId: string;
+    connectionId: string;
+    jobId: string;
+    status: 'running' | 'completed' | 'partial' | 'failed';
+    itemCount: number;
+    successCount: number;
+    failureCount: number;
+    startedAt: Timestamp;
+    completedAt?: Timestamp;
+    createdAt: Timestamp;
 };
 
 export type ActiveProviderAssignment = {
@@ -385,7 +573,7 @@ export type ProviderProductMapping = {
     platform: Platform;
     provider: ProviderKind;
     /**
-     * Opaque value emitted unchanged as Commerce Provider Contract providerProductReference.
+     * RevenueCat v2 Product resource identifier used only by server-side catalog synchronization.
      */
     providerProductIdentifier: string;
     /**
@@ -419,8 +607,15 @@ export type ProviderProductMetadataSnapshot = {
     availability: ProviderAvailability;
     observedAt: Timestamp;
     syncedAt: Timestamp;
+    staleAt: Timestamp;
     expiresAt?: Timestamp;
     lastErrorCode?: ProviderErrorCode;
+    /**
+     * Normalized safe metadata only; raw provider responses are never persisted.
+     */
+    metadata: {
+        [key: string]: unknown;
+    };
     createdAt: Timestamp;
 };
 
@@ -873,6 +1068,23 @@ export type AuditEventList = {
         items: Array<AuditEvent>;
         page: Page;
     };
+};
+
+export type CreateProviderConnectionRequestWritable = unknown & {
+    name: string;
+    provider: ProviderConnectionKind;
+    integrationMode: ProviderIntegrationMode;
+    mode: ProviderConnectionMode;
+    /**
+     * Required RevenueCat v2 Project resource ID.
+     */
+    externalProjectId?: string;
+    /**
+     * One-time RevenueCat v2 least-privilege secret key. Never returned or logged.
+     */
+    credential?: string;
+    environmentIds: Array<string>;
+    applicationIds: Array<string>;
 };
 
 /**
@@ -1722,7 +1934,7 @@ export type ListProviderConnectionsResponses = {
 export type ListProviderConnectionsResponse = ListProviderConnectionsResponses[keyof ListProviderConnectionsResponses];
 
 export type CreateProviderConnectionData = {
-    body: CreateProviderConnectionRequest;
+    body: CreateProviderConnectionRequestWritable;
     path: {
         projectId: string;
     };
@@ -1747,6 +1959,38 @@ export type CreateProviderConnectionResponses = {
 };
 
 export type CreateProviderConnectionResponse = CreateProviderConnectionResponses[keyof CreateProviderConnectionResponses];
+
+export type ImportProviderProductsData = {
+    body: ProviderImportRequest;
+    headers: {
+        'Idempotency-Key': string;
+    };
+    path: {
+        projectId: string;
+    };
+    query?: never;
+    url: '/v1/projects/{projectId}/provider-imports';
+};
+
+export type ImportProviderProductsErrors = {
+    /**
+     * Stable machine-readable failure.
+     */
+    default: ErrorEnvelope;
+};
+
+export type ImportProviderProductsError = ImportProviderProductsErrors[keyof ImportProviderProductsErrors];
+
+export type ImportProviderProductsResponses = {
+    /**
+     * Idempotent selected-import result with item-level outcomes.
+     */
+    200: {
+        data: ProviderImportResult;
+    };
+};
+
+export type ImportProviderProductsResponse = ImportProviderProductsResponses[keyof ImportProviderProductsResponses];
 
 export type ListApiKeysData = {
     body?: never;
@@ -2028,6 +2272,267 @@ export type RevokeProviderConnectionResponses = {
 };
 
 export type RevokeProviderConnectionResponse = RevokeProviderConnectionResponses[keyof RevokeProviderConnectionResponses];
+
+export type TestProviderConnectionData = {
+    body?: never;
+    path: {
+        connectionId: string;
+    };
+    query?: never;
+    url: '/v1/provider-connections/{connectionId}/test';
+};
+
+export type TestProviderConnectionErrors = {
+    /**
+     * Stable machine-readable failure.
+     */
+    default: ErrorEnvelope;
+};
+
+export type TestProviderConnectionError = TestProviderConnectionErrors[keyof TestProviderConnectionErrors];
+
+export type TestProviderConnectionResponses = {
+    /**
+     * Safe connection health and capability summary.
+     */
+    200: {
+        data: ProviderConnectionHealth;
+    };
+};
+
+export type TestProviderConnectionResponse = TestProviderConnectionResponses[keyof TestProviderConnectionResponses];
+
+export type GetProviderConnectionHealthData = {
+    body?: never;
+    path: {
+        connectionId: string;
+    };
+    query?: never;
+    url: '/v1/provider-connections/{connectionId}/health';
+};
+
+export type GetProviderConnectionHealthErrors = {
+    /**
+     * Stable machine-readable failure.
+     */
+    default: ErrorEnvelope;
+};
+
+export type GetProviderConnectionHealthError = GetProviderConnectionHealthErrors[keyof GetProviderConnectionHealthErrors];
+
+export type GetProviderConnectionHealthResponses = {
+    /**
+     * Safe connection health and capability summary.
+     */
+    200: {
+        data: ProviderConnectionHealth;
+    };
+};
+
+export type GetProviderConnectionHealthResponse = GetProviderConnectionHealthResponses[keyof GetProviderConnectionHealthResponses];
+
+export type GetProviderConnectionCapabilitiesData = {
+    body?: never;
+    path: {
+        connectionId: string;
+    };
+    query?: never;
+    url: '/v1/provider-connections/{connectionId}/capabilities';
+};
+
+export type GetProviderConnectionCapabilitiesErrors = {
+    /**
+     * Stable machine-readable failure.
+     */
+    default: ErrorEnvelope;
+};
+
+export type GetProviderConnectionCapabilitiesError = GetProviderConnectionCapabilitiesErrors[keyof GetProviderConnectionCapabilitiesErrors];
+
+export type GetProviderConnectionCapabilitiesResponses = {
+    /**
+     * Closed provider capability matrix and required least-privilege permissions.
+     */
+    200: {
+        data: ProviderConnectionCapabilities;
+    };
+};
+
+export type GetProviderConnectionCapabilitiesResponse = GetProviderConnectionCapabilitiesResponses[keyof GetProviderConnectionCapabilitiesResponses];
+
+export type ListProviderConnectionDiagnosticsData = {
+    body?: never;
+    path: {
+        connectionId: string;
+    };
+    query?: never;
+    url: '/v1/provider-connections/{connectionId}/diagnostics';
+};
+
+export type ListProviderConnectionDiagnosticsErrors = {
+    /**
+     * Stable machine-readable failure.
+     */
+    default: ErrorEnvelope;
+};
+
+export type ListProviderConnectionDiagnosticsError = ListProviderConnectionDiagnosticsErrors[keyof ListProviderConnectionDiagnosticsErrors];
+
+export type ListProviderConnectionDiagnosticsResponses = {
+    /**
+     * Safe provider diagnostics without provider response bodies or secrets.
+     */
+    200: {
+        data: {
+            items: Array<ProviderDiagnostic>;
+        };
+    };
+};
+
+export type ListProviderConnectionDiagnosticsResponse = ListProviderConnectionDiagnosticsResponses[keyof ListProviderConnectionDiagnosticsResponses];
+
+export type PreviewProviderCatalogData = {
+    body?: never;
+    path: {
+        connectionId: string;
+    };
+    query?: never;
+    url: '/v1/provider-connections/{connectionId}/catalog-preview';
+};
+
+export type PreviewProviderCatalogErrors = {
+    /**
+     * Stable machine-readable failure.
+     */
+    default: ErrorEnvelope;
+};
+
+export type PreviewProviderCatalogError = PreviewProviderCatalogErrors[keyof PreviewProviderCatalogErrors];
+
+export type PreviewProviderCatalogResponses = {
+    /**
+     * Normalized live provider catalog preview.
+     */
+    200: {
+        data: ProviderCatalogPreview;
+    };
+};
+
+export type PreviewProviderCatalogResponse = PreviewProviderCatalogResponses[keyof PreviewProviderCatalogResponses];
+
+export type RotateProviderCredentialData = {
+    body: ProviderCredentialRequest;
+    path: {
+        connectionId: string;
+    };
+    query?: never;
+    url: '/v1/provider-connections/{connectionId}/rotate-credential';
+};
+
+export type RotateProviderCredentialErrors = {
+    /**
+     * Stable machine-readable failure.
+     */
+    default: ErrorEnvelope;
+};
+
+export type RotateProviderCredentialError = RotateProviderCredentialErrors[keyof RotateProviderCredentialErrors];
+
+export type RotateProviderCredentialResponses = {
+    /**
+     * Non-secret Provider Connection metadata
+     */
+    200: ProviderConnectionEnvelope;
+};
+
+export type RotateProviderCredentialResponse = RotateProviderCredentialResponses[keyof RotateProviderCredentialResponses];
+
+export type ReconnectProviderConnectionData = {
+    body: ProviderCredentialRequest;
+    path: {
+        connectionId: string;
+    };
+    query?: never;
+    url: '/v1/provider-connections/{connectionId}/reconnect';
+};
+
+export type ReconnectProviderConnectionErrors = {
+    /**
+     * Stable machine-readable failure.
+     */
+    default: ErrorEnvelope;
+};
+
+export type ReconnectProviderConnectionError = ReconnectProviderConnectionErrors[keyof ReconnectProviderConnectionErrors];
+
+export type ReconnectProviderConnectionResponses = {
+    /**
+     * Non-secret Provider Connection metadata
+     */
+    200: ProviderConnectionEnvelope;
+};
+
+export type ReconnectProviderConnectionResponse = ReconnectProviderConnectionResponses[keyof ReconnectProviderConnectionResponses];
+
+export type EnqueueProviderSyncData = {
+    body?: never;
+    path: {
+        connectionId: string;
+    };
+    query?: never;
+    url: '/v1/provider-connections/{connectionId}/sync';
+};
+
+export type EnqueueProviderSyncErrors = {
+    /**
+     * Stable machine-readable failure.
+     */
+    default: ErrorEnvelope;
+};
+
+export type EnqueueProviderSyncError = EnqueueProviderSyncErrors[keyof EnqueueProviderSyncErrors];
+
+export type EnqueueProviderSyncResponses = {
+    /**
+     * Accepted provider synchronization job.
+     */
+    202: {
+        data: ProviderSyncJob;
+    };
+};
+
+export type EnqueueProviderSyncResponse = EnqueueProviderSyncResponses[keyof EnqueueProviderSyncResponses];
+
+export type ListProviderSyncRunsData = {
+    body?: never;
+    path: {
+        connectionId: string;
+    };
+    query?: never;
+    url: '/v1/provider-connections/{connectionId}/sync-runs';
+};
+
+export type ListProviderSyncRunsErrors = {
+    /**
+     * Stable machine-readable failure.
+     */
+    default: ErrorEnvelope;
+};
+
+export type ListProviderSyncRunsError = ListProviderSyncRunsErrors[keyof ListProviderSyncRunsErrors];
+
+export type ListProviderSyncRunsResponses = {
+    /**
+     * Provider synchronization run history.
+     */
+    200: {
+        data: {
+            items: Array<ProviderSyncRun>;
+        };
+    };
+};
+
+export type ListProviderSyncRunsResponse = ListProviderSyncRunsResponses[keyof ListProviderSyncRunsResponses];
 
 export type RotateApiKeyData = {
     body?: never;
@@ -2710,6 +3215,62 @@ export type ArchiveProviderMappingResponses = {
 };
 
 export type ArchiveProviderMappingResponse = ArchiveProviderMappingResponses[keyof ArchiveProviderMappingResponses];
+
+export type ReplaceProviderMappingData = {
+    body: ReplaceProviderMappingRequest;
+    path: {
+        mappingId: string;
+    };
+    query?: never;
+    url: '/v1/provider-mappings/{mappingId}/replace';
+};
+
+export type ReplaceProviderMappingErrors = {
+    /**
+     * Stable machine-readable failure.
+     */
+    default: ErrorEnvelope;
+};
+
+export type ReplaceProviderMappingError = ReplaceProviderMappingErrors[keyof ReplaceProviderMappingErrors];
+
+export type ReplaceProviderMappingResponses = {
+    /**
+     * Placeholder mapping
+     */
+    201: ProviderMappingEnvelope;
+};
+
+export type ReplaceProviderMappingResponse = ReplaceProviderMappingResponses[keyof ReplaceProviderMappingResponses];
+
+export type GetProviderMappingMetadataData = {
+    body?: never;
+    path: {
+        mappingId: string;
+    };
+    query?: never;
+    url: '/v1/provider-mappings/{mappingId}/metadata';
+};
+
+export type GetProviderMappingMetadataErrors = {
+    /**
+     * Stable machine-readable failure.
+     */
+    default: ErrorEnvelope;
+};
+
+export type GetProviderMappingMetadataError = GetProviderMappingMetadataErrors[keyof GetProviderMappingMetadataErrors];
+
+export type GetProviderMappingMetadataResponses = {
+    /**
+     * Current immutable normalized provider metadata and freshness evidence.
+     */
+    200: {
+        data: ProviderProductMetadataSnapshot;
+    };
+};
+
+export type GetProviderMappingMetadataResponse = GetProviderMappingMetadataResponses[keyof GetProviderMappingMetadataResponses];
 
 export type ListEntitlementsData = {
     body?: never;
@@ -3709,6 +4270,59 @@ export type GetSdkConfigurationResponses = {
 };
 
 export type GetSdkConfigurationResponse = GetSdkConfigurationResponses[keyof GetSdkConfigurationResponses];
+
+export type GetSdkCommerceConfigurationData = {
+    body?: never;
+    headers: {
+        Accept: 'application/vnd.mosaic.commerce-configuration+json;version=1';
+        'Mosaic-SDK-Platform': 'flutter' | 'ios' | 'android';
+        'Mosaic-SDK-Version': string;
+        'Mosaic-Commerce-Configuration-Versions': '1';
+        'Mosaic-Commerce-Provider-Contract-Versions': '1';
+        'If-None-Match'?: string;
+    };
+    path?: never;
+    query: {
+        applicationId: string;
+    };
+    url: '/v1/sdk/commerce-configuration';
+};
+
+export type GetSdkCommerceConfigurationErrors = {
+    /**
+     * Stable machine-readable failure.
+     */
+    401: ErrorEnvelope;
+    /**
+     * Stable machine-readable failure.
+     */
+    404: ErrorEnvelope;
+    /**
+     * Stable machine-readable failure.
+     */
+    406: ErrorEnvelope;
+    /**
+     * Stable machine-readable failure.
+     */
+    422: ErrorEnvelope;
+    /**
+     * Stable machine-readable failure.
+     */
+    429: ErrorEnvelope;
+};
+
+export type GetSdkCommerceConfigurationError = GetSdkCommerceConfigurationErrors[keyof GetSdkCommerceConfigurationErrors];
+
+export type GetSdkCommerceConfigurationResponses = {
+    /**
+     * Immutable Commerce Configuration v1 sidecar associated with the current Configuration Release and requested Application.
+     */
+    200: {
+        [key: string]: unknown;
+    };
+};
+
+export type GetSdkCommerceConfigurationResponse = GetSdkCommerceConfigurationResponses[keyof GetSdkCommerceConfigurationResponses];
 
 export type GetAssetContentData = {
     body?: never;

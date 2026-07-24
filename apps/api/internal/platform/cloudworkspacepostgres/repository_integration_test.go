@@ -5,8 +5,10 @@ import (
 	"context"
 	"crypto/sha256"
 	"database/sql"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"os"
 	"path/filepath"
@@ -27,6 +29,8 @@ import (
 	"github.com/Mujhtech/mosaic/apps/api/internal/platform/browserauthpostgres"
 	"github.com/Mujhtech/mosaic/apps/api/internal/platform/cloudworkspacepostgres"
 	"github.com/Mujhtech/mosaic/apps/api/internal/platform/hostedpublishingpostgres"
+	"github.com/Mujhtech/mosaic/apps/api/internal/providercatalog"
+	"github.com/Mujhtech/mosaic/apps/api/internal/providercredential"
 	"github.com/Mujhtech/mosaic/apps/api/migrations"
 )
 
@@ -374,6 +378,241 @@ func TestPhase3APersistenceRisks(t *testing.T) {
 	revokedAt = nil
 	if err := pool.QueryRow(ctx, `SELECT revoked_at FROM api_keys WHERE id=$1`, createdKey.APIKey.ID).Scan(&revokedAt); err != nil || revokedAt == nil {
 		t.Fatalf("database trigger allowed revocation clearing: revokedAt=%v err=%v", revokedAt, err)
+	}
+}
+
+type phase4AProviderCatalog struct {
+	catalog providercatalog.Catalog
+}
+
+func (catalog phase4AProviderCatalog) FetchCatalog(context.Context, providercatalog.Credential) (providercatalog.Catalog, error) {
+	return catalog.catalog, nil
+}
+
+func TestPhase4AProviderPersistenceRisks(t *testing.T) {
+	databaseURL := os.Getenv("DATABASE_TEST_URL")
+	if databaseURL == "" {
+		t.Skip("DATABASE_TEST_URL is required for PostgreSQL integration tests")
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	db := openSQL(t, databaseURL)
+	defer db.Close()
+	goose.SetBaseFS(migrations.Files)
+	if err := goose.SetDialect("postgres"); err != nil {
+		t.Fatal(err)
+	}
+	if err := goose.DownToContext(ctx, db, ".", 0); err != nil {
+		t.Fatalf("reset migrations: %v", err)
+	}
+	if err := goose.UpContext(ctx, db, "."); err != nil {
+		t.Fatalf("apply Phase 4A migrations: %v", err)
+	}
+	pool, err := pgxpool.New(ctx, databaseURL)
+	if err != nil {
+		t.Fatalf("open pool: %v", err)
+	}
+	defer pool.Close()
+	key := base64.RawURLEncoding.EncodeToString(bytes.Repeat([]byte{9}, 32))
+	cipher, err := providercredential.NewAESGCMCipher(
+		`{"version":1,"activeKeyId":"integration-key","keys":{"integration-key":"`+key+`"}}`,
+		bytes.NewReader(bytes.Repeat([]byte{4}, 128)),
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	catalog := phase4AProviderCatalog{catalog: providercatalog.Catalog{
+		ObservedAt: time.Now().UTC().Add(-time.Minute),
+		Apps: []providercatalog.App{{
+			ID: "app_resource", Name: "iOS", Platform: "app_store", Identifier: "com.example.phase4a",
+		}},
+		Products: []providercatalog.Product{{
+			ID: "product_resource", AppID: "app_resource",
+			StoreIdentifier: "com.example.phase4a.monthly", Type: "subscription", State: "active",
+		}},
+		Entitlements: []providercatalog.Entitlement{{
+			ID: "entitlement_resource", LookupKey: "pro", DisplayName: "Pro", State: "active",
+		}},
+	}}
+	repository := cloudworkspacepostgres.New(pool)
+	service := cloudworkspace.NewService(
+		repository,
+		cloudworkspace.WithProviderOperations(cipher, catalog, time.Hour),
+	)
+	actor := cloudworkspace.Actor{ID: "phase4a-owner"}
+	organization, err := service.CreateOrganization(ctx, actor, "Phase 4A")
+	if err != nil {
+		t.Fatal(err)
+	}
+	project, err := service.CreateProject(ctx, actor, organization.ID, "phase4a", "Phase 4A")
+	if err != nil {
+		t.Fatal(err)
+	}
+	application, err := service.CreateApplication(
+		ctx, actor, project.ID, "iOS", cloudworkspace.PlatformIOS, "com.example.phase4a",
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	environments, err := service.ListEnvironments(ctx, actor, project.ID, cloudworkspace.ListOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var development cloudworkspace.Environment
+	for _, environment := range environments.Items {
+		if environment.Mode == cloudworkspace.EnvironmentDevelopment {
+			development = environment
+		}
+	}
+	connection, err := service.CreateProviderConnection(ctx, actor, project.ID, cloudworkspace.CreateProviderConnectionInput{
+		Name: "RevenueCat", Provider: cloudworkspace.ProviderRevenueCat,
+		IntegrationMode: cloudworkspace.ProviderServerConnected, Mode: cloudworkspace.ProviderSandbox,
+		ExternalProjectID: "proj_resource", EnvironmentIDs: []string{development.ID},
+		ApplicationIDs: []string{application.ID}, Credential: "sk_integration_secret",
+	})
+	if err != nil {
+		t.Fatalf("persist encrypted provider connection: %v", err)
+	}
+	if _, err := service.TestProviderConnection(ctx, actor, connection.ID); err != nil {
+		t.Fatalf("test provider connection: %v", err)
+	}
+	importResult, err := service.ImportProviderProducts(ctx, actor, project.ID, connection.ID, cloudworkspace.ImportProviderProductsInput{
+		IdempotencyKey: "phase4a-postgres-import",
+		Items: []cloudworkspace.ProviderProductImportInput{{
+			ProviderProductIdentifier: "product_resource", Key: "monthly", InternalName: "Monthly",
+			EnvironmentID: development.ID, ApplicationID: application.ID,
+			Entitlements: []cloudworkspace.ProviderEntitlementImportInput{{
+				ProviderIdentifier: "entitlement_resource", Key: "pro", Name: "Pro",
+			}},
+		}},
+	})
+	if err != nil || importResult.Import.Status != cloudworkspace.ProviderImportCompleted ||
+		len(importResult.Items) != 1 || importResult.Items[0].MappingID == "" {
+		t.Fatalf("PostgreSQL import result = %#v, %v", importResult, err)
+	}
+	var ciphertext []byte
+	var keyID string
+	if err := pool.QueryRow(ctx,
+		`SELECT ciphertext,key_id FROM provider_connection_credentials WHERE connection_id=$1`,
+		connection.ID,
+	).Scan(&ciphertext, &keyID); err != nil {
+		t.Fatalf("read encrypted credential evidence: %v", err)
+	}
+	if bytes.Contains(ciphertext, []byte("sk_integration_secret")) || keyID != "integration-key" {
+		t.Fatal("provider credential was not stored as a scoped encrypted envelope")
+	}
+	if _, err := pool.Exec(ctx,
+		`UPDATE provider_product_metadata_snapshots SET normalized_metadata='{}'::jsonb WHERE id=(
+			SELECT current_snapshot_id FROM provider_product_mappings WHERE id=$1
+		)`,
+		importResult.Items[0].MappingID,
+	); err == nil || !strings.Contains(err.Error(), "immutable") {
+		t.Fatalf("immutable metadata snapshot update error = %v", err)
+	}
+	job, err := service.EnqueueProviderSync(ctx, actor, connection.ID)
+	if err != nil {
+		t.Fatalf("enqueue provider sync: %v", err)
+	}
+	var leased cloudworkspace.ProviderSyncJob
+	leaseStartedAt := time.Now().UTC()
+	err = repository.Transact(ctx, func(tx cloudworkspace.Transaction) error {
+		var ok bool
+		leased, ok = tx.LeaseProviderSyncJob("worker_1", leaseStartedAt, leaseStartedAt.Add(time.Minute))
+		if !ok {
+			return errors.New("queued provider sync job was not leased")
+		}
+		return nil
+	})
+	if err != nil || leased.ID != job.ID || leased.AttemptCount != 1 {
+		t.Fatalf("lease provider sync job = %#v, %v", leased, err)
+	}
+	err = repository.Transact(ctx, func(tx cloudworkspace.Transaction) error {
+		if _, ok := tx.LeaseProviderSyncJob("worker_2", leaseStartedAt.Add(30*time.Second), leaseStartedAt.Add(90*time.Second)); ok {
+			return errors.New("active provider sync lease was leased twice")
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = repository.Transact(ctx, func(tx cloudworkspace.Transaction) error {
+		releasedAt := leaseStartedAt.Add(time.Minute)
+		released, ok := tx.LeaseProviderSyncJob("worker_2", releasedAt, releasedAt.Add(time.Minute))
+		if !ok || released.ID != leased.ID || released.AttemptCount != leased.AttemptCount+1 {
+			return fmt.Errorf("expired provider sync job was not re-leased with a fencing attempt: %#v", released)
+		}
+		if tx.OwnsProviderSyncJobLease(leased.ID, "worker_1", leased.AttemptCount, releasedAt) {
+			return errors.New("stale worker retained provider sync lease ownership")
+		}
+		if !tx.OwnsProviderSyncJobLease(released.ID, "worker_2", released.AttemptCount, releasedAt) {
+			return errors.New("current worker did not own provider sync lease")
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	var entitlementID string
+	if err := repository.View(ctx, func(reader cloudworkspace.Reader) error {
+		grants := reader.ProductGrants(importResult.Items[0].MosaicProductID)
+		if len(grants) != 1 {
+			return fmt.Errorf("Product grants = %#v, want one", grants)
+		}
+		entitlementID = grants[0].EntitlementID
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := service.ArchiveProviderMapping(ctx, actor, importResult.Items[0].MappingID); err != nil {
+		t.Fatalf("archive first-connection mapping: %v", err)
+	}
+	secondConnection, err := service.CreateProviderConnection(ctx, actor, project.ID, cloudworkspace.CreateProviderConnectionInput{
+		Name: "RevenueCat replacement", Provider: cloudworkspace.ProviderRevenueCat,
+		IntegrationMode: cloudworkspace.ProviderServerConnected, Mode: cloudworkspace.ProviderSandbox,
+		ExternalProjectID: "proj_resource", EnvironmentIDs: []string{development.ID},
+		ApplicationIDs: []string{application.ID}, Credential: "sk_integration_secret_2",
+	})
+	if err != nil {
+		t.Fatalf("create replacement provider connection: %v", err)
+	}
+	secondImport, err := service.ImportProviderProducts(ctx, actor, project.ID, secondConnection.ID, cloudworkspace.ImportProviderProductsInput{
+		IdempotencyKey: "phase4a-postgres-second-connection-import",
+		Items: []cloudworkspace.ProviderProductImportInput{{
+			ProviderProductIdentifier: "product_resource",
+			ExistingProductID:         importResult.Items[0].MosaicProductID,
+			EnvironmentID:             development.ID,
+			ApplicationID:             application.ID,
+			Entitlements: []cloudworkspace.ProviderEntitlementImportInput{{
+				ProviderIdentifier:    "entitlement_resource",
+				ExistingEntitlementID: entitlementID,
+			}},
+		}},
+	})
+	if err != nil || secondImport.Import.Status != cloudworkspace.ProviderImportCompleted {
+		t.Fatalf("second-connection import = %#v, %v", secondImport, err)
+	}
+	if _, err := service.SetActiveProviderAssignment(
+		ctx, actor, development.ID, application.ID, secondConnection.ID, false,
+	); err != nil {
+		t.Fatalf("switch active provider connection: %v", err)
+	}
+	readiness, err := service.ProviderReadiness(
+		ctx, actor, importResult.Items[0].MosaicProductID, development.ID, application.ID,
+	)
+	if err != nil || readiness.ConnectionID != secondConnection.ID || len(readiness.Blockers) != 0 {
+		t.Fatalf("replacement-connection readiness = %#v, %v", readiness, err)
+	}
+	if err := repository.View(ctx, func(reader cloudworkspace.Reader) error {
+		firstMappings := reader.ProviderEntitlementMappings(connection.ID, development.ID, application.ID)
+		secondMappings := reader.ProviderEntitlementMappings(secondConnection.ID, development.ID, application.ID)
+		if len(firstMappings) != 1 || len(secondMappings) != 1 ||
+			firstMappings[0].EntitlementID != entitlementID || secondMappings[0].EntitlementID != entitlementID {
+			return fmt.Errorf("connection-scoped entitlement mappings first=%#v second=%#v", firstMappings, secondMappings)
+		}
+		return nil
+	}); err != nil {
+		t.Fatal(err)
 	}
 }
 

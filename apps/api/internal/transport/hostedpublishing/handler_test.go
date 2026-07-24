@@ -72,6 +72,8 @@ type deliveryTestTransaction struct {
 	environment hostedpublishing.Environment
 	state       hostedpublishing.ReleaseState
 	release     hostedpublishing.Release
+	application hostedpublishing.Application
+	commerce    hostedpublishing.CommerceConfigurationSnapshot
 	asset       hostedpublishing.Asset
 }
 
@@ -89,6 +91,19 @@ func (transaction *deliveryTestTransaction) ReleaseState(id string) (hostedpubli
 
 func (transaction *deliveryTestTransaction) Release(id string) (hostedpublishing.Release, bool) {
 	return transaction.release, id == transaction.release.ID
+}
+
+func (transaction *deliveryTestTransaction) Applications(projectID string) []hostedpublishing.Application {
+	if transaction.application.ProjectID != projectID {
+		return nil
+	}
+	return []hostedpublishing.Application{transaction.application}
+}
+
+func (transaction *deliveryTestTransaction) CommerceConfiguration(releaseID, applicationID string) (hostedpublishing.CommerceConfigurationSnapshot, bool) {
+	return transaction.commerce,
+		releaseID == transaction.commerce.ConfigurationReleaseID &&
+			applicationID == transaction.commerce.ApplicationID
 }
 
 func (*deliveryTestTransaction) TouchAPIKey(string) {}
@@ -136,6 +151,78 @@ func TestSDKConfigurationHTTPConditionalGzipAndExactCapabilities(t *testing.T) {
 	if unsupportedRecorder.Code != http.StatusNotAcceptable || !strings.Contains(unsupportedRecorder.Body.String(), `"code":"unsupported_capability"`) {
 		t.Fatalf("unsupported capability status=%d body=%s", unsupportedRecorder.Code, unsupportedRecorder.Body.String())
 	}
+}
+
+func TestSDKCommerceConfigurationAssociationConditionalAndPlatformIsolation(t *testing.T) {
+	payload, err := os.ReadFile(filepath.Join("../../../../../protocol/fixtures/commerce-configuration/v1/revenuecat-configuration.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	const rawKey = "sdk_commerce.secret"
+	digest := sha256.Sum256([]byte(rawKey))
+	transaction := &deliveryTestTransaction{
+		key: hostedpublishing.APIKeyRecord{
+			ID: "key_1", EnvironmentID: "environment_staging", Kind: "public_sdk",
+			Prefix: "sdk_commerce", SecretDigest: digest[:],
+		},
+		environment: hostedpublishing.Environment{ID: "environment_staging", ProjectID: "project_1", Key: "staging"},
+		state: hostedpublishing.ReleaseState{
+			EnvironmentID: "environment_staging", ProjectID: "project_1",
+			CurrentReleaseID: "configuration-release-9",
+		},
+		application: hostedpublishing.Application{ID: "application_ios", ProjectID: "project_1", Platform: "ios"},
+		commerce: hostedpublishing.CommerceConfigurationSnapshot{
+			ID: "commerce_1", ProjectID: "project_1", EnvironmentID: "environment_staging",
+			ApplicationID: "application_ios", StorePlatform: "ios",
+			ConfigurationReleaseID: "configuration-release-9",
+			ContentDigest:          "sha256:" + strings.Repeat("a", 64), Payload: payload,
+		},
+	}
+	handler := &Handler{service: hostedpublishing.NewService(deliveryTestRepository{transaction: transaction})}
+	request := commerceSDKRequest(rawKey, "ios")
+	recorder := httptest.NewRecorder()
+	handler.sdkCommerceConfiguration(recorder, request)
+	if recorder.Code != http.StatusOK || !bytes.Equal(recorder.Body.Bytes(), payload) ||
+		recorder.Header().Get("Content-Type") != commerceContentType ||
+		recorder.Header().Get("ETag") != `"`+transaction.commerce.ContentDigest+`"` ||
+		recorder.Header().Get("Mosaic-Configuration-Release-Id") != transaction.commerce.ConfigurationReleaseID {
+		t.Fatalf("commerce delivery status=%d headers=%v body=%s", recorder.Code, recorder.Header(), recorder.Body.String())
+	}
+
+	notModified := commerceSDKRequest(rawKey, "ios")
+	notModified.Header.Set("If-None-Match", recorder.Header().Get("ETag"))
+	notModifiedRecorder := httptest.NewRecorder()
+	handler.sdkCommerceConfiguration(notModifiedRecorder, notModified)
+	if notModifiedRecorder.Code != http.StatusNotModified || notModifiedRecorder.Body.Len() != 0 ||
+		notModifiedRecorder.Header().Get("ETag") != recorder.Header().Get("ETag") ||
+		notModifiedRecorder.Header().Get("Mosaic-Configuration-Release-Id") != transaction.commerce.ConfigurationReleaseID ||
+		notModifiedRecorder.Header().Get("Cache-Control") == "" ||
+		notModifiedRecorder.Header().Get("Vary") == "" {
+		t.Fatalf("conditional commerce delivery status=%d headers=%v body=%q", notModifiedRecorder.Code, notModifiedRecorder.Header(), notModifiedRecorder.Body.String())
+	}
+
+	mismatched := commerceSDKRequest(rawKey, "android")
+	mismatchedRecorder := httptest.NewRecorder()
+	handler.sdkCommerceConfiguration(mismatchedRecorder, mismatched)
+	if mismatchedRecorder.Code != http.StatusNotAcceptable ||
+		!strings.Contains(mismatchedRecorder.Body.String(), `"code":"unsupported_capability"`) {
+		t.Fatalf("platform mismatch status=%d body=%s", mismatchedRecorder.Code, mismatchedRecorder.Body.String())
+	}
+}
+
+func commerceSDKRequest(rawKey, platform string) *http.Request {
+	request := httptest.NewRequest(
+		http.MethodGet,
+		"/v1/sdk/commerce-configuration?applicationId=application_ios",
+		nil,
+	)
+	request.Header.Set("Authorization", "Bearer "+rawKey)
+	request.Header.Set("Accept", commerceContentType)
+	request.Header.Set("Mosaic-SDK-Platform", platform)
+	request.Header.Set("Mosaic-SDK-Version", "1.0.0")
+	request.Header.Set("Mosaic-Commerce-Configuration-Versions", "1")
+	request.Header.Set("Mosaic-Commerce-Provider-Contract-Versions", "1")
+	return request
 }
 
 func sdkRequest(rawKey string, capabilities []string) *http.Request {

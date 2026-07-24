@@ -35,12 +35,145 @@ func (h *Handler) createProviderConnection(w http.ResponseWriter, r *http.Reques
 		ExternalProjectID: request.ExternalProjectID,
 		EnvironmentIDs:    request.EnvironmentIDs,
 		ApplicationIDs:    request.ApplicationIDs,
+		Credential:        request.Credential,
 	})
 	if err != nil {
 		writeServiceError(w, r, err)
 		return
 	}
 	response.Created(w, r, result)
+}
+
+func (h *Handler) testProviderConnection(w http.ResponseWriter, r *http.Request) {
+	result, err := h.service.TestProviderConnection(r.Context(), actor(r), chi.URLParam(r, "connectionId"))
+	if err != nil {
+		writeServiceError(w, r, err)
+		return
+	}
+	response.OK(w, r, result)
+}
+
+func (h *Handler) getProviderConnectionHealth(w http.ResponseWriter, r *http.Request) {
+	result, err := h.service.ProviderConnectionHealth(r.Context(), actor(r), chi.URLParam(r, "connectionId"))
+	if err != nil {
+		writeServiceError(w, r, err)
+		return
+	}
+	response.OK(w, r, result)
+}
+
+func (h *Handler) getProviderConnectionCapabilities(w http.ResponseWriter, r *http.Request) {
+	result, err := h.service.ProviderConnectionHealth(r.Context(), actor(r), chi.URLParam(r, "connectionId"))
+	if err != nil {
+		writeServiceError(w, r, err)
+		return
+	}
+	response.OK(w, r, map[string]any{
+		"connectionId":        result.ConnectionID,
+		"capabilities":        result.Capabilities,
+		"requiredPermissions": result.RequiredPermissions,
+	})
+}
+
+func (h *Handler) getProviderConnectionDiagnostics(w http.ResponseWriter, r *http.Request) {
+	result, err := h.service.ProviderConnectionDiagnostics(r.Context(), actor(r), chi.URLParam(r, "connectionId"))
+	if err != nil {
+		writeServiceError(w, r, err)
+		return
+	}
+	response.OK(w, r, map[string]any{"items": result})
+}
+
+func (h *Handler) previewProviderCatalog(w http.ResponseWriter, r *http.Request) {
+	result, err := h.service.PreviewProviderCatalog(r.Context(), actor(r), chi.URLParam(r, "connectionId"))
+	if err != nil {
+		writeServiceError(w, r, err)
+		return
+	}
+	response.OK(w, r, result)
+}
+
+func (h *Handler) rotateProviderCredential(w http.ResponseWriter, r *http.Request) {
+	request := new(providerCredentialRequest)
+	if !decodeAndValidate(w, r, request) {
+		return
+	}
+	result, err := h.service.RotateProviderCredential(r.Context(), actor(r), chi.URLParam(r, "connectionId"), request.Credential)
+	request.Credential = ""
+	if err != nil {
+		writeServiceError(w, r, err)
+		return
+	}
+	response.OK(w, r, result)
+}
+
+func (h *Handler) reconnectProviderConnection(w http.ResponseWriter, r *http.Request) {
+	request := new(providerCredentialRequest)
+	if !decodeAndValidate(w, r, request) {
+		return
+	}
+	result, err := h.service.ReconnectProviderConnection(r.Context(), actor(r), chi.URLParam(r, "connectionId"), request.Credential)
+	request.Credential = ""
+	if err != nil {
+		writeServiceError(w, r, err)
+		return
+	}
+	response.OK(w, r, result)
+}
+
+func (h *Handler) enqueueProviderSync(w http.ResponseWriter, r *http.Request) {
+	result, err := h.service.EnqueueProviderSync(r.Context(), actor(r), chi.URLParam(r, "connectionId"))
+	if err != nil {
+		writeServiceError(w, r, err)
+		return
+	}
+	response.Accepted(w, r, result)
+}
+
+func (h *Handler) listProviderSyncRuns(w http.ResponseWriter, r *http.Request) {
+	result, err := h.service.ListProviderSyncRuns(r.Context(), actor(r), chi.URLParam(r, "connectionId"))
+	if err != nil {
+		writeServiceError(w, r, err)
+		return
+	}
+	response.OK(w, r, map[string]any{"items": result})
+}
+
+func (h *Handler) importProviderProducts(w http.ResponseWriter, r *http.Request) {
+	request := new(providerImportRequest)
+	if !decodeAndValidate(w, r, request) {
+		return
+	}
+	items := make([]cloudworkspace.ProviderProductImportInput, 0, len(request.Items))
+	for _, item := range request.Items {
+		entitlements := make([]cloudworkspace.ProviderEntitlementImportInput, 0, len(item.Entitlements))
+		for _, entitlement := range item.Entitlements {
+			entitlements = append(entitlements, cloudworkspace.ProviderEntitlementImportInput{
+				ProviderIdentifier:    entitlement.ProviderIdentifier,
+				ExistingEntitlementID: entitlement.ExistingEntitlementID,
+				Key:                   entitlement.Key, Name: entitlement.Name,
+			})
+		}
+		items = append(items, cloudworkspace.ProviderProductImportInput{
+			ProviderProductIdentifier:  item.ProviderProductIdentifier,
+			ProviderPackageIdentifier:  item.ProviderPackageIdentifier,
+			ProviderOfferingIdentifier: item.ProviderOfferingIdentifier,
+			ExistingProductID:          item.ExistingProductID, Key: item.Key,
+			InternalName: item.InternalName, EnvironmentID: item.EnvironmentID,
+			ApplicationID: item.ApplicationID, Entitlements: entitlements,
+		})
+	}
+	result, err := h.service.ImportProviderProducts(
+		r.Context(), actor(r), chi.URLParam(r, "projectId"), request.ConnectionID,
+		cloudworkspace.ImportProviderProductsInput{
+			IdempotencyKey: r.Header.Get("Idempotency-Key"), Items: items,
+		},
+	)
+	if err != nil {
+		writeServiceError(w, r, err)
+		return
+	}
+	response.OK(w, r, result)
 }
 
 func (h *Handler) listProviderConnections(w http.ResponseWriter, r *http.Request) {
@@ -161,6 +294,37 @@ func (h *Handler) createProviderMappingDraft(w http.ResponseWriter, r *http.Requ
 
 func (h *Handler) archiveProviderMapping(w http.ResponseWriter, r *http.Request) {
 	result, err := h.service.ArchiveProviderMapping(r.Context(), actor(r), chi.URLParam(r, "mappingId"))
+	if err != nil {
+		writeServiceError(w, r, err)
+		return
+	}
+	response.OK(w, r, result)
+}
+
+func (h *Handler) replaceProviderMapping(w http.ResponseWriter, r *http.Request) {
+	request := new(providerMappingReplacementRequest)
+	if !decodeAndValidate(w, r, request) {
+		return
+	}
+	result, err := h.service.ReplaceProviderMapping(
+		r.Context(), actor(r), chi.URLParam(r, "mappingId"),
+		cloudworkspace.ReplaceProviderMappingInput{
+			ProviderProductIdentifier:  request.ProviderProductIdentifier,
+			ProviderPackageIdentifier:  request.ProviderPackageIdentifier,
+			ProviderOfferingIdentifier: request.ProviderOfferingIdentifier,
+		},
+	)
+	if err != nil {
+		writeServiceError(w, r, err)
+		return
+	}
+	response.Created(w, r, result)
+}
+
+func (h *Handler) getProviderMappingMetadata(w http.ResponseWriter, r *http.Request) {
+	result, err := h.service.GetProviderMappingMetadata(
+		r.Context(), actor(r), chi.URLParam(r, "mappingId"),
+	)
 	if err != nil {
 		writeServiceError(w, r, err)
 		return

@@ -1,0 +1,314 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:mosaic:protocol:schema:commerce-configuration:v1:configuration",
+  "title": "Mosaic Commerce Configuration v1",
+  "description": "An immutable, release-associated commerce-provider mapping snapshot consumed by Mosaic SDKs.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "commerceConfigurationVersion",
+    "configuration"
+  ],
+  "properties": {
+    "commerceConfigurationVersion": {
+      "const": "1"
+    },
+    "configuration": {
+      "$ref": "#/$defs/configuration"
+    }
+  },
+  "$defs": {
+    "identifier": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+    },
+    "entitlementKey": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 64,
+      "pattern": "^[a-z][a-z0-9_.-]*$"
+    },
+    "opaqueProviderIdentifier": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 256,
+      "pattern": "^[^\\r\\n\\u0000-\\u001F\\u007F]+$"
+    },
+    "sha256Digest": {
+      "type": "string",
+      "pattern": "^sha256:[a-f0-9]{64}$"
+    },
+    "utcTimestamp": {
+      "type": "string",
+      "maxLength": 32,
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(?:\\.[0-9]{1,6})?Z$"
+    },
+    "storePlatform": {
+      "type": "string",
+      "enum": [
+        "ios",
+        "android"
+      ]
+    },
+    "configurationRelease": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "contentDigest"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/identifier"
+        },
+        "contentDigest": {
+          "$ref": "#/$defs/sha256Digest"
+        }
+      }
+    },
+    "providerActivation": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "source",
+            "providerConnectionId"
+          ],
+          "properties": {
+            "source": {
+              "const": "providerConnection"
+            },
+            "providerConnectionId": {
+              "$ref": "#/$defs/identifier"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "source",
+            "localSnapshotId"
+          ],
+          "properties": {
+            "source": {
+              "const": "sdkLocal"
+            },
+            "localSnapshotId": {
+              "$ref": "#/$defs/identifier"
+            }
+          }
+        }
+      ]
+    },
+    "activeProvider": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "identity",
+        "activation",
+        "capabilities"
+      ],
+      "properties": {
+        "identity": {
+          "$ref": "urn:mosaic:protocol:schema:commerce-provider:v1:contract#/$defs/providerIdentity"
+        },
+        "activation": {
+          "$ref": "#/$defs/providerActivation"
+        },
+        "capabilities": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 13,
+          "items": {
+            "$ref": "urn:mosaic:protocol:schema:commerce-provider:v1:contract#/$defs/providerCapability"
+          }
+        }
+      }
+    },
+    "adapterMapping": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "kind"
+          ],
+          "properties": {
+            "kind": {
+              "const": "directProduct"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "offeringIdentifier",
+            "packageIdentifier"
+          ],
+          "properties": {
+            "kind": {
+              "const": "revenueCatPackage"
+            },
+            "offeringIdentifier": {
+              "$ref": "#/$defs/opaqueProviderIdentifier"
+            },
+            "packageIdentifier": {
+              "$ref": "#/$defs/opaqueProviderIdentifier"
+            }
+          }
+        }
+      ]
+    },
+    "productMapping": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "mosaicProductId",
+        "mappingId",
+        "providerProductReference",
+        "adapterMapping"
+      ],
+      "properties": {
+        "mosaicProductId": {
+          "$ref": "#/$defs/identifier"
+        },
+        "mappingId": {
+          "$ref": "#/$defs/identifier"
+        },
+        "providerProductReference": {
+          "$ref": "#/$defs/opaqueProviderIdentifier"
+        },
+        "adapterMapping": {
+          "$ref": "#/$defs/adapterMapping"
+        }
+      }
+    },
+    "entitlementMapping": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "mosaicEntitlementKey",
+        "providerEntitlementIdentifier"
+      ],
+      "properties": {
+        "mosaicEntitlementKey": {
+          "$ref": "#/$defs/entitlementKey"
+        },
+        "providerEntitlementIdentifier": {
+          "$ref": "#/$defs/opaqueProviderIdentifier"
+        }
+      }
+    },
+    "freshness": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "source",
+        "status",
+        "providerObservedAt",
+        "synchronizedAt",
+        "staleAt"
+      ],
+      "properties": {
+        "source": {
+          "type": "string",
+          "enum": [
+            "providerSynchronization",
+            "sdkLocalSnapshot"
+          ]
+        },
+        "status": {
+          "type": "string",
+          "enum": [
+            "fresh",
+            "stale"
+          ]
+        },
+        "providerObservedAt": {
+          "$ref": "#/$defs/utcTimestamp"
+        },
+        "synchronizedAt": {
+          "$ref": "#/$defs/utcTimestamp"
+        },
+        "staleAt": {
+          "$ref": "#/$defs/utcTimestamp"
+        },
+        "expiresAt": {
+          "$ref": "#/$defs/utcTimestamp"
+        }
+      }
+    },
+    "configuration": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "environmentId",
+        "applicationId",
+        "storePlatform",
+        "configurationRelease",
+        "contentDigest",
+        "activeProvider",
+        "productMappings",
+        "entitlementMappings",
+        "freshness",
+        "diagnostics"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/identifier"
+        },
+        "environmentId": {
+          "$ref": "#/$defs/identifier"
+        },
+        "applicationId": {
+          "$ref": "#/$defs/identifier"
+        },
+        "storePlatform": {
+          "$ref": "#/$defs/storePlatform"
+        },
+        "configurationRelease": {
+          "$ref": "#/$defs/configurationRelease"
+        },
+        "contentDigest": {
+          "$ref": "#/$defs/sha256Digest"
+        },
+        "activeProvider": {
+          "$ref": "#/$defs/activeProvider"
+        },
+        "productMappings": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 256,
+          "items": {
+            "$ref": "#/$defs/productMapping"
+          }
+        },
+        "entitlementMappings": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 128,
+          "items": {
+            "$ref": "#/$defs/entitlementMapping"
+          }
+        },
+        "freshness": {
+          "$ref": "#/$defs/freshness"
+        },
+        "diagnostics": {
+          "type": "array",
+          "maxItems": 32,
+          "items": {
+            "$ref": "urn:mosaic:protocol:schema:commerce-provider:v1:contract#/$defs/diagnostic"
+          }
+        }
+      }
+    }
+  }
+}

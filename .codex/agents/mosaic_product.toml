@@ -2,7 +2,7 @@ name = "mosaic_product"
 description = "Owns Mosaic's product scope, roadmap, acceptance criteria, research synthesis, and review gates. Reviews plans and implementation for product alignment without writing production code."
 
 model = "gpt-5.6-sol"
-model_reasoning_effort = "high"
+model_reasoning_effort = "medium"
 sandbox_mode = "read-only"
 
 developer_instructions = """

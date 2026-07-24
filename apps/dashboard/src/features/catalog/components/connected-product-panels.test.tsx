@@ -105,7 +105,11 @@ describe("connected Product panels", () => {
     render(
       <>
         <section id="used-in-title">Used in 2 Paywalls</section>
-        <ProductReadinessPanel readiness={productReadinessView(readiness)} />
+        <ProductReadinessPanel
+          accessHref="#entitlement-grants-title"
+          manageProvidersHref="/providers"
+          readiness={productReadinessView(readiness)}
+        />
         <ProviderMappingsPanel
           manageProvidersHref="/catalog/providers"
           mappings={[providerMappingView(mapping, [application], [environment], [connection])]}
@@ -114,8 +118,11 @@ describe("connected Product panels", () => {
     )
 
     expect(screen.getByText(/env_01 · app_01 · IOS/)).toBeVisible()
-    expect(screen.getByText(/metadataStale · provider_mapping mapping_01/)).toBeVisible()
-    expect(screen.getByText("Recovery: syncProviderMetadata")).toBeVisible()
+    expect(screen.getByText("Connected Product details need to be synchronized.")).toBeVisible()
+    expect(screen.getByRole("link", { name: "Synchronize Product details" })).toHaveAttribute(
+      "href",
+      "/providers",
+    )
     expect(screen.getByText("Never synchronized")).toBeVisible()
     expect(screen.getByText("unknown")).toBeVisible()
     expect(screen.getByText("rc_monthly")).toBeVisible()

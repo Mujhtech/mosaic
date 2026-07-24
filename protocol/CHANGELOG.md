@@ -3,6 +3,22 @@
 All notable Mosaic protocol changes are recorded here. Versioned artifacts are
 not immutable until their review gate is approved.
 
+## Commerce Configuration v1 - 2026-07-23
+
+Status: release candidate
+
+- Added a separate immutable release-associated sidecar binding exact
+  Environment, Application, store platform, Configuration Release ID, and
+  Configuration Release digest.
+- Added one active provider, its capabilities, verified Product and Entitlement
+  mappings, direct-Product and RevenueCat Package/Offering adapter detail, and
+  equivalent SDK-local custom-provider snapshots.
+- Added canonical whole-sidecar digest semantics, freshness, safe diagnostics,
+  credential exclusions, minimum fixtures, semantic validation, generated
+  browser declarations, and documentation.
+- Preserved Paywall Protocol `0.2`, Local Preview `0.2`, Configuration Delivery
+  `1`, and Commerce Provider Contract `1` semantics.
+
 ## Commerce Provider Contract v1 - 2026-07-23
 
 Status: release candidate

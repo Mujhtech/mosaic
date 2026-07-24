@@ -95,6 +95,31 @@ the app to verify the last-known-valid cache; clear app data to demonstrate the
 generated bundled release. Network or validation failures retain the current
 complete release and surface a safe diagnostic instead of a partial paywall.
 
+## Run optional RevenueCat commerce
+
+The example includes the optional `mosaic_revenuecat` package but does not
+configure it unless the host supplies a RevenueCat public SDK key. The example
+itself owns `Purchases.configure`; Mosaic never configures RevenueCat or owns
+customer login/logout.
+
+Supply the registered Mosaic Application ID. Core fetches the immutable
+release-associated sidecar from the frozen hosted SDK route:
+
+```bash
+flutter run \
+  --dart-define=MOSAIC_HOSTED_BASE_URL=http://127.0.0.1:8080 \
+  --dart-define=MOSAIC_PUBLIC_SDK_KEY=public_example_key \
+  --dart-define=MOSAIC_APPLICATION_ID=application_ios \
+  --dart-define=MOSAIC_COMMERCE_ENABLED=true \
+  --dart-define=REVENUECAT_PUBLIC_SDK_KEY=appl_public_key
+```
+
+Use the platform-specific RevenueCat public key for the selected iOS or
+Android application. Never use a RevenueCat secret key here. If initialization,
+sidecar transport, validation, or adapter activation fails, the example keeps
+the deterministic local Provider and safe Product fallback available without
+printing the key or raw provider error.
+
 ## Verify
 
 ```bash

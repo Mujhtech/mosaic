@@ -12,15 +12,21 @@ import (
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/trace"
+
+	"github.com/Mujhtech/mosaic/apps/api/internal/providercatalog"
+	"github.com/Mujhtech/mosaic/apps/api/internal/providercredential"
 )
 
 const defaultPageLimit = 25
 
 type Service struct {
-	repository Repository
-	now        func() time.Time
-	random     io.Reader
-	tracer     trace.Tracer
+	repository          Repository
+	now                 func() time.Time
+	random              io.Reader
+	tracer              trace.Tracer
+	credentialCipher    providercredential.CredentialCipher
+	providerCatalog     providercatalog.Client
+	providerSnapshotTTL time.Duration
 }
 
 type ServiceOption func(*Service)
@@ -33,12 +39,21 @@ func WithRandom(random io.Reader) ServiceOption {
 	return func(service *Service) { service.random = random }
 }
 
+func WithProviderOperations(cipher providercredential.CredentialCipher, catalog providercatalog.Client, snapshotTTL time.Duration) ServiceOption {
+	return func(service *Service) {
+		service.credentialCipher = cipher
+		service.providerCatalog = catalog
+		service.providerSnapshotTTL = snapshotTTL
+	}
+}
+
 func NewService(repository Repository, options ...ServiceOption) *Service {
 	service := &Service{
-		repository: repository,
-		now:        func() time.Time { return time.Now().UTC() },
-		random:     rand.Reader,
-		tracer:     otel.Tracer("github.com/Mujhtech/mosaic/apps/api/cloudworkspace"),
+		repository:          repository,
+		now:                 func() time.Time { return time.Now().UTC() },
+		random:              rand.Reader,
+		tracer:              otel.Tracer("github.com/Mujhtech/mosaic/apps/api/cloudworkspace"),
+		providerSnapshotTTL: 24 * time.Hour,
 	}
 	for _, option := range options {
 		option(service)

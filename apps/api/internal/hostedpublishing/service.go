@@ -16,19 +16,24 @@ import (
 )
 
 type Service struct {
-	repository Repository
-	now        func() time.Time
-	tracer     trace.Tracer
-	validator  *ProtocolValidator
-	objects    ObjectStore
-	assetBase  string
-	assetLimit int64
+	repository        Repository
+	now               func() time.Time
+	tracer            trace.Tracer
+	validator         *ProtocolValidator
+	objects           ObjectStore
+	assetBase         string
+	assetLimit        int64
+	commerceValidator *CommerceConfigurationValidator
 }
 
 type ServiceOption func(*Service)
 
 func WithProtocolValidator(validator *ProtocolValidator) ServiceOption {
 	return func(service *Service) { service.validator = validator }
+}
+
+func WithCommerceConfigurationValidator(validator *CommerceConfigurationValidator) ServiceOption {
+	return func(service *Service) { service.commerceValidator = validator }
 }
 
 func WithObjectStore(store ObjectStore, publicBaseURL string, uploadLimit int64) ServiceOption {
@@ -549,6 +554,57 @@ func (s *Service) AuthenticateSDKKey(ctx context.Context, rawKey string) (SDKCon
 		}
 		tx.TouchAPIKey(key.ID)
 		result = SDKConfiguration{Release: release, Environment: environment, APIKeyID: key.ID}
+		return nil
+	})
+	return result, err
+}
+
+func (s *Service) AuthenticateSDKCommerceKey(ctx context.Context, rawKey, applicationID, sdkPlatform string) (SDKCommerceConfiguration, error) {
+	parts := strings.SplitN(strings.TrimSpace(rawKey), ".", 2)
+	if len(parts) != 2 || parts[0] == "" || parts[1] == "" {
+		return SDKCommerceConfiguration{}, ErrUnauthenticated
+	}
+	presented := digestString(rawKey)
+	var result SDKCommerceConfiguration
+	err := s.repository.Transact(ctx, func(tx Transaction) error {
+		key, ok := tx.APIKeyByPrefix(parts[0])
+		if !ok || key.Kind != "public_sdk" || key.RevokedAt != nil ||
+			subtle.ConstantTimeCompare([]byte(presented), []byte(hexDigest(key.SecretDigest))) != 1 {
+			return ErrUnauthenticated
+		}
+		environment, ok := tx.Environment(key.EnvironmentID)
+		if !ok {
+			return ErrUnauthenticated
+		}
+		var application Application
+		for _, candidate := range tx.Applications(environment.ProjectID) {
+			if candidate.ID == applicationID {
+				application = candidate
+				break
+			}
+		}
+		if application.ID == "" {
+			return ErrNotFound
+		}
+		if (sdkPlatform == "ios" || sdkPlatform == "android") && sdkPlatform != application.Platform {
+			return ErrUnsupportedCapability
+		}
+		state, ok := tx.ReleaseState(environment.ID)
+		if !ok || state.CurrentReleaseID == "" {
+			return ErrNoCurrentRelease
+		}
+		snapshot, ok := tx.CommerceConfiguration(state.CurrentReleaseID, application.ID)
+		if !ok || snapshot.ProjectID != environment.ProjectID ||
+			snapshot.EnvironmentID != environment.ID ||
+			snapshot.ApplicationID != application.ID ||
+			snapshot.StorePlatform != application.Platform ||
+			snapshot.ConfigurationReleaseID != state.CurrentReleaseID {
+			return ErrNotFound
+		}
+		tx.TouchAPIKey(key.ID)
+		result = SDKCommerceConfiguration{
+			Snapshot: snapshot, Environment: environment, APIKeyID: key.ID,
+		}
 		return nil
 	})
 	return result, err
