@@ -38,7 +38,9 @@ export function CloudWorkspaceShell() {
                 title: "Overview",
               },
               {
-                to: `/organizations/${scope.organizationId}/projects/${scope.projectId}/monetization/${scope.environmentId}/paywalls`,
+                to: scope.environmentId
+                  ? `/organizations/${scope.organizationId}/projects/${scope.projectId}/monetization/${scope.environmentId}/paywalls`
+                  : `/organizations/${scope.organizationId}/projects/${scope.projectId}`,
                 icon: <StorefrontIcon aria-hidden size={18} />,
                 title: "Monetization",
               },
@@ -63,12 +65,12 @@ export function CloudWorkspaceShell() {
                   },
                   {
                     to: `/organizations/${scope.organizationId}/projects/${scope.projectId}/catalog/entitlements`,
-                    title: "Entitlements",
+                    title: "Access",
                     icon: <></>,
                   },
                   {
                     to: `/organizations/${scope.organizationId}/projects/${scope.projectId}/catalog/providers`,
-                    title: "Commerce providers",
+                    title: "Purchase setup",
                     icon: <></>,
                   },
                 ],

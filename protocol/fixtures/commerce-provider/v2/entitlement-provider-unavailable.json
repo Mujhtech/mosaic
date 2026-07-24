@@ -1,0 +1,21 @@
+{
+  "commerceProviderContractVersion": "2",
+  "recordType": "activeEntitlementOutcome",
+  "payload": {
+    "lookupId": "entitlements_storekit_000001",
+    "providerId": "app_store",
+    "outcome": "providerUnavailable",
+    "observedAt": "2026-07-24T12:07:00Z",
+    "diagnostics": [
+      {
+        "code": "commerce.providerUnavailable",
+        "safeMessage": "Active access could not be checked because the provider is unavailable.",
+        "severity": "error",
+        "retryable": true,
+        "retryAfterSeconds": 30,
+        "correlationId": "entitlements_storekit_000001",
+        "recoveryAction": "retry"
+      }
+    ]
+  }
+}

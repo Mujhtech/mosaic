@@ -1,0 +1,21 @@
+{
+  "commerceProviderContractVersion": "2",
+  "recordType": "commerceUpdate",
+  "payload": {
+    "updateId": "update_google_000001",
+    "operationId": "purchase_google_000001",
+    "providerId": "google_play",
+    "mosaicProductId": "mosaic_pro_monthly",
+    "configuration": {
+      "configurationId": "commerce_configuration_google_42",
+      "configurationRevision": "sha256:d1e8974a5391aca0c378ffd62ef7c6f35e0d89d85439fa67cbc101168aa1e0e8"
+    },
+    "outcome": "purchased",
+    "transactionReference": "purchase_digest_000001",
+    "activeEntitlementKeys": [
+      "pro"
+    ],
+    "occurredAt": "2026-07-24T12:05:00Z",
+    "diagnostics": []
+  }
+}

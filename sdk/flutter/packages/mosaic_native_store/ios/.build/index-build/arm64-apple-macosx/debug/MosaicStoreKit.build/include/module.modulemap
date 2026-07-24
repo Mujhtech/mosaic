@@ -1,0 +1,3 @@
+module MosaicStoreKit {
+    header "/Users/muhideenmujeeb/Projects/mosaic/sdk/flutter/packages/mosaic_native_store/ios/.build/index-build/arm64-apple-macosx/debug/MosaicStoreKit.build/include/MosaicStoreKit-Swift.h"
+}

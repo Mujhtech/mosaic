@@ -389,6 +389,26 @@ class MosaicPaywallState(
                     MosaicInteractionOutcome.RestoreFailed(result.diagnosticCode),
                 )
             }
+            is MosaicRestoreResult.Detailed -> when (result.outcome) {
+                MosaicCommerceRecoveryOutcome.RESTORED -> MosaicPaywallEvent(
+                    interaction = MosaicInteractionOutcome.Restored(result.entitlements),
+                    presentationResult = MosaicPresentationResult.Restored(result.entitlements),
+                )
+                MosaicCommerceRecoveryOutcome.NOTHING_TO_RESTORE -> MosaicPaywallEvent(
+                    MosaicInteractionOutcome.RestoreNoPurchases,
+                )
+                MosaicCommerceRecoveryOutcome.CANCELLED -> MosaicPaywallEvent(
+                    MosaicInteractionOutcome.RestoreCancelled,
+                )
+                MosaicCommerceRecoveryOutcome.PROVIDER_UNAVAILABLE,
+                MosaicCommerceRecoveryOutcome.FAILED,
+                -> MosaicPaywallEvent(
+                    MosaicInteractionOutcome.RestoreFailed(
+                        result.metadata.diagnostics.firstOrNull()?.code
+                            ?: MosaicDiagnosticCode.RESTORE_FAILED.wireName,
+                    ),
+                )
+            }
         }
     }
 

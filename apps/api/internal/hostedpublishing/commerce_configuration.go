@@ -10,16 +10,22 @@ import (
 	"time"
 
 	"github.com/santhosh-tekuri/jsonschema/v6"
+
+	"github.com/Mujhtech/mosaic/apps/api/internal/nativecommerce"
 )
 
 const (
-	commerceProviderSchemaID      = "urn:mosaic:protocol:schema:commerce-provider:v1:contract"
-	commerceConfigurationSchemaID = "urn:mosaic:protocol:schema:commerce-configuration:v1:configuration"
+	commerceProviderSchemaID        = "urn:mosaic:protocol:schema:commerce-provider:v1:contract"
+	commerceConfigurationSchemaID   = "urn:mosaic:protocol:schema:commerce-configuration:v1:configuration"
+	commerceProviderV2SchemaID      = "urn:mosaic:protocol:schema:commerce-provider:v2:contract"
+	commerceConfigurationV2SchemaID = "urn:mosaic:protocol:schema:commerce-configuration:v2:configuration"
 )
 
-type CommerceConfigurationValidator struct{ schema *jsonschema.Schema }
+type CommerceConfigurationValidator struct {
+	schemas map[string]*jsonschema.Schema
+}
 
-func CompileCommerceConfigurationValidator(providerSchema, configurationSchema io.Reader) (*CommerceConfigurationValidator, error) {
+func CompileCommerceConfigurationValidator(providerSchema, configurationSchema io.Reader, v2Schemas ...io.Reader) (*CommerceConfigurationValidator, error) {
 	decode := func(name string, reader io.Reader) (any, error) {
 		var document any
 		decoder := json.NewDecoder(reader)
@@ -49,18 +55,53 @@ func CompileCommerceConfigurationValidator(providerSchema, configurationSchema i
 	if err != nil {
 		return nil, fmt.Errorf("compile canonical Commerce Configuration v1 schema: %w", err)
 	}
-	return &CommerceConfigurationValidator{schema: schema}, nil
+	schemas := map[string]*jsonschema.Schema{"1": schema}
+	if len(v2Schemas) != 0 {
+		if len(v2Schemas) != 2 {
+			return nil, errors.New("Commerce Configuration v2 requires provider and configuration schemas")
+		}
+		providerV2Document, err := decode("Commerce Provider v2", v2Schemas[0])
+		if err != nil {
+			return nil, err
+		}
+		configurationV2Document, err := decode("Commerce Configuration v2", v2Schemas[1])
+		if err != nil {
+			return nil, err
+		}
+		if err := compiler.AddResource(commerceProviderV2SchemaID, providerV2Document); err != nil {
+			return nil, fmt.Errorf("register canonical Commerce Provider v2 schema: %w", err)
+		}
+		if err := compiler.AddResource(commerceConfigurationV2SchemaID, configurationV2Document); err != nil {
+			return nil, fmt.Errorf("register canonical Commerce Configuration v2 schema: %w", err)
+		}
+		v2Schema, err := compiler.Compile(commerceConfigurationV2SchemaID)
+		if err != nil {
+			return nil, fmt.Errorf("compile canonical Commerce Configuration v2 schema: %w", err)
+		}
+		schemas["2"] = v2Schema
+	}
+	return &CommerceConfigurationValidator{schemas: schemas}, nil
 }
 
 func (validator *CommerceConfigurationValidator) Validate(payload json.RawMessage) error {
-	if validator == nil || validator.schema == nil {
+	if validator == nil {
 		return errors.New("Commerce Configuration validator unavailable")
 	}
 	var document any
 	if err := json.Unmarshal(payload, &document); err != nil {
 		return ErrProviderReadiness
 	}
-	if err := validator.schema.Validate(document); err != nil {
+	var envelope struct {
+		Version string `json:"commerceConfigurationVersion"`
+	}
+	if err := json.Unmarshal(payload, &envelope); err != nil {
+		return ErrProviderReadiness
+	}
+	schema := validator.schemas[envelope.Version]
+	if schema == nil {
+		return ErrProviderReadiness
+	}
+	if err := schema.Validate(document); err != nil {
 		return ErrProviderReadiness
 	}
 	return nil
@@ -98,7 +139,7 @@ type commerceProviderIdentity struct {
 
 type commerceProviderActivation struct {
 	Source               string `json:"source"`
-	ProviderConnectionID string `json:"providerConnectionId"`
+	ProviderConnectionID string `json:"providerConnectionId,omitempty"`
 }
 
 type commerceProviderCapability struct {
@@ -111,17 +152,22 @@ type commerceActiveProvider struct {
 	Identity     commerceProviderIdentity     `json:"identity"`
 	Activation   commerceProviderActivation   `json:"activation"`
 	Capabilities []commerceProviderCapability `json:"capabilities"`
+	RecoveryMode string                       `json:"recoveryMode,omitempty"`
 }
 
 type commerceAdapterMapping struct {
 	Kind               string `json:"kind"`
 	OfferingIdentifier string `json:"offeringIdentifier,omitempty"`
 	PackageIdentifier  string `json:"packageIdentifier,omitempty"`
+	BasePlanID         string `json:"basePlanId,omitempty"`
+	OfferID            string `json:"offerId,omitempty"`
 }
 
 type commerceProductMapping struct {
 	MosaicProductID          string                 `json:"mosaicProductId"`
 	MappingID                string                 `json:"mappingId"`
+	ProductType              string                 `json:"productType,omitempty"`
+	EntitlementKeys          []string               `json:"entitlementKeys,omitempty"`
 	ProviderProductReference string                 `json:"providerProductReference"`
 	AdapterMapping           commerceAdapterMapping `json:"adapterMapping"`
 }
@@ -132,12 +178,20 @@ type commerceEntitlementMapping struct {
 }
 
 type commerceConfigurationFreshness struct {
-	Source             string `json:"source"`
-	Status             string `json:"status"`
-	ProviderObservedAt string `json:"providerObservedAt"`
-	SynchronizedAt     string `json:"synchronizedAt"`
-	StaleAt            string `json:"staleAt"`
-	ExpiresAt          string `json:"expiresAt,omitempty"`
+	Source             string                     `json:"source"`
+	Status             string                     `json:"status"`
+	ProviderObservedAt string                     `json:"providerObservedAt,omitempty"`
+	SynchronizedAt     string                     `json:"synchronizedAt,omitempty"`
+	StaleAt            string                     `json:"staleAt,omitempty"`
+	ExpiresAt          string                     `json:"expiresAt,omitempty"`
+	ConfiguredAt       string                     `json:"configuredAt,omitempty"`
+	Observation        *commerceNativeObservation `json:"observation,omitempty"`
+}
+
+type commerceNativeObservation struct {
+	Environment string `json:"environment"`
+	ObservedAt  string `json:"observedAt"`
+	ExpiresAt   string `json:"expiresAt,omitempty"`
 }
 
 func configurationReleaseDigest(payload json.RawMessage) (string, error) {
@@ -174,6 +228,22 @@ func providerIdentity(provider string) (commerceProviderIdentity, []commerceProv
 	return commerceProviderIdentity{ID: "revenuecat", DisplayName: "RevenueCat", AdapterVersion: "1.0.0"}, capabilities, nil
 }
 
+func nativeProviderIdentity(provider string) (commerceProviderIdentity, []commerceProviderCapability, string, error) {
+	profile, ok := nativecommerce.ProfileFor(provider)
+	if !ok {
+		return commerceProviderIdentity{}, nil, "", ErrProviderReadiness
+	}
+	capabilities := make([]commerceProviderCapability, 0, len(profile.Capabilities))
+	for _, capability := range profile.Capabilities {
+		capabilities = append(capabilities, commerceProviderCapability{
+			Name: capability.Name, Support: capability.Support, ReasonCode: capability.ReasonCode,
+		})
+	}
+	return commerceProviderIdentity{
+		ID: profile.Provider, DisplayName: profile.DisplayName, AdapterVersion: profile.AdapterVersion,
+	}, capabilities, profile.RecoveryMode, nil
+}
+
 func minTime(current time.Time, candidate time.Time) time.Time {
 	if current.IsZero() || candidate.Before(current) {
 		return candidate
@@ -196,6 +266,9 @@ func (s *Service) buildCommerceConfiguration(tx Transaction, release Release, en
 	assignment, ok := tx.ProviderAssignment(environment.ID, application.ID)
 	if !ok {
 		return CommerceConfigurationSnapshot{}, ErrProviderReadiness
+	}
+	if assignment.ActivationKind == "native_store" {
+		return s.buildNativeCommerceConfiguration(tx, release, environment, application, productIDs, now, assignment)
 	}
 	connection, ok := tx.ProviderConnection(assignment.ConnectionID)
 	if !ok || connection.ProjectID != environment.ProjectID || connection.Status != "active" || connection.HealthStatus != "healthy" {
@@ -323,9 +396,152 @@ func (s *Service) buildCommerceConfiguration(tx Transaction, release Release, en
 	}, nil
 }
 
+func nativeObservationEnvironment(storeContext string) string {
+	switch storeContext {
+	case "storekitConfiguration", "appleSandbox", "googlePlayTest":
+		return "test"
+	case "production":
+		return "production"
+	default:
+		return "unknown"
+	}
+}
+
+func (s *Service) buildNativeCommerceConfiguration(tx Transaction, release Release, environment Environment, application Application, productIDs []string, now time.Time, assignment ProviderAssignment) (CommerceConfigurationSnapshot, error) {
+	identity, capabilities, recoveryMode, err := nativeProviderIdentity(assignment.Provider)
+	if err != nil {
+		return CommerceConfigurationSnapshot{}, err
+	}
+	if (assignment.Provider == "app_store" && application.Platform != "ios") ||
+		(assignment.Provider == "google_play" && application.Platform != "android") {
+		return CommerceConfigurationSnapshot{}, ErrProviderReadiness
+	}
+	expectedProducts := append([]string(nil), productIDs...)
+	sort.Strings(expectedProducts)
+	mappings := tx.ProviderMappingsForNativeCommerce(
+		assignment.Provider, environment.ID, application.ID, application.Platform, expectedProducts,
+	)
+	if len(mappings) != len(expectedProducts) {
+		return CommerceConfigurationSnapshot{}, ErrProviderReadiness
+	}
+	productMappings := make([]commerceProductMapping, 0, len(mappings))
+	allObserved := true
+	anyStale := false
+	var observedAt time.Time
+	var expiresAt *time.Time
+	observationEnvironment := ""
+	for index, mapping := range mappings {
+		if mapping.ProductID != expectedProducts[index] || mapping.ProviderProductIdentifier == "" {
+			return CommerceConfigurationSnapshot{}, ErrProviderReadiness
+		}
+		product, ok := tx.Product(mapping.ProductID)
+		if !ok || product.ProjectID != environment.ProjectID {
+			return CommerceConfigurationSnapshot{}, ErrProviderReadiness
+		}
+		keys := tx.ProductEntitlementKeys(mapping.ProductID)
+		if len(keys) == 0 {
+			return CommerceConfigurationSnapshot{}, ErrProviderReadiness
+		}
+		adapter := commerceAdapterMapping{Kind: "storeKitProduct"}
+		if assignment.Provider == "google_play" {
+			adapter = commerceAdapterMapping{
+				Kind: "googlePlayProduct", BasePlanID: mapping.ProviderBasePlanIdentifier,
+				OfferID: mapping.ProviderOfferIdentifier,
+			}
+			if product.Type == "subscription" && adapter.BasePlanID == "" {
+				return CommerceConfigurationSnapshot{}, ErrProviderReadiness
+			}
+			if product.Type == "one_time_non_consumable" && (adapter.BasePlanID != "" || adapter.OfferID != "") {
+				return CommerceConfigurationSnapshot{}, ErrProviderReadiness
+			}
+		}
+		productMappings = append(productMappings, commerceProductMapping{
+			MosaicProductID: mapping.ProductID, MappingID: mapping.ID, ProductType: product.Type,
+			EntitlementKeys: keys, ProviderProductReference: mapping.ProviderProductIdentifier,
+			AdapterMapping: adapter,
+		})
+		observation, ok := tx.LatestProviderMappingObservation(mapping.ID)
+		if !ok || observation.Result != "available" {
+			allObserved = false
+			continue
+		}
+		if observation.ExpiresAt != nil && !observation.ExpiresAt.After(now) {
+			anyStale = true
+		}
+		observedAt = minTime(observedAt, observation.ObservedAt)
+		expiresAt = minTimePointer(expiresAt, observation.ExpiresAt)
+		currentEnvironment := nativeObservationEnvironment(observation.StoreContext)
+		if observationEnvironment == "" {
+			observationEnvironment = currentEnvironment
+		} else if observationEnvironment != currentEnvironment {
+			observationEnvironment = "unknown"
+		}
+	}
+	releaseDigest, err := configurationReleaseDigest(release.Payload)
+	if err != nil {
+		return CommerceConfigurationSnapshot{}, err
+	}
+	freshness := commerceConfigurationFreshness{
+		Source: "nativeStoreConfiguration", Status: "configured",
+		ConfiguredAt: now.UTC().Format(time.RFC3339Nano),
+	}
+	if allObserved && !observedAt.IsZero() {
+		freshness.Status = "fresh"
+		if anyStale {
+			freshness.Status = "stale"
+		}
+		freshness.Observation = &commerceNativeObservation{
+			Environment: observationEnvironment,
+			ObservedAt:  observedAt.UTC().Format(time.RFC3339Nano),
+		}
+		if expiresAt != nil {
+			freshness.Observation.ExpiresAt = expiresAt.UTC().Format(time.RFC3339Nano)
+		}
+	}
+	document := commerceConfigurationDocument{
+		ID:            "commerce_" + release.ID + "_" + application.ID,
+		EnvironmentID: environment.ID, ApplicationID: application.ID, StorePlatform: application.Platform,
+		ConfigurationRelease: commerceConfigurationRelease{ID: release.ID, ContentDigest: releaseDigest},
+		ActiveProvider: commerceActiveProvider{
+			Identity: identity, Activation: commerceProviderActivation{Source: "nativeStore"},
+			Capabilities: capabilities, RecoveryMode: recoveryMode,
+		},
+		ProductMappings: productMappings, EntitlementMappings: []commerceEntitlementMapping{},
+		Freshness: freshness, Diagnostics: []map[string]any{},
+	}
+	material, err := json.Marshal(document)
+	if err != nil {
+		return CommerceConfigurationSnapshot{}, err
+	}
+	var canonicalMaterial map[string]any
+	if err := json.Unmarshal(material, &canonicalMaterial); err != nil {
+		return CommerceConfigurationSnapshot{}, err
+	}
+	delete(canonicalMaterial, "contentDigest")
+	canonicalBytes, err := canonicalJSON(canonicalMaterial)
+	if err != nil {
+		return CommerceConfigurationSnapshot{}, err
+	}
+	digest := sha256.Sum256(canonicalBytes)
+	document.ContentDigest = fmt.Sprintf("sha256:%x", digest)
+	payload, err := json.Marshal(commerceConfigurationEnvelope{Version: "2", Configuration: document})
+	if err != nil {
+		return CommerceConfigurationSnapshot{}, err
+	}
+	if err := s.commerceValidator.Validate(payload); err != nil {
+		return CommerceConfigurationSnapshot{}, err
+	}
+	return CommerceConfigurationSnapshot{
+		ID: document.ID, ProjectID: environment.ProjectID, EnvironmentID: environment.ID,
+		ApplicationID: application.ID, StorePlatform: application.Platform,
+		ConfigurationReleaseID: release.ID, ConfigurationReleaseDigest: releaseDigest,
+		ContentDigest: document.ContentDigest, Payload: payload, CreatedAt: now,
+	}, nil
+}
+
 func (s *Service) cloneCommerceConfiguration(target CommerceConfigurationSnapshot, release Release, now time.Time) (CommerceConfigurationSnapshot, error) {
 	var envelope commerceConfigurationEnvelope
-	if err := json.Unmarshal(target.Payload, &envelope); err != nil || envelope.Version != "1" {
+	if err := json.Unmarshal(target.Payload, &envelope); err != nil || (envelope.Version != "1" && envelope.Version != "2") {
 		return CommerceConfigurationSnapshot{}, ErrProviderReadiness
 	}
 	releaseDigest, err := configurationReleaseDigest(release.Payload)
@@ -336,13 +552,24 @@ func (s *Service) cloneCommerceConfiguration(target CommerceConfigurationSnapsho
 	envelope.Configuration.ConfigurationRelease = commerceConfigurationRelease{
 		ID: release.ID, ContentDigest: releaseDigest,
 	}
-	staleAt, err := time.Parse(time.RFC3339Nano, envelope.Configuration.Freshness.StaleAt)
-	if err != nil {
-		return CommerceConfigurationSnapshot{}, ErrProviderReadiness
-	}
-	envelope.Configuration.Freshness.Status = "fresh"
-	if !now.Before(staleAt) {
-		envelope.Configuration.Freshness.Status = "stale"
+	if envelope.Version == "1" {
+		staleAt, err := time.Parse(time.RFC3339Nano, envelope.Configuration.Freshness.StaleAt)
+		if err != nil {
+			return CommerceConfigurationSnapshot{}, ErrProviderReadiness
+		}
+		envelope.Configuration.Freshness.Status = "fresh"
+		if !now.Before(staleAt) {
+			envelope.Configuration.Freshness.Status = "stale"
+		}
+	} else if observation := envelope.Configuration.Freshness.Observation; observation != nil && observation.ExpiresAt != "" {
+		expiresAt, err := time.Parse(time.RFC3339Nano, observation.ExpiresAt)
+		if err != nil {
+			return CommerceConfigurationSnapshot{}, ErrProviderReadiness
+		}
+		envelope.Configuration.Freshness.Status = "fresh"
+		if !now.Before(expiresAt) {
+			envelope.Configuration.Freshness.Status = "stale"
+		}
 	}
 	envelope.Configuration.ContentDigest = ""
 	material, err := json.Marshal(envelope.Configuration)

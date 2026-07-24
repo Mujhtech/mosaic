@@ -1,10 +1,7 @@
+import 'dart:async';
+
 import 'commerce_configuration.dart';
 import 'configuration_delivery.dart';
-
-enum MosaicCommerceProductType {
-  subscription,
-  oneTimeNonConsumable,
-}
 
 enum MosaicBillingPeriodUnit { day, week, month, year }
 
@@ -14,6 +11,36 @@ final class MosaicBillingPeriod {
 
   final MosaicBillingPeriodUnit unit;
   final int value;
+}
+
+enum MosaicCommerceOfferEligibility { eligible, ineligible, unknown }
+
+final class MosaicCommerceTrial {
+  const MosaicCommerceTrial({
+    required this.period,
+    this.eligibility = MosaicCommerceOfferEligibility.unknown,
+  });
+
+  final MosaicBillingPeriod period;
+  final MosaicCommerceOfferEligibility eligibility;
+}
+
+enum MosaicCommerceIntroductoryPaymentMode { payAsYouGo, payUpFront }
+
+final class MosaicCommerceIntroductoryOffer {
+  const MosaicCommerceIntroductoryOffer({
+    required this.localizedPrice,
+    required this.period,
+    required this.cycles,
+    required this.paymentMode,
+    this.eligibility = MosaicCommerceOfferEligibility.unknown,
+  });
+
+  final String localizedPrice;
+  final MosaicBillingPeriod period;
+  final int cycles;
+  final MosaicCommerceIntroductoryPaymentMode paymentMode;
+  final MosaicCommerceOfferEligibility eligibility;
 }
 
 /// Provider-neutral product details resolved at runtime.
@@ -26,6 +53,10 @@ final class MosaicProduct {
     this.currencyCode,
     this.billingPeriod,
     this.type,
+    this.locale,
+    this.entitlementKeys = const <String>{},
+    this.trial,
+    this.introductoryOffer,
   });
 
   /// Stable Mosaic Product ID. Provider identifiers never cross this boundary.
@@ -42,6 +73,10 @@ final class MosaicProduct {
   final String? currencyCode;
   final MosaicBillingPeriod? billingPeriod;
   final MosaicCommerceProductType? type;
+  final String? locale;
+  final Set<String> entitlementKeys;
+  final MosaicCommerceTrial? trial;
+  final MosaicCommerceIntroductoryOffer? introductoryOffer;
 }
 
 /// Provider-neutral entitlement returned by a purchase adapter.
@@ -260,6 +295,61 @@ abstract interface class MosaicCommerceProvider
   List<MosaicCommerceDiagnostic> get diagnostics;
 }
 
+enum MosaicCommerceUpdateOutcome {
+  purchased,
+  pending,
+  cancelled,
+  providerUnavailable,
+  failed,
+  entitlementsChanged,
+}
+
+final class MosaicCommerceConfigurationReference {
+  const MosaicCommerceConfigurationReference({
+    required this.configurationId,
+    required this.configurationRevision,
+  });
+
+  final String configurationId;
+  final String configurationRevision;
+}
+
+final class MosaicCommerceUpdate {
+  MosaicCommerceUpdate({
+    required this.updateId,
+    required this.providerId,
+    required this.mosaicProductId,
+    required this.configuration,
+    required this.outcome,
+    required this.occurredAt,
+    this.operationId,
+    this.transactionReference,
+    Iterable<String> activeEntitlementKeys = const <String>[],
+    Iterable<MosaicCommerceDiagnostic> diagnostics =
+        const <MosaicCommerceDiagnostic>[],
+  })  : activeEntitlementKeys = Set.unmodifiable(activeEntitlementKeys),
+        diagnostics = List.unmodifiable(diagnostics);
+
+  final String updateId;
+  final String? operationId;
+  final String providerId;
+  final String mosaicProductId;
+  final MosaicCommerceConfigurationReference configuration;
+  final MosaicCommerceUpdateOutcome outcome;
+  final String? transactionReference;
+  final Set<String> activeEntitlementKeys;
+  final DateTime occurredAt;
+  final List<MosaicCommerceDiagnostic> diagnostics;
+}
+
+abstract interface class MosaicAsynchronousCommerceProvider {
+  Stream<MosaicCommerceUpdate> get commerceUpdates;
+
+  Future<void> invalidate();
+
+  Future<void> dispose();
+}
+
 /// Creates one adapter bound to one fully validated release/sidecar pair.
 abstract interface class MosaicCommerceProviderFactory {
   String get providerId;
@@ -290,23 +380,42 @@ final class MosaicCommerceProviderRouter implements MosaicPurchaseProvider {
   final Map<String, MosaicCommerceProviderFactory> _factories;
   final MosaicPurchaseProvider? fallbackProvider;
   MosaicCommerceProvider? _active;
+  StreamSubscription<MosaicCommerceUpdate>? _updateSubscription;
+  final StreamController<MosaicCommerceUpdate> _updates =
+      StreamController<MosaicCommerceUpdate>.broadcast();
+  final Set<String> _routedUpdateIds = <String>{};
+  final List<String> _routedUpdateOrder = <String>[];
+  var _activationRevision = 0;
 
   MosaicCommerceProvider? get activeProvider => _active;
+  Stream<MosaicCommerceUpdate> get commerceUpdates => _updates.stream;
 
   bool activate({
     required MosaicCommerceConfiguration commerceConfiguration,
     required MosaicConfigurationRelease configurationRelease,
   }) {
+    _activationRevision += 1;
+    final revision = _activationRevision;
+    final previous = _active;
+    _active = null;
+    unawaited(_updateSubscription?.cancel());
+    _updateSubscription = null;
+    _routedUpdateIds.clear();
+    _routedUpdateOrder.clear();
     final factory =
         _factories[commerceConfiguration.activeProvider.identity.id];
     if (factory == null) {
-      _active = null;
       return false;
     }
-    final candidate = factory.create(
-      commerceConfiguration: commerceConfiguration,
-      configurationRelease: configurationRelease,
-    );
+    final MosaicCommerceProvider candidate;
+    try {
+      candidate = factory.create(
+        commerceConfiguration: commerceConfiguration,
+        configurationRelease: configurationRelease,
+      );
+    } on Object {
+      return false;
+    }
     final expectedIdentity = commerceConfiguration.activeProvider.identity;
     if (candidate.identity.id != expectedIdentity.id ||
         candidate.identity.adapterVersion != expectedIdentity.adapterVersion ||
@@ -315,14 +424,61 @@ final class MosaicCommerceProviderRouter implements MosaicPurchaseProvider {
           candidate.capabilities,
         )) {
       _active = null;
+      if (candidate is MosaicAsynchronousCommerceProvider) {
+        unawaited(candidate.dispose());
+      }
       return false;
     }
     _active = candidate;
+    if (previous is MosaicAsynchronousCommerceProvider) {
+      unawaited(previous.dispose());
+    }
+    if (candidate is MosaicAsynchronousCommerceProvider) {
+      final expectedProvider = expectedIdentity.id;
+      final expectedConfigurationId = commerceConfiguration.id;
+      final expectedRevision = commerceConfiguration.contentDigest;
+      _updateSubscription = candidate.commerceUpdates.listen((update) {
+        if (_activationRevision != revision ||
+            _active != candidate ||
+            update.providerId != expectedProvider ||
+            update.configuration.configurationId != expectedConfigurationId ||
+            update.configuration.configurationRevision != expectedRevision ||
+            !_routedUpdateIds.add(update.updateId)) {
+          return;
+        }
+        _routedUpdateOrder.add(update.updateId);
+        if (_routedUpdateOrder.length > 1024) {
+          _routedUpdateIds.remove(_routedUpdateOrder.removeAt(0));
+        }
+        _updates.add(update);
+      });
+    }
     return true;
   }
 
   void deactivate() {
+    _activationRevision += 1;
+    final previous = _active;
     _active = null;
+    unawaited(_updateSubscription?.cancel());
+    _updateSubscription = null;
+    _routedUpdateIds.clear();
+    _routedUpdateOrder.clear();
+    if (previous is MosaicAsynchronousCommerceProvider) {
+      unawaited(previous.dispose());
+    }
+  }
+
+  Future<void> dispose() async {
+    _activationRevision += 1;
+    final previous = _active;
+    _active = null;
+    await _updateSubscription?.cancel();
+    _updateSubscription = null;
+    if (previous is MosaicAsynchronousCommerceProvider) {
+      await previous.dispose();
+    }
+    await _updates.close();
   }
 
   MosaicPurchaseProvider? get _delegate => _active ?? fallbackProvider;

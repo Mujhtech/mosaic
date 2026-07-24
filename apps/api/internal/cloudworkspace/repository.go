@@ -45,7 +45,10 @@ type Reader interface {
 	ProviderMapping(string) (ProviderProductMapping, bool)
 	ProviderMappings(string) []ProviderProductMapping
 	ProviderMappingsByConnection(string) []ProviderProductMapping
+	NativeProviderMappingByTarget(ProviderKind, string, string, Platform, string) (ProviderProductMapping, bool)
 	ProviderMetadataSnapshot(string) (ProviderProductMetadataSnapshot, bool)
+	ProviderMappingObservation(string) (ProviderMappingObservation, bool)
+	ProviderMappingObservations(string) []ProviderMappingObservation
 	ProviderEntitlementMappings(string, string, string) []ProviderEntitlementMapping
 	ProviderImportByKeyHash(string, [32]byte) (ProviderImportRequest, bool)
 	ProviderImportItems(string) []ProviderImportItem
@@ -82,6 +85,7 @@ type Transaction interface {
 	DeleteActiveProviderAssignment(string, string)
 	SaveProviderMapping(ProviderProductMapping)
 	SaveProviderMetadataSnapshot(ProviderProductMetadataSnapshot)
+	SaveProviderMappingObservation(ProviderMappingObservation)
 	SaveProviderEntitlementMapping(ProviderEntitlementMapping)
 	SaveProviderImport(ProviderImportRequest)
 	SaveProviderImportItem(ProviderImportItem)

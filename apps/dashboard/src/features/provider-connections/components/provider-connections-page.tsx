@@ -14,20 +14,25 @@ import {
   activeProviderAssignmentQueryOptions,
   providerConnectionsQueryOptions,
 } from "@/features/provider-connections/queries/provider-connection-queries"
+import { explicitPurchaseSetupEnvironment } from "@/features/provider-connections/types/provider-connection-view"
 import { useValidatedProjectScope } from "@/features/projects/hooks/use-validated-project-scope"
 import { applicationsQueryOptions } from "@/features/projects/queries/projects-query"
+import { useOrganizationAccess } from "@/hooks/use-organization-access"
 
 export function ProviderConnectionsPage({
   environmentId,
   organizationId,
   projectId,
+  returnTo,
 }: {
   environmentId?: string
   organizationId: string
   projectId: string
+  returnTo?: string
 }) {
   const navigate = useNavigate()
   const queryClient = useQueryClient()
+  const access = useOrganizationAccess(organizationId)
   const { project, scopeMismatch, scopeReady } = useValidatedProjectScope(organizationId, projectId)
   const applications = useQuery({
     ...applicationsQueryOptions(projectId),
@@ -46,10 +51,7 @@ export function ProviderConnectionsPage({
   )
   const applicationItems = applications.data?.items ?? []
   const environmentItems = environments.data?.items ?? []
-  const selectedEnvironment =
-    environmentItems.find((environment) => environment.id === environmentId) ??
-    environmentItems.find((environment) => environment.key === "staging") ??
-    environmentItems[0]
+  const selectedEnvironment = explicitPurchaseSetupEnvironment(environmentItems, environmentId)
   const assignmentQueries = useQueries({
     queries: applicationItems.map((application) => ({
       ...activeProviderAssignmentQueryOptions(
@@ -70,6 +72,7 @@ export function ProviderConnectionsPage({
       applications.error ??
       environments.error ??
       connections.error ??
+      access.error ??
       assignmentError,
     isEmpty: scopeReady && environments.isSuccess && environmentItems.length === 0,
     isPending:
@@ -78,6 +81,7 @@ export function ProviderConnectionsPage({
         (applications.isPending ||
           environments.isPending ||
           connections.isPending ||
+          access.isPending ||
           assignmentQueries.some((query) => query.isPending))),
     loadingDescription: "Loading Application and Environment commerce scopes.",
     onRetry: () => {
@@ -94,7 +98,7 @@ export function ProviderConnectionsPage({
     return (
       <WorkspacePage
         description="The routed Organization does not own this Project."
-        title="Commerce providers unavailable in this Organization"
+        title="Purchase setup unavailable in this Organization"
       >
         <ScopeMismatchRecovery
           mismatch={scopeMismatch}
@@ -109,52 +113,37 @@ export function ProviderConnectionsPage({
     <WorkspacePage
       description="Connect commerce without changing stable Mosaic Product IDs or rebuilding Paywalls."
       eyebrow="Catalog · Project-wide"
-      title="Commerce providers"
+      title="Purchase setup"
     >
       <HostedResourceBoundary state={state}>
+        {returnTo ? (
+          <a className="text-primary inline-flex text-sm font-semibold" href={returnTo}>
+            Return to Publish review
+          </a>
+        ) : null}
         <WorkflowPanel
-          description="Persisted records contain only non-secret provider metadata and explicit scopes."
-          title="Connections"
+          description="Choose one Mosaic Environment before inspecting or changing provider resolution. Mosaic never assumes Staging or another Environment."
+          title="Active provider by Application"
         >
-          <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-            <p className="text-muted-foreground max-w-2xl text-sm">
-              RevenueCat credentials are entered once, encrypted by the API, and never returned.
-            </p>
-            <ConnectRevenueCatSheet
-              applications={applicationItems}
-              environments={environmentItems}
-              onConnect={async (input) => {
-                await connectRevenueCat.mutateAsync(input)
-              }}
-              providerBaseHref={`/organizations/${encodeURIComponent(organizationId)}/projects/${encodeURIComponent(projectId)}/catalog/providers`}
-            />
-          </div>
-          <ProviderConnectionsList
-            connections={connections.data?.items ?? []}
-            organizationId={organizationId}
-            projectId={projectId}
-          />
-        </WorkflowPanel>
-
-        <WorkflowPanel
-          description="Each Application already owns one platform. The selected provider is explicit for every Environment and Application; Mosaic never falls back to another connection."
-          title="Active provider"
-        >
-          <label className="mb-5 flex max-w-sm flex-col gap-2 text-sm font-medium">
+          <label className="flex max-w-sm flex-col gap-2 text-sm font-medium">
             Environment
             <select
-              aria-label="Provider Environment"
+              aria-label="Purchase setup Environment"
               className="border-input bg-background focus-visible:border-ring focus-visible:ring-ring/40 h-9 rounded border px-3 text-sm outline-none focus-visible:ring-3"
               onChange={(event) =>
                 void navigate({
                   params: { organizationId, projectId },
                   replace: true,
-                  search: { environmentId: event.currentTarget.value },
+                  search: {
+                    environmentId: event.currentTarget.value || undefined,
+                    returnTo,
+                  },
                   to: "/organizations/$organizationId/projects/$projectId/catalog/providers",
                 })
               }
               value={selectedEnvironment?.id ?? ""}
             >
+              <option value="">Select Environment</option>
               {environmentItems.map((environment) => (
                 <option key={environment.id} value={environment.id}>
                   {environment.name} · {environment.mode}
@@ -163,16 +152,62 @@ export function ProviderConnectionsPage({
             </select>
           </label>
           {selectedEnvironment ? (
-            <ActiveProviderMatrix
-              applications={applicationItems}
-              assignments={activeAssignments}
-              connections={connections.data?.items ?? []}
-              environment={selectedEnvironment}
-              managementEnabled
-              organizationId={organizationId}
-              projectId={projectId}
-            />
-          ) : null}
+            <div className="mt-5">
+              <ActiveProviderMatrix
+                applicationsHref={`/organizations/${encodeURIComponent(organizationId)}/projects/${encodeURIComponent(projectId)}/apps`}
+                applications={applicationItems}
+                assignments={activeAssignments}
+                canManage={access.canManage}
+                connections={connections.data?.items ?? []}
+                environment={selectedEnvironment}
+                managementEnabled
+                membersHref={`/organizations/${encodeURIComponent(organizationId)}/members`}
+                organizationId={organizationId}
+                projectId={projectId}
+              />
+            </div>
+          ) : (
+            <div className="border-border mt-5 rounded border border-dashed p-4">
+              <p className="text-sm font-semibold">Select an Environment</p>
+              <p className="text-muted-foreground mt-1 text-sm leading-6">
+                Active providers are scoped to one Environment and one registered Application. No
+                provider assignment is loaded until you choose the Environment explicitly.
+              </p>
+            </div>
+          )}
+        </WorkflowPanel>
+
+        <WorkflowPanel
+          description="RevenueCat and app-owned custom providers use scoped Connections. StoreKit and Google Play Billing are built in and never require a fake server connection."
+          title="Connections"
+        >
+          <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+            <p className="text-muted-foreground max-w-2xl text-sm">
+              RevenueCat credentials are entered once, encrypted by the API, and never returned.
+            </p>
+            {access.canManage ? (
+              <ConnectRevenueCatSheet
+                applications={applicationItems}
+                environments={environmentItems}
+                onConnect={async (input) => {
+                  await connectRevenueCat.mutateAsync(input)
+                }}
+                providerBaseHref={`/organizations/${encodeURIComponent(organizationId)}/projects/${encodeURIComponent(projectId)}/catalog/providers`}
+              />
+            ) : (
+              <a
+                className="text-primary text-sm font-semibold"
+                href={`/organizations/${encodeURIComponent(organizationId)}/members`}
+              >
+                Ask an Owner or Admin to connect a provider
+              </a>
+            )}
+          </div>
+          <ProviderConnectionsList
+            connections={connections.data?.items ?? []}
+            organizationId={organizationId}
+            projectId={projectId}
+          />
         </WorkflowPanel>
       </HostedResourceBoundary>
     </WorkspacePage>

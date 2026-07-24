@@ -11,9 +11,17 @@ const schemaPaths = Object.freeze({
     protocolRoot,
     "schema/commerce-configuration/v1/configuration.schema.json",
   ),
+  commerceConfigurationV2: resolve(
+    protocolRoot,
+    "schema/commerce-configuration/v2/configuration.schema.json",
+  ),
   commerceProviderV1: resolve(
     protocolRoot,
     "schema/commerce-provider/v1/contract.schema.json",
+  ),
+  commerceProviderV2: resolve(
+    protocolRoot,
+    "schema/commerce-provider/v2/contract.schema.json",
   ),
   localProjectV02: resolve(
     protocolRoot,
@@ -52,8 +60,14 @@ function definitionTypeName(context, definitionName) {
   if (context === "commerceProviderV1") {
     return `MosaicCommerceProviderV1${name}`;
   }
+  if (context === "commerceProviderV2") {
+    return `MosaicCommerceProviderV2${name}`;
+  }
   if (context === "commerceConfigurationV1") {
     return `MosaicCommerceConfigurationV1${name}`;
+  }
+  if (context === "commerceConfigurationV2") {
+    return `MosaicCommerceConfigurationV2${name}`;
   }
   throw new Error(`Unsupported declaration context ${context}`);
 }
@@ -83,9 +97,31 @@ function refType(ref, context) {
   }
   if (
     schemaId ===
+    "urn:mosaic:protocol:schema:commerce-provider:v2:contract"
+  ) {
+    return fragment?.startsWith("/$defs/")
+      ? definitionTypeName(
+          "commerceProviderV2",
+          fragment.slice("/$defs/".length),
+        )
+      : "MosaicCommerceProviderV2Record";
+  }
+  if (
+    schemaId ===
     "urn:mosaic:protocol:schema:local-preview:v0.2:local-project"
   ) {
     return "MosaicLocalProjectV02";
+  }
+  if (
+    schemaId ===
+    "urn:mosaic:protocol:schema:commerce-configuration:v2:configuration"
+  ) {
+    return fragment?.startsWith("/$defs/")
+      ? definitionTypeName(
+          "commerceConfigurationV2",
+          fragment.slice("/$defs/".length),
+        )
+      : "MosaicCommerceConfigurationV2";
   }
   if (
     schemaId ===
@@ -253,8 +289,14 @@ function previewMessageSource(schema, context = "preview") {
   ].join("\n");
 }
 
-function commerceProviderRecordSource(schema) {
-  const context = "commerceProviderV1";
+function commerceProviderRecordSource(
+  schema,
+  context = "commerceProviderV1",
+) {
+  const prefix =
+    context === "commerceProviderV1"
+      ? "MosaicCommerceProviderV1"
+      : "MosaicCommerceProviderV2";
   const commonProperties = Object.fromEntries(
     Object.entries(schema.properties).filter(
       ([name]) => name !== "recordType" && name !== "payload",
@@ -278,18 +320,18 @@ function commerceProviderRecordSource(schema) {
   }));
 
   return [
-    "export type MosaicCommerceProviderV1Envelope<",
-    "  TRecordType extends MosaicCommerceProviderV1RecordType,",
+    `export type ${prefix}Envelope<`,
+    `  TRecordType extends ${prefix}RecordType,`,
     "  TPayload,",
     `> = ${common} & {`,
     "  \"recordType\": TRecordType;",
     "  \"payload\": TPayload;",
     "};",
     "",
-    `export type MosaicCommerceProviderV1Record =\n${variants
+    `export type ${prefix}Record =\n${variants
       .map(
         (variant) =>
-          `  | MosaicCommerceProviderV1Envelope<${literal(variant.recordType)}, ${variant.payload}>`,
+          `  | ${prefix}Envelope<${literal(variant.recordType)}, ${variant.payload}>`,
       )
       .join("\n")};`,
   ].join("\n");
@@ -299,7 +341,11 @@ export function buildBrowserContractDeclarations() {
   const commerceConfigurationV1 = readJson(
     schemaPaths.commerceConfigurationV1,
   );
+  const commerceConfigurationV2 = readJson(
+    schemaPaths.commerceConfigurationV2,
+  );
   const commerceProviderV1 = readJson(schemaPaths.commerceProviderV1);
+  const commerceProviderV2 = readJson(schemaPaths.commerceProviderV2);
   const paywallV02 = readJson(schemaPaths.paywallV02);
   const previewV02 = readJson(schemaPaths.previewV02);
   const localProjectV02 = readJson(schemaPaths.localProjectV02);
@@ -321,6 +367,10 @@ export function buildBrowserContractDeclarations() {
     "",
     commerceProviderRecordSource(commerceProviderV1),
     "",
+    definitionsSource(commerceProviderV2, "commerceProviderV2"),
+    "",
+    commerceProviderRecordSource(commerceProviderV2, "commerceProviderV2"),
+    "",
     definitionsSource(
       commerceConfigurationV1,
       "commerceConfigurationV1",
@@ -329,6 +379,16 @@ export function buildBrowserContractDeclarations() {
     `export type MosaicCommerceConfigurationV1 = ${schemaType(
       commerceConfigurationV1,
       "commerceConfigurationV1",
+    )};`,
+    "",
+    definitionsSource(
+      commerceConfigurationV2,
+      "commerceConfigurationV2",
+    ),
+    "",
+    `export type MosaicCommerceConfigurationV2 = ${schemaType(
+      commerceConfigurationV2,
+      "commerceConfigurationV2",
     )};`,
     "",
     "export type MosaicPaywallDocument = MosaicPaywallV02Document;",
@@ -343,7 +403,9 @@ export function buildBrowserContractDeclarations() {
   const indexDeclaration = `// Generated public declarations for protocol/browser/index.js. Do not edit.
 import type {
   MosaicCommerceConfigurationV1,
+  MosaicCommerceConfigurationV2,
   MosaicCommerceProviderV1Record,
+  MosaicCommerceProviderV2Record,
   MosaicLocalProject,
   MosaicLocalProjectV02,
   MosaicPaywallDocument,
@@ -374,8 +436,12 @@ export type MosaicContractDiagnostic = MosaicPreviewValidationDiagnostic;
 export type MosaicAnyPaywallDocument = MosaicPaywallV02Document;
 export type MosaicAnyPreviewMessage = MosaicPreviewV02Message;
 export type MosaicAnyLocalProject = MosaicLocalProjectV02;
-export type MosaicAnyCommerceProviderRecord = MosaicCommerceProviderV1Record;
-export type MosaicAnyCommerceConfiguration = MosaicCommerceConfigurationV1;
+export type MosaicAnyCommerceProviderRecord =
+  | MosaicCommerceProviderV1Record
+  | MosaicCommerceProviderV2Record;
+export type MosaicAnyCommerceConfiguration =
+  | MosaicCommerceConfigurationV1
+  | MosaicCommerceConfigurationV2;
 
 export type MosaicLocalPreviewNegotiationDiagnostic = {
   readonly code: "preview.noMutualVersion" | "preview.incompatibleSchemaVersion" | "preview.invalidNegotiation" | "preview.invalidCapabilityReport" | "preview.invalidDraft" | "preview.unsupportedPreviewCapability" | "preview.unsupportedCapability" | "preview.documentTooLarge";

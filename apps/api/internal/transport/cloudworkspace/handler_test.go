@@ -25,6 +25,9 @@ func TestHostedRoutesRequirePrincipalAndUseStableValidationAndPagination(t *test
 	}))
 	response = request(t, authenticated, http.MethodPost, "/organizations", `{"name":"","unknown":true}`)
 	assertErrorCode(t, response, http.StatusUnprocessableEntity, "validation_failed")
+	response = request(t, authenticated, http.MethodPost, "/provider-mappings/missing/observations",
+		`{"adapterVersion":"1.0.0","storeContext":"googlePlayTest","result":"available","correlationId":"run_1","metadata":{"receipt":"forbidden"},"observedAt":"2026-07-24T12:00:00Z"}`)
+	assertErrorCode(t, response, http.StatusUnprocessableEntity, "validation_failed")
 
 	for _, name := range []string{"Acme", "Beta"} {
 		response = request(t, authenticated, http.MethodPost, "/organizations", `{"name":"`+name+`"}`)

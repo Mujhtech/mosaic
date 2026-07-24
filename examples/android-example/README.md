@@ -1,5 +1,20 @@
 # Mosaic Android local-preview and hosted-delivery example
 
+Hosted mode can use the optional first-party Google Play provider without
+changing the Paywall document or its Mosaic Product references:
+
+```bash
+adb shell am start \
+  -n dev.mosaic.example/.MainActivity \
+  --es mosaic.sdk.key SDK_KEY \
+  --es mosaic.application.id APPLICATION_ID \
+  --ez mosaic.google.play true
+```
+
+Install the debug build through a Play test track for real test Products. Its
+debug-only manifest enables Play Billing response overrides for Play Billing
+Lab; release builds do not include that switch.
+
 This native Android app connects a Jetpack Compose renderer to a running local
 Mosaic Studio preview session. Studio draft revisions rerender immediately,
 without rebuilding or restarting the app. The status panel visibly reports

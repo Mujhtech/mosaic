@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"io"
 	"time"
+
+	"github.com/Mujhtech/mosaic/apps/api/internal/providerreadiness"
 )
 
 const (
@@ -42,7 +44,9 @@ type Product struct {
 }
 
 type ProviderAssignment struct {
-	ConnectionID string
+	Provider       string
+	ActivationKind string
+	ConnectionID   string
 }
 
 type ProviderConnection struct {
@@ -55,10 +59,14 @@ type ProviderConnection struct {
 }
 
 type ProviderMappingReadiness struct {
-	ID                string
-	Availability      string
-	SyncState         string
-	CurrentSnapshotID string
+	ID                         string
+	ProductID                  string
+	ProviderProductIdentifier  string
+	ProviderBasePlanIdentifier string
+	ProviderOfferIdentifier    string
+	Availability               string
+	SyncState                  string
+	CurrentSnapshotID          string
 }
 
 type ProviderMetadataSnapshot struct {
@@ -76,7 +84,17 @@ type CommerceProductMapping struct {
 	ProviderPackageIdentifier  string
 	ProviderOfferingIdentifier string
 	ExpectedStoreProductID     string
+	ProviderBasePlanIdentifier string
+	ProviderOfferIdentifier    string
 	CurrentSnapshotID          string
+}
+
+type ProviderMappingObservation struct {
+	ID           string
+	Result       string
+	StoreContext string
+	ObservedAt   time.Time
+	ExpiresAt    *time.Time
 }
 
 type CommerceEntitlementMapping struct {
@@ -104,7 +122,7 @@ type ProviderPublicationIssue struct {
 	ApplicationID  string `json:"applicationId"`
 	ResourceType   string `json:"resourceType"`
 	ResourceID     string `json:"resourceId"`
-	RecoveryAction string `json:"recoveryAction"`
+	RecoveryAction providerreadiness.Action `json:"recoveryAction"`
 }
 
 type Asset struct {

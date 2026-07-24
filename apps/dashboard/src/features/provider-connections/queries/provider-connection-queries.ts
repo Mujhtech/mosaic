@@ -3,6 +3,7 @@ import { queryOptions } from "@tanstack/react-query"
 import {
   getActivePaywallDraft,
   getActiveProviderAssignment,
+  getNativeProviderProfile,
   getProviderConnection,
   getProviderConnectionCapabilities,
   getProviderConnectionHealth,
@@ -28,22 +29,47 @@ export const providerConnectionKeys = {
   diagnostics: (connectionId: string) =>
     ["provider-connections", "diagnostics", connectionId] as const,
   health: (connectionId: string) => ["provider-connections", "health", connectionId] as const,
+  nativeProfile: (provider: "app_store" | "google_play", platform: "ios" | "android") =>
+    ["provider-connections", "native-profile", provider, platform] as const,
   list: (projectId: string) => ["provider-connections", "list", projectId] as const,
   replacementImpact: (
     projectId: string,
-    connectionId: string,
+    assignmentKey: string,
     environmentId: string,
     applicationId: string,
+    provider?: string,
+    connectionId?: string,
   ) =>
     [
       "provider-connections",
       "replacement-impact",
       projectId,
-      connectionId,
+      assignmentKey,
       environmentId,
       applicationId,
+      provider,
+      connectionId,
     ] as const,
   syncRuns: (connectionId: string) => ["provider-connections", "sync-runs", connectionId] as const,
+}
+
+export function nativeProviderProfileQueryOptions(
+  provider: "app_store" | "google_play",
+  platform: "ios" | "android",
+) {
+  return queryOptions({
+    queryKey: providerConnectionKeys.nativeProfile(provider, platform),
+    queryFn: async ({ signal }) => {
+      const result = await getNativeProviderProfile({
+        client: generatedDashboardClient,
+        path: { provider },
+        query: { platform },
+        signal,
+        throwOnError: true,
+      })
+      return result.data.data
+    },
+  })
 }
 
 export function providerDocumentReferencesProducts(
@@ -87,16 +113,20 @@ async function mapWithConcurrency<T, R>(
 
 export function providerAssignmentImpactQueryOptions(input: {
   applicationId: string
-  connectionId: string
+  assignmentKey: string
+  connectionId?: string
   environmentId: string
+  provider: "app_store" | "custom" | "google_play" | "revenuecat"
   projectId: string
 }) {
   return queryOptions({
     queryKey: providerConnectionKeys.replacementImpact(
       input.projectId,
-      input.connectionId,
+      input.assignmentKey,
       input.environmentId,
       input.applicationId,
+      input.provider,
+      input.connectionId,
     ),
     queryFn: async ({ signal }) => {
       const productsResult = await listProducts({
@@ -119,7 +149,8 @@ export function providerAssignmentImpactQueryOptions(input: {
         .filter(({ mappings }) =>
           mappings.some(
             (mapping) =>
-              mapping.connectionId === input.connectionId &&
+              mapping.provider === input.provider &&
+              (!input.connectionId || mapping.connectionId === input.connectionId) &&
               mapping.applicationId === input.applicationId &&
               (!mapping.environmentId || mapping.environmentId === input.environmentId) &&
               mapping.status !== "archived",

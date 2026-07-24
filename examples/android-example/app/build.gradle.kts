@@ -28,6 +28,8 @@ android {
 dependencies {
     implementation(project(":mosaic"))
     implementation(project(":mosaic-revenuecat"))
+    implementation(project(":mosaic-google-play"))
+    implementation("com.revenuecat.purchases:purchases:10.15.0")
 
     val composeBom = platform("androidx.compose:compose-bom:2026.02.00")
     implementation(composeBom)

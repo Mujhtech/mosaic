@@ -6,8 +6,8 @@ Protocol `0.2` RC4 and Local Preview `0.2` are the only supported contracts
 while Mosaic is iterating before its first stable release. Earlier experimental
 contracts have been retired rather than carried as compatibility readers.
 
-Configuration Delivery `1`, Commerce Provider Contract `1`, and Commerce
-Configuration `1` are independent versioned contracts. Their exact version `1`
+Configuration Delivery `1`, Commerce Provider Contracts `1`/`2`, and Commerce
+Configurations `1`/`2` are independent versioned contracts. Their exact versions
 values do not imply compatibility with one another and do not change the
 Paywall `schemaVersion`.
 
@@ -73,6 +73,11 @@ compatibility decision and normally a later Commerce Provider contract version.
 Changing the Commerce Provider contract does not authorize a Paywall Protocol
 or Configuration Delivery change.
 
+Commerce Provider Contract `2` is a parallel exact reader for native-store
+recovery, delayed updates, and local acceptance. V1 remains valid. Records from
+different versions are never combined. A client receives v2 only after
+declaring exact v2 support.
+
 ## Commerce Configuration versioning
 
 Commerce Configuration sidecars require exact
@@ -89,3 +94,15 @@ Changing activation, mapping, freshness, or association semantics requires a
 reviewed compatibility decision and normally a later Commerce Configuration
 version. It does not authorize changes to Paywall Protocol `0.2`,
 Configuration Delivery `1`, or Commerce Provider Contract `1`.
+
+Commerce Configuration `2` is parallel to v1 and adds native-store activation,
+exact native selectors, Product grants, recovery mode, and native observation
+context. An unsupported v2 candidate is rejected atomically while retaining
+the last accepted release-associated sidecar. If none exists, the SDK uses a
+compatible bundled fallback or reports configuration unavailable. It never
+interprets v2 as v1 or falls back to another provider.
+
+Commerce Provider v2 operation and update references use the exact accepted
+Commerce Configuration v2 content digest as `configurationRevision`. A
+different digest is a different immutable revision; readers do not compare
+numeric ordering or accept aliases.

@@ -9,9 +9,12 @@ import { buttonVariants } from "@/components/ui/button-variants"
 import { HostedResourceBoundary } from "@/features/auth/components/hosted-resource-boundary"
 import { resolveHostedQueryState } from "@/features/auth/types/hosted-query-state"
 import { ProductReadinessPanel } from "@/features/catalog/components/product-readiness-panel"
+import { ProductPlatformCoverage } from "@/features/catalog/components/product-platform-coverage"
 import { ProviderMappingsPanel } from "@/features/catalog/components/provider-mappings-panel"
+import { NativeProviderMappingSheet } from "@/features/catalog/components/native-provider-mapping-sheet"
 import {
   archiveProviderMappingMutationOptions,
+  createProviderMappingDraftMutationOptions,
   grantEntitlementMutationOptions,
   productLifecycleMutationOptions,
   removeEntitlementGrantMutationOptions,
@@ -24,6 +27,8 @@ import {
   productQueryOptions,
   productReadinessQueryOptions,
   providerMappingMetadataQueryOptions,
+  providerMappingObservationsQueryOptions,
+  providerMappingUsageQueryOptions,
   productsQueryOptions,
   productUsageQueryOptions,
   providerMappingsQueryOptions,
@@ -47,6 +52,7 @@ import {
   applicationsQueryOptions,
   projectQueryOptions,
 } from "@/features/projects/queries/projects-query"
+import { useOrganizationAccess } from "@/hooks/use-organization-access"
 
 interface ProductDetailPageProps {
   onReadinessScopeChange: (scope: { applicationId?: string; environmentId?: string }) => void
@@ -55,6 +61,7 @@ interface ProductDetailPageProps {
   projectId: string
   readinessApplicationId?: string
   readinessEnvironmentId?: string
+  returnTo?: string
 }
 
 export function ProductDetailPage({
@@ -64,8 +71,10 @@ export function ProductDetailPage({
   projectId,
   readinessApplicationId,
   readinessEnvironmentId,
+  returnTo,
 }: ProductDetailPageProps) {
   const queryClient = useQueryClient()
+  const access = useOrganizationAccess(organizationId)
   const [showLifecycle, setShowLifecycle] = useState(false)
   const [selectedReplacementId, setSelectedReplacementId] = useState<string | null>(null)
   const project = useQuery(projectQueryOptions(projectId))
@@ -84,6 +93,13 @@ export function ProductDetailPage({
     queries: (mappings.data?.items ?? []).map((mapping) => ({
       ...providerMappingMetadataQueryOptions(mapping.id),
       enabled: scopeReady && Boolean(mapping.currentSnapshotId) && mapping.status !== "archived",
+    })),
+  })
+  const observationQueries = useQueries({
+    queries: (mappings.data?.items ?? []).map((mapping) => ({
+      ...providerMappingObservationsQueryOptions(mapping.id),
+      enabled:
+        scopeReady && (mapping.provider === "app_store" || mapping.provider === "google_play"),
     })),
   })
   const grants = useQuery({ ...productEntitlementsQueryOptions(productId), enabled: scopeReady })
@@ -112,6 +128,16 @@ export function ProductDetailPage({
     ),
     enabled: scopeReady && hasExplicitReadinessScope,
   })
+  const coverageReadinessQueries = useQueries({
+    queries: (applications.data?.items ?? []).map((application) => ({
+      ...productReadinessQueryOptions(
+        productId,
+        readinessEnvironmentId ?? "unselected",
+        application.id,
+      ),
+      enabled: scopeReady && Boolean(selectedReadinessEnvironment),
+    })),
+  })
   const archive = useMutation(productLifecycleMutationOptions(queryClient, "archive"))
   const restore = useMutation(productLifecycleMutationOptions(queryClient, "restore"))
   const setReplacement = useMutation(setProductReplacementMutationOptions(productId, queryClient))
@@ -121,6 +147,9 @@ export function ProductDetailPage({
   )
   const archiveMapping = useMutation(
     archiveProviderMappingMutationOptions(productId, projectId, queryClient),
+  )
+  const createMapping = useMutation(
+    createProviderMappingDraftMutationOptions(productId, projectId, queryClient),
   )
   const replaceMapping = useMutation(
     replaceProviderMappingMutationOptions(productId, projectId, queryClient),
@@ -133,7 +162,8 @@ export function ProductDetailPage({
     mappings.error ??
     applications.error ??
     environments.error ??
-    connections.error
+    connections.error ??
+    access.error
   const state = resolveHostedQueryState({
     emptyDescription: "Return to Products and choose an existing Product.",
     emptyTitle: "Product unavailable",
@@ -142,6 +172,7 @@ export function ProductDetailPage({
     isPending:
       project.isPending ||
       product.isPending ||
+      access.isPending ||
       (scopeReady &&
         (usage.isPending ||
           (hasExplicitReadinessScope && readiness.isPending) ||
@@ -191,8 +222,20 @@ export function ProductDetailPage({
         environments.data?.items ?? [],
         connections.data?.items ?? [],
         metadataQueries[index]?.data,
+        observationQueries[index]?.data,
       ),
     ) ?? []
+  const coverageRows =
+    applications.data?.items.map((application, index) => {
+      const applicationReadiness = coverageReadinessQueries[index]?.data
+      return {
+        application,
+        readiness: applicationReadiness,
+        mapping: applicationReadiness?.mappingId
+          ? mappings.data?.items.find((mapping) => mapping.id === applicationReadiness.mappingId)
+          : undefined,
+      }
+    }) ?? []
   const manageProvidersHref = `/organizations/${encodeURIComponent(organizationId)}/projects/${encodeURIComponent(projectId)}/catalog/providers`
 
   async function confirmArchive() {
@@ -238,6 +281,11 @@ export function ProductDetailPage({
       title={product.data?.internalName ?? "Product"}
     >
       <HostedResourceBoundary state={state}>
+        {returnTo ? (
+          <a className="text-primary inline-flex text-sm font-semibold" href={returnTo}>
+            Return to Publish review
+          </a>
+        ) : null}
         <div className="grid gap-4 md:grid-cols-3">
           <Metric label="Status" value={product.data?.status.replaceAll("_", " ") ?? "—"} />
           <Metric
@@ -326,11 +374,27 @@ export function ProductDetailPage({
           ) : null}
         </WorkflowPanel>
 
+        <ProductPlatformCoverage
+          connections={connections.data?.items ?? []}
+          environment={selectedReadinessEnvironment}
+          isLoading={coverageReadinessQueries.some((query) => query.isPending)}
+          onInspect={(applicationId) =>
+            onReadinessScopeChange({
+              applicationId,
+              environmentId: selectedReadinessEnvironment?.id,
+            })
+          }
+          rows={coverageRows}
+          selectedApplicationId={selectedReadinessApplication?.id}
+        />
+
         {connectedReadiness ? (
           <ProductReadinessPanel
-            accessHref="#entitlement-grants-title"
+            accessHref="#access-grants-title"
+            applicationsHref={`/organizations/${encodeURIComponent(organizationId)}/projects/${encodeURIComponent(projectId)}/apps`}
             manageProvidersHref={manageProvidersHref}
             readiness={connectedReadiness}
+            scopeLabel={`${selectedReadinessEnvironment?.name ?? readiness.data?.environmentId} · ${selectedReadinessApplication?.name ?? readiness.data?.applicationId} · ${readiness.data?.platform.toUpperCase()}`}
           />
         ) : null}
 
@@ -342,7 +406,7 @@ export function ProductDetailPage({
             <UsageList items={usage.data?.plans.map((item) => item.name) ?? []} label="Plans" />
             <UsageList
               items={usage.data?.entitlements.map((item) => item.name) ?? []}
-              label="Entitlements"
+              label="Access"
             />
             <UsageList
               items={
@@ -361,7 +425,7 @@ export function ProductDetailPage({
 
         <WorkflowPanel
           description="These definitions describe access a Product grants. They are not customer entitlement state."
-          title="Entitlement grants"
+          title="Access grants"
         >
           <ul className="mb-4 divide-y">
             {grants.data?.items.map((entitlement) => (
@@ -375,34 +439,45 @@ export function ProductDetailPage({
                     · {entitlement.key}
                   </span>
                 </span>
-                <Button
-                  disabled={removeGrant.isPending}
-                  onClick={() => removeGrant.mutate(entitlement.id)}
-                  size="sm"
-                  variant="ghost"
-                >
-                  Remove grant
-                </Button>
+                {access.canManage ? (
+                  <Button
+                    disabled={removeGrant.isPending}
+                    onClick={() => removeGrant.mutate(entitlement.id)}
+                    size="sm"
+                    variant="ghost"
+                  >
+                    Remove grant
+                  </Button>
+                ) : null}
               </li>
             ))}
           </ul>
-          <div className="flex flex-wrap gap-2">
-            {entitlements.data?.items
-              .filter(
-                (entitlement) =>
-                  !grants.data?.items.some((granted) => granted.id === entitlement.id),
-              )
-              .map((entitlement) => (
-                <Button
-                  key={entitlement.id}
-                  onClick={() => grant.mutate(entitlement.id)}
-                  size="sm"
-                  variant="outline"
-                >
-                  Grant {entitlement.name}
-                </Button>
-              ))}
-          </div>
+          {access.canManage ? (
+            <div className="flex flex-wrap gap-2">
+              {entitlements.data?.items
+                .filter(
+                  (entitlement) =>
+                    !grants.data?.items.some((granted) => granted.id === entitlement.id),
+                )
+                .map((entitlement) => (
+                  <Button
+                    key={entitlement.id}
+                    onClick={() => grant.mutate(entitlement.id)}
+                    size="sm"
+                    variant="outline"
+                  >
+                    Grant {entitlement.name}
+                  </Button>
+                ))}
+            </div>
+          ) : (
+            <a
+              className="text-primary text-sm font-semibold"
+              href={`/organizations/${encodeURIComponent(organizationId)}/members`}
+            >
+              Ask an Owner or Admin to change Access grants
+            </a>
+          )}
           {grant.error || removeGrant.error ? (
             <p className="text-destructive mt-3 text-sm" role="alert">
               {(grant.error ?? removeGrant.error)?.message}
@@ -411,9 +486,16 @@ export function ProductDetailPage({
         </WorkflowPanel>
 
         <ProviderMappingsPanel
-          error={archiveMapping.error ?? replaceMapping.error}
-          isPending={archiveMapping.isPending || replaceMapping.isPending}
+          canManage={access.canManage}
+          error={archiveMapping.error ?? replaceMapping.error ?? createMapping.error}
+          isPending={
+            archiveMapping.isPending || replaceMapping.isPending || createMapping.isPending
+          }
+          onLoadUsage={(mappingId) =>
+            queryClient.fetchQuery(providerMappingUsageQueryOptions(mappingId))
+          }
           manageProvidersHref={manageProvidersHref}
+          membersHref={`/organizations/${encodeURIComponent(organizationId)}/members`}
           mappings={mappingViews}
           onArchive={async (mappingId) => {
             await archiveMapping.mutateAsync(mappingId)
@@ -421,13 +503,51 @@ export function ProductDetailPage({
           onReplace={async (mappingId, body) => {
             await replaceMapping.mutateAsync({ body, mappingId })
           }}
+          productType={product.data?.type}
         />
+
+        {access.canManage &&
+        product.data &&
+        selectedReadinessApplication &&
+        selectedReadinessEnvironment &&
+        (readiness.data?.provider === "app_store" || readiness.data?.provider === "google_play") ? (
+          <WorkflowPanel
+            description="The form is fixed to the selected Mosaic Product, Environment, Application, and platform."
+            title="Add native store mapping"
+          >
+            <NativeProviderMappingSheet
+              application={selectedReadinessApplication}
+              environment={selectedReadinessEnvironment}
+              onSubmit={async (input) => {
+                await createMapping.mutateAsync({
+                  applicationId: input.applicationId,
+                  environmentId: input.environmentId,
+                  provider: input.provider,
+                  providerProductIdentifier: input.providerProductIdentifier,
+                  ...(input.googleBasePlanId
+                    ? { providerBasePlanIdentifier: input.googleBasePlanId }
+                    : {}),
+                  ...(input.googleOfferId ? { providerOfferIdentifier: input.googleOfferId } : {}),
+                })
+              }}
+              product={product.data}
+              provider={readiness.data.provider}
+            />
+          </WorkflowPanel>
+        ) : null}
 
         <WorkflowPanel
           description="Archive removes this Product from future selection without deleting history. Restore preserves the same ID."
           title="Lifecycle"
         >
-          {isArchived ? (
+          {!access.canManage ? (
+            <a
+              className="text-primary text-sm font-semibold"
+              href={`/organizations/${encodeURIComponent(organizationId)}/members`}
+            >
+              Ask an Owner or Admin to change Product lifecycle
+            </a>
+          ) : isArchived ? (
             <Button onClick={() => restore.mutate(productId)} variant="outline">
               <ArrowCounterClockwiseIcon aria-hidden size={16} />
               Restore Product

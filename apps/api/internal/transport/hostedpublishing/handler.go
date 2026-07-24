@@ -28,6 +28,7 @@ const (
 	ifMatchHeader           = "If-Match"
 	deliveryContentType     = "application/vnd.mosaic.configuration+json;version=1"
 	commerceContentType     = "application/vnd.mosaic.commerce-configuration+json;version=1"
+	commerceContentTypeV2   = "application/vnd.mosaic.commerce-configuration+json;version=2"
 	capabilitiesHeader      = "Mosaic-Paywall-Capabilities"
 	maxCapabilityHeaderSize = 16 << 10
 )
@@ -705,7 +706,8 @@ func (h *Handler) sdkCommerceConfiguration(w http.ResponseWriter, r *http.Reques
 	if !h.allowDelivery(w, r, "ip:"+requestIP(r)) {
 		return
 	}
-	if !headerContains(r.Header.Get("Accept"), commerceContentType) {
+	if !headerContains(r.Header.Get("Accept"), commerceContentType) &&
+		!headerContains(r.Header.Get("Accept"), commerceContentTypeV2) {
 		writeError(w, r, hostedpublishing.ErrUnsupportedCapability)
 		return
 	}
@@ -736,16 +738,32 @@ func (h *Handler) sdkCommerceConfiguration(w http.ResponseWriter, r *http.Reques
 	if !h.allowDelivery(w, r, "key:"+configuration.APIKeyID) {
 		return
 	}
+	var envelope struct {
+		Version string `json:"commerceConfigurationVersion"`
+	}
+	if err := json.Unmarshal(configuration.Snapshot.Payload, &envelope); err != nil {
+		writeError(w, r, hostedpublishing.ErrUnsupportedCapability)
+		return
+	}
+	if err := hostedpublishing.ValidateSDKCommerceSnapshotCapability(
+		envelope.Version,
+		headerValues(r.Header.Get("Mosaic-Commerce-Configuration-Versions")),
+		headerValues(r.Header.Get("Mosaic-Commerce-Provider-Contract-Versions")),
+	); err != nil {
+		writeError(w, r, err)
+		return
+	}
 	etag := `"` + configuration.Snapshot.ContentDigest + `"`
 	w.Header().Set("Cache-Control", "private, max-age=60, stale-if-error=86400")
 	w.Header().Set("ETag", etag)
 	w.Header().Set("Mosaic-Configuration-Release-Id", configuration.Snapshot.ConfigurationReleaseID)
 	w.Header().Set("Vary", "Authorization, Accept, Mosaic-SDK-Platform, Mosaic-SDK-Version, Mosaic-Commerce-Configuration-Versions, Mosaic-Commerce-Provider-Contract-Versions")
+	contentType := "application/vnd.mosaic.commerce-configuration+json;version=" + envelope.Version
 	if r.Header.Get("If-None-Match") == etag {
-		response.Representation(w, http.StatusNotModified, commerceContentType, nil)
+		response.Representation(w, http.StatusNotModified, contentType, nil)
 		return
 	}
-	response.Representation(w, http.StatusOK, commerceContentType, configuration.Snapshot.Payload)
+	response.Representation(w, http.StatusOK, contentType, configuration.Snapshot.Payload)
 }
 
 func (h *Handler) allowDelivery(w http.ResponseWriter, r *http.Request, key string) bool {

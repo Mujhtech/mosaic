@@ -39,6 +39,7 @@ type state struct {
 	assignments                 map[string]cloudworkspace.ActiveProviderAssignment
 	mappings                    map[string]cloudworkspace.ProviderProductMapping
 	metadataSnapshots           map[string]cloudworkspace.ProviderProductMetadataSnapshot
+	mappingObservations         map[string]cloudworkspace.ProviderMappingObservation
 	entitlementMappings         map[string]cloudworkspace.ProviderEntitlementMapping
 	imports                     map[string]cloudworkspace.ProviderImportRequest
 	importItems                 map[string]cloudworkspace.ProviderImportItem
@@ -74,6 +75,7 @@ func newState() *state {
 		assignments:                 make(map[string]cloudworkspace.ActiveProviderAssignment),
 		mappings:                    make(map[string]cloudworkspace.ProviderProductMapping),
 		metadataSnapshots:           make(map[string]cloudworkspace.ProviderProductMetadataSnapshot),
+		mappingObservations:         make(map[string]cloudworkspace.ProviderMappingObservation),
 		entitlementMappings:         make(map[string]cloudworkspace.ProviderEntitlementMapping),
 		imports:                     make(map[string]cloudworkspace.ProviderImportRequest),
 		importItems:                 make(map[string]cloudworkspace.ProviderImportItem),
@@ -141,6 +143,10 @@ func (s *state) clone() *state {
 	for key, value := range s.metadataSnapshots {
 		value.Metadata = append([]byte(nil), value.Metadata...)
 		cloned.metadataSnapshots[key] = value
+	}
+	for key, value := range s.mappingObservations {
+		value.Metadata = append([]byte(nil), value.Metadata...)
+		cloned.mappingObservations[key] = value
 	}
 	copyMap(cloned.entitlementMappings, s.entitlementMappings)
 	copyMap(cloned.imports, s.imports)
@@ -320,10 +326,33 @@ func (r reader) ProviderMappingsByConnection(connectionID string) []cloudworkspa
 		return value.ConnectionID == connectionID
 	}, func(value cloudworkspace.ProviderProductMapping) string { return value.ID })
 }
+func (r reader) NativeProviderMappingByTarget(provider cloudworkspace.ProviderKind, environmentID, applicationID string, platform cloudworkspace.Platform, target string) (cloudworkspace.ProviderProductMapping, bool) {
+	for _, value := range r.state.mappings {
+		if value.ConnectionID == "" && value.Provider == provider &&
+			value.EnvironmentID == environmentID && value.ApplicationID == applicationID &&
+			value.Platform == platform && value.ProviderProductIdentifier == target &&
+			value.Status != cloudworkspace.ProviderMappingArchived {
+			return value, true
+		}
+	}
+	return cloudworkspace.ProviderProductMapping{}, false
+}
 func (r reader) ProviderMetadataSnapshot(id string) (cloudworkspace.ProviderProductMetadataSnapshot, bool) {
 	value, ok := r.state.metadataSnapshots[id]
 	value.Metadata = append([]byte(nil), value.Metadata...)
 	return value, ok
+}
+func (r reader) ProviderMappingObservation(id string) (cloudworkspace.ProviderMappingObservation, bool) {
+	value, ok := r.state.mappingObservations[id]
+	return value, ok
+}
+func (r reader) ProviderMappingObservations(mappingID string) []cloudworkspace.ProviderMappingObservation {
+	values := filteredSorted(r.state.mappingObservations, func(value cloudworkspace.ProviderMappingObservation) bool {
+		return value.MappingID == mappingID
+	}, func(value cloudworkspace.ProviderMappingObservation) string {
+		return value.ObservedAt.Format(time.RFC3339Nano) + "\x00" + value.ID
+	})
+	return values
 }
 func (r reader) ProviderEntitlementMappings(connectionID, environmentID, applicationID string) []cloudworkspace.ProviderEntitlementMapping {
 	return filteredSorted(r.state.entitlementMappings, func(value cloudworkspace.ProviderEntitlementMapping) bool {
@@ -456,6 +485,9 @@ func (tx transaction) SaveProviderMapping(value cloudworkspace.ProviderProductMa
 func (tx transaction) SaveProviderMetadataSnapshot(value cloudworkspace.ProviderProductMetadataSnapshot) {
 	value.Metadata = append([]byte(nil), value.Metadata...)
 	tx.state.metadataSnapshots[value.ID] = value
+}
+func (tx transaction) SaveProviderMappingObservation(value cloudworkspace.ProviderMappingObservation) {
+	tx.state.mappingObservations[value.ID] = value
 }
 func (tx transaction) SaveProviderEntitlementMapping(value cloudworkspace.ProviderEntitlementMapping) {
 	tx.state.entitlementMappings[value.ID] = value

@@ -19,6 +19,8 @@ import okhttp3.Request
 import okhttp3.HttpUrl.Companion.toHttpUrl
 
 private const val MOSAIC_COMMERCE_CONFIGURATION_MEDIA_TYPE =
+    "application/vnd.mosaic.commerce-configuration+json;version=2"
+private const val MOSAIC_COMMERCE_CONFIGURATION_MEDIA_TYPE_V1 =
     "application/vnd.mosaic.commerce-configuration+json;version=1"
 
 data class MosaicCachedConfiguration(
@@ -152,10 +154,10 @@ class MosaicHTTPCommerceConfigurationTransport(
                 .header("Authorization", "Bearer ${configuration.apiKey}")
                 .header(
                     "Accept",
-                    MOSAIC_COMMERCE_CONFIGURATION_MEDIA_TYPE,
+                    "$MOSAIC_COMMERCE_CONFIGURATION_MEDIA_TYPE, $MOSAIC_COMMERCE_CONFIGURATION_MEDIA_TYPE_V1;q=0.9",
                 )
-                .header("Mosaic-Commerce-Configuration-Versions", "1")
-                .header("Mosaic-Commerce-Provider-Contract-Versions", "1")
+                .header("Mosaic-Commerce-Configuration-Versions", "2,1")
+                .header("Mosaic-Commerce-Provider-Contract-Versions", "2,1")
                 .header("Mosaic-SDK-Platform", "android")
                 .header("Mosaic-SDK-Version", MOSAIC_ANDROID_SDK_VERSION)
                 .apply { etag?.let { header("If-None-Match", it) } }
@@ -170,8 +172,10 @@ class MosaicHTTPCommerceConfigurationTransport(
                         )
                         200 -> {
                             if (
-                                response.header("Content-Type") !=
-                                MOSAIC_COMMERCE_CONFIGURATION_MEDIA_TYPE
+                                response.header("Content-Type") !in setOf(
+                                    MOSAIC_COMMERCE_CONFIGURATION_MEDIA_TYPE,
+                                    MOSAIC_COMMERCE_CONFIGURATION_MEDIA_TYPE_V1,
+                                )
                             ) {
                                 MosaicCommerceConfigurationResponse.Failed(
                                     "The Commerce Configuration response Content-Type was invalid.",

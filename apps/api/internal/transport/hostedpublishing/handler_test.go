@@ -208,6 +208,24 @@ func TestSDKCommerceConfigurationAssociationConditionalAndPlatformIsolation(t *t
 		!strings.Contains(mismatchedRecorder.Body.String(), `"code":"unsupported_capability"`) {
 		t.Fatalf("platform mismatch status=%d body=%s", mismatchedRecorder.Code, mismatchedRecorder.Body.String())
 	}
+
+	transaction.commerce.Payload = []byte(`{"commerceConfigurationVersion":"2"}`)
+	v1OnlyRecorder := httptest.NewRecorder()
+	handler.sdkCommerceConfiguration(v1OnlyRecorder, commerceSDKRequest(rawKey, "ios"))
+	if v1OnlyRecorder.Code != http.StatusNotAcceptable ||
+		!strings.Contains(v1OnlyRecorder.Body.String(), `"code":"unsupported_capability"`) {
+		t.Fatalf("v1-only client received v2 configuration status=%d body=%s", v1OnlyRecorder.Code, v1OnlyRecorder.Body.String())
+	}
+
+	v2Request := commerceSDKRequest(rawKey, "ios")
+	v2Request.Header.Set("Mosaic-Commerce-Configuration-Versions", "1, 2")
+	v2Request.Header.Set("Mosaic-Commerce-Provider-Contract-Versions", "1, 2")
+	v2Recorder := httptest.NewRecorder()
+	handler.sdkCommerceConfiguration(v2Recorder, v2Request)
+	if v2Recorder.Code != http.StatusOK ||
+		v2Recorder.Header().Get("Content-Type") != "application/vnd.mosaic.commerce-configuration+json;version=2" {
+		t.Fatalf("v2-capable client status=%d headers=%v body=%s", v2Recorder.Code, v2Recorder.Header(), v2Recorder.Body.String())
+	}
 }
 
 func commerceSDKRequest(rawKey, platform string) *http.Request {

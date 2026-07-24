@@ -21,6 +21,9 @@ type Reader interface {
 	ProviderConnectionApplicationScoped(string, string) bool
 	ProviderMappingsForReadiness(string, string, string, string, string) []ProviderMappingReadiness
 	ProviderMappingsForCommerce(string, string, string, string, []string) []CommerceProductMapping
+	ProviderMappingsForNativeCommerce(string, string, string, string, []string) []CommerceProductMapping
+	ProductEntitlementKeys(string) []string
+	LatestProviderMappingObservation(string) (ProviderMappingObservation, bool)
 	ProviderEntitlementMappingsForCommerce(string, string, string, []string) []CommerceEntitlementMapping
 	ProviderMetadataSnapshot(string) (ProviderMetadataSnapshot, bool)
 	Asset(string) (Asset, bool)

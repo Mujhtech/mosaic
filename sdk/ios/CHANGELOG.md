@@ -2,6 +2,8 @@
 
 ## 0.1.0-dev.5
 
+- Add version-matched CocoaPods specifications for `MosaicSDK` and the optional
+  `MosaicStoreKit` adapter, including CocoaPods-compatible fallback resources.
 - Add strict Commerce Configuration v1 decoding, canonical digest validation,
   exact Configuration Release association, atomic last-known-valid caching,
   bundled fallback, safe diagnostics, and the frozen hosted sidecar wire
@@ -97,3 +99,11 @@
 - Add provider-neutral commerce result types and an actor-based mock provider.
 - Add a SwiftUI consumer compilation test; native paywall rendering remains out
   of scope until Phase 1.
+# Unreleased
+
+- Add provider-neutral Commerce Configuration v2 decoding, `2,1`
+  negotiation, exact native-store mappings, Product-to-Entitlement grants,
+  recovery modes, and asynchronous local-delivery types while retaining v1.
+- Add the optional `MosaicStoreKit` package with exact Product loading,
+  verified purchase/restore/current-Entitlement handling, durable idempotent
+  acceptance before finish, transaction update recovery, and safe diagnostics.

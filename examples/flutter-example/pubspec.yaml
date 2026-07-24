@@ -13,6 +13,8 @@ dependencies:
     path: ../../sdk/flutter
   mosaic_revenuecat:
     path: ../../sdk/flutter/packages/mosaic_revenuecat
+  mosaic_native_store:
+    path: ../../sdk/flutter/packages/mosaic_native_store
   purchases_flutter: 10.4.3
 
 dev_dependencies:

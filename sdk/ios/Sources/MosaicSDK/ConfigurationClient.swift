@@ -159,7 +159,15 @@ actor MosaicConfigurationClient {
       storePlatform: storePlatform,
       configurationReleaseID: accepted.release.metadata.id,
       configurationReleaseDigest: accepted.release.metadata.contentDigest,
-      mosaicProductIDs: accepted.release.productReferences.map(\.id)
+      mosaicProductIDs: accepted.release.productReferences.map(\.id),
+      mosaicProductTypes: Dictionary(
+        uniqueKeysWithValues: accepted.release.productReferences.map {
+          (
+            $0.id,
+            $0.type == .subscription ? .subscription : .oneTimeNonConsumable
+          )
+        }
+      )
     )
   }
 
@@ -369,11 +377,14 @@ actor MosaicConfigurationClient {
 private enum MosaicPackagedConfigurationRelease {
   static func data() throws -> Data {
     guard
-      let url = Bundle.module.url(
+      let url = MosaicResourceBundle.bundle.url(
         forResource: "complete-paywall",
         withExtension: "json",
         subdirectory: "v0.2"
-      ) ?? Bundle.module.url(forResource: "complete-paywall", withExtension: "json")
+      ) ?? MosaicResourceBundle.bundle.url(
+        forResource: "complete-paywall",
+        withExtension: "json"
+      )
     else { throw CocoaError(.fileNoSuchFile) }
     let documentData = try Data(contentsOf: url)
     let document = try DeliveryValueForFallback.object(

@@ -32,6 +32,49 @@ void main() {
     );
   });
 
+  test('decodes canonical native-store v2 mappings without changing v1', () {
+    final storeKit = _v2FixtureSource('storekit-configuration.json');
+    final storeKitEnvelope =
+        const MosaicCommerceConfigurationDecoder().decode(
+      storeKit,
+      expectedRelease: _releaseFor(storeKit),
+      expectedApplicationId: 'application_ios',
+      expectedStorePlatform: MosaicStorePlatform.ios,
+    );
+    expect(storeKitEnvelope.version, '2');
+    expect(
+      storeKitEnvelope.configuration.activeProvider.activation,
+      isA<MosaicNativeStoreProviderActivation>(),
+    );
+    expect(
+      storeKitEnvelope.configuration
+          .mappingForProduct('product_pro_monthly')!
+          .adapterMapping,
+      isA<MosaicStoreKitProductMapping>(),
+    );
+
+    final google = _v2FixtureSource('google-play-configuration.json');
+    final googleEnvelope = const MosaicCommerceConfigurationDecoder().decode(
+      google,
+      expectedRelease: _releaseFor(google),
+      expectedApplicationId: 'application_android',
+      expectedStorePlatform: MosaicStorePlatform.android,
+    );
+    final monthly = googleEnvelope.configuration
+        .mappingForProduct('product_pro_monthly')!;
+    expect(monthly.entitlementKeys, <String>['pro']);
+    expect(
+      monthly.adapterMapping,
+      isA<MosaicGooglePlayProductMapping>()
+          .having((value) => value.basePlanId, 'base plan', 'monthly')
+          .having((value) => value.offerId, 'offer', 'intro_7_day'),
+    );
+    expect(
+      googleEnvelope.configuration.activeProvider.recoveryMode,
+      MosaicCommerceRecoveryMode.activePurchaseRecovery,
+    );
+  });
+
   test('rejects unknown fields, digest changes, and release mismatches', () {
     final source = _fixtureSource('revenuecat-configuration.json');
     final release = _releaseFor(source);
@@ -83,6 +126,9 @@ void main() {
             as Map<String, Object?>)['contentDigest']! as String;
     final exactEtag = '"$contentDigest"';
     final receivedIfNoneMatch = <String?>[];
+    String? acceptedVersions;
+    String? acceptedContractVersions;
+    String? accept;
     var responseIndex = 0;
     final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
     addTearDown(() => server.close(force: true));
@@ -90,6 +136,11 @@ void main() {
       receivedIfNoneMatch.add(
         request.headers.value(HttpHeaders.ifNoneMatchHeader),
       );
+      acceptedVersions ??=
+          request.headers.value('Mosaic-Commerce-Configuration-Versions');
+      acceptedContractVersions ??=
+          request.headers.value('Mosaic-Commerce-Provider-Contract-Versions');
+      accept ??= request.headers.value(HttpHeaders.acceptHeader);
       responseIndex += 1;
       if (responseIndex == 2) {
         request.response
@@ -131,6 +182,9 @@ void main() {
     final updated = first as MosaicCommerceConfigurationUpdatedResponse;
     expect(updated.etag, exactEtag);
     expect(receivedIfNoneMatch.single, isNull);
+    expect(acceptedVersions, '2,1');
+    expect(acceptedContractVersions, '2,1');
+    expect(accept, mosaicCommerceConfigurationAccept);
 
     final second = await transport.fetch(
       MosaicCommerceConfigurationRequest(
@@ -206,6 +260,20 @@ String _fixtureSource(String name) {
     if (file.existsSync()) return file.readAsStringSync();
     if (directory.parent.path == directory.path) {
       throw StateError('Cannot locate Commerce Configuration fixtures.');
+    }
+    directory = directory.parent;
+  }
+}
+
+String _v2FixtureSource(String name) {
+  var directory = Directory.current.absolute;
+  while (true) {
+    final file = File(
+      '${directory.path}/protocol/fixtures/commerce-configuration/v2/$name',
+    );
+    if (file.existsSync()) return file.readAsStringSync();
+    if (directory.parent.path == directory.path) {
+      throw StateError('Cannot locate Commerce Configuration v2 fixtures.');
     }
     directory = directory.parent;
   }

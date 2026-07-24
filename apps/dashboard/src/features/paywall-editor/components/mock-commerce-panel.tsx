@@ -8,6 +8,7 @@ import {
   productReadinessQueryOptions,
   productsQueryOptions,
   providerMappingMetadataQueryOptions,
+  providerMappingObservationsQueryOptions,
   providerMappingsQueryOptions,
 } from "@/features/catalog/queries/catalog-query"
 import { MOCK_PURCHASE_STATES } from "@/features/paywall-editor/constants/editor-constants"
@@ -26,6 +27,7 @@ import { resolveLocalizedText } from "@/features/paywall-editor/utils/document-t
 import { ApiError } from "@/lib/api/errors"
 import {
   activeProviderAssignmentQueryOptions,
+  nativeProviderProfileQueryOptions,
   providerConnectionsQueryOptions,
 } from "@/features/provider-connections/queries/provider-connection-queries"
 import { applicationsQueryOptions } from "@/features/projects/queries/projects-query"
@@ -33,6 +35,12 @@ import type { ProviderConnection } from "@/generated/api"
 
 const CONTROL_CLASS =
   "border-input bg-background focus-visible:ring-ring w-full rounded border px-2 py-2 text-sm focus-visible:ring-2 focus-visible:outline-none"
+
+export function studioApplicationsErrorMessage(error: Error) {
+  return error instanceof ApiError && error.status === 403
+    ? "You can edit this Draft, but you do not have permission to inspect its Applications."
+    : "Applications could not be loaded. Provider readiness remains unavailable."
+}
 
 function availableMock(productReferenceId: string): MockProductDefinition {
   return {
@@ -153,10 +161,10 @@ function HostedCatalogProductBindingsContent({
   const connections = useQuery(providerConnectionsQueryOptions(source.projectId))
   const [applicationId, setApplicationId] = useState("")
   const products = catalog.data?.items.filter((product) => product.status !== "archived") ?? []
-  const selectedApplicationId =
-    applications.data?.items.find((application) => application.id === applicationId)?.id ??
-    applications.data?.items[0]?.id ??
-    ""
+  const selectedApplication = applications.data?.items.find(
+    (application) => application.id === applicationId,
+  )
+  const selectedApplicationId = selectedApplication?.id ?? ""
   const catalogHref = `/organizations/${encodeURIComponent(source.organizationId)}/projects/${encodeURIComponent(source.projectId)}/catalog/products`
   const returnTo = hostedStudioHref(source)
 
@@ -205,19 +213,55 @@ function HostedCatalogProductBindingsContent({
         </div>
       ) : document ? (
         <div className="space-y-2">
+          {applications.isPending ? (
+            <p className="text-muted-foreground text-xs" role="status">
+              Loading Applications{source.environmentName ? ` for ${source.environmentName}` : ""}…
+            </p>
+          ) : applications.error ? (
+            <div className="border-destructive/25 bg-destructive/5 rounded border p-3" role="alert">
+              <p className="text-destructive text-xs">
+                {studioApplicationsErrorMessage(applications.error)}
+              </p>
+              <Button
+                className="mt-2"
+                onClick={() => void applications.refetch()}
+                size="sm"
+                type="button"
+                variant="outline"
+              >
+                Retry Applications
+              </Button>
+            </div>
+          ) : applications.data?.items.length === 0 ? (
+            <div className="rounded border border-dashed p-3 text-xs">
+              <p className="font-medium">No registered Applications</p>
+              <a
+                className="text-primary mt-2 inline-flex font-semibold"
+                href={`/organizations/${encodeURIComponent(source.organizationId)}/projects/${encodeURIComponent(source.projectId)}/apps`}
+              >
+                Register Application
+              </a>
+            </div>
+          ) : null}
           <label className="mb-3 block text-xs font-medium">
             Provider preview Application
             <select
               className={`${CONTROL_CLASS} mt-1`}
+              disabled={applications.isPending || Boolean(applications.error)}
               onChange={(event) => setApplicationId(event.currentTarget.value)}
               value={selectedApplicationId}
             >
+              <option value="">Select Application</option>
               {applications.data?.items.map((application) => (
                 <option key={application.id} value={application.id}>
                   {application.name} · {application.platform.toUpperCase()}
                 </option>
               ))}
             </select>
+            <span className="text-muted-foreground mt-1 block text-[11px] leading-5">
+              Hosted Environment: {source.environmentName ?? source.environmentId}. Mosaic does not
+              silently choose an Application or another platform for commerce readiness.
+            </span>
           </label>
           {document.products.map((reference) => {
             const selected = products.find((product) => product.id === reference.productId)
@@ -247,13 +291,18 @@ function HostedCatalogProductBindingsContent({
                   <span className="text-muted-foreground text-[11px]">
                     Simulated metadata only; publishing requires acknowledgement.
                   </span>
-                ) : selected ? (
+                ) : selected && selectedApplicationId ? (
                   <ConnectedProductBindingContext
                     applicationId={selectedApplicationId}
                     connections={connections.data?.items ?? []}
                     environmentId={source.environmentId}
                     productId={selected.id}
                   />
+                ) : selected ? (
+                  <span className="text-muted-foreground text-[11px] leading-5">
+                    Select an Application to inspect its active provider, mapping, and readiness.
+                    Simulated preview remains active and is not store verification.
+                  </span>
                 ) : null}
               </label>
             )
@@ -278,6 +327,7 @@ function ConnectedProductBindingContext({
   environmentId: string
   productId: string
 }) {
+  const source = useStudioSource()
   const mappings = useQuery(providerMappingsQueryOptions(productId))
   const activeAssignment = useQuery({
     ...activeProviderAssignmentQueryOptions(environmentId, applicationId || "unselected"),
@@ -292,7 +342,10 @@ function ConnectedProductBindingContext({
       (mapping) =>
         mapping.applicationId === applicationId &&
         mapping.environmentId === environmentId &&
-        mapping.connectionId === activeAssignment.data?.connectionId,
+        mapping.provider === activeAssignment.data?.provider &&
+        (activeAssignment.data?.activationKind === "native_store"
+          ? !mapping.connectionId
+          : mapping.connectionId === activeAssignment.data?.connectionId),
     ) ?? []
   const metadata = useQueries({
     queries: scopedMappings.map((mapping) => ({
@@ -300,9 +353,42 @@ function ConnectedProductBindingContext({
       enabled: Boolean(mapping.currentSnapshotId) && mapping.status !== "archived",
     })),
   })
+  const observations = useQueries({
+    queries: scopedMappings.map((mapping) => ({
+      ...providerMappingObservationsQueryOptions(mapping.id),
+      enabled: mapping.provider === "app_store" || mapping.provider === "google_play",
+    })),
+  })
   const mapping = scopedMappings.length === 1 ? scopedMappings[0] : undefined
   const snapshot = scopedMappings.length === 1 ? metadata[0]?.data : undefined
+  const latestObservation =
+    scopedMappings.length === 1
+      ? [...(observations[0]?.data ?? [])].sort((left, right) =>
+          right.observedAt.localeCompare(left.observedAt),
+        )[0]
+      : undefined
   const connection = connections.find((item) => item.id === activeAssignment.data?.connectionId)
+  const nativeProvider =
+    activeAssignment.data?.provider === "app_store" ||
+    activeAssignment.data?.provider === "google_play"
+      ? activeAssignment.data.provider
+      : null
+  const profile = useQuery({
+    ...nativeProviderProfileQueryOptions(
+      nativeProvider ?? "app_store",
+      activeAssignment.data?.platform ?? "ios",
+    ),
+    enabled: activeAssignment.data?.activationKind === "native_store" && Boolean(nativeProvider),
+  })
+  const providerLabel =
+    profile.data?.displayName ??
+    (nativeProvider === "app_store"
+      ? "StoreKit"
+      : nativeProvider === "google_play"
+        ? "Google Play Billing"
+        : connection?.name)
+  const capabilityWarnings =
+    profile.data?.capabilities.filter((capability) => capability.support !== "supported") ?? []
   const displayName =
     typeof snapshot?.metadata.displayName === "string" ? snapshot.metadata.displayName : undefined
   const state =
@@ -314,18 +400,45 @@ function ConnectedProductBindingContext({
           ? "Ambiguous provider mappings block publishing."
           : !mapping
             ? "No scoped provider mapping. Mock preview is the safe fallback."
-            : `${connection?.name ?? "Provider"} · ${mapping.availability} · ${mapping.syncState.replaceAll("_", " ")} · readiness ${readiness.data?.state ?? "unavailable"}`
+            : `${providerLabel ?? "Provider"} · ${mapping.availability} · ${mapping.syncState.replaceAll("_", " ")} · readiness ${readiness.data?.state ?? "unavailable"}`
+  const diagnosticsHref =
+    source.kind === "hosted"
+      ? `/organizations/${encodeURIComponent(source.organizationId)}/projects/${encodeURIComponent(source.projectId)}/catalog/products/${encodeURIComponent(productId)}?environmentId=${encodeURIComponent(environmentId)}&applicationId=${encodeURIComponent(applicationId)}&returnTo=${encodeURIComponent(hostedStudioHref(source))}`
+      : undefined
 
   return (
     <span className="text-muted-foreground block text-[11px] leading-5">
-      {displayName ? `Synchronized connected Product: ${displayName}. ` : ""}
-      {state}
-      {snapshot
-        ? ` Observed ${snapshot.observedAt}; stale after ${snapshot.staleAt}.`
-        : " Synchronized catalog evidence is unavailable; simulated preview remains active."}
-      {
-        " Live localized price, period, trial, and offer details are resolved by the active native provider at runtime."
-      }
+      <span className="block">
+        {displayName ? `Observed connected Product: ${displayName}. ` : ""}
+        {state}
+        {latestObservation
+          ? ` Test evidence: ${latestObservation.storeContext}, ${latestObservation.result}, observed ${latestObservation.observedAt}.`
+          : snapshot
+            ? ` Metadata source ${snapshot.source}; observed ${snapshot.observedAt}; stale after ${snapshot.staleAt}.`
+            : " Observed/runtime metadata is unavailable; simulated preview remains active and is not store verification."}
+      </span>
+      {profile.data ? (
+        <span className="mt-1 block">
+          Adapter {profile.data.adapterVersion} · {profile.data.capabilities.length} declared
+          capabilities
+          {capabilityWarnings.length
+            ? ` · ${capabilityWarnings.length} conditional or unsupported`
+            : ""}
+          .{" "}
+          {nativeProvider === "app_store"
+            ? "Recovery uses user-initiated store sync/restore."
+            : "Recovery checks active Google Play purchases."}
+        </span>
+      ) : null}
+      <span className="block">
+        Live localized price, period, trial, and offer details are resolved by the active provider
+        at runtime.
+      </span>
+      {diagnosticsHref ? (
+        <a className="text-primary font-semibold" href={diagnosticsHref}>
+          Open scoped Product diagnostics
+        </a>
+      ) : null}
     </span>
   )
 }

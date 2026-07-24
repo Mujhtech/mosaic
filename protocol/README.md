@@ -37,16 +37,20 @@ around accepted Protocol `0.2` documents. Its schemas, compatibility manifest,
 fixtures, atomic validation rules, and fallback behavior are documented in
 `docs/protocol/configuration-delivery-v1.md`.
 
-Commerce Provider Contract `1` is a separate provider-neutral contract for
+Commerce Provider Contracts `1` and `2` are separate provider-neutral contracts for
 capabilities, verified Product resolution, localized commerce metadata,
 purchase and restore outcomes, active Entitlement lookup, freshness, and safe
-diagnostics. It does not add provider data to Paywall Protocol `0.2` or
+diagnostics. Version `2` additionally freezes native recovery modes,
+asynchronous commerce updates, and idempotent local acceptance before native
+finalization. Neither adds provider data to Paywall Protocol `0.2` or
 Configuration Delivery `1`.
 
-Commerce Configuration `1` is the separate immutable sidecar that associates
+Commerce Configurations `1` and `2` are immutable sidecars that associate
 one accepted Configuration Delivery release with an exact Application and
 platform, selects one provider, and carries verified Product and Entitlement
-mappings. It supports both backend Provider Connections and equivalently
+mappings. Version `2` adds credential-free native activation, exact StoreKit
+and Google Product/base-plan/offer mappings, and immutable Product grants.
+Version `1` supports both backend Provider Connections and equivalently
 verified SDK-local custom-provider snapshots without placing credentials or
 customer data in delivered configuration.
 
@@ -55,11 +59,17 @@ Canonical Commerce artifacts live under:
 ```text
 protocol/
 ├── schema/commerce-configuration/v1/
+├── schema/commerce-configuration/v2/
 ├── schema/commerce-provider/v1/
+├── schema/commerce-provider/v2/
 ├── compatibility/commerce-configuration/v1.json
+├── compatibility/commerce-configuration/v2.json
 ├── compatibility/commerce-provider/v1.json
+├── compatibility/commerce-provider/v2.json
 ├── fixtures/commerce-configuration/v1/
+├── fixtures/commerce-configuration/v2/
 ├── fixtures/commerce-provider/v1/
+├── fixtures/commerce-provider/v2/
 ├── commerce-configuration/CHANGELOG.md
 └── commerce/CHANGELOG.md
 ```
@@ -88,3 +98,5 @@ See:
 - `docs/protocol/configuration-delivery-v1.md`
 - `docs/protocol/commerce-provider-v1.md`
 - `docs/protocol/commerce-configuration-v1.md`
+- `docs/protocol/commerce-provider-v2.md`
+- `docs/protocol/commerce-configuration-v2.md`

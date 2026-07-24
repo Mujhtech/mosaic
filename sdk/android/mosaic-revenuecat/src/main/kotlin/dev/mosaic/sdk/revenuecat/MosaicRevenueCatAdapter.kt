@@ -431,6 +431,7 @@ private class PurchasesRevenueCatBridge(
                             productReference = mapping.providerProductReference,
                         )?.let(packages::get)
                     }
+                is MosaicCommerceAdapterMapping.GooglePlayProduct -> null
             } ?: return@mapNotNull null
             val product = when (target) {
                 is StoreProduct -> target

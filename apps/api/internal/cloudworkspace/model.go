@@ -3,6 +3,8 @@ package cloudworkspace
 import (
 	"encoding/json"
 	"time"
+
+	"github.com/Mujhtech/mosaic/apps/api/internal/providerreadiness"
 )
 
 type Actor struct {
@@ -317,16 +319,25 @@ type ProviderDiagnostic struct {
 }
 
 type ActiveProviderAssignment struct {
-	ProjectID                           string    `json:"projectId"`
-	EnvironmentID                       string    `json:"environmentId"`
-	ApplicationID                       string    `json:"applicationId"`
-	Platform                            Platform  `json:"platform"`
-	ConnectionID                        string    `json:"connectionId"`
-	ProductionConnectionUseAcknowledged bool      `json:"productionConnectionUseAcknowledged"`
-	CreatedByActorID                    string    `json:"createdByActorId"`
-	CreatedAt                           time.Time `json:"createdAt"`
-	UpdatedAt                           time.Time `json:"updatedAt"`
+	ProjectID                           string                 `json:"projectId"`
+	EnvironmentID                       string                 `json:"environmentId"`
+	ApplicationID                       string                 `json:"applicationId"`
+	Platform                            Platform               `json:"platform"`
+	Provider                            ProviderKind           `json:"provider"`
+	ActivationKind                      ProviderActivationKind `json:"activationKind"`
+	ConnectionID                        string                 `json:"connectionId,omitempty"`
+	ProductionConnectionUseAcknowledged bool                   `json:"productionConnectionUseAcknowledged"`
+	CreatedByActorID                    string                 `json:"createdByActorId"`
+	CreatedAt                           time.Time              `json:"createdAt"`
+	UpdatedAt                           time.Time              `json:"updatedAt"`
 }
+
+type ProviderActivationKind string
+
+const (
+	ProviderActivationConnection  ProviderActivationKind = "provider_connection"
+	ProviderActivationNativeStore ProviderActivationKind = "native_store"
+)
 
 type ProviderMappingStatus string
 
@@ -368,6 +379,9 @@ type ProviderProductMapping struct {
 	ProviderPackageIdentifier  string                `json:"providerPackageIdentifier,omitempty"`
 	ProviderOfferingIdentifier string                `json:"providerOfferingIdentifier,omitempty"`
 	ExpectedStoreProductID     string                `json:"expectedStoreProductId,omitempty"`
+	ProviderBasePlanIdentifier string                `json:"providerBasePlanIdentifier,omitempty"`
+	ProviderOfferIdentifier    string                `json:"providerOfferIdentifier,omitempty"`
+	ReplacesMappingID          string                `json:"replacesMappingId,omitempty"`
 	Status                     ProviderMappingStatus `json:"status"`
 	Availability               ProviderAvailability  `json:"availability"`
 	SyncState                  ProviderSyncState     `json:"syncState"`
@@ -376,6 +390,85 @@ type ProviderProductMapping struct {
 	ArchivedAt                 *time.Time            `json:"archivedAt,omitempty"`
 	CreatedAt                  time.Time             `json:"createdAt"`
 	UpdatedAt                  time.Time             `json:"updatedAt"`
+}
+
+type ProviderObservationContext string
+
+const (
+	ProviderObservationStoreKitConfiguration ProviderObservationContext = "storekitConfiguration"
+	ProviderObservationAppleSandbox          ProviderObservationContext = "appleSandbox"
+	ProviderObservationGooglePlayTest        ProviderObservationContext = "googlePlayTest"
+	ProviderObservationProduction            ProviderObservationContext = "production"
+	ProviderObservationUnknown               ProviderObservationContext = "unknown"
+)
+
+type ProviderObservationResult string
+
+const (
+	ProviderObservationAvailable   ProviderObservationResult = "available"
+	ProviderObservationUnavailable ProviderObservationResult = "unavailable"
+	ProviderObservationFailed      ProviderObservationResult = "failed"
+)
+
+type ProviderObservationConfigurationSource string
+
+const (
+	ProviderObservationConfigurationBundled ProviderObservationConfigurationSource = "bundled"
+	ProviderObservationConfigurationRemote  ProviderObservationConfigurationSource = "remote"
+	ProviderObservationConfigurationLocal   ProviderObservationConfigurationSource = "local"
+	ProviderObservationConfigurationUnknown ProviderObservationConfigurationSource = "unknown"
+)
+
+type ProviderObservationClientPlatform string
+
+const (
+	ProviderObservationClientIOS     ProviderObservationClientPlatform = "ios"
+	ProviderObservationClientAndroid ProviderObservationClientPlatform = "android"
+	ProviderObservationClientFlutter ProviderObservationClientPlatform = "flutter"
+)
+
+type ProviderObservationTestScenario string
+
+const (
+	ProviderObservationScenarioProductLoad             ProviderObservationTestScenario = "productLoad"
+	ProviderObservationScenarioConfigurationAcceptance ProviderObservationTestScenario = "configurationAcceptance"
+	ProviderObservationScenarioPurchasePresentation    ProviderObservationTestScenario = "purchasePresentation"
+	ProviderObservationScenarioRestore                 ProviderObservationTestScenario = "restore"
+)
+
+// ProviderMappingObservationMetadata is intentionally closed and operational.
+// It excludes free-form messages, device identity, provider payloads, and
+// customer or payment material.
+type ProviderMappingObservationMetadata struct {
+	ClientPlatform        ProviderObservationClientPlatform      `json:"clientPlatform,omitempty"`
+	ClientVersion         string                                 `json:"clientVersion,omitempty"`
+	ApplicationVersion    string                                 `json:"applicationVersion,omitempty"`
+	OSVersion             string                                 `json:"osVersion,omitempty"`
+	ConfigurationSource   ProviderObservationConfigurationSource `json:"configurationSource,omitempty"`
+	StorefrontCountryCode string                                 `json:"storefrontCountryCode,omitempty"`
+	TestScenario          ProviderObservationTestScenario        `json:"testScenario,omitempty"`
+}
+
+// ProviderMappingObservation is immutable, bounded developer-supplied evidence.
+// It never contains transactions, receipts, purchase tokens, or customer data.
+type ProviderMappingObservation struct {
+	ID               string                     `json:"id"`
+	ProjectID        string                     `json:"projectId"`
+	MappingID        string                     `json:"mappingId"`
+	EnvironmentID    string                     `json:"environmentId"`
+	ApplicationID    string                     `json:"applicationId"`
+	Platform         Platform                   `json:"platform"`
+	Provider         ProviderKind               `json:"provider"`
+	AdapterVersion   string                     `json:"adapterVersion"`
+	StoreContext     ProviderObservationContext `json:"storeContext"`
+	Result           ProviderObservationResult  `json:"result"`
+	DiagnosticCode   string                     `json:"diagnosticCode,omitempty"`
+	CorrelationID    string                     `json:"correlationId"`
+	Metadata         ProviderMappingObservationMetadata `json:"metadata"`
+	ObservedAt       time.Time                  `json:"observedAt"`
+	ExpiresAt        *time.Time                 `json:"expiresAt,omitempty"`
+	ReceivedAt       time.Time                  `json:"receivedAt"`
+	CreatedByActorID string                     `json:"createdByActorId"`
 }
 
 type ProviderMetadataSource string
@@ -578,9 +671,8 @@ const (
 type ProviderReadinessState string
 
 const (
-	ProviderReadinessDraft             ProviderReadinessState = "draft"
-	ProviderReadinessMockOnly          ProviderReadinessState = "mockOnly"
-	ProviderReadinessConnected         ProviderReadinessState = "connected"
+	ProviderReadinessConfigured        ProviderReadinessState = "configured"
+	ProviderReadinessVerifiedInTest    ProviderReadinessState = "verifiedInTest"
 	ProviderReadinessAttentionRequired ProviderReadinessState = "attentionRequired"
 	ProviderReadinessUnavailable       ProviderReadinessState = "unavailable"
 	ProviderReadinessArchived          ProviderReadinessState = "archived"
@@ -590,20 +682,22 @@ type ProviderReadinessIssue struct {
 	Code           ProviderErrorCode `json:"code"`
 	ResourceType   string            `json:"resourceType"`
 	ResourceID     string            `json:"resourceId"`
-	RecoveryAction string            `json:"recoveryAction"`
+	RecoveryAction providerreadiness.Action `json:"recoveryAction"`
 }
 
 type ProviderReadiness struct {
-	State         ProviderReadinessState   `json:"state"`
-	ProductID     string                   `json:"productId"`
-	EnvironmentID string                   `json:"environmentId"`
-	ApplicationID string                   `json:"applicationId"`
-	Platform      Platform                 `json:"platform"`
-	ConnectionID  string                   `json:"connectionId,omitempty"`
-	MappingID     string                   `json:"mappingId,omitempty"`
-	Blockers      []ProviderReadinessIssue `json:"blockers"`
-	Warnings      []ProviderReadinessIssue `json:"warnings"`
-	EvaluatedAt   time.Time                `json:"evaluatedAt"`
+	State         ProviderReadinessState      `json:"state"`
+	ProductID     string                      `json:"productId"`
+	EnvironmentID string                      `json:"environmentId"`
+	ApplicationID string                      `json:"applicationId"`
+	Platform      Platform                    `json:"platform"`
+	ConnectionID  string                      `json:"connectionId,omitempty"`
+	Provider      ProviderKind                `json:"provider,omitempty"`
+	MappingID     string                      `json:"mappingId,omitempty"`
+	Observation   *ProviderMappingObservation `json:"observation,omitempty"`
+	Blockers      []ProviderReadinessIssue    `json:"blockers"`
+	Warnings      []ProviderReadinessIssue    `json:"warnings"`
+	EvaluatedAt   time.Time                   `json:"evaluatedAt"`
 }
 
 type ProductUsage struct {
@@ -612,6 +706,20 @@ type ProductUsage struct {
 	Entitlements         []Entitlement            `json:"entitlements"`
 	ProviderMappings     []ProviderProductMapping `json:"providerMappings"`
 	HistoricalReferences []string                 `json:"historicalReferences"`
+}
+
+type ProviderMappingUsage struct {
+	Mapping ProviderProductMapping `json:"mapping"`
+	Product Product                `json:"product"`
+	Usage   ProductUsage           `json:"usage"`
+}
+
+type ProviderProfile struct {
+	Provider       ProviderKind         `json:"provider"`
+	DisplayName    string               `json:"displayName"`
+	Platform       Platform             `json:"platform"`
+	AdapterVersion string               `json:"adapterVersion"`
+	Capabilities   []ProviderCapability `json:"capabilities"`
 }
 
 type AuditEvent struct {

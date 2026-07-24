@@ -107,10 +107,9 @@ func ValidateSDKCapabilityRequest(request SDKCapabilityRequest, release Release)
 	return nil
 }
 
-// ValidateSDKCommerceCapabilityRequest enforces the closed Commerce
-// Configuration v1 delivery negotiation contract. Commerce provider
-// capabilities are represented by the immutable sidecar itself, so the SDK
-// reports only the configuration and provider contract versions it can decode.
+// ValidateSDKCommerceCapabilityRequest validates the versions an SDK can decode.
+// The published snapshot is checked separately so a v2 document is never sent
+// to a client that declared only v1 support.
 func ValidateSDKCommerceCapabilityRequest(platform, sdkVersion string, configurationVersions, providerContractVersions []string) error {
 	if platform != "flutter" && platform != "ios" && platform != "android" {
 		return ErrUnsupportedCapability
@@ -118,8 +117,19 @@ func ValidateSDKCommerceCapabilityRequest(platform, sdkVersion string, configura
 	if len(sdkVersion) > 64 || !semanticVersionPattern.MatchString(sdkVersion) {
 		return ErrUnsupportedCapability
 	}
-	if !containsExactUnique(configurationVersions, "1", 8) ||
-		!containsExactUnique(providerContractVersions, "1", 8) {
+	if !containsSupportedUnique(configurationVersions, 8) ||
+		!containsSupportedUnique(providerContractVersions, 8) {
+		return ErrUnsupportedCapability
+	}
+	return nil
+}
+
+func ValidateSDKCommerceSnapshotCapability(version string, configurationVersions, providerContractVersions []string) error {
+	if version != "1" && version != "2" {
+		return ErrUnsupportedCapability
+	}
+	if !containsExactUnique(configurationVersions, version, 8) ||
+		!containsExactUnique(providerContractVersions, version, 8) {
 		return ErrUnsupportedCapability
 	}
 	return nil
@@ -153,4 +163,21 @@ func containsExactUnique(values []string, expected string, limit int) bool {
 		}
 	}
 	return found
+}
+
+func containsSupportedUnique(values []string, limit int) bool {
+	if len(values) == 0 || len(values) > limit {
+		return false
+	}
+	seen := make(map[string]struct{}, len(values))
+	for _, value := range values {
+		if value != "1" && value != "2" {
+			return false
+		}
+		if _, duplicate := seen[value]; duplicate {
+			return false
+		}
+		seen[value] = struct{}{}
+	}
+	return true
 }

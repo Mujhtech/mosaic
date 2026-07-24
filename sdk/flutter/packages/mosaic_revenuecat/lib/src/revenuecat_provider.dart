@@ -144,6 +144,10 @@ final class MosaicRevenueCatPurchaseProvider implements MosaicCommerceProvider {
           }
         case MosaicRevenueCatPackageMapping():
           packageMappings.add(mapping);
+        case MosaicStoreKitProductMapping():
+        case MosaicGooglePlayProductMapping():
+          unavailable.add(productId);
+          _recordProductUnavailable(productId);
       }
     }
 

@@ -3,24 +3,39 @@ import { useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import type { ProviderMappingView } from "@/features/catalog/types/connected-product-view"
-import type { ReplaceProviderMappingRequest } from "@/generated/api"
+import { validateNativeProviderMapping } from "@/features/catalog/types/native-provider-mapping"
+import type { ProviderMappingUsage, ReplaceProviderMappingRequest } from "@/generated/api"
 
 export function ProviderMappingsPanel({
   error,
+  canManage = true,
   isPending = false,
   manageProvidersHref,
+  membersHref,
   mappings,
   onArchive,
+  onLoadUsage,
   onReplace,
+  productType,
 }: {
+  canManage?: boolean
   error?: Error | null
   isPending?: boolean
   manageProvidersHref: string
+  membersHref?: string
   mappings: readonly ProviderMappingView[]
   onArchive?: (mappingId: string) => Promise<void>
+  onLoadUsage?: (mappingId: string) => Promise<ProviderMappingUsage>
   onReplace?: (mappingId: string, body: ReplaceProviderMappingRequest) => Promise<void>
+  productType?: "one_time_non_consumable" | "subscription"
 }) {
   const [editingId, setEditingId] = useState<string | null>(null)
+  const [usage, setUsage] = useState<ProviderMappingUsage | null>(null)
+  const [usageError, setUsageError] = useState<Error | null>(null)
+  const [usagePending, setUsagePending] = useState(false)
+  const [replacementOfferSelection, setReplacementOfferSelection] = useState<"none" | "specific">(
+    "none",
+  )
   const [replacement, setReplacement] = useState<ReplaceProviderMappingRequest>({
     providerProductIdentifier: "",
   })
@@ -48,7 +63,7 @@ export function ProviderMappingsPanel({
               className="text-primary mt-3 inline-flex text-sm font-medium"
               href={manageProvidersHref}
             >
-              Review Commerce providers
+              Review Purchase setup
             </a>
           </div>
         ) : (
@@ -63,18 +78,26 @@ export function ProviderMappingsPanel({
                     </p>
                   </div>
                   <span className="border-border bg-muted rounded-full border px-2.5 py-1 text-xs font-medium capitalize">
-                    {syncStateLabel(mapping.syncState)}
+                    {mappingStateLabel(mapping)}
                   </span>
                 </div>
                 <dl className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
                   <MappingField
-                    label="Provider catalog resource"
+                    label={
+                      mapping.provider === "app_store"
+                        ? "StoreKit Product ID"
+                        : mapping.provider === "google_play"
+                          ? "Google Play Product ID"
+                          : "Provider catalog resource"
+                    }
                     value={mapping.providerProductIdentifier}
                   />
-                  <MappingField
-                    label="Store Product ID"
-                    value={mapping.expectedStoreProductId ?? "Awaiting verified synchronization"}
-                  />
+                  {mapping.provider !== "app_store" && mapping.provider !== "google_play" ? (
+                    <MappingField
+                      label="Store Product ID"
+                      value={mapping.expectedStoreProductId ?? "Awaiting verified synchronization"}
+                    />
+                  ) : null}
                   <MappingField label="Environment" value={mapping.environmentLabel} />
                   <MappingField label="Application" value={mapping.applicationLabel} />
                   <MappingField label="Platform" value={mapping.platformLabel} />
@@ -103,17 +126,67 @@ export function ProviderMappingsPanel({
                   {mapping.providerPackageIdentifier ? (
                     <MappingField label="Package" value={mapping.providerPackageIdentifier} />
                   ) : null}
+                  {mapping.providerBasePlanIdentifier ? (
+                    <MappingField label="Base plan" value={mapping.providerBasePlanIdentifier} />
+                  ) : null}
+                  {mapping.provider === "google_play" ? (
+                    <MappingField
+                      label="Offer"
+                      value={mapping.providerOfferIdentifier ?? "No offer"}
+                    />
+                  ) : null}
+                  {mapping.snapshotSource ? (
+                    <MappingField label="Metadata source" value={mapping.snapshotSource} />
+                  ) : null}
                 </dl>
                 <p className="text-muted-foreground mt-3 text-xs">
-                  {mapping.snapshotSyncedAt
-                    ? `Snapshot observed ${mapping.snapshotObservedAt}, synchronized ${mapping.snapshotSyncedAt}, stale after ${mapping.snapshotStaleAt}${mapping.snapshotExpiresAt ? `, expires ${mapping.snapshotExpiresAt}` : ""}. Runtime SDKs still resolve live localized metadata.`
-                    : mapping.connectionLastSuccessfulSyncAt
-                      ? `Connection last synchronized ${mapping.connectionLastSuccessfulSyncAt}. Mapping state is ${syncStateLabel(mapping.syncState).toLowerCase()}.`
-                      : "The connection has never reported a successful synchronization."}
+                  {mapping.provider === "app_store" || mapping.provider === "google_play"
+                    ? mapping.latestObservation
+                      ? `Observed by a ${observationContext(mapping.latestObservation.storeContext)} test client at ${mapping.latestObservation.observedAt}${mapping.latestObservation.expiresAt ? `; expires ${mapping.latestObservation.expiresAt}` : ""}.`
+                      : "Configured with an exact store identifier. No accepted test-client observation exists yet."
+                    : mapping.snapshotSyncedAt
+                      ? `Snapshot observed ${mapping.snapshotObservedAt}, synchronized ${mapping.snapshotSyncedAt}, stale after ${mapping.snapshotStaleAt}${mapping.snapshotExpiresAt ? `, expires ${mapping.snapshotExpiresAt}` : ""}. Runtime SDKs still resolve live localized metadata.`
+                      : mapping.connectionLastSuccessfulSyncAt
+                        ? `Connection last synchronized ${mapping.connectionLastSuccessfulSyncAt}. Mapping state is ${syncStateLabel(mapping.syncState).toLowerCase()}.`
+                        : "The connection has never reported a successful synchronization."}
                 </p>
                 {mapping.lastErrorCode ? (
                   <p className="text-destructive mt-2 text-xs" role="status">
                     Last mapping error: {mapping.lastErrorCode}
+                  </p>
+                ) : null}
+                {mapping.latestObservation ? (
+                  <div className="bg-muted/40 mt-3 rounded border p-3 text-xs">
+                    <p className="font-semibold">
+                      Test-client observation ·{" "}
+                      {observationContext(mapping.latestObservation.storeContext)}
+                    </p>
+                    <p className="text-muted-foreground mt-1">
+                      {mapping.latestObservation.result} · observed{" "}
+                      {mapping.latestObservation.observedAt} · received{" "}
+                      {mapping.latestObservation.receivedAt} · adapter{" "}
+                      {mapping.latestObservation.adapterVersion}
+                      {mapping.latestObservation.expiresAt
+                        ? ` · expires ${mapping.latestObservation.expiresAt}`
+                        : ""}
+                    </p>
+                    {Object.keys(mapping.latestObservation.metadata).length ? (
+                      <dl className="mt-2 grid gap-2 sm:grid-cols-2">
+                        {Object.entries(mapping.latestObservation.metadata).map(([key, value]) => (
+                          <MappingField
+                            key={key}
+                            label={key}
+                            value={typeof value === "string" ? value : JSON.stringify(value)}
+                          />
+                        ))}
+                      </dl>
+                    ) : null}
+                  </div>
+                ) : mapping.providerLabel === "StoreKit" ||
+                  mapping.providerLabel === "Google Play Billing" ? (
+                  <p className="text-muted-foreground mt-3 text-xs">
+                    No accepted test-client observation. This mapping is configured, not verified in
+                    test.
                   </p>
                 ) : null}
                 <div className="mt-3 flex flex-wrap gap-3 text-sm">
@@ -123,12 +196,20 @@ export function ProviderMappingsPanel({
                   <span className="text-muted-foreground">
                     {mapping.syncState === "current" && mapping.availability === "available"
                       ? "Ready for scoped publishing when Entitlement grants and active-provider assignment also pass."
-                      : "Recovery: open Commerce providers, test the connection, then retry synchronization."}
+                      : mapping.providerLabel === "StoreKit" ||
+                          mapping.providerLabel === "Google Play Billing"
+                        ? "Recovery: inspect the exact store mapping, test-client observation, and diagnostics."
+                        : "Recovery: open Purchase setup, test the connection, then retry synchronization."}
                   </span>
                   {mapping.status !== "archived" && onReplace && onArchive ? (
                     <Button
                       onClick={() => {
                         setEditingId(editingId === mapping.id ? null : mapping.id)
+                        setUsage(null)
+                        setUsageError(null)
+                        setReplacementOfferSelection(
+                          mapping.providerOfferIdentifier ? "specific" : "none",
+                        )
                         setReplacement({
                           providerProductIdentifier: mapping.providerProductIdentifier,
                           ...(mapping.providerOfferingIdentifier
@@ -139,7 +220,28 @@ export function ProviderMappingsPanel({
                           ...(mapping.providerPackageIdentifier
                             ? { providerPackageIdentifier: mapping.providerPackageIdentifier }
                             : {}),
+                          ...(mapping.providerBasePlanIdentifier
+                            ? {
+                                providerBasePlanIdentifier: mapping.providerBasePlanIdentifier,
+                              }
+                            : {}),
+                          ...(mapping.providerOfferIdentifier
+                            ? { providerOfferIdentifier: mapping.providerOfferIdentifier }
+                            : {}),
                         })
+                        if (editingId !== mapping.id && onLoadUsage) {
+                          setUsagePending(true)
+                          void onLoadUsage(mapping.id)
+                            .then(setUsage)
+                            .catch((loadError: unknown) =>
+                              setUsageError(
+                                loadError instanceof Error
+                                  ? loadError
+                                  : new Error("Mapping usage could not be loaded."),
+                              ),
+                            )
+                            .finally(() => setUsagePending(false))
+                        }
                       }}
                       size="sm"
                       type="button"
@@ -153,13 +255,60 @@ export function ProviderMappingsPanel({
                   <div className="border-border bg-muted/35 mt-4 rounded border p-4">
                     <p className="text-sm font-semibold">Replace or archive this mapping</p>
                     <p className="text-muted-foreground mt-1 text-xs">
-                      Review the Product, Plan, Paywall, and historical usage shown above before
-                      changing this mapping. Replacement creates a new mapping; history remains
-                      immutable.
+                      Mapping-specific usage must load before confirmation. Replacement creates a
+                      new mapping; history remains immutable.
                     </p>
+                    {usagePending ? (
+                      <p className="text-muted-foreground mt-3 text-xs" role="status">
+                        Loading affected Product, Plans, Access grants, mappings, and historical
+                        references…
+                      </p>
+                    ) : usageError ? (
+                      <div className="border-destructive/40 mt-3 rounded border p-3">
+                        <p className="text-destructive text-xs" role="alert">
+                          Usage could not be loaded. Replacement remains disabled.
+                        </p>
+                        <Button
+                          className="mt-2"
+                          onClick={() => {
+                            if (!onLoadUsage) return
+                            setUsageError(null)
+                            setUsagePending(true)
+                            void onLoadUsage(mapping.id)
+                              .then(setUsage)
+                              .catch((loadError: unknown) =>
+                                setUsageError(
+                                  loadError instanceof Error
+                                    ? loadError
+                                    : new Error("Mapping usage could not be loaded."),
+                                ),
+                              )
+                              .finally(() => setUsagePending(false))
+                          }}
+                          size="sm"
+                          type="button"
+                          variant="outline"
+                        >
+                          Retry usage
+                        </Button>
+                      </div>
+                    ) : usage ? (
+                      <p className="bg-background mt-3 rounded border p-3 text-xs">
+                        {usage.usage.plans.length} Plan
+                        {usage.usage.plans.length === 1 ? "" : "s"} ·{" "}
+                        {usage.usage.entitlements.length} Access grant
+                        {usage.usage.entitlements.length === 1 ? "" : "s"} ·{" "}
+                        {usage.usage.historicalReferences.length} historical reference
+                        {usage.usage.historicalReferences.length === 1 ? "" : "s"}
+                      </p>
+                    ) : null}
                     <div className="mt-3 grid gap-3 sm:grid-cols-3">
                       <label className="text-xs font-medium">
-                        Provider Product resource
+                        {mapping.provider === "app_store"
+                          ? "StoreKit Product ID"
+                          : mapping.provider === "google_play"
+                            ? "Google Play Product ID"
+                            : "Provider Product resource"}
                         <Input
                           className="mt-1"
                           onChange={(event) =>
@@ -171,60 +320,142 @@ export function ProviderMappingsPanel({
                           value={replacement.providerProductIdentifier}
                         />
                       </label>
-                      <label className="text-xs font-medium">
-                        Offering lookup key
-                        <Input
-                          className="mt-1"
-                          onChange={(event) =>
-                            setReplacement((current) => ({
-                              ...current,
-                              providerOfferingIdentifier: event.currentTarget.value || undefined,
-                            }))
-                          }
-                          value={replacement.providerOfferingIdentifier ?? ""}
-                        />
-                      </label>
-                      <label className="text-xs font-medium">
-                        Package lookup key
-                        <Input
-                          className="mt-1"
-                          onChange={(event) =>
-                            setReplacement((current) => ({
-                              ...current,
-                              providerPackageIdentifier: event.currentTarget.value || undefined,
-                            }))
-                          }
-                          value={replacement.providerPackageIdentifier ?? ""}
-                        />
-                      </label>
+                      {mapping.provider === "google_play" && productType === "subscription" ? (
+                        <>
+                          <label className="text-xs font-medium">
+                            Base plan ID
+                            <Input
+                              className="mt-1"
+                              onChange={(event) =>
+                                setReplacement((current) => ({
+                                  ...current,
+                                  providerBasePlanIdentifier:
+                                    event.currentTarget.value || undefined,
+                                }))
+                              }
+                              value={replacement.providerBasePlanIdentifier ?? ""}
+                            />
+                          </label>
+                          <fieldset className="space-y-2 text-xs">
+                            <legend className="font-medium">Offer</legend>
+                            <label className="flex gap-2">
+                              <input
+                                checked={replacementOfferSelection === "none"}
+                                name={`replacement-offer-${mapping.id}`}
+                                onChange={() => {
+                                  setReplacementOfferSelection("none")
+                                  setReplacement((current) => ({
+                                    ...current,
+                                    providerOfferIdentifier: undefined,
+                                  }))
+                                }}
+                                type="radio"
+                              />
+                              No offer
+                            </label>
+                            <label className="flex gap-2">
+                              <input
+                                checked={replacementOfferSelection === "specific"}
+                                name={`replacement-offer-${mapping.id}`}
+                                onChange={() => setReplacementOfferSelection("specific")}
+                                type="radio"
+                              />
+                              Use a specific offer
+                            </label>
+                          </fieldset>
+                          {replacementOfferSelection === "specific" ? (
+                            <label className="text-xs font-medium">
+                              Offer ID
+                              <Input
+                                className="mt-1"
+                                onChange={(event) =>
+                                  setReplacement((current) => ({
+                                    ...current,
+                                    providerOfferIdentifier: event.currentTarget.value || undefined,
+                                  }))
+                                }
+                                value={replacement.providerOfferIdentifier ?? ""}
+                              />
+                            </label>
+                          ) : null}
+                        </>
+                      ) : mapping.provider !== "app_store" && mapping.provider !== "google_play" ? (
+                        <>
+                          <label className="text-xs font-medium">
+                            Offering lookup key
+                            <Input
+                              className="mt-1"
+                              onChange={(event) =>
+                                setReplacement((current) => ({
+                                  ...current,
+                                  providerOfferingIdentifier:
+                                    event.currentTarget.value || undefined,
+                                }))
+                              }
+                              value={replacement.providerOfferingIdentifier ?? ""}
+                            />
+                          </label>
+                          <label className="text-xs font-medium">
+                            Package lookup key
+                            <Input
+                              className="mt-1"
+                              onChange={(event) =>
+                                setReplacement((current) => ({
+                                  ...current,
+                                  providerPackageIdentifier: event.currentTarget.value || undefined,
+                                }))
+                              }
+                              value={replacement.providerPackageIdentifier ?? ""}
+                            />
+                          </label>
+                        </>
+                      ) : null}
                     </div>
                     <div className="mt-3 flex flex-wrap gap-2">
-                      <Button
-                        disabled={isPending || !replacement.providerProductIdentifier.trim()}
-                        onClick={async () => {
-                          await onReplace(mapping.id, {
-                            ...replacement,
-                            providerProductIdentifier: replacement.providerProductIdentifier.trim(),
-                          })
-                          setEditingId(null)
-                        }}
-                        size="sm"
-                        type="button"
-                      >
-                        Replace mapping
-                      </Button>
-                      <Button
-                        disabled={isPending}
-                        onClick={async () => {
-                          await onArchive(mapping.id)
-                          setEditingId(null)
-                        }}
-                        size="sm"
-                        type="button"
-                        variant="destructive"
-                      >
-                        Archive mapping
-                      </Button>
+                      {canManage ? (
+                        <>
+                          <Button
+                            disabled={
+                              isPending ||
+                              !usage ||
+                              !replacementIsValid(
+                                mapping,
+                                productType,
+                                replacement,
+                                replacementOfferSelection,
+                              )
+                            }
+                            onClick={async () => {
+                              await onReplace(mapping.id, {
+                                ...replacement,
+                                providerProductIdentifier:
+                                  replacement.providerProductIdentifier.trim(),
+                              })
+                              setEditingId(null)
+                            }}
+                            size="sm"
+                            type="button"
+                          >
+                            Replace mapping
+                          </Button>
+                          <Button
+                            disabled={isPending}
+                            onClick={async () => {
+                              await onArchive(mapping.id)
+                              setEditingId(null)
+                            }}
+                            size="sm"
+                            type="button"
+                            variant="destructive"
+                          >
+                            Archive mapping
+                          </Button>
+                        </>
+                      ) : membersHref ? (
+                        <a className="text-primary text-xs font-semibold" href={membersHref}>
+                          Ask an Owner or Admin to change this mapping
+                        </a>
+                      ) : null}
                       <Button
                         disabled={isPending}
                         onClick={() => setEditingId(null)}
@@ -264,6 +495,59 @@ function syncStateLabel(syncState: ProviderMappingView["syncState"]) {
   }
 }
 
+function mappingStateLabel(mapping: ProviderMappingView) {
+  if (mapping.provider === "app_store" || mapping.provider === "google_play") {
+    if (!mapping.latestObservation) return "Configured"
+    if (
+      mapping.latestObservation.expiresAt &&
+      Date.parse(mapping.latestObservation.expiresAt) <= Date.now()
+    ) {
+      return "Observation stale"
+    }
+    return `Observed · ${mapping.latestObservation.result}`
+  }
+  return syncStateLabel(mapping.syncState)
+}
+
+function replacementIsValid(
+  mapping: ProviderMappingView,
+  productType: "one_time_non_consumable" | "subscription" | undefined,
+  replacement: ReplaceProviderMappingRequest,
+  offerSelection: "none" | "specific",
+) {
+  if (mapping.provider !== "app_store" && mapping.provider !== "google_play") {
+    return Boolean(replacement.providerProductIdentifier.trim())
+  }
+  if (!productType) return false
+  if (
+    mapping.provider === "google_play" &&
+    productType === "subscription" &&
+    offerSelection === "specific" &&
+    !replacement.providerOfferIdentifier?.trim()
+  ) {
+    return false
+  }
+  return (
+    Object.keys(
+      validateNativeProviderMapping({
+        applicationId: mapping.applicationLabel,
+        environmentId: mapping.environmentLabel,
+        productType,
+        provider: mapping.provider,
+        providerProductIdentifier: replacement.providerProductIdentifier,
+        ...(mapping.provider === "google_play" && productType === "subscription"
+          ? {
+              googleBasePlanId: replacement.providerBasePlanIdentifier,
+              ...(offerSelection === "specific"
+                ? { googleOfferId: replacement.providerOfferIdentifier }
+                : {}),
+            }
+          : {}),
+      }),
+    ).length === 0
+  )
+}
+
 function MappingField({ label, value }: { label: string; value: string }) {
   return (
     <div>
@@ -271,4 +555,21 @@ function MappingField({ label, value }: { label: string; value: string }) {
       <dd className="mt-1 font-mono text-xs break-all">{value}</dd>
     </div>
   )
+}
+
+function observationContext(
+  context: NonNullable<ProviderMappingView["latestObservation"]>["storeContext"],
+) {
+  switch (context) {
+    case "storekitConfiguration":
+      return "StoreKit Configuration"
+    case "appleSandbox":
+      return "Apple Sandbox"
+    case "googlePlayTest":
+      return "Google Play test"
+    case "production":
+      return "Production"
+    case "unknown":
+      return "Unknown"
+  }
 }

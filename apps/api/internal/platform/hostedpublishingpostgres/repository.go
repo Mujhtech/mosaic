@@ -167,9 +167,13 @@ func (r reader) ProductGrantCount(productID string) int {
 }
 
 func (r reader) ProviderAssignment(environmentID, applicationID string) (hostedpublishing.ProviderAssignment, bool) {
-	return one(r, `SELECT connection_id FROM active_provider_assignments WHERE environment_id=$1 AND application_id=$2`, func(row pgx.Row) (hostedpublishing.ProviderAssignment, error) {
+	return one(r, `SELECT provider,activation_kind,connection_id FROM active_provider_assignments WHERE environment_id=$1 AND application_id=$2`, func(row pgx.Row) (hostedpublishing.ProviderAssignment, error) {
 		var value hostedpublishing.ProviderAssignment
-		err := row.Scan(&value.ConnectionID)
+		var connectionID *string
+		err := row.Scan(&value.Provider, &value.ActivationKind, &connectionID)
+		if connectionID != nil {
+			value.ConnectionID = *connectionID
+		}
 		return value, err
 	}, environmentID, applicationID)
 }
@@ -203,14 +207,21 @@ func (r reader) ProviderConnectionApplicationScoped(connectionID, applicationID 
 }
 
 func (r reader) ProviderMappingsForReadiness(productID, connectionID, environmentID, applicationID, platform string) []hostedpublishing.ProviderMappingReadiness {
-	return many(r, `SELECT id,availability,sync_state,current_snapshot_id
+	return many(r, `SELECT id,product_id,provider_product_identifier,provider_base_plan_identifier,provider_offer_identifier,availability,sync_state,current_snapshot_id
 		FROM provider_product_mappings
 		WHERE product_id=$1 AND connection_id=$2 AND environment_id=$3 AND application_id=$4
 		  AND platform=$5 AND status='active'
 		ORDER BY id`, func(row pgx.Row) (hostedpublishing.ProviderMappingReadiness, error) {
 		var value hostedpublishing.ProviderMappingReadiness
-		var currentSnapshotID *string
-		err := row.Scan(&value.ID, &value.Availability, &value.SyncState, &currentSnapshotID)
+		var basePlanID, offerID, currentSnapshotID *string
+		err := row.Scan(&value.ID, &value.ProductID, &value.ProviderProductIdentifier,
+			&basePlanID, &offerID, &value.Availability, &value.SyncState, &currentSnapshotID)
+		if basePlanID != nil {
+			value.ProviderBasePlanIdentifier = *basePlanID
+		}
+		if offerID != nil {
+			value.ProviderOfferIdentifier = *offerID
+		}
 		if currentSnapshotID != nil {
 			value.CurrentSnapshotID = *currentSnapshotID
 		}
@@ -219,16 +230,16 @@ func (r reader) ProviderMappingsForReadiness(productID, connectionID, environmen
 }
 
 func (r reader) ProviderMappingsForCommerce(connectionID, environmentID, applicationID, platform string, productIDs []string) []hostedpublishing.CommerceProductMapping {
-	return many(r, `SELECT id,product_id,provider_product_identifier,provider_package_identifier,provider_offering_identifier,expected_store_product_id,current_snapshot_id
+	return many(r, `SELECT id,product_id,provider_product_identifier,provider_package_identifier,provider_offering_identifier,expected_store_product_id,provider_base_plan_identifier,provider_offer_identifier,current_snapshot_id
 		FROM provider_product_mappings
 		WHERE connection_id=$1 AND environment_id=$2 AND application_id=$3 AND platform=$4
 		  AND product_id=ANY($5::text[]) AND status='active'
 		ORDER BY product_id,id`, func(row pgx.Row) (hostedpublishing.CommerceProductMapping, error) {
 		var value hostedpublishing.CommerceProductMapping
-		var packageID, offeringID, storeID, snapshotID *string
+		var packageID, offeringID, storeID, basePlanID, offerID, snapshotID *string
 		err := row.Scan(
 			&value.ID, &value.ProductID, &value.ProviderProductIdentifier,
-			&packageID, &offeringID, &storeID, &snapshotID,
+			&packageID, &offeringID, &storeID, &basePlanID, &offerID, &snapshotID,
 		)
 		if packageID != nil {
 			value.ProviderPackageIdentifier = *packageID
@@ -239,11 +250,55 @@ func (r reader) ProviderMappingsForCommerce(connectionID, environmentID, applica
 		if storeID != nil {
 			value.ExpectedStoreProductID = *storeID
 		}
+		if basePlanID != nil {
+			value.ProviderBasePlanIdentifier = *basePlanID
+		}
+		if offerID != nil {
+			value.ProviderOfferIdentifier = *offerID
+		}
 		if snapshotID != nil {
 			value.CurrentSnapshotID = *snapshotID
 		}
 		return value, err
 	}, connectionID, environmentID, applicationID, platform, productIDs)
+}
+
+func (r reader) ProviderMappingsForNativeCommerce(provider, environmentID, applicationID, platform string, productIDs []string) []hostedpublishing.CommerceProductMapping {
+	return many(r, `SELECT id,product_id,provider_product_identifier,provider_base_plan_identifier,provider_offer_identifier
+		FROM provider_product_mappings
+		WHERE provider=$1 AND connection_id IS NULL AND environment_id=$2 AND application_id=$3
+		  AND platform=$4 AND product_id=ANY($5::text[]) AND status='active'
+		ORDER BY product_id,id`, func(row pgx.Row) (hostedpublishing.CommerceProductMapping, error) {
+		var value hostedpublishing.CommerceProductMapping
+		var basePlanID, offerID *string
+		err := row.Scan(&value.ID, &value.ProductID, &value.ProviderProductIdentifier, &basePlanID, &offerID)
+		if basePlanID != nil {
+			value.ProviderBasePlanIdentifier = *basePlanID
+		}
+		if offerID != nil {
+			value.ProviderOfferIdentifier = *offerID
+		}
+		return value, err
+	}, provider, environmentID, applicationID, platform, productIDs)
+}
+
+func (r reader) ProductEntitlementKeys(productID string) []string {
+	return many(r, `SELECT entitlement.key
+		FROM product_entitlement_grants grant_row
+		JOIN entitlements entitlement ON entitlement.id=grant_row.entitlement_id
+		WHERE grant_row.product_id=$1 ORDER BY entitlement.key`, func(row pgx.Row) (string, error) {
+		var value string
+		return value, row.Scan(&value)
+	}, productID)
+}
+
+func (r reader) LatestProviderMappingObservation(mappingID string) (hostedpublishing.ProviderMappingObservation, bool) {
+	return one(r, `SELECT id,result,store_context,observed_at,expires_at
+		FROM provider_mapping_observations WHERE mapping_id=$1
+		ORDER BY observed_at DESC,id DESC LIMIT 1`, func(row pgx.Row) (hostedpublishing.ProviderMappingObservation, error) {
+		var value hostedpublishing.ProviderMappingObservation
+		return value, row.Scan(&value.ID, &value.Result, &value.StoreContext, &value.ObservedAt, &value.ExpiresAt)
+	}, mappingID)
 }
 
 func (r reader) ProviderEntitlementMappingsForCommerce(connectionID, environmentID, applicationID string, productIDs []string) []hostedpublishing.CommerceEntitlementMapping {

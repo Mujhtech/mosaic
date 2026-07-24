@@ -117,6 +117,27 @@ func commerceConfigurationFixtureData(
   throw CanonicalFixtureLookupError.notFound
 }
 
+func commerceConfigurationV2FixtureData(
+  named name: String = "storekit-configuration.json"
+) throws -> Data {
+  let fileManager = FileManager.default
+  var directory = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
+  while directory.path != "/" {
+    let candidate =
+      directory
+      .appendingPathComponent("protocol")
+      .appendingPathComponent("fixtures")
+      .appendingPathComponent("commerce-configuration")
+      .appendingPathComponent("v2")
+      .appendingPathComponent(name)
+    if fileManager.fileExists(atPath: candidate.path) {
+      return try Data(contentsOf: candidate)
+    }
+    directory.deleteLastPathComponent()
+  }
+  throw CanonicalFixtureLookupError.notFound
+}
+
 func localPreviewFlowURL(filePath: StaticString = #filePath) throws -> URL {
   let fileManager = FileManager.default
   var directory = URL(fileURLWithPath: "\(filePath)").deletingLastPathComponent()

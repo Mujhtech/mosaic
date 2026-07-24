@@ -1,0 +1,163 @@
+{
+  "commerceConfigurationVersion": "2",
+  "configuration": {
+    "id": "commerce_configuration_google_42",
+    "environmentId": "environment_production",
+    "applicationId": "application_android",
+    "storePlatform": "android",
+    "configurationRelease": {
+      "id": "configuration_release_42",
+      "contentDigest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+    },
+    "contentDigest": "sha256:d1e8974a5391aca0c378ffd62ef7c6f35e0d89d85439fa67cbc101168aa1e0e8",
+    "activeProvider": {
+      "identity": {
+        "id": "google_play",
+        "displayName": "Google Play Billing",
+        "adapterVersion": "1.0.0"
+      },
+      "activation": {
+        "source": "nativeStore"
+      },
+      "capabilities": [
+        {
+          "name": "productLoading",
+          "support": "supported"
+        },
+        {
+          "name": "subscriptions",
+          "support": "supported"
+        },
+        {
+          "name": "oneTimeNonConsumables",
+          "support": "supported"
+        },
+        {
+          "name": "trials",
+          "support": "conditional",
+          "reasonCode": "provider.eligibilityRequired"
+        },
+        {
+          "name": "introductoryOffers",
+          "support": "conditional",
+          "reasonCode": "provider.eligibilityRequired"
+        },
+        {
+          "name": "promotionalOffers",
+          "support": "unsupported",
+          "reasonCode": "provider.capabilityUnavailable"
+        },
+        {
+          "name": "restore",
+          "support": "supported"
+        },
+        {
+          "name": "activeEntitlementLookup",
+          "support": "supported"
+        },
+        {
+          "name": "pendingPurchases",
+          "support": "supported"
+        },
+        {
+          "name": "deferredPurchases",
+          "support": "unsupported",
+          "reasonCode": "provider.outcomeUnavailable"
+        },
+        {
+          "name": "serverConfirmedTransactions",
+          "support": "unsupported",
+          "reasonCode": "provider.serverValidationExcluded"
+        },
+        {
+          "name": "productSynchronization",
+          "support": "unsupported",
+          "reasonCode": "provider.serverSynchronizationUnavailable"
+        },
+        {
+          "name": "providerDiagnostics",
+          "support": "supported"
+        },
+        {
+          "name": "basePlans",
+          "support": "supported"
+        },
+        {
+          "name": "explicitOffers",
+          "support": "supported"
+        },
+        {
+          "name": "storeSynchronization",
+          "support": "unsupported",
+          "reasonCode": "provider.recoveryModeUnavailable"
+        },
+        {
+          "name": "activePurchaseRecovery",
+          "support": "supported"
+        },
+        {
+          "name": "asynchronousCommerceUpdates",
+          "support": "supported"
+        },
+        {
+          "name": "localDeliveryAcceptance",
+          "support": "supported"
+        }
+      ],
+      "recoveryMode": "activePurchaseRecovery"
+    },
+    "productMappings": [
+      {
+        "mosaicProductId": "mosaic_pro_monthly",
+        "mappingId": "mapping_pro_monthly_google",
+        "productType": "subscription",
+        "entitlementKeys": [
+          "pro"
+        ],
+        "providerProductReference": "pro_monthly",
+        "adapterMapping": {
+          "kind": "googlePlayProduct",
+          "basePlanId": "monthly",
+          "offerId": "intro_7_day"
+        }
+      },
+      {
+        "mosaicProductId": "mosaic_pro_yearly",
+        "mappingId": "mapping_pro_yearly_google",
+        "productType": "subscription",
+        "entitlementKeys": [
+          "pro"
+        ],
+        "providerProductReference": "pro_yearly",
+        "adapterMapping": {
+          "kind": "googlePlayProduct",
+          "basePlanId": "yearly"
+        }
+      },
+      {
+        "mosaicProductId": "mosaic_pro_lifetime",
+        "mappingId": "mapping_pro_lifetime_google",
+        "productType": "one_time_non_consumable",
+        "entitlementKeys": [
+          "pro"
+        ],
+        "providerProductReference": "pro_lifetime",
+        "adapterMapping": {
+          "kind": "googlePlayProduct"
+        }
+      }
+    ],
+    "entitlementMappings": [],
+    "freshness": {
+      "source": "nativeStoreConfiguration",
+      "status": "fresh",
+      "configuredAt": "2026-07-24T12:00:00Z",
+      "observation": {
+        "environment": "test",
+        "observedAt": "2026-07-24T12:05:00Z",
+        "expiresAt": "2026-07-25T12:05:00Z"
+      }
+    },
+    "diagnostics": []
+  }
+}

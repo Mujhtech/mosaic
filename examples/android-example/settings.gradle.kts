@@ -15,6 +15,7 @@ dependencyResolutionManagement {
 }
 
 rootProject.name = "mosaic-android-example"
-include(":app", ":mosaic", ":mosaic-revenuecat")
+include(":app", ":mosaic", ":mosaic-revenuecat", ":mosaic-google-play")
 project(":mosaic").projectDir = file("../../sdk/android/mosaic")
 project(":mosaic-revenuecat").projectDir = file("../../sdk/android/mosaic-revenuecat")
+project(":mosaic-google-play").projectDir = file("../../sdk/android/mosaic-google-play")

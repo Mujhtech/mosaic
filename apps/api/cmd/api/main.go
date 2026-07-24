@@ -118,15 +118,31 @@ func run() (runErr error) {
 		_ = commerceProviderSchema.Close()
 		return fmt.Errorf("open canonical Commerce Configuration v1 schema: %w", err)
 	}
+	commerceProviderV2Schema, err := os.Open(cfg.Protocol.CommerceProviderV2SchemaPath)
+	if err != nil {
+		_ = commerceProviderSchema.Close()
+		_ = commerceConfigurationSchema.Close()
+		return fmt.Errorf("open canonical Commerce Provider v2 schema: %w", err)
+	}
+	commerceConfigurationV2Schema, err := os.Open(cfg.Protocol.CommerceConfigurationV2SchemaPath)
+	if err != nil {
+		_ = commerceProviderSchema.Close()
+		_ = commerceConfigurationSchema.Close()
+		_ = commerceProviderV2Schema.Close()
+		return fmt.Errorf("open canonical Commerce Configuration v2 schema: %w", err)
+	}
 	commerceValidator, err := hostedpublishing.CompileCommerceConfigurationValidator(
 		commerceProviderSchema, commerceConfigurationSchema,
+		commerceProviderV2Schema, commerceConfigurationV2Schema,
 	)
 	closeCommerceProviderErr := commerceProviderSchema.Close()
 	closeCommerceConfigurationErr := commerceConfigurationSchema.Close()
+	closeCommerceProviderV2Err := commerceProviderV2Schema.Close()
+	closeCommerceConfigurationV2Err := commerceConfigurationV2Schema.Close()
 	if err != nil {
 		return err
 	}
-	if closeErr := errors.Join(closeCommerceProviderErr, closeCommerceConfigurationErr); closeErr != nil {
+	if closeErr := errors.Join(closeCommerceProviderErr, closeCommerceConfigurationErr, closeCommerceProviderV2Err, closeCommerceConfigurationV2Err); closeErr != nil {
 		return fmt.Errorf("close canonical commerce schemas: %w", closeErr)
 	}
 

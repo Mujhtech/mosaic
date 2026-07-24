@@ -155,6 +155,8 @@ variables take precedence because `.env` loading does not overwrite them.
 | `MOSAIC_PROTOCOL_V02_SCHEMA_PATH` | repository canonical schema path     | Canonical Protocol 0.2 JSON Schema compiled at startup.                                                      |
 | `MOSAIC_COMMERCE_PROVIDER_SCHEMA_PATH` | repository canonical schema path | Canonical Commerce Provider v1 JSON Schema compiled at API startup.                                          |
 | `MOSAIC_COMMERCE_CONFIGURATION_SCHEMA_PATH` | repository canonical schema path | Canonical Commerce Configuration v1 JSON Schema compiled at API startup.                              |
+| `MOSAIC_COMMERCE_PROVIDER_V2_SCHEMA_PATH` | repository canonical schema path | Canonical Commerce Provider v2 JSON Schema compiled at API startup. |
+| `MOSAIC_COMMERCE_CONFIGURATION_V2_SCHEMA_PATH` | repository canonical schema path | Canonical Commerce Configuration v2 JSON Schema compiled at API startup and publishing. |
 | `MOSAIC_OBJECT_STORAGE_ENDPOINT`  | `localhost:9000`                     | S3-compatible object-storage endpoint.                                                                      |
 | `MOSAIC_OBJECT_STORAGE_ACCESS_KEY`| `mosaic`                             | Object-storage access key; development value is rejected in hosted environments.                            |
 | `MOSAIC_OBJECT_STORAGE_SECRET_KEY`| `mosaic_dev_secret`                  | Object-storage secret; never logged and development value is rejected in hosted environments.               |

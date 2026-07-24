@@ -5,10 +5,13 @@ import (
 	"encoding/hex"
 	"slices"
 	"strings"
+	"time"
 
 	"go.opentelemetry.io/otel/attribute"
 
+	"github.com/Mujhtech/mosaic/apps/api/internal/nativecommerce"
 	"github.com/Mujhtech/mosaic/apps/api/internal/providercredential"
+	"github.com/Mujhtech/mosaic/apps/api/internal/providerreadiness"
 )
 
 const providerCredentialClass = "serverSecret"
@@ -31,12 +34,85 @@ type ReplaceProviderConnectionScopesInput struct {
 
 type CreateProviderMappingDraftInput struct {
 	ConnectionID               string
+	Provider                   ProviderKind
 	EnvironmentID              string
 	ApplicationID              string
 	ProviderProductIdentifier  string
 	ProviderPackageIdentifier  string
 	ProviderOfferingIdentifier string
 	ExpectedStoreProductID     string
+	ProviderBasePlanIdentifier string
+	ProviderOfferIdentifier    string
+}
+
+type SetActiveProviderAssignmentInput struct {
+	Provider                 ProviderKind
+	ActivationKind           ProviderActivationKind
+	ConnectionID             string
+	AcknowledgeProductionUse bool
+}
+
+type CreateProviderMappingObservationInput struct {
+	AdapterVersion string
+	StoreContext   ProviderObservationContext
+	Result         ProviderObservationResult
+	DiagnosticCode string
+	CorrelationID  string
+	Metadata       ProviderMappingObservationMetadata
+	ObservedAt     time.Time
+	ExpiresAt      *time.Time
+}
+
+func validProviderObservationMetadata(metadata ProviderMappingObservationMetadata) bool {
+	safeVersion := func(value string) bool {
+		if len(value) > 64 {
+			return false
+		}
+		for _, character := range value {
+			if character < 0x20 || character > 0x7e {
+				return false
+			}
+		}
+		lower := strings.ToLower(value)
+		for _, forbidden := range []string{
+			"receipt", "token", "credential", "customer", "account",
+			"authorization", "secret", "password", "bearer",
+		} {
+			if strings.Contains(lower, forbidden) {
+				return false
+			}
+		}
+		return true
+	}
+	if metadata.ClientPlatform != "" &&
+		metadata.ClientPlatform != ProviderObservationClientIOS &&
+		metadata.ClientPlatform != ProviderObservationClientAndroid &&
+		metadata.ClientPlatform != ProviderObservationClientFlutter {
+		return false
+	}
+	if !safeVersion(metadata.ClientVersion) ||
+		!safeVersion(metadata.ApplicationVersion) ||
+		!safeVersion(metadata.OSVersion) {
+		return false
+	}
+	if metadata.ConfigurationSource != "" &&
+		metadata.ConfigurationSource != ProviderObservationConfigurationBundled &&
+		metadata.ConfigurationSource != ProviderObservationConfigurationRemote &&
+		metadata.ConfigurationSource != ProviderObservationConfigurationLocal &&
+		metadata.ConfigurationSource != ProviderObservationConfigurationUnknown {
+		return false
+	}
+	if metadata.StorefrontCountryCode != "" &&
+		(len(metadata.StorefrontCountryCode) != 2 ||
+			metadata.StorefrontCountryCode[0] < 'A' || metadata.StorefrontCountryCode[0] > 'Z' ||
+			metadata.StorefrontCountryCode[1] < 'A' || metadata.StorefrontCountryCode[1] > 'Z') {
+		return false
+	}
+	return metadata.TestScenario == "" ||
+		metadata.TestScenario == ProviderObservationScenarioProductLoad ||
+		metadata.TestScenario == ProviderObservationScenarioConfigurationAcceptance ||
+		metadata.TestScenario == ProviderObservationScenarioPurchasePresentation ||
+		metadata.TestScenario == ProviderObservationScenarioRestore
 }
 
 func supportedProviderIntegration(provider ProviderKind, mode ProviderIntegrationMode) bool {
@@ -62,7 +138,19 @@ func validProviderMappingTarget(provider ProviderKind, input CreateProviderMappi
 	if hasPackage != hasOffering {
 		return false
 	}
-	return provider == ProviderRevenueCat || !hasPackage
+	if provider == ProviderRevenueCat {
+		return true
+	}
+	if hasPackage || input.ExpectedStoreProductID != "" {
+		return false
+	}
+	if provider == ProviderAppStore {
+		return input.ProviderBasePlanIdentifier == "" && input.ProviderOfferIdentifier == ""
+	}
+	if provider == ProviderGooglePlay {
+		return input.ProviderOfferIdentifier == "" || input.ProviderBasePlanIdentifier != ""
+	}
+	return provider == ProviderCustom
 }
 
 func uniqueStrings(values []string) []string {
@@ -353,11 +441,12 @@ func (s *Service) RevokeProviderConnection(ctx context.Context, actor Actor, con
 	return result, err
 }
 
-func (s *Service) SetActiveProviderAssignment(ctx context.Context, actor Actor, environmentID, applicationID, connectionID string, acknowledgeProductionUse bool) (ActiveProviderAssignment, error) {
+func (s *Service) SetActiveProviderAssignment(ctx context.Context, actor Actor, environmentID, applicationID string, input SetActiveProviderAssignmentInput) (ActiveProviderAssignment, error) {
 	ctx, span := s.operation(ctx, "provider_assignment.set", actor,
 		attribute.String("mosaic.environment.id", environmentID),
 		attribute.String("mosaic.application.id", applicationID),
-		attribute.String("mosaic.provider_connection.id", connectionID),
+		attribute.String("mosaic.provider", string(input.Provider)),
+		attribute.String("mosaic.provider_activation.kind", string(input.ActivationKind)),
 	)
 	defer span.End()
 	var result ActiveProviderAssignment
@@ -374,23 +463,43 @@ func (s *Service) SetActiveProviderAssignment(ctx context.Context, actor Actor, 
 		if !ok || application.ProjectID != project.ID {
 			return ErrScopeMismatch
 		}
-		connection, ok := tx.ProviderConnection(connectionID)
-		if !ok || connection.ProjectID != project.ID {
-			return ErrScopeMismatch
+		productionUseOutsideProduction := false
+		provider := input.Provider
+		activationKind := input.ActivationKind
+		if activationKind == "" && input.ConnectionID != "" {
+			activationKind = ProviderActivationConnection
 		}
-		if connection.Status == ProviderConnectionRevoked {
-			return ErrConnectionRevoked
-		}
-		if !scopeContains(tx.ProviderConnectionEnvironmentIDs(connection.ID), environment.ID) ||
-			!scopeContains(tx.ProviderConnectionApplicationIDs(connection.ID), application.ID) {
-			return ErrScopeMismatch
-		}
-		if environment.Mode == EnvironmentProduction && connection.Mode == ProviderSandbox {
-			return ErrModeMismatch
-		}
-		productionUseOutsideProduction := environment.Mode != EnvironmentProduction && connection.Mode == ProviderProduction
-		if productionUseOutsideProduction && !acknowledgeProductionUse {
-			return ErrProductionConnectionAcknowledgementRequired
+		switch activationKind {
+		case ProviderActivationConnection:
+			connection, ok := tx.ProviderConnection(input.ConnectionID)
+			if !ok || connection.ProjectID != project.ID ||
+				(provider != "" && connection.Provider != provider) {
+				return ErrScopeMismatch
+			}
+			provider = connection.Provider
+			if connection.Status == ProviderConnectionRevoked {
+				return ErrConnectionRevoked
+			}
+			if !scopeContains(tx.ProviderConnectionEnvironmentIDs(connection.ID), environment.ID) ||
+				!scopeContains(tx.ProviderConnectionApplicationIDs(connection.ID), application.ID) {
+				return ErrScopeMismatch
+			}
+			if environment.Mode == EnvironmentProduction && connection.Mode == ProviderSandbox {
+				return ErrModeMismatch
+			}
+			productionUseOutsideProduction = environment.Mode != EnvironmentProduction && connection.Mode == ProviderProduction
+			if productionUseOutsideProduction && !input.AcknowledgeProductionUse {
+				return ErrProductionConnectionAcknowledgementRequired
+			}
+		case ProviderActivationNativeStore:
+			if input.ConnectionID != "" ||
+				(provider == ProviderAppStore && application.Platform != PlatformIOS) ||
+				(provider == ProviderGooglePlay && application.Platform != PlatformAndroid) ||
+				(provider != ProviderAppStore && provider != ProviderGooglePlay) {
+				return ErrProviderUnsupported
+			}
+		default:
+			return ErrProviderUnsupported
 		}
 		now := s.now()
 		result = ActiveProviderAssignment{
@@ -398,8 +507,10 @@ func (s *Service) SetActiveProviderAssignment(ctx context.Context, actor Actor, 
 			EnvironmentID:                       environment.ID,
 			ApplicationID:                       application.ID,
 			Platform:                            application.Platform,
-			ConnectionID:                        connection.ID,
-			ProductionConnectionUseAcknowledged: productionUseOutsideProduction && acknowledgeProductionUse,
+			Provider:                            provider,
+			ActivationKind:                      activationKind,
+			ConnectionID:                        input.ConnectionID,
+			ProductionConnectionUseAcknowledged: productionUseOutsideProduction && input.AcknowledgeProductionUse,
 			CreatedByActorID:                    actor.ID,
 			CreatedAt:                           now,
 			UpdatedAt:                           now,
@@ -409,15 +520,17 @@ func (s *Service) SetActiveProviderAssignment(ctx context.Context, actor Actor, 
 		}
 		tx.SaveActiveProviderAssignment(result)
 		s.audit(tx, actor, project.OrganizationID, project.ID, environment.ID, "provider_assignment.set", "provider_assignment", environment.ID+":"+application.ID, map[string]string{
-			"applicationId": application.ID,
-			"connectionId":  connection.ID,
-			"platform":      string(application.Platform),
+			"applicationId":  application.ID,
+			"connectionId":   input.ConnectionID,
+			"provider":       string(provider),
+			"activationKind": string(activationKind),
+			"platform":       string(application.Platform),
 		})
 		organizationID = project.OrganizationID
 		return nil
 	})
 	if err == nil {
-		logMutation(ctx, "provider_assignment.set", actor, organizationID, result.ProjectID, result.ConnectionID)
+		logMutation(ctx, "provider_assignment.set", actor, organizationID, result.ProjectID, environmentID+":"+applicationID)
 	}
 	return result, err
 }
@@ -492,16 +605,6 @@ func (s *Service) CreateProviderMappingDraft(ctx context.Context, actor Actor, p
 		if product.Status == ProductArchived {
 			return ErrResourceArchived
 		}
-		connection, ok := tx.ProviderConnection(input.ConnectionID)
-		if !ok || connection.ProjectID != project.ID {
-			return ErrScopeMismatch
-		}
-		if connection.Status == ProviderConnectionRevoked {
-			return ErrConnectionRevoked
-		}
-		if !validProviderMappingTarget(connection.Provider, input) {
-			return ErrMappingTargetInvalid
-		}
 		environment, ok := tx.Environment(input.EnvironmentID)
 		if !ok || environment.ProjectID != project.ID {
 			return ErrScopeMismatch
@@ -510,13 +613,49 @@ func (s *Service) CreateProviderMappingDraft(ctx context.Context, actor Actor, p
 		if !ok || application.ProjectID != project.ID {
 			return ErrScopeMismatch
 		}
-		if !scopeContains(tx.ProviderConnectionEnvironmentIDs(connection.ID), environment.ID) ||
-			!scopeContains(tx.ProviderConnectionApplicationIDs(connection.ID), application.ID) {
-			return ErrScopeMismatch
+		provider := input.Provider
+		status := ProviderMappingActive
+		if input.ConnectionID != "" {
+			connection, ok := tx.ProviderConnection(input.ConnectionID)
+			if !ok || connection.ProjectID != project.ID {
+				return ErrScopeMismatch
+			}
+			if connection.Status == ProviderConnectionRevoked {
+				return ErrConnectionRevoked
+			}
+			if provider != "" && provider != connection.Provider {
+				return ErrScopeMismatch
+			}
+			provider = connection.Provider
+			status = ProviderMappingDraft
+			if !scopeContains(tx.ProviderConnectionEnvironmentIDs(connection.ID), environment.ID) ||
+				!scopeContains(tx.ProviderConnectionApplicationIDs(connection.ID), application.ID) {
+				return ErrScopeMismatch
+			}
+		} else if (provider == ProviderAppStore && application.Platform != PlatformIOS) ||
+			(provider == ProviderGooglePlay && application.Platform != PlatformAndroid) ||
+			(provider != ProviderAppStore && provider != ProviderGooglePlay) {
+			return ErrProviderUnsupported
+		}
+		if !validProviderMappingTarget(provider, input) ||
+			(provider == ProviderGooglePlay && product.Type == ProductSubscription && input.ProviderBasePlanIdentifier == "") ||
+			(product.Type == ProductOneTimeNonConsumable && (input.ProviderBasePlanIdentifier != "" || input.ProviderOfferIdentifier != "")) {
+			return ErrMappingTargetInvalid
+		}
+		if input.ConnectionID == "" {
+			if _, exists := tx.NativeProviderMappingByTarget(
+				provider, environment.ID, application.ID, application.Platform,
+				input.ProviderProductIdentifier,
+			); exists {
+				return &ConflictError{Resource: "provider_mapping", Field: "providerProductIdentifier"}
+			}
 		}
 		for _, mapping := range tx.ProviderMappings(product.ID) {
-			if mapping.ConnectionID == connection.ID && mapping.EnvironmentID == environment.ID &&
-				mapping.ApplicationID == application.ID && mapping.Status != ProviderMappingArchived {
+			sameActivation := input.ConnectionID != "" && mapping.ConnectionID == input.ConnectionID ||
+				input.ConnectionID == "" && mapping.ConnectionID == "" && mapping.Provider == provider
+			if sameActivation && mapping.EnvironmentID == environment.ID &&
+				mapping.ApplicationID == application.ID && mapping.Platform == application.Platform &&
+				mapping.Status != ProviderMappingArchived {
 				return &ConflictError{Resource: "provider_mapping", Field: "scope"}
 			}
 		}
@@ -525,26 +664,32 @@ func (s *Service) CreateProviderMappingDraft(ctx context.Context, actor Actor, p
 			ID:                         tx.NextID("mapping"),
 			ProjectID:                  project.ID,
 			ProductID:                  product.ID,
-			ConnectionID:               connection.ID,
+			ConnectionID:               input.ConnectionID,
 			EnvironmentID:              environment.ID,
 			ApplicationID:              application.ID,
 			Platform:                   application.Platform,
-			Provider:                   connection.Provider,
+			Provider:                   provider,
 			ProviderProductIdentifier:  input.ProviderProductIdentifier,
 			ProviderPackageIdentifier:  input.ProviderPackageIdentifier,
 			ProviderOfferingIdentifier: input.ProviderOfferingIdentifier,
 			ExpectedStoreProductID:     input.ExpectedStoreProductID,
-			Status:                     ProviderMappingDraft,
+			ProviderBasePlanIdentifier: input.ProviderBasePlanIdentifier,
+			ProviderOfferIdentifier:    input.ProviderOfferIdentifier,
+			Status:                     status,
 			Availability:               ProviderAvailabilityUnknown,
 			SyncState:                  ProviderSyncNeverSynced,
 			CreatedAt:                  now,
 			UpdatedAt:                  now,
 		}
+		if input.ConnectionID == "" && product.Status != ProductConnected {
+			product.Status, product.UpdatedAt = ProductConnected, now
+			tx.SaveProduct(product)
+		}
 		tx.SaveProviderMapping(result)
 		s.audit(tx, actor, project.OrganizationID, project.ID, environment.ID, "provider_mapping.draft_created", "provider_mapping", result.ID, map[string]string{
 			"applicationId": application.ID,
-			"connectionId":  connection.ID,
-			"provider":      string(connection.Provider),
+			"connectionId":  input.ConnectionID,
+			"provider":      string(provider),
 		})
 		organizationID = project.OrganizationID
 		return nil
@@ -606,7 +751,140 @@ func (s *Service) GetProviderMappingMetadata(ctx context.Context, actor Actor, m
 	return result, err
 }
 
-func readinessIssue(code ProviderErrorCode, resourceType, resourceID, recoveryAction string) ProviderReadinessIssue {
+func validObservationContext(provider ProviderKind, context ProviderObservationContext) bool {
+	switch provider {
+	case ProviderAppStore:
+		return context == ProviderObservationStoreKitConfiguration ||
+			context == ProviderObservationAppleSandbox ||
+			context == ProviderObservationProduction ||
+			context == ProviderObservationUnknown
+	case ProviderGooglePlay:
+		return context == ProviderObservationGooglePlayTest ||
+			context == ProviderObservationProduction ||
+			context == ProviderObservationUnknown
+	default:
+		return false
+	}
+}
+
+func (s *Service) CreateProviderMappingObservation(ctx context.Context, actor Actor, mappingID string, input CreateProviderMappingObservationInput) (ProviderMappingObservation, error) {
+	ctx, span := s.operation(ctx, "provider_mapping.observe", actor, attribute.String("mosaic.provider_mapping.id", mappingID))
+	defer span.End()
+	var result ProviderMappingObservation
+	var organizationID string
+	err := s.repository.Transact(ctx, func(tx Transaction) error {
+		mapping, ok := tx.ProviderMapping(mappingID)
+		if !ok {
+			return ErrNotFound
+		}
+		_, project, err := productScope(tx, actor, mapping.ProductID, true)
+		if err != nil {
+			return err
+		}
+		if mapping.Status == ProviderMappingArchived {
+			return ErrResourceArchived
+		}
+		if mapping.ConnectionID != "" || !validObservationContext(mapping.Provider, input.StoreContext) {
+			return ErrProviderUnsupported
+		}
+		now := s.now()
+		if input.AdapterVersion == "" || len(input.AdapterVersion) > 64 ||
+			input.CorrelationID == "" || len(input.CorrelationID) > 128 ||
+			(input.Result != ProviderObservationAvailable &&
+				input.Result != ProviderObservationUnavailable &&
+				input.Result != ProviderObservationFailed) ||
+			input.ObservedAt.IsZero() || input.ObservedAt.After(now.Add(5*time.Minute)) ||
+			(input.ExpiresAt != nil && input.ExpiresAt.Before(input.ObservedAt)) ||
+			!validProviderObservationMetadata(input.Metadata) ||
+			(input.DiagnosticCode != "" && len(input.DiagnosticCode) > 128) {
+			return ErrMappingTargetInvalid
+		}
+		result = ProviderMappingObservation{
+			ID: tx.NextID("provider_observation"), ProjectID: project.ID, MappingID: mapping.ID,
+			EnvironmentID: mapping.EnvironmentID, ApplicationID: mapping.ApplicationID,
+			Platform: mapping.Platform, Provider: mapping.Provider, AdapterVersion: input.AdapterVersion,
+			StoreContext: input.StoreContext, Result: input.Result, DiagnosticCode: input.DiagnosticCode,
+			CorrelationID: input.CorrelationID, Metadata: input.Metadata, ObservedAt: input.ObservedAt,
+			ExpiresAt: input.ExpiresAt, ReceivedAt: now, CreatedByActorID: actor.ID,
+		}
+		tx.SaveProviderMappingObservation(result)
+		s.audit(tx, actor, project.OrganizationID, project.ID, mapping.EnvironmentID,
+			"provider_mapping.observation_accepted", "provider_mapping_observation", result.ID,
+			map[string]string{
+				"mappingId": mapping.ID, "provider": string(mapping.Provider),
+				"storeContext": string(input.StoreContext), "result": string(input.Result),
+			})
+		organizationID = project.OrganizationID
+		return nil
+	})
+	if err == nil {
+		logMutation(ctx, "provider_mapping.observation_accepted", actor, organizationID, result.ProjectID, result.ID)
+	}
+	return result, err
+}
+
+func (s *Service) ListProviderMappingObservations(ctx context.Context, actor Actor, mappingID string) ([]ProviderMappingObservation, error) {
+	result := []ProviderMappingObservation{}
+	err := s.repository.View(ctx, func(reader Reader) error {
+		mapping, ok := reader.ProviderMapping(mappingID)
+		if !ok {
+			return ErrNotFound
+		}
+		if _, _, err := productScope(reader, actor, mapping.ProductID, false); err != nil {
+			return err
+		}
+		result = reader.ProviderMappingObservations(mapping.ID)
+		return nil
+	})
+	return result, err
+}
+
+func (s *Service) ProviderMappingUsage(ctx context.Context, actor Actor, mappingID string) (ProviderMappingUsage, error) {
+	var result ProviderMappingUsage
+	err := s.repository.View(ctx, func(reader Reader) error {
+		mapping, ok := reader.ProviderMapping(mappingID)
+		if !ok {
+			return ErrNotFound
+		}
+		product, _, err := productScope(reader, actor, mapping.ProductID, false)
+		if err != nil {
+			return err
+		}
+		result = ProviderMappingUsage{Mapping: mapping, Product: product, Usage: productUsage(reader, product)}
+		return nil
+	})
+	return result, err
+}
+
+func nativeProviderProfile(provider ProviderKind, platform Platform) (ProviderProfile, bool) {
+	profile, ok := nativecommerce.ProfileFor(string(provider))
+	if !ok || profile.Platform != string(platform) {
+		return ProviderProfile{}, false
+	}
+	capabilities := make([]ProviderCapability, 0, len(profile.Capabilities))
+	for _, capability := range profile.Capabilities {
+		capabilities = append(capabilities, ProviderCapability{
+			Name: capability.Name, Support: capability.Support, ReasonCode: capability.ReasonCode,
+		})
+	}
+	return ProviderProfile{
+		Provider: provider, DisplayName: profile.DisplayName, Platform: platform,
+		AdapterVersion: profile.AdapterVersion, Capabilities: capabilities,
+	}, true
+}
+
+func (s *Service) NativeProviderProfile(_ context.Context, provider ProviderKind, platform Platform) (ProviderProfile, error) {
+	profile, ok := nativeProviderProfile(provider, platform)
+	if !ok {
+		return ProviderProfile{}, ErrProviderUnsupported
+	}
+	return profile, nil
+}
+
+func readinessIssue(code ProviderErrorCode, resourceType, resourceID string, recoveryAction providerreadiness.Action) ProviderReadinessIssue {
+	if !providerreadiness.IsKnown(recoveryAction) {
+		panic("unknown provider readiness recovery action: " + recoveryAction)
+	}
 	return ProviderReadinessIssue{Code: code, ResourceType: resourceType, ResourceID: resourceID, RecoveryAction: recoveryAction}
 }
 
@@ -641,31 +919,84 @@ func (s *Service) ProviderReadiness(ctx context.Context, actor Actor, productID,
 			return nil
 		}
 		if product.Status != ProductConnected {
-			result.State = ProviderReadinessDraft
+			result.State = ProviderReadinessAttentionRequired
 			result.Blockers = append(result.Blockers, readinessIssue(ProviderErrorProductUnavailable, "product", product.ID, "connectProduct"))
-		}
-		if product.MetadataSource != MetadataProvider {
-			if result.State == "" {
-				result.State = ProviderReadinessMockOnly
-			}
-			result.Blockers = append(result.Blockers, readinessIssue(ProviderErrorMetadataStale, "product", product.ID, "syncProviderMetadata"))
 		}
 		productGrants := reader.ProductGrants(product.ID)
 		if len(productGrants) == 0 {
 			if result.State == "" {
-				result.State = ProviderReadinessDraft
+				result.State = ProviderReadinessAttentionRequired
 			}
 			result.Blockers = append(result.Blockers, readinessIssue(ProviderErrorProductUnavailable, "product", product.ID, "grantEntitlement"))
 		}
 		assignment, ok := reader.ActiveProviderAssignment(environment.ID, application.ID)
 		if !ok {
 			if result.State == "" {
-				result.State = ProviderReadinessMockOnly
+				result.State = ProviderReadinessAttentionRequired
 			}
-			result.Blockers = append(result.Blockers, readinessIssue(ProviderErrorMappingMissing, "provider_assignment", environment.ID+":"+application.ID, "assignProviderConnection"))
+			result.Blockers = append(result.Blockers, readinessIssue(ProviderErrorMappingMissing, "provider_assignment", environment.ID+":"+application.ID, "assignProvider"))
 			return nil
 		}
+		result.Provider = assignment.Provider
 		result.ConnectionID = assignment.ConnectionID
+		if assignment.ActivationKind == ProviderActivationNativeStore {
+			if (assignment.Provider == ProviderAppStore && application.Platform != PlatformIOS) ||
+				(assignment.Provider == ProviderGooglePlay && application.Platform != PlatformAndroid) {
+				result.State = ProviderReadinessUnavailable
+				result.Blockers = append(result.Blockers, readinessIssue(ProviderErrorScopeMismatch, "provider_assignment", environment.ID+":"+application.ID, "selectCompatibleProvider"))
+				return nil
+			}
+			activeMappings := make([]ProviderProductMapping, 0, 1)
+			for _, mapping := range reader.ProviderMappings(product.ID) {
+				if mapping.ConnectionID == "" && mapping.Provider == assignment.Provider &&
+					mapping.EnvironmentID == environment.ID && mapping.ApplicationID == application.ID &&
+					mapping.Platform == application.Platform && mapping.Status == ProviderMappingActive {
+					activeMappings = append(activeMappings, mapping)
+				}
+			}
+			switch len(activeMappings) {
+			case 0:
+				result.Blockers = append(result.Blockers, readinessIssue(ProviderErrorMappingMissing, "product", product.ID, "createNativeProviderMapping"))
+			case 1:
+				mapping := activeMappings[0]
+				result.MappingID = mapping.ID
+				if mapping.Provider == ProviderGooglePlay && product.Type == ProductSubscription && mapping.ProviderBasePlanIdentifier == "" {
+					result.Blockers = append(result.Blockers, readinessIssue(ProviderErrorMappingMissing, "provider_mapping", mapping.ID, "addGoogleBasePlan"))
+				}
+				observations := reader.ProviderMappingObservations(mapping.ID)
+				if len(observations) != 0 {
+					observation := observations[0]
+					result.Observation = &observation
+					switch observation.Result {
+					case ProviderObservationUnavailable, ProviderObservationFailed:
+						result.Blockers = append(result.Blockers, readinessIssue(ProviderErrorProductUnavailable, "provider_mapping", mapping.ID, "rerunNativeProviderTest"))
+					case ProviderObservationAvailable:
+						if observation.ExpiresAt != nil && !observation.ExpiresAt.After(result.EvaluatedAt) {
+							result.Warnings = append(result.Warnings, readinessIssue(ProviderErrorMetadataStale, "provider_mapping", mapping.ID, "rerunNativeProviderTest"))
+						}
+					}
+				} else {
+					result.Warnings = append(result.Warnings, readinessIssue(ProviderErrorMetadataStale, "provider_mapping", mapping.ID, "runNativeProviderTest"))
+				}
+			default:
+				result.Blockers = append(result.Blockers, readinessIssue(ProviderErrorMappingAmbiguous, "product", product.ID, "archiveDuplicateMappings"))
+			}
+			if len(result.Blockers) != 0 {
+				result.State = ProviderReadinessAttentionRequired
+			} else if result.Observation != nil && result.Observation.Result == ProviderObservationAvailable &&
+				(result.Observation.StoreContext == ProviderObservationStoreKitConfiguration ||
+					result.Observation.StoreContext == ProviderObservationAppleSandbox ||
+					result.Observation.StoreContext == ProviderObservationGooglePlayTest) &&
+				(result.Observation.ExpiresAt == nil || result.Observation.ExpiresAt.After(result.EvaluatedAt)) {
+				result.State = ProviderReadinessVerifiedInTest
+			} else {
+				result.State = ProviderReadinessConfigured
+			}
+			return nil
+		}
+		if product.MetadataSource != MetadataProvider {
+			result.Blockers = append(result.Blockers, readinessIssue(ProviderErrorMetadataStale, "product", product.ID, "syncProviderMetadata"))
+		}
 		connection, ok := reader.ProviderConnection(assignment.ConnectionID)
 		if !ok {
 			return ErrNotFound
@@ -764,7 +1095,7 @@ func (s *Service) ProviderReadiness(ctx context.Context, actor Actor, productID,
 		}
 		if result.State == "" {
 			if len(result.Blockers) == 0 {
-				result.State = ProviderReadinessConnected
+				result.State = ProviderReadinessConfigured
 			} else {
 				result.State = ProviderReadinessAttentionRequired
 			}

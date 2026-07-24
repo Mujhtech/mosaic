@@ -8,9 +8,14 @@ import {
   clearActiveProviderMutationOptions,
   setActiveProviderMutationOptions,
 } from "@/features/provider-connections/mutations/provider-connection-mutations"
-import { providerAssignmentImpactQueryOptions } from "@/features/provider-connections/queries/provider-connection-queries"
-import { activeProviderScopes } from "@/features/provider-connections/types/provider-connection-view"
-import { environmentMatchesConnectionMode } from "@/features/provider-connections/types/provider-operation-input"
+import {
+  nativeProviderProfileQueryOptions,
+  providerAssignmentImpactQueryOptions,
+} from "@/features/provider-connections/queries/provider-connection-queries"
+import {
+  activeProviderScopes,
+  purchaseProviderChoices,
+} from "@/features/provider-connections/types/provider-connection-view"
 import type {
   ActiveProviderAssignment,
   Application,
@@ -19,19 +24,25 @@ import type {
 } from "@/generated/api"
 
 export function ActiveProviderMatrix({
+  applicationsHref,
   applications,
   assignments,
+  canManage = true,
   connections,
   environment,
   managementEnabled = false,
+  membersHref,
   organizationId,
   projectId,
 }: {
+  applicationsHref?: string
   applications: readonly Application[]
   assignments: readonly ActiveProviderAssignment[]
+  canManage?: boolean
   connections: readonly ProviderConnection[]
   environment: Environment
   managementEnabled?: boolean
+  membersHref?: string
   organizationId?: string
   projectId?: string
 }) {
@@ -45,6 +56,14 @@ export function ActiveProviderMatrix({
           Active providers are selected for one Environment and one concrete iOS or Android
           Application. Mosaic never guesses a provider from Product identifiers.
         </p>
+        {applicationsHref ? (
+          <a
+            className="text-primary mt-3 inline-flex text-sm font-semibold"
+            href={applicationsHref}
+          >
+            Register Application
+          </a>
+        ) : null}
       </div>
     )
   }
@@ -88,16 +107,7 @@ export function ActiveProviderMatrix({
               </td>
               <td className="border-b px-3 py-3">
                 {assignmentView ? (
-                  <div>
-                    <p className="font-medium">
-                      {assignmentView.connection?.name ?? assignmentView.assignment.connectionId}
-                    </p>
-                    <p className="text-muted-foreground mt-0.5 text-xs">
-                      {assignmentView.connection
-                        ? `${assignmentView.connection.provider === "revenuecat" ? "RevenueCat" : "Custom provider"} · ${assignmentView.connection.integrationMode === "sdk_only" ? "SDK-only" : "Server-connected"} · ${assignmentView.connection.mode}`
-                        : "Connection metadata unavailable"}
-                    </p>
-                  </div>
+                  <AssignmentSummary assignmentView={assignmentView} />
                 ) : (
                   <p className="flex items-center gap-1.5 font-medium">
                     <WarningCircleIcon aria-hidden className="text-destructive" size={16} />
@@ -108,17 +118,21 @@ export function ActiveProviderMatrix({
               <td className="text-muted-foreground border-b px-3 py-3 text-xs">
                 {assignmentView?.connection
                   ? `${assignmentView.connection.status} · ${assignmentView.connection.healthStatus}`
-                  : assignmentView
-                    ? "Assignment references an unavailable connection"
-                    : "No active assignment"}
+                  : assignmentView?.assignment.activationKind === "native_store"
+                    ? "Built in · no server credentials"
+                    : assignmentView
+                      ? "Assignment references an unavailable connection"
+                      : "No active assignment"}
               </td>
               <td className="border-b px-3 py-3 text-right">
                 {managementEnabled ? (
                   <ProviderAssignmentControl
                     application={application}
+                    canManage={canManage}
+                    currentAssignment={assignmentView?.assignment}
                     connections={connections}
-                    currentConnectionId={assignmentView?.assignment.connectionId}
                     environment={environment}
+                    membersHref={membersHref}
                     organizationId={organizationId ?? ""}
                     projectId={projectId ?? environment.projectId}
                   />
@@ -142,23 +156,87 @@ export function ActiveProviderMatrix({
   )
 }
 
+function AssignmentSummary({
+  assignmentView,
+}: {
+  assignmentView: ReturnType<typeof activeProviderScopes>[number]["assignment"]
+}) {
+  const assignment = assignmentView?.assignment
+  const isNative = assignment?.activationKind === "native_store"
+  if (!assignmentView || !assignment) return null
+  if (!isNative) {
+    return (
+      <div>
+        <p className="font-medium">
+          {assignmentView.connection?.name ?? assignment.connectionId ?? "Unavailable connection"}
+        </p>
+        <p className="text-muted-foreground mt-0.5 text-xs">
+          {assignmentView.connection
+            ? `${assignmentView.connection.provider === "revenuecat" ? "RevenueCat" : "Custom provider"} · ${assignmentView.connection.integrationMode === "sdk_only" ? "SDK-only" : "Server-connected"} · ${assignmentView.connection.mode}`
+            : "Connection metadata unavailable"}
+        </p>
+      </div>
+    )
+  }
+  if (assignment.provider !== "app_store" && assignment.provider !== "google_play") return null
+  return <NativeAssignmentSummary platform={assignment.platform} provider={assignment.provider} />
+}
+
+function NativeAssignmentSummary({
+  platform,
+  provider,
+}: {
+  platform: "android" | "ios"
+  provider: "app_store" | "google_play"
+}) {
+  const profile = useQuery(nativeProviderProfileQueryOptions(provider, platform))
+  const label = provider === "app_store" ? "StoreKit" : "Google Play Billing"
+  const warnings = profile.data?.capabilities.filter(
+    (capability) => capability.support !== "supported",
+  )
+  return (
+    <div>
+      <p className="font-medium">{profile.data?.displayName ?? label}</p>
+      <p className="text-muted-foreground mt-0.5 text-xs">
+        Built in · no server credentials
+        {profile.data ? ` · adapter ${profile.data.adapterVersion}` : ""}
+      </p>
+      {warnings?.length ? (
+        <p className="text-warning mt-1 text-xs">
+          {warnings.length} conditional or unsupported{" "}
+          {warnings.length === 1 ? "capability" : "capabilities"}
+        </p>
+      ) : null}
+    </div>
+  )
+}
+
 function ProviderAssignmentControl({
   application,
+  canManage,
   connections,
-  currentConnectionId,
+  currentAssignment,
   environment,
+  membersHref,
   organizationId,
   projectId,
 }: {
   application: Application
+  canManage: boolean
   connections: readonly ProviderConnection[]
-  currentConnectionId?: string
+  currentAssignment?: ActiveProviderAssignment
   environment: Environment
+  membersHref?: string
   organizationId: string
   projectId: string
 }) {
   const queryClient = useQueryClient()
-  const [selectedConnectionId, setSelectedConnectionId] = useState(currentConnectionId ?? "")
+  const currentChoiceId = currentAssignment
+    ? currentAssignment.activationKind === "native_store"
+      ? `native:${currentAssignment.provider}`
+      : `connection:${currentAssignment.connectionId}`
+    : ""
+  const [selectedChoiceId, setSelectedChoiceId] = useState(currentChoiceId)
   const [reviewAction, setReviewAction] = useState<"clear" | "set" | null>(null)
   const setProvider = useMutation(
     setActiveProviderMutationOptions(application.id, environment.id, projectId, queryClient),
@@ -166,28 +244,26 @@ function ProviderAssignmentControl({
   const clearProvider = useMutation(
     clearActiveProviderMutationOptions(application.id, environment.id, projectId, queryClient),
   )
-  const available = connections.filter(
-    (connection) =>
-      connection.status === "active" &&
-      connection.healthStatus === "healthy" &&
-      connection.environmentIds.includes(environment.id) &&
-      connection.applicationIds.includes(application.id) &&
-      environmentMatchesConnectionMode(environment.mode, connection.mode),
+  const choices = purchaseProviderChoices(application, environment, connections)
+  const selected = choices.find((choice) => choice.id === selectedChoiceId)
+  const availableConnectionCount = choices.filter((choice) => choice.kind === "connection").length
+  const unavailableCount = connections.length - availableConnectionCount
+  const current = connections.find(
+    (connection) => connection.id === currentAssignment?.connectionId,
   )
-  const selected = available.find((connection) => connection.id === selectedConnectionId)
-  const unavailableCount = connections.length - available.length
-  const current = connections.find((connection) => connection.id === currentConnectionId)
   const impact = useQuery({
     ...providerAssignmentImpactQueryOptions({
       applicationId: application.id,
-      connectionId: current?.id ?? "unassigned",
+      assignmentKey: currentAssignment?.connectionId ?? `native:${currentAssignment?.provider}`,
+      connectionId: currentAssignment?.connectionId,
       environmentId: environment.id,
+      provider: currentAssignment?.provider ?? "custom",
       projectId,
     }),
-    enabled: Boolean(reviewAction && current),
+    enabled: Boolean(reviewAction && currentAssignment),
   })
   const mutation = reviewAction === "clear" ? clearProvider : setProvider
-  const impactRequired = Boolean(current)
+  const impactRequired = Boolean(currentAssignment)
   const canConfirmImpact = !impactRequired || impact.isSuccess
   const catalogHref = `/organizations/${encodeURIComponent(organizationId)}/projects/${encodeURIComponent(projectId)}/catalog/products`
   const providersHref = `/organizations/${encodeURIComponent(organizationId)}/projects/${encodeURIComponent(projectId)}/catalog/providers`
@@ -198,15 +274,15 @@ function ProviderAssignmentControl({
       <div className="ml-auto max-w-xs rounded border p-3 text-left">
         <p className="text-xs font-semibold">
           {isClearing
-            ? `Clear ${current?.name ?? "active provider"}`
-            : current
-              ? `Replace ${current.name}`
+            ? `Clear ${providerChoiceLabel(currentAssignment, current)}`
+            : currentAssignment
+              ? `Replace ${providerChoiceLabel(currentAssignment, current)}`
               : "Select active provider"}
         </p>
         <p className="text-muted-foreground mt-1 text-xs leading-5">
           {isClearing
             ? `Clearing this assignment leaves ${application.name} without a commerce provider in ${environment.name}. New publishing will fail readiness and SDK configuration cannot resolve connected Product metadata until another healthy provider is selected.`
-            : `${current ? `${current.name} → ${selected?.name}. ` : ""}This changes provider resolution for ${application.name} in ${environment.name}. Published history remains immutable; new publishing readiness and SDK configuration use this explicit assignment.`}
+            : `${currentAssignment ? `${providerChoiceLabel(currentAssignment, current)} → ${selected?.label}. ` : ""}This changes provider resolution for ${application.name} in ${environment.name}. Published history remains immutable; new publishing readiness and SDK configuration use this explicit assignment.`}
         </p>
         {impactRequired && impact.isPending ? (
           <p className="text-muted-foreground mt-2 text-xs" role="status">
@@ -256,28 +332,50 @@ function ProviderAssignmentControl({
             {mutation.error.message}
           </p>
         ) : null}
+        {!canManage ? (
+          <div className="border-border bg-background mt-3 rounded border p-3 text-xs">
+            <p className="font-medium">Owner or Admin approval required</p>
+            <p className="text-muted-foreground mt-1">
+              Members can review this impact but cannot change Purchase setup.
+            </p>
+            {membersHref ? (
+              <a className="text-primary mt-2 inline-flex font-semibold" href={membersHref}>
+                Ask an Owner or Admin
+              </a>
+            ) : null}
+          </div>
+        ) : null}
         <div className="mt-3 flex gap-2">
-          <Button
-            disabled={mutation.isPending || !canConfirmImpact}
-            onClick={() => {
-              if (isClearing) {
-                clearProvider.mutate(undefined, { onSuccess: () => setReviewAction(null) })
-                return
-              }
-              if (!selected) return
-              setProvider.mutate(
-                {
-                  acknowledgeProductionConnectionUse: false,
-                  connectionId: selected.id,
-                },
-                { onSuccess: () => setReviewAction(null) },
-              )
-            }}
-            size="sm"
-            type="button"
-          >
-            {mutation.isPending ? "Saving…" : isClearing ? "Confirm clear" : "Confirm selection"}
-          </Button>
+          {canManage ? (
+            <Button
+              disabled={mutation.isPending || !canConfirmImpact}
+              onClick={() => {
+                if (isClearing) {
+                  clearProvider.mutate(undefined, { onSuccess: () => setReviewAction(null) })
+                  return
+                }
+                if (!selected) return
+                setProvider.mutate(
+                  selected.kind === "native"
+                    ? {
+                        activationKind: "native_store",
+                        provider: selected.provider,
+                      }
+                    : {
+                        acknowledgeProductionConnectionUse: false,
+                        activationKind: "provider_connection",
+                        connectionId: selected.connection.id,
+                        provider: selected.provider,
+                      },
+                  { onSuccess: () => setReviewAction(null) },
+                )
+              }}
+              size="sm"
+              type="button"
+            >
+              {mutation.isPending ? "Saving…" : isClearing ? "Confirm clear" : "Confirm selection"}
+            </Button>
+          ) : null}
           <Button
             disabled={mutation.isPending}
             onClick={() => setReviewAction(null)}
@@ -298,18 +396,19 @@ function ProviderAssignmentControl({
         <select
           aria-label={`Provider for ${application.name}`}
           className="border-input bg-background h-8 min-w-36 rounded border px-2 text-xs"
-          onChange={(event) => setSelectedConnectionId(event.currentTarget.value)}
-          value={selectedConnectionId}
+          onChange={(event) => setSelectedChoiceId(event.currentTarget.value)}
+          value={selectedChoiceId}
         >
           <option value="">Select provider</option>
-          {available.map((connection) => (
-            <option key={connection.id} value={connection.id}>
-              {connection.name}
+          {choices.map((choice) => (
+            <option key={choice.id} value={choice.id}>
+              {choice.label}
+              {choice.kind === "native" ? " · Built in" : ""}
             </option>
           ))}
         </select>
         <Button
-          disabled={!selected || selected.id === currentConnectionId}
+          disabled={!selected || selected.id === currentChoiceId}
           onClick={() => setReviewAction("set")}
           size="sm"
           type="button"
@@ -317,7 +416,7 @@ function ProviderAssignmentControl({
         >
           Review impact
         </Button>
-        {current ? (
+        {currentAssignment ? (
           <Button
             onClick={() => setReviewAction("clear")}
             size="sm"
@@ -339,4 +438,14 @@ function ProviderAssignmentControl({
       ) : null}
     </div>
   )
+}
+
+function providerChoiceLabel(
+  assignment?: ActiveProviderAssignment,
+  connection?: ProviderConnection,
+) {
+  if (connection) return connection.name
+  if (assignment?.provider === "app_store") return "StoreKit"
+  if (assignment?.provider === "google_play") return "Google Play Billing"
+  return "active provider"
 }

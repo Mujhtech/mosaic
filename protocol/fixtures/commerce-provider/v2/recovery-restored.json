@@ -1,0 +1,15 @@
+{
+  "commerceProviderContractVersion": "2",
+  "recordType": "restoreOutcome",
+  "payload": {
+    "operationId": "recovery_google_000001",
+    "providerId": "google_play",
+    "outcome": "restored",
+    "recoveryMode": "activePurchaseRecovery",
+    "activeEntitlementKeys": [
+      "pro"
+    ],
+    "completedAt": "2026-07-24T12:06:00Z",
+    "diagnostics": []
+  }
+}

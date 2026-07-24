@@ -21,6 +21,11 @@ for RevenueCat v2 credentials, required read permissions, import and mapping
 semantics, synchronization workers, Commerce Configuration sidecars, and
 operational recovery.
 
+See [`../../docs/backend/phase-4b-native-store-providers.md`](../../docs/backend/phase-4b-native-store-providers.md)
+for credential-free StoreKit and Google Play activation, native Product
+mappings, browser-session observations, readiness, and Commerce Configuration
+v2 delivery.
+
 `cmd/api`, `cmd/worker`, and `cmd/migrate` load this directory's `.env` with `godotenv`
 and decode it with `envconfig`. Existing process environment variables override
 matching `.env` entries.

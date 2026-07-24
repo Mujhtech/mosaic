@@ -26,6 +26,8 @@ export type MetadataSource = 'mock' | 'provider';
 
 export type ProviderKind = 'revenuecat' | 'app_store' | 'google_play' | 'custom';
 
+export type ProviderActivationKind = 'provider_connection' | 'native_store';
+
 export type ProviderConnectionKind = 'revenuecat' | 'custom';
 
 export type ProviderIntegrationMode = 'server_connected' | 'sdk_only';
@@ -44,7 +46,7 @@ export type ProviderAvailability = 'unknown' | 'available' | 'unavailable';
 
 export type ProviderSyncState = 'never_synced' | 'current' | 'stale' | 'failed';
 
-export type ProviderErrorCode = 'credentialInvalid' | 'credentialExpired' | 'permissionDenied' | 'connectionRevoked' | 'scopeMismatch' | 'modeMismatch' | 'rateLimited' | 'timeout' | 'providerUnavailable' | 'invalidResponse' | 'productNotFound' | 'productUnavailable' | 'mappingMissing' | 'mappingAmbiguous' | 'syncInProgress' | 'syncPartial' | 'syncFailed' | 'metadataStale' | 'idempotencyConflict';
+export type ProviderErrorCode = 'credentialInvalid' | 'credentialExpired' | 'permissionDenied' | 'connectionRevoked' | 'scopeMismatch' | 'modeMismatch' | 'rateLimited' | 'timeout' | 'providerUnavailable' | 'invalidResponse' | 'productNotFound' | 'productUnavailable' | 'mappingMissing' | 'mappingAmbiguous' | 'syncInProgress' | 'syncPartial' | 'syncFailed' | 'metadataStale' | 'basePlanMissing' | 'observationMissing' | 'observationStale' | 'idempotencyConflict';
 
 export type SignUpRequest = {
     email: string;
@@ -192,6 +194,14 @@ export type ReplaceProviderMappingRequest = {
      * RevenueCat v2 Offering ID or SDK lookup key; persisted as the verified lookup key.
      */
     providerOfferingIdentifier?: string;
+    /**
+     * Required exact Google base-plan ID for subscriptions.
+     */
+    providerBasePlanIdentifier?: string;
+    /**
+     * Optional explicitly selected Google offer ID. Offer tokens are never persisted.
+     */
+    providerOfferIdentifier?: string;
 };
 
 export type ProviderEntitlementImportRequest = {
@@ -224,7 +234,9 @@ export type ReplaceProviderConnectionScopesRequest = {
 };
 
 export type SetProviderAssignmentRequest = {
-    connectionId: string;
+    provider?: ProviderKind;
+    activationKind?: ProviderActivationKind;
+    connectionId?: string;
     /**
      * Required when explicitly assigning a production connection outside a production Environment.
      */
@@ -238,7 +250,8 @@ export type SetProviderAssignmentRequest = {
  *
  */
 export type CreateProviderMappingDraftRequest = {
-    connectionId: string;
+    connectionId?: string;
+    provider?: ProviderKind;
     environmentId: string;
     applicationId: string;
     /**
@@ -254,6 +267,33 @@ export type CreateProviderMappingDraftRequest = {
      */
     providerOfferingIdentifier?: string;
     expectedStoreProductId?: string;
+    /**
+     * Exact Google base-plan ID; required by service validation for subscriptions.
+     */
+    providerBasePlanIdentifier?: string;
+    /**
+     * Optional exact Google offer ID; requires a base plan. Runtime offer tokens are forbidden.
+     */
+    providerOfferIdentifier?: string;
+};
+
+export type CreateProviderMappingObservationRequest = {
+    adapterVersion: string;
+    storeContext: 'storekitConfiguration' | 'appleSandbox' | 'googlePlayTest' | 'production' | 'unknown';
+    result: 'available' | 'unavailable' | 'failed';
+    /**
+     * Safe Mosaic code only; raw provider messages are forbidden.
+     */
+    diagnosticCode?: string;
+    correlationId: string;
+    /**
+     * Bounded normalized Product metadata; no raw provider payload
+     */
+    metadata?: {
+        [key: string]: unknown;
+    };
+    observedAt: Timestamp;
+    expiresAt?: Timestamp;
 };
 
 export type Organization = {
@@ -479,7 +519,9 @@ export type ActiveProviderAssignment = {
     environmentId: string;
     applicationId: string;
     platform: Platform;
-    connectionId: string;
+    provider: ProviderKind;
+    activationKind: ProviderActivationKind;
+    connectionId?: string;
     productionConnectionUseAcknowledged: boolean;
     createdByActorId: string;
     createdAt: Timestamp;
@@ -585,6 +627,9 @@ export type ProviderProductMapping = {
      */
     providerOfferingIdentifier?: string;
     expectedStoreProductId?: string;
+    providerBasePlanIdentifier?: string;
+    providerOfferIdentifier?: string;
+    replacesMappingId?: string;
     status: ProviderMappingStatus;
     availability: ProviderAvailability;
     syncState: ProviderSyncState;
@@ -627,16 +672,54 @@ export type ProviderReadinessIssue = {
 };
 
 export type ProviderReadiness = {
-    state: 'draft' | 'mockOnly' | 'connected' | 'attentionRequired' | 'unavailable' | 'archived';
+    state: 'configured' | 'verifiedInTest' | 'attentionRequired' | 'unavailable' | 'archived';
     productId: string;
     environmentId: string;
     applicationId: string;
     platform: Platform;
     connectionId?: string;
+    provider?: ProviderKind;
     mappingId?: string;
+    observation?: ProviderMappingObservation;
     blockers: Array<ProviderReadinessIssue>;
     warnings: Array<ProviderReadinessIssue>;
     evaluatedAt: Timestamp;
+};
+
+export type ProviderMappingObservation = {
+    id: string;
+    projectId: string;
+    mappingId: string;
+    environmentId: string;
+    applicationId: string;
+    platform: Platform;
+    provider: ProviderKind;
+    adapterVersion: string;
+    storeContext: 'storekitConfiguration' | 'appleSandbox' | 'googlePlayTest' | 'production' | 'unknown';
+    result: 'available' | 'unavailable' | 'failed';
+    diagnosticCode?: string;
+    correlationId: string;
+    metadata: {
+        [key: string]: unknown;
+    };
+    observedAt: Timestamp;
+    expiresAt?: Timestamp;
+    receivedAt: Timestamp;
+    createdByActorId: string;
+};
+
+export type ProviderMappingUsage = {
+    mapping: ProviderProductMapping;
+    product: Product;
+    usage: ProductUsage;
+};
+
+export type ProviderProfile = {
+    provider: ProviderKind;
+    displayName: string;
+    platform: Platform;
+    adapterVersion: string;
+    capabilities: Array<ProviderCapability>;
 };
 
 export type ProductUsage = {
@@ -841,6 +924,18 @@ export type ProviderAssignmentEnvelope = {
 
 export type ProviderReadinessEnvelope = {
     data: ProviderReadiness;
+};
+
+export type ProviderMappingUsageEnvelope = {
+    data: ProviderMappingUsage;
+};
+
+export type ProviderMappingObservationEnvelope = {
+    data: ProviderMappingObservation;
+};
+
+export type ProviderProfileEnvelope = {
+    data: ProviderProfile;
 };
 
 export type ApiKeyEnvelope = {
@@ -3272,6 +3367,118 @@ export type GetProviderMappingMetadataResponses = {
 
 export type GetProviderMappingMetadataResponse = GetProviderMappingMetadataResponses[keyof GetProviderMappingMetadataResponses];
 
+export type GetProviderMappingUsageData = {
+    body?: never;
+    path: {
+        mappingId: string;
+    };
+    query?: never;
+    url: '/v1/provider-mappings/{mappingId}/usage';
+};
+
+export type GetProviderMappingUsageErrors = {
+    /**
+     * Stable machine-readable failure.
+     */
+    default: ErrorEnvelope;
+};
+
+export type GetProviderMappingUsageError = GetProviderMappingUsageErrors[keyof GetProviderMappingUsageErrors];
+
+export type GetProviderMappingUsageResponses = {
+    /**
+     * Mapping-specific replacement impact
+     */
+    200: ProviderMappingUsageEnvelope;
+};
+
+export type GetProviderMappingUsageResponse = GetProviderMappingUsageResponses[keyof GetProviderMappingUsageResponses];
+
+export type ListProviderMappingObservationsData = {
+    body?: never;
+    path: {
+        mappingId: string;
+    };
+    query?: never;
+    url: '/v1/provider-mappings/{mappingId}/observations';
+};
+
+export type ListProviderMappingObservationsErrors = {
+    /**
+     * Stable machine-readable failure.
+     */
+    default: ErrorEnvelope;
+};
+
+export type ListProviderMappingObservationsError = ListProviderMappingObservationsErrors[keyof ListProviderMappingObservationsErrors];
+
+export type ListProviderMappingObservationsResponses = {
+    /**
+     * Immutable native-store observation history.
+     */
+    200: {
+        data: Array<ProviderMappingObservation>;
+    };
+};
+
+export type ListProviderMappingObservationsResponse = ListProviderMappingObservationsResponses[keyof ListProviderMappingObservationsResponses];
+
+export type CreateProviderMappingObservationData = {
+    body: CreateProviderMappingObservationRequest;
+    path: {
+        mappingId: string;
+    };
+    query?: never;
+    url: '/v1/provider-mappings/{mappingId}/observations';
+};
+
+export type CreateProviderMappingObservationErrors = {
+    /**
+     * Stable machine-readable failure.
+     */
+    default: ErrorEnvelope;
+};
+
+export type CreateProviderMappingObservationError = CreateProviderMappingObservationErrors[keyof CreateProviderMappingObservationErrors];
+
+export type CreateProviderMappingObservationResponses = {
+    /**
+     * Accepted immutable native-store test observation
+     */
+    201: ProviderMappingObservationEnvelope;
+};
+
+export type CreateProviderMappingObservationResponse = CreateProviderMappingObservationResponses[keyof CreateProviderMappingObservationResponses];
+
+export type GetNativeProviderProfileData = {
+    body?: never;
+    path: {
+        provider: 'app_store' | 'google_play';
+    };
+    query: {
+        platform: Platform;
+    };
+    url: '/v1/native-providers/{provider}/profile';
+};
+
+export type GetNativeProviderProfileErrors = {
+    /**
+     * Stable machine-readable failure.
+     */
+    default: ErrorEnvelope;
+};
+
+export type GetNativeProviderProfileError = GetNativeProviderProfileErrors[keyof GetNativeProviderProfileErrors];
+
+export type GetNativeProviderProfileResponses = {
+    /**
+     * Credential-free native provider capability profile
+     */
+    200: ProviderProfileEnvelope;
+};
+
+export type GetNativeProviderProfileResponse = GetNativeProviderProfileResponses[keyof GetNativeProviderProfileResponses];
+
 export type ListEntitlementsData = {
     body?: never;
     path: {
@@ -4274,11 +4481,14 @@ export type GetSdkConfigurationResponse = GetSdkConfigurationResponses[keyof Get
 export type GetSdkCommerceConfigurationData = {
     body?: never;
     headers: {
-        Accept: 'application/vnd.mosaic.commerce-configuration+json;version=1';
+        /**
+         * Comma-separated accepted Commerce media types. Supported versions are application/vnd.mosaic.commerce-configuration+json;version=1 and version=2.
+         */
+        Accept: string;
         'Mosaic-SDK-Platform': 'flutter' | 'ios' | 'android';
         'Mosaic-SDK-Version': string;
-        'Mosaic-Commerce-Configuration-Versions': '1';
-        'Mosaic-Commerce-Provider-Contract-Versions': '1';
+        'Mosaic-Commerce-Configuration-Versions': string;
+        'Mosaic-Commerce-Provider-Contract-Versions': string;
         'If-None-Match'?: string;
     };
     path?: never;
@@ -4315,7 +4525,7 @@ export type GetSdkCommerceConfigurationError = GetSdkCommerceConfigurationErrors
 
 export type GetSdkCommerceConfigurationResponses = {
     /**
-     * Immutable Commerce Configuration v1 sidecar associated with the current Configuration Release and requested Application.
+     * Immutable version-negotiated Commerce Configuration sidecar associated with the current Configuration Release and requested Application.
      */
     200: {
         [key: string]: unknown;

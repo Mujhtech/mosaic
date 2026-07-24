@@ -1,0 +1,27 @@
+name: mosaic_native_store
+description: Optional thin Flutter bridge to Mosaic StoreKit and Google Play adapters.
+version: 0.1.0-dev.1
+publish_to: none
+
+environment:
+  sdk: ">=3.3.0 <4.0.0"
+  flutter: ">=3.19.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+  mosaic_sdk:
+    path: ../..
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+
+flutter:
+  plugin:
+    platforms:
+      android:
+        package: dev.mosaic.flutter.native_store
+        pluginClass: MosaicNativeStorePlugin
+      ios:
+        pluginClass: MosaicNativeStorePlugin

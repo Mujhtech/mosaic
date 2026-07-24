@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:mosaic_native_store/mosaic_native_store.dart';
 import 'package:mosaic_revenuecat/mosaic_revenuecat.dart';
 import 'package:mosaic_sdk/mosaic_sdk.dart';
 import 'package:purchases_flutter/purchases_flutter.dart' as revenuecat;
@@ -251,11 +252,11 @@ final class _HostedPaywallPlaygroundState
     applicationId: !_connectedCommerceEnabled ? null : _mosaicApplicationId,
     storePlatform: _connectedCommerceEnabled ? _runtimeStorePlatform : null,
     purchaseProvider: _fallbackPurchaseProvider(),
-    commerceProviderFactories: _revenueCatReady
-        ? const <MosaicCommerceProviderFactory>[
-            MosaicRevenueCatProviderFactory(),
-          ]
-        : const <MosaicCommerceProviderFactory>[],
+    commerceProviderFactories: <MosaicCommerceProviderFactory>[
+      MosaicStoreKitProviderFactory(),
+      MosaicGooglePlayProviderFactory(),
+      if (_revenueCatReady) const MosaicRevenueCatProviderFactory(),
+    ],
     bundledFallbackLoader: () async =>
         rootBundle.loadString('assets/generated/configuration-release.json'),
     onDiagnostic: (diagnostic) {

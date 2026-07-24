@@ -4,19 +4,31 @@ import {
   readinessStateLabel,
   type ProductReadinessView,
 } from "@/features/catalog/types/connected-product-view"
+import {
+  providerRecoveryDescriptor,
+  providerRecoveryHref,
+} from "@/features/catalog/types/provider-recovery"
 
 export function ProductReadinessPanel({
   accessHref,
+  applicationsHref,
   manageProvidersHref,
+  mappingHref = "#provider-mappings-title",
   readiness,
+  scopeLabel,
 }: {
   accessHref: string
+  applicationsHref: string
   manageProvidersHref: string
+  mappingHref?: string
   readiness: ProductReadinessView
+  scopeLabel?: string
 }) {
   const blockers = readiness.issues.filter((issue) => issue.severity === "blocker")
   const warnings = readiness.issues.filter((issue) => issue.severity === "warning")
-  const healthy = readiness.state === "connected" && blockers.length === 0
+  const healthy =
+    ["configured", "connected", "verifiedInTest"].includes(readiness.state as string) &&
+    blockers.length === 0
 
   return (
     <section aria-labelledby="connected-readiness-title" className="rounded border">
@@ -24,10 +36,10 @@ export function ProductReadinessPanel({
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
             <h2 className="text-sm font-semibold" id="connected-readiness-title">
-              Connected readiness
+              Purchase readiness
             </h2>
             <p className="text-muted-foreground mt-1 text-sm">
-              Authoritative for one explicit Environment, Application, and platform.
+              Authoritative for one explicit Mosaic Environment, Application, and platform.
             </p>
           </div>
           <span
@@ -46,8 +58,8 @@ export function ProductReadinessPanel({
           <div className="rounded border p-3">
             <dt className="text-muted-foreground text-xs">Scope</dt>
             <dd className="mt-1 text-sm font-medium">
-              {readiness.environmentId} · {readiness.applicationId} ·{" "}
-              {readiness.platform.toUpperCase()}
+              {scopeLabel ??
+                `${readiness.environmentId} · ${readiness.applicationId} · ${readiness.platform.toUpperCase()}`}
             </dd>
           </div>
           <div className="rounded border p-3">
@@ -65,6 +77,7 @@ export function ProductReadinessPanel({
                 accessHref={accessHref}
                 issues={blockers}
                 manageProvidersHref={manageProvidersHref}
+                mappingHref={mappingHref}
                 title="Blocking issues"
                 tone="danger"
               />
@@ -74,6 +87,7 @@ export function ProductReadinessPanel({
                 accessHref={accessHref}
                 issues={warnings}
                 manageProvidersHref={manageProvidersHref}
+                mappingHref={mappingHref}
                 title="Warnings"
                 tone="neutral"
               />
@@ -89,12 +103,14 @@ function IssueList({
   issues,
   accessHref,
   manageProvidersHref,
+  mappingHref,
   title,
   tone,
 }: {
   issues: ProductReadinessView["issues"]
   accessHref: string
   manageProvidersHref: string
+  mappingHref: string
   title: string
   tone: "danger" | "neutral"
 }) {
@@ -119,12 +135,18 @@ function IssueList({
       <ul className="mt-2 space-y-2 text-sm">
         {issues.map((issue) => (
           <li key={`${issue.code}:${issue.resourceType}:${issue.resourceId}`}>
-            <p>{readinessIssueLabel(issue.code)}</p>
+            <p>{readinessIssueLabel(issue.code, issue.recoveryAction)}</p>
             <a
               className="text-primary mt-1 inline-flex text-xs font-semibold"
-              href={recoveryHref(issue.recoveryAction, accessHref, manageProvidersHref)}
+              href={providerRecoveryHref(issue.recoveryAction, {
+                access: accessHref,
+                applications: applicationsHref,
+                lifecycle: "#lifecycle-title",
+                mapping: mappingHref,
+                providers: manageProvidersHref,
+              })}
             >
-              {recoveryLabel(issue.recoveryAction)}
+              {providerRecoveryDescriptor(issue.recoveryAction).label}
             </a>
           </li>
         ))}
@@ -133,38 +155,39 @@ function IssueList({
   )
 }
 
-function readinessIssueLabel(code: string) {
+function readinessIssueLabel(code: string, action: string) {
+  if (
+    action === "runNativeProviderTest" ||
+    action === "rerunNativeProviderTest" ||
+    action === "createNativeProviderMapping" ||
+    action === "addGoogleBasePlan" ||
+    action === "archiveDuplicateMappings" ||
+    action === "grantEntitlement"
+  ) {
+    return providerRecoveryDescriptor(action).message
+  }
   switch (code) {
     case "mappingMissing":
-      return "This Product is not mapped to the active commerce provider."
+      return "This Product is not mapped to the active purchase provider."
     case "metadataStale":
-      return "Connected Product details need to be synchronized."
+      return "Connected-provider catalog metadata is stale."
     case "entitlementGrantMissing":
       return "This Product does not grant an Access definition."
     case "connectionUnavailable":
-      return "The active commerce connection is unavailable."
+      return "The active purchase provider is unavailable."
+    case "commerce.mapping.basePlanMissing":
+      return "This Google Play subscription needs an exact base plan."
+    case "commerce.mapping.offerMissing":
+      return "The selected Google Play offer is missing."
+    case "commerce.mapping.offerIneligible":
+      return "The selected Google Play offer is not eligible for this test context."
+    case "commerce.provider.platformMismatch":
+      return "The active provider is not compatible with this Application platform."
+    case "commerce.observation.missing":
+      return "This mapping is configured but has not been observed by an accepted test client."
+    case "commerce.observation.stale":
+      return "The latest test-client observation is stale."
     default:
-      return "Connected commerce setup needs attention before publishing."
-  }
-}
-
-function recoveryHref(action: string, accessHref: string, manageProvidersHref: string) {
-  return action === "addEntitlementGrant" ? accessHref : manageProvidersHref
-}
-
-function recoveryLabel(action: string) {
-  switch (action) {
-    case "addEntitlementGrant":
-      return "Add Access"
-    case "fixProductMapping":
-      return "Review Product mapping"
-    case "reconnectProvider":
-      return "Reconnect provider"
-    case "selectActiveProvider":
-      return "Select active provider"
-    case "syncProviderMetadata":
-      return "Synchronize Product details"
-    default:
-      return "Review commerce setup"
+      return "Purchase setup needs attention before publishing."
   }
 }

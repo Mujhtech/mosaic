@@ -2,6 +2,7 @@ import type {
   Application,
   Environment,
   ProviderConnection,
+  ProviderMappingObservation,
   ProviderProductMapping,
   ProviderProductMetadataSnapshot,
   ProviderReadiness,
@@ -37,18 +38,23 @@ export interface ProviderMappingView {
   id: string
   lastErrorCode?: ProviderProductMapping["lastErrorCode"]
   platformLabel: string
+  provider: ProviderProductMapping["provider"]
   providerLabel: string
   providerOfferingIdentifier?: string
   providerPackageIdentifier?: string
+  providerBasePlanIdentifier?: string
+  providerOfferIdentifier?: string
   providerProductIdentifier: string
   providerDisplayName?: string
   providerProductState?: string
   providerProductType?: string
   snapshotId?: string
+  snapshotSource?: string
   snapshotExpiresAt?: string
   snapshotObservedAt?: string
   snapshotStaleAt?: string
   snapshotSyncedAt?: string
+  latestObservation?: ProviderMappingObservation
   status: ProviderProductMapping["status"]
   syncState: ProviderProductMapping["syncState"]
 }
@@ -60,18 +66,22 @@ function providerLabel(provider: ProviderProductMapping["provider"]) {
     case "custom":
       return "Custom provider"
     case "app_store":
-      return "App Store placeholder (Gate 4B)"
+      return "StoreKit"
     case "google_play":
-      return "Google Play placeholder (Gate 4B)"
+      return "Google Play Billing"
   }
 }
 
 export function readinessStateLabel(state: ProductReadinessState) {
-  switch (state) {
+  switch (state as string) {
     case "archived":
       return "Archived"
     case "attentionRequired":
       return "Attention required"
+    case "configured":
+      return "Configured"
+    case "verifiedInTest":
+      return "Verified in test"
     case "connected":
       return "Connected"
     case "draft":
@@ -81,6 +91,7 @@ export function readinessStateLabel(state: ProductReadinessState) {
     case "unavailable":
       return "Unavailable"
   }
+  return state
 }
 
 export function productReadinessView(readiness: ProviderReadiness): ProductReadinessView {
@@ -104,6 +115,7 @@ export function providerMappingView(
   environments: readonly Environment[],
   connections: readonly ProviderConnection[],
   snapshot?: ProviderProductMetadataSnapshot,
+  observations: readonly ProviderMappingObservation[] = [],
 ): ProviderMappingView {
   const application = applications.find((item) => item.id === mapping.applicationId)
   const environment = environments.find((item) => item.id === mapping.environmentId)
@@ -122,18 +134,25 @@ export function providerMappingView(
     id: mapping.id,
     lastErrorCode: mapping.lastErrorCode,
     platformLabel: mapping.platform.toUpperCase(),
+    provider: mapping.provider,
     providerLabel: providerLabel(mapping.provider),
     providerOfferingIdentifier: mapping.providerOfferingIdentifier,
     providerPackageIdentifier: mapping.providerPackageIdentifier,
+    providerBasePlanIdentifier: mapping.providerBasePlanIdentifier,
+    providerOfferIdentifier: mapping.providerOfferIdentifier,
     providerDisplayName: metadataString("displayName"),
     providerProductState: metadataString("state"),
     providerProductType: metadataString("type"),
     providerProductIdentifier: mapping.providerProductIdentifier,
     snapshotId: mapping.currentSnapshotId,
+    snapshotSource: snapshot?.source,
     snapshotExpiresAt: snapshot?.expiresAt,
     snapshotObservedAt: snapshot?.observedAt,
     snapshotStaleAt: snapshot?.staleAt,
     snapshotSyncedAt: snapshot?.syncedAt,
+    latestObservation: [...observations].sort((left, right) =>
+      right.observedAt.localeCompare(left.observedAt),
+    )[0],
     status: mapping.status,
     syncState: mapping.syncState,
   }

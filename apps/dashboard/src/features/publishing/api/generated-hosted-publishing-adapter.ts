@@ -29,6 +29,7 @@ import type {
   PaywallVersion,
   Placement,
 } from "@/generated/api/types.gen"
+import { providerRecoveryDescriptor } from "@/features/catalog/types/provider-recovery"
 import type { MosaicDocument } from "@/features/paywall-editor/types/editor"
 import {
   HostedDraftConflictError,
@@ -135,9 +136,11 @@ function conflictFrom(error: unknown) {
 }
 
 function recoveryActionLabel(recoveryAction: string) {
-  return recoveryAction
-    .replace(/([a-z0-9])([A-Z])/g, "$1 $2")
-    .replace(/^./, (character) => character.toUpperCase())
+  return providerRecoveryDescriptor(recoveryAction).label
+}
+
+function recoveryActionMessage(recoveryAction: string, product: string, application: string) {
+  return `${product} · ${application}: ${providerRecoveryDescriptor(recoveryAction).message}`
 }
 
 export function resolvePlacementReadiness(
@@ -510,7 +513,8 @@ export function createGeneratedHostedPublishingAdapter(
               scopes.length > 0 &&
               scopes.every(
                 ({ readiness }) =>
-                  readiness.state === "connected" && readiness.blockers.length === 0,
+                  (readiness.state === "configured" || readiness.state === "verifiedInTest") &&
+                  readiness.blockers.length === 0,
               ),
             scopes,
           }
@@ -523,7 +527,7 @@ export function createGeneratedHostedPublishingAdapter(
             code: issue.code,
             connectionId: readiness.connectionId,
             environmentId: readiness.environmentId,
-            message: `${product.name} for ${application.name} (${readiness.platform.toUpperCase()}) reports ${issue.code} on ${issue.resourceType} ${issue.resourceId}.`,
+            message: recoveryActionMessage(issue.recoveryAction, product.name, application.name),
             productId: product.id,
             recoveryAction: issue.recoveryAction,
             recoveryLabel: recoveryActionLabel(issue.recoveryAction),
@@ -536,7 +540,7 @@ export function createGeneratedHostedPublishingAdapter(
             code: issue.code,
             connectionId: readiness.connectionId,
             environmentId: readiness.environmentId,
-            message: `${product.name} for ${application.name} (${readiness.platform.toUpperCase()}) reports ${issue.code} on ${issue.resourceType} ${issue.resourceId}.`,
+            message: recoveryActionMessage(issue.recoveryAction, product.name, application.name),
             productId: product.id,
             recoveryAction: issue.recoveryAction,
             recoveryLabel: recoveryActionLabel(issue.recoveryAction),

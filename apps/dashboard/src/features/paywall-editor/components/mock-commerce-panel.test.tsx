@@ -4,7 +4,10 @@ import { useEffect, useState } from "react"
 import { describe, expect, it } from "vitest"
 
 import { catalogKeys } from "@/features/catalog/queries/catalog-query"
-import { MockCommercePanel } from "@/features/paywall-editor/components/mock-commerce-panel"
+import {
+  MockCommercePanel,
+  studioApplicationsErrorMessage,
+} from "@/features/paywall-editor/components/mock-commerce-panel"
 import { EDITOR_TEMPLATES } from "@/features/paywall-editor/constants/templates"
 import {
   EditorStoreProvider,
@@ -17,8 +20,10 @@ import type {
   MockPurchaseState,
 } from "@/features/paywall-editor/types/editor"
 import type { ProductList } from "@/generated/api"
+import { projectKeys } from "@/features/projects/queries/projects-query"
 import { cloneValue } from "@/features/paywall-editor/utils/clone"
 import { findNode } from "@/features/paywall-editor/utils/document-tree"
+import { ApiError } from "@/lib/api/errors"
 
 function Harness() {
   const { document } = useEditorStore()
@@ -115,6 +120,71 @@ function HostedHarness() {
 }
 
 describe("mock commerce controls", () => {
+  it("keeps Studio editable while naming Application permission failures", () => {
+    expect(
+      studioApplicationsErrorMessage(
+        new ApiError("forbidden", {
+          code: "forbidden",
+          correlationId: "correlation_01",
+          retryable: false,
+          status: 403,
+        }),
+      ),
+    ).toBe("You can edit this Draft, but you do not have permission to inspect its Applications.")
+  })
+
+  it("shows a named Studio scope and direct Application recovery when none are registered", async () => {
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false, staleTime: Number.POSITIVE_INFINITY } },
+    })
+    queryClient.setQueryData(catalogKeys.products("project_01"), {
+      items: [
+        {
+          createdAt: "2026-07-22T12:00:00Z",
+          id: "product_mosaic_monthly",
+          internalName: "Monthly",
+          key: "monthly",
+          metadataSource: "provider",
+          projectId: "project_01",
+          readiness: { metadataSource: "provider", ready: true, reasons: [] },
+          status: "connected",
+          type: "subscription",
+          updatedAt: "2026-07-22T12:00:00Z",
+        },
+      ],
+      page: {},
+    } satisfies ProductList["data"])
+    queryClient.setQueryData(projectKeys.applications("project_01"), { items: [], page: {} })
+
+    render(
+      <QueryClientProvider client={queryClient}>
+        <StudioSourceProvider
+          source={{
+            draftId: "draft_01",
+            environmentId: "env_01",
+            environmentName: "Staging",
+            kind: "hosted",
+            organizationId: "org_01",
+            paywallId: "paywall_01",
+            projectId: "project_01",
+          }}
+        >
+          <EditorStoreProvider>
+            <HostedHarness />
+          </EditorStoreProvider>
+        </StudioSourceProvider>
+      </QueryClientProvider>,
+    )
+
+    expect(await screen.findByText("No registered Applications")).toBeVisible()
+    expect(screen.getByText(/Hosted Environment: Staging/)).toBeVisible()
+    expect(screen.getByRole("link", { name: "Register Application" })).toHaveAttribute(
+      "href",
+      "/organizations/org_01/projects/project_01/apps",
+    )
+    expect(screen.getByLabelText("Provider preview Application")).toBeDisabled()
+  })
+
   it("binds an imported product and commits its local price on blur", () => {
     render(
       <EditorStoreProvider>
@@ -208,9 +278,10 @@ describe("mock commerce controls", () => {
       ),
     )
     expect(screen.getByLabelText("Starter mock availability")).toBeVisible()
+    expect(screen.getByDisplayValue("Select Application")).toBeVisible()
     expect(
       screen.getByText(
-        /Synchronized catalog evidence is unavailable; simulated preview remains active/,
+        /Select an Application to inspect its active provider, mapping, and readiness/,
       ),
     ).toBeVisible()
     expect(screen.getByLabelText("hosted mock state")).toHaveTextContent('"localizedPrice":"$4.99"')

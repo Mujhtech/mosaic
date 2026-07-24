@@ -5,10 +5,10 @@ Local Studio renders Protocol 0.2 revisions immediately without an account.
 Hosted mode fetches Configuration Delivery v1 with an Environment-scoped
 public SDK key, resolves a Placement, caches the last valid release, and falls
 back safely when delivery is unavailable. Local Studio remains deterministic.
-Hosted mode uses mock commerce unless RevenueCat settings are present; with
-those settings it configures the optional adapter, fetches the release-bound
-Commerce Configuration sidecar, installs exact Product mappings, and loads
-native Products.
+Hosted mode uses mock commerce unless RevenueCat or StoreKit is selected. Both
+optional adapters fetch the release-bound Commerce Configuration sidecar,
+install exact Product mappings, and load native Products without changing the
+Paywall document.
 
 Open `MosaicExample.xcodeproj`, select the `MosaicExample` scheme, and run on an
 iOS 15-or-newer simulator. With Studio running at the default local endpoint,
@@ -69,8 +69,22 @@ its development certificate; production Asset URLs must use a publicly trusted
 HTTPS origin. Stop the API and restart the app to verify last-known-valid cache
 fallback. Clearing app data demonstrates the bundled Delivery v1 fallback.
 
-Omit the last two variables to use the app-owned deterministic provider without
-changing the Paywall document. RevenueCat remains optional. Its public SDK key
+To exercise StoreKit Configuration instead, omit the RevenueCat key and add:
+
+```text
+MOSAIC_COMMERCE_PROVIDER=storekit
+```
+
+The shared Xcode scheme selects `MosaicExample.storekit`, which contains the
+exact `com.example.pro.monthly` subscription and
+`com.example.pro.lifetime` non-consumable. The backend's active iOS assignment
+and Product mappings must use those same identifiers. Use Xcode's StoreKit
+transaction manager for deterministic success, cancellation, Ask to Buy,
+interrupted transaction, current Entitlement, and restore testing.
+
+Omit the provider selection and RevenueCat key to use the app-owned
+deterministic provider without changing the Paywall document. RevenueCat
+remains optional. Its public SDK key
 is read only by the host app and passed directly to RevenueCat; Mosaic remote
 configuration and diagnostics never contain it.
 

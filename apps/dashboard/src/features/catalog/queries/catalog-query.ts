@@ -7,11 +7,13 @@ import {
   getProductReadiness,
   getProductUsage,
   getProviderMappingMetadata,
+  getProviderMappingUsage,
   listEntitlements,
   listPlanProducts,
   listPlans,
   listProductEntitlements,
   listProducts,
+  listProviderMappingObservations,
   listProviderMappings,
   type ProductStatus,
   type ProductType,
@@ -37,6 +39,10 @@ export const catalogKeys = {
     ["catalog", "product", productId, "provider-mappings"] as const,
   providerMetadata: (mappingId: string) =>
     ["catalog", "provider-mapping", mappingId, "metadata"] as const,
+  providerObservations: (mappingId: string) =>
+    ["catalog", "provider-mapping", mappingId, "observations"] as const,
+  providerUsage: (mappingId: string) =>
+    ["catalog", "provider-mapping", mappingId, "usage"] as const,
 }
 
 export function providerMappingMetadataQueryOptions(mappingId: string) {
@@ -44,6 +50,36 @@ export function providerMappingMetadataQueryOptions(mappingId: string) {
     queryKey: catalogKeys.providerMetadata(mappingId),
     queryFn: async ({ signal }) => {
       const result = await getProviderMappingMetadata({
+        client: generatedDashboardClient,
+        path: { mappingId },
+        signal,
+        throwOnError: true,
+      })
+      return result.data.data
+    },
+  })
+}
+
+export function providerMappingObservationsQueryOptions(mappingId: string) {
+  return queryOptions({
+    queryKey: catalogKeys.providerObservations(mappingId),
+    queryFn: async ({ signal }) => {
+      const result = await listProviderMappingObservations({
+        client: generatedDashboardClient,
+        path: { mappingId },
+        signal,
+        throwOnError: true,
+      })
+      return result.data.data
+    },
+  })
+}
+
+export function providerMappingUsageQueryOptions(mappingId: string) {
+  return queryOptions({
+    queryKey: catalogKeys.providerUsage(mappingId),
+    queryFn: async ({ signal }) => {
+      const result = await getProviderMappingUsage({
         client: generatedDashboardClient,
         path: { mappingId },
         signal,

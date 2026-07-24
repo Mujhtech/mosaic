@@ -2,6 +2,8 @@ import Foundation
 
 public let mosaicCommerceProviderContractVersion = "1"
 public let mosaicCommerceConfigurationVersion = "1"
+public let mosaicSupportedCommerceProviderContractVersions = ["2", "1"]
+public let mosaicSupportedCommerceConfigurationVersions = ["2", "1"]
 
 public enum MosaicCommercePeriodUnit: String, Sendable, Equatable, CaseIterable {
   case day
@@ -92,6 +94,12 @@ public enum MosaicCommerceCapabilityName: String, Sendable, Equatable, CaseItera
   case serverConfirmedTransactions
   case productSynchronization
   case providerDiagnostics
+  case basePlans
+  case explicitOffers
+  case storeSynchronization
+  case activePurchaseRecovery
+  case asynchronousCommerceUpdates
+  case localDeliveryAcceptance
 }
 
 public enum MosaicCommerceCapabilitySupport: String, Sendable, Equatable {
@@ -238,6 +246,82 @@ public struct MosaicCommerceProviderDiagnostics: Sendable, Equatable {
   }
 }
 
+public enum MosaicCommerceRecoveryOutcome: String, Sendable, Equatable {
+  case restored
+  case nothingToRestore
+  case cancelled
+  case providerUnavailable
+  case failed
+}
+
+public struct MosaicCommerceRecoveryResult: Sendable, Equatable {
+  public let operationID: String
+  public let providerID: String
+  public let outcome: MosaicCommerceRecoveryOutcome
+  public let recoveryMode: MosaicCommerceRecoveryMode
+  public let activeEntitlements: Set<MosaicEntitlement>
+  public let completedAt: Date
+  public let diagnostics: [MosaicCommerceDiagnostic]
+
+  public init(
+    operationID: String,
+    providerID: String,
+    outcome: MosaicCommerceRecoveryOutcome,
+    recoveryMode: MosaicCommerceRecoveryMode,
+    activeEntitlements: Set<MosaicEntitlement> = [],
+    completedAt: Date,
+    diagnostics: [MosaicCommerceDiagnostic] = []
+  ) {
+    self.operationID = operationID
+    self.providerID = providerID
+    self.outcome = outcome
+    self.recoveryMode = recoveryMode
+    self.activeEntitlements = activeEntitlements
+    self.completedAt = completedAt
+    self.diagnostics = diagnostics
+  }
+
+  public var restoreResult: MosaicRestoreResult {
+    switch outcome {
+    case .restored:
+      .restored(activeEntitlements)
+    case .nothingToRestore:
+      .nothingToRestore
+    case .cancelled:
+      .cancelled
+    case .providerUnavailable:
+      failureResult(providerUnavailable: true)
+    case .failed:
+      failureResult(providerUnavailable: false)
+    }
+  }
+
+  private func failureResult(providerUnavailable: Bool) -> MosaicRestoreResult {
+    let diagnostic =
+      diagnostics.first(where: { $0.severity == .error })
+      ?? MosaicCommerceDiagnostic(
+        code: providerUnavailable
+          ? "commerce.providerUnavailable" : "commerce.restoreFailed",
+        safeMessage: providerUnavailable
+          ? "The commerce provider is unavailable for restore."
+          : "The commerce provider could not restore purchases.",
+        severity: .error,
+        retryable: true,
+        correlationID: operationID,
+        recoveryAction: .retry
+      )
+    return providerUnavailable
+      ? .providerUnavailable(diagnosticCode: diagnostic.code, diagnostic: diagnostic)
+      : .failed(diagnosticCode: diagnostic.code, diagnostic: diagnostic)
+  }
+}
+
+public protocol MosaicCommerceRecoveryProvider: MosaicCommerceProvider {
+  func recover(
+    entitlementMappings: [MosaicCommerceEntitlementMapping]
+  ) async -> MosaicCommerceRecoveryResult
+}
+
 /// The provider-neutral boundary for RevenueCat and app-owned SDK-local
 /// commerce implementations. Providers receive only mappings from an accepted
 /// Commerce Configuration and must retain any native purchase handles
@@ -290,8 +374,26 @@ public actor MosaicCommerceProviderRouter: MosaicPurchaseProvider {
   private var installedProvider: (any MosaicCommerceProvider)?
   private var installationRevision = 0
   private var diagnosticSequence = 0
+  private let updates: AsyncStream<MosaicCommerceUpdate>
+  private let updateContinuation: AsyncStream<MosaicCommerceUpdate>.Continuation
+  private var updateTask: Task<Void, Never>?
+  private var routedUpdateIDs = Set<String>()
+  private var routedUpdateOrder: [String] = []
 
-  public init() {}
+  public init() {
+    (updates, updateContinuation) = AsyncStream.makeStream(
+      bufferingPolicy: .bufferingNewest(64)
+    )
+  }
+
+  deinit {
+    updateTask?.cancel()
+    updateContinuation.finish()
+  }
+
+  public var commerceUpdates: AsyncStream<MosaicCommerceUpdate> {
+    updates
+  }
 
   public func install(
     configuration: MosaicCommerceConfiguration,
@@ -306,6 +408,10 @@ public actor MosaicCommerceProviderRouter: MosaicPurchaseProvider {
     let previousProvider = installedProvider
     configured = nil
     installedProvider = nil
+    updateTask?.cancel()
+    updateTask = nil
+    routedUpdateIDs = []
+    routedUpdateOrder = []
 
     if let previousProvider {
       await previousProvider.invalidateLoadedProducts()
@@ -313,6 +419,32 @@ public actor MosaicCommerceProviderRouter: MosaicPurchaseProvider {
     }
     await provider.invalidateLoadedProducts()
     guard revision == installationRevision else { return }
+    if let asynchronousProvider = provider as? any MosaicAsynchronousCommerceProvider {
+      try await asynchronousProvider.install(
+        configuration: MosaicCommerceConfigurationReference(
+          configurationID: configuration.id,
+          configurationRevision: configuration.contentDigest
+        ),
+        mappings: configuration.productMappings
+      )
+      guard revision == installationRevision else { return }
+      let providerUpdates = await asynchronousProvider.commerceUpdates
+      let expectedConfiguration = MosaicCommerceConfigurationReference(
+        configurationID: configuration.id,
+        configurationRevision: configuration.contentDigest
+      )
+      updateTask = Task { [weak self] in
+        for await update in providerUpdates {
+          guard !Task.isCancelled else { return }
+          await self?.route(
+            update,
+            expectedProviderID: provider.identity.id,
+            expectedConfiguration: expectedConfiguration,
+            installationRevision: revision
+          )
+        }
+      }
+    }
     configured = replacement
     installedProvider = provider
   }
@@ -353,6 +485,21 @@ public actor MosaicCommerceProviderRouter: MosaicPurchaseProvider {
     return await configured.restore()
   }
 
+  public func recover() async -> MosaicCommerceRecoveryResult {
+    guard let configured else {
+      let diagnostic = configurationUnavailableDiagnostic(operation: "recovery")
+      return MosaicCommerceRecoveryResult(
+        operationID: "ios_recovery_\(UUID().uuidString.lowercased())",
+        providerID: "unavailable",
+        outcome: .providerUnavailable,
+        recoveryMode: .providerDefined,
+        completedAt: Date(),
+        diagnostics: [diagnostic]
+      )
+    }
+    return await configured.recover()
+  }
+
   public func activeEntitlements() async -> MosaicActiveEntitlementsResult {
     guard let configured else {
       let diagnostic = configurationUnavailableDiagnostic(operation: "entitlements")
@@ -379,6 +526,24 @@ public actor MosaicCommerceProviderRouter: MosaicPurchaseProvider {
       mosaicProductID: mosaicProductID,
       recoveryAction: .updateProviderConfiguration
     )
+  }
+
+  private func route(
+    _ update: MosaicCommerceUpdate,
+    expectedProviderID: String,
+    expectedConfiguration: MosaicCommerceConfigurationReference,
+    installationRevision: Int
+  ) {
+    guard installationRevision == self.installationRevision,
+      update.providerID == expectedProviderID,
+      update.configuration == expectedConfiguration,
+      routedUpdateIDs.insert(update.id).inserted
+    else { return }
+    routedUpdateOrder.append(update.id)
+    if routedUpdateOrder.count > 1_024 {
+      routedUpdateIDs.remove(routedUpdateOrder.removeFirst())
+    }
+    updateContinuation.yield(update)
   }
 }
 
@@ -414,7 +579,10 @@ public actor MosaicConfiguredPurchaseProvider: MosaicPurchaseProvider {
       by: \.name
     )
     guard capabilitiesByName.values.allSatisfy({ $0.count == 1 }),
-      actualCapabilities.count == configuration.activeProvider.capabilities.count,
+      (
+        configuration.version == "2"
+          || actualCapabilities.count == configuration.activeProvider.capabilities.count
+      ),
       actualCapabilities.allSatisfy(Self.isValidCapability)
     else {
       throw MosaicConfiguredCommerceProviderError.providerCapabilitiesInvalid
@@ -552,6 +720,52 @@ public actor MosaicConfiguredPurchaseProvider: MosaicPurchaseProvider {
     default:
       return result
     }
+  }
+
+  public func recover() async -> MosaicCommerceRecoveryResult {
+    if configuration.version == "2",
+      let recoveryProvider = provider as? any MosaicCommerceRecoveryProvider
+    {
+      return await recoveryProvider.recover(
+        entitlementMappings: configuration.entitlementMappings
+      )
+    }
+
+    let result = await restore()
+    let outcome: MosaicCommerceRecoveryOutcome
+    let entitlements: Set<MosaicEntitlement>
+    let diagnostics: [MosaicCommerceDiagnostic]
+    switch result {
+    case .restored(let active):
+      outcome = .restored
+      entitlements = active
+      diagnostics = []
+    case .nothingToRestore:
+      outcome = .nothingToRestore
+      entitlements = []
+      diagnostics = []
+    case .cancelled:
+      outcome = .cancelled
+      entitlements = []
+      diagnostics = []
+    case .providerUnavailable(_, let diagnostic):
+      outcome = .providerUnavailable
+      entitlements = []
+      diagnostics = [diagnostic]
+    case .failed(_, let diagnostic):
+      outcome = .failed
+      entitlements = []
+      diagnostics = [diagnostic]
+    }
+    return MosaicCommerceRecoveryResult(
+      operationID: "ios_recovery_\(UUID().uuidString.lowercased())",
+      providerID: configuration.activeProvider.identity.id,
+      outcome: outcome,
+      recoveryMode: configuration.activeProvider.recoveryMode,
+      activeEntitlements: entitlements,
+      completedAt: Date(),
+      diagnostics: diagnostics
+    )
   }
 
   public func activeEntitlements() async -> MosaicActiveEntitlementsResult {

@@ -33,11 +33,15 @@ import dev.mosaic.sdk.MosaicPaywallLoadResult
 import dev.mosaic.sdk.MosaicPaywall
 import dev.mosaic.sdk.MosaicPlacementResult
 import dev.mosaic.sdk.MosaicPurchaseProvider
+import dev.mosaic.sdk.MosaicCommerceUpdateAcceptance
+import dev.mosaic.sdk.MosaicCommerceUpdateAcceptanceDisposition
+import dev.mosaic.sdk.googleplay.MosaicGooglePlayAdapter
 import dev.mosaic.sdk.revenuecat.MosaicRevenueCatAdapter
 import java.net.URI
 
 class MainActivity : ComponentActivity() {
     private var previewClient: MosaicLocalPreviewClient? = null
+    private var googlePlayAdapter: MosaicGooglePlayAdapter? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -102,6 +106,7 @@ class MainActivity : ComponentActivity() {
 
     override fun onDestroy() {
         previewClient?.close()
+        googlePlayAdapter?.close()
         super.onDestroy()
     }
 
@@ -141,6 +146,17 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun configuredHostedProvider(): MosaicPurchaseProvider {
+        if (intent.getBooleanExtra(GOOGLE_PLAY_PROVIDER_EXTRA, false)) {
+            val adapter = MosaicGooglePlayAdapter.create(
+                application,
+                MosaicCommerceUpdateAcceptance {
+                    // The example's in-process stream is its local delivery boundary.
+                    MosaicCommerceUpdateAcceptanceDisposition.ACCEPTED
+                },
+            )
+            googlePlayAdapter = adapter
+            return MosaicConfiguredPurchaseProvider(adapter)
+        }
         val revenueCatPublicKey =
             intent.getStringExtra(REVENUECAT_PUBLIC_KEY_EXTRA)?.takeIf(String::isNotBlank)
                 ?: return MockMosaicPurchaseProvider(MockMosaicPurchaseProvider.phase1Products())
@@ -160,5 +176,6 @@ class MainActivity : ComponentActivity() {
         const val PLACEMENT_EXTRA = "mosaic.placement"
         const val APPLICATION_ID_EXTRA = "mosaic.application.id"
         const val REVENUECAT_PUBLIC_KEY_EXTRA = "revenuecat.public.sdk.key"
+        const val GOOGLE_PLAY_PROVIDER_EXTRA = "mosaic.google.play"
     }
 }
