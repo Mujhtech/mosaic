@@ -37,6 +37,12 @@ around accepted Protocol `0.2` documents. Its schemas, compatibility manifest,
 fixtures, atomic validation rules, and fallback behavior are documented in
 `docs/protocol/configuration-delivery-v1.md`.
 
+Placement Decision `1` is the separate deterministic local-evaluation contract
+for advanced Placement Rules. Configuration Delivery `2` atomically carries
+those Rule Sets with exact unchanged Protocol `0.2` Paywall Versions and
+Product/Entitlement references. Delivery `1` remains available only as a safe
+projection of an explicit default Paywall.
+
 Commerce Provider Contracts `1` and `2` are separate provider-neutral contracts for
 capabilities, verified Product resolution, localized commerce metadata,
 purchase and restore outcomes, active Entitlement lookup, freshness, and safe
@@ -62,6 +68,8 @@ protocol/
 ├── schema/commerce-configuration/v2/
 ├── schema/commerce-provider/v1/
 ├── schema/commerce-provider/v2/
+├── schema/placement-decision/v1/
+├── schema/configuration-delivery/v2/
 ├── compatibility/commerce-configuration/v1.json
 ├── compatibility/commerce-configuration/v2.json
 ├── compatibility/commerce-provider/v1.json
@@ -70,8 +78,11 @@ protocol/
 ├── fixtures/commerce-configuration/v2/
 ├── fixtures/commerce-provider/v1/
 ├── fixtures/commerce-provider/v2/
+├── fixtures/placement-decision/v1/
+├── fixtures/configuration-delivery/v2/
 ├── commerce-configuration/CHANGELOG.md
-└── commerce/CHANGELOG.md
+├── commerce/CHANGELOG.md
+└── placement-decision/CHANGELOG.md
 ```
 
 ## Generate and validate
@@ -100,3 +111,5 @@ See:
 - `docs/protocol/commerce-configuration-v1.md`
 - `docs/protocol/commerce-provider-v2.md`
 - `docs/protocol/commerce-configuration-v2.md`
+- `docs/protocol/placement-decision-v1.md`
+- `docs/protocol/configuration-delivery-v2.md`

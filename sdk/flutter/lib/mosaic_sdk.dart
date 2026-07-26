@@ -11,6 +11,8 @@ export 'src/configuration_transport.dart';
 export 'src/localization.dart';
 export 'src/mock_purchase_provider.dart';
 export 'src/placement.dart';
+export 'src/placement_decision.dart';
+export 'src/placement_identity.dart';
 export 'src/presentation.dart';
 export 'src/preview_client.dart';
 export 'src/preview_commerce.dart';

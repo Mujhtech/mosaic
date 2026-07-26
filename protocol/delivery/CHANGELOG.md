@@ -1,5 +1,13 @@
 # Configuration Delivery Changelog
 
+## Version 2 release candidate - 2026-07-26
+
+- Added an atomic Delivery `2` envelope for Placement Decision Contract `1` Rule Sets and unchanged Paywall Protocol `0.2` documents.
+- Added exact decision-feature and bucketing-algorithm capability negotiation, Product readiness, stable Entitlement references, and zero-Paywall `no_paywall` releases.
+- Added strict Project/Environment and Paywall/Product/Entitlement/Asset reference validation with whole-candidate rejection and last-known-valid preservation.
+- Defined Delivery v1 projection only for an explicit default Paywall; advanced Rules and `no_paywall` are never projected as unconditional bindings.
+- Added valid, zero-Paywall, capability, legacy-projection, and atomic invalid fixtures without modifying Delivery v1.
+
 ## Version 1 release candidate - 2026-07-22
 
 - Added the separate, strict Configuration Delivery `1` release envelope around unchanged Paywall

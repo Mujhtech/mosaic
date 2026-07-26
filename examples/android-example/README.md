@@ -68,7 +68,7 @@ example enables Android cleartext traffic solely for this local development
 connection.
 
 For the hosted path, pass an environment-scoped public SDK key. The
-app fetches Configuration Delivery v1, resolves the requested Placement,
+app fetches Configuration Delivery v1 or v2, resolves the requested Placement,
 caches the last valid release, and renders with the same native Compose
 renderer. It uses deterministic app-owned commerce unless a RevenueCat public
 SDK key and Mosaic Application ID are also supplied:
@@ -92,3 +92,8 @@ accept the exact Commerce Configuration sidecar. Omit
 `revenuecat.public.sdk.key` to switch back to the app-owned provider without
 changing the Paywall document. The example never embeds a RevenueCat key or
 customer identity.
+
+The hosted example renders through `MosaicPlacement`; advanced rules,
+deliberate `no_paywall`, named fallbacks, and offline last-known-valid decisions
+keep the same Placement extra and do not expose Paywall IDs to application
+code. Country remains an explicit trusted host input and is never inferred.

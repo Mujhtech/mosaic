@@ -1,8 +1,8 @@
-# Mosaic Flutter SDK — Configuration Delivery v1
+# Mosaic Flutter SDK — Configuration Delivery v1/v2
 
 This package provides a strict reader for Mosaic Protocol 0.2
 and renders it with native Flutter widgets. It includes hosted Configuration
-Delivery v1, persistent cache and bundled-release fallback, Placements,
+Delivery v1/v2, persistent cache and bundled-release fallback, Placements,
 localization and RTL,
 bundled fallback loading, mock commerce, normalized results, diagnostics,
 accessibility semantics, native rendering, Local Preview 0.2 support, and the
@@ -19,6 +19,47 @@ Analytics and experiments remain outside this package. Real billing adapters
 remain optional sibling packages, so core applications do not resolve or
 embed RevenueCat, StoreKit, or Google Play Billing.
 
+## Advanced Placement decisions
+
+Delivery v2 adds strict Placement Decision v1 decoding and local deterministic
+evaluation while preserving Delivery v1 and `MosaicPlacementHost`. A candidate
+is accepted only after all Rules, immutable Paywalls, exact Product and
+Entitlement references, exact embedded/release compatibility unions,
+Paywall-unavailable fallback paths, and digests validate. Delivery v2 also
+requires an explicit development, staging, or production Environment mode;
+QA overrides are accepted only in development or staging and for at most 24
+hours. Rejected candidates leave the complete last-known-valid release intact.
+
+The SDK persists a random app-install identity separately from configuration.
+Host user identity, typed attributes, and country are explicit:
+
+```dart
+await mosaic.loadIdentity();
+await mosaic.identify('account_123');
+await mosaic.setUserAttributes({
+  'student': const MosaicBooleanAttribute(true),
+});
+
+final decision = await mosaic.decidePlacement(
+  'export_pdf',
+  inputs: const MosaicPlacementDecisionInputs(
+    applicationLocale: 'en-US',
+    country: 'DE', // Never inferred from locale.
+  ),
+);
+
+await mosaic.resetUserIdentity(); // retains installation identity
+await mosaic.resetInstallationIdentity(); // explicitly rotates it
+```
+
+Results distinguish `MosaicPlacementDecisionPaywall`,
+`MosaicPlacementNoPaywall`, and `MosaicPlacementUnavailable`. They carry a
+bounded privacy-safe trace, matched Rule ID, assignment-key type, rollout
+bucket, and fallback path without raw identity or attribute values. Product and
+Entitlement observations remain provider-owned and preserve unknown,
+provider-unavailable, and failed states. Presentation performs no
+configuration request and evaluates cached or bundled snapshots offline.
+
 ## Requirements
 
 - Flutter 3.19 or newer
@@ -28,7 +69,7 @@ embed RevenueCat, StoreKit, or Google Play Billing.
 
 Configure the provider-neutral client with an environment-scoped public SDK
 key and hosted/self-hosted base URL. Loading reads cache then the bundled
-Delivery v1 release without networking; refresh is an explicit host action:
+Delivery v1/v2 release without networking; refresh is an explicit host action:
 
 ```dart
 final mosaic = Mosaic.configure(
@@ -241,7 +282,7 @@ and withhold incompatible or oversized compact UTF-8 drafts before sending.
   Countdown ordering.
 - The package contains no JSON Schema or fixture copy. Conformance tests read
   the canonical Protocol and Local Preview 0.2 fixtures directly.
-- Configuration resolves last-known-valid cache → bundled Delivery v1 release
+- Configuration resolves last-known-valid cache → bundled Delivery v1/v2 release
   → `configurationUnavailable`; explicit refresh may replace it with a fully
   validated remote release.
 - A missing component image uses its declared placeholder. Decorative media
@@ -272,6 +313,7 @@ The sealed presentation union maps one-to-one to RC1:
 - `MosaicConfigurationUnavailablePresentationResult`
 - `MosaicPurchaseFailedPresentationResult`
 - `MosaicRenderingFailedPresentationResult`
+- `MosaicNoPaywallPresentationResult`
 
 `restoreNoPurchases` and `restoreFailed` are emitted only through
 `onInteraction`; the paywall remains usable for retry, purchase, or close.

@@ -15,6 +15,7 @@ import (
 	"github.com/Mujhtech/mosaic/apps/api/internal/browserauth"
 	"github.com/Mujhtech/mosaic/apps/api/internal/cloudworkspace"
 	"github.com/Mujhtech/mosaic/apps/api/internal/hostedpublishing"
+	"github.com/Mujhtech/mosaic/apps/api/internal/placementdecision"
 	"github.com/Mujhtech/mosaic/apps/api/internal/platform/authn"
 	"github.com/Mujhtech/mosaic/apps/api/internal/platform/browserauthpostgres"
 	"github.com/Mujhtech/mosaic/apps/api/internal/platform/cloudworkspacepostgres"
@@ -24,6 +25,7 @@ import (
 	"github.com/Mujhtech/mosaic/apps/api/internal/platform/httpserver"
 	"github.com/Mujhtech/mosaic/apps/api/internal/platform/logging"
 	"github.com/Mujhtech/mosaic/apps/api/internal/platform/objectstoreminio"
+	"github.com/Mujhtech/mosaic/apps/api/internal/platform/placementdecisionpostgres"
 	"github.com/Mujhtech/mosaic/apps/api/internal/platform/ratelimit"
 	"github.com/Mujhtech/mosaic/apps/api/internal/platform/revenuecat"
 	"github.com/Mujhtech/mosaic/apps/api/internal/platform/telemetry"
@@ -187,6 +189,7 @@ func run() (runErr error) {
 		hostedpublishing.WithCommerceConfigurationValidator(commerceValidator),
 		hostedpublishing.WithObjectStore(objectStore, cfg.ObjectStore.PublicAssetBaseURL, cfg.ObjectStore.MaxUploadBytes),
 	)
+	placementDecisionService := placementdecision.NewService(placementdecisionpostgres.New(databasePool))
 	deliveryLimiter := ratelimit.New(cfg.Delivery.RequestsPerMinute, cfg.Delivery.Burst, cfg.Delivery.LimiterEntries)
 	authenticationLimiter := ratelimit.New(cfg.BrowserAuth.RequestsPerMinute, cfg.BrowserAuth.Burst, cfg.BrowserAuth.LimiterEntries)
 	handler := httpserver.NewWithDependencies(httpserver.Config{
@@ -198,6 +201,7 @@ func run() (runErr error) {
 		BrowserAuthConfig: browserauthhttp.Config{CookieSecure: cfg.BrowserAuth.CookieSecure, CookieDomain: cfg.BrowserAuth.CookieDomain, AllowedOrigins: cfg.HTTP.CORSAllowedOrigins, RateLimiter: authenticationLimiter},
 		CloudWorkspace:    workspaceService,
 		HostedPublishing:  publishingService,
+		PlacementDecision: placementDecisionService,
 		PrincipalResolver: authn.NewBrowserSessionResolver(browserAuthService),
 		DeliveryLimiter:   deliveryLimiter,
 		ReadinessChecker:  database.HealthChecker{Pinger: databasePool},

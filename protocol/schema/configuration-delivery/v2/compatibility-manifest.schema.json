@@ -1,0 +1,124 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:mosaic:protocol:schema:configuration-delivery:v2:compatibility-manifest",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "configurationDeliveryVersion",
+    "status",
+    "releaseSchema",
+    "capabilityRequestSchema",
+    "canonicalFixture",
+    "releaseEnvironmentModes",
+    "supportedPlacementDecisionContracts",
+    "supportedPaywallProtocols",
+    "readerPolicy"
+  ],
+  "properties": {
+    "configurationDeliveryVersion": {
+      "const": "2"
+    },
+    "status": {
+      "enum": [
+        "draft",
+        "releaseCandidate",
+        "approved",
+        "deprecated"
+      ]
+    },
+    "releaseSchema": {
+      "const": "../../schema/configuration-delivery/v2/release.schema.json"
+    },
+    "capabilityRequestSchema": {
+      "const": "../../schema/configuration-delivery/v2/capability-request.schema.json"
+    },
+    "canonicalFixture": {
+      "const": "../../fixtures/configuration-delivery/v2/advanced-release.json"
+    },
+    "releaseEnvironmentModes": {
+      "type": "array",
+      "minItems": 3,
+      "maxItems": 3,
+      "prefixItems": [
+        {
+          "const": "development"
+        },
+        {
+          "const": "staging"
+        },
+        {
+          "const": "production"
+        }
+      ],
+      "items": false
+    },
+    "supportedPlacementDecisionContracts": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 1,
+      "items": {
+        "const": "1"
+      }
+    },
+    "supportedPaywallProtocols": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 1,
+      "items": {
+        "const": "0.2"
+      }
+    },
+    "readerPolicy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "unknownDeliveryVersion",
+        "unsupportedDecisionContract",
+        "unsupportedDecisionFeature",
+        "unsupportedBucketingAlgorithm",
+        "invalidReference",
+        "invalidDigest",
+        "candidateRejected",
+        "noAcceptedRelease",
+        "bundledReleaseRejected",
+        "partialAcceptance",
+        "legacyProjection"
+      ],
+      "properties": {
+        "unknownDeliveryVersion": {
+          "const": "rejectRelease"
+        },
+        "unsupportedDecisionContract": {
+          "const": "rejectRelease"
+        },
+        "unsupportedDecisionFeature": {
+          "const": "rejectRelease"
+        },
+        "unsupportedBucketingAlgorithm": {
+          "const": "rejectRelease"
+        },
+        "invalidReference": {
+          "const": "rejectRelease"
+        },
+        "invalidDigest": {
+          "const": "rejectRelease"
+        },
+        "candidateRejected": {
+          "const": "keepLastAcceptedRelease"
+        },
+        "noAcceptedRelease": {
+          "const": "loadBundledRelease"
+        },
+        "bundledReleaseRejected": {
+          "const": "configurationUnavailable"
+        },
+        "partialAcceptance": {
+          "const": "forbidden"
+        },
+        "legacyProjection": {
+          "const": "explicitDefaultPaywallOnly"
+        }
+      }
+    }
+  }
+}

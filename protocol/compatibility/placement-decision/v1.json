@@ -1,0 +1,31 @@
+{
+  "placementDecisionVersion": "1",
+  "status": "releaseCandidate",
+  "decisionSchema": "../../schema/placement-decision/v1/decision.schema.json",
+  "canonicalFixture": "../../fixtures/placement-decision/v1/evaluator-conformance.json",
+  "rolloutFixture": "../../fixtures/placement-decision/v1/rollout-vectors.json",
+  "evaluation": "three_state_first_match",
+  "limits": {
+    "maxRules": 100,
+    "maxDepth": 5,
+    "maxLeavesPerRule": 64,
+    "maxDocumentBytes": 262144,
+    "maxFallbackDepth": 8,
+    "maxTraceSteps": 256
+  },
+  "warningPolicy": {
+    "maxWarnings": 64,
+    "duplicateLeaf": "warn",
+    "obviouslyShadowedRule": "warn",
+    "warningsInvalidate": false
+  },
+  "readerPolicy": {
+    "unknownVersion": "rejectCandidate",
+    "unknownField": "rejectCandidate",
+    "unsupportedFeature": "rejectCandidate",
+    "unsupportedAlgorithm": "rejectCandidate",
+    "malformedRule": "rejectCandidate",
+    "partialEvaluation": "forbidden",
+    "candidateRejected": "keepLastAcceptedRelease"
+  }
+}

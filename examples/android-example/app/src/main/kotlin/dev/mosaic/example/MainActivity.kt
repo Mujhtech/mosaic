@@ -30,8 +30,8 @@ import dev.mosaic.sdk.MosaicConfiguredPurchaseProvider
 import dev.mosaic.sdk.MockMosaicPurchaseProvider
 import dev.mosaic.sdk.Mosaic
 import dev.mosaic.sdk.MosaicPaywallLoadResult
-import dev.mosaic.sdk.MosaicPaywall
-import dev.mosaic.sdk.MosaicPlacementResult
+import dev.mosaic.sdk.MosaicPlacementDecisionResult
+import dev.mosaic.sdk.MosaicPlacement
 import dev.mosaic.sdk.MosaicPurchaseProvider
 import dev.mosaic.sdk.MosaicCommerceUpdateAcceptance
 import dev.mosaic.sdk.MosaicCommerceUpdateAcceptanceDisposition
@@ -125,22 +125,26 @@ class MainActivity : ComponentActivity() {
             ?: "onboarding_complete"
         setContent {
             MaterialTheme {
-                var result by remember { mutableStateOf<MosaicPlacementResult?>(null) }
                 LaunchedEffect(hosted, placement) {
                     hosted.refresh()
-                    result = hosted.paywall(placement)
                 }
-                when (val current = result) {
-                    is MosaicPlacementResult.Available -> MosaicPaywall(
-                        document = current.document,
-                        purchaseProvider = purchaseProvider,
-                        onResult = {},
-                        modifier = Modifier.fillMaxSize(),
-                    )
-                    is MosaicPlacementResult.PlacementUnavailable -> Text("Placement unavailable: ${current.key}")
-                    MosaicPlacementResult.ConfigurationUnavailable -> Text("Configuration unavailable")
-                    null -> Text("Loading hosted configuration…")
-                }
+                MosaicPlacement(
+                    client = hosted,
+                    placement = placement,
+                    purchaseProvider = purchaseProvider,
+                    // Country is intentionally omitted unless the host has an explicit trusted value.
+                    onDecision = { decision ->
+                        when (decision) {
+                            is MosaicPlacementDecisionResult.Available -> Unit
+                            is MosaicPlacementDecisionResult.NoPaywall -> Unit
+                            is MosaicPlacementDecisionResult.PlacementUnavailable -> Unit
+                            is MosaicPlacementDecisionResult.EvaluationFailed -> Unit
+                            MosaicPlacementDecisionResult.ConfigurationUnavailable -> Unit
+                        }
+                    },
+                    onResult = {},
+                    modifier = Modifier.fillMaxSize(),
+                )
             }
         }
     }

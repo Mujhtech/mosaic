@@ -6,7 +6,7 @@
   "scripts": {
     "check": "npm run validate && npm test",
     "generate:browser-contract": "node tools/generate-browser-contract.mjs",
-    "generate:delivery-fixtures": "node tools/generate-delivery-fixtures-v1.mjs",
+    "generate:delivery-fixtures": "node tools/generate-delivery-fixtures-v1.mjs && node tools/generate-phase5-fixtures.mjs",
     "migrate:rc2-to-rc3": "node tools/migrate-v0.2-rc2-to-rc3.mjs",
     "migrate:rc3-to-rc4": "node tools/migrate-v0.2-rc3-to-rc4.mjs",
     "generate": "npm run generate:browser-contract && npm run generate:delivery-fixtures",

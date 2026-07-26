@@ -1,0 +1,134 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:mosaic:protocol:schema:placement-decision:v1:compatibility-manifest",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "placementDecisionVersion",
+    "status",
+    "decisionSchema",
+    "canonicalFixture",
+    "rolloutFixture",
+    "evaluation",
+    "limits",
+    "warningPolicy",
+    "readerPolicy"
+  ],
+  "properties": {
+    "placementDecisionVersion": {
+      "const": "1"
+    },
+    "status": {
+      "enum": [
+        "draft",
+        "releaseCandidate",
+        "approved",
+        "deprecated"
+      ]
+    },
+    "decisionSchema": {
+      "const": "../../schema/placement-decision/v1/decision.schema.json"
+    },
+    "canonicalFixture": {
+      "const": "../../fixtures/placement-decision/v1/evaluator-conformance.json"
+    },
+    "rolloutFixture": {
+      "const": "../../fixtures/placement-decision/v1/rollout-vectors.json"
+    },
+    "evaluation": {
+      "const": "three_state_first_match"
+    },
+    "limits": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "maxRules",
+        "maxDepth",
+        "maxLeavesPerRule",
+        "maxDocumentBytes",
+        "maxFallbackDepth",
+        "maxTraceSteps"
+      ],
+      "properties": {
+        "maxRules": {
+          "const": 100
+        },
+        "maxDepth": {
+          "const": 5
+        },
+        "maxLeavesPerRule": {
+          "const": 64
+        },
+        "maxDocumentBytes": {
+          "const": 262144
+        },
+        "maxFallbackDepth": {
+          "const": 8
+        },
+        "maxTraceSteps": {
+          "const": 256
+        }
+      }
+    },
+    "warningPolicy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "maxWarnings",
+        "duplicateLeaf",
+        "obviouslyShadowedRule",
+        "warningsInvalidate"
+      ],
+      "properties": {
+        "maxWarnings": {
+          "const": 64
+        },
+        "duplicateLeaf": {
+          "const": "warn"
+        },
+        "obviouslyShadowedRule": {
+          "const": "warn"
+        },
+        "warningsInvalidate": {
+          "const": false
+        }
+      }
+    },
+    "readerPolicy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "unknownVersion",
+        "unknownField",
+        "unsupportedFeature",
+        "unsupportedAlgorithm",
+        "malformedRule",
+        "partialEvaluation",
+        "candidateRejected"
+      ],
+      "properties": {
+        "unknownVersion": {
+          "const": "rejectCandidate"
+        },
+        "unknownField": {
+          "const": "rejectCandidate"
+        },
+        "unsupportedFeature": {
+          "const": "rejectCandidate"
+        },
+        "unsupportedAlgorithm": {
+          "const": "rejectCandidate"
+        },
+        "malformedRule": {
+          "const": "rejectCandidate"
+        },
+        "partialEvaluation": {
+          "const": "forbidden"
+        },
+        "candidateRejected": {
+          "const": "keepLastAcceptedRelease"
+        }
+      }
+    }
+  }
+}

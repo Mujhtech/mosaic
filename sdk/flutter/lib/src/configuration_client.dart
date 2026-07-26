@@ -6,6 +6,7 @@ import 'commerce_configuration_transport.dart';
 import 'configuration_cache.dart';
 import 'configuration_delivery.dart';
 import 'configuration_transport.dart';
+import 'placement_decision.dart';
 import 'presentation.dart';
 import 'protocol.dart';
 
@@ -100,6 +101,14 @@ final class MosaicConfigurationCapabilityRequest {
         'sdkVersion': mosaicFlutterSdkVersion,
         'supportedConfigurationDeliveryVersions': const <String>[
           mosaicConfigurationDeliveryVersion,
+          mosaicConfigurationDeliveryVersionV2,
+        ],
+        'supportedPlacementDecisionContracts': const <String>[
+          mosaicPlacementDecisionVersion,
+        ],
+        'supportedDecisionFeatures': (mosaicDecisionFeatures.toList()..sort()),
+        'supportedBucketingAlgorithms': const <String>[
+          mosaicRolloutAlgorithm,
         ],
         'supportedPaywallProtocols': <Map<String, Object?>>[
           <String, Object?>{

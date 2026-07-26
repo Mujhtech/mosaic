@@ -44,7 +44,7 @@ interface CreatePlacementAndBindRequest {
   existingPlacement?: HostedPlacement
   key: string
   name: string
-  paywall: HostedPaywallListItem
+  paywall?: HostedPaywallListItem
 }
 
 export async function createPlacementAndBind(
@@ -59,6 +59,7 @@ export async function createPlacementAndBind(
       name: input.name,
       projectId: scope.projectId,
     }))
+  if (!input.paywall) return placement
   try {
     await adapter.bindPlacement({
       environmentId: scope.environmentId,

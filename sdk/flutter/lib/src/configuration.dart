@@ -6,6 +6,8 @@ import 'commerce_configuration_transport.dart';
 import 'configuration_cache.dart';
 import 'configuration_client.dart';
 import 'configuration_transport.dart';
+import 'placement_decision.dart';
+import 'placement_identity.dart';
 import 'presentation.dart';
 
 /// Immutable settings captured when a Mosaic client is configured.
@@ -124,8 +126,10 @@ final class Mosaic extends ChangeNotifier {
     required this.configuration,
     required this.purchaseProvider,
     required MosaicConfigurationClient? configurationClient,
+    required MosaicIdentityController identityController,
     MosaicCommerceProviderRouter? commerceProviderRouter,
   })  : _configurationClient = configurationClient,
+        _identityController = identityController,
         _commerceProviderRouter = commerceProviderRouter;
 
   factory Mosaic.configure({
@@ -143,6 +147,7 @@ final class Mosaic extends ChangeNotifier {
     MosaicConfigurationTransport transport =
         const MosaicIoConfigurationTransport(),
     MosaicConfigurationCache cache = const MosaicFileConfigurationCache(),
+    MosaicIdentityStorage identityStorage = const MosaicFileIdentityStorage(),
     MosaicBundledConfigurationLoader? bundledFallbackLoader,
     MosaicCommerceConfigurationLoader? commerceConfigurationLoader,
     MosaicCommerceConfigurationTransport? commerceConfigurationTransport,
@@ -189,6 +194,13 @@ final class Mosaic extends ChangeNotifier {
     return Mosaic._(
       configuration: configuration,
       purchaseProvider: resolvedPurchaseProvider,
+      identityController: MosaicIdentityController(
+        storage: identityStorage,
+        namespace: mosaicIdentityNamespace(
+          resolvedBaseUrl ?? Uri.parse('mosaic://local'),
+          configuration.publicSdkKey,
+        ),
+      ),
       configurationClient: resolvedBaseUrl == null
           ? null
           : MosaicConfigurationClient(
@@ -227,6 +239,7 @@ final class Mosaic extends ChangeNotifier {
   final MosaicConfiguration configuration;
   final MosaicPurchaseProvider purchaseProvider;
   final MosaicConfigurationClient? _configurationClient;
+  final MosaicIdentityController _identityController;
   final MosaicCommerceProviderRouter? _commerceProviderRouter;
 
   MosaicAcceptedConfiguration? get acceptedConfiguration =>
@@ -234,6 +247,61 @@ final class Mosaic extends ChangeNotifier {
 
   MosaicCommerceConfiguration? get acceptedCommerceConfiguration =>
       acceptedConfiguration?.commerceEnvelope?.configuration;
+
+  MosaicIdentityState? get identity => _identityController.current;
+
+  /// Loads or creates the stable app-install-scoped anonymous identity.
+  Future<MosaicIdentityState> loadIdentity() => _identityController.load();
+
+  /// Sets the host application's user identity. This may intentionally change
+  /// assignments for Rule Sets using an identified-user policy.
+  Future<MosaicIdentityState> identify(String userId) async {
+    final result = await _identityController.identify(userId);
+    notifyListeners();
+    return result;
+  }
+
+  /// Atomically replaces typed user attributes after validating the active
+  /// release's allow-list wherever definitions are available.
+  Future<MosaicIdentityState> setUserAttributes(
+    Map<String, MosaicAttributeValue> attributes,
+  ) async {
+    final definitions = <String, MosaicAttributeDefinition>{};
+    for (final decision
+        in acceptedConfiguration?.envelope.release.placementDecisions.values ??
+            const Iterable<MosaicPlacementRuleSet>.empty()) {
+      definitions.addAll(decision.attributeDefinitions);
+    }
+    for (final entry in attributes.entries) {
+      final definition = definitions[entry.key];
+      if (definitions.isNotEmpty && definition == null) {
+        throw ArgumentError.value(entry.key, 'attributes',
+            'Attribute is not allowed by the accepted release.');
+      }
+      if (definition is MosaicAttributeDefinition &&
+          !mosaicAttributeMatchesDefinition(definition.type, entry.value)) {
+        throw ArgumentError.value(entry.value, entry.key,
+            'Attribute type does not match the accepted definition.');
+      }
+    }
+    final result = await _identityController.setAttributes(attributes);
+    notifyListeners();
+    return result;
+  }
+
+  /// Clears user identity and attributes while retaining installation identity.
+  Future<MosaicIdentityState> resetUserIdentity() async {
+    final result = await _identityController.resetUser();
+    notifyListeners();
+    return result;
+  }
+
+  /// Explicitly rotates the installation identity. User identity is retained.
+  Future<MosaicIdentityState> resetInstallationIdentity() async {
+    final result = await _identityController.rotateInstallation();
+    notifyListeners();
+    return result;
+  }
 
   MosaicConfigurationCapabilityRequest get capabilityRequest =>
       MosaicConfigurationCapabilityRequest(

@@ -1,0 +1,69 @@
+{
+  "algorithm": "sha256_length_prefixed_v1",
+  "bucketCount": 10000,
+  "vectors": [
+    {
+      "projectId": "project_alpha",
+      "environmentId": "environment_production",
+      "placementId": "placement_export_pdf",
+      "ruleId": "rule_rollout",
+      "assignmentKeyType": "installation",
+      "assignmentKeyValue": "install_01",
+      "canonicalUtf8": "mosaic-placement-rollout\n1\n13:project_alpha\n22:environment_production\n20:placement_export_pdf\n12:rule_rollout\n12:installation\n10:install_01\n",
+      "sha256Hex": "87dd710094a8d1cd74069f6f8d16c8aee8147f3fecf80d8b51aa91e98f90e4ce",
+      "bucket": 6749,
+      "thresholdCases": [
+        {
+          "thresholdBasisPoints": 0,
+          "matches": false
+        },
+        {
+          "thresholdBasisPoints": 6749,
+          "matches": false
+        },
+        {
+          "thresholdBasisPoints": 6750,
+          "matches": true
+        },
+        {
+          "thresholdBasisPoints": 10000,
+          "matches": true
+        }
+      ]
+    },
+    {
+      "projectId": "project_alpha",
+      "environmentId": "environment_production",
+      "placementId": "placement_export_pdf",
+      "ruleId": "rule_rollout",
+      "assignmentKeyType": "identified_user",
+      "assignmentKeyValue": "user_123",
+      "canonicalUtf8": "mosaic-placement-rollout\n1\n13:project_alpha\n22:environment_production\n20:placement_export_pdf\n12:rule_rollout\n15:identified_user\n8:user_123\n",
+      "sha256Hex": "9584778b1f5df3afed90823fb16662b8bcca43751e9f70b863af84fc39ed8c0d",
+      "bucket": 9471,
+      "thresholdCases": [
+        {
+          "thresholdBasisPoints": 2000,
+          "matches": false
+        }
+      ]
+    },
+    {
+      "projectId": "π-project",
+      "environmentId": "staging",
+      "placementId": "placement_unicode",
+      "ruleId": "rule_é",
+      "assignmentKeyType": "installation",
+      "assignmentKeyValue": "安装-01",
+      "canonicalUtf8": "mosaic-placement-rollout\n1\n10:π-project\n7:staging\n17:placement_unicode\n7:rule_é\n12:installation\n9:安装-01\n",
+      "sha256Hex": "9c97734547941a6738d363af32eccfbca0e8100228f37b8a8d34a1ffccc2eb5c",
+      "bucket": 3159,
+      "thresholdCases": [
+        {
+          "thresholdBasisPoints": 3160,
+          "matches": true
+        }
+      ]
+    }
+  ]
+}

@@ -67,15 +67,19 @@ public struct Mosaic: Sendable {
   public let configuration: MosaicConfiguration
   public let purchaseProvider: any MosaicPurchaseProvider
   private let configurationClient: MosaicConfigurationClient?
+  private let identityStore: MosaicIdentityStore
 
   private init(
     configuration: MosaicConfiguration,
     purchaseProvider: any MosaicPurchaseProvider,
-    configurationClient: MosaicConfigurationClient? = nil
+    configurationClient: MosaicConfigurationClient? = nil,
+    identityStore: MosaicIdentityStore = MosaicIdentityStore(
+      persistence: MosaicMemoryIdentityPersistence())
   ) {
     self.configuration = configuration
     self.purchaseProvider = purchaseProvider
     self.configurationClient = configurationClient
+    self.identityStore = identityStore
   }
 
   public static func configure(
@@ -121,7 +125,13 @@ public struct Mosaic: Sendable {
     return Mosaic(
       configuration: configuration,
       purchaseProvider: purchaseProvider,
-      configurationClient: client
+      configurationClient: client,
+      identityStore: MosaicIdentityStore(
+        persistence: try MosaicIdentityFilePersistence(
+          baseURL: baseURL,
+          publicSDKKey: configuration.apiKey
+        )
+      )
     )
   }
 
@@ -163,6 +173,86 @@ public struct Mosaic: Sendable {
         ])
     }
     return await configurationClient.resolve(placement: placement)
+  }
+
+  /// Evaluates an accepted Placement locally. This never refreshes configuration.
+  public func decision(
+    placement: String,
+    context suppliedContext: MosaicDecisionContext? = nil
+  ) async -> MosaicPlacementDecisionResult {
+    guard let configurationClient else {
+      return .configurationUnavailable(diagnostics: [
+        MosaicDiagnostic(code: "delivery_not_configured", stage: .placement)
+      ])
+    }
+    let identity = await identityStore.snapshot()
+    var context =
+      suppliedContext
+      ?? MosaicDecisionContext(
+        platform: "ios",
+        operatingSystemVersion: ProcessInfo.processInfo.operatingSystemVersionString
+          .split(separator: " ").first(where: { $0.first?.isNumber == true }).map(String.init),
+        applicationVersion: configuration.applicationVersion,
+        applicationLocale: Locale.current.identifier.replacingOccurrences(of: "_", with: "-")
+      )
+    if suppliedContext == nil {
+      let requirements = await configurationClient.decisionRequirements(placement: placement)
+      if !requirements.productIDs.isEmpty {
+        switch await purchaseProvider.loadProducts(identifiers: requirements.productIDs) {
+        case .loaded(let products):
+          let available = Set(products.map(\.id))
+          context.products = Dictionary(
+            uniqueKeysWithValues: requirements.productIDs.map {
+              ($0, available.contains($0) ? .available : .unavailable)
+            })
+        case .unavailable:
+          context.products = Dictionary(
+            uniqueKeysWithValues: requirements.productIDs.map { ($0, .providerUnavailable) })
+        }
+      }
+      if !requirements.entitlementKeys.isEmpty {
+        switch await purchaseProvider.activeEntitlements() {
+        case .available(let active):
+          let activeKeys = Set(active.map(\.id))
+          context.entitlements = Dictionary(
+            uniqueKeysWithValues: requirements.entitlementKeys.map {
+              ($0, activeKeys.contains($0) ? .active : .inactive)
+            })
+        case .unknown:
+          context.entitlements = Dictionary(
+            uniqueKeysWithValues: requirements.entitlementKeys.map { ($0, .unknown) })
+        case .providerUnavailable:
+          context.entitlements = Dictionary(
+            uniqueKeysWithValues: requirements.entitlementKeys.map { ($0, .providerUnavailable) })
+        case .failed:
+          context.entitlements = Dictionary(
+            uniqueKeysWithValues: requirements.entitlementKeys.map { ($0, .failed) })
+        }
+      }
+      context.providerCapabilities = [
+        "product_loading": .available, "purchase": .available, "restore": .available,
+        "entitlement_lookup": .available,
+      ]
+    }
+    return await configurationClient.decide(
+      placement: placement, context: context, identity: identity)
+  }
+
+  public func identity() async -> MosaicIdentitySnapshot { await identityStore.snapshot() }
+
+  public func identify(userID: String) async throws { try await identityStore.identify(userID) }
+
+  public func setUserAttributes(_ attributes: [String: MosaicTypedValue]) async throws {
+    let definitions = await configurationClient?.attributeDefinitions()
+    try await identityStore.replaceAttributes(attributes, definitions: definitions)
+  }
+
+  /// Clears user identity, attributes and user-bound decision material while retaining the installation ID.
+  public func resetIdentity() async throws { try await identityStore.resetUser() }
+
+  /// Creates a new app-install identity and also clears user-bound state.
+  public func resetInstallationIdentity() async throws {
+    try await identityStore.resetInstallation()
   }
 
   /// Returns the exact accepted Configuration Release association required to

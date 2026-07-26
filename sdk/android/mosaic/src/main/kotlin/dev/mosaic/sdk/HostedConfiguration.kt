@@ -113,10 +113,13 @@ class MosaicHTTPConfigurationTransport(
         val request = Request.Builder()
             .url(configuration.configurationURL().toString())
             .header("Authorization", "Bearer ${configuration.apiKey}")
-            .header("Accept", "application/vnd.mosaic.configuration+json;version=1")
+            .header("Accept", "application/vnd.mosaic.configuration+json;version=2, application/vnd.mosaic.configuration+json;version=1;q=0.9")
             .header("Mosaic-SDK-Platform", "android")
             .header("Mosaic-SDK-Version", MOSAIC_ANDROID_SDK_VERSION)
-            .header("Mosaic-Configuration-Versions", MOSAIC_CONFIGURATION_DELIVERY_VERSION)
+            .header("Mosaic-Configuration-Versions", "$MOSAIC_CONFIGURATION_DELIVERY_VERSION_V2,$MOSAIC_CONFIGURATION_DELIVERY_VERSION")
+            .header("Mosaic-Placement-Decision-Versions", MOSAIC_PLACEMENT_DECISION_VERSION)
+            .header("Mosaic-Decision-Features", MosaicPlacementDecisionCapabilities.features.joinToString(","))
+            .header("Mosaic-Bucketing-Algorithms", MOSAIC_ROLLOUT_ALGORITHM)
             .header("Mosaic-Paywall-Protocol-Versions", MOSAIC_SUPPORTED_PROTOCOL_VERSIONS.sorted().joinToString(","))
             .header("Mosaic-Paywall-Capabilities", capabilityReport.configurationDeliveryCapabilitiesHeader())
             .apply { configuration.applicationVersion?.let { header("Mosaic-App-Version", it) } }
@@ -251,6 +254,37 @@ sealed interface MosaicPlacementResult {
     data object ConfigurationUnavailable : MosaicPlacementResult
 }
 
+sealed interface MosaicPlacementDecisionResult {
+    data class Available(
+        val document: MosaicPaywallDocument,
+        val source: MosaicConfigurationSource,
+        val releaseId: String?,
+        val releaseNumber: Long?,
+        val trace: MosaicDecisionTrace?,
+        val matchedRuleId: String?,
+        val fallbackPath: List<String>,
+        val resolvedProducts: List<MosaicProduct>,
+    ) : MosaicPlacementDecisionResult
+    data class NoPaywall(val trace: MosaicDecisionTrace, val matchedRuleId: String?) : MosaicPlacementDecisionResult
+    data class PlacementUnavailable(val key: String) : MosaicPlacementDecisionResult
+    data class EvaluationFailed(val diagnosticCode: String, val trace: MosaicDecisionTrace) : MosaicPlacementDecisionResult
+    data object ConfigurationUnavailable : MosaicPlacementDecisionResult
+}
+
+object MosaicPlacementDecisionCapabilities {
+    val features: List<String> = listOf(
+        "condition.all", "condition.any", "condition.not",
+        "operator.contains_all", "operator.contains_any", "operator.does_not_exist", "operator.equals",
+        "operator.exists", "operator.greater_than", "operator.greater_than_or_equal", "operator.in",
+        "operator.less_than", "operator.less_than_or_equal", "operator.locale_matches", "operator.not_equals", "operator.not_in",
+        "outcome.fallback", "outcome.no_paywall", "outcome.paywall", "outcome.unavailable",
+        "source.application.locale", "source.application.version", "source.context.country", "source.device.os_version",
+        "source.device.platform", "source.entitlement_state", "source.environment.id", "source.environment.key",
+        "source.identity.user_present", "source.product_availability", "source.product_readiness",
+        "source.provider_capability", "source.user_attribute", "override.qa",
+    ).sorted()
+}
+
 /** Serializes refreshes so an older response can never replace a newer accepted release. */
 class MosaicHostedConfigurationClient(
     private val transport: MosaicConfigurationTransport,
@@ -261,9 +295,14 @@ class MosaicHostedConfigurationClient(
     private val applicationId: String? = null,
     private val configurablePurchaseProvider: MosaicConfigurablePurchaseProvider? = null,
     private val diagnostics: MosaicDiagnosticSink = MosaicDiagnosticSink.None,
+    private val identityStore: MosaicIdentityStore? = null,
+    private val purchaseProvider: MosaicPurchaseProvider? = null,
+    private val applicationVersion: String? = null,
 ) {
     private val refreshLock = Mutex()
     @Volatile private var accepted: MosaicAcceptedConfiguration? = null
+    private val identityMutationLock = Mutex()
+    @Volatile private var qaOverrideTokens: Set<String> = emptySet()
 
     val acceptedConfiguration: MosaicAcceptedConfiguration?
         get() = accepted
@@ -401,16 +440,72 @@ class MosaicHostedConfigurationClient(
         acceptCommerceCandidate(payload, null, null, requireHostedHeaders = false)
     }
 
-    suspend fun paywall(placement: String, refresh: Boolean = false): MosaicPlacementResult {
+    suspend fun identityState(): MosaicIdentityState? = identityStore?.current()
+
+    suspend fun identify(userId: String, attributes: Map<String, MosaicTypedValue> = emptyMap()): MosaicIdentityState {
+        validateAttributes(attributes)
+        return requireNotNull(identityStore) { "Identity persistence is unavailable for this client." }.identify(userId, attributes)
+    }
+
+    suspend fun setUserAttributes(attributes: Map<String, MosaicTypedValue>): MosaicIdentityState {
+        validateAttributes(attributes)
+        return requireNotNull(identityStore) { "Identity persistence is unavailable for this client." }.setAttributes(attributes)
+    }
+
+    suspend fun resetIdentity(): MosaicIdentityState = identityMutationLock.withLock {
+        qaOverrideTokens = emptySet()
+        requireNotNull(identityStore) { "Identity persistence is unavailable for this client." }.resetUser()
+    }
+
+    suspend fun resetInstallationIdentity(): MosaicIdentityState = identityMutationLock.withLock {
+        qaOverrideTokens = emptySet()
+        requireNotNull(identityStore) { "Identity persistence is unavailable for this client." }.resetInstallation()
+    }
+
+    /** Tokens are held in memory only and are cleared by either identity reset operation. */
+    fun setQAOverrideTokens(tokens: Set<String>) {
+        require(tokens.size <= 32 && tokens.all { it.length in 16..512 })
+        qaOverrideTokens = tokens.toSet()
+    }
+
+    /** Stable Delivery-v1 Placement API retained for existing applications. */
+    suspend fun paywall(placement: String, refresh: Boolean = false): MosaicPlacementResult =
+        when (val decision = decidePlacement(placement, refresh)) {
+            is MosaicPlacementDecisionResult.Available -> MosaicPlacementResult.Available(
+                decision.document,
+                decision.source,
+                decision.releaseId,
+                decision.releaseNumber,
+            )
+            is MosaicPlacementDecisionResult.NoPaywall,
+            is MosaicPlacementDecisionResult.EvaluationFailed,
+            -> MosaicPlacementResult.PlacementUnavailable(placement)
+            is MosaicPlacementDecisionResult.PlacementUnavailable -> MosaicPlacementResult.PlacementUnavailable(decision.key)
+            MosaicPlacementDecisionResult.ConfigurationUnavailable -> MosaicPlacementResult.ConfigurationUnavailable
+        }
+
+    /** Advanced typed decision API; evaluation is local and does not refresh unless requested. */
+    suspend fun decidePlacement(
+        placement: String,
+        refresh: Boolean = false,
+        country: String? = null,
+    ): MosaicPlacementDecisionResult {
         if (refresh) refresh() else loadValidCache()
         accepted?.let { configuration ->
+            configuration.release.placementDecisions[placement]?.let { ruleSet ->
+                return evaluateAdvanced(configuration, ruleSet, country)
+            }
             val delivered = configuration.release.paywall(placement)
-                ?: return MosaicPlacementResult.PlacementUnavailable(placement)
-            return MosaicPlacementResult.Available(
+                ?: return MosaicPlacementDecisionResult.PlacementUnavailable(placement)
+            return MosaicPlacementDecisionResult.Available(
                 delivered.document,
                 configuration.source,
                 configuration.release.id,
                 configuration.release.number,
+                null,
+                null,
+                emptyList(),
+                emptyList(),
             )
         }
         val fallbackSource = bundledFallback
@@ -419,7 +514,7 @@ class MosaicHostedConfigurationClient(
                 MosaicDiagnosticCode.CONFIGURATION_BUNDLED_FALLBACK_MISSING,
                 "No valid Mosaic configuration is available.",
             )
-            return MosaicPlacementResult.ConfigurationUnavailable
+            return MosaicPlacementDecisionResult.ConfigurationUnavailable
         }
         val fallback = runCatching { fallbackSource.read() }
             .getOrNull()
@@ -430,8 +525,100 @@ class MosaicHostedConfigurationClient(
                 "No valid Mosaic configuration is available.",
             )
         }
-        return fallback?.let { MosaicPlacementResult.Available(it, MosaicConfigurationSource.BUNDLED_FALLBACK, null, null) }
-            ?: MosaicPlacementResult.ConfigurationUnavailable
+        return fallback?.let { MosaicPlacementDecisionResult.Available(it, MosaicConfigurationSource.BUNDLED_FALLBACK, null, null, null, null, emptyList(), emptyList()) }
+            ?: MosaicPlacementDecisionResult.ConfigurationUnavailable
+    }
+
+    private suspend fun evaluateAdvanced(
+        configuration: MosaicAcceptedConfiguration,
+        ruleSet: MosaicPlacementRuleSet,
+        country: String?,
+    ): MosaicPlacementDecisionResult {
+        val identity = identityStore?.current() ?: MosaicIdentityState("installation_unavailable", null, emptyMap(), 0)
+        val assignment = when (ruleSet.assignmentPolicy) {
+            MosaicAssignmentPolicy.INSTALLATION -> MosaicAssignmentKey(MosaicAssignmentKeyType.INSTALLATION, identity.installationId)
+            MosaicAssignmentPolicy.IDENTIFIED_USER -> identity.userId?.let { MosaicAssignmentKey(MosaicAssignmentKeyType.IDENTIFIED_USER, it) }
+            MosaicAssignmentPolicy.IDENTIFIED_USER_OR_INSTALLATION -> identity.userId?.let { MosaicAssignmentKey(MosaicAssignmentKeyType.IDENTIFIED_USER, it) }
+                ?: MosaicAssignmentKey(MosaicAssignmentKeyType.INSTALLATION, identity.installationId)
+        }
+        val sources = ruleSet.rules.flatMap { it.conditions.sources() }
+        val entitlementKeys = sources.filterIsInstance<MosaicDecisionSource.Entitlement>().map { it.key }.toSet()
+        val productIds = (
+            sources.filterIsInstance<MosaicDecisionSource.Product>().map { it.productId } +
+                configuration.release.paywallVersions.values.flatMap { it.productReferenceIds }
+            ).toSet()
+        val provider = purchaseProvider
+        val entitlementStates = if (entitlementKeys.isEmpty()) emptyMap() else when (val result = provider?.activeEntitlements()) {
+            is MosaicActiveEntitlementsResult.Available -> entitlementKeys.associateWith { key ->
+                val referenceId = configuration.release.entitlementReferences.values.first { it.key == key }.id
+                if (result.entitlements.any { it.id == referenceId }) MosaicEntitlementState.ACTIVE else MosaicEntitlementState.INACTIVE
+            }
+            is MosaicActiveEntitlementsResult.ProviderUnavailable, null -> entitlementKeys.associateWith { MosaicEntitlementState.PROVIDER_UNAVAILABLE }
+            is MosaicActiveEntitlementsResult.Failed -> entitlementKeys.associateWith { MosaicEntitlementState.FAILED }
+            is MosaicActiveEntitlementsResult.Unknown -> entitlementKeys.associateWith { MosaicEntitlementState.UNKNOWN }
+        }
+        var resolvedProducts: List<MosaicProduct> = emptyList()
+        val productStates = if (productIds.isEmpty()) emptyMap() else when (val result = provider?.loadProducts(productIds.sorted())) {
+            is MosaicProductLoadResult.Loaded -> {
+                resolvedProducts = result.products
+                productIds.associateWith { id -> if (result.products.any { it.id == id } && id !in result.unavailableProductIds) MosaicProductAvailability.AVAILABLE else MosaicProductAvailability.UNAVAILABLE }
+            }
+            is MosaicProductLoadResult.Unavailable, null -> productIds.associateWith { MosaicProductAvailability.UNKNOWN }
+        }
+        val context = MosaicDecisionContext(
+            applicationVersion = applicationVersion,
+            country = country,
+            userPresent = identity.userId != null,
+            attributes = identity.attributes.filterKeys(ruleSet.attributeDefinitions::containsKey),
+            entitlements = entitlementStates,
+            products = productStates,
+            productReadiness = configuration.release.productReferences.mapValues { it.value.readiness },
+            providerCapabilities = if (provider == null) {
+                emptyMap()
+            } else {
+                setOf("product_loading", "purchase", "restore", "entitlement_lookup")
+                    .associateWith { MosaicProviderCapabilityState.AVAILABLE }
+            },
+        )
+        return when (val result = MosaicPlacementEvaluator.evaluate(ruleSet, context, assignment, qaOverrideTokens)) {
+            is MosaicEvaluationResult.NoPaywall -> MosaicPlacementDecisionResult.NoPaywall(result.trace, result.matchedRuleId)
+            is MosaicEvaluationResult.Unavailable -> MosaicPlacementDecisionResult.EvaluationFailed("decision.${result.reason}", result.trace)
+            is MosaicEvaluationResult.Failed -> MosaicPlacementDecisionResult.EvaluationFailed(result.diagnosticCode, result.trace)
+            is MosaicEvaluationResult.Paywall -> {
+                val delivered = configuration.release.paywallVersions[result.paywallVersionId]
+                    ?: return MosaicPlacementDecisionResult.EvaluationFailed("decision.contentUnavailable", result.trace)
+                val requiredProducts = delivered.productReferenceIds
+                val availability = requiredProducts.all { productStates[it] == MosaicProductAvailability.AVAILABLE }
+                if (!availability && requiredProducts.isNotEmpty()) {
+                    val fallbackKey = result.unavailableFallbackKey
+                        ?: return MosaicPlacementDecisionResult.EvaluationFailed("decision.commerceUnavailable", result.trace)
+                    return when (val fallback = MosaicPlacementEvaluator.evaluateFallback(ruleSet, fallbackKey)) {
+                        is MosaicEvaluationResult.Paywall -> {
+                            val fallbackPaywall = configuration.release.paywallVersions[fallback.paywallVersionId]
+                                ?: return MosaicPlacementDecisionResult.EvaluationFailed("decision.contentUnavailable", fallback.trace)
+                            if (!fallbackPaywall.productReferenceIds.all { productStates[it] == MosaicProductAvailability.AVAILABLE }) {
+                                return MosaicPlacementDecisionResult.EvaluationFailed("decision.commerceUnavailable", fallback.trace)
+                            }
+                            MosaicPlacementDecisionResult.Available(fallbackPaywall.document, configuration.source, configuration.release.id, configuration.release.number, fallback.trace, result.matchedRuleId, result.fallbackPath + fallback.fallbackPath, resolvedProducts.filter { it.id in fallbackPaywall.productReferenceIds })
+                        }
+                        is MosaicEvaluationResult.NoPaywall -> MosaicPlacementDecisionResult.NoPaywall(fallback.trace, result.matchedRuleId)
+                        is MosaicEvaluationResult.Unavailable -> MosaicPlacementDecisionResult.EvaluationFailed("decision.${fallback.reason}", fallback.trace)
+                        is MosaicEvaluationResult.Failed -> MosaicPlacementDecisionResult.EvaluationFailed(fallback.diagnosticCode, fallback.trace)
+                    }
+                }
+                MosaicPlacementDecisionResult.Available(delivered.document, configuration.source, configuration.release.id, configuration.release.number, result.trace, result.matchedRuleId, result.fallbackPath, resolvedProducts.filter { it.id in requiredProducts })
+            }
+        }
+    }
+
+    private fun validateAttributes(attributes: Map<String, MosaicTypedValue>) {
+        val definitions = accepted?.release?.placementDecisions?.values.orEmpty().flatMap { it.attributeDefinitions.values }.associateBy { it.key }
+        require(attributes.keys.all { it in definitions }) { "Attributes must be allow-listed by the accepted release." }
+        attributes.forEach { (key, value) ->
+            val expected = definitions.getValue(key).type
+            val actual = when (value) { is MosaicTypedValue.StringValue -> "string"; is MosaicTypedValue.BooleanValue -> "boolean"; is MosaicTypedValue.NumberValue -> "number"; is MosaicTypedValue.TimestampValue -> "timestamp"; is MosaicTypedValue.SemanticVersionValue -> "semantic_version"; is MosaicTypedValue.StringListValue -> "string_list" }
+            require(actual == expected) { "Attribute $key has the wrong type." }
+        }
     }
 
     private suspend fun loadValidCache(): MosaicAcceptedConfiguration? {
@@ -637,4 +824,11 @@ private fun MosaicConfiguration.commerceConfigurationURL(): String {
         .addQueryParameter("applicationId", requireNotNull(applicationId))
         .build()
         .toString()
+}
+
+private fun MosaicConditionNode.sources(): List<MosaicDecisionSource> = when (this) {
+    is MosaicConditionNode.Condition -> listOf(source)
+    is MosaicConditionNode.All -> children.flatMap { it.sources() }
+    is MosaicConditionNode.Any -> children.flatMap { it.sources() }
+    is MosaicConditionNode.Not -> child.sources()
 }

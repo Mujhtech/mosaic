@@ -1,0 +1,751 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:mosaic:protocol:schema:placement-decision:v1:decision",
+  "title": "Mosaic Placement Decision Contract v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "placementDecisionVersion",
+    "ruleSet"
+  ],
+  "properties": {
+    "placementDecisionVersion": {
+      "const": "1"
+    },
+    "ruleSet": {
+      "$ref": "#/$defs/ruleSet"
+    }
+  },
+  "$defs": {
+    "identifier": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+    },
+    "key": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 64,
+      "pattern": "^[a-z][a-z0-9_]*$"
+    },
+    "environmentKey": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 64,
+      "pattern": "^[a-z][a-z0-9_-]*$"
+    },
+    "utcTimestamp": {
+      "type": "string",
+      "pattern": "^[0-9]{4}-(0[1-9]|1[0-2])-([0-2][0-9]|3[01])T([01][0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9]\\.[0-9]{3}Z$"
+    },
+    "safeLabel": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 120,
+      "pattern": "^[^\\r\\n\\u0000-\\u001F\\u007F]*$"
+    },
+    "typedValue": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "value"
+          ],
+          "properties": {
+            "type": {
+              "const": "string"
+            },
+            "value": {
+              "type": "string",
+              "maxLength": 256
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "value"
+          ],
+          "properties": {
+            "type": {
+              "const": "boolean"
+            },
+            "value": {
+              "type": "boolean"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "value"
+          ],
+          "properties": {
+            "type": {
+              "const": "number"
+            },
+            "value": {
+              "type": "number"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "value"
+          ],
+          "properties": {
+            "type": {
+              "const": "timestamp"
+            },
+            "value": {
+              "$ref": "#/$defs/utcTimestamp"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "value"
+          ],
+          "properties": {
+            "type": {
+              "const": "semantic_version"
+            },
+            "value": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "value"
+          ],
+          "properties": {
+            "type": {
+              "const": "string_list"
+            },
+            "value": {
+              "type": "array",
+              "minItems": 1,
+              "maxItems": 16,
+              "uniqueItems": true,
+              "items": {
+                "type": "string",
+                "maxLength": 128
+              }
+            }
+          }
+        }
+      ]
+    },
+    "source": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "kind"
+          ],
+          "properties": {
+            "kind": {
+              "enum": [
+                "device.platform",
+                "device.os_version",
+                "application.version",
+                "application.locale",
+                "context.country",
+                "environment.id",
+                "environment.key",
+                "identity.user_present"
+              ]
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "key"
+          ],
+          "properties": {
+            "kind": {
+              "const": "user_attribute"
+            },
+            "key": {
+              "$ref": "#/$defs/key"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "key"
+          ],
+          "properties": {
+            "kind": {
+              "const": "entitlement_state"
+            },
+            "key": {
+              "$ref": "#/$defs/key"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "productId"
+          ],
+          "properties": {
+            "kind": {
+              "enum": [
+                "product_availability",
+                "product_readiness"
+              ]
+            },
+            "productId": {
+              "$ref": "#/$defs/identifier"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "capability"
+          ],
+          "properties": {
+            "kind": {
+              "const": "provider_capability"
+            },
+            "capability": {
+              "enum": [
+                "product_loading",
+                "purchase",
+                "restore",
+                "entitlement_lookup"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "leaf": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "type",
+        "source",
+        "operator"
+      ],
+      "properties": {
+        "type": {
+          "const": "condition"
+        },
+        "source": {
+          "$ref": "#/$defs/source"
+        },
+        "operator": {
+          "enum": [
+            "equals",
+            "not_equals",
+            "in",
+            "not_in",
+            "greater_than",
+            "greater_than_or_equal",
+            "less_than",
+            "less_than_or_equal",
+            "exists",
+            "does_not_exist",
+            "contains_any",
+            "contains_all",
+            "locale_matches"
+          ]
+        },
+        "operand": {
+          "$ref": "#/$defs/typedValue"
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "operator": {
+                "enum": [
+                  "exists",
+                  "does_not_exist"
+                ]
+              }
+            },
+            "required": [
+              "operator"
+            ]
+          },
+          "then": {
+            "properties": {
+              "operand": false
+            }
+          },
+          "else": {
+            "properties": {
+              "operand": true
+            },
+            "required": [
+              "operand"
+            ]
+          }
+        }
+      ]
+    },
+    "conditionNode": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/leaf"
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "children"
+          ],
+          "properties": {
+            "type": {
+              "enum": [
+                "all",
+                "any"
+              ]
+            },
+            "children": {
+              "type": "array",
+              "minItems": 2,
+              "maxItems": 16,
+              "items": {
+                "$ref": "#/$defs/conditionNode"
+              }
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "child"
+          ],
+          "properties": {
+            "type": {
+              "const": "not"
+            },
+            "child": {
+              "$ref": "#/$defs/conditionNode"
+            }
+          }
+        }
+      ]
+    },
+    "outcome": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "paywallVersionId"
+          ],
+          "properties": {
+            "type": {
+              "const": "paywall"
+            },
+            "paywallVersionId": {
+              "$ref": "#/$defs/identifier"
+            },
+            "unavailableFallbackKey": {
+              "$ref": "#/$defs/key"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "type"
+          ],
+          "properties": {
+            "type": {
+              "const": "no_paywall"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "key"
+          ],
+          "properties": {
+            "type": {
+              "const": "fallback"
+            },
+            "key": {
+              "$ref": "#/$defs/key"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "reason"
+          ],
+          "properties": {
+            "type": {
+              "const": "unavailable"
+            },
+            "reason": {
+              "enum": [
+                "no_safe_decision",
+                "configuration_incompatible",
+                "content_unavailable",
+                "commerce_unavailable"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "rollout": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "algorithm",
+        "thresholdBasisPoints"
+      ],
+      "properties": {
+        "algorithm": {
+          "const": "sha256_length_prefixed_v1"
+        },
+        "thresholdBasisPoints": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 10000
+        }
+      }
+    },
+    "rule": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "priority",
+        "enabled",
+        "conditions",
+        "outcome"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/identifier"
+        },
+        "priority": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9999
+        },
+        "enabled": {
+          "type": "boolean"
+        },
+        "safeLabel": {
+          "$ref": "#/$defs/safeLabel"
+        },
+        "conditions": {
+          "$ref": "#/$defs/conditionNode"
+        },
+        "rollout": {
+          "$ref": "#/$defs/rollout"
+        },
+        "outcome": {
+          "$ref": "#/$defs/outcome"
+        }
+      }
+    },
+    "fallback": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "key",
+        "outcome"
+      ],
+      "properties": {
+        "key": {
+          "$ref": "#/$defs/key"
+        },
+        "safeLabel": {
+          "$ref": "#/$defs/safeLabel"
+        },
+        "outcome": {
+          "$ref": "#/$defs/outcome"
+        }
+      }
+    },
+    "attributeDefinition": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "key",
+        "type",
+        "sensitivity",
+        "allowedOperators"
+      ],
+      "properties": {
+        "key": {
+          "$ref": "#/$defs/key"
+        },
+        "type": {
+          "enum": [
+            "string",
+            "boolean",
+            "number",
+            "timestamp",
+            "semantic_version",
+            "string_list"
+          ]
+        },
+        "sensitivity": {
+          "enum": [
+            "standard",
+            "sensitive"
+          ]
+        },
+        "allowedOperators": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 13,
+          "uniqueItems": true,
+          "items": {
+            "enum": [
+              "equals",
+              "not_equals",
+              "in",
+              "not_in",
+              "greater_than",
+              "greater_than_or_equal",
+              "less_than",
+              "less_than_or_equal",
+              "exists",
+              "does_not_exist",
+              "contains_any",
+              "contains_all"
+            ]
+          }
+        }
+      }
+    },
+    "compatibility": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "requiredFeatures",
+        "bucketingAlgorithms"
+      ],
+      "properties": {
+        "requiredFeatures": {
+          "type": "array",
+          "maxItems": 64,
+          "uniqueItems": true,
+          "items": {
+            "enum": [
+              "condition.all",
+              "condition.any",
+              "condition.not",
+              "operator.contains_all",
+              "operator.contains_any",
+              "operator.does_not_exist",
+              "operator.equals",
+              "operator.exists",
+              "operator.greater_than",
+              "operator.greater_than_or_equal",
+              "operator.in",
+              "operator.less_than",
+              "operator.less_than_or_equal",
+              "operator.locale_matches",
+              "operator.not_equals",
+              "operator.not_in",
+              "outcome.fallback",
+              "outcome.no_paywall",
+              "outcome.paywall",
+              "outcome.unavailable",
+              "override.qa",
+              "source.application.locale",
+              "source.application.version",
+              "source.context.country",
+              "source.device.os_version",
+              "source.device.platform",
+              "source.entitlement_state",
+              "source.environment.id",
+              "source.environment.key",
+              "source.identity.user_present",
+              "source.product_availability",
+              "source.product_readiness",
+              "source.provider_capability",
+              "source.user_attribute"
+            ]
+          }
+        },
+        "bucketingAlgorithms": {
+          "type": "array",
+          "maxItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "const": "sha256_length_prefixed_v1"
+          }
+        }
+      }
+    },
+    "qaOverride": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "selectorDigest",
+        "safeLabel",
+        "startsAt",
+        "expiresAt",
+        "outcome"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/identifier"
+        },
+        "selectorDigest": {
+          "type": "string",
+          "pattern": "^sha256:[a-f0-9]{64}$"
+        },
+        "safeLabel": {
+          "$ref": "#/$defs/safeLabel"
+        },
+        "startsAt": {
+          "$ref": "#/$defs/utcTimestamp"
+        },
+        "expiresAt": {
+          "$ref": "#/$defs/utcTimestamp"
+        },
+        "outcome": {
+          "$ref": "#/$defs/outcome"
+        }
+      }
+    },
+    "ruleSet": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "version",
+        "projectId",
+        "environmentId",
+        "environmentKey",
+        "placementId",
+        "placementKey",
+        "enabled",
+        "assignmentPolicy",
+        "attributeDefinitions",
+        "fallbacks",
+        "rules",
+        "defaultOutcome",
+        "qaOverrides",
+        "compatibility"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/identifier"
+        },
+        "version": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "projectId": {
+          "$ref": "#/$defs/identifier"
+        },
+        "environmentId": {
+          "$ref": "#/$defs/identifier"
+        },
+        "environmentKey": {
+          "$ref": "#/$defs/environmentKey"
+        },
+        "placementId": {
+          "$ref": "#/$defs/identifier"
+        },
+        "placementKey": {
+          "$ref": "#/$defs/key"
+        },
+        "enabled": {
+          "type": "boolean"
+        },
+        "assignmentPolicy": {
+          "enum": [
+            "installation",
+            "identified_user",
+            "identified_user_or_installation"
+          ]
+        },
+        "attributeDefinitions": {
+          "type": "array",
+          "maxItems": 32,
+          "items": {
+            "$ref": "#/$defs/attributeDefinition"
+          }
+        },
+        "fallbacks": {
+          "type": "array",
+          "maxItems": 32,
+          "items": {
+            "$ref": "#/$defs/fallback"
+          }
+        },
+        "rules": {
+          "type": "array",
+          "maxItems": 100,
+          "items": {
+            "$ref": "#/$defs/rule"
+          }
+        },
+        "defaultOutcome": {
+          "$ref": "#/$defs/outcome"
+        },
+        "qaOverrides": {
+          "type": "array",
+          "maxItems": 32,
+          "items": {
+            "$ref": "#/$defs/qaOverride"
+          }
+        },
+        "compatibility": {
+          "$ref": "#/$defs/compatibility"
+        }
+      }
+    }
+  }
+}

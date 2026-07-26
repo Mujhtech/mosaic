@@ -33,6 +33,7 @@ const String _mosaicApplicationId = String.fromEnvironment(
   defaultValue: 'application_flutter_example',
 );
 const bool _commerceEnabled = bool.fromEnvironment('MOSAIC_COMMERCE_ENABLED');
+const bool _phase5Demo = bool.fromEnvironment('MOSAIC_PHASE5_DEMO');
 const String _revenueCatPublicSdkKey = String.fromEnvironment(
   'REVENUECAT_PUBLIC_SDK_KEY',
 );
@@ -226,7 +227,7 @@ final class _HostedPaywallPlaygroundState
           Expanded(
             child: MosaicPlacementHost(
               mosaic: _mosaic,
-              placementKey: 'onboarding_complete',
+              placementKey: _phase5Demo ? 'export_pdf' : 'onboarding_complete',
               onResult: (result) =>
                   _recordEvent('Presentation: ${result.outcome.wireValue}'),
               onInteraction: (interaction) =>
@@ -248,7 +249,7 @@ final class _HostedPaywallPlaygroundState
   Mosaic _createMosaic() => Mosaic.configure(
     publicSdkKey: _publicSdkKey,
     baseUrl: Uri.parse(_hostedBaseUrl),
-    applicationVersion: '0.2.0',
+    applicationVersion: '2.10.0',
     applicationId: !_connectedCommerceEnabled ? null : _mosaicApplicationId,
     storePlatform: _connectedCommerceEnabled ? _runtimeStorePlatform : null,
     purchaseProvider: _fallbackPurchaseProvider(),
@@ -257,8 +258,11 @@ final class _HostedPaywallPlaygroundState
       MosaicGooglePlayProviderFactory(acceptUpdate: _acceptNativeStoreUpdate),
       if (_revenueCatReady) const MosaicRevenueCatProviderFactory(),
     ],
-    bundledFallbackLoader: () async =>
-        rootBundle.loadString('assets/generated/configuration-release.json'),
+    bundledFallbackLoader: () async => rootBundle.loadString(
+      _phase5Demo
+          ? 'assets/generated/advanced-configuration-release.json'
+          : 'assets/generated/configuration-release.json',
+    ),
     onDiagnostic: (diagnostic) {
       if (mounted) _recordEvent('Configuration: ${diagnostic.code}');
     },

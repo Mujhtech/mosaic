@@ -601,7 +601,10 @@ func capabilityRequest(r *http.Request) (hostedpublishing.SDKCapabilityRequest, 
 		SupportedPaywallProtocols: []hostedpublishing.SDKPaywallProtocolSupport{{
 			Version: strings.TrimSpace(r.Header.Get("Mosaic-Paywall-Protocol-Versions")), Capabilities: capabilities,
 		}},
-		ApplicationVersion: strings.TrimSpace(r.Header.Get("Mosaic-App-Version")),
+		ApplicationVersion:                  strings.TrimSpace(r.Header.Get("Mosaic-App-Version")),
+		SupportedPlacementDecisionContracts: headerValues(r.Header.Get("Mosaic-Placement-Decision-Versions")),
+		SupportedDecisionFeatures:           headerValues(r.Header.Get("Mosaic-Decision-Features")),
+		SupportedBucketingAlgorithms:        headerValues(r.Header.Get("Mosaic-Bucketing-Algorithms")),
 	}
 	return request, nil
 }
@@ -666,19 +669,24 @@ func (h *Handler) sdkConfiguration(w http.ResponseWriter, r *http.Request) {
 		writeError(w, r, err)
 		return
 	}
-	configuration, err := h.service.AuthenticateSDKKey(r.Context(), bearer(r))
+	deliveryVersion := hostedpublishing.PreferredDeliveryVersion(capabilities.SupportedConfigurationDeliveryVersions)
+	if deliveryVersion == "" {
+		writeError(w, r, hostedpublishing.ErrUnsupportedCapability)
+		return
+	}
+	configuration, err := h.service.AuthenticateSDKKeyVersion(r.Context(), bearer(r), deliveryVersion)
 	if err != nil {
 		writeError(w, r, err)
 		return
 	}
-	if err := hostedpublishing.ValidateSDKCapabilityRequest(capabilities, configuration.Release); err != nil {
+	if err := hostedpublishing.ValidateSDKCapabilityPayload(capabilities, configuration.Payload, deliveryVersion); err != nil {
 		writeError(w, r, err)
 		return
 	}
 	if !h.allowDelivery(w, r, "key:"+configuration.APIKeyID) {
 		return
 	}
-	payload := []byte(configuration.Release.Payload)
+	payload := []byte(configuration.Payload)
 	encoding := ""
 	if len(payload) >= 1024 && headerContains(r.Header.Get("Accept-Encoding"), "gzip") {
 		payload, err = gzipRepresentation(payload)
@@ -691,15 +699,15 @@ func (h *Handler) sdkConfiguration(w http.ResponseWriter, r *http.Request) {
 	etag := representationETag(payload)
 	w.Header().Set("Cache-Control", "private, max-age=60, stale-if-error=86400")
 	w.Header().Set("ETag", etag)
-	w.Header().Set("Vary", "Authorization, Accept-Encoding, Mosaic-SDK-Platform, Mosaic-SDK-Version, Mosaic-Configuration-Versions, Mosaic-Paywall-Protocol-Versions, Mosaic-Paywall-Capabilities, Mosaic-App-Version")
+	w.Header().Set("Vary", "Authorization, Accept-Encoding, Mosaic-SDK-Platform, Mosaic-SDK-Version, Mosaic-Configuration-Versions, Mosaic-Paywall-Protocol-Versions, Mosaic-Paywall-Capabilities, Mosaic-Placement-Decision-Versions, Mosaic-Decision-Features, Mosaic-Bucketing-Algorithms, Mosaic-App-Version")
 	if encoding != "" {
 		w.Header().Set("Content-Encoding", encoding)
 	}
 	if r.Header.Get("If-None-Match") == etag {
-		response.Representation(w, http.StatusNotModified, deliveryContentType, nil)
+		response.Representation(w, http.StatusNotModified, "application/vnd.mosaic.configuration+json;version="+deliveryVersion, nil)
 		return
 	}
-	response.Representation(w, http.StatusOK, deliveryContentType, payload)
+	response.Representation(w, http.StatusOK, "application/vnd.mosaic.configuration+json;version="+deliveryVersion, payload)
 }
 
 func (h *Handler) sdkCommerceConfiguration(w http.ResponseWriter, r *http.Request) {

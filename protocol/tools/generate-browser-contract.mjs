@@ -7,6 +7,14 @@ const protocolRoot = resolve(toolsDirectory, "..");
 const generatedDirectory = resolve(protocolRoot, "browser/generated");
 
 const schemaPaths = Object.freeze({
+  configurationDeliveryV1: resolve(
+    protocolRoot,
+    "schema/configuration-delivery/v1/release.schema.json",
+  ),
+  configurationDeliveryV2: resolve(
+    protocolRoot,
+    "schema/configuration-delivery/v2/release.schema.json",
+  ),
   commerceConfigurationV1: resolve(
     protocolRoot,
     "schema/commerce-configuration/v1/configuration.schema.json",
@@ -26,6 +34,10 @@ const schemaPaths = Object.freeze({
   localProjectV02: resolve(
     protocolRoot,
     "schema/local-preview/v0.2/local-project.schema.json",
+  ),
+  placementDecisionV1: resolve(
+    protocolRoot,
+    "schema/placement-decision/v1/decision.schema.json",
   ),
   paywallV02: resolve(protocolRoot, "schema/v0.2/paywall.schema.json"),
   previewV02: resolve(
@@ -69,6 +81,15 @@ function definitionTypeName(context, definitionName) {
   if (context === "commerceConfigurationV2") {
     return `MosaicCommerceConfigurationV2${name}`;
   }
+  if (context === "placementDecisionV1") {
+    return `MosaicPlacementDecisionV1${name}`;
+  }
+  if (context === "configurationDeliveryV1") {
+    return `MosaicConfigurationDeliveryV1${name}`;
+  }
+  if (context === "configurationDeliveryV2") {
+    return `MosaicConfigurationDeliveryV2${name}`;
+  }
   throw new Error(`Unsupported declaration context ${context}`);
 }
 
@@ -94,6 +115,28 @@ function refType(ref, context) {
     return fragment?.startsWith("/$defs/")
       ? definitionTypeName("previewV02", fragment.slice("/$defs/".length))
       : "MosaicPreviewV02Message";
+  }
+  if (
+    schemaId ===
+    "urn:mosaic:protocol:schema:configuration-delivery:v1:release"
+  ) {
+    return fragment?.startsWith("/$defs/")
+      ? definitionTypeName(
+          "configurationDeliveryV1",
+          fragment.slice("/$defs/".length),
+        )
+      : "MosaicConfigurationDeliveryV1";
+  }
+  if (
+    schemaId ===
+    "urn:mosaic:protocol:schema:placement-decision:v1:decision"
+  ) {
+    return fragment?.startsWith("/$defs/")
+      ? definitionTypeName(
+          "placementDecisionV1",
+          fragment.slice("/$defs/".length),
+        )
+      : "MosaicPlacementDecisionV1";
   }
   if (
     schemaId ===
@@ -338,6 +381,12 @@ function commerceProviderRecordSource(
 }
 
 export function buildBrowserContractDeclarations() {
+  const configurationDeliveryV1 = readJson(
+    schemaPaths.configurationDeliveryV1,
+  );
+  const configurationDeliveryV2 = readJson(
+    schemaPaths.configurationDeliveryV2,
+  );
   const commerceConfigurationV1 = readJson(
     schemaPaths.commerceConfigurationV1,
   );
@@ -349,6 +398,7 @@ export function buildBrowserContractDeclarations() {
   const paywallV02 = readJson(schemaPaths.paywallV02);
   const previewV02 = readJson(schemaPaths.previewV02);
   const localProjectV02 = readJson(schemaPaths.localProjectV02);
+  const placementDecisionV1 = readJson(schemaPaths.placementDecisionV1);
 
   const contractTypes = [
     "// Generated from canonical Mosaic JSON Schemas. Do not edit.",
@@ -391,6 +441,18 @@ export function buildBrowserContractDeclarations() {
       "commerceConfigurationV2",
     )};`,
     "",
+    definitionsSource(placementDecisionV1, "placementDecisionV1"),
+    "",
+    `export type MosaicPlacementDecisionV1 = ${schemaType(placementDecisionV1, "placementDecisionV1")};`,
+    "",
+    definitionsSource(configurationDeliveryV1, "configurationDeliveryV1"),
+    "",
+    `export type MosaicConfigurationDeliveryV1 = ${schemaType(configurationDeliveryV1, "configurationDeliveryV1")};`,
+    "",
+    definitionsSource(configurationDeliveryV2, "configurationDeliveryV2"),
+    "",
+    `export type MosaicConfigurationDeliveryV2 = ${schemaType(configurationDeliveryV2, "configurationDeliveryV2")};`,
+    "",
     "export type MosaicPaywallDocument = MosaicPaywallV02Document;",
     "export type MosaicPreviewMessage = MosaicPreviewV02Message;",
     "export type MosaicLocalProject = MosaicLocalProjectV02;",
@@ -402,6 +464,8 @@ export function buildBrowserContractDeclarations() {
 
   const indexDeclaration = `// Generated public declarations for protocol/browser/index.js. Do not edit.
 import type {
+  MosaicConfigurationDeliveryV1,
+  MosaicConfigurationDeliveryV2,
   MosaicCommerceConfigurationV1,
   MosaicCommerceConfigurationV2,
   MosaicCommerceProviderV1Record,
@@ -422,6 +486,7 @@ import type {
   MosaicPaywallV02ProductSelectorComponent,
   MosaicPaywallV02Shadow,
   MosaicPaywallV02Visibility,
+  MosaicPlacementDecisionV1,
   MosaicPreviewCapabilityReportPayload,
   MosaicPreviewCapabilityName,
   MosaicPreviewMessage,
@@ -442,6 +507,10 @@ export type MosaicAnyCommerceProviderRecord =
 export type MosaicAnyCommerceConfiguration =
   | MosaicCommerceConfigurationV1
   | MosaicCommerceConfigurationV2;
+export type MosaicAnyPlacementDecision = MosaicPlacementDecisionV1;
+export type MosaicAnyConfigurationDelivery =
+  | MosaicConfigurationDeliveryV1
+  | MosaicConfigurationDeliveryV2;
 
 export type MosaicLocalPreviewNegotiationDiagnostic = {
   readonly code: "preview.noMutualVersion" | "preview.incompatibleSchemaVersion" | "preview.invalidNegotiation" | "preview.invalidCapabilityReport" | "preview.invalidDraft" | "preview.unsupportedPreviewCapability" | "preview.unsupportedCapability" | "preview.documentTooLarge";

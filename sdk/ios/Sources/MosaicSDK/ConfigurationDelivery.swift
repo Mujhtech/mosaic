@@ -1,8 +1,8 @@
 import CryptoKit
 import Foundation
 
-public let mosaicConfigurationDeliveryVersion = "1"
-public let mosaicSupportedConfigurationDeliveryVersions = [mosaicConfigurationDeliveryVersion]
+public let mosaicConfigurationDeliveryVersion = "2"
+public let mosaicSupportedConfigurationDeliveryVersions = ["2", "1"]
 
 public enum MosaicConfigurationDeliveryError: Error, Sendable, Equatable {
   case invalidJSON
@@ -10,6 +10,9 @@ public enum MosaicConfigurationDeliveryError: Error, Sendable, Equatable {
   case unsupportedDeliveryVersion(String)
   case unsupportedPaywallProtocol(String)
   case unsupportedPaywallCapability(name: String, version: String)
+  case unsupportedDecisionContract(String)
+  case unsupportedDecisionFeature(String)
+  case unsupportedBucketingAlgorithm(String)
   case invalidRelease(code: String)
 
   public var diagnosticCode: String {
@@ -19,6 +22,9 @@ public enum MosaicConfigurationDeliveryError: Error, Sendable, Equatable {
     case .unsupportedDeliveryVersion: "delivery_unsupported_version"
     case .unsupportedPaywallProtocol: "delivery_unsupported_paywall_protocol"
     case .unsupportedPaywallCapability: "delivery_unsupported_paywall_capability"
+    case .unsupportedDecisionContract: "delivery_unsupported_decision_contract"
+    case .unsupportedDecisionFeature: "delivery_unsupported_decision_feature"
+    case .unsupportedBucketingAlgorithm: "delivery_unsupported_bucketing_algorithm"
     case .invalidRelease(let code): code
     }
   }
@@ -29,8 +35,16 @@ public struct MosaicConfigurationReleaseMetadata: Sendable, Equatable {
   public let number: Int64
   public let environmentID: String
   public let environmentKey: String
+  /// Authoritative Delivery v2 Environment mode. Delivery v1 releases do not carry a mode.
+  public let environmentMode: MosaicEnvironmentMode?
   public let publishedAt: String
   public let contentDigest: String
+}
+
+public enum MosaicEnvironmentMode: String, Sendable, Equatable {
+  case development
+  case staging
+  case production
 }
 
 public struct MosaicConfigurationPlacement: Sendable, Equatable, Identifiable {
@@ -63,6 +77,17 @@ public struct MosaicConfigurationProductReference: Sendable, Equatable, Identifi
   public let id: String
   public let type: MosaicConfigurationProductType
   public let fallbackDisplayName: String
+  public let readiness: MosaicProductReadiness
+}
+
+public enum MosaicProductReadiness: String, Sendable, Equatable, Codable {
+  case ready
+  case notReady = "not_ready"
+}
+
+public struct MosaicConfigurationEntitlementReference: Sendable, Equatable, Identifiable {
+  public let id: String
+  public let key: String
 }
 
 public enum MosaicConfigurationAssetKind: String, Sendable, Equatable {
@@ -81,9 +106,12 @@ public struct MosaicConfigurationAssetReference: Sendable, Equatable, Identifiab
 
 public struct MosaicConfigurationRelease: Sendable, Equatable {
   public let metadata: MosaicConfigurationReleaseMetadata
+  public let projectID: String?
   public let placements: [MosaicConfigurationPlacement]
+  public let placementDecisions: [MosaicPlacementDecision]
   public let paywallVersions: [MosaicConfigurationPaywallVersion]
   public let productReferences: [MosaicConfigurationProductReference]
+  public let entitlementReferences: [MosaicConfigurationEntitlementReference]
   public let assetReferences: [MosaicConfigurationAssetReference]
 
   public func paywall(forPlacement key: String) -> MosaicConfigurationPaywallVersion? {
@@ -91,6 +119,10 @@ public struct MosaicConfigurationRelease: Sendable, Equatable {
       return nil
     }
     return paywallVersions.first(where: { $0.id == versionID })
+  }
+
+  public func decision(forPlacement key: String) -> MosaicPlacementDecision? {
+    placementDecisions.first { $0.ruleSet.placementKey == key }
   }
 }
 
@@ -108,7 +140,10 @@ public enum MosaicConfigurationDeliveryDecoder {
     )
     let version = try DeliveryValue.string(
       root["configurationDeliveryVersion"], path: "$.configurationDeliveryVersion")
-    guard version == mosaicConfigurationDeliveryVersion else {
+    if version == "2" {
+      return try MosaicConfigurationDeliveryV2Decoder.decode(root: root)
+    }
+    guard version == "1" else {
       throw MosaicConfigurationDeliveryError.unsupportedDeliveryVersion(version)
     }
     let releaseObject = try DeliveryValue.object(root["release"], path: "$.release")
@@ -145,6 +180,7 @@ public enum MosaicConfigurationDeliveryDecoder {
         environment["id"], path: "\(path).environment.id"),
       environmentKey: try DeliveryValue.environmentKey(
         environment["key"], path: "\(path).environment.key"),
+      environmentMode: nil,
       publishedAt: try DeliveryValue.timestamp(raw["publishedAt"], path: "\(path).publishedAt"),
       contentDigest: contentDigest
     )
@@ -165,9 +201,12 @@ public enum MosaicConfigurationDeliveryDecoder {
     )
     return MosaicConfigurationRelease(
       metadata: metadata,
+      projectID: nil,
       placements: placements,
+      placementDecisions: [],
       paywallVersions: paywalls,
       productReferences: products,
+      entitlementReferences: [],
       assetReferences: assets
     )
   }
@@ -273,7 +312,8 @@ public enum MosaicConfigurationDeliveryDecoder {
           type: type,
           fallbackDisplayName: try DeliveryValue.safeString(
             item["fallbackDisplayName"], length: 1...160, path: "\(itemPath).fallbackDisplayName"
-          )
+          ),
+          readiness: .ready
         ))
     }
     return result

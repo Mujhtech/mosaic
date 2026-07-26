@@ -4,6 +4,255 @@ export type ClientOptions = {
     baseUrl: `${string}://${string}` | (string & {});
 };
 
+export type PlacementDecisionDocumentRequest = {
+    document: PlacementDecisionDocument;
+};
+
+/**
+ * Canonical Placement Decision v1 envelope; see protocol/schema/placement-decision/v1/decision.schema.json.
+ */
+export type PlacementDecisionDocument = {
+    placementDecisionVersion: '1';
+    ruleSet: {
+        [key: string]: unknown;
+    };
+    [key: string]: unknown;
+};
+
+export type PlacementValidationIssue = {
+    severity: 'error' | 'warning';
+    code: string;
+    ruleId?: string;
+    conditionPath?: string;
+    resourceType?: string;
+    resourceId?: string;
+    recoveryAction: string;
+};
+
+export type PlacementValidation = {
+    valid: boolean;
+    issues: Array<PlacementValidationIssue>;
+};
+
+export type PlacementRuleSet = {
+    id: string;
+    projectId: string;
+    environmentId: string;
+    placementId: string;
+    contractVersion: '1';
+    status: 'active' | 'archived';
+    currentDraftId?: string;
+    currentPublishedVersionId?: string;
+    createdByActorId: string;
+    createdAt: string;
+    updatedAt: string;
+    archivedAt?: string;
+};
+
+export type PlacementRuleSetDraft = {
+    id: string;
+    ruleSetId: string;
+    projectId: string;
+    environmentId: string;
+    status: 'active' | 'published' | 'superseded';
+    revision: number;
+    sourceVersionId?: string;
+    createdByActorId: string;
+    updatedByActorId: string;
+    createdAt: string;
+    updatedAt: string;
+};
+
+export type PlacementRuleSetDraftResource = {
+    ruleSet: PlacementRuleSet;
+    draft: PlacementRuleSetDraft;
+    document: PlacementDecisionDocument;
+    validation: PlacementValidation;
+};
+
+export type PlacementRuleSetVersion = {
+    id: string;
+    ruleSetId: string;
+    projectId: string;
+    environmentId: string;
+    placementId: string;
+    versionNumber: number;
+    sourceDraftId: string;
+    sourceRevision: number;
+    contractVersion: '1';
+    document: PlacementDecisionDocument;
+    documentHash: string;
+    validation: PlacementValidation;
+    publishedByActorId: string;
+    publishedAt: string;
+};
+
+export type PlacementAttribute = {
+    id: string;
+    projectId: string;
+    key: string;
+    type: 'string' | 'boolean' | 'number' | 'timestamp' | 'semantic_version' | 'string_list';
+    description: string;
+    allowedOperators: Array<string>;
+    sensitivity: 'standard' | 'sensitive';
+    status: 'active' | 'archived';
+    revision: number;
+    createdByActorId: string;
+    updatedByActorId: string;
+    createdAt: string;
+    updatedAt: string;
+    archivedAt?: string;
+};
+
+export type CreatePlacementAttributeRequest = {
+    key: string;
+    type: string;
+    description?: string;
+    allowedOperators: Array<string>;
+    sensitivity: 'standard' | 'sensitive';
+};
+
+export type PlacementAlias = {
+    id: string;
+    projectId: string;
+    placementId: string;
+    key: string;
+    status: 'active' | 'archived';
+    createdByActorId: string;
+    createdAt: string;
+    archivedAt?: string;
+};
+
+export type PlacementUsage = {
+    ruleSetCount: number;
+    aliasCount: number;
+    publishedRuleCount: number;
+};
+
+export type PlacementOutcome = {
+    type: 'paywall' | 'no_paywall' | 'fallback' | 'unavailable';
+    paywallVersionId?: string;
+    key?: string;
+    unavailableFallbackKey?: string;
+    reason?: string;
+};
+
+export type QaOverride = {
+    id: string;
+    projectId: string;
+    environmentId: string;
+    placementId: string;
+    safeLabel: string;
+    outcome: PlacementOutcome;
+    status: 'active' | 'revoked' | 'expired';
+    createdByActorId: string;
+    createdAt: string;
+    expiresAt: string;
+    revokedAt?: string;
+};
+
+export type CreateQaOverrideRequest = {
+    safeLabel: string;
+    outcome: PlacementOutcome;
+    expiresAt: string;
+};
+
+export type QaOverrideCreated = {
+    override: QaOverride;
+    /**
+     * Returned once and never persisted in plaintext.
+     */
+    token: string;
+};
+
+export type PlacementSimulationRequest = {
+    platform?: 'ios' | 'android';
+    osVersion?: string;
+    applicationVersion?: string;
+    locale?: string;
+    country?: string;
+    entitlements?: {
+        [key: string]: unknown;
+    };
+    productAvailability?: {
+        [key: string]: unknown;
+    };
+    productReadiness?: {
+        [key: string]: unknown;
+    };
+    providerCapabilities?: {
+        [key: string]: unknown;
+    };
+};
+
+export type PlacementSimulationResult = {
+    winningRuleId?: string;
+    selectedOutcome: PlacementOutcome;
+    finalOutcome: PlacementOutcome;
+    fallbackPath: Array<string>;
+    assignmentKeyType?: string;
+    rolloutBucket?: number;
+    trace: Array<{
+        [key: string]: unknown;
+    }>;
+};
+
+export type PlacementRuleSetDraftEnvelope = {
+    data: PlacementRuleSetDraftResource;
+};
+
+export type PlacementValidationEnvelope = {
+    data: PlacementValidation;
+};
+
+export type PlacementRuleSetVersionEnvelope = {
+    data: PlacementRuleSetVersion;
+};
+
+export type PlacementRuleSetVersionListEnvelope = {
+    data: {
+        items: Array<PlacementRuleSetVersion>;
+    };
+};
+
+export type PlacementAttributeEnvelope = {
+    data: PlacementAttribute;
+};
+
+export type PlacementAttributeListEnvelope = {
+    data: {
+        items: Array<PlacementAttribute>;
+    };
+};
+
+export type PlacementAliasEnvelope = {
+    data: PlacementAlias;
+};
+
+export type PlacementAliasListEnvelope = {
+    data: {
+        items: Array<PlacementAlias>;
+    };
+};
+
+export type PlacementUsageEnvelope = {
+    data: PlacementUsage;
+};
+
+export type QaOverrideCreatedEnvelope = {
+    data: QaOverrideCreated;
+};
+
+export type QaOverrideListEnvelope = {
+    data: {
+        items: Array<QaOverride>;
+    };
+};
+
+export type PlacementSimulationEnvelope = {
+    data: PlacementSimulationResult;
+};
+
 export type Timestamp = string;
 
 export type Page = {
@@ -286,12 +535,7 @@ export type CreateProviderMappingObservationRequest = {
      */
     diagnosticCode?: string;
     correlationId: string;
-    /**
-     * Bounded normalized Product metadata; no raw provider payload
-     */
-    metadata?: {
-        [key: string]: unknown;
-    };
+    metadata?: ProviderMappingObservationMetadata;
     observedAt: Timestamp;
     expiresAt?: Timestamp;
 };
@@ -699,13 +943,24 @@ export type ProviderMappingObservation = {
     result: 'available' | 'unavailable' | 'failed';
     diagnosticCode?: string;
     correlationId: string;
-    metadata: {
-        [key: string]: unknown;
-    };
+    metadata: ProviderMappingObservationMetadata;
     observedAt: Timestamp;
     expiresAt?: Timestamp;
     receivedAt: Timestamp;
     createdByActorId: string;
+};
+
+/**
+ * Closed operational metadata. Unknown fields and receipt, token, credential, customer, account, authorization, or secret-like material are rejected.
+ */
+export type ProviderMappingObservationMetadata = {
+    clientPlatform?: 'ios' | 'android' | 'flutter';
+    clientVersion?: string;
+    applicationVersion?: string;
+    osVersion?: string;
+    configurationSource?: 'bundled' | 'remote' | 'local' | 'unknown';
+    storefrontCountryCode?: string;
+    testScenario?: 'productLoad' | 'configurationAcceptance' | 'purchasePresentation' | 'restore';
 };
 
 export type ProviderMappingUsage = {
@@ -1165,6 +1420,39 @@ export type AuditEventList = {
     };
 };
 
+export type CreateQaOverrideRequestWritable = {
+    safeLabel: string;
+    selector: string;
+    outcome: PlacementOutcome;
+    expiresAt: string;
+};
+
+export type PlacementSimulationRequestWritable = {
+    platform?: 'ios' | 'android';
+    osVersion?: string;
+    applicationVersion?: string;
+    locale?: string;
+    country?: string;
+    installationId?: string;
+    userId?: string;
+    attributes?: {
+        [key: string]: unknown;
+    };
+    entitlements?: {
+        [key: string]: unknown;
+    };
+    productAvailability?: {
+        [key: string]: unknown;
+    };
+    productReadiness?: {
+        [key: string]: unknown;
+    };
+    providerCapabilities?: {
+        [key: string]: unknown;
+    };
+    overrideToken?: string;
+};
+
 export type CreateProviderConnectionRequestWritable = unknown & {
     name: string;
     provider: ProviderConnectionKind;
@@ -1218,6 +1506,8 @@ export type DraftId = string;
 export type VersionId = string;
 
 export type PlacementId = string;
+
+export type RuleSetId = string;
 
 export type AssetId = string;
 
@@ -4432,12 +4722,18 @@ export type GetSdkConfigurationData = {
     headers: {
         'Mosaic-SDK-Platform': 'flutter' | 'ios' | 'android';
         'Mosaic-SDK-Version': string;
-        'Mosaic-Configuration-Versions': '1';
+        'Mosaic-Configuration-Versions': string;
         'Mosaic-Paywall-Protocol-Versions': '0.2';
         /**
          * Comma-separated unique exact Protocol capability pairs (`name@0.2`), bounded to 128 pairs. The selected Release is returned only when every required pair is reported.
          */
         'Mosaic-Paywall-Capabilities': string;
+        'Mosaic-Placement-Decision-Versions'?: string;
+        /**
+         * Comma-separated exact Placement Decision v1 feature identifiers.
+         */
+        'Mosaic-Decision-Features'?: string;
+        'Mosaic-Bucketing-Algorithms'?: 'sha256_length_prefixed_v1';
         'Mosaic-App-Version'?: string;
         'If-None-Match'?: string;
     };
@@ -4469,7 +4765,7 @@ export type GetSdkConfigurationError = GetSdkConfigurationErrors[keyof GetSdkCon
 
 export type GetSdkConfigurationResponses = {
     /**
-     * Complete immutable Configuration Delivery v1 envelope.
+     * Highest mutually supported immutable Configuration Delivery v2 or safe v1 projection. A v1 candidate is withheld when an advanced Placement lacks an explicit Paywall default.
      */
     200: {
         [key: string]: unknown;
@@ -4565,3 +4861,568 @@ export type GetAssetContentResponses = {
 };
 
 export type GetAssetContentResponse = GetAssetContentResponses[keyof GetAssetContentResponses];
+
+export type ListPlacementAttributesData = {
+    body?: never;
+    path: {
+        projectId: string;
+    };
+    query?: never;
+    url: '/v1/projects/{projectId}/placement-attributes';
+};
+
+export type ListPlacementAttributesErrors = {
+    /**
+     * Stable machine-readable failure.
+     */
+    401: ErrorEnvelope;
+    /**
+     * Stable machine-readable failure.
+     */
+    403: ErrorEnvelope;
+};
+
+export type ListPlacementAttributesError = ListPlacementAttributesErrors[keyof ListPlacementAttributesErrors];
+
+export type ListPlacementAttributesResponses = {
+    /**
+     * Project attribute allow-list.
+     */
+    200: PlacementAttributeListEnvelope;
+};
+
+export type ListPlacementAttributesResponse = ListPlacementAttributesResponses[keyof ListPlacementAttributesResponses];
+
+export type CreatePlacementAttributeData = {
+    body: CreatePlacementAttributeRequest;
+    path: {
+        projectId: string;
+    };
+    query?: never;
+    url: '/v1/projects/{projectId}/placement-attributes';
+};
+
+export type CreatePlacementAttributeErrors = {
+    /**
+     * Stable machine-readable failure.
+     */
+    409: ErrorEnvelope;
+    /**
+     * Stable machine-readable failure.
+     */
+    422: ErrorEnvelope;
+};
+
+export type CreatePlacementAttributeError = CreatePlacementAttributeErrors[keyof CreatePlacementAttributeErrors];
+
+export type CreatePlacementAttributeResponses = {
+    /**
+     * Attribute definition created.
+     */
+    201: PlacementAttributeEnvelope;
+};
+
+export type CreatePlacementAttributeResponse = CreatePlacementAttributeResponses[keyof CreatePlacementAttributeResponses];
+
+export type ArchivePlacementAttributeData = {
+    body?: never;
+    path: {
+        projectId: string;
+        attributeId: string;
+    };
+    query?: never;
+    url: '/v1/projects/{projectId}/placement-attributes/{attributeId}';
+};
+
+export type ArchivePlacementAttributeErrors = {
+    /**
+     * Stable machine-readable failure.
+     */
+    404: ErrorEnvelope;
+    /**
+     * Stable machine-readable failure.
+     */
+    409: ErrorEnvelope;
+};
+
+export type ArchivePlacementAttributeError = ArchivePlacementAttributeErrors[keyof ArchivePlacementAttributeErrors];
+
+export type ArchivePlacementAttributeResponses = {
+    /**
+     * Attribute definition archived.
+     */
+    204: void;
+};
+
+export type ArchivePlacementAttributeResponse = ArchivePlacementAttributeResponses[keyof ArchivePlacementAttributeResponses];
+
+export type GetPlacementUsageData = {
+    body?: never;
+    path: {
+        projectId: string;
+        placementId: string;
+    };
+    query?: never;
+    url: '/v1/projects/{projectId}/placements/{placementId}/usage';
+};
+
+export type GetPlacementUsageErrors = {
+    /**
+     * Stable machine-readable failure.
+     */
+    404: ErrorEnvelope;
+};
+
+export type GetPlacementUsageError = GetPlacementUsageErrors[keyof GetPlacementUsageErrors];
+
+export type GetPlacementUsageResponses = {
+    /**
+     * Placement usage.
+     */
+    200: PlacementUsageEnvelope;
+};
+
+export type GetPlacementUsageResponse = GetPlacementUsageResponses[keyof GetPlacementUsageResponses];
+
+export type ListPlacementAliasesData = {
+    body?: never;
+    path: {
+        projectId: string;
+        placementId: string;
+    };
+    query?: never;
+    url: '/v1/projects/{projectId}/placements/{placementId}/aliases';
+};
+
+export type ListPlacementAliasesResponses = {
+    /**
+     * Placement aliases.
+     */
+    200: PlacementAliasListEnvelope;
+};
+
+export type ListPlacementAliasesResponse = ListPlacementAliasesResponses[keyof ListPlacementAliasesResponses];
+
+export type CreatePlacementAliasData = {
+    body: {
+        key: string;
+    };
+    path: {
+        projectId: string;
+        placementId: string;
+    };
+    query?: never;
+    url: '/v1/projects/{projectId}/placements/{placementId}/aliases';
+};
+
+export type CreatePlacementAliasErrors = {
+    /**
+     * Stable machine-readable failure.
+     */
+    409: ErrorEnvelope;
+};
+
+export type CreatePlacementAliasError = CreatePlacementAliasErrors[keyof CreatePlacementAliasErrors];
+
+export type CreatePlacementAliasResponses = {
+    /**
+     * Alias created.
+     */
+    201: PlacementAliasEnvelope;
+};
+
+export type CreatePlacementAliasResponse = CreatePlacementAliasResponses[keyof CreatePlacementAliasResponses];
+
+export type ArchivePlacementWithUsageCheckData = {
+    body?: never;
+    path: {
+        projectId: string;
+        placementId: string;
+    };
+    query?: never;
+    url: '/v1/projects/{projectId}/placements/{placementId}/archive';
+};
+
+export type ArchivePlacementWithUsageCheckErrors = {
+    /**
+     * Stable machine-readable failure.
+     */
+    409: ErrorEnvelope;
+};
+
+export type ArchivePlacementWithUsageCheckError = ArchivePlacementWithUsageCheckErrors[keyof ArchivePlacementWithUsageCheckErrors];
+
+export type ArchivePlacementWithUsageCheckResponses = {
+    /**
+     * Placement archived.
+     */
+    204: void;
+};
+
+export type ArchivePlacementWithUsageCheckResponse = ArchivePlacementWithUsageCheckResponses[keyof ArchivePlacementWithUsageCheckResponses];
+
+export type GetPlacementDecisionData = {
+    body?: never;
+    path: {
+        projectId: string;
+        environmentId: string;
+        placementId: string;
+    };
+    query?: never;
+    url: '/v1/projects/{projectId}/environments/{environmentId}/placements/{placementId}/rule-set';
+};
+
+export type GetPlacementDecisionErrors = {
+    /**
+     * Stable machine-readable failure.
+     */
+    404: ErrorEnvelope;
+};
+
+export type GetPlacementDecisionError = GetPlacementDecisionErrors[keyof GetPlacementDecisionErrors];
+
+export type GetPlacementDecisionResponses = {
+    /**
+     * Combined Rule Set and current Draft detail.
+     */
+    200: PlacementRuleSetDraftEnvelope;
+};
+
+export type GetPlacementDecisionResponse = GetPlacementDecisionResponses[keyof GetPlacementDecisionResponses];
+
+export type CreatePlacementRuleSetData = {
+    body: PlacementDecisionDocumentRequest;
+    headers: {
+        'Idempotency-Key': string;
+    };
+    path: {
+        projectId: string;
+        environmentId: string;
+        placementId: string;
+    };
+    query?: never;
+    url: '/v1/projects/{projectId}/environments/{environmentId}/placements/{placementId}/rule-set';
+};
+
+export type CreatePlacementRuleSetErrors = {
+    /**
+     * Stable machine-readable failure.
+     */
+    409: ErrorEnvelope;
+    /**
+     * Stable machine-readable failure.
+     */
+    422: ErrorEnvelope;
+};
+
+export type CreatePlacementRuleSetError = CreatePlacementRuleSetErrors[keyof CreatePlacementRuleSetErrors];
+
+export type CreatePlacementRuleSetResponses = {
+    /**
+     * Rule Set and Draft created.
+     */
+    201: PlacementRuleSetDraftEnvelope;
+};
+
+export type CreatePlacementRuleSetResponse = CreatePlacementRuleSetResponses[keyof CreatePlacementRuleSetResponses];
+
+export type UpdatePlacementRuleSetDraftData = {
+    body: PlacementDecisionDocumentRequest;
+    headers: {
+        'If-Match': string;
+        'Idempotency-Key': string;
+    };
+    path: {
+        projectId: string;
+        environmentId: string;
+        placementId: string;
+        ruleSetId: string;
+    };
+    query?: never;
+    url: '/v1/projects/{projectId}/environments/{environmentId}/placements/{placementId}/rule-sets/{ruleSetId}/draft';
+};
+
+export type UpdatePlacementRuleSetDraftErrors = {
+    /**
+     * Stable machine-readable failure.
+     */
+    412: ErrorEnvelope;
+    /**
+     * Stable machine-readable failure.
+     */
+    422: ErrorEnvelope;
+    /**
+     * Stable machine-readable failure.
+     */
+    428: ErrorEnvelope;
+};
+
+export type UpdatePlacementRuleSetDraftError = UpdatePlacementRuleSetDraftErrors[keyof UpdatePlacementRuleSetDraftErrors];
+
+export type UpdatePlacementRuleSetDraftResponses = {
+    /**
+     * New immutable Draft revision.
+     */
+    200: PlacementRuleSetDraftEnvelope;
+};
+
+export type UpdatePlacementRuleSetDraftResponse = UpdatePlacementRuleSetDraftResponses[keyof UpdatePlacementRuleSetDraftResponses];
+
+export type ValidatePlacementRuleSetData = {
+    body?: never;
+    path: {
+        projectId: string;
+        environmentId: string;
+        placementId: string;
+        ruleSetId: string;
+    };
+    query?: never;
+    url: '/v1/projects/{projectId}/environments/{environmentId}/placements/{placementId}/rule-sets/{ruleSetId}/validate';
+};
+
+export type ValidatePlacementRuleSetResponses = {
+    /**
+     * Semantic validation result.
+     */
+    200: PlacementValidationEnvelope;
+};
+
+export type ValidatePlacementRuleSetResponse = ValidatePlacementRuleSetResponses[keyof ValidatePlacementRuleSetResponses];
+
+export type PublishPlacementRuleSetData = {
+    body: {
+        expectedRevision: number;
+    };
+    path: {
+        projectId: string;
+        environmentId: string;
+        placementId: string;
+        ruleSetId: string;
+    };
+    query?: never;
+    url: '/v1/projects/{projectId}/environments/{environmentId}/placements/{placementId}/rule-sets/{ruleSetId}/publish';
+};
+
+export type PublishPlacementRuleSetErrors = {
+    /**
+     * Stable machine-readable failure.
+     */
+    412: ErrorEnvelope;
+    /**
+     * Stable machine-readable failure.
+     */
+    422: ErrorEnvelope;
+};
+
+export type PublishPlacementRuleSetError = PublishPlacementRuleSetErrors[keyof PublishPlacementRuleSetErrors];
+
+export type PublishPlacementRuleSetResponses = {
+    /**
+     * Immutable Rule Set Version.
+     */
+    201: PlacementRuleSetVersionEnvelope;
+};
+
+export type PublishPlacementRuleSetResponse = PublishPlacementRuleSetResponses[keyof PublishPlacementRuleSetResponses];
+
+export type ArchivePlacementRuleSetData = {
+    body?: never;
+    path: {
+        projectId: string;
+        environmentId: string;
+        placementId: string;
+        ruleSetId: string;
+    };
+    query?: never;
+    url: '/v1/projects/{projectId}/environments/{environmentId}/placements/{placementId}/rule-sets/{ruleSetId}/archive';
+};
+
+export type ArchivePlacementRuleSetErrors = {
+    /**
+     * Stable machine-readable failure.
+     */
+    403: ErrorEnvelope;
+    /**
+     * Stable machine-readable failure.
+     */
+    404: ErrorEnvelope;
+    /**
+     * Rule Set is already archived or conflicts with current state.
+     */
+    409: ErrorEnvelope;
+};
+
+export type ArchivePlacementRuleSetError = ArchivePlacementRuleSetErrors[keyof ArchivePlacementRuleSetErrors];
+
+export type ArchivePlacementRuleSetResponses = {
+    /**
+     * Rule Set archived; immutable version history is retained.
+     */
+    204: void;
+};
+
+export type ArchivePlacementRuleSetResponse = ArchivePlacementRuleSetResponses[keyof ArchivePlacementRuleSetResponses];
+
+export type ListPlacementRuleSetVersionsData = {
+    body?: never;
+    path: {
+        projectId: string;
+        environmentId: string;
+        placementId: string;
+        ruleSetId: string;
+    };
+    query?: never;
+    url: '/v1/projects/{projectId}/environments/{environmentId}/placements/{placementId}/rule-sets/{ruleSetId}/versions';
+};
+
+export type ListPlacementRuleSetVersionsResponses = {
+    /**
+     * Immutable version history.
+     */
+    200: PlacementRuleSetVersionListEnvelope;
+};
+
+export type ListPlacementRuleSetVersionsResponse = ListPlacementRuleSetVersionsResponses[keyof ListPlacementRuleSetVersionsResponses];
+
+export type ClonePlacementRuleSetVersionData = {
+    body?: never;
+    headers: {
+        'Idempotency-Key': string;
+    };
+    path: {
+        projectId: string;
+        environmentId: string;
+        placementId: string;
+        ruleSetId: string;
+        versionId: string;
+    };
+    query?: never;
+    url: '/v1/projects/{projectId}/environments/{environmentId}/placements/{placementId}/rule-sets/{ruleSetId}/versions/{versionId}/draft';
+};
+
+export type ClonePlacementRuleSetVersionErrors = {
+    /**
+     * Stable machine-readable failure.
+     */
+    409: ErrorEnvelope;
+};
+
+export type ClonePlacementRuleSetVersionError = ClonePlacementRuleSetVersionErrors[keyof ClonePlacementRuleSetVersionErrors];
+
+export type ClonePlacementRuleSetVersionResponses = {
+    /**
+     * Active Draft cloned from the immutable version.
+     */
+    201: PlacementRuleSetDraftEnvelope;
+};
+
+export type ClonePlacementRuleSetVersionResponse = ClonePlacementRuleSetVersionResponses[keyof ClonePlacementRuleSetVersionResponses];
+
+export type SimulatePlacementDecisionData = {
+    body: PlacementSimulationRequestWritable;
+    path: {
+        projectId: string;
+        environmentId: string;
+        placementId: string;
+        ruleSetId: string;
+    };
+    query?: never;
+    url: '/v1/projects/{projectId}/environments/{environmentId}/placements/{placementId}/rule-sets/{ruleSetId}/simulate';
+};
+
+export type SimulatePlacementDecisionErrors = {
+    /**
+     * Stable machine-readable failure.
+     */
+    422: ErrorEnvelope;
+};
+
+export type SimulatePlacementDecisionError = SimulatePlacementDecisionErrors[keyof SimulatePlacementDecisionErrors];
+
+export type SimulatePlacementDecisionResponses = {
+    /**
+     * Ephemeral bounded decision trace; request inputs are neither logged nor persisted.
+     */
+    200: PlacementSimulationEnvelope;
+};
+
+export type SimulatePlacementDecisionResponse = SimulatePlacementDecisionResponses[keyof SimulatePlacementDecisionResponses];
+
+export type ListPlacementQaOverridesData = {
+    body?: never;
+    path: {
+        projectId: string;
+        environmentId: string;
+        placementId: string;
+    };
+    query?: never;
+    url: '/v1/projects/{projectId}/environments/{environmentId}/placements/{placementId}/qa-overrides';
+};
+
+export type ListPlacementQaOverridesResponses = {
+    /**
+     * Active non-production QA overrides.
+     */
+    200: QaOverrideListEnvelope;
+};
+
+export type ListPlacementQaOverridesResponse = ListPlacementQaOverridesResponses[keyof ListPlacementQaOverridesResponses];
+
+export type CreatePlacementQaOverrideData = {
+    body: CreateQaOverrideRequestWritable;
+    path: {
+        projectId: string;
+        environmentId: string;
+        placementId: string;
+    };
+    query?: never;
+    url: '/v1/projects/{projectId}/environments/{environmentId}/placements/{placementId}/qa-overrides';
+};
+
+export type CreatePlacementQaOverrideErrors = {
+    /**
+     * Stable machine-readable failure.
+     */
+    422: ErrorEnvelope;
+};
+
+export type CreatePlacementQaOverrideError = CreatePlacementQaOverrideErrors[keyof CreatePlacementQaOverrideErrors];
+
+export type CreatePlacementQaOverrideResponses = {
+    /**
+     * Override created; opaque token is returned once.
+     */
+    201: QaOverrideCreatedEnvelope;
+};
+
+export type CreatePlacementQaOverrideResponse = CreatePlacementQaOverrideResponses[keyof CreatePlacementQaOverrideResponses];
+
+export type RevokePlacementQaOverrideData = {
+    body?: never;
+    path: {
+        projectId: string;
+        environmentId: string;
+        placementId: string;
+        overrideId: string;
+    };
+    query?: never;
+    url: '/v1/projects/{projectId}/environments/{environmentId}/placements/{placementId}/qa-overrides/{overrideId}';
+};
+
+export type RevokePlacementQaOverrideErrors = {
+    /**
+     * Stable machine-readable failure.
+     */
+    404: ErrorEnvelope;
+};
+
+export type RevokePlacementQaOverrideError = RevokePlacementQaOverrideErrors[keyof RevokePlacementQaOverrideErrors];
+
+export type RevokePlacementQaOverrideResponses = {
+    /**
+     * Override revoked; the next immutable release omits it.
+     */
+    204: void;
+};
+
+export type RevokePlacementQaOverrideResponse = RevokePlacementQaOverrideResponses[keyof RevokePlacementQaOverrideResponses];

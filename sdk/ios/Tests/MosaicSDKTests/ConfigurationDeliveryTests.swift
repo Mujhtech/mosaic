@@ -30,6 +30,59 @@ final class ConfigurationDeliveryTests: XCTestCase {
       )
     }
   }
+
+  func testEveryCanonicalDeliveryV2ReleaseDecodesItsAuthoritativeEnvironmentMode() throws {
+    let advanced = try MosaicConfigurationDeliveryDecoder.decode(
+      phase5FixtureData("configuration-delivery/v2/advanced-release.json")
+    )
+    XCTAssertEqual(advanced.projectID, "project_alpha")
+    XCTAssertEqual(advanced.placementDecisions.map(\.ruleSet.placementKey), ["export_pdf"])
+    XCTAssertEqual(advanced.paywallVersions.count, 3)
+    XCTAssertEqual(advanced.productReferences.first?.readiness, .ready)
+    XCTAssertEqual(advanced.metadata.environmentMode, .production)
+
+    let noPaywall = try MosaicConfigurationDeliveryDecoder.decode(
+      phase5FixtureData("configuration-delivery/v2/no-paywall-release.json")
+    )
+    XCTAssertTrue(noPaywall.paywallVersions.isEmpty)
+    XCTAssertEqual(noPaywall.placementDecisions.first?.ruleSet.defaultOutcome, .noPaywall)
+    XCTAssertEqual(noPaywall.metadata.environmentMode, .production)
+
+    let staging = try MosaicConfigurationDeliveryDecoder.decode(
+      phase5FixtureData("configuration-delivery/v2/staging-qa-override-release.json")
+    )
+    XCTAssertEqual(staging.metadata.environmentKey, "staging")
+    XCTAssertEqual(staging.metadata.environmentMode, .staging)
+    XCTAssertEqual(staging.placementDecisions.first?.ruleSet.qaOverrides.count, 1)
+  }
+
+  func testEveryCanonicalInvalidDeliveryV2CandidateRejectsAtomically() throws {
+    for name in [
+      "unsupported-operator", "invalid-condition-type", "duplicate-priority", "fallback-cycle",
+      "incompatible-source-operator", "missing-unavailable-fallback", "underdeclared-features",
+      "overdeclared-features", "release-underdeclared-compatibility",
+      "release-overdeclared-compatibility", "qa-override-over-24h",
+      "production-qa-override", "invalid-environment-mode",
+    ] {
+      XCTAssertThrowsError(
+        try MosaicConfigurationDeliveryDecoder.decode(
+          phase5FixtureData("configuration-delivery/v2/invalid/\(name).json")
+        ), "Expected \(name) to reject the complete candidate")
+    }
+  }
+
+  func testEveryCanonicalInvalidPlacementDecisionFixtureRejectsStrictValidation() throws {
+    for name in [
+      "unsupported-operator", "invalid-condition-type", "duplicate-priority", "fallback-cycle",
+      "incompatible-source-operator", "missing-unavailable-fallback", "underdeclared-features",
+      "overdeclared-features", "qa-override-over-24h",
+    ] {
+      XCTAssertThrowsError(
+        try MosaicConfigurationDeliveryV2Decoder.validateDecisionFixture(
+          phase5FixtureData("placement-decision/v1/invalid/\(name).json")
+        ), "Expected \(name) to reject standalone Rule Set validation")
+    }
+  }
 }
 
 final class ConfigurationClientTests: XCTestCase {
@@ -59,7 +112,9 @@ final class ConfigurationClientTests: XCTestCase {
     XCTAssertEqual(requests[1].headers["If-None-Match"], "\"release-one\"")
     XCTAssertEqual(requests[0].headers["Authorization"], "Bearer public_test_key")
     XCTAssertEqual(requests[0].headers["Mosaic-SDK-Platform"], "ios")
-    XCTAssertEqual(requests[0].headers["Mosaic-Configuration-Versions"], "1")
+    XCTAssertEqual(requests[0].headers["Mosaic-Configuration-Versions"], "2,1")
+    XCTAssertEqual(requests[0].headers["Mosaic-Placement-Decision-Versions"], "1")
+    XCTAssertEqual(requests[0].headers["Mosaic-Bucketing-Algorithms"], "sha256_length_prefixed_v1")
     XCTAssertEqual(
       requests[0].headers["Mosaic-Paywall-Capabilities"],
       MosaicCapabilityCatalog.v02.map { "\($0.rawValue)@\(mosaicProtocolVersion)" }.joined(
@@ -67,6 +122,51 @@ final class ConfigurationClientTests: XCTestCase {
     )
     let storedRecord = await store.record()
     XCTAssertNotNil(storedRecord)
+  }
+
+  func testUnsupportedAndMalformedV2RefreshesPreserveAcceptedV2ForOfflineDecision() async throws {
+    let invalidNames = [
+      "unsupported-operator", "invalid-condition-type", "duplicate-priority", "fallback-cycle",
+      "incompatible-source-operator", "missing-unavailable-fallback", "underdeclared-features",
+      "overdeclared-features", "release-underdeclared-compatibility",
+      "release-overdeclared-compatibility", "qa-override-over-24h",
+      "production-qa-override", "invalid-environment-mode",
+    ]
+    let invalidSteps: [QueuedConfigurationTransport.Step] = try invalidNames.enumerated().map {
+      index, name in
+      .response(
+        status: 200,
+        data: try phase5FixtureData("configuration-delivery/v2/invalid/\(name).json"),
+        etag: "\"invalid-\(index)\"", cacheControl: nil)
+    }
+    let transport = QueuedConfigurationTransport(
+      steps: [
+        .response(
+          status: 200,
+          data: try phase5FixtureData("configuration-delivery/v2/advanced-release.json"),
+          etag: "\"phase-five\"", cacheControl: nil)
+      ] + invalidSteps)
+    let client = try makeClient(
+      transport: transport, store: MemoryConfigurationStore(), fallback: .data(nil))
+    await client.bootstrap()
+    guard case .updated = await client.refresh() else { return XCTFail("Expected v2 acceptance") }
+    for name in invalidNames {
+      guard case .preserved = await client.refresh() else {
+        return XCTFail("Expected \(name) to preserve the LKG")
+      }
+    }
+    let identity = MosaicIdentitySnapshot(
+      installationID: "install_01", userID: nil, attributes: [:], generation: 0)
+    let context = MosaicDecisionContext(
+      platform: "ios", applicationVersion: "2.10.0", applicationLocale: "en-US",
+      entitlements: ["pro": .inactive], products: ["product_export_pro": .available])
+    guard
+      case .paywallSelected(_, let versionID, let ruleID, _, _, let source, _) =
+        await client.decide(placement: "export_pdf", context: context, identity: identity)
+    else { return XCTFail("Expected cached local decision") }
+    XCTAssertEqual(versionID, "paywall_version_ios")
+    XCTAssertEqual(ruleID, "rule_ios_rollout")
+    XCTAssertEqual(source, .remote)
   }
 
   func testMalformedAndUnsupportedRefreshesPreserveThePreviousCompleteRelease() async throws {

@@ -1,3 +1,4 @@
+import 'placement_decision.dart';
 import 'protocol.dart';
 
 enum MosaicDiagnosticSeverity { warning, error }
@@ -128,7 +129,8 @@ enum MosaicPresentationOutcome {
   placementUnavailable('placementUnavailable'),
   configurationUnavailable('configurationUnavailable'),
   purchaseFailed('purchaseFailed'),
-  renderingFailed('renderingFailed');
+  renderingFailed('renderingFailed'),
+  noPaywall('noPaywall');
 
   const MosaicPresentationOutcome(this.wireValue);
 
@@ -250,6 +252,20 @@ final class MosaicPlacementUnavailablePresentationResult
   @override
   MosaicPresentationOutcome get outcome =>
       MosaicPresentationOutcome.placementUnavailable;
+}
+
+/// A successful terminal decision that intentionally presents no Paywall.
+final class MosaicNoPaywallPresentationResult extends MosaicPresentationResult {
+  const MosaicNoPaywallPresentationResult({
+    required this.placementKey,
+    required this.decision,
+  });
+
+  final String placementKey;
+  final MosaicNoPaywallSelected decision;
+
+  @override
+  MosaicPresentationOutcome get outcome => MosaicPresentationOutcome.noPaywall;
 }
 
 final class MosaicPurchaseFailedPresentationResult

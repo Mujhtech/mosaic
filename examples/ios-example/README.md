@@ -2,8 +2,9 @@
 
 This native SwiftUI application has separate Local Studio and Hosted modes.
 Local Studio renders Protocol 0.2 revisions immediately without an account.
-Hosted mode fetches Configuration Delivery v1 with an Environment-scoped
-public SDK key, resolves a Placement, caches the last valid release, and falls
+Hosted mode prefers Configuration Delivery v2 (with Delivery v1 compatibility)
+using an Environment-scoped public SDK key, evaluates a Placement locally,
+caches the last valid release, and falls
 back safely when delivery is unavailable. Local Studio remains deterministic.
 Hosted mode uses mock commerce unless RevenueCat or StoreKit is selected. Both
 optional adapters fetch the release-bound Commerce Configuration sidecar,
@@ -29,6 +30,9 @@ the app:
 - keeps the last accepted paywall visible when a later revision is unsafe
 - validates complete hosted releases before atomically replacing the cache
 - rejects stale or cross-Environment hosted releases
+- shows the matched Rule or fallback in its safe status line
+- demonstrates identify and user-identity reset while retaining installation assignment
+- terminates intentional `no_paywall` without an error surface
 
 The footer shows the latest normalized paywall interaction or terminal result.
 The example uses `MosaicImageResolver.missing` intentionally so the fixture's
@@ -57,7 +61,7 @@ example, and use Refresh:
 ```text
 MOSAIC_PUBLIC_SDK_KEY=<environment public SDK key>
 MOSAIC_SDK_BASE_URL=http://127.0.0.1:8080
-MOSAIC_PLACEMENT=onboarding_complete
+MOSAIC_PLACEMENT=export_pdf
 MOSAIC_APPLICATION_ID=<Mosaic Application ID>
 REVENUECAT_PUBLIC_SDK_KEY=<platform public SDK key>
 ```
@@ -66,8 +70,10 @@ The base URL is the configuration API origin. Releases containing hosted
 Assets use the immutable HTTPS Asset origin configured by the API. Simulator
 or device testing against the local Compose edge therefore requires trusting
 its development certificate; production Asset URLs must use a publicly trusted
-HTTPS origin. Stop the API and restart the app to verify last-known-valid cache
-fallback. Clearing app data demonstrates the bundled Delivery v1 fallback.
+HTTPS origin. Stop the API and restart the app to verify the same Rule from the
+last-known-valid cache without a presentation-time request. Use Identify and
+Reset to inspect assignment-policy changes. Clearing app data rotates the
+app-install identity and demonstrates the bundled Delivery v1 fallback.
 
 To exercise StoreKit Configuration instead, omit the RevenueCat key and add:
 

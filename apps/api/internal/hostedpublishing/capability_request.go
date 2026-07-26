@@ -3,6 +3,8 @@ package hostedpublishing
 import (
 	"encoding/json"
 	"regexp"
+
+	"github.com/Mujhtech/mosaic/apps/api/internal/placementdecision"
 )
 
 const MaxSDKCapabilityCount = 128
@@ -39,6 +41,74 @@ type SDKCapabilityRequest struct {
 	SupportedConfigurationDeliveryVersions []string                    `json:"supportedConfigurationDeliveryVersions"`
 	SupportedPaywallProtocols              []SDKPaywallProtocolSupport `json:"supportedPaywallProtocols"`
 	ApplicationVersion                     string                      `json:"applicationVersion,omitempty"`
+	SupportedPlacementDecisionContracts    []string                    `json:"supportedPlacementDecisionContracts"`
+	SupportedDecisionFeatures              []string                    `json:"supportedDecisionFeatures"`
+	SupportedBucketingAlgorithms           []string                    `json:"supportedBucketingAlgorithms"`
+}
+
+func PreferredDeliveryVersion(values []string) string {
+	for _, value := range values {
+		if value == "2" {
+			return "2"
+		}
+	}
+	for _, value := range values {
+		if value == "1" {
+			return "1"
+		}
+	}
+	return ""
+}
+
+func ValidateSDKCapabilityPayload(request SDKCapabilityRequest, payload json.RawMessage, version string) error {
+	if version == "1" {
+		release := Release{DeliveryContractVersion: "1", Payload: payload}
+		return ValidateSDKCapabilityRequest(request, release)
+	}
+	if version != "2" || !containsExactUnique(request.SupportedConfigurationDeliveryVersions, "2", 8) || !containsExactUnique(request.SupportedPlacementDecisionContracts, "1", 8) {
+		return ErrUnsupportedCapability
+	}
+	var envelope deliveryV2Envelope
+	if err := json.Unmarshal(payload, &envelope); err != nil || envelope.ConfigurationDeliveryVersion != "2" {
+		return ErrUnsupportedCapability
+	}
+	features := map[string]struct{}{}
+	for _, feature := range request.SupportedDecisionFeatures {
+		if _, duplicate := features[feature]; duplicate {
+			return ErrUnsupportedCapability
+		}
+		features[feature] = struct{}{}
+	}
+	algorithms := map[string]struct{}{}
+	for _, algorithm := range request.SupportedBucketingAlgorithms {
+		if algorithm != placementdecision.BucketingAlgorithm {
+			return ErrUnsupportedCapability
+		}
+		if _, duplicate := algorithms[algorithm]; duplicate {
+			return ErrUnsupportedCapability
+		}
+		algorithms[algorithm] = struct{}{}
+	}
+	for _, contract := range envelope.Release.Compatibility.PlacementDecisionContracts {
+		if contract.Version != "1" {
+			return ErrUnsupportedCapability
+		}
+		for _, feature := range contract.RequiredFeatures {
+			if _, ok := features[feature]; !ok {
+				return ErrUnsupportedCapability
+			}
+		}
+		for _, algorithm := range contract.BucketingAlgorithms {
+			if _, ok := algorithms[algorithm]; !ok {
+				return ErrUnsupportedCapability
+			}
+		}
+	}
+	clone := request
+	clone.SupportedConfigurationDeliveryVersions = []string{"1"}
+	v1 := deliveryEnvelope{ConfigurationDeliveryVersion: "1", Release: deliveryRelease{Compatibility: deliveryCompatibility{PaywallProtocols: envelope.Release.Compatibility.PaywallProtocols, Acceptance: "atomic"}}}
+	v1Payload, _ := json.Marshal(v1)
+	return ValidateSDKCapabilityRequest(clone, Release{DeliveryContractVersion: "1", Payload: v1Payload})
 }
 
 // ValidateSDKCapabilityRequest enforces the closed Delivery v1 request contract

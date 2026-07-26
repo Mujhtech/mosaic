@@ -132,6 +132,16 @@ private struct HostedConfigurationPreview: View {
         }
         .buttonStyle(.bordered)
         .disabled(model.isLoading || model.mosaic == nil)
+        Button("Identify") {
+          Task { await model.identifyExampleUser() }
+        }
+        .buttonStyle(.bordered)
+        .disabled(model.mosaic == nil)
+        Button("Reset") {
+          Task { await model.resetIdentity() }
+        }
+        .buttonStyle(.bordered)
+        .disabled(model.mosaic == nil)
       }
       .padding(.horizontal)
       .padding(.bottom, 10)
@@ -192,7 +202,7 @@ private final class HostedConfigurationModel: ObservableObject {
     placement = environment["MOSAIC_PLACEMENT"] ?? "onboarding_complete"
     setupMessage =
       "Set MOSAIC_PUBLIC_SDK_KEY and MOSAIC_SDK_BASE_URL in the Xcode scheme. "
-      + "The bundled Delivery v1 fallback remains available during an API outage."
+      + "Accepted Delivery v2 decisions and the bundled Delivery v1 fallback remain available during an API outage."
   }
 
   func start() async {
@@ -265,12 +275,30 @@ private final class HostedConfigurationModel: ObservableObject {
     statusText = "Presentation result · \(result.name.rawValue)"
   }
 
+  func identifyExampleUser() async {
+    guard let mosaic else { return }
+    do {
+      try await mosaic.identify(userID: "ios_example_user")
+      statusText = "Identified locally · decisions may change by assignment policy"
+    } catch { statusText = "Identity update rejected safely" }
+  }
+
+  func resetIdentity() async {
+    guard let mosaic else { return }
+    do {
+      try await mosaic.resetIdentity()
+      statusText = "User identity reset · installation assignment retained"
+    } catch { statusText = "Identity reset failed safely" }
+  }
+
   private func updateStatus(for mosaic: Mosaic) async {
     switch await mosaic.configurationStatus() {
     case .available(let metadata, let source, let diagnostics):
       releaseIdentity = "\(metadata.id):\(metadata.number)"
       let diagnostic = diagnostics.last.map { " · \($0.code)" } ?? ""
-      statusText = "Release \(metadata.number) · \(source.rawValue)\(diagnostic)"
+      let decision = await mosaic.decision(placement: placement)
+      statusText =
+        "Release \(metadata.number) · \(source.rawValue) · \(decision.summary)\(diagnostic)"
     case .unavailable(let diagnostics):
       releaseIdentity = "unavailable"
       statusText = diagnostics.last?.code ?? "Configuration unavailable"
@@ -304,6 +332,23 @@ private final class HostedConfigurationModel: ObservableObject {
       }
     case .unavailable(let diagnostics):
       statusText = diagnostics.last?.code ?? "Commerce configuration unavailable"
+    }
+  }
+}
+
+extension MosaicPlacementDecisionResult {
+  fileprivate var summary: String {
+    switch self {
+    case .paywallSelected(_, let paywallID, let ruleID, let fallbackPath, _, _, _):
+      let rule = ruleID.map { " · rule \($0)" } ?? ""
+      let fallback = fallbackPath.last.map { " · fallback \($0)" } ?? ""
+      return "paywall \(paywallID)\(rule)\(fallback)"
+    case .noPaywall(let ruleID, _, _, _):
+      return ruleID.map { "no paywall · rule \($0)" } ?? "no paywall"
+    case .placementUnavailable: return "placement unavailable"
+    case .configurationUnavailable: return "configuration unavailable"
+    case .unsupportedDecisionContract: return "unsupported decision contract"
+    case .evaluationFailed: return "evaluation failed"
     }
   }
 }

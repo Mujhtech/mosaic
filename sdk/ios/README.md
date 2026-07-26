@@ -1,4 +1,4 @@
-# Mosaic Apple SDK — Protocol 0.2 native rendering
+# Mosaic Apple SDK — native rendering and local Placement decisions
 
 The SDK strictly decodes Mosaic Protocol 0.2 and renders it with native
 SwiftUI, and can receive validated draft and mock-commerce revisions from a
@@ -7,6 +7,80 @@ fallback and adds hosted Configuration Delivery plus the provider-neutral
 Commerce Configuration v1/v2 boundary. The core package remains free of StoreKit
 and RevenueCat dependencies; the optional RevenueCat adapter is a separate
 package under `RevenueCat/`.
+
+Configuration Delivery v2 adds Placement Decision v1 without changing the
+existing Delivery v1 `resolve(placement:)` API. The new
+`decision(placement:context:)` evaluates the accepted release locally and
+returns an explicit selected Paywall, `noPaywall`, unavailable,
+unsupported-contract, or evaluation-failed result. It never refreshes during a
+Placement decision.
+
+## Advanced Placement decisions
+
+The hosted client advertises Delivery `2,1`, Placement Decision `1`, exact
+decision features, and `sha256_length_prefixed_v1`. A v2 candidate is accepted
+only when its digest, authoritative `development`/`staging`/`production`
+Environment mode, closed shape, exact derived compatibility, decision semantics,
+Paywall documents, and Product/Entitlement references all validate. Delivery v1
+metadata keeps `environmentMode` nil because that immutable contract does not
+carry a mode. Rejection preserves the last accepted release, so cached evaluation
+continues offline.
+
+```swift
+let mosaic = try await Mosaic.configure(
+  publicSDKKey: publicSDKKey,
+  baseURL: baseURL,
+  applicationVersion: "2.10.0",
+  purchaseProvider: provider
+)
+
+try await mosaic.identify(userID: "app_user_123")
+try await mosaic.setUserAttributes(["student": .boolean(true)])
+
+switch await mosaic.decision(placement: "export_pdf") {
+case .paywallSelected(_, let versionID, let ruleID, let fallbackPath, _, _, let trace):
+  print(versionID, ruleID as Any, fallbackPath, trace.steps.count)
+case .noPaywall:
+  break // Successful terminal decision; do not present a sheet.
+case .placementUnavailable, .configurationUnavailable,
+     .unsupportedDecisionContract, .evaluationFailed:
+  break
+}
+```
+
+`MosaicPlacementPaywall` performs the same local decision internally. It renders
+the selected document and renders nothing for `no_paywall`. The established
+commerce presentation-result enum remains unchanged.
+
+The SDK persists a random app-install identifier in Application Support through
+an actor-isolated store. It is not derived from IDFA, IDFV, account, locale, or
+device metadata. `resetIdentity()` clears user ID and typed attributes while
+retaining installation assignment. `resetInstallationIdentity()` explicitly
+rotates the installation ID and clears user-bound state. Attribute updates are
+atomic and validated against accepted release definitions.
+
+Host-owned country is always explicit and never inferred:
+
+```swift
+let result = await mosaic.decision(
+  placement: "export_pdf",
+  context: MosaicDecisionContext(
+    platform: "ios",
+    applicationVersion: "2.10.0",
+    applicationLocale: "en-NG",
+    country: "NG",
+    entitlements: ["pro": .unknown],
+    products: ["product_export_pro": .available]
+  )
+)
+```
+
+Without an explicit context, iOS supplies platform, OS/app version and locale,
+then observes required Products and Entitlements through the provider. Unknown,
+provider-unavailable, and failed states remain distinct. Traces are capped at
+256 safe steps and expose IDs, safe labels, three-state results, assignment
+type, rollout bucket, and fallback path—never identity or attribute values,
+provider payloads, or QA tokens.
 
 The optional first-party StoreKit 2 adapter is a sibling package under
 `StoreKit/`. Core advertises Commerce Configuration and Provider Contract
