@@ -6,7 +6,8 @@ Delivery v1/v2, persistent cache and bundled-release fallback, Placements,
 localization and RTL,
 bundled fallback loading, mock commerce, normalized results, diagnostics,
 accessibility semantics, native rendering, Local Preview 0.2 support, and the
-provider-neutral Commerce Configuration v1/v2 custom-provider boundary.
+provider-neutral Commerce Configuration v1/v2 custom-provider boundary, and
+Analytics Event Contract v1 collection with a persistent bounded queue.
 
 Protocol 0.2 RC4 adds document design-system tokens, solid/linear/radial/media
 backgrounds, native shadows, uniform width and height Fit/Fill/Fixed sizing,
@@ -15,7 +16,7 @@ It retains RC3's generalized Buttons and Stacks, authored Product Cards and
 Badges, safe product templates, navigation, Carousel, Switch, Countdown, and
 conditional visibility. The SDK never migrates a document implicitly.
 
-Analytics and experiments remain outside this package. Real billing adapters
+Experiments remain outside this package. Real billing adapters
 remain optional sibling packages, so core applications do not resolve or
 embed RevenueCat, StoreKit, or Google Play Billing.
 
@@ -49,7 +50,7 @@ final decision = await mosaic.decidePlacement(
 );
 
 await mosaic.resetUserIdentity(); // retains installation identity
-await mosaic.resetInstallationIdentity(); // explicitly rotates it
+await mosaic.resetInstallationIdentity(); // rotates install and clears user state
 ```
 
 Results distinguish `MosaicPlacementDecisionPaywall`,
@@ -59,6 +60,49 @@ bucket, and fallback path without raw identity or attribute values. Product and
 Entitlement observations remain provider-owned and preserve unknown,
 provider-unavailable, and failed states. Presentation performs no
 configuration request and evaluates cached or bundled snapshots offline.
+
+## Analytics, identity, and privacy
+
+Analytics is disabled by default. Enable it only after the Environment's
+server-side collection setting is enabled; a host override may disable but can
+never override a disabled Environment:
+
+```dart
+final mosaic = Mosaic.configure(
+  publicSdkKey: 'public_sdk_key',
+  baseUrl: Uri.parse('https://mosaic.example.com'),
+  purchaseProvider: provider,
+  analyticsEnvironmentSettings: const MosaicAnalyticsEnvironmentSettings(
+    collectionEnabled: true,
+  ),
+  analyticsHostEnabled: consentAllowsCollection,
+);
+
+await mosaic.setAnalyticsCollection(
+  environmentEnabled: environmentSetting.collectionEnabled,
+  hostEnabled: consentAllowsCollection,
+);
+final result = await mosaic.flushAnalytics();
+final diagnostics = await mosaic.analyticsDiagnostics();
+```
+
+Disabling collection atomically clears unsent events. Re-enabling begins a new
+30-minute-inactivity session and does not reconstruct missed events. Events
+snapshot installation, optional application user, generation, session,
+correlation, and immutable attribution at occurrence time; identity changes
+never rewrite queued history. `resetIdentity()` clears user-bound state while
+retaining installation identity. `resetInstallationIdentity()` rotates the
+installation and clears user-bound state.
+
+The app-private queue is atomically persisted, expires events after seven
+days, and is bounded to 1,000 events/2 MiB. Events are limited to 32 KiB,
+sends to 50 events/512 KiB, and retries to 10 attempts with full-jitter
+exponential backoff from one second to five minutes. Accepted, duplicate, and
+permanently rejected partial-batch results are removed; only retryable results
+remain. A malformed acknowledgement retains the complete sent batch.
+Analytics delivery is always best effort and never changes Placement,
+rendering, purchase, or restore results. Local Preview, lower-level local
+`MosaicPaywall`, and bundled/unhosted paywalls do not emit hosted analytics.
 
 ## Requirements
 

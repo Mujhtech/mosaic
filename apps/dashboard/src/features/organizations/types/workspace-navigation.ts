@@ -9,9 +9,15 @@ export function readWorkspaceScope(pathname: string): WorkspaceScope {
   const organizationIndex = segments.indexOf("organizations")
   const projectIndex = segments.indexOf("projects")
   const monetizationIndex = segments.indexOf("monetization")
+  const analyticsIndex = segments.indexOf("analytics")
 
   return {
-    environmentId: monetizationIndex >= 0 ? segments[monetizationIndex + 1] : undefined,
+    environmentId:
+      monetizationIndex >= 0
+        ? segments[monetizationIndex + 1]
+        : analyticsIndex >= 0
+          ? segments[analyticsIndex + 1]
+          : undefined,
     organizationId:
       organizationIndex >= 0 && segments[organizationIndex + 1] !== "new"
         ? segments[organizationIndex + 1]
@@ -28,5 +34,9 @@ export function isProjectWideSurface(pathname: string) {
 }
 
 export function isEnvironmentSurface(pathname: string) {
-  return pathname.endsWith("/settings/api-keys") || pathname.includes("/monetization/")
+  return (
+    pathname.endsWith("/settings/api-keys") ||
+    pathname.includes("/monetization/") ||
+    pathname.includes("/analytics/")
+  )
 }

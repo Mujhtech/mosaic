@@ -1465,6 +1465,100 @@ paths:
       tags: [Placement Decisions]
       responses: { "204": { description: Override revoked; the next immutable release omits it. }, "404": { $ref: "#/components/responses/Error" } }
 
+  /v1/sdk/events/batch:
+    post:
+      security: [{ PublicSDKKey: [] }]
+      operationId: ingestAnalyticsEventBatch
+      tags: [Analytics]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/AnalyticsEventBatch" } } } }
+      responses:
+        "200": { description: Per-event ingestion outcomes., content: { application/json: { schema: { $ref: "#/components/schemas/AnalyticsIngestionResult" } } } }
+        "401": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+        "422": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/Error" }
+  /v1/projects/{projectId}/environments/{environmentId}/analytics/settings:
+    parameters: [{ $ref: "#/components/parameters/ProjectID" }, { $ref: "#/components/parameters/EnvironmentID" }]
+    get:
+      operationId: getAnalyticsSettings
+      tags: [Analytics]
+      responses: { "200": { description: Analytics settings., content: { application/json: { schema: { $ref: "#/components/schemas/AnalyticsSettingsEnvelope" } } } }, "403": { $ref: "#/components/responses/Error" }, "404": { $ref: "#/components/responses/Error" } }
+    put:
+      operationId: updateAnalyticsSettings
+      tags: [Analytics]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/UpdateAnalyticsSettingsRequest" } } } }
+      responses: { "200": { description: Updated analytics settings., content: { application/json: { schema: { $ref: "#/components/schemas/AnalyticsSettingsEnvelope" } } } }, "403": { $ref: "#/components/responses/Error" }, "422": { $ref: "#/components/responses/Error" } }
+  /v1/projects/{projectId}/environments/{environmentId}/analytics/overview:
+    get:
+      operationId: getAnalyticsOverview
+      tags: [Analytics]
+      parameters: [{ $ref: "#/components/parameters/ProjectID" }, { $ref: "#/components/parameters/EnvironmentID" }, { $ref: "#/components/parameters/AnalyticsFrom" }, { $ref: "#/components/parameters/AnalyticsTo" }, { $ref: "#/components/parameters/AnalyticsTimezone" }, { $ref: "#/components/parameters/AnalyticsMetricBasis" }, { $ref: "#/components/parameters/AnalyticsPlatform" }, { $ref: "#/components/parameters/AnalyticsLocale" }, { $ref: "#/components/parameters/AnalyticsApplicationVersion" }]
+      responses: { "200": { $ref: "#/components/responses/AnalyticsResult" }, "403": { $ref: "#/components/responses/Error" }, "422": { $ref: "#/components/responses/Error" } }
+  /v1/projects/{projectId}/environments/{environmentId}/analytics/funnels/{funnel}:
+    get:
+      operationId: getAnalyticsFunnel
+      tags: [Analytics]
+      parameters: [{ $ref: "#/components/parameters/ProjectID" }, { $ref: "#/components/parameters/EnvironmentID" }, { name: funnel, in: path, required: true, schema: { type: string, enum: [placements, paywalls, products, purchases] } }, { $ref: "#/components/parameters/AnalyticsFrom" }, { $ref: "#/components/parameters/AnalyticsTo" }, { $ref: "#/components/parameters/AnalyticsTimezone" }, { $ref: "#/components/parameters/AnalyticsMetricBasis" }, { $ref: "#/components/parameters/AnalyticsPlatform" }, { $ref: "#/components/parameters/AnalyticsLocale" }, { $ref: "#/components/parameters/AnalyticsApplicationVersion" }]
+      responses: { "200": { $ref: "#/components/responses/AnalyticsResult" }, "404": { $ref: "#/components/responses/Error" }, "422": { $ref: "#/components/responses/Error" } }
+  /v1/projects/{projectId}/environments/{environmentId}/analytics/paywall-version-comparison:
+    get: { operationId: compareAnalyticsPaywallVersions, tags: [Analytics], parameters: [{ $ref: "#/components/parameters/ProjectID" }, { $ref: "#/components/parameters/EnvironmentID" }, { $ref: "#/components/parameters/AnalyticsFrom" }, { $ref: "#/components/parameters/AnalyticsTo" }, { $ref: "#/components/parameters/AnalyticsTimezone" }, { $ref: "#/components/parameters/AnalyticsMetricBasis" }, { $ref: "#/components/parameters/AnalyticsPlatform" }, { $ref: "#/components/parameters/AnalyticsLocale" }, { $ref: "#/components/parameters/AnalyticsApplicationVersion" }], responses: { "200": { $ref: "#/components/responses/AnalyticsResult" }, "422": { $ref: "#/components/responses/Error" } } }
+  /v1/projects/{projectId}/environments/{environmentId}/analytics/provider-errors:
+    get: { operationId: getAnalyticsProviderErrors, tags: [Analytics], parameters: [{ $ref: "#/components/parameters/ProjectID" }, { $ref: "#/components/parameters/EnvironmentID" }, { $ref: "#/components/parameters/AnalyticsFrom" }, { $ref: "#/components/parameters/AnalyticsTo" }, { $ref: "#/components/parameters/AnalyticsTimezone" }, { $ref: "#/components/parameters/AnalyticsMetricBasis" }, { $ref: "#/components/parameters/AnalyticsPlatform" }, { $ref: "#/components/parameters/AnalyticsLocale" }, { $ref: "#/components/parameters/AnalyticsApplicationVersion" }], responses: { "200": { $ref: "#/components/responses/AnalyticsResult" }, "422": { $ref: "#/components/responses/Error" } } }
+  /v1/projects/{projectId}/environments/{environmentId}/analytics/product-availability-failures:
+    get: { operationId: getAnalyticsProductAvailabilityFailures, tags: [Analytics], parameters: [{ $ref: "#/components/parameters/ProjectID" }, { $ref: "#/components/parameters/EnvironmentID" }, { $ref: "#/components/parameters/AnalyticsFrom" }, { $ref: "#/components/parameters/AnalyticsTo" }, { $ref: "#/components/parameters/AnalyticsTimezone" }, { $ref: "#/components/parameters/AnalyticsMetricBasis" }, { $ref: "#/components/parameters/AnalyticsPlatform" }, { $ref: "#/components/parameters/AnalyticsLocale" }, { $ref: "#/components/parameters/AnalyticsApplicationVersion" }], responses: { "200": { $ref: "#/components/responses/AnalyticsResult" }, "422": { $ref: "#/components/responses/Error" } } }
+  /v1/projects/{projectId}/environments/{environmentId}/analytics/breakdowns/{dimension}:
+    get:
+      operationId: getAnalyticsBreakdown
+      tags: [Analytics]
+      parameters: [{ $ref: "#/components/parameters/ProjectID" }, { $ref: "#/components/parameters/EnvironmentID" }, { name: dimension, in: path, required: true, schema: { type: string, enum: [platforms, locales] } }, { $ref: "#/components/parameters/AnalyticsFrom" }, { $ref: "#/components/parameters/AnalyticsTo" }, { $ref: "#/components/parameters/AnalyticsTimezone" }, { $ref: "#/components/parameters/AnalyticsMetricBasis" }, { $ref: "#/components/parameters/AnalyticsPlatform" }, { $ref: "#/components/parameters/AnalyticsLocale" }, { $ref: "#/components/parameters/AnalyticsApplicationVersion" }]
+      responses: { "200": { $ref: "#/components/responses/AnalyticsResult" }, "404": { $ref: "#/components/responses/Error" }, "422": { $ref: "#/components/responses/Error" } }
+  /v1/projects/{projectId}/environments/{environmentId}/analytics/freshness:
+    get: { operationId: getAnalyticsFreshness, tags: [Analytics], parameters: [{ $ref: "#/components/parameters/ProjectID" }, { $ref: "#/components/parameters/EnvironmentID" }, { $ref: "#/components/parameters/AnalyticsFrom" }, { $ref: "#/components/parameters/AnalyticsTo" }, { $ref: "#/components/parameters/AnalyticsTimezone" }, { $ref: "#/components/parameters/AnalyticsMetricBasis" }], responses: { "200": { $ref: "#/components/responses/AnalyticsResult" }, "422": { $ref: "#/components/responses/Error" } } }
+  /v1/projects/{projectId}/environments/{environmentId}/analytics/exports:
+    post:
+      operationId: createAnalyticsEventExport
+      tags: [Analytics]
+      parameters: [{ $ref: "#/components/parameters/ProjectID" }, { $ref: "#/components/parameters/EnvironmentID" }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/CreateAnalyticsEventExportRequest" } } } }
+      responses: { "202": { $ref: "#/components/responses/AnalyticsJob" }, "403": { $ref: "#/components/responses/Error" }, "422": { $ref: "#/components/responses/Error" } }
+  /v1/projects/{projectId}/analytics/privacy/preview:
+    post:
+      operationId: previewAnalyticsPrivacyRequest
+      description: Owner-only Project-scoped identity impact preview.
+      tags: [Analytics Privacy]
+      parameters: [{ $ref: "#/components/parameters/ProjectID" }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/AnalyticsIdentityRequest" } } } }
+      responses: { "200": { description: Privacy impact preview., content: { application/json: { schema: { $ref: "#/components/schemas/AnalyticsPrivacyPreviewEnvelope" } } } }, "403": { $ref: "#/components/responses/Error" }, "404": { $ref: "#/components/responses/Error" } }
+  /v1/projects/{projectId}/analytics/privacy/exports:
+    post:
+      operationId: createAnalyticsPrivacyExport
+      description: Owner-only identity export creation.
+      tags: [Analytics Privacy]
+      parameters: [{ $ref: "#/components/parameters/ProjectID" }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/CreateAnalyticsPrivacyExportRequest" } } } }
+      responses: { "202": { $ref: "#/components/responses/AnalyticsJob" }, "403": { $ref: "#/components/responses/Error" }, "422": { $ref: "#/components/responses/Error" } }
+  /v1/projects/{projectId}/analytics/privacy/deletions:
+    post:
+      operationId: createAnalyticsPrivacyDeletion
+      description: Owner-only confirmed identity deletion creation.
+      tags: [Analytics Privacy]
+      parameters: [{ $ref: "#/components/parameters/ProjectID" }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/CreateAnalyticsPrivacyDeletionRequest" } } } }
+      responses: { "202": { $ref: "#/components/responses/AnalyticsJob" }, "403": { $ref: "#/components/responses/Error" }, "409": { $ref: "#/components/responses/Error" }, "422": { $ref: "#/components/responses/Error" } }
+  /v1/projects/{projectId}/analytics/jobs/{jobId}:
+    get:
+      operationId: getAnalyticsJob
+      description: Owners may inspect every analytics job. Admins may inspect event-export jobs only.
+      tags: [Analytics Privacy]
+      parameters: [{ $ref: "#/components/parameters/ProjectID" }, { name: jobId, in: path, required: true, schema: { type: string } }]
+      responses: { "200": { $ref: "#/components/responses/AnalyticsJob" }, "403": { $ref: "#/components/responses/Error" }, "404": { $ref: "#/components/responses/Error" } }
+  /v1/projects/{projectId}/analytics/jobs/{jobId}/download:
+    get:
+      operationId: downloadAnalyticsJob
+      description: Owners may download event and identity exports. Admins may download event exports only.
+      tags: [Analytics Privacy]
+      parameters: [{ $ref: "#/components/parameters/ProjectID" }, { name: jobId, in: path, required: true, schema: { type: string } }]
+      responses: { "200": { description: Private export artifact., content: { application/x-ndjson: { schema: { type: string, format: binary } }, text/csv: { schema: { type: string, format: binary } } } }, "403": { $ref: "#/components/responses/Error" }, "404": { $ref: "#/components/responses/Error" } }
 components:
   securitySchemes:
     BrowserSession:
@@ -1506,12 +1600,21 @@ components:
     ReleaseID: { in: path, name: releaseId, required: true, schema: { type: string } }
     IdempotencyKey: { in: header, name: Idempotency-Key, required: true, schema: { type: string, minLength: 1, maxLength: 255 } }
     IfMatch: { in: header, name: If-Match, required: true, schema: { type: string } }
+    AnalyticsFrom: { in: query, name: from, required: true, schema: { $ref: "#/components/schemas/Timestamp" } }
+    AnalyticsTo: { in: query, name: to, required: true, schema: { $ref: "#/components/schemas/Timestamp" } }
+    AnalyticsTimezone: { in: query, name: timezone, required: true, schema: { type: string, example: UTC } }
+    AnalyticsMetricBasis: { in: query, name: metricBasis, required: true, schema: { type: string, const: event_count } }
+    AnalyticsPlatform: { in: query, name: platform, schema: { type: string, enum: [ios, android] } }
+    AnalyticsLocale: { in: query, name: locale, schema: { type: string } }
+    AnalyticsApplicationVersion: { in: query, name: applicationVersion, schema: { type: string } }
   responses:
     Error:
       description: Stable machine-readable failure.
       content:
         application/json:
           schema: { $ref: "#/components/schemas/ErrorEnvelope" }
+    AnalyticsResult: { description: Event-count analytics result., content: { application/json: { schema: { $ref: "#/components/schemas/AnalyticsResultEnvelope" } } } }
+    AnalyticsJob: { description: Asynchronous analytics job., content: { application/json: { schema: { $ref: "#/components/schemas/AnalyticsJobEnvelope" } } } }
     Organization: { description: Organization, content: { application/json: { schema: { $ref: "#/components/schemas/OrganizationEnvelope" } } } }
     OrganizationList: { description: Organizations, content: { application/json: { schema: { $ref: "#/components/schemas/OrganizationListEnvelope" } } } }
     Membership: { description: Membership, content: { application/json: { schema: { $ref: "#/components/schemas/MembershipEnvelope" } } } }
@@ -1628,6 +1731,139 @@ components:
     ReleaseList: { description: Configuration Release history, content: { application/json: { schema: { $ref: "#/components/schemas/ReleaseListEnvelope" } } } }
     PublishResult: { description: Publication result and nonblocking warnings, content: { application/json: { schema: { $ref: "#/components/schemas/PublishResultEnvelope" } } } }
   schemas:
+    AnalyticsEventBatch:
+      type: object
+      additionalProperties: false
+      required: [analyticsEventContractVersion, batchId, sentAt, events]
+      properties:
+        analyticsEventContractVersion: { type: string, const: "1" }
+        batchId: { type: string }
+        sentAt: { $ref: "#/components/schemas/Timestamp" }
+        events: { type: array, minItems: 1, maxItems: 100, items: { type: object, additionalProperties: true, description: Canonical Analytics Event v1 document. } }
+    AnalyticsEventResult:
+      type: object
+      additionalProperties: false
+      required: [eventId, status]
+      properties:
+        eventId: { type: string }
+        status: { type: string, enum: [accepted, duplicate, permanently_rejected, retryable] }
+        code: { type: string }
+    AnalyticsIngestionResult:
+      type: object
+      additionalProperties: false
+      required: [analyticsEventContractVersion, batchId, receivedAt, results]
+      properties:
+        analyticsEventContractVersion: { type: string, const: "1" }
+        batchId: { type: string }
+        receivedAt: { $ref: "#/components/schemas/Timestamp" }
+        results: { type: array, items: { $ref: "#/components/schemas/AnalyticsEventResult" } }
+    AnalyticsSettings:
+      type: object
+      additionalProperties: false
+      required: [projectId, environmentId, collectionEnabled, rawRetentionDays, updatedAt]
+      properties:
+        projectId: { type: string }
+        environmentId: { type: string }
+        collectionEnabled: { type: boolean, default: false }
+        rawRetentionDays: { type: integer, minimum: 30, maximum: 730, default: 180 }
+        updatedAt: { $ref: "#/components/schemas/Timestamp" }
+    UpdateAnalyticsSettingsRequest:
+      type: object
+      additionalProperties: false
+      required: [collectionEnabled, rawRetentionDays]
+      properties:
+        collectionEnabled: { type: boolean }
+        rawRetentionDays: { type: integer, minimum: 30, maximum: 730 }
+    AnalyticsFreshness:
+      type: object
+      additionalProperties: false
+      required: [lateEventPolicy]
+      properties:
+        latestReceivedAt: { $ref: "#/components/schemas/Timestamp" }
+        latestAggregatedAt: { $ref: "#/components/schemas/Timestamp" }
+        lateEventPolicy: { type: string }
+    AnalyticsMetric:
+      type: object
+      additionalProperties: false
+      required: [id, numerator, basis, authority, attributionWindow, timezone, definition]
+      properties:
+        id: { type: string }
+        value: { type: number }
+        numerator: { type: integer, format: int64 }
+        denominator: { type: integer, format: int64 }
+        basis: { type: string, const: event_count }
+        authority: { type: string, enum: [client_observed, trusted_server, provider_confirmed] }
+        attributionWindow: { type: string, const: 24h }
+        timezone: { type: string }
+        definition: { type: string }
+        warnings: { type: array, items: { type: string } }
+        dimensions: { type: object, additionalProperties: { type: string } }
+    AnalyticsResult:
+      type: object
+      additionalProperties: false
+      required: [metrics, freshness]
+      properties:
+        metrics: { type: array, items: { $ref: "#/components/schemas/AnalyticsMetric" } }
+        freshness: { $ref: "#/components/schemas/AnalyticsFreshness" }
+    CreateAnalyticsEventExportRequest:
+      type: object
+      additionalProperties: false
+      required: [from, to, format]
+      properties:
+        from: { $ref: "#/components/schemas/Timestamp" }
+        to: { $ref: "#/components/schemas/Timestamp" }
+        format: { type: string, enum: [ndjson, csv] }
+    AnalyticsIdentityRequest:
+      type: object
+      additionalProperties: false
+      required: [kind, identity]
+      properties:
+        kind: { type: string, enum: [application_user, installation] }
+        identity: { type: string, minLength: 1, maxLength: 256, description: Opaque identifier. Application-user values accept non-control Unicode and punctuation but sensitive-shaped values are rejected. }
+    CreateAnalyticsPrivacyExportRequest:
+      allOf:
+        - { $ref: "#/components/schemas/AnalyticsIdentityRequest" }
+        - type: object
+          required: [format]
+          properties: { format: { type: string, enum: [ndjson, csv] } }
+    CreateAnalyticsPrivacyDeletionRequest:
+      allOf:
+        - { $ref: "#/components/schemas/AnalyticsIdentityRequest" }
+        - type: object
+          required: [requestDigest, confirm]
+          properties:
+            requestDigest: { type: string, pattern: "^[0-9a-f]{64}$" }
+            confirm: { type: boolean, const: true }
+    AnalyticsPrivacyPreview:
+      type: object
+      additionalProperties: false
+      required: [kind, affectedEvents, affectedSessions, affectedEnvironmentIds, requestDigest]
+      properties:
+        kind: { type: string, enum: [application_user, installation] }
+        affectedEvents: { type: integer, format: int64 }
+        affectedSessions: { type: integer, format: int64 }
+        affectedEnvironmentIds: { type: array, items: { type: string } }
+        requestDigest: { type: string }
+    AnalyticsJob:
+      type: object
+      additionalProperties: false
+      required: [id, kind, status, createdAt, updatedAt]
+      properties:
+        id: { type: string }
+        kind: { type: string, enum: [events, application_user, installation] }
+        status: { type: string, enum: [queued, leased, recomputing, completed, failed, expired] }
+        format: { type: string, enum: [ndjson, csv] }
+        rowCount: { type: integer, format: int64 }
+        byteLength: { type: integer, format: int64 }
+        affectedEventCount: { type: integer, format: int64 }
+        affectedSessionCount: { type: integer, format: int64 }
+        expiresAt: { $ref: "#/components/schemas/Timestamp" }
+        createdAt: { $ref: "#/components/schemas/Timestamp" }
+        updatedAt: { $ref: "#/components/schemas/Timestamp" }
+    AnalyticsSettingsEnvelope: { type: object, required: [data], properties: { data: { $ref: "#/components/schemas/AnalyticsSettings" } } }
+    AnalyticsResultEnvelope: { type: object, required: [data], properties: { data: { $ref: "#/components/schemas/AnalyticsResult" } } }
+    AnalyticsPrivacyPreviewEnvelope: { type: object, required: [data], properties: { data: { $ref: "#/components/schemas/AnalyticsPrivacyPreview" } } }
+    AnalyticsJobEnvelope: { type: object, required: [data], properties: { data: { $ref: "#/components/schemas/AnalyticsJob" } } }
     PlacementDecisionDocumentRequest:
       type: object
       additionalProperties: false
@@ -1949,6 +2185,7 @@ components:
       required: [kind]
       properties:
         kind: { $ref: "#/components/schemas/APIKeyKind" }
+        applicationId: { type: string, description: Required for public_sdk keys and forbidden for secret_server keys. }
     CreateCatalogResourceRequest:
       type: object
       additionalProperties: false
@@ -2412,6 +2649,7 @@ components:
       properties:
         id: { type: string }
         environmentId: { type: string }
+        applicationId: { type: string, description: Trusted Application binding for public SDK analytics ingestion. }
         kind: { $ref: "#/components/schemas/APIKeyKind" }
         prefix: { type: string }
         createdByActorId: { type: string }

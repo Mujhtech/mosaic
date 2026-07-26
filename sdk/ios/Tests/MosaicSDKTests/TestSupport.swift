@@ -108,6 +108,10 @@ func phase5FixtureData(_ relativePath: String) throws -> Data {
   throw CanonicalFixtureLookupError.notFound
 }
 
+func analyticsFixtureData(_ relativePath: String) throws -> Data {
+  try phase5FixtureData("analytics-event/v1/\(relativePath)")
+}
+
 func commerceConfigurationFixtureData(
   named name: String = "revenuecat-configuration.json"
 ) throws -> Data {

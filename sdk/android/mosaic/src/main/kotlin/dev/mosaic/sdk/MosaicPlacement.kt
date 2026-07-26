@@ -42,6 +42,8 @@ fun MosaicPlacement(
             modifier = modifier,
             requestedLocale = requestedLocale,
             diagnostics = diagnostics,
+            analyticsRuntime = client.analyticsRuntime,
+            analyticsContext = current.analytics,
         )
         is MosaicPlacementDecisionResult.NoPaywall -> Box(modifier.testTag("mosaic-no-paywall"))
         is MosaicPlacementDecisionResult.PlacementUnavailable,
@@ -56,7 +58,7 @@ fun MosaicPlacement(
 private class MosaicResolvedProductProvider(
     products: List<MosaicProduct>,
     private val delegate: MosaicPurchaseProvider,
-) : MosaicPurchaseProvider {
+) : MosaicPurchaseProvider, MosaicAnalyticsCommerceProvider {
     private val products = products.associateBy { it.id }
 
     override suspend fun loadProducts(productIds: List<String>): MosaicProductLoadResult {
@@ -67,4 +69,7 @@ private class MosaicResolvedProductProvider(
     override suspend fun purchase(productId: String) = delegate.purchase(productId)
     override suspend fun restore() = delegate.restore()
     override suspend fun activeEntitlements() = delegate.activeEntitlements()
+    override fun analyticsAttribution(productId: String): MosaicAnalyticsCommerceAttribution =
+        (delegate as? MosaicAnalyticsCommerceProvider)?.analyticsAttribution(productId)
+            ?: MosaicAnalyticsCommerceAttribution("custom", null)
 }

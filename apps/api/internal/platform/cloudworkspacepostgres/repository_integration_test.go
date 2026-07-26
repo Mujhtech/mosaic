@@ -449,9 +449,9 @@ func TestPhase3APersistenceRisks(t *testing.T) {
 		AdapterVersion: "1.0.0", StoreContext: cloudworkspace.ProviderObservationGooglePlayTest,
 		Result: cloudworkspace.ProviderObservationAvailable, CorrelationID: "postgres-test-run",
 		Metadata: cloudworkspace.ProviderMappingObservationMetadata{
-			ClientPlatform: cloudworkspace.ProviderObservationClientAndroid,
+			ClientPlatform:      cloudworkspace.ProviderObservationClientAndroid,
 			ConfigurationSource: cloudworkspace.ProviderObservationConfigurationRemote,
-			TestScenario: cloudworkspace.ProviderObservationScenarioProductLoad,
+			TestScenario:        cloudworkspace.ProviderObservationScenarioProductLoad,
 		},
 		ObservedAt: now, ExpiresAt: &expiresAt,
 	})
@@ -504,11 +504,15 @@ func TestPhase3APersistenceRisks(t *testing.T) {
 		t.Fatal("one-time API key secret was not returned")
 	}
 	var digest []byte
-	if err := pool.QueryRow(ctx, `SELECT secret_digest FROM api_keys WHERE id=$1`, createdKey.APIKey.ID).Scan(&digest); err != nil {
+	var applicationID, applicationProjectID sql.NullString
+	if err := pool.QueryRow(ctx, `SELECT secret_digest,application_id,application_project_id FROM api_keys WHERE id=$1`, createdKey.APIKey.ID).Scan(&digest, &applicationID, &applicationProjectID); err != nil {
 		t.Fatal(err)
 	}
 	if len(digest) != 32 {
 		t.Fatalf("stored digest length=%d, want 32", len(digest))
+	}
+	if applicationID.Valid || applicationProjectID.Valid {
+		t.Fatalf("secret-server key application binding = (%q,%q), want both NULL", applicationID.String, applicationProjectID.String)
 	}
 	keys, err := service.ListAPIKeys(ctx, owner, environments.Items[0].ID, "", "", cloudworkspace.ListOptions{})
 	if err != nil || len(keys.Items) != 1 {
@@ -847,15 +851,25 @@ func TestPhase3BPublishingPersistenceRisks(t *testing.T) {
 	if environment.ID == "" || otherEnvironment.ID == "" || productionEnvironment.ID == "" {
 		t.Fatalf("explicit Environment modes missing: %#v", environments.Items)
 	}
+	application, err := workspace.CreateApplication(ctx, owner, project.ID, "Publishing iOS", cloudworkspace.PlatformIOS, "com.example.publishing")
+	if err != nil {
+		t.Fatalf("create publishing application: %v", err)
+	}
 	catalogProduct, err := workspace.CreateProduct(ctx, owner, project.ID, "monthly", "Monthly", "", cloudworkspace.ProductSubscription)
 	if err != nil {
 		t.Fatalf("create product: %v", err)
 	}
-	publicKey, err := workspace.CreateAPIKey(ctx, owner, environment.ID, cloudworkspace.APIKeyPublicSDK)
+	publicKey, err := workspace.CreateAPIKey(ctx, owner, environment.ID, cloudworkspace.APIKeyPublicSDK, application.ID)
 	if err != nil {
 		t.Fatalf("create public SDK key: %v", err)
 	}
-	otherPublicKey, err := workspace.CreateAPIKey(ctx, owner, otherEnvironment.ID, cloudworkspace.APIKeyPublicSDK)
+	if publicKey.APIKey.ApplicationID != application.ID {
+		t.Fatalf("public SDK key application binding = %q, want %q", publicKey.APIKey.ApplicationID, application.ID)
+	}
+	if _, err = workspace.CreateAPIKey(ctx, owner, environment.ID, cloudworkspace.APIKeyPublicSDK); !errors.Is(err, cloudworkspace.ErrNotFound) {
+		t.Fatalf("create unbound public SDK key error = %v, want not found", err)
+	}
+	otherPublicKey, err := workspace.CreateAPIKey(ctx, owner, otherEnvironment.ID, cloudworkspace.APIKeyPublicSDK, application.ID)
 	if err != nil {
 		t.Fatalf("create second Environment public SDK key: %v", err)
 	}

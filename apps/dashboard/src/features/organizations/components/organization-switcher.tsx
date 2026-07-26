@@ -22,11 +22,14 @@ import { useQuery } from "@tanstack/react-query"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { Separator } from "@/components/ui/separator"
 import { ArrowsLeftRightIcon } from "@phosphor-icons/react/dist/ssr/ArrowsLeftRight"
+import { Link } from "@tanstack/react-router"
 
 const AVATAR_CLASSNAMES =
   "bg-sidebar-primary text-sidebar-primary-foreground size-4 rounded data-[size=lg]:size-4 data-[size=sm]:size-4 after:rounded-none"
 
-export function OrganizationSwitcher() {
+export function OrganizationSwitcher({ organizationId }: {
+  organizationId?: string
+}) {
   const { isMobile } = useSidebar()
   const { data } = useQuery(organizationsQueryOptions())
 
@@ -85,7 +88,11 @@ export function OrganizationSwitcher() {
                   {/* <DropdownMenuShortcut>⌘{index + 1}</DropdownMenuShortcut> */}
                 </DropdownMenuItem>
               ))}
-              <DropdownMenuItem className="gap-2 p-2">
+              <DropdownMenuItem className="gap-2 p-2" render={<Link to="/organizations/$organizationId/projects/new" params={
+                {
+                  organizationId: organizationId ?? ""
+                }
+            }/>}>
                 <div className="flex size-4 items-center justify-center bg-transparent">
                   <PlusIcon className="size-4" />
                 </div>
@@ -98,7 +105,7 @@ export function OrganizationSwitcher() {
               {organizations.length > 0 ? (
                 <OrganizationDropdown isMobile={isMobile} organizations={organizations} />
               ) : (
-                <DropdownMenuItem className="gap-2 p-2">
+                  <DropdownMenuItem className="gap-2 p-2" render={<Link to="/organizations/new" />}>
                   <div className="flex size-4 items-center justify-center bg-transparent">
                     <PlusIcon className="size-4" />
                   </div>
@@ -155,7 +162,7 @@ const OrganizationDropdown = ({
             </DropdownMenuItem>
           ))}
           <DropdownMenuSeparator />
-          <DropdownMenuItem className="gap-2 p-2">
+          <DropdownMenuItem className="gap-2 p-2" render={<Link to="/organizations/new" />}>
             <div className="flex size-4 items-center justify-center bg-transparent">
               <PlusIcon className="size-4" />
             </div>

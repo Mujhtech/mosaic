@@ -17,6 +17,13 @@ import (
 
 type Repository struct{ pool *pgxpool.Pool }
 
+func nullable(value string) any {
+	if value == "" {
+		return nil
+	}
+	return value
+}
+
 func New(pool *pgxpool.Pool) *Repository { return &Repository{pool: pool} }
 
 func (r *Repository) View(ctx context.Context, fn func(cloudworkspace.Reader) error) error {
@@ -164,7 +171,7 @@ func (r reader) Environments(projectID string) []cloudworkspace.Environment {
 func scanAPIKey(row pgx.Row) (cloudworkspace.APIKeyRecord, error) {
 	var v cloudworkspace.APIKeyRecord
 	var digest []byte
-	err := row.Scan(&v.ID, &v.EnvironmentID, &v.Kind, &v.Prefix, &v.CreatedByActorID, &v.CreatedAt, &v.RotatedAt, &v.RevokedAt, &v.LastUsedAt, &digest)
+	err := row.Scan(&v.ID, &v.EnvironmentID, &v.ApplicationID, &v.ApplicationProjectID, &v.Kind, &v.Prefix, &v.CreatedByActorID, &v.CreatedAt, &v.RotatedAt, &v.RevokedAt, &v.LastUsedAt, &digest)
 	if err == nil {
 		if len(digest) != len(v.SecretDigest) {
 			return v, fmt.Errorf("API key %s has invalid digest length", v.ID)
@@ -174,10 +181,10 @@ func scanAPIKey(row pgx.Row) (cloudworkspace.APIKeyRecord, error) {
 	return v, err
 }
 func (r reader) APIKey(id string) (cloudworkspace.APIKeyRecord, bool) {
-	return one(r, `SELECT id,environment_id,kind,prefix,created_by_actor_id,created_at,rotated_at,revoked_at,last_used_at,secret_digest FROM api_keys WHERE id=$1`, scanAPIKey, id)
+	return one(r, `SELECT id,environment_id,COALESCE(application_id,''),COALESCE(application_project_id,''),kind,prefix,created_by_actor_id,created_at,rotated_at,revoked_at,last_used_at,secret_digest FROM api_keys WHERE id=$1`, scanAPIKey, id)
 }
 func (r reader) APIKeys(environmentID string) []cloudworkspace.APIKeyRecord {
-	return many(r, `SELECT id,environment_id,kind,prefix,created_by_actor_id,created_at,rotated_at,revoked_at,last_used_at,secret_digest FROM api_keys WHERE environment_id=$1 ORDER BY id`, scanAPIKey, environmentID)
+	return many(r, `SELECT id,environment_id,COALESCE(application_id,''),COALESCE(application_project_id,''),kind,prefix,created_by_actor_id,created_at,rotated_at,revoked_at,last_used_at,secret_digest FROM api_keys WHERE environment_id=$1 ORDER BY id`, scanAPIKey, environmentID)
 }
 
 func scanPlan(row pgx.Row) (cloudworkspace.Plan, error) {
@@ -595,7 +602,7 @@ func (t *transaction) SaveEnvironment(v cloudworkspace.Environment) {
 	t.exec(`INSERT INTO environments(id,project_id,key,name,mode,created_at,updated_at) VALUES($1,$2,$3,$4,$5,$6,$7) ON CONFLICT(id) DO UPDATE SET name=excluded.name,mode=excluded.mode,updated_at=excluded.updated_at`, v.ID, v.ProjectID, v.Key, v.Name, v.Mode, v.CreatedAt, v.UpdatedAt)
 }
 func (t *transaction) SaveAPIKey(v cloudworkspace.APIKeyRecord) {
-	t.exec(`INSERT INTO api_keys(id,environment_id,kind,prefix,secret_digest,created_by_actor_id,created_at,rotated_at,revoked_at,last_used_at) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) ON CONFLICT(id) DO UPDATE SET secret_digest=excluded.secret_digest,rotated_at=excluded.rotated_at,revoked_at=COALESCE(api_keys.revoked_at,excluded.revoked_at),last_used_at=excluded.last_used_at`, v.ID, v.EnvironmentID, v.Kind, v.Prefix, v.SecretDigest[:], v.CreatedByActorID, v.CreatedAt, v.RotatedAt, v.RevokedAt, v.LastUsedAt)
+	t.exec(`INSERT INTO api_keys(id,environment_id,application_id,application_project_id,kind,prefix,secret_digest,created_by_actor_id,created_at,rotated_at,revoked_at,last_used_at) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) ON CONFLICT(id) DO UPDATE SET secret_digest=excluded.secret_digest,rotated_at=excluded.rotated_at,revoked_at=COALESCE(api_keys.revoked_at,excluded.revoked_at),last_used_at=excluded.last_used_at`, v.ID, v.EnvironmentID, nullable(v.ApplicationID), nullable(v.ApplicationProjectID), v.Kind, v.Prefix, v.SecretDigest[:], v.CreatedByActorID, v.CreatedAt, v.RotatedAt, v.RevokedAt, v.LastUsedAt)
 }
 func (t *transaction) SavePlan(v cloudworkspace.Plan) {
 	t.exec(`INSERT INTO plans(id,project_id,key,name,description,created_at,updated_at) VALUES($1,$2,$3,$4,$5,$6,$7) ON CONFLICT(id) DO UPDATE SET key=excluded.key,name=excluded.name,description=excluded.description,updated_at=excluded.updated_at`, v.ID, v.ProjectID, v.Key, v.Name, v.Description, v.CreatedAt, v.UpdatedAt)

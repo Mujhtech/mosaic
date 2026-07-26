@@ -19,7 +19,7 @@ func (s *Service) newSecret(prefix string) (string, [32]byte, error) {
 	return secret, sha256.Sum256([]byte(secret)), nil
 }
 
-func (s *Service) CreateAPIKey(ctx context.Context, actor Actor, environmentID string, kind APIKeyKind) (APIKeySecretResult, error) {
+func (s *Service) CreateAPIKey(ctx context.Context, actor Actor, environmentID string, kind APIKeyKind, applicationIDs ...string) (APIKeySecretResult, error) {
 	ctx, span := s.operation(ctx, "api_key.create", actor, attribute.String("mosaic.environment.id", environmentID))
 	defer span.End()
 	var result APIKeySecretResult
@@ -31,6 +31,18 @@ func (s *Service) CreateAPIKey(ctx context.Context, actor Actor, environmentID s
 		if project.Status == ProjectArchived {
 			return ErrResourceArchived
 		}
+		applicationID := ""
+		if len(applicationIDs) > 0 {
+			applicationID = applicationIDs[0]
+		}
+		if kind == APIKeyPublicSDK {
+			application, ok := tx.Application(applicationID)
+			if !ok || application.ProjectID != project.ID {
+				return ErrNotFound
+			}
+		} else if applicationID != "" {
+			return ErrScopeMismatch
+		}
 		id := tx.NextID("key")
 		prefix := "mos_" + string(kind) + "_" + id
 		secret, digest, err := s.newSecret(prefix)
@@ -38,9 +50,13 @@ func (s *Service) CreateAPIKey(ctx context.Context, actor Actor, environmentID s
 			return err
 		}
 		now := s.now()
-		key := APIKey{ID: id, EnvironmentID: environment.ID, Kind: kind, Prefix: prefix, CreatedByActorID: actor.ID, CreatedAt: now}
+		applicationProjectID := ""
+		if applicationID != "" {
+			applicationProjectID = project.ID
+		}
+		key := APIKey{ID: id, EnvironmentID: environment.ID, ApplicationID: applicationID, ApplicationProjectID: applicationProjectID, Kind: kind, Prefix: prefix, CreatedByActorID: actor.ID, CreatedAt: now}
 		tx.SaveAPIKey(APIKeyRecord{APIKey: key, SecretDigest: digest})
-		s.audit(tx, actor, project.OrganizationID, project.ID, environment.ID, "api_key.created", "api_key", id, map[string]string{"kind": string(kind), "prefix": prefix})
+		s.audit(tx, actor, project.OrganizationID, project.ID, environment.ID, "api_key.created", "api_key", id, map[string]string{"kind": string(kind), "prefix": prefix, "applicationId": applicationID})
 		result = APIKeySecretResult{APIKey: key, Secret: secret}
 		return nil
 	})

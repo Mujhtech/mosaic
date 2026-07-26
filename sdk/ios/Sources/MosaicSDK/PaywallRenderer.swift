@@ -45,6 +45,7 @@ public struct MosaicPaywall: View {
     imageResolver: MosaicImageResolver = .missing,
     videoResolver: MosaicVideoResolver = .missing,
     clock: @escaping @Sendable () -> Date = { Date() },
+    analytics: MosaicAnalyticsPresentationInstrumentation? = nil,
     onInteraction: @escaping @MainActor (MosaicInteractionOutcome) -> Void = { _ in },
     onResult: @escaping @MainActor (MosaicPresentationResult) -> Void
   ) {
@@ -54,6 +55,7 @@ public struct MosaicPaywall: View {
         requestedLocale: requestedLocale,
         purchaseProvider: purchaseProvider,
         clock: clock,
+        analytics: analytics,
         onInteraction: onInteraction,
         onResult: onResult
       )

@@ -1,6 +1,10 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
+import 'analytics.dart';
+import 'analytics_event.dart';
 import 'commerce.dart';
 import 'commerce_configuration.dart';
 import 'configuration.dart';
@@ -403,6 +407,9 @@ final class _MosaicPlacementHostState extends State<MosaicPlacementHost> {
   late Future<MosaicConfigurationLoadResult> _load;
   Future<MosaicPlacementDecisionResolution>? _decision;
   String? _reportedUnavailableKey;
+  String _placementRequestId = mosaicAnalyticsId('placement_request');
+  String _paywallPresentationId = mosaicAnalyticsId('presentation');
+  final Set<String> _analyticsEvents = <String>{};
 
   @override
   void initState() {
@@ -424,6 +431,9 @@ final class _MosaicPlacementHostState extends State<MosaicPlacementHost> {
         oldWidget.requestedLocale != widget.requestedLocale) {
       _reportedUnavailableKey = null;
       _decision = null;
+      _placementRequestId = mosaicAnalyticsId('placement_request');
+      _paywallPresentationId = mosaicAnalyticsId('presentation');
+      _analyticsEvents.clear();
     }
   }
 
@@ -466,6 +476,9 @@ final class _MosaicPlacementHostState extends State<MosaicPlacementHost> {
           future: _decision,
           builder: (context, decisionSnapshot) {
             if (!decisionSnapshot.hasData) {
+              if (decisionSnapshot.hasError) {
+                return _evaluationFailed(context);
+              }
               return widget.loadingBuilder?.call(context) ??
                   const SizedBox.shrink();
             }
@@ -482,38 +495,96 @@ final class _MosaicPlacementHostState extends State<MosaicPlacementHost> {
     );
   }
 
-  Widget _paywall(MosaicPlacementResolved resolution) => MosaicPaywall(
-        key: ValueKey<String>(
-          '${resolution.configuration.envelope.release.id}:'
-          '${resolution.paywallVersion.id}',
-        ),
-        document: resolution.paywallVersion.document,
-        purchaseProvider: widget.mosaic.purchaseProvider,
-        requestedLocale: widget.requestedLocale,
-        imageResolver: widget.imageResolver,
-        videoResolver: widget.videoResolver,
-        onResult: widget.onResult,
-        onInteraction: widget.onInteraction,
-        onDiagnostic: widget.onDiagnostic,
-        externalUrlOpener: widget.externalUrlOpener,
-      );
+  Widget _paywall(MosaicPlacementResolved resolution) {
+    final analytics = _analyticsContext(
+      resolution.configuration,
+      resolution.paywallVersion,
+      decision: resolution.decision,
+    );
+    _recordPlacement(
+      resolution.configuration,
+      MosaicAnalyticsEventName.placementPaywallSelected,
+      analytics.attribution,
+      const <String, Object?>{
+        'finalOutcome': 'paywall',
+        'decisionContractVersion': '1',
+      },
+    );
+    return MosaicPaywall(
+      key: ValueKey<String>(
+        '${resolution.configuration.envelope.release.id}:'
+        '${resolution.paywallVersion.id}',
+      ),
+      document: resolution.paywallVersion.document,
+      purchaseProvider: widget.mosaic.purchaseProvider,
+      requestedLocale: widget.requestedLocale,
+      imageResolver: widget.imageResolver,
+      videoResolver: widget.videoResolver,
+      onResult: widget.onResult,
+      onInteraction: widget.onInteraction,
+      onDiagnostic: widget.onDiagnostic,
+      analyticsRuntime: widget.mosaic.analytics,
+      analyticsContext: analytics,
+      externalUrlOpener: widget.externalUrlOpener,
+    );
+  }
 
-  Widget _decisionPaywall(MosaicPlacementDecisionPaywall resolution) =>
-      MosaicPaywall(
-        key: ValueKey<String>(
-          '${resolution.configuration.envelope.release.id}:'
-          '${resolution.paywallVersion.id}',
-        ),
-        document: resolution.paywallVersion.document,
-        purchaseProvider: widget.mosaic.purchaseProvider,
-        requestedLocale: widget.requestedLocale,
-        imageResolver: widget.imageResolver,
-        videoResolver: widget.videoResolver,
-        onResult: widget.onResult,
-        onInteraction: widget.onInteraction,
-        onDiagnostic: widget.onDiagnostic,
-        externalUrlOpener: widget.externalUrlOpener,
+  Widget _decisionPaywall(MosaicPlacementDecisionPaywall resolution) {
+    final analytics = _analyticsContext(
+      resolution.configuration,
+      resolution.paywallVersion,
+      decision: resolution.decision,
+    );
+    final decision = resolution.decision;
+    if (decision?.usedFallback == true) {
+      _recordPlacement(
+        resolution.configuration,
+        MosaicAnalyticsEventName.placementFallbackUsed,
+        analytics.attribution,
+        <String, Object?>{
+          'trigger': _fallbackTrigger(
+            decision!,
+            resolution.configuration.envelope.release
+                .decisionForPlacement(resolution.placementKey),
+          ),
+          'fallbackKey': decision.fallbackPath.last,
+          'finalOutcome': 'paywall',
+        },
       );
+    }
+    _recordPlacement(
+      resolution.configuration,
+      MosaicAnalyticsEventName.placementPaywallSelected,
+      analytics.attribution,
+      <String, Object?>{
+        'finalOutcome': 'paywall',
+        'decisionContractVersion': '1',
+        if (decision?.assignmentKeyType != null)
+          'assignmentKeyType': decision!.assignmentKeyType,
+        if (decision?.rolloutBucket != null)
+          'rolloutBucket': decision!.rolloutBucket,
+        if (decision?.rolloutBucket != null)
+          'bucketingAlgorithm': mosaicRolloutAlgorithm,
+      },
+    );
+    return MosaicPaywall(
+      key: ValueKey<String>(
+        '${resolution.configuration.envelope.release.id}:'
+        '${resolution.paywallVersion.id}',
+      ),
+      document: resolution.paywallVersion.document,
+      purchaseProvider: widget.mosaic.purchaseProvider,
+      requestedLocale: widget.requestedLocale,
+      imageResolver: widget.imageResolver,
+      videoResolver: widget.videoResolver,
+      onResult: widget.onResult,
+      onInteraction: widget.onInteraction,
+      onDiagnostic: widget.onDiagnostic,
+      analyticsRuntime: widget.mosaic.analytics,
+      analyticsContext: analytics,
+      externalUrlOpener: widget.externalUrlOpener,
+    );
+  }
 
   Widget _decisionUnavailable(
     BuildContext context,
@@ -529,6 +600,45 @@ final class _MosaicPlacementHostState extends State<MosaicPlacementHost> {
       );
 
   Widget _noPaywall(MosaicPlacementNoPaywall resolution) {
+    final accepted = widget.mosaic.acceptedConfiguration;
+    if (accepted != null) {
+      final ruleSet = accepted.envelope.release
+          .decisionForPlacement(resolution.placementKey);
+      final attribution = MosaicAnalyticsAttribution(
+        configurationReleaseId: accepted.envelope.release.id,
+        placementId: ruleSet?.placementId,
+        placementRuleSetId: ruleSet?.id,
+        placementRuleSetVersion: ruleSet?.version,
+        winningRuleId: resolution.decision.matchedRuleId,
+      );
+      if (resolution.decision.fallbackPath.isNotEmpty) {
+        _recordPlacement(
+          accepted,
+          MosaicAnalyticsEventName.placementFallbackUsed,
+          attribution,
+          <String, Object?>{
+            'trigger': _fallbackTrigger(resolution.decision, ruleSet),
+            'fallbackKey': resolution.decision.fallbackPath.last,
+            'finalOutcome': 'no_paywall',
+          },
+        );
+      }
+      _recordPlacement(
+        accepted,
+        MosaicAnalyticsEventName.placementNoPaywall,
+        attribution,
+        <String, Object?>{
+          'finalOutcome': 'no_paywall',
+          'decisionContractVersion': '1',
+          if (resolution.decision.assignmentKeyType != null)
+            'assignmentKeyType': resolution.decision.assignmentKeyType,
+          if (resolution.decision.rolloutBucket != null)
+            'rolloutBucket': resolution.decision.rolloutBucket,
+          if (resolution.decision.rolloutBucket != null)
+            'bucketingAlgorithm': mosaicRolloutAlgorithm,
+        },
+      );
+    }
     final reportKey = '${resolution.placementKey}:no_paywall';
     if (_reportedUnavailableKey != reportKey) {
       _reportedUnavailableKey = reportKey;
@@ -547,6 +657,25 @@ final class _MosaicPlacementHostState extends State<MosaicPlacementHost> {
     BuildContext context,
     MosaicPlacementUnavailable resolution,
   ) {
+    final accepted = widget.mosaic.acceptedConfiguration;
+    if (accepted != null) {
+      final ruleSet = accepted.envelope.release
+          .decisionForPlacement(resolution.placementKey);
+      _recordPlacement(
+        accepted,
+        MosaicAnalyticsEventName.placementUnavailable,
+        MosaicAnalyticsAttribution(
+          configurationReleaseId: accepted.envelope.release.id,
+          placementId: ruleSet?.placementId,
+          placementRuleSetId: ruleSet?.id,
+          placementRuleSetVersion: ruleSet?.version,
+        ),
+        <String, Object?>{
+          'reason': _analyticsUnavailableReason(resolution.diagnosticCode),
+          'diagnosticCode': 'placement.unavailable',
+        },
+      );
+    }
     final reportKey = '${resolution.placementKey}:${resolution.diagnosticCode}';
     if (_reportedUnavailableKey != reportKey) {
       _reportedUnavailableKey = reportKey;
@@ -573,5 +702,162 @@ final class _MosaicPlacementHostState extends State<MosaicPlacementHost> {
     }
     return widget.unavailableBuilder?.call(context, resolution) ??
         const SizedBox.shrink();
+  }
+
+  Widget _evaluationFailed(BuildContext context) {
+    final accepted = widget.mosaic.acceptedConfiguration;
+    final ruleSet =
+        accepted?.envelope.release.decisionForPlacement(widget.placementKey);
+    if (accepted != null && ruleSet != null) {
+      _recordPlacement(
+        accepted,
+        MosaicAnalyticsEventName.placementEvaluationFailed,
+        MosaicAnalyticsAttribution(
+          configurationReleaseId: accepted.envelope.release.id,
+          placementId: ruleSet.placementId,
+          placementRuleSetId: ruleSet.id,
+          placementRuleSetVersion: ruleSet.version,
+        ),
+        const <String, Object?>{
+          'diagnosticCode': 'decision.evaluation_failed',
+          'retryable': false,
+        },
+      );
+    }
+    const resolution = MosaicPlacementUnavailable(
+      placementKey: '',
+      diagnosticCode: 'placement.evaluationFailed',
+    );
+    final reportKey = '${widget.placementKey}:evaluation_failed';
+    if (_reportedUnavailableKey != reportKey) {
+      _reportedUnavailableKey = reportKey;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted || _reportedUnavailableKey != reportKey) return;
+        widget.onDiagnostic?.call(
+          const MosaicDiagnostic(
+            code: 'placement.evaluationFailed',
+            message: 'The Mosaic Placement could not be evaluated.',
+            severity: MosaicDiagnosticSeverity.error,
+          ),
+        );
+        widget.onResult(
+          const MosaicRenderingFailedPresentationResult(
+            diagnosticCode: 'placement.evaluationFailed',
+          ),
+        );
+      });
+    }
+    return widget.unavailableBuilder?.call(context, resolution) ??
+        const SizedBox.shrink();
+  }
+
+  MosaicAnalyticsPresentationContext _analyticsContext(
+    MosaicAcceptedConfiguration configuration,
+    MosaicDeliveredPaywallVersion paywallVersion, {
+    MosaicPlacementDecisionResult? decision,
+  }) {
+    final release = configuration.envelope.release;
+    final ruleSet = release.decisionForPlacement(widget.placementKey);
+    final commerce = configuration.commerceEnvelope?.configuration;
+    return MosaicAnalyticsPresentationContext(
+      placementRequestId: _placementRequestId,
+      paywallPresentationId: _paywallPresentationId,
+      attribution: MosaicAnalyticsAttribution(
+        configurationReleaseId: release.id,
+        placementId: ruleSet?.placementId,
+        placementRuleSetId: ruleSet?.id,
+        placementRuleSetVersion: ruleSet?.version,
+        winningRuleId: decision?.matchedRuleId,
+        paywallId: paywallVersion.paywallId,
+        paywallVersionId: paywallVersion.id,
+      ),
+      providerId: commerce?.activeProvider.identity.id,
+      providerProductMappingIds: <String, String>{
+        for (final mapping in commerce?.productMappings ??
+            const <MosaicCommerceProductMapping>[])
+          mapping.mosaicProductId: mapping.mappingId,
+      },
+    );
+  }
+
+  void _recordPlacement(
+    MosaicAcceptedConfiguration configuration,
+    MosaicAnalyticsEventName outcome,
+    MosaicAnalyticsAttribution attribution,
+    Map<String, Object?> payload,
+  ) {
+    final runtime = widget.mosaic.analytics;
+    if (runtime == null) return;
+    if (_analyticsEvents.add('requested')) {
+      unawaited(runtime.record(
+        name: MosaicAnalyticsEventName.placementRequested,
+        correlation: MosaicAnalyticsCorrelation(
+          placementRequestId: _placementRequestId,
+        ),
+        attribution: MosaicAnalyticsAttribution(
+          configurationReleaseId: configuration.envelope.release.id,
+          placementId: attribution.placementId,
+          placementRuleSetId: attribution.placementRuleSetId,
+          placementRuleSetVersion: attribution.placementRuleSetVersion,
+        ),
+        payload: const <String, Object?>{'decisionContractVersion': '1'},
+      ).catchError((Object _) => false));
+    }
+    if (_analyticsEvents.add(outcome.wireValue)) {
+      unawaited(runtime
+          .record(
+            name: outcome,
+            correlation: MosaicAnalyticsCorrelation(
+              placementRequestId: _placementRequestId,
+            ),
+            attribution: attribution,
+            payload: payload,
+          )
+          .catchError((Object _) => false));
+    }
+  }
+
+  String _analyticsUnavailableReason(String code) {
+    if (code.contains('configuration')) return 'configuration_incompatible';
+    if (code.contains('commerce')) return 'commerce_unavailable';
+    if (code.contains('content')) return 'content_unavailable';
+    return 'no_safe_decision';
+  }
+
+  String _fallbackTrigger(
+    MosaicPlacementDecisionResult decision,
+    MosaicPlacementRuleSet? ruleSet,
+  ) {
+    final triggered = decision.trace
+        .where((step) => step.code == 'fallback.triggered')
+        .lastOrNull;
+    if (triggered != null) {
+      final message = triggered.message;
+      return message.substring(
+          'Fallback was triggered by '.length, message.length - 1);
+    }
+    final rule = ruleSet?.rules
+        .where((candidate) => candidate.id == decision.matchedRuleId)
+        .firstOrNull;
+    return _conditionFallbackTrigger(rule?.conditions) ?? 'unsafe_rendering';
+  }
+
+  String? _conditionFallbackTrigger(MosaicConditionNode? node) {
+    return switch (node) {
+      MosaicConditionLeaf(:final sourceKind, :final operand) => switch ((
+          sourceKind,
+          operand?.value
+        )) {
+          ('product_availability', 'unavailable') => 'product_unavailable',
+          ('product_availability', 'unknown') => 'product_unknown',
+          ('provider_capability', 'unavailable') => 'provider_unavailable',
+          ('entitlement_state', 'unknown') => 'entitlement_unknown',
+          _ => null,
+        },
+      MosaicConditionGroup(:final children) =>
+        children.map(_conditionFallbackTrigger).nonNulls.firstOrNull,
+      MosaicConditionNot(:final child) => _conditionFallbackTrigger(child),
+      _ => null,
+    };
   }
 }

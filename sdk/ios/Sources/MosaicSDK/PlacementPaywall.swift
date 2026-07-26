@@ -6,7 +6,7 @@ import SwiftUI
 public struct MosaicPlacementPaywall: View {
   private enum LoadState {
     case loading
-    case resolved(MosaicPaywallDocument)
+    case resolved(MosaicPaywallDocument, MosaicAnalyticsPresentationInstrumentation?)
     case noPaywall
     case unavailable(String)
   }
@@ -19,6 +19,9 @@ public struct MosaicPlacementPaywall: View {
   private let onInteraction: @MainActor (MosaicInteractionOutcome) -> Void
   private let onResult: @MainActor (MosaicPresentationResult) -> Void
   @State private var state: LoadState = .loading
+  @State private var placementRequestID = MosaicAnalyticsRuntime.identifier(
+    prefix: "placement_request")
+  @State private var presentationID = MosaicAnalyticsRuntime.identifier(prefix: "presentation")
 
   public init(
     mosaic: Mosaic,
@@ -45,13 +48,14 @@ public struct MosaicPlacementPaywall: View {
         ProgressView("Loading paywall")
           .frame(maxWidth: .infinity, maxHeight: .infinity)
           .accessibilityLabel("Loading Mosaic paywall")
-      case .resolved(let document):
+      case .resolved(let document, let analytics):
         MosaicPaywall(
           document: document,
           requestedLocale: requestedLocale,
           purchaseProvider: mosaic.purchaseProvider,
           imageResolver: imageResolver,
           videoResolver: videoResolver,
+          analytics: analytics,
           onInteraction: onInteraction,
           onResult: onResult
         )
@@ -77,11 +81,85 @@ public struct MosaicPlacementPaywall: View {
       }
     }
     .task(id: placement) {
-      switch await mosaic.decision(placement: placement) {
-      case .paywallSelected(let document, _, _, _, _, _, _):
-        state = .resolved(document)
-      case .noPaywall:
+      let analytics = await mosaic.analyticsPlacementMetadata(placement)
+      if let analytics {
+        _ = await mosaic.recordAnalytics(
+          .placementRequested,
+          correlation: .init(placementRequestId: placementRequestID),
+          attribution: .init(
+            configurationReleaseId: analytics.releaseID,
+            placementId: analytics.placementID,
+            placementRuleSetId: analytics.ruleSetID,
+            placementRuleSetVersion: UInt64(analytics.ruleSetVersion)),
+          payload: .init(decisionContractVersion: "1"))
+      }
+      let evaluation = await mosaic.decisionForPresentation(placement: placement)
+      switch evaluation.result {
+      case .paywallSelected(
+        let document, let paywallVersionID, let matchedRuleID, _,
+        _, _, let trace):
+        if let analytics,
+          let paywall = await mosaic.analyticsPaywallMetadata(versionID: paywallVersionID)
+        {
+          let attribution = MosaicAnalyticsAttribution(
+            configurationReleaseId: analytics.releaseID,
+            placementId: analytics.placementID,
+            placementRuleSetId: analytics.ruleSetID,
+            placementRuleSetVersion: UInt64(analytics.ruleSetVersion),
+            winningRuleId: matchedRuleID, paywallId: paywall.paywallID,
+            paywallVersionId: paywall.versionID)
+          let rollout = trace.steps.reversed().compactMap(\.rolloutBucket).first
+          let assignment = trace.steps.reversed().compactMap(\.assignmentType).first
+          await emitFallbackUses(
+            evaluation.fallbackUses, finalOutcome: "paywall", attribution: attribution)
+          _ = await mosaic.recordAnalytics(
+            .placementPaywallSelected,
+            correlation: .init(placementRequestId: placementRequestID),
+            attribution: attribution,
+            payload: .init(
+              decisionContractVersion: "1", finalOutcome: "paywall",
+              assignmentKeyType: assignment == "identified_user"
+                ? "identified_user" : assignment == nil ? nil : "installation",
+              bucketingAlgorithm: rollout == nil ? nil : "sha256_length_prefixed_v1",
+              rolloutBucket: rollout))
+          _ = await mosaic.recordAnalytics(
+            .paywallPresented,
+            correlation: .init(
+              placementRequestId: placementRequestID,
+              paywallPresentationId: presentationID),
+            attribution: attribution, payload: .init())
+          state = .resolved(
+            document,
+            await mosaic.analyticsPresentationInstrumentation(
+              placementRequestID: placementRequestID, presentationID: presentationID,
+              attribution: attribution))
+        } else {
+          state = .resolved(document, nil)
+        }
+      case .noPaywall(let matchedRuleID, _, _, let trace):
         state = .noPaywall
+        if let analytics {
+          let rollout = trace.steps.reversed().compactMap(\.rolloutBucket).first
+          let assignment = trace.steps.reversed().compactMap(\.assignmentType).first
+          let attribution = MosaicAnalyticsAttribution(
+            configurationReleaseId: analytics.releaseID,
+            placementId: analytics.placementID,
+            placementRuleSetId: analytics.ruleSetID,
+            placementRuleSetVersion: UInt64(analytics.ruleSetVersion),
+            winningRuleId: matchedRuleID)
+          await emitFallbackUses(
+            evaluation.fallbackUses, finalOutcome: "no_paywall", attribution: attribution)
+          _ = await mosaic.recordAnalytics(
+            .placementNoPaywall,
+            correlation: .init(placementRequestId: placementRequestID),
+            attribution: attribution,
+            payload: .init(
+              decisionContractVersion: "1", finalOutcome: "no_paywall",
+              assignmentKeyType: assignment == "identified_user"
+                ? "identified_user" : assignment == nil ? nil : "installation",
+              bucketingAlgorithm: rollout == nil ? nil : "sha256_length_prefixed_v1",
+              rolloutBucket: rollout))
+        }
       case .configurationUnavailable(let diagnostics):
         let code = diagnostics.last?.code ?? "delivery_configuration_unavailable"
         state = .unavailable(code)
@@ -90,6 +168,20 @@ public struct MosaicPlacementPaywall: View {
         let code = diagnostics.last?.code ?? "delivery_placement_unavailable"
         state = .unavailable(code)
         onResult(.configurationUnavailable)
+        if let analytics {
+          let attribution = MosaicAnalyticsAttribution(
+            configurationReleaseId: analytics.releaseID,
+            placementId: analytics.placementID,
+            placementRuleSetId: analytics.ruleSetID,
+            placementRuleSetVersion: UInt64(analytics.ruleSetVersion))
+          await emitFallbackUses(
+            evaluation.fallbackUses, finalOutcome: "unavailable", attribution: attribution)
+          _ = await mosaic.recordAnalytics(
+            .placementUnavailable,
+            correlation: .init(placementRequestId: placementRequestID),
+            attribution: attribution,
+            payload: .init(diagnosticCode: "decision.unavailable", reason: "no_safe_decision"))
+        }
       case .unsupportedDecisionContract(let diagnostics):
         let code = diagnostics.last?.code ?? "delivery_unsupported_decision_contract"
         state = .unavailable(code)
@@ -98,7 +190,32 @@ public struct MosaicPlacementPaywall: View {
         let code = diagnostics.last?.code ?? "decision_evaluation_failed"
         state = .unavailable(code)
         onResult(.renderingFailed(diagnosticCode: code))
+        if let analytics {
+          _ = await mosaic.recordAnalytics(
+            .placementEvaluationFailed,
+            correlation: .init(placementRequestId: placementRequestID),
+            attribution: .init(
+              configurationReleaseId: analytics.releaseID,
+              placementId: analytics.placementID,
+              placementRuleSetId: analytics.ruleSetID,
+              placementRuleSetVersion: UInt64(analytics.ruleSetVersion)),
+            payload: .init(diagnosticCode: "decision.evaluation_failed", retryable: false))
+        }
       }
+    }
+  }
+
+  private func emitFallbackUses(
+    _ uses: [MosaicPlacementEvaluator.FallbackUse], finalOutcome: String,
+    attribution: MosaicAnalyticsAttribution
+  ) async {
+    for use in uses {
+      _ = await mosaic.recordAnalytics(
+        .placementFallbackUsed,
+        correlation: .init(placementRequestId: placementRequestID),
+        attribution: attribution,
+        payload: .init(
+          finalOutcome: finalOutcome, trigger: use.trigger, fallbackKey: use.key))
     }
   }
 }

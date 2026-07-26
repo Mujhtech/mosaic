@@ -104,10 +104,17 @@ public enum MosaicActiveEntitlementsResult: Sendable, Equatable {
 /// Implemented later by RevenueCat, StoreKit, or app-owned adapters. Phase 1
 /// uses only the deterministic mock implementation.
 public protocol MosaicPurchaseProvider: Sendable {
+  /// Stable Mosaic-safe provider identifier used only for analytics attribution.
+  /// Returning nil suppresses purchase/restore analytics rather than inventing attribution.
+  var mosaicAnalyticsProviderID: String? { get async }
   func loadProducts(identifiers: [String]) async -> MosaicProductLoadResult
   func purchase(productID: String) async -> MosaicPurchaseResult
   func restore() async -> MosaicRestoreResult
   func activeEntitlements() async -> MosaicActiveEntitlementsResult
+}
+
+extension MosaicPurchaseProvider {
+  public var mosaicAnalyticsProviderID: String? { get async { nil } }
 }
 
 public enum MosaicInteractionOutcomeName: String, Sendable, CaseIterable {

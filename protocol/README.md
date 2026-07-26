@@ -60,6 +60,14 @@ Version `1` supports both backend Provider Connections and equivalently
 verified SDK-local custom-provider snapshots without placing credentials or
 customer data in delivered configuration.
 
+Analytics Event Contract `1` is a separate closed batch/event contract for
+Placement, Paywall, Product, purchase, and restore observations. It uses
+event-time identity snapshots, stable correlation, immutable attribution,
+authentication-derived authority, and per-event partial-batch results. Public
+events contain no tenant or Application IDs; ingestion derives that scope from
+an SDK key bound to one Application. It does not modify delivery, decision,
+Paywall, or commerce contracts.
+
 Canonical Commerce artifacts live under:
 
 ```text
@@ -70,19 +78,23 @@ protocol/
 ├── schema/commerce-provider/v2/
 ├── schema/placement-decision/v1/
 ├── schema/configuration-delivery/v2/
+├── schema/analytics-event/v1/
 ├── compatibility/commerce-configuration/v1.json
 ├── compatibility/commerce-configuration/v2.json
 ├── compatibility/commerce-provider/v1.json
 ├── compatibility/commerce-provider/v2.json
+├── compatibility/analytics-event/v1.json
 ├── fixtures/commerce-configuration/v1/
 ├── fixtures/commerce-configuration/v2/
 ├── fixtures/commerce-provider/v1/
 ├── fixtures/commerce-provider/v2/
 ├── fixtures/placement-decision/v1/
 ├── fixtures/configuration-delivery/v2/
+├── fixtures/analytics-event/v1/
 ├── commerce-configuration/CHANGELOG.md
 ├── commerce/CHANGELOG.md
-└── placement-decision/CHANGELOG.md
+├── placement-decision/CHANGELOG.md
+└── analytics/CHANGELOG.md
 ```
 
 ## Generate and validate
@@ -113,3 +125,4 @@ See:
 - `docs/protocol/commerce-configuration-v2.md`
 - `docs/protocol/placement-decision-v1.md`
 - `docs/protocol/configuration-delivery-v2.md`
+- `docs/protocol/analytics-event-v1.md`

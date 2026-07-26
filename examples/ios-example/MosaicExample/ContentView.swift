@@ -142,6 +142,11 @@ private struct HostedConfigurationPreview: View {
         }
         .buttonStyle(.bordered)
         .disabled(model.mosaic == nil)
+        Menu("Analytics") {
+          Button("Queue demo events") { Task { await model.queueAnalyticsDemo() } }
+          Button("Flush now") { Task { await model.flushAnalytics() } }
+        }
+        .disabled(model.mosaic == nil)
       }
       .padding(.horizontal)
       .padding(.bottom, 10)
@@ -189,6 +194,7 @@ private final class HostedConfigurationModel: ObservableObject {
   private let applicationID: String?
   private let revenueCatPublicSDKKey: String?
   private let commerceProviderSelection: String?
+  private let analyticsEnabled: Bool
   private var commerceManager: MosaicCommerceConfigurationManager?
   private var commerceProvider: (any MosaicCommerceProvider)?
   private var commerceRouter: MosaicCommerceProviderRouter?
@@ -199,6 +205,7 @@ private final class HostedConfigurationModel: ObservableObject {
     applicationID = environment["MOSAIC_APPLICATION_ID"]
     revenueCatPublicSDKKey = environment["REVENUECAT_PUBLIC_SDK_KEY"]
     commerceProviderSelection = environment["MOSAIC_COMMERCE_PROVIDER"]
+    analyticsEnabled = environment["MOSAIC_ANALYTICS_ENABLED"] == "1"
     placement = environment["MOSAIC_PLACEMENT"] ?? "onboarding_complete"
     setupMessage =
       "Set MOSAIC_PUBLIC_SDK_KEY and MOSAIC_SDK_BASE_URL in the Xcode scheme. "
@@ -248,6 +255,9 @@ private final class HostedConfigurationModel: ObservableObject {
         purchaseProvider: purchaseProvider
       )
       mosaic = configured
+      await configured.setAnalyticsCollection(
+        environmentEnabled: analyticsEnabled,
+        hostEnabled: true)
       await refreshCommerce(for: configured)
       await updateStatus(for: configured)
     } catch {
@@ -289,6 +299,28 @@ private final class HostedConfigurationModel: ObservableObject {
       try await mosaic.resetIdentity()
       statusText = "User identity reset · installation assignment retained"
     } catch { statusText = "Identity reset failed safely" }
+  }
+
+  func queueAnalyticsDemo() async {
+    guard let mosaic else { return }
+    let presentationID = "presentation_ios_demo_\(UUID().uuidString.lowercased())"
+    for action in ["navigate_to", "navigate_back", "open_external_url", "close"] {
+      _ = await mosaic.recordAnalytics(
+        .paywallActionSelected,
+        correlation: .init(paywallPresentationId: presentationID),
+        payload: .init(action: action))
+    }
+    let diagnostics = await mosaic.analyticsDiagnostics()
+    statusText =
+      "Analytics queue · \(diagnostics.queuedEventCount) events · \(diagnostics.queuedBytes) bytes"
+  }
+
+  func flushAnalytics() async {
+    guard let mosaic else { return }
+    let result = await mosaic.flushAnalytics()
+    let diagnostics = await mosaic.analyticsDiagnostics()
+    statusText =
+      "Analytics \(String(describing: result)) · \(diagnostics.queuedEventCount) retained"
   }
 
   private func updateStatus(for mosaic: Mosaic) async {

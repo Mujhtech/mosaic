@@ -24,6 +24,8 @@ class MosaicPaywallState(
     private val purchaseProvider: MosaicPurchaseProvider,
     private val diagnostics: MosaicDiagnosticSink = MosaicDiagnosticSink.None,
     private val clock: () -> Long = System::currentTimeMillis,
+    private val analyticsRuntime: MosaicAnalyticsRuntime? = null,
+    private val analyticsContext: MosaicAnalyticsPresentationContext? = null,
 ) {
     private val allNodes = document.walkNodesDepthFirst().toList()
     private val selectors = allNodes
@@ -36,6 +38,7 @@ class MosaicPaywallState(
         .filterIsInstance<MosaicCarouselComponent>()
         .associateBy(MosaicCarouselComponent::id)
     private val productReferences = document.products.associateBy(MosaicProductReference::id)
+    private val reportedRenderingFailures = mutableSetOf<String>()
 
     var selectorStates: Map<String, MosaicProductSelectorState> by mutableStateOf(
         selectors.keys.associateWith {
@@ -73,6 +76,9 @@ class MosaicPaywallState(
 
     val currentScreen: MosaicPaywallScreen
         get() = document.screens.first { it.id == currentScreenId }
+
+    internal val currentScreenOrNull: MosaicPaywallScreen?
+        get() = document.screens.firstOrNull { it.id == currentScreenId }
 
     val backgroundScreen: MosaicPaywallScreen
         get() = navigationHistory.asReversed()
@@ -140,9 +146,48 @@ class MosaicPaywallState(
 
     fun currentTimeMillis(): Long = clock()
 
+    fun presented() {
+        track(
+            MosaicAnalyticsPayload.PaywallPresented(),
+            MosaicAnalyticsCorrelation(
+                placementRequestId = analyticsContext?.placementRequestId,
+                paywallPresentationId = analyticsContext?.paywallPresentationId,
+            ),
+        )
+    }
+
+    fun reportRenderingFailure(diagnosticCode: String = "rendering.failed"): MosaicPaywallEvent? {
+        val safeDiagnosticCode = safeCode(diagnosticCode)
+        if (!reportedRenderingFailures.add(safeDiagnosticCode)) return null
+        diagnostics.record(
+            MosaicDiagnostic(
+                MosaicDiagnosticCode.RENDERING_FAILED,
+                "The paywall could not be rendered safely.",
+            ),
+        )
+        track(
+            MosaicAnalyticsPayload.DiagnosticFailure("paywall_render_failed", safeDiagnosticCode, false),
+            presentationCorrelation(),
+        )
+        return MosaicPaywallEvent(
+            interaction = MosaicInteractionOutcome.RenderingFailed(safeDiagnosticCode),
+            presentationResult = MosaicPresentationResult.RenderingFailed(safeDiagnosticCode),
+        )
+    }
+
     suspend fun loadProducts(requestedLocale: String? = null): List<MosaicPaywallEvent> {
+        val startedAt = clock()
+        val attemptId = mosaicAnalyticsId("product_load")
         val localization = MosaicLocalizationResolver(document.localization, requestedLocale)
         val providerIds = document.products.map(MosaicProductReference::providerProductId)
+        if (providerIds.isNotEmpty()) track(
+            MosaicAnalyticsPayload.ProductLoadStarted(providerIds.size.coerceAtMost(64)),
+            MosaicAnalyticsCorrelation(
+                placementRequestId = analyticsContext?.placementRequestId,
+                paywallPresentationId = analyticsContext?.paywallPresentationId,
+                productLoadAttemptId = attemptId,
+            ),
+        )
         val result = try {
             purchaseProvider.loadProducts(providerIds)
         } catch (_: Exception) {
@@ -161,6 +206,24 @@ class MosaicPaywallState(
             }
             is MosaicProductLoadResult.Unavailable -> emptyList()
         }.filter { product -> providerIds.contains(product.id) }.associateBy(MosaicProduct::id)
+
+        if (providerIds.isNotEmpty()) {
+            val duration = mosaicAnalyticsDuration(startedAt, clock())
+            when (result) {
+                is MosaicProductLoadResult.Loaded -> track(
+                    MosaicAnalyticsPayload.ProductLoadCompleted(
+                        loadedProducts.size.coerceAtMost(64),
+                        (providerIds.size - loadedProducts.size).coerceIn(0, 64),
+                        duration,
+                    ),
+                    MosaicAnalyticsCorrelation(productLoadAttemptId = attemptId),
+                )
+                is MosaicProductLoadResult.Unavailable -> track(
+                    MosaicAnalyticsPayload.ProductLoadFailed(providerIds.size.coerceAtMost(64), duration, safeCode(result.diagnosticCode), true),
+                    MosaicAnalyticsCorrelation(productLoadAttemptId = attemptId),
+                )
+            }
+        }
 
         val events = mutableListOf<MosaicPaywallEvent>()
         selectorStates = selectors.mapValues { (_, selector) ->
@@ -192,6 +255,22 @@ class MosaicPaywallState(
                 )
                 events += MosaicPaywallEvent(
                     interaction = interaction,
+                )
+                selector.initialProductReferenceId()?.let { productId ->
+                    track(
+                        MosaicAnalyticsPayload.ProductUnavailable("product_not_found"),
+                        MosaicAnalyticsCorrelation(productLoadAttemptId = attemptId),
+                        productId,
+                    )
+                }
+            } else {
+                track(
+                    MosaicAnalyticsPayload.ProductSelected("default"),
+                    MosaicAnalyticsCorrelation(
+                        placementRequestId = analyticsContext?.placementRequestId,
+                        paywallPresentationId = analyticsContext?.paywallPresentationId,
+                    ),
+                    selectedOption.reference.providerProductId,
                 )
             }
             MosaicProductSelectorState(
@@ -235,9 +314,19 @@ class MosaicPaywallState(
             )
         )
         return MosaicPaywallEvent(MosaicInteractionOutcome.ProductSelected(selected.reference.id))
+            .also {
+                track(
+                    MosaicAnalyticsPayload.ProductSelected("user"),
+                    MosaicAnalyticsCorrelation(
+                        placementRequestId = analyticsContext?.placementRequestId,
+                        paywallPresentationId = analyticsContext?.paywallPresentationId,
+                    ),
+                    selected.reference.providerProductId,
+                )
+            }
     }
 
-    suspend fun purchase(selectorId: String): MosaicPaywallEvent {
+    suspend fun purchase(selectorId: String, componentId: String? = null): MosaicPaywallEvent {
         if (!isNodeVisible(selectorId)) {
             val unavailableReferenceId = selectors[selectorId]?.initialProductReferenceId()
             return MosaicPaywallEvent(
@@ -268,15 +357,21 @@ class MosaicPaywallState(
         }
 
         purchaseBusySelectorIds = purchaseBusySelectorIds + selectorId
+        val attemptId = mosaicAnalyticsId("purchase_attempt")
+        val startedAt = clock()
+        val productId = selected.reference.providerProductId
+        track(MosaicAnalyticsPayload.PaywallAction("purchase", componentId), presentationCorrelation())
+        trackPurchase(MosaicAnalyticsPayload.PurchaseStarted(), attemptId, productId)
         val result = try {
-            purchaseProvider.purchase(selected.reference.providerProductId)
+            purchaseProvider.purchase(productId)
         } catch (_: Exception) {
             MosaicPurchaseResult.Failed(selected.reference.providerProductId)
         } finally {
             purchaseBusySelectorIds = purchaseBusySelectorIds - selectorId
         }
 
-        return when (result) {
+        val duration = mosaicAnalyticsDuration(startedAt, clock())
+        val event = when (result) {
             is MosaicPurchaseResult.Purchased -> MosaicPaywallEvent(
                 interaction = MosaicInteractionOutcome.Purchased(selected.reference.id),
                 presentationResult = MosaicPresentationResult.Purchased(
@@ -284,25 +379,25 @@ class MosaicPaywallState(
                     providerProductId = selected.reference.providerProductId,
                     transactionId = result.transactionId,
                 ),
-            )
+            ).also { trackPurchase(MosaicAnalyticsPayload.PurchaseCompleted("purchased", duration, result.entitlements.map { it.id }.sorted().take(64)), attemptId, productId) }
             is MosaicPurchaseResult.AlreadyEntitled -> MosaicPaywallEvent(
                 interaction = MosaicInteractionOutcome.AlreadyEntitled(selected.reference.id),
                 presentationResult = MosaicPresentationResult.AlreadyEntitled(selected.reference.id),
-            )
+            ).also { trackPurchase(MosaicAnalyticsPayload.PurchaseCompleted("already_entitled", duration, result.entitlements.map { it.id }.sorted().take(64)), attemptId, productId) }
             is MosaicPurchaseResult.Pending -> MosaicPaywallEvent(
                 interaction = MosaicInteractionOutcome.PurchasePending(selected.reference.id),
-            )
+            ).also { trackPurchase(MosaicAnalyticsPayload.PurchaseLifecycle("purchase_pending", duration), attemptId, productId) }
             is MosaicPurchaseResult.Deferred -> MosaicPaywallEvent(
                 interaction = MosaicInteractionOutcome.PurchaseDeferred(selected.reference.id),
-            )
+            ).also { trackPurchase(MosaicAnalyticsPayload.PurchaseLifecycle("purchase_deferred", duration), attemptId, productId) }
             is MosaicPurchaseResult.Cancelled -> MosaicPaywallEvent(
                 interaction = MosaicInteractionOutcome.Cancelled(selected.reference.id),
                 presentationResult = MosaicPresentationResult.Cancelled(selected.reference.id),
-            )
+            ).also { trackPurchase(MosaicAnalyticsPayload.PurchaseLifecycle("purchase_cancelled", duration, "purchase.cancelled"), attemptId, productId) }
             is MosaicPurchaseResult.ProductUnavailable -> MosaicPaywallEvent(
                 interaction = MosaicInteractionOutcome.ProductUnavailable(selected.reference.id),
                 presentationResult = MosaicPresentationResult.ProductUnavailable(selected.reference.id),
-            )
+            ).also { trackPurchase(MosaicAnalyticsPayload.PurchaseFailed(duration, "commerce.product_unavailable", false), attemptId, productId) }
             is MosaicPurchaseResult.ProviderUnavailable -> {
                 diagnostics.record(
                     MosaicDiagnostic(
@@ -319,7 +414,7 @@ class MosaicPaywallState(
                         selected.reference.id,
                         result.diagnosticCode,
                     ),
-                )
+                ).also { trackPurchase(MosaicAnalyticsPayload.PurchaseFailed(duration, safeCode(result.diagnosticCode), true), attemptId, productId) }
             }
             is MosaicPurchaseResult.Failed -> {
                 diagnostics.record(
@@ -337,18 +432,24 @@ class MosaicPaywallState(
                         selected.reference.id,
                         result.diagnosticCode,
                     ),
-                )
+                ).also { trackPurchase(MosaicAnalyticsPayload.PurchaseFailed(duration, safeCode(result.diagnosticCode), false), attemptId, productId) }
             }
         }
+        return event
     }
 
-    suspend fun restore(): MosaicPaywallEvent {
+    suspend fun restore(componentId: String? = null): MosaicPaywallEvent {
         if (isRestoreBusy) {
             return MosaicPaywallEvent(
                 MosaicInteractionOutcome.RestoreFailed("restore_already_in_progress"),
             )
         }
         isRestoreBusy = true
+        val attemptId = mosaicAnalyticsId("restore_attempt")
+        val startedAt = clock()
+        val providerId = analyticsProvider(null).providerId
+        track(MosaicAnalyticsPayload.PaywallAction("restore", componentId), presentationCorrelation())
+        track(MosaicAnalyticsPayload.RestoreStarted(providerId), MosaicAnalyticsCorrelation(restoreAttemptId = attemptId))
         val result = try {
             purchaseProvider.restore()
         } catch (_: Exception) {
@@ -356,24 +457,25 @@ class MosaicPaywallState(
         } finally {
             isRestoreBusy = false
         }
+        val duration = mosaicAnalyticsDuration(startedAt, clock())
         return when (result) {
             is MosaicRestoreResult.Restored -> MosaicPaywallEvent(
                 interaction = MosaicInteractionOutcome.Restored(result.entitlements),
                 presentationResult = MosaicPresentationResult.Restored(result.entitlements),
-            )
+            ).also { track(MosaicAnalyticsPayload.RestoreCompleted(providerId, duration, emptyList(), result.entitlements.map { it.id }.sorted().take(64)), MosaicAnalyticsCorrelation(restoreAttemptId = attemptId)) }
             MosaicRestoreResult.NothingToRestore -> MosaicPaywallEvent(
                 MosaicInteractionOutcome.RestoreNoPurchases,
-            )
+            ).also { track(MosaicAnalyticsPayload.RestoreLifecycle("restore_nothing_found", providerId, duration), MosaicAnalyticsCorrelation(restoreAttemptId = attemptId)) }
             MosaicRestoreResult.Cancelled -> MosaicPaywallEvent(
                 MosaicInteractionOutcome.RestoreCancelled,
-            )
+            ).also { track(MosaicAnalyticsPayload.RestoreLifecycle("restore_cancelled", providerId, duration), MosaicAnalyticsCorrelation(restoreAttemptId = attemptId)) }
             is MosaicRestoreResult.ProviderUnavailable -> {
                 diagnostics.record(
                     MosaicDiagnostic(
                         MosaicDiagnosticCode.COMMERCE_PROVIDER_UNAVAILABLE,
                         "The commerce provider is currently unavailable.",
                     ),
-                )
+                ).also { track(MosaicAnalyticsPayload.RestoreFailed(providerId, duration, safeCode(result.diagnosticCode), true), MosaicAnalyticsCorrelation(restoreAttemptId = attemptId)) }
                 MosaicPaywallEvent(
                     MosaicInteractionOutcome.RestoreFailed(result.diagnosticCode),
                 )
@@ -387,19 +489,29 @@ class MosaicPaywallState(
                 )
                 MosaicPaywallEvent(
                     MosaicInteractionOutcome.RestoreFailed(result.diagnosticCode),
-                )
+                ).also {
+                    track(
+                        MosaicAnalyticsPayload.RestoreFailed(
+                            providerId,
+                            duration,
+                            safeCode(result.diagnosticCode),
+                            false,
+                        ),
+                        MosaicAnalyticsCorrelation(restoreAttemptId = attemptId),
+                    )
+                }
             }
             is MosaicRestoreResult.Detailed -> when (result.outcome) {
                 MosaicCommerceRecoveryOutcome.RESTORED -> MosaicPaywallEvent(
                     interaction = MosaicInteractionOutcome.Restored(result.entitlements),
                     presentationResult = MosaicPresentationResult.Restored(result.entitlements),
-                )
+                ).also { track(MosaicAnalyticsPayload.RestoreCompleted(providerId, duration, emptyList(), result.entitlements.map { it.id }.sorted().take(64)), MosaicAnalyticsCorrelation(restoreAttemptId = attemptId, providerOperationId = result.metadata.operationId)) }
                 MosaicCommerceRecoveryOutcome.NOTHING_TO_RESTORE -> MosaicPaywallEvent(
                     MosaicInteractionOutcome.RestoreNoPurchases,
-                )
+                ).also { track(MosaicAnalyticsPayload.RestoreLifecycle("restore_nothing_found", providerId, duration), MosaicAnalyticsCorrelation(restoreAttemptId = attemptId, providerOperationId = result.metadata.operationId)) }
                 MosaicCommerceRecoveryOutcome.CANCELLED -> MosaicPaywallEvent(
                     MosaicInteractionOutcome.RestoreCancelled,
-                )
+                ).also { track(MosaicAnalyticsPayload.RestoreLifecycle("restore_cancelled", providerId, duration), MosaicAnalyticsCorrelation(restoreAttemptId = attemptId, providerOperationId = result.metadata.operationId)) }
                 MosaicCommerceRecoveryOutcome.PROVIDER_UNAVAILABLE,
                 MosaicCommerceRecoveryOutcome.FAILED,
                 -> MosaicPaywallEvent(
@@ -407,15 +519,68 @@ class MosaicPaywallState(
                         result.metadata.diagnostics.firstOrNull()?.code
                             ?: MosaicDiagnosticCode.RESTORE_FAILED.wireName,
                     ),
-                )
+                ).also { track(MosaicAnalyticsPayload.RestoreFailed(providerId, duration, safeCode(result.metadata.diagnostics.firstOrNull()?.code ?: "restore.failed"), result.outcome == MosaicCommerceRecoveryOutcome.PROVIDER_UNAVAILABLE), MosaicAnalyticsCorrelation(restoreAttemptId = attemptId, providerOperationId = result.metadata.operationId)) }
             }
         }
     }
 
-    fun close(): MosaicPaywallEvent = MosaicPaywallEvent(
+    fun close(componentId: String? = null): MosaicPaywallEvent = MosaicPaywallEvent(
         interaction = MosaicInteractionOutcome.Dismissed,
         presentationResult = MosaicPresentationResult.Dismissed,
+    ).also {
+        track(MosaicAnalyticsPayload.PaywallAction("close", componentId), presentationCorrelation())
+        track(MosaicAnalyticsPayload.PaywallDismissed("user"), presentationCorrelation())
+    }
+
+    fun recordAction(action: String, componentId: String) {
+        track(MosaicAnalyticsPayload.PaywallAction(action, componentId), presentationCorrelation())
+    }
+
+    private fun presentationCorrelation() = MosaicAnalyticsCorrelation(
+        placementRequestId = analyticsContext?.placementRequestId,
+        paywallPresentationId = analyticsContext?.paywallPresentationId,
     )
+
+    private fun analyticsProvider(productId: String?): MosaicAnalyticsCommerceAttribution =
+        (purchaseProvider as? MosaicAnalyticsCommerceProvider)?.analyticsAttribution(productId.orEmpty())
+            ?: MosaicAnalyticsCommerceAttribution("custom", null)
+
+    private fun trackPurchase(payload: MosaicAnalyticsPayload, attemptId: String, productId: String) {
+        val provider = analyticsProvider(productId)
+        track(
+            payload,
+            presentationCorrelation().copy(purchaseAttemptId = attemptId),
+            productId,
+            provider,
+        )
+    }
+
+    private fun track(
+        payload: MosaicAnalyticsPayload,
+        correlation: MosaicAnalyticsCorrelation,
+        productId: String? = null,
+        provider: MosaicAnalyticsCommerceAttribution? = null,
+    ) {
+        val context = analyticsContext ?: return
+        analyticsRuntime?.record(
+            payload,
+            MosaicAnalyticsJourney(
+                correlation,
+                context.attribution.copy(
+                    mosaicProductId = productId,
+                    providerId = provider?.providerId,
+                    providerProductMappingId = provider?.providerProductMappingId,
+                ),
+                context.context,
+            ),
+        )
+    }
+
+    private fun safeCode(value: String): String = value
+        .lowercase()
+        .replace(Regex("[^a-z0-9._-]+"), "_")
+        .let { if (it.contains('.') || it.contains('_') || it.contains('-')) it else "analytics.$it" }
+        .take(96)
 }
 
 private val PRODUCT_PRICE_TEMPLATE = Regex("\\{\\{\\s*product\\.price\\s*\\}\\}")

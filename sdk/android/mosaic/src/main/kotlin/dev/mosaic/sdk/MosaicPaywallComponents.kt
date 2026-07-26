@@ -755,7 +755,7 @@ internal fun RenderPurchaseButton(
     val isBusy = component.action.productSelectorId in state.purchaseBusySelectorIds
     val appearance = component.appearance
     Button(
-        onClick = { scope.launch { onEvent(state.purchase(component.action.productSelectorId)) } },
+        onClick = { scope.launch { onEvent(state.purchase(component.action.productSelectorId, component.id)) } },
         enabled = selector.selectedProductReferenceId != null &&
             state.isNodeVisible(component.action.productSelectorId) &&
             !isBusy,
@@ -819,7 +819,7 @@ internal fun RenderRestoreButton(
                 if (isBusy) stateDescription = localization.resolve(component.inProgressLabel)
             }
             .testTag("mosaic-node-${component.id}"),
-        onClick = { scope.launch { onEvent(state.restore()) } },
+        onClick = { scope.launch { onEvent(state.restore(component.id)) } },
         leading = if (isBusy) {
             {
                 CircularProgressIndicator(
@@ -854,7 +854,7 @@ internal fun RenderCloseButton(
                 contentDescription = component.accessibility.resolvedDescriptions(localization)
             }
             .testTag("mosaic-node-${component.id}"),
-        onClick = { onEvent(state.close()) },
+        onClick = { onEvent(state.close(component.id)) },
     )
 }
 

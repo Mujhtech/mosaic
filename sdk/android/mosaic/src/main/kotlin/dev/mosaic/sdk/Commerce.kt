@@ -135,6 +135,15 @@ interface MosaicPurchaseProvider {
     suspend fun activeEntitlements(): MosaicActiveEntitlementsResult
 }
 
+data class MosaicAnalyticsCommerceAttribution(
+    val providerId: String,
+    val providerProductMappingId: String?,
+)
+
+internal interface MosaicAnalyticsCommerceProvider {
+    fun analyticsAttribution(productId: String): MosaicAnalyticsCommerceAttribution
+}
+
 /**
  * Provider adapter boundary used by both optional packaged adapters and SDK-local custom providers.
  * Implementations receive only verified sidecar mappings, never arbitrary provider identifiers.
@@ -248,7 +257,7 @@ interface MosaicConfigurablePurchaseProvider : MosaicPurchaseProvider {
  */
 class MosaicConfiguredPurchaseProvider(
     private val adapter: MosaicCommerceProviderAdapter,
-) : MosaicConfigurablePurchaseProvider {
+) : MosaicConfigurablePurchaseProvider, MosaicAnalyticsCommerceProvider {
     private val lock = Any()
     private var configuration: MosaicCommerceConfiguration? = null
     private var configurationGeneration: Long = 0
@@ -372,6 +381,13 @@ class MosaicConfiguredPurchaseProvider(
                 MosaicDiagnosticCode.COMMERCE_CONFIGURATION_UNAVAILABLE.wireName,
             )
         return adapter.activeEntitlements(snapshot.entitlementMappings.values.toList())
+    }
+
+    override fun analyticsAttribution(productId: String): MosaicAnalyticsCommerceAttribution = synchronized(lock) {
+        MosaicAnalyticsCommerceAttribution(
+            providerId = adapter.identity.id,
+            providerProductMappingId = configuration?.productMappings?.get(productId)?.mappingId,
+        )
     }
 
     private fun isCompatible(configuration: MosaicCommerceConfiguration): Boolean {

@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.2.0-dev.9
+
+- Add the exact Analytics Event Contract v1 event, batch, and partial-response
+  codec with direct canonical fixture conformance.
+- Add disabled-by-default Environment/host collection gates, immutable
+  event-time identity and 30-minute sessions, app-private backup-excluded
+  bounded persistence, priority overflow, expiry, coalesced delivery, and
+  jittered partial-batch retry.
+- Instrument hosted Placement, Paywall, Product, purchase, and restore flows
+  without changing provider outcomes; Local Preview and unhosted/bundled
+  Paywalls remain analytics-free.
+- Align identity resets across platforms: user reset retains installation,
+  while installation reset rotates installation and clears user-bound state.
+
 ## 0.2.0-dev.8
 
 - Accept frozen Commerce Configuration and Provider Contract v2 while

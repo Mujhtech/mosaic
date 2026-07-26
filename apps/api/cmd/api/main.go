@@ -12,10 +12,12 @@ import (
 
 	"github.com/rs/zerolog"
 
+	"github.com/Mujhtech/mosaic/apps/api/internal/analytics"
 	"github.com/Mujhtech/mosaic/apps/api/internal/browserauth"
 	"github.com/Mujhtech/mosaic/apps/api/internal/cloudworkspace"
 	"github.com/Mujhtech/mosaic/apps/api/internal/hostedpublishing"
 	"github.com/Mujhtech/mosaic/apps/api/internal/placementdecision"
+	"github.com/Mujhtech/mosaic/apps/api/internal/platform/analyticspostgres"
 	"github.com/Mujhtech/mosaic/apps/api/internal/platform/authn"
 	"github.com/Mujhtech/mosaic/apps/api/internal/platform/browserauthpostgres"
 	"github.com/Mujhtech/mosaic/apps/api/internal/platform/cloudworkspacepostgres"
@@ -147,6 +149,18 @@ func run() (runErr error) {
 	if closeErr := errors.Join(closeCommerceProviderErr, closeCommerceConfigurationErr, closeCommerceProviderV2Err, closeCommerceConfigurationV2Err); closeErr != nil {
 		return fmt.Errorf("close canonical commerce schemas: %w", closeErr)
 	}
+	analyticsSchema, err := os.Open(cfg.Analytics.EventSchemaPath)
+	if err != nil {
+		return fmt.Errorf("open canonical Analytics Event v1 schema: %w", err)
+	}
+	analyticsValidator, err := analytics.CompileSchemaValidator(analyticsSchema)
+	closeAnalyticsSchemaErr := analyticsSchema.Close()
+	if err != nil {
+		return err
+	}
+	if closeAnalyticsSchemaErr != nil {
+		return fmt.Errorf("close canonical Analytics Event v1 schema: %w", closeAnalyticsSchemaErr)
+	}
 
 	objectStore, err := objectstoreminio.New(objectstoreminio.Config{
 		Endpoint: cfg.ObjectStore.Endpoint, AccessKey: cfg.ObjectStore.AccessKey,
@@ -190,21 +204,29 @@ func run() (runErr error) {
 		hostedpublishing.WithObjectStore(objectStore, cfg.ObjectStore.PublicAssetBaseURL, cfg.ObjectStore.MaxUploadBytes),
 	)
 	placementDecisionService := placementdecision.NewService(placementdecisionpostgres.New(databasePool))
+	analyticsService := analytics.NewService(analyticspostgres.New(databasePool), objectStore, analyticsValidator)
 	deliveryLimiter := ratelimit.New(cfg.Delivery.RequestsPerMinute, cfg.Delivery.Burst, cfg.Delivery.LimiterEntries)
 	authenticationLimiter := ratelimit.New(cfg.BrowserAuth.RequestsPerMinute, cfg.BrowserAuth.Burst, cfg.BrowserAuth.LimiterEntries)
+	analyticsIPLimiter := ratelimit.New(cfg.Analytics.IPRequestsPerMinute, cfg.Analytics.IPBurst, cfg.Analytics.LimiterEntries)
+	analyticsKeyLimiter := ratelimit.New(cfg.Analytics.KeyBatchesPerMinute, cfg.Analytics.KeyBatchBurst, cfg.Analytics.LimiterEntries)
+	analyticsEventLimiter := ratelimit.New(cfg.Analytics.KeyEventsPerMinute, cfg.Analytics.KeyEventBurst, cfg.Analytics.LimiterEntries)
 	handler := httpserver.NewWithDependencies(httpserver.Config{
 		ServiceName:    cfg.Telemetry.ServiceName,
 		AllowedOrigins: cfg.HTTP.CORSAllowedOrigins,
 		RequestTimeout: cfg.HTTP.HandlerTimeout,
 	}, logger, httpserver.Dependencies{
-		BrowserAuth:       browserAuthService,
-		BrowserAuthConfig: browserauthhttp.Config{CookieSecure: cfg.BrowserAuth.CookieSecure, CookieDomain: cfg.BrowserAuth.CookieDomain, AllowedOrigins: cfg.HTTP.CORSAllowedOrigins, RateLimiter: authenticationLimiter},
-		CloudWorkspace:    workspaceService,
-		HostedPublishing:  publishingService,
-		PlacementDecision: placementDecisionService,
-		PrincipalResolver: authn.NewBrowserSessionResolver(browserAuthService),
-		DeliveryLimiter:   deliveryLimiter,
-		ReadinessChecker:  database.HealthChecker{Pinger: databasePool},
+		BrowserAuth:           browserAuthService,
+		BrowserAuthConfig:     browserauthhttp.Config{CookieSecure: cfg.BrowserAuth.CookieSecure, CookieDomain: cfg.BrowserAuth.CookieDomain, AllowedOrigins: cfg.HTTP.CORSAllowedOrigins, RateLimiter: authenticationLimiter},
+		CloudWorkspace:        workspaceService,
+		HostedPublishing:      publishingService,
+		PlacementDecision:     placementDecisionService,
+		PrincipalResolver:     authn.NewBrowserSessionResolver(browserAuthService),
+		DeliveryLimiter:       deliveryLimiter,
+		Analytics:             analyticsService,
+		AnalyticsIPLimiter:    analyticsIPLimiter,
+		AnalyticsKeyLimiter:   analyticsKeyLimiter,
+		AnalyticsEventLimiter: analyticsEventLimiter,
+		ReadinessChecker:      database.HealthChecker{Pinger: databasePool},
 	})
 
 	server := &http.Server{

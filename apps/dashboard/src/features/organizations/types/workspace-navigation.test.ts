@@ -41,4 +41,16 @@ describe("hosted workspace route scope", () => {
     expect(isEnvironmentSurface(route)).toBe(true)
     expect(isProjectWideSurface(route)).toBe(false)
   })
+
+  it("keeps Analytics Environment identity URL-owned", () => {
+    const route = "/organizations/org_one/projects/project_one/analytics/env_production/paywalls"
+
+    expect(readWorkspaceScope(route)).toEqual({
+      environmentId: "env_production",
+      organizationId: "org_one",
+      projectId: "project_one",
+    })
+    expect(isEnvironmentSurface(route)).toBe(true)
+    expect(isProjectWideSurface(route)).toBe(false)
+  })
 })

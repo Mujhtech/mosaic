@@ -13,6 +13,58 @@ Development Maven coordinates are
 `dev.mosaic.sdk:mosaic-google-play:0.1.0-dev.6`. Artifact versions do not track
 the independently versioned commerce-adapter identity.
 
+## Analytics, identity, and privacy
+
+Analytics Event Contract v1 is available only for hosted clients. Collection
+defaults to disabled and begins only when `analyticsCollectionEnabled = true`
+mirrors an owner-enabled Environment. A host consent override may disable
+collection with `setAnalyticsCollectionEnabled(false)`; disabling stops new
+collection and atomically clears the unsent queue. It cannot make a
+server-disabled Environment accept events.
+
+Events snapshot installation identity, optional application user identity,
+session, correlations, and immutable release/Placement/Paywall/Product
+attribution at occurrence time. Public Android SDK events always assert
+`client_observed`; the SDK cannot enqueue `purchase_completed_provider`.
+
+The app-private, backup-excluded queue survives process restart and is bounded
+to 1,000 events or 2 MiB. Events are capped at 32 KiB, expire after seven days,
+and send in batches of at most 50 and 512 KiB. Retry is capped at ten attempts
+with full-jitter exponential backoff from one second to five minutes. Partial
+responses remove accepted, duplicate, and permanently rejected events while
+retaining only retryable events. Overflow discards expired and older low-value
+events before purchase/restore outcomes while always enforcing the hard bound.
+
+Sessions use a 30-minute inactivity threshold and survive ordinary SDK
+reconstruction. Effective user changes, user clearing, installation reset, and
+collection re-enable start a new session. `resetIdentity()` retains the
+installation ID; `resetInstallationIdentity()` rotates it and clears user state.
+
+```kotlin
+val mosaic = Mosaic.configure(
+    apiKey = publicSdkKey,
+    purchaseProvider = purchaseProvider,
+    applicationId = "application_android",
+    analyticsCollectionEnabled = environmentAnalyticsEnabled,
+)
+val hosted = mosaic.hostedConfiguration(applicationContext)
+hosted.setAnalyticsCollectionEnabled(hostConsentGranted)
+val diagnostics = hosted.flushAnalytics()
+```
+
+Foreground and background transitions request a best-effort flush. Android may
+terminate a background process immediately, so background delivery is not
+guaranteed; the persistent queue resumes on the next foreground. Mosaic does
+not use WorkManager for Phase 6. Local Preview and unhosted bundled paywalls do
+not emit hosted analytics.
+
+The deterministic offline reconstruction and canonical partial-response demo is:
+
+```bash
+./gradlew :mosaic:testDebugUnitTest \
+  --tests 'dev.mosaic.sdk.AnalyticsQueueTest.offlineQueueSurvivesReconstructionThenAppliesCanonicalPartialBatch'
+```
+
 ## Requirements
 
 - JDK 17

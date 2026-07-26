@@ -1,0 +1,239 @@
+{
+  "analyticsEventContractVersion": "1",
+  "batchId": "batch_edge_case_conformance_001",
+  "sentAt": "2026-07-26T14:00:08.000Z",
+  "events": [
+    {
+      "eventId": "event_conformance_no_paywall_rollout",
+      "eventSchemaVersion": "1",
+      "eventName": "placement_no_paywall",
+      "occurredAt": "2026-07-26T14:00:00.000Z",
+      "queuedAt": "2026-07-26T14:00:00.005Z",
+      "authority": "client_observed",
+      "identity": {
+        "installationId": "installation_conformance_001",
+        "applicationUserId": "tenant opaque/user 42",
+        "generation": 1
+      },
+      "sessionId": "session_conformance_001",
+      "context": {
+        "platform": "ios",
+        "sdkFamily": "ios",
+        "sdkVersion": "0.6.0",
+        "configurationDeliveryVersion": "2"
+      },
+      "correlation": {
+        "placementRequestId": "placement_request_conformance_001"
+      },
+      "attribution": {
+        "configurationReleaseId": "configuration_release_conformance_001",
+        "placementId": "placement_onboarding",
+        "placementRuleSetId": "rule_set_onboarding",
+        "placementRuleSetVersion": 4,
+        "winningRuleId": "rule_holdout"
+      },
+      "payload": {
+        "finalOutcome": "no_paywall",
+        "decisionContractVersion": "1",
+        "assignmentKeyType": "identified_user",
+        "bucketingAlgorithm": "sha256_length_prefixed_v1",
+        "rolloutBucket": 7421
+      }
+    },
+    {
+      "eventId": "event_conformance_fallback",
+      "eventSchemaVersion": "1",
+      "eventName": "placement_fallback_used",
+      "occurredAt": "2026-07-26T14:00:01.000Z",
+      "queuedAt": "2026-07-26T14:00:01.005Z",
+      "authority": "client_observed",
+      "identity": {
+        "installationId": "installation_conformance_001",
+        "generation": 1
+      },
+      "sessionId": "session_conformance_001",
+      "context": {
+        "platform": "android",
+        "sdkFamily": "flutter",
+        "sdkVersion": "0.6.0",
+        "configurationDeliveryVersion": "2"
+      },
+      "correlation": {
+        "placementRequestId": "placement_request_conformance_002"
+      },
+      "attribution": {
+        "configurationReleaseId": "configuration_release_conformance_001",
+        "placementId": "placement_upgrade",
+        "paywallId": "paywall_safe_default",
+        "paywallVersionId": "paywall_version_safe_default_3"
+      },
+      "payload": {
+        "trigger": "product_unavailable",
+        "fallbackKey": "safe_default",
+        "finalOutcome": "paywall",
+        "diagnosticCode": "commerce.product_unavailable"
+      }
+    },
+    {
+      "eventId": "event_conformance_placement_evaluation_failed",
+      "eventSchemaVersion": "1",
+      "eventName": "placement_evaluation_failed",
+      "occurredAt": "2026-07-26T14:00:02.000Z",
+      "queuedAt": "2026-07-26T14:00:02.005Z",
+      "authority": "client_observed",
+      "identity": {
+        "installationId": "installation_conformance_001",
+        "generation": 1
+      },
+      "sessionId": "session_conformance_001",
+      "context": {
+        "platform": "android",
+        "sdkFamily": "android",
+        "sdkVersion": "0.6.0",
+        "configurationDeliveryVersion": "2"
+      },
+      "correlation": {
+        "placementRequestId": "placement_request_conformance_003"
+      },
+      "attribution": {
+        "configurationReleaseId": "configuration_release_conformance_001",
+        "placementId": "placement_upgrade",
+        "placementRuleSetId": "rule_set_upgrade",
+        "placementRuleSetVersion": 8
+      },
+      "payload": {
+        "diagnosticCode": "placement.evaluation_failed",
+        "retryable": false
+      }
+    },
+    {
+      "eventId": "event_conformance_paywall_render_failed",
+      "eventSchemaVersion": "1",
+      "eventName": "paywall_render_failed",
+      "occurredAt": "2026-07-26T14:00:03.000Z",
+      "queuedAt": "2026-07-26T14:00:03.005Z",
+      "authority": "client_observed",
+      "identity": {
+        "installationId": "installation_conformance_001",
+        "generation": 1
+      },
+      "sessionId": "session_conformance_001",
+      "context": {
+        "platform": "ios",
+        "sdkFamily": "ios",
+        "sdkVersion": "0.6.0",
+        "configurationDeliveryVersion": "2"
+      },
+      "correlation": {
+        "placementRequestId": "placement_request_conformance_004",
+        "paywallPresentationId": "presentation_conformance_004"
+      },
+      "attribution": {
+        "configurationReleaseId": "configuration_release_conformance_001",
+        "placementId": "placement_upgrade",
+        "paywallId": "paywall_pro",
+        "paywallVersionId": "paywall_version_pro_9"
+      },
+      "payload": {
+        "diagnosticCode": "rendering.content_unavailable",
+        "retryable": false
+      }
+    },
+    {
+      "eventId": "event_conformance_product_mapping_missing",
+      "eventSchemaVersion": "1",
+      "eventName": "product_unavailable",
+      "occurredAt": "2026-07-26T14:00:04.000Z",
+      "queuedAt": "2026-07-26T14:00:04.005Z",
+      "authority": "client_observed",
+      "identity": {
+        "installationId": "installation_conformance_001",
+        "generation": 1
+      },
+      "sessionId": "session_conformance_001",
+      "context": {
+        "platform": "android",
+        "sdkFamily": "android",
+        "sdkVersion": "0.6.0",
+        "commerceProviderContractVersion": "2"
+      },
+      "correlation": {
+        "paywallPresentationId": "presentation_conformance_005",
+        "productLoadAttemptId": "product_load_conformance_005"
+      },
+      "attribution": {
+        "paywallId": "paywall_pro",
+        "paywallVersionId": "paywall_version_pro_9",
+        "mosaicProductId": "product_yearly",
+        "providerId": "google_play"
+      },
+      "payload": {
+        "reason": "mapping_missing",
+        "diagnosticCode": "commerce.mapping_missing"
+      }
+    },
+    {
+      "eventId": "event_conformance_purchase_unmapped",
+      "eventSchemaVersion": "1",
+      "eventName": "purchase_failed",
+      "occurredAt": "2026-07-26T14:00:05.000Z",
+      "queuedAt": "2026-07-26T14:00:05.005Z",
+      "authority": "client_observed",
+      "identity": {
+        "installationId": "installation_conformance_001",
+        "generation": 1
+      },
+      "sessionId": "session_conformance_001",
+      "context": {
+        "platform": "android",
+        "sdkFamily": "flutter",
+        "sdkVersion": "0.6.0",
+        "commerceProviderContractVersion": "2"
+      },
+      "correlation": {
+        "paywallPresentationId": "presentation_conformance_006",
+        "purchaseAttemptId": "purchase_attempt_conformance_006"
+      },
+      "attribution": {
+        "paywallId": "paywall_pro",
+        "paywallVersionId": "paywall_version_pro_9",
+        "mosaicProductId": "product_yearly",
+        "providerId": "google_play"
+      },
+      "payload": {
+        "durationMs": 20,
+        "diagnosticCode": "commerce.mapping_missing",
+        "retryable": false
+      }
+    },
+    {
+      "eventId": "event_conformance_restore_unmapped",
+      "eventSchemaVersion": "1",
+      "eventName": "restore_nothing_found",
+      "occurredAt": "2026-07-26T14:00:06.000Z",
+      "queuedAt": "2026-07-26T14:00:06.005Z",
+      "authority": "client_observed",
+      "identity": {
+        "installationId": "installation_conformance_001",
+        "generation": 1
+      },
+      "sessionId": "session_conformance_001",
+      "context": {
+        "platform": "ios",
+        "sdkFamily": "ios",
+        "sdkVersion": "0.6.0",
+        "commerceProviderContractVersion": "2"
+      },
+      "correlation": {
+        "restoreAttemptId": "restore_attempt_conformance_007",
+        "providerOperationId": "provider_operation_conformance_007"
+      },
+      "attribution": {},
+      "payload": {
+        "providerId": "app_store",
+        "durationMs": 35,
+        "providerResultCode": "commerce.unmapped_transactions"
+      }
+    }
+  ]
+}
