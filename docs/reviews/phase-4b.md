@@ -2,17 +2,17 @@
 
 ## Status
 
-**Rejected pending fixes**
+**Accepted with tracked follow-ups**
 
 The integrated implementation is accepted by the final engineering quality
-review and the complete available automated matrix passes. Gate 4B cannot be
-approved because its mandatory real Apple sandbox and Google Play test-track
-demonstrations were unavailable. The missing signed applications, store-console
-Products, sandbox/license-test accounts, and physical/test-store devices leave
-real purchase, cancellation, pending, relaunch recovery, restore/synchronize,
-acknowledgement, and cross-provider proof unverified. A skip is not a pass.
-
-No merge, tag, release, or Phase 5 work is authorized by this review.
+review and the complete available automated matrix passes. On 2026-07-26, the
+product owner explicitly accepted Gate 4B and authorized Phase 5 to begin with
+the unavailable real Apple sandbox and Google Play test-track demonstrations
+retained as tracked environmental follow-ups. The missing signed applications,
+store-console Products, sandbox/license-test accounts, and physical/test-store
+devices still leave real purchase, cancellation, pending, relaunch recovery,
+restore/synchronize, acknowledgement, and cross-provider proof unverified. A
+skip remains documented as unavailable rather than passing.
 
 ## Baseline
 
@@ -159,6 +159,6 @@ Available checks passed:
   dependencies.
 
 The retained deterministic and unavailable evidence is recorded in
-`docs/reviews/phase-4b-demo-evidence.md`. Gate 4B may be reconsidered without a
-new implementation round when the missing real-store evidence is captured and
-reviewed against the same commit and configuration digests.
+`docs/reviews/phase-4b-demo-evidence.md`. The product owner accepted Gate 4B on
+2026-07-26 with those demonstrations tracked for later capture against the same
+commit and configuration digests.
