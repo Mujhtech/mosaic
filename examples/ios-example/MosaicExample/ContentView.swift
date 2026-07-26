@@ -311,9 +311,11 @@ private final class HostedConfigurationModel: ObservableObject {
 private actor ExampleStoreKitUpdateAcceptor: MosaicCommerceUpdateAcceptor {
   private var accepted = Set<String>()
 
-  func accept(_ update: MosaicCommerceUpdate) -> Bool {
+  func accept(
+    _ update: MosaicCommerceUpdate
+  ) -> MosaicCommerceUpdateAcceptanceDisposition {
     accepted.insert(update.id)
-    return true
+    return .accepted
   }
 }
 

@@ -12,7 +12,12 @@ final class CommerceConfigurationTests: XCTestCase {
       configurationReleaseID: "configuration_release_42",
       configurationReleaseDigest:
         "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
-      mosaicProductIDs: ["product_pro_monthly"]
+      mosaicProductIDs: ["mosaic_pro_monthly", "mosaic_pro_yearly", "mosaic_pro_lifetime"],
+      mosaicProductTypes: [
+        "mosaic_pro_monthly": .subscription,
+        "mosaic_pro_yearly": .subscription,
+        "mosaic_pro_lifetime": .oneTimeNonConsumable,
+      ]
     )
     let configuration = try MosaicCommerceConfigurationDecoder.decode(
       commerceConfigurationV2FixtureData(),
@@ -23,10 +28,13 @@ final class CommerceConfigurationTests: XCTestCase {
     XCTAssertEqual(configuration.activeProvider.identity.id, "app_store")
     XCTAssertEqual(configuration.activeProvider.activation, .nativeStore)
     XCTAssertEqual(configuration.activeProvider.recoveryMode, .storeSynchronization)
-    XCTAssertEqual(configuration.productMappings.count, 1)
-    XCTAssertEqual(configuration.productMappings[0].adapterMapping, .storeKitProduct)
-    XCTAssertEqual(configuration.productMappings[0].productType, .subscription)
-    XCTAssertEqual(configuration.productMappings[0].entitlementKeys, ["pro"])
+    XCTAssertEqual(configuration.productMappings.count, 3)
+    let monthly = try XCTUnwrap(
+      configuration.productMappings.first { $0.mosaicProductID == "mosaic_pro_monthly" }
+    )
+    XCTAssertEqual(monthly.adapterMapping, .storeKitProduct)
+    XCTAssertEqual(monthly.productType, .subscription)
+    XCTAssertEqual(monthly.entitlementKeys, ["pro"])
     XCTAssertEqual(configuration.freshness.source, .nativeStoreConfiguration)
     XCTAssertEqual(configuration.freshness.status, .configured)
 
@@ -36,17 +44,7 @@ final class CommerceConfigurationTests: XCTestCase {
         displayName: "StoreKit",
         adapterVersion: "1.0.0"
       ),
-      capabilities:
-        configuration.activeProvider.capabilities
-        + [
-          .init(name: .oneTimeNonConsumables, support: .supported),
-          .init(
-            name: .deferredPurchases,
-            support: .unsupported,
-            reasonCode: "provider.outcomeUnavailable"
-          ),
-          .init(name: .providerDiagnostics, support: .supported),
-        ]
+      capabilities: configuration.activeProvider.capabilities
     )
     XCTAssertNoThrow(
       try MosaicConfiguredPurchaseProvider(
@@ -63,17 +61,7 @@ final class CommerceConfigurationTests: XCTestCase {
       association: association
     )
     let provider = AsyncRecordingCommerceProvider(
-      capabilities:
-        configuration.activeProvider.capabilities
-        + [
-          .init(name: .oneTimeNonConsumables, support: .supported),
-          .init(
-            name: .deferredPurchases,
-            support: .unsupported,
-            reasonCode: "provider.outcomeUnavailable"
-          ),
-          .init(name: .providerDiagnostics, support: .supported),
-        ]
+      capabilities: configuration.activeProvider.capabilities
     )
     let router = MosaicCommerceProviderRouter()
     try await router.install(configuration: configuration, provider: provider)
@@ -423,7 +411,12 @@ final class CommerceConfigurationTests: XCTestCase {
       configurationReleaseID: "configuration_release_42",
       configurationReleaseDigest:
         "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
-      mosaicProductIDs: ["product_pro_monthly"]
+      mosaicProductIDs: ["mosaic_pro_monthly", "mosaic_pro_yearly", "mosaic_pro_lifetime"],
+      mosaicProductTypes: [
+        "mosaic_pro_monthly": .subscription,
+        "mosaic_pro_yearly": .subscription,
+        "mosaic_pro_lifetime": .oneTimeNonConsumable,
+      ]
     )
   }
 
@@ -434,7 +427,7 @@ final class CommerceConfigurationTests: XCTestCase {
     MosaicCommerceUpdate(
       id: id,
       providerID: "app_store",
-      mosaicProductID: "product_pro_monthly",
+      mosaicProductID: "mosaic_pro_monthly",
       configuration: configuration,
       outcome: .purchased,
       transactionReference: "storekit_42",

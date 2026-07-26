@@ -193,6 +193,9 @@ export function NativeProviderMappingSheet({
                   <FieldDescription>
                     Exact identifier only. Mosaic never matches by display name, price, period, or
                     similarity.
+                    {provider === "google_play"
+                      ? " One Google Product ID can map to only one Mosaic Product in this Environment and Application so purchase recovery remains unambiguous."
+                      : null}
                   </FieldDescription>
                   <FieldError errors={field.state.meta.errors.map((message) => ({ message }))} />
                 </Field>

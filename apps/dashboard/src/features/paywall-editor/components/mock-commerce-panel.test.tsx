@@ -4,10 +4,8 @@ import { useEffect, useState } from "react"
 import { describe, expect, it } from "vitest"
 
 import { catalogKeys } from "@/features/catalog/queries/catalog-query"
-import {
-  MockCommercePanel,
-  studioApplicationsErrorMessage,
-} from "@/features/paywall-editor/components/mock-commerce-panel"
+import { MockCommercePanel } from "@/features/paywall-editor/components/mock-commerce-panel"
+import { studioApplicationsErrorMessage } from "@/features/paywall-editor/utils/studio-applications-error"
 import { EDITOR_TEMPLATES } from "@/features/paywall-editor/constants/templates"
 import {
   EditorStoreProvider,

@@ -237,6 +237,44 @@ final class MosaicRestoreFailed extends MosaicRestoreResult {
   final MosaicCommerceDiagnostic? diagnostic;
 }
 
+enum MosaicCommerceRecoveryOutcome {
+  restored,
+  nothingToRestore,
+  cancelled,
+  providerUnavailable,
+  failed,
+}
+
+final class MosaicCommerceRecoveryMetadata {
+  MosaicCommerceRecoveryMetadata({
+    required this.operationId,
+    required this.providerId,
+    required this.recoveryMode,
+    required this.completedAt,
+    Iterable<MosaicCommerceDiagnostic> diagnostics =
+        const <MosaicCommerceDiagnostic>[],
+  }) : diagnostics = List.unmodifiable(diagnostics);
+
+  final String operationId;
+  final String providerId;
+  final String recoveryMode;
+  final DateTime completedAt;
+  final List<MosaicCommerceDiagnostic> diagnostics;
+}
+
+/// Complete Commerce Provider Contract v2 recovery result.
+final class MosaicDetailedRestoreResult extends MosaicRestoreResult {
+  MosaicDetailedRestoreResult({
+    required this.outcome,
+    required this.metadata,
+    Iterable<MosaicEntitlement> entitlements = const <MosaicEntitlement>[],
+  }) : entitlements = Set.unmodifiable(entitlements);
+
+  final MosaicCommerceRecoveryOutcome outcome;
+  final Set<MosaicEntitlement> entitlements;
+  final MosaicCommerceRecoveryMetadata metadata;
+}
+
 sealed class MosaicActiveEntitlementsResult {
   const MosaicActiveEntitlementsResult();
 }
@@ -417,6 +455,10 @@ final class MosaicCommerceProviderRouter implements MosaicPurchaseProvider {
       return false;
     }
     final expectedIdentity = commerceConfiguration.activeProvider.identity;
+    final asynchronousCandidate =
+        candidate is MosaicAsynchronousCommerceProvider
+            ? candidate as MosaicAsynchronousCommerceProvider
+            : null;
     if (candidate.identity.id != expectedIdentity.id ||
         candidate.identity.adapterVersion != expectedIdentity.adapterVersion ||
         !_capabilitiesMatch(
@@ -424,34 +466,39 @@ final class MosaicCommerceProviderRouter implements MosaicPurchaseProvider {
           candidate.capabilities,
         )) {
       _active = null;
-      if (candidate is MosaicAsynchronousCommerceProvider) {
-        unawaited(candidate.dispose());
+      if (asynchronousCandidate != null) {
+        unawaited(asynchronousCandidate.dispose());
       }
       return false;
     }
     _active = candidate;
-    if (previous is MosaicAsynchronousCommerceProvider) {
-      unawaited(previous.dispose());
+    final asynchronousPrevious = previous is MosaicAsynchronousCommerceProvider
+        ? previous as MosaicAsynchronousCommerceProvider
+        : null;
+    if (asynchronousPrevious != null) {
+      unawaited(asynchronousPrevious.dispose());
     }
-    if (candidate is MosaicAsynchronousCommerceProvider) {
+    if (asynchronousCandidate != null) {
       final expectedProvider = expectedIdentity.id;
       final expectedConfigurationId = commerceConfiguration.id;
       final expectedRevision = commerceConfiguration.contentDigest;
-      _updateSubscription = candidate.commerceUpdates.listen((update) {
-        if (_activationRevision != revision ||
-            _active != candidate ||
-            update.providerId != expectedProvider ||
-            update.configuration.configurationId != expectedConfigurationId ||
-            update.configuration.configurationRevision != expectedRevision ||
-            !_routedUpdateIds.add(update.updateId)) {
-          return;
-        }
-        _routedUpdateOrder.add(update.updateId);
-        if (_routedUpdateOrder.length > 1024) {
-          _routedUpdateIds.remove(_routedUpdateOrder.removeAt(0));
-        }
-        _updates.add(update);
-      });
+      _updateSubscription = asynchronousCandidate.commerceUpdates.listen(
+        (MosaicCommerceUpdate update) {
+          if (_activationRevision != revision ||
+              _active != candidate ||
+              update.providerId != expectedProvider ||
+              update.configuration.configurationId != expectedConfigurationId ||
+              update.configuration.configurationRevision != expectedRevision ||
+              !_routedUpdateIds.add(update.updateId)) {
+            return;
+          }
+          _routedUpdateOrder.add(update.updateId);
+          if (_routedUpdateOrder.length > 1024) {
+            _routedUpdateIds.remove(_routedUpdateOrder.removeAt(0));
+          }
+          _updates.add(update);
+        },
+      );
     }
     return true;
   }
@@ -465,7 +512,7 @@ final class MosaicCommerceProviderRouter implements MosaicPurchaseProvider {
     _routedUpdateIds.clear();
     _routedUpdateOrder.clear();
     if (previous is MosaicAsynchronousCommerceProvider) {
-      unawaited(previous.dispose());
+      unawaited((previous as MosaicAsynchronousCommerceProvider).dispose());
     }
   }
 
@@ -476,7 +523,7 @@ final class MosaicCommerceProviderRouter implements MosaicPurchaseProvider {
     await _updateSubscription?.cancel();
     _updateSubscription = null;
     if (previous is MosaicAsynchronousCommerceProvider) {
-      await previous.dispose();
+      await (previous as MosaicAsynchronousCommerceProvider).dispose();
     }
     await _updates.close();
   }

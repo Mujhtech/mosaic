@@ -253,8 +253,8 @@ final class _HostedPaywallPlaygroundState
     storePlatform: _connectedCommerceEnabled ? _runtimeStorePlatform : null,
     purchaseProvider: _fallbackPurchaseProvider(),
     commerceProviderFactories: <MosaicCommerceProviderFactory>[
-      MosaicStoreKitProviderFactory(),
-      MosaicGooglePlayProviderFactory(),
+      MosaicStoreKitProviderFactory(acceptUpdate: _acceptNativeStoreUpdate),
+      MosaicGooglePlayProviderFactory(acceptUpdate: _acceptNativeStoreUpdate),
       if (_revenueCatReady) const MosaicRevenueCatProviderFactory(),
     ],
     bundledFallbackLoader: () async =>
@@ -263,6 +263,13 @@ final class _HostedPaywallPlaygroundState
       if (mounted) _recordEvent('Configuration: ${diagnostic.code}');
     },
   );
+
+  Future<MosaicNativeStoreUpdateAcceptanceDisposition> _acceptNativeStoreUpdate(
+    MosaicCommerceUpdate update,
+  ) async {
+    _recordEvent('Commerce update accepted: ${update.updateId}');
+    return MosaicNativeStoreUpdateAcceptanceDisposition.accepted;
+  }
 
   Future<void> _load() async {
     final result = await _mosaic.loadConfiguration();

@@ -10,6 +10,7 @@ struct StoreKitProductSnapshot: Sendable {
   let displayPrice: String
   let currencyCode: String?
   let billingPeriod: MosaicCommercePeriod?
+  let localizedPeriod: String?
   let trial: MosaicCommerceTrial?
   let introductoryOffer: MosaicCommerceIntroductoryOffer?
 }
@@ -70,6 +71,7 @@ actor LiveStoreKitClient: StoreKitClient {
           displayPrice: product.displayPrice,
           currencyCode: product.priceFormatStyle.currencyCode,
           billingPeriod: period,
+          localizedPeriod: nil,
           trial: offer.flatMap(Self.trial),
           introductoryOffer: offer.flatMap(Self.introductoryOffer)
         )

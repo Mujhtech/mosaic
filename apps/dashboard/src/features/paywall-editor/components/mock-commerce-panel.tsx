@@ -24,6 +24,7 @@ import type {
 } from "@/features/paywall-editor/types/editor"
 import { hostedStudioHref, type StudioSource } from "@/features/paywall-editor/types/studio-source"
 import { resolveLocalizedText } from "@/features/paywall-editor/utils/document-tree"
+import { studioApplicationsErrorMessage } from "@/features/paywall-editor/utils/studio-applications-error"
 import { ApiError } from "@/lib/api/errors"
 import {
   activeProviderAssignmentQueryOptions,
@@ -35,12 +36,6 @@ import type { ProviderConnection } from "@/generated/api"
 
 const CONTROL_CLASS =
   "border-input bg-background focus-visible:ring-ring w-full rounded border px-2 py-2 text-sm focus-visible:ring-2 focus-visible:outline-none"
-
-export function studioApplicationsErrorMessage(error: Error) {
-  return error instanceof ApiError && error.status === 403
-    ? "You can edit this Draft, but you do not have permission to inspect its Applications."
-    : "Applications could not be loaded. Provider readiness remains unavailable."
-}
 
 function availableMock(productReferenceId: string): MockProductDefinition {
   return {
@@ -246,8 +241,13 @@ function HostedCatalogProductBindingsContent({
           <label className="mb-3 block text-xs font-medium">
             Provider preview Application
             <select
+              aria-label="Provider preview Application"
               className={`${CONTROL_CLASS} mt-1`}
-              disabled={applications.isPending || Boolean(applications.error)}
+              disabled={
+                applications.isPending ||
+                Boolean(applications.error) ||
+                applications.data?.items.length === 0
+              }
               onChange={(event) => setApplicationId(event.currentTarget.value)}
               value={selectedApplicationId}
             >

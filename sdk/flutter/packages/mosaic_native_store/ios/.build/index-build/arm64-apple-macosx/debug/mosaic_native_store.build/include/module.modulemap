@@ -1,3 +1,0 @@
-module mosaic_native_store {
-    header "/Users/muhideenmujeeb/Projects/mosaic/sdk/flutter/packages/mosaic_native_store/ios/.build/index-build/arm64-apple-macosx/debug/mosaic_native_store.build/include/mosaic_native_store-Swift.h"
-}

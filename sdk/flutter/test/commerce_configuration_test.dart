@@ -48,7 +48,7 @@ void main() {
     );
     expect(
       storeKitEnvelope.configuration
-          .mappingForProduct('product_pro_monthly')!
+          .mappingForProduct('mosaic_pro_monthly')!
           .adapterMapping,
       isA<MosaicStoreKitProductMapping>(),
     );
@@ -61,7 +61,7 @@ void main() {
       expectedStorePlatform: MosaicStorePlatform.android,
     );
     final monthly = googleEnvelope.configuration
-        .mappingForProduct('product_pro_monthly')!;
+        .mappingForProduct('mosaic_pro_monthly')!;
     expect(monthly.entitlementKeys, <String>['pro']);
     expect(
       monthly.adapterMapping,

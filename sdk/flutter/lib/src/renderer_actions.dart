@@ -436,6 +436,32 @@ extension on _MosaicPaywallState {
           );
         case MosaicRestoreFailed():
           _reportRestoreFailure('restore_provider_failed');
+        case MosaicDetailedRestoreResult():
+          switch (result.outcome) {
+            case MosaicCommerceRecoveryOutcome.restored:
+              final references = _referenceIds(result.entitlements);
+              widget.onInteraction?.call(
+                const MosaicInteraction(
+                    outcome: MosaicInteractionOutcome.restored),
+              );
+              widget.onResult(MosaicRestoredPresentationResult(references));
+            case MosaicCommerceRecoveryOutcome.nothingToRestore:
+              widget.onInteraction?.call(
+                const MosaicInteraction(
+                  outcome: MosaicInteractionOutcome.restoreNoPurchases,
+                ),
+              );
+            case MosaicCommerceRecoveryOutcome.cancelled:
+              widget.onInteraction?.call(
+                const MosaicInteraction(
+                  outcome: MosaicInteractionOutcome.restoreCancelled,
+                ),
+              );
+            case MosaicCommerceRecoveryOutcome.providerUnavailable:
+              _reportRestoreFailure('restore_provider_unavailable');
+            case MosaicCommerceRecoveryOutcome.failed:
+              _reportRestoreFailure('restore_provider_failed');
+          }
       }
     } on Object {
       if (mounted) {

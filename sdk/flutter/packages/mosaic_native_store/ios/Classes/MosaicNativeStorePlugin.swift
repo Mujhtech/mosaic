@@ -96,7 +96,7 @@ private final class StoreKitProcessBridge {
     let decoded = try rawMappings.map(decodeMapping)
     let provider = try adapter()
     await provider.invalidateLoadedProducts()
-    await provider.install(
+    try await provider.install(
       configuration: MosaicCommerceConfigurationReference(
         configurationID: configurationID,
         configurationRevision: revision
@@ -162,7 +162,7 @@ private final class StoreKitProcessBridge {
   }
 
   func restore() async throws -> [String: Any] {
-    encodeRestore(await adapter().restore(entitlementMappings: []))
+    encodeRecovery(await adapter().recover(entitlementMappings: []))
   }
 
   func activeEntitlements() async throws -> [String: Any] {
@@ -191,11 +191,16 @@ private final class StoreKitProcessBridge {
     mappings = []
   }
 
-  func accept(_ update: MosaicCommerceUpdate) async -> Bool {
-    guard let channel = channels.last else { return false }
+  func accept(
+    _ update: MosaicCommerceUpdate
+  ) async -> MosaicCommerceUpdateAcceptanceDisposition {
+    guard let channel = channels.last else { return .deliveryFailed }
     return await withCheckedContinuation { continuation in
       channel.invokeMethod("commerceUpdate", arguments: encodeUpdate(update)) { response in
-        continuation.resume(returning: response as? Bool == true)
+        let disposition = (response as? String)
+          .flatMap(MosaicCommerceUpdateAcceptanceDisposition.init(rawValue:))
+          ?? .deliveryFailed
+        continuation.resume(returning: disposition)
       }
     }
   }
@@ -226,7 +231,9 @@ private final class StoreKitProcessBridge {
 private final class FlutterCommerceUpdateAcceptor:
   MosaicCommerceUpdateAcceptor, @unchecked Sendable
 {
-  func accept(_ update: MosaicCommerceUpdate) async throws -> Bool {
+  func accept(
+    _ update: MosaicCommerceUpdate
+  ) async throws -> MosaicCommerceUpdateAcceptanceDisposition {
     await StoreKitProcessBridge.shared.accept(update)
   }
 }
@@ -331,6 +338,20 @@ private func encodeRestore(_ value: MosaicRestoreResult) -> [String: Any] {
   case .providerUnavailable: return ["outcome": "providerUnavailable"]
   case .failed: return ["outcome": "failed"]
   }
+}
+
+private func encodeRecovery(
+  _ value: MosaicCommerceRecoveryResult
+) -> [String: Any] {
+  [
+    "outcome": value.outcome.rawValue,
+    "activeEntitlementKeys": value.activeEntitlements.map(\.id),
+    "operationId": value.operationID,
+    "providerId": value.providerID,
+    "recoveryMode": value.recoveryMode.rawValue,
+    "completedAt": utcFormatter.string(from: value.completedAt),
+    "diagnostics": value.diagnostics.map(encodeDiagnostic),
+  ]
 }
 
 private func encodeEntitlements(

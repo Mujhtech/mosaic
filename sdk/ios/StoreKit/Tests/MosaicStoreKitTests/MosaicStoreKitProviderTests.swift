@@ -20,7 +20,7 @@ final class MosaicStoreKitProviderTests: XCTestCase {
       acceptor: acceptor,
       acceptanceStore: store
     )
-    await provider.install(configuration: configuration, mappings: [mapping])
+    try await provider.install(configuration: configuration, mappings: [mapping])
     _ = await provider.loadProducts(mappings: [mapping])
 
     let result = await provider.purchase(mosaicProductID: mapping.mosaicProductID)
@@ -36,7 +36,7 @@ final class MosaicStoreKitProviderTests: XCTestCase {
     )
   }
 
-  func testUnverifiedPendingCancelledAndFailureRemainDistinctAndNeverFinish() async {
+  func testUnverifiedPendingCancelledAndFailureRemainDistinctAndNeverFinish() async throws {
     for (event, expected) in [
       (
         StoreKitPurchaseEvent.unverified,
@@ -51,7 +51,7 @@ final class MosaicStoreKitProviderTests: XCTestCase {
         acceptor: AcceptorStub(order: order),
         acceptanceStore: AcceptanceStoreStub(order: order)
       )
-      await provider.install(configuration: configuration, mappings: [mapping])
+      try await provider.install(configuration: configuration, mappings: [mapping])
       _ = await provider.loadProducts(mappings: [mapping])
       expected.assert(await provider.purchase(mosaicProductID: mapping.mosaicProductID))
       let events = await order.values()
@@ -68,7 +68,7 @@ final class MosaicStoreKitProviderTests: XCTestCase {
       acceptor: AcceptorStub(order: order),
       acceptanceStore: AcceptanceStoreStub(order: order)
     )
-    await provider.install(configuration: configuration, mappings: [mapping])
+    try await provider.install(configuration: configuration, mappings: [mapping])
     _ = await provider.loadProducts(mappings: [mapping])
     Outcome.failed("commerce.purchaseFailed")
       .assert(await provider.purchase(mosaicProductID: mapping.mosaicProductID))
@@ -76,7 +76,7 @@ final class MosaicStoreKitProviderTests: XCTestCase {
     XCTAssertEqual(events, [])
   }
 
-  func testDuplicateUnfinishedTransactionFinishesWithoutRedelivery() async {
+  func testDuplicateUnfinishedTransactionFinishesWithoutRedelivery() async throws {
     let order = OrderRecorder()
     let transaction = StoreKitTransaction(
       id: 88,
@@ -97,13 +97,13 @@ final class MosaicStoreKitProviderTests: XCTestCase {
       acceptanceStore: store
     )
 
-    await provider.install(configuration: configuration, mappings: [mapping])
+    try await provider.install(configuration: configuration, mappings: [mapping])
 
     let events = await order.values()
     XCTAssertEqual(events, ["finish:88"])
   }
 
-  func testEntitlementVerificationFailureNeverNormalizesToInactive() async {
+  func testEntitlementVerificationFailureNeverNormalizesToInactive() async throws {
     let order = OrderRecorder()
     let provider = MosaicStoreKitProvider(
       client: StoreKitClientStub(
@@ -114,7 +114,7 @@ final class MosaicStoreKitProviderTests: XCTestCase {
       acceptor: AcceptorStub(order: order),
       acceptanceStore: AcceptanceStoreStub(order: order)
     )
-    await provider.install(configuration: configuration, mappings: [mapping])
+    try await provider.install(configuration: configuration, mappings: [mapping])
 
     guard
       case .failed(let code, _) = await provider.activeEntitlements(
@@ -178,11 +178,13 @@ private actor AcceptorStub: MosaicCommerceUpdateAcceptor {
 
   init(order: OrderRecorder) { self.order = order }
 
-  func accept(_ update: MosaicCommerceUpdate) async -> Bool {
+  func accept(
+    _ update: MosaicCommerceUpdate
+  ) async -> MosaicCommerceUpdateAcceptanceDisposition {
     await order.append(
       "accept:\(update.id):\(update.activeEntitlementKeys.sorted().joined(separator: ","))"
     )
-    return true
+    return .accepted
   }
 }
 

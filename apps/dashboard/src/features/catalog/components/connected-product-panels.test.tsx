@@ -337,7 +337,7 @@ describe("connected Product panels", () => {
     expect(screen.getByText("Connected-provider catalog metadata is stale.")).toBeVisible()
     expect(screen.getByRole("link", { name: "Refresh provider metadata" })).toHaveAttribute(
       "href",
-      "/providers",
+      "#provider-mappings-title",
     )
     expect(screen.getByText("Never synchronized")).toBeVisible()
     expect(screen.getByText("unknown")).toBeVisible()

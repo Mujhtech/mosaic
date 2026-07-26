@@ -4,9 +4,11 @@ import android.app.Activity
 import com.android.billingclient.api.BillingClient
 import com.android.billingclient.api.Purchase
 import dev.mosaic.sdk.MosaicCommerceAdapterMapping
+import dev.mosaic.sdk.MosaicCommerceAdapterConfiguration
 import dev.mosaic.sdk.MosaicCommerceConfigurationReference
 import dev.mosaic.sdk.MosaicCommerceProductMapping
 import dev.mosaic.sdk.MosaicCommerceUpdateAcceptance
+import dev.mosaic.sdk.MosaicCommerceUpdateAcceptanceDisposition
 import dev.mosaic.sdk.MosaicProductLoadResult
 import dev.mosaic.sdk.MosaicPurchaseResult
 import dev.mosaic.sdk.MosaicActiveEntitlementsResult
@@ -62,11 +64,8 @@ class MosaicGooglePlayAdapterTest {
         val store = RecordingDeliveryStore(order)
         val adapter = adapter(service, store) {
             order += "hostAccepted"
-            true
+            MosaicCommerceUpdateAcceptanceDisposition.ACCEPTED
         }
-        adapter.installConfigurationReference(
-            MosaicCommerceConfigurationReference("configuration", "revision"),
-        )
         assertTrue(adapter.loadProducts(listOf(mapping())) is MosaicProductLoadResult.Loaded)
 
         val result = async { adapter.purchase(mapping(), emptyList()) }
@@ -93,7 +92,9 @@ class MosaicGooglePlayAdapterTest {
             ),
             order = order,
         )
-        val adapter = adapter(service, RecordingDeliveryStore(order)) { true }
+        val adapter = adapter(service, RecordingDeliveryStore(order)) {
+            MosaicCommerceUpdateAcceptanceDisposition.ACCEPTED
+        }
         adapter.loadProducts(listOf(mapping()))
 
         val result = async { adapter.purchase(mapping(), emptyList()) }
@@ -114,7 +115,9 @@ class MosaicGooglePlayAdapterTest {
                 BillingClient.ProductType.INAPP to BillingClient.BillingResponseCode.SERVICE_UNAVAILABLE,
             ),
         )
-        val adapter = adapter(service, RecordingDeliveryStore(mutableListOf())) { true }
+        val adapter = adapter(service, RecordingDeliveryStore(mutableListOf())) {
+            MosaicCommerceUpdateAcceptanceDisposition.ACCEPTED
+        }
 
         val result = adapter.activeEntitlements(emptyList())
 
@@ -124,15 +127,23 @@ class MosaicGooglePlayAdapterTest {
     private fun CoroutineScope.adapter(
         service: GooglePlayBillingService,
         store: DeliveryStore,
-        acceptance: suspend (dev.mosaic.sdk.MosaicCommerceUpdate) -> Boolean,
-    ) = MosaicGooglePlayAdapter(
+        acceptance: suspend (dev.mosaic.sdk.MosaicCommerceUpdate) ->
+            dev.mosaic.sdk.MosaicCommerceUpdateAcceptanceDisposition,
+    ): MosaicGooglePlayAdapter = MosaicGooglePlayAdapter(
         service = service,
         activityProvider = { Activity() },
         deliveryAcceptance = MosaicCommerceUpdateAcceptance(acceptance),
         deliveryStore = store,
         lifecycle = null,
         scope = this,
-    )
+    ).also {
+        it.installConfiguration(
+            MosaicCommerceAdapterConfiguration(
+                MosaicCommerceConfigurationReference("configuration", "revision"),
+                listOf(mapping()),
+            ),
+        )
+    }
 
     private fun mapping(
         detail: MosaicCommerceAdapterMapping.GooglePlayProduct =

@@ -77,8 +77,8 @@ final class MosaicCommerceConfigurationV2Decoder {
       storePlatform: platform,
       configurationReleaseId:
           _identifier(release['id'], '$path.configurationRelease.id'),
-      configurationReleaseDigest:
-          _digest(release['contentDigest'], '$path.configurationRelease.digest'),
+      configurationReleaseDigest: _digest(
+          release['contentDigest'], '$path.configurationRelease.digest'),
       contentDigest: _digest(raw['contentDigest'], '$path.contentDigest'),
       activeProvider: provider,
       productMappings: products,
@@ -105,7 +105,8 @@ final class MosaicCommerceConfigurationV2Decoder {
         configuration.applicationId != expectedApplicationId ||
         configuration.storePlatform != expectedStorePlatform ||
         configuration.configurationReleaseId != expectedRelease.id ||
-        configuration.configurationReleaseDigest != expectedRelease.contentDigest ||
+        configuration.configurationReleaseDigest !=
+            expectedRelease.contentDigest ||
         products.map((item) => item.mosaicProductId).toSet().length !=
             expectedRelease.productReferences.length ||
         !products
@@ -117,7 +118,8 @@ final class MosaicCommerceConfigurationV2Decoder {
       );
     }
     for (final mapping in products) {
-      final expected = expectedRelease.productReferences[mapping.mosaicProductId];
+      final expected =
+          expectedRelease.productReferences[mapping.mosaicProductId];
       final expectedType = switch (expected?.type) {
         MosaicDeliveredProductType.subscription =>
           MosaicCommerceProductType.subscription,
@@ -125,8 +127,7 @@ final class MosaicCommerceConfigurationV2Decoder {
           MosaicCommerceProductType.oneTimeNonConsumable,
         null => null,
       };
-      if (expected == null ||
-          mapping.productType != expectedType) {
+      if (expected == null || mapping.productType != expectedType) {
         throw const MosaicCommerceConfigurationException(
           'The commerce Product mappings do not match the accepted release.',
         );
@@ -162,8 +163,7 @@ final class MosaicCommerceConfigurationV2Decoder {
       '$path.identity',
     );
     final providerId = _identifier(identity['id'], '$path.identity.id');
-    final activationObject =
-        _object(object['activation'], '$path.activation');
+    final activationObject = _object(object['activation'], '$path.activation');
     final activationSource =
         _string(activationObject['source'], '$path.activation.source');
     final MosaicProviderActivation activation;
@@ -265,7 +265,8 @@ final class MosaicCommerceConfigurationV2Decoder {
     return MosaicActiveProvider(
       identity: MosaicProviderIdentity(
         id: providerId,
-        displayName: _safe(identity['displayName'], '$path.identity.displayName'),
+        displayName:
+            _safe(identity['displayName'], '$path.identity.displayName'),
         adapterVersion: _pattern(
           identity['adapterVersion'],
           '$path.identity.adapterVersion',
@@ -672,7 +673,7 @@ final class MosaicCommerceConfigurationV2Decoder {
           ? _identifier(object['mosaicProductId'], '$path.product')
           : null,
       recoveryAction: object.containsKey('recoveryAction')
-          ? _wireEnum(
+          ? _wireEnum<MosaicCommerceRecoveryAction>(
               object['recoveryAction'],
               '$path.recoveryAction',
               MosaicCommerceRecoveryAction.values,
@@ -783,8 +784,7 @@ Object? _canonicalize(Object? value) {
   if (value is Map) {
     final entries = value.entries.toList()
       ..sort(
-        (left, right) =>
-            (left.key as String).compareTo(right.key as String),
+        (left, right) => (left.key as String).compareTo(right.key as String),
       );
     return <String, Object?>{
       for (final entry in entries)
@@ -794,12 +794,10 @@ Object? _canonicalize(Object? value) {
   return value;
 }
 
-final RegExp _identifierPattern =
-    RegExp(r'^[A-Za-z0-9][A-Za-z0-9._:-]*$');
+final RegExp _identifierPattern = RegExp(r'^[A-Za-z0-9][A-Za-z0-9._:-]*$');
 final RegExp _entitlementPattern = RegExp(r'^[a-z][a-z0-9_.-]*$');
 final RegExp _digestPattern = RegExp(r'^sha256:[a-f0-9]{64}$');
-final RegExp _adapterVersionPattern =
-    RegExp(r'^[A-Za-z0-9][A-Za-z0-9.+_-]*$');
+final RegExp _adapterVersionPattern = RegExp(r'^[A-Za-z0-9][A-Za-z0-9.+_-]*$');
 final RegExp _reasonPattern =
     RegExp(r'^[a-z][a-zA-Z0-9]*(?:[._-][a-zA-Z0-9]+)+$');
 final RegExp _safePattern = RegExp(r'^[^\r\n\u0000-\u001F\u007F]+$');

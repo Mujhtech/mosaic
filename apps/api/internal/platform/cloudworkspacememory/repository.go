@@ -145,7 +145,6 @@ func (s *state) clone() *state {
 		cloned.metadataSnapshots[key] = value
 	}
 	for key, value := range s.mappingObservations {
-		value.Metadata = append([]byte(nil), value.Metadata...)
 		cloned.mappingObservations[key] = value
 	}
 	copyMap(cloned.entitlementMappings, s.entitlementMappings)

@@ -173,9 +173,10 @@ class CommerceConfigurationTest {
             placements = emptyMap(),
             paywallVersions = emptyMap(),
             productReferences = listOf(
-                MosaicDeliveryProduct("product_pro_monthly", "subscription", "Monthly"),
+                MosaicDeliveryProduct("mosaic_pro_monthly", "subscription", "Monthly"),
+                MosaicDeliveryProduct("mosaic_pro_yearly", "subscription", "Yearly"),
                 MosaicDeliveryProduct(
-                    "product_pro_lifetime",
+                    "mosaic_pro_lifetime",
                     "one_time_non_consumable",
                     "Lifetime",
                 ),
@@ -195,7 +196,7 @@ class CommerceConfigurationTest {
         assertEquals("2", configuration.version)
         assertTrue(configuration.activation is MosaicCommerceProviderActivation.NativeStore)
         assertEquals("activePurchaseRecovery", configuration.recoveryMode)
-        val monthly = configuration.productMappings.getValue("product_pro_monthly")
+        val monthly = configuration.productMappings.getValue("mosaic_pro_monthly")
         assertEquals(setOf("pro"), monthly.entitlementKeys)
         assertEquals(
             MosaicCommerceAdapterMapping.GooglePlayProduct("monthly", "intro_7_day"),

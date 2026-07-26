@@ -69,14 +69,13 @@ finish-ordering are **unavailable**, not passing.
 
 ## Google evidence
 
-Status: deterministic module/example evidence passed before the last additive
-recovery hook; real Play demonstration and the final post-hook rerun are
-unavailable.
+Status: deterministic module evidence passed after the final recovery and
+atomic-configuration changes; real Play demonstration remains unavailable.
 
 Available evidence:
 
-- The Android core, RevenueCat, and Google modules passed `test lint assemble`
-  before the final additive `installMappings` recovery hook.
+- The focused Android core and Google Play unit suites passed after the final
+  atomic configuration and recovery changes.
 - The Android example debug APK assembled before that hook.
 - Focused Google tests covered:
   - exact Product/base-plan/optional-offer selection with no silent fallback;
@@ -92,9 +91,6 @@ Available evidence:
 
 Unavailable evidence:
 
-- The final full Gradle rerun after `installMappings` and its partial-recovery
-  regression test was rejected because the execution-approval service quota was
-  exhausted.
 - No package-matching Play Console application or distributed test-track build.
 - No license tester, current Play Store test device, or Play Billing Lab run.
 - No real localized `ProductDetails`/pricing-phase response.
@@ -108,7 +104,8 @@ passing.
 
 ## Flutter evidence
 
-Status: static integration evidence passed; dynamic Flutter checks unavailable.
+Status: static and dynamic integration evidence passed; real-store Flutter
+demonstration remains unavailable.
 
 Available evidence:
 
@@ -124,10 +121,14 @@ Available evidence:
 
 Unavailable evidence:
 
-- Dart formatting, Flutter analysis, core/plugin tests, RevenueCat tests,
-  Android debug build, and iOS Simulator build could not run because the
-  Flutter/Gradle/SwiftPM shared caches require access outside the workspace and
-  the execution-approval service quota was exhausted.
+- Flutter core analysis passed and its complete suite passed 142 tests with one
+  documented skip.
+- The optional native-store package analysis and all three focused tests passed.
+- The Flutter bridge reused the verified Swift and Kotlin adapters; the iOS
+  core suite passed 98 tests with one skip, and the focused Android core and
+  Google Play suites passed.
+- No signed App Store sandbox or Play-distributed application was available, so
+  a Flutter-hosted real purchase and recovery run remains unavailable.
 
 ## Cross-provider equality proof
 

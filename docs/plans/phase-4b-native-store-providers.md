@@ -457,6 +457,17 @@ Google Play:
 - replacement mapping reference;
 - optional bounded observed metadata and diagnostics.
 
+Gate 4B permits only one current Mosaic Product mapping for a Google Product
+ID within an Environment and Android Application, even when Google exposes
+multiple base plans or offers below that Product. The selected base plan and
+optional offer are exact selectors for that one mapping. This restriction is
+required because the client-only active-purchase recovery boundary reports the
+Google Product ID but cannot authoritatively recover which base plan produced
+an owned purchase without the server transaction/receipt infrastructure that
+is explicitly out of scope. Supporting several Mosaic Products under one
+Google Product is deferred until that ambiguity can be resolved by an approved
+contract and architecture change.
+
 Validation:
 
 - archived Products cannot gain mappings;
@@ -467,6 +478,8 @@ Validation:
 - selected offers never fall back to the base plan;
 - `No offer` is explicit;
 - no offer token is persisted;
+- one current Google Product ID cannot map to several Mosaic Products in the
+  same Environment and Application, regardless of base-plan or offer detail;
 - active mapping resolution is unambiguous for the selected provider;
 - replacing a mapping creates a new row with `replaces_mapping_id`;
 - immutable Releases and sidecars retain the old mapping;

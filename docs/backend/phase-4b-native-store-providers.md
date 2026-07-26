@@ -15,7 +15,11 @@ An active provider assignment is one of two explicit shapes:
 Native mappings are application- and environment-specific. StoreKit mappings
 identify a Product. Google Play subscription mappings additionally require a
 base plan and may select an offer. Non-consumable Products cannot carry base
-plan or offer identifiers.
+plan or offer identifiers. One current Google Product ID may map to only one
+Mosaic Product in an Environment and Android Application, even if that Google
+Product has several base plans. Client-only owned-purchase recovery cannot
+authoritatively distinguish those base plans; supporting that shape is deferred
+until Mosaic owns an approved authoritative recovery contract.
 
 Native mappings become active when created because there is no server-side
 provider verification step. Replacing a mapping archives the prior row and

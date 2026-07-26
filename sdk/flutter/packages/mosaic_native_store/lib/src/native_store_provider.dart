@@ -7,6 +7,21 @@ const int mosaicNativeStoreChannelCodecVersion = 1;
 const String mosaicNativeStoreChannelName =
     'dev.mosaic/native_store/commerce_v1';
 
+enum MosaicNativeStoreUpdateAcceptanceDisposition {
+  accepted,
+  alreadyAccepted,
+  rejectedStaleConfiguration,
+  deliveryFailed;
+
+  bool get authorizesFinalization =>
+      this == accepted || this == alreadyAccepted;
+}
+
+typedef MosaicNativeStoreUpdateAcceptor
+    = Future<MosaicNativeStoreUpdateAcceptanceDisposition> Function(
+  MosaicCommerceUpdate update,
+);
+
 abstract interface class MosaicNativeStoreChannel {
   Future<Object?> invoke(String method, [Map<String, Object?>? arguments]);
 
@@ -39,10 +54,12 @@ final class MethodChannelMosaicNativeStoreChannel
 final class MosaicStoreKitProviderFactory
     extends _MosaicNativeStoreProviderFactory {
   MosaicStoreKitProviderFactory({
+    required MosaicNativeStoreUpdateAcceptor acceptUpdate,
     MosaicNativeStoreChannel? channel,
   }) : super(
           providerId: 'app_store',
           expectedPlatform: MosaicStorePlatform.ios,
+          acceptUpdate: acceptUpdate,
           channel: channel,
         );
 }
@@ -50,10 +67,12 @@ final class MosaicStoreKitProviderFactory
 final class MosaicGooglePlayProviderFactory
     extends _MosaicNativeStoreProviderFactory {
   MosaicGooglePlayProviderFactory({
+    required MosaicNativeStoreUpdateAcceptor acceptUpdate,
     MosaicNativeStoreChannel? channel,
   }) : super(
           providerId: 'google_play',
           expectedPlatform: MosaicStorePlatform.android,
+          acceptUpdate: acceptUpdate,
           channel: channel,
         );
 }
@@ -63,12 +82,14 @@ abstract base class _MosaicNativeStoreProviderFactory
   _MosaicNativeStoreProviderFactory({
     required this.providerId,
     required this.expectedPlatform,
+    required this.acceptUpdate,
     MosaicNativeStoreChannel? channel,
   }) : channel = channel ?? MethodChannelMosaicNativeStoreChannel();
 
   @override
   final String providerId;
   final MosaicStorePlatform expectedPlatform;
+  final MosaicNativeStoreUpdateAcceptor acceptUpdate;
   final MosaicNativeStoreChannel channel;
 
   @override
@@ -88,6 +109,7 @@ abstract base class _MosaicNativeStoreProviderFactory
     return MosaicNativeStorePurchaseProvider(
       commerceConfiguration: commerceConfiguration,
       configurationRelease: configurationRelease,
+      acceptUpdate: acceptUpdate,
       channel: channel,
     );
   }
@@ -100,6 +122,7 @@ final class MosaicNativeStorePurchaseProvider
   MosaicNativeStorePurchaseProvider({
     required this.commerceConfiguration,
     required this.configurationRelease,
+    required this.acceptUpdate,
     required this.channel,
   }) {
     if (commerceConfiguration.version != '2') {
@@ -111,6 +134,7 @@ final class MosaicNativeStorePurchaseProvider
 
   final MosaicCommerceConfiguration commerceConfiguration;
   final MosaicConfigurationRelease configurationRelease;
+  final MosaicNativeStoreUpdateAcceptor acceptUpdate;
   final MosaicNativeStoreChannel channel;
   final StreamController<MosaicCommerceUpdate> _updates =
       StreamController<MosaicCommerceUpdate>.broadcast();
@@ -179,7 +203,8 @@ final class MosaicNativeStorePurchaseProvider
       throw const _NativeStoreUnavailable();
     }
     final actual = <String, (String, String?)>{};
-    for (final raw in _list(profile['capabilities'], r'$.profile.capabilities')) {
+    for (final raw
+        in _list(profile['capabilities'], r'$.profile.capabilities')) {
       final capability = _map(raw, r'$.profile.capabilities[]');
       actual[_string(capability['name'], r'$.capability.name')] = (
         _string(capability['support'], r'$.capability.support'),
@@ -313,6 +338,29 @@ final class MosaicNativeStorePurchaseProvider
       await _ensureInstalled();
       final payload = _map(await _invoke('restore'), r'$.restore');
       final outcome = _string(payload['outcome'], r'$.restore.outcome');
+      final metadata = payload['operationId'] == null
+          ? null
+          : MosaicCommerceRecoveryMetadata(
+              operationId:
+                  _string(payload['operationId'], r'$.restore.operationId'),
+              providerId:
+                  _string(payload['providerId'], r'$.restore.providerId'),
+              recoveryMode:
+                  _string(payload['recoveryMode'], r'$.restore.recoveryMode'),
+              completedAt: DateTime.parse(
+                _string(payload['completedAt'], r'$.restore.completedAt'),
+              ),
+              diagnostics: _decodeDiagnostics(payload['diagnostics']),
+            );
+      if (metadata != null) {
+        return MosaicDetailedRestoreResult(
+          outcome: MosaicCommerceRecoveryOutcome.values.firstWhere(
+            (item) => item.name == outcome,
+          ),
+          metadata: metadata,
+          entitlements: _entitlements(payload['activeEntitlementKeys']),
+        );
+      }
       return switch (outcome) {
         'restored' => MosaicRestored(
             _entitlements(payload['activeEntitlementKeys']),
@@ -386,12 +434,17 @@ final class MosaicNativeStorePurchaseProvider
     }
     try {
       final update = _decodeUpdate(_map(arguments, r'$.commerceUpdate'));
-      final current = update.configuration.configurationId ==
-              commerceConfiguration.id &&
-          update.configuration.configurationRevision ==
-              commerceConfiguration.contentDigest &&
-          update.providerId == identity.id;
-      if (!current) return false;
+      final current =
+          update.configuration.configurationId == commerceConfiguration.id &&
+              update.configuration.configurationRevision ==
+                  commerceConfiguration.contentDigest &&
+              update.providerId == identity.id;
+      if (!current) {
+        return MosaicNativeStoreUpdateAcceptanceDisposition
+            .rejectedStaleConfiguration.name;
+      }
+      final disposition = await acceptUpdate(update);
+      if (!disposition.authorizesFinalization) return disposition.name;
       if (_acceptedUpdateIds.add(update.updateId)) {
         _acceptedUpdateOrder.add(update.updateId);
         if (_acceptedUpdateOrder.length > 1024) {
@@ -399,9 +452,9 @@ final class MosaicNativeStorePurchaseProvider
         }
         _updates.add(update);
       }
-      return true;
+      return disposition.name;
     } on Object {
-      return false;
+      return MosaicNativeStoreUpdateAcceptanceDisposition.deliveryFailed.name;
     }
   }
 

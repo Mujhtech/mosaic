@@ -68,7 +68,12 @@ One-time non-consumables forbid both fields.
 Within one native sidecar, a provider Product identifier may occur only once,
 even when adapter mapping detail differs. A StoreKit Product ID or Google
 Product ID cannot map to multiple Mosaic Products. This prevents transaction
-misattribution and duplicate-key installation failures.
+misattribution and duplicate-key installation failures. In particular, Google
+client purchase recovery exposes an owned Product ID but not an authoritative
+base-plan identity, so distinct base plans under one Google Product cannot be
+used to distinguish Mosaic Products in this client-only release. That broader
+mapping shape requires a future approved contract with an authoritative
+recovery mechanism.
 
 The Google adapter resolves the current offer token from the current private
 `ProductDetails` handle. The sidecar cannot contain `offerToken`; unknown

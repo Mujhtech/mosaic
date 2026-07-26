@@ -81,9 +81,9 @@ enum MosaicCommerceConfigurationV2Decoder {
       throw invalid("commerce_configuration_product_association_mismatch")
     }
     guard association.mosaicProductTypes.count == association.mosaicProductIDs.count,
-      productMappings.allSatisfy {
+      productMappings.allSatisfy({
         association.mosaicProductTypes[$0.mosaicProductID] == $0.productType
-      }
+      })
     else {
       throw invalid("commerce_configuration_product_type_association_mismatch")
     }
@@ -225,12 +225,12 @@ enum MosaicCommerceConfigurationV2Decoder {
       let expected = nativeCapabilityMatrix(providerID: identity.id)
       guard capabilities.count == MosaicCommerceCapabilityName.allCases.count,
         expected.count == MosaicCommerceCapabilityName.allCases.count,
-        capabilities.allSatisfy {
+        capabilities.allSatisfy({
           expected[$0.name] == NativeCapabilityExpectation(
             support: $0.support,
             reasonCode: $0.reasonCode
           )
-        }
+        })
       else {
         throw invalid("commerce_configuration_native_capability_matrix_mismatch")
       }

@@ -1,5 +1,3 @@
-import 'dart:async';
-
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mosaic_native_store/mosaic_native_store.dart';
@@ -9,7 +7,10 @@ void main() {
   test('one provider-neutral API installs exact mappings and decodes products',
       () async {
     final channel = _FakeChannel();
-    final provider = MosaicGooglePlayProviderFactory(channel: channel).create(
+    final provider = MosaicGooglePlayProviderFactory(
+      acceptUpdate: _accept,
+      channel: channel,
+    ).create(
       commerceConfiguration: _configuration(),
       configurationRelease: _release(),
     );
@@ -24,8 +25,7 @@ void main() {
     final activation =
         channel.calls.firstWhere((call) => call.$1 == 'activate');
     expect(activation.$1, 'activate');
-    final mapping =
-        (activation.$2['mappings']! as List<Object?>).single as Map;
+    final mapping = (activation.$2['mappings']! as List<Object?>).single as Map;
     expect(mapping['providerProductReference'], 'pro_subscription');
     expect(mapping['adapterMapping'], <String, Object?>{
       'kind': 'googlePlayProduct',
@@ -37,7 +37,10 @@ void main() {
   test('accepts matching updates idempotently and rejects stale revisions',
       () async {
     final channel = _FakeChannel();
-    final provider = MosaicGooglePlayProviderFactory(channel: channel).create(
+    final provider = MosaicGooglePlayProviderFactory(
+      acceptUpdate: _accept,
+      channel: channel,
+    ).create(
       commerceConfiguration: _configuration(),
       configurationRelease: _release(),
     ) as MosaicNativeStorePurchaseProvider;
@@ -46,11 +49,11 @@ void main() {
     addTearDown(subscription.cancel);
 
     final update = _update(_configurationDigest);
-    expect(await channel.deliver(update), isTrue);
-    expect(await channel.deliver(update), isTrue);
+    expect(await channel.deliver(update), 'accepted');
+    expect(await channel.deliver(update), 'accepted');
     expect(
       await channel.deliver(_update(_staleDigest)),
-      isFalse,
+      'rejectedStaleConfiguration',
     );
     await Future<void>.delayed(Duration.zero);
     expect(updates, hasLength(1));
@@ -59,6 +62,7 @@ void main() {
   test('missing plugin becomes a stable provider-unavailable outcome',
       () async {
     final provider = MosaicStoreKitProviderFactory(
+      acceptUpdate: _accept,
       channel: _MissingChannel(),
     ).create(
       commerceConfiguration: _configuration(
@@ -74,6 +78,11 @@ void main() {
     );
   });
 }
+
+Future<MosaicNativeStoreUpdateAcceptanceDisposition> _accept(
+  MosaicCommerceUpdate _,
+) async =>
+    MosaicNativeStoreUpdateAcceptanceDisposition.accepted;
 
 MosaicCommerceConfiguration _configuration({
   String providerId = 'google_play',
@@ -105,9 +114,8 @@ MosaicCommerceConfiguration _configuration({
     activeProvider: MosaicActiveProvider(
       identity: MosaicProviderIdentity(
         id: providerId,
-        displayName: providerId == 'app_store'
-            ? 'StoreKit'
-            : 'Google Play Billing',
+        displayName:
+            providerId == 'app_store' ? 'StoreKit' : 'Google Play Billing',
         adapterVersion: '1.0.0',
       ),
       activation: const MosaicNativeStoreProviderActivation(),
@@ -237,7 +245,7 @@ final class _MissingChannel implements MosaicNativeStoreChannel {
     String method, [
     Map<String, Object?>? arguments,
   ]) =>
-      Future<Object?>.error(const MissingPluginException());
+      Future<Object?>.error(MissingPluginException());
 
   @override
   void setHandler(Future<Object?> Function(String, Object?)? handler) {}

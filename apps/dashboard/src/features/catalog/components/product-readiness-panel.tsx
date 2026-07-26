@@ -75,6 +75,7 @@ export function ProductReadinessPanel({
             {blockers.length > 0 ? (
               <IssueList
                 accessHref={accessHref}
+                applicationsHref={applicationsHref}
                 issues={blockers}
                 manageProvidersHref={manageProvidersHref}
                 mappingHref={mappingHref}
@@ -85,6 +86,7 @@ export function ProductReadinessPanel({
             {warnings.length > 0 ? (
               <IssueList
                 accessHref={accessHref}
+                applicationsHref={applicationsHref}
                 issues={warnings}
                 manageProvidersHref={manageProvidersHref}
                 mappingHref={mappingHref}
@@ -102,6 +104,7 @@ export function ProductReadinessPanel({
 function IssueList({
   issues,
   accessHref,
+  applicationsHref,
   manageProvidersHref,
   mappingHref,
   title,
@@ -109,6 +112,7 @@ function IssueList({
 }: {
   issues: ProductReadinessView["issues"]
   accessHref: string
+  applicationsHref: string
   manageProvidersHref: string
   mappingHref: string
   title: string

@@ -5,7 +5,6 @@ import com.google.gson.JsonElement
 import com.google.gson.JsonObject
 import com.google.gson.JsonParser
 import java.security.MessageDigest
-import java.time.Instant
 
 /**
  * Strict reader for Commerce Configuration v2. It deliberately produces the same provider-neutral
@@ -172,9 +171,9 @@ internal object MosaicCommerceConfigurationV2Decoder {
         observation?.let {
             require(it.string("environment") in setOf("test", "production", "unknown"))
             val observedAt = it.string("observedAt").checked(timestamp)
-            require(Instant.parse(observedAt) >= Instant.parse(configuredAt))
+            require(timestampSortKey(observedAt) >= timestampSortKey(configuredAt))
             it.get("expiresAt")?.asString?.checked(timestamp)?.let { expiresAt ->
-                require(Instant.parse(expiresAt) >= Instant.parse(observedAt))
+                require(timestampSortKey(expiresAt) >= timestampSortKey(observedAt))
             }
         }
         val diagnostics = value.array("diagnostics").map { element ->
@@ -235,6 +234,14 @@ internal object MosaicCommerceConfigurationV2Decoder {
             ?: throw IllegalArgumentException("Invalid Commerce Configuration v2.")
 
     private fun String.checked(pattern: Regex): String = also { require(pattern.matches(it)) }
+
+    private fun timestampSortKey(value: String): String {
+        val withoutZulu = value.removeSuffix("Z")
+        val separator = withoutZulu.indexOf('.')
+        val seconds = if (separator == -1) withoutZulu else withoutZulu.substring(0, separator)
+        val fraction = if (separator == -1) "" else withoutZulu.substring(separator + 1)
+        return seconds + fraction.padEnd(6, '0')
+    }
 
     private fun sha256(value: JsonObject): String {
         val bytes = canonicalJson(value).toByteArray(Charsets.UTF_8)

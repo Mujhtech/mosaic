@@ -82,7 +82,7 @@ export function ProviderConnectionsPage({
           environments.isPending ||
           connections.isPending ||
           access.isPending ||
-          assignmentQueries.some((query) => query.isPending))),
+          (Boolean(selectedEnvironment) && assignmentQueries.some((query) => query.isPending)))),
     loadingDescription: "Loading Application and Environment commerce scopes.",
     onRetry: () => {
       void applications.refetch()

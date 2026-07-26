@@ -46,7 +46,7 @@ public enum MosaicCommerceAdapterMapping: Sendable, Equatable {
   case googlePlayProduct(basePlanID: String?, offerID: String?)
 }
 
-public enum MosaicCommerceProductType: String, Sendable, Equatable {
+public enum MosaicCommerceProductType: String, Codable, Sendable, Equatable {
   case subscription
   case oneTimeNonConsumable = "one_time_non_consumable"
 }

@@ -3,11 +3,13 @@ package dev.mosaic.flutter.native_store
 import android.app.Application
 import dev.mosaic.sdk.MosaicActiveEntitlementsResult
 import dev.mosaic.sdk.MosaicCommerceAdapterMapping
+import dev.mosaic.sdk.MosaicCommerceAdapterConfiguration
 import dev.mosaic.sdk.MosaicCommerceConfigurationReference
 import dev.mosaic.sdk.MosaicCommerceProductMapping
 import dev.mosaic.sdk.MosaicCommerceSafeDiagnostic
 import dev.mosaic.sdk.MosaicCommerceUpdate
 import dev.mosaic.sdk.MosaicCommerceUpdateAcceptance
+import dev.mosaic.sdk.MosaicCommerceUpdateAcceptanceDisposition
 import dev.mosaic.sdk.MosaicProduct
 import dev.mosaic.sdk.MosaicProductLoadResult
 import dev.mosaic.sdk.MosaicPurchaseResult
@@ -114,14 +116,15 @@ class MosaicNativeStorePlugin : FlutterPlugin, MethodChannel.MethodCallHandler {
         val reference = arguments.map("configuration")
         mappings = arguments.list("mappings").map(::decodeMapping)
         bridge.adapter(application).apply {
-            invalidateProductHandles()
-            installConfigurationReference(
-                MosaicCommerceConfigurationReference(
+            installConfiguration(
+                MosaicCommerceAdapterConfiguration(
+                    reference = MosaicCommerceConfigurationReference(
                     reference.string("configurationId"),
                     reference.string("configurationRevision"),
                 ),
+                    mappings = mappings,
+                ),
             )
-            installMappings(mappings)
         }
         return mapOf("status" to "ready")
     }
@@ -206,18 +209,33 @@ private class ProcessBridge {
             MosaicCommerceUpdateAcceptance { update -> accept(update) },
         ).also { adapter = it }
 
-    suspend fun accept(update: MosaicCommerceUpdate): Boolean {
-        val target = synchronized(this) { channels.lastOrNull() } ?: return false
+    suspend fun accept(
+        update: MosaicCommerceUpdate,
+    ): MosaicCommerceUpdateAcceptanceDisposition {
+        val target = synchronized(this) { channels.lastOrNull() }
+            ?: return MosaicCommerceUpdateAcceptanceDisposition.DELIVERY_FAILED
         return suspendCancellableCoroutine { continuation ->
             target.invokeMethod("commerceUpdate", encodeUpdate(update), object : MethodChannel.Result {
                 override fun success(result: Any?) {
-                    if (continuation.isActive) continuation.resume(result == true)
+                    val disposition = when (result as? String) {
+                        "accepted" -> MosaicCommerceUpdateAcceptanceDisposition.ACCEPTED
+                        "alreadyAccepted" ->
+                            MosaicCommerceUpdateAcceptanceDisposition.ALREADY_ACCEPTED
+                        "rejectedStaleConfiguration" ->
+                            MosaicCommerceUpdateAcceptanceDisposition.REJECTED_STALE_CONFIGURATION
+                        else -> MosaicCommerceUpdateAcceptanceDisposition.DELIVERY_FAILED
+                    }
+                    if (continuation.isActive) continuation.resume(disposition)
                 }
                 override fun error(code: String, message: String?, details: Any?) {
-                    if (continuation.isActive) continuation.resume(false)
+                    if (continuation.isActive) continuation.resume(
+                        MosaicCommerceUpdateAcceptanceDisposition.DELIVERY_FAILED,
+                    )
                 }
                 override fun notImplemented() {
-                    if (continuation.isActive) continuation.resume(false)
+                    if (continuation.isActive) continuation.resume(
+                        MosaicCommerceUpdateAcceptanceDisposition.DELIVERY_FAILED,
+                    )
                 }
             })
         }
@@ -292,6 +310,23 @@ private fun encodeRestore(value: MosaicRestoreResult): Map<String, Any?> = when 
     MosaicRestoreResult.Cancelled -> mapOf("outcome" to "cancelled")
     is MosaicRestoreResult.ProviderUnavailable -> mapOf("outcome" to "providerUnavailable")
     is MosaicRestoreResult.Failed -> mapOf("outcome" to "failed")
+    is MosaicRestoreResult.Detailed -> mapOf(
+        "outcome" to when (value.outcome) {
+            dev.mosaic.sdk.MosaicCommerceRecoveryOutcome.RESTORED -> "restored"
+            dev.mosaic.sdk.MosaicCommerceRecoveryOutcome.NOTHING_TO_RESTORE ->
+                "nothingToRestore"
+            dev.mosaic.sdk.MosaicCommerceRecoveryOutcome.CANCELLED -> "cancelled"
+            dev.mosaic.sdk.MosaicCommerceRecoveryOutcome.PROVIDER_UNAVAILABLE ->
+                "providerUnavailable"
+            dev.mosaic.sdk.MosaicCommerceRecoveryOutcome.FAILED -> "failed"
+        },
+        "activeEntitlementKeys" to value.entitlements.map { it.id },
+        "operationId" to value.metadata.operationId,
+        "providerId" to value.metadata.providerId,
+        "recoveryMode" to value.metadata.recoveryMode,
+        "completedAt" to value.metadata.completedAt,
+        "diagnostics" to value.metadata.diagnostics.map(::encodeDiagnostic),
+    )
 }
 
 private fun encodeEntitlements(value: MosaicActiveEntitlementsResult): Map<String, Any?> =

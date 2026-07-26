@@ -12,8 +12,8 @@ final mosaic = Mosaic.configure(
   // Hosted Delivery and sidecar settings omitted.
   purchaseProvider: localFallbackProvider,
   commerceProviderFactories: [
-    MosaicStoreKitProviderFactory(),
-    MosaicGooglePlayProviderFactory(),
+    MosaicStoreKitProviderFactory(acceptUpdate: persistCommerceUpdate),
+    MosaicGooglePlayProviderFactory(acceptUpdate: persistCommerceUpdate),
   ],
 );
 ```

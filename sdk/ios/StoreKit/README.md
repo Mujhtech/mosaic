@@ -12,9 +12,11 @@ import MosaicSDK
 import MosaicStoreKit
 
 actor UpdateAcceptor: MosaicCommerceUpdateAcceptor {
-  func accept(_ update: MosaicCommerceUpdate) async throws -> Bool {
-    // Persist or route update.id idempotently before returning true.
-    true
+  func accept(
+    _ update: MosaicCommerceUpdate
+  ) async throws -> MosaicCommerceUpdateAcceptanceDisposition {
+    // Persist update.id idempotently before authorizing finalization.
+    .accepted
   }
 }
 
