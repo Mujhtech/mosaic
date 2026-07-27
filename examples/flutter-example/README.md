@@ -9,6 +9,20 @@ accepted draft without rebuilding the app. When Studio is disconnected or a
 revision fails, the last accepted document remains visible; before the first
 accepted revision, the generated canonical bundle is the safe fallback.
 
+## Prerequisites
+
+Flutter 3.22 / Dart 3.4 or newer, matching the SDK's supported floor.
+
+The bundled fallback asset under `assets/generated/` is generated and
+Git-ignored. Run the sync command before every build, run, or test — without it
+the example has no bundled release to fall back to:
+
+```bash
+cd examples/flutter-example
+dart run tool/sync_fixture.dart
+flutter pub get
+```
+
 The status panel visibly distinguishes:
 
 - connected, reconnecting, and disconnected transport states;
@@ -197,7 +211,7 @@ dart run tool/sync_fixture.dart
 dart format --output=none --set-exit-if-changed lib test tool
 flutter analyze --no-pub
 flutter test --no-pub
-flutter build bundle --no-pub
+flutter build bundle --release --no-pub
 ```
 
 The sync command copies

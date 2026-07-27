@@ -1,20 +1,19 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mosaic_sdk/mosaic_sdk.dart';
+
+import 'support/canonical_fixture.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
   group('Analytics Event Contract v1', () {
     test('decodes and exactly re-encodes every canonical event fixture', () {
-      final root = Directory('../../protocol/fixtures/analytics-event/v1');
-      final fixtures = root
-          .listSync()
-          .whereType<File>()
-          .where((file) => file.path.endsWith('.json'))
-          .where((file) => !file.path.contains('/invalid/'));
+      final root = repositoryDirectory('protocol/fixtures/analytics-event/v1');
+      final fixtures = canonicalFixtureFiles(root);
       expect(fixtures, isNotEmpty);
       for (final fixture in fixtures) {
         final original = jsonDecode(fixture.readAsStringSync());
@@ -22,16 +21,14 @@ void main() {
         expect(decoded.toJson(), original, reason: fixture.path);
       }
 
-      for (final batchFile in Directory('${root.path}/batches')
-          .listSync()
-          .whereType<File>()
-          .where((file) => file.path.endsWith('.json'))) {
+      for (final batchFile
+          in canonicalFixtureFiles(Directory('${root.path}/batches'))) {
         final batch = MosaicAnalyticsBatch.decode(batchFile.readAsStringSync());
         expect(batch.toJson(), jsonDecode(batchFile.readAsStringSync()),
             reason: batchFile.path);
       }
       for (final file
-          in Directory('${root.path}/responses').listSync().whereType<File>()) {
+          in canonicalFixtureFiles(Directory('${root.path}/responses'))) {
         expect(
           MosaicAnalyticsIngestionResponse.decode(file.readAsStringSync())
               .results,
@@ -39,9 +36,18 @@ void main() {
           reason: file.path,
         );
       }
-      final manifest = jsonDecode(File(
-        '../../protocol/compatibility/analytics-event/v1.json',
-      ).readAsStringSync()) as Map;
+      for (final file
+          in canonicalFixtureFiles(Directory('${root.path}/invalid'))) {
+        expect(
+          () => MosaicAnalyticsEvent.decode(file.readAsStringSync()),
+          throwsFormatException,
+          reason: file.path,
+        );
+      }
+      final manifest = jsonDecode(
+        repositoryFile('protocol/compatibility/analytics-event/v1.json')
+            .readAsStringSync(),
+      ) as Map;
       final report = MosaicAnalyticsCapabilityReport();
       expect(report.contractVersion, manifest['analyticsEventContractVersion']);
       expect(report.supportedEventNames, hasLength(27));
@@ -52,8 +58,8 @@ void main() {
     });
 
     test('public event construction rejects provider-confirmed authority', () {
-      final source = File(
-        '../../protocol/fixtures/analytics-event/v1/purchase-completed-provider.json',
+      final source = repositoryFile(
+        'protocol/fixtures/analytics-event/v1/purchase-completed-provider.json',
       ).readAsStringSync();
       final object = (jsonDecode(source) as Map).cast<String, Object?>()
         ..['authority'] = 'client_observed';
@@ -64,8 +70,8 @@ void main() {
     });
 
     test('rejects correlation and attribution from unrelated event stages', () {
-      final source = File(
-        '../../protocol/fixtures/analytics-event/v1/placement-request.json',
+      final source = repositoryFile(
+        'protocol/fixtures/analytics-event/v1/placement-request.json',
       ).readAsStringSync();
       final unrelatedCorrelation =
           (jsonDecode(source) as Map).cast<String, Object?>();
@@ -104,8 +110,8 @@ void main() {
         throwsFormatException,
       );
 
-      final source = File(
-        '../../protocol/fixtures/analytics-event/v1/placement-request.json',
+      final source = repositoryFile(
+        'protocol/fixtures/analytics-event/v1/placement-request.json',
       ).readAsStringSync();
       final object = (jsonDecode(source) as Map).cast<String, Object?>()
         ..['eventName'] = 'placement_no_paywall'
@@ -118,6 +124,94 @@ void main() {
         };
       expect(
         () => MosaicAnalyticsEvent.fromJson(object),
+        throwsFormatException,
+      );
+    });
+
+    test('decodes and re-encodes every canonical v2 Experiment fixture', () {
+      final root = repositoryDirectory('protocol/fixtures/analytics-event/v2');
+      // Canonical v2 events this SDK never emits: standard monetization events
+      // carrying Experiment attribution. Flutter emits those on the v1 schema,
+      // so its v2 codec is Experiment-only. Recorded in
+      // docs/known-limitations.md; adding v2 emission is a post-GA change.
+      const notEmittedByFlutter = <String>{
+        'product-selection-attributed.json',
+        'purchase-started-attributed.json',
+      };
+      var decoded = 0;
+      for (final fixture in canonicalFixtureFiles(root)) {
+        final name = fixture.uri.pathSegments.last;
+        final object = jsonDecode(fixture.readAsStringSync());
+        if (notEmittedByFlutter.contains(name)) {
+          expect(
+            () => mosaicDecodeExperimentAnalyticsEvent(object),
+            throwsFormatException,
+            reason: fixture.path,
+          );
+          continue;
+        }
+        expect(
+          mosaicDecodeExperimentAnalyticsEvent(object),
+          object,
+          reason: fixture.path,
+        );
+        decoded++;
+      }
+      expect(decoded, 4, reason: 'every Experiment event fixture is covered');
+
+      for (final batchFile
+          in canonicalFixtureFiles(Directory('${root.path}/batches'))) {
+        final object = (jsonDecode(batchFile.readAsStringSync()) as Map)
+            .cast<String, Object?>();
+        final batch = MosaicExperimentAnalyticsBatch(
+          batchId: object['batchId']! as String,
+          sentAt: DateTime.parse(object['sentAt']! as String),
+          events: (object['events']! as List)
+              .map(mosaicDecodeExperimentAnalyticsEvent),
+        );
+        expect(batch.toJson(), object, reason: batchFile.path);
+      }
+
+      for (final file
+          in canonicalFixtureFiles(Directory('${root.path}/responses'))) {
+        expect(
+          MosaicAnalyticsIngestionResponse.decode(
+            file.readAsStringSync(),
+            contractVersion: mosaicAnalyticsEventContractVersionV2,
+          ).results,
+          isNotEmpty,
+          reason: file.path,
+        );
+      }
+
+      for (final file
+          in canonicalFixtureFiles(Directory('${root.path}/invalid'))) {
+        expect(
+          () => mosaicDecodeExperimentAnalyticsEvent(
+            jsonDecode(file.readAsStringSync()),
+          ),
+          throwsFormatException,
+          reason: file.path,
+        );
+      }
+    });
+
+    test('a v2 batch is only acknowledged by a v2 ingestion response', () {
+      final response = repositoryFile(
+        'protocol/fixtures/analytics-event/v2/responses/accepted-exposure.json',
+      ).readAsStringSync();
+      expect(
+        () => MosaicAnalyticsIngestionResponse.decode(response),
+        throwsFormatException,
+      );
+      final v1 = repositoryFile(
+        'protocol/fixtures/analytics-event/v1/responses/accepted-event.json',
+      ).readAsStringSync();
+      expect(
+        () => MosaicAnalyticsIngestionResponse.decode(
+          v1,
+          contractVersion: mosaicAnalyticsEventContractVersionV2,
+        ),
         throwsFormatException,
       );
     });
@@ -434,6 +528,76 @@ void main() {
       hasLength(1),
     );
   });
+
+  test('disposal and delivery survive an unavailable analytics storage',
+      () async {
+    final storage = _UnavailableAnalyticsStorage();
+    final identity = MosaicIdentityController(
+      storage: MosaicMemoryIdentityStorage(),
+      namespace: 'b' * 64,
+    );
+    final clock = _Clock(DateTime.utc(2026, 7, 26, 12));
+    final runtime = _runtime(storage, identity, clock, _FailingTransport());
+    await runtime.setCollection(
+      environment: const MosaicAnalyticsEnvironmentSettings(
+        collectionEnabled: true,
+      ),
+    );
+    expect(
+      await runtime.record(
+        name: MosaicAnalyticsEventName.purchaseCompletedClient,
+        correlation: const MosaicAnalyticsCorrelation(
+          purchaseAttemptId: 'purchase_attempt_1',
+        ),
+        attribution: const MosaicAnalyticsAttribution(
+          mosaicProductId: 'product_1',
+          providerId: 'app_store',
+        ),
+        payload: const <String, Object?>{
+          'outcome': 'purchased',
+          'durationMs': 10,
+          'observedEntitlementKeys': <String>[],
+        },
+      ),
+      isTrue,
+    );
+
+    // Backgrounding flushes without awaiting. A storage failure must not become
+    // an uncaught zone error, which would crash the host application.
+    runtime.didChangeAppLifecycleState(AppLifecycleState.paused);
+    await pumpEventQueue();
+
+    await expectLater(runtime.disposeRuntime(), completes);
+    final diagnostics = await runtime.diagnostics();
+    expect(diagnostics.lastSafeCode, isNotNull);
+    expect(storage.writeAttempts, greaterThan(0));
+  });
+
+  test('identity survives a failed write and a later load recovers', () async {
+    final storage = _UnavailableIdentityStorage();
+    final controller = MosaicIdentityController(
+      storage: storage,
+      namespace: 'c' * 64,
+    );
+    final created = await controller.load();
+    expect(created.installationId, startsWith('installation_'));
+    expect(controller.lastSafeCode, mosaicIdentityStorageUnavailableCode);
+
+    // A failed persistence attempt must not poison later resolution.
+    final identified = await controller.identify('user_1');
+    expect(identified.userId, 'user_1');
+    expect(await controller.load(), same(identified));
+
+    storage.available = true;
+    final recovered = MosaicIdentityController(
+      storage: storage,
+      namespace: 'c' * 64,
+    );
+    final restored = await recovered.load();
+    expect(restored.installationId, startsWith('installation_'));
+    expect(recovered.lastSafeCode, isNull);
+    expect(storage.source, isNotNull);
+  });
 }
 
 MosaicAnalyticsRuntime _runtime(
@@ -544,4 +708,44 @@ final class _UnknownCodeTransport implements MosaicAnalyticsTransport {
           ),
         ],
       );
+}
+
+/// Storage that is never writable, modelling a full or permission-denied
+/// application-private directory.
+final class _UnavailableAnalyticsStorage implements MosaicAnalyticsStorage {
+  int writeAttempts = 0;
+
+  @override
+  Future<String?> read(String namespace) async => null;
+
+  @override
+  Future<void> write(String namespace, String source) async {
+    writeAttempts++;
+    throw const FileSystemException('Analytics storage is unavailable.');
+  }
+
+  @override
+  Future<void> clear(String namespace) async =>
+      throw const FileSystemException('Analytics storage is unavailable.');
+}
+
+final class _UnavailableIdentityStorage implements MosaicIdentityStorage {
+  bool available = false;
+  String? source;
+
+  @override
+  Future<String?> read(String namespace) async {
+    if (!available) {
+      throw const FileSystemException('Identity storage is unavailable.');
+    }
+    return source;
+  }
+
+  @override
+  Future<void> write(String namespace, String source) async {
+    if (!available) {
+      throw const FileSystemException('Identity storage is unavailable.');
+    }
+    this.source = source;
+  }
 }

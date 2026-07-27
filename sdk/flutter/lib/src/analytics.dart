@@ -17,6 +17,11 @@ const int mosaicAnalyticsMaximumAttempts = 10;
 const Duration mosaicAnalyticsEventExpiry = Duration(days: 7);
 const Duration mosaicAnalyticsSessionInactivity = Duration(minutes: 30);
 
+/// Safe diagnostic code reported when analytics persistence is unavailable.
+/// Queued events stay in memory; delivery and purchasing continue unaffected.
+const String mosaicAnalyticsStorageUnavailableCode =
+    'analytics.storage_unavailable';
+
 typedef MosaicAnalyticsClock = DateTime Function();
 typedef MosaicAnalyticsRandom = double Function();
 
@@ -97,14 +102,17 @@ final class MosaicIoAnalyticsTransport
 
   @override
   Future<MosaicAnalyticsIngestionResponse> send(MosaicAnalyticsBatch batch) =>
-      _send(batch.encode());
+      _send(batch.encode(), mosaicAnalyticsEventContractVersion);
 
   @override
   Future<MosaicAnalyticsIngestionResponse> sendExperiment(
           MosaicExperimentAnalyticsBatch batch) =>
-      _send(batch.encode());
+      _send(batch.encode(), mosaicAnalyticsEventContractVersionV2);
 
-  Future<MosaicAnalyticsIngestionResponse> _send(String encoded) async {
+  Future<MosaicAnalyticsIngestionResponse> _send(
+    String encoded,
+    String contractVersion,
+  ) async {
     final client = HttpClient()..connectionTimeout = timeout;
     try {
       final endpoint = baseUrl.resolve('/v1/sdk/events/batch');
@@ -118,7 +126,10 @@ final class MosaicIoAnalyticsTransport
       if (response.statusCode < 200 || response.statusCode >= 300) {
         throw HttpException('Analytics ingestion unavailable.', uri: endpoint);
       }
-      return MosaicAnalyticsIngestionResponse.decode(body);
+      return MosaicAnalyticsIngestionResponse.decode(
+        body,
+        contractVersion: contractVersion,
+      );
     } finally {
       client.close(force: true);
     }
@@ -330,7 +341,7 @@ final class MosaicAnalyticsRuntime
           _queue.clear();
           _sessionId = null;
           _lastActivityAt = null;
-          await storage.clear(namespace);
+          await _clearStorageSafely();
         }
       });
 
@@ -346,13 +357,13 @@ final class MosaicAnalyticsRuntime
           _queue.clear();
           _sessionId = null;
           _lastActivityAt = null;
-          await storage.clear(namespace);
+          await _clearStorageSafely();
         } else {
           if (!wasEnabled) {
             _sessionId = null;
             _lastActivityAt = null;
           }
-          await _persist();
+          await _persistSafely();
         }
       });
 
@@ -394,14 +405,14 @@ final class MosaicAnalyticsRuntime
           _queueBytes + queued.bytes > mosaicAnalyticsMaximumQueueBytes) {
         _dropped++;
         _lastSafeCode = 'analytics.queue_overflow';
-        await _persist();
+        await _persistSafely();
         return;
       }
       _queue.add(queued);
       accepted = true;
-      await _persist();
+      await _persistSafely();
     });
-    if (accepted && _queue.length >= 50) unawaited(flush());
+    if (accepted && _queue.length >= 50) _flushInBackground();
     return accepted;
   }
 
@@ -433,11 +444,11 @@ final class MosaicAnalyticsRuntime
             _queueBytes + queued.bytes > mosaicAnalyticsMaximumQueueBytes) {
           _dropped++;
           _lastSafeCode = 'analytics.queue_overflow';
-          await _persist();
+          await _persistSafely();
           return;
         }
         _queue.add(queued);
-        await _persist();
+        await _persistSafely();
       });
 
   Future<MosaicAnalyticsFlushResult> flush() =>
@@ -498,7 +509,7 @@ final class MosaicAnalyticsRuntime
           );
         }
       }
-      await _persist();
+      await _persistSafely();
     });
     if (!collectionEnabled) return const MosaicAnalyticsFlushDisabled();
     if (batch == null && experimentBatch == null) {
@@ -560,7 +571,7 @@ final class MosaicAnalyticsRuntime
         }
       }
       _lastFlushAt = clock().toUtc();
-      await _persist();
+      await _persistSafely();
     });
     return MosaicAnalyticsFlushCompleted(
         sent: sent.length, removed: removed, retained: retained);
@@ -574,7 +585,7 @@ final class MosaicAnalyticsRuntime
         for (final item in sent) {
           _scheduleRetry(item);
         }
-        await _persist();
+        await _persistSafely();
       });
   void _scheduleRetry(_QueuedAnalyticsEvent item, {Duration? explicit}) {
     if (!_queue.contains(item)) return;
@@ -615,22 +626,22 @@ final class MosaicAnalyticsRuntime
           _sessionId = null;
           _lastActivityAt = null;
         }
-        await _persist();
+        await _persistSafely();
       });
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.paused ||
         state == AppLifecycleState.inactive ||
-        state == AppLifecycleState.detached) unawaited(flush());
-    if (state == AppLifecycleState.resumed) unawaited(flush());
+        state == AppLifecycleState.detached) _flushInBackground();
+    if (state == AppLifecycleState.resumed) _flushInBackground();
   }
 
   Future<void> disposeRuntime() => _serialize(() async {
         if (_disposed) return;
         _disposed = true;
         if (_observingLifecycle) WidgetsBinding.instance.removeObserver(this);
-        await _persist();
+        await _persistSafely();
       });
 
   Future<void> release() async {
@@ -741,9 +752,39 @@ final class MosaicAnalyticsRuntime
       }
     } on Object {
       _queue.clear();
-      await storage.clear(namespace);
+      await _clearStorageSafely();
       _lastSafeCode = 'analytics.queue_rejected';
     }
+  }
+
+  /// Persists the queue, degrading to a diagnostic safe code when the injected
+  /// storage fails. Analytics persistence must never surface as a host-app
+  /// error, and must never block rendering or purchasing.
+  Future<void> _persistSafely() async {
+    try {
+      await _persist();
+    } on Object {
+      _lastSafeCode = mosaicAnalyticsStorageUnavailableCode;
+    }
+  }
+
+  Future<void> _clearStorageSafely() async {
+    try {
+      await storage.clear(namespace);
+    } on Object {
+      _lastSafeCode = mosaicAnalyticsStorageUnavailableCode;
+    }
+  }
+
+  /// Starts a delivery attempt without awaiting it. Failures are recorded as
+  /// safe diagnostics rather than escaping as uncaught zone errors.
+  void _flushInBackground() {
+    unawaited(flush().then<void>(
+      (_) {},
+      onError: (Object _, StackTrace __) {
+        _lastSafeCode = mosaicAnalyticsStorageUnavailableCode;
+      },
+    ));
   }
 
   Future<void> _persist() => storage.write(
@@ -771,7 +812,7 @@ final class MosaicAnalyticsRuntime
         _queue.clear();
         _sessionId = null;
         _lastActivityAt = null;
-        await storage.clear(namespace);
+        await _clearStorageSafely();
       }
     }
   }

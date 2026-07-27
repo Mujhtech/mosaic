@@ -1,6 +1,11 @@
 import 'dart:convert';
 
 const String mosaicAnalyticsEventContractVersion = '1';
+
+/// Analytics Event Contract v2, used for Experiment events. The API echoes the
+/// submitted batch contract version in its acknowledgement, so a v2 batch is
+/// acknowledged with a v2 response.
+const String mosaicAnalyticsEventContractVersionV2 = '2';
 const String mosaicAnalyticsEventSchemaVersion = '1';
 const int mosaicAnalyticsMaximumEventBytes = 32 * 1024;
 const int mosaicAnalyticsMaximumBatchBytes = 512 * 1024;
@@ -490,7 +495,13 @@ final class MosaicAnalyticsIngestionResponse {
   final DateTime receivedAt;
   final List<MosaicAnalyticsIngestionResult> results;
 
-  factory MosaicAnalyticsIngestionResponse.decode(String source) {
+  /// Decodes an ingestion acknowledgement. [contractVersion] must be the exact
+  /// contract version of the submitted batch: the API echoes it, so accepting
+  /// any other value would let a v1 batch be acknowledged as v2 or vice versa.
+  factory MosaicAnalyticsIngestionResponse.decode(
+    String source, {
+    String contractVersion = mosaicAnalyticsEventContractVersion,
+  }) {
     final value = jsonDecode(source);
     if (value is! Map) throw const FormatException('Expected response object.');
     final json = value.cast<String, Object?>();
@@ -500,7 +511,11 @@ final class MosaicAnalyticsIngestionResponse {
       'receivedAt',
       'results'
     });
-    if (json['analyticsEventContractVersion'] != '1')
+    if (contractVersion != mosaicAnalyticsEventContractVersion &&
+        contractVersion != mosaicAnalyticsEventContractVersionV2) {
+      throw const FormatException('Unsupported expected response version.');
+    }
+    if (json['analyticsEventContractVersion'] != contractVersion)
       throw const FormatException('Unsupported response version.');
     final values = json['results'];
     if (values is! List || values.isEmpty || values.length > 100)
@@ -896,6 +911,19 @@ void _validatePayload(
   final bucket = payload['rolloutBucket'];
   if (bucket != null && (bucket is! int || bucket < 0 || bucket > 9999)) {
     throw const FormatException('Invalid rollout bucket.');
+  }
+  // Rollout attribution is atomic: a bucket without its key type and bucketing
+  // algorithm cannot be interpreted, so a partial tuple is never valid.
+  const rolloutTuple = {
+    'assignmentKeyType',
+    'bucketingAlgorithm',
+    'rolloutBucket',
+  };
+  final presentRollout =
+      rolloutTuple.where((key) => payload[key] != null).toSet();
+  if (presentRollout.isNotEmpty &&
+      presentRollout.length != rolloutTuple.length) {
+    throw const FormatException('Incomplete rollout attribution.');
   }
   for (final key in const {'durationMs'}) {
     final v = payload[key];

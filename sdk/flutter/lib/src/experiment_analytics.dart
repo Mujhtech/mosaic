@@ -162,6 +162,38 @@ Map<String, Object?> mosaicDecodeExperimentAnalyticsEvent(Object? source) {
           correlation['paywallPresentationId'] is! String) {
     throw const FormatException('Invalid Experiment correlation.');
   }
+  // Analytics minimization: each event may carry only the correlation and
+  // attribution identifiers its own semantics justify. Anything else is a
+  // rejected document, not an ignorable extra field.
+  const presentationCorrelation = {
+    'placementRequestId',
+    'paywallPresentationId'
+  };
+  final allowedCorrelation =
+      name == 'experiment_exposed' || name == 'experiment_fallback_presented'
+          ? presentationCorrelation
+          : const {'placementRequestId'};
+  const decidedPlacementAttribution = {
+    'configurationReleaseId',
+    'placementId',
+    'placementRuleSetId',
+    'placementRuleSetVersion',
+    'winningRuleId',
+    ...tuple,
+  };
+  final allowedAttribution = name == 'experiment_exposed'
+      ? const {
+          'paywallId',
+          'paywallVersionId',
+          ...decidedPlacementAttribution,
+        }
+      : decidedPlacementAttribution;
+  if (correlation.keys.toSet().difference(allowedCorrelation).isNotEmpty ||
+      attribution.keys.toSet().difference(allowedAttribution).isNotEmpty) {
+    throw const FormatException(
+      'Experiment event carries unrelated correlation or attribution.',
+    );
+  }
   if (name == 'experiment_exposed' &&
       (attribution['paywallId'] is! String ||
           attribution['paywallVersionId'] is! String ||

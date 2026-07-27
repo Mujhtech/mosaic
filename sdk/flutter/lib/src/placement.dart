@@ -13,6 +13,7 @@ import 'configuration_delivery.dart';
 import 'experiment_analytics.dart';
 import 'experiment_assignment.dart';
 import 'placement_decision.dart';
+import 'placement_identity.dart';
 import 'presentation.dart';
 import 'renderer.dart';
 
@@ -177,7 +178,17 @@ extension MosaicPlacementClient on Mosaic {
           ),
       };
     }
-    final identity = await loadIdentity();
+    final MosaicIdentityState identity;
+    try {
+      identity = await loadIdentity();
+    } on Object {
+      // Identity is required for deterministic bucketing. A failure here is
+      // reported as a safe unavailable decision rather than thrown at the host.
+      return MosaicPlacementDecisionUnavailable(
+        placementKey: key,
+        diagnosticCode: 'identity.unavailable',
+      );
+    }
     final products = <String, MosaicProductDecisionState>{};
     if (release.productReferences.isNotEmpty) {
       try {
@@ -638,12 +649,14 @@ final class _MosaicPlacementHostState extends State<MosaicPlacementHost> {
       <String, Object?>{
         'finalOutcome': 'paywall',
         'decisionContractVersion': '1',
-        if (decision?.assignmentKeyType != null)
+        // Rollout attribution is atomic: the key type, algorithm, and bucket
+        // are emitted together or not at all, matching the canonical contract.
+        if (decision?.rolloutBucket != null &&
+            decision?.assignmentKeyType != null) ...<String, Object?>{
           'assignmentKeyType': decision!.assignmentKeyType,
-        if (decision?.rolloutBucket != null)
-          'rolloutBucket': decision!.rolloutBucket,
-        if (decision?.rolloutBucket != null)
+          'rolloutBucket': decision.rolloutBucket,
           'bucketingAlgorithm': mosaicRolloutAlgorithm,
+        },
       },
     );
     final experiment = resolution.experiment;
@@ -801,12 +814,13 @@ final class _MosaicPlacementHostState extends State<MosaicPlacementHost> {
         <String, Object?>{
           'finalOutcome': 'no_paywall',
           'decisionContractVersion': '1',
-          if (resolution.decision.assignmentKeyType != null)
+          if (resolution.decision.rolloutBucket != null &&
+              resolution.decision.assignmentKeyType !=
+                  null) ...<String, Object?>{
             'assignmentKeyType': resolution.decision.assignmentKeyType,
-          if (resolution.decision.rolloutBucket != null)
             'rolloutBucket': resolution.decision.rolloutBucket,
-          if (resolution.decision.rolloutBucket != null)
             'bucketingAlgorithm': mosaicRolloutAlgorithm,
+          },
         },
       );
     }

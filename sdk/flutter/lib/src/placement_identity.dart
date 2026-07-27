@@ -7,6 +7,10 @@ import 'package:path_provider/path_provider.dart';
 
 import 'sha256.dart';
 
+/// Safe diagnostic code reported when identity persistence is unavailable.
+const String mosaicIdentityStorageUnavailableCode =
+    'identity.storage_unavailable';
+
 sealed class MosaicAttributeValue {
   const MosaicAttributeValue();
 
@@ -167,28 +171,39 @@ final class MosaicIdentityController {
   MosaicIdentityState? _state;
   Future<MosaicIdentityState>? _operation;
   Future<void> _mutations = Future<void>.value();
+  String? _lastSafeCode;
 
   MosaicIdentityState? get current => _state;
+
+  /// Safe diagnostic code for the most recent identity-storage failure. The
+  /// controller keeps serving in-memory identity when persistence fails.
+  String? get lastSafeCode => _lastSafeCode;
 
   Future<MosaicIdentityState> load() =>
       _state == null ? (_operation ??= _load()) : Future.value(_state);
 
   Future<MosaicIdentityState> _load() async {
     try {
-      final source = await storage.read(namespace);
-      if (source != null) _state = _decode(source);
-    } on Object {
-      _state = null;
+      try {
+        final source = await storage.read(namespace);
+        if (source != null) _state = _decode(source);
+      } on Object {
+        _state = null;
+        _lastSafeCode = mosaicIdentityStorageUnavailableCode;
+      }
+      final state = _state ??
+          MosaicIdentityState(
+            installationId: _newIdentity('installation'),
+            generation: 1,
+          );
+      _state = state;
+      await _persistSafely(state);
+      return state;
+    } finally {
+      // Always released so a single storage failure cannot permanently poison
+      // identity resolution for the rest of the process lifetime.
+      _operation = null;
     }
-    final state = _state ??
-        MosaicIdentityState(
-          installationId: _newIdentity('installation'),
-          generation: 1,
-        );
-    _state = state;
-    await _persist(state);
-    _operation = null;
-    return state;
   }
 
   Future<MosaicIdentityState> identify(String userId) =>
@@ -247,9 +262,19 @@ final class MosaicIdentityController {
   }
 
   Future<MosaicIdentityState> _replace(MosaicIdentityState state) async {
-    await _persist(state);
+    await _persistSafely(state);
     _state = state;
     return state;
+  }
+
+  /// Writes identity state, degrading to a safe diagnostic code when the
+  /// injected storage fails. Identity remains valid for the session.
+  Future<void> _persistSafely(MosaicIdentityState state) async {
+    try {
+      await _persist(state);
+    } on Object {
+      _lastSafeCode = mosaicIdentityStorageUnavailableCode;
+    }
   }
 
   Future<MosaicIdentityState> _enqueue(

@@ -187,3 +187,120 @@ failure.
   delivered on v1 with their Experiment attribution recorded by the exposure
   event. Verified by the canonical v2 fixture scan in
   `sdk/flutter/test/analytics_test.dart`.
+
+## iOS SDK
+
+Each entry is owner-accepted for v1 General Availability. None falls into a
+release-blocker category: none can cause data loss, money loss, or a wrong
+monetization decision, and each has a stated workaround or a safe visible
+failure.
+
+### The Apple SDK is pre-1.0 and is not published to any registry
+
+- Surface: `sdk/ios` (`MosaicSDK`, `MosaicStoreKit`, `MosaicRevenueCat`).
+- Platforms: iOS 15+.
+- Symptom: the packages are versioned `0.1.0-dev.6`. Swift Package Manager
+  integration works by Git revision, tag, or local path, but CocoaPods is
+  local-path-only: no `MosaicSDK` or `MosaicStoreKit` pod resolves by version
+  from the CocoaPods trunk or any release artifact. `spec.source` names an
+  `ios-v<version>` tag that exists only once a release is published, so it is
+  present for `pod lib lint` and not for installation.
+- Workaround: use SwiftPM, or add the pods with `:path =>` against a checkout.
+  Both paths are documented in `sdk/ios/README.md`.
+- Planned resolution: podspec publication and release artifacts after 1.0.
+- GA safety: this is a distribution limitation only. Runtime behaviour, failure
+  handling, and protocol conformance are unaffected. Owner decision D6.
+
+### The iOS 15 floor is compile-verified, not runtime-verified
+
+- Surface: the whole `MosaicSDK` renderer and client surface.
+- Platforms: iOS 15.0–15.x.
+- Symptom: Mosaic declares an iOS 15 minimum and guarantees it by typechecking
+  every core source against `arm64-apple-ios15.0-simulator` (the command is in
+  `sdk/ios/README.md`). The Simulator golden, accessibility, and interaction
+  suites run on iOS 26.5 only, and the SwiftPM package tests build for the
+  macOS development host. iOS 15 *rendering and runtime behaviour* is therefore
+  not demonstrated.
+- Workaround: hosts targeting iOS 15 should verify their own paywall
+  presentation on an iOS 15 Simulator. The known iOS 15 behavioural difference
+  is already documented: SwiftUI exposes the native header trait but no public
+  per-level heading API.
+- Planned resolution: add an iOS 15 Simulator runtime to the verification
+  matrix post-GA.
+- GA safety: labelled "not demonstrated" rather than implied as working. The
+  compile guarantee prevents the concrete regression that motivated this entry
+  (an iOS 16-only `ContinuousClock` reaching a declared iOS 15 target).
+
+### `refresh()` is not cancellable
+
+- Surface: `Mosaic.refresh()`, `Mosaic.refreshIfNeeded()` in
+  `sdk/ios/Sources/MosaicSDK/ConfigurationClient.swift`.
+- Platforms: iOS.
+- Symptom: concurrent callers join a single in-flight refresh, and cancelling
+  the calling Swift `Task` does not abort the underlying request. The request
+  ends only when the configured `requestTimeout` (1–30 seconds) elapses. A
+  screen dismissed mid-refresh therefore keeps one request alive briefly.
+- Workaround: keep `requestTimeout` at or below the default 5 seconds. Refresh
+  never blocks rendering, purchasing, or a Placement decision, so an
+  outstanding request has no user-visible effect.
+- Planned resolution: adopt cooperative cancellation in the delivery client
+  post-GA, together with the shared in-flight coalescing contract.
+- GA safety: bounded by `requestTimeout`, cannot leak unboundedly, and cannot
+  change a Placement, Paywall, or purchase outcome.
+
+### Background analytics delivery is best effort
+
+- Surface: `MosaicAnalyticsRuntime` foreground/background flush in
+  `sdk/ios/Sources/MosaicSDK/AnalyticsLifecycle.swift`.
+- Platforms: iOS.
+- Symptom: the SDK flushes on `didEnterBackground` and
+  `willEnterForeground` without requesting a background task assertion. iOS may
+  suspend the app before the batch completes, so a background flush is not
+  guaranteed to deliver. Events remain queued and are retried on a later
+  launch, but the seven-day queue expiry can discard events for an app that is
+  not reopened.
+- Workaround: call `flushAnalytics()` for a deterministic result at a moment the
+  host controls.
+- Planned resolution: evaluate a bounded background task assertion post-GA,
+  weighed against host battery and launch-time cost.
+- GA safety: analytics delivery never gates rendering or purchasing, per the
+  mandatory safe-failure rule. Loss is limited to non-financial observability
+  for apps that are never reopened within seven days.
+
+### Lifecycle observers and shared registries are retained for the process
+
+- Surface: `MosaicAnalyticsLifecycleRegistry`,
+  `MosaicAnalyticsRuntimeRegistry`, `MosaicExperimentAssignmentStoreRegistry`.
+- Platforms: iOS.
+- Symptom: the analytics lifecycle observer and the per-endpoint runtime and
+  assignment stores are installed once per endpoint/key namespace and are never
+  removed. Reconfiguring the SDK against a new key adds a namespace rather than
+  replacing one, so an app that reconfigures many times over one process
+  lifetime accumulates a small number of retained actors and
+  `NotificationCenter` observers.
+- Workaround: configure Mosaic once per process, which is the documented usage.
+- Planned resolution: registry eviction keyed to handle lifetime, tracked
+  post-GA (audit finding P3).
+- GA safety: growth is bounded by the number of distinct endpoint/key pairs a
+  host configures, which is one in normal use. No unbounded growth per
+  presentation, refresh, or purchase.
+
+### Unreachable local persistence silently degrades to memory
+
+- Surface: `Mosaic.configure(publicSDKKey:baseURL:…)`.
+- Platforms: iOS.
+- Symptom: when the Application Support directory cannot be resolved,
+  `configure` no longer throws. It degrades to process-lifetime storage for the
+  configuration cache, installation identity, assignment replay records, and
+  the analytics queue, keeps the bundled fallback reachable, and records the
+  safe diagnostic `delivery_persistence_unavailable`. In that state the
+  installation identifier rotates on every launch, so install-bucketed
+  Experiment assignments are not stable across launches for the affected host.
+- Workaround: inspect `configurationStatus()` diagnostics during development.
+  The condition requires a genuinely unusable container and does not occur on a
+  healthy device.
+- Planned resolution: none planned; failing the host application's launch is
+  the worse behaviour.
+- GA safety: this is the mandated safe-failure path. It is preferred over a
+  throwing `configure`, and the degradation is observable through diagnostics
+  rather than silent to the developer.
