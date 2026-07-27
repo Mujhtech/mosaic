@@ -84,14 +84,32 @@ actor MosaicExperimentAssignmentStoreRegistry {
   func store(
     baseURL: URL, publicSDKKey: String, rootDirectory: URL? = nil
   ) throws -> MosaicExperimentAssignmentStore {
+    try store(baseURL: baseURL, publicSDKKey: publicSDKKey) {
+      try MosaicExperimentFilePersistence(
+        baseURL: baseURL, publicSDKKey: publicSDKKey, rootDirectory: rootDirectory)
+    }
+  }
+
+  /// Degraded, process-lifetime replay storage for hosts whose Application
+  /// Support directory is unreachable. Assignments stay stable while the
+  /// process lives and are not replayed after relaunch.
+  func memoryStore(baseURL: URL, publicSDKKey: String) -> MosaicExperimentAssignmentStore {
+    // The closure cannot throw, so the failure branch is unreachable.
+    (try? store(baseURL: baseURL, publicSDKKey: publicSDKKey) {
+      MosaicExperimentMemoryPersistence()
+    }) ?? MosaicExperimentAssignmentStore(persistence: MosaicExperimentMemoryPersistence())
+  }
+
+  private func store(
+    baseURL: URL,
+    publicSDKKey: String,
+    persistence: () throws -> any MosaicExperimentAssignmentPersistence
+  ) throws -> MosaicExperimentAssignmentStore {
     let namespace =
       baseURL.absoluteString.trimmingCharacters(
         in: CharacterSet(charactersIn: "/")) + "\n" + publicSDKKey
     if let existing = stores[namespace] { return existing }
-    let store = MosaicExperimentAssignmentStore(
-      persistence: try MosaicExperimentFilePersistence(
-        baseURL: baseURL, publicSDKKey: publicSDKKey,
-        rootDirectory: rootDirectory))
+    let store = MosaicExperimentAssignmentStore(persistence: try persistence())
     stores[namespace] = store
     return store
   }

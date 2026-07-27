@@ -142,15 +142,34 @@ is unavailable; the example shows a clear loading or connection state instead.
 
 ## Build
 
+The example depends on the optional RevenueCat adapter, which depends on
+`purchases-ios` from GitHub. **A cold build needs network access**, and
+`xcodebuild`'s own package resolution is slow enough to exceed ten minutes on a
+cold cache. Seed the cache with SwiftPM first, then point `xcodebuild` at it.
+
 From the repository root:
 
 ```bash
+set -o pipefail
+
+# 1. Resolve once with SwiftPM, which is far faster than xcodebuild's resolver.
+swift package --package-path sdk/ios/RevenueCat resolve
+
+# 2. Build the example against the seeded clone directory.
 xcodebuild -project examples/ios-example/MosaicExample.xcodeproj \
   -scheme MosaicExample \
   -destination 'generic/platform=iOS Simulator' \
   -derivedDataPath examples/ios-example/.build/DerivedData \
+  -clonedSourcePackagesDirPath sdk/ios/RevenueCat/.build/checkouts \
   CODE_SIGNING_ALLOWED=NO build
 ```
+
+`set -o pipefail` is required whenever this command is piped into `tail`,
+`grep`, or a formatter. Without it a failed build reports success.
+
+Omitting `-clonedSourcePackagesDirPath` still works; it is only an
+accelerator. If resolution appears to hang, it is almost always downloading
+`purchases-ios`, not stuck.
 
 ## Simulator tests
 
@@ -158,10 +177,12 @@ Choose an available simulator ID from `xcrun simctl list devices available`,
 then run the native golden, accessibility-size, and preview-status tests:
 
 ```bash
+set -o pipefail
 xcodebuild -project examples/ios-example/MosaicExample.xcodeproj \
   -scheme MosaicExample \
   -destination 'platform=iOS Simulator,id=<SIMULATOR_ID>' \
   -derivedDataPath examples/ios-example/.build/DerivedData \
+  -clonedSourcePackagesDirPath sdk/ios/RevenueCat/.build/checkouts \
   test
 ```
 

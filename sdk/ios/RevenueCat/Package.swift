@@ -13,9 +13,12 @@ let package = Package(
   ],
   dependencies: [
     .package(path: ".."),
+    // Range rather than `exact:` so host applications can resolve one
+    // compatible purchases-ios version. `Package.resolved` records the
+    // version Mosaic verifies.
     .package(
       url: "https://github.com/RevenueCat/purchases-ios.git",
-      exact: "5.81.2"
+      .upToNextMajor(from: "5.81.2")
     ),
   ],
   targets: [

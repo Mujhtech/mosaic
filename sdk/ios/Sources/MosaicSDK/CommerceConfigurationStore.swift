@@ -427,8 +427,9 @@ public actor MosaicCommerceConfigurationManager {
       }
       return .accepted(configuration: accepted.configuration, source: accepted.source)
     case 200:
-      guard [mosaicCommerceConfigurationMediaType, mosaicCommerceConfigurationMediaTypeV2]
-        .contains(response.contentType),
+      guard
+        [mosaicCommerceConfigurationMediaType, mosaicCommerceConfigurationMediaTypeV2]
+          .contains(response.contentType),
         let etag = response.etag,
         etag.range(
           of: "^\"sha256:[a-f0-9]{64}\"$",

@@ -129,7 +129,8 @@ final class MosaicStoreKitProviderTests: XCTestCase {
   private var configuration: MosaicCommerceConfigurationReference {
     .init(
       configurationID: "commerce_configuration_storekit_42",
-      configurationRevision: "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      configurationRevision:
+        "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
     )
   }
 

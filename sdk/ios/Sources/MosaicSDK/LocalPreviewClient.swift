@@ -131,9 +131,7 @@ public final class MosaicLocalPreviewClient: ObservableObject {
   public init(
     configuration: MosaicPreviewClientConfiguration,
     connector: any MosaicPreviewSocketConnector = MosaicURLSessionPreviewSocketConnector(),
-    codec: MosaicPreviewMessageCodec = MosaicPreviewMessageCodec(
-      protocolVersion: mosaicLatestLocalPreviewProtocolVersion
-    ),
+    codec: MosaicPreviewMessageCodec = MosaicPreviewMessageCodec(),
     fallbackProtocolVersions: [String] = [mosaicLocalPreviewProtocolVersion],
     delay: @escaping MosaicPreviewDelay = mosaicPreviewTaskDelay,
     clock: @escaping MosaicPreviewClock = { Date() }
@@ -143,7 +141,8 @@ public final class MosaicLocalPreviewClient: ObservableObject {
     let fallbackCodecs =
       fallbackProtocolVersions
       .filter { $0 != codec.protocolVersion }
-      .map { MosaicPreviewMessageCodec(protocolVersion: $0) }
+      // Unsupported fallback versions are dropped rather than trapping.
+      .compactMap { MosaicPreviewMessageCodec(protocolVersion: $0) }
     codecs = [codec] + fallbackCodecs
     activeCodec = codec
     self.delay = delay

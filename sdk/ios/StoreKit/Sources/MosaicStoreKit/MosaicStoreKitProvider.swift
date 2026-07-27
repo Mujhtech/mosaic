@@ -280,16 +280,18 @@ public actor MosaicStoreKitProvider:
     entitlementMappings _: [MosaicCommerceEntitlementMapping]
   ) async -> MosaicCommerceRecoveryResult {
     let operationID = "storekit_recovery_\(UUID().uuidString.lowercased())"
-    let completed: (
-      outcome: MosaicCommerceRecoveryOutcome,
-      entitlements: Set<MosaicEntitlement>,
-      diagnostics: [MosaicCommerceDiagnostic]
-    )
+    let completed:
+      (
+        outcome: MosaicCommerceRecoveryOutcome,
+        entitlements: Set<MosaicEntitlement>,
+        diagnostics: [MosaicCommerceDiagnostic]
+      )
     do {
       try await client.synchronize()
       switch await currentEntitlementKeys() {
       case .success(let keys):
-        completed = keys.isEmpty
+        completed =
+          keys.isEmpty
           ? (.nothingToRestore, [], [])
           : (.restored, Set(keys.map(MosaicEntitlement.init(id:))), [])
       case .failure:

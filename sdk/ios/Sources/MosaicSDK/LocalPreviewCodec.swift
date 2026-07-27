@@ -8,11 +8,17 @@ import Foundation
 public struct MosaicPreviewMessageCodec: Sendable {
   public let protocolVersion: String
 
-  public init(protocolVersion: String = mosaicLocalPreviewProtocolVersion) {
-    precondition(
-      protocolVersion == mosaicLocalPreviewProtocolVersion,
-      "Unsupported Mosaic Local Preview codec version."
-    )
+  /// A codec for the one supported Local Preview version.
+  public init() {
+    protocolVersion = mosaicLocalPreviewProtocolVersion
+  }
+
+  /// Returns `nil` for an unsupported version instead of trapping, so a host
+  /// or Studio session cannot crash the application by naming one.
+  public init?(protocolVersion: String) {
+    guard mosaicSupportedLocalPreviewProtocolVersions.contains(protocolVersion) else {
+      return nil
+    }
     self.protocolVersion = protocolVersion
   }
 

@@ -6,6 +6,24 @@ import XCTest
 final class LocalPreviewCodecTests: XCTestCase {
   private let codec = MosaicPreviewMessageCodec()
 
+  /// An unsupported version must be rejected rather than trapping, because a
+  /// host application can supply the string.
+  @MainActor
+  func testUnsupportedCodecVersionIsRejectedWithoutTrapping() throws {
+    XCTAssertNil(MosaicPreviewMessageCodec(protocolVersion: "0.1"))
+    XCTAssertNil(MosaicPreviewMessageCodec(protocolVersion: ""))
+    XCTAssertEqual(
+      MosaicPreviewMessageCodec(protocolVersion: mosaicLocalPreviewProtocolVersion)?
+        .protocolVersion,
+      mosaicLocalPreviewProtocolVersion)
+
+    let client = MosaicLocalPreviewClient(
+      configuration: try MosaicPreviewClientConfiguration(identity: previewTestIdentity()),
+      fallbackProtocolVersions: ["0.1", "9.9"]
+    )
+    XCTAssertEqual(client.codecs.count, 1)
+  }
+
   func testDecodesEveryCanonicalLocalPreviewFlowMessage() throws {
     let values = try localPreviewFlowObjects()
     XCTAssertEqual(values.count, 17)

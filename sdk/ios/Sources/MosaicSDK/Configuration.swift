@@ -55,6 +55,26 @@ public struct MosaicConfiguration: Sendable, Equatable {
   }
 }
 
+/// Where the SDK keeps its cached configuration, identity, assignment replay,
+/// and analytics queue.
+enum MosaicPersistenceRoot: Sendable, Equatable {
+  case applicationSupport
+  case directory(URL)
+  /// Simulates an unreachable Application Support directory.
+  case unavailable
+
+  func resolve(_ fileManager: FileManager = .default) -> URL? {
+    switch self {
+    case .applicationSupport:
+      fileManager.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
+    case .directory(let url):
+      url
+    case .unavailable:
+      nil
+    }
+  }
+}
+
 public enum MosaicConfigurationError: Error, Sendable, Equatable {
   case emptyAPIKey
   case invalidEndpoint
@@ -96,6 +116,12 @@ public struct Mosaic: Sendable {
     )
   }
 
+  /// Configures hosted delivery.
+  ///
+  /// This only throws for an invalid configuration argument. When local
+  /// persistence is unreachable the SDK degrades to process-lifetime storage
+  /// and the bundled fallback rather than failing the host's launch; the
+  /// degradation is reported through `configurationStatus()` diagnostics.
   public static func configure(
     publicSDKKey: String,
     baseURL: URL,
@@ -104,42 +130,98 @@ public struct Mosaic: Sendable {
     bundledFallback: MosaicConfigurationBundledFallback = .packaged,
     purchaseProvider: any MosaicPurchaseProvider
   ) async throws -> Mosaic {
+    try await configureHosted(
+      publicSDKKey: publicSDKKey,
+      baseURL: baseURL,
+      applicationVersion: applicationVersion,
+      requestTimeout: requestTimeout,
+      bundledFallback: bundledFallback,
+      purchaseProvider: purchaseProvider,
+      persistenceRoot: .applicationSupport
+    )
+  }
+
+  static func configureHosted(
+    publicSDKKey: String,
+    baseURL: URL,
+    applicationVersion: String?,
+    requestTimeout: TimeInterval,
+    bundledFallback: MosaicConfigurationBundledFallback,
+    purchaseProvider: any MosaicPurchaseProvider,
+    persistenceRoot: MosaicPersistenceRoot
+  ) async throws -> Mosaic {
     let configuration = try MosaicConfiguration(
       apiKey: publicSDKKey,
       endpoint: baseURL,
       applicationVersion: applicationVersion,
       requestTimeout: requestTimeout
     )
-    let store = try MosaicConfigurationFileStore(
-      baseURL: baseURL,
-      publicSDKKey: configuration.apiKey
-    )
-    let experimentStore = try await MosaicExperimentAssignmentStoreRegistry.shared.store(
-      baseURL: baseURL, publicSDKKey: configuration.apiKey)
+    let key = configuration.apiKey
+    let root = persistenceRoot.resolve()
+    var degraded = root == nil
+
+    let store: any MosaicConfigurationCacheStore
+    if let root,
+      let fileStore = try? MosaicConfigurationFileStore(
+        baseURL: baseURL, publicSDKKey: key, rootDirectory: root)
+    {
+      store = fileStore
+    } else {
+      store = MosaicConfigurationMemoryStore()
+      degraded = true
+    }
+
+    let experimentRegistry = MosaicExperimentAssignmentStoreRegistry.shared
+    var experimentStore: MosaicExperimentAssignmentStore?
+    if let root {
+      experimentStore = try? await experimentRegistry.store(
+        baseURL: baseURL, publicSDKKey: key, rootDirectory: root)
+    }
+    if experimentStore == nil {
+      experimentStore = await experimentRegistry.memoryStore(baseURL: baseURL, publicSDKKey: key)
+      degraded = true
+    }
+
+    let identityPersistence: any MosaicIdentityPersistence
+    if let root,
+      let filePersistence = try? MosaicIdentityFilePersistence(
+        baseURL: baseURL, publicSDKKey: key, rootDirectory: root)
+    {
+      identityPersistence = filePersistence
+    } else {
+      identityPersistence = MosaicMemoryIdentityPersistence()
+      degraded = true
+    }
+    let identityStore = MosaicIdentityStore(persistence: identityPersistence)
+
+    let analytics = await MosaicAnalyticsRuntimeRegistry.shared.runtime(
+      baseURL: baseURL, apiKey: key, timeout: requestTimeout,
+      identityStore: identityStore, applicationVersion: applicationVersion,
+      rootDirectory: root)
+    let analyticsRuntime = analytics.runtime
+    if analytics.degraded { degraded = true }
+
     let client = MosaicConfigurationClient(
-      publicSDKKey: configuration.apiKey,
+      publicSDKKey: key,
       baseURL: baseURL,
       applicationVersion: configuration.applicationVersion,
       requestTimeout: configuration.requestTimeout,
       bundledFallback: bundledFallback,
       transport: MosaicURLSessionConfigurationTransport(requestTimeout: requestTimeout),
       store: store,
+      // `experimentStore` is always assigned above.
       experimentStore: experimentStore
+        ?? MosaicExperimentAssignmentStore(
+          persistence: MosaicExperimentMemoryPersistence()),
+      initialDiagnostics: degraded
+        ? [MosaicDiagnostic(code: "delivery_persistence_unavailable", stage: .cache)]
+        : []
     )
     await client.bootstrap()
     _ = await client.refresh()
-    let identityStore = MosaicIdentityStore(
-      persistence: try MosaicIdentityFilePersistence(
-        baseURL: baseURL,
-        publicSDKKey: configuration.apiKey
-      )
-    )
-    let analyticsRuntime = try await MosaicAnalyticsRuntimeRegistry.shared.runtime(
-      baseURL: baseURL, apiKey: configuration.apiKey, timeout: requestTimeout,
-      identityStore: identityStore, applicationVersion: applicationVersion)
     await MosaicAnalyticsLifecycleRegistry.install(
       runtime: analyticsRuntime,
-      namespace: baseURL.absoluteString + "\n" + configuration.apiKey)
+      namespace: baseURL.absoluteString + "\n" + key)
     return Mosaic(
       configuration: configuration,
       purchaseProvider: purchaseProvider,

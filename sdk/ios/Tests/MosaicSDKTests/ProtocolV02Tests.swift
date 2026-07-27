@@ -770,7 +770,7 @@ final class ProtocolV02Tests: XCTestCase {
   }
 
   func testLocalPreviewV02CodecIsExactAndCarriesTheV02DraftUnchanged() throws {
-    let codec = MosaicPreviewMessageCodec(protocolVersion: mosaicLocalPreviewProtocolVersion)
+    let codec = MosaicPreviewMessageCodec()
     let messages = try localPreviewV02Objects()
     var decodedDraft: MosaicPreviewDraftUpdate?
     for message in messages {
@@ -789,7 +789,7 @@ final class ProtocolV02Tests: XCTestCase {
   }
 
   func testLocalPreviewV02CapabilityReportAdvertisesExactImplementedCoverage() throws {
-    let codec = MosaicPreviewMessageCodec(protocolVersion: mosaicLocalPreviewProtocolVersion)
+    let codec = MosaicPreviewMessageCodec()
     let report = MosaicPreviewCapabilityReport.v02(clientId: "client_ios_tests")
     let source = try codec.encode(
       .capabilityReport(report),

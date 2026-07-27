@@ -166,8 +166,9 @@ enum MosaicCommerceConfigurationV2Decoder {
       try CommerceValue.exactKeys(
         activationObject, required: ["source"], path: "\(path).activation"
       )
-      guard (platform == .ios && identity.id == "app_store")
-        || (platform == .android && identity.id == "google_play")
+      guard
+        (platform == .ios && identity.id == "app_store")
+          || (platform == .android && identity.id == "google_play")
       else {
         throw invalid("commerce_configuration_native_provider_platform_mismatch")
       }
@@ -200,8 +201,9 @@ enum MosaicCommerceConfigurationV2Decoder {
       let reason = try item["reasonCode"].map {
         try CommerceValue.reasonCode($0, path: "\(itemPath).reasonCode")
       }
-      guard (support == .supported && reason == nil)
-        || (support != .supported && reason != nil)
+      guard
+        (support == .supported && reason == nil)
+          || (support != .supported && reason != nil)
       else {
         throw invalid("commerce_configuration_capability_reason_invalid")
       }
@@ -226,10 +228,11 @@ enum MosaicCommerceConfigurationV2Decoder {
       guard capabilities.count == MosaicCommerceCapabilityName.allCases.count,
         expected.count == MosaicCommerceCapabilityName.allCases.count,
         capabilities.allSatisfy({
-          expected[$0.name] == NativeCapabilityExpectation(
-            support: $0.support,
-            reasonCode: $0.reasonCode
-          )
+          expected[$0.name]
+            == NativeCapabilityExpectation(
+              support: $0.support,
+              reasonCode: $0.reasonCode
+            )
         })
       else {
         throw invalid("commerce_configuration_native_capability_matrix_mismatch")
@@ -307,7 +310,8 @@ enum MosaicCommerceConfigurationV2Decoder {
       let adapter: MosaicCommerceAdapterMapping
       switch kind {
       case "directProduct":
-        try CommerceValue.exactKeys(adapterObject, required: ["kind"], path: "\(itemPath).adapterMapping")
+        try CommerceValue.exactKeys(
+          adapterObject, required: ["kind"], path: "\(itemPath).adapterMapping")
         adapter = .directProduct
       case "revenueCatPackage":
         try CommerceValue.exactKeys(
@@ -326,7 +330,8 @@ enum MosaicCommerceConfigurationV2Decoder {
           )
         )
       case "storeKitProduct":
-        try CommerceValue.exactKeys(adapterObject, required: ["kind"], path: "\(itemPath).adapterMapping")
+        try CommerceValue.exactKeys(
+          adapterObject, required: ["kind"], path: "\(itemPath).adapterMapping")
         guard providerID == "app_store" else {
           throw invalid("commerce_configuration_storekit_mapping_provider_mismatch")
         }
@@ -588,9 +593,11 @@ enum MosaicCommerceConfigurationV2Decoder {
         ],
         path: itemPath
       )
-      guard let severity = MosaicCommerceDiagnosticSeverity(
-        rawValue: try CommerceValue.string(item["severity"], path: "\(itemPath).severity")
-      ) else {
+      guard
+        let severity = MosaicCommerceDiagnosticSeverity(
+          rawValue: try CommerceValue.string(item["severity"], path: "\(itemPath).severity")
+        )
+      else {
         throw CommerceValue.shape("\(itemPath).severity", "unsupported_value")
       }
       let retryable = try CommerceValue.boolean(item["retryable"], path: "\(itemPath).retryable")
@@ -603,9 +610,11 @@ enum MosaicCommerceConfigurationV2Decoder {
         throw invalid("commerce_configuration_diagnostic_retry_invalid")
       }
       let recovery = try item["recoveryAction"].map {
-        guard let action = MosaicCommerceRecoveryAction(
-          rawValue: try CommerceValue.string($0, path: "\(itemPath).recoveryAction")
-        ) else {
+        guard
+          let action = MosaicCommerceRecoveryAction(
+            rawValue: try CommerceValue.string($0, path: "\(itemPath).recoveryAction")
+          )
+        else {
           throw CommerceValue.shape("\(itemPath).recoveryAction", "unsupported_value")
         }
         return action

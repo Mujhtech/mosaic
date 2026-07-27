@@ -4,7 +4,11 @@ import XCTest
 @testable import MosaicSDK
 
 private actor AnalyticsTestTransport: MosaicAnalyticsTransport {
-  enum Behavior: Sendable { case fail, accept, partial }
+  enum Behavior: Sendable {
+    case fail, accept, partial
+    /// A 200 acknowledgement that echoes the wrong contract version.
+    case contractVersionMismatch
+  }
   var behavior: Behavior
   private(set) var batches: [MosaicAnalyticsBatch] = []
 
@@ -28,13 +32,18 @@ private actor AnalyticsTestTransport: MosaicAnalyticsTransport {
         )
       }
       return response(batch: batch, statuses: statuses)
+    case .contractVersionMismatch:
+      return response(
+        batch: batch, statuses: batch.events.map { ($0.eventId, "accepted", nil) },
+        contractVersion: batch.analyticsEventContractVersion == "2" ? "1" : "2")
     }
   }
 
   func setBehavior(_ value: Behavior) { behavior = value }
 
   private func response(
-    batch: MosaicAnalyticsBatch, statuses: [(String, String, String?)]
+    batch: MosaicAnalyticsBatch, statuses: [(String, String, String?)],
+    contractVersion: String? = nil
   ) -> MosaicAnalyticsHTTPResponse {
     let results = statuses.map { eventID, status, code -> [String: Any] in
       var value: [String: Any] = ["eventId": eventID, "status": status]
@@ -42,8 +51,10 @@ private actor AnalyticsTestTransport: MosaicAnalyticsTransport {
       if status == "retryable" { value["retryAfterSeconds"] = 10 }
       return value
     }
+    // The ingestion API echoes the contract version of the submitted batch.
     let object: [String: Any] = [
-      "analyticsEventContractVersion": "1", "batchId": batch.batchId,
+      "analyticsEventContractVersion": contractVersion ?? batch.analyticsEventContractVersion,
+      "batchId": batch.batchId,
       "receivedAt": "2026-07-26T12:05:00.000Z", "results": results,
     ]
     return .init(
@@ -208,6 +219,55 @@ final class AnalyticsTests: XCTestCase {
     XCTAssertEqual(disabledDiagnostics.queuedEventCount, 0)
   }
 
+  /// A 200 acknowledgement that echoes a different contract version than the
+  /// submitted batch must not be applied. It would apply one contract's result
+  /// semantics to another's batch. The events stay queued for retry instead of
+  /// being removed, and a matching acknowledgement then delivers them.
+  func testAcknowledgementContractVersionMustMatchTheSubmittedBatch() async {
+    let now = Date(timeIntervalSince1970: 1_790_510_400)
+    let persistence = MosaicMemoryAnalyticsPersistence()
+    let identity = MosaicIdentityStore(persistence: MosaicMemoryIdentityPersistence())
+    let transport = AnalyticsTestTransport(.contractVersionMismatch)
+    let runtime = MosaicAnalyticsRuntime(
+      persistence: persistence, transport: transport, identityStore: identity,
+      context: .init(sdkVersion: mosaicSDKVersion), clock: { now }, jitter: { _ in 0 })
+    await runtime.setCollection(environmentEnabled: true, hostEnabled: true)
+    let recordResult = await runtime.record(
+      name: .experimentExposed,
+      correlation: .init(
+        placementRequestId: "placement_request_mismatch",
+        paywallPresentationId: "presentation_mismatch"),
+      attribution: .init(
+        configurationReleaseId: "release_mismatch", placementId: "placement_mismatch",
+        paywallId: "paywall_mismatch", paywallVersionId: "paywall_version_mismatch",
+        experimentId: "experiment_mismatch",
+        experimentVersionId: "experiment_version_mismatch",
+        experimentVariantId: "variant_mismatch",
+        experimentAllocationVersion: "allocation_mismatch_1"),
+      payload: .init(
+        assignmentKeyType: "identified_user",
+        bucketingAlgorithm: mosaicExperimentAssignmentAlgorithm,
+        productReadiness: "ready", providerCapability: "accepted", qaOverride: false),
+      occurredAt: now)
+    guard case .queued = recordResult else {
+      return XCTFail("The canonical experiment exposure shape must queue.")
+    }
+
+    let mismatchResult = await runtime.flush()
+    XCTAssertEqual(mismatchResult, .deferred)
+    let deferredDiagnostics = await runtime.diagnostics()
+    XCTAssertEqual(deferredDiagnostics.queuedEventCount, 1)
+
+    // The submitted batch was well formed; only the echo was wrong.
+    let submitted = await transport.batches
+    XCTAssertEqual(submitted.count, 1)
+    XCTAssertEqual(submitted.first?.analyticsEventContractVersion, "2")
+
+    await transport.setBehavior(.accept)
+    let matchedResult = await runtime.flush()
+    XCTAssertEqual(matchedResult, .delivered(removed: 1, retained: 0))
+  }
+
   func testPriorityOverflowPreservesPurchaseOutcomeOverLowValueRequest() async {
     let now = Date(timeIntervalSince1970: 1_790_510_400)
     let lowValue = MosaicAnalyticsEvent(
@@ -285,5 +345,87 @@ final class AnalyticsTests: XCTestCase {
     XCTAssertEqual(completed.correlation.paywallPresentationId, "presentation_renderer")
     XCTAssertEqual(completed.attribution.mosaicProductId, "yearly-plan")
     XCTAssertEqual(completed.attribution.providerId, "mock")
+  }
+
+  /// Conversion attribution joins solely on the event-carried Experiment tuple,
+  /// and the tuple is accepted only on Event Schema v2. If a monetization event
+  /// were emitted on v1, or without the complete tuple, an active Experiment
+  /// would silently report zero conversions.
+  @MainActor
+  func testActiveExperimentAttributesMonetizationEventsOnSchemaV2() async throws {
+    func events(withExperiment: Bool) async throws -> [MosaicAnalyticsEvent] {
+      let persistence = MosaicMemoryAnalyticsPersistence()
+      let runtime = MosaicAnalyticsRuntime(
+        persistence: persistence, transport: AnalyticsTestTransport(.fail),
+        identityStore: MosaicIdentityStore(persistence: MosaicMemoryIdentityPersistence()),
+        context: .init(sdkVersion: mosaicSDKVersion), jitter: { _ in 0 })
+      await runtime.setCollection(environmentEnabled: true, hostEnabled: true)
+      let base = MosaicAnalyticsAttribution(
+        configurationReleaseId: "release_experiment", placementId: "placement_experiment",
+        paywallId: "paywall_experiment", paywallVersionId: "paywall_version_experiment")
+      var experiment: MosaicAnalyticsAttribution?
+      if withExperiment {
+        experiment = MosaicAnalyticsAttribution(
+          experimentId: "experiment_checkout",
+          experimentVersionId: "experiment_version_checkout_1",
+          experimentVariantId: "variant_treatment_a",
+          experimentAllocationVersion: "allocation_checkout_1")
+      }
+      let analytics = MosaicAnalyticsPresentationInstrumentation(
+        runtime: runtime, placementRequestID: "placement_request_experiment",
+        presentationID: "presentation_experiment", attribution: base,
+        experimentAttribution: experiment, providerID: "mock")
+      let document = try canonicalDocument()
+      let model = MosaicPaywallModel(
+        document: document,
+        purchaseProvider: MockMosaicPurchaseProvider(
+          products: MosaicProduct.phase1MockProducts, purchaseBehavior: .success),
+        analytics: analytics,
+        onResult: { _ in })
+      await model.prepare()
+      await model.purchase(using: try purchaseButton(in: document))
+
+      var queued: [MosaicAnalyticsEvent] = []
+      for _ in 0..<1_000 {
+        queued = await persistence.load()?.queue.map(\.event) ?? []
+        let names = Set(queued.map(\.eventName))
+        if names.contains(.purchaseStarted) && names.contains(.purchaseCompletedClient) { break }
+        await Task.yield()
+      }
+      return queued
+    }
+
+    let attributed = try await events(withExperiment: true)
+    let conversionNames: [MosaicAnalyticsEventName] = [
+      .productSelected, .purchaseStarted, .purchaseCompletedClient,
+    ]
+    for name in conversionNames {
+      let event = try XCTUnwrap(attributed.first { $0.eventName == name }, name.rawValue)
+      // v1 cannot carry the tuple at all.
+      XCTAssertEqual(event.eventSchemaVersion, "2", name.rawValue)
+      XCTAssertEqual(event.attribution.experimentId, "experiment_checkout", name.rawValue)
+      XCTAssertEqual(
+        event.attribution.experimentVersionId, "experiment_version_checkout_1", name.rawValue)
+      XCTAssertEqual(
+        event.attribution.experimentVariantId, "variant_treatment_a", name.rawValue)
+      XCTAssertEqual(
+        event.attribution.experimentAllocationVersion, "allocation_checkout_1", name.rawValue)
+      // All-or-none: the encoded event must survive the closed codec.
+      XCTAssertNoThrow(
+        try MosaicAnalyticsCodec.decodeEvent(MosaicAnalyticsCodec.encode(event)), name.rawValue)
+    }
+
+    // Without an assignment the same events carry no partial tuple.
+    let unattributed = try await events(withExperiment: false)
+    for name in conversionNames {
+      let event = try XCTUnwrap(unattributed.first { $0.eventName == name }, name.rawValue)
+      XCTAssertEqual(event.eventSchemaVersion, "2", name.rawValue)
+      XCTAssertNil(event.attribution.experimentId, name.rawValue)
+      XCTAssertNil(event.attribution.experimentVersionId, name.rawValue)
+      XCTAssertNil(event.attribution.experimentVariantId, name.rawValue)
+      XCTAssertNil(event.attribution.experimentAllocationVersion, name.rawValue)
+      XCTAssertNoThrow(
+        try MosaicAnalyticsCodec.decodeEvent(MosaicAnalyticsCodec.encode(event)), name.rawValue)
+    }
   }
 }

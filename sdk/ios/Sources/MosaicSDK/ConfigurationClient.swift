@@ -1,3 +1,4 @@
+import CryptoKit
 import Foundation
 
 public enum MosaicConfigurationSource: String, Sendable, Equatable {
@@ -82,8 +83,10 @@ actor MosaicConfigurationClient {
     store: any MosaicConfigurationCacheStore,
     experimentStore: MosaicExperimentAssignmentStore = MosaicExperimentAssignmentStore(
       persistence: MosaicExperimentMemoryPersistence()),
+    initialDiagnostics: [MosaicDiagnostic] = [],
     clock: @escaping @Sendable () -> Date = { Date() }
   ) {
+    diagnostics = initialDiagnostics
     self.publicSDKKey = publicSDKKey
     configurationURL =
       baseURL
@@ -812,6 +815,10 @@ actor MosaicConfigurationClient {
 }
 
 private enum MosaicPackagedConfigurationRelease {
+  static func digest(_ value: String) -> String {
+    "sha256:" + SHA256.hash(data: Data(value.utf8)).map { String(format: "%02x", $0) }.joined()
+  }
+
   static func data() throws -> Data {
     guard
       let url = MosaicResourceBundle.bundle.url(
@@ -850,7 +857,9 @@ private enum MosaicPackagedConfigurationRelease {
         "kind": kind,
         "mediaType": kind == "image" ? "image/webp" : "video/mp4",
         "byteLength": 1,
-        "contentDigest": try DeliveryCanonicalJSON.digest(remoteURL.absoluteString),
+        // A bare string is not a valid top-level JSON object, so the canonical
+        // JSON digest cannot be used for an Asset URL.
+        "contentDigest": digest(remoteURL.absoluteString),
         "url": remoteURL.absoluteString,
       ])
       assetBindings.append([
@@ -897,7 +906,11 @@ private enum MosaicPackagedConfigurationRelease {
     ]
     release["contentDigest"] = try DeliveryCanonicalJSON.digest(release)
     return try DeliveryCanonicalJSON.data([
-      "configurationDeliveryVersion": mosaicConfigurationDeliveryVersion,
+      // The synthesized release above is deliberately Delivery v1 shaped: the
+      // bundled fallback carries no Project, Environment mode, Placement
+      // Decisions, Entitlement references, or Experiment Assignments. It must
+      // not be tagged with the latest advertised delivery version.
+      "configurationDeliveryVersion": "1",
       "release": release,
     ])
   }

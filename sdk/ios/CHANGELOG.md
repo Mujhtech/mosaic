@@ -1,7 +1,52 @@
 # Changelog
 
-## Unreleased
+## 0.1.0-dev.6 — 2026-07-27
 
+Operational hardening. The SDK remains pre-1.0; see
+`docs/known-limitations.md`.
+
+- Restore the declared iOS 15 floor. Trusted-time evaluation now reads
+  `CLOCK_MONOTONIC_RAW` directly instead of the iOS 16-only
+  `ContinuousClock`, with no change to schedule or anchor semantics. A
+  dedicated iOS 15 typecheck command guards the regression.
+- Add `PrivacyInfo.xcprivacy` declaring the `SystemBootTime` API reason
+  `35F9.1`, the host-supplied user ID, installation ID, user attributes, and
+  Product/purchase interaction data types, `NSPrivacyTracking` false, and no
+  tracking domains. It ships through both SwiftPM resources and the podspec
+  resource bundle.
+- `Mosaic.configure` no longer fails the host application's launch when
+  Application Support is unreachable. Configuration cache, identity,
+  assignment replay, and the analytics queue degrade to process-lifetime
+  storage, the bundled fallback stays reachable, and the safe
+  `delivery_persistence_unavailable` diagnostic is reported.
+- Fix the packaged bundled fallback, which could never be accepted: its
+  synthesized release digested an Asset URL as top-level JSON and was tagged
+  with the advertised Configuration Delivery version rather than the v1 shape
+  it actually builds.
+- Replace three host-reachable trap paths with safe failures.
+  `MosaicPreviewMessageCodec(protocolVersion:)` is now failable, unsupported
+  Local Preview fallback versions are dropped instead of trapping, an
+  unresolved background token rejects the document, and an unsupported
+  RevenueCat product handle raises a sanitized purchase failure.
+- Require an analytics acknowledgement to echo the contract version of the
+  batch it acknowledges. A 200 response carrying a different version is now
+  retried instead of applying one contract's result semantics to another's
+  batch. The response codec still reads both versions.
+- Report the exact artifact version. `mosaicSDKVersion` and the analytics
+  context `sdkVersion` both equal the published podspec version, so the
+  `Mosaic-SDK-Version` header no longer drifts from the artifact.
+- Relax the optional RevenueCat adapter's `purchases-ios` dependency from
+  `exact: "5.81.2"` to `.upToNextMajor(from: "5.81.2")`; `Package.resolved`
+  still records the verified version.
+- Document CocoaPods as local-path-only until release artifacts are
+  published, and state that background analytics delivery is best effort and
+  `refresh()` is not cancellable.
+- Bind bucketing tests to the canonical assignment-vector fixture and pin a
+  repository-root `.swift-format` configuration.
+- Add conformance coverage proving the closed codec rejects all six canonical
+  negative analytics fixtures across v1 and v2, and proving conversion events
+  are emitted on Event Schema v2 with the complete immutable Experiment tuple
+  whenever a presentation carries an assignment.
 - Add strict Configuration Delivery v3 and Experiment Assignment v1 decoding,
   exact compatibility derivation, trusted schedule evaluation, stable
   assignment/group bucketing, mutual exclusion, and non-production QA override
@@ -18,6 +63,12 @@
   no-Paywall/fallback decision results, and privacy-safe bounded traces.
 - Add actor-isolated app-install identity persistence, identify/reset APIs, and
   atomic typed user attributes.
+- Add provider-neutral Commerce Configuration v2 decoding, `2,1`
+  negotiation, exact native-store mappings, Product-to-Entitlement grants,
+  recovery modes, and asynchronous local-delivery types while retaining v1.
+- Add the optional `MosaicStoreKit` package with exact Product loading,
+  verified purchase/restore/current-Entitlement handling, durable idempotent
+  acceptance before finish, transaction update recovery, and safe diagnostics.
 
 ## 0.1.0-dev.5
 
@@ -118,11 +169,3 @@
 - Add provider-neutral commerce result types and an actor-based mock provider.
 - Add a SwiftUI consumer compilation test; native paywall rendering remains out
   of scope until Phase 1.
-# Unreleased
-
-- Add provider-neutral Commerce Configuration v2 decoding, `2,1`
-  negotiation, exact native-store mappings, Product-to-Entitlement grants,
-  recovery modes, and asynchronous local-delivery types while retaining v1.
-- Add the optional `MosaicStoreKit` package with exact Product loading,
-  verified purchase/restore/current-Entitlement handling, durable idempotent
-  acceptance before finish, transaction update recovery, and safe diagnostics.
