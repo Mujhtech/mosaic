@@ -73,3 +73,45 @@ func TestReadinessReportsDrainingBeforeShutdown(t *testing.T) {
 		t.Fatalf("body = %s, want a draining diagnostic", recorder.Body.String())
 	}
 }
+
+// A readiness failure is the first thing an operator reads during an incident,
+// so it must name the dependency that actually broke. The migration check runs
+// its own query, so a PostgreSQL outage used to fail it too and readiness
+// reported `migration_incompatible` alongside `database_unavailable` — sending
+// the operator to diagnose a schema problem that does not exist. This asserts a
+// check declaring a prerequisite is skipped, not reported, when that
+// prerequisite fails, and that it still runs when the prerequisite is healthy.
+func TestReadinessDoesNotReportDependentChecksWhenTheirPrerequisiteFails(t *testing.T) {
+	migrationProbed := false
+	readiness := NewReadiness(
+		Check{Name: "postgresql", Code: "database_unavailable", Probe: func(context.Context) error {
+			return errors.New("failed to connect to `user=mosaic database=mosaic`")
+		}},
+		Check{Name: "migrations", Code: "migration_incompatible", DependsOn: "postgresql", Probe: func(context.Context) error {
+			migrationProbed = true
+			return errors.New("query goose_db_version: connection refused")
+		}},
+	)
+
+	failures := readiness.Evaluate(context.Background())
+
+	if len(failures) != 1 || failures[0] != "database_unavailable" {
+		t.Fatalf("checks = %#v, want only database_unavailable", failures)
+	}
+	if migrationProbed {
+		t.Fatal("the migration probe ran even though its prerequisite was down")
+	}
+
+	// The dependent check must still be able to fail on its own merits: a
+	// genuinely incompatible schema on a healthy database has to be reported,
+	// or a pending-migration deployment would look ready.
+	healthy := NewReadiness(
+		Check{Name: "postgresql", Code: "database_unavailable", Probe: func(context.Context) error { return nil }},
+		Check{Name: "migrations", Code: "migration_incompatible", DependsOn: "postgresql", Probe: func(context.Context) error {
+			return errors.New("3 pending migrations")
+		}},
+	)
+	if failures := healthy.Evaluate(context.Background()); len(failures) != 1 || failures[0] != "migration_incompatible" {
+		t.Fatalf("checks = %#v, want only migration_incompatible", failures)
+	}
+}

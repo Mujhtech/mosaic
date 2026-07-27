@@ -164,8 +164,31 @@ func errorDetails(err error) (int, errorPayload) {
 	if apiError.Status < http.StatusBadRequest || apiError.Status > 599 {
 		return internalError()
 	}
-	if apiError.Status >= http.StatusInternalServerError {
+	// A 500 is by definition the unexpected bucket: never trust whatever code
+	// or message reached it, and never let a cause escape.
+	//
+	// Statuses above 500 are different. A handler that answers 503
+	// `providerUnavailable` or 502 `providerInvalidResponse` chose a safe,
+	// documented, machine-readable outcome that an SDK uses to decide whether
+	// to retry. Collapsing every 5xx into 500 `internal_error` erased all of
+	// them: every deliberate upstream-failure code in the OpenAPI contract was
+	// unreachable, and clients could not tell "the provider is down, retry"
+	// from "Mosaic is broken". A code is still required, so an APIError that
+	// forgot to set one degrades to internal_error rather than leaking.
+	if apiError.Status == http.StatusInternalServerError || apiError.Code == "" {
 		return internalError()
+	}
+	// Above 500 the status and code are preserved but the message is replaced.
+	// Codes are Mosaic-owned constants and safe by construction; messages are
+	// free text and are where internal topology leaks (a readiness message
+	// naming a database host, for example). Clients need the code, not the
+	// prose.
+	if apiError.Status > http.StatusInternalServerError {
+		return apiError.Status, errorPayload{
+			Code:    apiError.Code,
+			Message: upstreamFailureMessage,
+			Details: cloneDetails(apiError.Details),
+		}
 	}
 
 	code := apiError.Code
@@ -184,6 +207,10 @@ func errorDetails(err error) (int, errorPayload) {
 		Details: cloneDetails(apiError.Details),
 	}
 }
+
+// upstreamFailureMessage is the fixed human text for a deliberate 5xx above
+// 500. The machine-readable code carries the meaning.
+const upstreamFailureMessage = "The request could not be completed because a dependency failed. Retry may succeed."
 
 func internalError() (int, errorPayload) {
 	return http.StatusInternalServerError, errorPayload{

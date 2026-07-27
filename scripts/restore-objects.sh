@@ -12,6 +12,9 @@
 #   -b  bucket (default $MOSAIC_OBJECT_STORAGE_BUCKET or mosaic-assets)
 #   -e  S3 endpoint URL (default http://minio:9000 inside the Compose network)
 #   -c  check only: no writes; reports missing and orphaned objects
+#   -p  Compose project to act on (default: the Compose default project).
+#       Required when the host runs more than one Mosaic installation.
+#   --compose-file / --env-file  extra Compose file and env-file selection
 #
 # Missing object  = referenced by the assets table but absent from the bucket.
 #                   This is a failed restore: an SDK cannot render that Asset.
@@ -21,10 +24,21 @@
 #                   snapshot.
 set -euo pipefail
 
+# shellcheck source=lib/compose.sh
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib/compose.sh"
+
 mirror_directory=""
 bucket="${MOSAIC_OBJECT_STORAGE_BUCKET:-mosaic-assets}"
 endpoint="http://minio:9000"
 check_only="false"
+
+arguments=()
+while [[ $# -gt 0 ]]; do
+  mosaic_compose_parse_option "$@"
+  if [[ "${mosaic_compose_consumed}" -gt 0 ]]; then shift "${mosaic_compose_consumed}"; continue; fi
+  arguments+=("$1"); shift
+done
+set -- "${arguments[@]+"${arguments[@]}"}"
 
 while getopts ":m:b:e:ch" option; do
   case "${option}" in
@@ -32,7 +46,7 @@ while getopts ":m:b:e:ch" option; do
     b) bucket="${OPTARG}" ;;
     e) endpoint="${OPTARG}" ;;
     c) check_only="true" ;;
-    h) sed -n '2,24p' "$0"; exit 0 ;;
+    h) sed -n '2,27p' "$0"; exit 0 ;;
     *) echo "unknown option: -${OPTARG}" >&2; exit 2 ;;
   esac
 done
@@ -53,12 +67,14 @@ if [[ -z "${access_key}" || -z "${secret_key}" ]]; then
   exit 2
 fi
 
+mosaic_compose_describe
+
 work_directory="$(mktemp -d)"
 trap 'rm -rf "${work_directory}"' EXIT
 mount_directory="${mirror_directory:-${work_directory}}"
 
 mc() {
-  docker compose run --rm -T \
+  mosaic_compose run --rm -T \
     -e MC_HOST_mosaic="${endpoint/:\/\//://${access_key}:${secret_key}@}" \
     -v "$(cd "${mount_directory}" && pwd)":/backup \
     --entrypoint mc minio-init "$@"
@@ -86,8 +102,8 @@ echo "    ${bucket_count} object(s) in the bucket"
 echo
 echo "==> reconciling against the assets table"
 # Storage keys are the authoritative link between a row and its object.
-if docker compose ps --status running postgres >/dev/null 2>&1; then
-  docker compose exec -T postgres \
+if mosaic_compose ps --status running postgres >/dev/null 2>&1; then
+  mosaic_compose exec -T postgres \
     psql -U "${POSTGRES_USER:-mosaic}" -d "${POSTGRES_DB:-mosaic}" -At \
       -c "SELECT storage_key FROM assets WHERE archived_at IS NULL ORDER BY storage_key" \
     | sort > "${work_directory}/database-keys.txt"

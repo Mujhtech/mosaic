@@ -277,6 +277,22 @@ func writeError(w http.ResponseWriter, r *http.Request, err error) {
 		}
 	case errors.Is(err, hostedpublishing.ErrUnsupportedCapability):
 		status, code, message = http.StatusNotAcceptable, "unsupported_capability", "The SDK does not support this Configuration Release."
+		// Name the term that failed. Without it an integrator has no path from
+		// the 406 to the header they must send or the SDK they must upgrade.
+		if capabilityError, ok := hostedpublishing.CapabilityFailure(err); ok {
+			details := map[string]any{
+				"requirement": capabilityError.Requirement,
+				"reason":      string(capabilityError.Reason),
+				"detail":      capabilityError.Detail(),
+			}
+			if capabilityError.Name != "" {
+				details["capability"] = capabilityError.Name
+			}
+			if capabilityError.Version != "" {
+				details["version"] = capabilityError.Version
+			}
+			apiError.Details = details
+		}
 	}
 	apiError.Status, apiError.Code, apiError.Message = status, code, message
 	response.Error(w, r, apiError)
@@ -602,13 +618,13 @@ func (h *Handler) rollback(w http.ResponseWriter, r *http.Request) {
 func capabilityRequestFromHeaders(r *http.Request) (hostedpublishing.SDKCapabilityRequest, error) {
 	capabilityHeader := r.Header.Get(capabilitiesHeader)
 	if len(capabilityHeader) == 0 || len(capabilityHeader) > maxCapabilityHeaderSize {
-		return hostedpublishing.SDKCapabilityRequest{}, hostedpublishing.ErrUnsupportedCapability
+		return hostedpublishing.SDKCapabilityRequest{}, hostedpublishing.NewCapabilityError("paywallCapability", capabilitiesHeader, "", hostedpublishing.CapabilityMalformed)
 	}
 	capabilities := make([]hostedpublishing.SDKCapability, 0)
 	for _, item := range strings.Split(capabilityHeader, ",") {
 		name, version, ok := strings.Cut(strings.TrimSpace(item), "@")
 		if !ok || name == "" || version == "" || strings.Contains(version, "@") {
-			return hostedpublishing.SDKCapabilityRequest{}, hostedpublishing.ErrUnsupportedCapability
+			return hostedpublishing.SDKCapabilityRequest{}, hostedpublishing.NewCapabilityError("paywallCapability", name, version, hostedpublishing.CapabilityMalformed)
 		}
 		capabilities = append(capabilities, hostedpublishing.SDKCapability{Name: name, Version: version})
 	}
@@ -630,7 +646,7 @@ func capabilityRequestFromHeaders(r *http.Request) (hostedpublishing.SDKCapabili
 	}
 	for _, name := range []string{experimentAssignmentVersionsHeader, experimentFeaturesHeader, experimentBucketingAlgorithmsHeader, experimentSchedulePoliciesHeader} {
 		if len(r.Header.Get(name)) > maxCapabilityHeaderSize {
-			return hostedpublishing.SDKCapabilityRequest{}, hostedpublishing.ErrUnsupportedCapability
+			return hostedpublishing.SDKCapabilityRequest{}, hostedpublishing.NewCapabilityError("experimentCapabilityHeader", name, "", hostedpublishing.CapabilityMalformed)
 		}
 	}
 	return request, nil
@@ -715,7 +731,7 @@ func (h *Handler) sdkConfiguration(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if hostedpublishing.PreferredDeliveryVersion(capabilities.SupportedConfigurationDeliveryVersions) == "" {
-		writeError(w, r, hostedpublishing.ErrUnsupportedCapability)
+		writeError(w, r, hostedpublishing.NewCapabilityError("configurationDeliveryVersion", "Mosaic-Configuration-Versions", "", hostedpublishing.CapabilityMalformed))
 		return
 	}
 	configuration, err := h.service.AuthenticateSDKKeyVersions(r.Context(), bearer(r), capabilities.SupportedConfigurationDeliveryVersions)
@@ -763,7 +779,7 @@ func (h *Handler) sdkCommerceConfiguration(w http.ResponseWriter, r *http.Reques
 	}
 	if !headerContains(r.Header.Get("Accept"), commerceContentType) &&
 		!headerContains(r.Header.Get("Accept"), commerceContentTypeV2) {
-		writeError(w, r, hostedpublishing.ErrUnsupportedCapability)
+		writeError(w, r, hostedpublishing.NewCapabilityError("acceptMediaType", commerceContentType, "", hostedpublishing.CapabilityMissing))
 		return
 	}
 	sdkPlatform := strings.TrimSpace(r.Header.Get("Mosaic-SDK-Platform"))
@@ -797,7 +813,7 @@ func (h *Handler) sdkCommerceConfiguration(w http.ResponseWriter, r *http.Reques
 		Version string `json:"commerceConfigurationVersion"`
 	}
 	if err := json.Unmarshal(configuration.Snapshot.Payload, &envelope); err != nil {
-		writeError(w, r, hostedpublishing.ErrUnsupportedCapability)
+		writeError(w, r, hostedpublishing.NewCapabilityError("commerceConfigurationVersion", "", "", hostedpublishing.CapabilityUnavailable))
 		return
 	}
 	if err := hostedpublishing.ValidateSDKCommerceSnapshotCapability(

@@ -14,30 +14,42 @@
 #
 #   -b             backup directory (default ./backups)
 #   --skip-backup  proceed without taking a backup (requires MOSAIC_I_HAVE_A_BACKUP=yes)
+#   -p             Compose project to upgrade (default: the Compose default
+#                  project). Required when the host runs more than one Mosaic
+#                  installation; it is also passed to the backup scripts.
+#   --compose-file / --env-file  extra Compose file and env-file selection
 set -euo pipefail
+
+# shellcheck source=lib/compose.sh
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib/compose.sh"
 
 backup_directory="./backups"
 skip_backup="false"
 
 arguments=()
-for argument in "$@"; do
-  case "${argument}" in
-    --skip-backup) skip_backup="true" ;;
-    *) arguments+=("${argument}") ;;
-  esac
+while [[ $# -gt 0 ]]; do
+  if [[ "$1" == "--skip-backup" ]]; then skip_backup="true"; shift; continue; fi
+  mosaic_compose_parse_option "$@"
+  if [[ "${mosaic_compose_consumed}" -gt 0 ]]; then shift "${mosaic_compose_consumed}"; continue; fi
+  arguments+=("$1"); shift
 done
 set -- "${arguments[@]+"${arguments[@]}"}"
 
 while getopts ":b:h" option; do
   case "${option}" in
     b) backup_directory="${OPTARG}" ;;
-    h) sed -n '2,20p' "$0"; exit 0 ;;
+    h) sed -n '2,25p' "$0"; exit 0 ;;
     *) echo "unknown option: -${OPTARG}" >&2; exit 2 ;;
   esac
 done
 
 repository_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "${repository_root}"
+
+# The backup scripts are separate processes; export the resolved selection so
+# they act on the same installation this upgrade is touching.
+mosaic_compose_export
+mosaic_compose_describe
 
 api_port="${MOSAIC_API_PORT:-8080}"
 
@@ -60,11 +72,11 @@ if [[ "${skip_backup}" == "true" ]]; then
   echo "    skipped at operator request (MOSAIC_I_HAVE_A_BACKUP=yes)"
 else
   echo "--> ensuring PostgreSQL is up for the backup"
-  docker compose up -d postgres
-  docker compose exec -T postgres sh -c 'until pg_isready -q; do sleep 1; done'
+  mosaic_compose up -d postgres
+  mosaic_compose exec -T postgres sh -c 'until pg_isready -q; do sleep 1; done'
   scripts/backup-postgres.sh -o "${backup_directory}"
   echo "--> object storage"
-  docker compose up -d minio
+  mosaic_compose up -d minio
   scripts/backup-objects.sh -o "${backup_directory}"
   echo
   echo "    Back up MOSAIC_PROVIDER_CREDENTIAL_KEYRING separately from these"
@@ -74,14 +86,14 @@ fi
 
 echo
 echo "=== 3. build the target release ==="
-docker compose build api worker
+mosaic_compose build api worker
 
 echo
 echo "=== 4. migration preflight ==="
 # Exit code 3 means "pending migrations": the expected state for an upgrade.
 # Exit code 4 means an incompatible or dirty schema and stops the upgrade.
 set +e
-docker compose run --rm --entrypoint /usr/local/bin/migrate api preflight
+mosaic_compose run --rm --entrypoint /usr/local/bin/migrate api preflight
 preflight_status=$?
 set -e
 case "${preflight_status}" in
@@ -103,15 +115,15 @@ echo
 echo "=== 5. stop the API and worker before migrating ==="
 # Migrating while the previous release is serving lets a binary run against a
 # schema it does not understand.
-docker compose stop api worker || true
+mosaic_compose stop api worker || true
 
 echo
 echo "=== 6. apply migrations ==="
-docker compose run --rm --entrypoint /usr/local/bin/migrate api up
+mosaic_compose run --rm --entrypoint /usr/local/bin/migrate api up
 
 echo
 echo "=== 7. start services ==="
-docker compose up -d
+mosaic_compose up -d
 
 echo
 echo "=== 8. verify readiness ==="
@@ -121,7 +133,7 @@ until curl -fsS "http://localhost:${api_port}/health/ready" >/dev/null 2>&1; do
   if [[ "${attempt}" -ge 60 ]]; then
     echo "the API did not become ready within 60 attempts." >&2
     echo "Diagnose with: curl -sS http://localhost:${api_port}/health/ready | jq" >&2
-    echo "and: docker compose logs api" >&2
+    echo "and: docker compose logs api (with the same -p/--env-file selection)" >&2
     exit 1
   fi
   sleep 2
@@ -137,7 +149,7 @@ echo "--> /health/ready"
 curl -fsS "http://localhost:${api_port}/health/ready"
 echo
 echo "--> post-upgrade preflight (expect: compatible)"
-docker compose run --rm --entrypoint /usr/local/bin/migrate api preflight
+mosaic_compose run --rm --entrypoint /usr/local/bin/migrate api preflight
 
 echo
 echo "Upgrade complete. Verify the data-integrity checks listed in"

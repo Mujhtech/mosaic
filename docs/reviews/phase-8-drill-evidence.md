@@ -856,3 +856,764 @@ The **full** suite (`go test -p 1 ./...`) was not run.
 
 No new test suite, test framework, or test dependency was introduced.
 </content>
+
+---
+
+# Phase 8 Stage 4 — GA Drill Evidence, pass two
+
+Operator: mosaic-backend agent
+Date: 2026-07-27
+Branch: `phase/8-operational-hardening`
+Scope: the drills pass one left NOT RUN (D2–D6, D9, D10, D12, D13, the D14
+remainder), the full integration suite, the two triage items, and the
+performance measurements. Pass one's D1/D7/D8/D14-blocker results stand
+unchanged above.
+
+**Honesty rule applied throughout.** Every section states exactly what was run.
+Steps that were not executed are recorded as not demonstrated and never
+presented as a pass. No secret values appear here: keys, passwords, and keyring
+material are reduced to a shape description or an identifier.
+
+## Environment
+
+| Item | Value |
+| --- | --- |
+| Host | Apple Silicon macOS (Darwin 25.5.0), arm64, 12 CPU, 16 GiB |
+| Docker Engine | 29.4.0; 12 CPU / 7.8 GiB allocated |
+| Go toolchain | go1.26.2 darwin/arm64 |
+| PostgreSQL | `postgres:17-alpine` (17.10) |
+| Object storage | `minio/minio:RELEASE.2025-07-23T15-54-02Z`, `minio/mc:RELEASE.2025-07-21T05-28-08Z` |
+| Compose project | `mosaic-drill2` (isolated) |
+| Published ports | api 28080, dashboard 23000, TLS edge 28443, postgres 25432 (debug), MinIO console 29001 (debug) |
+| Version stamp | `MOSAIC_VERSION=drill2-phase8` |
+| Data | Created through the API during the drills. **No production data exists or was used.** |
+
+### Isolation
+
+Pass one reported that `compose.yaml` pinned explicit `name:` values on all four
+named volumes, which defeats `-p` isolation. **That is now fixed** (defect A
+below), so this pass needed no override file:
+
+```
+docker compose --env-file .env.example config
+  name: mosaic
+  volumes: mosaic_postgres_data, mosaic_minio_data, mosaic_caddy_data, mosaic_caddy_config
+
+docker compose -p mosaic-drill2 --env-file <drill env> config
+  name: mosaic-drill2
+  volumes: mosaic-drill2_postgres_data, mosaic-drill2_minio_data,
+           mosaic-drill2_caddy_data, mosaic-drill2_caddy_config
+```
+
+The default project's resolved volume names are byte-identical to the previous
+pinned names, so an existing installation keeps its data.
+
+`apps/api/.env` was neither read nor copied. The drill env file was created by
+copying `.env.example` and appending dev-safe values (distinct random passwords,
+high ports, a freshly generated 32-byte keyring, `MOSAIC_ENVIRONMENT=development`).
+
+---
+
+## Pass-one operational defects fixed first
+
+### A. `compose.yaml` volume `name:` pinning defeated `-p` isolation
+
+Volume keys renamed to `postgres_data` / `minio_data` / `caddy_data` /
+`caddy_config`, the `name:` pins removed, and a top-level `name: mosaic` added so
+the default project name no longer depends on the checkout directory. Verified
+above: default resolves to the historical names, `-p` isolates.
+
+### B. `scripts/*.sh` called bare `docker compose`
+
+New `scripts/lib/compose.sh` provides `mosaic_compose`, honouring `-p/--project`,
+`--compose-file`, `--env-file`, and the `MOSAIC_COMPOSE_*` environment
+equivalents; `upgrade.sh` exports the selection to the backup scripts it calls.
+All five scripts route through it and print the installation they are about to
+act on. Verified by every backup, restore, and object-storage command in D2–D5,
+each of which named `project=mosaic-drill2`.
+
+One bug was caught while writing it: the first version returned the consumed-arg
+count via `echo`, so callers read it through `$( )` — a subshell — and silently
+discarded the parsed project. The count is now a global, with the reason recorded
+at the definition.
+
+### C. Readiness reported `migration_incompatible` when PostgreSQL was merely down
+
+`health.Check` gained `DependsOn`. A check whose prerequisite already failed is
+skipped and not reported; readiness still fails, on the dependency that actually
+broke. Both directions demonstrated at runtime:
+
+```
+postgres stopped:
+  GET /health/live   200 {"data":{"status":"ok","version":"drill2-phase8"}}
+  GET /health/ready  503 {"error":{"code":"not_ready",
+      "details":{"checks":["database_unavailable"]}}}      <- migration_incompatible gone
+postgres restarted:  GET /health/ready 200, api RestartCount = 0
+
+schema rolled back one step while the API kept running (PostgreSQL healthy):
+  GET /health/live   200
+  GET /health/ready  503 {"details":{"checks":["migration_incompatible"]}}
+schema rolled forward: GET /health/ready 200
+```
+
+### D. `406 unsupported_capability` named nothing
+
+New `hostedpublishing.CapabilityError` carries `Requirement`, `Name`, `Version`,
+and a closed `Reason` vocabulary, wraps `ErrUnsupportedCapability` so every
+existing status mapping is unchanged, and is surfaced in `details`. Every
+negotiation refusal in `capability_request.go`, plus the transport-side header
+parsing failures, now names its term. Live:
+
+```
+Mosaic-Configuration-Versions: 1   ->  406
+  details {"requirement":"configurationDeliveryVersion","version":"1","reason":"unavailable",
+           "detail":"configurationDeliveryVersion 1 has no representation this
+                     Configuration Release can serve"}
+
+Mosaic-Configuration-Versions: 2   ->  406
+  details {"requirement":"placementDecisionContractVersion","reason":"malformed",
+           "detail":"placementDecisionContractVersion was missing, empty, malformed,
+                     or advertised too many values"}
+```
+
+### E. Worker logs lacked job, tenant, and trace identity
+
+New `internal/platform/jobtelemetry`; each job family annotates the context
+logger once it knows what it leased, and the worker writes its completion and
+failure lines through the logger read back out of the job context. Live:
+
+```json
+{"job_family":"experiment_schedule","worker_id":"419b22415e47",
+ "job_id":"drill2_stranded","job_kind":"experiment_schedule_complete",
+ "project_id":"project_000001","environment_id":"env_000001",
+ "resource_id":"experiment_000001","duration":79.96,"failed":false,
+ "message":"background job finished"}
+
+{"job_family":"analytics","job_id":"analytics_delete_000001","job_kind":"deletion",
+ "project_id":"project_000001","trace_id":"0076badf6276de1602ecd996db9ea98b",
+ "failed":false,"message":"background job finished"}
+```
+
+`trace_id` appears on the analytics family, which runs inside a span; the
+Experiment schedule path has no span, so it is absent there — "where available",
+as specified.
+
+---
+
+## Drill 2 — Upgrade from the RC schema
+
+- Start 2026-07-27T15:41Z, end 2026-07-27T16:35Z
+- Result: **PASS**
+
+### How the RC-era installation was built
+
+The API fails startup on a pending migration, so an RC-schema installation
+cannot be populated through the API, and building the `v1.0.0-rc.1` binary was
+not available (no git operations). The dataset was therefore created through the
+real API at the current schema, captured as a data-only dump, and restored onto a
+freshly migrated schema-18 database:
+
+```bash
+docker compose -p mosaic-drill2 exec -T postgres \
+  pg_dump -U mosaic -d mosaic --data-only --no-owner --no-privileges --disable-triggers > rc-data.sql
+# strip the three columns migration 00020 adds, and the two tables the
+# migrations own (experiment_metric_definitions, goose_db_version)
+migrate up-to 18            # 18 applied, 19/20/21 pending
+psql -v ON_ERROR_STOP=1 < rc-data-18.sql
+```
+
+Honest note on the harness: the first restore attempt aborted mid-file on a
+`goose_db_version` primary-key conflict under `ON_ERROR_STOP=1`, leaving
+`id_sequences` empty, which surfaced later as a duplicate-key failure on ingest.
+That was a flaw in this drill's harness, not in Mosaic; the dump was corrected
+and D2 was rerun from a clean schema-18 database. Both the failure and the rerun
+are recorded rather than the rerun alone.
+
+Seeded dataset (created through the API): 1 Organization, 1 Project, 3
+Environments, 1 Application, 2 Products, 1 Entitlement, 2 Paywalls, 3 Paywall
+Versions, 2 Placements, 1 published Placement rule set, 5 Configuration Releases
+(8 representations), 1 Experiment with 2 Variants and a published Version, 45
+Analytics Events (v2, ingested through `POST /v1/sdk/events/batch`), 31 audit
+events.
+
+### The upgrade
+
+```bash
+scripts/backup-postgres.sh -p mosaic-drill2 -o <dir>
+  ==> Compose installation: project=mosaic-drill2 ...
+  migrationVersion "18", postgresVersion "17.10", sha256 a405a878a07a…
+  occurrences of the configured PostgreSQL password in the artifacts: 0
+  occurrences of the configured MinIO password in the artifacts:      0
+
+migrate preflight
+  current version:  18
+  expected version: 21
+  pending:          [19 20 21]
+  dirty:            false
+  verdict:          upgrade required
+  exit code 3
+
+migrate up
+  applied 19 00019_experiment_analysis_index_concurrent.sql
+  applied 20 00020_experiment_schedule_job_reliability.sql
+  applied 21 00021_experiment_version_environment_integrity.sql
+
+migrate preflight
+  current 21, expected 21, pending [], dirty false, verdict compatible, exit 0
+```
+
+### Verification after the upgrade
+
+| Assertion | Result |
+| --- | --- |
+| Readiness | `GET /health/ready` 200 |
+| Data intact | Full fingerprint (22 entity counts + per-Release content hashes) **byte-identical** to the pre-upgrade capture; only `migration_version` changed 18 → 21 |
+| Configuration Release digests | all five unchanged; `release_representation_digest_mismatches = 0` |
+| Delivery digest unchanged | `ETag "sha256-4e78b671255bd8c14de2873c9c32f8a3a38aeaa38f1901cd2558541d4b52be29"`, identical before and after, `Content-Type: application/vnd.mosaic.configuration+json;version=3` |
+| Ingestion works | `POST /v1/sdk/events/batch` → 200 `[{"eventId":"postupgrade_exposed_2","status":"accepted"}]` |
+
+---
+
+## Drill 3 — Failed-migration recovery
+
+- Start 2026-07-27T16:36Z, end 2026-07-27T16:45Z
+- Result: **PASS**, with one expectation corrected and one follow-up
+
+### Readiness against an incompatible schema
+
+The drill brief expected "start API with pending migrations → ready 503, live
+200". **That is not what happens, and the difference is recorded rather than
+smoothed over.** The API *fails startup* and crash-loops:
+
+```
+docker inspect mosaic-drill2-api-1 -> state=restarting restarts=7
+{"level":"error","error":"verify migration compatibility: database schema is
+ behind the expected migration version: applied 18, expected 21",
+ "message":"api stopped"}
+```
+
+This matches the plan's Startup Model ("fail closed if pending; never
+auto-migrate") and is the safer behaviour — a load balancer never sees an
+instance that cannot serve — but it means the readiness code
+`migration_incompatible` is unreachable in the pending-migration case. It *is*
+reachable when the schema drifts under a running API, which was demonstrated
+separately (defect C above).
+
+### Irreversible rollback
+
+```bash
+migrate down-to 17            # without --confirm
+  migration failed: down-to rolls the schema back and can be refused by
+  irreversible migrations; pass --confirm to proceed. Rollback is not a
+  substitute for restore-from-backup
+
+migrate down-to 17 --confirm
+  migration failed: apply migrations: partial migration error (type:sql,version:18):
+  ERROR: migration 00018 cannot be rolled back: 2 Delivery v3 Release(s),
+  46 Analytics Event v2 row(s), and 2 Release-to-Experiment link(s) would be
+  destroyed (SQLSTATE 55000)
+migrate version -> 18
+```
+
+The refusal is clean, names the exact affected data, and stops at the
+irreversible boundary having rolled back only the three reversible migrations.
+
+Follow-up (reported, not fixed): the irreversible refusal itself does not name
+the restore path. The guard message shown without `--confirm` does; the message
+an operator actually hits, at the moment of failure, does not.
+
+### Restore and integrity
+
+```bash
+scripts/restore-postgres.sh -p mosaic-drill2 -f <dump> -d mosaic_restore_check
+  checksum matches a405a878a07a…
+  migration_version=18, organizations=1, projects=1, products=2, entitlements=1,
+  paywalls=2, paywall_versions=3, configuration_releases=5, placements=2,
+  analytics_events=45, experiments=1, experiment_versions=1, audit_events=31
+  release_representation_digest_mismatches=0
+```
+
+Full fingerprint of the restored database: **identical to the source dataset.**
+`id_sequences` restored with all 29 rows, so identifier allocation continues
+correctly (the property the harness bug above proved matters).
+
+The live installation was then recovered the documented way — API and worker
+stopped, `restore-postgres.sh … -d mosaic --force`, `migrate up`, restart — and
+its fingerprint returned to exactly the pre-rollback state.
+
+---
+
+## Drill 4 — PostgreSQL backup and restore
+
+- Result: **PASS**
+
+Backup, checksum, and isolated restore are covered under D2/D3 above. Additional
+D4-specific evidence:
+
+- The restored database was migrated to 21 and served by a **second API process**
+  on port 28081 (`DATABASE_URL` pointed at `mosaic_restore_check`), which reached
+  `GET /health/ready` 200.
+- **Delivery digest from the restored database is identical to the live one**:
+  `"sha256-4e78b671255bd8c14de2873c9c32f8a3a38aeaa38f1901cd2558541d4b52be29"`.
+- Critical workflows spot-checked against the restored database — 22 endpoints,
+  **all 200**: organizations, projects, environments, applications, products,
+  entitlements, paywalls, paywall versions, placements, releases, API keys,
+  provider connections, assets, placement rule set, experiments, experiment
+  versions, experiment history, experiment results, analytics settings, analytics
+  overview, analytics funnel, audit history.
+
+Two failures were found on the first pass of that sweep and are recorded because
+they were real:
+
+- `GET /v1/organizations/{id}/audit-events` returned **500** —
+  `json: cannot unmarshal number into Go value of type string`. Fixed (defect 3
+  below); the endpoint now returns 25 audit events.
+- `GET …/analytics/overview` returned 422 — `timezone` and `metricBasis` are
+  required parameters and the sweep omitted them. Correct behaviour; the sweep
+  was wrong. Recorded as a diagnosability follow-up because the 422 carried no
+  `fields` naming which parameters were missing.
+
+---
+
+## Drill 5 — Object-storage backup and restore
+
+- Start 2026-07-27T16:45Z, end 2026-07-27T16:46Z
+- Result: **PASS**, with one reported defect
+
+| Step | Result |
+| --- | --- |
+| Publish an Asset | `POST /v1/projects/{id}/assets` → 201, `asset_000001`, `contentDigest sha256:afdc1edd…648c` |
+| Serve it through the SDK path | `GET /v1/sdk/assets/asset_000001/sha256:afdc1edd…` → 200, 79 bytes |
+| `scripts/backup-objects.sh -p mosaic-drill2` | 1 object mirrored; the mirrored file is **named by its content digest**, and its sha256 equals that digest |
+| Wipe the bucket | `mc rm --recursive --force` — object removed |
+| Detection | `scripts/restore-objects.sh -p mosaic-drill2 -c` → `missing from the bucket: 1`, names the key, "treat this as a failed restore", **exit code 1** |
+| `scripts/restore-objects.sh -p mosaic-drill2 -m <mirror>` | mirrored back; `missing 0, orphaned 0`, "verification passed" |
+| Serve after restore | 200, 79 bytes, served sha256 `afdc1edd…648c` **equals** the stored `contentDigest` |
+| Wrong digest | 404 — a digest that does not match does not resolve |
+
+Reported (not fixed): while the object was missing, the delivery endpoint
+answered **500 `internal_error`** rather than a distinct, safe code. The operator
+log was precise (`stat object: The specified key does not exist`), but an SDK
+receives an indistinguishable "Mosaic is broken" signal for a recoverable
+missing-asset condition.
+
+---
+
+## Drill 6 — Process recovery
+
+- Start 2026-07-27T16:46Z, end 2026-07-27T17:14Z
+- Result: **PASS on worker recovery and state integrity; the API drain
+  assertion FAILED and is reported as a defect**
+
+### Worker `kill -9`
+
+```
+docker kill -s KILL mosaic-drill2-worker-1
+  worker: state=exited exit=137 oomkilled=false
+docker compose -p mosaic-drill2 up -d worker
+  worker: state=running health=healthy; in-container readiness probe -> ready
+```
+
+A lease stranded exactly as a killed worker leaves one (status `leased`, dead
+owner, lease still in the future) was reclaimed after expiry, retried, and
+completed:
+
+```
+seeded:        status=leased owner=dead_worker_from_kill9
+after restart: status=completed owner=- attempts=2 error=-
+```
+
+The Experiment's scheduled `complete` action then really ran, transitioning the
+Experiment to `completed` — end-to-end proof that migration 00020's lease,
+retry, and backoff columns work at runtime.
+
+The analytics job tables were exercised in the same window: four export jobs and
+one deletion job leased, processed, and completed (see Drill 12). The earlier
+scheduled `start` job dead-lettered correctly at `attempts=5/5` with
+`last_error_code=experiment_state_conflict` after the Experiment had already been
+started manually — the retry budget and terminal diagnostic both behaving as
+designed.
+
+Two synthetic edits were **rejected by the database** while setting this up, and
+are recorded as evidence that the integrity constraints hold: an
+`analytics_export_jobs` row forced back to `running` while retaining a completed
+job's object key violated `analytics_export_jobs_check`.
+
+### API SIGTERM
+
+```
+docker kill -s TERM mosaic-drill2-api-1
+readiness poll (100 ms):  200 ready  ->  connection refused
+in-flight request:        HTTP/1.1 422 (served to completion during the drain)
+api: state=exited exit=0
+{"message":"api shutdown requested"} {"message":"api stopped gracefully"}
+```
+
+In-flight work drained and the process exited cleanly, but **no client ever
+observes the draining state**: readiness goes from 200 straight to connection
+refused. See defect 8.
+
+### Restart everything
+
+`docker compose -p mosaic-drill2 up -d` → api, dashboard, local-edge, minio,
+postgres, worker all running and healthy; readiness 200. All five original
+Configuration Releases retained **byte-identical content hashes** across the
+kill, the drain, the restore, and the upgrade. Remaining fingerprint differences
+are fully explained by drill activity in between (an Asset uploaded, the privacy
+deletion removing 4 events, the scheduled completion publishing a new Release,
+extra audit rows).
+
+---
+
+## Drill 9 — Credential rotation
+
+- Start 2026-07-27T17:46Z, end 2026-07-27T17:48Z
+- Result: **PASS**. No secret values appear below; keys are described by prefix,
+  length, and a truncated digest of the secret.
+
+| Step | Result |
+| --- | --- |
+| Delivery with the old public SDK key, before rotation | 200 |
+| `POST /v1/api-keys/{id}/rotate` | 200; same key id, new secret (`prefix=mos_public_sdk_key_000001 length=69 sha256[:8]=9d40fcf4`, was `0d30f523`) |
+| Delivery with the **old** key after rotation | **401 `unauthenticated`** |
+| Delivery with the **new** key after rotation | **200** |
+| Create a secret server key | 201 (`prefix=mos_secret_server_key_000002 length=72`) |
+| Rotate it | 200, new secret digest |
+| Revoke it | 200 |
+| Rotate a `custom` / `sdk_only` provider credential | 422 `providerIntegrationUnsupported` — correct: that integration mode stores no server-side credential |
+
+Audit coverage, read from the database rather than the first page of the API
+listing: `api_key.created` ×2, `api_key.rotated` ×2, `api_key.revoked` ×1,
+`provider_connection.created` ×1. Rotation and revocation are auditable.
+
+### Keyring rotation
+
+A server-connected RevenueCat connection was created to produce a real encrypted
+envelope, then `cmd/keyring` was exercised before and after rotation:
+
+```
+keyring validate     keyring is valid; active key id: key_drill_a; key ids: [key_drill_a]
+
+keyring inspect      KEY ID        ENVELOPES  STATUS
+                     key_drill_a   1          active
+                     0 envelope(s) not under the active key
+
+keyring rotate       rotated 1 envelope(s)
+  (with the two-key keyring)
+                     rotation complete: 1 envelope(s) now sealed under key_drill_b
+
+keyring inspect      KEY ID        ENVELOPES  STATUS
+                     key_drill_b   1          active
+                     key_drill_a   0          unused
+                     0 envelope(s) not under the active key
+```
+
+The API and worker were restarted with the rotated keyring and returned to
+readiness 200. No key material was printed at any point.
+
+---
+
+## Drill 10 — Cross-tenant authorization
+
+- Start 2026-07-27T17:48Z, end 2026-07-27T17:51Z
+- Result: **PASS after fixing one masked authorization decision**
+
+A second Organization (`org_000002`) with its own user and Project was created so
+that every refusal below is an authorization decision rather than a missing
+feature. It then attempted the first tenant's resources.
+
+| Endpoint attempted with a foreign session | Status | Code |
+| --- | --- | --- |
+| `GET /v1/organizations/{id}` | 403 | forbidden |
+| `GET /v1/organizations/{id}/audit-events` | 403 | forbidden |
+| `GET /v1/projects/{id}` | 403 | forbidden |
+| `GET /v1/projects/{id}/environments` | 403 | forbidden |
+| `GET /v1/projects/{id}/paywalls` | 403 | forbidden |
+| `GET …/paywalls/{id}/versions` | 403 | forbidden |
+| `POST /v1/projects/{id}/paywalls` | 403 | forbidden |
+| `GET …/environments/{id}/releases` | 403 | forbidden |
+| `POST …/environments/{id}/publish` | 403 | forbidden |
+| `GET /v1/projects/{id}/products` | 403 | forbidden |
+| `GET /v1/products/{id}` | 403 | forbidden |
+| `POST /v1/products/{id}/archive` | 403 | forbidden |
+| `GET /v1/projects/{id}/entitlements` | 403 | forbidden |
+| `GET /v1/projects/{id}/placements` | 403 | forbidden |
+| `GET …/placements/{id}/rule-set` | 404 | not_found |
+| `PUT …/placements/{id}/binding` | 403 | forbidden |
+| `GET …/experiments` | 404 | experiment_not_found |
+| `GET …/experiments/{id}` | 404 | experiment_not_found |
+| `GET …/experiments/{id}/results` | 404 | experiment_not_found |
+| `POST …/experiments/{id}/emergency-stop` | 404 | experiment_not_found |
+| `POST …/experiments/{id}/exports` | 403 | forbidden |
+| `GET …/analytics/overview` | 403 | forbidden |
+| `POST …/analytics/exports` | 403 | forbidden |
+| `POST …/analytics/privacy/exports` | 403 | forbidden |
+| `GET /v1/projects/{id}/provider-connections` | 403 | forbidden |
+| `GET /v1/environments/{id}/api-keys` | 403 | forbidden |
+| `POST /v1/environments/{id}/api-keys` | 403 | forbidden |
+| `POST /v1/api-keys/{id}/rotate` | 403 | forbidden |
+| `POST /v1/api-keys/{id}/revoke` | 403 | forbidden |
+| `GET /v1/projects/{id}/assets` | 403 | forbidden |
+| `GET /v1/provider-connections/{id}` | 403 | forbidden |
+| `POST /v1/provider-connections/{id}/test` | 403 | forbidden |
+| `POST /v1/provider-connections/{id}/rotate-credential` | 403 | forbidden |
+
+33 of 33 refused server-side.
+
+On the first run, `POST /v1/provider-connections/{id}/test` answered **503
+`providerUnavailable`** instead of 403: the authorization failure was being
+rewritten into a provider error code. Verified that it caused **no cross-tenant
+read or write** — the victim connection's diagnostics count and health were
+unchanged, because the diagnostic write is itself scope-checked — but the
+decision was invisible. Fixed (defect 6) and re-run: 403.
+
+---
+
+## Drill 12 — Privacy operations
+
+- Result: **PASS**
+
+| Step | Result |
+| --- | --- |
+| `POST …/analytics/exports` (environment events) | 202 → `analytics_export_000001`, completed, **45 rows / 45 425 bytes**, artifact `analytics-exports/project_000001/analytics_export_000001.ndjson` |
+| `POST …/experiments/{id}/exports` (raw Experiment) | 202 → `analytics_export_000002`, completed, 45 rows / 40 070 bytes |
+| `POST …/analytics/privacy/preview` | 200 — `affectedEvents 4`, `affectedSessions 1`, `affectedEnvironmentIds ["env_000001"]`, `requestDigest ca16f651…` |
+| `POST …/analytics/privacy/exports` | 202 → completed, 4 rows / 4 052 bytes |
+| `POST …/analytics/privacy/deletions` with a **self-computed** digest | **409 conflict** — correct: the deletion must confirm the digest the preview returned |
+| Same with the preview's digest | 202 → `analytics_delete_000001`, processed to `recomputing`, `affected_event_count = 4` |
+| Tenant scoping | The second tenant's attempts at both the analytics export and the privacy export were refused 403 (Drill 10) |
+| Audit and job telemetry | Every job logged with `job_id`, `job_kind`, `project_id`, and `trace_id` |
+
+---
+
+## Drill 13 — Commerce smoke (mock / custom provider)
+
+- Start 2026-07-27T17:15Z
+- Result: **PASS for the custom-provider path.** RevenueCat, StoreKit 2, and
+  Google Play Billing are **not live-verified** (owner decision D10) and nothing
+  here claims otherwise.
+
+| Step | Result |
+| --- | --- |
+| Create a `custom` / `sdk_only` connection | 201, `provider_connection_000001`, `status pending`, `healthStatus untested` |
+| `POST /v1/provider-connections/{id}/test` | **503 `providerUnavailable`** (after defect 5 was fixed; it returned 500 before) |
+| `GET …/health` | 200 — `degraded`, `lastErrorCode providerUnavailable` |
+| `GET …/capabilities` | 200 — `productLoading: conditional`, `reasonCode host.implementationRequired` — correct for an SDK-only provider |
+| `GET …/diagnostics` | 200 — diagnostic rows recorded with `operation test`, `code providerUnavailable`, retryable |
+| Create a Product mapping | 201, `mapping_000001`, `status placeholder`, `availability unknown` |
+| `GET /v1/products/{id}/provider-mappings` | 200, resolves the mapping |
+| `GET /v1/products/{id}/provider-readiness` | 200 — `attentionRequired` with explicit `productUnavailable` blockers and `connectProduct` recovery actions |
+| `GET /v1/products/{id}/readiness` | 200 — same, consistent |
+
+The `custom` provider is host-implemented, so "test" legitimately reports the
+provider as unavailable; the value demonstrated here is that the outcome is a
+**documented, machine-readable, retryable** code with a diagnostic trail, not an
+opaque failure.
+
+---
+
+## Drill 14 remainder — emergency stop and raw export
+
+- Start 2026-07-27T17:52Z
+- Result: **PASS**
+
+A second Experiment (`experiment_000003`) was published and started on
+`placement_000002`.
+
+| Assertion | Observed | Verdict |
+| --- | --- | --- |
+| Delivery before the stop | 200, `ETag "sha256-e1073191…f45"`, 1 Experiment assignment for `experiment_000003` | — |
+| `POST …/emergency-stop` | 200, Experiment state → `stopped` | PASS |
+| A new Release is published by the stop | `release_000008` → **`release_000009`** | PASS |
+| Delivery reflects the stop | 200, **new ETag** `"sha256-4a3e13d4…f0"`; the assignment now carries `"lifecycle": "stopped"` with `"fallback": "normal_placement"` | PASS |
+| History preserved | 3 entries, including the stop with reason `drill two emergency stop` | PASS |
+| Versions preserved | `experiment_version_000002` retained | PASS |
+| Results preserved | 200, `state: "stopped"`, Variant rows intact | PASS |
+| Raw Experiment export | 202 → `analytics_export_000005`, kind `experiment` | PASS |
+
+Note on the delivered payload: the assignment entry is **not removed** from
+Delivery v3 — it remains with `lifecycle: stopped` so an SDK deterministically
+falls back to the normal Placement rather than silently losing the record. That
+is the contract-defined behaviour ("emergency stop always targets the normal
+Placement fallback"), and it is what "delivery reflects the removal" means here.
+
+---
+
+## Full integration suite
+
+```bash
+DATABASE_TEST_URL=postgres://mosaic:***@localhost:25432/mosaic_test?sslmode=disable
+MOSAIC_OBJECT_STORAGE_ENDPOINT=localhost:29000  (+ access key, secret key, bucket, TLS=false)
+go test -p 1 -count=1 ./...
+  exit code 0
+  30 packages ok, 17 with no test files, 0 skipped
+```
+
+No suite skipped for a missing `DATABASE_TEST_URL` or object-store configuration.
+
+Three failures were found and resolved on the way to that result:
+
+1. `TestEmbeddedSchemasMatchCanonicalProtocolFiles` — the API's **embedded**
+   `analytics-event` v1 and v2 schemas had drifted from the canonical
+   `protocol/schema/...` files. Resolved with the repository's own remedy,
+   `go generate ./internal/platform/protocolschema`, which rewrites only the
+   embedded copies under `apps/api`. The canonical protocol files were **not
+   modified**; both now hash-match (`a82d88f3a920c054`, `298950c9976b5986`).
+   This is release-blocker category 17 (canonical schema versus API runtime
+   disagreeing) and was live in the tree before this pass.
+2. `TestMiddlewareDistinguishesUnauthenticatedFromResolverFailure` — see
+   defect 7; a genuine secret-in-logs regression from pass one's 5xx cause
+   logging.
+3. `TestValidateExperimentDeliveryPayloadRequiresExactClosure` — asserted the
+   prose of an error message this pass replaced with a machine-readable reason.
+   Retargeted to assert the reason code, which is the actual API contract.
+
+---
+
+## Triage of the two pre-existing failures
+
+Both were run, diagnosed from real output, and resolved.
+
+### `TestPhase3APersistenceRisks`
+
+Pass one's static analysis was correct as far as it went, and the run confirmed
+it — then revealed four more layers behind it:
+
+```
+repository_integration_test.go:350: persist provider connection: provider project identifier is invalid
+  -> test-side: a server-connected RevenueCat connection requires ExternalProjectID. Added.
+repository_integration_test.go:354: provider mode mismatch
+  -> test-side: a sandbox connection may not be scoped to a production Environment.
+     Scope changed to development + staging, with production kept as the
+     genuinely-out-of-scope Environment for the integrity assertion below.
+repository_integration_test.go:391: null value in column "normalized_metadata" ... violates not-null
+  -> DOMAIN-side defect. Fixed (defect 9).
+repository_integration_test.go:391: violates check constraint "..._stale_order_check"
+  -> test-side: the fixture left StaleAt zero; stale_at is NOT NULL and must not
+     precede observed_at. Set.
+repository_integration_test.go:477: can't scan into dest[10] (col: diagnostic_code): cannot scan NULL
+  -> DOMAIN-side defect. Fixed (defect 10).
+```
+
+Pass one proposed adding a `Credential`; the run showed none is needed — the
+service rejects on `ExternalProjectID` first, and the test's stub catalog accepts
+the connection without one. **Result: PASS.**
+
+### `TestPhase4AProviderPersistenceRisks`
+
+Pass one could not decide between "stale assertion" and "readiness genuinely
+regresses". The real output settles it:
+
+```
+repository_integration_test.go:777: replacement-connection readiness =
+  {State:"attentionRequired", ConnectionID:"provider_connection_000002",
+   MappingID:"mapping_000002",
+   Blockers:[{Code:"providerUnavailable", ResourceType:"provider_connection",
+              RecoveryAction:"testOrReconnectProvider"}]}
+```
+
+Readiness resolved to the **correct** replacement connection. Its single blocker
+is `connection.Status != active || HealthStatus != healthy`
+(`service_provider.go:1019`) — the replacement connection had never been tested.
+The rule is right and errs safe: declaring a never-tested connection ready is the
+direction that would be release-blocker category 8. The **test** was stale, not
+the domain: it created a replacement connection and asserted readiness without
+performing the connection test the first connection performs. Added the
+`TestProviderConnection` call the operator workflow requires. **Result: PASS**,
+and the assertion still protects its original risk (readiness follows the active
+assignment across a connection replacement).
+
+---
+
+## Performance
+
+Measured, and recorded with full environment and dataset context, in
+[`docs/backend/operations/performance.md`](../backend/operations/performance.md#results).
+Summary, `mosaic-drill2` on the host above, zero error rate on all three runs:
+
+| Path | Concurrency | Duration | Throughput | Median | p95 | p99 |
+| --- | --- | --- | --- | --- | --- | --- |
+| Configuration delivery (v3) | 8 | 45s | 2 279.8 req/s | 3.257 ms | 6.396 ms | 8.596 ms |
+| Delivery 304 path | 8 | 45s | 2 377.7 req/s | 3.147 ms | 6.083 ms | 8.090 ms |
+| Ingestion, 100-event batches | 4 | 45s | 55.1 req/s (~5 500 events/s) | 69.536 ms | 89.871 ms | 128.341 ms |
+
+304 ratio on the conditional path: **1.0000**. The dataset is small (9 Releases,
+41 Events, a 15 761-byte delivered representation) and the numbers must not be
+read as capacity guidance for a production-sized Release.
+
+Two defects had to be fixed before any number could be produced: `cmd/loadgen`
+advertised no capabilities and was answered 406 for every delivery version, and
+the Compose services never passed the rate-limit variables through, so raising a
+limit for the measurement had no effect. Both are recorded below.
+
+**Not measured, and not claimed:** cold-publish delivery, publish, Placement
+evaluation, Experiment result queries, v3-versus-v2 payload cost, dashboard APIs,
+the seeded 10 k-job worker backlog drain, pool gauges under load, and
+`EXPLAIN (ANALYZE, BUFFERS)` plans.
+
+---
+
+## Defects found and fixed in this pass
+
+Beyond the five assigned pass-one defects (A–E above):
+
+| Id | Defect | Severity | Files |
+| --- | --- | --- | --- |
+| 1 | **Experiment publish always failed with 500** on any Experiment carrying a schedule: migration 00020 made `experiment_scheduling_jobs.available_at` NOT NULL and the insert never set it. No Experiment could be scheduled. | GA blocker | `internal/platform/experimentpostgres/repository.go` (+ integration test) |
+| 2 | **Every deliberate 5xx was rewritten to `500 internal_error`.** `errorDetails` collapsed all statuses ≥ 500, so `503 providerUnavailable`, `503 asset_storage_failed`, `502 providerInvalidResponse` and every other documented upstream-failure code were unreachable, and an SDK could not tell a failed dependency from a broken Mosaic. Status and code are now preserved above 500; the free-text message is still replaced, because messages are where topology leaks. | GA blocker (API contract) | `internal/platform/httpserver/response/response.go` (+ tests) |
+| 3 | **Audit history permanently unreadable after any Experiment action.** `AuditEvent.Metadata` is `map[string]string` but the Experiment writers store numbers and booleans, so `GET /v1/organizations/{id}/audit-events` returned 500 for the whole Organization, forever, over immutable rows. Decoding is now lenient, which repairs already-written history. | GA blocker | `internal/platform/cloudworkspacepostgres/repository.go` (+ test) |
+| 4 | **`422 experiment_invalid` named nothing** — fifteen distinct publish preconditions shared one opaque code with no detail and no log line. Now carries a machine-readable `details.reason`. | Diagnosability | `internal/experiment/errors.go`, `service.go`, `internal/platform/experimentpostgres/repository.go`, `internal/transport/experiment/handler.go` |
+| 5 | **`migrate down-to <version> --confirm` could never parse** — the documented failed-migration recovery command failed with "down-to requires a target version" because the version and the flag both landed in the positional list. | Blocks a documented recovery path | `cmd/migrate/main.go` (+ test) |
+| 6 | **Authorization refusals masked as provider outages.** A cross-tenant provider-connection test answered 503 `providerUnavailable` instead of 403. No cross-tenant read or write occurred, but the decision was invisible. | Security diagnosability | `internal/cloudworkspace/service_provider_operations.go` (+ test) |
+| 7 | **Secret material could reach the operator log.** Pass one's 5xx cause logging is valuable, but the authentication middleware deliberately reduces a resolver error to its type — and then handed the raw error, which may carry a connection string or credential fragment, to the logger that prints causes. | Blocker category 2 (secret exposure in logs) | `internal/platform/authn/principal.go` |
+| 8 | **Compose passed none of the operator configuration.** 59 variables documented in `.env.example` as "every variable the API and worker read" had no effect in the supported deployment profile — every rate limit, timeout, log level, session lifetime, upload ceiling, and worker interval. | Blocker category 16 (configuration in the supported profile does nothing) | `compose.yaml` |
+| 9 | Provider metadata snapshots could not be written when a Product carried no normalized metadata: an explicit NULL overrides the column default on a NOT NULL jsonb column. | Data-path defect | `internal/platform/cloudworkspacepostgres/repository.go` |
+| 10 | Provider mapping observations could not be **read back** once a successful one existed: `diagnostic_code` is NULL for a successful observation and was scanned into a `string`. | Data-path defect | `internal/platform/cloudworkspacepostgres/repository.go` |
+| 11 | `cmd/loadgen` advertised no capabilities, so both delivery scenarios were answered 406 and had never measured a Configuration Release. | Measurement harness | `cmd/loadgen/main.go` |
+| 12 | The API's embedded `analytics-event` v1/v2 schemas had drifted from the canonical protocol files (regenerated; canonical files untouched). | Blocker category 17 | `internal/platform/protocolschema/schemas/` |
+
+## Defects found, reported and NOT fixed
+
+| Defect | Why not fixed here | Owner |
+| --- | --- | --- |
+| **The API never serves a 503 while draining.** `readiness.StartDraining()` is followed immediately by `server.Shutdown()`, which closes the listener, so a load balancer polling readiness gets connection-refused rather than the clean 503 the Startup/Shutdown Model promises. In-flight requests do complete. The fix needs a deliberate pre-shutdown delay and a default value, which is a deployment-policy decision. | Needs an owner ruling on the default | mosaic-backend + owner |
+| **Once an Experiment is published, the Environment's Release has no Delivery v1 representation** (only v2 and v3), so a v1-only SDK receives 406 and cannot fetch configuration at all. The plan states legacy v1/v2 negotiation is preserved. The SDK fails safe on its cache, so it is not a crash, but the compatibility claim is not currently true. | Emitting a v1 view of a v3 Release is a contract decision | mosaic-backend + mosaic-protocol + owner |
+| **Experiment publish requires the Environment's current Release to already carry a Delivery v2 representation**, i.e. a Placement rule set must have been published there first. Nothing documents this. Now at least diagnosable (`reason: environment_release_has_no_placement_decision_contract`) rather than a bare `emitted_delivery_invalid`. | Auto-upgrading a v1 Release is a design decision | mosaic-backend + owner |
+| A missing object answers `500 internal_error` on the SDK asset path instead of a distinct safe code. | Adding a delivery error code is a contract decision | mosaic-backend + mosaic-protocol |
+| The irreversible-migration refusal names the data that would be destroyed but not the restore path. | One-line message change, but it belongs with the Stage 5 runbook wording | mosaic-backend |
+| `422 validation_failed` on the analytics query endpoints carries no `fields` naming the missing parameter. | Same class as the errors fixed above; not drill-blocking | mosaic-backend |
+| Throwaway-Placement-for-treatment-Versions workflow, and `docs/reviews/phase-5-demo-rule-set.json` being an invalid rule set. | Carried forward from pass one, unchanged | owner / Phase 5 evidence owner |
+
+## Drill status after pass two
+
+| Drill | Status |
+| --- | --- |
+| D1 Clean installation | **PASS** (pass one) |
+| D2 Upgrade from the RC schema | **PASS** |
+| D3 Failed-migration recovery | **PASS** (readiness-on-pending expectation corrected: the API fails startup instead) |
+| D4 PostgreSQL backup and restore | **PASS** |
+| D5 Object-storage backup and restore | **PASS** |
+| D6 Process recovery | **PASS** on worker recovery and state integrity; **FAIL** on the observable drain (defect reported) |
+| D7 Dependency failure | **PASS** (pass one; re-verified with the readiness fix) |
+| D8 Configuration delivery recovery | **PASS** (pass one) |
+| D9 Credential rotation | **PASS** |
+| D10 Cross-tenant authorization | **PASS** (33/33 refused, after fixing one masked decision) |
+| D11 SDK cache rendering | **NOT RUN** — owned by the SDK agents |
+| D12 Privacy operations | **PASS** |
+| D13 Commerce smoke (mock/custom) | **PASS**; RevenueCat / StoreKit / Play **not live-verified** |
+| D14 Placement + Experiment conformance | **PASS** including emergency stop and raw export |
+| Full integration suite | **PASS** — `go test -p 1 ./...` exit 0 |
+| Triage of the two pre-existing failures | **RESOLVED** — both run, both now pass; two domain defects found behind them |
+| Performance harness | **MEASURED** — delivery, delivery-etag, ingest; recorded in `performance.md` |
+
+## Cleanup
+
+`docker compose -p mosaic-drill2 down -v` removed all drill containers, the four
+`mosaic-drill2_*` volumes, and the `mosaic-drill2_default` network. The
+pre-existing development volumes (`mosaic_postgres_data`, `mosaic_minio_data`,
+`mosaic_caddy_data`, `mosaic_caddy_config`) were never attached to this project
+and were not touched. The `mosaic_test` and `mosaic_restore_check` databases went
+away with the teardown. All drill scratch files — env files, keyring material,
+generated batches, helper scripts, backup artifacts — live outside the repository
+in the session scratchpad and were removed; nothing was left in the working tree
+except the fixes and this document.

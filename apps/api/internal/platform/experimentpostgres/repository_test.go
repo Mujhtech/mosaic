@@ -2,8 +2,9 @@ package experimentpostgres
 
 import (
 	"encoding/json"
-	"strings"
 	"testing"
+
+	"github.com/Mujhtech/mosaic/apps/api/internal/experiment"
 )
 
 func TestSetReleaseContentDigestChangesWithReleaseMaterial(t *testing.T) {
@@ -41,8 +42,12 @@ func TestValidateExperimentDeliveryPayloadRequiresExactClosure(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err = validateExperimentDeliveryPayload(raw); err == nil || !strings.Contains(err.Error(), "paywall closure") {
-		t.Fatalf("missing treatment closure error = %v", err)
+	// Assert the machine-readable reason rather than the prose: the reason is
+	// the contract the API surfaces as `details.reason` on a 422.
+	err = validateExperimentDeliveryPayload(raw)
+	reason, ok := experiment.InvalidReason(err)
+	if err == nil || !ok || reason != "experiment_paywall_closure_incomplete" {
+		t.Fatalf("missing treatment closure error = %v (reason %q)", err, reason)
 	}
 
 	release["paywallVersions"] = []any{map[string]any{"id": "paywall_version_treatment"}}

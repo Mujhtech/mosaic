@@ -17,7 +17,13 @@
 #   -t       direct-URL mode: the URL of the target database to restore into;
 #            its database name must match -d (required with -u)
 #   --force  allow restoring over an existing database
+#   -p       Compose project to act on (default: the Compose default project).
+#            Required when the host runs more than one Mosaic installation.
+#   --compose-file / --env-file  extra Compose file and env-file selection
 set -euo pipefail
+
+# shellcheck source=lib/compose.sh
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib/compose.sh"
 
 dump_path=""
 target_database=""
@@ -27,11 +33,11 @@ service="postgres"
 force="false"
 
 arguments=()
-for argument in "$@"; do
-  case "${argument}" in
-    --force) force="true" ;;
-    *) arguments+=("${argument}") ;;
-  esac
+while [[ $# -gt 0 ]]; do
+  if [[ "$1" == "--force" ]]; then force="true"; shift; continue; fi
+  mosaic_compose_parse_option "$@"
+  if [[ "${mosaic_compose_consumed}" -gt 0 ]]; then shift "${mosaic_compose_consumed}"; continue; fi
+  arguments+=("$1"); shift
 done
 set -- "${arguments[@]+"${arguments[@]}"}"
 
@@ -42,7 +48,7 @@ while getopts ":f:d:u:t:s:h" option; do
     u) admin_url="${OPTARG}" ;;
     t) target_url="${OPTARG}" ;;
     s) service="${OPTARG}" ;;
-    h) sed -n '2,24p' "$0"; exit 0 ;;
+    h) sed -n '2,27p' "$0"; exit 0 ;;
     *) echo "unknown option: -${OPTARG}" >&2; exit 2 ;;
   esac
 done
@@ -78,6 +84,8 @@ checksum() {
   fi
 }
 
+if [[ -z "${admin_url}" ]]; then mosaic_compose_describe; fi
+
 echo "==> verifying artifact integrity"
 if [[ -f "${dump_path}.sha256" ]]; then
   expected="$(awk '{print $1}' "${dump_path}.sha256")"
@@ -100,7 +108,7 @@ administer() {
   if [[ -n "${admin_url}" ]]; then
     psql "${admin_url}" -v ON_ERROR_STOP=1 -At -c "${statement}"
   else
-    docker compose exec -T "${service}" \
+    mosaic_compose exec -T "${service}" \
       psql -U "${POSTGRES_USER:-mosaic}" -d postgres -v ON_ERROR_STOP=1 -At -c "${statement}"
   fi
 }
@@ -111,7 +119,7 @@ inTarget() {
   if [[ -n "${admin_url}" ]]; then
     psql "${target_url}" -v ON_ERROR_STOP=1 -At -c "${statement}"
   else
-    docker compose exec -T "${service}" \
+    mosaic_compose exec -T "${service}" \
       psql -U "${POSTGRES_USER:-mosaic}" -d "${target_database}" -v ON_ERROR_STOP=1 -At -c "${statement}"
   fi
 }
@@ -134,7 +142,7 @@ if [[ -n "${admin_url}" ]]; then
   pg_restore --no-owner --no-privileges --exit-on-error \
     --dbname="${target_url}" "${dump_path}"
 else
-  docker compose exec -T "${service}" \
+  mosaic_compose exec -T "${service}" \
     pg_restore --no-owner --no-privileges --exit-on-error \
       -U "${POSTGRES_USER:-mosaic}" -d "${target_database}" < "${dump_path}"
 fi

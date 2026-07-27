@@ -188,7 +188,10 @@ func TestErrorDoesNotExposeUnknownInternalError(t *testing.T) {
 	}
 }
 
-func TestServerAPIErrorIsAlwaysSanitized(t *testing.T) {
+// A deliberate 5xx keeps its machine-readable code, because SDKs and Studio use
+// it to tell a failed dependency from a broken Mosaic, but never its message:
+// free-text messages are where internal topology leaks.
+func TestServerAPIErrorKeepsItsCodeAndDropsItsMessage(t *testing.T) {
 	recorder := serveWithRequestID(t, "req-server", func(w http.ResponseWriter, r *http.Request) {
 		Error(w, r, &APIError{
 			Status:  http.StatusServiceUnavailable,
@@ -197,9 +200,12 @@ func TestServerAPIErrorIsAlwaysSanitized(t *testing.T) {
 		})
 	})
 
+	if recorder.Code != http.StatusServiceUnavailable {
+		t.Fatalf("status = %d, want 503", recorder.Code)
+	}
 	payload := decodeError(t, recorder)
-	if payload.Error.Code != "internal_error" {
-		t.Fatalf("code = %q, want internal_error", payload.Error.Code)
+	if payload.Error.Code != "database_unavailable" {
+		t.Fatalf("code = %q, want the deliberate code to survive", payload.Error.Code)
 	}
 	if strings.Contains(recorder.Body.String(), "db.internal") {
 		t.Fatalf("response exposed internal host: %s", recorder.Body.String())
@@ -303,5 +309,70 @@ func TestClientErrorIsNotLoggedAsUnexpected(t *testing.T) {
 	}
 	if logged.Len() != 0 {
 		t.Fatalf("client error was logged as unexpected: %s", logged.String())
+	}
+}
+
+// The API documents deliberate upstream-failure statuses -- 503
+// providerUnavailable, 503 asset_storage_failed, 502 providerInvalidResponse --
+// and SDKs use them to decide whether to retry. Every one of them was rewritten
+// to 500 internal_error before reaching the client, so a temporarily
+// unavailable commerce provider was indistinguishable from a broken Mosaic and
+// the documented contract could never be produced. A 500 must still collapse,
+// and an APIError with no code must still degrade safely rather than leak.
+func TestDeliberateUpstreamFailureStatusesReachTheClient(t *testing.T) {
+	for name, testCase := range map[string]struct {
+		err         error
+		wantStatus  int
+		wantCode    string
+		wantMessage string
+	}{
+		"provider temporarily unavailable": {
+			&APIError{Status: http.StatusServiceUnavailable, Code: "providerUnavailable",
+				Message: "The provider is temporarily unavailable.",
+				Cause:   stderrors.New("dial tcp 10.0.0.1:443: connection refused")},
+			http.StatusServiceUnavailable, "providerUnavailable", upstreamFailureMessage,
+		},
+		"provider returned an invalid response": {
+			&APIError{Status: http.StatusBadGateway, Code: "providerInvalidResponse",
+				Message: "The provider returned an invalid response."},
+			http.StatusBadGateway, "providerInvalidResponse", upstreamFailureMessage,
+		},
+		"an unexpected 500 still collapses": {
+			&APIError{Status: http.StatusInternalServerError, Code: "some_internal_detail",
+				Message: "pq: relation does not exist", Cause: stderrors.New("SQLSTATE 42P01")},
+			http.StatusInternalServerError, "internal_error", "An unexpected error occurred.",
+		},
+		"a 5xx with no code degrades to internal_error": {
+			&APIError{Status: http.StatusServiceUnavailable},
+			http.StatusInternalServerError, "internal_error", "An unexpected error occurred.",
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			recorder := httptest.NewRecorder()
+			request := httptest.NewRequest(http.MethodGet, "/x", nil)
+			Error(recorder, request, testCase.err)
+
+			if recorder.Code != testCase.wantStatus {
+				t.Fatalf("status = %d, want %d (body %s)", recorder.Code, testCase.wantStatus, recorder.Body.String())
+			}
+			var payload struct {
+				Error struct {
+					Code    string `json:"code"`
+					Message string `json:"message"`
+				} `json:"error"`
+			}
+			if err := json.Unmarshal(recorder.Body.Bytes(), &payload); err != nil {
+				t.Fatal(err)
+			}
+			if payload.Error.Code != testCase.wantCode || payload.Error.Message != testCase.wantMessage {
+				t.Fatalf("body = %s, want code %q message %q",
+					recorder.Body.String(), testCase.wantCode, testCase.wantMessage)
+			}
+			// The cause must never reach the client on any 5xx.
+			if strings.Contains(recorder.Body.String(), "connection refused") ||
+				strings.Contains(recorder.Body.String(), "SQLSTATE") {
+				t.Fatalf("the internal cause leaked into the response: %s", recorder.Body.String())
+			}
+		})
 	}
 }

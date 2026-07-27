@@ -28,10 +28,17 @@ type Checker interface{ Ping(context.Context) error }
 
 // Check is one named readiness dependency. Code is a stable, safe diagnostic
 // identifier reported to operators; it must never embed configuration values.
+//
+// DependsOn names another Check this one cannot be evaluated without. When that
+// prerequisite fails, this check is skipped rather than reported: the migration
+// probe needs PostgreSQL, so reporting `migration_incompatible` while the
+// database is simply down sends an operator to diagnose a schema problem that
+// does not exist. Readiness still fails — on the dependency that actually broke.
 type Check struct {
-	Name  string
-	Code  string
-	Probe func(context.Context) error
+	Name      string
+	Code      string
+	DependsOn string
+	Probe     func(context.Context) error
 }
 
 // Readiness aggregates readiness dependencies and the draining flag.
@@ -60,9 +67,19 @@ func (r *Readiness) Evaluate(ctx context.Context) []string {
 		return nil
 	}
 	var failures []string
+	failed := make(map[string]struct{}, len(r.checks))
 	for _, check := range r.checks {
 		if check.Probe == nil {
 			continue
+		}
+		if check.DependsOn != "" {
+			if _, broken := failed[check.DependsOn]; broken {
+				zerolog.Ctx(ctx).Warn().
+					Str("readiness_check", check.Name).
+					Str("readiness_skipped_because", check.DependsOn).
+					Msg("readiness dependency check skipped: a prerequisite is unavailable")
+				continue
+			}
 		}
 		probeContext, cancel := context.WithTimeout(ctx, checkTimeout)
 		err := check.Probe(probeContext)
@@ -73,6 +90,7 @@ func (r *Readiness) Evaluate(ctx context.Context) []string {
 				Str("readiness_code", check.Code).
 				Err(err).
 				Msg("readiness dependency check failed")
+			failed[check.Name] = struct{}{}
 			failures = append(failures, check.Code)
 		}
 	}

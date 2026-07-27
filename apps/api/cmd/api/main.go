@@ -250,7 +250,7 @@ func run() (runErr error) {
 			return database.Ping(ctx, databasePool)
 		}},
 		health.Check{Name: "object_storage", Code: "object_storage_unavailable", Probe: objectStore.Check},
-		health.Check{Name: "migrations", Code: "migration_incompatible", Probe: func(ctx context.Context) error {
+		health.Check{Name: "migrations", Code: "migration_incompatible", DependsOn: "postgresql", Probe: func(ctx context.Context) error {
 			return database.MigrationCompatibility(ctx, databasePool)
 		}},
 		health.Check{Name: "encryption", Code: "encryption_misconfigured", Probe: func(context.Context) error {

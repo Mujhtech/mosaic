@@ -343,7 +343,7 @@ func (r *Repository) Publish(ctx context.Context, scope experiment.Scope, input 
 		var ok bool
 		e = tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM paywall_versions v JOIN paywalls p ON p.id=v.paywall_id WHERE v.id=$1 AND v.paywall_id=$2 AND v.project_id=$3 AND v.environment_id=$4 AND p.status='active')`, variant.PaywallVersionID, variant.PaywallID, scope.ProjectID, scope.EnvironmentID).Scan(&ok)
 		if e != nil || !ok {
-			return experiment.PublishOutput{}, fmt.Errorf("paywall version is not publishable: %w", experiment.ErrInvalid)
+			return experiment.PublishOutput{}, experiment.Invalid("variant_paywall_version_not_publishable")
 		}
 		var unsafe int
 		e = tx.QueryRow(ctx, `SELECT count(*) FROM paywall_version_products pvp
@@ -368,7 +368,7 @@ func (r *Repository) Publish(ctx context.Context, scope experiment.Scope, input 
 				)
 			)`, variant.PaywallVersionID, scope.EnvironmentID).Scan(&unsafe)
 		if e != nil || unsafe > 0 {
-			return experiment.PublishOutput{}, fmt.Errorf("paywall version has unsafe products: %w", experiment.ErrInvalid)
+			return experiment.PublishOutput{}, experiment.Invalid("variant_paywall_products_not_ready")
 		}
 	}
 	var overlap int
@@ -391,7 +391,7 @@ func (r *Repository) Publish(ctx context.Context, scope experiment.Scope, input 
 			return experiment.PublishOutput{}, persistence(e)
 		}
 		if !groupValid {
-			return experiment.PublishOutput{}, fmt.Errorf("mutual exclusion group is invalid: %w", experiment.ErrInvalid)
+			return experiment.PublishOutput{}, experiment.Invalid("mutual_exclusion_group_invalid")
 		}
 		var outsideGroup int
 		e = tx.QueryRow(ctx, `SELECT count(*) FROM experiments other
@@ -453,7 +453,7 @@ func (r *Repository) Publish(ctx context.Context, scope experiment.Scope, input 
 		var snapshot []byte
 		e = tx.QueryRow(ctx, `SELECT jsonb_build_object('id',id,'version',version,'name',name,'numeratorEvent',numerator_event,'denominatorEvent',denominator_event,'assignmentUnit',assignment_unit,'authority',authority,'availability',availability,'eventFilter',event_filter,'attributionWindowSeconds',attribution_window_seconds,'freshnessSeconds',freshness_seconds,'definition',definition) FROM experiment_metric_definitions WHERE id=$1 AND version=$2 AND availability='available' AND (($3='primary' AND primary_eligible) OR ($3='guardrail' AND guardrail_eligible))`, id, mv, kind).Scan(&snapshot)
 		if e != nil {
-			return experiment.PublishOutput{}, fmt.Errorf("metric snapshot is unavailable: %w", experiment.ErrInvalid)
+			return experiment.PublishOutput{}, experiment.Invalid("metric_definition_unavailable")
 		}
 		_, e = tx.Exec(ctx, `INSERT INTO experiment_metric_snapshots(experiment_version_id,project_id,metric_id,metric_version,kind,snapshot) VALUES($1,$2,$3,$4,$5,$6)`, versionID, scope.ProjectID, id, mv, kind, snapshot)
 		if e != nil {
@@ -480,7 +480,7 @@ func (r *Repository) Publish(ctx context.Context, scope experiment.Scope, input 
 		if jobErr != nil {
 			return experiment.PublishOutput{}, persistence(jobErr)
 		}
-		_, e = tx.Exec(ctx, `INSERT INTO experiment_scheduling_jobs(id,experiment_id,project_id,environment_id,action,scheduled_at,status,actor_id,created_at,updated_at) VALUES($1,$2,$3,$4,'start',$5,'queued',$6,$7,$7)`, jobID, input.Experiment.ID, scope.ProjectID, scope.EnvironmentID, input.Document.Schedule.StartsAt, input.ActorID, input.Now)
+		_, e = tx.Exec(ctx, scheduleJobStartInsert, jobID, input.Experiment.ID, scope.ProjectID, scope.EnvironmentID, input.Document.Schedule.StartsAt, input.ActorID, input.Now)
 		if e != nil {
 			return experiment.PublishOutput{}, persistence(e)
 		}
@@ -490,7 +490,7 @@ func (r *Repository) Publish(ctx context.Context, scope experiment.Scope, input 
 		if jobErr != nil {
 			return experiment.PublishOutput{}, persistence(jobErr)
 		}
-		_, e = tx.Exec(ctx, `INSERT INTO experiment_scheduling_jobs(id,experiment_id,project_id,environment_id,action,scheduled_at,status,actor_id,created_at,updated_at) VALUES($1,$2,$3,$4,'complete',$5,'queued',$6,$7,$7)`, jobID, input.Experiment.ID, scope.ProjectID, scope.EnvironmentID, input.Document.Schedule.EndsAt, input.ActorID, input.Now)
+		_, e = tx.Exec(ctx, scheduleJobCompleteInsert, jobID, input.Experiment.ID, scope.ProjectID, scope.EnvironmentID, input.Document.Schedule.EndsAt, input.ActorID, input.Now)
 		if e != nil {
 			return experiment.PublishOutput{}, persistence(e)
 		}
@@ -518,7 +518,7 @@ func (r *Repository) publishRelease(ctx context.Context, tx pgx.Tx, scope experi
 	var number int64
 	e := tx.QueryRow(ctx, `SELECT current_release_id,last_release_number FROM environment_release_state WHERE environment_id=$1 FOR UPDATE`, scope.EnvironmentID).Scan(&oldID, &number)
 	if e != nil || oldID == "" {
-		return "", fmt.Errorf("environment has no current release: %w", experiment.ErrInvalid)
+		return "", experiment.Invalid("environment_has_no_current_release")
 	}
 	var base []byte
 	e = tx.QueryRow(ctx, `SELECT COALESCE((SELECT payload_bytes FROM configuration_release_representations WHERE release_id=$1 AND delivery_contract_version='2'),(SELECT payload_bytes FROM configuration_releases WHERE id=$1))`, oldID).Scan(&base)
@@ -527,11 +527,11 @@ func (r *Repository) publishRelease(ctx context.Context, tx pgx.Tx, scope experi
 	}
 	var envelope map[string]any
 	if e = json.Unmarshal(base, &envelope); e != nil {
-		return "", fmt.Errorf("current release bytes are invalid: %w", experiment.ErrInvalid)
+		return "", experiment.Invalid("current_release_payload_unreadable")
 	}
 	release, ok := envelope["release"].(map[string]any)
 	if !ok {
-		return "", fmt.Errorf("current release envelope is missing release metadata: %w", experiment.ErrInvalid)
+		return "", experiment.Invalid("current_release_metadata_missing")
 	}
 	releaseID, e := nextID(ctx, tx, "release")
 	if e != nil {
@@ -544,6 +544,14 @@ func (r *Repository) publishRelease(ctx context.Context, tx pgx.Tx, scope experi
 	v2, e := json.Marshal(envelope)
 	if e != nil {
 		return "", fmt.Errorf("marshal delivery v2: %w", e)
+	}
+	// The base above falls back to the Release's v1 payload when the
+	// Environment has no v2 representation, which only happens when no
+	// Placement rule set has been published there. Publishing an Experiment
+	// then cannot produce a v3 Release. Say so: the generic
+	// `emitted_delivery_invalid` sent the caller looking at the Experiment.
+	if version, _ := envelope["configurationDeliveryVersion"].(string); version != "2" {
+		return "", experiment.Invalid("environment_release_has_no_placement_decision_contract")
 	}
 	if e = validateDeliveryPayload(v2, "2"); e != nil {
 		return "", e
@@ -741,6 +749,21 @@ const (
 	closureEntitlementGrantsQuery = `SELECT DISTINCT e.id,e.key FROM product_entitlement_grants peg JOIN entitlements e ON e.id=peg.entitlement_id AND e.project_id=peg.project_id WHERE peg.product_id=ANY($1::text[]) ORDER BY e.id`
 )
 
+// Migration 00020 made experiment_scheduling_jobs.available_at NOT NULL so an
+// expired lease can be reclaimed and a transient failure requeued with backoff.
+// The writer was never updated to set it, so every Experiment publish carrying a
+// schedule failed with a not-null violation and no Experiment could be
+// scheduled. available_at starts equal to scheduled_at: the job is eligible the
+// moment it is due, and each retry pushes it forward.
+const (
+	scheduleJobStartInsert    = `INSERT INTO experiment_scheduling_jobs(id,experiment_id,project_id,environment_id,action,scheduled_at,available_at,status,actor_id,created_at,updated_at) VALUES($1,$2,$3,$4,'start',$5,$5,'queued',$6,$7,$7)`
+	scheduleJobCompleteInsert = `INSERT INTO experiment_scheduling_jobs(id,experiment_id,project_id,environment_id,action,scheduled_at,available_at,status,actor_id,created_at,updated_at) VALUES($1,$2,$3,$4,'complete',$5,$5,'queued',$6,$7,$7)`
+)
+
+// ScheduleJobInsertStatements exposes the scheduling-job writes so an
+// integration test can execute them against the real schema.
+var ScheduleJobInsertStatements = []string{scheduleJobStartInsert, scheduleJobCompleteInsert}
+
 // ReleaseClosureStatements lists every statement above so
 // TestReleaseClosureStatementsMatchTheSchema can prepare them all.
 var ReleaseClosureStatements = func() []string {
@@ -901,7 +924,7 @@ func validateExperimentDeliveryPayload(payload []byte) error {
 		} `json:"release"`
 	}
 	if err := json.Unmarshal(payload, &envelope); err != nil || envelope.Version != "3" {
-		return fmt.Errorf("emitted delivery v3 is invalid: %w", experiment.ErrInvalid)
+		return experiment.Invalid("emitted_delivery_v3_invalid")
 	}
 	paywalls, products := map[string]bool{}, map[string]bool{}
 	for _, value := range envelope.Release.PaywallVersions {
@@ -915,11 +938,11 @@ func validateExperimentDeliveryPayload(payload []byte) error {
 	for _, assignment := range envelope.Release.Assignments {
 		for _, variant := range assignment.Variants {
 			if !paywalls[variant.PaywallVersionID] {
-				return fmt.Errorf("experiment paywall closure is incomplete: %w", experiment.ErrInvalid)
+				return experiment.Invalid("experiment_paywall_closure_incomplete")
 			}
 			for _, id := range variant.Compatibility.ProductIDs {
 				if !products[id] {
-					return fmt.Errorf("experiment product closure is incomplete: %w", experiment.ErrInvalid)
+					return experiment.Invalid("experiment_product_closure_incomplete")
 				}
 			}
 		}
@@ -930,15 +953,15 @@ func validateExperimentDeliveryPayload(payload []byte) error {
 func validateDeliveryPayload(payload []byte, expectedVersion string) error {
 	var root map[string]any
 	if err := json.Unmarshal(payload, &root); err != nil || root["configurationDeliveryVersion"] != expectedVersion {
-		return fmt.Errorf("emitted delivery v%s is invalid: %w", expectedVersion, experiment.ErrInvalid)
+		return experiment.Invalid("emitted_delivery_invalid")
 	}
 	release, ok := root["release"].(map[string]any)
 	if !ok {
-		return fmt.Errorf("emitted delivery v%s has no release: %w", expectedVersion, experiment.ErrInvalid)
+		return experiment.Invalid("emitted_delivery_has_no_release")
 	}
 	declared, _ := release["contentDigest"].(string)
 	if err := setReleaseContentDigest(release); err != nil || release["contentDigest"] != declared {
-		return fmt.Errorf("emitted delivery v%s digest is invalid: %w", expectedVersion, experiment.ErrInvalid)
+		return experiment.Invalid("emitted_delivery_digest_invalid")
 	}
 	return nil
 }

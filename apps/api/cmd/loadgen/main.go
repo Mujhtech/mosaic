@@ -30,6 +30,7 @@ import (
 	"os"
 	"os/signal"
 	"sort"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"syscall"
@@ -221,15 +222,63 @@ func issue(ctx context.Context, client *http.Client, opts options, etag string, 
 	}
 }
 
+// paywallCapabilities is the full Paywall 0.2 capability vocabulary a current
+// SDK advertises. Capability negotiation is a closed contract: a request that
+// advertises nothing is answered 406 for every delivery version, so without
+// these headers the delivery scenarios measured the refusal path and never
+// reached a Configuration Release.
+var paywallCapabilities = []string{
+	"layout.scrollContainer", "layout.stack", "layout.sizing", "layout.heightSizing", "layout.outerInsets",
+	"navigation.screens", "navigation.sheets",
+	"component.text", "component.image", "component.icon", "component.featureList", "component.productSelector",
+	"component.productCard", "component.productBadge", "component.button", "component.carousel",
+	"component.switch", "component.countdown",
+	"localization.catalogs", "localization.rtl", "localization.productTemplate", "product.references",
+	"asset.bundledImage", "asset.remoteImage", "asset.bundledVideo", "asset.remoteVideo",
+	"action.purchase", "action.restore", "action.close", "action.navigateTo", "action.navigateBack",
+	"action.openExternalUrl",
+	"accessibility.metadata", "fallback.asset", "fallback.product", "outcome.normalized",
+	"style.colors", "style.designTokens", "style.gradientBackground", "style.mediaBackground", "style.shadow",
+	"style.box", "style.clipping", "style.typography", "style.productCardStates",
+	"visibility.static", "condition.switchVisibility",
+}
+
+var experimentFeatures = []string{
+	"allocation.ranges", "assignment.installation", "assignment.identified_user",
+	"assignment.identified_user_or_installation", "fallback.normal_placement",
+	"group.mutual_exclusion", "override.qa", "schedule.trusted_server_time",
+}
+
+// setCapabilityHeaders makes the request look like a current SDK that supports
+// every delivery contract, so negotiation selects the highest representation
+// the Environment actually serves.
+func setCapabilityHeaders(request *http.Request, opts options) {
+	request.Header.Set("Authorization", "Bearer "+opts.key)
+	request.Header.Set("Mosaic-SDK-Platform", opts.platform)
+	request.Header.Set("Mosaic-SDK-Version", opts.sdkVersion)
+	request.Header.Set("Mosaic-Configuration-Versions", "3,2,1")
+	request.Header.Set("Mosaic-Paywall-Protocol-Versions", "0.2")
+	capabilities := make([]string, 0, len(paywallCapabilities))
+	for _, name := range paywallCapabilities {
+		capabilities = append(capabilities, name+"@0.2")
+	}
+	request.Header.Set("Mosaic-Paywall-Capabilities", strings.Join(capabilities, ","))
+	request.Header.Set("Mosaic-Placement-Decision-Versions", "1")
+	request.Header.Set("Mosaic-Decision-Features", "source.device.platform,source.identity.user_present")
+	request.Header.Set("Mosaic-Bucketing-Algorithms", "sha256_length_prefixed_v1")
+	request.Header.Set("Mosaic-Experiment-Assignment-Versions", "1")
+	request.Header.Set("Mosaic-Experiment-Features", strings.Join(experimentFeatures, ","))
+	request.Header.Set("Mosaic-Experiment-Bucketing-Algorithms", "experiment_sha256_length_prefixed_v1")
+	request.Header.Set("Mosaic-Experiment-Schedule-Policies", "trusted_server_time_v1")
+}
+
 func getConfiguration(ctx context.Context, client *http.Client, opts options, etag string) (int, error) {
 	request, err := http.NewRequestWithContext(ctx, http.MethodGet,
 		opts.baseURL+"/v1/sdk/configuration", nil)
 	if err != nil {
 		return 0, err
 	}
-	request.Header.Set("Authorization", "Bearer "+opts.key)
-	request.Header.Set("Mosaic-SDK-Platform", opts.platform)
-	request.Header.Set("Mosaic-SDK-Version", opts.sdkVersion)
+	setCapabilityHeaders(request, opts)
 	if etag != "" {
 		request.Header.Set("If-None-Match", etag)
 	}
@@ -249,9 +298,7 @@ func fetchETag(client *http.Client, opts options) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	request.Header.Set("Authorization", "Bearer "+opts.key)
-	request.Header.Set("Mosaic-SDK-Platform", opts.platform)
-	request.Header.Set("Mosaic-SDK-Version", opts.sdkVersion)
+	setCapabilityHeaders(request, opts)
 	response, err := client.Do(request)
 	if err != nil {
 		return "", err

@@ -440,16 +440,60 @@ func (r reader) ProviderMetadataSnapshot(id string) (cloudworkspace.ProviderProd
 func scanProviderMappingObservation(row pgx.Row) (cloudworkspace.ProviderMappingObservation, error) {
 	var v cloudworkspace.ProviderMappingObservation
 	var metadata []byte
+	// diagnostic_code is written as SQL NULL for an observation that carries no
+	// diagnostic -- that is, every successful one -- so scanning it into a
+	// string failed with "cannot scan NULL into *string" and listing
+	// observations broke as soon as one succeeded.
+	var diagnosticCode *string
 	err := row.Scan(
 		&v.ID, &v.ProjectID, &v.MappingID, &v.EnvironmentID, &v.ApplicationID,
 		&v.Platform, &v.Provider, &v.AdapterVersion, &v.StoreContext, &v.Result,
-		&v.DiagnosticCode, &v.CorrelationID, &metadata, &v.ObservedAt,
+		&diagnosticCode, &v.CorrelationID, &metadata, &v.ObservedAt,
 		&v.ExpiresAt, &v.ReceivedAt, &v.CreatedByActorID,
 	)
 	if err == nil {
+		if diagnosticCode != nil {
+			v.DiagnosticCode = *diagnosticCode
+		}
 		err = json.Unmarshal(metadata, &v.Metadata)
 	}
 	return v, err
+}
+
+// decodeAuditMetadata reads stored audit metadata leniently.
+//
+// AuditEvent.Metadata is map[string]string, but the Experiment writers record
+// map[string]any values including revision numbers and validation booleans.
+// Decoding straight into map[string]string therefore failed with "cannot
+// unmarshal number into Go value of type string", and because audit history is
+// immutable, one Experiment action made
+// GET /v1/organizations/{id}/audit-events return 500 for that Organization
+// permanently -- the audit trail became unreadable exactly where it matters.
+//
+// Non-string scalars are rendered as their JSON text and structured values as
+// compact JSON, so history written before this fix is readable and the public
+// contract stays a string map.
+func decodeAuditMetadata(raw []byte) (map[string]string, error) {
+	if len(raw) == 0 {
+		return nil, nil
+	}
+	var values map[string]json.RawMessage
+	if err := json.Unmarshal(raw, &values); err != nil {
+		return nil, err
+	}
+	if values == nil {
+		return nil, nil
+	}
+	result := make(map[string]string, len(values))
+	for key, value := range values {
+		var text string
+		if err := json.Unmarshal(value, &text); err == nil {
+			result[key] = text
+			continue
+		}
+		result[key] = string(value)
+	}
+	return result, nil
 }
 
 const providerMappingObservationColumns = `id,project_id,mapping_id,environment_id,application_id,platform,provider,adapter_version,store_context,result,diagnostic_code,correlation_id,metadata,observed_at,expires_at,received_at,created_by_actor_id`
@@ -558,7 +602,7 @@ func scanAudit(row pgx.Row) (cloudworkspace.AuditEvent, error) {
 		if environmentID != nil {
 			v.EnvironmentID = *environmentID
 		}
-		err = json.Unmarshal(metadata, &v.Metadata)
+		v.Metadata, err = decodeAuditMetadata(metadata)
 	}
 	return v, err
 }
@@ -648,6 +692,19 @@ func (t *transaction) SaveProductReplacement(v cloudworkspace.ProductReplacement
 func (t *transaction) DeleteProductGrant(productID, entitlementID string) {
 	t.exec(`DELETE FROM product_entitlement_grants WHERE product_id=$1 AND entitlement_id=$2`, productID, entitlementID)
 }
+
+// jsonObjectOrEmpty keeps a nil or empty JSON document out of a NOT NULL jsonb
+// column. `provider_product_metadata_snapshots.normalized_metadata` is
+// NOT NULL with a `{}` default and an "is an object" CHECK, but an explicit
+// NULL overrides a column default, so a snapshot recorded for a provider
+// Product that carries no normalized metadata failed the insert outright.
+func jsonObjectOrEmpty(raw json.RawMessage) json.RawMessage {
+	if len(raw) == 0 {
+		return json.RawMessage(`{}`)
+	}
+	return raw
+}
+
 func emptyStringAsNil(value string) any {
 	if value == "" {
 		return nil
@@ -755,7 +812,7 @@ func (t *transaction) SaveProviderMetadataSnapshot(v cloudworkspace.ProviderProd
 		 VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)`,
 		v.ID, v.ProjectID, v.MappingID, v.Source, v.Digest, v.Availability, v.ObservedAt,
 		v.SyncedAt, v.StaleAt, v.ExpiresAt, emptyStringAsNil(string(v.LastErrorCode)),
-		v.Metadata, v.CreatedAt,
+		jsonObjectOrEmpty(v.Metadata), v.CreatedAt,
 	)
 }
 func (t *transaction) SaveProviderEntitlementMapping(v cloudworkspace.ProviderEntitlementMapping) {

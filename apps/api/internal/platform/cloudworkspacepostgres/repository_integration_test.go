@@ -341,10 +341,16 @@ func TestPhase3APersistenceRisks(t *testing.T) {
 			production = environment
 		}
 	}
+	// A server-connected RevenueCat connection requires the external project id;
+	// the invariant landed after this call site was written, which is why it
+	// failed with providerProjectInvalid.
 	connection, err := service.CreateProviderConnection(ctx, owner, project.ID, cloudworkspace.CreateProviderConnectionInput{
 		Name: "RevenueCat sandbox", Provider: cloudworkspace.ProviderRevenueCat,
 		IntegrationMode: cloudworkspace.ProviderServerConnected, Mode: cloudworkspace.ProviderSandbox,
-		EnvironmentIDs: []string{development.ID, production.ID}, ApplicationIDs: []string{application.ID},
+		ExternalProjectID: "proj_phase3a",
+		// A sandbox connection may not be scoped to a production Environment,
+		// so this covers development and staging.
+		EnvironmentIDs: []string{development.ID, staging.ID}, ApplicationIDs: []string{application.ID},
 	})
 	if err != nil {
 		t.Fatalf("persist provider connection: %v", err)
@@ -353,12 +359,12 @@ func TestPhase3APersistenceRisks(t *testing.T) {
 		t.Fatalf("persist provider assignment: %v", err)
 	}
 	if _, err := service.ReplaceProviderConnectionScopes(ctx, owner, connection.ID, cloudworkspace.ReplaceProviderConnectionScopesInput{
-		EnvironmentIDs: []string{development.ID, production.ID}, ApplicationIDs: []string{application.ID},
+		EnvironmentIDs: []string{development.ID, staging.ID}, ApplicationIDs: []string{application.ID},
 	}); err != nil {
 		t.Fatalf("idempotently retain in-use provider scopes: %v", err)
 	}
 	if _, err := service.ReplaceProviderConnectionScopes(ctx, owner, connection.ID, cloudworkspace.ReplaceProviderConnectionScopesInput{
-		EnvironmentIDs: []string{production.ID}, ApplicationIDs: []string{application.ID},
+		EnvironmentIDs: []string{staging.ID}, ApplicationIDs: []string{application.ID},
 	}); !errors.Is(err, cloudworkspace.ErrScopeMismatch) {
 		t.Fatalf("remove in-use provider Environment scope error=%v, want scope mismatch", err)
 	}
@@ -376,7 +382,9 @@ func TestPhase3APersistenceRisks(t *testing.T) {
 		ID: "provider_snapshot_000001", ProjectID: project.ID, MappingID: mapping.ID,
 		Source: cloudworkspace.ProviderMetadataProvider, Digest: strings.Repeat("a", 64),
 		Availability: cloudworkspace.ProviderAvailabilityAvailable,
-		ObservedAt:   now, SyncedAt: now, CreatedAt: now,
+		// stale_at is NOT NULL and must not precede observed_at; a zero value
+		// violates the freshness ordering the schema enforces.
+		ObservedAt: now, SyncedAt: now, StaleAt: now.Add(time.Hour), CreatedAt: now,
 	}
 	if err := repository.Transact(ctx, func(tx cloudworkspace.Transaction) error {
 		tx.SaveProviderMetadataSnapshot(snapshot)
@@ -395,7 +403,9 @@ func TestPhase3APersistenceRisks(t *testing.T) {
 			'connected_out_of_scope',$1,$2,$3,'revenuecat','out.of.scope','active',
 			$4,$5,'ios',now(),now()
 		)`,
-		project.ID, replacement.ID, application.ID, connection.ID, staging.ID,
+		// production is deliberately outside this sandbox connection's scope
+		// (development + staging), so the database must refuse the mapping.
+		project.ID, replacement.ID, application.ID, connection.ID, production.ID,
 	); err == nil {
 		t.Fatal("database accepted connected mapping outside its connection Environment scope")
 	}
@@ -496,7 +506,7 @@ func TestPhase3APersistenceRisks(t *testing.T) {
 		t.Fatal("database accepted mutation of an archived provider mapping")
 	}
 	if got, err := reconstructed.GetProviderConnection(ctx, owner, connection.ID); err != nil ||
-		!reflect.DeepEqual(got.EnvironmentIDs, []string{development.ID, production.ID}) ||
+		!reflect.DeepEqual(got.EnvironmentIDs, []string{development.ID, staging.ID}) ||
 		!reflect.DeepEqual(got.ApplicationIDs, []string{application.ID}) {
 		t.Fatalf("reconstructed provider connection = %#v, %v", got, err)
 	}
@@ -748,6 +758,14 @@ func TestPhase4AProviderPersistenceRisks(t *testing.T) {
 	})
 	if err != nil {
 		t.Fatalf("create replacement provider connection: %v", err)
+	}
+	// A never-tested connection is deliberately not ready: ProviderReadiness
+	// reports providerUnavailable until a successful test, which is the safe
+	// direction for commerce Product resolution. The first connection is tested
+	// above; the replacement must be too, or this asserts the untested state
+	// rather than the connection swap it exists to protect.
+	if _, err := service.TestProviderConnection(ctx, actor, secondConnection.ID); err != nil {
+		t.Fatalf("test replacement provider connection: %v", err)
 	}
 	secondImport, err := service.ImportProviderProducts(ctx, actor, project.ID, secondConnection.ID, cloudworkspace.ImportProviderProductsInput{
 		IdempotencyKey: "phase4a-postgres-second-connection-import",

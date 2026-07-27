@@ -86,9 +86,86 @@ Every recorded run states:
 - median, p95, p99, error rate
 - resource use during the run (CPU, memory, pool gauges)
 
-Results are recorded as Phase 8 drill evidence, not in this document. This
-document describes the method; the numbers belong to a dated run on a stated
-environment.
+Every recorded run belongs to a dated run on a stated environment. Recorded
+runs live in the Results section below and are cross-referenced from the Phase 8
+drill evidence.
+
+## Results
+
+Numbers describe the stated environment only. Per owner decision D8, Phase 8
+measures and records; it does not publish latency SLOs.
+
+### 2026-07-27 — Phase 8 GA drill, pass two
+
+| Item | Value |
+| --- | --- |
+| Mosaic version | `drill2-phase8` (`GET /health/live`), branch `phase/8-operational-hardening` |
+| Host | Apple Silicon macOS (Darwin 25.5.0), arm64, 12 CPU, 16 GiB; Docker Engine 29.4.0 with 12 CPU / 7.8 GiB allocated |
+| Deployment | Profile A, Docker Compose project `mosaic-drill2`, all services on one host |
+| PostgreSQL | 17.10 (`postgres:17-alpine`), in-Compose |
+| Object storage | MinIO `RELEASE.2025-07-23T15-54-02Z`, in-Compose |
+| Load generator | `apps/api/cmd/loadgen`, run on the host against the published API port |
+| Rate limits | Raised for the run so the limiter was not the thing being measured (see the note below) |
+
+Dataset at measurement time:
+
+| Entity | Count |
+| --- | --- |
+| Configuration Releases | 9 |
+| Paywall Versions | 3 |
+| Experiments | 3 (1 completed, 1 stopped, 1 draft) |
+| Analytics Events | 41 |
+| Delivered representation | Delivery v3, 15 761 bytes |
+
+This is a **small** dataset: it exercises the request path, negotiation, and
+serialization, not large-table scan behaviour. Treat the delivery numbers as a
+floor for this deployment shape and re-measure against a production-sized
+Release before drawing capacity conclusions.
+
+| ID | Path | Concurrency | Duration | Requests | Throughput | Median | p95 | p99 | Max | Error rate |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| P2 | Configuration delivery (`GET /v1/sdk/configuration`, Delivery v3, no validator) | 8 | 45s | 102 590 | 2 279.8 req/s | 3.257 ms | 6.396 ms | 8.596 ms | 41.916 ms | 0.0000 |
+| P3 | Delivery 304 path (`If-None-Match` matching) | 8 | 45s | 106 997 | 2 377.7 req/s | 3.147 ms | 6.083 ms | 8.090 ms | 36.977 ms | 0.0000 |
+| P5 | Analytics ingestion, 100-event batches (`POST /v1/sdk/events/batch`) | 4 | 45s | 2 478 | 55.1 req/s | 69.536 ms | 89.871 ms | 128.341 ms | 518.738 ms | 0.0000 |
+
+P3 reported a **304 ratio of 1.0000** — every conditional request with a
+matching validator was answered 304 with no body, which is the property SDK
+cache revalidation depends on. All three runs had a **zero error rate**, so the
+latencies are real rather than throttled.
+
+P5 is per **batch**: 2 478 batches × 100 events is ~247 800 events accepted in
+45 s (~5 500 events/s) at concurrency 4, including per-event schema validation,
+minimization checks, and digest-based deduplication.
+
+Not measured in this run, and not claimed: P1 (cold delivery immediately after a
+publish), P4 (publish), P6 (Placement evaluation), P7 (Experiment result
+queries), P8 (v3 versus v2 payload cost), P9 (dashboard APIs), P10 (worker
+backlog drain over the seeded 10 k jobs), and P11 (pool gauges under load). No
+`EXPLAIN (ANALYZE, BUFFERS)` plans were captured.
+
+#### Rate limits during the measurement
+
+At the shipped defaults (`MOSAIC_DELIVERY_REQUESTS_PER_MINUTE=120`) the first
+attempt returned a 50 % 429 rate and 10 successful responses in 45 s, which
+measures the limiter, not the delivery path. The run above raised the delivery
+and analytics limits far above the offered load, as this document's
+"Interpreting Failures" section prescribes. **The raised values are a
+measurement setting and are not a recommended production configuration.**
+
+Two harness defects were fixed before these numbers could be produced at all,
+both found by this run:
+
+- `cmd/loadgen` sent no capability headers, so `GET /v1/sdk/configuration` was
+  answered `406 unsupported_capability` for every delivery version and the
+  delivery scenarios had never measured a Configuration Release. It now
+  advertises the full Paywall 0.2, Placement Decision, and Experiment
+  Assignment vocabulary, so negotiation selects the highest representation the
+  Environment serves.
+- The Compose `api` and `worker` services passed only the variables Compose
+  itself controls, so none of the rate-limit variables (and 55 other documented
+  variables) reached the containers. Raising a limit for a measurement — or for
+  a real deployment — had no effect until `compose.yaml` gained an operator
+  `env_file`.
 
 ## Interpreting Failures
 

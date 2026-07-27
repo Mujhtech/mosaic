@@ -8,6 +8,8 @@ import (
 
 	"github.com/Mujhtech/mosaic/apps/api/internal/providercatalog"
 	"github.com/Mujhtech/mosaic/apps/api/internal/providercredential"
+
+	"github.com/Mujhtech/mosaic/apps/api/internal/platform/jobtelemetry"
 )
 
 const providerSyncLeaseDuration = 2 * time.Minute
@@ -90,6 +92,9 @@ func (s *Service) ProcessNextProviderSync(ctx context.Context, workerID string) 
 	if err != nil || job.ID == "" {
 		return job.ID != "", err
 	}
+	jobtelemetry.Annotate(ctx, jobtelemetry.Identity{
+		JobID: job.ID, JobKind: "provider_sync", ProjectID: job.ProjectID, ResourceID: job.ConnectionID,
+	})
 	connection, project, secret, err := s.workerCredential(ctx, job.ConnectionID)
 	if err != nil {
 		return true, s.finishFailedProviderSync(ctx, job, run, err)

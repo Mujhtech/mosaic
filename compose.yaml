@@ -9,6 +9,28 @@
 # to attach psql or the MinIO console:
 #
 #   docker compose --profile debug up -d
+#
+# Named volumes are deliberately NOT pinned with an explicit `name:`. Compose
+# prefixes them with the project name, so `docker compose -p other-project up`
+# gets its own PostgreSQL, MinIO, and Caddy state instead of silently sharing
+# this installation's data. The `name: mosaic` below fixes the default project
+# name so the resolved volumes stay `mosaic_postgres_data`, `mosaic_minio_data`,
+# `mosaic_caddy_data`, and `mosaic_caddy_config` regardless of the directory the
+# repository is checked out into.
+name: mosaic
+
+# Operator configuration. `.env.example` documents every variable the API and
+# worker read, but the service blocks below list only the ones Compose itself
+# must control (the in-network database and object-storage endpoints, the listen
+# addresses, the service names). Without this the other ~59 documented variables
+# -- every rate limit, timeout, log level, session lifetime, upload ceiling, and
+# worker interval -- silently had no effect in the supported deployment profile,
+# so an operator could edit `.env` and change nothing. `environment:` is applied
+# over `env_file:`, so the explicit values below still win.
+x-operator-env: &operator-env
+  - path: ${MOSAIC_ENV_FILE:-.env}
+    required: false
+
 x-api-build: &api-build
   context: .
   dockerfile: apps/api/Dockerfile
@@ -34,7 +56,7 @@ services:
       timeout: 3s
       retries: 10
     volumes:
-      - mosaic_postgres_data:/var/lib/postgresql/data
+      - postgres_data:/var/lib/postgresql/data
 
   # Host-published PostgreSQL, opt-in through the debug profile.
   postgres-debug-ports:
@@ -52,6 +74,7 @@ services:
     build: *api-build
     entrypoint: ["/usr/local/bin/migrate"]
     command: ["up"]
+    env_file: *operator-env
     environment:
       <<: *database-url
     depends_on:
@@ -71,7 +94,7 @@ services:
       timeout: 3s
       retries: 10
     volumes:
-      - mosaic_minio_data:/data
+      - minio_data:/data
 
   # Host-published MinIO API and console, opt-in through the debug profile.
   minio-debug-ports:
@@ -103,6 +126,7 @@ services:
   api:
     build: *api-build
     restart: unless-stopped
+    env_file: *operator-env
     environment:
       <<: *database-url
       MOSAIC_ENVIRONMENT: ${MOSAIC_ENVIRONMENT:-development}
@@ -148,6 +172,7 @@ services:
     build: *api-build
     restart: unless-stopped
     entrypoint: ["/usr/local/bin/worker"]
+    env_file: *operator-env
     environment:
       <<: *database-url
       MOSAIC_ENVIRONMENT: ${MOSAIC_ENVIRONMENT:-development}
@@ -210,8 +235,8 @@ services:
     restart: unless-stopped
     volumes:
       - ./deploy/local/Caddyfile:/etc/caddy/Caddyfile:ro
-      - mosaic_caddy_data:/data
-      - mosaic_caddy_config:/config
+      - caddy_data:/data
+      - caddy_config:/config
     depends_on:
       api:
         condition: service_started
@@ -219,11 +244,7 @@ services:
       - "${MOSAIC_HTTPS_PORT:-8443}:8443"
 
 volumes:
-  mosaic_postgres_data:
-    name: mosaic_postgres_data
-  mosaic_minio_data:
-    name: mosaic_minio_data
-  mosaic_caddy_data:
-    name: mosaic_caddy_data
-  mosaic_caddy_config:
-    name: mosaic_caddy_config
+  postgres_data:
+  minio_data:
+  caddy_data:
+  caddy_config:

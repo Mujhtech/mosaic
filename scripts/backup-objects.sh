@@ -13,21 +13,35 @@
 #   -o  output directory (default ./backups)
 #   -b  bucket (default $MOSAIC_OBJECT_STORAGE_BUCKET or mosaic-assets)
 #   -e  S3 endpoint URL (default http://minio:9000 inside the Compose network)
+#   -p  Compose project to act on (default: the Compose default project).
+#       Required when the host runs more than one Mosaic installation.
+#   --compose-file / --env-file  extra Compose file and env-file selection
 #
 # Credentials come from MOSAIC_OBJECT_STORAGE_ACCESS_KEY / _SECRET_KEY (or
 # MINIO_ROOT_USER / MINIO_ROOT_PASSWORD) and are never written to any artifact.
 set -euo pipefail
 
+# shellcheck source=lib/compose.sh
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib/compose.sh"
+
 output_directory="./backups"
 bucket="${MOSAIC_OBJECT_STORAGE_BUCKET:-mosaic-assets}"
 endpoint="http://minio:9000"
+
+arguments=()
+while [[ $# -gt 0 ]]; do
+  mosaic_compose_parse_option "$@"
+  if [[ "${mosaic_compose_consumed}" -gt 0 ]]; then shift "${mosaic_compose_consumed}"; continue; fi
+  arguments+=("$1"); shift
+done
+set -- "${arguments[@]+"${arguments[@]}"}"
 
 while getopts ":o:b:e:h" option; do
   case "${option}" in
     o) output_directory="${OPTARG}" ;;
     b) bucket="${OPTARG}" ;;
     e) endpoint="${OPTARG}" ;;
-    h) sed -n '2,20p' "$0"; exit 0 ;;
+    h) sed -n '2,23p' "$0"; exit 0 ;;
     *) echo "unknown option: -${OPTARG}" >&2; exit 2 ;;
   esac
 done
@@ -51,11 +65,13 @@ mkdir -p "${mirror_directory}"
 # the object store is reachable by service name and no credentials are baked
 # into a bespoke container invocation.
 mc() {
-  docker compose run --rm -T \
+  mosaic_compose run --rm -T \
     -e MC_HOST_mosaic="${endpoint/:\/\//://${access_key}:${secret_key}@}" \
     -v "$(cd "${mirror_directory}" && pwd)":/backup \
     --entrypoint mc minio-init "$@"
 }
+
+mosaic_compose_describe
 
 echo "==> listing bucket inventory"
 mc ls --recursive "mosaic/${bucket}" > "${inventory_path}"

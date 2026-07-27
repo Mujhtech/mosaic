@@ -15,6 +15,8 @@ import (
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/trace"
+
+	"github.com/Mujhtech/mosaic/apps/api/internal/platform/jobtelemetry"
 )
 
 type Service struct {
@@ -57,7 +59,7 @@ func parseMetricVersion(value string) (string, int, bool) {
 
 func CompileSchedule(schedule Schedule, publicationTime time.Time) (Schedule, error) {
 	if schedule.StartsAt == nil {
-		return Schedule{}, ErrInvalid
+		return Schedule{}, Invalid("schedule_start_missing")
 	}
 	compiled := schedule
 	if !compiled.StartsAt.After(publicationTime) {
@@ -65,7 +67,7 @@ func CompileSchedule(schedule Schedule, publicationTime time.Time) (Schedule, er
 		compiled.StartsAt = &start
 	}
 	if compiled.EndsAt != nil && !compiled.EndsAt.After(*compiled.StartsAt) {
-		return Schedule{}, ErrInvalid
+		return Schedule{}, Invalid("schedule_end_not_after_start")
 	}
 	return compiled, nil
 }
@@ -567,6 +569,10 @@ func (s *Service) ProcessNextSchedule(ctx context.Context, worker string) (bool,
 	if err != nil || !ok {
 		return ok, err
 	}
+	jobtelemetry.Annotate(ctx, jobtelemetry.Identity{
+		JobID: job.ID, JobKind: "experiment_schedule_" + job.Action,
+		ProjectID: job.ProjectID, EnvironmentID: job.EnvironmentID, ResourceID: job.ExperimentID,
+	})
 	target := "running"
 	reason := "scheduled_start"
 	if job.Action == "complete" {

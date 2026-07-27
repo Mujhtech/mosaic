@@ -25,6 +25,7 @@ import (
 	"fmt"
 	"os"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -65,7 +66,7 @@ func main() {
 }
 
 func run(args []string) error {
-	action, flagArguments := splitArguments(args)
+	action, flagArguments, positional := splitArguments(args)
 	flags := flag.NewFlagSet("migrate", flag.ContinueOnError)
 	confirm := flags.Bool("confirm", false, "confirm a destructive rollback (required for down, down-to, and redo)")
 	// The old command wrapped the entire run in a fixed 10s context, which
@@ -79,7 +80,9 @@ func run(args []string) error {
 	if action == "" {
 		return errors.New("usage: migrate <preflight|status|version|up|up-to|down|down-to|redo> [version] [flags]")
 	}
-	positional := flags.Args()
+	if remaining := flags.Args(); len(remaining) > 0 {
+		return fmt.Errorf("unexpected argument %q", remaining[0])
+	}
 
 	var target int64
 	switch action {
@@ -317,19 +320,46 @@ func newSessionLocker(wait time.Duration) (lock.SessionLocker, error) {
 	return lock.NewPostgresSessionLocker(lock.WithLockTimeout(probeSeconds, attempts))
 }
 
-// splitArguments separates the subcommand from its flags so both orders work:
-// `migrate down --confirm` and `migrate --confirm down`. Go's flag package stops
-// parsing at the first positional argument, which would otherwise reject the
-// natural form.
-func splitArguments(args []string) (string, []string) {
+// valueFlags are the migrate flags whose value is a separate argument, so
+// `--timeout 30m` is not mistaken for a subcommand or a target version.
+var valueFlags = map[string]bool{"timeout": true, "lock-timeout": true}
+
+// splitArguments separates the subcommand and its target version from its
+// flags, so every documented form works:
+//
+//	migrate down --confirm
+//	migrate --confirm down
+//	migrate down-to 17 --confirm
+//	migrate up-to 18 --timeout 30m
+//
+// Go's flag package stops parsing at the first positional argument, so
+// `down-to 17 --confirm` used to leave `--confirm` unparsed AND count it as a
+// second positional: the documented rollback form always failed with
+// "down-to requires a target version", and the recovery runbook could not be
+// followed as written.
+func splitArguments(args []string) (string, []string, []string) {
 	action := ""
 	flags := make([]string, 0, len(args))
-	for _, argument := range args {
-		if action == "" && argument != "" && argument[0] != '-' {
+	positional := make([]string, 0, len(args))
+	for index := 0; index < len(args); index++ {
+		argument := args[index]
+		if argument == "" {
+			continue
+		}
+		if argument[0] == '-' {
+			flags = append(flags, argument)
+			name := strings.TrimLeft(argument, "-")
+			if !strings.Contains(argument, "=") && valueFlags[name] && index+1 < len(args) {
+				index++
+				flags = append(flags, args[index])
+			}
+			continue
+		}
+		if action == "" {
 			action = argument
 			continue
 		}
-		flags = append(flags, argument)
+		positional = append(positional, argument)
 	}
-	return action, flags
+	return action, flags, positional
 }

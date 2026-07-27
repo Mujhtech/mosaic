@@ -2,6 +2,7 @@ package hostedpublishing
 
 import (
 	"encoding/json"
+	"errors"
 	"os"
 	"sort"
 	"testing"
@@ -144,5 +145,76 @@ func TestSafeV1ProjectionRequiresPaywallDefault(t *testing.T) {
 	}
 	if safeV1Projection([]PublishedDecisionVersion{{Document: noPaywall}}) {
 		t.Fatal("no_paywall default was projected to legacy SDKs")
+	}
+}
+
+// A 406 that names nothing is undiagnosable: an SDK integrator has no path from
+// the refusal to the header they must send or the capability they must ship.
+// Every negotiation refusal must therefore identify the exact term that failed,
+// and must keep satisfying errors.Is(err, ErrUnsupportedCapability) so the
+// transport status mapping is unchanged.
+func TestCapabilityRefusalNamesTheMissingTerm(t *testing.T) {
+	payload, err := os.ReadFile("../../../../protocol/fixtures/configuration-delivery/v3/experiment-release.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var envelope map[string]any
+	if err = json.Unmarshal(payload, &envelope); err != nil {
+		t.Fatal(err)
+	}
+	release := envelope["release"].(map[string]any)
+	features := sortedCapabilityKeys(supportedExperimentFeatures)
+	request := SDKCapabilityRequest{
+		Platform: "ios", SDKVersion: "1.0.0",
+		SupportedConfigurationDeliveryVersions: []string{"3"},
+		SupportedExperimentAssignmentContracts: []string{"1"},
+		SupportedExperimentFeatures:            features,
+		SupportedExperimentBucketingAlgorithms: sortedCapabilityKeys(supportedExperimentBucketingAlgorithms),
+		SupportedExperimentSchedulePolicies:    sortedCapabilityKeys(supportedExperimentSchedulePolicies),
+		SupportedPaywallProtocols:              []SDKPaywallProtocolSupport{{Version: "0.2", Capabilities: paywallCapabilities(release)}},
+	}
+	if err = ValidateSDKCapabilityPayload(request, payload, "3"); err != nil {
+		t.Fatalf("baseline Delivery v3 request rejected: %v", err)
+	}
+
+	// This is the exact mistake the drill hit: the SDK sent a plausible but
+	// wrong Experiment-feature name and got a 406 that identified nothing.
+	misspelt := append([]string(nil), features...)
+	for index, feature := range misspelt {
+		if feature == "group.mutual_exclusion" {
+			misspelt[index] = "mutual_exclusion.groups"
+		}
+	}
+	request.SupportedExperimentFeatures = misspelt
+	err = ValidateSDKCapabilityPayload(request, payload, "3")
+	if err == nil {
+		t.Fatal("an unknown Experiment feature was accepted")
+	}
+	if !errors.Is(err, ErrUnsupportedCapability) {
+		t.Fatalf("refusal no longer maps to ErrUnsupportedCapability: %v", err)
+	}
+	capabilityError, ok := CapabilityFailure(err)
+	if !ok {
+		t.Fatalf("refusal carried no capability detail: %v", err)
+	}
+	if capabilityError.Requirement != "experimentFeature" ||
+		capabilityError.Name != "mutual_exclusion.groups" ||
+		capabilityError.Reason != CapabilityUnknown {
+		t.Fatalf("refusal did not name the offending feature: %#v", capabilityError)
+	}
+
+	// A Paywall capability the Release requires but the SDK did not advertise
+	// must be named too, so an integrator knows which renderer feature to ship.
+	request.SupportedExperimentFeatures = features
+	request.SupportedPaywallProtocols[0].Capabilities = []SDKCapability{{Name: "component.text", Version: "0.2"}}
+	err = ValidateSDKCapabilityPayload(request, payload, "3")
+	capabilityError, ok = CapabilityFailure(err)
+	if !ok {
+		t.Fatalf("missing Paywall capability carried no detail: %v", err)
+	}
+	if capabilityError.Requirement != "paywallCapability" ||
+		capabilityError.Name == "" || capabilityError.Version != "0.2" ||
+		capabilityError.Reason != CapabilityMissing {
+		t.Fatalf("refusal did not name the missing Paywall capability: %#v", capabilityError)
 	}
 }

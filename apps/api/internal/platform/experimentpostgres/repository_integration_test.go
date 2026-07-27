@@ -424,3 +424,41 @@ func TestReleaseClosureStatementsMatchTheSchema(t *testing.T) {
 		}
 	}
 }
+
+// Preparing a statement proves its columns exist; it does not prove the row it
+// writes satisfies the table's constraints. Migration 00020 added a NOT NULL
+// available_at to experiment_scheduling_jobs and the publish writer was never
+// updated, so every Experiment published with a schedule failed with a 500 and
+// no Experiment could be scheduled at all. The lease-recovery test above missed
+// it because that test seeds its own row and supplies the column the production
+// writer omitted. This executes the production statements themselves.
+func TestScheduleJobInsertsSatisfyTheSchema(t *testing.T) {
+	pool, ctx := setup(t)
+	now := time.Now().UTC()
+
+	for index, statement := range experimentpostgres.ScheduleJobInsertStatements {
+		transaction, err := pool.Begin(ctx)
+		if err != nil {
+			t.Fatalf("begin: %v", err)
+		}
+		_, err = transaction.Exec(ctx, statement,
+			fmt.Sprintf("xp_insert_job_%d", index), "xp_experiment", "xp_project", "xp_env",
+			now.Add(time.Hour), "xp_actor", now)
+		if err != nil {
+			t.Errorf("scheduling-job statement %d was rejected by the schema: %v\n  %s", index, err, statement)
+		}
+		// The row must be immediately leasable once due, which is what
+		// available_at exists to express.
+		if err == nil {
+			var due bool
+			if err := transaction.QueryRow(ctx,
+				`SELECT available_at = scheduled_at FROM experiment_scheduling_jobs WHERE id=$1`,
+				fmt.Sprintf("xp_insert_job_%d", index)).Scan(&due); err != nil {
+				t.Errorf("read back statement %d: %v", index, err)
+			} else if !due {
+				t.Errorf("statement %d wrote available_at out of step with scheduled_at", index)
+			}
+		}
+		_ = transaction.Rollback(ctx)
+	}
+}

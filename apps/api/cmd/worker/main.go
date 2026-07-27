@@ -188,15 +188,11 @@ func run() (runErr error) {
 		for range families {
 			family := families[next%len(families)]
 			next++
-			processed, processErr := processOne(runContext, jobBudget, family, workerID, logger)
+			// processOne logs its own failure through the job context, which
+			// carries the job, tenant, and trace identifiers this loop does not
+			// have.
+			processed, _ := processOne(runContext, jobBudget, family, workerID, logger)
 			processedAny = processedAny || processed
-			if processErr != nil {
-				logger.Error().
-					Str("job_family", family.name).
-					Str("worker_id", workerID).
-					Err(processErr).
-					Msg("background job processing failed")
-			}
 		}
 		select {
 		case err := <-healthErrors:
@@ -227,17 +223,27 @@ func run() (runErr error) {
 
 // processOne runs one job on a detached context with a completion budget and
 // emits one structured line per executed job.
+//
+// The completion line is written through the logger read back out of the job
+// context, not through the local copy: each job family calls
+// jobtelemetry.Annotate once it knows what it leased, which adds the job id,
+// tenant identifiers, and trace id. Without that read-back the line would name
+// only the family and the worker, which no runbook step can act on.
 func processOne(runContext context.Context, budget time.Duration, family jobFamily, workerID string, logger zerolog.Logger) (bool, error) {
 	jobLogger := logger.With().Str("job_family", family.name).Str("worker_id", workerID).Logger()
 	jobContext, cancel := context.WithTimeout(context.WithoutCancel(runContext), budget)
 	defer cancel()
+	jobContext = jobLogger.WithContext(jobContext)
 	started := time.Now()
-	processed, err := family.process(jobLogger.WithContext(jobContext), workerID)
+	processed, err := family.process(jobContext, workerID)
 	if processed {
-		jobLogger.Info().
+		event := zerolog.Ctx(jobContext).Info().
 			Dur("duration", time.Since(started)).
-			Bool("failed", err != nil).
-			Msg("background job finished")
+			Bool("failed", err != nil)
+		event.Msg("background job finished")
+	}
+	if err != nil {
+		zerolog.Ctx(jobContext).Error().Err(err).Msg("background job processing failed")
 	}
 	return processed, err
 }

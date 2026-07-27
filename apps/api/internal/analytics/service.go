@@ -16,6 +16,8 @@ import (
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/metric"
+
+	"github.com/Mujhtech/mosaic/apps/api/internal/platform/jobtelemetry"
 )
 
 type Service struct {
@@ -290,6 +292,9 @@ func (s *Service) ProcessNextJob(ctx context.Context, workerID string) (bool, er
 	if job, ok, err := s.repository.LeaseExport(ctx, workerID, now, lease); err != nil {
 		return false, err
 	} else if ok {
+		jobtelemetry.Annotate(ctx, jobtelemetry.Identity{
+			JobID: job.ID, JobKind: job.Kind, ProjectID: job.ProjectID, EnvironmentID: job.EnvironmentID,
+		})
 		return true, s.processExport(ctx, job, now)
 	}
 	return false, nil
@@ -301,6 +306,9 @@ const jobFailureBudget = 10 * time.Second
 func (s *Service) runJob(ctx context.Context, job Job, operation func() error) error {
 	ctx, span := otel.Tracer("mosaic/analytics").Start(ctx, "analytics."+job.Kind)
 	defer span.End()
+	jobtelemetry.Annotate(ctx, jobtelemetry.Identity{
+		JobID: job.ID, JobKind: job.Kind, ProjectID: job.ProjectID, EnvironmentID: job.EnvironmentID,
+	})
 	if err := operation(); err != nil {
 		span.RecordError(err)
 		// The failure record must land even when the run context was cancelled

@@ -580,7 +580,9 @@ func (s *Service) AuthenticateSDKKeyVersions(ctx context.Context, rawKey string,
 			}
 		}
 		if !found {
-			return ErrUnsupportedCapability
+			// The Environment has a current Release, but no representation in
+			// any delivery contract version the SDK advertised.
+			return unsupportedCapability("configurationDeliveryVersion", "", strings.Join(supportedVersions, ","), CapabilityUnavailable)
 		}
 		result = SDKConfiguration{Release: release, Payload: representation.Payload, ContentHash: representation.ContentHash, DeliveryContractVersion: representation.DeliveryContractVersion, Environment: environment, APIKeyID: key.ID}
 		return nil
@@ -630,7 +632,7 @@ func (s *Service) AuthenticateSDKCommerceKey(ctx context.Context, rawKey, applic
 			return ErrNotFound
 		}
 		if (sdkPlatform == "ios" || sdkPlatform == "android") && sdkPlatform != application.Platform {
-			return ErrUnsupportedCapability
+			return unsupportedCapability("sdkPlatform", sdkPlatform, "", CapabilityUnsupported)
 		}
 		state, ok := tx.ReleaseState(environment.ID)
 		if !ok || state.CurrentReleaseID == "" {
