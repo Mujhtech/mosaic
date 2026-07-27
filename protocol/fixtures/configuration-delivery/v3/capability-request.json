@@ -1,0 +1,112 @@
+{
+  "platform": "flutter",
+  "sdkVersion": "0.3.0",
+  "supportedConfigurationDeliveryVersions": [
+    "1",
+    "2",
+    "3"
+  ],
+  "supportedPaywallProtocols": [
+    {
+      "version": "0.2",
+      "capabilities": [
+        {
+          "name": "accessibility.metadata",
+          "version": "0.2"
+        },
+        {
+          "name": "action.navigateBack",
+          "version": "0.2"
+        },
+        {
+          "name": "action.navigateTo",
+          "version": "0.2"
+        },
+        {
+          "name": "action.openExternalUrl",
+          "version": "0.2"
+        },
+        {
+          "name": "component.button",
+          "version": "0.2"
+        },
+        {
+          "name": "component.text",
+          "version": "0.2"
+        },
+        {
+          "name": "layout.scrollContainer",
+          "version": "0.2"
+        },
+        {
+          "name": "layout.stack",
+          "version": "0.2"
+        },
+        {
+          "name": "localization.catalogs",
+          "version": "0.2"
+        },
+        {
+          "name": "navigation.screens",
+          "version": "0.2"
+        },
+        {
+          "name": "style.box",
+          "version": "0.2"
+        },
+        {
+          "name": "style.colors",
+          "version": "0.2"
+        },
+        {
+          "name": "style.typography",
+          "version": "0.2"
+        }
+      ]
+    }
+  ],
+  "supportedPlacementDecisionContracts": [
+    "1"
+  ],
+  "supportedDecisionFeatures": [
+    "condition.all",
+    "condition.not",
+    "operator.equals",
+    "operator.greater_than",
+    "operator.greater_than_or_equal",
+    "operator.in",
+    "operator.locale_matches",
+    "operator.not_equals",
+    "outcome.fallback",
+    "outcome.no_paywall",
+    "outcome.paywall",
+    "source.application.locale",
+    "source.application.version",
+    "source.context.country",
+    "source.device.platform",
+    "source.entitlement_state",
+    "source.product_availability",
+    "source.user_attribute"
+  ],
+  "supportedBucketingAlgorithms": [
+    "sha256_length_prefixed_v1"
+  ],
+  "applicationVersion": "2.10.0",
+  "supportedExperimentAssignmentContracts": [
+    "1"
+  ],
+  "supportedExperimentFeatures": [
+    "allocation.ranges",
+    "assignment.identified_user_or_installation",
+    "fallback.normal_placement",
+    "group.mutual_exclusion",
+    "schedule.trusted_server_time"
+  ],
+  "supportedExperimentBucketingAlgorithms": [
+    "experiment_sha256_length_prefixed_v1",
+    "experiment_group_sha256_length_prefixed_v1"
+  ],
+  "supportedExperimentSchedulePolicies": [
+    "trusted_server_time_v1"
+  ]
+}

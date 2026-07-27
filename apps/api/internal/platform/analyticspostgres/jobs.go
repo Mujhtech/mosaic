@@ -43,6 +43,41 @@ func (r *Repository) RunAggregation(ctx context.Context, job analytics.Job, now 
 		return err
 	}
 	defer tx.Rollback(ctx)
+	start, end := job.BucketDate.UTC(), job.BucketDate.UTC().Add(24*time.Hour)
+	if _, err = tx.Exec(ctx, `DELETE FROM experiment_daily_unique_units WHERE environment_id=$1 AND bucket_date=$2`, job.EnvironmentID, start); err != nil {
+		return err
+	}
+	_, err = tx.Exec(ctx, `WITH metrics AS (
+		SELECT s.experiment_version_id,s.metric_id,s.metric_version,s.snapshot->>'numeratorEvent' numerator_event,s.snapshot->>'denominatorEvent' denominator_event,s.snapshot->>'authority' authority,COALESCE(s.snapshot->'eventFilter','{}'::jsonb) event_filter,(s.snapshot->>'attributionWindowSeconds')::integer window_seconds,v.assignment_key_policy
+		FROM experiment_metric_snapshots s JOIN experiment_versions v ON v.id=s.experiment_version_id WHERE v.environment_id=$1
+	), denominator_candidates AS (
+		SELECT d.project_id,d.environment_id,d.experiment_id,d.experiment_version_id,d.experiment_variant_id,d.occurred_at,d.received_at,d.event_id,m.metric_id,m.metric_version,m.numerator_event,m.authority,m.event_filter,m.window_seconds,m.assignment_key_policy,
+		CASE m.assignment_key_policy WHEN 'installation' THEN d.installation_id WHEN 'identified_user' THEN d.application_user_id ELSE COALESCE(d.application_user_id,d.installation_id) END assignment_unit_id
+		FROM analytics_events d JOIN metrics m ON m.experiment_version_id=d.experiment_version_id AND m.denominator_event=d.event_name
+		WHERE d.environment_id=$1 AND d.occurred_at>=$2 AND d.occurred_at<$3 AND d.experiment_qa_override=false
+	), first_units AS (
+		SELECT DISTINCT ON (experiment_version_id,metric_id,metric_version,assignment_unit_id) * FROM denominator_candidates
+		WHERE assignment_unit_id IS NOT NULL
+		ORDER BY experiment_version_id,metric_id,metric_version,assignment_unit_id,occurred_at,event_id
+	), converted_units AS (
+		SELECT e.*,EXISTS(SELECT 1 FROM analytics_events c WHERE c.environment_id=e.environment_id AND c.experiment_version_id=e.experiment_version_id AND c.experiment_variant_id=e.experiment_variant_id AND (CASE e.assignment_key_policy WHEN 'installation' THEN c.installation_id WHEN 'identified_user' THEN c.application_user_id ELSE COALESCE(c.application_user_id,c.installation_id) END)=e.assignment_unit_id AND c.event_name=e.numerator_event AND c.authority=e.authority AND (e.event_filter='{}'::jsonb OR e.event_filter->>'payload.reason' IS NULL OR c.payload->>'reason'=e.event_filter->>'payload.reason') AND c.occurred_at>=e.occurred_at AND c.occurred_at<=e.occurred_at+make_interval(secs=>e.window_seconds)) converted
+		FROM first_units e
+	), grouped AS (
+		SELECT e.project_id,e.environment_id,e.experiment_id,e.experiment_version_id,e.experiment_variant_id variant_id,e.metric_id,e.metric_version,e.authority,
+		COUNT(*) unique_exposures,
+		COUNT(*) FILTER (WHERE e.converted) unique_conversions,
+		MAX(e.received_at) latest_received_at
+		FROM converted_units e
+		GROUP BY e.project_id,e.environment_id,e.experiment_id,e.experiment_version_id,e.experiment_variant_id,e.metric_id,e.metric_version,e.authority
+	)
+	INSERT INTO experiment_daily_unique_units(project_id,environment_id,bucket_date,experiment_id,experiment_version_id,variant_id,metric_id,metric_version,authority,unique_exposures,unique_conversions,raw_exposure_events,fallback_presentations,latest_received_at,rebuilt_at)
+	SELECT g.project_id,g.environment_id,$2::date,g.experiment_id,g.experiment_version_id,g.variant_id,g.metric_id,g.metric_version,g.authority,g.unique_exposures,g.unique_conversions,
+	(SELECT count(*) FROM analytics_events x WHERE x.environment_id=g.environment_id AND x.experiment_version_id=g.experiment_version_id AND x.experiment_variant_id=g.variant_id AND x.event_name='experiment_exposed' AND x.experiment_qa_override=false AND x.occurred_at>=$2 AND x.occurred_at<$3),
+	(SELECT count(*) FROM analytics_events x WHERE x.environment_id=g.environment_id AND x.experiment_version_id=g.experiment_version_id AND x.experiment_variant_id=g.variant_id AND x.event_name='experiment_fallback_presented' AND x.occurred_at>=$2 AND x.occurred_at<$3),g.latest_received_at,$4
+	FROM grouped g`, job.EnvironmentID, start, end, now)
+	if err != nil {
+		return err
+	}
 	var lease time.Time
 	if err = tx.QueryRow(ctx, `SELECT lease_expires_at FROM analytics_aggregation_jobs WHERE id=$1 AND status='leased' FOR UPDATE`, job.ID).Scan(&lease); err != nil {
 		return err
@@ -50,7 +85,6 @@ func (r *Repository) RunAggregation(ctx context.Context, job analytics.Job, now 
 	if !lease.After(now) {
 		return analytics.ErrConflict
 	}
-	start, end := job.BucketDate.UTC(), job.BucketDate.UTC().Add(24*time.Hour)
 	if _, err = tx.Exec(ctx, `DELETE FROM analytics_daily_event_counts WHERE environment_id=$1 AND bucket_date=$2`, job.EnvironmentID, start); err != nil {
 		return err
 	}
@@ -100,6 +134,9 @@ func (r *Repository) RunAggregation(ctx context.Context, job analytics.Job, now 
 	if _, err = tx.Exec(ctx, `DELETE FROM analytics_dirty_buckets WHERE environment_id=$1 AND bucket_date=$2`, job.EnvironmentID, start); err != nil {
 		return err
 	}
+	if _, err = tx.Exec(ctx, `DELETE FROM experiment_analysis_rebuilds WHERE environment_id=$1 AND bucket_date=$2`, job.EnvironmentID, start); err != nil {
+		return err
+	}
 	if _, err = tx.Exec(ctx, `UPDATE analytics_aggregation_jobs SET status='completed',lease_owner=NULL,lease_expires_at=NULL,last_error_code=NULL,updated_at=$2 WHERE id=$1`, job.ID, now); err != nil {
 		return err
 	}
@@ -114,7 +151,7 @@ func (r *Repository) LeaseExport(ctx context.Context, worker string, now, expire
 	defer tx.Rollback(ctx)
 	var job analytics.Job
 	var identity []byte
-	err = tx.QueryRow(ctx, `SELECT id,project_id,COALESCE(environment_id,''),kind,format,COALESCE(identity_reference_id,''),COALESCE(identity_digest,'\\x'::bytea),requested_by_actor_id,created_at,updated_at FROM analytics_export_jobs WHERE (status='queued' OR status='leased' AND lease_expires_at<=$1) AND available_at<=$1 AND attempt_count<max_attempts ORDER BY available_at,created_at,id FOR UPDATE SKIP LOCKED LIMIT 1`, now).Scan(&job.ID, &job.ProjectID, &job.EnvironmentID, &job.Kind, &job.Format, &job.IdentityReferenceID, &identity, &job.RequestedByActorID, &job.CreatedAt, &job.UpdatedAt)
+	err = tx.QueryRow(ctx, `SELECT id,project_id,COALESCE(environment_id,''),kind,format,COALESCE(identity_reference_id,''),COALESCE(identity_digest,'\\x'::bytea),requested_by_actor_id,COALESCE(experiment_version_id,''),include_identity,created_at,updated_at FROM analytics_export_jobs WHERE (status='queued' OR status='leased' AND lease_expires_at<=$1) AND available_at<=$1 AND attempt_count<max_attempts ORDER BY available_at,created_at,id FOR UPDATE SKIP LOCKED LIMIT 1`, now).Scan(&job.ID, &job.ProjectID, &job.EnvironmentID, &job.Kind, &job.Format, &job.IdentityReferenceID, &identity, &job.RequestedByActorID, &job.ExperimentVersionID, &job.IncludeIdentity, &job.CreatedAt, &job.UpdatedAt)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return job, false, nil
 	}
@@ -131,8 +168,12 @@ func (r *Repository) LeaseExport(ctx context.Context, worker string, now, expire
 }
 
 func (r *Repository) ExportRows(ctx context.Context, job analytics.Job, writer io.Writer) (int64, error) {
-	query := `SELECT jsonb_build_object('eventId',event_id,'eventSchemaVersion',event_schema_version,'eventName',event_name,'occurredAt',occurred_at,'receivedAt',received_at,'environmentId',environment_id,'applicationId',application_id,'identity',jsonb_build_object('installationReferenceId',installation_id,'applicationUserReferenceId',application_user_id),'sessionReferenceId',session_id,'platform',platform,'sdkVersion',sdk_version,'applicationVersion',application_version,'locale',locale,'correlation',jsonb_build_object('placementRequestId',placement_request_id,'paywallPresentationId',paywall_presentation_id,'productLoadAttemptId',product_load_attempt_id,'purchaseAttemptId',purchase_attempt_id,'restoreAttemptId',restore_attempt_id),'attribution',jsonb_build_object('configurationReleaseId',configuration_release_id,'placementId',placement_id,'paywallId',paywall_id,'paywallVersionId',paywall_version_id,'mosaicProductId',product_id,'providerId',provider),'payload',payload)::text FROM analytics_events WHERE project_id=$1`
-	args := []any{job.ProjectID}
+	identityExpression := `jsonb_build_object('installationReferenceId',installation_id,'applicationUserReferenceId',application_user_id)`
+	if job.Kind == "experiment" && !job.IncludeIdentity {
+		identityExpression = `NULL::jsonb`
+	}
+	query := `SELECT jsonb_strip_nulls(jsonb_build_object('eventId',event_id,'eventSchemaVersion',event_schema_version,'eventName',event_name,'occurredAt',occurred_at,'receivedAt',received_at,'environmentId',environment_id,'applicationId',application_id,'identity',` + identityExpression + `,'sessionReferenceId',CASE WHEN $2::boolean THEN session_id ELSE NULL END,'platform',platform,'sdkVersion',sdk_version,'applicationVersion',application_version,'locale',locale,'correlation',jsonb_build_object('placementRequestId',placement_request_id,'paywallPresentationId',paywall_presentation_id,'productLoadAttemptId',product_load_attempt_id,'purchaseAttemptId',purchase_attempt_id,'restoreAttemptId',restore_attempt_id),'attribution',jsonb_build_object('configurationReleaseId',configuration_release_id,'placementId',placement_id,'paywallId',paywall_id,'paywallVersionId',paywall_version_id,'mosaicProductId',product_id,'providerId',provider,'experimentId',experiment_id,'experimentVersionId',experiment_version_id,'experimentVariantId',experiment_variant_id,'experimentAllocationVersion',experiment_allocation_version),'payload',payload))::text FROM analytics_events WHERE project_id=$1`
+	args := []any{job.ProjectID, job.Kind != "experiment" || job.IncludeIdentity}
 	if job.Kind == "events" {
 		parts := strings.SplitN(job.IdentityReferenceID, "/", 2)
 		if len(parts) != 2 {
@@ -143,13 +184,16 @@ func (r *Repository) ExportRows(ctx context.Context, job analytics.Job, writer i
 		if e1 != nil || e2 != nil {
 			return 0, analytics.ErrInvalidBatch
 		}
-		query += ` AND environment_id=$2 AND occurred_at>=$3 AND occurred_at<$4`
+		query += ` AND environment_id=$3 AND occurred_at>=$4 AND occurred_at<$5`
 		args = append(args, job.EnvironmentID, from, to)
+	} else if job.Kind == "experiment" {
+		query += ` AND environment_id=$3 AND experiment_version_id=$4`
+		args = append(args, job.EnvironmentID, job.ExperimentVersionID)
 	} else if job.Kind == "application_user" {
-		query += ` AND application_user_id=$2`
+		query += ` AND application_user_id=$3`
 		args = append(args, job.IdentityReferenceID)
 	} else {
-		query += ` AND installation_id=$2`
+		query += ` AND installation_id=$3`
 		args = append(args, job.IdentityReferenceID)
 	}
 	query += ` ORDER BY occurred_at,event_id`
@@ -257,12 +301,32 @@ func (r *Repository) RunDeletion(ctx context.Context, job analytics.Job, now tim
 	}
 	if deletionAppliedAt == nil {
 		dateEnvironments := map[string]time.Time{}
-		query := `SELECT DISTINCT environment_id,date_trunc('day',occurred_at) FROM analytics_events WHERE project_id=$1 AND `
+		identityColumn := "installation_id"
 		if job.IdentityKind == "application_user" {
-			query += `application_user_id=$2`
-		} else {
-			query += `installation_id=$2`
+			identityColumn = "application_user_id"
 		}
+		// A later conversion is aggregated into the first exposure's bucket. Dirty
+		// both the subject's event buckets and every earlier exposure bucket whose
+		// selected metric attribution window contains one of those conversions.
+		query := `
+			SELECT DISTINCT environment_id,bucket_date FROM (
+				SELECT e.environment_id,date_trunc('day',e.occurred_at) bucket_date
+				FROM analytics_events e WHERE e.project_id=$1 AND e.` + identityColumn + `=$2
+				UNION
+				SELECT exposure.environment_id,date_trunc('day',exposure.occurred_at) bucket_date
+				FROM analytics_events conversion
+				JOIN experiment_metric_snapshots snapshot ON snapshot.experiment_version_id=conversion.experiment_version_id
+				JOIN experiment_metric_definitions metric ON metric.id=snapshot.metric_id AND metric.version=snapshot.metric_version
+				JOIN analytics_events exposure ON exposure.environment_id=conversion.environment_id
+				 AND exposure.experiment_version_id=conversion.experiment_version_id
+				 AND exposure.experiment_variant_id=conversion.experiment_variant_id
+				 AND exposure.event_name=metric.denominator_event
+				 AND exposure.` + identityColumn + `=conversion.` + identityColumn + `
+				 AND conversion.occurred_at>=exposure.occurred_at
+				 AND conversion.occurred_at<=exposure.occurred_at+make_interval(secs=>metric.attribution_window_seconds)
+				WHERE conversion.project_id=$1 AND conversion.` + identityColumn + `=$2
+				 AND conversion.event_name=metric.numerator_event
+			) affected`
 		rows, e := tx.Query(ctx, query, job.ProjectID, job.IdentityReferenceID)
 		if e != nil {
 			return false, e

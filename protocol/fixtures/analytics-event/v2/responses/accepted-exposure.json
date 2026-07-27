@@ -1,0 +1,11 @@
+{
+  "analyticsEventContractVersion": "2",
+  "batchId": "batch_experiment_journey_001",
+  "receivedAt": "2026-07-26T12:04:00.100Z",
+  "results": [
+    {
+      "eventId": "event_experiment_exposed_batch",
+      "status": "accepted"
+    }
+  ]
+}

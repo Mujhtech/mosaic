@@ -56,6 +56,8 @@ data class MosaicConfigurationRelease(
     val placementDecisions: Map<String, MosaicPlacementRuleSet> = emptyMap(),
     val entitlementReferences: Map<String, MosaicDeliveryEntitlement> = emptyMap(),
     val deliveryVersion: String = MOSAIC_CONFIGURATION_DELIVERY_VERSION,
+    /** Canonical candidate order is retained; multiple Experiments may target one Placement. */
+    val experimentAssignments: List<MosaicExperimentAssignment> = emptyList(),
 ) {
     fun paywall(forPlacement: String): MosaicDeliveredPaywall? =
         placements[forPlacement]?.paywallVersionId?.let(paywallVersions::get)
@@ -78,6 +80,9 @@ object MosaicConfigurationDeliveryDecoder {
         }.getOrNull()
         if (version == MOSAIC_CONFIGURATION_DELIVERY_VERSION_V2) {
             return MosaicConfigurationDeliveryV2Decoder.decode(source, capabilityReport)
+        }
+        if (version == MOSAIC_CONFIGURATION_DELIVERY_VERSION_V3) {
+            return MosaicConfigurationDeliveryV3Decoder.decode(source, capabilityReport)
         }
         val root = parseObject(source, "$")
         root.exactKeys(setOf("configurationDeliveryVersion", "release"), "$")

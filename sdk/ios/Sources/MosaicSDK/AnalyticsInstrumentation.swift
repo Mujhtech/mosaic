@@ -5,7 +5,21 @@ public struct MosaicAnalyticsPresentationInstrumentation: Sendable {
   let placementRequestID: String
   let presentationID: String
   let attribution: MosaicAnalyticsAttribution
+  let experimentAttribution: MosaicAnalyticsAttribution?
   let providerID: String?
+
+  init(
+    runtime: MosaicAnalyticsRuntime, placementRequestID: String, presentationID: String,
+    attribution: MosaicAnalyticsAttribution,
+    experimentAttribution: MosaicAnalyticsAttribution? = nil, providerID: String?
+  ) {
+    self.runtime = runtime
+    self.placementRequestID = placementRequestID
+    self.presentationID = presentationID
+    self.attribution = attribution
+    self.experimentAttribution = experimentAttribution
+    self.providerID = providerID
+  }
 
   func emit(
     _ name: MosaicAnalyticsEventName,
@@ -28,6 +42,12 @@ public struct MosaicAnalyticsPresentationInstrumentation: Sendable {
   func productAttribution(_ productID: String) -> MosaicAnalyticsAttribution {
     var value = attribution
     value.mosaicProductId = productID
+    if let experimentAttribution {
+      value.experimentId = experimentAttribution.experimentId
+      value.experimentVersionId = experimentAttribution.experimentVersionId
+      value.experimentVariantId = experimentAttribution.experimentVariantId
+      value.experimentAllocationVersion = experimentAttribution.experimentAllocationVersion
+    }
     return value
   }
 

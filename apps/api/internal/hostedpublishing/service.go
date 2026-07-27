@@ -533,6 +533,10 @@ func (s *Service) AuthenticateSDKKey(ctx context.Context, rawKey string) (SDKCon
 }
 
 func (s *Service) AuthenticateSDKKeyVersion(ctx context.Context, rawKey, deliveryVersion string) (SDKConfiguration, error) {
+	return s.AuthenticateSDKKeyVersions(ctx, rawKey, []string{deliveryVersion})
+}
+
+func (s *Service) AuthenticateSDKKeyVersions(ctx context.Context, rawKey string, supportedVersions []string) (SDKConfiguration, error) {
 	parts := strings.SplitN(strings.TrimSpace(rawKey), ".", 2)
 	if len(parts) != 2 || parts[0] == "" || parts[1] == "" {
 		return SDKConfiguration{}, ErrUnauthenticated
@@ -557,18 +561,41 @@ func (s *Service) AuthenticateSDKKeyVersion(ctx context.Context, rawKey, deliver
 			return ErrNoCurrentRelease
 		}
 		tx.TouchAPIKey(key.ID)
-		representation := ReleaseRepresentation{ReleaseID: release.ID, EnvironmentID: environment.ID, DeliveryContractVersion: "1", Payload: release.Payload, ContentHash: release.ContentHash, CreatedAt: release.PublishedAt}
-		if deliveryVersion != "1" || release.DeliveryContractVersion == "2" {
-			var ok bool
-			representation, ok = tx.ReleaseRepresentation(release.ID, deliveryVersion)
-			if !ok {
-				return ErrUnsupportedCapability
+		var representation ReleaseRepresentation
+		found := false
+		for _, deliveryVersion := range preferredDeliveryVersions(supportedVersions) {
+			if release.DeliveryContractVersion == deliveryVersion || deliveryVersion == "1" && release.DeliveryContractVersion == "" {
+				representation = ReleaseRepresentation{ReleaseID: release.ID, EnvironmentID: environment.ID, DeliveryContractVersion: deliveryVersion, Payload: release.Payload, ContentHash: release.ContentHash, CreatedAt: release.PublishedAt}
+				found = true
+				break
 			}
+			if candidate, ok := tx.ReleaseRepresentation(release.ID, deliveryVersion); ok {
+				representation = candidate
+				found = true
+				break
+			}
+		}
+		if !found {
+			return ErrUnsupportedCapability
 		}
 		result = SDKConfiguration{Release: release, Payload: representation.Payload, ContentHash: representation.ContentHash, DeliveryContractVersion: representation.DeliveryContractVersion, Environment: environment, APIKeyID: key.ID}
 		return nil
 	})
 	return result, err
+}
+
+func preferredDeliveryVersions(values []string) []string {
+	set := make(map[string]bool, len(values))
+	for _, value := range values {
+		set[value] = true
+	}
+	result := make([]string, 0, 3)
+	for _, version := range []string{"3", "2", "1"} {
+		if set[version] {
+			result = append(result, version)
+		}
+	}
+	return result
 }
 
 func (s *Service) AuthenticateSDKCommerceKey(ctx context.Context, rawKey, applicationID, sdkPlatform string) (SDKCommerceConfiguration, error) {

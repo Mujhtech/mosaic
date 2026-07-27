@@ -13,6 +13,7 @@ void main() {
       MosaicConfigurationUpdatedResponse(
         source: deliveryFixtureSource(),
         etag: '"release-1"',
+        serverTime: DateTime.now().toUtc(),
       ),
       const MosaicConfigurationNotModifiedResponse(),
     ]);
@@ -78,10 +79,13 @@ void main() {
       MosaicConfigurationUpdatedResponse(
         source: deliveryFixtureSource(),
         etag: '"release-1"',
+        serverTime: DateTime.now().toUtc(),
       ),
     ]);
     final first = _mosaic(transport: firstTransport, cache: cache);
     await first.refreshConfiguration();
+    expect(cache.entry!.trustedServerTime, isNotNull);
+    expect(cache.entry!.localReceiptTime, isNotNull);
 
     final secondTransport = _Transport(const <MosaicConfigurationResponse>[]);
     final second = _mosaic(transport: secondTransport, cache: cache);
@@ -89,6 +93,7 @@ void main() {
     expect(loaded, isA<MosaicConfigurationReady>());
     expect(
         second.acceptedConfiguration!.source, MosaicConfigurationSource.cache);
+    expect(second.acceptedConfiguration!.trustedNow, isNotNull);
     expect(
       second.resolvePlacement('onboarding_complete'),
       isA<MosaicPlacementResolved>(),

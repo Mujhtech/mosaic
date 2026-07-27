@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/foundation.dart';
+import 'package:flutter/widgets.dart';
 
 import 'analytics.dart';
 import 'analytics_event.dart';
@@ -10,6 +11,8 @@ import 'commerce_configuration_transport.dart';
 import 'configuration_cache.dart';
 import 'configuration_client.dart';
 import 'configuration_transport.dart';
+import 'experiment_analytics.dart';
+import 'experiment_assignment_store.dart';
 import 'placement_decision.dart';
 import 'placement_identity.dart';
 import 'presentation.dart';
@@ -126,7 +129,7 @@ final class MosaicConfiguration {
 }
 
 /// An isolated Mosaic SDK client with cache-first hosted configuration state.
-final class Mosaic extends ChangeNotifier {
+final class Mosaic extends ChangeNotifier with WidgetsBindingObserver {
   Mosaic._({
     required this.configuration,
     required this.purchaseProvider,
@@ -134,10 +137,16 @@ final class Mosaic extends ChangeNotifier {
     required MosaicIdentityController identityController,
     MosaicAnalyticsRuntime? analyticsRuntime,
     MosaicCommerceProviderRouter? commerceProviderRouter,
+    MosaicExperimentAnalyticsSink? experimentAnalyticsSink,
+    MosaicExperimentAssignmentStore? experimentAssignmentStore,
   })  : _configurationClient = configurationClient,
         _identityController = identityController,
         _analyticsRuntime = analyticsRuntime,
-        _commerceProviderRouter = commerceProviderRouter;
+        _experimentAnalyticsSink = experimentAnalyticsSink,
+        _experimentAssignmentStore = experimentAssignmentStore,
+        _commerceProviderRouter = commerceProviderRouter {
+    _observeLifecycleIfAvailable();
+  }
 
   factory Mosaic.configure({
     String? publicSdkKey,
@@ -169,6 +178,9 @@ final class Mosaic extends ChangeNotifier {
     MosaicCommerceConfigurationTransport? commerceConfigurationTransport,
     MosaicCommerceConfigurationLoader? bundledCommerceConfigurationLoader,
     MosaicDiagnosticCallback? onDiagnostic,
+    MosaicExperimentAnalyticsSink? experimentAnalyticsSink,
+    MosaicExperimentAssignmentStorage experimentAssignmentStorage =
+        const MosaicFileExperimentAssignmentStorage(),
   }) {
     final factories = commerceProviderFactories.toList(growable: false);
     final router = factories.isEmpty
@@ -279,6 +291,16 @@ final class Mosaic extends ChangeNotifier {
               onDiagnostic: onDiagnostic,
             ),
       commerceProviderRouter: router,
+      experimentAnalyticsSink: experimentAnalyticsSink ?? runtime,
+      experimentAssignmentStore: resolvedBaseUrl == null
+          ? null
+          : MosaicExperimentAssignmentStore(
+              storage: experimentAssignmentStorage,
+              namespace: mosaicExperimentAssignmentNamespace(
+                resolvedBaseUrl,
+                configuration.publicSdkKey,
+              ),
+            ),
     );
   }
 
@@ -287,7 +309,21 @@ final class Mosaic extends ChangeNotifier {
   final MosaicConfigurationClient? _configurationClient;
   final MosaicIdentityController _identityController;
   final MosaicAnalyticsRuntime? _analyticsRuntime;
+  final MosaicExperimentAnalyticsSink? _experimentAnalyticsSink;
+  final MosaicExperimentAssignmentStore? _experimentAssignmentStore;
   final MosaicCommerceProviderRouter? _commerceProviderRouter;
+  bool _observingLifecycle = false;
+
+  void _observeLifecycleIfAvailable() {
+    if (_observingLifecycle) return;
+    try {
+      WidgetsBinding.instance.addObserver(this);
+      _observingLifecycle = true;
+    } on FlutterError {
+      // A pure Dart host may configure before Flutter initializes. The first
+      // configuration load retries registration from the widget lifecycle.
+    }
+  }
 
   MosaicAcceptedConfiguration? get acceptedConfiguration =>
       _configurationClient?.accepted;
@@ -297,6 +333,10 @@ final class Mosaic extends ChangeNotifier {
 
   MosaicIdentityState? get identity => _identityController.current;
   MosaicAnalyticsRuntime? get analytics => _analyticsRuntime;
+  MosaicExperimentAnalyticsSink? get experimentAnalytics =>
+      _experimentAnalyticsSink;
+  MosaicExperimentAssignmentStore? get experimentAssignmentStore =>
+      _experimentAssignmentStore;
   MosaicAnalyticsCapabilityReport get analyticsCapabilityReport =>
       MosaicAnalyticsCapabilityReport();
 
@@ -408,6 +448,7 @@ final class Mosaic extends ChangeNotifier {
   /// Loads the last-known-valid cache, then the bundled Delivery v1 fallback.
   /// This method never performs networking.
   Future<MosaicConfigurationLoadResult> loadConfiguration() async {
+    _observeLifecycleIfAvailable();
     final client = _configurationClient;
     if (client == null) {
       return const MosaicConfigurationUnavailable(
@@ -435,7 +476,17 @@ final class Mosaic extends ChangeNotifier {
   }
 
   @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed && _configurationClient != null) {
+      // The client coalesces concurrent refreshes; presentation continues from
+      // the accepted snapshot while emergency-stop updates are fetched.
+      unawaited(refreshConfiguration());
+    }
+  }
+
+  @override
   void dispose() {
+    if (_observingLifecycle) WidgetsBinding.instance.removeObserver(this);
     _commerceProviderRouter?.deactivate();
     if (_analyticsRuntime case final runtime?) unawaited(runtime.release());
     super.dispose();

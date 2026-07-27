@@ -3,7 +3,7 @@
 The Android SDK strictly decodes Mosaic Protocol 0.2 and renders it with
 Jetpack Compose primitives. Local Preview uses the exact 0.2 contract.
 It uses provider-neutral commerce, a generated bundled fallback, and Hosted
-Configuration Delivery v1 and v2. RevenueCat support is isolated in the optional
+Configuration Delivery v1, v2, and v3. RevenueCat support is isolated in the optional
 `:mosaic-revenuecat` module; the core `:mosaic` AAR has no RevenueCat or Play
 Billing dependency. Native Google Play support is isolated in the optional
 `:mosaic-google-play` module and consumes Commerce Configuration v2.
@@ -15,7 +15,7 @@ the independently versioned commerce-adapter identity.
 
 ## Analytics, identity, and privacy
 
-Analytics Event Contract v1 is available only for hosted clients. Collection
+Analytics Event Contracts v1 and v2 are available only for hosted clients. Collection
 defaults to disabled and begins only when `analyticsCollectionEnabled = true`
 mirrors an owner-enabled Environment. A host consent override may disable
 collection with `setAnalyticsCollectionEnabled(false)`; disabling stops new
@@ -52,7 +52,9 @@ hosted.setAnalyticsCollectionEnabled(hostConsentGranted)
 val diagnostics = hosted.flushAnalytics()
 ```
 
-Foreground and background transitions request a best-effort flush. Android may
+Foreground and background transitions request a best-effort flush. Foreground
+entry also coalesces a configuration refresh so emergency-stop releases can
+take effect without a request for every presentation. Android may
 terminate a background process immediately, so background delivery is not
 guaranteed; the persistent queue resumes on the next foreground. Mosaic does
 not use WorkManager for Phase 6. Local Preview and unhosted bundled paywalls do
@@ -132,9 +134,9 @@ The exact presentation union is `purchased`, `restored`, `alreadyEntitled`,
 
 ## Hosted configuration
 
-An environment-scoped public SDK key selects the Configuration Delivery v1
-release. Presentation is cache-first; networking occurs only when the host
-explicitly calls `refresh()`, and the returned sealed result distinguishes an
+An environment-scoped public SDK key selects a Configuration Delivery release.
+Presentation is cache-first; networking occurs when the host explicitly calls
+`refresh()` and once per foreground transition. The returned sealed result distinguishes an
 update, `304` revalidation, retained last-known-valid state, and unavailable
 state.
 
@@ -178,7 +180,7 @@ documents, or transport internals.
 ### Advanced Placement decisions
 
 Delivery v2 is accepted atomically and evaluated locally. A rejected refresh
-keeps the last accepted v1 or v2 release, so `paywall()` and `MosaicPlacement`
+keeps the last accepted v1, v2, or v3 release, so `paywall()` and `MosaicPlacement`
 remain offline-capable and do not request configuration per presentation.
 Existing v1 calls remain source compatible:
 
@@ -216,6 +218,31 @@ Attribute updates are atomic, bounded, typed, and restricted to definitions in
 the accepted release. Identity reset also clears in-memory QA tokens, which are
 never persisted. `MosaicPlacement` evaluates before composing the existing
 native renderer and reuses the decision's Product-load snapshot.
+
+### Experiments
+
+Delivery v3 adds strict Experiment Assignment v1 without changing the public
+Placement API. Normal Placement must first select the exact Control Paywall
+Version. Assignment and mutual exclusion then use the canonical length-prefixed
+SHA-256 algorithms locally and offline. The SDK retains the ordered Assignment
+candidate list, so mutually exclusive Experiments may share a Placement and
+evaluation continues to the group-admitted candidate. Identity changes affect
+future decisions without rewriting queued history.
+
+Schedules use validated server time: start is inclusive, an optional end is
+exclusive, anchors become stale after seven days, and wall-clock deviation over
+five minutes conservatively uses normal Placement. Assignment diagnostics store
+only one-way subject digests and safe IDs in the no-backup directory, with
+atomic replacement and bounds of 256 records/180 days. Hosts can inspect them
+with `hosted.experimentDiagnostics()`.
+
+A Variant is presented only when its exact Product set is ready and the
+installed provider truthfully declares every required capability. Otherwise
+the existing normal Placement Paywall is presented. Statistical
+`experiment_exposed` is emitted exactly once after native presentation;
+successful fallback emits `experiment_fallback_presented`, assignment alone is
+diagnostic, and QA presentations never emit statistical exposure. Analytics
+delivery remains nonblocking.
 
 ## Commerce Configuration and providers
 

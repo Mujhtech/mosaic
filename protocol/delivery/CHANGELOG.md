@@ -1,5 +1,16 @@
 # Configuration Delivery Changelog
 
+## Version 3 release candidate - 2026-07-26
+
+- Retained the complete immutable Delivery `2` snapshot and atomically added Experiment Assignment Contract `1` definitions.
+- Added exact Experiment contract, feature, bucketing-algorithm, and trusted-time schedule-policy negotiation.
+- Added strict tenant, Placement, immutable Paywall Version, allocation, compatibility, and release-digest validation with last-accepted preservation.
+- Defined the Delivery `2` projection as unchanged normal Placement behavior; Experiment Variants are never projected as unconditional bindings.
+- Added canonical release/capability/projection fixtures and malformed-allocation/unsupported-contract rejection fixtures without modifying v1/v2.
+- Group Version snapshots carry complete stable-Experiment membership ranges; Delivery validates each pinned Experiment Version's stable Experiment root against that selected Group Version.
+- Delivery accepts both bounded schedules and immediate/manual-completion
+  Assignments without an `endsAt`, while preserving trusted-time fallback.
+
 ## Version 2 release candidate - 2026-07-26
 
 - Added an atomic Delivery `2` envelope for Placement Decision Contract `1` Rule Sets and unchanged Paywall Protocol `0.2` documents.

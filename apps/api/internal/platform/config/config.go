@@ -41,6 +41,7 @@ type Config struct {
 
 type AnalyticsConfig struct {
 	EventSchemaPath     string        `envconfig:"MOSAIC_ANALYTICS_EVENT_SCHEMA_PATH" default:"../../protocol/schema/analytics-event/v1/event.schema.json"`
+	EventV2SchemaPath   string        `envconfig:"MOSAIC_ANALYTICS_EVENT_V2_SCHEMA_PATH" default:"../../protocol/schema/analytics-event/v2/event.schema.json"`
 	IPRequestsPerMinute int           `envconfig:"MOSAIC_ANALYTICS_IP_REQUESTS_PER_MINUTE" default:"30"`
 	IPBurst             int           `envconfig:"MOSAIC_ANALYTICS_IP_BURST" default:"10"`
 	KeyBatchesPerMinute int           `envconfig:"MOSAIC_ANALYTICS_KEY_BATCHES_PER_MINUTE" default:"60"`
@@ -151,6 +152,7 @@ func load() (Config, error) {
 	cfg.Protocol.CommerceProviderV2SchemaPath = strings.TrimSpace(cfg.Protocol.CommerceProviderV2SchemaPath)
 	cfg.Protocol.CommerceConfigurationV2SchemaPath = strings.TrimSpace(cfg.Protocol.CommerceConfigurationV2SchemaPath)
 	cfg.Analytics.EventSchemaPath = strings.TrimSpace(cfg.Analytics.EventSchemaPath)
+	cfg.Analytics.EventV2SchemaPath = strings.TrimSpace(cfg.Analytics.EventV2SchemaPath)
 	cfg.Providers.CredentialKeyring = strings.TrimSpace(cfg.Providers.CredentialKeyring)
 	cfg.Providers.RevenueCatBaseURL = strings.TrimSpace(cfg.Providers.RevenueCatBaseURL)
 	cfg.ObjectStore.Endpoint = strings.TrimSpace(cfg.ObjectStore.Endpoint)
@@ -242,6 +244,9 @@ func (cfg Config) validate() error {
 	}
 	if cfg.Analytics.EventSchemaPath == "" {
 		return errors.New("MOSAIC_ANALYTICS_EVENT_SCHEMA_PATH must not be empty")
+	}
+	if cfg.Analytics.EventV2SchemaPath == "" {
+		return errors.New("MOSAIC_ANALYTICS_EVENT_V2_SCHEMA_PATH must not be empty")
 	}
 	for key, value := range map[string]int{
 		"MOSAIC_ANALYTICS_IP_REQUESTS_PER_MINUTE": cfg.Analytics.IPRequestsPerMinute,

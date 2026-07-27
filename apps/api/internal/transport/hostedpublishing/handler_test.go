@@ -68,13 +68,14 @@ func (repository deliveryTestRepository) Transact(_ context.Context, fn func(hos
 
 type deliveryTestTransaction struct {
 	hostedpublishing.Transaction
-	key         hostedpublishing.APIKeyRecord
-	environment hostedpublishing.Environment
-	state       hostedpublishing.ReleaseState
-	release     hostedpublishing.Release
-	application hostedpublishing.Application
-	commerce    hostedpublishing.CommerceConfigurationSnapshot
-	asset       hostedpublishing.Asset
+	key             hostedpublishing.APIKeyRecord
+	environment     hostedpublishing.Environment
+	state           hostedpublishing.ReleaseState
+	release         hostedpublishing.Release
+	representations map[string]hostedpublishing.ReleaseRepresentation
+	application     hostedpublishing.Application
+	commerce        hostedpublishing.CommerceConfigurationSnapshot
+	asset           hostedpublishing.Asset
 }
 
 func (transaction *deliveryTestTransaction) APIKeyByPrefix(prefix string) (hostedpublishing.APIKeyRecord, bool) {
@@ -91,6 +92,11 @@ func (transaction *deliveryTestTransaction) ReleaseState(id string) (hostedpubli
 
 func (transaction *deliveryTestTransaction) Release(id string) (hostedpublishing.Release, bool) {
 	return transaction.release, id == transaction.release.ID
+}
+
+func (transaction *deliveryTestTransaction) ReleaseRepresentation(releaseID, version string) (hostedpublishing.ReleaseRepresentation, bool) {
+	representation, ok := transaction.representations[version]
+	return representation, ok && releaseID == transaction.release.ID
 }
 
 func (transaction *deliveryTestTransaction) Applications(projectID string) []hostedpublishing.Application {
@@ -150,6 +156,79 @@ func TestSDKConfigurationHTTPConditionalGzipAndExactCapabilities(t *testing.T) {
 	handler.sdkConfiguration(unsupportedRecorder, unsupported)
 	if unsupportedRecorder.Code != http.StatusNotAcceptable || !strings.Contains(unsupportedRecorder.Body.String(), `"code":"unsupported_capability"`) {
 		t.Fatalf("unsupported capability status=%d body=%s", unsupportedRecorder.Code, unsupportedRecorder.Body.String())
+	}
+}
+
+func TestSDKConfigurationParsesExperimentCapabilitiesAndVariesRepresentation(t *testing.T) {
+	payload, err := os.ReadFile(filepath.Join("../../../../../protocol/fixtures/configuration-delivery/v3/experiment-release.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	const rawKey = "sdk_experiment.secret"
+	digest := sha256.Sum256([]byte(rawKey))
+	transaction := &deliveryTestTransaction{
+		key:         hostedpublishing.APIKeyRecord{ID: "key_experiment", EnvironmentID: "environment_staging", Kind: "public_sdk", Prefix: "sdk_experiment", SecretDigest: digest[:]},
+		environment: hostedpublishing.Environment{ID: "environment_staging", ProjectID: "project_1", Key: "staging"},
+		state:       hostedpublishing.ReleaseState{EnvironmentID: "environment_staging", ProjectID: "project_1", CurrentReleaseID: "configuration-release-experiment"},
+		release:     hostedpublishing.Release{ID: "configuration-release-experiment", EnvironmentID: "environment_staging", DeliveryContractVersion: "3", Payload: payload},
+		representations: map[string]hostedpublishing.ReleaseRepresentation{
+			"3": {ReleaseID: "configuration-release-experiment", EnvironmentID: "environment_staging", DeliveryContractVersion: "3", Payload: payload},
+		},
+	}
+	handler := &Handler{service: hostedpublishing.NewService(deliveryTestRepository{transaction: transaction})}
+	request := sdkRequest(rawKey, releaseCapabilities(t, payload))
+	request.Header.Set("Mosaic-Configuration-Versions", "3")
+	request.Header.Set(experimentAssignmentVersionsHeader, "1")
+	request.Header.Set(experimentFeaturesHeader, "allocation.ranges,assignment.installation,assignment.identified_user,assignment.identified_user_or_installation,fallback.normal_placement,group.mutual_exclusion,override.qa,schedule.trusted_server_time")
+	request.Header.Set(experimentBucketingAlgorithmsHeader, "experiment_sha256_length_prefixed_v1,experiment_group_sha256_length_prefixed_v1")
+	request.Header.Set(experimentSchedulePoliciesHeader, "trusted_server_time_v1")
+	recorder := httptest.NewRecorder()
+	handler.sdkConfiguration(recorder, request)
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("Experiment-capable delivery status=%d body=%s", recorder.Code, recorder.Body.String())
+	}
+	for _, name := range []string{experimentAssignmentVersionsHeader, experimentFeaturesHeader, experimentBucketingAlgorithmsHeader, experimentSchedulePoliciesHeader} {
+		if !headerContains(recorder.Header().Get("Vary"), name) {
+			t.Errorf("Vary omits %s: %s", name, recorder.Header().Get("Vary"))
+		}
+	}
+
+	missingPolicy := request.Clone(request.Context())
+	missingPolicy.Header = request.Header.Clone()
+	missingPolicy.Header.Del(experimentSchedulePoliciesHeader)
+	unsupportedRecorder := httptest.NewRecorder()
+	handler.sdkConfiguration(unsupportedRecorder, missingPolicy)
+	if unsupportedRecorder.Code != http.StatusNotAcceptable || !strings.Contains(unsupportedRecorder.Body.String(), `"code":"unsupported_capability"`) {
+		t.Fatalf("missing Experiment schedule policy status=%d body=%s", unsupportedRecorder.Code, unsupportedRecorder.Body.String())
+	}
+}
+
+func TestSDKConfigurationFallsBackToCurrentV2ForV3CapableSDK(t *testing.T) {
+	payload, err := os.ReadFile(filepath.Join("../../../../../protocol/fixtures/configuration-delivery/v2/advanced-release.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	const rawKey = "sdk_v3_v2_fallback.secret"
+	digest := sha256.Sum256([]byte(rawKey))
+	transaction := &deliveryTestTransaction{
+		key:         hostedpublishing.APIKeyRecord{ID: "key_v2", EnvironmentID: "environment_staging", Kind: "public_sdk", Prefix: "sdk_v3_v2_fallback", SecretDigest: digest[:]},
+		environment: hostedpublishing.Environment{ID: "environment_staging", ProjectID: "project_1", Key: "staging"},
+		state:       hostedpublishing.ReleaseState{EnvironmentID: "environment_staging", ProjectID: "project_1", CurrentReleaseID: "configuration-release-v2"},
+		release:     hostedpublishing.Release{ID: "configuration-release-v2", EnvironmentID: "environment_staging", DeliveryContractVersion: "2", Payload: payload},
+	}
+	handler := &Handler{service: hostedpublishing.NewService(deliveryTestRepository{transaction: transaction})}
+	request := sdkRequest(rawKey, releaseCapabilities(t, payload))
+	request.Header.Set("Mosaic-Configuration-Versions", "3,2,1")
+	features, algorithms := decisionCapabilities(t, payload)
+	request.Header.Set("Mosaic-Placement-Decision-Versions", "1")
+	request.Header.Set("Mosaic-Decision-Features", strings.Join(features, ","))
+	request.Header.Set("Mosaic-Bucketing-Algorithms", strings.Join(algorithms, ","))
+	recorder := httptest.NewRecorder()
+
+	handler.sdkConfiguration(recorder, request)
+
+	if recorder.Code != http.StatusOK || recorder.Header().Get("Content-Type") != "application/vnd.mosaic.configuration+json;version=2" || !bytes.Equal(recorder.Body.Bytes(), payload) {
+		t.Fatalf("v3-capable fallback status=%d content-type=%q body=%s", recorder.Code, recorder.Header().Get("Content-Type"), recorder.Body.String())
 	}
 }
 
@@ -278,6 +357,27 @@ func releaseCapabilities(t *testing.T, payload []byte) []string {
 		}
 	}
 	return values
+}
+
+func decisionCapabilities(t *testing.T, payload []byte) ([]string, []string) {
+	t.Helper()
+	var envelope struct {
+		Release struct {
+			Compatibility struct {
+				Contracts []struct {
+					RequiredFeatures    []string `json:"requiredFeatures"`
+					BucketingAlgorithms []string `json:"bucketingAlgorithms"`
+				} `json:"placementDecisionContracts"`
+			} `json:"compatibility"`
+		} `json:"release"`
+	}
+	if err := json.Unmarshal(payload, &envelope); err != nil {
+		t.Fatal(err)
+	}
+	if len(envelope.Release.Compatibility.Contracts) != 1 {
+		t.Fatalf("fixture placement compatibility = %#v", envelope.Release.Compatibility.Contracts)
+	}
+	return envelope.Release.Compatibility.Contracts[0].RequiredFeatures, envelope.Release.Compatibility.Contracts[0].BucketingAlgorithms
 }
 
 var _ hostedpublishing.Repository = deliveryTestRepository{}

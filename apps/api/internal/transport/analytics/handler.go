@@ -51,6 +51,7 @@ func RegisterProjectRoutes(router chi.Router, service *analytics.Service) {
 		a.Get("/freshness", h.freshness)
 		a.Post("/exports", h.eventExport)
 	})
+	router.Post("/environments/{environmentId}/experiments/{experimentId}/exports", h.experimentExport)
 	router.Route("/analytics/privacy", func(p chi.Router) {
 		p.Post("/preview", h.preview)
 		p.Post("/exports", h.userExport)
@@ -245,6 +246,27 @@ func (h *Handler) eventExport(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	value, err := h.service.CreateEventExport(r.Context(), actor(r), chi.URLParam(r, "projectId"), chi.URLParam(r, "environmentId"), req.Format, from, to)
+	if err != nil {
+		writeError(w, r, err)
+		return
+	}
+	response.Accepted(w, r, value)
+}
+
+type experimentExportRequest struct {
+	Format          string `json:"format"`
+	IncludeIdentity bool   `json:"includeIdentity"`
+}
+
+func (v *experimentExportRequest) Validate() error {
+	return validation.ValidateStruct(v, validation.Field(&v.Format, validation.Required, validation.In("ndjson", "csv")))
+}
+func (h *Handler) experimentExport(w http.ResponseWriter, r *http.Request) {
+	var req experimentExportRequest
+	if !decode(w, r, &req) {
+		return
+	}
+	value, err := h.service.CreateExperimentExport(r.Context(), actor(r), chi.URLParam(r, "projectId"), chi.URLParam(r, "environmentId"), chi.URLParam(r, "experimentId"), req.Format, req.IncludeIdentity)
 	if err != nil {
 		writeError(w, r, err)
 		return

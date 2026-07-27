@@ -112,9 +112,19 @@ final class ConfigurationClientTests: XCTestCase {
     XCTAssertEqual(requests[1].headers["If-None-Match"], "\"release-one\"")
     XCTAssertEqual(requests[0].headers["Authorization"], "Bearer public_test_key")
     XCTAssertEqual(requests[0].headers["Mosaic-SDK-Platform"], "ios")
-    XCTAssertEqual(requests[0].headers["Mosaic-Configuration-Versions"], "2,1")
+    XCTAssertEqual(requests[0].headers["Mosaic-Configuration-Versions"], "3,2,1")
     XCTAssertEqual(requests[0].headers["Mosaic-Placement-Decision-Versions"], "1")
     XCTAssertEqual(requests[0].headers["Mosaic-Bucketing-Algorithms"], "sha256_length_prefixed_v1")
+    XCTAssertEqual(requests[0].headers["Mosaic-Experiment-Assignment-Versions"], "1")
+    XCTAssertEqual(
+      requests[0].headers["Mosaic-Experiment-Features"],
+      mosaicSupportedExperimentFeatures.joined(separator: ","))
+    XCTAssertEqual(
+      requests[0].headers["Mosaic-Experiment-Bucketing-Algorithms"],
+      [mosaicExperimentAssignmentAlgorithm, mosaicExperimentGroupAlgorithm].joined(separator: ","))
+    XCTAssertEqual(
+      requests[0].headers["Mosaic-Experiment-Schedule-Policies"],
+      mosaicExperimentSchedulePolicy)
     XCTAssertEqual(
       requests[0].headers["Mosaic-Paywall-Capabilities"],
       MosaicCapabilityCatalog.v02.map { "\($0.rawValue)@\(mosaicProtocolVersion)" }.joined(

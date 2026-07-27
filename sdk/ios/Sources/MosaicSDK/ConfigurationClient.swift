@@ -54,6 +54,7 @@ actor MosaicConfigurationClient {
     let data: Data
     let etag: String?
     let refreshAfter: Date
+    let trustedTime: MosaicTrustedTimeAnchor?
   }
 
   private let publicSDKKey: String
@@ -64,6 +65,7 @@ actor MosaicConfigurationClient {
   private let store: any MosaicConfigurationCacheStore
   private let bundledFallback: MosaicConfigurationBundledFallback
   private let clock: @Sendable () -> Date
+  private let experimentStore: MosaicExperimentAssignmentStore
 
   private var accepted: AcceptedRelease?
   private var diagnostics: [MosaicDiagnostic] = []
@@ -78,6 +80,8 @@ actor MosaicConfigurationClient {
     bundledFallback: MosaicConfigurationBundledFallback,
     transport: any MosaicConfigurationTransport,
     store: any MosaicConfigurationCacheStore,
+    experimentStore: MosaicExperimentAssignmentStore = MosaicExperimentAssignmentStore(
+      persistence: MosaicExperimentMemoryPersistence()),
     clock: @escaping @Sendable () -> Date = { Date() }
   ) {
     self.publicSDKKey = publicSDKKey
@@ -91,6 +95,7 @@ actor MosaicConfigurationClient {
     self.bundledFallback = bundledFallback
     self.transport = transport
     self.store = store
+    self.experimentStore = experimentStore
     self.clock = clock
   }
 
@@ -104,8 +109,12 @@ actor MosaicConfigurationClient {
             source: .cache,
             data: record.releaseData,
             etag: record.etag,
-            refreshAfter: record.refreshAfter
+            refreshAfter: record.refreshAfter,
+            trustedTime: MosaicTrustedTimeAnchor.cached(
+              serverTime: record.serverTime, localReceiptTime: record.localReceiptTime,
+              systemUptime: record.systemUptime, now: clock())
           )
+          await reconcileExperimentRecords()
         } catch {
           recordDiagnostic(
             code: deliveryCode(error, fallback: "delivery_cached_release_rejected"), stage: .cache)
@@ -226,31 +235,40 @@ actor MosaicConfigurationClient {
   struct AnalyticsDecisionEvaluation: Sendable {
     let result: MosaicPlacementDecisionResult
     let fallbackUses: [MosaicPlacementEvaluator.FallbackUse]
+    let experimentSelection: MosaicExperimentSelection?
+    let normalPlacementResult: MosaicPlacementDecisionResult?
+    let experimentFallbackReason: String?
 
     init(
       _ result: MosaicPlacementDecisionResult,
-      fallbackUses: [MosaicPlacementEvaluator.FallbackUse] = []
+      fallbackUses: [MosaicPlacementEvaluator.FallbackUse] = [],
+      experimentSelection: MosaicExperimentSelection? = nil,
+      normalPlacementResult: MosaicPlacementDecisionResult? = nil,
+      experimentFallbackReason: String? = nil
     ) {
       self.result = result
       self.fallbackUses = fallbackUses
+      self.experimentSelection = experimentSelection
+      self.normalPlacementResult = normalPlacementResult
+      self.experimentFallbackReason = experimentFallbackReason
     }
   }
 
   func decide(
     placement key: String, context: MosaicDecisionContext, identity: MosaicIdentitySnapshot
-  ) -> MosaicPlacementDecisionResult {
-    evaluateDecision(placement: key, context: context, identity: identity).result
+  ) async -> MosaicPlacementDecisionResult {
+    await evaluateDecision(placement: key, context: context, identity: identity).result
   }
 
   func decideForPresentation(
     placement key: String, context: MosaicDecisionContext, identity: MosaicIdentitySnapshot
-  ) -> AnalyticsDecisionEvaluation {
-    evaluateDecision(placement: key, context: context, identity: identity)
+  ) async -> AnalyticsDecisionEvaluation {
+    await evaluateDecision(placement: key, context: context, identity: identity)
   }
 
   private func evaluateDecision(
     placement key: String, context: MosaicDecisionContext, identity: MosaicIdentitySnapshot
-  ) -> AnalyticsDecisionEvaluation {
+  ) async -> AnalyticsDecisionEvaluation {
     guard key.range(of: "^[a-z][a-z0-9_]{0,63}$", options: .regularExpression) != nil else {
       let diagnostic = MosaicDiagnostic(code: "delivery_invalid_placement", stage: .placement)
       recordDiagnostic(diagnostic)
@@ -296,13 +314,15 @@ actor MosaicConfigurationClient {
           recordDiagnostic(diagnostic)
           return .init(.evaluationFailed(diagnostics: diagnostics))
         }
-        return .init(
-          .paywallSelected(
-            document: paywall.document, paywallVersionID: versionID,
-            matchedRuleID: output.matchedRuleID,
-            fallbackPath: resolution.path, release: accepted.release.metadata,
-            source: accepted.source,
-            trace: resolution.trace), fallbackUses: resolution.fallbackUses)
+        let normal = MosaicPlacementDecisionResult.paywallSelected(
+          document: paywall.document, paywallVersionID: versionID,
+          matchedRuleID: output.matchedRuleID,
+          fallbackPath: resolution.path, release: accepted.release.metadata,
+          source: accepted.source,
+          trace: resolution.trace)
+        return await applyExperiment(
+          to: normal, normalPaywallVersionID: versionID, decision: decision,
+          identity: identity, context: context, fallbackUses: resolution.fallbackUses)
       case .noPaywall:
         return .init(
           .noPaywall(
@@ -334,6 +354,117 @@ actor MosaicConfigurationClient {
       recordDiagnostic(diagnostic)
       return .init(.evaluationFailed(diagnostics: diagnostics))
     }
+  }
+
+  private func applyExperiment(
+    to normal: MosaicPlacementDecisionResult, normalPaywallVersionID: String,
+    decision: MosaicPlacementDecision, identity: MosaicIdentitySnapshot,
+    context: MosaicDecisionContext, fallbackUses: [MosaicPlacementEvaluator.FallbackUse]
+  ) async -> AnalyticsDecisionEvaluation {
+    guard let accepted, accepted.source != .bundled else {
+      return .init(normal, fallbackUses: fallbackUses)
+    }
+    let candidates = accepted.release.experimentAssignments
+      .filter {
+        $0.placementId == decision.ruleSet.placementId
+          && $0.controlPaywallVersionId == normalPaywallVersionID
+      }
+      .sorted { $0.experimentId < $1.experimentId }
+    let selectorDigests = Set(context.qaOverrideTokens.map(MosaicExperimentAssignmentEngine.digest))
+    for assignment in candidates {
+      switch MosaicExperimentAssignmentEngine.evaluate(
+        assignment, identity: identity, trustedTime: accepted.trustedTime?.now(),
+        qaSelectorDigests: selectorDigests)
+      {
+      case .normalPlacement(let reason):
+        recordDiagnostic(
+          MosaicDiagnostic(code: "experiment.\(reason.rawValue)", stage: .placement))
+        continue
+      case .selected(let selection):
+        guard
+          let paywall = accepted.release.paywallVersions.first(where: {
+            $0.id == selection.variant.paywallVersionId
+          })
+        else { continue }
+        await experimentStore.record(selection, at: clock())
+        let result = MosaicPlacementDecisionResult.paywallSelected(
+          document: paywall.document, paywallVersionID: paywall.id, matchedRuleID: nil,
+          fallbackPath: [], release: accepted.release.metadata, source: accepted.source,
+          trace: .init(steps: []))
+        return .init(
+          result, fallbackUses: fallbackUses, experimentSelection: selection,
+          normalPlacementResult: normal)
+      }
+    }
+    return .init(normal, fallbackUses: fallbackUses)
+  }
+
+  func finalizeExperiment(
+    _ evaluation: AnalyticsDecisionEvaluation,
+    productsReady: Bool,
+    providerCapabilities: Set<MosaicExperimentProviderCapability>
+  ) -> AnalyticsDecisionEvaluation {
+    guard let selection = evaluation.experimentSelection,
+      let normal = evaluation.normalPlacementResult
+    else { return evaluation }
+    let staticReadiness = selection.variant.compatibility.requiredProductIds.allSatisfy { id in
+      accepted?.release.productReferences.first(where: { $0.id == id })?.readiness == .ready
+    }
+    let capabilitiesReady = Set(selection.variant.compatibility.requiredProviderCapabilities)
+      .isSubset(of: providerCapabilities)
+    guard staticReadiness, productsReady, capabilitiesReady else {
+      let reason =
+        !staticReadiness || !productsReady ? "product_unavailable" : "provider_unavailable"
+      return .init(
+        normal, fallbackUses: evaluation.fallbackUses, experimentSelection: selection,
+        normalPlacementResult: normal, experimentFallbackReason: reason)
+    }
+    return evaluation
+  }
+
+  func authorizePresentation(
+    _ selection: MosaicExperimentSelection, releaseID: String,
+    identity: MosaicIdentitySnapshot
+  ) -> Bool {
+    guard let accepted, accepted.release.metadata.id == releaseID,
+      let current = accepted.release.experimentAssignments.first(where: {
+        $0.experimentVersionId == selection.assignment.experimentVersionId
+      }), let now = accepted.trustedTime?.now()
+    else { return false }
+    if selection.source == .qaOverride {
+      return current.qaOverrides.contains(where: {
+        $0.variantId == selection.variant.id && $0.assignmentKeyType == selection.keyType
+          && MosaicExperimentAssignmentDecoder.timestamp($0.startsAt).map { now >= $0 } == true
+          && MosaicExperimentAssignmentDecoder.timestamp($0.expiresAt).map { now < $0 } == true
+      })
+    }
+    guard
+      case .selected(let refreshed) = MosaicExperimentAssignmentEngine.evaluate(
+        current, identity: identity, trustedTime: now),
+      refreshed.variant.id == selection.variant.id,
+      refreshed.keyType == selection.keyType,
+      refreshed.subjectDigest == selection.subjectDigest
+    else { return false }
+    return true
+  }
+
+  func markExposed(_ selection: MosaicExperimentSelection) async {
+    await experimentStore.markExposed(selection, at: clock())
+  }
+
+  func identityChanged(user: Bool, installation: Bool) async {
+    if user { await experimentStore.clearUserBound() }
+    if installation { await experimentStore.clearInstallationBound() }
+  }
+
+  func experimentDiagnostics() async -> MosaicExperimentDiagnostics {
+    let stored = await experimentStore.diagnostics()
+    return .init(
+      acceptedReleaseID: accepted?.release.metadata.id,
+      activeAssignmentCount: accepted?.release.experimentAssignments.count ?? 0,
+      trustedTimeReliable: accepted?.trustedTime?.now() != nil,
+      persistedAssignmentCount: stored.count, exposedAssignmentCount: stored.exposed,
+      lastSafeCode: diagnostics.last?.code)
   }
 
   private struct AvailablePaywallResolution {
@@ -472,6 +603,13 @@ actor MosaicConfigurationClient {
       "Mosaic-Decision-Features": MosaicConfigurationDeliveryV2Decoder.supportedCapabilityFeatures
         .joined(separator: ","),
       "Mosaic-Bucketing-Algorithms": mosaicSupportedBucketingAlgorithms.joined(separator: ","),
+      "Mosaic-Experiment-Assignment-Versions": mosaicSupportedExperimentAssignmentVersions.joined(
+        separator: ","),
+      "Mosaic-Experiment-Features": mosaicSupportedExperimentFeatures.joined(separator: ","),
+      "Mosaic-Experiment-Bucketing-Algorithms": [
+        mosaicExperimentAssignmentAlgorithm, mosaicExperimentGroupAlgorithm,
+      ].joined(separator: ","),
+      "Mosaic-Experiment-Schedule-Policies": mosaicExperimentSchedulePolicy,
       "Mosaic-Paywall-Protocol-Versions": mosaicSupportedProtocolVersions.joined(separator: ","),
       "Mosaic-Paywall-Capabilities": MosaicCapabilityCatalog.v02.map {
         "\($0.rawValue)@\(mosaicProtocolVersion)"
@@ -507,7 +645,11 @@ actor MosaicConfigurationClient {
         source: current.source,
         data: current.data,
         etag: current.etag,
-        refreshAfter: refreshAfter
+        refreshAfter: refreshAfter,
+        trustedTime: response.serverDate.map {
+          MosaicTrustedTimeAnchor.remote(
+            serverTime: $0, localReceiptTime: clock())
+        } ?? current.trustedTime
       )
       if let etag = current.etag {
         try? await store.save(
@@ -515,7 +657,10 @@ actor MosaicConfigurationClient {
             etag: etag,
             releaseData: current.data,
             storedAt: clock(),
-            refreshAfter: refreshAfter
+            refreshAfter: refreshAfter,
+            serverTime: accepted?.trustedTime?.serverTime,
+            localReceiptTime: accepted?.trustedTime?.localReceiptTime,
+            systemUptime: accepted?.trustedTime?.systemUptime
           ))
       }
       return .notModified(metadata: current.release.metadata)
@@ -551,13 +696,19 @@ actor MosaicConfigurationClient {
       }
       let now = clock()
       let refreshAfter = freshnessDate(cacheControl: response.cacheControl, now: now)
+      let trustedTime = response.serverDate.map {
+        MosaicTrustedTimeAnchor.remote(serverTime: $0, localReceiptTime: now)
+      }
       do {
         try await store.save(
           MosaicConfigurationCacheRecord(
             etag: etag,
             releaseData: response.data,
             storedAt: now,
-            refreshAfter: refreshAfter
+            refreshAfter: refreshAfter,
+            serverTime: trustedTime?.serverTime,
+            localReceiptTime: trustedTime?.localReceiptTime,
+            systemUptime: trustedTime?.systemUptime
           ))
       } catch {
         return preserveOrUnavailable(
@@ -569,8 +720,10 @@ actor MosaicConfigurationClient {
         source: .remote,
         data: response.data,
         etag: etag,
-        refreshAfter: refreshAfter
+        refreshAfter: refreshAfter,
+        trustedTime: trustedTime
       )
+      await reconcileExperimentRecords()
       return .updated(metadata: candidate.metadata)
 
     default:
@@ -599,13 +752,22 @@ actor MosaicConfigurationClient {
         source: .bundled,
         data: data,
         etag: nil,
-        refreshAfter: .distantPast
+        refreshAfter: .distantPast,
+        trustedTime: nil
       )
     } catch {
       recordDiagnostic(
         code: deliveryCode(error, fallback: "delivery_bundled_fallback_rejected"),
         stage: .fallbackValidation)
     }
+  }
+
+  private func reconcileExperimentRecords() async {
+    guard let accepted, accepted.source != .bundled else { return }
+    await experimentStore.reconcile(
+      assignments: accepted.release.experimentAssignments,
+      trustedTime: accepted.trustedTime?.now(),
+      recordedAt: clock())
   }
 
   private func preserveOrUnavailable(_ diagnostic: MosaicDiagnostic)

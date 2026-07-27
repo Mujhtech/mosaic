@@ -1,0 +1,37 @@
+{
+  "eventId": "event_experiment_fallback_001",
+  "eventSchemaVersion": "2",
+  "eventName": "experiment_fallback_presented",
+  "occurredAt": "2026-07-26T12:02:00.000Z",
+  "queuedAt": "2026-07-26T12:02:00.005Z",
+  "authority": "client_observed",
+  "identity": {
+    "installationId": "installation_001",
+    "generation": 1
+  },
+  "sessionId": "session_001",
+  "context": {
+    "platform": "android",
+    "sdkFamily": "android",
+    "sdkVersion": "0.7.0",
+    "configurationDeliveryVersion": "3"
+  },
+  "correlation": {
+    "placementRequestId": "placement_request_002",
+    "paywallPresentationId": "presentation_fallback_001"
+  },
+  "attribution": {
+    "configurationReleaseId": "release_phase7_experiment",
+    "placementId": "placement_checkout",
+    "experimentId": "experiment_checkout",
+    "experimentVersionId": "experiment_version_checkout_1",
+    "experimentVariantId": "variant_treatment_a",
+    "experimentAllocationVersion": "allocation_checkout_1"
+  },
+  "payload": {
+    "reason": "product_unavailable",
+    "presentedPaywallId": "paywall_normal_placement",
+    "presentedPaywallVersionId": "paywall_version_normal_4",
+    "diagnosticCode": "experiment.product_unavailable"
+  }
+}

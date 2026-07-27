@@ -6,10 +6,11 @@ Protocol `0.2` RC4 and Local Preview `0.2` are the only supported contracts
 while Mosaic is iterating before its first stable release. Earlier experimental
 contracts have been retired rather than carried as compatibility readers.
 
-Configuration Delivery `1`/`2`, Placement Decision `1`, Commerce Provider
-Contracts `1`/`2`, and Commerce Configurations `1`/`2` are independent
-versioned contracts. Their exact version values do not imply compatibility
-with one another and do not change the Paywall `schemaVersion`.
+Configuration Delivery `1`/`2`/`3`, Placement Decision `1`, Experiment
+Assignment `1`, Analytics Event `1`/`2`, Commerce Provider Contracts `1`/`2`,
+and Commerce Configurations `1`/`2` are independent versioned contracts. Their
+exact version values do not imply compatibility with one another and do not
+change the Paywall `schemaVersion`.
 
 `schemaVersion`, Local Preview versions, and capability versions are exact
 identifiers. A reader declaring `0.2` accepts only `0.2`; it must not infer
@@ -74,6 +75,24 @@ references without changing embedded Paywall Protocol `0.2` documents. A
 reader never interprets v2 as v1. A server may construct a v1 projection only
 from an explicit default Paywall outcome; it never projects `no_paywall` or an
 advanced Rule as an unconditional binding.
+
+Configuration Delivery `3` retains the complete v2 snapshot and atomically
+adds exact Experiment Assignment `1` definitions. A reader never interprets v3
+as v2. A non-Experiment SDK may receive a separately compiled v2 projection
+only when it preserves the unchanged normal Placement behavior; Experiment
+Variants are never projected as unconditional bindings.
+
+## Experiment and Analytics versioning
+
+Experiment Assignment readers require exact contract, feature, Variant and
+group bucketing-algorithm, and trusted-time schedule-policy support. Unknown,
+malformed, underdeclared, or overdeclared semantics reject the complete v3
+candidate and preserve last accepted state.
+
+Analytics Event `2` is parallel to closed Event `1`. V2 batches and events use
+exact discriminator `"2"`; ingestion may accept exact v1 and v2 batches beside
+one another but never mixes event schema versions inside one batch. Experiment
+attribution in v2 is all-or-none and occurrence-time immutable.
 
 ## Commerce Provider versioning
 

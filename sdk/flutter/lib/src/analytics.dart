@@ -7,6 +7,7 @@ import 'package:flutter/widgets.dart';
 import 'package:path_provider/path_provider.dart';
 
 import 'analytics_event.dart';
+import 'experiment_analytics.dart';
 import 'placement_identity.dart';
 import 'sha256.dart';
 
@@ -83,7 +84,8 @@ abstract interface class MosaicAnalyticsTransport {
   Future<MosaicAnalyticsIngestionResponse> send(MosaicAnalyticsBatch batch);
 }
 
-final class MosaicIoAnalyticsTransport implements MosaicAnalyticsTransport {
+final class MosaicIoAnalyticsTransport
+    implements MosaicAnalyticsTransport, MosaicExperimentAnalyticsTransport {
   const MosaicIoAnalyticsTransport({
     required this.baseUrl,
     required this.publicSdkKey,
@@ -94,8 +96,15 @@ final class MosaicIoAnalyticsTransport implements MosaicAnalyticsTransport {
   final Duration timeout;
 
   @override
-  Future<MosaicAnalyticsIngestionResponse> send(
-      MosaicAnalyticsBatch batch) async {
+  Future<MosaicAnalyticsIngestionResponse> send(MosaicAnalyticsBatch batch) =>
+      _send(batch.encode());
+
+  @override
+  Future<MosaicAnalyticsIngestionResponse> sendExperiment(
+          MosaicExperimentAnalyticsBatch batch) =>
+      _send(batch.encode());
+
+  Future<MosaicAnalyticsIngestionResponse> _send(String encoded) async {
     final client = HttpClient()..connectionTimeout = timeout;
     try {
       final endpoint = baseUrl.resolve('/v1/sdk/events/batch');
@@ -103,7 +112,7 @@ final class MosaicIoAnalyticsTransport implements MosaicAnalyticsTransport {
       request.headers
         ..set(HttpHeaders.authorizationHeader, 'Bearer $publicSdkKey')
         ..contentType = ContentType.json;
-      request.write(batch.encode());
+      request.write(encoded);
       final response = await request.close().timeout(timeout);
       final body = await utf8.decoder.bind(response).join().timeout(timeout);
       if (response.statusCode < 200 || response.statusCode >= 300) {
@@ -189,12 +198,41 @@ final class _QueuedAnalyticsEvent {
       {required this.event,
       required this.encoded,
       this.attempts = 0,
-      this.notBefore});
-  final MosaicAnalyticsEvent event;
+      this.notBefore})
+      : experimentEvent = null;
+  _QueuedAnalyticsEvent.experiment({
+    required Map<String, Object?> event,
+    required this.encoded,
+    this.attempts = 0,
+    this.notBefore,
+  })  : event = null,
+        experimentEvent = Map.unmodifiable(event);
+  final MosaicAnalyticsEvent? event;
+  final Map<String, Object?>? experimentEvent;
   final String encoded;
   int attempts;
   DateTime? notBefore;
   int get bytes => utf8.encode(encoded).length;
+  bool get isExperiment => experimentEvent != null;
+  String get eventId =>
+      event?.eventId ?? experimentEvent!['eventId']! as String;
+  DateTime get occurredAt =>
+      event?.occurredAt ??
+      DateTime.parse(experimentEvent!['occurredAt']! as String).toUtc();
+  MosaicAnalyticsEventPriority get priority {
+    final normal = event;
+    if (normal != null) return normal.name.priority;
+    return switch (experimentEvent!['eventName']) {
+      'experiment_assigned' ||
+      'experiment_assignment_failed' =>
+        MosaicAnalyticsEventPriority.low,
+      'experiment_exposed' ||
+      'experiment_fallback_presented' =>
+        MosaicAnalyticsEventPriority.presentation,
+      _ => MosaicAnalyticsEventPriority.low,
+    };
+  }
+
   Map<String, Object?> toJson() => {
         'event': jsonDecode(encoded),
         'attempts': attempts,
@@ -202,7 +240,9 @@ final class _QueuedAnalyticsEvent {
       };
 }
 
-final class MosaicAnalyticsRuntime with WidgetsBindingObserver {
+final class MosaicAnalyticsRuntime
+    with WidgetsBindingObserver
+    implements MosaicExperimentAnalyticsSink {
   static final Map<String, ({MosaicAnalyticsRuntime runtime, int references})>
       _shared = <String, ({MosaicAnalyticsRuntime runtime, int references})>{};
 
@@ -267,6 +307,7 @@ final class MosaicAnalyticsRuntime with WidgetsBindingObserver {
   bool _environmentEnabled;
   bool _hostEnabled;
   bool _disposed = false;
+  bool _observingLifecycle = false;
   String? _sessionId;
   DateTime? _lastActivityAt;
   int _dropped = 0,
@@ -284,7 +325,7 @@ final class MosaicAnalyticsRuntime with WidgetsBindingObserver {
         if (_loaded) return;
         await _restore();
         _loaded = true;
-        WidgetsBinding.instance.addObserver(this);
+        _observeLifecycleIfAvailable();
         if (!collectionEnabled) {
           _queue.clear();
           _sessionId = null;
@@ -364,11 +405,47 @@ final class MosaicAnalyticsRuntime with WidgetsBindingObserver {
     return accepted;
   }
 
+  @override
+  Future<void> enqueue(Map<String, Object?> draft) => _serialize(() async {
+        await _ensureLoaded();
+        if (!collectionEnabled) return;
+        final now = clock().toUtc();
+        final identity = await identityController.load();
+        final event = Map<String, Object?>.from(draft)
+          ..['eventSchemaVersion'] = '2'
+          ..['queuedAt'] = mosaicAnalyticsTimestamp(now)
+          ..['identity'] = MosaicAnalyticsIdentity(
+            installationId: identity.installationId,
+            applicationUserId: identity.userId,
+            generation: identity.generation,
+          ).toJson()
+          ..['sessionId'] = _activeSession(now)
+          ..['context'] = context.toJson();
+        final validated = mosaicDecodeExperimentAnalyticsEvent(event);
+        final encoded = jsonEncode(validated);
+        final queued = _QueuedAnalyticsEvent.experiment(
+          event: validated,
+          encoded: encoded,
+        );
+        _dropExpired(now);
+        _makeRoom(queued);
+        if (_queue.length >= mosaicAnalyticsMaximumQueueEvents ||
+            _queueBytes + queued.bytes > mosaicAnalyticsMaximumQueueBytes) {
+          _dropped++;
+          _lastSafeCode = 'analytics.queue_overflow';
+          await _persist();
+          return;
+        }
+        _queue.add(queued);
+        await _persist();
+      });
+
   Future<MosaicAnalyticsFlushResult> flush() =>
       _flush ??= _performFlush().whenComplete(() => _flush = null);
 
   Future<MosaicAnalyticsFlushResult> _performFlush() async {
     MosaicAnalyticsBatch? batch;
+    MosaicExperimentAnalyticsBatch? experimentBatch;
     List<_QueuedAnalyticsEvent> sent = const [];
     await _serialize(() async {
       await _ensureLoaded();
@@ -379,37 +456,76 @@ final class MosaicAnalyticsRuntime with WidgetsBindingObserver {
           .where((e) => e.notBefore == null || !e.notBefore!.isAfter(now))
           .toList();
       final selected = <_QueuedAnalyticsEvent>[];
-      for (final item in eligible.take(mosaicAnalyticsMaximumSendBatchSize)) {
-        final candidate = MosaicAnalyticsBatch(
-            batchId: _newId('batch'),
-            sentAt: now,
-            events: [...selected.map((e) => e.event), item.event]);
-        if (utf8.encode(candidate.encode()).length >
-            mosaicAnalyticsMaximumBatchBytes) break;
+      final experiment = eligible.isEmpty ? null : eligible.first.isExperiment;
+      for (final item in eligible
+          .where((item) => item.isExperiment == experiment)
+          .take(mosaicAnalyticsMaximumSendBatchSize)) {
+        final encoded = experiment == true
+            ? MosaicExperimentAnalyticsBatch(
+                batchId: _newId('batch'),
+                sentAt: now,
+                events: [
+                  ...selected.map((e) => e.experimentEvent!),
+                  item.experimentEvent!,
+                ],
+              ).encode()
+            : MosaicAnalyticsBatch(
+                batchId: _newId('batch'),
+                sentAt: now,
+                events: [
+                  ...selected.map((e) => e.event!),
+                  item.event!,
+                ],
+              ).encode();
+        if (utf8.encode(encoded).length > mosaicAnalyticsMaximumBatchBytes) {
+          break;
+        }
         selected.add(item);
       }
       if (selected.isNotEmpty) {
         sent = selected;
-        batch = MosaicAnalyticsBatch(
+        if (experiment == true) {
+          experimentBatch = MosaicExperimentAnalyticsBatch(
             batchId: _newId('batch'),
             sentAt: now,
-            events: selected.map((e) => e.event));
+            events: selected.map((e) => e.experimentEvent!),
+          );
+        } else {
+          batch = MosaicAnalyticsBatch(
+            batchId: _newId('batch'),
+            sentAt: now,
+            events: selected.map((e) => e.event!),
+          );
+        }
       }
       await _persist();
     });
     if (!collectionEnabled) return const MosaicAnalyticsFlushDisabled();
-    if (batch == null) return const MosaicAnalyticsFlushEmpty();
+    if (batch == null && experimentBatch == null) {
+      return const MosaicAnalyticsFlushEmpty();
+    }
     MosaicAnalyticsIngestionResponse response;
     try {
-      response = await transport.send(batch!);
+      if (experimentBatch case final value?) {
+        final experimentTransport = transport;
+        if (experimentTransport is! MosaicExperimentAnalyticsTransport) {
+          throw const FormatException('Analytics v2 transport unavailable.');
+        }
+        response =
+            await (experimentTransport as MosaicExperimentAnalyticsTransport)
+                .sendExperiment(value);
+      } else {
+        response = await transport.send(batch!);
+      }
     } on Object {
       await _retainAfterFailure(sent, 'analytics.delivery_unavailable');
       return const MosaicAnalyticsFlushDeferred(
           safeCode: 'analytics.delivery_unavailable');
     }
-    var malformed = response.batchId != batch!.batchId ||
+    final sentBatchId = experimentBatch?.batchId ?? batch!.batchId;
+    var malformed = response.batchId != sentBatchId ||
         response.results.length != sent.length;
-    final ids = sent.map((e) => e.event.eventId).toSet();
+    final ids = sent.map((e) => e.eventId).toSet();
     malformed = malformed ||
         response.results.map((e) => e.eventId).toSet().length != sent.length ||
         response.results
@@ -425,7 +541,7 @@ final class MosaicAnalyticsRuntime with WidgetsBindingObserver {
         for (final result in response.results) result.eventId: result
       };
       for (final item in sent) {
-        final result = byId[item.event.eventId]!;
+        final result = byId[item.eventId]!;
         switch (result.status) {
           case MosaicAnalyticsIngestionStatus.accepted:
           case MosaicAnalyticsIngestionStatus.duplicate:
@@ -513,7 +629,7 @@ final class MosaicAnalyticsRuntime with WidgetsBindingObserver {
   Future<void> disposeRuntime() => _serialize(() async {
         if (_disposed) return;
         _disposed = true;
-        WidgetsBinding.instance.removeObserver(this);
+        if (_observingLifecycle) WidgetsBinding.instance.removeObserver(this);
         await _persist();
       });
 
@@ -547,7 +663,7 @@ final class MosaicAnalyticsRuntime with WidgetsBindingObserver {
   void _dropExpired(DateTime now) {
     final before = _queue.length;
     _queue.removeWhere(
-        (e) => now.difference(e.event.occurredAt) > mosaicAnalyticsEventExpiry);
+        (e) => now.difference(e.occurredAt) > mosaicAnalyticsEventExpiry);
     _expired += before - _queue.length;
   }
 
@@ -556,8 +672,7 @@ final class MosaicAnalyticsRuntime with WidgetsBindingObserver {
         (_queue.length >= mosaicAnalyticsMaximumQueueEvents ||
             _queueBytes + incoming.bytes > mosaicAnalyticsMaximumQueueBytes)) {
       for (final priority in MosaicAnalyticsEventPriority.values) {
-        final index =
-            _queue.indexWhere((e) => e.event.name.priority == priority);
+        final index = _queue.indexWhere((e) => e.priority == priority);
         if (index >= 0) {
           _queue.removeAt(index);
           _dropped++;
@@ -581,20 +696,32 @@ final class MosaicAnalyticsRuntime with WidgetsBindingObserver {
         final item = value.cast<String, Object?>();
         final eventValue = item['event'];
         if (eventValue is! Map) throw const FormatException();
-        final event =
-            MosaicAnalyticsEvent.fromJson(eventValue.cast<String, Object?>());
+        final eventJson = eventValue.cast<String, Object?>();
         final attempts = item['attempts'];
         if (attempts is! int ||
             attempts < 0 ||
             attempts >= mosaicAnalyticsMaximumAttempts) continue;
-        final encoded = event.encode();
-        _queue.add(_QueuedAnalyticsEvent(
-            event: event,
+        final notBefore = item['notBefore'] == null
+            ? null
+            : DateTime.parse(item['notBefore'] as String).toUtc();
+        if (eventJson['eventSchemaVersion'] == '2') {
+          final validated = mosaicDecodeExperimentAnalyticsEvent(eventJson);
+          final encoded = jsonEncode(validated);
+          _queue.add(_QueuedAnalyticsEvent.experiment(
+            event: validated,
             encoded: encoded,
             attempts: attempts,
-            notBefore: item['notBefore'] == null
-                ? null
-                : DateTime.parse(item['notBefore'] as String).toUtc()));
+            notBefore: notBefore,
+          ));
+        } else {
+          final event = MosaicAnalyticsEvent.fromJson(eventJson);
+          _queue.add(_QueuedAnalyticsEvent(
+            event: event,
+            encoded: event.encode(),
+            attempts: attempts,
+            notBefore: notBefore,
+          ));
+        }
       }
       _sessionId = json['sessionId'] as String?;
       _lastActivityAt = json['lastActivityAt'] == null
@@ -639,7 +766,7 @@ final class MosaicAnalyticsRuntime with WidgetsBindingObserver {
     if (!_loaded) {
       await _restore();
       _loaded = true;
-      WidgetsBinding.instance.addObserver(this);
+      _observeLifecycleIfAvailable();
       if (!collectionEnabled) {
         _queue.clear();
         _sessionId = null;
@@ -660,6 +787,16 @@ final class MosaicAnalyticsRuntime with WidgetsBindingObserver {
       }
     });
     return completer.future;
+  }
+
+  void _observeLifecycleIfAvailable() {
+    if (_observingLifecycle) return;
+    try {
+      WidgetsBinding.instance.addObserver(this);
+      _observingLifecycle = true;
+    } on FlutterError {
+      // Pure Dart hosts may initialize analytics before Flutter bindings.
+    }
   }
 
   String _newId(String prefix) => mosaicAnalyticsId(prefix);

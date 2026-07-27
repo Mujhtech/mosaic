@@ -3,6 +3,7 @@ package dev.mosaic.sdk
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import java.util.concurrent.atomic.AtomicBoolean
 
 data class MosaicAvailableProduct(
     val reference: MosaicProductReference,
@@ -39,6 +40,7 @@ class MosaicPaywallState(
         .associateBy(MosaicCarouselComponent::id)
     private val productReferences = document.products.associateBy(MosaicProductReference::id)
     private val reportedRenderingFailures = mutableSetOf<String>()
+    private val presentationAcknowledged = AtomicBoolean(false)
 
     var selectorStates: Map<String, MosaicProductSelectorState> by mutableStateOf(
         selectors.keys.associateWith {
@@ -147,6 +149,7 @@ class MosaicPaywallState(
     fun currentTimeMillis(): Long = clock()
 
     fun presented() {
+        if (!presentationAcknowledged.compareAndSet(false, true)) return
         track(
             MosaicAnalyticsPayload.PaywallPresented(),
             MosaicAnalyticsCorrelation(
@@ -154,6 +157,26 @@ class MosaicPaywallState(
                 paywallPresentationId = analyticsContext?.paywallPresentationId,
             ),
         )
+        val experiment = analyticsContext?.experiment ?: return
+        if (experiment.qaOverride) return
+        val context = requireNotNull(analyticsContext)
+        val payload = when (experiment.kind) {
+            MosaicExperimentPresentationKind.VARIANT -> MosaicAnalyticsPayload.ExperimentExposed(
+                experiment.assignmentKeyType, experiment.bucketingAlgorithm, qaOverride = false,
+            )
+            MosaicExperimentPresentationKind.FALLBACK -> MosaicAnalyticsPayload.ExperimentFallbackPresented(
+                requireNotNull(experiment.fallbackReason), experiment.presentedPaywallId,
+                experiment.presentedPaywallVersionId, "experiment.${experiment.fallbackReason}",
+            )
+        }
+        val attribution = if (experiment.kind == MosaicExperimentPresentationKind.FALLBACK) {
+            context.attribution.copy(paywallId = null, paywallVersionId = null)
+        } else context.attribution
+        analyticsRuntime?.record(
+            payload,
+            MosaicAnalyticsJourney(presentationCorrelation(), attribution, context.context),
+        )
+        context.acknowledgeExperimentPresentation?.invoke()
     }
 
     fun reportRenderingFailure(diagnosticCode: String = "rendering.failed"): MosaicPaywallEvent? {
@@ -562,15 +585,26 @@ class MosaicPaywallState(
         provider: MosaicAnalyticsCommerceAttribution? = null,
     ) {
         val context = analyticsContext ?: return
+        val carriesExperiment = payload is MosaicAnalyticsPayload.ProductSelected ||
+            payload is MosaicAnalyticsPayload.PurchaseStarted ||
+            payload is MosaicAnalyticsPayload.PurchaseCompleted ||
+            payload is MosaicAnalyticsPayload.PurchaseLifecycle ||
+            payload is MosaicAnalyticsPayload.PurchaseFailed
+        val attribution = context.attribution.copy(
+            mosaicProductId = productId,
+            providerId = provider?.providerId,
+            providerProductMappingId = provider?.providerProductMappingId,
+        ).let { current ->
+            if (carriesExperiment) current else current.copy(
+                experimentId = null, experimentVersionId = null,
+                experimentVariantId = null, experimentAllocationVersion = null,
+            )
+        }
         analyticsRuntime?.record(
             payload,
             MosaicAnalyticsJourney(
                 correlation,
-                context.attribution.copy(
-                    mosaicProductId = productId,
-                    providerId = provider?.providerId,
-                    providerProductMappingId = provider?.providerProductMappingId,
-                ),
+                attribution,
                 context.context,
             ),
         )

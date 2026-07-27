@@ -52,6 +52,21 @@ import {
   validateAnalyticsEventV1Artifacts,
   validateAnalyticsEventV1JsonFormatting,
 } from "./analytics-event-validation-v1.mjs";
+import {
+  loadExperimentAssignmentV1Artifacts,
+  validateExperimentAssignmentV1Artifacts,
+  validateExperimentAssignmentV1JsonFormatting,
+} from "./experiment-assignment-validation-v1.mjs";
+import {
+  loadDeliveryV3Artifacts,
+  validateDeliveryV3Artifacts,
+  validateDeliveryV3JsonFormatting,
+} from "./delivery-validation-v3.mjs";
+import {
+  loadAnalyticsEventV2Artifacts,
+  validateAnalyticsEventV2Artifacts,
+  validateAnalyticsEventV2JsonFormatting,
+} from "./analytics-event-validation-v2.mjs";
 
 try {
   const artifactsV02 = loadProtocolV02Artifacts();
@@ -66,6 +81,9 @@ try {
   const decisionArtifactsV1 = loadDecisionV1Artifacts();
   const deliveryArtifactsV2 = loadDeliveryV2Artifacts();
   const analyticsEventArtifactsV1 = loadAnalyticsEventV1Artifacts();
+  const experimentAssignmentArtifactsV1 = loadExperimentAssignmentV1Artifacts();
+  const deliveryArtifactsV3 = loadDeliveryV3Artifacts();
+  const analyticsEventArtifactsV2 = loadAnalyticsEventV2Artifacts();
   const errors = [
     ...validateBrowserContractGeneration(),
     ...validateProtocolV02(artifactsV02),
@@ -109,6 +127,12 @@ try {
     ...validateDeliveryV2JsonFormatting(),
     ...validateAnalyticsEventV1Artifacts(analyticsEventArtifactsV1),
     ...validateAnalyticsEventV1JsonFormatting(),
+    ...validateExperimentAssignmentV1Artifacts(experimentAssignmentArtifactsV1),
+    ...validateExperimentAssignmentV1JsonFormatting(),
+    ...validateDeliveryV3Artifacts(deliveryArtifactsV3),
+    ...validateDeliveryV3JsonFormatting(),
+    ...validateAnalyticsEventV2Artifacts(analyticsEventArtifactsV2),
+    ...validateAnalyticsEventV2JsonFormatting(),
   ];
 
   if (errors.length > 0) {
@@ -123,7 +147,7 @@ try {
         "validated Local Preview 0.2 fixtures, Configuration Delivery v1, " +
         "Commerce Provider Contracts v1/v2, Commerce Configurations v1/v2, " +
         "Placement Decision v1, Configuration Delivery v2, Analytics Event " +
-        "v1, and the browser contract.",
+        "v1/v2, Experiment Assignment v1, Configuration Delivery v3, and the browser contract.",
     );
   }
 } catch (error) {

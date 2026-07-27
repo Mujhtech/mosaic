@@ -14,10 +14,12 @@ import (
 
 	"github.com/Mujhtech/mosaic/apps/api/internal/analytics"
 	"github.com/Mujhtech/mosaic/apps/api/internal/cloudworkspace"
+	"github.com/Mujhtech/mosaic/apps/api/internal/experiment"
 	"github.com/Mujhtech/mosaic/apps/api/internal/platform/analyticspostgres"
 	"github.com/Mujhtech/mosaic/apps/api/internal/platform/cloudworkspacepostgres"
 	"github.com/Mujhtech/mosaic/apps/api/internal/platform/config"
 	"github.com/Mujhtech/mosaic/apps/api/internal/platform/database"
+	"github.com/Mujhtech/mosaic/apps/api/internal/platform/experimentpostgres"
 	"github.com/Mujhtech/mosaic/apps/api/internal/platform/logging"
 	"github.com/Mujhtech/mosaic/apps/api/internal/platform/objectstoreminio"
 	"github.com/Mujhtech/mosaic/apps/api/internal/platform/revenuecat"
@@ -75,6 +77,7 @@ func run() (runErr error) {
 		return fmt.Errorf("initialize object storage: %w", err)
 	}
 	analyticsService := analytics.NewService(analyticspostgres.New(pool), objectStore)
+	experimentService := experiment.NewService(experimentpostgres.New(pool))
 	var providerService *cloudworkspace.Service
 	if cfg.Providers.Enabled {
 		cipher, err := providercredential.NewAESGCMCipher(cfg.Providers.CredentialKeyring, rand.Reader)
@@ -110,6 +113,11 @@ func run() (runErr error) {
 		processed = processed || analyticsProcessed
 		if processErr != nil {
 			logger.Error().Err(processErr).Msg("analytics job processing failed")
+		}
+		experimentProcessed, processErr := experimentService.ProcessNextSchedule(runContext, workerID)
+		processed = processed || experimentProcessed
+		if processErr != nil {
+			logger.Error().Err(processErr).Msg("experiment schedule processing failed")
 		}
 		if runContext.Err() != nil {
 			logger.Info().Msg("provider worker stopped gracefully")

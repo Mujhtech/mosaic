@@ -3,6 +3,19 @@
 All notable Mosaic protocol changes are recorded here. Versioned artifacts are
 not immutable until their review gate is approved.
 
+## Experiment Assignment v1, Configuration Delivery v3, and Analytics Event v2 - 2026-07-26
+
+Status: release candidate
+
+- Added deterministic offline Experiment assignment with exact Control and Treatment Paywall Versions, immutable allocation ranges, identity policies, trusted scheduling, mutual exclusion, QA metadata, and normal-Placement fallback.
+- Added Configuration Delivery `3` as the atomic complete Delivery `2` snapshot plus exact Experiment Assignment `1` definitions and capability negotiation.
+- Added backward-compatible Analytics Event `2`, four closed Experiment events, all-or-none immutable Experiment attribution, and explicit exposure versus fallback presentation semantics while preserving v1 ingestion.
+- Added shared assignment/group hash vectors, minimal valid and invalid fixtures, exact manifests, semantic validation, tests, documentation, and ADR-0021.
+- Preserved Paywall Protocol `0.2`, Placement Decision `1`, Delivery `1`/`2`, Analytics Event `1`, and all Commerce contracts unchanged.
+- Corrected mutual-exclusion publication ordering by making immutable Group Version members reference stable Experiment IDs while Delivery Assignments separately pin exact Experiment Version IDs.
+- Made `schedule.endsAt` optional for immediate/manual-completion Experiments;
+  `startsAt` remains required and a present end remains exclusive.
+
 ## Analytics Event Contract v1 - 2026-07-26
 
 Status: release candidate

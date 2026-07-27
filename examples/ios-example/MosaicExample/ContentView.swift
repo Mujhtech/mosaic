@@ -145,6 +145,9 @@ private struct HostedConfigurationPreview: View {
         Menu("Analytics") {
           Button("Queue demo events") { Task { await model.queueAnalyticsDemo() } }
           Button("Flush now") { Task { await model.flushAnalytics() } }
+          Button("Experiment diagnostics") {
+            Task { await model.showExperimentDiagnostics() }
+          }
         }
         .disabled(model.mosaic == nil)
       }
@@ -321,6 +324,15 @@ private final class HostedConfigurationModel: ObservableObject {
     let diagnostics = await mosaic.analyticsDiagnostics()
     statusText =
       "Analytics \(String(describing: result)) · \(diagnostics.queuedEventCount) retained"
+  }
+
+  func showExperimentDiagnostics() async {
+    guard let mosaic else { return }
+    let diagnostics = await mosaic.experimentDiagnostics()
+    let time = diagnostics.trustedTimeReliable ? "trusted time" : "time unavailable"
+    statusText =
+      "Experiments · \(diagnostics.activeAssignmentCount) active · "
+      + "\(diagnostics.persistedAssignmentCount) persisted · \(time)"
   }
 
   private func updateStatus(for mosaic: Mosaic) async {

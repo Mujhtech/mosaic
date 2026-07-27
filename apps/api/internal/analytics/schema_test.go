@@ -2,6 +2,7 @@ package analytics
 
 import (
 	"encoding/json"
+	"errors"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -9,6 +10,8 @@ import (
 	"testing"
 	"time"
 )
+
+type batchVersionRepository struct{ Repository }
 
 func protocolPath(t *testing.T, parts ...string) string {
 	t.Helper()
@@ -43,6 +46,69 @@ func TestCanonicalAnalyticsEventFixturesCompileWithBackendValidator(t *testing.T
 			}
 			if err = validator.ValidateEvent(document); err != nil {
 				t.Fatalf("backend rejected canonical fixture: %v", err)
+			}
+		})
+	}
+}
+
+func TestCanonicalAnalyticsV2ExperimentFixturesAndClosedAttribution(t *testing.T) {
+	v1, err := os.Open(protocolPath(t, "protocol/schema/analytics-event/v1/event.schema.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer v1.Close()
+	v2, err := os.Open(protocolPath(t, "protocol/schema/analytics-event/v2/event.schema.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer v2.Close()
+	validator, err := CompileSchemaValidators(v1, v2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	fixtures, err := filepath.Glob(protocolPath(t, "protocol/fixtures/analytics-event/v2/*.json"))
+	if err != nil || len(fixtures) == 0 {
+		t.Fatalf("find v2 fixtures: %v", err)
+	}
+	for _, fixture := range fixtures {
+		document, readErr := os.ReadFile(fixture)
+		if readErr != nil {
+			t.Fatal(readErr)
+		}
+		if err = validator.ValidateEvent(document); err != nil {
+			t.Fatalf("%s rejected: %v", filepath.Base(fixture), err)
+		}
+	}
+	document, err := os.ReadFile(protocolPath(t, "protocol/fixtures/analytics-event/v2/experiment-exposed.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var event Event
+	if err = json.Unmarshal(document, &event); err != nil {
+		t.Fatal(err)
+	}
+	event.Attribution.ExperimentVariantID = ""
+	now := time.Date(2026, 7, 26, 12, 1, 2, 0, time.UTC)
+	if _, code := ValidateEvent(event, now, now); code != "experiment_attribution_incomplete" {
+		t.Fatalf("partial tuple code=%q", code)
+	}
+}
+
+func TestIngestionRejectsBatchAndEventContractVersionMismatch(t *testing.T) {
+	now := time.Date(2026, 7, 27, 12, 0, 0, 0, time.UTC)
+	service := NewService(batchVersionRepository{}, nil)
+	service.now = func() time.Time { return now }
+	for _, test := range []struct {
+		name, batchVersion, eventVersion string
+	}{
+		{"v1 batch carrying v2 event", ContractVersion, EventSchemaVersionV2},
+		{"v2 batch carrying v1 event", ContractVersionV2, EventSchemaVersion},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			event := json.RawMessage(`{"eventId":"event_1","eventSchemaVersion":"` + test.eventVersion + `"}`)
+			_, err := service.Ingest(t.Context(), "unused", Batch{ContractVersion: test.batchVersion, BatchID: "batch_1", SentAt: now.Format("2006-01-02T15:04:05.000Z"), Events: []json.RawMessage{event}})
+			if !errors.Is(err, ErrInvalidBatch) {
+				t.Fatalf("mismatched batch/event versions error = %v, want invalid batch", err)
 			}
 		})
 	}

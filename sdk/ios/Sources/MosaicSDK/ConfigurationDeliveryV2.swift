@@ -29,7 +29,9 @@ enum MosaicConfigurationDeliveryV2Decoder {
     _ = try validateRuleSetSemantics(decision.ruleSet, environmentMode: .staging)
   }
 
-  static func decode(root: [String: Any]) throws -> MosaicConfigurationRelease {
+  static func decode(
+    root: [String: Any], allowUnreferencedExperimentMaterial: Bool = false
+  ) throws -> MosaicConfigurationRelease {
     let release = try object(root["release"], "$.release")
     try exact(
       release,
@@ -150,12 +152,18 @@ enum MosaicConfigurationDeliveryV2Decoder {
         decision, paywallIDs: paywallIDs, productIDs: productIDs, entitlementKeys: entitlementKeys)
     }
     let referencedPaywalls = Set(decisions.flatMap { referencedPaywallIDs($0.ruleSet) })
-    guard referencedPaywalls == paywallIDs else {
+    guard
+      allowUnreferencedExperimentMaterial
+        ? referencedPaywalls.isSubset(of: paywallIDs) : referencedPaywalls == paywallIDs
+    else {
       throw invalid("delivery_paywall_reference_mismatch")
     }
     let referencedProducts = Set(paywalls.flatMap(\.productReferenceIDs)).union(
       decisions.flatMap { referencedProductIDs($0.ruleSet) })
-    guard referencedProducts == productIDs else {
+    guard
+      allowUnreferencedExperimentMaterial
+        ? referencedProducts.isSubset(of: productIDs) : referencedProducts == productIDs
+    else {
       throw invalid("delivery_product_reference_mismatch")
     }
     let referencedEntitlements = Set(decisions.flatMap { referencedEntitlementKeys($0.ruleSet) })
@@ -176,7 +184,7 @@ enum MosaicConfigurationDeliveryV2Decoder {
     return .init(
       metadata: metadata, projectID: projectID, placements: [], placementDecisions: decisions,
       paywallVersions: paywalls, productReferences: products, entitlementReferences: entitlements,
-      assetReferences: assetReferences)
+      assetReferences: assetReferences, experimentAssignments: [])
   }
 
   private struct Compatibility {

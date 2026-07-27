@@ -3,6 +3,7 @@ package hostedpublishing
 import (
 	"encoding/json"
 	"os"
+	"sort"
 	"testing"
 )
 
@@ -69,6 +70,57 @@ func TestDeliveryV2CompilerAndCapabilityNegotiationUseExactDecisionReferences(t 
 	if err := ValidateSDKCapabilityPayload(request, payload, "2"); err == nil {
 		t.Fatal("v2 payload accepted without required decision features")
 	}
+}
+
+func TestDeliveryV3CapabilityValidationAllowsNoAssignments(t *testing.T) {
+	payload, err := os.ReadFile("../../../../protocol/fixtures/configuration-delivery/v3/experiment-release.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var envelope map[string]any
+	if err = json.Unmarshal(payload, &envelope); err != nil {
+		t.Fatal(err)
+	}
+	release := envelope["release"].(map[string]any)
+	release["experimentAssignments"] = []any{}
+	release["compatibility"].(map[string]any)["experimentAssignmentContracts"] = []any{}
+	payload, _ = json.Marshal(envelope)
+	request := SDKCapabilityRequest{
+		Platform: "ios", SDKVersion: "1.0.0",
+		SupportedConfigurationDeliveryVersions: []string{"3"},
+		SupportedExperimentAssignmentContracts: []string{"1"},
+		SupportedExperimentFeatures:            sortedCapabilityKeys(supportedExperimentFeatures),
+		SupportedExperimentBucketingAlgorithms: sortedCapabilityKeys(supportedExperimentBucketingAlgorithms),
+		SupportedExperimentSchedulePolicies:    sortedCapabilityKeys(supportedExperimentSchedulePolicies),
+		SupportedPaywallProtocols:              []SDKPaywallProtocolSupport{{Version: "0.2", Capabilities: paywallCapabilities(release)}},
+	}
+	if err = ValidateSDKCapabilityPayload(request, payload, "3"); err != nil {
+		t.Fatalf("zero-assignment Delivery v3 rejected: %v", err)
+	}
+}
+
+func sortedCapabilityKeys(values map[string]struct{}) []string {
+	result := make([]string, 0, len(values))
+	for value := range values {
+		result = append(result, value)
+	}
+	sort.Strings(result)
+	return result
+}
+
+func paywallCapabilities(release map[string]any) []SDKCapability {
+	result := []SDKCapability{}
+	compatibility, _ := release["compatibility"].(map[string]any)
+	protocols, _ := compatibility["paywallProtocols"].([]any)
+	for _, rawProtocol := range protocols {
+		protocol, _ := rawProtocol.(map[string]any)
+		required, _ := protocol["requiredCapabilities"].([]any)
+		for _, rawCapability := range required {
+			capability, _ := rawCapability.(map[string]any)
+			result = append(result, SDKCapability{Name: capability["name"].(string), Version: capability["version"].(string)})
+		}
+	}
+	return result
 }
 
 func TestSafeV1ProjectionRequiresPaywallDefault(t *testing.T) {

@@ -10,7 +10,7 @@ import { WorkspacePage } from "@/features/organizations/components/workspace-pag
 import { projectQueryOptions } from "@/features/projects/queries/projects-query"
 import { cn } from "@/lib/utils"
 
-export type MonetizationSurface = "assets" | "paywalls" | "placements" | "releases"
+export type MonetizationSurface = "assets" | "experiments" | "paywalls" | "placements" | "releases"
 
 interface MonetizationWorkspaceProps {
   actions?: ReactNode
@@ -26,6 +26,7 @@ interface MonetizationWorkspaceProps {
 const tabs = [
   { label: "Paywalls", surface: "paywalls" },
   { label: "Placements", surface: "placements" },
+  { label: "Experiments", surface: "experiments" },
   { label: "Assets", surface: "assets" },
   { label: "Publish history", surface: "releases" },
 ] as const
@@ -81,6 +82,11 @@ export function MonetizationWorkspace({
         return navigate({
           params,
           to: "/organizations/$organizationId/projects/$projectId/monetization/$environmentId/placements",
+        })
+      case "experiments":
+        return navigate({
+          params,
+          to: "/organizations/$organizationId/projects/$projectId/monetization/$environmentId/experiments",
         })
       case "releases":
         return navigate({
@@ -152,6 +158,16 @@ export function MonetizationWorkspace({
                       {...shared}
                       key={tab.surface}
                       to="/organizations/$organizationId/projects/$projectId/monetization/$environmentId/placements"
+                    >
+                      {tab.label}
+                    </Link>
+                  )
+                case "experiments":
+                  return (
+                    <Link
+                      {...shared}
+                      key={tab.surface}
+                      to="/organizations/$organizationId/projects/$projectId/monetization/$environmentId/experiments"
                     >
                       {tab.label}
                     </Link>

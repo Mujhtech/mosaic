@@ -1,8 +1,8 @@
 import CoreFoundation
 import Foundation
 
-public let mosaicAnalyticsEventContractVersion = "1"
-public let mosaicAnalyticsEventSchemaVersion = "1"
+public let mosaicAnalyticsEventContractVersion = "2"
+public let mosaicAnalyticsEventSchemaVersion = "2"
 
 public struct MosaicAnalyticsCapabilityReport: Sendable, Equatable {
   public let analyticsEventContractVersions: [String]
@@ -14,7 +14,7 @@ public struct MosaicAnalyticsCapabilityReport: Sendable, Equatable {
   public let publicSDKAuthority: MosaicAnalyticsAuthority
 
   public static let current = MosaicAnalyticsCapabilityReport(
-    analyticsEventContractVersions: ["1"], eventSchemaVersions: ["1"],
+    analyticsEventContractVersions: ["2", "1"], eventSchemaVersions: ["2"],
     eventNames: MosaicAnalyticsEventName.allCases, maximumEventsPerBatch: 50,
     maximumEventBytes: 32 * 1_024, maximumRequestBytes: 512 * 1_024,
     publicSDKAuthority: .clientObserved)
@@ -48,6 +48,10 @@ public enum MosaicAnalyticsEventName: String, Codable, Sendable, CaseIterable {
   case restoreNothingFound = "restore_nothing_found"
   case restoreCancelled = "restore_cancelled"
   case restoreFailed = "restore_failed"
+  case experimentAssigned = "experiment_assigned"
+  case experimentExposed = "experiment_exposed"
+  case experimentFallbackPresented = "experiment_fallback_presented"
+  case experimentAssignmentFailed = "experiment_assignment_failed"
 }
 
 public enum MosaicAnalyticsAuthority: String, Codable, Sendable {
@@ -132,6 +136,10 @@ public struct MosaicAnalyticsAttribution: Codable, Sendable, Equatable {
   public var planId: String?
   public var providerId: String?
   public var providerProductMappingId: String?
+  public var experimentId: String?
+  public var experimentVersionId: String?
+  public var experimentVariantId: String?
+  public var experimentAllocationVersion: String?
 
   public init(
     configurationReleaseId: String? = nil, placementId: String? = nil,
@@ -139,7 +147,9 @@ public struct MosaicAnalyticsAttribution: Codable, Sendable, Equatable {
     winningRuleId: String? = nil, paywallId: String? = nil,
     paywallVersionId: String? = nil, mosaicProductId: String? = nil,
     planId: String? = nil, providerId: String? = nil,
-    providerProductMappingId: String? = nil
+    providerProductMappingId: String? = nil,
+    experimentId: String? = nil, experimentVersionId: String? = nil,
+    experimentVariantId: String? = nil, experimentAllocationVersion: String? = nil
   ) {
     self.configurationReleaseId = configurationReleaseId
     self.placementId = placementId
@@ -152,6 +162,10 @@ public struct MosaicAnalyticsAttribution: Codable, Sendable, Equatable {
     self.planId = planId
     self.providerId = providerId
     self.providerProductMappingId = providerProductMappingId
+    self.experimentId = experimentId
+    self.experimentVersionId = experimentVersionId
+    self.experimentVariantId = experimentVariantId
+    self.experimentAllocationVersion = experimentAllocationVersion
   }
 }
 
@@ -181,6 +195,12 @@ public struct MosaicAnalyticsPayload: Codable, Sendable, Equatable {
   public var linkedClientEventId: String?
   public var providerId: String?
   public var restoredProductIds: [String]?
+  public var bucket: Int?
+  public var productReadiness: String?
+  public var providerCapability: String?
+  public var qaOverride: Bool?
+  public var presentedPaywallId: String?
+  public var presentedPaywallVersionId: String?
 
   public init(
     decisionContractVersion: String? = nil, finalOutcome: String? = nil,
@@ -193,7 +213,10 @@ public struct MosaicAnalyticsPayload: Codable, Sendable, Equatable {
     observedEntitlementKeys: [String]? = nil, providerResultCode: String? = nil,
     confirmationSource: String? = nil, activeEntitlementKeys: [String]? = nil,
     linkedClientEventId: String? = nil, providerId: String? = nil,
-    restoredProductIds: [String]? = nil
+    restoredProductIds: [String]? = nil, bucket: Int? = nil,
+    productReadiness: String? = nil, providerCapability: String? = nil,
+    qaOverride: Bool? = nil, presentedPaywallId: String? = nil,
+    presentedPaywallVersionId: String? = nil
   ) {
     self.decisionContractVersion = decisionContractVersion
     self.finalOutcome = finalOutcome
@@ -220,6 +243,12 @@ public struct MosaicAnalyticsPayload: Codable, Sendable, Equatable {
     self.linkedClientEventId = linkedClientEventId
     self.providerId = providerId
     self.restoredProductIds = restoredProductIds
+    self.bucket = bucket
+    self.productReadiness = productReadiness
+    self.providerCapability = providerCapability
+    self.qaOverride = qaOverride
+    self.presentedPaywallId = presentedPaywallId
+    self.presentedPaywallVersionId = presentedPaywallVersionId
   }
 }
 
@@ -321,7 +350,8 @@ public enum MosaicAnalyticsCodec {
     "attribution": [
       "configurationReleaseId", "placementId", "placementRuleSetId", "placementRuleSetVersion",
       "winningRuleId", "paywallId", "paywallVersionId", "mosaicProductId", "planId", "providerId",
-      "providerProductMappingId",
+      "providerProductMappingId", "experimentId", "experimentVersionId", "experimentVariantId",
+      "experimentAllocationVersion",
     ],
   ]
 
@@ -342,7 +372,8 @@ public enum MosaicAnalyticsCodec {
       Set(object.keys).isSubset(of: [
         "analyticsEventContractVersion", "batchId", "sentAt", "events",
       ]),
-      object["analyticsEventContractVersion"] as? String == "1",
+      let contractVersion = object["analyticsEventContractVersion"] as? String,
+      ["1", "2"].contains(contractVersion),
       let batchID = object["batchId"] as? String, validIdentifier(batchID),
       let sentAt = object["sentAt"] as? String, validTimestamp(sentAt),
       let events = object["events"] as? [[String: Any]], (1...100).contains(events.count)
@@ -351,6 +382,9 @@ public enum MosaicAnalyticsCodec {
       throw MosaicAnalyticsCodecError.invalidEvent
     }
     for event in events {
+      guard event["eventSchemaVersion"] as? String == contractVersion else {
+        throw MosaicAnalyticsCodecError.invalidEvent
+      }
       guard let encoded = try? JSONSerialization.data(withJSONObject: event),
         encoded.count <= 32 * 1_024
       else { throw MosaicAnalyticsCodecError.invalidEvent }
@@ -366,7 +400,8 @@ public enum MosaicAnalyticsCodec {
       Set(object.keys).isSubset(of: [
         "analyticsEventContractVersion", "batchId", "receivedAt", "results",
       ]),
-      object["analyticsEventContractVersion"] as? String == "1",
+      let contractVersion = object["analyticsEventContractVersion"] as? String,
+      ["1", "2"].contains(contractVersion),
       let batchID = object["batchId"] as? String, validIdentifier(batchID),
       let receivedAt = object["receivedAt"] as? String, validTimestamp(receivedAt),
       let results = object["results"] as? [[String: Any]], (1...100).contains(results.count)
@@ -411,7 +446,8 @@ public enum MosaicAnalyticsCodec {
     guard Set(object.keys).isSubset(of: eventKeys) else {
       throw MosaicAnalyticsCodecError.unknownField("event")
     }
-    guard object["eventSchemaVersion"] as? String == "1",
+    guard let schemaVersion = object["eventSchemaVersion"] as? String,
+      ["1", "2"].contains(schemaVersion),
       let nameValue = object["eventName"] as? String,
       let name = MosaicAnalyticsEventName(rawValue: nameValue),
       let eventID = object["eventId"] as? String, validIdentifier(eventID),
@@ -463,6 +499,26 @@ public enum MosaicAnalyticsCodec {
     guard ruleSetIDPresent == ruleSetVersionPresent,
       attribution["winningRuleId"] == nil || ruleSetIDPresent
     else { throw MosaicAnalyticsCodecError.invalidEvent }
+    let experimentKeys = [
+      "experimentId", "experimentVersionId", "experimentVariantId",
+      "experimentAllocationVersion",
+    ]
+    let experimentCount = experimentKeys.count { attribution[$0] != nil }
+    guard experimentCount == 0 || experimentCount == experimentKeys.count else {
+      throw MosaicAnalyticsCodecError.invalidEvent
+    }
+    if schemaVersion == "1" {
+      guard
+        ![
+          MosaicAnalyticsEventName.experimentAssigned, .experimentExposed,
+          .experimentFallbackPresented, .experimentAssignmentFailed,
+        ].contains(name), experimentCount == 0,
+        Set(payload.keys).isDisjoint(with: [
+          "bucket", "productReadiness", "providerCapability", "qaOverride",
+          "presentedPaywallId", "presentedPaywallVersionId",
+        ])
+      else { throw MosaicAnalyticsCodecError.invalidEvent }
+    }
     try validatePayload(payload, name: name)
     if name == .purchaseCompletedProvider {
       guard let authority = object["authority"] as? String,
@@ -524,7 +580,7 @@ public enum MosaicAnalyticsCodec {
     }
     for key in ["configurationDeliveryVersion", "commerceProviderContractVersion"]
     where context[key] != nil {
-      guard let version = context[key] as? String, ["1", "2"].contains(version) else {
+      guard let version = context[key] as? String, ["1", "2", "3"].contains(version) else {
         throw MosaicAnalyticsCodecError.invalidEvent
       }
     }
@@ -540,6 +596,7 @@ public enum MosaicAnalyticsCodec {
         && number.doubleValue == Double(value) && range.contains(value)
     }
     guard int("durationMs", 0...86_400_000), int("rolloutBucket", 0...9_999),
+      int("bucket", 0...9_999),
       int("requestedProductCount", 1...64), int("availableProductCount", 0...64),
       int("unavailableProductCount", 0...64)
     else { throw MosaicAnalyticsCodecError.payloadMismatch }
@@ -563,7 +620,10 @@ public enum MosaicAnalyticsCodec {
       "finalOutcome": name == .placementFallbackUsed
         ? ["paywall", "no_paywall", "unavailable"] : ["paywall", "no_paywall"],
       "assignmentKeyType": ["installation", "identified_user"],
-      "source": ["default", "user"],
+      "source": name == .experimentAssigned
+        ? ["deterministic", "qa_override"] : ["default", "user"],
+      "productReadiness": ["ready"],
+      "providerCapability": ["accepted"],
       "outcome": ["purchased", "already_entitled"],
       "reason": name == .paywallDismissed
         ? ["user", "system", "purchase_completed", "host_application", "unknown"]
@@ -572,10 +632,15 @@ public enum MosaicAnalyticsCodec {
             "mapping_missing", "mapping_invalid", "product_not_found", "temporarily_unavailable",
             "provider_unavailable", "unsupported_product_type", "metadata_unavailable",
           ]
-          : [
-            "no_safe_decision", "configuration_incompatible", "content_unavailable",
-            "commerce_unavailable",
-          ],
+          : name == .experimentFallbackPresented
+            ? [
+              "configuration_incompatible", "product_unavailable", "provider_unavailable",
+              "rendering_failed", "time_unreliable",
+            ]
+            : [
+              "no_safe_decision", "configuration_incompatible", "content_unavailable",
+              "commerce_unavailable",
+            ],
       "action": [
         "purchase", "restore", "close", "navigate_to", "navigate_back", "open_external_url",
       ],
@@ -608,11 +673,20 @@ public enum MosaicAnalyticsCodec {
         throw MosaicAnalyticsCodecError.payloadMismatch
       }
     }
+    for key in ["presentedPaywallId", "presentedPaywallVersionId"] where payload[key] != nil {
+      guard let value = payload[key] as? String, validIdentifier(value) else {
+        throw MosaicAnalyticsCodecError.payloadMismatch
+      }
+    }
+    if let qaOverride = payload["qaOverride"], qaOverride is Bool == false {
+      throw MosaicAnalyticsCodecError.payloadMismatch
+    }
     if let version = payload["decisionContractVersion"] as? String, version != "1" {
       throw MosaicAnalyticsCodecError.payloadMismatch
     }
     if let algorithm = payload["bucketingAlgorithm"] as? String,
       algorithm != "sha256_length_prefixed_v1"
+        && algorithm != mosaicExperimentAssignmentAlgorithm
     {
       throw MosaicAnalyticsCodecError.payloadMismatch
     }
@@ -693,6 +767,15 @@ public enum MosaicAnalyticsCodec {
     .restoreNothingFound: ["providerId", "durationMs", "providerResultCode"],
     .restoreCancelled: ["providerId", "durationMs", "providerResultCode"],
     .restoreFailed: ["providerId", "durationMs", "diagnosticCode", "retryable"],
+    .experimentAssigned: ["assignmentKeyType", "bucketingAlgorithm", "bucket", "source"],
+    .experimentExposed: [
+      "assignmentKeyType", "bucketingAlgorithm", "productReadiness", "providerCapability",
+      "qaOverride",
+    ],
+    .experimentFallbackPresented: [
+      "reason", "presentedPaywallId", "presentedPaywallVersionId", "diagnosticCode",
+    ],
+    .experimentAssignmentFailed: ["diagnosticCode", "retryable"],
   ]
 
   private static let requiredPayloadKeys: [MosaicAnalyticsEventName: Set<String>] = [
@@ -720,6 +803,12 @@ public enum MosaicAnalyticsCodec {
     .restoreNothingFound: ["providerId", "durationMs"],
     .restoreCancelled: ["providerId", "durationMs"],
     .restoreFailed: ["providerId", "durationMs", "diagnosticCode", "retryable"],
+    .experimentAssigned: ["assignmentKeyType", "bucketingAlgorithm", "bucket", "source"],
+    .experimentExposed: [
+      "assignmentKeyType", "bucketingAlgorithm", "productReadiness", "providerCapability",
+    ],
+    .experimentFallbackPresented: ["reason", "presentedPaywallId", "presentedPaywallVersionId"],
+    .experimentAssignmentFailed: ["diagnosticCode", "retryable"],
   ]
 
   private static let requiredCorrelationKeys: [MosaicAnalyticsEventName: Set<String>] = [
@@ -744,6 +833,10 @@ public enum MosaicAnalyticsCodec {
     .restoreStarted: ["restoreAttemptId"], .restoreCompleted: ["restoreAttemptId"],
     .restoreNothingFound: ["restoreAttemptId"], .restoreCancelled: ["restoreAttemptId"],
     .restoreFailed: ["restoreAttemptId"],
+    .experimentAssigned: ["placementRequestId"],
+    .experimentExposed: ["placementRequestId", "paywallPresentationId"],
+    .experimentFallbackPresented: ["placementRequestId", "paywallPresentationId"],
+    .experimentAssignmentFailed: ["placementRequestId"],
   ]
 
   private static let requiredAttributionKeys: [MosaicAnalyticsEventName: Set<String>] = [
@@ -761,6 +854,22 @@ public enum MosaicAnalyticsCodec {
     .purchaseDeferred: ["mosaicProductId", "providerId"],
     .purchaseCancelled: ["mosaicProductId", "providerId"],
     .purchaseFailed: ["mosaicProductId", "providerId"],
+    .experimentAssigned: [
+      "placementId", "experimentId", "experimentVersionId", "experimentVariantId",
+      "experimentAllocationVersion",
+    ],
+    .experimentExposed: [
+      "placementId", "paywallId", "paywallVersionId", "experimentId", "experimentVersionId",
+      "experimentVariantId", "experimentAllocationVersion",
+    ],
+    .experimentFallbackPresented: [
+      "placementId", "experimentId", "experimentVersionId", "experimentVariantId",
+      "experimentAllocationVersion",
+    ],
+    .experimentAssignmentFailed: [
+      "placementId", "experimentId", "experimentVersionId", "experimentVariantId",
+      "experimentAllocationVersion",
+    ],
   ]
 
   private static let placementCorrelation: Set<String> = ["placementRequestId"]
@@ -792,6 +901,10 @@ public enum MosaicAnalyticsCodec {
     .restoreStarted: restoreCorrelation, .restoreCompleted: restoreCorrelation,
     .restoreNothingFound: restoreCorrelation, .restoreCancelled: restoreCorrelation,
     .restoreFailed: restoreCorrelation,
+    .experimentAssigned: placementCorrelation,
+    .experimentExposed: paywallCorrelation,
+    .experimentFallbackPresented: paywallCorrelation,
+    .experimentAssignmentFailed: placementCorrelation,
   ]
 
   private static let placementAttribution: Set<String> = [
@@ -804,6 +917,13 @@ public enum MosaicAnalyticsCodec {
   private static let productAttribution = paywallAttribution.union([
     "mosaicProductId", "planId", "providerId", "providerProductMappingId",
   ])
+  private static let experimentTuple: Set<String> = [
+    "experimentId", "experimentVersionId", "experimentVariantId", "experimentAllocationVersion",
+  ]
+  private static let experimentAttribution: Set<String> = [
+    "configurationReleaseId", "placementId", "experimentId", "experimentVersionId",
+    "experimentVariantId", "experimentAllocationVersion",
+  ]
 
   private static let attributionKeys: [MosaicAnalyticsEventName: Set<String>] = [
     .placementRequested: placementAttribution.subtracting(["winningRuleId"]),
@@ -814,13 +934,21 @@ public enum MosaicAnalyticsCodec {
     .paywallActionSelected: paywallAttribution, .paywallRenderFailed: paywallAttribution,
     .productLoadStarted: paywallAttribution, .productLoadCompleted: paywallAttribution,
     .productLoadFailed: paywallAttribution, .productUnavailable: productAttribution,
-    .productSelected: productAttribution, .purchaseStarted: productAttribution,
-    .purchaseCompletedClient: productAttribution, .purchaseCompletedProvider: productAttribution,
-    .purchasePending: productAttribution, .purchaseDeferred: productAttribution,
-    .purchaseCancelled: productAttribution, .purchaseFailed: productAttribution,
+    .productSelected: productAttribution.union(experimentTuple),
+    .purchaseStarted: productAttribution.union(experimentTuple),
+    .purchaseCompletedClient: productAttribution.union(experimentTuple),
+    .purchaseCompletedProvider: productAttribution.union(experimentTuple),
+    .purchasePending: productAttribution.union(experimentTuple),
+    .purchaseDeferred: productAttribution.union(experimentTuple),
+    .purchaseCancelled: productAttribution.union(experimentTuple),
+    .purchaseFailed: productAttribution.union(experimentTuple),
     .restoreStarted: ["configurationReleaseId"], .restoreCompleted: ["configurationReleaseId"],
     .restoreNothingFound: ["configurationReleaseId"],
     .restoreCancelled: ["configurationReleaseId"], .restoreFailed: ["configurationReleaseId"],
+    .experimentAssigned: experimentAttribution,
+    .experimentExposed: experimentAttribution.union(["paywallId", "paywallVersionId"]),
+    .experimentFallbackPresented: experimentAttribution,
+    .experimentAssignmentFailed: experimentAttribution,
   ]
 
   private static let permanentResultCodes: Set<String> = [

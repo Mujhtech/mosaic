@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+- Add strict Configuration Delivery v3 and Experiment Assignment v1 decoding,
+  exact compatibility derivation, trusted schedule evaluation, stable
+  assignment/group bucketing, mutual exclusion, and non-production QA override
+  handling while retaining Delivery v2/v1 readers.
+- Add bounded backup-excluded assignment replay diagnostics, identity-aware
+  clearing, completion retention, pre-presentation reauthorization, foreground
+  refresh, selected-variant commerce capability checks, and safe normal-Placement
+  fallback.
+- Add Analytics Event v2 experiment assignment, exposure, and fallback events
+  with immutable all-or-none experiment attribution on eligible Product and
+  purchase lifecycle events, while preserving queued v1 decoding.
 - Add strict Configuration Delivery v2 and Placement Decision v1 acceptance.
 - Add offline deterministic targeting, exact rollout bucketing, explicit
   no-Paywall/fallback decision results, and privacy-safe bounded traces.

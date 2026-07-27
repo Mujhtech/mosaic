@@ -391,7 +391,7 @@ class MosaicPaywallComposeTest {
     @Test
     fun bundledFallbackMatchesCurrentProtocolV02PixelBaseline() {
         val document = canonicalBundle()
-        assertEquals(MOSAIC_PROTOCOL_VERSION_V02, document.schemaVersion)
+        assertEquals(MOSAIC_PROTOCOL_VERSION, document.schemaVersion)
         val state = MosaicPaywallState(
             document,
             MockMosaicPurchaseProvider(MockMosaicPurchaseProvider.phase1Products()),

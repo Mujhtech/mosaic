@@ -9,7 +9,8 @@
     "generate:delivery-fixtures": "node tools/generate-delivery-fixtures-v1.mjs && node tools/generate-phase5-fixtures.mjs",
     "migrate:rc2-to-rc3": "node tools/migrate-v0.2-rc2-to-rc3.mjs",
     "migrate:rc3-to-rc4": "node tools/migrate-v0.2-rc3-to-rc4.mjs",
-    "generate": "npm run generate:browser-contract && npm run generate:delivery-fixtures",
+    "generate:phase7-contracts": "node tools/generate-phase7-contracts.mjs",
+    "generate": "npm run generate:browser-contract && npm run generate:delivery-fixtures && npm run generate:phase7-contracts",
     "test": "node --test tools/*.test.mjs",
     "validate": "node tools/validate.mjs"
   },

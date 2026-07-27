@@ -31,10 +31,12 @@ final class MosaicConfigurationUpdatedResponse
   const MosaicConfigurationUpdatedResponse({
     required this.source,
     required this.etag,
+    this.serverTime,
   });
 
   final String source;
   final String etag;
+  final DateTime? serverTime;
 }
 
 final class MosaicConfigurationNotModifiedResponse
@@ -111,13 +113,26 @@ final class MosaicIoConfigurationTransport
       ..headers.set(
         'Mosaic-Configuration-Versions',
         '$mosaicConfigurationDeliveryVersion,'
-            '$mosaicConfigurationDeliveryVersionV2',
+            '$mosaicConfigurationDeliveryVersionV2,'
+            '$mosaicConfigurationDeliveryVersionV3',
       )
       ..headers.set('Mosaic-Paywall-Protocol-Versions', mosaicProtocolVersion)
       ..headers.set(
         'Mosaic-Paywall-Capabilities',
         mosaicPaywallCapabilitiesHeaderValue,
-      );
+      )
+      ..headers.set('Mosaic-Experiment-Assignment-Versions', '1')
+      ..headers.set(
+          'Mosaic-Experiment-Features',
+          'allocation.ranges,assignment.installation,assignment.identified_user,'
+              'assignment.identified_user_or_installation,fallback.normal_placement,'
+              'group.mutual_exclusion,override.qa,schedule.trusted_server_time')
+      ..headers.set(
+          'Mosaic-Experiment-Bucketing-Algorithms',
+          'experiment_sha256_length_prefixed_v1,'
+              'experiment_group_sha256_length_prefixed_v1')
+      ..headers
+          .set('Mosaic-Experiment-Schedule-Policies', 'trusted_server_time_v1');
     if (request.applicationVersion case final version?) {
       outgoing.headers.set('Mosaic-App-Version', version);
     }
@@ -157,6 +172,7 @@ final class MosaicIoConfigurationTransport
         !const <String>{
           mosaicConfigurationDeliveryVersion,
           mosaicConfigurationDeliveryVersionV2,
+          mosaicConfigurationDeliveryVersionV3,
         }.contains(contentType.parameters['version'])) {
       return const MosaicConfigurationFailedResponse(
         diagnosticCode: 'configuration.refresh.invalidContentType',
@@ -179,7 +195,31 @@ final class MosaicIoConfigurationTransport
         diagnosticCode: 'configuration.refresh.invalidEncoding',
       );
     }
-    return MosaicConfigurationUpdatedResponse(source: source, etag: etag);
+    DateTime? serverTime;
+    final date = response.headers.value(HttpHeaders.dateHeader);
+    if (date != null) {
+      try {
+        serverTime = HttpDate.parse(date).toUtc();
+      } on FormatException {
+        return const MosaicConfigurationFailedResponse(
+          diagnosticCode: 'configuration.refresh.invalidServerTime',
+        );
+      }
+    }
+    final decodedEnvelope = jsonDecode(source);
+    if (decodedEnvelope is Map &&
+        decodedEnvelope['configurationDeliveryVersion'] ==
+            mosaicConfigurationDeliveryVersionV3 &&
+        serverTime == null) {
+      return const MosaicConfigurationFailedResponse(
+        diagnosticCode: 'configuration.refresh.missingServerTime',
+      );
+    }
+    return MosaicConfigurationUpdatedResponse(
+      source: source,
+      etag: etag,
+      serverTime: serverTime,
+    );
   }
 }
 
@@ -189,5 +229,6 @@ Uri _configurationEndpoint(Uri baseUrl) {
 }
 
 const String _deliveryContentType =
+    'application/vnd.mosaic.configuration+json;version=3, '
     'application/vnd.mosaic.configuration+json;version=2, '
     'application/vnd.mosaic.configuration+json;version=1';

@@ -1,13 +1,34 @@
-# Mosaic Flutter SDK — Configuration Delivery v1/v2
+# Mosaic Flutter SDK — Configuration Delivery v1/v2/v3
+
+## Experiments
+
+Delivery v3 and Experiment Assignment v1 extend an eligible Control decision
+locally using deterministic cross-platform SHA-256 assignment. Existing
+Placement APIs are unchanged. Candidates that are inactive, unsupported,
+time-unreliable, group-excluded, or unready do not replace the normal Placement
+result.
+
+Same-Placement Experiment candidates are evaluated by stable Experiment ID;
+mutual-exclusion admission may continue to the admitted candidate, while a
+selected candidate's Product or provider failure never selects another member.
+
+Hosted clients enqueue Analytics Event v2 assignment,
+presentation-confirmed exposure, and explicit fallback events through the
+default durable analytics queue and transport. A custom
+`MosaicExperimentAnalyticsSink` remains available for tests. QA overrides never
+emit statistical exposure. The default assignment store persists only one-way
+subject digests, is backup-excluded, and is atomically bounded to 256 records
+and 180 days. Trusted server and local receipt anchors are cached with Delivery
+v3 so valid schedules remain evaluable across restart.
 
 This package provides a strict reader for Mosaic Protocol 0.2
 and renders it with native Flutter widgets. It includes hosted Configuration
-Delivery v1/v2, persistent cache and bundled-release fallback, Placements,
+Delivery v1/v2/v3, persistent cache and bundled-release fallback, Placements,
 localization and RTL,
 bundled fallback loading, mock commerce, normalized results, diagnostics,
 accessibility semantics, native rendering, Local Preview 0.2 support, and the
 provider-neutral Commerce Configuration v1/v2 custom-provider boundary, and
-Analytics Event Contract v1 collection with a persistent bounded queue.
+Analytics Event Contract v1/v2 collection with a persistent bounded queue.
 
 Protocol 0.2 RC4 adds document design-system tokens, solid/linear/radial/media
 backgrounds, native shadows, uniform width and height Fit/Fill/Fixed sizing,

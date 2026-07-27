@@ -1,6 +1,7 @@
 package dev.mosaic.sdk
 
 import android.content.Context
+import android.os.SystemClock
 import com.google.gson.Gson
 import java.io.File
 import java.io.FileOutputStream
@@ -8,6 +9,9 @@ import java.io.IOException
 import java.io.OutputStreamWriter
 import java.net.URI
 import java.security.MessageDigest
+import java.text.SimpleDateFormat
+import java.util.Locale
+import java.util.TimeZone
 import java.util.concurrent.TimeUnit
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
@@ -23,10 +27,24 @@ private const val MOSAIC_COMMERCE_CONFIGURATION_MEDIA_TYPE =
 private const val MOSAIC_COMMERCE_CONFIGURATION_MEDIA_TYPE_V1 =
     "application/vnd.mosaic.commerce-configuration+json;version=1"
 
+private fun parseHttpDate(value: String?): Long? = value?.let {
+    runCatching {
+        SimpleDateFormat("EEE, dd MMM yyyy HH:mm:ss zzz", Locale.US).apply {
+            isLenient = false
+            timeZone = TimeZone.getTimeZone("GMT")
+        }.parse(it)?.time
+    }.getOrNull()
+}
+
+internal fun mosaicElapsedRealtime(): Long = runCatching { SystemClock.elapsedRealtime() }.getOrDefault(0L)
+
 data class MosaicCachedConfiguration(
     val etag: String?,
     val payload: String,
     val commercePayload: String? = null,
+    val trustedServerTimeEpochMillis: Long? = null,
+    val trustedReceiptWallTimeEpochMillis: Long? = null,
+    val trustedReceiptElapsedRealtimeMillis: Long? = null,
 )
 
 interface MosaicConfigurationCache {
@@ -78,7 +96,7 @@ class MosaicFileConfigurationCache(
 }
 
 sealed interface MosaicConfigurationResponse {
-    data class Modified(val payload: String, val etag: String?) : MosaicConfigurationResponse
+    data class Modified(val payload: String, val etag: String?, val serverTimeEpochMillis: Long? = null) : MosaicConfigurationResponse
     data object NotModified : MosaicConfigurationResponse
     data class Failed(val reason: String) : MosaicConfigurationResponse
 }
@@ -113,13 +131,17 @@ class MosaicHTTPConfigurationTransport(
         val request = Request.Builder()
             .url(configuration.configurationURL().toString())
             .header("Authorization", "Bearer ${configuration.apiKey}")
-            .header("Accept", "application/vnd.mosaic.configuration+json;version=2, application/vnd.mosaic.configuration+json;version=1;q=0.9")
+            .header("Accept", "application/vnd.mosaic.configuration+json;version=3, application/vnd.mosaic.configuration+json;version=2;q=0.9, application/vnd.mosaic.configuration+json;version=1;q=0.8")
             .header("Mosaic-SDK-Platform", "android")
             .header("Mosaic-SDK-Version", MOSAIC_ANDROID_SDK_VERSION)
-            .header("Mosaic-Configuration-Versions", "$MOSAIC_CONFIGURATION_DELIVERY_VERSION_V2,$MOSAIC_CONFIGURATION_DELIVERY_VERSION")
+            .header("Mosaic-Configuration-Versions", "$MOSAIC_CONFIGURATION_DELIVERY_VERSION_V3,$MOSAIC_CONFIGURATION_DELIVERY_VERSION_V2,$MOSAIC_CONFIGURATION_DELIVERY_VERSION")
             .header("Mosaic-Placement-Decision-Versions", MOSAIC_PLACEMENT_DECISION_VERSION)
             .header("Mosaic-Decision-Features", MosaicPlacementDecisionCapabilities.features.joinToString(","))
             .header("Mosaic-Bucketing-Algorithms", MOSAIC_ROLLOUT_ALGORITHM)
+            .header("Mosaic-Experiment-Assignment-Versions", MOSAIC_EXPERIMENT_ASSIGNMENT_VERSION)
+            .header("Mosaic-Experiment-Features", MosaicExperimentCapabilities.features.joinToString(","))
+            .header("Mosaic-Experiment-Bucketing-Algorithms", MosaicExperimentCapabilities.algorithms.joinToString(","))
+            .header("Mosaic-Experiment-Schedule-Policies", MOSAIC_EXPERIMENT_TIME_POLICY)
             .header("Mosaic-Paywall-Protocol-Versions", MOSAIC_SUPPORTED_PROTOCOL_VERSIONS.sorted().joinToString(","))
             .header("Mosaic-Paywall-Capabilities", capabilityReport.configurationDeliveryCapabilitiesHeader())
             .apply { configuration.applicationVersion?.let { header("Mosaic-App-Version", it) } }
@@ -129,7 +151,9 @@ class MosaicHTTPConfigurationTransport(
             client.newCall(request).execute().use { response ->
                 when (response.code) {
                     304 -> MosaicConfigurationResponse.NotModified
-                    200 -> response.body?.string()?.let { MosaicConfigurationResponse.Modified(it, response.header("ETag")) }
+                    200 -> response.body?.string()?.let {
+                        MosaicConfigurationResponse.Modified(it, response.header("ETag"), parseHttpDate(response.header("Date")))
+                    }
                         ?: MosaicConfigurationResponse.Failed("The configuration response was empty.")
                     else -> MosaicConfigurationResponse.Failed("Configuration request failed with HTTP ${response.code}.")
                 }
@@ -216,7 +240,30 @@ data class MosaicAcceptedConfiguration(
     val source: MosaicConfigurationSource,
     val etag: String,
     val commerceConfiguration: MosaicCommerceConfiguration? = null,
+    val trustedTimeAnchor: MosaicTrustedTimeAnchor? = null,
 )
+
+data class MosaicTrustedTimeAnchor(
+    val serverTimeEpochMillis: Long,
+    val receiptWallTimeEpochMillis: Long,
+    val receiptElapsedRealtimeMillis: Long,
+) {
+    fun nowEpochMillis(
+        wallTimeEpochMillis: Long = System.currentTimeMillis(),
+        elapsedRealtimeMillis: Long = mosaicElapsedRealtime(),
+    ): Long? {
+        val elapsed = elapsedRealtimeMillis - receiptElapsedRealtimeMillis
+        if (elapsed !in 0..SEVEN_DAYS_MILLIS) return null
+        val expectedWall = receiptWallTimeEpochMillis + elapsed
+        if (kotlin.math.abs(wallTimeEpochMillis - expectedWall) > FIVE_MINUTES_MILLIS) return null
+        return serverTimeEpochMillis + elapsed
+    }
+
+    private companion object {
+        const val FIVE_MINUTES_MILLIS = 5 * 60 * 1000L
+        const val SEVEN_DAYS_MILLIS = 7 * 24 * 60 * 60 * 1000L
+    }
+}
 
 sealed interface MosaicConfigurationRefreshResult {
     data class Updated(val configuration: MosaicAcceptedConfiguration) : MosaicConfigurationRefreshResult
@@ -300,6 +347,7 @@ class MosaicHostedConfigurationClient(
     private val purchaseProvider: MosaicPurchaseProvider? = null,
     private val applicationVersion: String? = null,
     internal val analyticsRuntime: MosaicAnalyticsRuntime? = null,
+    private val experimentStore: MosaicExperimentAssignmentStore? = null,
 ) {
     private val refreshLock = Mutex()
     @Volatile private var accepted: MosaicAcceptedConfiguration? = null
@@ -343,12 +391,20 @@ class MosaicHostedConfigurationClient(
                         it.environmentId == candidate.environment.id &&
                         it.productMappings.keys == candidate.productReferences.keys
                 }
+                val receiptWall = System.currentTimeMillis()
+                val receiptElapsed = mosaicElapsedRealtime()
+                val trustedAnchor = response.serverTimeEpochMillis?.let {
+                    MosaicTrustedTimeAnchor(it, receiptWall, receiptElapsed)
+                }
                 try {
                     cache.write(
                         MosaicCachedConfiguration(
                             acceptedETag,
                             response.payload,
                             retainedCommerce?.encoded,
+                            trustedAnchor?.serverTimeEpochMillis,
+                            trustedAnchor?.receiptWallTimeEpochMillis,
+                            trustedAnchor?.receiptElapsedRealtimeMillis,
                         ),
                     )
                 } catch (error: CancellationException) {
@@ -361,6 +417,7 @@ class MosaicHostedConfigurationClient(
                     source = MosaicConfigurationSource.REMOTE,
                     etag = acceptedETag,
                     commerceConfiguration = retainedCommerce,
+                    trustedTimeAnchor = trustedAnchor,
                 )
                 if (retainedCommerce == null) {
                     configurablePurchaseProvider?.clearConfiguration()
@@ -467,13 +524,18 @@ class MosaicHostedConfigurationClient(
         val store = requireNotNull(identityStore) { "Identity persistence is unavailable for this client." }
         analyticsRuntime?.drainPendingRecords()
         val previous = store.current()
+        previous.userId?.let { experimentStore?.clearSubject(MosaicAssignmentKeyType.IDENTIFIED_USER, it) }
         store.resetUser().also { if (previous.userId != null) analyticsRuntime?.identityChanged() }
     }
 
     suspend fun resetInstallationIdentity(): MosaicIdentityState = identityMutationLock.withLock {
         qaOverrideTokens = emptySet()
         analyticsRuntime?.drainPendingRecords()
-        requireNotNull(identityStore) { "Identity persistence is unavailable for this client." }.resetInstallation().also {
+        val store = requireNotNull(identityStore) { "Identity persistence is unavailable for this client." }
+        val previous = store.current()
+        experimentStore?.clearSubject(MosaicAssignmentKeyType.INSTALLATION, previous.installationId)
+        previous.userId?.let { experimentStore?.clearSubject(MosaicAssignmentKeyType.IDENTIFIED_USER, it) }
+        store.resetInstallation().also {
             analyticsRuntime?.identityChanged()
         }
     }
@@ -493,6 +555,9 @@ class MosaicHostedConfigurationClient(
 
     suspend fun analyticsDiagnostics(): MosaicAnalyticsDiagnostics = analyticsRuntime?.diagnostics()
         ?: MosaicAnalyticsDiagnostics(0, 0, 0, 0, 0, 0, "analytics.unavailable")
+
+    suspend fun experimentDiagnostics(): List<MosaicExperimentAssignmentRecord> =
+        experimentStore?.diagnostics().orEmpty()
 
     /** Tokens are held in memory only and are cleared by either identity reset operation. */
     fun setQAOverrideTokens(tokens: Set<String>) {
@@ -697,9 +762,104 @@ class MosaicHostedConfigurationClient(
                     )
                 }
                 emitRuleFallbackIfExact(ruleSet, context, result.fallbackPath, result.matchedRuleId, "paywall", placementRequestId, analyticsContext, baseAttribution)
-                availableAnalyticsResult(configuration, delivered, result.trace, result.matchedRuleId, result.fallbackPath, resolvedProducts, requiredProducts, placementRequestId, analyticsContext, baseAttribution)
+                availableExperimentOrNormal(
+                    configuration, ruleSet, delivered, result.trace, result.matchedRuleId,
+                    result.fallbackPath, resolvedProducts, requiredProducts, productStates,
+                    identity, placementRequestId, analyticsContext, baseAttribution,
+                )
             }
         }
+    }
+
+    private suspend fun availableExperimentOrNormal(
+        configuration: MosaicAcceptedConfiguration,
+        ruleSet: MosaicPlacementRuleSet,
+        normalPaywall: MosaicDeliveredPaywall,
+        trace: MosaicDecisionTrace,
+        matchedRuleId: String?,
+        fallbackPath: List<String>,
+        resolvedProducts: List<MosaicProduct>,
+        normalRequiredProducts: List<String>,
+        productStates: Map<String, MosaicProductAvailability>,
+        identity: MosaicIdentityState,
+        placementRequestId: String,
+        context: MosaicAnalyticsContext,
+        baseAttribution: MosaicAnalyticsAttribution,
+    ): MosaicPlacementDecisionResult.Available {
+        val candidates = configuration.release.experimentAssignments.filter {
+            it.placementId == ruleSet.placementId && it.controlPaywallVersionId == normalPaywall.id
+        }
+        if (candidates.isEmpty()) {
+            return availableAnalyticsResult(
+                configuration, normalPaywall, trace, matchedRuleId, fallbackPath, resolvedProducts,
+                normalRequiredProducts, placementRequestId, context, baseAttribution,
+            )
+        }
+        val candidateEvaluation = MosaicExperimentAssignmentEngine.evaluateCandidates(
+            candidates, identity, configuration.trustedTimeAnchor?.nowEpochMillis(), qaOverrideTokens,
+        )
+        val evaluated = candidateEvaluation.assignment
+        if (evaluated == null) {
+            if ("time_unreliable" in candidateEvaluation.normalPlacementReasons) {
+                diagnose(MosaicDiagnosticCode.EXPERIMENT_TIME_UNRELIABLE, "Experiment scheduling time is unavailable; normal Placement was used.")
+            }
+            return availableAnalyticsResult(
+                configuration, normalPaywall, trace, matchedRuleId, fallbackPath, resolvedProducts,
+                normalRequiredProducts, placementRequestId, context, baseAttribution,
+            )
+        }
+        val assignment = evaluated.assignment
+        val experimentAttribution = MosaicExperimentAttribution(
+            assignment.experimentId, assignment.experimentVersionId, evaluated.variant.id, assignment.allocationVersion,
+        )
+        val attributed = baseAttribution.copy(
+            experimentId = experimentAttribution.experimentId,
+            experimentVersionId = experimentAttribution.experimentVersionId,
+            experimentVariantId = experimentAttribution.experimentVariantId,
+            experimentAllocationVersion = experimentAttribution.experimentAllocationVersion,
+        )
+        analyticsRuntime?.record(
+            MosaicAnalyticsPayload.ExperimentAssigned(
+                evaluated.assignmentKeyType.experimentWireName(), MOSAIC_EXPERIMENT_BUCKETING_ALGORITHM, evaluated.bucket,
+                if (evaluated.qaOverride) "qa_override" else "deterministic",
+            ),
+            MosaicAnalyticsJourney(MosaicAnalyticsCorrelation(placementRequestId = placementRequestId), attributed, context),
+        )
+        val identityValue = if (evaluated.assignmentKeyType == MosaicAssignmentKeyType.IDENTIFIED_USER) {
+            requireNotNull(identity.userId)
+        } else identity.installationId
+        runCatching { experimentStore?.record(evaluated, identityValue, System.currentTimeMillis()) }
+
+        val variantPaywall = configuration.release.paywallVersions.getValue(evaluated.variant.paywallVersionId)
+        val requiredProducts = evaluated.variant.compatibility.requiredProductIds
+        val productsReady = requiredProducts.all {
+            configuration.release.productReferences[it]?.readiness == MosaicProductReadiness.READY &&
+                productStates[it] == MosaicProductAvailability.AVAILABLE
+        }
+        val acceptedCapabilities = (purchaseProvider as? MosaicExperimentCommerceCapabilityProvider)
+            ?.mosaicExperimentCapabilities.orEmpty()
+        val providerReady = acceptedCapabilities.containsAll(evaluated.variant.compatibility.requiredProviderCapabilities)
+        val failure = when {
+            !productsReady -> "product_unavailable"
+            !providerReady -> "provider_unavailable"
+            else -> null
+        }
+        val selectedPaywall = if (failure == null) variantPaywall else normalPaywall
+        val selectedProducts = if (failure == null) requiredProducts.toList() else normalRequiredProducts
+        val presentation = MosaicExperimentPresentationContext(
+            experimentAttribution, evaluated.assignmentKeyType.experimentWireName(), MOSAIC_EXPERIMENT_BUCKETING_ALGORITHM,
+            evaluated.qaOverride,
+            if (failure == null) MosaicExperimentPresentationKind.VARIANT else MosaicExperimentPresentationKind.FALLBACK,
+            failure, selectedPaywall.paywallId, selectedPaywall.id,
+            MosaicExperimentAssignmentStore.subjectDigest(identityValue),
+        )
+        if (failure != null) {
+            diagnose(MosaicDiagnosticCode.EXPERIMENT_VARIANT_UNAVAILABLE, "Experiment Variant readiness failed; normal Placement was used.")
+        }
+        return availableAnalyticsResult(
+            configuration, selectedPaywall, trace, matchedRuleId, fallbackPath, resolvedProducts,
+            selectedProducts, placementRequestId, context, attributed, presentation,
+        )
     }
 
     private fun resolveUnavailableFallback(
@@ -835,7 +995,14 @@ class MosaicHostedConfigurationClient(
     ) {
         analyticsRuntime?.record(
             MosaicAnalyticsPayload.DiagnosticFailure("placement_evaluation_failed", code.analyticsSafeCode(), false),
-            MosaicAnalyticsJourney(MosaicAnalyticsCorrelation(placementRequestId = placementRequestId), attribution, context),
+            MosaicAnalyticsJourney(
+                MosaicAnalyticsCorrelation(placementRequestId = placementRequestId),
+                attribution.copy(
+                    experimentId = null, experimentVersionId = null,
+                    experimentVariantId = null, experimentAllocationVersion = null,
+                ),
+                context,
+            ),
         )
     }
 
@@ -850,6 +1017,7 @@ class MosaicHostedConfigurationClient(
         placementRequestId: String,
         context: MosaicAnalyticsContext,
         baseAttribution: MosaicAnalyticsAttribution,
+        experimentPresentation: MosaicExperimentPresentationContext? = null,
     ): MosaicPlacementDecisionResult.Available {
         val presentationId = mosaicAnalyticsId("presentation")
         val attribution = baseAttribution.copy(
@@ -866,13 +1034,32 @@ class MosaicHostedConfigurationClient(
                 bucketingAlgorithm = bucket?.let { MOSAIC_ROLLOUT_ALGORITHM },
                 rolloutBucket = bucket,
             ),
-            MosaicAnalyticsJourney(MosaicAnalyticsCorrelation(placementRequestId = placementRequestId), attribution, context),
+            MosaicAnalyticsJourney(
+                MosaicAnalyticsCorrelation(placementRequestId = placementRequestId),
+                attribution.copy(
+                    experimentId = null, experimentVersionId = null,
+                    experimentVariantId = null, experimentAllocationVersion = null,
+                ),
+                context,
+            ),
         )
         return MosaicPlacementDecisionResult.Available(
             delivered.document, configuration.source, configuration.release.id, configuration.release.number,
             trace, matchedRuleId, fallbackPath, resolvedProducts.filter { it.id in requiredProducts },
             analyticsRuntime?.let {
-                MosaicAnalyticsPresentationContext(placementRequestId, presentationId, context, attribution)
+                MosaicAnalyticsPresentationContext(
+                    placementRequestId, presentationId, context, attribution, experimentPresentation,
+                    experimentPresentation?.assignmentSubjectDigest?.let { digest ->
+                        {
+                            experimentStore?.markExposedBestEffort(
+                                experimentPresentation.attribution,
+                                experimentPresentation.assignmentKeyType,
+                                digest,
+                                System.currentTimeMillis(),
+                            )
+                        }
+                    },
+                )
             },
         )
     }
@@ -935,6 +1122,15 @@ class MosaicHostedConfigurationClient(
             MosaicConfigurationSource.CACHE,
             acceptedETag,
             commerce,
+            if (
+                cached.trustedServerTimeEpochMillis != null &&
+                cached.trustedReceiptWallTimeEpochMillis != null &&
+                cached.trustedReceiptElapsedRealtimeMillis != null
+            ) MosaicTrustedTimeAnchor(
+                cached.trustedServerTimeEpochMillis,
+                cached.trustedReceiptWallTimeEpochMillis,
+                cached.trustedReceiptElapsedRealtimeMillis,
+            ) else null,
         ).also {
             if (commerce == null) {
                 configurablePurchaseProvider?.clearConfiguration()
@@ -991,6 +1187,9 @@ class MosaicHostedConfigurationClient(
                     current.etag,
                     current.release.encoded,
                     payload,
+                    current.trustedTimeAnchor?.serverTimeEpochMillis,
+                    current.trustedTimeAnchor?.receiptWallTimeEpochMillis,
+                    current.trustedTimeAnchor?.receiptElapsedRealtimeMillis,
                 ),
             )
         } catch (error: CancellationException) {

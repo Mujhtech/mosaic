@@ -49,6 +49,7 @@ class Mosaic private constructor(
     ): MosaicHostedConfigurationClient {
         val namespace = mosaicConfigurationCacheNamespace(configuration)
         val identityStore = MosaicIdentityStore(context, namespace)
+        val experimentStore = MosaicExperimentAssignmentStoreRegistry.store(context, namespace)
         val analytics = (context.applicationContext as? android.app.Application)?.let { application ->
             MosaicAnalyticsRuntimeRegistry.runtime(application, namespace, configuration, identityStore)
         }
@@ -66,7 +67,12 @@ class Mosaic private constructor(
             analyticsRuntime = analytics,
             purchaseProvider = purchaseProvider,
             applicationVersion = configuration.applicationVersion,
-        )
+            experimentStore = experimentStore,
+        ).also { client ->
+            (context.applicationContext as? android.app.Application)?.let { application ->
+                MosaicForegroundRefreshRegistry.register(application, namespace, client)
+            }
+        }
     }
 
     companion object {

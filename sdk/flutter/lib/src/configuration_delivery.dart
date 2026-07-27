@@ -1,12 +1,14 @@
 import 'dart:collection';
 import 'dart:convert';
 
+import 'experiment_assignment.dart';
 import 'placement_decision.dart';
 import 'protocol.dart';
 import 'sha256.dart';
 
 const String mosaicConfigurationDeliveryVersion = '1';
 const String mosaicConfigurationDeliveryVersionV2 = '2';
+const String mosaicConfigurationDeliveryVersionV3 = '3';
 const int mosaicMaximumConfigurationBytes = 8 * 1024 * 1024;
 
 final class MosaicConfigurationDeliveryException implements Exception {
@@ -60,13 +62,19 @@ final class MosaicConfigurationRelease {
     Map<String, MosaicPlacementRuleSet> placementDecisions = const {},
     Map<String, MosaicDeliveredEntitlementReference> entitlementReferences =
         const {},
+    Iterable<MosaicExperimentAssignment> experimentAssignments = const [],
   })  : requiredCapabilities = List.unmodifiable(requiredCapabilities),
         placements = Map.unmodifiable(placements),
         paywallVersions = Map.unmodifiable(paywallVersions),
         productReferences = Map.unmodifiable(productReferences),
         assetReferences = Map.unmodifiable(assetReferences),
         placementDecisions = Map.unmodifiable(placementDecisions),
-        entitlementReferences = Map.unmodifiable(entitlementReferences);
+        entitlementReferences = Map.unmodifiable(entitlementReferences),
+        experimentAssignments = List.unmodifiable(
+          experimentAssignments.toList()
+            ..sort((left, right) =>
+                left.experimentId.compareTo(right.experimentId)),
+        );
 
   final String id;
   final int number;
@@ -82,6 +90,9 @@ final class MosaicConfigurationRelease {
   final Map<String, MosaicPlacementRuleSet> placementDecisions;
   final Map<String, MosaicDeliveredEntitlementReference> entitlementReferences;
 
+  /// Canonical Experiment candidates ordered by stable Experiment ID.
+  final List<MosaicExperimentAssignment> experimentAssignments;
+
   MosaicDeliveredPaywallVersion? paywallForPlacement(String key) {
     final versionId = placements[key];
     return versionId == null ? null : paywallVersions[versionId];
@@ -89,6 +100,15 @@ final class MosaicConfigurationRelease {
 
   MosaicPlacementRuleSet? decisionForPlacement(String key) =>
       placementDecisions[key];
+
+  List<MosaicExperimentAssignment> experimentsForPlacement(
+    String placementId,
+  ) =>
+      List.unmodifiable(
+        experimentAssignments.where(
+          (assignment) => assignment.placementId == placementId,
+        ),
+      );
 }
 
 enum MosaicDeliveredEnvironmentMode { development, staging, production }
@@ -207,20 +227,175 @@ final class MosaicConfigurationDeliveryDecoder {
       r'$.configurationDeliveryVersion',
     );
     if (version != mosaicConfigurationDeliveryVersion &&
-        version != mosaicConfigurationDeliveryVersionV2) {
+        version != mosaicConfigurationDeliveryVersionV2 &&
+        version != mosaicConfigurationDeliveryVersionV3) {
       throw const MosaicConfigurationDeliveryException(
         'The Configuration Delivery version is unsupported.',
       );
     }
     final releaseObject = _object(envelope['release'], r'$.release');
-    final release = version == mosaicConfigurationDeliveryVersionV2
-        ? _releaseV2(releaseObject)
-        : _release(releaseObject);
+    final release = version == mosaicConfigurationDeliveryVersionV3
+        ? _releaseV3(releaseObject)
+        : version == mosaicConfigurationDeliveryVersionV2
+            ? _releaseV2(releaseObject)
+            : _release(releaseObject);
     _validateReleaseDigest(envelope, release.contentDigest);
     return MosaicConfigurationDeliveryEnvelope(
       version: version,
       release: release,
       source: source,
+    );
+  }
+
+  MosaicConfigurationRelease _releaseV3(Map<String, Object?> object) {
+    final expected = <String>{
+      'id',
+      'number',
+      'projectId',
+      'environment',
+      'publishedAt',
+      'contentDigest',
+      'compatibility',
+      'placementDecisions',
+      'paywallVersions',
+      'productReferences',
+      'entitlementReferences',
+      'assetReferences',
+      'experimentAssignments',
+    };
+    if (object.keys.toSet().difference(expected).isNotEmpty ||
+        !expected.every(object.containsKey)) {
+      throw const MosaicConfigurationDeliveryException(
+        'The Delivery v3 release fields are invalid.',
+      );
+    }
+    final compatibility =
+        _object(object['compatibility'], r'$.release.compatibility');
+    _expectKeys(
+        compatibility,
+        const {
+          'placementDecisionContracts',
+          'paywallProtocols',
+          'acceptance',
+          'experimentAssignmentContracts',
+        },
+        r'$.release.compatibility');
+    final declarations = _list(compatibility['experimentAssignmentContracts'],
+        r'$.release.compatibility.experimentAssignmentContracts',
+        minimum: 1, maximum: 1);
+    final declaration = _object(declarations.single,
+        r'$.release.compatibility.experimentAssignmentContracts[0]');
+    _expectKeys(
+        declaration,
+        const {
+          'version',
+          'requiredFeatures',
+          'bucketingAlgorithms',
+          'schedulePolicies',
+        },
+        r'$.release.compatibility.experimentAssignmentContracts[0]');
+    if (_string(declaration['version'], 'version') != '1') {
+      throw const MosaicConfigurationDeliveryException(
+          'Unsupported Experiment contract.');
+    }
+    final v2 = Map<String, Object?>.from(object)
+      ..remove('experimentAssignments');
+    v2['compatibility'] = Map<String, Object?>.from(compatibility)
+      ..remove('experimentAssignmentContracts');
+    final base = _releaseV2(v2);
+    final assignmentValues = _list(
+        object['experimentAssignments'], r'$.release.experimentAssignments',
+        maximum: 128);
+    final assignments = <MosaicExperimentAssignment>[];
+    final experimentIds = <String>{};
+    final experimentVersionIds = <String>{};
+    for (final source in assignmentValues) {
+      final MosaicExperimentAssignment assignment;
+      try {
+        assignment = const MosaicExperimentAssignmentDecoder().decodeEmbedded(
+            source,
+            production: base.environment.mode ==
+                MosaicDeliveredEnvironmentMode.production);
+      } on FormatException {
+        throw const MosaicConfigurationDeliveryException(
+          'The release contains an invalid Experiment Assignment.',
+        );
+      }
+      if (assignment.projectId != base.projectId ||
+          assignment.environmentId != base.environment.id ||
+          !experimentIds.add(assignment.experimentId) ||
+          !experimentVersionIds.add(assignment.experimentVersionId) ||
+          !_placementContainsControlOutcome(base.placementDecisions.values,
+              assignment.placementId, assignment.controlPaywallVersionId) ||
+          assignment.variants.any((variant) {
+            final paywall = base.paywallVersions[variant.paywallVersionId];
+            return paywall?.paywallId != variant.paywallId ||
+                !_sameSet(
+                  paywall!.productReferenceIds,
+                  variant.requiredProductIds,
+                );
+          }) ||
+          assignment.group != null &&
+              !assignment.group!.members.any(
+                  (member) => member.experimentId == assignment.experimentId)) {
+        throw const MosaicConfigurationDeliveryException(
+          'The release contains inconsistent Experiment references.',
+        );
+      }
+      assignments.add(assignment);
+    }
+    final requiredFeatures = <String>{};
+    final requiredAlgorithms = <String>{};
+    for (final assignment in assignments) {
+      requiredFeatures.addAll({
+        'allocation.ranges',
+        'fallback.normal_placement',
+        'schedule.trusted_server_time',
+        'assignment.${switch (assignment.assignmentPolicy) {
+          MosaicExperimentAssignmentPolicy.installation => 'installation',
+          MosaicExperimentAssignmentPolicy.identifiedUser => 'identified_user',
+          MosaicExperimentAssignmentPolicy.identifiedUserOrInstallation =>
+            'identified_user_or_installation',
+        }}',
+        if (assignment.group != null) 'group.mutual_exclusion',
+        if (assignment.qaOverrides.isNotEmpty) 'override.qa',
+      });
+      requiredAlgorithms.add(mosaicExperimentBucketingAlgorithm);
+      if (assignment.group != null)
+        requiredAlgorithms.add(mosaicExperimentGroupBucketingAlgorithm);
+    }
+    Set<String> strings(Object? value, String path) =>
+        _list(value, path, maximum: 16)
+            .map((item) => _string(item, path))
+            .toSet();
+    if (!_sameSet(strings(declaration['requiredFeatures'], 'features'),
+            requiredFeatures) ||
+        !_sameSet(strings(declaration['bucketingAlgorithms'], 'algorithms'),
+            requiredAlgorithms) ||
+        !_sameSet(
+            strings(declaration['schedulePolicies'], 'policies'),
+            assignments.isEmpty
+                ? const <String>{}
+                : const {mosaicExperimentSchedulePolicy})) {
+      throw const MosaicConfigurationDeliveryException(
+        'Release Experiment compatibility must exactly match embedded requirements.',
+      );
+    }
+    return MosaicConfigurationRelease(
+      id: base.id,
+      number: base.number,
+      projectId: base.projectId,
+      environment: base.environment,
+      publishedAt: base.publishedAt,
+      contentDigest: base.contentDigest,
+      requiredCapabilities: base.requiredCapabilities,
+      placements: base.placements,
+      placementDecisions: base.placementDecisions,
+      paywallVersions: base.paywallVersions,
+      productReferences: base.productReferences,
+      entitlementReferences: base.entitlementReferences,
+      assetReferences: base.assetReferences,
+      experimentAssignments: assignments,
     );
   }
 
@@ -885,6 +1060,28 @@ final class MosaicConfigurationDeliveryDecoder {
         );
       }
     }
+  }
+
+  bool _placementContainsControlOutcome(
+    Iterable<MosaicPlacementRuleSet> decisions,
+    String placementId,
+    String controlPaywallVersionId,
+  ) {
+    bool matches(MosaicDecisionOutcome outcome) =>
+        outcome is MosaicPaywallDecisionOutcome &&
+        outcome.paywallVersionId == controlPaywallVersionId;
+
+    for (final decision in decisions) {
+      if (decision.placementId != placementId) continue;
+      if (matches(decision.defaultOutcome) ||
+          decision.rules.any((rule) => matches(rule.outcome)) ||
+          decision.fallbacks.values
+              .any((fallback) => matches(fallback.outcome)) ||
+          decision.qaOverrides.any((override) => matches(override.outcome))) {
+        return true;
+      }
+    }
+    return false;
   }
 
   Map<String, MosaicDeliveredAssetReference> _assetReferences(Object? value) {

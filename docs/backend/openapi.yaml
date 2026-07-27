@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Mosaic API
-  version: 0.7.0-phase5
+  version: 0.7.0-phase7
   description: |
     Hosted workspace, provider foundation, publishing, Asset, browser-session, and SDK-delivery API.
     RevenueCat server-connected integrations use least-privilege v2 secret keys. Secrets
@@ -1258,7 +1258,7 @@ paths:
       parameters:
         - { in: header, name: Mosaic-SDK-Platform, required: true, schema: { type: string, enum: [flutter, ios, android] } }
         - { in: header, name: Mosaic-SDK-Version, required: true, schema: { type: string, minLength: 1, maxLength: 64, pattern: "^[0-9]+\\.[0-9]+(?:\\.[0-9]+)?(?:[-+][A-Za-z0-9.-]+)?$" } }
-        - { in: header, name: Mosaic-Configuration-Versions, required: true, schema: { type: string, pattern: "^(1|2)(, ?(1|2))*$" } }
+        - { in: header, name: Mosaic-Configuration-Versions, required: true, schema: { type: string, pattern: "^(1|2|3)(, ?(1|2|3))*$" } }
         - { in: header, name: Mosaic-Paywall-Protocol-Versions, required: true, schema: { type: string, const: "0.2" } }
         - in: header
           name: Mosaic-Paywall-Capabilities
@@ -1268,11 +1268,15 @@ paths:
         - { in: header, name: Mosaic-Placement-Decision-Versions, required: false, schema: { type: string, pattern: "^1$" } }
         - { in: header, name: Mosaic-Decision-Features, required: false, description: Comma-separated exact Placement Decision v1 feature identifiers., schema: { type: string, maxLength: 16384 } }
         - { in: header, name: Mosaic-Bucketing-Algorithms, required: false, schema: { type: string, enum: [sha256_length_prefixed_v1] } }
+        - { in: header, name: Mosaic-Experiment-Assignment-Versions, required: false, description: Required when Delivery v3 is requested. Comma-separated unique Experiment Assignment contract versions., schema: { type: string, maxLength: 16384, pattern: "^1$" } }
+        - { in: header, name: Mosaic-Experiment-Features, required: false, description: Required when Delivery v3 is requested. Comma-separated unique exact Experiment Assignment v1 feature identifiers., schema: { type: string, minLength: 1, maxLength: 16384 } }
+        - { in: header, name: Mosaic-Experiment-Bucketing-Algorithms, required: false, description: Required when Delivery v3 is requested. Comma-separated unique canonical Variant and Group bucketing algorithms., schema: { type: string, minLength: 1, maxLength: 16384 } }
+        - { in: header, name: Mosaic-Experiment-Schedule-Policies, required: false, description: Required when Delivery v3 is requested. Comma-separated unique trusted-time schedule policies., schema: { type: string, minLength: 1, maxLength: 16384 } }
         - { in: header, name: Mosaic-App-Version, required: false, schema: { type: string, minLength: 1, maxLength: 64 } }
         - { in: header, name: If-None-Match, required: false, schema: { type: string } }
       responses:
         "200":
-          description: Highest mutually supported immutable Configuration Delivery v2 or safe v1 projection. A v1 candidate is withheld when an advanced Placement lacks an explicit Paywall default.
+          description: Highest mutually supported representation actually available for the current immutable Release. A v3-capable SDK falls back to an available v2 or safe v1 representation when that Release predates v3. Delivery v3 requires complete Experiment capability headers. A v1 candidate is withheld when an advanced Placement lacks an explicit Paywall default.
           headers:
             ETag: { schema: { type: string } }
             Cache-Control: { schema: { type: string } }
@@ -1465,11 +1469,109 @@ paths:
       tags: [Placement Decisions]
       responses: { "204": { description: Override revoked; the next immutable release omits it. }, "404": { $ref: "#/components/responses/Error" } }
 
+  /v1/projects/{projectId}/environments/{environmentId}/experiments:
+    parameters: [{ $ref: "#/components/parameters/ProjectID" }, { $ref: "#/components/parameters/EnvironmentID" }]
+    get:
+      operationId: listExperiments
+      tags: [Experiments]
+      responses: { "200": { description: Environment-scoped Experiments., content: { application/json: { schema: { $ref: "#/components/schemas/ExperimentListEnvelope" } } } } }
+    post:
+      operationId: createExperiment
+      tags: [Experiments]
+      parameters: [{ $ref: "#/components/parameters/IdempotencyKey" }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/CreateExperimentRequest" } } } }
+      responses: { "201": { description: Experiment and first Draft revision., content: { application/json: { schema: { $ref: "#/components/schemas/ExperimentEnvelope" } } } }, "409": { $ref: "#/components/responses/Error" }, "422": { $ref: "#/components/responses/Error" } }
+  /v1/projects/{projectId}/environments/{environmentId}/experiments/metrics:
+    parameters: [{ $ref: "#/components/parameters/ProjectID" }, { $ref: "#/components/parameters/EnvironmentID" }]
+    get: { operationId: listExperimentMetricDefinitions, tags: [Experiments], responses: { "200": { description: Immutable Experiment metric definitions., content: { application/json: { schema: { $ref: "#/components/schemas/ExperimentMetricListEnvelope" } } } } } }
+  /v1/projects/{projectId}/environments/{environmentId}/experiments/groups:
+    parameters: [{ $ref: "#/components/parameters/ProjectID" }, { $ref: "#/components/parameters/EnvironmentID" }]
+    get: { operationId: listExperimentGroups, tags: [Experiments], responses: { "200": { description: Mutual-exclusion groups., content: { application/json: { schema: { $ref: "#/components/schemas/ExperimentGroupListEnvelope" } } } } } }
+    post:
+      operationId: createExperimentGroupVersion
+      tags: [Experiments]
+      description: Creates a stable mutual-exclusion group and immutable first group Version. Later membership changes create another immutable Version.
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/CreateExperimentGroupRequest" } } } }
+      responses: { "201": { description: Group and immutable Version., content: { application/json: { schema: { $ref: "#/components/schemas/ExperimentGroupCreatedEnvelope" } } } }, "404": { $ref: "#/components/responses/Error" }, "422": { $ref: "#/components/responses/Error" } }
+  /v1/projects/{projectId}/environments/{environmentId}/experiments/groups/{groupId}/versions:
+    parameters: [{ $ref: "#/components/parameters/ProjectID" }, { $ref: "#/components/parameters/EnvironmentID" }, { name: groupId, in: path, required: true, schema: { type: string } }]
+    post:
+      operationId: createExperimentMutualExclusionGroupVersion
+      tags: [Experiments]
+      description: Creates a new immutable Version; prior membership and allocation Versions remain unchanged and auditable.
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/CreateExperimentGroupVersionRequest" } } } }
+      responses: { "201": { description: New immutable group Version., content: { application/json: { schema: { $ref: "#/components/schemas/ExperimentGroupVersionEnvelope" } } } }, "404": { $ref: "#/components/responses/Error" }, "422": { $ref: "#/components/responses/Error" } }
+    get:
+      operationId: listExperimentMutualExclusionGroupVersions
+      tags: [Experiments]
+      responses: { "200": { description: Immutable group Version history., content: { application/json: { schema: { $ref: "#/components/schemas/ExperimentGroupVersionListEnvelope" } } } }, "404": { $ref: "#/components/responses/Error" } }
+  /v1/projects/{projectId}/environments/{environmentId}/experiments/{experimentId}:
+    parameters: [{ $ref: "#/components/parameters/ProjectID" }, { $ref: "#/components/parameters/EnvironmentID" }, { $ref: "#/components/parameters/ExperimentID" }]
+    get: { operationId: getExperiment, tags: [Experiments], responses: { "200": { description: Experiment root, current Draft, and active immutable Version., headers: { ETag: { schema: { type: string } } }, content: { application/json: { schema: { $ref: "#/components/schemas/ExperimentEnvelope" } } } }, "404": { $ref: "#/components/responses/Error" } } }
+  /v1/projects/{projectId}/environments/{environmentId}/experiments/{experimentId}/draft:
+    parameters: [{ $ref: "#/components/parameters/ProjectID" }, { $ref: "#/components/parameters/EnvironmentID" }, { $ref: "#/components/parameters/ExperimentID" }]
+    put:
+      operationId: updateExperimentDraft
+      tags: [Experiments]
+      parameters: [{ $ref: "#/components/parameters/IfMatch" }, { $ref: "#/components/parameters/IdempotencyKey" }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/UpdateExperimentDraftRequest" } } } }
+      responses: { "200": { description: New immutable Draft revision., content: { application/json: { schema: { $ref: "#/components/schemas/ExperimentDraftEnvelope" } } } }, "409": { description: Stale Draft revision with currentRevision and ETag recovery details., content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } } }, "422": { $ref: "#/components/responses/Error" }, "428": { $ref: "#/components/responses/Error" } }
+  /v1/projects/{projectId}/environments/{environmentId}/experiments/{experimentId}/validate:
+    parameters: [{ $ref: "#/components/parameters/ProjectID" }, { $ref: "#/components/parameters/EnvironmentID" }, { $ref: "#/components/parameters/ExperimentID" }]
+    post: { operationId: validateExperimentDraft, tags: [Experiments], responses: { "200": { description: Scientific, Product, provider, overlap, and compatibility validation., content: { application/json: { schema: { $ref: "#/components/schemas/ExperimentValidationEnvelope" } } } } } }
+  /v1/projects/{projectId}/environments/{environmentId}/experiments/{experimentId}/publish:
+    parameters: [{ $ref: "#/components/parameters/ProjectID" }, { $ref: "#/components/parameters/EnvironmentID" }, { $ref: "#/components/parameters/ExperimentID" }]
+    post:
+      operationId: publishExperiment
+      tags: [Experiments]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/PublishExperimentRequest" } } } }
+      responses: { "201": { description: Immutable Experiment Version and atomic Configuration Delivery v3 release., content: { application/json: { schema: { $ref: "#/components/schemas/ExperimentVersionEnvelope" } } } }, "409": { $ref: "#/components/responses/Error" }, "422": { $ref: "#/components/responses/Error" } }
+  /v1/projects/{projectId}/environments/{environmentId}/experiments/{experimentId}/versions:
+    parameters: [{ $ref: "#/components/parameters/ProjectID" }, { $ref: "#/components/parameters/EnvironmentID" }, { $ref: "#/components/parameters/ExperimentID" }]
+    get: { operationId: listExperimentVersions, tags: [Experiments], responses: { "200": { description: Immutable Experiment Version history., content: { application/json: { schema: { $ref: "#/components/schemas/ExperimentVersionListEnvelope" } } } } } }
+  /v1/projects/{projectId}/environments/{environmentId}/experiments/{experimentId}/history:
+    parameters: [{ $ref: "#/components/parameters/ProjectID" }, { $ref: "#/components/parameters/EnvironmentID" }, { $ref: "#/components/parameters/ExperimentID" }]
+    get: { operationId: listExperimentHistory, tags: [Experiments], responses: { "200": { description: Audited lifecycle and publication history., content: { application/json: { schema: { $ref: "#/components/schemas/ExperimentHistoryListEnvelope" } } } } } }
+  /v1/projects/{projectId}/environments/{environmentId}/experiments/{experimentId}/results:
+    parameters: [{ $ref: "#/components/parameters/ProjectID" }, { $ref: "#/components/parameters/EnvironmentID" }, { $ref: "#/components/parameters/ExperimentID" }]
+    get: { operationId: getExperimentResults, tags: [Experiments], responses: { "200": { description: Unique-unit conversion, Wilson/Newcombe uncertainty, freshness, warnings, and SRM. Never contains a Winner field., content: { application/json: { schema: { $ref: "#/components/schemas/ExperimentResultsEnvelope" } } } } } }
+  /v1/projects/{projectId}/environments/{environmentId}/experiments/{experimentId}/srm:
+    parameters: [{ $ref: "#/components/parameters/ProjectID" }, { $ref: "#/components/parameters/EnvironmentID" }, { $ref: "#/components/parameters/ExperimentID" }]
+    get: { operationId: getExperimentSampleRatioMismatch, tags: [Experiments], responses: { "200": { description: Descriptive Pearson chi-square SRM diagnostic., content: { application/json: { schema: { type: object, required: [data], properties: { data: { $ref: "#/components/schemas/ExperimentSRM" } } } } } } } }
+  /v1/projects/{projectId}/environments/{environmentId}/experiments/{experimentId}/{lifecycleAction}:
+    parameters: [{ $ref: "#/components/parameters/ProjectID" }, { $ref: "#/components/parameters/EnvironmentID" }, { $ref: "#/components/parameters/ExperimentID" }, { name: lifecycleAction, in: path, required: true, schema: { type: string, enum: [schedule, start, pause, resume, stop, complete, archive, emergency-stop] } }]
+    post:
+      operationId: transitionExperimentLifecycle
+      tags: [Experiments]
+      description: Each accepted transition atomically appends history and publishes a new immutable release. Emergency stop always targets the normal Placement fallback.
+      requestBody: { content: { application/json: { schema: { type: object, additionalProperties: false, properties: { reason: { type: string, maxLength: 500 } } } } } }
+      responses: { "200": { description: Updated Experiment root., content: { application/json: { schema: { $ref: "#/components/schemas/ExperimentEnvelope" } } } }, "409": { $ref: "#/components/responses/Error" }, "422": { $ref: "#/components/responses/Error" } }
+  /v1/projects/{projectId}/environments/{environmentId}/experiments/{experimentId}/qa-overrides:
+    parameters: [{ $ref: "#/components/parameters/ProjectID" }, { $ref: "#/components/parameters/EnvironmentID" }, { $ref: "#/components/parameters/ExperimentID" }]
+    get: { operationId: listExperimentQAOverrides, tags: [Experiments], responses: { "200": { description: Safe QA override metadata without tokens., content: { application/json: { schema: { $ref: "#/components/schemas/ExperimentQAOverrideListEnvelope" } } } } } }
+    post:
+      operationId: createExperimentQAOverride
+      tags: [Experiments]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/CreateExperimentQAOverrideRequest" } } } }
+      responses: { "201": { description: Non-production override; raw token returned once and never delivered as creator identity., content: { application/json: { schema: { $ref: "#/components/schemas/ExperimentQAOverrideCreatedEnvelope" } } } }, "422": { $ref: "#/components/responses/Error" } }
+  /v1/projects/{projectId}/environments/{environmentId}/experiments/{experimentId}/qa-overrides/{overrideId}:
+    parameters: [{ $ref: "#/components/parameters/ProjectID" }, { $ref: "#/components/parameters/EnvironmentID" }, { $ref: "#/components/parameters/ExperimentID" }, { name: overrideId, in: path, required: true, schema: { type: string } }]
+    delete: { operationId: revokeExperimentQAOverride, tags: [Experiments], responses: { "204": { description: Override revoked. }, "404": { $ref: "#/components/responses/Error" } } }
+  /v1/projects/{projectId}/environments/{environmentId}/experiments/{experimentId}/exports:
+    parameters: [{ $ref: "#/components/parameters/ProjectID" }, { $ref: "#/components/parameters/EnvironmentID" }, { $ref: "#/components/parameters/ExperimentID" }]
+    post:
+      operationId: createExperimentRawExport
+      tags: [Experiments]
+      description: Owner/admin asynchronous raw Experiment export. Identity-bearing export is owner-only and expires after seven days.
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/CreateExperimentExportRequest" } } } }
+      responses: { "202": { $ref: "#/components/responses/AnalyticsJob" }, "403": { $ref: "#/components/responses/Error" }, "404": { $ref: "#/components/responses/Error" }, "422": { $ref: "#/components/responses/Error" } }
+
   /v1/sdk/events/batch:
     post:
       security: [{ PublicSDKKey: [] }]
       operationId: ingestAnalyticsEventBatch
       tags: [Analytics]
+      description: The enclosing Analytics Event contract version must exactly match every eventSchemaVersion in the batch; mixed-version batches reject atomically.
       requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/AnalyticsEventBatch" } } } }
       responses:
         "200": { description: Per-event ingestion outcomes., content: { application/json: { schema: { $ref: "#/components/schemas/AnalyticsIngestionResult" } } } }
@@ -1596,6 +1698,7 @@ components:
     VersionID: { in: path, name: versionId, required: true, schema: { type: string } }
     PlacementID: { in: path, name: placementId, required: true, schema: { type: string } }
     RuleSetID: { in: path, name: ruleSetId, required: true, schema: { type: string } }
+    ExperimentID: { in: path, name: experimentId, required: true, schema: { type: string } }
     AssetID: { in: path, name: assetId, required: true, schema: { type: string } }
     ReleaseID: { in: path, name: releaseId, required: true, schema: { type: string } }
     IdempotencyKey: { in: header, name: Idempotency-Key, required: true, schema: { type: string, minLength: 1, maxLength: 255 } }
@@ -1731,15 +1834,189 @@ components:
     ReleaseList: { description: Configuration Release history, content: { application/json: { schema: { $ref: "#/components/schemas/ReleaseListEnvelope" } } } }
     PublishResult: { description: Publication result and nonblocking warnings, content: { application/json: { schema: { $ref: "#/components/schemas/PublishResultEnvelope" } } } }
   schemas:
+    CreateExperimentRequest:
+      type: object
+      additionalProperties: false
+      required: [placementId, name]
+      properties: { placementId: { type: string }, name: { type: string, minLength: 1, maxLength: 120 }, hypothesis: { type: string, maxLength: 1000 } }
+    ExperimentSchedule:
+      type: object
+      additionalProperties: false
+      required: [startsAt]
+      properties: { startsAt: { $ref: "#/components/schemas/Timestamp" }, endsAt: { $ref: "#/components/schemas/Timestamp" } }
+    ExperimentVariantDraft:
+      type: object
+      additionalProperties: false
+      required: [role, name, paywallId, paywallVersionId, allocationBasisPoints]
+      properties:
+        id: { type: string }
+        role: { type: string, enum: [control, treatment] }
+        name: { type: string, minLength: 1, maxLength: 80 }
+        paywallId: { type: string }
+        paywallVersionId: { type: string }
+        allocationBasisPoints: { type: integer, minimum: 1, maximum: 9999 }
+    ExperimentDraftDocument:
+      type: object
+      additionalProperties: false
+      required: [variants, assignmentKeyPolicy, primaryMetricVersionId, guardrailMetricVersionIds, schedule, qaPolicy]
+      properties:
+        variants: { type: array, minItems: 2, maxItems: 4, items: { $ref: "#/components/schemas/ExperimentVariantDraft" } }
+        assignmentKeyPolicy: { type: string, enum: [installation, identified_user, identified_user_or_installation] }
+        primaryMetricVersionId: { type: string, pattern: "^[a-z0-9_]+@[1-9][0-9]*$" }
+        guardrailMetricVersionIds: { type: array, uniqueItems: true, items: { type: string, pattern: "^[a-z0-9_]+@[1-9][0-9]*$" } }
+        schedule: { $ref: "#/components/schemas/ExperimentSchedule" }
+        mutualExclusionGroupVersionId: { type: string }
+        qaPolicy: { type: object, additionalProperties: false, required: [enabled], properties: { enabled: { type: boolean } } }
+    UpdateExperimentDraftRequest:
+      type: object
+      additionalProperties: false
+      required: [expectedRevision, document]
+      properties: { expectedRevision: { type: integer, minimum: 1 }, document: { $ref: "#/components/schemas/ExperimentDraftDocument" } }
+    PublishExperimentRequest:
+      type: object
+      additionalProperties: false
+      required: [expectedRevision]
+      properties: { expectedRevision: { type: integer, minimum: 1 } }
+    ExperimentValidationIssue:
+      type: object
+      additionalProperties: false
+      required: [code, severity, message, recoveryAction]
+      properties: { code: { type: string }, severity: { type: string, enum: [error, warning, info] }, message: { type: string }, resourceId: { type: string }, recoveryAction: { type: string } }
+    ExperimentValidation:
+      type: object
+      additionalProperties: false
+      required: [valid, issues]
+      properties: { valid: { type: boolean }, issues: { type: array, items: { $ref: "#/components/schemas/ExperimentValidationIssue" } } }
+    ExperimentDraft:
+      type: object
+      additionalProperties: false
+      required: [id, revision, status, document, validation, updatedAt]
+      properties: { id: { type: string }, revision: { type: integer, minimum: 1 }, status: { type: string, enum: [active, published, superseded] }, document: { $ref: "#/components/schemas/ExperimentDraftDocument" }, validation: { $ref: "#/components/schemas/ExperimentValidation" }, updatedAt: { $ref: "#/components/schemas/Timestamp" } }
+    ExperimentVariantVersion:
+      type: object
+      additionalProperties: false
+      required: [id, role, name, paywallId, paywallVersionId, allocationStart, allocationEnd]
+      properties: { id: { type: string }, role: { type: string, enum: [control, treatment] }, name: { type: string }, paywallId: { type: string }, paywallVersionId: { type: string }, allocationStart: { type: integer, minimum: 0, maximum: 9999 }, allocationEnd: { type: integer, minimum: 1, maximum: 10000 } }
+    ExperimentVersion:
+      type: object
+      additionalProperties: false
+      required: [id, experimentId, placementId, versionNumber, sourceRevision, assignmentKeyPolicy, bucketingAlgorithm, allocationVersion, variants, primaryMetricVersionId, guardrailMetricVersionIds, schedule, publishedAt]
+      properties:
+        id: { type: string }
+        experimentId: { type: string }
+        placementId: { type: string }
+        versionNumber: { type: integer, minimum: 1 }
+        sourceRevision: { type: integer, minimum: 1 }
+        assignmentKeyPolicy: { type: string, enum: [installation, identified_user, identified_user_or_installation] }
+        bucketingAlgorithm: { type: string, const: experiment_sha256_length_prefixed_v1 }
+        allocationVersion: { type: string }
+        variants: { type: array, minItems: 2, maxItems: 4, items: { $ref: "#/components/schemas/ExperimentVariantVersion" } }
+        primaryMetricVersionId: { type: string }
+        guardrailMetricVersionIds: { type: array, items: { type: string } }
+        schedule: { $ref: "#/components/schemas/ExperimentSchedule" }
+        mutualExclusionGroupVersionId: { type: string }
+        publishedAt: { $ref: "#/components/schemas/Timestamp" }
+    Experiment:
+      type: object
+      additionalProperties: false
+      required: [id, projectId, environmentId, placementId, name, state, role, permissions, createdAt, updatedAt]
+      properties:
+        id: { type: string }
+        projectId: { type: string }
+        environmentId: { type: string }
+        placementId: { type: string }
+        name: { type: string }
+        hypothesis: { type: string }
+        state: { type: string, enum: [draft, scheduled, running, paused, stopped, completed, archived] }
+        currentDraft: { $ref: "#/components/schemas/ExperimentDraft" }
+        activeVersion: { $ref: "#/components/schemas/ExperimentVersion" }
+        role: { type: string, enum: [owner, admin, member] }
+        permissions: { type: array, items: { type: string, enum: [read, write, publish, lifecycle, qa, export] } }
+        createdAt: { $ref: "#/components/schemas/Timestamp" }
+        updatedAt: { $ref: "#/components/schemas/Timestamp" }
+        archivedAt: { $ref: "#/components/schemas/Timestamp" }
+    ExperimentMetricDefinition:
+      type: object
+      additionalProperties: false
+      required: [id, version, name, numeratorEvent, denominatorEvent, assignmentUnit, authority, availability, eventFilter, attributionWindowSeconds, freshnessSeconds, definition, primaryEligible, guardrailEligible]
+      properties: { id: { type: string }, version: { type: integer }, name: { type: string }, numeratorEvent: { type: string }, denominatorEvent: { type: string }, assignmentUnit: { type: string, enum: [assignment_key] }, authority: { type: string }, availability: { type: string, enum: [available, trusted_source_unavailable] }, eventFilter: { type: object, additionalProperties: false, properties: { payload.reason: { type: string, enum: [provider_unavailable] } } }, attributionWindowSeconds: { type: integer }, freshnessSeconds: { type: integer }, definition: { type: string }, primaryEligible: { type: boolean }, guardrailEligible: { type: boolean } }
+    ExperimentGroup:
+      type: object
+      additionalProperties: false
+      required: [id, name, status, createdAt]
+      properties: { id: { type: string }, name: { type: string }, status: { type: string, enum: [active, archived] }, activeVersionId: { type: string }, createdAt: { $ref: "#/components/schemas/Timestamp" } }
+    ExperimentGroupMemberInput: { type: object, additionalProperties: false, required: [experimentId, allocationBasisPoints], properties: { experimentId: { type: string, description: Stable Experiment root identifier. }, allocationBasisPoints: { type: integer, minimum: 1, maximum: 10000 } } }
+    CreateExperimentGroupRequest: { type: object, additionalProperties: false, required: [name, assignmentKeyPolicy, members, holdoutBasisPoints], properties: { name: { type: string, minLength: 1, maxLength: 120 }, assignmentKeyPolicy: { type: string, enum: [installation, identified_user, identified_user_or_installation] }, members: { type: array, minItems: 1, maxItems: 32, items: { $ref: "#/components/schemas/ExperimentGroupMemberInput" } }, holdoutBasisPoints: { type: integer, minimum: 0, maximum: 9999 } } }
+    CreateExperimentGroupVersionRequest: { type: object, additionalProperties: false, required: [assignmentKeyPolicy, members, holdoutBasisPoints], properties: { assignmentKeyPolicy: { type: string, enum: [installation, identified_user, identified_user_or_installation] }, members: { type: array, minItems: 1, maxItems: 32, items: { $ref: "#/components/schemas/ExperimentGroupMemberInput" } }, holdoutBasisPoints: { type: integer, minimum: 0, maximum: 9999 } } }
+    ExperimentGroupVersion: { type: object, additionalProperties: false, required: [id, groupId, versionNumber, assignmentKeyPolicy, bucketingAlgorithm, members, holdoutBasisPoints, createdAt], properties: { id: { type: string }, groupId: { type: string }, versionNumber: { type: integer, minimum: 1 }, assignmentKeyPolicy: { type: string }, bucketingAlgorithm: { type: string }, members: { type: array, items: { $ref: "#/components/schemas/ExperimentGroupMemberInput" } }, holdoutBasisPoints: { type: integer }, createdAt: { $ref: "#/components/schemas/Timestamp" } } }
+    ExperimentGroupCreated: { type: object, additionalProperties: false, required: [group, version], properties: { group: { $ref: "#/components/schemas/ExperimentGroup" }, version: { $ref: "#/components/schemas/ExperimentGroupVersion" } } }
+    ExperimentInterval: { type: object, additionalProperties: false, required: [lower, upper], properties: { lower: { type: number }, upper: { type: number } } }
+    ExperimentVariantResult:
+      type: object
+      additionalProperties: false
+      required: [variantId, role, allocationBasisPoints, uniqueExposures, uniqueConversions, estimate, wilson95, rawExposureEvents, fallbackPresentations]
+      properties: { variantId: { type: string }, role: { type: string }, allocationBasisPoints: { type: integer }, uniqueExposures: { type: integer }, uniqueConversions: { type: integer }, estimate: { type: number }, wilson95: { $ref: "#/components/schemas/ExperimentInterval" }, rawExposureEvents: { type: integer }, fallbackPresentations: { type: integer } }
+    ExperimentLift:
+      type: object
+      additionalProperties: false
+      required: [treatmentVariantId, absoluteLift, newcombe95]
+      properties: { treatmentVariantId: { type: string }, absoluteLift: { type: number }, newcombe95: { $ref: "#/components/schemas/ExperimentInterval" }, relativeLift: { type: number } }
+    ExperimentSRM:
+      type: object
+      additionalProperties: false
+      required: [status, severity, statistic, degreesOfFreedom, pValue, cells, exclusions, explanation, investigationSteps]
+      properties: { status: { type: string, enum: [insufficient_sample, ok, mismatch] }, severity: { type: string, enum: [none, warning, critical] }, statistic: { type: number }, degreesOfFreedom: { type: integer }, pValue: { type: number }, cells: { type: array, items: { type: object, additionalProperties: false, required: [variantId, observed, expected, observedShare, expectedShare], properties: { variantId: { type: string }, observed: { type: integer }, expected: { type: number }, observedShare: { type: number }, expectedShare: { type: number } } } }, exclusions: { type: array, items: { type: string } }, explanation: { type: string }, investigationSteps: { type: array, items: { type: string } } }
+    ExperimentGuardrailVariantResult:
+      type: object
+      additionalProperties: false
+      required: [variantId, role, denominatorCount, numeratorCount, rate]
+      properties: { variantId: { type: string }, role: { type: string, enum: [control, treatment] }, denominatorCount: { type: integer, minimum: 0 }, numeratorCount: { type: integer, minimum: 0 }, rate: { type: number, minimum: 0, maximum: 1 } }
+    ExperimentGuardrailMaturity:
+      type: object
+      additionalProperties: false
+      required: [status, minimumVariantDenominator, attributionWindowClosed]
+      properties: { status: { type: string, enum: [interim, insufficient_sample, mature] }, minimumVariantDenominator: { type: integer, minimum: 0 }, attributionWindowClosed: { type: boolean } }
+    ExperimentGuardrailResult:
+      type: object
+      additionalProperties: false
+      description: Descriptive selected guardrail result. Warning means a mature Treatment rate is greater than Control; it never triggers an automatic action.
+      required: [metricVersionId, name, status, denominatorCount, numeratorCount, rate, maturity, variants]
+      properties: { metricVersionId: { type: string }, name: { type: string }, status: { type: string, enum: [insufficient_data, stale, healthy, warning] }, denominatorCount: { type: integer, minimum: 0 }, numeratorCount: { type: integer, minimum: 0 }, rate: { type: number, minimum: 0, maximum: 1 }, maturity: { $ref: "#/components/schemas/ExperimentGuardrailMaturity" }, freshness: { $ref: "#/components/schemas/Timestamp" }, variants: { type: array, items: { $ref: "#/components/schemas/ExperimentGuardrailVariantResult" } } }
+    ExperimentResults:
+      type: object
+      additionalProperties: false
+      description: Descriptive Experiment results. A winner, significance badge, and automatic action are intentionally absent.
+      required: [experimentId, experimentVersionId, state, interim, variants, lifts, srm, warnings, guardrails]
+      properties: { experimentId: { type: string }, experimentVersionId: { type: string }, state: { type: string }, interim: { type: boolean }, variants: { type: array, items: { $ref: "#/components/schemas/ExperimentVariantResult" } }, lifts: { type: array, items: { $ref: "#/components/schemas/ExperimentLift" } }, srm: { $ref: "#/components/schemas/ExperimentSRM" }, freshness: { $ref: "#/components/schemas/Timestamp" }, warnings: { type: array, items: { type: string } }, guardrails: { type: array, items: { $ref: "#/components/schemas/ExperimentGuardrailResult" } } }
+    ExperimentHistory: { type: object, additionalProperties: false, required: [id, fromState, toState, actorId, createdAt], properties: { id: { type: string }, fromState: { type: string }, toState: { type: string }, reason: { type: string }, releaseId: { type: string }, actorId: { type: string }, createdAt: { $ref: "#/components/schemas/Timestamp" } } }
+    CreateExperimentQAOverrideRequest: { type: object, additionalProperties: false, required: [experimentVersionId, variantId, identityType, safeLabel, expiresAt], properties: { experimentVersionId: { type: string }, variantId: { type: string }, identityType: { type: string, enum: [installation, identified_user] }, safeLabel: { type: string, minLength: 1, maxLength: 80 }, expiresAt: { $ref: "#/components/schemas/Timestamp" } } }
+    CreateExperimentExportRequest: { type: object, additionalProperties: false, required: [format, includeIdentity], properties: { format: { type: string, enum: [ndjson, csv] }, includeIdentity: { type: boolean } } }
+    ExperimentQAOverride: { type: object, additionalProperties: false, required: [id, experimentVersionId, variantId, identityType, safeLabel, status, createdAt, expiresAt], properties: { id: { type: string }, experimentVersionId: { type: string }, variantId: { type: string }, identityType: { type: string }, safeLabel: { type: string }, selectorDigest: { type: string }, status: { type: string, enum: [active, revoked, expired] }, createdAt: { $ref: "#/components/schemas/Timestamp" }, expiresAt: { $ref: "#/components/schemas/Timestamp" }, revokedAt: { $ref: "#/components/schemas/Timestamp" } } }
+    ExperimentQAOverrideCreated: { type: object, additionalProperties: false, required: [override, token], properties: { override: { $ref: "#/components/schemas/ExperimentQAOverride" }, token: { type: string, readOnly: true, description: Returned once and never persisted in plaintext. } } }
+    ExperimentEnvelope: { type: object, required: [data], properties: { data: { $ref: "#/components/schemas/Experiment" } } }
+    ExperimentDraftEnvelope: { type: object, required: [data], properties: { data: { $ref: "#/components/schemas/ExperimentDraft" } } }
+    ExperimentValidationEnvelope: { type: object, required: [data], properties: { data: { $ref: "#/components/schemas/ExperimentValidation" } } }
+    ExperimentVersionEnvelope: { type: object, required: [data], properties: { data: { $ref: "#/components/schemas/ExperimentVersion" } } }
+    ExperimentResultsEnvelope: { type: object, required: [data], properties: { data: { $ref: "#/components/schemas/ExperimentResults" } } }
+    ExperimentListEnvelope: { type: object, required: [data], properties: { data: { type: object, required: [items], properties: { items: { type: array, items: { $ref: "#/components/schemas/Experiment" } } } } } }
+    ExperimentVersionListEnvelope: { type: object, required: [data], properties: { data: { type: object, required: [items], properties: { items: { type: array, items: { $ref: "#/components/schemas/ExperimentVersion" } } } } } }
+    ExperimentHistoryListEnvelope: { type: object, required: [data], properties: { data: { type: object, required: [items], properties: { items: { type: array, items: { $ref: "#/components/schemas/ExperimentHistory" } } } } } }
+    ExperimentMetricListEnvelope: { type: object, required: [data], properties: { data: { type: object, required: [items], properties: { items: { type: array, items: { $ref: "#/components/schemas/ExperimentMetricDefinition" } } } } } }
+    ExperimentGroupListEnvelope: { type: object, required: [data], properties: { data: { type: object, required: [items], properties: { items: { type: array, items: { $ref: "#/components/schemas/ExperimentGroup" } } } } } }
+    ExperimentGroupCreatedEnvelope: { type: object, required: [data], properties: { data: { $ref: "#/components/schemas/ExperimentGroupCreated" } } }
+    ExperimentGroupVersionEnvelope: { type: object, required: [data], properties: { data: { $ref: "#/components/schemas/ExperimentGroupVersion" } } }
+    ExperimentGroupVersionListEnvelope: { type: object, required: [data], properties: { data: { type: object, required: [items], properties: { items: { type: array, items: { $ref: "#/components/schemas/ExperimentGroupVersion" } } } } } }
+    ExperimentQAOverrideListEnvelope: { type: object, required: [data], properties: { data: { type: object, required: [items], properties: { items: { type: array, items: { $ref: "#/components/schemas/ExperimentQAOverride" } } } } } }
+    ExperimentQAOverrideCreatedEnvelope: { type: object, required: [data], properties: { data: { $ref: "#/components/schemas/ExperimentQAOverrideCreated" } } }
     AnalyticsEventBatch:
       type: object
       additionalProperties: false
       required: [analyticsEventContractVersion, batchId, sentAt, events]
       properties:
-        analyticsEventContractVersion: { type: string, const: "1" }
+        analyticsEventContractVersion: { type: string, enum: ["1", "2"], description: Must exactly equal every enclosed eventSchemaVersion. }
         batchId: { type: string }
         sentAt: { $ref: "#/components/schemas/Timestamp" }
-        events: { type: array, minItems: 1, maxItems: 100, items: { type: object, additionalProperties: true, description: Canonical Analytics Event v1 document. } }
+        events: { type: array, minItems: 1, maxItems: 100, items: { type: object, additionalProperties: true, description: Canonical Analytics Event document matching analyticsEventContractVersion exactly. } }
     AnalyticsEventResult:
       type: object
       additionalProperties: false
@@ -1753,7 +2030,7 @@ components:
       additionalProperties: false
       required: [analyticsEventContractVersion, batchId, receivedAt, results]
       properties:
-        analyticsEventContractVersion: { type: string, const: "1" }
+        analyticsEventContractVersion: { type: string, enum: ["1", "2"] }
         batchId: { type: string }
         receivedAt: { $ref: "#/components/schemas/Timestamp" }
         results: { type: array, items: { $ref: "#/components/schemas/AnalyticsEventResult" } }

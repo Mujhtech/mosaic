@@ -38,16 +38,19 @@ void main() {
     }
   });
 
-  test('Flutter capability request advertises Delivery v2 decisions', () {
+  test('Flutter capability request advertises Delivery v3 Experiments', () {
     final actual = const MosaicConfigurationCapabilityRequest(
       applicationVersion: '1.0.0',
     ).toJson();
     expect(actual['sdkVersion'], mosaicFlutterSdkVersion);
-    expect(
-        actual['supportedConfigurationDeliveryVersions'], <String>['1', '2']);
+    expect(actual['supportedConfigurationDeliveryVersions'],
+        <String>['1', '2', '3']);
     expect(actual['supportedPlacementDecisionContracts'], <String>['1']);
     expect(actual['supportedBucketingAlgorithms'],
         <String>['sha256_length_prefixed_v1']);
+    expect(actual['supportedExperimentAssignmentContracts'], <String>['1']);
+    expect(actual['supportedExperimentSchedulePolicies'],
+        <String>['trusted_server_time_v1']);
   });
 
   test('hosted transport advertises every exact Protocol 0.2 capability', () {

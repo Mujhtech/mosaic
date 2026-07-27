@@ -116,7 +116,7 @@ actor MosaicAnalyticsFilePersistence: MosaicAnalyticsPersistence {
         ?? fileManager.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
     else { throw CocoaError(.fileNoSuchFile) }
     directory = root.appendingPathComponent("MosaicSDK", isDirectory: true)
-      .appendingPathComponent("analytics-v1", isDirectory: true)
+      .appendingPathComponent("analytics-v2", isDirectory: true)
     let normalizedURL = baseURL.absoluteString.trimmingCharacters(
       in: CharacterSet(charactersIn: "/"))
     let digest = SHA256.hash(data: Data("\(normalizedURL)\n\(publicSDKKey)".utf8))
@@ -480,6 +480,8 @@ actor MosaicAnalyticsRuntime {
       .purchaseFailed, .restoreCompleted, .restoreNothingFound, .restoreCancelled, .restoreFailed:
       4
     case .paywallPresented, .paywallDismissed, .purchaseStarted, .restoreStarted: 3
+    case .experimentExposed, .experimentFallbackPresented: 4
+    case .experimentAssigned, .experimentAssignmentFailed: 2
     case .placementPaywallSelected, .placementNoPaywall, .placementFallbackUsed,
       .placementUnavailable, .placementEvaluationFailed, .productSelected:
       2
@@ -543,7 +545,7 @@ actor MosaicAnalyticsRuntimeRegistry {
           .split(separator: " ").first(where: { $0.first?.isNumber == true }).map(String.init),
         applicationVersion: applicationVersion,
         locale: Locale.current.identifier.replacingOccurrences(of: "_", with: "-"),
-        configurationDeliveryVersion: "2", commerceProviderContractVersion: "2"))
+        configurationDeliveryVersion: "3", commerceProviderContractVersion: "2"))
     runtimes[namespace] = runtime
     return runtime
   }

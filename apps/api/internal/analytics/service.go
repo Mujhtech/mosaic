@@ -44,7 +44,7 @@ func (s *Service) Ingest(ctx context.Context, rawKey string, batch Batch) (Inges
 	ctx, span := otel.Tracer("mosaic/analytics").Start(ctx, "events.ingest")
 	defer span.End()
 	now := s.now().UTC()
-	if batch.ContractVersion != ContractVersion || !validID(batch.BatchID) || len(batch.Events) == 0 || len(batch.Events) > MaxBatchEvents {
+	if batch.ContractVersion != ContractVersion && batch.ContractVersion != ContractVersionV2 || !validID(batch.BatchID) || len(batch.Events) == 0 || len(batch.Events) > MaxBatchEvents {
 		return IngestionResponse{}, ErrInvalidBatch
 	}
 	sentAt, ok := ParseTimestamp(batch.SentAt)
@@ -57,9 +57,13 @@ func (s *Service) Ingest(ctx context.Context, rawKey string, batch Batch) (Inges
 	orderedIDs := make([]string, 0, len(batch.Events))
 	for _, raw := range batch.Events {
 		var identity struct {
-			EventID string `json:"eventId"`
+			EventID            string `json:"eventId"`
+			EventSchemaVersion string `json:"eventSchemaVersion"`
 		}
 		if err := json.Unmarshal(raw, &identity); err != nil || !validID(identity.EventID) {
+			return IngestionResponse{}, ErrInvalidBatch
+		}
+		if !batchAcceptsEventVersion(batch.ContractVersion, identity.EventSchemaVersion) {
 			return IngestionResponse{}, ErrInvalidBatch
 		}
 		eventID := identity.EventID
@@ -134,7 +138,12 @@ func (s *Service) Ingest(ctx context.Context, rawKey string, batch Batch) (Inges
 	span.SetAttributes(attribute.Int("analytics.batch.events", len(batch.Events)), attribute.Int("analytics.accepted", counts["accepted"]), attribute.Int("analytics.duplicate", counts["duplicate"]), attribute.Int("analytics.rejected", counts["permanently_rejected"]))
 	s.ingested.Add(ctx, int64(counts["accepted"]+counts["duplicate"]), metric.WithAttributes(attribute.String("outcome", "durable")))
 	s.rejected.Add(ctx, int64(counts["permanently_rejected"]), metric.WithAttributes(attribute.String("outcome", "permanent")))
-	return IngestionResponse{ContractVersion: ContractVersion, BatchID: batch.BatchID, ReceivedAt: now.Format("2006-01-02T15:04:05.000Z"), Results: ordered}, nil
+	return IngestionResponse{ContractVersion: batch.ContractVersion, BatchID: batch.BatchID, ReceivedAt: now.Format("2006-01-02T15:04:05.000Z"), Results: ordered}, nil
+}
+
+func batchAcceptsEventVersion(contractVersion, eventSchemaVersion string) bool {
+	return contractVersion == ContractVersion && eventSchemaVersion == EventSchemaVersion ||
+		contractVersion == ContractVersionV2 && eventSchemaVersion == EventSchemaVersionV2
 }
 
 func (s *Service) Settings(ctx context.Context, actor Actor, projectID, environmentID string) (Settings, error) {
@@ -199,6 +208,20 @@ func (s *Service) CreateEventExport(ctx context.Context, actor Actor, projectID,
 		return JobResponse{}, ErrInvalidBatch
 	}
 	job, err := s.repository.CreateExport(ctx, actor, projectID, environmentID, "events", from.UTC().Format(time.RFC3339Nano)+"/"+to.UTC().Format(time.RFC3339Nano), format, s.now().UTC(), s.now().UTC().Add(ExportRetention))
+	return job.Response(), err
+}
+func (s *Service) CreateExperimentExport(ctx context.Context, actor Actor, projectID, environmentID, experimentID, format string, includeIdentity bool) (JobResponse, error) {
+	if actor.ID == "" {
+		return JobResponse{}, ErrUnauthenticated
+	}
+	if format != "ndjson" && format != "csv" || experimentID == "" {
+		return JobResponse{}, ErrInvalidBatch
+	}
+	reference := experimentID + "|false"
+	if includeIdentity {
+		reference = experimentID + "|true"
+	}
+	job, err := s.repository.CreateExport(ctx, actor, projectID, environmentID, "experiment", reference, format, s.now().UTC(), s.now().UTC().Add(ExportRetention))
 	return job.Response(), err
 }
 func (s *Service) CreateDeletion(ctx context.Context, actor Actor, projectID, kind, identity, requestDigest string) (JobResponse, error) {

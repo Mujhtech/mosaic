@@ -49,6 +49,31 @@ data class MosaicAnalyticsAttribution(
     val planId: String? = null,
     val providerId: String? = null,
     val providerProductMappingId: String? = null,
+    val experimentId: String? = null,
+    val experimentVersionId: String? = null,
+    val experimentVariantId: String? = null,
+    val experimentAllocationVersion: String? = null,
+)
+
+data class MosaicExperimentAttribution(
+    val experimentId: String,
+    val experimentVersionId: String,
+    val experimentVariantId: String,
+    val experimentAllocationVersion: String,
+)
+
+enum class MosaicExperimentPresentationKind { VARIANT, FALLBACK }
+
+data class MosaicExperimentPresentationContext(
+    val attribution: MosaicExperimentAttribution,
+    val assignmentKeyType: String,
+    val bucketingAlgorithm: String,
+    val qaOverride: Boolean,
+    val kind: MosaicExperimentPresentationKind,
+    val fallbackReason: String? = null,
+    val presentedPaywallId: String,
+    val presentedPaywallVersionId: String,
+    internal val assignmentSubjectDigest: String? = null,
 )
 
 data class MosaicAnalyticsPresentationContext(
@@ -56,6 +81,8 @@ data class MosaicAnalyticsPresentationContext(
     val paywallPresentationId: String,
     val context: MosaicAnalyticsContext,
     val attribution: MosaicAnalyticsAttribution,
+    val experiment: MosaicExperimentPresentationContext? = null,
+    internal val acknowledgeExperimentPresentation: (() -> Unit)? = null,
 )
 
 sealed interface MosaicAnalyticsPayload {
@@ -91,6 +118,10 @@ sealed interface MosaicAnalyticsPayload {
     data class RestoreFailed(val providerId: String, val durationMs: Long, val diagnosticCode: String, val retryable: Boolean) : MosaicAnalyticsPayload { override val eventName = "restore_failed" }
     /** Decode-only representation for the trusted provider fixture; the public runtime refuses to enqueue it. */
     data class ProviderCompleted(val confirmationSource: String, val activeEntitlementKeys: List<String>, val linkedClientEventId: String?) : MosaicAnalyticsPayload { override val eventName = "purchase_completed_provider" }
+    data class ExperimentAssigned(val assignmentKeyType: String, val bucketingAlgorithm: String, val bucket: Int, val source: String = "deterministic") : MosaicAnalyticsPayload { override val eventName = "experiment_assigned" }
+    data class ExperimentExposed(val assignmentKeyType: String, val bucketingAlgorithm: String, val productReadiness: String = "ready", val providerCapability: String = "accepted", val qaOverride: Boolean = false) : MosaicAnalyticsPayload { override val eventName = "experiment_exposed" }
+    data class ExperimentFallbackPresented(val reason: String, val presentedPaywallId: String, val presentedPaywallVersionId: String, val diagnosticCode: String) : MosaicAnalyticsPayload { override val eventName = "experiment_fallback_presented" }
+    data class ExperimentAssignmentFailed(val diagnosticCode: String, val retryable: Boolean) : MosaicAnalyticsPayload { override val eventName = "experiment_assignment_failed" }
 }
 
 data class MosaicAnalyticsEvent(
@@ -140,3 +171,15 @@ internal fun mosaicAnalyticsTimestampMillis(value: String): Long =
 
 internal fun mosaicAnalyticsDuration(startedAt: Long, endedAt: Long): Long =
     (endedAt - startedAt).coerceIn(0, 86_400_000)
+
+internal fun MosaicAnalyticsAttribution.hasExperimentTuple(): Boolean =
+    listOf(experimentId, experimentVersionId, experimentVariantId, experimentAllocationVersion).all { it != null }
+
+internal fun MosaicAnalyticsPayload.isExperimentV2(): Boolean = when (this) {
+    is MosaicAnalyticsPayload.ExperimentAssigned,
+    is MosaicAnalyticsPayload.ExperimentExposed,
+    is MosaicAnalyticsPayload.ExperimentFallbackPresented,
+    is MosaicAnalyticsPayload.ExperimentAssignmentFailed,
+    -> true
+    else -> false
+}

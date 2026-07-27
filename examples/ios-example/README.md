@@ -2,7 +2,7 @@
 
 This native SwiftUI application has separate Local Studio and Hosted modes.
 Local Studio renders Protocol 0.2 revisions immediately without an account.
-Hosted mode prefers Configuration Delivery v2 (with Delivery v1 compatibility)
+Hosted mode prefers Configuration Delivery v3 (with Delivery v2/v1 compatibility)
 using an Environment-scoped public SDK key, evaluates a Placement locally,
 caches the last valid release, and falls
 back safely when delivery is unavailable. Local Studio remains deterministic.
@@ -32,6 +32,13 @@ the app:
 - rejects stale or cross-Environment hosted releases
 - shows the matched Rule or fallback in its safe status line
 - demonstrates identify and user-identity reset while retaining installation assignment
+- evaluates scheduled A/B assignments and mutual-exclusion groups with stable
+  install/user bucketing, then falls back to the normal Placement when a selected
+  variant cannot load its exact Products or provider capabilities
+- exposes safe experiment diagnostics from the hosted Analytics menu without
+  exposing identity material or QA selector tokens
+- refreshes and reauthorizes a selection when the app returns to the foreground
+  so an emergency-stop release suppresses stale exposure
 - terminates intentional `no_paywall` without an error surface
 
 The footer shows the latest normalized paywall interaction or terminal result.
@@ -72,9 +79,15 @@ Assets use the immutable HTTPS Asset origin configured by the API. Simulator
 or device testing against the local Compose edge therefore requires trusting
 its development certificate; production Asset URLs must use a publicly trusted
 HTTPS origin. Stop the API and restart the app to verify the same Rule from the
-last-known-valid cache without a presentation-time request. Use Identify and
-Reset to inspect assignment-policy changes. Clearing app data rotates the
+last-known-valid cache without a presentation-time request. Use Identify,
+Reset, and **Analytics → Experiment diagnostics** to inspect assignment-policy
+changes and safe replay counts. Clearing app data rotates the
 app-install identity and demonstrates the bundled Delivery v1 fallback.
+
+To exercise a QA override in a development or staging Environment, pass its
+short-lived selector token through the host-owned `MosaicDecisionContext`
+`qaOverrideTokens` field. The SDK hashes it before comparison and never persists
+or reports the token. Production releases reject QA overrides atomically.
 
 To exercise StoreKit Configuration instead, omit the RevenueCat key and add:
 

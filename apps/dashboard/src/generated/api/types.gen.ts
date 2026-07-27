@@ -4,8 +4,387 @@ export type ClientOptions = {
     baseUrl: `${string}://${string}` | (string & {});
 };
 
+export type CreateExperimentRequest = {
+    placementId: string;
+    name: string;
+    hypothesis?: string;
+};
+
+export type ExperimentSchedule = {
+    startsAt: Timestamp;
+    endsAt?: Timestamp;
+};
+
+export type ExperimentVariantDraft = {
+    id?: string;
+    role: 'control' | 'treatment';
+    name: string;
+    paywallId: string;
+    paywallVersionId: string;
+    allocationBasisPoints: number;
+};
+
+export type ExperimentDraftDocument = {
+    variants: Array<ExperimentVariantDraft>;
+    assignmentKeyPolicy: 'installation' | 'identified_user' | 'identified_user_or_installation';
+    primaryMetricVersionId: string;
+    guardrailMetricVersionIds: Array<string>;
+    schedule: ExperimentSchedule;
+    mutualExclusionGroupVersionId?: string;
+    qaPolicy: {
+        enabled: boolean;
+    };
+};
+
+export type UpdateExperimentDraftRequest = {
+    expectedRevision: number;
+    document: ExperimentDraftDocument;
+};
+
+export type PublishExperimentRequest = {
+    expectedRevision: number;
+};
+
+export type ExperimentValidationIssue = {
+    code: string;
+    severity: 'error' | 'warning' | 'info';
+    message: string;
+    resourceId?: string;
+    recoveryAction: string;
+};
+
+export type ExperimentValidation = {
+    valid: boolean;
+    issues: Array<ExperimentValidationIssue>;
+};
+
+export type ExperimentDraft = {
+    id: string;
+    revision: number;
+    status: 'active' | 'published' | 'superseded';
+    document: ExperimentDraftDocument;
+    validation: ExperimentValidation;
+    updatedAt: Timestamp;
+};
+
+export type ExperimentVariantVersion = {
+    id: string;
+    role: 'control' | 'treatment';
+    name: string;
+    paywallId: string;
+    paywallVersionId: string;
+    allocationStart: number;
+    allocationEnd: number;
+};
+
+export type ExperimentVersion = {
+    id: string;
+    experimentId: string;
+    placementId: string;
+    versionNumber: number;
+    sourceRevision: number;
+    assignmentKeyPolicy: 'installation' | 'identified_user' | 'identified_user_or_installation';
+    bucketingAlgorithm: 'experiment_sha256_length_prefixed_v1';
+    allocationVersion: string;
+    variants: Array<ExperimentVariantVersion>;
+    primaryMetricVersionId: string;
+    guardrailMetricVersionIds: Array<string>;
+    schedule: ExperimentSchedule;
+    mutualExclusionGroupVersionId?: string;
+    publishedAt: Timestamp;
+};
+
+export type Experiment = {
+    id: string;
+    projectId: string;
+    environmentId: string;
+    placementId: string;
+    name: string;
+    hypothesis?: string;
+    state: 'draft' | 'scheduled' | 'running' | 'paused' | 'stopped' | 'completed' | 'archived';
+    currentDraft?: ExperimentDraft;
+    activeVersion?: ExperimentVersion;
+    role: 'owner' | 'admin' | 'member';
+    permissions: Array<'read' | 'write' | 'publish' | 'lifecycle' | 'qa' | 'export'>;
+    createdAt: Timestamp;
+    updatedAt: Timestamp;
+    archivedAt?: Timestamp;
+};
+
+export type ExperimentMetricDefinition = {
+    id: string;
+    version: number;
+    name: string;
+    numeratorEvent: string;
+    denominatorEvent: string;
+    assignmentUnit: 'assignment_key';
+    authority: string;
+    availability: 'available' | 'trusted_source_unavailable';
+    eventFilter: {
+        'payload.reason'?: 'provider_unavailable';
+    };
+    attributionWindowSeconds: number;
+    freshnessSeconds: number;
+    definition: string;
+    primaryEligible: boolean;
+    guardrailEligible: boolean;
+};
+
+export type ExperimentGroup = {
+    id: string;
+    name: string;
+    status: 'active' | 'archived';
+    activeVersionId?: string;
+    createdAt: Timestamp;
+};
+
+export type ExperimentGroupMemberInput = {
+    /**
+     * Stable Experiment root identifier.
+     */
+    experimentId: string;
+    allocationBasisPoints: number;
+};
+
+export type CreateExperimentGroupRequest = {
+    name: string;
+    assignmentKeyPolicy: 'installation' | 'identified_user' | 'identified_user_or_installation';
+    members: Array<ExperimentGroupMemberInput>;
+    holdoutBasisPoints: number;
+};
+
+export type CreateExperimentGroupVersionRequest = {
+    assignmentKeyPolicy: 'installation' | 'identified_user' | 'identified_user_or_installation';
+    members: Array<ExperimentGroupMemberInput>;
+    holdoutBasisPoints: number;
+};
+
+export type ExperimentGroupVersion = {
+    id: string;
+    groupId: string;
+    versionNumber: number;
+    assignmentKeyPolicy: string;
+    bucketingAlgorithm: string;
+    members: Array<ExperimentGroupMemberInput>;
+    holdoutBasisPoints: number;
+    createdAt: Timestamp;
+};
+
+export type ExperimentGroupCreated = {
+    group: ExperimentGroup;
+    version: ExperimentGroupVersion;
+};
+
+export type ExperimentInterval = {
+    lower: number;
+    upper: number;
+};
+
+export type ExperimentVariantResult = {
+    variantId: string;
+    role: string;
+    allocationBasisPoints: number;
+    uniqueExposures: number;
+    uniqueConversions: number;
+    estimate: number;
+    wilson95: ExperimentInterval;
+    rawExposureEvents: number;
+    fallbackPresentations: number;
+};
+
+export type ExperimentLift = {
+    treatmentVariantId: string;
+    absoluteLift: number;
+    newcombe95: ExperimentInterval;
+    relativeLift?: number;
+};
+
+export type ExperimentSrm = {
+    status: 'insufficient_sample' | 'ok' | 'mismatch';
+    severity: 'none' | 'warning' | 'critical';
+    statistic: number;
+    degreesOfFreedom: number;
+    pValue: number;
+    cells: Array<{
+        variantId: string;
+        observed: number;
+        expected: number;
+        observedShare: number;
+        expectedShare: number;
+    }>;
+    exclusions: Array<string>;
+    explanation: string;
+    investigationSteps: Array<string>;
+};
+
+export type ExperimentGuardrailVariantResult = {
+    variantId: string;
+    role: 'control' | 'treatment';
+    denominatorCount: number;
+    numeratorCount: number;
+    rate: number;
+};
+
+export type ExperimentGuardrailMaturity = {
+    status: 'interim' | 'insufficient_sample' | 'mature';
+    minimumVariantDenominator: number;
+    attributionWindowClosed: boolean;
+};
+
+/**
+ * Descriptive selected guardrail result. Warning means a mature Treatment rate is greater than Control; it never triggers an automatic action.
+ */
+export type ExperimentGuardrailResult = {
+    metricVersionId: string;
+    name: string;
+    status: 'insufficient_data' | 'stale' | 'healthy' | 'warning';
+    denominatorCount: number;
+    numeratorCount: number;
+    rate: number;
+    maturity: ExperimentGuardrailMaturity;
+    freshness?: Timestamp;
+    variants: Array<ExperimentGuardrailVariantResult>;
+};
+
+/**
+ * Descriptive Experiment results. A winner, significance badge, and automatic action are intentionally absent.
+ */
+export type ExperimentResults = {
+    experimentId: string;
+    experimentVersionId: string;
+    state: string;
+    interim: boolean;
+    variants: Array<ExperimentVariantResult>;
+    lifts: Array<ExperimentLift>;
+    srm: ExperimentSrm;
+    freshness?: Timestamp;
+    warnings: Array<string>;
+    guardrails: Array<ExperimentGuardrailResult>;
+};
+
+export type ExperimentHistory = {
+    id: string;
+    fromState: string;
+    toState: string;
+    reason?: string;
+    releaseId?: string;
+    actorId: string;
+    createdAt: Timestamp;
+};
+
+export type CreateExperimentQaOverrideRequest = {
+    experimentVersionId: string;
+    variantId: string;
+    identityType: 'installation' | 'identified_user';
+    safeLabel: string;
+    expiresAt: Timestamp;
+};
+
+export type CreateExperimentExportRequest = {
+    format: 'ndjson' | 'csv';
+    includeIdentity: boolean;
+};
+
+export type ExperimentQaOverride = {
+    id: string;
+    experimentVersionId: string;
+    variantId: string;
+    identityType: string;
+    safeLabel: string;
+    selectorDigest?: string;
+    status: 'active' | 'revoked' | 'expired';
+    createdAt: Timestamp;
+    expiresAt: Timestamp;
+    revokedAt?: Timestamp;
+};
+
+export type ExperimentQaOverrideCreated = {
+    override: ExperimentQaOverride;
+    /**
+     * Returned once and never persisted in plaintext.
+     */
+    readonly token: string;
+};
+
+export type ExperimentEnvelope = {
+    data: Experiment;
+};
+
+export type ExperimentDraftEnvelope = {
+    data: ExperimentDraft;
+};
+
+export type ExperimentValidationEnvelope = {
+    data: ExperimentValidation;
+};
+
+export type ExperimentVersionEnvelope = {
+    data: ExperimentVersion;
+};
+
+export type ExperimentResultsEnvelope = {
+    data: ExperimentResults;
+};
+
+export type ExperimentListEnvelope = {
+    data: {
+        items: Array<Experiment>;
+    };
+};
+
+export type ExperimentVersionListEnvelope = {
+    data: {
+        items: Array<ExperimentVersion>;
+    };
+};
+
+export type ExperimentHistoryListEnvelope = {
+    data: {
+        items: Array<ExperimentHistory>;
+    };
+};
+
+export type ExperimentMetricListEnvelope = {
+    data: {
+        items: Array<ExperimentMetricDefinition>;
+    };
+};
+
+export type ExperimentGroupListEnvelope = {
+    data: {
+        items: Array<ExperimentGroup>;
+    };
+};
+
+export type ExperimentGroupCreatedEnvelope = {
+    data: ExperimentGroupCreated;
+};
+
+export type ExperimentGroupVersionEnvelope = {
+    data: ExperimentGroupVersion;
+};
+
+export type ExperimentGroupVersionListEnvelope = {
+    data: {
+        items: Array<ExperimentGroupVersion>;
+    };
+};
+
+export type ExperimentQaOverrideListEnvelope = {
+    data: {
+        items: Array<ExperimentQaOverride>;
+    };
+};
+
+export type ExperimentQaOverrideCreatedEnvelope = {
+    data: ExperimentQaOverrideCreated;
+};
+
 export type AnalyticsEventBatch = {
-    analyticsEventContractVersion: '1';
+    /**
+     * Must exactly equal every enclosed eventSchemaVersion.
+     */
+    analyticsEventContractVersion: '1' | '2';
     batchId: string;
     sentAt: Timestamp;
     events: Array<{
@@ -20,7 +399,7 @@ export type AnalyticsEventResult = {
 };
 
 export type AnalyticsIngestionResult = {
-    analyticsEventContractVersion: '1';
+    analyticsEventContractVersion: '1' | '2';
     batchId: string;
     receivedAt: Timestamp;
     results: Array<AnalyticsEventResult>;
@@ -1551,6 +1930,14 @@ export type AuditEventList = {
     };
 };
 
+export type ExperimentQaOverrideCreatedWritable = {
+    override: ExperimentQaOverride;
+};
+
+export type ExperimentQaOverrideCreatedEnvelopeWritable = {
+    data: ExperimentQaOverrideCreatedWritable;
+};
+
 export type CreateQaOverrideRequestWritable = {
     safeLabel: string;
     selector: string;
@@ -1639,6 +2026,8 @@ export type VersionId = string;
 export type PlacementId = string;
 
 export type RuleSetId = string;
+
+export type ExperimentId = string;
 
 export type AssetId = string;
 
@@ -4879,6 +5268,22 @@ export type GetSdkConfigurationData = {
          */
         'Mosaic-Decision-Features'?: string;
         'Mosaic-Bucketing-Algorithms'?: 'sha256_length_prefixed_v1';
+        /**
+         * Required when Delivery v3 is requested. Comma-separated unique Experiment Assignment contract versions.
+         */
+        'Mosaic-Experiment-Assignment-Versions'?: string;
+        /**
+         * Required when Delivery v3 is requested. Comma-separated unique exact Experiment Assignment v1 feature identifiers.
+         */
+        'Mosaic-Experiment-Features'?: string;
+        /**
+         * Required when Delivery v3 is requested. Comma-separated unique canonical Variant and Group bucketing algorithms.
+         */
+        'Mosaic-Experiment-Bucketing-Algorithms'?: string;
+        /**
+         * Required when Delivery v3 is requested. Comma-separated unique trusted-time schedule policies.
+         */
+        'Mosaic-Experiment-Schedule-Policies'?: string;
         'Mosaic-App-Version'?: string;
         'If-None-Match'?: string;
     };
@@ -4910,7 +5315,7 @@ export type GetSdkConfigurationError = GetSdkConfigurationErrors[keyof GetSdkCon
 
 export type GetSdkConfigurationResponses = {
     /**
-     * Highest mutually supported immutable Configuration Delivery v2 or safe v1 projection. A v1 candidate is withheld when an advanced Placement lacks an explicit Paywall default.
+     * Highest mutually supported representation actually available for the current immutable Release. A v3-capable SDK falls back to an available v2 or safe v1 representation when that Release predates v3. Delivery v3 requires complete Experiment capability headers. A v1 candidate is withheld when an advanced Placement lacks an explicit Paywall default.
      */
     200: {
         [key: string]: unknown;
@@ -5571,6 +5976,549 @@ export type RevokePlacementQaOverrideResponses = {
 };
 
 export type RevokePlacementQaOverrideResponse = RevokePlacementQaOverrideResponses[keyof RevokePlacementQaOverrideResponses];
+
+export type ListExperimentsData = {
+    body?: never;
+    path: {
+        projectId: string;
+        environmentId: string;
+    };
+    query?: never;
+    url: '/v1/projects/{projectId}/environments/{environmentId}/experiments';
+};
+
+export type ListExperimentsResponses = {
+    /**
+     * Environment-scoped Experiments.
+     */
+    200: ExperimentListEnvelope;
+};
+
+export type ListExperimentsResponse = ListExperimentsResponses[keyof ListExperimentsResponses];
+
+export type CreateExperimentData = {
+    body: CreateExperimentRequest;
+    headers: {
+        'Idempotency-Key': string;
+    };
+    path: {
+        projectId: string;
+        environmentId: string;
+    };
+    query?: never;
+    url: '/v1/projects/{projectId}/environments/{environmentId}/experiments';
+};
+
+export type CreateExperimentErrors = {
+    /**
+     * Stable machine-readable failure.
+     */
+    409: ErrorEnvelope;
+    /**
+     * Stable machine-readable failure.
+     */
+    422: ErrorEnvelope;
+};
+
+export type CreateExperimentError = CreateExperimentErrors[keyof CreateExperimentErrors];
+
+export type CreateExperimentResponses = {
+    /**
+     * Experiment and first Draft revision.
+     */
+    201: ExperimentEnvelope;
+};
+
+export type CreateExperimentResponse = CreateExperimentResponses[keyof CreateExperimentResponses];
+
+export type ListExperimentMetricDefinitionsData = {
+    body?: never;
+    path: {
+        projectId: string;
+        environmentId: string;
+    };
+    query?: never;
+    url: '/v1/projects/{projectId}/environments/{environmentId}/experiments/metrics';
+};
+
+export type ListExperimentMetricDefinitionsResponses = {
+    /**
+     * Immutable Experiment metric definitions.
+     */
+    200: ExperimentMetricListEnvelope;
+};
+
+export type ListExperimentMetricDefinitionsResponse = ListExperimentMetricDefinitionsResponses[keyof ListExperimentMetricDefinitionsResponses];
+
+export type ListExperimentGroupsData = {
+    body?: never;
+    path: {
+        projectId: string;
+        environmentId: string;
+    };
+    query?: never;
+    url: '/v1/projects/{projectId}/environments/{environmentId}/experiments/groups';
+};
+
+export type ListExperimentGroupsResponses = {
+    /**
+     * Mutual-exclusion groups.
+     */
+    200: ExperimentGroupListEnvelope;
+};
+
+export type ListExperimentGroupsResponse = ListExperimentGroupsResponses[keyof ListExperimentGroupsResponses];
+
+export type CreateExperimentGroupVersionData = {
+    body: CreateExperimentGroupRequest;
+    path: {
+        projectId: string;
+        environmentId: string;
+    };
+    query?: never;
+    url: '/v1/projects/{projectId}/environments/{environmentId}/experiments/groups';
+};
+
+export type CreateExperimentGroupVersionErrors = {
+    /**
+     * Stable machine-readable failure.
+     */
+    404: ErrorEnvelope;
+    /**
+     * Stable machine-readable failure.
+     */
+    422: ErrorEnvelope;
+};
+
+export type CreateExperimentGroupVersionError = CreateExperimentGroupVersionErrors[keyof CreateExperimentGroupVersionErrors];
+
+export type CreateExperimentGroupVersionResponses = {
+    /**
+     * Group and immutable Version.
+     */
+    201: ExperimentGroupCreatedEnvelope;
+};
+
+export type CreateExperimentGroupVersionResponse = CreateExperimentGroupVersionResponses[keyof CreateExperimentGroupVersionResponses];
+
+export type ListExperimentMutualExclusionGroupVersionsData = {
+    body?: never;
+    path: {
+        projectId: string;
+        environmentId: string;
+        groupId: string;
+    };
+    query?: never;
+    url: '/v1/projects/{projectId}/environments/{environmentId}/experiments/groups/{groupId}/versions';
+};
+
+export type ListExperimentMutualExclusionGroupVersionsErrors = {
+    /**
+     * Stable machine-readable failure.
+     */
+    404: ErrorEnvelope;
+};
+
+export type ListExperimentMutualExclusionGroupVersionsError = ListExperimentMutualExclusionGroupVersionsErrors[keyof ListExperimentMutualExclusionGroupVersionsErrors];
+
+export type ListExperimentMutualExclusionGroupVersionsResponses = {
+    /**
+     * Immutable group Version history.
+     */
+    200: ExperimentGroupVersionListEnvelope;
+};
+
+export type ListExperimentMutualExclusionGroupVersionsResponse = ListExperimentMutualExclusionGroupVersionsResponses[keyof ListExperimentMutualExclusionGroupVersionsResponses];
+
+export type CreateExperimentMutualExclusionGroupVersionData = {
+    body: CreateExperimentGroupVersionRequest;
+    path: {
+        projectId: string;
+        environmentId: string;
+        groupId: string;
+    };
+    query?: never;
+    url: '/v1/projects/{projectId}/environments/{environmentId}/experiments/groups/{groupId}/versions';
+};
+
+export type CreateExperimentMutualExclusionGroupVersionErrors = {
+    /**
+     * Stable machine-readable failure.
+     */
+    404: ErrorEnvelope;
+    /**
+     * Stable machine-readable failure.
+     */
+    422: ErrorEnvelope;
+};
+
+export type CreateExperimentMutualExclusionGroupVersionError = CreateExperimentMutualExclusionGroupVersionErrors[keyof CreateExperimentMutualExclusionGroupVersionErrors];
+
+export type CreateExperimentMutualExclusionGroupVersionResponses = {
+    /**
+     * New immutable group Version.
+     */
+    201: ExperimentGroupVersionEnvelope;
+};
+
+export type CreateExperimentMutualExclusionGroupVersionResponse = CreateExperimentMutualExclusionGroupVersionResponses[keyof CreateExperimentMutualExclusionGroupVersionResponses];
+
+export type GetExperimentData = {
+    body?: never;
+    path: {
+        projectId: string;
+        environmentId: string;
+        experimentId: string;
+    };
+    query?: never;
+    url: '/v1/projects/{projectId}/environments/{environmentId}/experiments/{experimentId}';
+};
+
+export type GetExperimentErrors = {
+    /**
+     * Stable machine-readable failure.
+     */
+    404: ErrorEnvelope;
+};
+
+export type GetExperimentError = GetExperimentErrors[keyof GetExperimentErrors];
+
+export type GetExperimentResponses = {
+    /**
+     * Experiment root
+     */
+    200: ExperimentEnvelope;
+};
+
+export type GetExperimentResponse = GetExperimentResponses[keyof GetExperimentResponses];
+
+export type UpdateExperimentDraftData = {
+    body: UpdateExperimentDraftRequest;
+    headers: {
+        'If-Match': string;
+        'Idempotency-Key': string;
+    };
+    path: {
+        projectId: string;
+        environmentId: string;
+        experimentId: string;
+    };
+    query?: never;
+    url: '/v1/projects/{projectId}/environments/{environmentId}/experiments/{experimentId}/draft';
+};
+
+export type UpdateExperimentDraftErrors = {
+    /**
+     * Stale Draft revision with currentRevision and ETag recovery details.
+     */
+    409: ErrorEnvelope;
+    /**
+     * Stable machine-readable failure.
+     */
+    422: ErrorEnvelope;
+    /**
+     * Stable machine-readable failure.
+     */
+    428: ErrorEnvelope;
+};
+
+export type UpdateExperimentDraftError = UpdateExperimentDraftErrors[keyof UpdateExperimentDraftErrors];
+
+export type UpdateExperimentDraftResponses = {
+    /**
+     * New immutable Draft revision.
+     */
+    200: ExperimentDraftEnvelope;
+};
+
+export type UpdateExperimentDraftResponse = UpdateExperimentDraftResponses[keyof UpdateExperimentDraftResponses];
+
+export type ValidateExperimentDraftData = {
+    body?: never;
+    path: {
+        projectId: string;
+        environmentId: string;
+        experimentId: string;
+    };
+    query?: never;
+    url: '/v1/projects/{projectId}/environments/{environmentId}/experiments/{experimentId}/validate';
+};
+
+export type ValidateExperimentDraftResponses = {
+    /**
+     * Scientific
+     */
+    200: ExperimentValidationEnvelope;
+};
+
+export type ValidateExperimentDraftResponse = ValidateExperimentDraftResponses[keyof ValidateExperimentDraftResponses];
+
+export type PublishExperimentData = {
+    body: PublishExperimentRequest;
+    path: {
+        projectId: string;
+        environmentId: string;
+        experimentId: string;
+    };
+    query?: never;
+    url: '/v1/projects/{projectId}/environments/{environmentId}/experiments/{experimentId}/publish';
+};
+
+export type PublishExperimentErrors = {
+    /**
+     * Stable machine-readable failure.
+     */
+    409: ErrorEnvelope;
+    /**
+     * Stable machine-readable failure.
+     */
+    422: ErrorEnvelope;
+};
+
+export type PublishExperimentError = PublishExperimentErrors[keyof PublishExperimentErrors];
+
+export type PublishExperimentResponses = {
+    /**
+     * Immutable Experiment Version and atomic Configuration Delivery v3 release.
+     */
+    201: ExperimentVersionEnvelope;
+};
+
+export type PublishExperimentResponse = PublishExperimentResponses[keyof PublishExperimentResponses];
+
+export type ListExperimentVersionsData = {
+    body?: never;
+    path: {
+        projectId: string;
+        environmentId: string;
+        experimentId: string;
+    };
+    query?: never;
+    url: '/v1/projects/{projectId}/environments/{environmentId}/experiments/{experimentId}/versions';
+};
+
+export type ListExperimentVersionsResponses = {
+    /**
+     * Immutable Experiment Version history.
+     */
+    200: ExperimentVersionListEnvelope;
+};
+
+export type ListExperimentVersionsResponse = ListExperimentVersionsResponses[keyof ListExperimentVersionsResponses];
+
+export type ListExperimentHistoryData = {
+    body?: never;
+    path: {
+        projectId: string;
+        environmentId: string;
+        experimentId: string;
+    };
+    query?: never;
+    url: '/v1/projects/{projectId}/environments/{environmentId}/experiments/{experimentId}/history';
+};
+
+export type ListExperimentHistoryResponses = {
+    /**
+     * Audited lifecycle and publication history.
+     */
+    200: ExperimentHistoryListEnvelope;
+};
+
+export type ListExperimentHistoryResponse = ListExperimentHistoryResponses[keyof ListExperimentHistoryResponses];
+
+export type GetExperimentResultsData = {
+    body?: never;
+    path: {
+        projectId: string;
+        environmentId: string;
+        experimentId: string;
+    };
+    query?: never;
+    url: '/v1/projects/{projectId}/environments/{environmentId}/experiments/{experimentId}/results';
+};
+
+export type GetExperimentResultsResponses = {
+    /**
+     * Unique-unit conversion
+     */
+    200: ExperimentResultsEnvelope;
+};
+
+export type GetExperimentResultsResponse = GetExperimentResultsResponses[keyof GetExperimentResultsResponses];
+
+export type GetExperimentSampleRatioMismatchData = {
+    body?: never;
+    path: {
+        projectId: string;
+        environmentId: string;
+        experimentId: string;
+    };
+    query?: never;
+    url: '/v1/projects/{projectId}/environments/{environmentId}/experiments/{experimentId}/srm';
+};
+
+export type GetExperimentSampleRatioMismatchResponses = {
+    /**
+     * Descriptive Pearson chi-square SRM diagnostic.
+     */
+    200: {
+        data: ExperimentSrm;
+    };
+};
+
+export type GetExperimentSampleRatioMismatchResponse = GetExperimentSampleRatioMismatchResponses[keyof GetExperimentSampleRatioMismatchResponses];
+
+export type TransitionExperimentLifecycleData = {
+    body?: {
+        reason?: string;
+    };
+    path: {
+        projectId: string;
+        environmentId: string;
+        experimentId: string;
+        lifecycleAction: 'schedule' | 'start' | 'pause' | 'resume' | 'stop' | 'complete' | 'archive' | 'emergency-stop';
+    };
+    query?: never;
+    url: '/v1/projects/{projectId}/environments/{environmentId}/experiments/{experimentId}/{lifecycleAction}';
+};
+
+export type TransitionExperimentLifecycleErrors = {
+    /**
+     * Stable machine-readable failure.
+     */
+    409: ErrorEnvelope;
+    /**
+     * Stable machine-readable failure.
+     */
+    422: ErrorEnvelope;
+};
+
+export type TransitionExperimentLifecycleError = TransitionExperimentLifecycleErrors[keyof TransitionExperimentLifecycleErrors];
+
+export type TransitionExperimentLifecycleResponses = {
+    /**
+     * Updated Experiment root.
+     */
+    200: ExperimentEnvelope;
+};
+
+export type TransitionExperimentLifecycleResponse = TransitionExperimentLifecycleResponses[keyof TransitionExperimentLifecycleResponses];
+
+export type ListExperimentQaOverridesData = {
+    body?: never;
+    path: {
+        projectId: string;
+        environmentId: string;
+        experimentId: string;
+    };
+    query?: never;
+    url: '/v1/projects/{projectId}/environments/{environmentId}/experiments/{experimentId}/qa-overrides';
+};
+
+export type ListExperimentQaOverridesResponses = {
+    /**
+     * Safe QA override metadata without tokens.
+     */
+    200: ExperimentQaOverrideListEnvelope;
+};
+
+export type ListExperimentQaOverridesResponse = ListExperimentQaOverridesResponses[keyof ListExperimentQaOverridesResponses];
+
+export type CreateExperimentQaOverrideData = {
+    body: CreateExperimentQaOverrideRequest;
+    path: {
+        projectId: string;
+        environmentId: string;
+        experimentId: string;
+    };
+    query?: never;
+    url: '/v1/projects/{projectId}/environments/{environmentId}/experiments/{experimentId}/qa-overrides';
+};
+
+export type CreateExperimentQaOverrideErrors = {
+    /**
+     * Stable machine-readable failure.
+     */
+    422: ErrorEnvelope;
+};
+
+export type CreateExperimentQaOverrideError = CreateExperimentQaOverrideErrors[keyof CreateExperimentQaOverrideErrors];
+
+export type CreateExperimentQaOverrideResponses = {
+    /**
+     * Non-production override; raw token returned once and never delivered as creator identity.
+     */
+    201: ExperimentQaOverrideCreatedEnvelope;
+};
+
+export type CreateExperimentQaOverrideResponse = CreateExperimentQaOverrideResponses[keyof CreateExperimentQaOverrideResponses];
+
+export type RevokeExperimentQaOverrideData = {
+    body?: never;
+    path: {
+        projectId: string;
+        environmentId: string;
+        experimentId: string;
+        overrideId: string;
+    };
+    query?: never;
+    url: '/v1/projects/{projectId}/environments/{environmentId}/experiments/{experimentId}/qa-overrides/{overrideId}';
+};
+
+export type RevokeExperimentQaOverrideErrors = {
+    /**
+     * Stable machine-readable failure.
+     */
+    404: ErrorEnvelope;
+};
+
+export type RevokeExperimentQaOverrideError = RevokeExperimentQaOverrideErrors[keyof RevokeExperimentQaOverrideErrors];
+
+export type RevokeExperimentQaOverrideResponses = {
+    /**
+     * Override revoked.
+     */
+    204: void;
+};
+
+export type RevokeExperimentQaOverrideResponse = RevokeExperimentQaOverrideResponses[keyof RevokeExperimentQaOverrideResponses];
+
+export type CreateExperimentRawExportData = {
+    body: CreateExperimentExportRequest;
+    path: {
+        projectId: string;
+        environmentId: string;
+        experimentId: string;
+    };
+    query?: never;
+    url: '/v1/projects/{projectId}/environments/{environmentId}/experiments/{experimentId}/exports';
+};
+
+export type CreateExperimentRawExportErrors = {
+    /**
+     * Stable machine-readable failure.
+     */
+    403: ErrorEnvelope;
+    /**
+     * Stable machine-readable failure.
+     */
+    404: ErrorEnvelope;
+    /**
+     * Stable machine-readable failure.
+     */
+    422: ErrorEnvelope;
+};
+
+export type CreateExperimentRawExportError = CreateExperimentRawExportErrors[keyof CreateExperimentRawExportErrors];
+
+export type CreateExperimentRawExportResponses = {
+    /**
+     * Asynchronous analytics job.
+     */
+    202: AnalyticsJobEnvelope;
+};
+
+export type CreateExperimentRawExportResponse = CreateExperimentRawExportResponses[keyof CreateExperimentRawExportResponses];
 
 export type IngestAnalyticsEventBatchData = {
     body: AnalyticsEventBatch;

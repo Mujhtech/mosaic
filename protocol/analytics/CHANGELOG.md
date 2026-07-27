@@ -1,5 +1,15 @@
 # Analytics Event Contract changelog
 
+## Version 2 - 2026-07-26
+
+Status: release candidate
+
+- Added `experiment_assigned`, `experiment_exposed`, `experiment_fallback_presented`, and `experiment_assignment_failed` with closed typed payloads.
+- Added an all-or-none immutable Experiment ID/Version/Variant/allocation tuple to Experiment, Product-selection, and purchase lifecycle events.
+- Froze successful native presentation as the exposure boundary and kept diagnostic assignment outside result denominators.
+- Kept assigned and actually presented fallback identities distinct and prohibited QA presentation from statistical exposure.
+- Preserved Analytics Event `1` bytes and semantics; ingestion accepts exact v1 and v2 batches side by side.
+
 ## Version 1 - 2026-07-26
 
 Status: release candidate

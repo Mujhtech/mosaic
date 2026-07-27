@@ -1,0 +1,132 @@
+{
+  "contractVersion": "1",
+  "bucketSpace": 10000,
+  "variantRanges": [
+    {
+      "variantId": "variant_control",
+      "start": 0,
+      "end": 5000
+    },
+    {
+      "variantId": "variant_treatment_a",
+      "start": 5000,
+      "end": 10000
+    }
+  ],
+  "assignmentVectors": [
+    {
+      "name": "identified-control",
+      "values": [
+        "project_alpha",
+        "environment_production",
+        "experiment_checkout",
+        "experiment_version_checkout_1",
+        "identified_user",
+        "customer_42"
+      ],
+      "canonicalUtf8Hex": "6d6f736169632d6578706572696d656e742d61737369676e6d656e740a310a31333a70726f6a6563745f616c7068610a32323a656e7669726f6e6d656e745f70726f64756374696f6e0a31393a6578706572696d656e745f636865636b6f75740a32393a6578706572696d656e745f76657273696f6e5f636865636b6f75745f310a31353a6964656e7469666965645f757365720a31313a637573746f6d65725f34320a",
+      "sha256": "75755acba375520e23e5aa9f515eb83bd77a76af3adcc629ee8539fbd07f3fff",
+      "firstEightBytes": "75755acba375520e",
+      "bucket": 1118,
+      "variantId": "variant_control"
+    },
+    {
+      "name": "installation-treatment",
+      "values": [
+        "project_alpha",
+        "environment_production",
+        "experiment_checkout",
+        "experiment_version_checkout_1",
+        "installation",
+        "installation_001"
+      ],
+      "canonicalUtf8Hex": "6d6f736169632d6578706572696d656e742d61737369676e6d656e740a310a31333a70726f6a6563745f616c7068610a32323a656e7669726f6e6d656e745f70726f64756374696f6e0a31393a6578706572696d656e745f636865636b6f75740a32393a6578706572696d656e745f76657273696f6e5f636865636b6f75745f310a31323a696e7374616c6c6174696f6e0a31363a696e7374616c6c6174696f6e5f3030310a",
+      "sha256": "f9b9d3bb0b2385726892e1344fd266f85417e9ecd9983a8037e0d255a561b3e6",
+      "firstEightBytes": "f9b9d3bb0b238572",
+      "bucket": 9810,
+      "variantId": "variant_treatment_a"
+    }
+  ],
+  "groupVectors": [
+    {
+      "name": "group-excluded",
+      "values": [
+        "project_alpha",
+        "environment_production",
+        "experiment_group_checkout",
+        "experiment_group_version_checkout_1",
+        "identified_user",
+        "customer_42"
+      ],
+      "canonicalUtf8Hex": "6d6f736169632d6578706572696d656e742d67726f75700a310a31333a70726f6a6563745f616c7068610a32323a656e7669726f6e6d656e745f70726f64756374696f6e0a32353a6578706572696d656e745f67726f75705f636865636b6f75740a33353a6578706572696d656e745f67726f75705f76657273696f6e5f636865636b6f75745f310a31353a6964656e7469666965645f757365720a31313a637573746f6d65725f34320a",
+      "sha256": "b07739df0a97aab5e92d32b069861d7dc6a7a27d02566f6994673ba816b65686",
+      "firstEightBytes": "b07739df0a97aab5",
+      "bucket": 6837,
+      "memberRanges": [
+        {
+          "experimentId": "experiment_checkout",
+          "start": 0,
+          "end": 5000
+        },
+        {
+          "experimentId": "experiment_upsell",
+          "start": 5000,
+          "end": 10000
+        }
+      ],
+      "selectedExperimentId": "experiment_upsell"
+    }
+  ],
+  "eligibilityCases": [
+    {
+      "name": "qa-override",
+      "lifecycle": "scheduled",
+      "timeState": "before_start",
+      "qaOverride": "valid",
+      "expected": "variant_treatment_a",
+      "excludedFromResults": true
+    },
+    {
+      "name": "scheduled-start-inclusive",
+      "lifecycle": "scheduled",
+      "timeState": "at_start",
+      "qaOverride": "absent",
+      "expected": "assign"
+    },
+    {
+      "name": "scheduled-end-exclusive",
+      "lifecycle": "running",
+      "timeState": "at_end",
+      "qaOverride": "absent",
+      "expected": "normal_placement"
+    },
+    {
+      "name": "paused",
+      "lifecycle": "paused",
+      "timeState": "inside",
+      "qaOverride": "absent",
+      "expected": "normal_placement"
+    },
+    {
+      "name": "stopped",
+      "lifecycle": "stopped",
+      "timeState": "inside",
+      "qaOverride": "absent",
+      "expected": "normal_placement"
+    },
+    {
+      "name": "fallback-presentation",
+      "lifecycle": "running",
+      "timeState": "inside",
+      "qaOverride": "absent",
+      "variantReadiness": "failed",
+      "expected": "normal_placement",
+      "analyticsEvent": "experiment_fallback_presented"
+    },
+    {
+      "name": "unsupported-contract",
+      "supportedContracts": [],
+      "expected": "reject_candidate_keep_lkg"
+    }
+  ]
+}

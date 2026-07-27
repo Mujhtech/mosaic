@@ -202,6 +202,7 @@ final class MosaicPaywall extends StatefulWidget {
     this.onDiagnostic,
     this.analyticsRuntime,
     this.analyticsContext,
+    this.onPresented,
     this.clock = _mosaicSystemClock,
     this.externalUrlOpener = mosaicExternalUrlOpener,
     super.key,
@@ -217,6 +218,7 @@ final class MosaicPaywall extends StatefulWidget {
   final MosaicDiagnosticCallback? onDiagnostic;
   final MosaicAnalyticsRuntime? analyticsRuntime;
   final MosaicAnalyticsPresentationContext? analyticsContext;
+  final VoidCallback? onPresented;
   final MosaicClock clock;
   final MosaicExternalUrlOpener externalUrlOpener;
 
@@ -268,6 +270,9 @@ final class _MosaicPaywallState extends State<MosaicPaywall> {
       attribution: widget.analyticsContext?.attribution,
       payload: const {},
     );
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) widget.onPresented?.call();
+    });
   }
 
   void _analytics(

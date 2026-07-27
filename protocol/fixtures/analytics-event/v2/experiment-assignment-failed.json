@@ -1,0 +1,33 @@
+{
+  "eventId": "event_experiment_assignment_failed_001",
+  "eventSchemaVersion": "2",
+  "eventName": "experiment_assignment_failed",
+  "occurredAt": "2026-07-26T12:03:00.000Z",
+  "queuedAt": "2026-07-26T12:03:00.005Z",
+  "authority": "client_observed",
+  "identity": {
+    "installationId": "installation_001",
+    "generation": 1
+  },
+  "sessionId": "session_001",
+  "context": {
+    "platform": "android",
+    "sdkFamily": "flutter",
+    "sdkVersion": "0.7.0",
+    "configurationDeliveryVersion": "3"
+  },
+  "correlation": {
+    "placementRequestId": "placement_request_003"
+  },
+  "attribution": {
+    "placementId": "placement_checkout",
+    "experimentId": "experiment_checkout",
+    "experimentVersionId": "experiment_version_checkout_1",
+    "experimentVariantId": "variant_treatment_a",
+    "experimentAllocationVersion": "allocation_checkout_1"
+  },
+  "payload": {
+    "diagnosticCode": "experiment.time_unreliable",
+    "retryable": true
+  }
+}

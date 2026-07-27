@@ -21,6 +21,7 @@ var eventNames = map[string]struct{}{
 	"purchase_started": {}, "purchase_completed_client": {}, "purchase_completed_provider": {}, "purchase_pending": {},
 	"purchase_deferred": {}, "purchase_cancelled": {}, "purchase_failed": {},
 	"restore_started": {}, "restore_completed": {}, "restore_nothing_found": {}, "restore_cancelled": {}, "restore_failed": {},
+	"experiment_assigned": {}, "experiment_exposed": {}, "experiment_fallback_presented": {}, "experiment_assignment_failed": {},
 }
 
 type payloadRule struct{ required, optional map[string]string }
@@ -34,33 +35,37 @@ func fields(values ...string) map[string]string {
 }
 
 var payloadRules = map[string]payloadRule{
-	"placement_requested":         {fields("decisionContractVersion", "string"), nil},
-	"placement_paywall_selected":  {fields("finalOutcome", "string", "decisionContractVersion", "string"), fields("assignmentKeyType", "string", "bucketingAlgorithm", "string", "rolloutBucket", "number")},
-	"placement_no_paywall":        {fields("finalOutcome", "string", "decisionContractVersion", "string"), fields("assignmentKeyType", "string", "bucketingAlgorithm", "string", "rolloutBucket", "number")},
-	"placement_fallback_used":     {fields("trigger", "string", "fallbackKey", "string", "finalOutcome", "string"), fields("diagnosticCode", "string")},
-	"placement_unavailable":       {fields("reason", "string"), fields("diagnosticCode", "string")},
-	"placement_evaluation_failed": {fields("diagnosticCode", "string", "retryable", "boolean"), nil},
-	"paywall_presented":           {nil, nil},
-	"paywall_dismissed":           {fields("reason", "string"), nil},
-	"paywall_action_selected":     {fields("action", "string"), fields("componentId", "string")},
-	"paywall_render_failed":       {fields("diagnosticCode", "string", "retryable", "boolean"), nil},
-	"product_load_started":        {fields("requestedProductCount", "number"), nil},
-	"product_load_completed":      {fields("availableProductCount", "number", "unavailableProductCount", "number", "durationMs", "number"), nil},
-	"product_load_failed":         {fields("requestedProductCount", "number", "durationMs", "number", "diagnosticCode", "string", "retryable", "boolean"), nil},
-	"product_unavailable":         {fields("reason", "string"), fields("diagnosticCode", "string")},
-	"product_selected":            {fields("source", "string"), nil},
-	"purchase_started":            {nil, nil},
-	"purchase_completed_client":   {fields("outcome", "string", "durationMs", "number", "observedEntitlementKeys", "string_array"), fields("providerResultCode", "string")},
-	"purchase_completed_provider": {fields("confirmationSource", "string", "activeEntitlementKeys", "string_array"), fields("linkedClientEventId", "string")},
-	"purchase_pending":            {fields("durationMs", "number"), fields("providerResultCode", "string")},
-	"purchase_deferred":           {fields("durationMs", "number"), fields("providerResultCode", "string")},
-	"purchase_cancelled":          {fields("durationMs", "number"), fields("providerResultCode", "string")},
-	"purchase_failed":             {fields("durationMs", "number", "diagnosticCode", "string", "retryable", "boolean"), nil},
-	"restore_started":             {fields("providerId", "string"), nil},
-	"restore_completed":           {fields("providerId", "string", "durationMs", "number", "restoredProductIds", "string_array", "observedEntitlementKeys", "string_array"), nil},
-	"restore_nothing_found":       {fields("providerId", "string", "durationMs", "number"), fields("providerResultCode", "string")},
-	"restore_cancelled":           {fields("providerId", "string", "durationMs", "number"), fields("providerResultCode", "string")},
-	"restore_failed":              {fields("providerId", "string", "durationMs", "number", "diagnosticCode", "string", "retryable", "boolean"), nil},
+	"placement_requested":           {fields("decisionContractVersion", "string"), nil},
+	"placement_paywall_selected":    {fields("finalOutcome", "string", "decisionContractVersion", "string"), fields("assignmentKeyType", "string", "bucketingAlgorithm", "string", "rolloutBucket", "number")},
+	"placement_no_paywall":          {fields("finalOutcome", "string", "decisionContractVersion", "string"), fields("assignmentKeyType", "string", "bucketingAlgorithm", "string", "rolloutBucket", "number")},
+	"placement_fallback_used":       {fields("trigger", "string", "fallbackKey", "string", "finalOutcome", "string"), fields("diagnosticCode", "string")},
+	"placement_unavailable":         {fields("reason", "string"), fields("diagnosticCode", "string")},
+	"placement_evaluation_failed":   {fields("diagnosticCode", "string", "retryable", "boolean"), nil},
+	"paywall_presented":             {nil, nil},
+	"paywall_dismissed":             {fields("reason", "string"), nil},
+	"paywall_action_selected":       {fields("action", "string"), fields("componentId", "string")},
+	"paywall_render_failed":         {fields("diagnosticCode", "string", "retryable", "boolean"), nil},
+	"product_load_started":          {fields("requestedProductCount", "number"), nil},
+	"product_load_completed":        {fields("availableProductCount", "number", "unavailableProductCount", "number", "durationMs", "number"), nil},
+	"product_load_failed":           {fields("requestedProductCount", "number", "durationMs", "number", "diagnosticCode", "string", "retryable", "boolean"), nil},
+	"product_unavailable":           {fields("reason", "string"), fields("diagnosticCode", "string")},
+	"product_selected":              {fields("source", "string"), nil},
+	"purchase_started":              {nil, nil},
+	"purchase_completed_client":     {fields("outcome", "string", "durationMs", "number", "observedEntitlementKeys", "string_array"), fields("providerResultCode", "string")},
+	"purchase_completed_provider":   {fields("confirmationSource", "string", "activeEntitlementKeys", "string_array"), fields("linkedClientEventId", "string")},
+	"purchase_pending":              {fields("durationMs", "number"), fields("providerResultCode", "string")},
+	"purchase_deferred":             {fields("durationMs", "number"), fields("providerResultCode", "string")},
+	"purchase_cancelled":            {fields("durationMs", "number"), fields("providerResultCode", "string")},
+	"purchase_failed":               {fields("durationMs", "number", "diagnosticCode", "string", "retryable", "boolean"), nil},
+	"restore_started":               {fields("providerId", "string"), nil},
+	"restore_completed":             {fields("providerId", "string", "durationMs", "number", "restoredProductIds", "string_array", "observedEntitlementKeys", "string_array"), nil},
+	"restore_nothing_found":         {fields("providerId", "string", "durationMs", "number"), fields("providerResultCode", "string")},
+	"restore_cancelled":             {fields("providerId", "string", "durationMs", "number"), fields("providerResultCode", "string")},
+	"restore_failed":                {fields("providerId", "string", "durationMs", "number", "diagnosticCode", "string", "retryable", "boolean"), nil},
+	"experiment_assigned":           {fields("assignmentKeyType", "string", "bucketingAlgorithm", "string", "bucket", "number", "source", "string"), nil},
+	"experiment_exposed":            {fields("assignmentKeyType", "string", "bucketingAlgorithm", "string", "productReadiness", "string", "providerCapability", "string"), fields("qaOverride", "boolean")},
+	"experiment_fallback_presented": {fields("reason", "string", "presentedPaywallId", "string", "presentedPaywallVersionId", "string"), fields("diagnosticCode", "string")},
+	"experiment_assignment_failed":  {fields("diagnosticCode", "string", "retryable", "boolean"), nil},
 }
 
 func ParseTimestamp(value string) (time.Time, bool) {
@@ -86,11 +91,31 @@ func ValidateEvent(event Event, sentAt, now time.Time) (Candidate, string) {
 	if event.Identity.Generation < 0 {
 		return Candidate{}, "event_schema_invalid"
 	}
-	if event.EventSchemaVersion != EventSchemaVersion {
+	if event.EventSchemaVersion != EventSchemaVersion && event.EventSchemaVersion != EventSchemaVersionV2 {
 		return Candidate{}, "unsupported_event_schema"
 	}
 	if _, ok := eventNames[event.EventName]; !ok {
 		return Candidate{}, "unsupported_event_name"
+	}
+	if strings.HasPrefix(event.EventName, "experiment_") && event.EventSchemaVersion != EventSchemaVersionV2 {
+		return Candidate{}, "unsupported_event_name"
+	}
+	attribution := event.Attribution
+	experimentFields := []string{attribution.ExperimentID, attribution.ExperimentVersionID, attribution.ExperimentVariantID, attribution.ExperimentAllocationVersion}
+	present := 0
+	for _, value := range experimentFields {
+		if value != "" {
+			present++
+		}
+	}
+	if present != 0 && present != len(experimentFields) {
+		return Candidate{}, "experiment_attribution_incomplete"
+	}
+	if present != 0 && event.EventSchemaVersion != EventSchemaVersionV2 {
+		return Candidate{}, "unsupported_event_schema"
+	}
+	if strings.HasPrefix(event.EventName, "experiment_") && present != len(experimentFields) {
+		return Candidate{}, "experiment_attribution_incomplete"
 	}
 	if event.Authority != "client_observed" || event.EventName == "purchase_completed_provider" {
 		return Candidate{}, "authority_not_allowed"
@@ -162,6 +187,13 @@ func require(values ...string) bool {
 func validateRequiredContext(event Event) string {
 	a, c := event.Attribution, event.Correlation
 	switch {
+	case strings.HasPrefix(event.EventName, "experiment_"):
+		if !require(c.PlacementRequestID, a.PlacementID, a.ExperimentID, a.ExperimentVersionID, a.ExperimentVariantID, a.ExperimentAllocationVersion) {
+			return "event_schema_invalid"
+		}
+		if (event.EventName == "experiment_exposed" || event.EventName == "experiment_fallback_presented") && !require(c.PaywallPresentationID) {
+			return "event_schema_invalid"
+		}
 	case strings.HasPrefix(event.EventName, "placement_"):
 		if !require(c.PlacementRequestID, a.PlacementID) {
 			return "event_schema_invalid"

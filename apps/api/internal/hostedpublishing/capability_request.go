@@ -25,6 +25,18 @@ var supportedProtocolCapabilities = map[string]struct{}{
 	"visibility.static": {}, "condition.switchVisibility": {},
 }
 
+var supportedExperimentFeatures = map[string]struct{}{
+	"allocation.ranges": {}, "assignment.installation": {}, "assignment.identified_user": {},
+	"assignment.identified_user_or_installation": {}, "fallback.normal_placement": {},
+	"group.mutual_exclusion": {}, "override.qa": {}, "schedule.trusted_server_time": {},
+}
+
+var supportedExperimentBucketingAlgorithms = map[string]struct{}{
+	"experiment_sha256_length_prefixed_v1": {}, "experiment_group_sha256_length_prefixed_v1": {},
+}
+
+var supportedExperimentSchedulePolicies = map[string]struct{}{"trusted_server_time_v1": {}}
+
 type SDKCapability struct {
 	Name    string `json:"name"`
 	Version string `json:"version"`
@@ -44,9 +56,18 @@ type SDKCapabilityRequest struct {
 	SupportedPlacementDecisionContracts    []string                    `json:"supportedPlacementDecisionContracts"`
 	SupportedDecisionFeatures              []string                    `json:"supportedDecisionFeatures"`
 	SupportedBucketingAlgorithms           []string                    `json:"supportedBucketingAlgorithms"`
+	SupportedExperimentAssignmentContracts []string                    `json:"supportedExperimentAssignmentContracts,omitempty"`
+	SupportedExperimentFeatures            []string                    `json:"supportedExperimentFeatures,omitempty"`
+	SupportedExperimentBucketingAlgorithms []string                    `json:"supportedExperimentBucketingAlgorithms,omitempty"`
+	SupportedExperimentSchedulePolicies    []string                    `json:"supportedExperimentSchedulePolicies,omitempty"`
 }
 
 func PreferredDeliveryVersion(values []string) string {
+	for _, value := range values {
+		if value == "3" {
+			return "3"
+		}
+	}
 	for _, value := range values {
 		if value == "2" {
 			return "2"
@@ -64,6 +85,61 @@ func ValidateSDKCapabilityPayload(request SDKCapabilityRequest, payload json.Raw
 	if version == "1" {
 		release := Release{DeliveryContractVersion: "1", Payload: payload}
 		return ValidateSDKCapabilityRequest(request, release)
+	}
+	if version == "3" {
+		if !containsExactUnique(request.SupportedConfigurationDeliveryVersions, "3", 8) ||
+			!containsExactUnique(request.SupportedExperimentAssignmentContracts, "1", 8) ||
+			!containsKnownUnique(request.SupportedExperimentFeatures, supportedExperimentFeatures, MaxSDKCapabilityCount) ||
+			!containsKnownUnique(request.SupportedExperimentBucketingAlgorithms, supportedExperimentBucketingAlgorithms, 8) ||
+			!containsKnownUnique(request.SupportedExperimentSchedulePolicies, supportedExperimentSchedulePolicies, 8) {
+			return ErrUnsupportedCapability
+		}
+		var envelope struct {
+			ConfigurationDeliveryVersion string `json:"configurationDeliveryVersion"`
+			Release                      struct {
+				Compatibility struct {
+					PaywallProtocols []deliveryProtocolCompatibility `json:"paywallProtocols"`
+					Experiment       []struct {
+						Version             string   `json:"version"`
+						RequiredFeatures    []string `json:"requiredFeatures"`
+						BucketingAlgorithms []string `json:"bucketingAlgorithms"`
+						SchedulePolicies    []string `json:"schedulePolicies"`
+					} `json:"experimentAssignmentContracts"`
+				} `json:"compatibility"`
+				ExperimentAssignments []json.RawMessage `json:"experimentAssignments"`
+			} `json:"release"`
+		}
+		if err := json.Unmarshal(payload, &envelope); err != nil || envelope.ConfigurationDeliveryVersion != "3" {
+			return ErrUnsupportedCapability
+		}
+		features := stringSet(request.SupportedExperimentFeatures)
+		algorithms := stringSet(request.SupportedExperimentBucketingAlgorithms)
+		policies := stringSet(request.SupportedExperimentSchedulePolicies)
+		for _, contract := range envelope.Release.Compatibility.Experiment {
+			if contract.Version != "1" {
+				return ErrUnsupportedCapability
+			}
+			for _, v := range contract.RequiredFeatures {
+				if _, ok := features[v]; !ok {
+					return ErrUnsupportedCapability
+				}
+			}
+			for _, v := range contract.BucketingAlgorithms {
+				if _, ok := algorithms[v]; !ok {
+					return ErrUnsupportedCapability
+				}
+			}
+			for _, v := range contract.SchedulePolicies {
+				if _, ok := policies[v]; !ok {
+					return ErrUnsupportedCapability
+				}
+			}
+		}
+		clone := request
+		clone.SupportedConfigurationDeliveryVersions = []string{"1"}
+		v1 := deliveryEnvelope{ConfigurationDeliveryVersion: "1", Release: deliveryRelease{Compatibility: deliveryCompatibility{PaywallProtocols: envelope.Release.Compatibility.PaywallProtocols, Acceptance: "atomic"}}}
+		v1Payload, _ := json.Marshal(v1)
+		return ValidateSDKCapabilityRequest(clone, Release{DeliveryContractVersion: "1", Payload: v1Payload})
 	}
 	if version != "2" || !containsExactUnique(request.SupportedConfigurationDeliveryVersions, "2", 8) || !containsExactUnique(request.SupportedPlacementDecisionContracts, "1", 8) {
 		return ErrUnsupportedCapability
@@ -109,6 +185,33 @@ func ValidateSDKCapabilityPayload(request SDKCapabilityRequest, payload json.Raw
 	v1 := deliveryEnvelope{ConfigurationDeliveryVersion: "1", Release: deliveryRelease{Compatibility: deliveryCompatibility{PaywallProtocols: envelope.Release.Compatibility.PaywallProtocols, Acceptance: "atomic"}}}
 	v1Payload, _ := json.Marshal(v1)
 	return ValidateSDKCapabilityRequest(clone, Release{DeliveryContractVersion: "1", Payload: v1Payload})
+}
+
+func containsKnownUnique(values []string, supported map[string]struct{}, limit int) bool {
+	if len(values) == 0 || len(values) > limit {
+		return false
+	}
+	seen := make(map[string]struct{}, len(values))
+	for _, value := range values {
+		if _, ok := supported[value]; !ok {
+			return false
+		}
+		if _, duplicate := seen[value]; duplicate {
+			return false
+		}
+		seen[value] = struct{}{}
+	}
+	return true
+}
+
+func stringSet(values []string) map[string]struct{} {
+	result := make(map[string]struct{}, len(values))
+	for _, value := range values {
+		if value != "" {
+			result[value] = struct{}{}
+		}
+	}
+	return result
 }
 
 // ValidateSDKCapabilityRequest enforces the closed Delivery v1 request contract

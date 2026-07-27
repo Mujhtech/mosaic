@@ -22,15 +22,19 @@ import (
 )
 
 const (
-	maxDocumentRequestBytes = 4 << 20
-	maxAssetRequestBytes    = 11 << 20
-	idempotencyHeader       = "Idempotency-Key"
-	ifMatchHeader           = "If-Match"
-	deliveryContentType     = "application/vnd.mosaic.configuration+json;version=1"
-	commerceContentType     = "application/vnd.mosaic.commerce-configuration+json;version=1"
-	commerceContentTypeV2   = "application/vnd.mosaic.commerce-configuration+json;version=2"
-	capabilitiesHeader      = "Mosaic-Paywall-Capabilities"
-	maxCapabilityHeaderSize = 16 << 10
+	maxDocumentRequestBytes             = 4 << 20
+	maxAssetRequestBytes                = 11 << 20
+	idempotencyHeader                   = "Idempotency-Key"
+	ifMatchHeader                       = "If-Match"
+	deliveryContentType                 = "application/vnd.mosaic.configuration+json;version=1"
+	commerceContentType                 = "application/vnd.mosaic.commerce-configuration+json;version=1"
+	commerceContentTypeV2               = "application/vnd.mosaic.commerce-configuration+json;version=2"
+	capabilitiesHeader                  = "Mosaic-Paywall-Capabilities"
+	experimentAssignmentVersionsHeader  = "Mosaic-Experiment-Assignment-Versions"
+	experimentFeaturesHeader            = "Mosaic-Experiment-Features"
+	experimentBucketingAlgorithmsHeader = "Mosaic-Experiment-Bucketing-Algorithms"
+	experimentSchedulePoliciesHeader    = "Mosaic-Experiment-Schedule-Policies"
+	maxCapabilityHeaderSize             = 16 << 10
 )
 
 type DeliveryRateLimiter interface {
@@ -581,7 +585,7 @@ func (h *Handler) rollback(w http.ResponseWriter, r *http.Request) {
 	response.Created(w, r, result)
 }
 
-func capabilityRequest(r *http.Request) (hostedpublishing.SDKCapabilityRequest, error) {
+func capabilityRequestFromHeaders(r *http.Request) (hostedpublishing.SDKCapabilityRequest, error) {
 	capabilityHeader := r.Header.Get(capabilitiesHeader)
 	if len(capabilityHeader) == 0 || len(capabilityHeader) > maxCapabilityHeaderSize {
 		return hostedpublishing.SDKCapabilityRequest{}, hostedpublishing.ErrUnsupportedCapability
@@ -601,10 +605,19 @@ func capabilityRequest(r *http.Request) (hostedpublishing.SDKCapabilityRequest, 
 		SupportedPaywallProtocols: []hostedpublishing.SDKPaywallProtocolSupport{{
 			Version: strings.TrimSpace(r.Header.Get("Mosaic-Paywall-Protocol-Versions")), Capabilities: capabilities,
 		}},
-		ApplicationVersion:                  strings.TrimSpace(r.Header.Get("Mosaic-App-Version")),
-		SupportedPlacementDecisionContracts: headerValues(r.Header.Get("Mosaic-Placement-Decision-Versions")),
-		SupportedDecisionFeatures:           headerValues(r.Header.Get("Mosaic-Decision-Features")),
-		SupportedBucketingAlgorithms:        headerValues(r.Header.Get("Mosaic-Bucketing-Algorithms")),
+		ApplicationVersion:                     strings.TrimSpace(r.Header.Get("Mosaic-App-Version")),
+		SupportedPlacementDecisionContracts:    headerValues(r.Header.Get("Mosaic-Placement-Decision-Versions")),
+		SupportedDecisionFeatures:              headerValues(r.Header.Get("Mosaic-Decision-Features")),
+		SupportedBucketingAlgorithms:           headerValues(r.Header.Get("Mosaic-Bucketing-Algorithms")),
+		SupportedExperimentAssignmentContracts: headerValues(r.Header.Get(experimentAssignmentVersionsHeader)),
+		SupportedExperimentFeatures:            headerValues(r.Header.Get(experimentFeaturesHeader)),
+		SupportedExperimentBucketingAlgorithms: headerValues(r.Header.Get(experimentBucketingAlgorithmsHeader)),
+		SupportedExperimentSchedulePolicies:    headerValues(r.Header.Get(experimentSchedulePoliciesHeader)),
+	}
+	for _, name := range []string{experimentAssignmentVersionsHeader, experimentFeaturesHeader, experimentBucketingAlgorithmsHeader, experimentSchedulePoliciesHeader} {
+		if len(r.Header.Get(name)) > maxCapabilityHeaderSize {
+			return hostedpublishing.SDKCapabilityRequest{}, hostedpublishing.ErrUnsupportedCapability
+		}
 	}
 	return request, nil
 }
@@ -664,21 +677,21 @@ func (h *Handler) sdkConfiguration(w http.ResponseWriter, r *http.Request) {
 	if !h.allowDelivery(w, r, "ip:"+requestIP(r)) {
 		return
 	}
-	capabilities, err := capabilityRequest(r)
+	capabilities, err := capabilityRequestFromHeaders(r)
 	if err != nil {
 		writeError(w, r, err)
 		return
 	}
-	deliveryVersion := hostedpublishing.PreferredDeliveryVersion(capabilities.SupportedConfigurationDeliveryVersions)
-	if deliveryVersion == "" {
+	if hostedpublishing.PreferredDeliveryVersion(capabilities.SupportedConfigurationDeliveryVersions) == "" {
 		writeError(w, r, hostedpublishing.ErrUnsupportedCapability)
 		return
 	}
-	configuration, err := h.service.AuthenticateSDKKeyVersion(r.Context(), bearer(r), deliveryVersion)
+	configuration, err := h.service.AuthenticateSDKKeyVersions(r.Context(), bearer(r), capabilities.SupportedConfigurationDeliveryVersions)
 	if err != nil {
 		writeError(w, r, err)
 		return
 	}
+	deliveryVersion := configuration.DeliveryContractVersion
 	if err := hostedpublishing.ValidateSDKCapabilityPayload(capabilities, configuration.Payload, deliveryVersion); err != nil {
 		writeError(w, r, err)
 		return
@@ -699,7 +712,7 @@ func (h *Handler) sdkConfiguration(w http.ResponseWriter, r *http.Request) {
 	etag := representationETag(payload)
 	w.Header().Set("Cache-Control", "private, max-age=60, stale-if-error=86400")
 	w.Header().Set("ETag", etag)
-	w.Header().Set("Vary", "Authorization, Accept-Encoding, Mosaic-SDK-Platform, Mosaic-SDK-Version, Mosaic-Configuration-Versions, Mosaic-Paywall-Protocol-Versions, Mosaic-Paywall-Capabilities, Mosaic-Placement-Decision-Versions, Mosaic-Decision-Features, Mosaic-Bucketing-Algorithms, Mosaic-App-Version")
+	w.Header().Set("Vary", "Authorization, Accept-Encoding, Mosaic-SDK-Platform, Mosaic-SDK-Version, Mosaic-Configuration-Versions, Mosaic-Paywall-Protocol-Versions, Mosaic-Paywall-Capabilities, Mosaic-Placement-Decision-Versions, Mosaic-Decision-Features, Mosaic-Bucketing-Algorithms, Mosaic-Experiment-Assignment-Versions, Mosaic-Experiment-Features, Mosaic-Experiment-Bucketing-Algorithms, Mosaic-Experiment-Schedule-Policies, Mosaic-App-Version")
 	if encoding != "" {
 		w.Header().Set("Content-Encoding", encoding)
 	}
