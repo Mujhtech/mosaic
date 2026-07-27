@@ -55,6 +55,35 @@ non-Experiment SDK receives a separately stored Delivery v2 projection with
 the exact unchanged normal Placement snapshot and no Experiment assignment.
 Projection never turns a Variant into an unconditional Placement binding.
 
+### Every Release carries a representation for every approved Delivery version
+
+**Normative.** A Configuration Release is not publishable-complete until it
+carries a stored representation for **every approved Delivery version** — `1`,
+`2`, and `3` — regardless of which contract the publish originated from. A
+v1-only SDK must always be able to fetch a usable v1 document. Publishing an
+Experiment must not remove a version from the Environment's negotiable set.
+
+"Usable" is a stronger requirement than "schema-valid". `placements` is v1-only
+vocabulary; v2 replaces it with `placementDecisions`. A v1 document whose
+`placements` array is empty passes the v1 schema and is worthless to the reader
+that asked for it, so an empty `placements` on a Release whose predecessor bound
+Placements is a defect, not a degraded mode.
+
+The v1 representation is therefore produced by **carry-forward, not
+projection**: on Experiment publish the preceding Release's v1 representation is
+carried forward and its identity restamped to the new Release. An Experiment
+publish does not change Placement bindings, so the preceding v1 view remains
+exactly correct. Projection from the v2 envelope is the fallback used **only**
+when no predecessor v1 representation exists.
+
+Verified in
+[`docs/reviews/phase-8-drill-evidence.md`](../reviews/phase-8-drill-evidence.md)
+("A v1-only SDK is served again after an Experiment publishes"), which records
+both the empty-`placements` projection defect and the re-verification against a
+Release carrying an active Experiment: an SDK advertising `1` receives `200`
+with `version=1` and the Placements populated, while `2` and `3,2,1` continue to
+negotiate to `2` and `3` respectively.
+
 Delivery contains definitions and stable references only. Results, customer
 values, raw identity, event history, provider secrets, Drafts, audit state, and
 executable code are excluded.

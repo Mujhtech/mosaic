@@ -51,6 +51,73 @@ When no mutually supported representation exists the SDK receives nothing new
 and follows the fallback chain below. Negotiation failure is never silent data
 loss: the SDK keeps serving something it fully understands.
 
+### Every Release carries a representation for every approved Delivery version
+
+**Normative.** Negotiation can only select from what the Release actually
+stores. Mosaic therefore guarantees that **every** Configuration Release carries
+a stored representation for **every** approved Configuration Delivery version —
+`1`, `2`, and `3` — whichever contract the publish originated from. A publish
+must never remove a version from an Environment's negotiable set, because doing
+so turns an already-shipped SDK's exact-match declaration into a permanent `406`.
+
+A v1-only client always receives a *usable* v1 document, not merely a
+schema-valid one: its `placements` array is populated. `placements` is v1-only
+vocabulary — v2 replaces it with `placementDecisions` — so a v1 view derived
+naively from a v2 envelope arrives empty and is worthless to the reader that
+asked for it.
+
+On Experiment publish the v1 view is produced by **carry-forward**: the
+preceding Release's v1 representation is carried forward with its identity
+restamped to the new Release. Publishing an Experiment does not change Placement
+bindings, so the preceding view remains exactly correct. Projection from the v2
+envelope is used **only** when no predecessor v1 representation exists.
+
+Verified in
+[`docs/reviews/phase-8-drill-evidence.md`](../reviews/phase-8-drill-evidence.md)
+("A v1-only SDK is served again after an Experiment publishes"), which records
+the empty-`placements` projection defect the drill caught before it shipped, and
+the re-verification against a Release carrying an active Experiment: advertising
+`1` returns `200` with `version=1` and both Placements delivered, while `2` and
+`3,2,1` still negotiate to `2` and `3`. See
+[Configuration Delivery v3](configuration-delivery-v3.md#every-release-carries-a-representation-for-every-approved-delivery-version).
+
+### Negotiation refusals name the failing term (`406`)
+
+A negotiation refusal returns `406` with code `unsupported_capability`. A bare
+refusal is undiagnosable — an integrator has no path from the response to the
+header they must send or the SDK they must ship — so every refusal carries
+structured `details`.
+
+This is a **REST transport concern, not a protocol contract**. The vocabulary
+below carries no contract version and is additive: new `requirement` values may
+appear without a protocol version change. The closed `reason` set is the part
+clients may branch on.
+
+| Field | Present | Meaning |
+| --- | --- | --- |
+| `requirement` | always | The negotiation term that failed, in the vocabulary of the request headers and the contracts: `sdkPlatform`, `sdkVersion`, `applicationVersion`, `acceptMediaType`, `paywallProtocolVersion`, `paywallCapability`, `configurationDeliveryVersion`, `placementDecisionContractVersion`, `decisionFeature`, `bucketingAlgorithm`, `experimentAssignmentContractVersion`, `experimentFeature`, `experimentBucketingAlgorithm`, `experimentSchedulePolicy`, `experimentCapabilityHeader`, `commerceConfigurationVersion`. |
+| `capability` | when named | The capability, feature, algorithm, or policy identifier. Omitted when the requirement is itself version-shaped. |
+| `version` | when applicable | The contract or capability version involved. |
+| `reason` | always | One of the closed set below. |
+| `detail` | always | A human-readable sentence composed from the other four. For logs and integrator-facing messages; do not parse it. |
+
+The `reason` set is closed. An SDK receiving an unrecognized value must treat it
+as unrecoverable and fall back, not retry.
+
+| `reason` | What happened | What the client should do |
+| --- | --- | --- |
+| `missing` | The Release requires the named term; the SDK did not advertise it. | Advertise it if the SDK genuinely supports it; otherwise upgrade the SDK. Retrying the same request cannot succeed. |
+| `unknown` | The SDK advertised a term Mosaic does not define. | Client-side defect — a typo or an invented capability name. Fix the advertised set. Note the `product_load` / `product_loading` hazard below. |
+| `unsupported` | The value is defined but this Mosaic installation does not accept it. | Server-side capability gap. Not retryable by the client; escalate to the operator. |
+| `duplicate` | The same term was advertised more than once. | Client-side header-construction defect. De-duplicate the advertised set. |
+| `malformed` | The advertised value was missing, empty, unparseable, or exceeded the allowed count. | Client-side header-construction defect. Fix the header. |
+| `unavailable` | The Release has no representation the SDK can read. | Not a client defect and not fixable by re-advertising. Fall back per the chain below. Given the guarantee above, a `configurationDeliveryVersion` / `unavailable` in production is a server-side bug worth reporting. |
+
+Every reason is terminal for that request: the SDK falls back rather than
+retrying. `missing`, `unknown`, `duplicate`, and `malformed` indicate the client
+must change what it advertises; `unsupported` and `unavailable` indicate it
+cannot.
+
 ## Fallback chain
 
 Every delivery contract declares the same ordered chain in its manifest

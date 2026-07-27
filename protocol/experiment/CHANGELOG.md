@@ -2,7 +2,7 @@
 
 ## Version 1 - 2026-07-26
 
-Status: release candidate
+Status: approved at v1 GA (2026-07-27); released as a candidate on 2026-07-26
 
 - Added immutable platform-neutral Experiment, Version, Placement, Control, Variant, Paywall Version, and allocation identities.
 - Added exactly one Control and one to three Treatments with complete half-open ranges over 10,000 buckets.

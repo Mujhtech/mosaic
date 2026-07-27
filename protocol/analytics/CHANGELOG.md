@@ -2,7 +2,7 @@
 
 ## Version 2 - 2026-07-26
 
-Status: release candidate
+Status: approved at v1 GA (2026-07-27); released as a candidate on 2026-07-26
 
 - Added `experiment_assigned`, `experiment_exposed`, `experiment_fallback_presented`, and `experiment_assignment_failed` with closed typed payloads.
 - Added an all-or-none immutable Experiment ID/Version/Variant/allocation tuple to Experiment, Product-selection, and purchase lifecycle events.
@@ -12,7 +12,7 @@ Status: release candidate
 
 ## Version 1 - 2026-07-26
 
-Status: release candidate
+Status: approved at v1 GA (2026-07-27); released as a candidate on 2026-07-26
 
 - Added closed batch, event, ingestion-response, and compatibility-manifest
   schemas for the Placement-to-purchase and restore journeys.

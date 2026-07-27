@@ -284,8 +284,8 @@ failure.
 
 ## Protocol
 
-Each entry is owner-accepted for v1 General Availability. Neither falls into a
-release-blocker category: neither can cause data loss, money loss, or a wrong
+Each entry is owner-accepted for v1 General Availability. No entry falls into a
+release-blocker category: none can cause data loss, money loss, or a wrong
 monetization decision, and each has a stated workaround or a safe visible
 failure.
 
@@ -344,6 +344,37 @@ failure.
   entry narrows that same gap rather than adding a new one. No incorrect Product
   resolution or purchase-result corruption is possible from a fixture not being
   read by a test; the adapters' own contract tests cover the decode paths.
+
+### A few fixtures remain unconsumed, and invalid-fixture coverage is uneven across SDKs
+
+- Surface: `protocol/fixtures/configuration-delivery/v3/legacy-v2-projection.json`,
+  `protocol/fixtures/configuration-delivery/v1/capability-request.json`,
+  `protocol/fixtures/configuration-delivery/v3/capability-request.json`, and the
+  invalid fixtures under `protocol/fixtures/configuration-delivery/v3/invalid/`
+  and `protocol/fixtures/experiment-assignment/v1/invalid/`.
+- Platforms: Flutter, iOS, Android.
+- Symptom: three valid fixtures are validated by
+  `npm --prefix protocol run validate` but read by no SDK conformance suite. Only
+  the Delivery v2 capability request is consumed (by the Android
+  `PlacementDecisionTest`); the v1 and v3 capability requests and the v3
+  legacy-v2 projection are tool-verified only. Separately, the Delivery v3 and
+  Experiment Assignment negative fixtures are consumed by the iOS suite alone
+  (`sdk/ios/Tests/MosaicSDKTests/ExperimentTests.swift`), so Flutter and Android
+  have no shared-fixture proof that they reject a malformed allocation or an
+  unsupported Experiment contract.
+- Workaround: every one of these fixtures is validated against the canonical
+  schemas and semantic validators under `npm --prefix protocol run validate`, so
+  the fixtures themselves cannot drift from the contract. Rejection of malformed
+  Delivery material is additionally enforced server-side before anything is
+  stored or delivered, and each SDK has its own decode-failure tests written
+  against the same rules.
+- Planned resolution: bind the unconsumed fixtures and the two negative
+  directories into all three SDK conformance suites post-GA, together with the
+  Commerce Provider fixture binding described above.
+- GA safety: the gap is missing *cross-SDK evidence*, not missing validation. A
+  divergence would surface as an SDK rejecting a document it should accept, or
+  accepting one the server never emits; both fail closed onto last-known-valid
+  or bundled configuration rather than rendering wrong material.
 
 ### Three Experiment guardrail metrics always report zero
 

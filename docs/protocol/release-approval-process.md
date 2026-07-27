@@ -99,6 +99,14 @@ All of the following before `status` becomes `approved`.
       artifacts rather than restating intent — the v2 analytics document asserted
       a `mosaic_` export prefix that nothing in Mosaic produced.
 - [ ] `protocol/CHANGELOG.md` entry with the approval date.
+- [ ] The contract's own changelog (`protocol/<contract>/CHANGELOG.md`) carries a
+      status line for **every** version entry that matches that version's
+      manifest `status`. Per-contract changelogs are the copy readers reach for
+      first, and they drifted at v1 GA: entries still read `release candidate`
+      after the manifests were flipped to `approved`. Use the root changelog's
+      pattern — `Status: approved at v1 GA (<approval date>); released as a
+      candidate on <original date>.` — and remove `release candidate` from the
+      entry heading itself.
 - [ ] [Versioning](versioning.md) and the [compatibility
       policy](compatibility-policy.md) updated.
 - [ ] A migration guide under [`migration/`](migration/) if the version has an
@@ -118,8 +126,9 @@ All of the following before `status` becomes `approved`.
    narrowing corrections. Run the full protocol gate.
 2. Set `"status": "approved"` in the compatibility manifest.
 3. Update any test asserting the previous status.
-4. Update the contract document, `versioning.md`, `protocol/README.md`, and
-   `protocol/CHANGELOG.md`.
+4. Update the contract document, `versioning.md`, `protocol/README.md`,
+   `protocol/CHANGELOG.md`, and the contract's own
+   `protocol/<contract>/CHANGELOG.md` status lines.
 5. Re-run `generate` (zero drift), `validate`, and `test`.
 6. Record the approval in the phase review.
 

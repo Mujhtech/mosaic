@@ -1,6 +1,8 @@
 # Commerce Provider Contract changelog
 
-## Version 2 release candidate - 2026-07-24
+## Version 2 - 2026-07-24
+
+Status: approved at v1 GA (2026-07-27); released as a candidate on 2026-07-24
 
 - Preserved all v1 behavior and fixtures as a parallel readable contract.
 - Added native recovery modes and explicit base-plan, offer, asynchronous
@@ -15,7 +17,9 @@
   digest, required non-empty purchased-update access, and froze complete
   truthful StoreKit and Google capability matrices.
 
-## Version 1 release candidate - 2026-07-23
+## Version 1 - 2026-07-23
+
+Status: approved at v1 GA (2026-07-27); released as a candidate on 2026-07-23
 
 - Added a separately versioned, closed, platform-neutral Commerce Provider
   Contract without changing Paywall Protocol `0.2`, Local Preview `0.2`, or

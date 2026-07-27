@@ -1,6 +1,8 @@
 # Configuration Delivery Changelog
 
-## Version 3 release candidate - 2026-07-26
+## Version 3 - 2026-07-26
+
+Status: approved at v1 GA (2026-07-27); released as a candidate on 2026-07-26
 
 - Retained the complete immutable Delivery `2` snapshot and atomically added Experiment Assignment Contract `1` definitions.
 - Added exact Experiment contract, feature, bucketing-algorithm, and trusted-time schedule-policy negotiation.
@@ -11,7 +13,9 @@
 - Delivery accepts both bounded schedules and immediate/manual-completion
   Assignments without an `endsAt`, while preserving trusted-time fallback.
 
-## Version 2 release candidate - 2026-07-26
+## Version 2 - 2026-07-26
+
+Status: approved at v1 GA (2026-07-27); released as a candidate on 2026-07-26
 
 - Added an atomic Delivery `2` envelope for Placement Decision Contract `1` Rule Sets and unchanged Paywall Protocol `0.2` documents.
 - Added exact decision-feature and bucketing-algorithm capability negotiation, Product readiness, stable Entitlement references, and zero-Paywall `no_paywall` releases.
@@ -19,7 +23,9 @@
 - Defined Delivery v1 projection only for an explicit default Paywall; advanced Rules and `no_paywall` are never projected as unconditional bindings.
 - Added valid, zero-Paywall, capability, legacy-projection, and atomic invalid fixtures without modifying Delivery v1.
 
-## Version 1 release candidate - 2026-07-22
+## Version 1 - 2026-07-22
+
+Status: approved at v1 GA (2026-07-27); released as a candidate on 2026-07-22
 
 - Added the separate, strict Configuration Delivery `1` release envelope around unchanged Paywall
   Protocol `0.2` documents.

@@ -1,6 +1,8 @@
 # Placement Decision Contract changelog
 
-## Version 1 release candidate - 2026-07-26
+## Version 1 - 2026-07-26
+
+Status: approved at v1 GA (2026-07-27); released as a candidate on 2026-07-26
 
 - Added a closed, platform-neutral three-state Placement decision model with explicit priority, bounded conditions, typed values, exact compatibility requirements, and safe diagnostic labels.
 - Added platform, semantic version, locale, explicit country, identity, allow-listed attribute, Entitlement, Product, readiness, and provider-capability inputs.
