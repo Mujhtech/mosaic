@@ -33,6 +33,23 @@ Release-blocking fixes:
   batch ID and the exact submitted contract version. A mismatched version means
   the server did not acknowledge what was sent, so events are retried rather
   than removed on an unrelated acknowledgement.
+- Omit the Experiment tuple from conversion events produced by a fallback or
+  QA-override presentation. A fallback presents the normal Paywall, so its
+  conversions are not Variant outcomes; because
+  `product_selection_purchase_start` uses `product_selected` as its *denominator*
+  (not `experiment_exposed`), a tuple-carrying fallback conversion was counted as
+  a Variant presentation and, being earlier, could displace the Variant's own
+  first unit for that bucket — attributing normal-Paywall outcomes to the Variant.
+  The tuple now attaches only to a statistically exposed original-Variant
+  presentation, the same condition under which `experiment_exposed` is emitted.
+  `experiment_fallback_presented` still carries the tuple, since it identifies the
+  assignment that fell back.
+- Pin the mandatory bundled-fallback chain with an executable regression test: an
+  unreachable transport plus an empty cache renders the packaged canonical
+  document, and the packaged asset path and bytes are asserted against the
+  canonical fixture. Android decodes the bundled document as a raw Paywall
+  document and never re-wraps it in a synthesized delivery release, so the two
+  iOS fallback defects do not apply here; nothing was previously testing it.
 - Pin Experiment conversion attribution to the `analytics-event-v1-to-v2` MUST
   table with regression tests. Conversion attribution joins solely on the
   Experiment tuple carried by the conversion event itself, and the tuple is legal

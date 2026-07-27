@@ -43,6 +43,61 @@ class PaywallStateTest {
         assertTrue(events.any { it.eventName == "experiment_exposed" })
     }
 
+    /**
+     * A fallback presentation shows the normal Paywall, so its conversions are NOT Variant outcomes
+     * and MUST omit the tuple. `product_selection_purchase_start` uses `product_selected` as its
+     * *denominator*, so a tuple-carrying fallback conversion becomes a counted exposure and, being
+     * earlier, can displace the Variant's own first unit for that bucket — attributing
+     * normal-Paywall outcomes to the Variant. `experiment_fallback_presented` still requires the
+     * tuple, because it identifies the assignment that fell back.
+     *
+     * The normative requirement is the absent tuple, not the schema version. These events stay on
+     * v2 because the release is Delivery v3, and a tuple-free v1-shaped event is a valid v2 event
+     * ("A v1 event is a valid v2 event once `eventSchemaVersion` is `2`"). Forcing them to v1 would
+     * split one presentation across two batches for no benefit, and versions are never mixed inside
+     * a batch. Aggregation joins on the tuple columns, which are absent either way.
+     */
+    @Test
+    fun fallbackPresentationConversionsOmitTheExperimentTuple() = runTest {
+        val events = emitConversionJourney(
+            experimentAssigned = true,
+            kind = MosaicExperimentPresentationKind.FALLBACK,
+        )
+
+        val conversions = events.filter {
+            it.eventName == "product_selected" || it.eventName.startsWith("purchase_")
+        }
+        assertTrue(conversions.isNotEmpty())
+        conversions.forEach { event ->
+            assertFalse(
+                "${event.eventName} must not carry the tuple on a fallback presentation",
+                event.attribution.hasExperimentTuple(),
+            )
+            assertEquals("2", event.eventSchemaVersion)
+        }
+        // The fallback's own event still carries the tuple: it identifies the assignment.
+        val fallback = events.single { it.eventName == "experiment_fallback_presented" }
+        assertEquals("2", fallback.eventSchemaVersion)
+        assertTrue(fallback.attribution.hasExperimentTuple())
+        assertTrue(events.none { it.eventName == "experiment_exposed" })
+    }
+
+    /**
+     * A QA-override presentation emits no statistical exposure, so its conversions must not be
+     * attributed to the Variant either; otherwise QA traffic inflates the denominator.
+     */
+    @Test
+    fun qaOverridePresentationConversionsOmitTheExperimentTuple() = runTest {
+        val events = emitConversionJourney(experimentAssigned = true, qaOverride = true)
+
+        val conversions = events.filter {
+            it.eventName == "product_selected" || it.eventName.startsWith("purchase_")
+        }
+        assertTrue(conversions.isNotEmpty())
+        conversions.forEach { assertFalse(it.attribution.hasExperimentTuple()) }
+        assertTrue(events.none { it.eventName == "experiment_exposed" })
+    }
+
     /** Without an Experiment the SDK stays on v1: v1 is approved and current for non-Experiment use. */
     @Test
     fun conversionEventsRemainOnV1WithoutAnExperiment() = runTest {
@@ -55,7 +110,11 @@ class PaywallStateTest {
         }
     }
 
-    private suspend fun emitConversionJourney(experimentAssigned: Boolean): List<MosaicAnalyticsEvent> {
+    private suspend fun emitConversionJourney(
+        experimentAssigned: Boolean,
+        kind: MosaicExperimentPresentationKind = MosaicExperimentPresentationKind.VARIANT,
+        qaOverride: Boolean = false,
+    ): List<MosaicAnalyticsEvent> {
         val queue = MosaicAnalyticsQueue(MemoryStore()) { 1_700_000_000_000 }
         val runtime = MosaicAnalyticsRuntime(
             identityStore = { MosaicIdentityState("installation_001", "customer_42", emptyMap(), 1) },
@@ -93,8 +152,13 @@ class PaywallStateTest {
                 MosaicAnalyticsContext(configurationDeliveryVersion = if (experimentAssigned) "3" else "2"),
                 attribution,
                 if (!experimentAssigned) null else MosaicExperimentPresentationContext(
-                    experiment, "identified_user", MOSAIC_EXPERIMENT_BUCKETING_ALGORITHM, false,
-                    MosaicExperimentPresentationKind.VARIANT,
+                    experiment, "identified_user", MOSAIC_EXPERIMENT_BUCKETING_ALGORITHM, qaOverride,
+                    kind,
+                    fallbackReason = if (kind == MosaicExperimentPresentationKind.FALLBACK) {
+                        "product_unavailable"
+                    } else {
+                        null
+                    },
                     presentedPaywallId = "paywall_checkout_control",
                     presentedPaywallVersionId = "paywall_version_control_7",
                 ),

@@ -559,6 +559,14 @@ class MosaicPaywallState(
         track(MosaicAnalyticsPayload.PaywallAction(action, componentId), presentationCorrelation())
     }
 
+    /**
+     * True only for a presentation that emits `experiment_exposed`: the assigned Variant was
+     * actually presented and the presentation was not a QA override. This is the single condition
+     * that makes a conversion attributable to the Variant.
+     */
+    private fun MosaicExperimentPresentationContext?.isStatisticallyExposedVariant(): Boolean =
+        this != null && !qaOverride && kind == MosaicExperimentPresentationKind.VARIANT
+
     private fun presentationCorrelation() = MosaicAnalyticsCorrelation(
         placementRequestId = analyticsContext?.placementRequestId,
         paywallPresentationId = analyticsContext?.paywallPresentationId,
@@ -589,11 +597,19 @@ class MosaicPaywallState(
         // joins solely on the tuple carried here, and the tuple is legal only on a v2 event, so
         // dropping it from any of these silently reports zero conversions for every Experiment.
         // `purchase_completed_provider` is absent by design: the public SDK cannot emit it.
-        val carriesExperiment = payload is MosaicAnalyticsPayload.ProductSelected ||
+        val isConversion = payload is MosaicAnalyticsPayload.ProductSelected ||
             payload is MosaicAnalyticsPayload.PurchaseStarted ||
             payload is MosaicAnalyticsPayload.PurchaseCompleted ||
             payload is MosaicAnalyticsPayload.PurchaseLifecycle ||
             payload is MosaicAnalyticsPayload.PurchaseFailed
+        // ...but only when this presentation was the assigned Variant and was statistically
+        // exposed. A fallback presentation shows the normal Paywall, so its conversions are not
+        // Variant outcomes: `product_selection_purchase_start` uses `product_selected` as its
+        // *denominator*, so a tuple-carrying fallback conversion becomes a counted exposure and,
+        // being earlier, can displace the Variant's own first unit for that bucket. A QA-override
+        // presentation emits no exposure either. Both are the "fallback counted as original
+        // exposure" corruption; fallbacks are measured by the `fallback_exposure` guardrail.
+        val carriesExperiment = isConversion && context.experiment.isStatisticallyExposedVariant()
         val attribution = context.attribution.copy(
             mosaicProductId = productId,
             providerId = provider?.providerId,

@@ -357,6 +357,72 @@ class ConfigurationDeliveryTest {
         )
     }
 
+    /**
+     * The mandatory fallback chain's last resort, driven end to end with the **actual packaged
+     * bundled document** rather than a document lifted out of a delivery-release fixture. An
+     * unreachable transport plus an empty cache must still produce a renderable paywall, never
+     * `ConfigurationUnavailable`. Two iOS bugs made this path dead on that platform while remaining
+     * invisible because no test exercised it: the bundled document must be decoded as a raw Paywall
+     * document, never re-wrapped in a synthesized delivery release tagged with the latest
+     * advertised contract version.
+     */
+    @Test
+    fun `an unreachable transport and empty cache still render the packaged bundled paywall`() = runTest {
+        val packaged = canonicalFixtureSource()
+        val diagnostics = mutableListOf<String>()
+        val client = MosaicHostedConfigurationClient(
+            // Throwing, not a Failed result: an unreachable network is not a protocol response.
+            transport = MosaicConfigurationTransport { error("network unreachable") },
+            cache = MemoryCache(null),
+            bundledFallback = MosaicPaywallDocumentSource { packaged },
+            diagnostics = MosaicDiagnosticSink { diagnostics += it.code.wireName },
+        )
+
+        assertTrue(client.refresh() is MosaicConfigurationRefreshResult.Unavailable)
+        val decision = client.decidePlacement("onboarding_complete")
+
+        assertTrue("expected the bundled fallback, got $decision", decision is MosaicPlacementDecisionResult.Available)
+        val available = decision as MosaicPlacementDecisionResult.Available
+        assertEquals(MosaicConfigurationSource.BUNDLED_FALLBACK, available.source)
+        // Renderable, not merely decodable: the selector must resolve real product options.
+        val state = MosaicPaywallState(
+            available.document,
+            MockMosaicPurchaseProvider(MockMosaicPurchaseProvider.phase1Products()),
+        )
+        state.loadProducts()
+        val selectorId = available.document.walkNodesDepthFirst()
+            .filterIsInstance<MosaicProductSelectorComponent>().first().id
+        assertEquals(3, state.selectorStates[selectorId]?.options?.size)
+        // The stable v1 Placement API resolves the same fallback.
+        assertTrue(client.paywall("onboarding_complete") is MosaicPlacementResult.Available)
+        assertFalse(
+            "the bundled fallback must not be reported as missing or rejected",
+            diagnostics.any { it.startsWith("configuration.bundledFallback") },
+        )
+    }
+
+    /**
+     * The reader's asset path is a packaging contract: the generated canonical fixture must be
+     * present in the AAR at exactly the path [MosaicCanonicalBundleSource.ASSET_NAME] resolves, and
+     * byte-identical to the protocol fixture. A JVM test cannot open an AAR asset, so this asserts
+     * the generated source of truth the packaging step copies.
+     */
+    @Test
+    fun `the packaged bundled asset path and content match the canonical fixture`() {
+        assertEquals("mosaic/complete-paywall.json", MosaicCanonicalBundleSource.ASSET_NAME)
+        val generated = File(
+            System.getProperty("mosaic.repositoryRoot"),
+            "sdk/android/mosaic/build/generated/mosaic/canonical-assets/mosaic/complete-paywall.json",
+        )
+        assertTrue("the canonical asset generation task has not run", generated.isFile)
+        assertEquals(canonicalFixtureSource(), generated.readText(Charsets.UTF_8))
+        // The packaged bytes must decode into a renderable document on their own.
+        assertEquals(
+            "phase1-complete-paywall",
+            MosaicProtocolDecoder.decode(generated.readText(Charsets.UTF_8)).id,
+        )
+    }
+
     private fun validRelease(): String {
         return fixture("valid-release.json")
     }
