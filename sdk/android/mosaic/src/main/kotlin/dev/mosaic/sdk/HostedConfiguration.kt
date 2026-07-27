@@ -2,7 +2,8 @@ package dev.mosaic.sdk
 
 import android.content.Context
 import android.os.SystemClock
-import com.google.gson.Gson
+import com.google.gson.JsonObject
+import com.google.gson.JsonParser
 import java.io.File
 import java.io.FileOutputStream
 import java.io.IOException
@@ -52,6 +53,59 @@ interface MosaicConfigurationCache {
     suspend fun write(value: MosaicCachedConfiguration)
 }
 
+/**
+ * The cache record uses an explicit Gson tree codec rather than reflective binding so R8 cannot
+ * rename or strip the persisted field names of a released build. The accepted shape is closed:
+ * unknown keys, missing required keys, and wrong JSON types are rejected instead of silently
+ * decoding to a partially populated record.
+ */
+internal object MosaicCachedConfigurationCodec {
+    private const val ETAG = "etag"
+    private const val PAYLOAD = "payload"
+    private const val COMMERCE_PAYLOAD = "commercePayload"
+    private const val SERVER_TIME = "trustedServerTimeEpochMillis"
+    private const val RECEIPT_WALL_TIME = "trustedReceiptWallTimeEpochMillis"
+    private const val RECEIPT_ELAPSED_REALTIME = "trustedReceiptElapsedRealtimeMillis"
+    private val acceptedKeys = setOf(
+        ETAG, PAYLOAD, COMMERCE_PAYLOAD, SERVER_TIME, RECEIPT_WALL_TIME, RECEIPT_ELAPSED_REALTIME,
+    )
+
+    fun encode(value: MosaicCachedConfiguration): String = JsonObject().apply {
+        value.etag?.let { addProperty(ETAG, it) }
+        addProperty(PAYLOAD, value.payload)
+        value.commercePayload?.let { addProperty(COMMERCE_PAYLOAD, it) }
+        value.trustedServerTimeEpochMillis?.let { addProperty(SERVER_TIME, it) }
+        value.trustedReceiptWallTimeEpochMillis?.let { addProperty(RECEIPT_WALL_TIME, it) }
+        value.trustedReceiptElapsedRealtimeMillis?.let { addProperty(RECEIPT_ELAPSED_REALTIME, it) }
+    }.toString()
+
+    fun decode(source: String): MosaicCachedConfiguration {
+        val root = JsonParser.parseString(source).asJsonObject
+        require(root.keySet().all { it in acceptedKeys }) {
+            "The Mosaic configuration cache record contains unknown fields."
+        }
+        require(root.has(PAYLOAD)) { "The Mosaic configuration cache record has no payload." }
+        return MosaicCachedConfiguration(
+            etag = root.string(ETAG),
+            payload = requireNotNull(root.string(PAYLOAD)),
+            commercePayload = root.string(COMMERCE_PAYLOAD),
+            trustedServerTimeEpochMillis = root.long(SERVER_TIME),
+            trustedReceiptWallTimeEpochMillis = root.long(RECEIPT_WALL_TIME),
+            trustedReceiptElapsedRealtimeMillis = root.long(RECEIPT_ELAPSED_REALTIME),
+        )
+    }
+
+    private fun JsonObject.string(key: String): String? = get(key)?.let {
+        require(it.isJsonPrimitive && it.asJsonPrimitive.isString) { "$key must be a string." }
+        it.asString
+    }
+
+    private fun JsonObject.long(key: String): Long? = get(key)?.let {
+        require(it.isJsonPrimitive && it.asJsonPrimitive.isNumber) { "$key must be a number." }
+        it.asLong
+    }
+}
+
 class MosaicFileConfigurationCache(
     context: Context,
     configuration: MosaicConfiguration,
@@ -64,8 +118,13 @@ class MosaicFileConfigurationCache(
 
     override suspend fun read(): MosaicCachedConfiguration? = withContext(Dispatchers.IO) {
         if (!entry.isFile) return@withContext null
-        val cached = Gson().fromJson(entry.readText(), MosaicCachedConfiguration::class.java)
-            ?: throw IOException("The Mosaic configuration cache record is invalid.")
+        val cached = try {
+            MosaicCachedConfigurationCodec.decode(entry.readText())
+        } catch (error: CancellationException) {
+            throw error
+        } catch (_: Exception) {
+            throw IOException("The Mosaic configuration cache record is invalid.")
+        }
         if (!mosaicIsStrongETag(cached.etag)) {
             throw IOException("The Mosaic configuration cache ETag is invalid.")
         }
@@ -81,7 +140,7 @@ class MosaicFileConfigurationCache(
         try {
             FileOutputStream(temporary).use { output ->
                 OutputStreamWriter(output, Charsets.UTF_8).buffered().use { writer ->
-                    writer.write(Gson().toJson(value))
+                    writer.write(MosaicCachedConfigurationCodec.encode(value))
                     writer.flush()
                     output.fd.sync()
                 }

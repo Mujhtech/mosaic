@@ -15,6 +15,20 @@ android {
         versionName = "0.1"
     }
 
+    buildTypes {
+        // R8 runs permanently in the example release build so a Mosaic change that would need
+        // consumer keep rules fails `:app:assembleRelease` instead of silently corrupting a
+        // released host application's persisted Mosaic records.
+        release {
+            isMinifyEnabled = true
+            isShrinkResources = true
+            proguardFiles(
+                getDefaultProguardFile("proguard-android-optimize.txt"),
+                "proguard-rules.pro",
+            )
+        }
+    }
+
     buildFeatures {
         compose = true
     }

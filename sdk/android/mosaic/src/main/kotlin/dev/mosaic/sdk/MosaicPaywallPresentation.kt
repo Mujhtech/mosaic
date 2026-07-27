@@ -702,18 +702,23 @@ internal fun MosaicProductCardStyle.cardHorizontalAlignment(): Alignment.Horizon
         MosaicProductCardContentAlignment.END -> Alignment.End
     }
 
+/**
+ * [value] and [maximum] are read inside the draw scope, not during composition, so scrolling
+ * invalidates only this Canvas rather than the enclosing paywall tree.
+ */
 @Composable
 internal fun MosaicScrollIndicator(
-    value: Int,
-    maximum: Int,
+    value: () -> Int,
+    maximum: () -> Int,
     modifier: Modifier = Modifier,
 ) {
     val direction = LocalLayoutDirection.current
     Canvas(modifier) {
+        val maximum = maximum()
         val visibleFraction = (size.height / (size.height + maximum)).coerceIn(0.08f, 1f)
         val thumbHeight = size.height * visibleFraction
         val travel = size.height - thumbHeight
-        val top = if (maximum == 0) 0f else travel * (value.toFloat() / maximum)
+        val top = if (maximum == 0) 0f else travel * (value().toFloat() / maximum)
         val width = 3.dp.toPx()
         val x = if (direction == LayoutDirection.Ltr) size.width - width else 0f
         drawRoundRect(

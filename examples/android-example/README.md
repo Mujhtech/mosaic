@@ -13,7 +13,7 @@ adb shell am start \
 
 Install the debug build through a Play test track for real test Products. Its
 debug-only manifest enables Play Billing response overrides for Play Billing
-Lab; release builds do not include that switch.
+Lab and cleartext traffic for Local Preview; release builds include neither.
 
 This native Android app connects a Jetpack Compose renderer to a running local
 Mosaic Studio preview session. Studio draft revisions rerender immediately,
@@ -55,6 +55,26 @@ directory using the SDK's pinned Gradle wrapper:
 adb shell am start -n dev.mosaic.example/.MainActivity
 ```
 
+## Validation commands
+
+```bash
+../../sdk/android/gradlew -p . :app:assembleRelease :app:assembleDebug :app:lint
+```
+
+The `release` build type enables `isMinifyEnabled`, so `:app:assembleRelease` is
+the permanent R8 regression guard for the whole Mosaic dependency graph: if a
+Mosaic change ever began to require consumer keep rules, that task fails. The
+resulting rename map is written to
+`app/build/outputs/mapping/release/mapping.txt` and shows Mosaic's persisted
+model fields being renamed, which is exactly why the SDK persists every record
+through explicit codecs rather than reflective binding. See the R8 section of
+`sdk/android/README.md`.
+
+The Android SDK's own JVM suite, lint, and library artifacts are validated from
+`sdk/android` with `./gradlew test lint assemble`. Instrumentation tests
+(`:mosaic:connectedDebugAndroidTest`) need a connected device or a running
+emulator; there is no headless path.
+
 To select a different local relay or session, pass Activity string extras:
 
 ```bash
@@ -63,9 +83,12 @@ adb shell am start -n dev.mosaic.example/.MainActivity \
   --es mosaic.preview.session session_local_01
 ```
 
-The SDK accepts only credential-free local `ws://` or `wss://` endpoints. The
-example enables Android cleartext traffic solely for this local development
-connection.
+The SDK accepts only credential-free local `ws://` or `wss://` endpoints, and the
+Mosaic library itself never requests cleartext traffic. This example declares
+`android:usesCleartextTraffic="true"` **only in `app/src/debug/AndroidManifest.xml`**,
+solely so Local Preview can reach the Studio relay over `ws://`. The release
+build does not request cleartext traffic at all, so a host copying this example
+does not inherit an app-wide cleartext permission.
 
 For the hosted path, pass an environment-scoped public SDK key. The
 app fetches Configuration Delivery v1, v2, or v3, resolves the requested Placement,

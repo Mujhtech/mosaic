@@ -46,6 +46,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -364,10 +365,15 @@ internal fun MosaicScreenContent(
                 modifier = Modifier.fillMaxWidth(),
             )
         }
-        if (layout.showsIndicators && scrollState.maxValue > 0) {
+        // The visibility gate is derived so only a scrollability change, not each scrolled pixel,
+        // invalidates this composable; the indicator itself reads scroll offset in the draw phase.
+        val showsIndicator by remember(scrollState, layout.showsIndicators) {
+            derivedStateOf { layout.showsIndicators && scrollState.maxValue > 0 }
+        }
+        if (showsIndicator) {
             MosaicScrollIndicator(
-                value = scrollState.value,
-                maximum = scrollState.maxValue,
+                value = { scrollState.value },
+                maximum = { scrollState.maxValue },
                 modifier = Modifier.fillMaxSize().clearAndSetSemantics { },
             )
         }

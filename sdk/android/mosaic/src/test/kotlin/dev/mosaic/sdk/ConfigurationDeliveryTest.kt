@@ -24,6 +24,72 @@ import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.ResponseBody.Companion.toResponseBody
 
 class ConfigurationDeliveryTest {
+    /**
+     * The cache record is persisted by an explicit tree codec instead of reflective Gson binding,
+     * because R8 renames fields in a minified release build and reflective binding would silently
+     * lose the accepted release, its paired Commerce sidecar, and its trusted time anchor. This
+     * asserts the literal wire names and every optional field survive a round trip.
+     */
+    @Test
+    fun `the cached configuration record round trips through the explicit codec`() {
+        val record = MosaicCachedConfiguration(
+            etag = "\"release-1\"",
+            payload = validRelease(),
+            commercePayload = "{\"commerce\":true}",
+            trustedServerTimeEpochMillis = 1_700_000_000_000,
+            trustedReceiptWallTimeEpochMillis = 1_700_000_001_000,
+            trustedReceiptElapsedRealtimeMillis = 4_242,
+        )
+
+        val encoded = MosaicCachedConfigurationCodec.encode(record)
+
+        assertEquals(record, MosaicCachedConfigurationCodec.decode(encoded))
+        assertEquals(
+            setOf(
+                "etag", "payload", "commercePayload", "trustedServerTimeEpochMillis",
+                "trustedReceiptWallTimeEpochMillis", "trustedReceiptElapsedRealtimeMillis",
+            ),
+            JsonParser.parseString(encoded).asJsonObject.keySet(),
+        )
+        assertEquals(
+            record.copy(
+                commercePayload = null,
+                trustedServerTimeEpochMillis = null,
+                trustedReceiptWallTimeEpochMillis = null,
+                trustedReceiptElapsedRealtimeMillis = null,
+            ),
+            MosaicCachedConfigurationCodec.decode(
+                MosaicCachedConfigurationCodec.encode(
+                    MosaicCachedConfiguration(etag = record.etag, payload = record.payload),
+                ),
+            ),
+        )
+    }
+
+    /**
+     * A truncated, foreign, or renamed cache record must be rejected so the SDK falls back to the
+     * bundled configuration instead of presenting a partially decoded release.
+     */
+    @Test
+    fun `a malformed cached configuration record is rejected instead of partially decoded`() {
+        listOf(
+            "{}",
+            """{"payload":"{}","unexpected":"value"}""",
+            """{"payload":7}""",
+            """{"etag":"\"release-1\""}""",
+            """{"payload":"{}","trustedServerTimeEpochMillis":"soon"}""",
+            "not json at all",
+        ).forEach { source ->
+            var rejected = false
+            try {
+                MosaicCachedConfigurationCodec.decode(source)
+            } catch (_: Exception) {
+                rejected = true
+            }
+            assertTrue("Expected rejection of $source", rejected)
+        }
+    }
+
     @Test
     fun `decodes the canonical delivery fixture and resolves its placement`() {
         val release = MosaicConfigurationDeliveryDecoder.decode(validRelease())

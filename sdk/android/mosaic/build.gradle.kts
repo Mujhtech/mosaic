@@ -7,7 +7,7 @@ plugins {
 }
 
 group = "dev.mosaic.sdk"
-version = "0.1.0-dev.6"
+version = "0.1.0-dev.7"
 
 val canonicalFixture = layout.projectDirectory.file(
     "../../../protocol/fixtures/v0.2/complete-paywall.json",

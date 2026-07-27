@@ -72,6 +72,12 @@ class ExperimentContractTest {
 
     @Test
     fun `canonical assignment and group vectors match Kotlin engine`() {
+        // Buckets and Variants are read from the canonical vector fixture, so a protocol change to
+        // the bucketing algorithm cannot pass because Android hard-coded the previous answers.
+        val vectors = JsonParser.parseString(fixture("experiment-assignment/v1/assignment-vectors.json")).asJsonObject
+        val identifiedVector = vectors.assignmentVector("identified-control")
+        val installationVector = vectors.assignmentVector("installation-treatment")
+
         val assignment = assignment()
         val identified = MosaicExperimentAssignmentEngine.evaluate(
             assignment,
@@ -80,6 +86,10 @@ class ExperimentContractTest {
         ) as MosaicExperimentAssignmentResult.NormalPlacement
         // The canonical identified vector is excluded by the canonical mutual-exclusion group.
         assertEquals("group_excluded", identified.reason)
+        assertEquals(
+            "experiment_upsell",
+            vectors.getAsJsonArray("groupVectors").single().asJsonObject.get("selectedExperimentId").asString,
+        )
 
         val withoutGroup = assignment.copy(mutualExclusionGroup = null)
         val control = MosaicExperimentAssignmentEngine.evaluate(
@@ -87,16 +97,67 @@ class ExperimentContractTest {
             MosaicIdentityState("installation_ignored", "customer_42", emptyMap(), 1),
             withoutGroup.schedule.startsAtEpochMillis,
         ) as MosaicExperimentAssignmentResult.Assigned
-        assertEquals(1118, control.bucket)
-        assertEquals("variant_control", control.variant.id)
+        assertEquals(identifiedVector.get("bucket").asInt, control.bucket)
+        assertEquals(identifiedVector.get("variantId").asString, control.variant.id)
 
         val treatment = MosaicExperimentAssignmentEngine.evaluate(
             withoutGroup.copy(assignmentKeyPolicy = MosaicAssignmentPolicy.INSTALLATION),
             MosaicIdentityState("installation_001", null, emptyMap(), 0),
             withoutGroup.schedule.startsAtEpochMillis,
         ) as MosaicExperimentAssignmentResult.Assigned
-        assertEquals(9810, treatment.bucket)
-        assertEquals("variant_treatment_a", treatment.variant.id)
+        assertEquals(installationVector.get("bucket").asInt, treatment.bucket)
+        assertEquals(installationVector.get("variantId").asString, treatment.variant.id)
+    }
+
+    /**
+     * Assignment records are persisted by an explicit tree codec rather than reflective Gson
+     * binding, which R8 would rename in a minified release build. Losing `exposed` in particular
+     * would re-emit `experiment_exposed` for an already-counted subject and corrupt Experiment
+     * results, so every field must survive a round trip by literal wire name.
+     */
+    @Test
+    fun `an experiment assignment record round trips and preserves its exposed flag`() {
+        val record = MosaicExperimentAssignmentRecord(
+            projectId = "project_alpha",
+            environmentId = "environment_production",
+            experimentId = "experiment_checkout",
+            experimentVersionId = "experiment_version_checkout_1",
+            variantId = "variant_control",
+            allocationVersion = "allocation_checkout_1",
+            assignmentKeyType = "identified_user",
+            subjectDigest = MosaicExperimentAssignmentStore.subjectDigest("customer_42"),
+            bucket = 1118,
+            algorithm = MOSAIC_EXPERIMENT_BUCKETING_ALGORITHM,
+            assignedAtEpochMillis = 1_700_000_000_000,
+            groupId = "experiment_group_checkout",
+            groupVersionId = "experiment_group_version_checkout_1",
+            groupBucket = 6837,
+            qaOverride = false,
+            exposed = true,
+            lastUpdatedAtEpochMillis = 1_700_000_005_000,
+        )
+        val withoutGroup = record.copy(
+            groupId = null, groupVersionId = null, groupBucket = null, exposed = false, qaOverride = true,
+        )
+
+        val encoded = MosaicExperimentAssignmentRecordCodec.encode(listOf(record, withoutGroup))
+
+        assertEquals(
+            listOf(record, withoutGroup),
+            MosaicExperimentAssignmentRecordCodec.decode(encoded),
+        )
+        assertTrue(JsonParser.parseString(encoded).asJsonArray.first().asJsonObject.get("exposed").asBoolean)
+        // An omitted required field is rejected rather than defaulted back to an unexposed record.
+        val stripped = JsonParser.parseString(encoded).asJsonArray.also {
+            it.first().asJsonObject.remove("exposed")
+        }.toString()
+        var rejected = false
+        try {
+            MosaicExperimentAssignmentRecordCodec.decode(stripped)
+        } catch (_: Exception) {
+            rejected = true
+        }
+        assertTrue(rejected)
     }
 
     @Test
@@ -150,6 +211,10 @@ class ExperimentContractTest {
     }
 
     private fun identity() = MosaicIdentityState("installation_001", null, emptyMap(), 0)
+
+    private fun com.google.gson.JsonObject.assignmentVector(name: String) =
+        getAsJsonArray("assignmentVectors").map { it.asJsonObject }
+            .single { it.get("name").asString == name }
     private fun fixture(path: String): String = Files.readAllBytes(repositoryFile("protocol/fixtures/$path")).toString(Charsets.UTF_8)
 
     private fun deliveryWithGroupCandidates(): String = mutateDelivery(

@@ -133,6 +133,44 @@ class AnalyticsQueueTest {
         assertEquals("analytics.event_too_large", queue.diagnostics().lastSafeCode)
     }
 
+    /**
+     * A namespace keeps one analytics runtime per process, so a second `Mosaic.configure` carrying
+     * the owner-approved Environment setting used to be silently ignored: collection stayed
+     * disabled (dropping every event) or stayed enabled after the owner disabled it. Reconciliation
+     * must apply the changed flag, and disabling must still clear the unsent queue.
+     */
+    @Test
+    fun runtimeReconcilesAChangedEnvironmentCollectionFlag() = runTest {
+        val queue = MosaicAnalyticsQueue(MemoryAnalyticsStore()) {
+            Instant.parse("2026-07-26T12:05:00.000Z").toEpochMilli()
+        }
+        assertTrue(queue.enqueue(event("placement-request.json")))
+        val runtime = runtime(queue, environmentEnabled = false)
+        assertTrue(!runtime.isCollectionEnabled)
+
+        runtime.reconcileEnvironmentEnabled(true)
+        runtime.drainPendingRecords()
+        assertTrue(runtime.isCollectionEnabled)
+        assertEquals(1, queue.diagnostics().queuedEventCount)
+
+        runtime.reconcileEnvironmentEnabled(false)
+        runtime.drainPendingRecords()
+        assertTrue(!runtime.isCollectionEnabled)
+        assertEquals(0, queue.diagnostics().queuedEventCount)
+        runtime.close()
+    }
+
+    private fun runtime(queue: MosaicAnalyticsQueue, environmentEnabled: Boolean) = MosaicAnalyticsRuntime(
+        identityStore = { MosaicIdentityState("installation_001", null, emptyMap(), 0) },
+        queue = queue,
+        transport = object : MosaicAnalyticsTransport {
+            override suspend fun send(batch: MosaicAnalyticsBatch) =
+                MosaicAnalyticsTransportResult.Retryable("analytics.unavailable")
+        },
+        baseContext = MosaicAnalyticsContext(),
+        environmentEnabled = environmentEnabled,
+    )
+
     private fun event(name: String): MosaicAnalyticsEvent = MosaicAnalyticsCodec.decodeEvent(
         Files.readAllBytes(repositoryFile("protocol/fixtures/analytics-event/v1/$name")).toString(Charsets.UTF_8),
     )

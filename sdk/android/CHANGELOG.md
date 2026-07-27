@@ -1,15 +1,130 @@
 # Changelog
 
-## Unreleased
+## 0.1.0-dev.7 — 2026-07-27 (Phase 8: operational hardening)
 
-- Add Analytics Event Contract v1 decoding, persistent bounded delivery,
-  partial-batch handling, privacy controls, sessions, lifecycle flushing, and
-  provider-neutral monetization instrumentation.
-- Add strict atomic Configuration Delivery v2 and Placement Decision v1 decoding.
-- Add deterministic local targeting, typed attributes, safe traces, named fallbacks, and explicit `no_paywall` results.
-- Add app-private no-backup identity persistence, reset APIs, and Compose Placement integration while preserving Delivery v1 calls.
+Release-blocking fixes:
+
+- Replace reflective Gson binding with explicit tree codecs for the cached
+  Configuration Release record and for Experiment assignment records. R8 renames
+  the fields of both models in a minified release build (`etag -> a`,
+  `payload -> b`, …), so reflective binding silently discarded the
+  last-known-valid configuration and could resurface an already-counted
+  Experiment exposure. Both codecs now read and write literal wire names and
+  reject unknown, missing, or wrongly typed fields instead of partially decoding.
+- Move Google Play local-delivery persistence off the main thread. The store no
+  longer calls `SharedPreferences.commit()` from the caller's dispatcher; reads
+  and writes are suspending and dispatched to an injected I/O dispatcher.
+- Relocate Google Play local-delivery markers to the app-private no-backup
+  directory. Android auto-backup could previously restore finalized markers onto
+  another device or install, letting a purchase short-circuit host delivery and
+  grant Entitlements that were never delivered there. The legacy
+  `mosaic-google-play-delivery-v1` preferences are deleted, never migrated,
+  because their contents cannot be trusted; losing a genuine marker is safe
+  because re-delivery is idempotent.
+- Bound the Google Play local-delivery record to 256 digests, evicting the least
+  recently written first, so a long-lived install cannot grow it without limit.
+- Reconcile a changed `analyticsCollectionEnabled` Environment flag on an
+  existing analytics runtime namespace. A later `Mosaic.configure` carrying the
+  owner-approved setting was previously ignored, so collection stayed disabled
+  (dropping every event) or stayed enabled after an owner disabled it.
+- Fix a full-paywall-tree recomposition on every scrolled pixel. The scroll
+  indicator now reads scroll offset in the draw phase and derives its visibility,
+  so scrolling invalidates only the indicator.
+
+Packaging, versioning, and documentation:
+
+- Give `:mosaic-revenuecat` publication parity with the other two modules
+  (`group`, `version`, `maven-publish`, `singleVariant("release")` with sources),
+  so the documented `dev.mosaic.sdk:mosaic-revenuecat` artifact can actually be
+  produced.
+- Set `MOSAIC_ANDROID_SDK_VERSION` to the exact artifact version. It previously
+  reported `0.2.0-dev.1` while the artifacts were `0.1.0-dev.6`, making the
+  `Mosaic-SDK-Version` header untrue.
+- Bump all three modules to `0.1.0-dev.7`.
+- Correct `consumer-rules.pro`, which claimed a Phase 0 state; the SDK now
+  genuinely contains no reflection-based models.
+- Enable `isMinifyEnabled` in the example application's `release` build type so
+  R8 runs permanently over the Mosaic dependency graph and a change that began
+  to require keep rules would fail `:app:assembleRelease`.
+- Scope the example application's cleartext-traffic permission to its debug
+  manifest; the release build no longer requests it.
+- Document R8/minification behaviour, honest pre-1.0 installation paths, and the
+  supported version matrix including the enforced AAR consumption floor
+  (`compileSdk` 36, Kotlin 2.2.0, JDK 17) read from the built artifact.
+- Bind Experiment bucketing assertions to
+  `protocol/fixtures/experiment-assignment/v1/assignment-vectors.json` instead of
+  hard-coded bucket values.
 
 ## 0.1.0-dev.6
+
+Phases 5, 6, and 7 were all developed and validated against this single artifact
+version; it was never re-published between them. The subsections below record
+what each phase added, newest first.
+
+### Phase 7: Experiments
+
+- Add strict Experiment Assignment v1 and Configuration Delivery v3 decoding
+  without changing the public Placement API. Normal Placement must first select
+  the exact Control Paywall Version.
+- Add local, offline, deterministic Experiment assignment and mutual exclusion
+  using the canonical length-prefixed SHA-256 algorithms, retaining the ordered
+  candidate list so mutually exclusive Experiments may share a Placement.
+- Add validated server-time scheduling: inclusive start, exclusive end, anchors
+  stale after seven days, and conservative normal Placement when wall-clock
+  deviation exceeds five minutes.
+- Present a Variant only when its exact Product set is ready and the installed
+  provider truthfully declares every required capability; otherwise present the
+  normal Placement Paywall and emit `experiment_fallback_presented`.
+- Emit statistical `experiment_exposed` exactly once after native presentation;
+  assignment alone is diagnostic and QA presentations never emit exposure.
+- Add bounded (256 records / 180 days) atomic assignment diagnostics in the
+  no-backup directory storing only one-way subject digests and safe IDs, exposed
+  through `hosted.experimentDiagnostics()`.
+- Add Analytics Event Contract v2 encoding for the Experiment attribution tuple.
+
+### Phase 6: analytics, identity, and privacy
+
+- Add Analytics Event Contract v1 decoding, encoding, and canonical-fixture
+  conformance for hosted clients only.
+- Add a persistent app-private, backup-excluded event queue bounded to 1,000
+  events or 2 MiB, with 32 KiB per-event caps, seven-day expiry, batches of at
+  most 50 events or 512 KiB, and priority-aware overflow that discards expired
+  and older low-value events before purchase and restore outcomes.
+- Add partial-batch acknowledgement handling that removes accepted, duplicate,
+  and permanently rejected events while retaining only retryable ones, with
+  retry capped at ten attempts using full-jitter exponential backoff from one
+  second to five minutes.
+- Default collection to disabled; enable it only when `analyticsCollectionEnabled`
+  mirrors an owner-enabled Environment. A host consent override may disable
+  collection and atomically clear the unsent queue but can never enable a
+  server-disabled Environment.
+- Add 30-minute inactivity sessions that survive ordinary SDK reconstruction and
+  restart on effective user change, user clearing, installation reset, and
+  collection re-enable.
+- Add app-private no-backup identity persistence, `identify`,
+  `setUserAttributes`, `resetIdentity`, and `resetInstallationIdentity`, with
+  suspendable serialized APIs and no main-thread file access.
+- Add lifecycle-driven best-effort flushing and a coalesced foreground
+  configuration refresh so emergency-stop releases apply without a per-
+  presentation request. Analytics delivery never blocks rendering or purchasing.
+
+### Phase 5: targeting and Placement decisions
+
+- Add strict atomic Configuration Delivery v2 and Placement Decision v1
+  decoding, evaluated locally so `paywall()` and `MosaicPlacement` remain
+  offline-capable; a rejected refresh keeps the last accepted release.
+- Add deterministic local targeting with exact rule priority, three-state
+  conditions, semantic versions, RFC 4647 basic locale matching, typed
+  allow-listed attributes, and `sha256_length_prefixed_v1` bucketing.
+- Add named fallbacks, explicit `no_paywall` results, and safe decision traces
+  carrying rule/source metadata and buckets but never identity, attribute
+  values, assignment keys, provider payloads, or override tokens.
+- Add in-memory-only QA override tokens cleared by either identity reset.
+- Keep `country` an explicit trusted host input, never inferred from locale,
+  timezone, currency, IP address, or device region.
+- Preserve every existing Delivery v1 call site as source compatible.
+
+### Phase 4B: Google Play and Commerce Configuration v2
 
 - Add local Maven publication metadata for
   `dev.mosaic.sdk:mosaic:0.1.0-dev.6` and

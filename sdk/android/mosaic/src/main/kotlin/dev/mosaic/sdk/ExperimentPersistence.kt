@@ -1,8 +1,9 @@
 package dev.mosaic.sdk
 
 import android.content.Context
-import com.google.gson.Gson
-import com.google.gson.reflect.TypeToken
+import com.google.gson.JsonArray
+import com.google.gson.JsonObject
+import com.google.gson.JsonParser
 import java.io.File
 import java.io.FileOutputStream
 import java.security.MessageDigest
@@ -35,12 +36,99 @@ data class MosaicExperimentAssignmentRecord(
     val lastUpdatedAtEpochMillis: Long,
 )
 
+/**
+ * Assignment records use an explicit Gson tree codec rather than reflective binding, so a minified
+ * release build cannot rename or strip persisted field names. Every field, including `exposed`, is
+ * written and read by literal wire name; a record with unknown or missing fields is rejected rather
+ * than silently reconstructed with defaults, which would resurface an already-counted exposure.
+ */
+internal object MosaicExperimentAssignmentRecordCodec {
+    private val acceptedKeys = setOf(
+        "projectId", "environmentId", "experimentId", "experimentVersionId", "variantId",
+        "allocationVersion", "assignmentKeyType", "subjectDigest", "bucket", "algorithm",
+        "assignedAtEpochMillis", "groupId", "groupVersionId", "groupBucket", "qaOverride",
+        "exposed", "lastUpdatedAtEpochMillis",
+    )
+    private val requiredKeys = acceptedKeys - setOf("groupId", "groupVersionId", "groupBucket")
+
+    fun encode(records: List<MosaicExperimentAssignmentRecord>): String =
+        JsonArray().apply {
+            records.forEach { record ->
+                add(
+                    JsonObject().apply {
+                        addProperty("projectId", record.projectId)
+                        addProperty("environmentId", record.environmentId)
+                        addProperty("experimentId", record.experimentId)
+                        addProperty("experimentVersionId", record.experimentVersionId)
+                        addProperty("variantId", record.variantId)
+                        addProperty("allocationVersion", record.allocationVersion)
+                        addProperty("assignmentKeyType", record.assignmentKeyType)
+                        addProperty("subjectDigest", record.subjectDigest)
+                        addProperty("bucket", record.bucket)
+                        addProperty("algorithm", record.algorithm)
+                        addProperty("assignedAtEpochMillis", record.assignedAtEpochMillis)
+                        record.groupId?.let { addProperty("groupId", it) }
+                        record.groupVersionId?.let { addProperty("groupVersionId", it) }
+                        record.groupBucket?.let { addProperty("groupBucket", it) }
+                        addProperty("qaOverride", record.qaOverride)
+                        addProperty("exposed", record.exposed)
+                        addProperty("lastUpdatedAtEpochMillis", record.lastUpdatedAtEpochMillis)
+                    },
+                )
+            }
+        }.toString()
+
+    fun decode(source: String): List<MosaicExperimentAssignmentRecord> =
+        JsonParser.parseString(source).asJsonArray.map { element ->
+            val value = element.asJsonObject
+            require(value.keySet().all { it in acceptedKeys } && value.keySet().containsAll(requiredKeys)) {
+                "A Mosaic Experiment assignment record has an unexpected shape."
+            }
+            MosaicExperimentAssignmentRecord(
+                projectId = value.string("projectId"),
+                environmentId = value.string("environmentId"),
+                experimentId = value.string("experimentId"),
+                experimentVersionId = value.string("experimentVersionId"),
+                variantId = value.string("variantId"),
+                allocationVersion = value.string("allocationVersion"),
+                assignmentKeyType = value.string("assignmentKeyType"),
+                subjectDigest = value.string("subjectDigest"),
+                bucket = value.int("bucket"),
+                algorithm = value.string("algorithm"),
+                assignedAtEpochMillis = value.long("assignedAtEpochMillis"),
+                groupId = value.optionalString("groupId"),
+                groupVersionId = value.optionalString("groupVersionId"),
+                groupBucket = value.get("groupBucket")?.let { value.int("groupBucket") },
+                qaOverride = value.boolean("qaOverride"),
+                exposed = value.boolean("exposed"),
+                lastUpdatedAtEpochMillis = value.long("lastUpdatedAtEpochMillis"),
+            )
+        }
+
+    private fun JsonObject.string(key: String): String = requireNotNull(optionalString(key))
+
+    private fun JsonObject.optionalString(key: String): String? = get(key)?.let {
+        require(it.isJsonPrimitive && it.asJsonPrimitive.isString) { "$key must be a string." }
+        it.asString
+    }
+
+    private fun JsonObject.number(key: String) = requireNotNull(get(key)).also {
+        require(it.isJsonPrimitive && it.asJsonPrimitive.isNumber) { "$key must be a number." }
+    }
+
+    private fun JsonObject.int(key: String): Int = number(key).asInt
+    private fun JsonObject.long(key: String): Long = number(key).asLong
+
+    private fun JsonObject.boolean(key: String): Boolean = requireNotNull(get(key)).let {
+        require(it.isJsonPrimitive && it.asJsonPrimitive.isBoolean) { "$key must be a boolean." }
+        it.asBoolean
+    }
+}
+
 /** Bounded, atomic, app-private no-backup diagnostics/replay storage. */
 class MosaicExperimentAssignmentStore internal constructor(context: Context, namespace: String) {
     private val lock = Mutex()
-    private val gson = Gson()
     private val file = File(context.applicationContext.noBackupFilesDir, "mosaic/experiment/$namespace/assignments.json")
-    private val listType = object : TypeToken<List<MosaicExperimentAssignmentRecord>>() {}.type
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO.limitedParallelism(1))
 
     internal fun markExposedBestEffort(
@@ -98,7 +186,7 @@ class MosaicExperimentAssignmentStore internal constructor(context: Context, nam
 
     private suspend fun read(): List<MosaicExperimentAssignmentRecord> = withContext(Dispatchers.IO) {
         if (!file.isFile) return@withContext emptyList()
-        runCatching { gson.fromJson<List<MosaicExperimentAssignmentRecord>>(file.readText(), listType) }.getOrNull().orEmpty()
+        runCatching { MosaicExperimentAssignmentRecordCodec.decode(file.readText()) }.getOrNull().orEmpty()
     }
 
     private suspend fun write(records: List<MosaicExperimentAssignmentRecord>) = withContext(Dispatchers.IO) {
@@ -106,7 +194,9 @@ class MosaicExperimentAssignmentStore internal constructor(context: Context, nam
         val temporary = File.createTempFile("assignments-", ".tmp", file.parentFile)
         try {
             FileOutputStream(temporary).use { output ->
-                output.writer(Charsets.UTF_8).buffered().use { writer -> writer.write(gson.toJson(records)); writer.flush(); output.fd.sync() }
+                output.writer(Charsets.UTF_8).buffered().use { writer ->
+                    writer.write(MosaicExperimentAssignmentRecordCodec.encode(records)); writer.flush(); output.fd.sync()
+                }
             }
             if (!temporary.renameTo(file)) error("Could not atomically persist Mosaic Experiment assignments.")
         } finally {
