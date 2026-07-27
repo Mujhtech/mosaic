@@ -47,5 +47,8 @@ type Repository interface {
 	Overrides(context.Context, Scope, string, time.Time) ([]QAOverride, error)
 	RevokeOverride(context.Context, Scope, Actor, string, string, time.Time) error
 	LeaseSchedule(context.Context, string, time.Time, time.Time) (ScheduleJob, bool, error)
-	FinishSchedule(context.Context, string, bool, time.Time) error
+	// FinishSchedule completes a leased job. A failure requeues the job with
+	// backoff until the retry budget is exhausted, then records a terminal
+	// failure with the supplied diagnostic code.
+	FinishSchedule(context.Context, ScheduleJob, bool, string, time.Time) error
 }

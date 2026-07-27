@@ -92,7 +92,7 @@ func TestKeyRotationKeepsOldEnvelopesReadableAndUsesOnlyActiveKeyForWrites(t *te
 	}
 	rotated, err := NewAESGCMCipher(
 		keyring("new", fmt.Sprintf(`"old":%q,"new":%q`, oldKey, newKey)),
-		bytes.NewReader(bytes.Repeat([]byte{2}, 12)),
+		bytes.NewReader(bytes.Repeat([]byte{2}, 12*4)),
 	)
 	if err != nil {
 		t.Fatalf("new rotated cipher: %v", err)
@@ -106,5 +106,21 @@ func TestKeyRotationKeepsOldEnvelopesReadableAndUsesOnlyActiveKeyForWrites(t *te
 	}
 	if newEnvelope.KeyID != "new" {
 		t.Fatalf("replacement key ID = %q, want active key", newEnvelope.KeyID)
+	}
+
+	// `keyring rotate` re-seals every envelope under the active key so the old
+	// key can eventually be removed. If a re-sealed envelope did not decrypt
+	// under a keyring holding only the new key, retiring the old key would make
+	// every provider credential permanently unreadable.
+	resealed, err := rotated.Encrypt([]byte("credential-value"), scope)
+	if err != nil {
+		t.Fatalf("re-seal envelope under the active key: %v", err)
+	}
+	onlyNew, err := NewAESGCMCipher(keyring("new", fmt.Sprintf(`"new":%q`, newKey)), bytes.NewReader(bytes.Repeat([]byte{3}, 12)))
+	if err != nil {
+		t.Fatalf("new post-rotation cipher: %v", err)
+	}
+	if plaintext, err := onlyNew.Decrypt(resealed, scope); err != nil || string(plaintext) != "credential-value" {
+		t.Fatalf("re-sealed envelope after removing the retired key = %q, %v", plaintext, err)
 	}
 }

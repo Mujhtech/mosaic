@@ -9,6 +9,7 @@ import (
 	chimiddleware "github.com/go-chi/chi/v5/middleware"
 	"github.com/go-chi/cors"
 	"github.com/riandyrn/otelchi"
+	otelchimetric "github.com/riandyrn/otelchi/metric"
 	"github.com/rs/zerolog"
 
 	"github.com/Mujhtech/mosaic/apps/api/internal/analytics"
@@ -31,19 +32,21 @@ import (
 
 const (
 	MiddlewareRequestID       = "request_id"
-	MiddlewareRealIP          = "real_ip"
+	MiddlewareRealIP          = "trusted_proxy_real_ip"
 	MiddlewareTelemetry       = "otelchi"
 	MiddlewareRequestLogging  = "request_scoped_zerolog"
 	MiddlewareRecovery        = "recovery"
 	MiddlewareSecurityHeaders = "security_headers"
 	MiddlewareCORS            = "cors"
 	MiddlewareTimeout         = "timeout"
+	MiddlewareMetrics         = "otelchi_metrics"
 )
 
 var middlewareOrder = []string{
 	MiddlewareRequestID,
 	MiddlewareRealIP,
 	MiddlewareTelemetry,
+	MiddlewareMetrics,
 	MiddlewareRequestLogging,
 	MiddlewareRecovery,
 	MiddlewareSecurityHeaders,
@@ -55,13 +58,24 @@ type Config struct {
 	ServiceName    string
 	AllowedOrigins []string
 	RequestTimeout time.Duration
+	// UploadTimeout and IngestTimeout override RequestTimeout for the two
+	// routes whose legitimate work exceeds the default request budget.
+	UploadTimeout time.Duration
+	IngestTimeout time.Duration
+	// TrustedProxyCIDRs lists peers whose forwarded-client headers are honoured.
+	TrustedProxyCIDRs []string
+	// EnableHSTS is set when the deployment is reached over TLS.
+	EnableHSTS bool
 }
 
 type Dependencies struct {
-	CloudWorkspace        *cloudworkspace.Service
-	HostedPublishing      *hostedpublishing.Service
-	PlacementDecision     *placementdecision.Service
-	PrincipalResolver     authn.Resolver
+	CloudWorkspace    *cloudworkspace.Service
+	HostedPublishing  *hostedpublishing.Service
+	PlacementDecision *placementdecision.Service
+	PrincipalResolver authn.Resolver
+	// Readiness is the full dependency probe used by /health/ready. When it is
+	// nil the router falls back to ReadinessChecker.
+	Readiness             *health.Readiness
 	ReadinessChecker      health.Checker
 	BrowserAuth           *browserauth.Service
 	BrowserAuthConfig     browserauthhttp.Config
@@ -71,6 +85,10 @@ type Dependencies struct {
 	AnalyticsKeyLimiter   analyticshttp.Limiter
 	AnalyticsEventLimiter analyticshttp.EventLimiter
 	Experiment            *experiment.Service
+	// APILimiter is the baseline limit for authenticated dashboard APIs.
+	APILimiter httpmiddleware.Limiter
+	// DecisionLimiter bounds Placement and Experiment decision reads.
+	DecisionLimiter httpmiddleware.Limiter
 }
 
 func New(cfg Config, logger zerolog.Logger) http.Handler {
@@ -81,19 +99,28 @@ func NewWithDependencies(cfg Config, logger zerolog.Logger, dependencies Depende
 	router := chi.NewRouter()
 
 	router.Use(chimiddleware.RequestID)
-	router.Use(chimiddleware.RealIP)
-	router.Use(otelchi.Middleware(cfg.ServiceName, otelchi.WithChiRoutes(router)))
+	// Mosaic's own RealIP honours forwarded-client headers only from a trusted
+	// peer, so limiter buckets and remote_ip log fields cannot be spoofed.
+	router.Use(httpmiddleware.RealIP(cfg.TrustedProxyCIDRs))
+	router.Use(otelchi.Middleware(cfg.ServiceName,
+		otelchi.WithChiRoutes(router),
+		otelchi.WithRequestMethodInSpanName(true),
+	))
+	metrics := otelchimetric.NewBaseConfig(cfg.ServiceName)
+	router.Use(otelchimetric.NewRequestDurationMillis(metrics))
+	router.Use(otelchimetric.NewRequestInFlight(metrics))
+	router.Use(otelchimetric.NewResponseSizeBytes(metrics))
 	router.Use(httpmiddleware.RequestLogging(logger))
 	router.Use(httpmiddleware.Recovery)
-	router.Use(httpmiddleware.SecurityHeaders)
+	router.Use(httpmiddleware.SecurityHeaders(cfg.EnableHSTS))
 	router.Use(corsMiddleware(cfg.AllowedOrigins))
 	router.Use(httpmiddleware.Timeout(cfg.RequestTimeout))
 
 	router.Mount("/health/live", health.LiveRoutes())
-	router.Mount("/health/ready", health.ReadyRoutes(dependencies.ReadinessChecker))
+	router.Mount("/health/ready", readinessRoutes(dependencies))
 	// Compatibility aliases retained for existing probes while documented callers migrate.
 	router.Mount("/health", health.LiveRoutes())
-	router.Mount("/ready", health.ReadyRoutes(dependencies.ReadinessChecker))
+	router.Mount("/ready", readinessRoutes(dependencies))
 	if dependencies.BrowserAuth != nil || dependencies.CloudWorkspace != nil || dependencies.HostedPublishing != nil || dependencies.PlacementDecision != nil || dependencies.Analytics != nil {
 		router.Route("/v1", func(versioned chi.Router) {
 			versioned.Use(trustedMutationOrigins(cfg.AllowedOrigins))
@@ -103,6 +130,10 @@ func NewWithDependencies(cfg Config, logger zerolog.Logger, dependencies Depende
 			if dependencies.CloudWorkspace != nil || dependencies.HostedPublishing != nil || dependencies.Analytics != nil {
 				versioned.Group(func(authenticated chi.Router) {
 					authenticated.Use(authn.Middleware(dependencies.PrincipalResolver))
+					// Authenticated dashboard APIs had no limit at all before
+					// Phase 8; the baseline bucket is per principal so one
+					// tenant cannot exhaust the API for everyone.
+					authenticated.Use(httpmiddleware.RateLimit("api", dependencies.APILimiter, principalKey))
 					if dependencies.CloudWorkspace != nil {
 						cloudworkspacehttp.RegisterWorkspaceRoutes(authenticated, dependencies.CloudWorkspace)
 					}
@@ -113,16 +144,23 @@ func NewWithDependencies(cfg Config, logger zerolog.Logger, dependencies Depende
 							cloudworkspacehttp.RegisterProjectRoutes(project, dependencies.CloudWorkspace)
 						}
 						if dependencies.HostedPublishing != nil {
-							hostedpublishinghttp.RegisterProjectRoutes(project, dependencies.HostedPublishing)
+							hostedpublishinghttp.RegisterProjectRoutes(project, dependencies.HostedPublishing,
+								routeTimeout(cfg.UploadTimeout, cfg.RequestTimeout))
 						}
 						if dependencies.PlacementDecision != nil {
-							placementdecisionhttp.RegisterProjectRoutes(project, dependencies.PlacementDecision)
+							project.Group(func(decision chi.Router) {
+								decision.Use(httpmiddleware.RateLimit("decision", dependencies.DecisionLimiter, principalKey))
+								placementdecisionhttp.RegisterProjectRoutes(decision, dependencies.PlacementDecision)
+							})
 						}
 						if dependencies.Analytics != nil {
 							analyticshttp.RegisterProjectRoutes(project, dependencies.Analytics)
 						}
 						if dependencies.Experiment != nil {
-							experimenthttp.RegisterProjectRoutes(project, dependencies.Experiment)
+							project.Group(func(decision chi.Router) {
+								decision.Use(httpmiddleware.RateLimit("decision", dependencies.DecisionLimiter, principalKey))
+								experimenthttp.RegisterProjectRoutes(decision, dependencies.Experiment)
+							})
 						}
 					})
 				})
@@ -131,7 +169,8 @@ func NewWithDependencies(cfg Config, logger zerolog.Logger, dependencies Depende
 				hostedpublishinghttp.RegisterPublicRoutes(versioned, dependencies.HostedPublishing, dependencies.DeliveryLimiter)
 			}
 			if dependencies.Analytics != nil {
-				analyticshttp.RegisterPublicRoutes(versioned, dependencies.Analytics, dependencies.AnalyticsIPLimiter, dependencies.AnalyticsKeyLimiter, dependencies.AnalyticsEventLimiter)
+				analyticshttp.RegisterPublicRoutes(versioned, dependencies.Analytics, dependencies.AnalyticsIPLimiter, dependencies.AnalyticsKeyLimiter, dependencies.AnalyticsEventLimiter,
+					routeTimeout(cfg.IngestTimeout, cfg.RequestTimeout))
 			}
 		})
 	}
@@ -151,6 +190,32 @@ func NewWithDependencies(cfg Config, logger zerolog.Logger, dependencies Depende
 	})
 
 	return router
+}
+
+func readinessRoutes(dependencies Dependencies) http.Handler {
+	if dependencies.Readiness != nil {
+		return health.ReadinessRoutes(dependencies.Readiness)
+	}
+	return health.ReadyRoutes(dependencies.ReadinessChecker)
+}
+
+// routeTimeout returns a middleware that raises the handler timeout for one
+// route subtree. It is a no-op when the override is not longer than the global
+// timeout, so the default configuration keeps exactly one timeout layer.
+func routeTimeout(override, global time.Duration) func(http.Handler) http.Handler {
+	if override <= global {
+		return nil
+	}
+	return httpmiddleware.RouteTimeout(override)
+}
+
+// principalKey buckets authenticated traffic by actor, falling back to the
+// trusted client IP for unauthenticated requests that reach a limited subtree.
+func principalKey(r *http.Request) string {
+	if principal, ok := authn.FromContext(r.Context()); ok && principal.ActorID != "" {
+		return "actor:" + principal.ActorID
+	}
+	return "ip:" + httpmiddleware.ClientIP(r)
 }
 
 func trustedMutationOrigins(allowedOrigins []string) func(http.Handler) http.Handler {

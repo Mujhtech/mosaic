@@ -191,13 +191,21 @@ go run ./cmd/migrate down
 For the durable Compose workflow, copy `.env.example`, then run
 `docker compose up --build`. The `migrate` service completes before the API
 starts, and PostgreSQL data lives in the named `mosaic_postgres_data` volume.
-Stopping or recreating the API container does not remove data. Back up the
-PostgreSQL volume with `pg_dump` before destructive migrations or environment
-changes; named volumes are durability, not a backup policy.
+Stopping or recreating the API container does not remove data. A named volume is
+durability, not a backup policy: a complete Mosaic backup is PostgreSQL **plus**
+object storage **plus** the credential keyring, taken and restored with the
+documented procedure in
+[docs/backend/operations/backup-restore.md](operations/backup-restore.md). Run
+`migrate preflight` and take a verified backup before every upgrade
+([upgrade.md](operations/upgrade.md)).
 
 ## Background provider worker
 
 `cmd/worker` uses the same PostgreSQL repository and provider credential
-keyring as the API. It is enabled in Compose with the `providers` profile and
-processes bounded, leased provider-synchronization jobs. It never applies
-migrations or falls back to volatile storage.
+keyring as the API. It runs by default in Compose as the `worker` service
+because analytics aggregation, retention, privacy, and Experiment scheduling
+jobs are part of every installation; provider synchronization is additionally
+enabled when `MOSAIC_PROVIDER_INTEGRATIONS_ENABLED=true`. It polls its job
+families round-robin, exposes a health listener on
+`MOSAIC_WORKER_HEALTH_ADDRESS` (default `:8081`), and processes bounded, leased
+jobs. It never applies migrations or falls back to volatile storage.

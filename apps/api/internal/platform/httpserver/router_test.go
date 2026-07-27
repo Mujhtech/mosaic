@@ -181,8 +181,9 @@ func TestEmptyCORSOriginsDisableCrossOriginAccess(t *testing.T) {
 func TestMiddlewareOrder(t *testing.T) {
 	want := []string{
 		"request_id",
-		"real_ip",
+		"trusted_proxy_real_ip",
 		"otelchi",
+		"otelchi_metrics",
 		"request_scoped_zerolog",
 		"recovery",
 		"security_headers",

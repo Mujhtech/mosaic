@@ -1,0 +1,36 @@
+# Keep the API build context to the Go module and its migrations. Everything
+# below is either irrelevant to the server image or large enough to slow the
+# build and grow the layer cache for no reason.
+.git
+.github
+.vscode
+.codex
+.claude
+**/.DS_Store
+
+sdk/
+examples/
+packages/
+docs/
+deploy/
+scripts/
+
+# The dashboard builds from the repository root too, but BuildKit prefers
+# apps/dashboard/Dockerfile.dockerignore for that Dockerfile, so excluding the
+# dashboard here only shrinks the API build context.
+apps/dashboard/
+
+**/node_modules/
+**/dist/
+**/build/
+**/.build/
+**/.next/
+**/.output/
+**/coverage/
+**/*.log
+
+# Local environment files must never enter an image layer.
+.env
+.env.*
+!.env.example
+apps/api/.env

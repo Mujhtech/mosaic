@@ -315,4 +315,9 @@ type ExportRequest struct {
 	Format          string `json:"format"`
 	IncludeIdentity bool   `json:"includeIdentity"`
 }
-type ScheduleJob struct{ ID, ExperimentID, ProjectID, EnvironmentID, Action, ActorID string }
+type ScheduleJob struct {
+	ID, ExperimentID, ProjectID, EnvironmentID, Action, ActorID string
+	// AttemptCount is the attempt this lease represents (1 on first lease) and
+	// MaxAttempts is the retry budget before the job is terminally failed.
+	AttemptCount, MaxAttempts int
+}

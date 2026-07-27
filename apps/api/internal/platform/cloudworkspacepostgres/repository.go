@@ -120,6 +120,17 @@ func (r reader) Organizations() []cloudworkspace.Organization {
 	return many(r, `SELECT id,name,created_at,updated_at FROM organizations ORDER BY id`, scanOrganization)
 }
 
+// OrganizationsForActor joins membership in SQL so the cost of listing a user's
+// Organizations is proportional to their memberships, not to every tenant in
+// the installation.
+func (r reader) OrganizationsForActor(actorID string) []cloudworkspace.Organization {
+	return many(r, `SELECT o.id,o.name,o.created_at,o.updated_at
+		FROM organizations o
+		JOIN organization_members m ON m.organization_id = o.id
+		WHERE m.actor_id = $1
+		ORDER BY o.id`, scanOrganization, actorID)
+}
+
 func scanMembership(row pgx.Row) (cloudworkspace.Membership, error) {
 	var v cloudworkspace.Membership
 	err := row.Scan(&v.OrganizationID, &v.ActorID, &v.Role, &v.CreatedAt, &v.UpdatedAt)

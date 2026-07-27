@@ -227,9 +227,23 @@ DROP INDEX provider_product_mappings_active_scope_key;
 DROP INDEX provider_product_mappings_placeholder_scope_key;
 DROP INDEX provider_product_mappings_current_scope_key;
 
--- A migration rollback explicitly discards new provider-mapping drafts/history
--- because the Phase 3A placeholder schema cannot represent those records.
-DELETE FROM provider_product_mappings WHERE status <> 'placeholder';
+-- The Phase 3A placeholder schema cannot represent real provider mappings, so a
+-- rollback would have to delete them. Refuse instead of silently discarding
+-- commerce configuration; recovery is restore-from-backup.
+-- +goose StatementBegin
+DO $$
+DECLARE real_mappings bigint;
+BEGIN
+  SELECT count(*) INTO real_mappings FROM provider_product_mappings WHERE status <> 'placeholder';
+  IF real_mappings > 0 THEN
+    RAISE EXCEPTION USING
+      ERRCODE = '55000',
+      MESSAGE = format('migration 00006 cannot be rolled back: %s non-placeholder provider Product mapping(s) would be deleted', real_mappings),
+      HINT = 'Restore from a backup taken before the upgrade: see docs/backend/operations/backup-restore.md';
+  END IF;
+END
+$$;
+-- +goose StatementEnd
 
 ALTER TABLE provider_product_mappings
     DROP CONSTRAINT provider_product_mappings_application_scope_fkey,

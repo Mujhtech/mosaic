@@ -6,6 +6,7 @@ import (
 	"fmt"
 
 	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetrichttp"
 	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp"
 	"go.opentelemetry.io/otel/propagation"
@@ -13,6 +14,8 @@ import (
 	"go.opentelemetry.io/otel/sdk/resource"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	semconv "go.opentelemetry.io/otel/semconv/v1.41.0"
+
+	"github.com/Mujhtech/mosaic/apps/api/internal/platform/buildinfo"
 )
 
 type Config struct {
@@ -24,13 +27,20 @@ type Config struct {
 type Shutdown func(context.Context) error
 
 func New(ctx context.Context, cfg Config) (Shutdown, error) {
+	build := buildinfo.Current()
+	attributes := []attribute.KeyValue{
+		semconv.ServiceName(cfg.ServiceName),
+		semconv.ServiceVersion(build.Version),
+		semconv.DeploymentEnvironmentNameKey.String(cfg.Environment),
+	}
+	// The commit is release identity, never a secret, and is what an operator
+	// correlates a trace back to a source tree with.
+	if build.Commit != "" {
+		attributes = append(attributes, attribute.String("service.commit", build.Commit))
+	}
 	serviceResource, err := resource.Merge(
 		resource.Default(),
-		resource.NewWithAttributes(
-			semconv.SchemaURL,
-			semconv.ServiceName(cfg.ServiceName),
-			semconv.DeploymentEnvironmentNameKey.String(cfg.Environment),
-		),
+		resource.NewWithAttributes(semconv.SchemaURL, attributes...),
 	)
 	if err != nil {
 		return nil, fmt.Errorf("create telemetry resource: %w", err)

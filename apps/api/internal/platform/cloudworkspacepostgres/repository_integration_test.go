@@ -47,8 +47,12 @@ func TestPhase3APersistenceRisks(t *testing.T) {
 	if err := goose.SetDialect("postgres"); err != nil {
 		t.Fatal(err)
 	}
-	if err := goose.DownToContext(ctx, db, ".", 0); err != nil {
-		t.Fatalf("reset migrations: %v", err)
+	// Reset by dropping the schema rather than rolling migrations down: since
+	// Phase 8, irreversible down migrations correctly refuse when affected data
+	// exists, so a rollback is not a usable test reset. DATABASE_TEST_URL is
+	// documented as a throwaway database.
+	if _, err := db.ExecContext(ctx, `DROP SCHEMA public CASCADE; CREATE SCHEMA public;`); err != nil {
+		t.Fatalf("reset the test schema (DATABASE_TEST_URL must be a throwaway database): %v", err)
 	}
 	if err := goose.UpToContext(ctx, db, ".", 7); err != nil {
 		t.Fatalf("apply accepted migrations through 00007: %v", err)
@@ -567,8 +571,12 @@ func TestPhase4AProviderPersistenceRisks(t *testing.T) {
 	if err := goose.SetDialect("postgres"); err != nil {
 		t.Fatal(err)
 	}
-	if err := goose.DownToContext(ctx, db, ".", 0); err != nil {
-		t.Fatalf("reset migrations: %v", err)
+	// Reset by dropping the schema rather than rolling migrations down: since
+	// Phase 8, irreversible down migrations correctly refuse when affected data
+	// exists, so a rollback is not a usable test reset. DATABASE_TEST_URL is
+	// documented as a throwaway database.
+	if _, err := db.ExecContext(ctx, `DROP SCHEMA public CASCADE; CREATE SCHEMA public;`); err != nil {
+		t.Fatalf("reset the test schema (DATABASE_TEST_URL must be a throwaway database): %v", err)
 	}
 	if err := goose.UpContext(ctx, db, "."); err != nil {
 		t.Fatalf("apply Phase 4A migrations: %v", err)
@@ -794,8 +802,12 @@ func TestPhase3BPublishingPersistenceRisks(t *testing.T) {
 	if err := goose.SetDialect("postgres"); err != nil {
 		t.Fatal(err)
 	}
-	if err := goose.DownToContext(ctx, db, ".", 0); err != nil {
-		t.Fatalf("reset migrations: %v", err)
+	// Reset by dropping the schema rather than rolling migrations down: since
+	// Phase 8, irreversible down migrations correctly refuse when affected data
+	// exists, so a rollback is not a usable test reset. DATABASE_TEST_URL is
+	// documented as a throwaway database.
+	if _, err := db.ExecContext(ctx, `DROP SCHEMA public CASCADE; CREATE SCHEMA public;`); err != nil {
+		t.Fatalf("reset the test schema (DATABASE_TEST_URL must be a throwaway database): %v", err)
 	}
 	if err := goose.UpContext(ctx, db, "."); err != nil {
 		t.Fatalf("apply Phase 3B migrations: %v", err)

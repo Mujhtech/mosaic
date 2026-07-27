@@ -1352,6 +1352,10 @@ func (r *Repository) RevokeOverride(ctx context.Context, scope experiment.Scope,
 	return persistence(tx.Commit(ctx))
 }
 
+// LeaseSchedule claims the next due scheduling job. It also reclaims leases
+// whose owner died before finishing, which the original query could not do: an
+// expired lease left the row stuck in 'leased' forever and the scheduled
+// Experiment start or completion was silently lost.
 func (r *Repository) LeaseSchedule(ctx context.Context, worker string, now, expires time.Time) (experiment.ScheduleJob, bool, error) {
 	tx, err := r.pool.Begin(ctx)
 	if err != nil {
@@ -1359,7 +1363,12 @@ func (r *Repository) LeaseSchedule(ctx context.Context, worker string, now, expi
 	}
 	defer tx.Rollback(ctx)
 	var job experiment.ScheduleJob
-	err = tx.QueryRow(ctx, `SELECT id,experiment_id,project_id,environment_id,action,actor_id FROM experiment_scheduling_jobs WHERE status='queued' AND scheduled_at<=$1 ORDER BY scheduled_at,id FOR UPDATE SKIP LOCKED LIMIT 1`, now).Scan(&job.ID, &job.ExperimentID, &job.ProjectID, &job.EnvironmentID, &job.Action, &job.ActorID)
+	err = tx.QueryRow(ctx, `SELECT id,experiment_id,project_id,environment_id,action,actor_id,attempt_count,max_attempts
+		FROM experiment_scheduling_jobs
+		WHERE (status='queued' OR (status='leased' AND lease_expires_at<=$1))
+		  AND scheduled_at<=$1 AND available_at<=$1 AND attempt_count<max_attempts
+		ORDER BY available_at,scheduled_at,id FOR UPDATE SKIP LOCKED LIMIT 1`, now).
+		Scan(&job.ID, &job.ExperimentID, &job.ProjectID, &job.EnvironmentID, &job.Action, &job.ActorID, &job.AttemptCount, &job.MaxAttempts)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return job, false, nil
 	}
@@ -1373,15 +1382,45 @@ func (r *Repository) LeaseSchedule(ctx context.Context, worker string, now, expi
 	if err = tx.Commit(ctx); err != nil {
 		return job, false, persistence(err)
 	}
+	job.AttemptCount++
 	return job, true, nil
 }
 
-func (r *Repository) FinishSchedule(ctx context.Context, id string, success bool, now time.Time) error {
-	status := "failed"
-	if success {
-		status = "completed"
+// scheduleBackoff is the requeue delay for attempt n, capped so a repeatedly
+// failing job still retries within a scheduling window an operator would notice.
+func scheduleBackoff(attempt int) time.Duration {
+	const base = 15 * time.Second
+	const cap = 10 * time.Minute
+	delay := base << min(attempt, 6)
+	if delay > cap {
+		return cap
 	}
-	tag, err := r.pool.Exec(ctx, `UPDATE experiment_scheduling_jobs SET status=$2,lease_owner=NULL,lease_expires_at=NULL,updated_at=$3 WHERE id=$1 AND status='leased'`, id, status, now)
+	return delay
+}
+
+// FinishSchedule closes out a leased job. A transient failure is requeued with
+// backoff until the retry budget is spent, at which point the job is terminally
+// failed with a diagnostic code instead of disappearing.
+func (r *Repository) FinishSchedule(ctx context.Context, job experiment.ScheduleJob, success bool, code string, now time.Time) error {
+	if success {
+		tag, err := r.pool.Exec(ctx, `UPDATE experiment_scheduling_jobs SET status='completed',lease_owner=NULL,lease_expires_at=NULL,last_error_code=NULL,updated_at=$2 WHERE id=$1 AND status='leased'`, job.ID, now)
+		if err != nil {
+			return persistence(err)
+		}
+		if tag.RowsAffected() != 1 {
+			return experiment.ErrConflict
+		}
+		return nil
+	}
+	if code == "" {
+		code = "schedule_transition_failed"
+	}
+	tag, err := r.pool.Exec(ctx, `UPDATE experiment_scheduling_jobs
+		SET status=CASE WHEN attempt_count>=max_attempts THEN 'failed' ELSE 'queued' END,
+		    lease_owner=NULL,lease_expires_at=NULL,last_error_code=$2,
+		    available_at=$3::timestamptz+$4::interval,updated_at=$3
+		WHERE id=$1 AND status='leased'`,
+		job.ID, code, now, scheduleBackoff(job.AttemptCount).String())
 	if err != nil {
 		return persistence(err)
 	}

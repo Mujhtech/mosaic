@@ -184,6 +184,16 @@ func (r reader) Organizations() []cloudworkspace.Organization {
 	return sortedValues(r.state.organizations, func(value cloudworkspace.Organization) string { return value.ID })
 }
 
+func (r reader) OrganizationsForActor(actorID string) []cloudworkspace.Organization {
+	values := make([]cloudworkspace.Organization, 0)
+	for _, organization := range r.Organizations() {
+		if _, ok := r.Membership(organization.ID, actorID); ok {
+			values = append(values, organization)
+		}
+	}
+	return values
+}
+
 func membershipKey(organizationID, actorID string) string { return organizationID + "\x00" + actorID }
 
 func (r reader) Membership(organizationID, actorID string) (cloudworkspace.Membership, bool) {

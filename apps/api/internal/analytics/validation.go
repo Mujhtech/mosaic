@@ -146,6 +146,9 @@ func ValidateEvent(event Event, sentAt, now time.Time) (Candidate, string) {
 	if code := validatePayload(event.EventName, event.Payload); code != "" {
 		return Candidate{}, code
 	}
+	if code := validateMinimization(event); code != "" {
+		return Candidate{}, code
+	}
 	return Candidate{Event: event, Raw: raw, OccurredAt: occurred, QueuedAt: queued, SentAt: sentAt, ReceivedAt: now, ExpiresAt: now.Add(EventExpiry)}, ""
 }
 
@@ -302,4 +305,258 @@ func validPayloadValue(kind string, value any) bool {
 	default:
 		panic(fmt.Sprintf("unknown payload kind %q", kind))
 	}
+}
+
+// Data-minimization tables.
+//
+// These mirror the canonical semantic validators
+// (protocol/tools/analytics-event-validation-v1.mjs and -v2.mjs). Before Phase 8
+// the API accepted any correlation or attribution field the JSON Schema allowed,
+// so the canonical validator, the schema, and the runtime disagreed about
+// validity and the ingestion boundary collected identifiers an event has no
+// business carrying. The tables below make the runtime the same authority.
+var (
+	experimentTupleFields = []string{"experimentId", "experimentVersionId", "experimentVariantId", "experimentAllocationVersion"}
+	placementAttribution  = []string{"configurationReleaseId", "placementId", "placementRuleSetId", "placementRuleSetVersion", "winningRuleId"}
+	paywallAttribution    = append(append([]string{}, placementAttribution...), "paywallId", "paywallVersionId")
+	productAttribution    = append(append([]string{}, paywallAttribution...), "mosaicProductId", "planId", "providerId", "providerProductMappingId")
+)
+
+func withoutWinningRule(fields []string) []string {
+	result := make([]string, 0, len(fields))
+	for _, field := range fields {
+		if field != "winningRuleId" {
+			result = append(result, field)
+		}
+	}
+	return result
+}
+
+func withExperimentTuple(fields []string) []string {
+	return append(append([]string{}, fields...), experimentTupleFields...)
+}
+
+func fieldSet(values ...[]string) map[string]struct{} {
+	set := make(map[string]struct{})
+	for _, group := range values {
+		for _, value := range group {
+			set[value] = struct{}{}
+		}
+	}
+	return set
+}
+
+var correlationFieldsByEvent = map[string]map[string]struct{}{
+	"placement_requested":           fieldSet([]string{"placementRequestId"}),
+	"placement_paywall_selected":    fieldSet([]string{"placementRequestId"}),
+	"placement_no_paywall":          fieldSet([]string{"placementRequestId"}),
+	"placement_fallback_used":       fieldSet([]string{"placementRequestId"}),
+	"placement_unavailable":         fieldSet([]string{"placementRequestId"}),
+	"placement_evaluation_failed":   fieldSet([]string{"placementRequestId"}),
+	"paywall_presented":             fieldSet([]string{"placementRequestId", "paywallPresentationId"}),
+	"paywall_dismissed":             fieldSet([]string{"placementRequestId", "paywallPresentationId"}),
+	"paywall_action_selected":       fieldSet([]string{"placementRequestId", "paywallPresentationId"}),
+	"paywall_render_failed":         fieldSet([]string{"placementRequestId", "paywallPresentationId"}),
+	"product_load_started":          fieldSet([]string{"placementRequestId", "paywallPresentationId", "productLoadAttemptId"}),
+	"product_load_completed":        fieldSet([]string{"placementRequestId", "paywallPresentationId", "productLoadAttemptId"}),
+	"product_load_failed":           fieldSet([]string{"placementRequestId", "paywallPresentationId", "productLoadAttemptId"}),
+	"product_unavailable":           fieldSet([]string{"placementRequestId", "paywallPresentationId", "productLoadAttemptId"}),
+	"product_selected":              fieldSet([]string{"placementRequestId", "paywallPresentationId", "productLoadAttemptId"}),
+	"purchase_started":              fieldSet(purchaseCorrelation),
+	"purchase_completed_client":     fieldSet(purchaseCorrelation),
+	"purchase_completed_provider":   fieldSet([]string{"purchaseAttemptId", "providerOperationId", "providerUpdateId"}),
+	"purchase_pending":              fieldSet(purchaseCorrelation),
+	"purchase_deferred":             fieldSet(purchaseCorrelation),
+	"purchase_cancelled":            fieldSet(purchaseCorrelation),
+	"purchase_failed":               fieldSet(purchaseCorrelation),
+	"restore_started":               fieldSet(restoreCorrelation),
+	"restore_completed":             fieldSet(restoreCorrelation),
+	"restore_nothing_found":         fieldSet(restoreCorrelation),
+	"restore_cancelled":             fieldSet(restoreCorrelation),
+	"restore_failed":                fieldSet(restoreCorrelation),
+	"experiment_assigned":           fieldSet([]string{"placementRequestId"}),
+	"experiment_exposed":            fieldSet([]string{"placementRequestId", "paywallPresentationId"}),
+	"experiment_fallback_presented": fieldSet([]string{"placementRequestId", "paywallPresentationId"}),
+	"experiment_assignment_failed":  fieldSet([]string{"placementRequestId"}),
+}
+
+var (
+	purchaseCorrelation = []string{"placementRequestId", "paywallPresentationId", "productLoadAttemptId", "purchaseAttemptId", "providerOperationId"}
+	restoreCorrelation  = []string{"restoreAttemptId", "providerOperationId"}
+)
+
+var attributionFieldsByEvent = map[string]map[string]struct{}{
+	"placement_requested":           fieldSet(withoutWinningRule(placementAttribution)),
+	"placement_paywall_selected":    fieldSet(paywallAttribution),
+	"placement_no_paywall":          fieldSet(placementAttribution),
+	"placement_fallback_used":       fieldSet(paywallAttribution),
+	"placement_unavailable":         fieldSet(placementAttribution),
+	"placement_evaluation_failed":   fieldSet(withoutWinningRule(placementAttribution)),
+	"paywall_presented":             fieldSet(paywallAttribution),
+	"paywall_dismissed":             fieldSet(paywallAttribution),
+	"paywall_action_selected":       fieldSet(paywallAttribution),
+	"paywall_render_failed":         fieldSet(paywallAttribution),
+	"product_load_started":          fieldSet(paywallAttribution),
+	"product_load_completed":        fieldSet(paywallAttribution),
+	"product_load_failed":           fieldSet(paywallAttribution),
+	"product_unavailable":           fieldSet(productAttribution),
+	"product_selected":              fieldSet(withExperimentTuple(productAttribution)),
+	"purchase_started":              fieldSet(withExperimentTuple(productAttribution)),
+	"purchase_completed_client":     fieldSet(withExperimentTuple(productAttribution)),
+	"purchase_completed_provider":   fieldSet(withExperimentTuple(productAttribution)),
+	"purchase_pending":              fieldSet(withExperimentTuple(productAttribution)),
+	"purchase_deferred":             fieldSet(withExperimentTuple(productAttribution)),
+	"purchase_cancelled":            fieldSet(withExperimentTuple(productAttribution)),
+	"purchase_failed":               fieldSet(withExperimentTuple(productAttribution)),
+	"restore_started":               fieldSet([]string{"configurationReleaseId"}),
+	"restore_completed":             fieldSet([]string{"configurationReleaseId"}),
+	"restore_nothing_found":         fieldSet([]string{"configurationReleaseId"}),
+	"restore_cancelled":             fieldSet([]string{"configurationReleaseId"}),
+	"restore_failed":                fieldSet([]string{"configurationReleaseId"}),
+	"experiment_assigned":           fieldSet(withExperimentTuple(placementAttribution)),
+	"experiment_exposed":            fieldSet(withExperimentTuple(paywallAttribution)),
+	"experiment_fallback_presented": fieldSet(withExperimentTuple(placementAttribution)),
+	"experiment_assignment_failed":  fieldSet(withExperimentTuple(placementAttribution)),
+}
+
+// presentCorrelationFields lists the correlation identifiers carried by an event.
+func presentCorrelationFields(c Correlation) []string {
+	present := make([]string, 0, 7)
+	for _, candidate := range []struct {
+		name  string
+		value string
+	}{
+		{"placementRequestId", c.PlacementRequestID},
+		{"paywallPresentationId", c.PaywallPresentationID},
+		{"productLoadAttemptId", c.ProductLoadAttemptID},
+		{"purchaseAttemptId", c.PurchaseAttemptID},
+		{"restoreAttemptId", c.RestoreAttemptID},
+		{"providerOperationId", c.ProviderOperationID},
+		{"providerUpdateId", c.ProviderUpdateID},
+	} {
+		if candidate.value != "" {
+			present = append(present, candidate.name)
+		}
+	}
+	return present
+}
+
+// presentAttributionFields lists the attribution fields carried by an event.
+func presentAttributionFields(a Attribution) []string {
+	present := make([]string, 0, 15)
+	for _, candidate := range []struct {
+		name  string
+		value string
+	}{
+		{"configurationReleaseId", a.ConfigurationReleaseID},
+		{"placementId", a.PlacementID},
+		{"placementRuleSetId", a.PlacementRuleSetID},
+		{"winningRuleId", a.WinningRuleID},
+		{"paywallId", a.PaywallID},
+		{"paywallVersionId", a.PaywallVersionID},
+		{"mosaicProductId", a.ProductID},
+		{"planId", a.PlanID},
+		{"providerId", a.Provider},
+		{"providerProductMappingId", a.ProviderMappingID},
+		{"experimentId", a.ExperimentID},
+		{"experimentVersionId", a.ExperimentVersionID},
+		{"experimentVariantId", a.ExperimentVariantID},
+		{"experimentAllocationVersion", a.ExperimentAllocationVersion},
+	} {
+		if candidate.value != "" {
+			present = append(present, candidate.name)
+		}
+	}
+	if a.PlacementRuleSetVersion != 0 {
+		present = append(present, "placementRuleSetVersion")
+	}
+	return present
+}
+
+// validateMinimization enforces the per-event correlation and attribution
+// allow-lists plus the pairing rules that keep attribution interpretable. It
+// applies to both v1 and v2 events.
+func validateMinimization(event Event) string {
+	allowedCorrelation, known := correlationFieldsByEvent[event.EventName]
+	if !known {
+		return RejectUnsupportedEventName
+	}
+	for _, field := range presentCorrelationFields(event.Correlation) {
+		if _, ok := allowedCorrelation[field]; !ok {
+			return RejectCorrelationNotAllowed
+		}
+	}
+	allowedAttribution := attributionFieldsByEvent[event.EventName]
+	for _, field := range presentAttributionFields(event.Attribution) {
+		if _, ok := allowedAttribution[field]; !ok {
+			return RejectAttributionNotAllowed
+		}
+	}
+
+	// A Rule Set ID without its version cannot identify the evaluated targeting
+	// state, and a winning Rule without a Rule Set is unattributable.
+	hasRuleSetID := event.Attribution.PlacementRuleSetID != ""
+	hasRuleSetVersion := event.Attribution.PlacementRuleSetVersion != 0
+	if hasRuleSetID != hasRuleSetVersion {
+		return RejectRuleSetAttributionIncomplete
+	}
+	if event.Attribution.WinningRuleID != "" && !hasRuleSetID {
+		return RejectRuleSetAttributionIncomplete
+	}
+
+	if code := validateRolloutTuple(event); code != "" {
+		return code
+	}
+
+	// A QA-overridden presentation is not a statistical exposure; counting it
+	// would corrupt Experiment results.
+	if event.EventName == "experiment_exposed" && payloadBool(event.Payload, "qaOverride") {
+		return RejectQAExposure
+	}
+	if event.EventName == "experiment_fallback_presented" &&
+		(event.Attribution.PaywallID != "" || event.Attribution.PaywallVersionID != "") {
+		return RejectFallbackPaywallIdentity
+	}
+	return ""
+}
+
+// validateRolloutTuple enforces that rollout attribution on a selection event is
+// either entirely absent or entirely present. A partial tuple silently
+// misattributes a rollout bucket to an unknown algorithm.
+func validateRolloutTuple(event Event) string {
+	if event.EventName != "placement_paywall_selected" && event.EventName != "placement_no_paywall" {
+		return ""
+	}
+	payload := decodePayload(event.Payload)
+	if payload == nil {
+		return ""
+	}
+	present := 0
+	for _, field := range []string{"assignmentKeyType", "bucketingAlgorithm", "rolloutBucket"} {
+		if _, ok := payload[field]; ok {
+			present++
+		}
+	}
+	if present != 0 && present != 3 {
+		return RejectRolloutAttributionIncomplete
+	}
+	return ""
+}
+
+func decodePayload(raw json.RawMessage) map[string]any {
+	if len(raw) == 0 {
+		return nil
+	}
+	decoder := json.NewDecoder(bytes.NewReader(raw))
+	decoder.UseNumber()
+	var value map[string]any
+	if err := decoder.Decode(&value); err != nil {
+		return nil
+	}
+	return value
+}
+
+func payloadBool(raw json.RawMessage, field string) bool {
+	value, _ := decodePayload(raw)[field].(bool)
+	return value
 }

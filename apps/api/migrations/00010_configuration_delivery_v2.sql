@@ -48,6 +48,21 @@ DROP TRIGGER immutable_configuration_release_rule_set_versions ON configuration_
 DROP TRIGGER immutable_configuration_release_representations ON configuration_release_representations;
 DROP TABLE configuration_release_rule_set_versions;
 DROP TABLE configuration_release_representations;
-UPDATE configuration_releases SET delivery_contract_version='1' WHERE delivery_contract_version='2';
+-- Rewriting a published v2 Release to claim contract version 1 would corrupt an
+-- immutable Configuration Release. Refuse instead; recovery is restore-from-backup.
+-- +goose StatementBegin
+DO $$
+DECLARE v2_releases bigint;
+BEGIN
+  SELECT count(*) INTO v2_releases FROM configuration_releases WHERE delivery_contract_version = '2';
+  IF v2_releases > 0 THEN
+    RAISE EXCEPTION USING
+      ERRCODE = '55000',
+      MESSAGE = format('migration 00010 cannot be rolled back: %s Delivery v2 Configuration Release(s) exist', v2_releases),
+      HINT = 'Restore from a backup taken before the upgrade: see docs/backend/operations/backup-restore.md';
+  END IF;
+END
+$$;
+-- +goose StatementEnd
 ALTER TABLE configuration_releases DROP CONSTRAINT configuration_releases_delivery_contract_version_check;
 ALTER TABLE configuration_releases ADD CONSTRAINT configuration_releases_delivery_contract_version_check CHECK (delivery_contract_version='1');

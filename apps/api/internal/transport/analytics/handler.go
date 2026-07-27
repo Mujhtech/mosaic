@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
-	"net"
 	"net/http"
 	"strconv"
 	"strings"
@@ -18,6 +17,7 @@ import (
 
 	"github.com/Mujhtech/mosaic/apps/api/internal/analytics"
 	"github.com/Mujhtech/mosaic/apps/api/internal/platform/authn"
+	"github.com/Mujhtech/mosaic/apps/api/internal/platform/httpserver/httpmiddleware"
 	"github.com/Mujhtech/mosaic/apps/api/internal/platform/httpserver/response"
 )
 
@@ -33,9 +33,23 @@ type Handler struct {
 	eventLimiter          EventLimiter
 }
 
-func RegisterPublicRoutes(router chi.Router, service *analytics.Service, ip, key Limiter, events EventLimiter) {
+// RegisterPublicRoutes mounts the SDK ingestion endpoint. ingestMiddleware
+// carries the per-route timeout override, because a 100-event batch legitimately
+// takes longer than the global request budget.
+func RegisterPublicRoutes(router chi.Router, service *analytics.Service, ip, key Limiter, events EventLimiter, ingestMiddleware ...func(http.Handler) http.Handler) {
 	h := &Handler{service: service, ipLimiter: ip, keyLimiter: key, eventLimiter: events}
-	router.Post("/sdk/events/batch", h.ingest)
+	router.With(nonNil(ingestMiddleware)...).Post("/sdk/events/batch", h.ingest)
+}
+
+// nonNil drops unset optional middleware so callers can pass a nil override.
+func nonNil(middleware []func(http.Handler) http.Handler) []func(http.Handler) http.Handler {
+	result := make([]func(http.Handler) http.Handler, 0, len(middleware))
+	for _, item := range middleware {
+		if item != nil {
+			result = append(result, item)
+		}
+	}
+	return result
 }
 func RegisterProjectRoutes(router chi.Router, service *analytics.Service) {
 	h := &Handler{service: service}
@@ -81,10 +95,7 @@ func (h *Handler) ingest(w http.ResponseWriter, r *http.Request) {
 		writeError(w, r, analytics.ErrInvalidBatch)
 		return
 	}
-	host, _, _ := net.SplitHostPort(r.RemoteAddr)
-	if host == "" {
-		host = r.RemoteAddr
-	}
+	host := httpmiddleware.ClientIP(r)
 	if ok, retry := h.ipLimiter.Allow("ip:" + host); !ok {
 		w.Header().Set("Retry-After", retryHeader(retry))
 		writeError(w, r, analytics.ErrRateLimited)

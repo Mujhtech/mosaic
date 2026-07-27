@@ -14,6 +14,9 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	validation "github.com/go-ozzo/ozzo-validation/v4"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/metric"
 
 	"github.com/Mujhtech/mosaic/apps/api/internal/hostedpublishing"
 	"github.com/Mujhtech/mosaic/apps/api/internal/platform/authn"
@@ -22,8 +25,10 @@ import (
 )
 
 const (
-	maxDocumentRequestBytes             = 4 << 20
-	maxAssetRequestBytes                = 11 << 20
+	maxDocumentRequestBytes = 4 << 20
+	// multipartOverheadBytes covers the MIME part headers and boundary markers
+	// wrapping the Asset bytes themselves.
+	multipartOverheadBytes              = 1 << 20
 	idempotencyHeader                   = "Idempotency-Key"
 	ifMatchHeader                       = "If-Match"
 	deliveryContentType                 = "application/vnd.mosaic.configuration+json;version=1"
@@ -56,10 +61,19 @@ func RegisterRoutes(router chi.Router, service *hostedpublishing.Service, resolv
 	RegisterPublicRoutes(router, service, limiters...)
 }
 
-func RegisterProjectRoutes(router chi.Router, service *hostedpublishing.Service) {
+// RegisterProjectRoutes mounts the authenticated publishing routes.
+// uploadMiddleware carries the per-route timeout override for asset upload,
+// which must not be bounded by the global request budget.
+func RegisterProjectRoutes(router chi.Router, service *hostedpublishing.Service, uploadMiddleware ...func(http.Handler) http.Handler) {
 	handler := &Handler{service: service}
+	upload := make([]func(http.Handler) http.Handler, 0, len(uploadMiddleware))
+	for _, item := range uploadMiddleware {
+		if item != nil {
+			upload = append(upload, item)
+		}
+	}
 	router.Get("/assets", handler.listAssets)
-	router.Post("/assets", handler.uploadAsset)
+	router.With(upload...).Post("/assets", handler.uploadAsset)
 	router.Get("/assets/{assetId}", handler.getAsset)
 	router.Delete("/assets/{assetId}", handler.archiveAsset)
 	router.Get("/assets/{assetId}/usage", handler.assetUsage)
@@ -269,7 +283,7 @@ func writeError(w http.ResponseWriter, r *http.Request, err error) {
 }
 
 func (h *Handler) uploadAsset(w http.ResponseWriter, r *http.Request) {
-	r.Body = http.MaxBytesReader(w, r.Body, maxAssetRequestBytes)
+	r.Body = http.MaxBytesReader(w, r.Body, h.service.AssetUploadLimit()+multipartOverheadBytes)
 	reader, err := r.MultipartReader()
 	if err != nil {
 		response.Error(w, r, response.ValidationFailed(map[string][]string{"file": {"A multipart file upload is required."}}))
@@ -673,6 +687,24 @@ func digestBytes(payload []byte) string {
 	return hostedpublishing.ContentHash(payload)
 }
 
+// deliveryResponses counts Configuration Release deliveries split by whether
+// the SDK's cached representation was still current. The 304 ratio is the
+// documented signal for delivery efficiency and cache correctness.
+var deliveryResponses = func() metric.Int64Counter {
+	counter, _ := otel.Meter("mosaic/hostedpublishing").Int64Counter(
+		"mosaic.delivery.responses",
+		metric.WithDescription("Configuration delivery responses, split by cache outcome."),
+	)
+	return counter
+}()
+
+func recordDelivery(r *http.Request, surface string, notModified bool) {
+	deliveryResponses.Add(r.Context(), 1, metric.WithAttributes(
+		attribute.String("surface", surface),
+		attribute.Bool("not_modified", notModified),
+	))
+}
+
 func (h *Handler) sdkConfiguration(w http.ResponseWriter, r *http.Request) {
 	if !h.allowDelivery(w, r, "ip:"+requestIP(r)) {
 		return
@@ -717,9 +749,11 @@ func (h *Handler) sdkConfiguration(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Encoding", encoding)
 	}
 	if r.Header.Get("If-None-Match") == etag {
+		recordDelivery(r, "configuration", true)
 		response.Representation(w, http.StatusNotModified, "application/vnd.mosaic.configuration+json;version="+deliveryVersion, nil)
 		return
 	}
+	recordDelivery(r, "configuration", false)
 	response.Representation(w, http.StatusOK, "application/vnd.mosaic.configuration+json;version="+deliveryVersion, payload)
 }
 
@@ -781,9 +815,11 @@ func (h *Handler) sdkCommerceConfiguration(w http.ResponseWriter, r *http.Reques
 	w.Header().Set("Vary", "Authorization, Accept, Mosaic-SDK-Platform, Mosaic-SDK-Version, Mosaic-Commerce-Configuration-Versions, Mosaic-Commerce-Provider-Contract-Versions")
 	contentType := "application/vnd.mosaic.commerce-configuration+json;version=" + envelope.Version
 	if r.Header.Get("If-None-Match") == etag {
+		recordDelivery(r, "commerce-configuration", true)
 		response.Representation(w, http.StatusNotModified, contentType, nil)
 		return
 	}
+	recordDelivery(r, "commerce-configuration", false)
 	response.Representation(w, http.StatusOK, contentType, configuration.Snapshot.Payload)
 }
 

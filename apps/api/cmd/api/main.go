@@ -5,6 +5,7 @@ import (
 	"crypto/rand"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"os"
 	"os/signal"
@@ -21,6 +22,7 @@ import (
 	"github.com/Mujhtech/mosaic/apps/api/internal/platform/analyticspostgres"
 	"github.com/Mujhtech/mosaic/apps/api/internal/platform/authn"
 	"github.com/Mujhtech/mosaic/apps/api/internal/platform/browserauthpostgres"
+	"github.com/Mujhtech/mosaic/apps/api/internal/platform/buildinfo"
 	"github.com/Mujhtech/mosaic/apps/api/internal/platform/cloudworkspacepostgres"
 	"github.com/Mujhtech/mosaic/apps/api/internal/platform/config"
 	"github.com/Mujhtech/mosaic/apps/api/internal/platform/database"
@@ -30,11 +32,13 @@ import (
 	"github.com/Mujhtech/mosaic/apps/api/internal/platform/logging"
 	"github.com/Mujhtech/mosaic/apps/api/internal/platform/objectstoreminio"
 	"github.com/Mujhtech/mosaic/apps/api/internal/platform/placementdecisionpostgres"
+	"github.com/Mujhtech/mosaic/apps/api/internal/platform/protocolschema"
 	"github.com/Mujhtech/mosaic/apps/api/internal/platform/ratelimit"
 	"github.com/Mujhtech/mosaic/apps/api/internal/platform/revenuecat"
 	"github.com/Mujhtech/mosaic/apps/api/internal/platform/telemetry"
 	"github.com/Mujhtech/mosaic/apps/api/internal/providercredential"
 	browserauthhttp "github.com/Mujhtech/mosaic/apps/api/internal/transport/browserauth"
+	"github.com/Mujhtech/mosaic/apps/api/internal/transport/health"
 )
 
 func main() {
@@ -50,6 +54,36 @@ func main() {
 	}
 }
 
+// openSchemas resolves every canonical schema the runtime compiles. Schemas are
+// embedded in the binary; a configured path is an explicit operator override.
+func openSchemas(cfg config.Config) (map[protocolschema.Schema]io.ReadCloser, error) {
+	overrides := map[protocolschema.Schema]string{
+		protocolschema.PaywallV02:              cfg.Protocol.V02SchemaPath,
+		protocolschema.CommerceProviderV1:      cfg.Protocol.CommerceProviderSchemaPath,
+		protocolschema.CommerceProviderV2:      cfg.Protocol.CommerceProviderV2SchemaPath,
+		protocolschema.CommerceConfigurationV1: cfg.Protocol.CommerceConfigurationSchemaPath,
+		protocolschema.CommerceConfigurationV2: cfg.Protocol.CommerceConfigurationV2SchemaPath,
+		protocolschema.AnalyticsEventV1:        cfg.Analytics.EventSchemaPath,
+		protocolschema.AnalyticsEventV2:        cfg.Analytics.EventV2SchemaPath,
+	}
+	readers := make(map[protocolschema.Schema]io.ReadCloser, len(overrides))
+	for schema, override := range overrides {
+		reader, err := protocolschema.Open(schema, override)
+		if err != nil {
+			closeSchemas(readers)
+			return nil, err
+		}
+		readers[schema] = reader
+	}
+	return readers, nil
+}
+
+func closeSchemas(readers map[protocolschema.Schema]io.ReadCloser) {
+	for _, reader := range readers {
+		_ = reader.Close()
+	}
+}
+
 func run() (runErr error) {
 	cfg, err := config.Load()
 	if err != nil {
@@ -60,9 +94,11 @@ func run() (runErr error) {
 	if err != nil {
 		return fmt.Errorf("configure logging: %w", err)
 	}
+	build := buildinfo.Current()
 	logger = logger.With().
 		Str("service", cfg.Telemetry.ServiceName).
 		Str("environment", cfg.Environment).
+		Str("version", build.Version).
 		Logger()
 
 	runContext, stop := signal.NotifyContext(
@@ -81,9 +117,11 @@ func run() (runErr error) {
 		return fmt.Errorf("configure telemetry: %w", err)
 	}
 	defer func() {
+		// Telemetry flush has its own budget so a slow collector cannot consume
+		// the HTTP drain budget or delay closing the database pool.
 		shutdownContext, cancel := context.WithTimeout(
 			context.Background(),
-			cfg.HTTP.ShutdownTimeout,
+			cfg.HTTP.TelemetryShutdownTimeout,
 		)
 		defer cancel()
 
@@ -93,89 +131,71 @@ func run() (runErr error) {
 	}()
 
 	databasePool, err := database.Open(runContext, database.Config{
-		URL:            cfg.Database.URL,
-		MaxConnections: cfg.Database.MaxConnections,
-		MinConnections: cfg.Database.MinConnections,
-		ConnectTimeout: cfg.Database.ConnectTimeout,
+		URL:               cfg.Database.URL,
+		MaxConnections:    cfg.Database.MaxConnections,
+		MinConnections:    cfg.Database.MinConnections,
+		ConnectTimeout:    cfg.Database.ConnectTimeout,
+		MaxConnLifetime:   cfg.Database.MaxConnLifetime,
+		MaxConnIdleTime:   cfg.Database.MaxConnIdleTime,
+		HealthCheckPeriod: cfg.Database.HealthCheckPeriod,
+		StatementTimeout:  cfg.Database.StatementTimeout,
+		LockTimeout:       cfg.Database.LockTimeout,
 	})
 	if err != nil {
 		return fmt.Errorf("initialize database: %w", err)
 	}
-	defer databasePool.Close()
-
-	protocolSchema, err := os.Open(cfg.Protocol.V02SchemaPath)
-	if err != nil {
-		return fmt.Errorf("open canonical Protocol 0.2 schema: %w", err)
+	defer func() {
+		// Close is synchronous; the budget bounds how long callers may still be
+		// returning connections before the process exits.
+		closeContext, cancel := context.WithTimeout(context.Background(), cfg.Database.CloseTimeout)
+		defer cancel()
+		done := make(chan struct{})
+		go func() { databasePool.Close(); close(done) }()
+		select {
+		case <-done:
+		case <-closeContext.Done():
+			logger.Warn().Msg("database pool did not close within the configured budget")
+		}
+	}()
+	if err := database.RegisterPoolMetrics(databasePool); err != nil {
+		return fmt.Errorf("register database metrics: %w", err)
 	}
-	protocolValidator, err := hostedpublishing.CompileProtocolValidator(protocolSchema)
-	closeSchemaErr := protocolSchema.Close()
+
+	// Startup fails closed when the schema does not match this binary; Mosaic
+	// never migrates during normal startup.
+	if err := database.MigrationCompatibility(runContext, databasePool); err != nil {
+		return fmt.Errorf("verify migration compatibility: %w", err)
+	}
+
+	schemas, err := openSchemas(cfg)
 	if err != nil {
 		return err
 	}
-	if closeSchemaErr != nil {
-		return fmt.Errorf("close canonical Protocol 0.2 schema: %w", closeSchemaErr)
-	}
-	commerceProviderSchema, err := os.Open(cfg.Protocol.CommerceProviderSchemaPath)
+	protocolValidator, err := hostedpublishing.CompileProtocolValidator(schemas[protocolschema.PaywallV02])
 	if err != nil {
-		return fmt.Errorf("open canonical Commerce Provider v1 schema: %w", err)
-	}
-	commerceConfigurationSchema, err := os.Open(cfg.Protocol.CommerceConfigurationSchemaPath)
-	if err != nil {
-		_ = commerceProviderSchema.Close()
-		return fmt.Errorf("open canonical Commerce Configuration v1 schema: %w", err)
-	}
-	commerceProviderV2Schema, err := os.Open(cfg.Protocol.CommerceProviderV2SchemaPath)
-	if err != nil {
-		_ = commerceProviderSchema.Close()
-		_ = commerceConfigurationSchema.Close()
-		return fmt.Errorf("open canonical Commerce Provider v2 schema: %w", err)
-	}
-	commerceConfigurationV2Schema, err := os.Open(cfg.Protocol.CommerceConfigurationV2SchemaPath)
-	if err != nil {
-		_ = commerceProviderSchema.Close()
-		_ = commerceConfigurationSchema.Close()
-		_ = commerceProviderV2Schema.Close()
-		return fmt.Errorf("open canonical Commerce Configuration v2 schema: %w", err)
+		closeSchemas(schemas)
+		return err
 	}
 	commerceValidator, err := hostedpublishing.CompileCommerceConfigurationValidator(
-		commerceProviderSchema, commerceConfigurationSchema,
-		commerceProviderV2Schema, commerceConfigurationV2Schema,
+		schemas[protocolschema.CommerceProviderV1], schemas[protocolschema.CommerceConfigurationV1],
+		schemas[protocolschema.CommerceProviderV2], schemas[protocolschema.CommerceConfigurationV2],
 	)
-	closeCommerceProviderErr := commerceProviderSchema.Close()
-	closeCommerceConfigurationErr := commerceConfigurationSchema.Close()
-	closeCommerceProviderV2Err := commerceProviderV2Schema.Close()
-	closeCommerceConfigurationV2Err := commerceConfigurationV2Schema.Close()
 	if err != nil {
+		closeSchemas(schemas)
 		return err
 	}
-	if closeErr := errors.Join(closeCommerceProviderErr, closeCommerceConfigurationErr, closeCommerceProviderV2Err, closeCommerceConfigurationV2Err); closeErr != nil {
-		return fmt.Errorf("close canonical commerce schemas: %w", closeErr)
-	}
-	analyticsSchema, err := os.Open(cfg.Analytics.EventSchemaPath)
-	if err != nil {
-		return fmt.Errorf("open canonical Analytics Event v1 schema: %w", err)
-	}
-	analyticsV2Schema, err := os.Open(cfg.Analytics.EventV2SchemaPath)
-	if err != nil {
-		_ = analyticsSchema.Close()
-		return fmt.Errorf("open canonical Analytics Event v2 schema: %w", err)
-	}
-	analyticsValidator, err := analytics.CompileSchemaValidators(analyticsSchema, analyticsV2Schema)
-	closeAnalyticsSchemaErr := analyticsSchema.Close()
-	closeAnalyticsV2SchemaErr := analyticsV2Schema.Close()
+	analyticsValidator, err := analytics.CompileSchemaValidators(
+		schemas[protocolschema.AnalyticsEventV1], schemas[protocolschema.AnalyticsEventV2],
+	)
+	closeSchemas(schemas)
 	if err != nil {
 		return err
-	}
-	if closeAnalyticsSchemaErr != nil {
-		return fmt.Errorf("close canonical Analytics Event v1 schema: %w", closeAnalyticsSchemaErr)
-	}
-	if closeAnalyticsV2SchemaErr != nil {
-		return fmt.Errorf("close canonical Analytics Event v2 schema: %w", closeAnalyticsV2SchemaErr)
 	}
 
 	objectStore, err := objectstoreminio.New(objectstoreminio.Config{
 		Endpoint: cfg.ObjectStore.Endpoint, AccessKey: cfg.ObjectStore.AccessKey,
 		SecretKey: cfg.ObjectStore.SecretKey, Bucket: cfg.ObjectStore.Bucket, UseTLS: cfg.ObjectStore.UseTLS,
+		OperationTimeout: cfg.ObjectStore.OperationTimeout, CheckTimeout: cfg.ObjectStore.CheckTimeout,
 	})
 	if err != nil {
 		return err
@@ -219,13 +239,36 @@ func run() (runErr error) {
 	experimentService := experiment.NewService(experimentpostgres.New(databasePool))
 	deliveryLimiter := ratelimit.New(cfg.Delivery.RequestsPerMinute, cfg.Delivery.Burst, cfg.Delivery.LimiterEntries)
 	authenticationLimiter := ratelimit.New(cfg.BrowserAuth.RequestsPerMinute, cfg.BrowserAuth.Burst, cfg.BrowserAuth.LimiterEntries)
+	apiLimiter := ratelimit.New(cfg.Delivery.APIRequestsPerMinute, cfg.Delivery.APIBurst, cfg.Delivery.LimiterEntries)
+	decisionLimiter := ratelimit.New(cfg.Delivery.DecisionRequestsPerMinute, cfg.Delivery.DecisionBurst, cfg.Delivery.LimiterEntries)
 	analyticsIPLimiter := ratelimit.New(cfg.Analytics.IPRequestsPerMinute, cfg.Analytics.IPBurst, cfg.Analytics.LimiterEntries)
 	analyticsKeyLimiter := ratelimit.New(cfg.Analytics.KeyBatchesPerMinute, cfg.Analytics.KeyBatchBurst, cfg.Analytics.LimiterEntries)
 	analyticsEventLimiter := ratelimit.New(cfg.Analytics.KeyEventsPerMinute, cfg.Analytics.KeyEventBurst, cfg.Analytics.LimiterEntries)
+
+	readiness := health.NewReadiness(
+		health.Check{Name: "postgresql", Code: "database_unavailable", Probe: func(ctx context.Context) error {
+			return database.Ping(ctx, databasePool)
+		}},
+		health.Check{Name: "object_storage", Code: "object_storage_unavailable", Probe: objectStore.Check},
+		health.Check{Name: "migrations", Code: "migration_incompatible", Probe: func(ctx context.Context) error {
+			return database.MigrationCompatibility(ctx, databasePool)
+		}},
+		health.Check{Name: "encryption", Code: "encryption_misconfigured", Probe: func(context.Context) error {
+			if !cfg.Providers.Enabled {
+				return nil
+			}
+			return providercredential.ValidateKeyring(cfg.Providers.CredentialKeyring)
+		}},
+	)
+
 	handler := httpserver.NewWithDependencies(httpserver.Config{
-		ServiceName:    cfg.Telemetry.ServiceName,
-		AllowedOrigins: cfg.HTTP.CORSAllowedOrigins,
-		RequestTimeout: cfg.HTTP.HandlerTimeout,
+		ServiceName:       cfg.Telemetry.ServiceName,
+		AllowedOrigins:    cfg.HTTP.CORSAllowedOrigins,
+		RequestTimeout:    cfg.HTTP.HandlerTimeout,
+		UploadTimeout:     cfg.HTTP.UploadTimeout,
+		IngestTimeout:     cfg.HTTP.IngestTimeout,
+		TrustedProxyCIDRs: cfg.HTTP.TrustedProxyCIDRs,
+		EnableHSTS:        cfg.ProductionLike(),
 	}, logger, httpserver.Dependencies{
 		BrowserAuth:           browserAuthService,
 		BrowserAuthConfig:     browserauthhttp.Config{CookieSecure: cfg.BrowserAuth.CookieSecure, CookieDomain: cfg.BrowserAuth.CookieDomain, AllowedOrigins: cfg.HTTP.CORSAllowedOrigins, RateLimiter: authenticationLimiter},
@@ -239,6 +282,9 @@ func run() (runErr error) {
 		AnalyticsKeyLimiter:   analyticsKeyLimiter,
 		AnalyticsEventLimiter: analyticsEventLimiter,
 		Experiment:            experimentService,
+		APILimiter:            apiLimiter,
+		DecisionLimiter:       decisionLimiter,
+		Readiness:             readiness,
 		ReadinessChecker:      database.HealthChecker{Pinger: databasePool},
 	})
 
@@ -257,7 +303,10 @@ func run() (runErr error) {
 		serverErrors <- server.ListenAndServe()
 	}()
 
-	logger.Info().Str("address", cfg.HTTP.Address).Msg("api listening")
+	logger.Info().
+		Str("address", cfg.HTTP.Address).
+		Str("commit", build.Commit).
+		Msg("api listening")
 
 	select {
 	case err := <-serverErrors:
@@ -268,6 +317,10 @@ func run() (runErr error) {
 	case <-runContext.Done():
 		logger.Info().Msg("api shutdown requested")
 	}
+
+	// Readiness flips first so a load balancer stops routing new work before
+	// in-flight requests are drained.
+	readiness.StartDraining()
 
 	shutdownContext, cancel := context.WithTimeout(
 		context.Background(),

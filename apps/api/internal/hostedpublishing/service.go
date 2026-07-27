@@ -44,6 +44,10 @@ func WithObjectStore(store ObjectStore, publicBaseURL string, uploadLimit int64)
 	}
 }
 
+// AssetUploadLimit is the configured maximum Asset size in bytes. The HTTP
+// transport uses it to bound the request body instead of a hardcoded ceiling.
+func (s *Service) AssetUploadLimit() int64 { return s.assetLimit }
+
 func NewService(repository Repository, options ...ServiceOption) *Service {
 	service := &Service{
 		repository: repository,

@@ -120,8 +120,15 @@ func RequestTimeout(w http.ResponseWriter, r *http.Request) {
 }
 
 func ServiceUnavailable(w http.ResponseWriter, r *http.Request, code, message string) {
+	ServiceUnavailableWithDetails(w, r, code, message, nil)
+}
+
+// ServiceUnavailableWithDetails adds safe machine-readable diagnostics such as
+// per-dependency readiness codes. Details must never contain credentials,
+// connection strings, or internal topology.
+func ServiceUnavailableWithDetails(w http.ResponseWriter, r *http.Request, code, message string, details map[string]any) {
 	writeJSON(w, r, http.StatusServiceUnavailable, errorEnvelope{Error: errorPayload{
-		Code: code, Message: message, RequestID: chimiddleware.GetReqID(r.Context()),
+		Code: code, Message: message, Details: cloneDetails(details), RequestID: chimiddleware.GetReqID(r.Context()),
 	}})
 }
 

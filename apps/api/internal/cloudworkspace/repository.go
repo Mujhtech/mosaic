@@ -15,6 +15,10 @@ type Repository interface {
 type Reader interface {
 	Organization(string) (Organization, bool)
 	Organizations() []Organization
+	// OrganizationsForActor returns only the Organizations the actor belongs to.
+	// Listing every Organization and filtering in the service leaked an
+	// all-tenants scan into a per-user request.
+	OrganizationsForActor(string) []Organization
 	Membership(string, string) (Membership, bool)
 	Memberships(string) []Membership
 	Project(string) (Project, bool)
