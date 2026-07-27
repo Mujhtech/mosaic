@@ -585,6 +585,10 @@ class MosaicPaywallState(
         provider: MosaicAnalyticsCommerceAttribution? = null,
     ) {
         val context = analyticsContext ?: return
+        // The conversion events named by the `analytics-event-v1-to-v2` MUST table. Attribution
+        // joins solely on the tuple carried here, and the tuple is legal only on a v2 event, so
+        // dropping it from any of these silently reports zero conversions for every Experiment.
+        // `purchase_completed_provider` is absent by design: the public SDK cannot emit it.
         val carriesExperiment = payload is MosaicAnalyticsPayload.ProductSelected ||
             payload is MosaicAnalyticsPayload.PurchaseStarted ||
             payload is MosaicAnalyticsPayload.PurchaseCompleted ||

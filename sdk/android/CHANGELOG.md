@@ -33,6 +33,14 @@ Release-blocking fixes:
   batch ID and the exact submitted contract version. A mismatched version means
   the server did not acknowledge what was sent, so events are retried rather
   than removed on an unrelated acknowledgement.
+- Pin Experiment conversion attribution to the `analytics-event-v1-to-v2` MUST
+  table with regression tests. Conversion attribution joins solely on the
+  Experiment tuple carried by the conversion event itself, and the tuple is legal
+  only on a v2 event, so emitting `product_selected` or any purchase lifecycle
+  event on v1 during an active Experiment reports zero conversions with no ingest
+  rejection and no diagnostic. Android already emitted these events on v2 with the
+  complete tuple; the behaviour depended on three separate untested mechanisms and
+  is now locked by emitter and codec tests plus the canonical attributed fixtures.
 - Apply per-event correlation and attribution ownership allow-lists to every
   schema version. Attribution ownership was previously checked only for v2, and
   correlation ownership was not checked at all, so a v1 event could carry an

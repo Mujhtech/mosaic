@@ -55,6 +55,58 @@ class AnalyticsContractTest {
         }
     }
 
+    /**
+     * Experiment conversion attribution joins solely on the Experiment tuple carried by the
+     * conversion event itself, and the tuple is only legal on a v2 event. If the codec rejected or
+     * dropped the attributed conversion forms, every Experiment would report zero conversions with
+     * no ingest rejection and no diagnostic. These fixtures are the canonical correct forms, so they
+     * must decode and re-encode byte-identically — including under the per-event correlation and
+     * attribution ownership allow-lists, which must permit the tuple on conversion events.
+     */
+    @Test
+    fun canonicalAttributedConversionFixturesRoundTripExactly() {
+        listOf("product-selection-attributed.json", "purchase-started-attributed.json").forEach { name ->
+            val source = versionedFixture("v2/$name")
+            val event = MosaicAnalyticsCodec.decodeEvent(source)
+            assertEquals("2", event.eventSchemaVersion)
+            assertTrue("$name must carry the Experiment tuple", event.attribution.hasExperimentTuple())
+            assertEquals(
+                JsonParser.parseString(source),
+                JsonParser.parseString(MosaicAnalyticsCodec.encodeEvent(event)),
+            )
+        }
+    }
+
+    /**
+     * The Experiment tuple is permitted on exactly the conversion events named by the
+     * `analytics-event-v1-to-v2` MUST table and forbidden on every other event. Each case starts
+     * from that event's own canonical fixture, so the only variable is the tuple. Narrowing the
+     * permitted set silently zeroes Experiment conversion metrics; widening it lets an unrelated
+     * event be attributed to a Variant it never influenced.
+     */
+    @Test
+    fun experimentTupleIsPermittedOnExactlyTheConversionEvents() {
+        val permitted = listOf(
+            "product-selection.json", "purchase-started.json", "purchase-completed-client.json",
+            "purchase-completed-provider.json", "purchase-cancelled.json", "purchase-failed.json",
+        )
+        val forbidden = listOf(
+            "paywall-presentation.json", "placement-request.json", "restore-completed.json",
+        )
+
+        permitted.forEach { name ->
+            val event = MosaicAnalyticsCodec.decodeEvent(withTuple(fixture(name)))
+            assertEquals("2", event.eventSchemaVersion)
+            assertTrue("$name must accept the Experiment tuple", event.attribution.hasExperimentTuple())
+        }
+        forbidden.forEach { name ->
+            assertThrows(
+                "$name must reject the Experiment tuple",
+                IllegalArgumentException::class.java,
+            ) { MosaicAnalyticsCodec.decodeEvent(withTuple(fixture(name))) }
+        }
+    }
+
     @Test
     fun canonicalEventsAndBatchRoundTripWithoutContractDrift() {
         val eventFiles = listOf(
@@ -155,6 +207,18 @@ class AnalyticsContractTest {
     private fun fixture(name: String): String = Files.readAllBytes(
         repositoryFile("protocol/fixtures/analytics-event/v1/$name"),
     ).toString(Charsets.UTF_8)
+
+    /** Promotes a canonical v1 fixture to v2 and stamps the complete Experiment tuple onto it. */
+    private fun withTuple(source: String): String =
+        JsonParser.parseString(source).asJsonObject.apply {
+            addProperty("eventSchemaVersion", "2")
+            getAsJsonObject("attribution").apply {
+                addProperty("experimentId", "experiment_checkout")
+                addProperty("experimentVersionId", "experiment_version_checkout_1")
+                addProperty("experimentVariantId", "variant_control")
+                addProperty("experimentAllocationVersion", "allocation_checkout_1")
+            }
+        }.toString()
 
     /** Explicit contract-versioned path; no fixture directory is ever scanned. */
     private fun versionedFixture(path: String): String = Files.readAllBytes(
