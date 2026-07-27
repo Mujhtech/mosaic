@@ -25,11 +25,11 @@ Publishing errors are diagnosable by code:
   equal the Paywall id.
 - **Draft validation errors** — run
   `POST .../drafts/{draftId}/validate` and fix each reported error.
-- **`422 experiment_invalid`** with `details.reason` — an Experiment publish
-  precondition failed; e.g.
-  `environment_release_has_no_placement_decision_contract` means the
-  Environment needs a published Placement rule set first
- .
+- **`409 experiment_placement_decision_required`** — the Environment's
+  current Configuration Release carries no Placement Decision representation:
+  publish a Placement rule set in this Environment before publishing an
+  Experiment. Other Experiment publish preconditions fail as
+  `422 experiment_invalid` with a machine-readable `details.reason`.
 - **500** — look up the `requestId` in the operator log:
   `docker compose logs api | grep '<requestId>'` (every 5xx logs its cause).
 

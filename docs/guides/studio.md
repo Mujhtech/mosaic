@@ -1,11 +1,11 @@
 # Studio
 
-Studio is the paywall editor. It runs in two modes:
+Studio is the Paywall editor. It runs in two modes:
 
 - **Local Studio** at `http://localhost:3000/studio`: account-free and
   local-first. It needs no session, no account, and no reachable backend.
   Work is autosaved to browser storage.
-- **Hosted Studio**: opened from a paywall Draft inside the dashboard. Same
+- **Hosted Studio**: opened from a Paywall Draft inside the dashboard. Same
   editor, backed by hosted Drafts with revision-checked saves.
 
 Studio is desktop-only: displays narrower than 768 px get a safe fallback
@@ -64,7 +64,7 @@ connect. See [docs/protocol/local-preview-v0.2.md](../protocol/local-preview-v0.
 
 ## Export and import
 
-The Export button downloads the paywall as raw Protocol 0.2 JSON
+The Export button downloads the Paywall as raw Protocol 0.2 JSON
 (`<id>.mosaic.json`). Import accepts the same format. Exports are exact-version
 documents; clients accept only the current protocol version. Local autosave
 uses a separate local-project envelope in browser storage and is not the

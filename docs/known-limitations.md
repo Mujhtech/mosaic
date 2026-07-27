@@ -385,3 +385,211 @@ failure.
   it is not exposure corruption (no exposure or conversion is mis-attributed), not
   analytics duplication, and not a wrong Entitlement or Product decision.
   Owner-accepted at the Phase 8 gate.
+
+## Server and platform
+
+Each entry is owner-accepted for v1 General Availability. None falls into a
+release-blocker category: none can cause data loss, money loss, or a wrong
+monetization decision, and each has a stated workaround or a safe visible
+failure.
+
+### Signup is deliberately ungated in the application
+
+- Surface: `POST /v1/auth/signup`.
+- Platforms: server (all installations).
+- Symptom: anyone who can reach the endpoint can create an account. There is
+  no invitation, allow-list, or toggle in the application itself.
+- Workaround: restrict the endpoint at your reverse proxy or firewall after
+  creating your administrator accounts. The
+  [installation guide](guides/installation.md) shows a Caddy example; verify
+  the block with `curl` against your edge after deploying it.
+- Planned resolution: none planned in the application; edge restriction is the
+  supported model. Owner decision D9.
+- GA safety: an operator responsibility documented at the exact step where the
+  first account is created. A rogue signup gains an empty workspace, not access
+  to any existing Organization's data.
+
+### Commerce adapters are not live-verified against store sandboxes
+
+- Surface: RevenueCat, StoreKit 2, and Google Play Billing adapter paths across
+  server and SDKs.
+- Platforms: all.
+- Symptom: the adapters are implemented and contract-tested, and the
+  mock/custom commerce path passed the GA drill (D13), but no purchase has been
+  executed against the RevenueCat sandbox, the Apple sandbox, or a Google Play
+  test track. That evidence layer is "not demonstrated", never implied as
+  working.
+- Workaround: verify your own provider path in your store's sandbox before
+  production rollout, as you would for any billing integration.
+- Planned resolution: live sandbox verification post-GA. Owner decision D10.
+- GA safety: an environmental verification gap, explicitly labelled. The
+  four-state Entitlement contract fails safe: a provider failure is surfaced as
+  a provider failure, never rendered as "not entitled".
+
+### Irreversible down-migrations refuse; the rollback path is restore from backup
+
+- Surface: `migrate down` / `down-to` over migrations `00006`, `00010`,
+  `00018`.
+- Platforms: server (operators).
+- Symptom: with `--confirm`, these three migrations still refuse to roll back
+  when affected data exists (provider Product mappings, Delivery v2/v3
+  Releases, Analytics Event v2 rows, Release-to-Experiment links), naming the
+  exact rows that would be destroyed. The refusal is final; there is no force
+  flag.
+- Workaround: the supported rollback is
+  [restore from backup](backend/operations/backup-restore.md) — the refusal's
+  HINT names that document. Take the documented backup (database + object
+  storage + keyring) before every upgrade.
+- Planned resolution: none planned; refusing is the design (R2). A forced
+  destructive rollback is the worse behaviour.
+- GA safety: the refusal fails closed and destroys nothing. Data loss is
+  possible only by deliberately restoring an older backup, which is the
+  operator's explicit, documented action.
+
+### Experiment statistics are descriptive only
+
+- Surface: Experiment results (`GET .../experiments/{id}/results` and the
+  dashboard results panel).
+- Platforms: all.
+- Symptom: results report Wilson intervals, Newcombe lift intervals, and SRM
+  warnings, but apply no peeking correction and no multiple-comparison
+  correction, and never declare a winner or take an automatic action. Repeated
+  looks at a running Experiment inflate the effective false-positive rate, and
+  nothing in the product corrects for that.
+- Workaround: decide your sample size and stopping rule before starting, treat
+  intervals as descriptive, and heed SRM warnings before drawing conclusions.
+- Planned resolution: none planned; this is deliberate documented scope, not a
+  gap to be closed. Honest descriptive statistics were chosen over automated
+  inference.
+- GA safety: the product makes no claim it cannot support — there is no winner
+  field or significance badge to be wrong. The interpretation risk is
+  documented where the numbers are read.
+
+### A second Variant Paywall Version requires a throwaway staging Placement
+
+- Surface: Experiment Variant setup; hosted publishing.
+- Platforms: all (dashboard/API workflow).
+- Symptom: every Variant must pin a distinct immutable Paywall Version, and a
+  Paywall Version is only minted by publishing the Paywall through a Placement
+  binding. To produce a treatment Version without changing live traffic, you
+  must bind the treatment Paywall to a throwaway Placement (typically in a
+  staging Environment) and publish there.
+- Workaround: create a staging Placement per treatment, bind, publish to mint
+  the Version, then pin that Version in the Experiment. The Placement can be
+  left unused afterwards.
+- Planned resolution: a direct mint-a-Version path is a post-GA design item;
+  changing publish semantics during the Phase 8 feature freeze was ruled out.
+- GA safety: a workflow inconvenience only. The resulting Versions are
+  immutable and correctly pinned; no delivery or attribution behaviour is
+  affected.
+
+### Experiment publish requires a published Placement rule set in the Environment
+
+- Surface: `POST .../experiments/{id}/publish`.
+- Platforms: all (server).
+- Symptom: an Experiment can only publish into an Environment whose current
+  Configuration Release already carries a Placement Decision representation
+  (Delivery v2), i.e. a Placement rule set has been published there. Without
+  one, publish fails with `409 experiment_placement_decision_required`, whose
+  message names the required action.
+- Workaround: publish a Placement rule set in the Environment first, then
+  publish the Experiment.
+- Planned resolution: auto-upgrading a v1 Release is a design decision tracked
+  post-GA.
+- GA safety: a named, actionable 409 that fails closed before anything is
+  written. No Release is created and delivery is unchanged.
+
+### Analytics query 422s do not name the missing parameter
+
+- Surface: analytics query endpoints (`.../analytics/overview` and related).
+- Platforms: all (API consumers).
+- Symptom: these endpoints require `timezone` and `metricBasis`; omitting one
+  returns `422 validation_failed` without a `fields` map naming the missing
+  parameter, unlike other validation errors.
+- Workaround: always send both parameters; consult the API reference for each
+  endpoint's required query parameters.
+- Planned resolution: add the `fields` detail post-GA, same class as the error
+  details added during the drills.
+- GA safety: a diagnosability gap on a read-only path. The request fails
+  closed with the correct status; no data is returned or mutated.
+
+### Some export routes may sit in a broader rate-limit family than planned
+
+- Surface: per-surface HTTP rate limiting (`auth`, `delivery`, `ingestion`,
+  `api`, `decision` families); analytics export routes.
+- Platforms: server (operators).
+- Symptom: rate-limit families are narrower than originally planned for some
+  export routes, which may share the general `api` family's budget rather than
+  having their own. (Verify at integration — this entry is reconciled against
+  the backend fix report for this round.)
+- Workaround: tune the affected family's `MOSAIC_*_REQUESTS_PER_MINUTE` /
+  `_BURST` variables; rejections are observable as
+  `mosaic.http.rate_limit.rejections` by surface and carry `Retry-After`.
+- Planned resolution: dedicated family assignment post-GA if confirmed.
+- GA safety: limits fail closed with `429` and `Retry-After`; the only effect
+  is coarser-grained throttling, never unthrottled traffic.
+
+## Dashboard
+
+Each entry is owner-accepted for v1 General Availability. None falls into a
+release-blocker category: none can cause data loss, money loss, or a wrong
+monetization decision, and each has a stated workaround or a safe visible
+failure.
+
+### Server-rendered HTML is always the anonymous view (SSR cookie caveat)
+
+- Surface: dashboard server rendering; the `_hosted` route guard.
+- Platforms: all supported browsers.
+- Symptom: the server render never sees the browser's session cookie, so
+  server-rendered HTML is always the anonymous view; session-scoped data is
+  not prefetched during SSR, and the hosted route guard runs on the client
+  only. Hosted pages show a brief loading state before the authenticated view
+  appears after hydration.
+- Workaround: none required; the loading state is momentary.
+- Planned resolution: none planned for v1; a server-side guard would redirect
+  every authenticated operator to the sign-in page.
+- GA safety: safe by construction — no tenant data can ever be rendered for
+  the wrong session. The only cost is the brief loading state.
+
+### The hosted workspace is desktop-first
+
+- Surface: the hosted workspace (`/workspace` and its subtree).
+- Platforms: all supported browsers; tablets and phones.
+- Symptom: like Studio (which is desktop-only, ≥768 px, with a safe fallback
+  screen), the hosted workspace is laid out for desktop widths. It remains
+  usable on a tablet, but wide tables and the Studio-adjacent panels are not a
+  supported phone experience.
+- Workaround: use a desktop browser for operating Mosaic.
+- Planned resolution: none planned for v1; operator tooling is desktop-first
+  by design.
+- GA safety: a layout limitation only. Nothing fails silently — narrow Studio
+  viewports get an explicit fallback state, and no data-mutating flow is
+  phone-only.
+
+### No client-side error reporting, by design
+
+- Surface: the whole dashboard.
+- Platforms: all supported browsers.
+- Symptom: the dashboard ships no Sentry, telemetry beacon, or automatic crash
+  upload, so browser-side failures are not collected anywhere automatically.
+- Workaround: every API failure surfaces an `X-Request-ID` correlation
+  identifier in error boundaries and on `/diagnostics`, with a copy control;
+  diagnose by searching the API logs for that identifier
+  ([dashboard operations](dashboard/operations.md)).
+- Planned resolution: none planned; a self-hosted operator's users must not
+  have their browsing forwarded to a third party, and Mosaic has no service to
+  forward it to.
+- GA safety: a deliberate privacy decision with a documented diagnostic path;
+  server-side causes remain fully logged and correlated.
+
+### The sign-in and sign-up pages have a Separator rendering glitch
+
+- Surface: the Separator component on the login and sign-up pages.
+- Platforms: all supported browsers.
+- Symptom: the visual divider between the form and its alternate action can
+  render incorrectly (found in QA). Purely cosmetic; both pages remain fully
+  functional and accessible.
+- Workaround: none needed; sign-in and sign-up work normally.
+- Planned resolution: cosmetic fix in the first post-GA maintenance release.
+- GA safety: a visual defect on an authentication page with no functional,
+  security, or data impact.

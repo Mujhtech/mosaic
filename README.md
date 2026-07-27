@@ -51,13 +51,18 @@ The local Studio needs no account and no backend: open
 
 | Area | Supported |
 | --- | --- |
-| PostgreSQL | 17 |
-| Docker | Engine 24+ with Compose v2 |
+| PostgreSQL | 17 (16 expected-compatible but unsupported) |
+| Object storage | S3-compatible; MinIO `RELEASE.2025-07-23T15-54-02Z` tested |
+| Docker | Engine 24+ with Compose v2; amd64 and arm64 |
 | Browsers | Chrome/Edge 111+, Safari 16.4+, Firefox 128+ (Studio desktop-only, ≥768 px) |
 | Go (build from source) | 1.26.x |
 | Flutter SDK | Flutter 3.22+ / Dart 3.4+ |
 | iOS SDK | iOS 15+, Swift 6 language mode, Xcode 16+ |
-| Android SDK | API 24+ |
+| Android SDK | API 24+, JDK 17 |
+
+The dashboard must be served over **HTTPS, or on `localhost`**: the session
+cookie is `Secure` and clipboard access requires a secure context, so plain
+`http://` on any other host produces a sign-in loop.
 
 ## Repository map
 

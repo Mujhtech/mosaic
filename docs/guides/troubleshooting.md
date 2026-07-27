@@ -56,11 +56,12 @@ migration check is skipped when its prerequisite already failed).
 Readiness recovers on its own when the dependency returns — the drill
 verified 503 → 200 with zero API restarts.
 
-On SIGTERM the API is intended to
-serve `503 draining` for `MOSAIC_HTTP_DRAIN_DELAY` (default 5s) before
-closing the listener, so load balancers observe the drain. As drilled, the
-listener closed immediately (readiness went 200 → connection refused);
-in-flight requests still completed.
+On SIGTERM the API serves `503 draining` from readiness for
+`MOSAIC_HTTP_DRAIN_DELAY` (default `5s`; `0` disables, negative values are
+rejected at startup) before closing the listener, so a load balancer polling
+readiness observes a clean draining window — drill-verified at ~4.9 s of
+observable 503 before connection refused, with the process exiting 0.
+In-flight requests complete during the drain.
 
 ## A migration failed
 
@@ -100,10 +101,12 @@ a defect). Notes:
   500: a provider outage is `503 providerUnavailable`, a bad provider
   response `502 providerInvalidResponse`, and so on. A genuine
   `500 internal_error` means Mosaic itself hit something unexpected.
-- An SDK Asset request whose object
-  is missing from the bucket is intended to answer a distinct 404 rather than
-  `500 internal_error`. As drilled it answered 500 (the operator log named
-  the missing key precisely).
+- An SDK Asset request whose object is missing from the bucket answers
+  `404 asset_object_missing` ("The Asset's stored bytes are not available"),
+  while object storage that is genuinely failing answers a retryable
+  `503 asset_storage_failed` — the two are distinguishable. The operator log
+  still records the integrity problem in full, with `asset_id` and
+  `storage_key`.
 
 ## 422 validation errors
 
@@ -116,12 +119,11 @@ and why. Cases worth knowing:
 - **`document_paywall_id_mismatch`** on draft creation: the Paywall
   document's `id` must equal the Paywall you are attaching it to.
 - **`422 experiment_invalid`** carries a machine-readable `details.reason`
-  naming which publish precondition failed — for example
-  `environment_release_has_no_placement_decision_contract`: an Experiment can
-  only publish into an Environment whose current Release already carries a
-  Placement rule set (Delivery v2). Publishing without one returns
-  `409 experiment_placement_decision_required` naming the required action:
-  publish a Placement rule set there first.
+  naming which Experiment publish precondition failed. The missing-rule-set
+  case has its own code: an Experiment can only publish into an Environment
+  whose current Release already carries a Placement rule set (Delivery v2);
+  publishing without one returns `409 experiment_placement_decision_required`
+  naming the required action — publish a Placement rule set there first.
 - Analytics query endpoints (`analytics/overview` etc.) require `timezone`
   and `metricBasis`; as drilled, their 422 does not yet name the missing
   parameter in `fields`.
@@ -135,10 +137,12 @@ failed requirement, the offending value, and a reason (`unavailable`,
 (`group.mutual_exclusion` is the accepted name) or a Release
 `requiredFeatures` entry missing from `Mosaic-Decision-Features`.
 
-Once an Experiment is published,
-the Environment's Release is intended to retain a Delivery v1 representation
-so v1-only SDKs keep fetching. As drilled, such Releases had only v2/v3 and a
-v1-only SDK received 406 (the SDK fails safe on its cached configuration).
+Once an Experiment is published, the Environment's Release retains a
+Delivery v1 representation — the preceding Release's v1 view is carried
+forward (an Experiment publish does not change Placement bindings) — so a
+v1-only SDK keeps fetching configuration with its Placements intact instead
+of receiving 406. Drill-verified across clients advertising `1`, `2`,
+`3,2,1`, and `3`.
 
 ## Dashboard problems
 

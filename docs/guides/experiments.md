@@ -1,10 +1,27 @@
 # Experiments
 
-Experiments compare immutable paywall versions on live traffic with
+Experiments compare immutable Paywall Versions on live traffic with
 deterministic assignment and honest, descriptive statistics. Mosaic
 deliberately does not declare winners, apply peeking or multiple-comparison
 corrections, or take automatic actions on results — you interpret the numbers
 and decide.
+
+## Prerequisites
+
+Two things must exist before an Experiment can publish:
+
+- **A published Placement rule set in the Environment.** The Environment's
+  current Configuration Release must already carry a Placement Decision
+  representation, i.e. a Placement rule set has been published there. Without
+  one, publishing the Experiment fails with
+  `409 experiment_placement_decision_required`, whose message names the
+  action: publish a Placement rule set in the Environment first.
+- **A distinct immutable Paywall Version per Variant.** Versions are minted
+  only by publishing a Paywall through a Placement binding. For a treatment
+  Paywall that should not touch live traffic yet, use the staging-Placement
+  pattern: bind it to a throwaway Placement (typically in a staging
+  Environment) and publish there to mint the Version — see the
+  [known-limitations register](../known-limitations.md#a-second-variant-paywall-version-requires-a-throwaway-staging-placement).
 
 ## Creating an Experiment
 
@@ -17,7 +34,7 @@ An Experiment has exactly one Control and one to three Treatments. Each
 Variant pins a distinct **immutable Paywall Version** — not a draft, not
 "latest" — so what each Variant showed is reproducible forever. Drafts are
 edited with revision-checked saves, validated, and published as an immutable
-Experiment Version snapshotting allocation, metrics, paywall versions,
+Experiment Version snapshotting allocation, metrics, Paywall Versions,
 assignment policy, and schedule.
 
 ## Allocation and assignment
@@ -45,10 +62,10 @@ through to another member. Groups are managed from the Experiments pages.
 ## Exposure after presentation
 
 `experiment_exposed` — the statistical denominator — is emitted only after
-the assigned paywall version actually presented successfully with ready
+the assigned Paywall Version actually presented successfully with ready
 Products and an accepted provider. Assignment alone, a render failure, a
 compatibility rejection, or a QA override never counts as exposure. When an
-assigned paywall cannot present and the SDK falls back to normal Placement,
+assigned Paywall cannot present and the SDK falls back to normal Placement,
 that is recorded as `experiment_fallback_presented`, never as exposure of the
 assigned Variant.
 
@@ -89,8 +106,11 @@ Experiments move through schedule → start → (pause/resume) → stop or
 complete → archive. Every transition publishes a new immutable Configuration
 Release and an audit record. **Emergency stop**
 (`POST .../experiments/{id}/emergency-stop`, or the workspace button with a
-required reason) immediately publishes a release that ends the Experiment;
-subsequent releases omit it. QA overrides let you pin a Variant in
+required reason) immediately publishes a Release that ends the Experiment.
+The assignment **remains in the delivered payload** with lifecycle `stopped`
+and fallback `normal_placement` — SDKs that see it restore normal Placement
+delivery for affected units. Subsequent Releases carry the same explicit
+stopped state rather than silently omitting the assignment. QA overrides let you pin a Variant in
 development/staging for up to 24 hours without polluting results.
 
 ## Verification status

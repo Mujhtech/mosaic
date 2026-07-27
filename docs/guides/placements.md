@@ -6,6 +6,11 @@ Placement; a published Rule Set decides which paywall — if any — to show.
 Decisions are evaluated entirely on the device from the delivered
 configuration, so they work offline and never wait on a network call.
 
+Placement keys must match `^[a-z][a-z0-9_]{0,63}$`: start with a lowercase
+letter, then lowercase letters, digits, and underscores only — **no hyphens**,
+unlike Project and Product keys. The same charset applies to Placement alias
+and Placement attribute keys. An invalid key is a `422` field error.
+
 ## Where
 
 Dashboard, per Environment:

@@ -19,6 +19,10 @@ Nothing else is required on the host: PostgreSQL 17 and MinIO run inside
 Compose. Outbound DNS is **not** required — administrator email addresses are
 format-validated only, so internal-only mail domains work.
 
+The dashboard must be reached over **HTTPS, or on `localhost`**: the session
+cookie is `Secure` and clipboard access requires a secure context, so serving
+it over plain `http://` on any other host produces a sign-in loop.
+
 ## 1. Clone and configure
 
 ```bash
@@ -43,6 +47,7 @@ activates production guards that reject the shipped defaults):
 | `MOSAIC_SESSION_COOKIE_SECURE` | Must be `true` outside development and test |
 | `MOSAIC_PUBLIC_ASSET_BASE_URL` | Must be the absolute HTTPS URL your devices will fetch Assets from |
 | `MOSAIC_TRUSTED_PROXY_CIDRS` | Set to exactly your proxy/edge addresses when Mosaic runs behind one; empty means forwarded headers are never trusted |
+| `MOSAIC_DASHBOARD_API_BASE_URL` | Read server-side by the dashboard and injected into the browser at runtime; must be the public API origin your operators' browsers can reach |
 | `MOSAIC_PROVIDER_CREDENTIAL_KEYRING` | Only if you enable server-connected commerce providers (`MOSAIC_PROVIDER_INTEGRATIONS_ENABLED=true`); see [key rotation](../backend/operations/key-rotation.md) for the format |
 
 Safe to leave at their defaults for a first installation: all rate limits,
@@ -93,8 +98,11 @@ docker compose run --rm --entrypoint /usr/local/bin/migrate api status
 # 21 applied, 0 pending migration(s)  (counts grow with future releases)
 ```
 
-Open the dashboard at `http://localhost:3000` — it responds with a redirect to
-the sign-in page. If readiness is 503 or the dashboard is blank, see the
+Open the dashboard at `http://localhost:3000` — `/` redirects to the local
+Studio at `/studio`, which needs no account and no session. The hosted
+workspace lives at `/workspace`; opening it while signed out redirects to the
+sign-in page at `/login`, which guards every hosted route.
+If readiness is 503 or the dashboard is blank, see the
 [troubleshooting guide](troubleshooting.md).
 
 ### The debug profile
