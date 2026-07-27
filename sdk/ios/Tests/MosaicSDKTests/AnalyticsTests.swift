@@ -347,6 +347,82 @@ final class AnalyticsTests: XCTestCase {
     XCTAssertEqual(completed.attribution.providerId, "mock")
   }
 
+  /// A fallback presentation never records a statistical exposure, so its
+  /// conversions must not carry the assigned Variant's tuple. A tuple-carrying
+  /// fallback `product_selected` would displace the Variant's legitimate
+  /// denominator row in `product_selection_purchase_start`.
+  ///
+  /// `experiment_fallback_presented` itself still carries the tuple; it is a
+  /// diagnostic event, not a conversion.
+  @MainActor
+  func testFallbackPresentationConversionsCarryNoExperimentTuple() async throws {
+    let experiment = MosaicAnalyticsAttribution(
+      configurationReleaseId: "release_fallback", placementId: "placement_fallback",
+      experimentId: "experiment_checkout",
+      experimentVersionId: "experiment_version_checkout_1",
+      experimentVariantId: "variant_treatment_a",
+      experimentAllocationVersion: "allocation_checkout_1")
+
+    // An exposed original-variant presentation keeps the tuple.
+    XCTAssertEqual(
+      MosaicPlacementPaywall.conversionExperimentAttribution(
+        experiment: experiment, fallbackReason: nil),
+      experiment)
+    // Every fallback reason drops it.
+    for reason in ["products_unavailable", "provider_capability", "reauthorization_failed"] {
+      XCTAssertNil(
+        MosaicPlacementPaywall.conversionExperimentAttribution(
+          experiment: experiment, fallbackReason: reason),
+        reason)
+    }
+
+    // The instrumentation built for a fallback presentation must therefore emit
+    // tuple-free conversions end to end.
+    let persistence = MosaicMemoryAnalyticsPersistence()
+    let runtime = MosaicAnalyticsRuntime(
+      persistence: persistence, transport: AnalyticsTestTransport(.fail),
+      identityStore: MosaicIdentityStore(persistence: MosaicMemoryIdentityPersistence()),
+      context: .init(sdkVersion: mosaicSDKVersion), jitter: { _ in 0 })
+    await runtime.setCollection(environmentEnabled: true, hostEnabled: true)
+    let analytics = MosaicAnalyticsPresentationInstrumentation(
+      runtime: runtime, placementRequestID: "placement_request_fallback",
+      presentationID: "presentation_fallback",
+      attribution: .init(
+        configurationReleaseId: "release_fallback", placementId: "placement_fallback",
+        paywallId: "paywall_control", paywallVersionId: "paywall_version_control"),
+      experimentAttribution: MosaicPlacementPaywall.conversionExperimentAttribution(
+        experiment: experiment, fallbackReason: "products_unavailable"),
+      providerID: "mock")
+    let document = try canonicalDocument()
+    let model = MosaicPaywallModel(
+      document: document,
+      purchaseProvider: MockMosaicPurchaseProvider(
+        products: MosaicProduct.phase1MockProducts, purchaseBehavior: .success),
+      analytics: analytics,
+      onResult: { _ in })
+    await model.prepare()
+    await model.purchase(using: try purchaseButton(in: document))
+
+    var queued: [MosaicAnalyticsEvent] = []
+    for _ in 0..<1_000 {
+      queued = await persistence.load()?.queue.map(\.event) ?? []
+      let names = Set(queued.map(\.eventName))
+      if names.contains(.purchaseStarted) && names.contains(.purchaseCompletedClient) { break }
+      await Task.yield()
+    }
+    for name in [
+      MosaicAnalyticsEventName.productSelected, .purchaseStarted, .purchaseCompletedClient,
+    ] {
+      let event = try XCTUnwrap(queued.first { $0.eventName == name }, name.rawValue)
+      XCTAssertNil(event.attribution.experimentId, name.rawValue)
+      XCTAssertNil(event.attribution.experimentVersionId, name.rawValue)
+      XCTAssertNil(event.attribution.experimentVariantId, name.rawValue)
+      XCTAssertNil(event.attribution.experimentAllocationVersion, name.rawValue)
+      // The product attribution a conversion does need is still present.
+      XCTAssertEqual(event.attribution.mosaicProductId, "yearly-plan", name.rawValue)
+    }
+  }
+
   /// Conversion attribution joins solely on the event-carried Experiment tuple,
   /// and the tuple is accepted only on Event Schema v2. If a monetization event
   /// were emitted on v1, or without the complete tuple, an active Experiment

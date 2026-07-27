@@ -7,52 +7,16 @@
 
   @MainActor
   final class SwiftUISnapshotTests: XCTestCase {
-    func testCanonicalPaywallMatchesDeterministicSwiftUIGolden() async throws {
-      let document = try canonicalDocument()
-      let model = MosaicPaywallModel(
-        document: document,
-        requestedLocale: "en",
-        purchaseProvider: MockMosaicPurchaseProvider(
-          products: MosaicProduct.phase1MockProducts
-        ),
-        onResult: { _ in }
-      )
-      await model.prepare()
-
-      let image = render(
-        MosaicPaywall(model: model, imageResolver: .missing)
-          .environment(\.colorScheme, .light)
-          .environment(\.sizeCategory, .large)
-          .background(Color.white),
-        size: CGSize(width: 390, height: 844)
-      )
-      let snapshotURL = sourceSnapshotURL()
-
-      if ProcessInfo.processInfo.environment["MOSAIC_RECORD_SNAPSHOTS"] == "1" {
-        try FileManager.default.createDirectory(
-          at: snapshotURL.deletingLastPathComponent(),
-          withIntermediateDirectories: true
-        )
-        try XCTUnwrap(image.pngData()).write(to: snapshotURL, options: .atomic)
-        return
-      }
-
-      guard FileManager.default.fileExists(atPath: snapshotURL.path) else {
-        throw XCTSkip(
-          "The iOS golden has not been recorded in this checkout. "
-            + "Run the documented MOSAIC_RECORD_SNAPSHOTS=1 simulator command first."
-        )
-      }
-      let expected = try XCTUnwrap(UIImage(contentsOfFile: snapshotURL.path))
-      let comparison = try compare(actual: image, expected: expected)
-      XCTAssertLessThanOrEqual(
-        comparison.differentPixelRatio,
-        0.005,
-        "SwiftUI golden changed: \(comparison.differentPixelRatio * 100)% pixels differ. "
-          + "Record intentionally with MOSAIC_RECORD_SNAPSHOTS=1 after review."
-      )
-    }
-
+    /// The one canonical full-paywall golden.
+    ///
+    /// This previously had a sibling that rendered `canonicalDocument()`
+    /// against a separate `complete-paywall.png` baseline. Both helpers resolve
+    /// to `protocol/fixtures/v0.2/complete-paywall.json`, so the two tests
+    /// rendered the same document and produced byte-identical output; the
+    /// sibling's baseline was a stale Protocol 0.1-era recording. They are now
+    /// one test with one baseline.
+    ///
+    /// The clock is pinned because the fixture's Countdown resolves against it.
     func testProtocolV02CompleteFixtureMatchesDeterministicSwiftUIGolden() async throws {
       let document = try v02Document()
       let model = MosaicPaywallModel(
@@ -306,7 +270,12 @@
       return image
     }
 
-    private func sourceSnapshotURL(named name: String = "complete-paywall.png") -> URL {
+    /// Baselines are recorded at scale 1 into a fixed 390x844 frame, so they are
+    /// independent of the Simulator device. They are not independent of the
+    /// runtime's native control rendering: the current baselines were recorded
+    /// on Xcode 26.5 with the iOS 26.5 Simulator runtime. Compare and re-record
+    /// on that runtime.
+    private func sourceSnapshotURL(named name: String) -> URL {
       URL(fileURLWithPath: #filePath)
         .deletingLastPathComponent()
         .appendingPathComponent("Resources")

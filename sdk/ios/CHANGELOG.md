@@ -43,10 +43,19 @@ Operational hardening. The SDK remains pre-1.0; see
   `refresh()` is not cancellable.
 - Bind bucketing tests to the canonical assignment-vector fixture and pin a
   repository-root `.swift-format` configuration.
+- Stop attributing conversions on an Experiment fallback presentation to the
+  assigned Variant. A fallback never records a statistical exposure, so a
+  tuple-carrying fallback `product_selected` could displace the Variant's
+  legitimate denominator row in `product_selection_purchase_start`.
+  `experiment_fallback_presented` still carries the tuple as a diagnostic.
 - Add conformance coverage proving the closed codec rejects all six canonical
   negative analytics fixtures across v1 and v2, and proving conversion events
   are emitted on Event Schema v2 with the complete immutable Experiment tuple
-  whenever a presentation carries an assignment.
+  whenever a presentation exposes an assigned Variant.
+- Consolidate the two full-paywall SwiftUI goldens into one. Both rendered the
+  same canonical Protocol 0.2 document and produced byte-identical output; the
+  removed baseline was a stale Protocol 0.1-era recording. The remaining
+  baseline was re-recorded after visual review on Xcode 26.5 / iOS 26.5.
 - Add strict Configuration Delivery v3 and Experiment Assignment v1 decoding,
   exact compatibility derivation, trusted schedule evaluation, stable
   assignment/group bucketing, mutual exclusion, and non-production QA override

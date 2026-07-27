@@ -172,7 +172,10 @@ public struct MosaicPlacementPaywall: View {
               document: document,
               analytics: await mosaic.analyticsPresentationInstrumentation(
                 placementRequestID: placementRequestID, presentationID: presentationID,
-                attribution: attribution, experimentAttribution: experiment),
+                attribution: attribution,
+                experimentAttribution: Self.conversionExperimentAttribution(
+                  experiment: experiment,
+                  fallbackReason: evaluation.experimentFallbackReason)),
               attribution: attribution, experimentAttribution: experiment,
               selection: evaluation.experimentSelection,
               fallbackReason: evaluation.experimentFallbackReason,
@@ -310,6 +313,23 @@ public struct MosaicPlacementPaywall: View {
     acknowledgementGate.reset()
     state = .loading
     generation += 1
+  }
+
+  /// The Experiment tuple that a presentation's conversion events may carry.
+  ///
+  /// Conversion attribution joins a conversion to an exposure by equality on
+  /// the Experiment columns of the conversion event itself. A fallback
+  /// presentation never records a statistical exposure, so its conversions must
+  /// stay tuple-free: a tuple-carrying fallback `product_selected` would
+  /// otherwise displace the Variant's legitimate denominator row in
+  /// `product_selection_purchase_start`.
+  ///
+  /// `experiment_fallback_presented` still carries the tuple. It is a
+  /// diagnostic event, not a conversion.
+  static func conversionExperimentAttribution(
+    experiment: MosaicAnalyticsAttribution?, fallbackReason: String?
+  ) -> MosaicAnalyticsAttribution? {
+    fallbackReason == nil ? experiment : nil
   }
 
   private func exposureAttribution(
