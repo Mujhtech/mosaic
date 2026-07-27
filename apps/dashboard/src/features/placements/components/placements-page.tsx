@@ -238,8 +238,7 @@ export function PlacementsPage({
   const items = placements.data ?? []
   const availablePaywalls = paywalls.data?.filter((paywall) => paywall.status === "active") ?? []
   const state = resolveHostedQueryState({
-    emptyDescription: "",
-    emptyTitle: "",
+    // Emptiness is presented inside the page body rather than replacing it.
     error: placements.error ?? paywalls.error,
     // Emptiness is handled inside the page, not by the boundary: the create
     // form is the recovery action and must stay reachable with zero Placements.
@@ -260,6 +259,7 @@ export function PlacementsPage({
       </Link>
     ),
     permissionDescription: "Project membership is required to manage Placement bindings.",
+    scope: { environmentId, organizationId, projectId },
   })
 
   return (

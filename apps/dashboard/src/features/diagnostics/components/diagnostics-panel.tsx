@@ -68,6 +68,16 @@ export function DiagnosticsPanel() {
         <Row label="Preview relay URL" value={dashboardEnvironment.previewUrl} />
         <Row label="Session state" value={sessionState} />
         <Row label="API liveness" value={healthState} />
+        {/* Identity of the artifact actually serving the API. Only rendered
+            once a probe has answered, so the rows never imply a value Mosaic
+            has not observed. */}
+        {health.isSuccess ? (
+          <>
+            <Row label="API version" value={health.data.version ?? "Not reported"} />
+            <Row label="API commit" value={health.data.commit ?? "Not reported"} />
+            <Row label="API built at" value={health.data.built ?? "Not reported"} />
+          </>
+        ) : null}
       </dl>
 
       <div className="mt-4 flex flex-wrap items-center gap-2">

@@ -5,7 +5,11 @@ import { Link } from "@tanstack/react-router"
 
 import { Button } from "@/components/ui/button"
 import { buttonVariants } from "@/components/ui/button-variants"
-import { HostedResourceBoundary } from "@/features/auth/components/hosted-resource-boundary"
+import {
+  ApiErrorDetails,
+  HostedResourceBoundary,
+  RequestIdCopy,
+} from "@/features/auth/components/hosted-resource-boundary"
 import { resolveHostedQueryState } from "@/features/auth/types/hosted-query-state"
 import { WorkspacePage, WorkflowPanel } from "@/features/organizations/components/workspace-page"
 import { ScopeMismatchRecovery } from "@/features/organizations/components/scope-mismatch-recovery"
@@ -16,6 +20,7 @@ import {
   applicationsQueryOptions,
   projectQueryOptions,
 } from "@/features/projects/queries/projects-query"
+import { describeApiError } from "@/lib/api/errors"
 
 interface ProjectOverviewPageProps {
   organizationId: string
@@ -40,6 +45,13 @@ export function ProjectOverviewPage({ organizationId, projectId }: ProjectOvervi
   })
   const archive = useMutation(projectLifecycleMutationOptions(queryClient, "archive"))
   const restore = useMutation(projectLifecycleMutationOptions(queryClient, "restore"))
+  // Archive and restore previously rendered the raw server message, which can
+  // carry database internals. Mosaic-owned copy plus the correlation ID is the
+  // documented support path.
+  const lifecycleError = archive.error ?? restore.error
+  const lifecycleFailure = lifecycleError
+    ? describeApiError(lifecycleError, { organizationId, projectId })
+    : null
   const state = resolveHostedQueryState({
     emptyDescription: "Project data is unavailable.",
     emptyTitle: "Project not found",
@@ -156,10 +168,16 @@ export function ProjectOverviewPage({ organizationId, projectId }: ProjectOvervi
             </span>
           </Link>
         </div>
-        {archive.error || restore.error ? (
-          <p className="text-destructive text-sm" role="alert">
-            {(archive.error ?? restore.error)?.message}
-          </p>
+        {lifecycleFailure ? (
+          <div className="space-y-2">
+            <p className="text-destructive text-sm" role="alert">
+              {lifecycleFailure.description}
+            </p>
+            <ApiErrorDetails details={lifecycleFailure.details} />
+            {lifecycleFailure.correlationId ? (
+              <RequestIdCopy requestId={lifecycleFailure.correlationId} />
+            ) : null}
+          </div>
         ) : null}
         <WorkflowPanel title="Hosted publishing">
           <p className="text-muted-foreground text-sm leading-6">

@@ -2,32 +2,47 @@ import type { ReactNode } from "react"
 
 import type { HostedResourceState } from "@/features/auth/components/hosted-resource-boundary"
 import { ApiError, describeApiError } from "@/lib/api/errors"
+import type { WorkspaceScope } from "@/lib/routing/workspace-hrefs"
 
-interface ResolveHostedQueryStateOptions {
-  emptyAction?: ReactNode
-  emptyDescription: string
-  emptyTitle: string
+interface HostedQueryStateBaseOptions {
   error: unknown
-  isEmpty: boolean
   isPending: boolean
   loadingDescription: string
   onRetry?: () => void
   permissionAction?: ReactNode
   permissionDescription: string
+  /**
+   * Identifiers a coded error's recovery link needs. Omitting it keeps the
+   * specific explanation and drops only the link.
+   */
+  scope?: WorkspaceScope
 }
 
-export function resolveHostedQueryState({
-  emptyAction,
-  emptyDescription,
-  emptyTitle,
-  error,
-  isEmpty,
-  isPending,
-  loadingDescription,
-  onRetry,
-  permissionAction,
-  permissionDescription,
-}: ResolveHostedQueryStateOptions): HostedResourceState {
+/**
+ * Empty copy is required exactly when the caller can report an empty result.
+ * A view that never renders the empty state, because emptiness is handled
+ * inside its own body, must not be forced to pass placeholder strings.
+ */
+type HostedQueryEmptyOptions =
+  | { emptyAction?: ReactNode; emptyDescription: string; emptyTitle: string; isEmpty: boolean }
+  | { emptyAction?: never; emptyDescription?: never; emptyTitle?: never; isEmpty: false }
+
+type ResolveHostedQueryStateOptions = HostedQueryStateBaseOptions & HostedQueryEmptyOptions
+
+export function resolveHostedQueryState(
+  options: ResolveHostedQueryStateOptions,
+): HostedResourceState {
+  const {
+    error,
+    isEmpty,
+    isPending,
+    loadingDescription,
+    onRetry,
+    permissionAction,
+    permissionDescription,
+    scope,
+  } = options
+
   if (isPending) {
     return { description: loadingDescription, kind: "loading" }
   }
@@ -45,7 +60,11 @@ export function resolveHostedQueryState({
   }
 
   if (error) {
-    const described = describeApiError(error)
+    const described = describeApiError(error, scope)
+    const specifics = {
+      ...(described.details ? { details: described.details } : {}),
+      ...(described.recovery ? { recovery: described.recovery } : {}),
+    }
 
     // A transport failure (offline, DNS, CORS, API down) is operationally
     // different from a server-reported error: Mosaic stays usable locally and
@@ -56,6 +75,7 @@ export function resolveHostedQueryState({
         kind: "degraded",
         onRetry,
         requestId: described.correlationId,
+        ...specifics,
       }
     }
 
@@ -64,15 +84,16 @@ export function resolveHostedQueryState({
       kind: "error",
       onRetry,
       requestId: described.correlationId,
+      ...specifics,
     }
   }
 
   if (isEmpty) {
     return {
-      action: emptyAction,
-      description: emptyDescription,
+      action: options.emptyAction,
+      description: options.emptyDescription,
       kind: "empty",
-      title: emptyTitle,
+      title: options.emptyTitle,
     }
   }
 

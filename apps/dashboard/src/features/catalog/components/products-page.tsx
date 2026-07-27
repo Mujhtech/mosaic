@@ -63,6 +63,7 @@ export function ProductsPage({
     onRetry: () => void products.refetch(),
     permissionDescription:
       "Project membership is required to view Products; owner or admin is required to change them.",
+    scope: { organizationId, projectId },
   })
   const canManageProducts = state.kind === "empty" || state.kind === "ready"
 

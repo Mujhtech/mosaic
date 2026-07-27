@@ -77,7 +77,7 @@ export function QaOverrides({
             <ShieldWarningIcon aria-hidden /> Production overrides are unavailable
           </p>
           <p className="text-muted-foreground mt-1 text-sm">
-            Switch to a development or staging Environment. Phase 5 never creates hidden production
+            Switch to a development or staging Environment. Mosaic never creates hidden production
             targeting.
           </p>
         </div>

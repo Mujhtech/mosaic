@@ -78,6 +78,7 @@ export function PaywallDetailPage({
       </Link>
     ),
     permissionDescription: "Project membership is required to open this Paywall.",
+    scope: { environmentId, organizationId, projectId },
   })
 
   return (

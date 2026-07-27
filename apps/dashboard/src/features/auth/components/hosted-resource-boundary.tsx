@@ -9,13 +9,22 @@ import { LoadingState } from "@/components/feedback/loading-state"
 import { Button } from "@/components/ui/button"
 import { buttonVariants } from "@/components/ui/button-variants"
 import { HostedAccessBanner } from "@/features/auth/components/hosted-access-banner"
+import type { ApiErrorDetailEntry, ApiErrorRecovery } from "@/lib/api/errors"
+
+interface HostedResourceFailure {
+  description?: string
+  details?: ApiErrorDetailEntry[]
+  onRetry?: () => void
+  recovery?: ApiErrorRecovery
+  requestId?: string
+}
 
 export type HostedResourceState =
   | { kind: "decision_required" }
   | { description?: string; kind: "loading"; title?: string }
   | { description: string; kind: "empty"; title: string; action?: ReactNode }
-  | { description?: string; kind: "error"; requestId?: string; onRetry?: () => void }
-  | { description?: string; kind: "degraded"; requestId?: string; onRetry?: () => void }
+  | (HostedResourceFailure & { kind: "error" })
+  | (HostedResourceFailure & { kind: "degraded" })
   | { action?: ReactNode; description: string; kind: "permission"; requiredRole?: string }
   | { kind: "ready" }
 
@@ -79,13 +88,54 @@ function HostedErrorState({
         retryLabel="Retry"
         title={degraded ? "Mosaic API unreachable" : "Cloud workspace unavailable"}
       />
+      <ApiErrorDetails details={state.details} />
       <div className="flex flex-wrap items-center gap-2">
+        {state.recovery ? <ApiErrorRecoveryAction recovery={state.recovery} /> : null}
         <Link className={buttonVariants({ variant: "outline" })} to="/studio">
           Continue locally
         </Link>
       </div>
       {state.requestId ? <RequestIdCopy requestId={state.requestId} /> : null}
     </div>
+  )
+}
+
+/**
+ * Server-supplied specifics for a coded failure: readiness blockers, rejected
+ * fields, the refused precondition. These are Mosaic-owned codes and resource
+ * identifiers, never server prose.
+ */
+export function ApiErrorDetails({ details }: { details?: ApiErrorDetailEntry[] }) {
+  if (!details || details.length === 0) return null
+
+  return (
+    <dl className="border-border bg-muted/30 space-y-1 rounded border p-3 text-sm">
+      {details.map((entry) => (
+        <div className="flex flex-wrap gap-x-2" key={`${entry.label ?? ""}:${entry.value}`}>
+          {entry.label ? (
+            <dt className="text-muted-foreground font-medium">{entry.label}</dt>
+          ) : (
+            <dt className="sr-only">Detail</dt>
+          )}
+          <dd className="font-mono text-xs break-all">{entry.value}</dd>
+        </div>
+      ))}
+    </dl>
+  )
+}
+
+/**
+ * The single next step for a coded failure. A recovery without a destination
+ * would be a dead control, so the link renders only when the surrounding view
+ * supplied the identifiers the destination needs.
+ */
+export function ApiErrorRecoveryAction({ recovery }: { recovery: ApiErrorRecovery }) {
+  if (!recovery.href) return null
+
+  return (
+    <a className={buttonVariants({ variant: "default" })} href={recovery.href}>
+      {recovery.label}
+    </a>
   )
 }
 

@@ -9,7 +9,7 @@
 #
 # The runtime serves the TanStack Start server on port 3000.
 
-FROM node:22.12-alpine AS build
+FROM node:22.23.1-alpine AS build
 ARG VERSION=dev
 ARG COMMIT=""
 ARG SOURCE_DATE_EPOCH=""
@@ -39,7 +39,7 @@ RUN cd apps/dashboard && NODE_ENV=production npm run build
 # Reinstall production dependencies only, for the runtime layer.
 RUN cd apps/dashboard && npm ci --omit=dev
 
-FROM node:22.12-alpine AS runtime
+FROM node:22.23.1-alpine AS runtime
 ARG VERSION=dev
 ARG COMMIT=""
 LABEL org.opencontainers.image.title="Mosaic Dashboard" \

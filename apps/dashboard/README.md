@@ -87,8 +87,16 @@ falls back to the documented default instead of throwing, so a misconfigured dep
 renders a page that can explain the problem. Confirm the resolved values on `/diagnostics`.
 
 The build-time `VITE_API_BASE_URL`, `VITE_MOSAIC_PREVIEW_URL`, and `VITE_MOSAIC_PREVIEW_SESSION_ID`
-remain **development** fallbacks only. These variables are dashboard-owned and are deliberately
-absent from the backend-owned `.env.example`.
+remain **development** fallbacks only.
+
+`MOSAIC_DASHBOARD_PORT` and `MOSAIC_DASHBOARD_API_BASE_URL` are declared in the repository-root
+`.env.example` because the Compose stack injects them into the dashboard container.
+`MOSAIC_DASHBOARD_PREVIEW_URL` and `MOSAIC_DASHBOARD_PREVIEW_SESSION_ID` are Studio-local and are
+deliberately absent from it.
+
+Three dashboard behaviours ship documented rather than fixed for v1 — the SSR cookie caveat, the
+desktop-first workspace floor, and the absence of client-side error reporting. Each has an entry in
+[`docs/known-limitations.md`](../../docs/known-limitations.md).
 
 ## Deployment
 

@@ -42,7 +42,7 @@ approval for the frozen Protocol `0.2` vertical slice.
 | Product terminology                                            | Use **Products**, **Available plans**, and **Purchase simulation** in primary UI. Keep protocol type names in diagnostics/advanced details.                                                                                   |
 | Paywall name has no display-name field                         | Show a read-only humanized document identifier/template label. Do not add or edit protocol metadata.                                                                                                                          |
 | Manual Save versus autosave                                    | Show **Saving locally**, **Saved locally**, or **Autosave failed**. Do not add a manual Save or Publish action.                                                                                                               |
-| Back destination                                               | The toolbar Back action returns to `/foundation`; template replacement remains a separate explicit Studio action.                                                                                                             |
+| Back destination                                               | The toolbar Back action returns to `/workspace`; template replacement remains a separate explicit Studio action.                                                                                                             |
 | Multiple Product Selectors                                     | Permit the combinations allowed by Protocol `0.1`; purchase buttons expose their selector binding. Do not retain the Phase 2 UI-only singleton restriction.                                                                   |
 | Rename, lock, and hide have no protocol representation         | Treat them as clearly labeled Studio-only layer metadata. They never modify, autosave, export, or transmit the paywall document and never enter document undo history.                                                        |
 | Canvas selection versus commerce interaction                   | The browser canvas remains an editing surface: click selects and double-click edits supported text. Commerce interaction remains in Purchase simulation and connected native previews; no separate interact mode is required. |
@@ -101,7 +101,7 @@ The `/studio` route must not compose `AppShell`, `AppSidebar`, `SidebarProvider`
 
 The toolbar contains:
 
-- Back to dashboard (`/foundation`);
+- Back to dashboard (`/workspace`);
 - humanized paywall identifier/template label, read-only;
 - `Saving locally`, `Saved locally`, or `Autosave failed` state, including a retry action on failure;
 - undo and redo with disabled states and shortcuts;

@@ -184,8 +184,7 @@ export function AssetsPage({
   )
   const items = assets.data ?? []
   const state = resolveHostedQueryState({
-    emptyDescription: "",
-    emptyTitle: "",
+    // Emptiness is presented inside the page body rather than replacing it.
     error: assets.error,
     isEmpty: false,
     isPending: assets.isPending,
@@ -201,6 +200,7 @@ export function AssetsPage({
       </Link>
     ),
     permissionDescription: "Project membership is required to manage Assets.",
+    scope: { environmentId, organizationId, projectId },
   })
 
   return (

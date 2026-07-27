@@ -28,10 +28,10 @@
     "format:check": "prettier --check .",
     "lint": "eslint . --max-warnings=0",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run && npm run test:relay",
+    "test": "vitest run",
     "test:relay": "node --test scripts/local-preview-relay.test.mjs",
     "test:watch": "vitest",
-    "check": "npm run format:check && npm run lint && npm run typecheck && npm run test && npm run build"
+    "check": "npm run format:check && npm run lint && npm run typecheck && npm run test && npm run test:relay && npm run build"
   },
   "dependencies": {
     "@base-ui/react": "^1.6.0",

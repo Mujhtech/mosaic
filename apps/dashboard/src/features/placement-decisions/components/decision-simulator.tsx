@@ -315,8 +315,8 @@ export function DecisionSimulator({
 
         {attributes.some((attribute) => attribute.sensitivity === "sensitive") ? (
           <p className="border-border bg-muted/30 mt-4 rounded border p-3 text-xs">
-            Sensitive attribute input is not available in the Phase 5 dashboard simulator. These
-            attributes are excluded here, and any sensitive values in server traces are redacted.
+            Sensitive attributes cannot be entered in the simulator. They are excluded from this
+            run, and any sensitive values in server traces are redacted.
           </p>
         ) : null}
         <div className="mt-4 flex gap-2">

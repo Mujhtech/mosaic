@@ -201,6 +201,7 @@ export function ProductDetailPage({
       </Link>
     ),
     permissionDescription: "Project membership is required to inspect Product usage.",
+    scope: { organizationId, projectId },
   })
   const usageCount = countProductUsage(usage.data)
   const isArchived = product.data?.status === "archived"

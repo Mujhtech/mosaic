@@ -81,8 +81,21 @@ Validation rules (`apps/dashboard/src/config/environment.ts`):
 - The build-time `VITE_API_BASE_URL`, `VITE_MOSAIC_PREVIEW_URL`, and
   `VITE_MOSAIC_PREVIEW_SESSION_ID` remain as **development** fallbacks only.
 
-These are dashboard-owned variables. They are intentionally absent from the
-backend-owned `.env.example`.
+These are dashboard-owned variables. The two the Compose stack needs to wire the
+dashboard container — `MOSAIC_DASHBOARD_PORT` and `MOSAIC_DASHBOARD_API_BASE_URL`
+— are declared in the repository-root `.env.example` alongside the backend
+variables, because Compose is what injects them. `MOSAIC_DASHBOARD_PREVIEW_URL`
+and `MOSAIC_DASHBOARD_PREVIEW_SESSION_ID` are Studio-local and are deliberately
+absent from it; set them in the dashboard service environment when you need a
+non-default preview relay.
+
+Three dashboard behaviours ship documented rather than fixed for v1. Read them
+before filing a defect against any of them, in
+[`docs/known-limitations.md`](../known-limitations.md):
+
+- "Server-rendered HTML is always the anonymous view (SSR cookie caveat)".
+- "The hosted workspace is desktop-first".
+- "No client-side error reporting, by design".
 
 ## Browser support
 
@@ -200,4 +213,11 @@ loading state briefly.
 npm run check   # format check, lint, typecheck, tests, relay tests, build
 ```
 
-`npm run check` is the single gate for dashboard changes and is what CI runs.
+`npm run check` is the single gate for dashboard changes and is what CI runs. It
+runs `test` (Vitest) and `test:relay` as separate, explicit steps.
+
+`test:relay` exercises the local Studio preview relay over a real WebSocket on
+loopback. It needs to bind an ephemeral TCP port on `127.0.0.1`; in a sandbox
+that forbids listening sockets it fails on bind rather than on behaviour. Run it
+on a host with loopback networking, and do not remove it from `check` — it is the
+only coverage of the relay's message flow.

@@ -11,12 +11,12 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as SignupRouteImport } from './routes/signup'
 import { Route as LoginRouteImport } from './routes/login'
+import { Route as DiagnosticsRouteImport } from './routes/diagnostics'
 import { Route as Studio_layoutRouteImport } from './routes/_studio_layout'
 import { Route as HostedRouteImport } from './routes/_hosted'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as Studio_layoutStudioRouteImport } from './routes/_studio_layout/studio'
 import { Route as HostedWorkspaceRouteImport } from './routes/_hosted/workspace'
-import { Route as HostedDiagnosticsRouteImport } from './routes/_hosted/diagnostics'
 import { Route as HostedOrganizationsNewRouteImport } from './routes/_hosted/organizations/new'
 import { Route as HostedOrganizationsOrganizationIdIndexRouteImport } from './routes/_hosted/organizations/$organizationId/index'
 import { Route as HostedOrganizationsOrganizationIdMembersRouteImport } from './routes/_hosted/organizations/$organizationId/members'
@@ -55,6 +55,11 @@ const LoginRoute = LoginRouteImport.update({
   path: '/login',
   getParentRoute: () => rootRouteImport,
 } as any)
+const DiagnosticsRoute = DiagnosticsRouteImport.update({
+  id: '/diagnostics',
+  path: '/diagnostics',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const Studio_layoutRoute = Studio_layoutRouteImport.update({
   id: '/_studio_layout',
   getParentRoute: () => rootRouteImport,
@@ -76,11 +81,6 @@ const Studio_layoutStudioRoute = Studio_layoutStudioRouteImport.update({
 const HostedWorkspaceRoute = HostedWorkspaceRouteImport.update({
   id: '/workspace',
   path: '/workspace',
-  getParentRoute: () => HostedRoute,
-} as any)
-const HostedDiagnosticsRoute = HostedDiagnosticsRouteImport.update({
-  id: '/diagnostics',
-  path: '/diagnostics',
   getParentRoute: () => HostedRoute,
 } as any)
 const HostedOrganizationsNewRoute = HostedOrganizationsNewRouteImport.update({
@@ -294,9 +294,9 @@ const HostedOrganizationsOrganizationIdProjectsProjectIdMonetizationEnvironmentI
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/diagnostics': typeof DiagnosticsRoute
   '/login': typeof LoginRoute
   '/signup': typeof SignupRoute
-  '/diagnostics': typeof HostedDiagnosticsRoute
   '/workspace': typeof HostedWorkspaceRoute
   '/studio': typeof Studio_layoutStudioRoute
   '/organizations/new': typeof HostedOrganizationsNewRoute
@@ -329,9 +329,9 @@ export interface FileRoutesByFullPath {
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/diagnostics': typeof DiagnosticsRoute
   '/login': typeof LoginRoute
   '/signup': typeof SignupRoute
-  '/diagnostics': typeof HostedDiagnosticsRoute
   '/workspace': typeof HostedWorkspaceRoute
   '/studio': typeof Studio_layoutStudioRoute
   '/organizations/new': typeof HostedOrganizationsNewRoute
@@ -367,9 +367,9 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/_hosted': typeof HostedRouteWithChildren
   '/_studio_layout': typeof Studio_layoutRouteWithChildren
+  '/diagnostics': typeof DiagnosticsRoute
   '/login': typeof LoginRoute
   '/signup': typeof SignupRoute
-  '/_hosted/diagnostics': typeof HostedDiagnosticsRoute
   '/_hosted/workspace': typeof HostedWorkspaceRoute
   '/_studio_layout/studio': typeof Studio_layoutStudioRoute
   '/_hosted/organizations/new': typeof HostedOrganizationsNewRoute
@@ -404,9 +404,9 @@ export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/'
+    | '/diagnostics'
     | '/login'
     | '/signup'
-    | '/diagnostics'
     | '/workspace'
     | '/studio'
     | '/organizations/new'
@@ -439,9 +439,9 @@ export interface FileRouteTypes {
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
+    | '/diagnostics'
     | '/login'
     | '/signup'
-    | '/diagnostics'
     | '/workspace'
     | '/studio'
     | '/organizations/new'
@@ -476,9 +476,9 @@ export interface FileRouteTypes {
     | '/'
     | '/_hosted'
     | '/_studio_layout'
+    | '/diagnostics'
     | '/login'
     | '/signup'
-    | '/_hosted/diagnostics'
     | '/_hosted/workspace'
     | '/_studio_layout/studio'
     | '/_hosted/organizations/new'
@@ -514,6 +514,7 @@ export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   HostedRoute: typeof HostedRouteWithChildren
   Studio_layoutRoute: typeof Studio_layoutRouteWithChildren
+  DiagnosticsRoute: typeof DiagnosticsRoute
   LoginRoute: typeof LoginRoute
   SignupRoute: typeof SignupRoute
 }
@@ -532,6 +533,13 @@ declare module '@tanstack/react-router' {
       path: '/login'
       fullPath: '/login'
       preLoaderRoute: typeof LoginRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/diagnostics': {
+      id: '/diagnostics'
+      path: '/diagnostics'
+      fullPath: '/diagnostics'
+      preLoaderRoute: typeof DiagnosticsRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/_studio_layout': {
@@ -567,13 +575,6 @@ declare module '@tanstack/react-router' {
       path: '/workspace'
       fullPath: '/workspace'
       preLoaderRoute: typeof HostedWorkspaceRouteImport
-      parentRoute: typeof HostedRoute
-    }
-    '/_hosted/diagnostics': {
-      id: '/_hosted/diagnostics'
-      path: '/diagnostics'
-      fullPath: '/diagnostics'
-      preLoaderRoute: typeof HostedDiagnosticsRouteImport
       parentRoute: typeof HostedRoute
     }
     '/_hosted/organizations/new': {
@@ -832,7 +833,6 @@ const HostedOrganizationsOrganizationIdProjectsProjectIdMonetizationEnvironmentI
   )
 
 interface HostedRouteChildren {
-  HostedDiagnosticsRoute: typeof HostedDiagnosticsRoute
   HostedWorkspaceRoute: typeof HostedWorkspaceRoute
   HostedOrganizationsNewRoute: typeof HostedOrganizationsNewRoute
   HostedOrganizationsOrganizationIdMembersRoute: typeof HostedOrganizationsOrganizationIdMembersRoute
@@ -858,7 +858,6 @@ interface HostedRouteChildren {
 }
 
 const HostedRouteChildren: HostedRouteChildren = {
-  HostedDiagnosticsRoute: HostedDiagnosticsRoute,
   HostedWorkspaceRoute: HostedWorkspaceRoute,
   HostedOrganizationsNewRoute: HostedOrganizationsNewRoute,
   HostedOrganizationsOrganizationIdMembersRoute:
@@ -925,6 +924,7 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   HostedRoute: HostedRouteWithChildren,
   Studio_layoutRoute: Studio_layoutRouteWithChildren,
+  DiagnosticsRoute: DiagnosticsRoute,
   LoginRoute: LoginRoute,
   SignupRoute: SignupRoute,
 }

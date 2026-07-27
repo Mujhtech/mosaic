@@ -53,6 +53,7 @@ export function AnalyticsWorkspace({
       void environments.refetch()
     },
     permissionDescription: "Project membership is required to read analytics.",
+    scope: { environmentId, organizationId, projectId },
   })
 
   return (
