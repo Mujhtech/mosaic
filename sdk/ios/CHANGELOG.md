@@ -43,10 +43,13 @@ Operational hardening. The SDK remains pre-1.0; see
   `refresh()` is not cancellable.
 - Bind bucketing tests to the canonical assignment-vector fixture and pin a
   repository-root `.swift-format` configuration.
-- Stop attributing conversions on an Experiment fallback presentation to the
-  assigned Variant. A fallback never records a statistical exposure, so a
-  tuple-carrying fallback `product_selected` could displace the Variant's
-  legitimate denominator row in `product_selection_purchase_start`.
+- Attach the Experiment attribution tuple to conversion events only when the
+  presentation actually records a statistical exposure. Fallback presentations
+  and QA-override presentations emit no exposure, so their tuple-carrying
+  `product_selected` could displace the Variant's legitimate denominator row in
+  `product_selection_purchase_start`. Tuple attachment and exposure emission
+  now share one predicate so they cannot drift apart. Only the tuple is
+  removed; the events remain on Event Schema v2, and
   `experiment_fallback_presented` still carries the tuple as a diagnostic.
 - Add conformance coverage proving the closed codec rejects all six canonical
   negative analytics fixtures across v1 and v2, and proving conversion events

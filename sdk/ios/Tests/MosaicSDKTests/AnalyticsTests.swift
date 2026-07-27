@@ -347,37 +347,99 @@ final class AnalyticsTests: XCTestCase {
     XCTAssertEqual(completed.attribution.providerId, "mock")
   }
 
-  /// A fallback presentation never records a statistical exposure, so its
-  /// conversions must not carry the assigned Variant's tuple. A tuple-carrying
-  /// fallback `product_selected` would displace the Variant's legitimate
-  /// denominator row in `product_selection_purchase_start`.
+  /// The core Experiment analytics invariant: a conversion event carries the
+  /// Experiment tuple **if and only if** an `experiment_exposed` row exists for
+  /// that presentation.
   ///
-  /// `experiment_fallback_presented` itself still carries the tuple; it is a
+  /// Conversion attribution joins a conversion to an exposure by equality on
+  /// the Experiment columns of the conversion event itself. Both a fallback
+  /// presentation and a QA-override presentation emit no exposure, so a
+  /// tuple-carrying `product_selected` from either would displace the Variant's
+  /// legitimate denominator row in `product_selection_purchase_start`.
+  ///
+  /// `experiment_fallback_presented` still carries the tuple; it is a
   /// diagnostic event, not a conversion.
   @MainActor
-  func testFallbackPresentationConversionsCarryNoExperimentTuple() async throws {
-    let experiment = MosaicAnalyticsAttribution(
-      configurationReleaseId: "release_fallback", placementId: "placement_fallback",
-      experimentId: "experiment_checkout",
-      experimentVersionId: "experiment_version_checkout_1",
-      experimentVariantId: "variant_treatment_a",
-      experimentAllocationVersion: "allocation_checkout_1")
+  func testConversionTupleExistsExactlyWhenExposureIsRecorded() async throws {
+    let assignment = try qaOverrideAssignment()
+    let variant = try XCTUnwrap(assignment.variants.first)
+    func selection(source: MosaicExperimentAssignmentSource) -> MosaicExperimentSelection {
+      MosaicExperimentSelection(
+        assignment: assignment, variant: variant, keyType: .identifiedUser, bucket: 1_118,
+        groupBucket: nil, source: source,
+        subjectDigest: "sha256:" + String(repeating: "a", count: 64)
+      )
+    }
+    let exposed = selection(source: .deterministic)
+    let qaOverride = selection(source: .qaOverride)
+    XCTAssertFalse(exposed.excludedFromResults)
+    XCTAssertTrue(qaOverride.excludedFromResults, "A QA override is excluded from results.")
 
-    // An exposed original-variant presentation keeps the tuple.
-    XCTAssertEqual(
-      MosaicPlacementPaywall.conversionExperimentAttribution(
-        experiment: experiment, fallbackReason: nil),
-      experiment)
-    // Every fallback reason drops it.
-    for reason in ["products_unavailable", "provider_capability", "reauthorization_failed"] {
-      XCTAssertNil(
-        MosaicPlacementPaywall.conversionExperimentAttribution(
-          experiment: experiment, fallbackReason: reason),
-        reason)
+    let experiment = MosaicAnalyticsAttribution(
+      configurationReleaseId: "release_experiment", placementId: "placement_experiment",
+      experimentId: assignment.experimentId,
+      experimentVersionId: assignment.experimentVersionId,
+      experimentVariantId: variant.id,
+      experimentAllocationVersion: assignment.allocationVersion)
+
+    // The tuple predicate must agree with the exposure predicate in every case.
+    let cases:
+      [(name: String, selection: MosaicExperimentSelection?, fallback: String?, exposes: Bool)] = [
+        ("exposed original variant", exposed, nil, true),
+        ("fallback: products unavailable", exposed, "products_unavailable", false),
+        ("fallback: provider capability", exposed, "provider_capability", false),
+        ("qa override", qaOverride, nil, false),
+        ("qa override with fallback", qaOverride, "products_unavailable", false),
+        ("no assignment", nil, nil, false),
+      ]
+    for value in cases {
+      let exposes = MosaicPlacementPaywall.recordsStatisticalExposure(
+        selection: value.selection, experiment: experiment, fallbackReason: value.fallback)
+      XCTAssertEqual(exposes, value.exposes, value.name)
+      let tuple = MosaicPlacementPaywall.conversionExperimentAttribution(
+        experiment: experiment, selection: value.selection, fallbackReason: value.fallback)
+      // tuple <-> exposure
+      XCTAssertEqual(tuple != nil, exposes, value.name)
+      XCTAssertEqual(tuple, value.exposes ? experiment : nil, value.name)
     }
 
-    // The instrumentation built for a fallback presentation must therefore emit
-    // tuple-free conversions end to end.
+    // End to end: a QA-override presentation emits tuple-free conversions.
+    let queued = try await conversionEvents(
+      experiment: MosaicPlacementPaywall.conversionExperimentAttribution(
+        experiment: experiment, selection: qaOverride, fallbackReason: nil))
+    for name in [
+      MosaicAnalyticsEventName.productSelected, .purchaseStarted, .purchaseCompletedClient,
+    ] {
+      let event = try XCTUnwrap(queued.first { $0.eventName == name }, name.rawValue)
+      XCTAssertNil(event.attribution.experimentId, name.rawValue)
+      XCTAssertNil(event.attribution.experimentVersionId, name.rawValue)
+      XCTAssertNil(event.attribution.experimentVariantId, name.rawValue)
+      XCTAssertNil(event.attribution.experimentAllocationVersion, name.rawValue)
+      // Tuple removal is the rule; the schema version is unaffected.
+      XCTAssertEqual(event.eventSchemaVersion, "2", name.rawValue)
+      // The product attribution a conversion does need is still present.
+      XCTAssertEqual(event.attribution.mosaicProductId, "yearly-plan", name.rawValue)
+    }
+
+    // And a fallback presentation does the same.
+    let fallbackQueued = try await conversionEvents(
+      experiment: MosaicPlacementPaywall.conversionExperimentAttribution(
+        experiment: experiment, selection: exposed, fallbackReason: "products_unavailable"))
+    for name in [
+      MosaicAnalyticsEventName.productSelected, .purchaseStarted, .purchaseCompletedClient,
+    ] {
+      let event = try XCTUnwrap(fallbackQueued.first { $0.eventName == name }, name.rawValue)
+      XCTAssertNil(event.attribution.experimentId, name.rawValue)
+      XCTAssertNil(event.attribution.experimentAllocationVersion, name.rawValue)
+      XCTAssertEqual(event.attribution.mosaicProductId, "yearly-plan", name.rawValue)
+    }
+  }
+
+  /// Drives one real paywall purchase and returns the queued events.
+  @MainActor
+  private func conversionEvents(
+    experiment: MosaicAnalyticsAttribution?
+  ) async throws -> [MosaicAnalyticsEvent] {
     let persistence = MosaicMemoryAnalyticsPersistence()
     let runtime = MosaicAnalyticsRuntime(
       persistence: persistence, transport: AnalyticsTestTransport(.fail),
@@ -385,13 +447,12 @@ final class AnalyticsTests: XCTestCase {
       context: .init(sdkVersion: mosaicSDKVersion), jitter: { _ in 0 })
     await runtime.setCollection(environmentEnabled: true, hostEnabled: true)
     let analytics = MosaicAnalyticsPresentationInstrumentation(
-      runtime: runtime, placementRequestID: "placement_request_fallback",
-      presentationID: "presentation_fallback",
+      runtime: runtime, placementRequestID: "placement_request_experiment",
+      presentationID: "presentation_experiment",
       attribution: .init(
-        configurationReleaseId: "release_fallback", placementId: "placement_fallback",
+        configurationReleaseId: "release_experiment", placementId: "placement_experiment",
         paywallId: "paywall_control", paywallVersionId: "paywall_version_control"),
-      experimentAttribution: MosaicPlacementPaywall.conversionExperimentAttribution(
-        experiment: experiment, fallbackReason: "products_unavailable"),
+      experimentAttribution: experiment,
       providerID: "mock")
     let document = try canonicalDocument()
     let model = MosaicPaywallModel(
@@ -410,17 +471,12 @@ final class AnalyticsTests: XCTestCase {
       if names.contains(.purchaseStarted) && names.contains(.purchaseCompletedClient) { break }
       await Task.yield()
     }
-    for name in [
-      MosaicAnalyticsEventName.productSelected, .purchaseStarted, .purchaseCompletedClient,
-    ] {
-      let event = try XCTUnwrap(queued.first { $0.eventName == name }, name.rawValue)
-      XCTAssertNil(event.attribution.experimentId, name.rawValue)
-      XCTAssertNil(event.attribution.experimentVersionId, name.rawValue)
-      XCTAssertNil(event.attribution.experimentVariantId, name.rawValue)
-      XCTAssertNil(event.attribution.experimentAllocationVersion, name.rawValue)
-      // The product attribution a conversion does need is still present.
-      XCTAssertEqual(event.attribution.mosaicProductId, "yearly-plan", name.rawValue)
-    }
+    return queued
+  }
+
+  private func qaOverrideAssignment() throws -> MosaicExperimentAssignment {
+    try MosaicExperimentAssignmentDecoder.decode(
+      phase5FixtureData("experiment-assignment/v1/staging-qa.json"), environmentMode: .staging)
   }
 
   /// Conversion attribution joins solely on the event-carried Experiment tuple,
