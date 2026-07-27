@@ -122,10 +122,17 @@ class MosaicAnalyticsRuntime internal constructor(
             sentAt = mosaicAnalyticsTimestamp(now()),
             events = sent.map { MosaicAnalyticsCodec.decodeEvent(it.encoded) },
         )
+        val batchContractVersion = firstVersion
         when (val result = runCatching { transport.send(batch) }.getOrNull()) {
+            // A response is authoritative only when it echoes both the exact batch ID and the
+            // exact contract version that was submitted. A version mismatch means the server did
+            // not acknowledge the batch that was actually sent, so the events are retried rather
+            // than removed on the strength of an unrelated acknowledgement.
             is MosaicAnalyticsTransportResult.Received -> queue.applyResults(
                 sent,
-                result.response.takeIf { it.batchId == batch.batchId },
+                result.response.takeIf {
+                    it.batchId == batch.batchId && it.analyticsEventContractVersion == batchContractVersion
+                },
                 null,
                 jitter,
             )

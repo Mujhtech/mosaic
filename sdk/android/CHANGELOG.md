@@ -27,6 +27,24 @@ Release-blocking fixes:
   existing analytics runtime namespace. A later `Mosaic.configure` carrying the
   owner-approved setting was previously ignored, so collection stayed disabled
   (dropping every event) or stayed enabled after an owner disabled it.
+- Acknowledge Analytics Event Contract v2 batches correctly. The decoded
+  ingestion response now retains the echoed `analyticsEventContractVersion`, and
+  a batch's results are applied only when the response echoes both the exact
+  batch ID and the exact submitted contract version. A mismatched version means
+  the server did not acknowledge what was sent, so events are retried rather
+  than removed on an unrelated acknowledgement.
+- Apply per-event correlation and attribution ownership allow-lists to every
+  schema version. Attribution ownership was previously checked only for v2, and
+  correlation ownership was not checked at all, so a v1 event could carry an
+  unrelated `providerUpdateId` or `planId` and an `experiment_exposed` event
+  could carry an unrelated `purchaseAttemptId`/`providerOperationId`. Unrelated
+  identifiers silently join an event to a different journey during ingestion and
+  corrupt funnel and Experiment attribution. The six canonical invalid analytics
+  fixtures are now consumed directly by name as conformance evidence.
+- Derive the Placement rollout tuple (`assignmentKeyType`, `bucketingAlgorithm`,
+  `rolloutBucket`) atomically from a single decision-trace step, so a partial
+  tuple is structurally impossible rather than emitted and then silently dropped
+  by the codec.
 - Fix a full-paywall-tree recomposition on every scrolled pixel. The scroll
   indicator now reads scroll offset in the draw phase and derives its visibility,
   so scrolling invalidates only the indicator.

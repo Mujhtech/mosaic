@@ -9,6 +9,52 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class AnalyticsContractTest {
+    /**
+     * Consumes the canonical invalid fixtures directly, by exact path, rather than mutating valid
+     * ones. Each names a real ingestion-boundary defect: an unrelated correlation identifier or
+     * attribution field silently joins an event to a different journey, and an incomplete rollout
+     * tuple corrupts Placement attribution. The ownership rules must apply to v1 as well as v2 —
+     * restricting them to v2 was how the v1 cases were reaching the queue.
+     */
+    @Test
+    fun canonicalInvalidFixturesAreRejectedByOwnershipRules() {
+        listOf(
+            "v1/invalid/incomplete-rollout-attribution.json",
+            "v1/invalid/placement-request-unrelated-correlation.json",
+            "v1/invalid/placement-request-unrelated-attribution.json",
+            "v2/invalid/experiment-exposure-unrelated-correlation.json",
+            "v2/invalid/experiment-fallback-unrelated-attribution.json",
+            "v2/invalid/partial-experiment-attribution.json",
+        ).forEach { path ->
+            assertThrows(
+                "Expected rejection of $path",
+                IllegalArgumentException::class.java,
+            ) { MosaicAnalyticsCodec.decodeEvent(versionedFixture(path)) }
+        }
+    }
+
+    /**
+     * The backend echoes the contract version of the submitted batch. A v2 Experiment batch must be
+     * acknowledged by a v2 response and a v1 batch by a v1 response; a mismatched version means the
+     * server did not acknowledge what was sent, so results must not be applied. Applying them, or
+     * rejecting every v2 response outright, loses Experiment exposures permanently.
+     */
+    @Test
+    fun ingestionResponsesCarryTheEchoedContractVersionForBothContracts() {
+        val v1 = MosaicAnalyticsCodec.decodeResponse(fixture("responses/mixed-result-batch.json"))
+        assertEquals("1", v1.analyticsEventContractVersion)
+
+        val v2Source = JsonParser.parseString(fixture("responses/mixed-result-batch.json")).asJsonObject
+            .also { it.addProperty("analyticsEventContractVersion", "2") }.toString()
+        assertEquals("2", MosaicAnalyticsCodec.decodeResponse(v2Source).analyticsEventContractVersion)
+
+        val unsupported = JsonParser.parseString(fixture("responses/mixed-result-batch.json")).asJsonObject
+            .also { it.addProperty("analyticsEventContractVersion", "3") }.toString()
+        assertThrows(IllegalArgumentException::class.java) {
+            MosaicAnalyticsCodec.decodeResponse(unsupported)
+        }
+    }
+
     @Test
     fun canonicalEventsAndBatchRoundTripWithoutContractDrift() {
         val eventFiles = listOf(
@@ -108,5 +154,10 @@ class AnalyticsContractTest {
 
     private fun fixture(name: String): String = Files.readAllBytes(
         repositoryFile("protocol/fixtures/analytics-event/v1/$name"),
+    ).toString(Charsets.UTF_8)
+
+    /** Explicit contract-versioned path; no fixture directory is ever scanned. */
+    private fun versionedFixture(path: String): String = Files.readAllBytes(
+        repositoryFile("protocol/fixtures/analytics-event/$path"),
     ).toString(Charsets.UTF_8)
 }

@@ -89,6 +89,7 @@ class AnalyticsQueueTest {
                 MosaicAnalyticsEventResult.Accepted(sent[0].eventId),
                 MosaicAnalyticsEventResult.PermanentlyRejected(sent[1].eventId, "future_unknown_code"),
             ),
+            analyticsEventContractVersion = "1",
         )
 
         queue.applyResults(sent, invalid, null) { 0 }
@@ -160,6 +161,61 @@ class AnalyticsQueueTest {
         runtime.close()
     }
 
+    /**
+     * The blocker this protects: the backend echoes the submitted batch's contract version, so a v2
+     * Experiment batch is acknowledged by a v2 response. Treating a v2 response as unusable (or
+     * accepting a v1 response for a v2 batch) either retries the batch to exhaustion and drops it —
+     * losing Experiment exposures silently — or removes events on an acknowledgement that never
+     * referred to them. A v2 batch must be acknowledged only by a matching v2 response.
+     */
+    @Test
+    fun v2BatchesAreAcknowledgedOnlyByV2Responses() = runTest {
+        val exposure = MosaicAnalyticsCodec.decodeEvent(v2Fixture("experiment-exposed.json"))
+        assertEquals("2", exposure.eventSchemaVersion)
+
+        // A v1-versioned response must not acknowledge the v2 batch: the event is retried, not lost.
+        val mismatched = MosaicAnalyticsQueue(MemoryAnalyticsStore()) { NOW }
+        assertTrue(mismatched.enqueue(exposure))
+        val mismatchedRuntime = runtime(mismatched, environmentEnabled = true, responseVersion = "1")
+        mismatchedRuntime.flush()
+        assertEquals(1, mismatched.diagnostics().queuedEventCount)
+        mismatchedRuntime.close()
+
+        // The correctly versioned v2 response acknowledges and removes it.
+        val matched = MosaicAnalyticsQueue(MemoryAnalyticsStore()) { NOW }
+        assertTrue(matched.enqueue(exposure))
+        val matchedRuntime = runtime(matched, environmentEnabled = true, responseVersion = "2")
+        matchedRuntime.flush()
+        assertEquals(0, matched.diagnostics().queuedEventCount)
+        matchedRuntime.close()
+    }
+
+    private fun v2Fixture(name: String) = Files.readAllBytes(
+        repositoryFile("protocol/fixtures/analytics-event/v2/$name"),
+    ).toString(Charsets.UTF_8)
+
+    private fun runtime(
+        queue: MosaicAnalyticsQueue,
+        environmentEnabled: Boolean,
+        responseVersion: String,
+    ) = MosaicAnalyticsRuntime(
+        identityStore = { MosaicIdentityState("installation_001", null, emptyMap(), 0) },
+        queue = queue,
+        transport = object : MosaicAnalyticsTransport {
+            override suspend fun send(batch: MosaicAnalyticsBatch) =
+                MosaicAnalyticsTransportResult.Received(
+                    MosaicAnalyticsIngestionResponse(
+                        batchId = batch.batchId,
+                        receivedAt = "2026-07-26T12:05:01.000Z",
+                        results = batch.events.map { MosaicAnalyticsEventResult.Accepted(it.eventId) },
+                        analyticsEventContractVersion = responseVersion,
+                    ),
+                )
+        },
+        baseContext = MosaicAnalyticsContext(),
+        environmentEnabled = environmentEnabled,
+    )
+
     private fun runtime(queue: MosaicAnalyticsQueue, environmentEnabled: Boolean) = MosaicAnalyticsRuntime(
         identityStore = { MosaicIdentityState("installation_001", null, emptyMap(), 0) },
         queue = queue,
@@ -170,6 +226,8 @@ class AnalyticsQueueTest {
         baseContext = MosaicAnalyticsContext(),
         environmentEnabled = environmentEnabled,
     )
+
+    private val NOW = Instant.parse("2026-07-26T12:05:00.000Z").toEpochMilli()
 
     private fun event(name: String): MosaicAnalyticsEvent = MosaicAnalyticsCodec.decodeEvent(
         Files.readAllBytes(repositoryFile("protocol/fixtures/analytics-event/v1/$name")).toString(Charsets.UTF_8),

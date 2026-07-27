@@ -760,13 +760,13 @@ class MosaicHostedConfigurationClient(
         return when (val result = MosaicPlacementEvaluator.evaluate(ruleSet, context, assignment, qaOverrideTokens)) {
             is MosaicEvaluationResult.NoPaywall -> {
                 emitRuleFallbackIfExact(ruleSet, context, result.fallbackPath, result.matchedRuleId, "no_paywall", placementRequestId, analyticsContext, baseAttribution)
-                val rolloutStep = result.trace.steps.lastOrNull { it.rolloutBucket != null }
+                val rollout = result.trace.rolloutTuple()
                 analyticsRuntime?.record(
                     MosaicAnalyticsPayload.PlacementSelected(
                         finalOutcome = "no_paywall",
-                        assignmentKeyType = rolloutStep?.assignmentKeyType?.analyticsWireName(),
-                        bucketingAlgorithm = rolloutStep?.rolloutBucket?.let { MOSAIC_ROLLOUT_ALGORITHM },
-                        rolloutBucket = rolloutStep?.rolloutBucket,
+                        assignmentKeyType = rollout?.assignmentKeyType,
+                        bucketingAlgorithm = rollout?.bucketingAlgorithm,
+                        rolloutBucket = rollout?.rolloutBucket,
                     ),
                     MosaicAnalyticsJourney(
                         MosaicAnalyticsCorrelation(placementRequestId = placementRequestId),
@@ -967,13 +967,13 @@ class MosaicHostedConfigurationClient(
         }
         is MosaicEvaluationResult.NoPaywall -> {
             emitFallbackUses(uses, "no_paywall", original.matchedRuleId, placementRequestId, context, baseAttribution)
-            val rolloutStep = original.trace.steps.lastOrNull { it.rolloutBucket != null }
+            val rollout = original.trace.rolloutTuple()
             analyticsRuntime?.record(
                 MosaicAnalyticsPayload.PlacementSelected(
                     finalOutcome = "no_paywall",
-                    assignmentKeyType = rolloutStep?.assignmentKeyType?.analyticsWireName(),
-                    bucketingAlgorithm = rolloutStep?.rolloutBucket?.let { MOSAIC_ROLLOUT_ALGORITHM },
-                    rolloutBucket = rolloutStep?.rolloutBucket,
+                    assignmentKeyType = rollout?.assignmentKeyType,
+                    bucketingAlgorithm = rollout?.bucketingAlgorithm,
+                    rolloutBucket = rollout?.rolloutBucket,
                 ),
                 MosaicAnalyticsJourney(
                     MosaicAnalyticsCorrelation(placementRequestId = placementRequestId),
@@ -1084,14 +1084,13 @@ class MosaicHostedConfigurationClient(
             paywallId = delivered.paywallId,
             paywallVersionId = delivered.id,
         )
-        val bucket = trace.steps.lastOrNull { it.rolloutBucket != null }?.rolloutBucket
-        val assignmentKeyType = trace.steps.lastOrNull { it.rolloutBucket != null }?.assignmentKeyType
+        val rollout = trace.rolloutTuple()
         analyticsRuntime?.record(
             MosaicAnalyticsPayload.PlacementSelected(
                 finalOutcome = "paywall",
-                assignmentKeyType = assignmentKeyType?.analyticsWireName(),
-                bucketingAlgorithm = bucket?.let { MOSAIC_ROLLOUT_ALGORITHM },
-                rolloutBucket = bucket,
+                assignmentKeyType = rollout?.assignmentKeyType,
+                bucketingAlgorithm = rollout?.bucketingAlgorithm,
+                rolloutBucket = rollout?.rolloutBucket,
             ),
             MosaicAnalyticsJourney(
                 MosaicAnalyticsCorrelation(placementRequestId = placementRequestId),
@@ -1120,6 +1119,28 @@ class MosaicHostedConfigurationClient(
                     },
                 )
             },
+        )
+    }
+
+    /**
+     * The rollout tuple is all-or-none by contract: `assignmentKeyType`, `bucketingAlgorithm`, and
+     * `rolloutBucket` are emitted together or not at all. Deriving them from one trace step in a
+     * single place makes a partial tuple structurally impossible; a partial tuple would otherwise be
+     * rejected by the codec and the whole event silently dropped.
+     */
+    private data class MosaicRolloutTuple(
+        val assignmentKeyType: String,
+        val bucketingAlgorithm: String,
+        val rolloutBucket: Int,
+    )
+
+    private fun MosaicDecisionTrace.rolloutTuple(): MosaicRolloutTuple? {
+        val step = steps.lastOrNull { it.rolloutBucket != null && it.assignmentKeyType != null }
+            ?: return null
+        return MosaicRolloutTuple(
+            assignmentKeyType = requireNotNull(step.assignmentKeyType).analyticsWireName(),
+            bucketingAlgorithm = MOSAIC_ROLLOUT_ALGORITHM,
+            rolloutBucket = requireNotNull(step.rolloutBucket),
         )
     }
 
