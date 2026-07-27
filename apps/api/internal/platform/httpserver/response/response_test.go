@@ -250,3 +250,58 @@ func decodeError(t *testing.T, recorder *httptest.ResponseRecorder) errorEnvelop
 	}
 	return payload
 }
+
+// TestUnexpectedErrorIsLoggedForOperators protects every "the API returned 500"
+// runbook. The response body carries only `internal_error` plus a request ID, so
+// if the cause is not written to the operator log it is lost: the sole trace of
+// the failure was an access-log line with http_status 500 and no reason. The
+// cause must reach the log and must not reach the body.
+func TestUnexpectedErrorIsLoggedForOperators(t *testing.T) {
+	var logged bytes.Buffer
+	logger := zerolog.New(&logged)
+
+	request := httptest.NewRequest(http.MethodPost, "/v1/projects/project_1/placements", nil)
+	request.Header.Set(RequestIDHeader, "req-unexpected")
+	request = request.WithContext(logger.WithContext(request.Context()))
+	recorder := httptest.NewRecorder()
+
+	chimiddleware.RequestID(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		Error(w, r, stderrors.New(`ERROR: new row violates check constraint "placements_key_format_check"`))
+	})).ServeHTTP(recorder, request)
+
+	if recorder.Code != http.StatusInternalServerError {
+		t.Fatalf("status = %d, want 500", recorder.Code)
+	}
+	entry := logged.String()
+	if !strings.Contains(entry, "placements_key_format_check") {
+		t.Fatalf("operator log did not record the cause: %s", entry)
+	}
+	if !strings.Contains(entry, "req-unexpected") {
+		t.Fatalf("operator log did not record the request ID: %s", entry)
+	}
+	if strings.Contains(recorder.Body.String(), "placements_key_format_check") {
+		t.Fatalf("response leaked the internal cause: %s", recorder.Body.String())
+	}
+}
+
+// TestClientErrorIsNotLoggedAsUnexpected keeps ordinary 4xx validation traffic
+// out of the error log; otherwise the signal that matters is buried.
+func TestClientErrorIsNotLoggedAsUnexpected(t *testing.T) {
+	var logged bytes.Buffer
+	logger := zerolog.New(&logged)
+
+	request := httptest.NewRequest(http.MethodPost, "/v1/projects/project_1/placements", nil)
+	request = request.WithContext(logger.WithContext(request.Context()))
+	recorder := httptest.NewRecorder()
+
+	chimiddleware.RequestID(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		Error(w, r, ValidationFailed(map[string][]string{"key": {"must be lowercase"}}))
+	})).ServeHTTP(recorder, request)
+
+	if recorder.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("status = %d, want 422", recorder.Code)
+	}
+	if logged.Len() != 0 {
+		t.Fatalf("client error was logged as unexpected: %s", logged.String())
+	}
+}

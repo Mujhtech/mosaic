@@ -161,7 +161,7 @@ type placementRequest struct {
 
 func (request *placementRequest) Validate() error {
 	return validation.ValidateStruct(request,
-		validation.Field(&request.Key, validation.Required, validation.Length(2, 63)),
+		validation.Field(&request.Key, validation.Required, validation.Length(2, 63), requestvalidation.PlacementKey()),
 		validation.Field(&request.Name, validation.Required, validation.Length(1, 120)),
 		validation.Field(&request.Description, validation.Length(0, 1000)))
 }

@@ -3,6 +3,7 @@ package requestvalidation
 import (
 	"errors"
 	"reflect"
+	"strings"
 	"testing"
 
 	validation "github.com/go-ozzo/ozzo-validation/v4"
@@ -60,5 +61,27 @@ func TestFieldErrorsRejectsInternalValidationErrors(t *testing.T) {
 	fields, ok := FieldErrors(err)
 	if ok {
 		t.Fatalf("FieldErrors returned %#v, want internal failure", fields)
+	}
+}
+
+// TestPlacementKeyMatchesDatabaseConstraint protects against the transport
+// layer accepting a key PostgreSQL will reject. Placement, alias, and attribute
+// keys are the only keys in the schema that forbid hyphens; when the boundary
+// checked length alone, a hyphenated key became a 500 with no field error and no
+// logged cause. The pattern here must stay identical to the CHECK constraints in
+// migrations 00009 and 00011.
+func TestPlacementKeyMatchesDatabaseConstraint(t *testing.T) {
+	rule := PlacementKey()
+	accepted := []string{"onboarding", "drill_onboarding", "a", "p1", strings.Repeat("a", 64)}
+	for _, key := range accepted {
+		if err := rule.Validate(key); err != nil {
+			t.Errorf("key %q = %v, want accepted", key, err)
+		}
+	}
+	rejected := []string{"drill-onboarding", "Onboarding", "1onboarding", "_onboarding", "onboarding key", "onboarding.key", strings.Repeat("a", 65)}
+	for _, key := range rejected {
+		if err := rule.Validate(key); err == nil {
+			t.Errorf("key %q was accepted; PostgreSQL rejects it", key)
+		}
 	}
 }

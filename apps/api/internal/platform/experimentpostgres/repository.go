@@ -652,23 +652,20 @@ func (r *Repository) publishRelease(ctx context.Context, tx pgx.Tx, scope experi
 	if e != nil {
 		return "", persistence(e)
 	}
-	_, e = tx.Exec(ctx, `INSERT INTO configuration_release_placements SELECT $1,project_id,environment_id,placement_id,placement_key,paywall_version_id FROM configuration_release_placements WHERE release_id=$2; INSERT INTO configuration_release_products SELECT $1,environment_id,project_id,product_id FROM configuration_release_products WHERE release_id=$2; INSERT INTO configuration_release_assets SELECT $1,environment_id,project_id,asset_id FROM configuration_release_assets WHERE release_id=$2; INSERT INTO configuration_release_rule_set_versions SELECT $1,environment_id,project_id,rule_set_version_id,placement_id FROM configuration_release_rule_set_versions WHERE release_id=$2`, releaseID, oldID)
-	if e != nil {
-		return "", persistence(e)
+	// pgx uses the extended protocol, which accepts exactly one statement per
+	// parameterized Exec. These four carries were previously one semicolon-joined
+	// string, so every Experiment publish failed with SQLSTATE 42601 ("cannot
+	// insert multiple commands into a prepared statement") and no Experiment could
+	// ever reach a published Version.
+	for _, statement := range carryForwardReleaseMaterialStatements {
+		if _, e = tx.Exec(ctx, statement, releaseID, oldID); e != nil {
+			return "", persistence(e)
+		}
 	}
-	_, e = tx.Exec(ctx, `
-		INSERT INTO configuration_release_products(release_id,environment_id,project_id,product_id)
-		SELECT DISTINCT $1,$2,$3,pvp.product_id FROM experiment_versions ev
-		JOIN experiment_variants variant ON variant.experiment_version_id=ev.id
-		JOIN paywall_version_products pvp ON pvp.version_id=variant.paywall_version_id
-		WHERE ev.id=ANY($4::text[]) ON CONFLICT DO NOTHING;
-		INSERT INTO configuration_release_assets(release_id,environment_id,project_id,asset_id)
-		SELECT DISTINCT $1,$2,$3,pva.asset_id FROM experiment_versions ev
-		JOIN experiment_variants variant ON variant.experiment_version_id=ev.id
-		JOIN paywall_version_assets pva ON pva.version_id=variant.paywall_version_id
-		WHERE ev.id=ANY($4::text[]) ON CONFLICT DO NOTHING`, releaseID, scope.EnvironmentID, scope.ProjectID, activeVersions)
-	if e != nil {
-		return "", persistence(e)
+	for _, statement := range experimentVariantReleaseMaterialStatements {
+		if _, e = tx.Exec(ctx, statement, releaseID, scope.EnvironmentID, scope.ProjectID, activeVersions); e != nil {
+			return "", persistence(e)
+		}
 	}
 	for _, versionID := range activeVersions {
 		if _, e = tx.Exec(ctx, `INSERT INTO configuration_release_experiment_versions(release_id,experiment_version_id,project_id,environment_id) VALUES($1,$2,$3,$4)`, releaseID, versionID, scope.ProjectID, scope.EnvironmentID); e != nil {
@@ -700,6 +697,62 @@ func objectArray(value any) []map[string]any {
 	}
 	return out
 }
+
+// carryForwardReleaseMaterialStatements copy the previous Release's material onto
+// the new Experiment-bearing Release. Each is a separate statement because pgx
+// speaks the extended protocol; a semicolon-joined parameterized statement is
+// rejected outright.
+var carryForwardReleaseMaterialStatements = []string{
+	`INSERT INTO configuration_release_placements SELECT $1,project_id,environment_id,placement_id,placement_key,paywall_version_id FROM configuration_release_placements WHERE release_id=$2`,
+	`INSERT INTO configuration_release_products SELECT $1,environment_id,project_id,product_id FROM configuration_release_products WHERE release_id=$2`,
+	`INSERT INTO configuration_release_assets SELECT $1,environment_id,project_id,asset_id FROM configuration_release_assets WHERE release_id=$2`,
+	`INSERT INTO configuration_release_rule_set_versions SELECT $1,environment_id,project_id,rule_set_version_id,placement_id FROM configuration_release_rule_set_versions WHERE release_id=$2`,
+}
+
+// experimentVariantReleaseMaterialStatements add the Products and Assets that only
+// the Experiment Variants' Paywall Versions reference, so the Release is closed
+// over everything an SDK must resolve.
+var experimentVariantReleaseMaterialStatements = []string{
+	`INSERT INTO configuration_release_products(release_id,environment_id,project_id,product_id)
+		SELECT DISTINCT $1,$2,$3,pvp.product_id FROM experiment_versions ev
+		JOIN experiment_variants variant ON variant.experiment_version_id=ev.id
+		JOIN paywall_version_products pvp ON pvp.version_id=variant.paywall_version_id
+		WHERE ev.id=ANY($4::text[]) ON CONFLICT DO NOTHING`,
+	`INSERT INTO configuration_release_assets(release_id,environment_id,project_id,asset_id)
+		SELECT DISTINCT $1,$2,$3,pva.asset_id FROM experiment_versions ev
+		JOIN experiment_variants variant ON variant.experiment_version_id=ev.id
+		JOIN paywall_version_assets pva ON pva.version_id=variant.paywall_version_id
+		WHERE ev.id=ANY($4::text[]) ON CONFLICT DO NOTHING`,
+}
+
+// The Experiment publish release-closure path reads Paywall Version material
+// straight out of the hosted-publishing tables. None of it had a test, and one
+// statement selected `a.url` from a column actually named `public_url`, so every
+// Experiment publish failed with a 500 the moment the closure needed to load a
+// Variant's Paywall Version. The statements are named constants so an
+// integration test can prepare each one against the migrated schema.
+const (
+	closurePaywallVersionQuery = `SELECT paywall_id,protocol_version,document,document_hash FROM paywall_versions WHERE id=$1 AND project_id=$2 AND environment_id=$3`
+
+	closurePaywallProductsQuery = `SELECT p.id,p.type,p.internal_name,p.readiness_ready FROM paywall_version_products pvp JOIN products p ON p.id=pvp.product_id AND p.project_id=pvp.project_id WHERE pvp.version_id=$1 ORDER BY p.id`
+
+	closurePaywallAssetsQuery = `SELECT pva.document_asset_id,a.id,a.kind,a.media_type,a.byte_length,a.content_digest,a.public_url FROM paywall_version_assets pva JOIN assets a ON a.id=pva.asset_id AND a.project_id=pva.project_id WHERE pva.version_id=$1 ORDER BY pva.document_asset_id`
+
+	closureEntitlementGrantsQuery = `SELECT DISTINCT e.id,e.key FROM product_entitlement_grants peg JOIN entitlements e ON e.id=peg.entitlement_id AND e.project_id=peg.project_id WHERE peg.product_id=ANY($1::text[]) ORDER BY e.id`
+)
+
+// ReleaseClosureStatements lists every statement above so
+// TestReleaseClosureStatementsMatchTheSchema can prepare them all.
+var ReleaseClosureStatements = func() []string {
+	statements := []string{
+		closurePaywallVersionQuery,
+		closurePaywallProductsQuery,
+		closurePaywallAssetsQuery,
+		closureEntitlementGrantsQuery,
+	}
+	statements = append(statements, carryForwardReleaseMaterialStatements...)
+	return append(statements, experimentVariantReleaseMaterialStatements...)
+}()
 
 func (r *Repository) ensureExperimentReleaseClosure(ctx context.Context, tx pgx.Tx, scope experiment.Scope, release map[string]any, assignments []any) error {
 	paywalls := objectArray(release["paywallVersions"])
@@ -742,11 +795,11 @@ func (r *Repository) ensureExperimentReleaseClosure(ctx context.Context, tx pgx.
 		}
 		var paywallID, protocolVersion, documentHash string
 		var document []byte
-		if err := tx.QueryRow(ctx, `SELECT paywall_id,protocol_version,document,document_hash FROM paywall_versions WHERE id=$1 AND project_id=$2 AND environment_id=$3`, id, scope.ProjectID, scope.EnvironmentID).Scan(&paywallID, &protocolVersion, &document, &documentHash); err != nil {
+		if err := tx.QueryRow(ctx, closurePaywallVersionQuery, id, scope.ProjectID, scope.EnvironmentID).Scan(&paywallID, &protocolVersion, &document, &documentHash); err != nil {
 			return persistence(err)
 		}
 		productIDs := []string{}
-		rows, err := tx.Query(ctx, `SELECT p.id,p.type,p.internal_name,p.readiness_ready FROM paywall_version_products pvp JOIN products p ON p.id=pvp.product_id AND p.project_id=pvp.project_id WHERE pvp.version_id=$1 ORDER BY p.id`, id)
+		rows, err := tx.Query(ctx, closurePaywallProductsQuery, id)
 		if err != nil {
 			return persistence(err)
 		}
@@ -769,7 +822,7 @@ func (r *Repository) ensureExperimentReleaseClosure(ctx context.Context, tx pgx.
 		}
 		rows.Close()
 		bindings := []any{}
-		rows, err = tx.Query(ctx, `SELECT pva.document_asset_id,a.id,a.kind,a.media_type,a.byte_length,a.content_digest,a.url FROM paywall_version_assets pva JOIN assets a ON a.id=pva.asset_id AND a.project_id=pva.project_id WHERE pva.version_id=$1 ORDER BY pva.document_asset_id`, id)
+		rows, err = tx.Query(ctx, closurePaywallAssetsQuery, id)
 		if err != nil {
 			return persistence(err)
 		}
@@ -794,7 +847,7 @@ func (r *Repository) ensureExperimentReleaseClosure(ctx context.Context, tx pgx.
 		paywalls = append(paywalls, map[string]any{"id": id, "paywallId": paywallID, "protocolVersion": protocolVersion, "documentDigest": "sha256:" + documentHash, "document": decoded, "productReferenceIds": productIDs, "assetBindings": bindings})
 		paywallSet[id] = true
 	}
-	rows, err := tx.Query(ctx, `SELECT DISTINCT e.id,e.key FROM product_entitlement_grants peg JOIN entitlements e ON e.id=peg.entitlement_id AND e.project_id=peg.project_id WHERE peg.product_id=ANY($1::text[]) ORDER BY e.id`, mapKeys(productSet))
+	rows, err := tx.Query(ctx, closureEntitlementGrantsQuery, mapKeys(productSet))
 	if err != nil {
 		return persistence(err)
 	}

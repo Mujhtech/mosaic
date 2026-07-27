@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/go-chi/chi/v5"
 	chimiddleware "github.com/go-chi/chi/v5/middleware"
 	"github.com/go-chi/render"
 	"github.com/rs/zerolog"
@@ -108,7 +109,29 @@ func Representation(w http.ResponseWriter, status int, contentType string, body 
 func Error(w http.ResponseWriter, r *http.Request, err error) {
 	status, payload := errorDetails(err)
 	payload.RequestID = chimiddleware.GetReqID(r.Context())
+	if status >= http.StatusInternalServerError {
+		logUnexpectedError(r, status, payload.RequestID, err)
+	}
 	writeJSON(w, r, status, errorEnvelope{Error: payload})
+}
+
+// logUnexpectedError records the cause behind a 5xx response. The response body
+// deliberately carries only `internal_error` and a request ID, so without this
+// the cause was discarded entirely: an operator following any "the API returned
+// 500" runbook saw nothing but an access-log line with http_status 500 and had
+// no way to reach the underlying error. The cause is written to the operator log
+// only — never to the response — and the request ID ties the two together.
+func logUnexpectedError(r *http.Request, status int, requestID string, err error) {
+	event := zerolog.Ctx(r.Context()).Error().
+		Int("http_status", status).
+		Str("http_method", r.Method)
+	if route := chi.RouteContext(r.Context()); route != nil && route.RoutePattern() != "" {
+		event = event.Str("http_route", route.RoutePattern())
+	}
+	if requestID != "" {
+		event = event.Str("request_id", requestID)
+	}
+	event.Err(err).Msg("request failed with an unexpected error")
 }
 
 func RequestTimeout(w http.ResponseWriter, r *http.Request) {

@@ -77,7 +77,7 @@ type attributeRequest struct {
 }
 
 func (r *attributeRequest) Validate() error {
-	return validation.ValidateStruct(r, validation.Field(&r.Key, validation.Required, validation.Length(1, 64)), validation.Field(&r.Type, validation.Required, validation.In("string", "boolean", "number", "timestamp", "semantic_version", "string_list")), validation.Field(&r.Description, validation.Length(0, 500)), validation.Field(&r.AllowedOperators, validation.Required, validation.Length(1, 13)), validation.Field(&r.Sensitivity, validation.Required, validation.In("standard", "sensitive")))
+	return validation.ValidateStruct(r, validation.Field(&r.Key, validation.Required, validation.Length(1, 64), requestvalidation.PlacementKey()), validation.Field(&r.Type, validation.Required, validation.In("string", "boolean", "number", "timestamp", "semantic_version", "string_list")), validation.Field(&r.Description, validation.Length(0, 500)), validation.Field(&r.AllowedOperators, validation.Required, validation.Length(1, 13)), validation.Field(&r.Sensitivity, validation.Required, validation.In("standard", "sensitive")))
 }
 
 type aliasRequest struct {
@@ -85,7 +85,7 @@ type aliasRequest struct {
 }
 
 func (r *aliasRequest) Validate() error {
-	return validation.ValidateStruct(r, validation.Field(&r.Key, validation.Required, validation.Length(1, 64)))
+	return validation.ValidateStruct(r, validation.Field(&r.Key, validation.Required, validation.Length(1, 64), requestvalidation.PlacementKey()))
 }
 
 type overrideRequest struct {

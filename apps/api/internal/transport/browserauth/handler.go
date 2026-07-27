@@ -48,6 +48,19 @@ func RegisterRoutes(router chi.Router, service *browserauth.Service, cfg Config)
 	})
 }
 
+// emailAddress validates the shape of an email address without resolving it.
+//
+// ozzo's `is.Email` is `govalidator.IsExistingEmail`, which performs a live
+// net.LookupMX (then net.LookupIP) on the domain of every submitted address.
+// That made administrator bootstrap depend on outbound DNS from the API
+// container and rejected every internal-only domain (`.internal`, `.local`,
+// an intranet zone, an RFC 2606 `.test`/`.example` name), so a self-hosted
+// installation on an isolated network could not create its first user. It also
+// put an unbounded, uncancellable network call inside two unauthenticated
+// handlers. Mosaic validates the format only; deliverability is not something
+// an authentication boundary can or should assert.
+var emailAddress = is.EmailFormat
+
 type signupRequest struct {
 	Email    string `json:"email"`
 	Name     string `json:"name"`
@@ -56,7 +69,7 @@ type signupRequest struct {
 
 func (request *signupRequest) Validate() error {
 	return validation.ValidateStruct(request,
-		validation.Field(&request.Email, validation.Required, is.Email, validation.Length(3, 320)),
+		validation.Field(&request.Email, validation.Required, emailAddress, validation.Length(3, 320)),
 		validation.Field(&request.Name, validation.Required, validation.Length(1, 120)),
 		validation.Field(&request.Password, validation.Required, validation.Length(12, 72)),
 	)
@@ -69,7 +82,7 @@ type loginRequest struct {
 
 func (request *loginRequest) Validate() error {
 	return validation.ValidateStruct(request,
-		validation.Field(&request.Email, validation.Required, is.Email, validation.Length(3, 320)),
+		validation.Field(&request.Email, validation.Required, emailAddress, validation.Length(3, 320)),
 		validation.Field(&request.Password, validation.Required, validation.Length(1, 72)),
 	)
 }

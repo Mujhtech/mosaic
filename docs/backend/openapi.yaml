@@ -2244,7 +2244,7 @@ components:
       type: object
       additionalProperties: false
       required: [key, type, allowedOperators, sensitivity]
-      properties: { key: { type: string }, type: { type: string }, description: { type: string }, allowedOperators: { type: array, minItems: 1, maxItems: 13, items: { type: string } }, sensitivity: { type: string, enum: [standard, sensitive] } }
+      properties: { key: { type: string, maxLength: 64, pattern: "^[a-z][a-z0-9_]{0,63}$" }, type: { type: string }, description: { type: string, maxLength: 500 }, allowedOperators: { type: array, minItems: 1, maxItems: 13, items: { type: string } }, sensitivity: { type: string, enum: [standard, sensitive] } }
     PlacementAlias:
       type: object
       required: [id, projectId, placementId, key, status, createdByActorId, createdAt]
@@ -2396,7 +2396,7 @@ components:
       additionalProperties: false
       required: [key, name]
       properties:
-        key: { type: string, minLength: 2, maxLength: 63 }
+        key: { type: string, minLength: 2, maxLength: 63, pattern: "^[a-z][a-z0-9_]{0,63}$" }
         name: { type: string, minLength: 1, maxLength: 120 }
         description: { type: string, maxLength: 1000 }
     UpdatePlacementRequest:

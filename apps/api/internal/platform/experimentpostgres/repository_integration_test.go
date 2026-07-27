@@ -2,6 +2,7 @@ package experimentpostgres_test
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"strings"
 	"testing"
@@ -399,3 +400,27 @@ func TestScheduleSuccessCompletesTheJob(t *testing.T) {
 }
 
 var _ experiment.Repository = (*experimentpostgres.Repository)(nil)
+
+// TestReleaseClosureStatementsMatchTheSchema guards the Experiment publish
+// release SQL against the real schema and against pgx's extended protocol. This
+// path had no test and carried two defects that made every Experiment publish
+// return 500, so no Experiment could ever reach a published Version: one
+// statement selected `assets.url`, a column that does not exist (it is
+// `public_url`), and two others were semicolon-joined parameterized statements,
+// which PostgreSQL rejects with SQLSTATE 42601. Both are only reported when the
+// statement is prepared, which is exactly what this test does.
+func TestReleaseClosureStatementsMatchTheSchema(t *testing.T) {
+	pool, ctx := setup(t)
+
+	connection, err := pool.Acquire(ctx)
+	if err != nil {
+		t.Fatalf("acquire connection: %v", err)
+	}
+	defer connection.Release()
+
+	for index, statement := range experimentpostgres.ReleaseClosureStatements {
+		if _, err := connection.Conn().Prepare(ctx, fmt.Sprintf("closure_%d", index), statement); err != nil {
+			t.Errorf("release-closure statement %d does not match the schema: %v\n  %s", index, err, statement)
+		}
+	}
+}
