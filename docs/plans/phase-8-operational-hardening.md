@@ -142,9 +142,16 @@ never implied as working. Owner-accepted limitations at planning time:
 - CPU architectures: amd64 and arm64 (Go cross-compiled, distroless base).
 - Dashboard browsers: per D7 above.
 - Go toolchain (build-from-source): 1.26.x.
-- Flutter/Dart minimums: Flutter 3.19 / Dart 3.3 floor `[confirm in Stage 1B]`.
-- iOS minimum, Swift, Xcode: `[pending Stage 1B]`.
-- Android minimum API, Kotlin, Gradle, AGP: `[pending Stage 1B]`.
+- Flutter/Dart minimums: Flutter 3.22 / Dart 3.4 (raised from the unverifiable
+  3.19/3.3 claim; 3.22 is already the effective floor via the RevenueCat
+  adapter; stated as tested, not merely claimed).
+- iOS minimum 15.0; Swift 6.0 language mode; Xcode 16.0 minimum. GA verified on
+  Xcode 26.5 / Swift 6.3.2; the iOS 15 slice is verified by a dedicated
+  deployment-target compile check (added in Stage 3 after fixing the
+  `ContinuousClock` regression).
+- Android minimum API 24; compile/target SDK 36; Kotlin 2.2.10; Gradle 9.3.1;
+  AGP 9.1.1; JDK 17. Consumer-facing minimum host AGP/Kotlin documented in the
+  SDK README.
 - Protocol contracts at GA (all `approved`, exact-match readers): Paywall 0.2;
   Configuration Delivery 1, 2, 3; Commerce Provider 1, 2; Commerce
   Configuration 1, 2; Placement Decision 1; Analytics Event 1, 2; Experiment
@@ -334,10 +341,18 @@ measured release-blocking issues are fixed; no speculative optimization.
   a new contract version; exact-match readers; negotiation selects the highest
   mutually supported representation; unknown versions rejected safely with
   last-known-valid retention.
-- Deprecation: deprecated surface removed no earlier than two minor releases
-  and six months, migration guide at deprecation time; minimum SDK support
-  window 12 months / two minors; skip-version upgrades supported across one
-  minor. Final wording `[pending Stage 1B protocol report]`.
+- Deprecation (contract-scoped): manifest lifecycle becomes
+  `draft → releaseCandidate → approved → deprecated → retired`, with `retired`
+  and an optional `deprecation` metadata block added to all manifest schemas
+  BEFORE the approval flip (one-way door). A contract version may not be
+  deprecated until its successor has been approved 6 months; deprecated
+  versions retire no sooner than a further 12 months (18-month minimum runway,
+  never fewer than two SDK minors); retired schemas/fixtures/docs stay in-tree
+  permanently. Breaking = a previously valid document rejected, field meaning
+  changed, or field/enum/capability removed; narrowing a schema to reject what
+  semantic validators already reject is non-breaking pre-approval only.
+- Deprecation (SDK-scoped): each SDK minor supported 12 months; skip-version
+  upgrades across one minor; migration guide at deprecation time.
 
 ## Release-Artifact Policy and CI Gates
 
@@ -431,10 +446,47 @@ the product still works.
   → WP12 → WP2/WP3 → WP1 → WP6/WP7/WP8 → WP5 → WP13; mosaic-dashboard
   (apps/dashboard, frontend docs/tests) WP1–WP7. Non-overlapping paths;
   neither touches SDKs or canonical protocol files.
-- Stage 3 (write): mosaic-protocol (approval flip, policies, fixtures,
-  changelogs), mosaic-flutter, mosaic-ios, mosaic-android (hardening per
-  Stage 1B findings; suites rerun green — Phase 7 owner condition).
-  `[work lists pending Stage 1B]`
+- Stage 3 (write), per Stage 1B audits and orchestrator rulings:
+  - mosaic-protocol: Phase A pre-flip widening (analytics manifest enum, all
+    manifest schemas gain `retired` + optional `deprecation` block, Delivery
+    v3 readerPolicy fallback keys, new Local Preview 0.2 manifest); encode
+    the analytics minimization rules in the canonical v1/v2 schemas
+    (per-event allow-lists via `unevaluatedProperties`, two
+    `dependentRequired` edits — fixture-neutral, verified); Phase D (D3 path
+    (a): correct the false `mosaic_*` claim, new export-names doc); Phase B
+    flip (12 manifests + the RC-status test assertion); Phase C/E policy and
+    changelog docs; Phase F fixture rejection-layer metadata (no file moves)
+    and analytics v2 negative fixtures. Browser-contract generation extension
+    deferred post-GA (tracked). Vocabulary note: `product_load` (Experiment
+    Assignment) and `product_loading` (Placement Decision) are intentionally
+    distinct — documented, no SDK change.
+  - mosaic-flutter: guard dispose/lifecycle/threshold flush and identity
+    persistence (B17 family) with the established safe-code pattern;
+    `decidePlacement` returns sealed unavailable on identity failure; version
+    reconciliation (wire constant = pubspec version); floor raise to
+    3.22/3.4; CHANGELOG Phase 7 entry; installation docs per D6; format fix;
+    analytics v2 fixture scan; rewrite `docs/sdk/README.md` (sole owner,
+    folding in iOS/Android corrections).
+  - mosaic-ios: fix `ContinuousClock` → iOS 15-safe monotonic source and add
+    the iOS 15 typecheck command; `PrivacyInfo.xcprivacy` (SystemBootTime
+    reason 35F9.1, collected data, tracking=false); version reconciliation
+    (`mosaicSDKVersion` = podspec version); honest podspec source/install
+    docs; RevenueCat pin → `.upToNextMajor`; C4 precondition removals; C5
+    configure degrades to in-memory + bundled fallback instead of throwing;
+    `.swift-format` pinned config + reformat; canonical assignment-vector
+    fixture binding; CHANGELOG cut; rerun example build via the seeded
+    package-cache workaround and the simulator suite.
+  - mosaic-android: replace reflective Gson with the explicit tree codec for
+    `MosaicCachedConfiguration` and `MosaicExperimentAssignmentRecord`;
+    correct `consumer-rules.pro`; enable `isMinifyEnabled` on the example
+    release build (R8 regression guard); Google Play delivery store off-main
+    + bounded + `noBackupFilesDir`; scroll-indicator recomposition fix;
+    analytics registry stale-flag fix; RevenueCat module publication parity
+    or README correction; version reconciliation (wire constant = artifact
+    version); CHANGELOG Phase 5–7 entries; honest install/R8 docs; cleartext
+    manifest scoping; canonical assignment-vector fixture binding.
+  - Cross-SDK rule: `Mosaic-SDK-Version` header equals the exact artifact
+    version on every platform. Dependency bumps are out of freeze scope.
 - Stage 4: GA Drills 1–14 in an isolated Compose environment, evidence
   recorded.
 - Stage 5: documentation inventory above via owning agents.
