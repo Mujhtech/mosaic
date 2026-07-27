@@ -206,8 +206,12 @@ This is a contract/backend disagreement, not an SDK defect: no SDK can satisfy
 these metrics without violating the allow-lists. Widening the allow-lists is a
 behaviour change to an approved contract and therefore requires a new Analytics
 Event version (see [breaking-change process](breaking-change-process.md)).
-Recorded for an owner decision; the affected metrics are guardrails, not primary
-metrics, and they fail closed at zero rather than reporting a wrong value.
+
+**Owner-accepted as a documented known limitation at v1 GA**, tracked for
+Analytics Event `3` post-GA. The affected metrics are guardrails rather than
+primary metrics, and they fail closed at zero rather than reporting a wrong
+value. Full entry, including the workaround, in
+[`docs/known-limitations.md`](../known-limitations.md) under "Protocol".
 
 ## Near-collision vocabulary: `product_load` vs `product_loading`
 

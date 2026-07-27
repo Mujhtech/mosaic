@@ -367,3 +367,44 @@ failure.
   entry narrows that same gap rather than adding a new one. No incorrect Product
   resolution or purchase-result corruption is possible from a fixture not being
   read by a test; the adapters' own contract tests cover the decode paths.
+
+### Three Experiment guardrail metrics always report zero
+
+- Surface: seeded `experiment_metric_definitions` (`product_unavailable`,
+  `provider_unavailable`, `paywall_render_failure`), consumed by Experiment
+  results; contract side is
+  `protocol/schema/analytics-event/v2/event.schema.json` attribution
+  allow-lists.
+- Platforms: all (backend aggregation; no platform-specific behaviour).
+- Symptom: these three guardrail metrics always report `unique_conversions = 0`,
+  regardless of how many underlying failures occur. Their numerator events —
+  `product_unavailable` and `paywall_render_failed` — are **forbidden** by the
+  approved Analytics Event `2` attribution allow-lists from carrying the
+  Experiment tuple. The aggregation matches a numerator by equality on the
+  event's own `experiment_version_id` and `experiment_variant_id`
+  (`apps/api/internal/platform/analyticspostgres/jobs.go`), and those columns are
+  always NULL for these events, so no conversion ever matches. No SDK can satisfy
+  these metrics without emitting attribution the contract rejects at ingest. The
+  remaining eight seeded metrics are satisfiable and unaffected.
+- Affected users: experimenters relying on these three guardrails to detect
+  Product-availability, provider-availability, or Paywall render regressions
+  during an Experiment. Primary metrics, exposure counts, fallback counts, and
+  all conversion metrics are unaffected.
+- Workaround: monitor the underlying events outside Experiment context. Both
+  `product_unavailable` and `paywall_render_failed` are ingested, stored, and
+  counted normally in environment-wide analytics; they are visible in the funnel
+  and event counts, just not attributable to a Variant. Pair that with the
+  Experiment's exposure and `fallback_exposure` counts, which do work, to detect
+  a Variant-specific regression.
+- Planned resolution: Analytics Event `3` post-GA. Widening an approved
+  contract's attribution allow-lists is a behaviour change and therefore requires
+  a new contract version — see `docs/protocol/breaking-change-process.md`. Tracked
+  for that version rather than patched in place.
+- GA safety: these metrics **fail closed at zero rather than reporting a wrong
+  value.** A guardrail reading zero cannot cause a wrong monetization decision,
+  cannot corrupt exposure or conversion attribution, and cannot cause data or
+  money loss. It can only fail to surface a regression that remains visible in
+  environment-wide analytics. This falls outside every release-blocker category:
+  it is not exposure corruption (no exposure or conversion is mis-attributed), not
+  analytics duplication, and not a wrong Entitlement or Product decision.
+  Owner-accepted at the Phase 8 gate.
