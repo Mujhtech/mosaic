@@ -7,6 +7,11 @@ import { useRef, useState } from "react"
 
 import { EmptyState } from "@/components/feedback/empty-state"
 import { ErrorState } from "@/components/feedback/error-state"
+import {
+  ApiErrorDetails,
+  ApiErrorRecoveryAction,
+  RequestIdCopy,
+} from "@/features/auth/components/hosted-resource-boundary"
 import { describeApiError } from "@/lib/api/errors"
 import { LoadingState } from "@/components/feedback/loading-state"
 import { Button } from "@/components/ui/button"
@@ -210,6 +215,17 @@ function DecisionWorkspace({
         queryKey: placementDecisionKeys.detail(scope, adapter),
       }),
   })
+  // Archiving a Placement or its rule set previously rendered the raw server
+  // message. Mosaic-owned copy plus the correlation ID is the documented
+  // support path, and a coded refusal here can name the page that resolves it.
+  const archiveError = archiveRuleSet.error ?? archive.error
+  const archiveFailure = archiveError
+    ? describeApiError(archiveError, {
+        environmentId: scope.environmentId,
+        organizationId,
+        projectId: scope.projectId,
+      })
+    : null
   const form = useForm({
     defaultValues: detail.draft,
     onSubmit: async ({ value }) => {
@@ -316,10 +332,19 @@ function DecisionWorkspace({
             />
           </div>
         ) : null}
-        {archiveRuleSet.error || archive.error ? (
-          <p className="text-destructive mt-3 text-sm" role="alert">
-            {(archiveRuleSet.error ?? archive.error)?.message}
-          </p>
+        {archiveFailure ? (
+          <div className="mt-3 space-y-2">
+            <p className="text-destructive text-sm" role="alert">
+              {archiveFailure.description}
+            </p>
+            <ApiErrorDetails details={archiveFailure.details} />
+            {archiveFailure.recovery ? (
+              <ApiErrorRecoveryAction recovery={archiveFailure.recovery} />
+            ) : null}
+            {archiveFailure.correlationId ? (
+              <RequestIdCopy requestId={archiveFailure.correlationId} />
+            ) : null}
+          </div>
         ) : null}
       </div>
 
