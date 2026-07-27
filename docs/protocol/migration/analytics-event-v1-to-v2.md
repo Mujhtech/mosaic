@@ -98,6 +98,66 @@ completely wrong.
 There is no partially-correct mode. Emit the tuple on conversions, or do not run
 Experiments.
 
+## Fallback presentations: omit the tuple on conversions
+
+The rule above has one exception, and it runs the other way.
+
+When the assigned Variant cannot be presented and normal Placement behaviour is
+shown instead — `experiment_fallback_presented` is emitted — the conversion events
+from that presentation **MUST NOT carry the Experiment tuple**:
+
+| Event | On a Variant presentation | On a fallback presentation |
+| --- | --- | --- |
+| `experiment_fallback_presented` | n/a | tuple **required** (identifies the assignment that fell back) |
+| `product_selected` | tuple **required** | tuple **must be omitted** |
+| `purchase_started`, `purchase_completed_client`, and the rest of the purchase lifecycle | tuple **required** | tuple **must be omitted** |
+
+### Why — it is not harmless
+
+It is tempting to assume a fallback conversion carrying the tuple is inert,
+because no `experiment_exposed` row exists for the presentation, so the conversion
+drops out of the `presentation_*` numerators. That reasoning holds for those
+metrics and fails for others:
+
+- **`product_selection_purchase_start` uses `product_selected` as its
+  *denominator*, not `experiment_exposed`.** A fallback `product_selected`
+  carrying the tuple is selected by `denominator_candidates` and becomes a
+  `unique_exposures` row: a normal-Paywall presentation counted as a Variant
+  presentation. Worse, `first_units` picks the earliest per unit
+  (`DISTINCT ON (… assignment_unit_id) ORDER BY occurred_at`), so an earlier
+  fallback **displaces** the Variant's own `product_selected` as the denominator
+  for that unit in that bucket.
+- **A unit exposed *and* later fell back in the same daily bucket** has the
+  fallback's conversions matched against the genuine exposure, inside the
+  attribution window — attributing a normal-Paywall outcome to the Variant.
+
+Both are the "fallback counted as original exposure" corruption named in the
+release-blocker policy. Fallbacks already have their own measurement, the
+`fallback_exposure` guardrail (denominator `experiment_assigned`, numerator
+`experiment_fallback_presented`), so tagging them as Variant outcomes counts them
+twice.
+
+The rule matches the contract's existing separation of assigned from presented
+identity: `experiment_fallback_presented` may not carry `paywallId` /
+`paywallVersionId` in attribution and reports what was shown in
+`payload.presentedPaywallId`. Attribution names the *assigned* Variant; the
+payload names what was *presented*. A conversion produced by the normal Paywall
+is not a Variant outcome.
+
+Mosaic's analysis is exposure-based rather than intent-to-treat —
+`experiment_exposed` requires successful native presentation — so a per-protocol
+rule for conversions is the consistent choice.
+
+### Not schema-enforceable
+
+A conversion event carries no field stating whether its presentation was a
+fallback, so neither the canonical schema nor the API can detect a violation. The
+SDK must track whether the presentation it is reporting against was the assigned
+Variant or a fallback, and stamp the tuple only in the former case. Verify by
+inspection and by end-to-end results: a Variant whose
+`product_selection_purchase_start` denominator exceeds its `experiment_exposed`
+count is emitting fallback conversions with the tuple attached.
+
 ## Migration steps
 
 1. Keep emitting v1 until the SDK can emit the complete v2 set. A correct v1

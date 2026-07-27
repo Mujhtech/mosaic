@@ -137,6 +137,78 @@ taxonomy on v1. `product_selection_purchase_start` uses `product_selected` as it
 See [Analytics Event v1 → v2 migration](migration/analytics-event-v1-to-v2.md)
 for the per-event requirement table.
 
+### Conversions on a fallback presentation MUST omit the tuple
+
+**Normative.** When the assigned Variant cannot be presented and normal Placement
+behaviour is shown instead — `experiment_fallback_presented` is emitted — the
+conversion events produced by that presentation (`product_selected`,
+`purchase_started`, `purchase_completed_client`, and the rest of the purchase
+lifecycle) **MUST NOT carry the Experiment tuple.**
+
+`experiment_fallback_presented` itself still requires the tuple: it identifies
+*which* assignment fell back. The rule applies to the conversion events, whose
+outcome is attributable to the normal Paywall, not to the Variant.
+
+Carrying the tuple on those conversions is **not** harmless, despite there being
+no `experiment_exposed` row for the presentation. Two of the seeded metrics do
+not use `experiment_exposed` as their denominator:
+
+- `product_selection_purchase_start` has denominator `product_selected`. A
+  fallback `product_selected` carrying the tuple is picked up by
+  `denominator_candidates` and becomes a `unique_exposures` row — a normal-Paywall
+  presentation counted as a Variant presentation. Because `first_units` selects
+  `DISTINCT ON (… assignment_unit_id) ORDER BY occurred_at`, a fallback occurring
+  earlier in the bucket **displaces** the Variant's own `product_selected` as that
+  unit's denominator row.
+- Within one daily bucket, a unit that was genuinely exposed *and* later fell back
+  has the fallback's conversions matched against the real exposure, attributing a
+  normal-Paywall outcome to the Variant.
+
+This is the "fallback counted as original exposure" corruption named in the
+release-blocker policy. Fallbacks are already measured separately by the
+`fallback_exposure` guardrail metric (denominator `experiment_assigned`, numerator
+`experiment_fallback_presented`), so tagging them as Variant outcomes double-counts
+them.
+
+The rule also follows the contract's existing separation of assigned from
+presented identity: `experiment_fallback_presented` is forbidden from carrying
+`paywallId` / `paywallVersionId` in attribution, and reports the Paywall actually
+shown in `payload.presentedPaywallId`. Attribution names the assigned Variant;
+the payload names what was presented.
+
+Mosaic's Experiment analysis is exposure-based, not intent-to-treat —
+`experiment_exposed` requires successful native presentation. A per-protocol rule
+for conversions is the consistent choice.
+
+**This is not schema-enforceable.** A conversion event carries no field stating
+whether its presentation was a fallback, so neither the canonical schema nor the
+API can detect the violation. It is an SDK obligation, verified by inspection and
+by end-to-end Experiment results.
+
+### Guardrail metrics with diagnostic numerators cannot currently converge
+
+Three seeded guardrail metrics have numerator events that the contract's
+attribution allow-lists **forbid** from carrying the Experiment tuple, so their
+numerator can never match:
+
+| Metric | Numerator | Tuple permitted on numerator? |
+| --- | --- | --- |
+| `product_unavailable` | `product_unavailable` | no |
+| `provider_unavailable` | `product_unavailable` | no |
+| `paywall_render_failure` | `paywall_render_failed` | no |
+
+The aggregation matches a numerator by equality on the event's own
+`experiment_version_id` and `experiment_variant_id`. Those columns are always NULL
+for these events, so these three guardrails always report zero conversions. The
+eight remaining seeded metrics are satisfiable.
+
+This is a contract/backend disagreement, not an SDK defect: no SDK can satisfy
+these metrics without violating the allow-lists. Widening the allow-lists is a
+behaviour change to an approved contract and therefore requires a new Analytics
+Event version (see [breaking-change process](breaking-change-process.md)).
+Recorded for an owner decision; the affected metrics are guardrails, not primary
+metrics, and they fail closed at zero rather than reporting a wrong value.
+
 ## Near-collision vocabulary: `product_load` vs `product_loading`
 
 Two contracts use similar-looking capability tokens for genuinely different
