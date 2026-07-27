@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
-	"net"
 	"net/http"
 	"strconv"
 	"strings"
@@ -16,6 +15,7 @@ import (
 	"github.com/go-ozzo/ozzo-validation/v4/is"
 
 	"github.com/Mujhtech/mosaic/apps/api/internal/browserauth"
+	"github.com/Mujhtech/mosaic/apps/api/internal/platform/httpserver/httpmiddleware"
 	"github.com/Mujhtech/mosaic/apps/api/internal/platform/httpserver/response"
 	"github.com/Mujhtech/mosaic/apps/api/internal/platform/requestvalidation"
 )
@@ -119,7 +119,7 @@ func (h *Handler) signup(w http.ResponseWriter, r *http.Request) {
 	if !h.requireTrustedOrigin(w, r) {
 		return
 	}
-	if !h.allowAuthentication(w, r, "ip:"+requestIP(r)) {
+	if !h.allowAuthentication(w, r, "ip:"+httpmiddleware.ClientIP(r)) {
 		return
 	}
 	request := new(signupRequest)
@@ -142,7 +142,7 @@ func (h *Handler) login(w http.ResponseWriter, r *http.Request) {
 	if !h.requireTrustedOrigin(w, r) {
 		return
 	}
-	if !h.allowAuthentication(w, r, "ip:"+requestIP(r)) {
+	if !h.allowAuthentication(w, r, "ip:"+httpmiddleware.ClientIP(r)) {
 		return
 	}
 	request := new(loginRequest)
@@ -216,14 +216,6 @@ func fmtDigest(value []byte) string {
 		result[index*2], result[index*2+1] = digits[item>>4], digits[item&0x0f]
 	}
 	return string(result)
-}
-
-func requestIP(r *http.Request) string {
-	host, _, err := net.SplitHostPort(r.RemoteAddr)
-	if err == nil {
-		return host
-	}
-	return r.RemoteAddr
 }
 
 func (h *Handler) session(w http.ResponseWriter, r *http.Request) {

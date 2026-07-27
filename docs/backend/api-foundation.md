@@ -10,6 +10,13 @@ and configuration delivery are documented in `docs/backend/phase-3b-hosted-publi
 The API module requires Go 1.26.2 or newer. The module directive is pinned to
 the repository's approved backend toolchain version.
 
+`apps/api/Dockerfile` builds the shipped binaries on `golang:1.26.5-alpine`.
+1.26.5 is the floor for a release build: `govulncheck` reports eight *called*
+standard-library vulnerabilities when the module is built on 1.26.2, and the
+last of them (GO-2026-5856, `crypto/tls`) is only fixed in 1.26.5. A binary-mode
+scan of all six 1.26.5 binaries reports zero. Local development on 1.26.2 still
+compiles and tests cleanly, but do not build a release image from it.
+
 ```bash
 cd apps/api
 go mod download

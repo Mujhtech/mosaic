@@ -97,6 +97,12 @@ applies per migration rather than to the whole run.
 `migrate up-to <version>` applies a prefix of the pending list when you want to
 stage a long migration.
 
+For the record: on a `v1.0.0-rc.1` installation the online-safety property of
+this step comes from `00019`'s `CREATE INDEX CONCURRENTLY IF NOT EXISTS`, which
+does not block analytics ingestion and is a no-op where the index already
+exists — not from the `00018` reshape, which is already applied on those
+installations and therefore never runs.
+
 ### 7. Start
 
 ```bash

@@ -51,8 +51,14 @@ func nonNil(middleware []func(http.Handler) http.Handler) []func(http.Handler) h
 	}
 	return result
 }
-func RegisterProjectRoutes(router chi.Router, service *analytics.Service) {
+
+// RegisterProjectRoutes mounts the authenticated analytics routes.
+// exportMiddleware carries the export-specific rate limit. Every route it wraps
+// enqueues a background job that scans analytics history, so those routes are
+// bounded separately from the baseline API limit shared by dashboard reads.
+func RegisterProjectRoutes(router chi.Router, service *analytics.Service, exportMiddleware ...func(http.Handler) http.Handler) {
 	h := &Handler{service: service}
+	export := nonNil(exportMiddleware)
 	router.Route("/environments/{environmentId}/analytics", func(a chi.Router) {
 		a.Get("/settings", h.settings)
 		a.Put("/settings", h.updateSettings)
@@ -63,13 +69,13 @@ func RegisterProjectRoutes(router chi.Router, service *analytics.Service) {
 		a.Get("/product-availability-failures", h.productFailures)
 		a.Get("/breakdowns/{dimension}", h.breakdown)
 		a.Get("/freshness", h.freshness)
-		a.Post("/exports", h.eventExport)
+		a.With(export...).Post("/exports", h.eventExport)
 	})
-	router.Post("/environments/{environmentId}/experiments/{experimentId}/exports", h.experimentExport)
+	router.With(export...).Post("/environments/{environmentId}/experiments/{experimentId}/exports", h.experimentExport)
 	router.Route("/analytics/privacy", func(p chi.Router) {
 		p.Post("/preview", h.preview)
-		p.Post("/exports", h.userExport)
-		p.Post("/deletions", h.deletion)
+		p.With(export...).Post("/exports", h.userExport)
+		p.With(export...).Post("/deletions", h.deletion)
 	})
 	router.Get("/analytics/jobs/{jobId}", h.job)
 	router.Get("/analytics/jobs/{jobId}/download", h.download)

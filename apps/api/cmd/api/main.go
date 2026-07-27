@@ -113,6 +113,7 @@ func run() (runErr error) {
 		ServiceName:  cfg.Telemetry.ServiceName,
 		Environment:  cfg.Environment,
 		OTLPEndpoint: cfg.Telemetry.OTLPEndpoint,
+		Logger:       logger,
 	})
 	if err != nil {
 		return fmt.Errorf("configure telemetry: %w", err)
@@ -242,6 +243,8 @@ func run() (runErr error) {
 	authenticationLimiter := ratelimit.New(cfg.BrowserAuth.RequestsPerMinute, cfg.BrowserAuth.Burst, cfg.BrowserAuth.LimiterEntries)
 	apiLimiter := ratelimit.New(cfg.Delivery.APIRequestsPerMinute, cfg.Delivery.APIBurst, cfg.Delivery.LimiterEntries)
 	decisionLimiter := ratelimit.New(cfg.Delivery.DecisionRequestsPerMinute, cfg.Delivery.DecisionBurst, cfg.Delivery.LimiterEntries)
+	uploadLimiter := ratelimit.New(cfg.Delivery.UploadRequestsPerMinute, cfg.Delivery.UploadBurst, cfg.Delivery.LimiterEntries)
+	exportLimiter := ratelimit.New(cfg.Delivery.ExportRequestsPerMinute, cfg.Delivery.ExportBurst, cfg.Delivery.LimiterEntries)
 	analyticsIPLimiter := ratelimit.New(cfg.Analytics.IPRequestsPerMinute, cfg.Analytics.IPBurst, cfg.Analytics.LimiterEntries)
 	analyticsKeyLimiter := ratelimit.New(cfg.Analytics.KeyBatchesPerMinute, cfg.Analytics.KeyBatchBurst, cfg.Analytics.LimiterEntries)
 	analyticsEventLimiter := ratelimit.New(cfg.Analytics.KeyEventsPerMinute, cfg.Analytics.KeyEventBurst, cfg.Analytics.LimiterEntries)
@@ -285,6 +288,8 @@ func run() (runErr error) {
 		Experiment:            experimentService,
 		APILimiter:            apiLimiter,
 		DecisionLimiter:       decisionLimiter,
+		UploadLimiter:         uploadLimiter,
+		ExportLimiter:         exportLimiter,
 		Readiness:             readiness,
 		ReadinessChecker:      database.HealthChecker{Pinger: databasePool},
 	})

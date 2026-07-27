@@ -126,6 +126,17 @@ type DeliveryConfig struct {
 	// Limit for Placement/Experiment decision reads.
 	DecisionRequestsPerMinute int `envconfig:"MOSAIC_DECISION_REQUESTS_PER_MINUTE" default:"600"`
 	DecisionBurst             int `envconfig:"MOSAIC_DECISION_BURST" default:"120"`
+	// Asset upload is bounded separately from the baseline API limit: each
+	// request may carry MOSAIC_ASSET_MAX_UPLOAD_BYTES of body, hold a long
+	// upload timeout, and write to object storage, so the baseline 600/minute
+	// would allow one actor to saturate storage bandwidth on its own.
+	UploadRequestsPerMinute int `envconfig:"MOSAIC_UPLOAD_REQUESTS_PER_MINUTE" default:"30"`
+	UploadBurst             int `envconfig:"MOSAIC_UPLOAD_BURST" default:"10"`
+	// Export and privacy-request submissions each enqueue an asynchronous job
+	// that scans analytics history, so they are far more expensive than the
+	// dashboard reads sharing the baseline API bucket.
+	ExportRequestsPerMinute int `envconfig:"MOSAIC_EXPORT_REQUESTS_PER_MINUTE" default:"10"`
+	ExportBurst             int `envconfig:"MOSAIC_EXPORT_BURST" default:"5"`
 }
 
 type DatabaseConfig struct {
@@ -333,6 +344,10 @@ func (cfg Config) validate() error {
 		"MOSAIC_API_BURST":                    cfg.Delivery.APIBurst,
 		"MOSAIC_DECISION_REQUESTS_PER_MINUTE": cfg.Delivery.DecisionRequestsPerMinute,
 		"MOSAIC_DECISION_BURST":               cfg.Delivery.DecisionBurst,
+		"MOSAIC_UPLOAD_REQUESTS_PER_MINUTE":   cfg.Delivery.UploadRequestsPerMinute,
+		"MOSAIC_UPLOAD_BURST":                 cfg.Delivery.UploadBurst,
+		"MOSAIC_EXPORT_REQUESTS_PER_MINUTE":   cfg.Delivery.ExportRequestsPerMinute,
+		"MOSAIC_EXPORT_BURST":                 cfg.Delivery.ExportBurst,
 	})
 
 	if len(report.list) > 0 {

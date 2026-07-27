@@ -61,6 +61,49 @@ func TestForwardedHeadersAreHonouredFromATrustedPeer(t *testing.T) {
 	}
 }
 
+// A client behind a trusted edge proxy can prepend its own X-Forwarded-For
+// value; the proxy appends the true source to the right of it. Reading the
+// left-most entry would therefore hand the attacker control of the limiter
+// bucket and the remote_ip log field even with trusted proxies configured. The
+// right-to-left scan must skip trusted hops and stop at the real client.
+func TestForgedForwardedPrefixLosesToTheRealClientAddress(t *testing.T) {
+	for _, testCase := range []struct {
+		name      string
+		forwarded string
+		want      string
+	}{
+		{
+			name:      "forged prefix from the client",
+			forwarded: "203.0.113.10, 198.51.100.77",
+			want:      "198.51.100.77",
+		},
+		{
+			name:      "trusted hops on the right are discarded",
+			forwarded: "198.51.100.77, 10.9.1.1, 10.9.8.7",
+			want:      "198.51.100.77",
+		},
+		{
+			name:      "malformed hop stops the scan",
+			forwarded: "203.0.113.10, not-an-ip, 10.9.8.7",
+			want:      "10.9.8.7",
+		},
+	} {
+		t.Run(testCase.name, func(t *testing.T) {
+			var seen string
+			handler := RealIP([]string{"10.9.0.0/16"})(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				seen = ClientIP(r)
+			}))
+			request := httptest.NewRequest(http.MethodGet, "/v1/anything", nil)
+			request.RemoteAddr = "10.9.8.7:54321"
+			request.Header.Set("X-Forwarded-For", testCase.forwarded)
+			handler.ServeHTTP(httptest.NewRecorder(), request)
+			if seen != testCase.want {
+				t.Fatalf("client IP = %q, want %q", seen, testCase.want)
+			}
+		})
+	}
+}
+
 func TestRateLimitRejectionCarriesRetryMetadata(t *testing.T) {
 	limiter := &singleTokenLimiter{used: map[string]int{"ip:1.2.3.4": 5}}
 	handler := RateLimit("auth", limiter, func(*http.Request) string { return "ip:1.2.3.4" })(

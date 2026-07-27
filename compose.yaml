@@ -135,7 +135,15 @@ services:
       DATABASE_CONNECT_TIMEOUT: ${DATABASE_CONNECT_TIMEOUT:-5s}
       MOSAIC_HTTP_ADDRESS: :8080
       MOSAIC_CORS_ALLOWED_ORIGINS: ${MOSAIC_CORS_ALLOWED_ORIGINS:-http://localhost:3000,http://127.0.0.1:3000}
-      MOSAIC_TRUSTED_PROXY_CIDRS: ${MOSAIC_TRUSTED_PROXY_CIDRS:-}
+      # The local-edge (Caddy) container terminates TLS in front of the API, so
+      # without this every request through https://localhost:8443 would be
+      # bucketed and logged under Caddy's single container address. Only the
+      # edge's pinned address is trusted -- not the whole Compose subnet --
+      # because the Docker bridge gateway is also inside that subnet and carries
+      # traffic sent straight to the published port 8080, which must never be
+      # allowed to set its own client address. Change this together with
+      # MOSAIC_EDGE_IPV4 below.
+      MOSAIC_TRUSTED_PROXY_CIDRS: ${MOSAIC_TRUSTED_PROXY_CIDRS:-172.28.0.10/32}
       MOSAIC_OBJECT_STORAGE_ENDPOINT: minio:9000
       MOSAIC_OBJECT_STORAGE_ACCESS_KEY: ${MINIO_ROOT_USER:-mosaic}
       MOSAIC_OBJECT_STORAGE_SECRET_KEY: ${MINIO_ROOT_PASSWORD:-mosaic_dev_secret}
@@ -233,6 +241,12 @@ services:
   local-edge:
     image: caddy:2.10-alpine
     restart: unless-stopped
+    # Pinned so the API can trust exactly this address in
+    # MOSAIC_TRUSTED_PROXY_CIDRS. A dynamic address would force operators to
+    # trust the whole subnet, which would also trust the bridge gateway.
+    networks:
+      default:
+        ipv4_address: ${MOSAIC_EDGE_IPV4:-172.28.0.10}
     volumes:
       - ./deploy/local/Caddyfile:/etc/caddy/Caddyfile:ro
       - caddy_data:/data
@@ -242,6 +256,16 @@ services:
         condition: service_started
     ports:
       - "${MOSAIC_HTTPS_PORT:-8443}:8443"
+
+# The default network carries an explicit subnet so the edge proxy can hold a
+# stable address. Override MOSAIC_COMPOSE_SUBNET (and MOSAIC_EDGE_IPV4 plus
+# MOSAIC_TRUSTED_PROXY_CIDRS with it) if 172.28.0.0/16 collides with an existing
+# network on the host.
+networks:
+  default:
+    ipam:
+      config:
+        - subnet: ${MOSAIC_COMPOSE_SUBNET:-172.28.0.0/16}
 
 volumes:
   postgres_data:

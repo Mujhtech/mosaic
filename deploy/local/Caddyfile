@@ -2,6 +2,12 @@
 	local_certs
 }
 
+# Caddy sets X-Forwarded-For on every proxied request. The API honours that
+# header only from a peer inside MOSAIC_TRUSTED_PROXY_CIDRS, which compose.yaml
+# pins to this container's address (172.28.0.10/32, see MOSAIC_EDGE_IPV4). Keep
+# the two in step: if this container's address changes and the API stops
+# trusting it, every request arriving through the edge is rate-limited and
+# logged under one address instead of the real client's.
 https://localhost:8443 {
 	reverse_proxy api:8080
 }

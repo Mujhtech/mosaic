@@ -73,6 +73,7 @@ func run() (runErr error) {
 	shutdownTelemetry, err := telemetry.New(runContext, telemetry.Config{
 		ServiceName: cfg.Telemetry.ServiceName, Environment: cfg.Environment,
 		OTLPEndpoint: cfg.Telemetry.OTLPEndpoint,
+		Logger:       logger,
 	})
 	if err != nil {
 		return fmt.Errorf("configure telemetry: %w", err)

@@ -89,6 +89,12 @@ type Dependencies struct {
 	APILimiter httpmiddleware.Limiter
 	// DecisionLimiter bounds Placement and Experiment decision reads.
 	DecisionLimiter httpmiddleware.Limiter
+	// UploadLimiter bounds asset upload, whose per-request cost (body size,
+	// extended timeout, object-storage write) is far above the API baseline.
+	UploadLimiter httpmiddleware.Limiter
+	// ExportLimiter bounds the analytics, experiment, and privacy export and
+	// deletion-request routes, each of which enqueues a history-scanning job.
+	ExportLimiter httpmiddleware.Limiter
 }
 
 func New(cfg Config, logger zerolog.Logger) http.Handler {
@@ -145,7 +151,8 @@ func NewWithDependencies(cfg Config, logger zerolog.Logger, dependencies Depende
 						}
 						if dependencies.HostedPublishing != nil {
 							hostedpublishinghttp.RegisterProjectRoutes(project, dependencies.HostedPublishing,
-								routeTimeout(cfg.UploadTimeout, cfg.RequestTimeout))
+								routeTimeout(cfg.UploadTimeout, cfg.RequestTimeout),
+								httpmiddleware.RateLimit("upload", dependencies.UploadLimiter, principalKey))
 						}
 						if dependencies.PlacementDecision != nil {
 							project.Group(func(decision chi.Router) {
@@ -154,7 +161,8 @@ func NewWithDependencies(cfg Config, logger zerolog.Logger, dependencies Depende
 							})
 						}
 						if dependencies.Analytics != nil {
-							analyticshttp.RegisterProjectRoutes(project, dependencies.Analytics)
+							analyticshttp.RegisterProjectRoutes(project, dependencies.Analytics,
+								httpmiddleware.RateLimit("export", dependencies.ExportLimiter, principalKey))
 						}
 						if dependencies.Experiment != nil {
 							project.Group(func(decision chi.Router) {
