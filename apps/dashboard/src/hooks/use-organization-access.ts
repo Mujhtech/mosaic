@@ -20,7 +20,7 @@ export function useOrganizationAccess(organizationId: string) {
   const session = useQuery(sessionQueryOptions())
   const memberships = useQuery({
     ...membersQueryOptions(organizationId),
-    enabled: session.isSuccess,
+    enabled: session.isSuccess && organizationId.length > 0,
   })
   const access = organizationAccessFor(session.data?.id, memberships.data?.items ?? [])
   return {

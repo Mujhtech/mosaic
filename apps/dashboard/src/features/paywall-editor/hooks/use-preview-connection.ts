@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react"
 
-import { PREVIEW_ENDPOINT_DEFAULT } from "@/features/paywall-editor/constants/editor-constants"
+import { dashboardEnvironment } from "@/config/environment"
 import { mockCommerceState } from "@/features/paywall-editor/mutations/local-project-file"
 import {
   createDraftUpdatedMessage,
@@ -58,8 +58,7 @@ export function usePreviewConnection(options: {
   initialRevisionSequence?: number
   onRevisionDispatched?: (sequence: number) => void
 }) {
-  const endpoint =
-    options.endpoint ?? import.meta.env.VITE_MOSAIC_PREVIEW_URL ?? PREVIEW_ENDPOINT_DEFAULT
+  const endpoint = options.endpoint ?? dashboardEnvironment.previewUrl
   const [status, setStatus] = useState<PreviewConnectionStatus>(() =>
     endpoint && typeof WebSocket !== "undefined" ? "idle" : "unavailable",
   )
@@ -81,9 +80,7 @@ export function usePreviewConnection(options: {
   } | null>(null)
   const [connectionEpoch, setConnectionEpoch] = useState(0)
   const socketRef = useRef<WebSocket | null>(null)
-  const [sessionId] = useState(
-    () => import.meta.env.VITE_MOSAIC_PREVIEW_SESSION_ID ?? "session_local_01",
-  )
+  const [sessionId] = useState(() => dashboardEnvironment.previewSessionId)
   const reconnectAttemptRef = useRef(0)
   const reconnectTimerRef = useRef<number | null>(null)
   const negotiatedProtocolVersionRef = useRef<PreviewProtocolVersion | null>(null)

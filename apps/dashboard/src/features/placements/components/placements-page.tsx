@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { Link } from "@tanstack/react-router"
 
 import { Button } from "@/components/ui/button"
+import { EmptyState } from "@/components/feedback/empty-state"
 import { buttonVariants } from "@/components/ui/button-variants"
 import { Field, FieldError, FieldLabel } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
@@ -240,6 +241,8 @@ export function PlacementsPage({
     emptyDescription: "",
     emptyTitle: "",
     error: placements.error ?? paywalls.error,
+    // Emptiness is handled inside the page, not by the boundary: the create
+    // form is the recovery action and must stay reachable with zero Placements.
     isEmpty: false,
     isPending: placements.isPending || paywalls.isPending,
     loadingDescription: "Loading Placements and Paywalls together.",
@@ -282,9 +285,10 @@ export function PlacementsPage({
           </WorkflowPanel>
           <WorkflowPanel title="Environment bindings">
             {items.length === 0 ? (
-              <p className="text-muted-foreground text-sm">
-                No Placements yet. Create the first app intent above.
-              </p>
+              <EmptyState
+                description="Create the first app intent above to bind a Paywall to this Environment."
+                title="No Placements yet"
+              />
             ) : (
               <ul className="space-y-3">
                 {items.map((placement) => (

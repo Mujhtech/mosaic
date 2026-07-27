@@ -16,6 +16,7 @@ import { Route as HostedRouteImport } from './routes/_hosted'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as Studio_layoutStudioRouteImport } from './routes/_studio_layout/studio'
 import { Route as HostedWorkspaceRouteImport } from './routes/_hosted/workspace'
+import { Route as HostedDiagnosticsRouteImport } from './routes/_hosted/diagnostics'
 import { Route as HostedOrganizationsNewRouteImport } from './routes/_hosted/organizations/new'
 import { Route as HostedOrganizationsOrganizationIdIndexRouteImport } from './routes/_hosted/organizations/$organizationId/index'
 import { Route as HostedOrganizationsOrganizationIdMembersRouteImport } from './routes/_hosted/organizations/$organizationId/members'
@@ -75,6 +76,11 @@ const Studio_layoutStudioRoute = Studio_layoutStudioRouteImport.update({
 const HostedWorkspaceRoute = HostedWorkspaceRouteImport.update({
   id: '/workspace',
   path: '/workspace',
+  getParentRoute: () => HostedRoute,
+} as any)
+const HostedDiagnosticsRoute = HostedDiagnosticsRouteImport.update({
+  id: '/diagnostics',
+  path: '/diagnostics',
   getParentRoute: () => HostedRoute,
 } as any)
 const HostedOrganizationsNewRoute = HostedOrganizationsNewRouteImport.update({
@@ -290,6 +296,7 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/login': typeof LoginRoute
   '/signup': typeof SignupRoute
+  '/diagnostics': typeof HostedDiagnosticsRoute
   '/workspace': typeof HostedWorkspaceRoute
   '/studio': typeof Studio_layoutStudioRoute
   '/organizations/new': typeof HostedOrganizationsNewRoute
@@ -324,6 +331,7 @@ export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/login': typeof LoginRoute
   '/signup': typeof SignupRoute
+  '/diagnostics': typeof HostedDiagnosticsRoute
   '/workspace': typeof HostedWorkspaceRoute
   '/studio': typeof Studio_layoutStudioRoute
   '/organizations/new': typeof HostedOrganizationsNewRoute
@@ -361,6 +369,7 @@ export interface FileRoutesById {
   '/_studio_layout': typeof Studio_layoutRouteWithChildren
   '/login': typeof LoginRoute
   '/signup': typeof SignupRoute
+  '/_hosted/diagnostics': typeof HostedDiagnosticsRoute
   '/_hosted/workspace': typeof HostedWorkspaceRoute
   '/_studio_layout/studio': typeof Studio_layoutStudioRoute
   '/_hosted/organizations/new': typeof HostedOrganizationsNewRoute
@@ -397,6 +406,7 @@ export interface FileRouteTypes {
     | '/'
     | '/login'
     | '/signup'
+    | '/diagnostics'
     | '/workspace'
     | '/studio'
     | '/organizations/new'
@@ -431,6 +441,7 @@ export interface FileRouteTypes {
     | '/'
     | '/login'
     | '/signup'
+    | '/diagnostics'
     | '/workspace'
     | '/studio'
     | '/organizations/new'
@@ -467,6 +478,7 @@ export interface FileRouteTypes {
     | '/_studio_layout'
     | '/login'
     | '/signup'
+    | '/_hosted/diagnostics'
     | '/_hosted/workspace'
     | '/_studio_layout/studio'
     | '/_hosted/organizations/new'
@@ -555,6 +567,13 @@ declare module '@tanstack/react-router' {
       path: '/workspace'
       fullPath: '/workspace'
       preLoaderRoute: typeof HostedWorkspaceRouteImport
+      parentRoute: typeof HostedRoute
+    }
+    '/_hosted/diagnostics': {
+      id: '/_hosted/diagnostics'
+      path: '/diagnostics'
+      fullPath: '/diagnostics'
+      preLoaderRoute: typeof HostedDiagnosticsRouteImport
       parentRoute: typeof HostedRoute
     }
     '/_hosted/organizations/new': {
@@ -813,6 +832,7 @@ const HostedOrganizationsOrganizationIdProjectsProjectIdMonetizationEnvironmentI
   )
 
 interface HostedRouteChildren {
+  HostedDiagnosticsRoute: typeof HostedDiagnosticsRoute
   HostedWorkspaceRoute: typeof HostedWorkspaceRoute
   HostedOrganizationsNewRoute: typeof HostedOrganizationsNewRoute
   HostedOrganizationsOrganizationIdMembersRoute: typeof HostedOrganizationsOrganizationIdMembersRoute
@@ -838,6 +858,7 @@ interface HostedRouteChildren {
 }
 
 const HostedRouteChildren: HostedRouteChildren = {
+  HostedDiagnosticsRoute: HostedDiagnosticsRoute,
   HostedWorkspaceRoute: HostedWorkspaceRoute,
   HostedOrganizationsNewRoute: HostedOrganizationsNewRoute,
   HostedOrganizationsOrganizationIdMembersRoute:

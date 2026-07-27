@@ -4,6 +4,14 @@ import { useNavigate } from "@tanstack/react-router"
 import { useState } from "react"
 
 import { Button } from "@/components/ui/button"
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetFooter,
+  SheetHeader,
+  SheetTitle,
+} from "@/components/ui/sheet"
 import { OneTimeSecret } from "@/features/api-keys/components/one-time-secret"
 import { HostedResourceBoundary } from "@/features/auth/components/hosted-resource-boundary"
 import { resolveHostedQueryState } from "@/features/auth/types/hosted-query-state"
@@ -147,41 +155,62 @@ export function ApiKeysPage({ environmentId, organizationId, projectId }: ApiKey
 
       {revealed ? <OneTimeSecret onDismiss={dismissSecret} secret={revealed.secret} /> : null}
 
-      {pendingAction ? (
-        <WorkflowPanel
-          description={`This action applies only to ${selectedEnvironment?.name ?? "the selected environment"}.`}
-          title={`${pendingAction.action === "rotate" ? "Rotate" : "Revoke"} ${pendingAction.apiKey.prefix}••••`}
-        >
-          <p className="text-muted-foreground text-sm leading-6">
-            {pendingAction.action === "rotate"
-              ? "Rotation invalidates the previous credential and reveals its replacement once. Copy it before leaving this page."
-              : "Revocation is permanent. Clients using this credential in the selected environment will stop authenticating."}
-          </p>
-          <div className="mt-4 flex flex-wrap gap-2">
-            <Button
-              disabled={rotate.isPending || revoke.isPending}
-              onClick={() => {
-                const onSuccess = () => setPendingAction(null)
-                if (pendingAction.action === "rotate") {
-                  rotate.mutate(pendingAction.apiKey.id, {
-                    onSuccess: (result) => {
-                      revealSecret(result)
-                      onSuccess()
-                    },
-                  })
-                } else {
-                  revoke.mutate(pendingAction.apiKey.id, { onSuccess })
-                }
-              }}
-            >
-              Confirm {pendingAction.action}
-            </Button>
-            <Button onClick={() => setPendingAction(null)} variant="ghost">
-              Cancel
-            </Button>
-          </div>
-        </WorkflowPanel>
-      ) : null}
+      {/* Rotation and revocation are destructive and irreversible, so the
+          confirmation is a modal surface: it takes focus, traps it, restores
+          focus to the invoking row action, and closes on Escape. */}
+      <Sheet
+        onOpenChange={(open) => {
+          if (!open) setPendingAction(null)
+        }}
+        open={pendingAction !== null}
+      >
+        <SheetContent className="w-full sm:max-w-md">
+          {pendingAction ? (
+            <>
+              <SheetHeader className="border-b p-5">
+                <SheetTitle>
+                  {pendingAction.action === "rotate" ? "Rotate" : "Revoke"}{" "}
+                  {pendingAction.apiKey.prefix}••••
+                </SheetTitle>
+                <SheetDescription>
+                  This action applies only to{" "}
+                  {selectedEnvironment?.name ?? "the selected environment"}.
+                </SheetDescription>
+              </SheetHeader>
+              <div className="p-5">
+                <p className="text-muted-foreground text-sm leading-6">
+                  {pendingAction.action === "rotate"
+                    ? "Rotation invalidates the previous credential and reveals its replacement once. Copy it before leaving this page."
+                    : "Revocation is permanent. Clients using this credential in the selected environment will stop authenticating."}
+                </p>
+              </div>
+              <SheetFooter className="flex-row flex-wrap gap-2 border-t p-5">
+                <Button
+                  disabled={rotate.isPending || revoke.isPending}
+                  onClick={() => {
+                    const onSuccess = () => setPendingAction(null)
+                    if (pendingAction.action === "rotate") {
+                      rotate.mutate(pendingAction.apiKey.id, {
+                        onSuccess: (result) => {
+                          revealSecret(result)
+                          onSuccess()
+                        },
+                      })
+                    } else {
+                      revoke.mutate(pendingAction.apiKey.id, { onSuccess })
+                    }
+                  }}
+                >
+                  Confirm {pendingAction.action}
+                </Button>
+                <Button onClick={() => setPendingAction(null)} variant="ghost">
+                  Cancel
+                </Button>
+              </SheetFooter>
+            </>
+          ) : null}
+        </SheetContent>
+      </Sheet>
 
       <HostedResourceBoundary state={state}>
         <WorkflowPanel title="Environment keys">

@@ -12,9 +12,11 @@ Applications, Environments, environment-scoped API keys, memberships, and the pr
 Catalog. Hosted REST calls use the generated client under `src/generated/api`; regenerate it from
 the backend OpenAPI document after a contract change with `npm run generate:api`.
 
-Hosted authentication remains an explicit owner-decision gate. The login and signup forms validate
-locally with TanStack Form but do not create a browser session or simulate a signed-in user.
-`/studio` remains account-free.
+Hosted authentication is implemented. The login and signup forms in
+`src/features/auth/components` validate with TanStack Form and call the Mosaic REST API, which
+establishes an HttpOnly browser session cookie. `/_hosted` routes are guarded: an unauthenticated
+visitor is redirected to `/login?returnTo=…` with a sanitized internal path, and the sidebar footer
+provides sign-out. `/studio` remains account-free and needs no session.
 
 ## Analytics workspace
 
@@ -44,6 +46,92 @@ payloads do not submit tenant or Application identifiers; trusted scope is deriv
 
 - Node.js 22.12 or newer
 - npm 10 or newer
+
+## Supported browsers
+
+| Browser | Minimum |
+| ------- | ------- |
+| Chrome  | 111     |
+| Edge    | 111     |
+| Safari  | 16.4    |
+| Firefox | 128     |
+
+The floor is set by Tailwind CSS v4 (cascade layers and `@property`); older browsers render an
+unusable layout rather than a degraded one. The matrix is encoded as `browserslist` in
+`package.json`, so PostCSS and Tailwind target exactly these engines. No polyfills are shipped.
+
+**HTTPS or `localhost` is required.** The session cookie is `Secure`, and clipboard access used to
+copy correlation identifiers is restricted to secure contexts. Serving the dashboard over plain
+`http://` on any other host produces a sign-in loop.
+
+Viewport floors: Studio is **desktop-only** and requires at least 768 px of width, below which it
+shows a desktop-required state that still allows a safe local export. The hosted workspace is
+**desktop-first** — usable on a tablet, but its wide tables and panels are laid out for desktop
+widths and it is not a supported phone experience.
+
+## Runtime configuration
+
+Configuration is read from the **server's** environment at render time and injected into the page as
+`window.__MOSAIC_CONFIG__` before any application module executes. The shipped bundle contains no
+baked-in API URL, so one image can be deployed against any API host without rebuilding.
+
+| Variable                              | Default                       | Meaning                                                |
+| ------------------------------------- | ----------------------------- | ------------------------------------------------------ |
+| `MOSAIC_DASHBOARD_API_BASE_URL`       | `http://localhost:8080`       | Mosaic API origin. Absolute `http:`/`https:` URL.      |
+| `MOSAIC_DASHBOARD_PREVIEW_URL`        | `ws://127.0.0.1:4317/preview` | Local Studio preview relay. Absolute `ws:`/`wss:` URL. |
+| `MOSAIC_DASHBOARD_PREVIEW_SESSION_ID` | `session_local_01`            | Preview session identifier.                            |
+| `PORT` / `HOST`                       | `3000` / `0.0.0.0`            | Listen address for the production server.              |
+
+Values are validated in `src/config/environment.ts`. A missing, malformed, or wrong-protocol value
+falls back to the documented default instead of throwing, so a misconfigured deployment still
+renders a page that can explain the problem. Confirm the resolved values on `/diagnostics`.
+
+The build-time `VITE_API_BASE_URL`, `VITE_MOSAIC_PREVIEW_URL`, and `VITE_MOSAIC_PREVIEW_SESSION_ID`
+remain **development** fallbacks only. These variables are dashboard-owned and are deliberately
+absent from the backend-owned `.env.example`.
+
+## Deployment
+
+The dashboard ships as its own container image listening on **port 3000**:
+
+```bash
+docker build \
+  -f apps/dashboard/Dockerfile \
+  --build-arg VERSION=1.0.0-rc.1 \
+  --build-arg COMMIT="$(git rev-parse --short HEAD)" \
+  -t mosaic-dashboard:1.0.0-rc.1 \
+  .
+```
+
+The build context is the repository root, because the dashboard consumes the local `file:` packages
+under `packages/` and the generated protocol bundle under `protocol/browser`. Exclusions come from
+`apps/dashboard/Dockerfile.dockerignore`. The image runs as the unprivileged `node` user, sets
+`NODE_ENV=production`, installs with `npm ci` for a deterministic tree, and exposes a `HEALTHCHECK`
+that requests `/` from itself without probing the Mosaic API.
+
+Source maps are not emitted or shipped: they would publish Mosaic's client source to every visitor,
+and Mosaic sends no client error reports anywhere that would consume them.
+
+Full operational detail, including troubleshooting for blank pages, 401 loops, CORS, missing
+cookies, a wrong API URL, and the SSR cookie caveat, is in
+[`docs/dashboard/operations.md`](../../docs/dashboard/operations.md).
+
+## Error-reporting policy
+
+Mosaic ships **no client-side error reporting** — no Sentry, no telemetry beacon, no automatic crash
+upload. This is deliberate: an operator who self-hosts Mosaic must not have their users' browsing
+silently forwarded to a third party, and Mosaic has no service to forward it to.
+
+What replaces it:
+
+- Every API failure carries an `X-Request-ID` correlation identifier, surfaced in error boundaries
+  and on `/diagnostics` with a copy control plus a selectable fallback for browsers without
+  clipboard access.
+- User-facing copy never contains raw server messages or stack traces. `describeApiError` in
+  `src/lib/api/errors.ts` maps failures onto Mosaic-owned text; server detail stays in the API logs,
+  already correlated by the same identifier.
+- `/diagnostics` reports the dashboard version, commit, build time, resolved API base URL, session
+  state, and an on-demand API liveness probe.
 
 ## Setup
 
@@ -140,9 +228,10 @@ Layers, Components, Products, or Localization. `F` fits the canvas, `Shift+0` re
 diagnostics panel. Global shortcuts pause while an input, textarea, select, contenteditable, or
 command search owns focus.
 
-Set `VITE_API_BASE_URL` for the hosted REST workspace. The default is `http://localhost:8080`; the
-generated client supplies the versioned `/v1/...` paths. Local Studio itself does not require the
-API.
+In development, `VITE_API_BASE_URL` still points the hosted REST workspace at an API; deployed
+instances use `MOSAIC_DASHBOARD_API_BASE_URL` instead (see **Runtime configuration**). The default is
+`http://localhost:8080`, and the generated client supplies the versioned `/v1/...` paths. Local
+Studio itself does not require the API.
 
 ## Purchase setup
 

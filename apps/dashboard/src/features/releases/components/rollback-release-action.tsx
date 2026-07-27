@@ -1,6 +1,6 @@
 import { ArrowUDownLeftIcon } from "@phosphor-icons/react/dist/ssr/ArrowUDownLeft"
 import { useMutation, useQueryClient } from "@tanstack/react-query"
-import { useState } from "react"
+import { useEffect, useRef, useState } from "react"
 
 import { Button } from "@/components/ui/button"
 import { rollbackReleaseMutationOptions } from "@/features/releases/mutations/rollback-mutation"
@@ -29,9 +29,10 @@ export function RollbackReleaseAction({
 
   if (rollback.data) {
     return (
-      <p className="text-primary text-sm font-medium" role="status">
-        Release {rollback.data.number} is now current. Release {release.number} remains in history.
-      </p>
+      <RollbackSuccessMessage
+        rolledBackNumber={release.number}
+        currentNumber={rollback.data.number}
+      />
     )
   }
 
@@ -70,5 +71,30 @@ export function RollbackReleaseAction({
         </p>
       ) : null}
     </div>
+  )
+}
+
+/**
+ * The confirm button unmounts on success, so keyboard focus would land on the
+ * document body. Focusing the confirmation keeps the operator's position in
+ * the release list and makes the outcome announced exactly once.
+ */
+function RollbackSuccessMessage({
+  currentNumber,
+  rolledBackNumber,
+}: {
+  currentNumber: number
+  rolledBackNumber: number
+}) {
+  const messageRef = useRef<HTMLParagraphElement>(null)
+
+  useEffect(() => {
+    messageRef.current?.focus()
+  }, [])
+
+  return (
+    <p className="text-primary text-sm font-medium" ref={messageRef} role="status" tabIndex={-1}>
+      Release {currentNumber} is now current. Release {rolledBackNumber} remains in history.
+    </p>
   )
 }

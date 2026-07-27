@@ -1,7 +1,7 @@
 import type { ReactNode } from "react"
 
 import type { HostedResourceState } from "@/features/auth/components/hosted-resource-boundary"
-import { ApiError } from "@/lib/api/errors"
+import { ApiError, describeApiError } from "@/lib/api/errors"
 
 interface ResolveHostedQueryStateOptions {
   emptyAction?: ReactNode
@@ -45,11 +45,25 @@ export function resolveHostedQueryState({
   }
 
   if (error) {
+    const described = describeApiError(error)
+
+    // A transport failure (offline, DNS, CORS, API down) is operationally
+    // different from a server-reported error: Mosaic stays usable locally and
+    // the request is worth retrying, so it renders as a degraded state.
+    if (described.kind === "network") {
+      return {
+        description: described.description,
+        kind: "degraded",
+        onRetry,
+        requestId: described.correlationId,
+      }
+    }
+
     return {
-      description: error instanceof Error ? error.message : undefined,
+      description: described.description,
       kind: "error",
       onRetry,
-      requestId: error instanceof ApiError ? error.correlationId : undefined,
+      requestId: described.correlationId,
     }
   }
 

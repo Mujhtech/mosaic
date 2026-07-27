@@ -1,11 +1,14 @@
 import { createFileRoute } from "@tanstack/react-router"
 
+import { RoutePendingState } from "@/components/feedback/route-feedback"
+
 import { PlansPage } from "@/features/catalog/components/plans-page"
 
 export const Route = createFileRoute(
   "/_hosted/organizations/$organizationId/projects/$projectId/catalog/plans/",
 )({
   component: CatalogPlansRoute,
+  pendingComponent: RoutePendingState,
 })
 
 function CatalogPlansRoute() {

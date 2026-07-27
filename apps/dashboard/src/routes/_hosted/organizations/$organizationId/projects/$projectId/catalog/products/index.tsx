@@ -1,5 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router"
 
+import { RoutePendingState } from "@/components/feedback/route-feedback"
+
 import { ProductsPage } from "@/features/catalog/components/products-page"
 import type { ProductFilters } from "@/features/catalog/queries/catalog-query"
 
@@ -18,6 +20,7 @@ export const Route = createFileRoute(
   "/_hosted/organizations/$organizationId/projects/$projectId/catalog/products/",
 )({
   component: CatalogProductsRoute,
+  pendingComponent: RoutePendingState,
   validateSearch: (search: Record<string, unknown>): ProductFilters => ({
     search:
       typeof search.search === "string" && search.search.length > 0 ? search.search : undefined,

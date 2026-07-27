@@ -2,6 +2,7 @@ import { ShieldWarningIcon } from "@phosphor-icons/react/dist/ssr/ShieldWarning"
 import { useForm } from "@tanstack/react-form"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 
+import { LiveAnnouncer } from "@/components/feedback/live-announcer"
 import { Button } from "@/components/ui/button"
 import { Field, FieldError, FieldLabel } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
@@ -204,11 +205,13 @@ export function QaOverrides({
             customer metadata. The returned opaque token is shown once and must be handled as a
             secret.
           </p>
+          {/* Only the fact that a token exists is announced; the secret itself
+              is never pushed into a live region. */}
+          <LiveAnnouncer
+            message={create.data?.token ? "One-time override token created below." : undefined}
+          />
           {create.data?.token ? (
-            <p
-              className="border-primary/30 bg-primary/5 rounded border p-3 font-mono text-sm break-all lg:col-span-2"
-              role="status"
-            >
+            <p className="border-primary/30 bg-primary/5 rounded border p-3 font-mono text-sm break-all lg:col-span-2">
               One-time override token: {create.data.token}
             </p>
           ) : null}

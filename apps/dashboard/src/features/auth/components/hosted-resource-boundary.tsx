@@ -15,6 +15,7 @@ export type HostedResourceState =
   | { description?: string; kind: "loading"; title?: string }
   | { description: string; kind: "empty"; title: string; action?: ReactNode }
   | { description?: string; kind: "error"; requestId?: string; onRetry?: () => void }
+  | { description?: string; kind: "degraded"; requestId?: string; onRetry?: () => void }
   | { action?: ReactNode; description: string; kind: "permission"; requiredRole?: string }
   | { kind: "ready" }
 
@@ -34,6 +35,7 @@ export function HostedResourceBoundary({ children, state }: HostedResourceBounda
         <EmptyState action={state.action} description={state.description} title={state.title} />
       )
     case "error":
+    case "degraded":
       return <HostedErrorState state={state} />
     case "permission":
       return (
@@ -59,14 +61,12 @@ export function HostedResourceBoundary({ children, state }: HostedResourceBounda
   }
 }
 
-function HostedErrorState({ state }: { state: Extract<HostedResourceState, { kind: "error" }> }) {
-  const [copied, setCopied] = useState(false)
-
-  async function copyRequestId() {
-    if (!state.requestId) return
-    await navigator.clipboard.writeText(state.requestId)
-    setCopied(true)
-  }
+function HostedErrorState({
+  state,
+}: {
+  state: Extract<HostedResourceState, { kind: "degraded" | "error" }>
+}) {
+  const degraded = state.kind === "degraded"
 
   return (
     <div className="space-y-3">
@@ -77,19 +77,54 @@ function HostedErrorState({ state }: { state: Extract<HostedResourceState, { kin
         }
         onRetry={state.onRetry}
         retryLabel="Retry"
-        title="Cloud workspace unavailable"
+        title={degraded ? "Mosaic API unreachable" : "Cloud workspace unavailable"}
       />
       <div className="flex flex-wrap items-center gap-2">
         <Link className={buttonVariants({ variant: "outline" })} to="/studio">
           Continue locally
         </Link>
-        {state.requestId ? (
-          <Button onClick={() => void copyRequestId()} variant="ghost">
-            <CopyIcon aria-hidden size={16} />
-            {copied ? "Request ID copied" : "Copy request ID"}
-          </Button>
-        ) : null}
       </div>
+      {state.requestId ? <RequestIdCopy requestId={state.requestId} /> : null}
+    </div>
+  )
+}
+
+/**
+ * Clipboard access is unavailable outside secure contexts and in some
+ * browsers, so the identifier always stays selectable as a manual fallback.
+ */
+export function RequestIdCopy({ requestId }: { requestId: string }) {
+  const [copied, setCopied] = useState(false)
+  const [failed, setFailed] = useState(false)
+
+  const canCopy =
+    typeof navigator !== "undefined" && typeof navigator.clipboard?.writeText === "function"
+
+  async function copyRequestId() {
+    try {
+      await navigator.clipboard.writeText(requestId)
+      setCopied(true)
+      setFailed(false)
+    } catch {
+      setFailed(true)
+    }
+  }
+
+  return (
+    <div className="flex flex-wrap items-center gap-2">
+      <span className="text-muted-foreground text-xs">
+        Request ID:{" "}
+        <code className="bg-muted rounded px-1 py-0.5 font-mono select-all">{requestId}</code>
+      </span>
+      {canCopy ? (
+        <Button onClick={() => void copyRequestId()} size="sm" variant="ghost">
+          <CopyIcon aria-hidden size={16} />
+          {copied ? "Request ID copied" : "Copy request ID"}
+        </Button>
+      ) : null}
+      <span aria-live="polite" className="text-muted-foreground text-xs">
+        {failed ? "Copying failed. Select the request ID above to copy it manually." : ""}
+      </span>
     </div>
   )
 }

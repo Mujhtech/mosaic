@@ -7,6 +7,7 @@ import { useState } from "react"
 
 import { EmptyState } from "@/components/feedback/empty-state"
 import { ErrorState } from "@/components/feedback/error-state"
+import { describeApiError } from "@/lib/api/errors"
 import { LoadingState } from "@/components/feedback/loading-state"
 import { Button } from "@/components/ui/button"
 import { Field, FieldLabel } from "@/components/ui/field"
@@ -110,16 +111,14 @@ export function PlacementDecisionPage({
       surface="placements"
       title={detail.data?.name ?? "Placement"}
     >
-      {detail.isPending ||
-      paywalls.isPending ||
-      paywallVersions.isPending ||
-      attributes.isPending ? (
-        <LoadingState description="Loading the Placement decision settings and their references." />
-      ) : null}
+      {/* Loading and error are mutually exclusive: a failed reference query
+          previously left the spinner mounted next to the error. */}
       {detail.error || paywalls.error || paywallVersions.error || attributes.error ? (
         <ErrorState
           description={
-            (detail.error ?? paywalls.error ?? paywallVersions.error ?? attributes.error)?.message
+            describeApiError(
+              detail.error ?? paywalls.error ?? paywallVersions.error ?? attributes.error,
+            ).description
           }
           onRetry={() => {
             void detail.refetch()
@@ -128,6 +127,11 @@ export function PlacementDecisionPage({
             void attributes.refetch()
           }}
         />
+      ) : detail.isPending ||
+        paywalls.isPending ||
+        paywallVersions.isPending ||
+        attributes.isPending ? (
+        <LoadingState description="Loading the Placement decision settings and their references." />
       ) : null}
       {detail.data && paywallVersions.data && attributes.data ? (
         <DecisionWorkspace

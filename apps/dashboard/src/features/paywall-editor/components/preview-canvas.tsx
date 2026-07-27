@@ -1,3 +1,7 @@
+// React Flow styles load with the Studio canvas chunk instead of the global
+// stylesheet, so hosted workspace routes never download them.
+import "@xyflow/react/dist/style.css"
+
 import {
   Background,
   BackgroundVariant,

@@ -1,9 +1,64 @@
+import * as React from "react"
 import { useMemo } from "react"
 import { cva, type VariantProps } from "class-variance-authority"
 
 import { cn } from "@/lib/utils"
 import { Label } from "@/components/ui/label"
 import { Separator } from "@/components/ui/separator"
+
+interface FieldContextValue {
+  descriptionId: string
+  errorId: string
+}
+
+const FieldContext = React.createContext<FieldContextValue | null>(null)
+
+const CONTROL_SELECTOR = "input, select, textarea, [contenteditable='true']"
+const MANAGED_ATTRIBUTE = "data-field-described-by"
+
+/**
+ * Associates the field's description and error text with its control.
+ *
+ * Mosaic forms are written with many different control components (native
+ * inputs, shadcn wrappers, Base UI primitives), so the association is applied
+ * from the field root rather than by threading props through every call site.
+ * Author-supplied `aria-describedby` values are preserved; only the ids this
+ * component added are recalculated, so the error id disappears together with
+ * the error text.
+ */
+function useFieldDescribedBy(
+  root: React.RefObject<HTMLDivElement | null>,
+  { descriptionId, errorId }: FieldContextValue,
+) {
+  React.useEffect(() => {
+    const element = root.current
+    if (!element) return
+
+    const control = element.querySelector<HTMLElement>(CONTROL_SELECTOR)
+    if (!control) return
+
+    const owned = [descriptionId, errorId].filter((id) => element.querySelector(`[id="${id}"]`))
+    const previouslyOwned = (control.getAttribute(MANAGED_ATTRIBUTE) ?? "")
+      .split(" ")
+      .filter(Boolean)
+    const authored = (control.getAttribute("aria-describedby") ?? "")
+      .split(" ")
+      .filter((id) => id.length > 0 && !previouslyOwned.includes(id))
+    const next = [...authored, ...owned.filter((id) => !authored.includes(id))]
+
+    if (next.length > 0) {
+      control.setAttribute("aria-describedby", next.join(" "))
+    } else {
+      control.removeAttribute("aria-describedby")
+    }
+
+    if (owned.length > 0) {
+      control.setAttribute(MANAGED_ATTRIBUTE, owned.join(" "))
+    } else {
+      control.removeAttribute(MANAGED_ATTRIBUTE)
+    }
+  })
+}
 
 function FieldSet({ className, ...props }: React.ComponentProps<"fieldset">) {
   return (
@@ -69,14 +124,28 @@ function Field({
   orientation = "vertical",
   ...props
 }: React.ComponentProps<"div"> & VariantProps<typeof fieldVariants>) {
+  const generatedId = React.useId()
+  const ids = React.useMemo(
+    () => ({
+      descriptionId: `field-${generatedId}-description`,
+      errorId: `field-${generatedId}-error`,
+    }),
+    [generatedId],
+  )
+  const rootRef = React.useRef<HTMLDivElement>(null)
+  useFieldDescribedBy(rootRef, ids)
+
   return (
-    <div
-      role="group"
-      data-slot="field"
-      data-orientation={orientation}
-      className={cn(fieldVariants({ orientation }), className)}
-      {...props}
-    />
+    <FieldContext.Provider value={ids}>
+      <div
+        role="group"
+        data-slot="field"
+        data-orientation={orientation}
+        className={cn(fieldVariants({ orientation }), className)}
+        ref={rootRef}
+        {...props}
+      />
+    </FieldContext.Provider>
   )
 }
 
@@ -117,10 +186,12 @@ function FieldTitle({ className, ...props }: React.ComponentProps<"div">) {
   )
 }
 
-function FieldDescription({ className, ...props }: React.ComponentProps<"p">) {
+function FieldDescription({ className, id, ...props }: React.ComponentProps<"p">) {
+  const ids = React.useContext(FieldContext)
   return (
     <p
       data-slot="field-description"
+      id={id ?? ids?.descriptionId}
       className={cn(
         "text-muted-foreground text-left text-sm leading-normal font-normal group-has-data-horizontal/field:text-balance [[data-variant=legend]+&]:-mt-1.5",
         "last:mt-0 nth-last-2:-mt-1",
@@ -166,10 +237,12 @@ function FieldError({
   className,
   children,
   errors,
+  id,
   ...props
 }: React.ComponentProps<"div"> & {
   errors?: Array<{ message?: string } | undefined>
 }) {
+  const ids = React.useContext(FieldContext)
   const content = useMemo(() => {
     if (children) {
       return children
@@ -200,6 +273,7 @@ function FieldError({
     <div
       role="alert"
       data-slot="field-error"
+      id={id ?? ids?.errorId}
       className={cn("text-destructive text-sm font-normal", className)}
       {...props}
     >

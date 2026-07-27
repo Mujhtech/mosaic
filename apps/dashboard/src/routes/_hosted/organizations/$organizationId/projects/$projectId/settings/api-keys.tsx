@@ -1,5 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router"
 
+import { RoutePendingState } from "@/components/feedback/route-feedback"
+
 import { ApiKeysPage } from "@/features/api-keys/components/api-keys-page"
 
 interface ApiKeysSearch {
@@ -10,6 +12,7 @@ export const Route = createFileRoute(
   "/_hosted/organizations/$organizationId/projects/$projectId/settings/api-keys",
 )({
   component: ProjectApiKeysRoute,
+  pendingComponent: RoutePendingState,
   validateSearch: (search: Record<string, unknown>): ApiKeysSearch => ({
     environmentId:
       typeof search.environmentId === "string" && search.environmentId.length > 0

@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest"
 
 import { resolveHostedQueryState } from "@/features/auth/types/hosted-query-state"
-import { ApiError } from "@/lib/api/errors"
+import { ApiError, ApiNetworkError } from "@/lib/api/errors"
 
 function queryError(status: number) {
   return new ApiError("Hosted request failed", {
@@ -36,5 +36,31 @@ describe("hosted query recovery state", () => {
     const state = resolveHostedQueryState({ ...baseOptions, error: queryError(500) })
 
     expect(state).toMatchObject({ kind: "error", requestId: "request_test" })
+  })
+
+  it("classifies a transport failure as degraded rather than a server error", () => {
+    const state = resolveHostedQueryState({
+      ...baseOptions,
+      error: new ApiNetworkError("request_offline", new TypeError("Failed to fetch")),
+    })
+
+    expect(state).toMatchObject({ kind: "degraded", requestId: "request_offline" })
+  })
+
+  it("never renders the raw server message", () => {
+    const leaky = new ApiError('pq: relation "organizations" does not exist', {
+      code: "internal_error",
+      correlationId: "request_leak",
+      retryable: true,
+      status: 500,
+    })
+
+    const state = resolveHostedQueryState({ ...baseOptions, error: leaky })
+
+    expect(state.kind).toBe("error")
+    const description = "description" in state ? state.description : undefined
+    expect(description).toBeDefined()
+    expect(description).not.toContain("relation")
+    expect(description).not.toContain("pq:")
   })
 })

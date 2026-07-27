@@ -6,9 +6,10 @@ import { PackageIcon } from "@phosphor-icons/react/dist/ssr/Package"
 import { StorefrontIcon } from "@phosphor-icons/react/dist/ssr/Storefront"
 import { SquaresFourIcon } from "@phosphor-icons/react/dist/ssr/SquaresFour"
 import { UsersThreeIcon } from "@phosphor-icons/react/dist/ssr/UsersThree"
-import { useRouterState } from "@tanstack/react-router"
+import { Link, useRouterState } from "@tanstack/react-router"
 
 import { NavMain } from "@/components/navigation/nav-main"
+import { dashboardBuildInfo } from "@/config/environment"
 import {
   Sidebar,
   SidebarContent,
@@ -17,11 +18,23 @@ import {
   SidebarRail,
 } from "@/components/ui/sidebar"
 import { readWorkspaceScope } from "@/features/organizations/types/workspace-navigation"
+import { UserMenu } from "@/features/auth/components/user-menu"
+import { useOrganizationAccess } from "@/hooks/use-organization-access"
+import type { NavigationItem } from "@/components/navigation/nav-main"
 import { OrganizationSwitcher } from "./organization-switcher"
 
 export function CloudWorkspaceShell() {
   const pathname = useRouterState({ select: (state) => state.location.pathname })
   const scope = readWorkspaceScope(pathname)
+  const access = useOrganizationAccess(scope.organizationId ?? "")
+
+  // Administrative surfaces are hidden until membership confirms management
+  // rights. The API remains the authority; this only prevents dead-end links.
+  const canManage = access.canManage
+
+  function withManagement(items: NavigationItem[]) {
+    return canManage ? items : []
+  }
 
   return (
     <Sidebar collapsible="icon">
@@ -83,20 +96,22 @@ export function CloudWorkspaceShell() {
                   },
                 ],
               },
-              {
-                to: `/organizations/${scope.organizationId}/projects/${scope.projectId}/settings/environments`,
-                icon: <GearSixIcon aria-hidden size={18} />,
-                title: "Settings",
-              },
-              {
-                to: `/organizations/${scope.organizationId}/projects/${scope.projectId}/settings/api-keys`,
-                icon: <KeyIcon aria-hidden size={18} />,
-                title: "API keys",
-              },
+              ...withManagement([
+                {
+                  to: `/organizations/${scope.organizationId}/projects/${scope.projectId}/settings/environments`,
+                  icon: <GearSixIcon aria-hidden size={18} />,
+                  title: "Settings",
+                },
+                {
+                  to: `/organizations/${scope.organizationId}/projects/${scope.projectId}/settings/api-keys`,
+                  icon: <KeyIcon aria-hidden size={18} />,
+                  title: "API keys",
+                },
+              ]),
             ]}
           />
         )}
-        {scope.organizationId && (
+        {scope.organizationId && canManage && (
           <NavMain
             label="Organization"
             items={[
@@ -109,7 +124,15 @@ export function CloudWorkspaceShell() {
           />
         )}
       </SidebarContent>
-      <SidebarFooter></SidebarFooter>
+      <SidebarFooter>
+        <UserMenu />
+        <Link
+          className="text-muted-foreground hover:text-foreground px-2 pb-1 text-[11px] group-data-[collapsible=icon]:hidden"
+          to="/diagnostics"
+        >
+          Mosaic {dashboardBuildInfo.version} · diagnostics
+        </Link>
+      </SidebarFooter>
       <SidebarRail />
     </Sidebar>
   )

@@ -163,19 +163,28 @@ export function ComponentTreeView({ model }: { model: ComponentTreeModel }) {
         </div>
       </div>
 
-      {notice ? (
-        <StatusMessage
-          className={`mb-3 rounded border p-2 text-xs ${
-            notice.tone === "danger"
-              ? "border-destructive/25 bg-destructive/5"
-              : "border-primary/20 bg-primary/5"
-          }`}
-          tone={notice.tone}
-        >
-          <p className="font-medium">{notice.title}</p>
-          <p className="text-muted-foreground mt-0.5">{notice.detail}</p>
-        </StatusMessage>
-      ) : null}
+      {/* The live region stays mounted so layer-reorder results are announced.
+          A region created at the same moment its text appears is routinely
+          missed by assistive technology. */}
+      <StatusMessage
+        className={
+          notice
+            ? `mb-3 rounded border p-2 text-xs ${
+                notice.tone === "danger"
+                  ? "border-destructive/25 bg-destructive/5"
+                  : "border-primary/20 bg-primary/5"
+              }`
+            : "sr-only"
+        }
+        tone={notice?.tone ?? "neutral"}
+      >
+        {notice ? (
+          <>
+            <p className="font-medium">{notice.title}</p>
+            <p className="text-muted-foreground mt-0.5">{notice.detail}</p>
+          </>
+        ) : null}
+      </StatusMessage>
 
       <div aria-label="Paywall component tree" className="space-y-0.5" role="tree">
         {rows.map((row) => {
@@ -289,7 +298,10 @@ export function ComponentTreeView({ model }: { model: ComponentTreeModel }) {
             dropPreview?.key === insideKey
 
           return (
-            <div key={row.id}>
+            // Presentational wrapper: a tree may only contain treeitem and
+            // group children, so this grouping element is removed from the
+            // accessibility tree.
+            <div key={row.id} role="none">
               <ContextMenuPrimitive.Root
                 disabled={!node}
                 onOpenChange={(open) => {

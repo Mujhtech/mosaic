@@ -5,6 +5,7 @@ import { Link } from "@tanstack/react-router"
 import { useState } from "react"
 
 import { ErrorState } from "@/components/feedback/error-state"
+import { LiveAnnouncer } from "@/components/feedback/live-announcer"
 import { LoadingState } from "@/components/feedback/loading-state"
 import { Button } from "@/components/ui/button"
 import { buttonVariants } from "@/components/ui/button-variants"
@@ -387,6 +388,17 @@ function ValidationPanel({
           {publish.isPending ? "Publishing…" : "Publish immutable Version"}
         </Button>
       </div>
+      {/* The outcome is announced from a region that is always in the tree,
+          because the validation result replaces content without moving focus. */}
+      <LiveAnnouncer
+        message={
+          validation.data
+            ? validation.data.issues.length
+              ? `Validation found ${validation.data.issues.length} issue${validation.data.issues.length === 1 ? "" : "s"}.`
+              : "Validation passed."
+            : undefined
+        }
+      />
       {validation.data ? (
         <div className="mt-4 grid gap-3">
           {validation.data.issues.length ? (
@@ -394,7 +406,7 @@ function ValidationPanel({
               <ExperimentIssueCard issue={issue} key={issue.code} />
             ))
           ) : (
-            <p className="text-sm font-medium" role="status">
+            <p className="text-sm font-medium">
               Validation passed. Review the lifecycle and publish when ready.
             </p>
           )}
