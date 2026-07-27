@@ -29,7 +29,7 @@ Publishing errors are diagnosable by code:
   precondition failed; e.g.
   `environment_release_has_no_placement_decision_contract` means the
   Environment needs a published Placement rule set first
-  **(fix in progress — verify at Stage 6)**.
+ .
 - **500** — look up the `requestId` in the operator log:
   `docker compose logs api | grep '<requestId>'` (every 5xx logs its cause).
 

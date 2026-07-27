@@ -32,7 +32,7 @@ curl -si http://localhost:8080/v1/sdk/configuration \
   and reason. Common: misspelled Experiment feature names, or missing
   `Mosaic-Decision-Features` entries required by the Release. A v1-only SDK
   against an Environment with a published Experiment currently receives 406
-  **(v1 representation fix in progress — verify at Stage 6)**.
+ .
 - **429** — rate limit; see the
   [troubleshooting guide](../guides/troubleshooting.md#429-too-many-requests)
   (check `MOSAIC_TRUSTED_PROXY_CIDRS` behind a proxy).

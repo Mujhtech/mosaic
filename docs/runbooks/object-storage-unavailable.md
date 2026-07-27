@@ -52,7 +52,7 @@ curl -s -o /dev/null -w '%{http_code}\n' \
 
 Data loss in the bucket → [failed-restore](failed-restore.md). Note: as
 drilled, a missing object answers `500 internal_error` on the SDK asset path;
-a distinct 404 is **(fix in progress — verify at Stage 6)**.
+a distinct 404 is.
 
 ## Prevention
 
