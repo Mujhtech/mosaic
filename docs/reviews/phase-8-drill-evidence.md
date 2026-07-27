@@ -410,11 +410,30 @@ Workflow friction recorded (not defects, but undocumented):
 - The rule-set document must be the **server's** document with edits applied. A
   hand-built document with the same content but a client-chosen `ruleSet.id`
   fails `rule_set_identity_mismatch`.
-- `docs/reviews/phase-5-demo-rule-set.json` — the Phase 5 demo artefact — is
+- ~~`docs/reviews/phase-5-demo-rule-set.json` — the Phase 5 demo artefact — is
   **not a valid rule set**: it omits the required `defaultOutcome`,
   `qaOverrides`, and `compatibility` members. Copying it produces
-  `unsupported_outcome` at `defaultOutcome`. Reported to the Phase 5 evidence
-  owner, not fixed here.
+  `unsupported_outcome` at `defaultOutcome`.~~
+
+  **Corrected at Stage 6. This finding was wrong.** The artefact was run through
+  the canonical validator, `protocol/tools/placement-decision-validation-v1.mjs`,
+  and it validates clean:
+
+  ```
+  $ node --input-type=module -e "
+      import {validateDecisionV1Detailed} from './tools/placement-decision-validation-v1.mjs';
+      import {readFileSync} from 'node:fs';
+      console.log(JSON.stringify(validateDecisionV1Detailed(
+        JSON.parse(readFileSync('../docs/reviews/phase-5-demo-rule-set.json','utf8')))));"
+  {"errors":[],"warnings":[]}
+  ```
+
+  All three members the drill reported as missing are in fact present:
+  `ruleSet.defaultOutcome` is `{"type":"paywall","paywallVersionId":"version_000001"}`,
+  `ruleSet.qaOverrides` is an array, and `ruleSet.compatibility` declares twelve
+  `requiredFeatures` plus `sha256_length_prefixed_v1`. The `unsupported_outcome`
+  the drill observed came from the hand-edited copy used during the drill, not
+  from this file. No action is owed by the Phase 5 evidence owner.
 
 ### Deterministic decision
 
@@ -807,11 +826,11 @@ Phase 7 "zero conversions" symptom.
 | `406 unsupported_capability` identifies no missing capability, in the response or any log | mosaic-backend + mosaic-protocol | Adding detail to a protocol error response is a contract decision |
 | Publishing an Experiment treatment Paywall Version requires creating a throwaway Placement; five distinct failures share one `placement_unpublished` code and a message that does not describe most of them | mosaic-backend (owner ruling needed) | Changing publish semantics under feature freeze is a design decision |
 | Readiness reports `migration_incompatible` alongside `database_unavailable` when PostgreSQL is simply down | mosaic-backend | Cosmetic; would change readiness diagnostics |
-| OpenTelemetry export failures are plain-text stdlib log lines, not zerolog JSON, unlike every other API log line | mosaic-backend | Needs an OTel error-handler wiring decision |
+| OpenTelemetry export failures are plain-text stdlib log lines, not zerolog JSON, unlike every other API log line | mosaic-backend | **Fixed at Stage 6.** `telemetry.New` now installs an `otel.SetErrorHandler` backed by the caller's zerolog logger, so SDK export errors join the JSON stream with `component=opentelemetry`. Both `cmd/api` and `cmd/worker` pass their configured logger. |
 | Worker job logs carry `job_family` and `worker_id` but not job id, tenant id, or trace id, which the Phase 8 plan requires | mosaic-backend | Not drill-blocking; observed, not investigated |
-| `docs/reviews/phase-5-demo-rule-set.json` is not a valid rule set (missing `defaultOutcome`, `qaOverrides`, `compatibility`) | Phase 5 evidence owner | Historical review artefact |
+| ~~`docs/reviews/phase-5-demo-rule-set.json` is not a valid rule set (missing `defaultOutcome`, `qaOverrides`, `compatibility`)~~ **WITHDRAWN at Stage 6 — the finding was wrong.** `protocol/tools/placement-decision-validation-v1.mjs` returns `{"errors":[],"warnings":[]}` for the file, and all three members are present. See the corrected entry under "Workflow friction recorded" above. | — | Not a defect |
 | `scripts/backup-postgres.sh`, `restore-*.sh`, `backup-objects.sh`, and `upgrade.sh` all call bare `docker compose`, so they only ever act on the default Compose project; the operations docs do not mention `COMPOSE_PROJECT_NAME` / `COMPOSE_FILE` / `COMPOSE_ENV_FILES` | mosaic-backend | Documentation, Stage 5 scope |
-| `compose.yaml` pins explicit volume `name:` values, so `-p` does not isolate data between two installations on one host | mosaic-backend (owner ruling needed) | Intentional for the single-host profile; worth an explicit note either way |
+| ~~`compose.yaml` pins explicit volume `name:` values, so `-p` does not isolate data between two installations on one host~~ **WITHDRAWN at Stage 6 — the finding does not hold against the file.** `compose.yaml` declares `postgres_data`, `minio_data`, `caddy_data`, and `caddy_config` with no `name:` key at all, and carries a comment explaining that omission is deliberate so `docker compose -p` isolates each installation's data. `docker compose config` resolves them to the project-prefixed `mosaic_*` names. | — | Not a defect |
 | Undocumented first-run requirements: Paywall document `id` must equal the Paywall id; the first publish needs a Placement bound to the Paywall; analytics collection is off by default so the first SDK batch is always rejected; rule-set drafts need the opaque ETag in `If-Match` | mosaic-backend / mosaic-dashboard docs | Stage 5 documentation scope |
 
 ## Verification state of the committed changes
@@ -1582,7 +1601,7 @@ Beyond the five assigned pass-one defects (A–E above):
 | A missing object answers `500 internal_error` on the SDK asset path instead of a distinct safe code. | Adding a delivery error code is a contract decision | mosaic-backend + mosaic-protocol |
 | The irreversible-migration refusal names the data that would be destroyed but not the restore path. | One-line message change, but it belongs with the Stage 5 runbook wording | mosaic-backend |
 | `422 validation_failed` on the analytics query endpoints carries no `fields` naming the missing parameter. | Same class as the errors fixed above; not drill-blocking | mosaic-backend |
-| Throwaway-Placement-for-treatment-Versions workflow, and `docs/reviews/phase-5-demo-rule-set.json` being an invalid rule set. | Carried forward from pass one, unchanged | owner / Phase 5 evidence owner |
+| Throwaway-Placement-for-treatment-Versions workflow. (The companion claim that `docs/reviews/phase-5-demo-rule-set.json` is an invalid rule set was **withdrawn at Stage 6**: the file validates clean against `protocol/tools/placement-decision-validation-v1.mjs`.) | Carried forward from pass one, unchanged | owner |
 
 ## Drill status after pass two
 
@@ -1830,3 +1849,268 @@ python3 scripts/check-writer-schema-drift.py   DRIFT: none (exit 0)
 | `TestMissingAssetObjectIsNotFoundAndFailingStorageIsRetryable` (`transport/hostedpublishing`) | An SDK must be able to tell "these bytes are gone, use the bundled Asset" from "storage is down, retry". Asserts both mappings together so neither can drift into the other. |
 
 No new test suite, framework, or dependency was introduced.
+
+---
+
+## Drill 11 (Stage 6): PASS — SDK cache survives an API outage (Flutter)
+
+Operator: mosaic-flutter agent
+Date: 2026-07-27
+Start: 2026-07-27T20:13:33Z · End: 2026-07-27T20:25:51Z
+Result: **PASS** — all four phases (a, b, c, d) executed live against a running
+Mosaic API and passed. Two documentation gaps were found in the installation
+guide while re-validating it; both are recorded below and neither blocked the
+drill.
+
+**Platform scope — stated explicitly.** This drill was executed **only on the
+Flutter SDK**. iOS and Android cache survival remains **suite-verified only and
+was not demonstrated live** in this drill; the owner accepted one-platform live
+scope for Stage 6. Nothing below should be read as live evidence for
+`sdk/ios` or `sdk/android`.
+
+### Environment
+
+| Item | Value |
+| --- | --- |
+| Host | Apple Silicon macOS (Darwin 25.5.0), arch `arm64` |
+| Docker Engine | 29.4.0 |
+| Docker Compose | v5.1.2 |
+| Compose project | `mosaic-drill11` (isolated, created and destroyed by this drill) |
+| Services started | `postgres`, `minio`, `minio-init`, `migrate`, `api` (dashboard, worker and the TLS edge were not needed and were not started) |
+| Published port | api `8090` (8080 avoided to keep the drill off any developer stack) |
+| Flutter toolchain | Flutter 3.38.5 stable, framework `f6ff1529fd`, Dart 3.10.4 |
+| Migrations | `migrate status` → 21 applied, `0 pending migration(s)` |
+| Data | Created through the API during this drill only. `apps/api/.env` was neither read nor copied. |
+
+`.env` was a fresh copy of `.env.example` with dev-safe values: only
+`MOSAIC_API_PORT=8090`, `MOSAIC_DASHBOARD_PORT=3010`, `MOSAIC_HTTPS_PORT=8453`
+and `MOSAIC_ENV_FILE` (absolute path, so `env_file:` resolves) were changed.
+`MOSAIC_ENVIRONMENT` stayed `development`.
+
+```bash
+cp .env.example <scratchpad>/drill11/.env      # + the four values above
+docker compose -p mosaic-drill11 --env-file <scratchpad>/drill11/.env \
+  up -d --build postgres minio minio-init migrate api
+```
+
+```
+postgres  Up (healthy)     minio  Up (healthy)
+minio-init Exited(0)       migrate Exited(0)      api  Up (healthy)
+GET /health/live   -> 200 {"data":{"status":"ok","version":"dev"}}
+GET /health/ready  -> 200 {"data":{"status":"ready","version":"dev"}}
+```
+
+### Bootstrap through the API (re-validating `docs/guides/installation.md`)
+
+Executed in the guide's order, section 4 → 7, as plain HTTP calls with a
+cookie-jar session. The Paywall document was
+`protocol/fixtures/v0.2/navigation-only.json` with its `id` rewritten to the
+created Paywall id, as in Drill 1.
+
+| Step | Endpoint | Result |
+| --- | --- | --- |
+| Administrator | `POST /v1/auth/signup` | 201 (a second run returns `409 signup_unavailable`; the drill then logs in) |
+| Session | `GET /v1/auth/session` | 200 |
+| Organization | `POST /v1/organizations` | 201, `org_000003` |
+| Project | `POST /v1/projects` | 201, `project_000002` (key `drill11-2`) |
+| Environments | `GET /v1/projects/{id}/environments` | 200 — auto-seeded; development is `env_000004` |
+| Application | `POST /v1/projects/{id}/applications` | 201, `app_000002` (android) |
+| Paywall | `POST /v1/projects/{id}/paywalls` | 201, `paywall_000002` |
+| Draft | `POST …/paywalls/{id}/drafts` | 201, `draft_000002` revision 1 |
+| Validate | `POST …/drafts/{id}/validate` | 200 `{"errors":[],"warnings":[]}` |
+| Placement | `POST /v1/projects/{id}/placements` | 201, `placement_000002`, key `drill11_onboarding_2` |
+| Bind | `PUT /v1/projects/{id}/environments/{envId}/placements/{id}/binding` | 200 |
+| Publish | `POST …/environments/{envId}/publish` | 201, `release_000001`, `contentHash 0a9b45b3…89b`, `warnings: []` |
+| Public SDK key | `POST /v1/environments/{envId}/api-keys` | 201, `key_000001`, kind `public_sdk` (secret returned once; redacted here) |
+
+**Guide gap 1 — publish requires `Idempotency-Key` and the guide never says so.**
+Following section 6 step 6 literally returns:
+
+```
+POST /v1/projects/…/environments/…/publish -> 428
+{"error":{"code":"precondition_required",
+          "message":"The required revision or idempotency precondition is missing."}}
+```
+
+`docs/backend/openapi.yaml:1216` declares the header `required: true`, so the
+API is right and the guide is incomplete. An operator following only the guide
+is blocked at the single most important step. Not fixed here —
+`docs/guides/**` is not owned by the Flutter agent.
+
+**Guide gap 2 — the section 7 verification `curl` returns 406 for this Release.**
+The guide's exact command returns:
+
+```
+HTTP/1.1 406 Not Acceptable
+{"error":{"code":"unsupported_capability",
+  "details":{"capability":"Mosaic-Paywall-Capabilities","reason":"malformed",
+             "requirement":"paywallCapability"}}}
+```
+
+because it omits `Mosaic-Paywall-Capabilities`. The guide's prose already says
+"real SDKs send the full capability set for you", but the command is presented
+as expecting `200`, so the stated expectation is wrong for any Release whose
+Paywall document declares required capabilities (including the guide's own
+suggested fixtures). The Flutter SDK sends the header
+(`sdk/flutter/lib/src/configuration_transport.dart:121`) and was served `200`
+throughout this drill. Also not fixed here, for the same ownership reason.
+
+### The harness
+
+`sdk/flutter/test/cache_survival_integration_test.dart` — an opt-in,
+`--dart-define`-gated `flutter test` file following the existing
+`preview_relay_integration_test.dart` pattern. It is **skipped** in the ordinary
+suite (it contributes one of the two skips in the totals below) and contains no
+Docker knowledge: each phase is a separate process, so the operator stops and
+starts the API container between phases. Storages are the in-memory
+implementations (`path_provider` has no plugin in a `flutter test` host); the
+Configuration cache is the real `MosaicFileConfigurationCache` pointed at a
+scratchpad directory.
+
+```bash
+flutter test test/cache_survival_integration_test.dart -r expanded \
+  --dart-define=MOSAIC_RUN_CACHE_SURVIVAL_INTEGRATION=true \
+  --dart-define=MOSAIC_CACHE_DRILL_PHASE=<a|b|c|d> \
+  --dart-define=MOSAIC_CACHE_DRILL_BASE_URL=http://127.0.0.1:8090 \
+  --dart-define=MOSAIC_CACHE_DRILL_SDK_KEY=<secret> \
+  --dart-define=MOSAIC_CACHE_DRILL_CACHE_DIR=<scratchpad>/drill11/cache \
+  --dart-define=MOSAIC_CACHE_DRILL_PLACEMENT=drill11_onboarding_2
+```
+
+**Digest baseline.** The drill compares against the digest the API actually
+served, not the publish response. `POST …/publish` returned
+`contentHash 0a9b45b35c79bc1639e199f9ed2338334748904dbf608f68295468147c78489b`,
+while the negotiated Delivery contract served
+`release.contentDigest sha256:2cce9f3f18055ffb90176bbf948616300b71425ec8b61423cb9bb8d302da422f`
+with `ETag "sha256-e5d20566a1b06af670d73081d4aafdd16037db37ec226a12d2b059197bf4671d"`.
+Three distinct values. This is consistent with delivery recomputing the digest
+over the negotiated contract's projection, and the first phase-a attempt failed
+against the publish `contentHash` before the baseline was corrected — recorded
+because the installation guide states the ETag is `"sha256-<the Release
+contentHash>"`, which did not hold for the contract this SDK negotiates. Flagged
+for the protocol and backend owners; **no protocol or backend file was changed.**
+
+### Phase a — live fetch populates the cache (20:23:21Z → 20:23:26Z)
+
+Clean cache directory, then `refreshConfiguration()`:
+
+```
+Shell: diagnostic: configuration.bundledFallback.missing
+Shell: placement drill11_onboarding_2 -> paywall paywall_000002 document paywall_000002 screens 2
+Shell: remote fetch: source remote release release_000001 digest sha256:2cce9f3f…a422f
+       etag "sha256-e5d20566…671d"
+00:00 +1: All tests passed!
+```
+
+Asserted: result is `MosaicConfigurationUpdated`, `source == remote`, the
+Placement resolves to a Paywall with a decoded document, and a cache record was
+written under `<cache dir>/mosaic/`. (The `bundledFallback.missing` diagnostic
+is the expected cache-miss path before the remote fetch; no bundle was
+configured in this phase.)
+
+### Phase b — cache serves the Placement during the outage (20:23:38Z → 20:24:03Z)
+
+```bash
+docker compose -p mosaic-drill11 stop api    # api  Exited (0)
+curl -m 3 http://127.0.0.1:8090/health/live  # connection refused, code 000
+```
+
+A **new** `Mosaic` instance against the **same** cache directory:
+
+```
+Shell: placement drill11_onboarding_2 -> paywall paywall_000002 document paywall_000002 screens 2
+Shell: cache during outage: source cache release release_000001 digest sha256:2cce9f3f…a422f
+       etag "sha256-e5d20566…671d"
+Shell: diagnostic: configuration.refresh.networkFailed
+Shell: retained diagnostic: configuration.refresh.networkFailed
+Shell: placement drill11_onboarding_2 -> paywall paywall_000002 document paywall_000002 screens 2
+00:00 +1: All tests passed!
+```
+
+Asserted: `MosaicConfigurationReady` with `source == cache`, **the same release
+id, the same content digest, and the same ETag as phase a**, and the same
+Placement → Paywall document resolution. A `refreshConfiguration()` against the
+stopped API returned `MosaicConfigurationRetained`
+(`configuration.refresh.networkFailed`) — the host application keeps the cached
+Release rather than dropping to unavailable — and the Placement still resolved
+afterwards. Nothing threw.
+
+Honest limit: the phase asserts **resolution and document decode**, not a pixel
+render. Rendering of this document is covered by the golden and widget tests in
+the suite run below; the drill does not add a live golden.
+
+### Phase c — bundled fallback serves a wiped cache (20:24:10Z → 20:24:18Z)
+
+API still stopped. `rm -rf <cache dir>/mosaic`, then a new instance configured
+with a bundled fallback
+(`protocol/fixtures/configuration-delivery/v1/placement-binding.json`):
+
+```
+Shell: placement onboarding_complete -> paywall navigation-only document navigation-only screens 2
+Shell: bundled fallback: source bundledFallback release configuration_release_placement
+       digest sha256:ea9d91a2…0822 etag null
+00:00 +1: All tests passed!
+```
+
+Asserted: the cache directory really was gone before the run,
+`MosaicConfigurationReady` with `source == bundledFallback`, a digest that is
+**not** the live one, and the bundled document's own Placement
+(`onboarding_complete`) resolving to the bundled Paywall. The resolution order
+remote → cache → bundle → unavailable therefore held at every step.
+
+### Phase d — refresh recovers after the outage (20:24:27Z → 20:24:51Z)
+
+```bash
+docker compose -p mosaic-drill11 start api   # ready: 200 after ~4s
+```
+
+Run twice on purpose, to exercise both recovery responses:
+
+```
+### run 1 (cache still wiped -> unconditional request)
+Shell: 200 fresh: source remote release release_000001 digest sha256:2cce9f3f…a422f
+       etag "sha256-e5d20566…671d"
+00:00 +1: All tests passed!
+
+### run 2 (cache warm -> If-None-Match)
+Shell: 304 not modified: source cache release release_000001 digest sha256:2cce9f3f…a422f
+       etag "sha256-e5d20566…671d"
+00:00 +1: All tests passed!
+```
+
+Asserted in both runs: the result is `MosaicConfigurationUpdated` or
+`MosaicConfigurationNotModified` (never a retained failure), the digest matches
+the phase-a baseline, and the Placement resolves.
+
+### Flutter suite run and toolchain (Phase 7 owner-condition evidence gap)
+
+Recorded here because the Phase 7 owner condition asked for exact totals and a
+pinned toolchain, and no prior evidence section carried them.
+
+```
+Flutter 3.38.5 • channel stable • revision f6ff1529fd (2025-12-11)
+Dart 3.10.4 • DevTools 2.51.1
+
+cd sdk/flutter
+dart format --output=none --set-exit-if-changed lib test example   clean (74 files)
+flutter analyze                                                    No issues found!
+flutter test                                                       +178 ~2, All tests passed!
+```
+
+`+178 ~2` = 178 passed, 2 skipped, 0 failed, run 20:25:33Z → 20:25:51Z (16s).
+Both skips are the opt-in live-integration files
+(`preview_relay_integration_test.dart`, `cache_survival_integration_test.dart`);
+neither can run without an external process, and both were exercised
+deliberately outside the suite. Golden tests
+(`renderer_v02_golden_test.dart`) are part of the 178 and are not separately
+gated. The example application was not built in this pass — nothing under
+`examples/` or `sdk/flutter/example/` changed.
+
+### Cleanup
+
+```bash
+docker compose -p mosaic-drill11 down -v      # containers, network and volumes removed
+```
+
+The drill scratchpad (env file, bootstrap script, cache directory, SDK key)
+lives outside the repository and was not committed.

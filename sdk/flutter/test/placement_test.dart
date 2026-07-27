@@ -1,11 +1,11 @@
 import 'dart:convert';
-import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mosaic_sdk/mosaic_sdk.dart';
 
+import 'support/canonical_fixture.dart';
 import 'support/configuration_delivery_fixture.dart';
 
 void main() {
@@ -193,8 +193,8 @@ void main() {
   });
 }
 
-String _advancedDeliverySource() => File(
-      '../../protocol/fixtures/configuration-delivery/v2/advanced-release.json',
+String _advancedDeliverySource() => repositoryFile(
+      'protocol/fixtures/configuration-delivery/v2/advanced-release.json',
     ).readAsStringSync();
 
 List<String> _queuedEventNames(MosaicMemoryAnalyticsStorage storage) {
