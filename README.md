@@ -76,6 +76,10 @@ docs/             documentation
 
 User guides:
 
+- [Installation](docs/guides/installation.md)
+- [Upgrade](docs/guides/upgrade.md)
+- [Backup and restore](docs/guides/backup-restore.md)
+- [Troubleshooting](docs/guides/troubleshooting.md)
 - [Catalog: Products and Entitlements](docs/guides/catalog.md)
 - [Commerce providers](docs/guides/providers.md)
 - [Studio](docs/guides/studio.md)
@@ -88,7 +92,8 @@ User guides:
 - [SDK quickstarts](docs/guides/sdk-quickstarts.md) and the
   [SDK overview](docs/sdk/README.md)
 
-Operations: [backup and restore](docs/backend/operations/backup-restore.md),
+Operations: [operator runbooks](docs/runbooks/README.md),
+[backup and restore](docs/backend/operations/backup-restore.md),
 [upgrade](docs/backend/operations/upgrade.md),
 [key rotation](docs/backend/operations/key-rotation.md),
 [observability](docs/backend/operations/observability.md),
