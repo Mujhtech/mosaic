@@ -1,0 +1,201 @@
+name: ci
+
+on:
+  push:
+    branches: [main, "phase/**"]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: mosaic_ci
+          POSTGRES_PASSWORD: mosaic_ci_secret
+          POSTGRES_DB: mosaic_ci
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U mosaic_ci"
+          --health-interval 5s --health-timeout 5s --health-retries 12
+      minio:
+        image: bitnami/minio:latest
+        env:
+          MINIO_ROOT_USER: mosaic_ci
+          MINIO_ROOT_PASSWORD: mosaic_ci_secret
+          MINIO_DEFAULT_BUCKETS: mosaic-ci-assets
+        ports: ["9000:9000"]
+    env:
+      DATABASE_TEST_URL: postgres://mosaic_ci:mosaic_ci_secret@localhost:5432/mosaic_ci?sslmode=disable
+      OBJECT_STORAGE_TEST_ENDPOINT: localhost:9000
+      OBJECT_STORAGE_TEST_ACCESS_KEY: mosaic_ci
+      OBJECT_STORAGE_TEST_SECRET_KEY: mosaic_ci_secret
+      OBJECT_STORAGE_TEST_BUCKET: mosaic-ci-assets
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: apps/api/go.mod
+          cache-dependency-path: apps/api/go.sum
+      - name: Format
+        working-directory: apps/api
+        run: test -z "$(gofmt -l .)"
+      - name: Vet
+        working-directory: apps/api
+        run: go vet ./...
+      - name: Build
+        working-directory: apps/api
+        run: go build ./...
+      - name: Tests (unit + PostgreSQL/object-storage integration)
+        working-directory: apps/api
+        run: go test -p 1 -count=1 ./...
+      - name: Writer/schema drift sweep
+        run: python3 scripts/check-writer-schema-drift.py
+      - name: Vulnerability scan (govulncheck)
+        working-directory: apps/api
+        run: |
+          go install golang.org/x/vuln/cmd/govulncheck@latest
+          govulncheck ./...
+      - name: SBOM (Go module list)
+        working-directory: apps/api
+        run: |
+          go list -m -json all > ../../go-sbom.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: sbom-go
+          path: go-sbom.json
+
+  protocol:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: protocol/package-lock.json
+      - name: Install
+        working-directory: protocol
+        run: npm ci
+      - name: Tests
+        working-directory: protocol
+        run: npm test
+      - name: Contract validation
+        working-directory: protocol
+        run: npm run validate
+      - name: Generation drift gate
+        working-directory: protocol
+        run: |
+          npm run generate
+          git diff --exit-code -- .
+      - name: Dependency audit (production tree)
+        working-directory: protocol
+        run: npm audit --omit=dev --audit-level=high
+
+  dashboard:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: apps/dashboard/package-lock.json
+      - name: Install
+        working-directory: apps/dashboard
+        run: npm ci
+      - name: Check (format, lint, typecheck, tests, relay, build)
+        working-directory: apps/dashboard
+        run: npm run check
+      - name: Dependency audit (production tree)
+        working-directory: apps/dashboard
+        run: npm audit --omit=dev --audit-level=high
+      - name: SBOM (npm dependency tree)
+        working-directory: apps/dashboard
+        run: npm ls --omit=dev --json > ../../npm-sbom-dashboard.json || true
+      - uses: actions/upload-artifact@v4
+        with:
+          name: sbom-dashboard
+          path: npm-sbom-dashboard.json
+
+  flutter:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+      - name: Format
+        working-directory: sdk/flutter
+        run: dart format --output=none --set-exit-if-changed lib test example/lib
+      - name: Analyze
+        working-directory: sdk/flutter
+        run: flutter analyze
+      - name: Tests
+        working-directory: sdk/flutter
+        run: flutter test
+
+  android:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+      - name: Tests, lint, assemble
+        working-directory: sdk/android
+        run: ./gradlew test lint assemble
+      - name: Example release build (R8 gate)
+        working-directory: examples/android-example
+        run: ../../sdk/android/gradlew -p . :app:assembleRelease
+
+  ios:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build (release)
+        run: swift build --package-path sdk/ios -c release
+      - name: Tests
+        run: swift test --package-path sdk/ios
+      - name: iOS 15 deployment-target typecheck
+        run: |
+          set -o pipefail
+          xcrun swiftc -typecheck -swift-version 6 \
+            -target arm64-apple-ios15.0-simulator \
+            -sdk "$(xcrun --sdk iphonesimulator --show-sdk-path)" \
+            sdk/ios/Sources/MosaicSDK/*.swift
+
+  compose-smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Prepare environment
+        run: cp .env.example .env
+      - name: Start core services
+        run: docker compose -p mosaic-ci up -d --build postgres minio minio-init migrate api
+      - name: Wait for readiness
+        run: |
+          for i in $(seq 1 60); do
+            if curl -fsS http://localhost:8080/health/ready; then exit 0; fi
+            sleep 2
+          done
+          docker compose -p mosaic-ci logs api migrate | tail -100
+          exit 1
+      - name: Teardown
+        if: always()
+        run: docker compose -p mosaic-ci down -v
+
+  secret-scan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
