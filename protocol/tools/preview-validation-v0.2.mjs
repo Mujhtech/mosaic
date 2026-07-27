@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { dirname, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -34,6 +34,14 @@ export const previewV02Paths = Object.freeze({
     previewV02Root,
     "schema/local-preview/v0.2/preview-message.schema.json",
   ),
+  compatibilityManifestSchema: resolve(
+    previewV02Root,
+    "schema/local-preview/v0.2/compatibility-manifest.schema.json",
+  ),
+  compatibilityManifest: resolve(
+    previewV02Root,
+    "compatibility/local-preview/v0.2.json",
+  ),
 });
 
 function readJson(path) {
@@ -50,6 +58,10 @@ export function loadPreviewV02Artifacts() {
     localProjectSchema: readJson(previewV02Paths.localProjectSchema),
     messages: readJson(previewV02Paths.messageFixture),
     previewMessageSchema: readJson(previewV02Paths.previewMessageSchema),
+    localPreviewManifestSchema: readJson(
+      previewV02Paths.compatibilityManifestSchema,
+    ),
+    localPreviewManifest: readJson(previewV02Paths.compatibilityManifest),
   };
 }
 
@@ -60,10 +72,25 @@ function schemaValidators(artifacts) {
   return {
     localProject: ajv.compile(artifacts.localProjectSchema),
     message: ajv.getSchema(artifacts.previewMessageSchema.$id),
+    localPreviewManifest: ajv.compile(artifacts.localPreviewManifestSchema),
   };
 }
 
 export const localPreviewV02VersionPreference = Object.freeze(["0.2"]);
+/**
+ * Every structured diagnostic code `decideLocalPreviewDraftDelivery` can emit.
+ * The Local Preview 0.2 compatibility manifest must declare exactly this set.
+ */
+export const localPreviewV02DeliveryDiagnosticCodes = Object.freeze([
+  "preview.noMutualVersion",
+  "preview.invalidNegotiation",
+  "preview.invalidDraft",
+  "preview.incompatibleSchemaVersion",
+  "preview.invalidCapabilityReport",
+  "preview.unsupportedPreviewCapability",
+  "preview.unsupportedCapability",
+  "preview.documentTooLarge",
+]);
 export const requiredLocalPreviewV02Capabilities = Object.freeze([
   ...readJson(previewV02Paths.previewMessageSchema).$defs.previewCapabilityName
     .enum,
@@ -527,11 +554,71 @@ function validateRuntimeReset(errors, artifacts) {
   }
 }
 
+function sameSet(left, right) {
+  return (
+    JSON.stringify([...left].sort()) === JSON.stringify([...right].sort())
+  );
+}
+
+function validateLocalPreviewManifest(errors, artifacts, validators) {
+  const manifest = artifacts.localPreviewManifest;
+  if (!validators.localPreviewManifest(manifest)) {
+    errors.push(
+      ...formatErrors(
+        "Local Preview 0.2 compatibility manifest",
+        validators.localPreviewManifest.errors,
+      ),
+    );
+    return;
+  }
+  if (
+    !sameSet(
+      manifest.messageTypes,
+      artifacts.previewMessageSchema.properties.type.enum,
+    )
+  ) {
+    errors.push(
+      "Local Preview 0.2 manifest message taxonomy does not equal the preview-message schema",
+    );
+  }
+  if (
+    !sameSet(
+      manifest.previewCapabilities.map((capability) => capability.name),
+      requiredLocalPreviewV02Capabilities,
+    )
+  ) {
+    errors.push(
+      "Local Preview 0.2 manifest capability set does not equal the preview-message schema",
+    );
+  }
+  if (
+    !sameSet(
+      manifest.deliveryDiagnosticCodes,
+      localPreviewV02DeliveryDiagnosticCodes,
+    )
+  ) {
+    errors.push(
+      "Local Preview 0.2 manifest diagnostic codes do not equal the draft-delivery decision codes",
+    );
+  }
+  const manifestDirectory = dirname(previewV02Paths.compatibilityManifest);
+  for (const path of [
+    manifest.documentProtocol.compatibilityManifest,
+    ...Object.values(manifest.schemas),
+    ...manifest.canonicalFixtures,
+  ]) {
+    if (!existsSync(resolve(manifestDirectory, path))) {
+      errors.push(`Local Preview 0.2 manifest path does not exist: ${path}`);
+    }
+  }
+}
+
 export function validatePreviewV02Artifacts(
   artifacts = loadPreviewV02Artifacts(),
 ) {
   const validators = schemaValidators(artifacts);
   const errors = [];
+  validateLocalPreviewManifest(errors, artifacts, validators);
   for (const [index, message] of artifacts.messages.entries()) {
     if (!validators.message(message)) {
       errors.push(...formatErrors(`v0.2 messages/${index}`, validators.message.errors));

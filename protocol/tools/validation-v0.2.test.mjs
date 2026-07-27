@@ -119,7 +119,11 @@ test("Protocol 0.2 release-candidate fixtures validate without approving the ver
   }
   assert.deepEqual(validateCanonicalV02Coverage(input.document), []);
   assert.deepEqual(validateV02JsonFormatting(), []);
-  assert.equal(input.manifest.status, "releaseCandidate");
+  // Paywall Protocol 0.2 is approved at v1 GA. `releaseCandidate: "RC4"` is
+  // retained as an approved-lineage record naming the release candidate the
+  // approved contract was cut from; it is not a lifecycle state.
+  assert.equal(input.manifest.status, "approved");
+  assert.equal(input.manifest.releaseCandidate, "RC4");
 });
 
 test("the canonical fixture declares exactly every used 0.2 capability", () => {

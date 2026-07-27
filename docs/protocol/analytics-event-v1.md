@@ -14,6 +14,12 @@ Canonical artifacts:
 - `protocol/compatibility/analytics-event/v1.json`
 - `protocol/fixtures/analytics-event/v1/`
 
+Canonical event names are unprefixed, and Mosaic's own NDJSON and CSV exports
+emit them verbatim. `mosaic_*` is a recommended convention for third-party
+downstream destinations only; Mosaic never emits or accepts a prefixed name. See
+[Analytics export names](analytics-export-names.md) for the complete mapping and
+the reserved provider-native namespaces.
+
 The exact batch and response discriminator is
 `analyticsEventContractVersion = "1"`. Every event independently declares the
 exact `eventSchemaVersion = "1"`. Unknown versions, names, payload variants,

@@ -355,6 +355,18 @@
         "providerProductMappingId": {
           "$ref": "#/$defs/identifier"
         }
+      },
+      "dependentRequired": {
+        "placementRuleSetId": [
+          "placementRuleSetVersion"
+        ],
+        "placementRuleSetVersion": [
+          "placementRuleSetId"
+        ],
+        "winningRuleId": [
+          "placementRuleSetId",
+          "placementRuleSetVersion"
+        ]
       }
     },
     "clientEventBase": {
@@ -501,6 +513,20 @@
           "minimum": 0,
           "maximum": 9999
         }
+      },
+      "dependentRequired": {
+        "assignmentKeyType": [
+          "bucketingAlgorithm",
+          "rolloutBucket"
+        ],
+        "bucketingAlgorithm": [
+          "assignmentKeyType",
+          "rolloutBucket"
+        ],
+        "rolloutBucket": [
+          "assignmentKeyType",
+          "bucketingAlgorithm"
+        ]
       }
     },
     "placementFallbackPayload": {
@@ -883,10 +909,24 @@
               "const": "placement_requested"
             },
             "correlation": {
-              "$ref": "#/$defs/placementCorrelation"
+              "allOf": [
+                {
+                  "$ref": "#/$defs/placementCorrelation"
+                },
+                {
+                  "$ref": "#/$defs/correlationScopePlacementRequest"
+                }
+              ]
             },
             "attribution": {
-              "$ref": "#/$defs/placementAttribution"
+              "allOf": [
+                {
+                  "$ref": "#/$defs/placementAttribution"
+                },
+                {
+                  "$ref": "#/$defs/attributionScopePlacementRequest"
+                }
+              ]
             },
             "payload": {
               "$ref": "#/$defs/placementRequestedPayload"
@@ -906,7 +946,14 @@
               "const": "placement_paywall_selected"
             },
             "correlation": {
-              "$ref": "#/$defs/placementCorrelation"
+              "allOf": [
+                {
+                  "$ref": "#/$defs/placementCorrelation"
+                },
+                {
+                  "$ref": "#/$defs/correlationScopePlacementRequest"
+                }
+              ]
             },
             "attribution": {
               "allOf": [
@@ -915,6 +962,9 @@
                 },
                 {
                   "$ref": "#/$defs/paywallAttribution"
+                },
+                {
+                  "$ref": "#/$defs/attributionScopePaywall"
                 }
               ]
             },
@@ -947,10 +997,24 @@
               "const": "placement_no_paywall"
             },
             "correlation": {
-              "$ref": "#/$defs/placementCorrelation"
+              "allOf": [
+                {
+                  "$ref": "#/$defs/placementCorrelation"
+                },
+                {
+                  "$ref": "#/$defs/correlationScopePlacementRequest"
+                }
+              ]
             },
             "attribution": {
-              "$ref": "#/$defs/placementAttribution"
+              "allOf": [
+                {
+                  "$ref": "#/$defs/placementAttribution"
+                },
+                {
+                  "$ref": "#/$defs/attributionScopeDecidedPlacement"
+                }
+              ]
             },
             "payload": {
               "allOf": [
@@ -981,10 +1045,24 @@
               "const": "placement_fallback_used"
             },
             "correlation": {
-              "$ref": "#/$defs/placementCorrelation"
+              "allOf": [
+                {
+                  "$ref": "#/$defs/placementCorrelation"
+                },
+                {
+                  "$ref": "#/$defs/correlationScopePlacementRequest"
+                }
+              ]
             },
             "attribution": {
-              "$ref": "#/$defs/placementAttribution"
+              "allOf": [
+                {
+                  "$ref": "#/$defs/placementAttribution"
+                },
+                {
+                  "$ref": "#/$defs/attributionScopePaywall"
+                }
+              ]
             },
             "payload": {
               "$ref": "#/$defs/placementFallbackPayload"
@@ -1004,10 +1082,24 @@
               "const": "placement_unavailable"
             },
             "correlation": {
-              "$ref": "#/$defs/placementCorrelation"
+              "allOf": [
+                {
+                  "$ref": "#/$defs/placementCorrelation"
+                },
+                {
+                  "$ref": "#/$defs/correlationScopePlacementRequest"
+                }
+              ]
             },
             "attribution": {
-              "$ref": "#/$defs/placementAttribution"
+              "allOf": [
+                {
+                  "$ref": "#/$defs/placementAttribution"
+                },
+                {
+                  "$ref": "#/$defs/attributionScopeDecidedPlacement"
+                }
+              ]
             },
             "payload": {
               "$ref": "#/$defs/placementUnavailablePayload"
@@ -1027,10 +1119,24 @@
               "const": "placement_evaluation_failed"
             },
             "correlation": {
-              "$ref": "#/$defs/placementCorrelation"
+              "allOf": [
+                {
+                  "$ref": "#/$defs/placementCorrelation"
+                },
+                {
+                  "$ref": "#/$defs/correlationScopePlacementRequest"
+                }
+              ]
             },
             "attribution": {
-              "$ref": "#/$defs/placementAttribution"
+              "allOf": [
+                {
+                  "$ref": "#/$defs/placementAttribution"
+                },
+                {
+                  "$ref": "#/$defs/attributionScopePlacementRequest"
+                }
+              ]
             },
             "payload": {
               "$ref": "#/$defs/diagnosticFailurePayload"
@@ -1050,13 +1156,27 @@
               "const": "paywall_presented"
             },
             "correlation": {
-              "type": "object",
-              "required": [
-                "paywallPresentationId"
+              "allOf": [
+                {
+                  "type": "object",
+                  "required": [
+                    "paywallPresentationId"
+                  ]
+                },
+                {
+                  "$ref": "#/$defs/correlationScopePaywallPresentation"
+                }
               ]
             },
             "attribution": {
-              "$ref": "#/$defs/paywallAttribution"
+              "allOf": [
+                {
+                  "$ref": "#/$defs/paywallAttribution"
+                },
+                {
+                  "$ref": "#/$defs/attributionScopePaywall"
+                }
+              ]
             },
             "payload": {
               "$ref": "#/$defs/emptyPayload"
@@ -1076,13 +1196,23 @@
               "const": "paywall_dismissed"
             },
             "correlation": {
-              "type": "object",
-              "required": [
-                "paywallPresentationId"
+              "allOf": [
+                {
+                  "type": "object",
+                  "required": [
+                    "paywallPresentationId"
+                  ]
+                },
+                {
+                  "$ref": "#/$defs/correlationScopePaywallPresentation"
+                }
               ]
             },
             "payload": {
               "$ref": "#/$defs/dismissalPayload"
+            },
+            "attribution": {
+              "$ref": "#/$defs/attributionScopePaywall"
             }
           }
         }
@@ -1099,13 +1229,23 @@
               "const": "paywall_action_selected"
             },
             "correlation": {
-              "type": "object",
-              "required": [
-                "paywallPresentationId"
+              "allOf": [
+                {
+                  "type": "object",
+                  "required": [
+                    "paywallPresentationId"
+                  ]
+                },
+                {
+                  "$ref": "#/$defs/correlationScopePaywallPresentation"
+                }
               ]
             },
             "payload": {
               "$ref": "#/$defs/paywallActionPayload"
+            },
+            "attribution": {
+              "$ref": "#/$defs/attributionScopePaywall"
             }
           }
         }
@@ -1123,6 +1263,12 @@
             },
             "payload": {
               "$ref": "#/$defs/diagnosticFailurePayload"
+            },
+            "correlation": {
+              "$ref": "#/$defs/correlationScopePaywallPresentation"
+            },
+            "attribution": {
+              "$ref": "#/$defs/attributionScopePaywall"
             }
           }
         }
@@ -1139,14 +1285,24 @@
               "const": "product_load_started"
             },
             "correlation": {
-              "type": "object",
-              "required": [
-                "productLoadAttemptId",
-                "paywallPresentationId"
+              "allOf": [
+                {
+                  "type": "object",
+                  "required": [
+                    "productLoadAttemptId",
+                    "paywallPresentationId"
+                  ]
+                },
+                {
+                  "$ref": "#/$defs/correlationScopeProductLoad"
+                }
               ]
             },
             "payload": {
               "$ref": "#/$defs/productLoadStartedPayload"
+            },
+            "attribution": {
+              "$ref": "#/$defs/attributionScopePaywall"
             }
           }
         }
@@ -1163,13 +1319,23 @@
               "const": "product_load_completed"
             },
             "correlation": {
-              "type": "object",
-              "required": [
-                "productLoadAttemptId"
+              "allOf": [
+                {
+                  "type": "object",
+                  "required": [
+                    "productLoadAttemptId"
+                  ]
+                },
+                {
+                  "$ref": "#/$defs/correlationScopeProductLoad"
+                }
               ]
             },
             "payload": {
               "$ref": "#/$defs/productLoadCompletedPayload"
+            },
+            "attribution": {
+              "$ref": "#/$defs/attributionScopePaywall"
             }
           }
         }
@@ -1186,13 +1352,23 @@
               "const": "product_load_failed"
             },
             "correlation": {
-              "type": "object",
-              "required": [
-                "productLoadAttemptId"
+              "allOf": [
+                {
+                  "type": "object",
+                  "required": [
+                    "productLoadAttemptId"
+                  ]
+                },
+                {
+                  "$ref": "#/$defs/correlationScopeProductLoad"
+                }
               ]
             },
             "payload": {
               "$ref": "#/$defs/productLoadFailedPayload"
+            },
+            "attribution": {
+              "$ref": "#/$defs/attributionScopePaywall"
             }
           }
         }
@@ -1209,13 +1385,27 @@
               "const": "product_unavailable"
             },
             "correlation": {
-              "type": "object",
-              "required": [
-                "productLoadAttemptId"
+              "allOf": [
+                {
+                  "type": "object",
+                  "required": [
+                    "productLoadAttemptId"
+                  ]
+                },
+                {
+                  "$ref": "#/$defs/correlationScopeProductLoad"
+                }
               ]
             },
             "attribution": {
-              "$ref": "#/$defs/productAttribution"
+              "allOf": [
+                {
+                  "$ref": "#/$defs/productAttribution"
+                },
+                {
+                  "$ref": "#/$defs/attributionScopeProduct"
+                }
+              ]
             },
             "payload": {
               "$ref": "#/$defs/productUnavailablePayload"
@@ -1235,9 +1425,16 @@
               "const": "product_selected"
             },
             "correlation": {
-              "type": "object",
-              "required": [
-                "paywallPresentationId"
+              "allOf": [
+                {
+                  "type": "object",
+                  "required": [
+                    "paywallPresentationId"
+                  ]
+                },
+                {
+                  "$ref": "#/$defs/correlationScopeProductLoad"
+                }
               ]
             },
             "attribution": {
@@ -1247,6 +1444,9 @@
                 },
                 {
                   "$ref": "#/$defs/productAttribution"
+                },
+                {
+                  "$ref": "#/$defs/attributionScopeProduct"
                 }
               ]
             },
@@ -1268,13 +1468,27 @@
               "const": "purchase_started"
             },
             "correlation": {
-              "type": "object",
-              "required": [
-                "purchaseAttemptId"
+              "allOf": [
+                {
+                  "type": "object",
+                  "required": [
+                    "purchaseAttemptId"
+                  ]
+                },
+                {
+                  "$ref": "#/$defs/correlationScopePurchaseAttempt"
+                }
               ]
             },
             "attribution": {
-              "$ref": "#/$defs/purchaseAttribution"
+              "allOf": [
+                {
+                  "$ref": "#/$defs/purchaseAttribution"
+                },
+                {
+                  "$ref": "#/$defs/attributionScopeProduct"
+                }
+              ]
             },
             "payload": {
               "$ref": "#/$defs/emptyPayload"
@@ -1294,13 +1508,27 @@
               "const": "purchase_completed_client"
             },
             "correlation": {
-              "type": "object",
-              "required": [
-                "purchaseAttemptId"
+              "allOf": [
+                {
+                  "type": "object",
+                  "required": [
+                    "purchaseAttemptId"
+                  ]
+                },
+                {
+                  "$ref": "#/$defs/correlationScopePurchaseAttempt"
+                }
               ]
             },
             "attribution": {
-              "$ref": "#/$defs/purchaseAttribution"
+              "allOf": [
+                {
+                  "$ref": "#/$defs/purchaseAttribution"
+                },
+                {
+                  "$ref": "#/$defs/attributionScopeProduct"
+                }
+              ]
             },
             "payload": {
               "$ref": "#/$defs/purchaseClientCompletedPayload"
@@ -1322,27 +1550,41 @@
           ]
         },
         "correlation": {
-          "type": "object",
-          "anyOf": [
+          "allOf": [
             {
-              "required": [
-                "purchaseAttemptId"
+              "type": "object",
+              "anyOf": [
+                {
+                  "required": [
+                    "purchaseAttemptId"
+                  ]
+                },
+                {
+                  "required": [
+                    "providerOperationId"
+                  ]
+                },
+                {
+                  "required": [
+                    "providerUpdateId"
+                  ]
+                }
               ]
             },
             {
-              "required": [
-                "providerOperationId"
-              ]
-            },
-            {
-              "required": [
-                "providerUpdateId"
-              ]
+              "$ref": "#/$defs/correlationScopeProviderConfirmation"
             }
           ]
         },
         "attribution": {
-          "$ref": "#/$defs/purchaseAttribution"
+          "allOf": [
+            {
+              "$ref": "#/$defs/purchaseAttribution"
+            },
+            {
+              "$ref": "#/$defs/attributionScopeProduct"
+            }
+          ]
         },
         "payload": {
           "$ref": "#/$defs/purchaseProviderCompletedPayload"
@@ -1360,13 +1602,27 @@
               "const": "purchase_pending"
             },
             "correlation": {
-              "type": "object",
-              "required": [
-                "purchaseAttemptId"
+              "allOf": [
+                {
+                  "type": "object",
+                  "required": [
+                    "purchaseAttemptId"
+                  ]
+                },
+                {
+                  "$ref": "#/$defs/correlationScopePurchaseAttempt"
+                }
               ]
             },
             "attribution": {
-              "$ref": "#/$defs/purchaseAttribution"
+              "allOf": [
+                {
+                  "$ref": "#/$defs/purchaseAttribution"
+                },
+                {
+                  "$ref": "#/$defs/attributionScopeProduct"
+                }
+              ]
             },
             "payload": {
               "$ref": "#/$defs/purchaseLifecyclePayload"
@@ -1386,13 +1642,27 @@
               "const": "purchase_deferred"
             },
             "correlation": {
-              "type": "object",
-              "required": [
-                "purchaseAttemptId"
+              "allOf": [
+                {
+                  "type": "object",
+                  "required": [
+                    "purchaseAttemptId"
+                  ]
+                },
+                {
+                  "$ref": "#/$defs/correlationScopePurchaseAttempt"
+                }
               ]
             },
             "attribution": {
-              "$ref": "#/$defs/purchaseAttribution"
+              "allOf": [
+                {
+                  "$ref": "#/$defs/purchaseAttribution"
+                },
+                {
+                  "$ref": "#/$defs/attributionScopeProduct"
+                }
+              ]
             },
             "payload": {
               "$ref": "#/$defs/purchaseLifecyclePayload"
@@ -1412,13 +1682,27 @@
               "const": "purchase_cancelled"
             },
             "correlation": {
-              "type": "object",
-              "required": [
-                "purchaseAttemptId"
+              "allOf": [
+                {
+                  "type": "object",
+                  "required": [
+                    "purchaseAttemptId"
+                  ]
+                },
+                {
+                  "$ref": "#/$defs/correlationScopePurchaseAttempt"
+                }
               ]
             },
             "attribution": {
-              "$ref": "#/$defs/purchaseAttribution"
+              "allOf": [
+                {
+                  "$ref": "#/$defs/purchaseAttribution"
+                },
+                {
+                  "$ref": "#/$defs/attributionScopeProduct"
+                }
+              ]
             },
             "payload": {
               "$ref": "#/$defs/purchaseLifecyclePayload"
@@ -1438,13 +1722,27 @@
               "const": "purchase_failed"
             },
             "correlation": {
-              "type": "object",
-              "required": [
-                "purchaseAttemptId"
+              "allOf": [
+                {
+                  "type": "object",
+                  "required": [
+                    "purchaseAttemptId"
+                  ]
+                },
+                {
+                  "$ref": "#/$defs/correlationScopePurchaseAttempt"
+                }
               ]
             },
             "attribution": {
-              "$ref": "#/$defs/purchaseAttribution"
+              "allOf": [
+                {
+                  "$ref": "#/$defs/purchaseAttribution"
+                },
+                {
+                  "$ref": "#/$defs/attributionScopeProduct"
+                }
+              ]
             },
             "payload": {
               "$ref": "#/$defs/purchaseFailedPayload"
@@ -1464,13 +1762,23 @@
               "const": "restore_started"
             },
             "correlation": {
-              "type": "object",
-              "required": [
-                "restoreAttemptId"
+              "allOf": [
+                {
+                  "type": "object",
+                  "required": [
+                    "restoreAttemptId"
+                  ]
+                },
+                {
+                  "$ref": "#/$defs/correlationScopeRestoreAttempt"
+                }
               ]
             },
             "payload": {
               "$ref": "#/$defs/restoreStartedPayload"
+            },
+            "attribution": {
+              "$ref": "#/$defs/attributionScopeConfigurationRelease"
             }
           }
         }
@@ -1487,13 +1795,23 @@
               "const": "restore_completed"
             },
             "correlation": {
-              "type": "object",
-              "required": [
-                "restoreAttemptId"
+              "allOf": [
+                {
+                  "type": "object",
+                  "required": [
+                    "restoreAttemptId"
+                  ]
+                },
+                {
+                  "$ref": "#/$defs/correlationScopeRestoreAttempt"
+                }
               ]
             },
             "payload": {
               "$ref": "#/$defs/restoreCompletedPayload"
+            },
+            "attribution": {
+              "$ref": "#/$defs/attributionScopeConfigurationRelease"
             }
           }
         }
@@ -1510,13 +1828,23 @@
               "const": "restore_nothing_found"
             },
             "correlation": {
-              "type": "object",
-              "required": [
-                "restoreAttemptId"
+              "allOf": [
+                {
+                  "type": "object",
+                  "required": [
+                    "restoreAttemptId"
+                  ]
+                },
+                {
+                  "$ref": "#/$defs/correlationScopeRestoreAttempt"
+                }
               ]
             },
             "payload": {
               "$ref": "#/$defs/restoreLifecyclePayload"
+            },
+            "attribution": {
+              "$ref": "#/$defs/attributionScopeConfigurationRelease"
             }
           }
         }
@@ -1533,13 +1861,23 @@
               "const": "restore_cancelled"
             },
             "correlation": {
-              "type": "object",
-              "required": [
-                "restoreAttemptId"
+              "allOf": [
+                {
+                  "type": "object",
+                  "required": [
+                    "restoreAttemptId"
+                  ]
+                },
+                {
+                  "$ref": "#/$defs/correlationScopeRestoreAttempt"
+                }
               ]
             },
             "payload": {
               "$ref": "#/$defs/restoreLifecyclePayload"
+            },
+            "attribution": {
+              "$ref": "#/$defs/attributionScopeConfigurationRelease"
             }
           }
         }
@@ -1556,17 +1894,148 @@
               "const": "restore_failed"
             },
             "correlation": {
-              "type": "object",
-              "required": [
-                "restoreAttemptId"
+              "allOf": [
+                {
+                  "type": "object",
+                  "required": [
+                    "restoreAttemptId"
+                  ]
+                },
+                {
+                  "$ref": "#/$defs/correlationScopeRestoreAttempt"
+                }
               ]
             },
             "payload": {
               "$ref": "#/$defs/restoreFailedPayload"
+            },
+            "attribution": {
+              "$ref": "#/$defs/attributionScopeConfigurationRelease"
             }
           }
         }
       ]
+    },
+    "attributionScopeConfigurationRelease": {
+      "type": "object",
+      "description": "Fields this event may carry in `attribution`. Any other field is rejected: analytics minimization forbids collecting identifiers the event's own semantics cannot justify.",
+      "properties": {
+        "configurationReleaseId": true
+      },
+      "unevaluatedProperties": false
+    },
+    "attributionScopeDecidedPlacement": {
+      "type": "object",
+      "description": "Fields this event may carry in `attribution`. Any other field is rejected: analytics minimization forbids collecting identifiers the event's own semantics cannot justify.",
+      "properties": {
+        "configurationReleaseId": true,
+        "placementId": true,
+        "placementRuleSetId": true,
+        "placementRuleSetVersion": true,
+        "winningRuleId": true
+      },
+      "unevaluatedProperties": false
+    },
+    "attributionScopePaywall": {
+      "type": "object",
+      "description": "Fields this event may carry in `attribution`. Any other field is rejected: analytics minimization forbids collecting identifiers the event's own semantics cannot justify.",
+      "properties": {
+        "configurationReleaseId": true,
+        "paywallId": true,
+        "paywallVersionId": true,
+        "placementId": true,
+        "placementRuleSetId": true,
+        "placementRuleSetVersion": true,
+        "winningRuleId": true
+      },
+      "unevaluatedProperties": false
+    },
+    "attributionScopePlacementRequest": {
+      "type": "object",
+      "description": "Fields this event may carry in `attribution`. Any other field is rejected: analytics minimization forbids collecting identifiers the event's own semantics cannot justify.",
+      "properties": {
+        "configurationReleaseId": true,
+        "placementId": true,
+        "placementRuleSetId": true,
+        "placementRuleSetVersion": true
+      },
+      "unevaluatedProperties": false
+    },
+    "attributionScopeProduct": {
+      "type": "object",
+      "description": "Fields this event may carry in `attribution`. Any other field is rejected: analytics minimization forbids collecting identifiers the event's own semantics cannot justify.",
+      "properties": {
+        "configurationReleaseId": true,
+        "mosaicProductId": true,
+        "paywallId": true,
+        "paywallVersionId": true,
+        "placementId": true,
+        "placementRuleSetId": true,
+        "placementRuleSetVersion": true,
+        "planId": true,
+        "providerId": true,
+        "providerProductMappingId": true,
+        "winningRuleId": true
+      },
+      "unevaluatedProperties": false
+    },
+    "correlationScopePaywallPresentation": {
+      "type": "object",
+      "description": "Fields this event may carry in `correlation`. Any other field is rejected: analytics minimization forbids collecting identifiers the event's own semantics cannot justify.",
+      "properties": {
+        "paywallPresentationId": true,
+        "placementRequestId": true
+      },
+      "unevaluatedProperties": false
+    },
+    "correlationScopePlacementRequest": {
+      "type": "object",
+      "description": "Fields this event may carry in `correlation`. Any other field is rejected: analytics minimization forbids collecting identifiers the event's own semantics cannot justify.",
+      "properties": {
+        "placementRequestId": true
+      },
+      "unevaluatedProperties": false
+    },
+    "correlationScopeProductLoad": {
+      "type": "object",
+      "description": "Fields this event may carry in `correlation`. Any other field is rejected: analytics minimization forbids collecting identifiers the event's own semantics cannot justify.",
+      "properties": {
+        "paywallPresentationId": true,
+        "placementRequestId": true,
+        "productLoadAttemptId": true
+      },
+      "unevaluatedProperties": false
+    },
+    "correlationScopeProviderConfirmation": {
+      "type": "object",
+      "description": "Fields this event may carry in `correlation`. Any other field is rejected: analytics minimization forbids collecting identifiers the event's own semantics cannot justify.",
+      "properties": {
+        "providerOperationId": true,
+        "providerUpdateId": true,
+        "purchaseAttemptId": true
+      },
+      "unevaluatedProperties": false
+    },
+    "correlationScopePurchaseAttempt": {
+      "type": "object",
+      "description": "Fields this event may carry in `correlation`. Any other field is rejected: analytics minimization forbids collecting identifiers the event's own semantics cannot justify.",
+      "properties": {
+        "paywallPresentationId": true,
+        "placementRequestId": true,
+        "productLoadAttemptId": true,
+        "providerOperationId": true,
+        "purchaseAttemptId": true
+      },
+      "unevaluatedProperties": false
+    },
+    "correlationScopeRestoreAttempt": {
+      "type": "object",
+      "description": "Fields this event may carry in `correlation`. Any other field is rejected: analytics minimization forbids collecting identifiers the event's own semantics cannot justify.",
+      "properties": {
+        "providerOperationId": true,
+        "restoreAttemptId": true
+      },
+      "unevaluatedProperties": false
     }
   }
 }

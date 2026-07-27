@@ -18,7 +18,47 @@
       "const": "1"
     },
     "status": {
-      "const": "releaseCandidate"
+      "type": "string",
+      "enum": [
+        "draft",
+        "releaseCandidate",
+        "approved",
+        "deprecated",
+        "retired"
+      ]
+    },
+    "deprecation": {
+      "type": "object",
+      "description": "Lifecycle metadata present only once this contract version enters the deprecated or retired state. Absent for draft, releaseCandidate, and approved contracts. See docs/protocol/deprecation-policy.md.",
+      "additionalProperties": false,
+      "required": [
+        "deprecatedAt",
+        "retiresAt"
+      ],
+      "properties": {
+        "deprecatedAt": {
+          "type": "string",
+          "pattern": "^[0-9]{4}-(0[1-9]|1[0-2])-([0-2][0-9]|3[01])$",
+          "description": "UTC calendar date on which this contract version was deprecated."
+        },
+        "retiresAt": {
+          "type": "string",
+          "pattern": "^[0-9]{4}-(0[1-9]|1[0-2])-([0-2][0-9]|3[01])$",
+          "description": "Earliest UTC calendar date on which this contract version may be retired."
+        },
+        "supersededBy": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "description": "Identifier of the approved successor contract version, when one exists."
+        },
+        "migrationGuide": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256,
+          "description": "Repository-relative path to the migration guide for the successor version."
+        }
+      }
     },
     "schemas": {
       "type": "object",

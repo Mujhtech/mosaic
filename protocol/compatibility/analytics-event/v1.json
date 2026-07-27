@@ -1,6 +1,6 @@
 {
   "analyticsEventContractVersion": "1",
-  "status": "releaseCandidate",
+  "status": "approved",
   "schemas": {
     "event": "../../schema/analytics-event/v1/event.schema.json",
     "batch": "../../schema/analytics-event/v1/batch.schema.json",
