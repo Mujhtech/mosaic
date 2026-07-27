@@ -1,141 +1,110 @@
 # Mosaic
 
-Mosaic is an open-source, cross-platform app monetization platform built around
-one platform-neutral protocol, three native SDKs, and one Studio.
+Mosaic is an open-source, cross-platform paywall and monetization platform.
+Create, publish, and update production-quality native paywalls across
+Flutter, SwiftUI, and Jetpack Compose without releasing a new app version.
 
-The repository includes the account-free local Studio and Local Preview `0.2`
-workflow plus the Phase 3B hosted configuration-delivery private alpha. Hosted
-mode adds Projects and Environments, browser sessions, Drafts, Assets,
-Placements, immutable Paywall Versions, publishing, rollback, and Delivery v1
-clients for Flutter, SwiftUI, and Jetpack Compose. Commerce remains mock-only;
-provider billing, analytics, experiments, targeting, and authoritative
-Entitlement state are deliberately deferred.
+Mosaic covers the full monetization loop: visual paywall authoring in
+Studio, remote configuration with immutable versioning and rollback,
+placements with deterministic on-device targeting, publishing per
+Environment, analytics, experiments with honest descriptive statistics, and
+provider-independent commerce through RevenueCat, StoreKit 2, Google Play
+Billing, or your own custom adapter.
+
+The architecture is one platform-neutral protocol, three native renderers,
+and one Studio. No WebView rendering, and no executable code in remote
+configuration.
+
+## Status
+
+Mosaic is a **v1 release candidate**, self-hostable today.
+
+- The server and dashboard version together and are preparing for a
+  `v1.0.0` General Availability release
+  ([draft release notes](docs/releases/v1.0.0-notes.md)).
+- The SDKs are **pre-1.0 (`0.x-dev`) and not published to any package
+  registry**; install them by pinning this repository at an exact tag or
+  commit, or by local path
+  ([SDK quickstarts](docs/guides/sdk-quickstarts.md)).
+- Commerce adapters are implemented and contract-tested but **not
+  live-verified** against the RevenueCat sandbox, Apple sandbox, or a Google
+  Play test track.
+- All documented limitations live in
+  [docs/known-limitations.md](docs/known-limitations.md).
+
+## Quickstart
+
+```bash
+cp .env.example .env
+docker compose up --build
+```
+
+This starts a complete installation: PostgreSQL, MinIO, migrations, the API,
+the worker, the dashboard, and a local TLS edge. Open the dashboard at
+`http://localhost:3000`.
+
+The local Studio needs no account and no backend: open
+`http://localhost:3000/studio` (or run `npm run dev:studio` from
+`apps/dashboard` for development with the device-preview relay).
+
+## Supported matrix (v1)
+
+| Area | Supported |
+| --- | --- |
+| PostgreSQL | 17 |
+| Docker | Engine 24+ with Compose v2 |
+| Browsers | Chrome/Edge 111+, Safari 16.4+, Firefox 128+ (Studio desktop-only, ≥768 px) |
+| Go (build from source) | 1.26.x |
+| Flutter SDK | Flutter 3.22+ / Dart 3.4+ |
+| iOS SDK | iOS 15+, Swift 6 language mode, Xcode 16+ |
+| Android SDK | API 24+ |
 
 ## Repository map
 
 ```text
-apps/api/         Go API foundation
-apps/dashboard/   TanStack Start dashboard and local Studio
-apps/worker/      deferred worker-boundary documentation
-protocol/         Protocol 0.2 plus its Local Preview contract and fixtures
-sdk/flutter/      Flutter renderer, hosted delivery/cache, fallback, and preview client
-sdk/ios/          SwiftUI renderer, hosted delivery/cache, fallback, and preview client
-sdk/android/      Compose renderer, hosted delivery/cache, fallback, and preview client
-examples/         Flutter, iOS, and Android local-renderer and preview applications
-docs/             architecture and foundation documentation
+apps/api/         Go API, worker binary, and CLI commands (migrate, keyring)
+apps/dashboard/   dashboard and Studio (TanStack Start)
+protocol/         canonical JSON Schemas, validators, and fixtures
+sdk/flutter/      Flutter SDK        sdk/ios/  Swift SDK    sdk/android/  Kotlin SDK
+packages/         design tokens and design system
+examples/         example host apps for all three platforms
+deploy/ scripts/  deployment profile and operational scripts
+docs/             documentation
 ```
-
-## Requirements
-
-- Node.js 22.12+ and npm 10+
-- Go 1.26.2+
-- Flutter 3.19+ and Dart 3.3+
-- Swift 6+ and Xcode 16+
-- JDK 17 and Android SDK 36
-- Docker with Compose for the durable local PostgreSQL workflow
-
-The SDK platform minimums remain working baselines pending stable public SDK
-versioning.
-
-## Install and validate
-
-Run these commands from the repository root unless a directory change is shown.
-
-Protocol schema and conformance:
-
-```bash
-npm --prefix protocol ci
-npm --prefix protocol run check
-```
-
-Backend formatting and tests:
-
-```bash
-cd apps/api
-gofmt -l .
-go test ./...
-go vet ./...
-```
-
-Dashboard formatting, linting, type checks, tests, and production build:
-
-```bash
-npm --prefix apps/dashboard ci
-npm --prefix apps/dashboard run check
-```
-
-Flutter SDK:
-
-```bash
-cd sdk/flutter
-flutter pub get
-dart format --output=none --set-exit-if-changed lib test example/lib
-flutter analyze
-flutter test
-cd example
-flutter build bundle --no-pub
-```
-
-Swift SDK:
-
-```bash
-swift format lint --strict --recursive sdk/ios/Package.swift sdk/ios/Sources sdk/ios/Tests
-swift build --package-path sdk/ios
-swift test --package-path sdk/ios
-xcodebuild -project examples/ios-example/MosaicExample.xcodeproj \
-  -scheme MosaicExample \
-  -destination 'generic/platform=iOS Simulator' \
-  -derivedDataPath examples/ios-example/.build/DerivedData \
-  CODE_SIGNING_ALLOWED=NO build
-```
-
-Android SDK:
-
-```bash
-cd sdk/android
-./gradlew --no-daemon :mosaic:assembleDebug :mosaic:testDebugUnitTest \
-  :mosaic:lintDebug :mosaic:assembleDebugAndroidTest
-```
-
-Start the durable API stack with `cp .env.example .env && docker compose up --build`.
-The database uses the named `mosaic_postgres_data` volume. For a host-run API,
-start PostgreSQL, run `go run ./cmd/migrate up`, then `go run ./cmd/api` from
-`apps/api`; both commands load `apps/api/.env`, with existing process variables
-taking precedence. To start the account-free
-Studio and its loopback preview relay together, run:
-
-```bash
-cd apps/dashboard
-npm run dev:studio
-```
-
-Open `http://localhost:3000/studio`. Preview clients connect to
-`ws://127.0.0.1:4317/preview` using the local session documented by each example
-application. `npm run dev` remains available when only the dashboard is needed.
-
-Hosted Studio routes use the browser session APIs and remain separate from the
-account-free `/studio` route. The local stack includes PostgreSQL, MinIO, and a
-development HTTPS edge for immutable hosted Asset URLs. Trust the generated
-local development certificate only on test devices that must load those Asset
-URLs; production deployments must configure an externally reachable HTTPS
-`MOSAIC_PUBLIC_ASSET_BASE_URL`.
 
 ## Documentation
 
-- [Product roadmap](docs/product/roadmap.md)
-- [Architecture overview](docs/architecture/overview.md)
-- [Protocol 0.2](docs/protocol/v0.2.md)
-- [Backend foundation](docs/backend/api-foundation.md)
-- [Dashboard foundation](docs/dashboard/foundation.md)
-- [Phase 1 SDK renderers](docs/sdk/README.md)
-- [Phase 1 review](docs/reviews/phase-1-review.md)
-- [Phase 2 review](docs/reviews/phase-2.md)
-- [Phase 3B hosted publishing](docs/backend/phase-3b-hosted-publishing.md)
-- [Configuration Delivery v1](docs/protocol/configuration-delivery-v1.md)
-- [Phase 3B review](docs/reviews/phase-3b.md)
+User guides:
 
-There is intentionally no root package-manager workspace or shared Go module
-yet. Hosted configuration is additive: `/studio` remains local-first and does
-not require an account or reachable backend. The roadmap's `mosaic dev`
-convenience command is deferred; local preview uses `npm run dev:studio`
-directly.
+- [Catalog: Products and Entitlements](docs/guides/catalog.md)
+- [Commerce providers](docs/guides/providers.md)
+- [Studio](docs/guides/studio.md)
+- [Publishing](docs/guides/publishing.md)
+- [Placements](docs/guides/placements.md)
+- [Targeting](docs/guides/targeting.md)
+- [Analytics](docs/guides/analytics.md)
+- [Experiments](docs/guides/experiments.md)
+- [Privacy](docs/guides/privacy.md)
+- [SDK quickstarts](docs/guides/sdk-quickstarts.md) and the
+  [SDK overview](docs/sdk/README.md)
+
+Operations: [backup and restore](docs/backend/operations/backup-restore.md),
+[upgrade](docs/backend/operations/upgrade.md),
+[key rotation](docs/backend/operations/key-rotation.md),
+[observability](docs/backend/operations/observability.md),
+[performance](docs/backend/operations/performance.md). The environment
+reference is [`.env.example`](.env.example).
+
+Reference: [protocol contracts](docs/protocol/),
+[architecture overview](docs/architecture/overview.md),
+[product roadmap](docs/product/roadmap.md),
+[known limitations](docs/known-limitations.md),
+[support policy](docs/support.md).
+
+Contributing: [CONTRIBUTING.md](CONTRIBUTING.md),
+[CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md), and — for vulnerabilities —
+[SECURITY.md](SECURITY.md).
+
+## License
+
+Mosaic is licensed under the [Apache License 2.0](LICENSE).
