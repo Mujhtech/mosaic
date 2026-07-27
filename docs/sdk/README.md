@@ -37,7 +37,8 @@ All three SDKs provide the same conceptual capabilities:
 - Product loading, selection, purchasing, restoration, and Entitlement
   observation through a provider abstraction, with mock and custom providers;
 - Commerce Configuration v1/v2 sidecars bound to the accepted release;
-- Analytics Event Contract v1 (and v2 for Experiment events) with a bounded,
+- Analytics Event Contract v1, and v2 for the Experiment events plus the
+  conversion events of an exposed Variant presentation, with a bounded,
   app-private, persistent queue and best-effort delivery;
 - identity: installation identity, optional application user identity, typed
   attributes, and resets;
@@ -260,6 +261,16 @@ cd sdk/android
 The instrumentation task requires a connected device or emulator; without one it
 cannot run, and that gap is recorded in `docs/known-limitations.md` rather than
 implied as passing. The runnable Compose app is `examples/android-example`.
+
+## Experiment conversion attribution
+
+Experiment results join a conversion to an exposure solely on the Experiment
+tuple carried by the conversion event itself, and that tuple may only appear on
+an Analytics Event v2 event. Every SDK therefore emits `product_selected` and the
+purchase lifecycle events on v2 with the complete tuple whenever the presented
+Paywall is a successfully exposed original Variant, and without the tuple for a
+fallback presentation or a QA override. A partial tuple is never synthesized.
+See `docs/protocol/migration/analytics-event-v1-to-v2.md`.
 
 ## Known limitations
 

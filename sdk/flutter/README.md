@@ -16,7 +16,20 @@ Hosted clients enqueue Analytics Event v2 assignment,
 presentation-confirmed exposure, and explicit fallback events through the
 default durable analytics queue and transport. A custom
 `MosaicExperimentAnalyticsSink` remains available for tests. QA overrides never
-emit statistical exposure. The default assignment store persists only one-way
+emit statistical exposure.
+
+Conversion events are emitted on Analytics Event v2 carrying the same immutable
+Experiment tuple whenever the presented Paywall is a successfully exposed
+original Variant: `product_selected`, `purchase_started`,
+`purchase_completed_client`, and the rest of the purchase lifecycle. Experiment
+results join a conversion to an exposure solely on that tuple, so a conversion
+emitted on v1 would silently count as zero. Conversions from a fallback
+presentation or a QA override are emitted without the tuple, because neither is
+an exposed Variant presentation and attributing them to the Variant would count
+a normal-Paywall outcome as a Variant outcome. Presentation, Placement, restore,
+and Product-availability events never carry the tuple.
+
+The default assignment store persists only one-way
 subject digests, is backup-excluded, and is atomically bounded to 256 records
 and 180 days. Trusted server and local receipt anchors are cached with Delivery
 v3 so valid schedules remain evaluable across restart.

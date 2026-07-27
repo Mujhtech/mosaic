@@ -624,6 +624,7 @@ final class _MosaicPlacementHostState extends State<MosaicPlacementHost> {
       resolution.configuration,
       resolution.paywallVersion,
       decision: resolution.decision,
+      conversionExperiment: mosaicConversionExperimentAttribution(resolution),
     );
     final decision = resolution.decision;
     if (decision?.usedFallback == true) {
@@ -940,6 +941,7 @@ final class _MosaicPlacementHostState extends State<MosaicPlacementHost> {
     MosaicAcceptedConfiguration configuration,
     MosaicDeliveredPaywallVersion paywallVersion, {
     MosaicPlacementDecisionResult? decision,
+    MosaicExperimentAttribution? conversionExperiment,
   }) {
     final release = configuration.envelope.release;
     final ruleSet = release.decisionForPlacement(widget.placementKey);
@@ -962,6 +964,7 @@ final class _MosaicPlacementHostState extends State<MosaicPlacementHost> {
             const <MosaicCommerceProductMapping>[])
           mapping.mosaicProductId: mapping.mappingId,
       },
+      experiment: conversionExperiment,
     );
   }
 
@@ -1045,4 +1048,29 @@ final class _MosaicPlacementHostState extends State<MosaicPlacementHost> {
       _ => null,
     };
   }
+}
+
+/// The Experiment tuple that conversion events from [resolution] must carry, or
+/// `null` when they must be emitted without one.
+///
+/// Only a successfully exposed original-Variant presentation may attribute a
+/// conversion to a Variant:
+///
+/// * a fallback presentation shows the normal Placement, and a tuple-carrying
+///   conversion would enter the `product_selection_purchase_start` denominator
+///   and can displace the Variant's own row, counting a normal-Paywall outcome
+///   as a Variant outcome; and
+/// * a QA override deliberately emits no statistical exposure, so its
+///   conversions must not appear in Variant results either.
+MosaicExperimentAttribution? mosaicConversionExperimentAttribution(
+  MosaicPlacementDecisionPaywall resolution,
+) {
+  final experiment = resolution.experiment;
+  if (experiment == null || experiment.qaOverride) return null;
+  return MosaicExperimentAttribution(
+    experimentId: experiment.assignment.experimentId,
+    experimentVersionId: experiment.assignment.experimentVersionId,
+    experimentVariantId: experiment.variant.id,
+    experimentAllocationVersion: experiment.assignment.allocationVersion,
+  );
 }

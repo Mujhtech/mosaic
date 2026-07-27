@@ -7,6 +7,10 @@ const String mosaicAnalyticsEventContractVersion = '1';
 /// acknowledged with a v2 response.
 const String mosaicAnalyticsEventContractVersionV2 = '2';
 const String mosaicAnalyticsEventSchemaVersion = '1';
+
+/// Analytics Event v2 event schema version. An event declares it exactly when
+/// it carries Experiment attribution.
+const String mosaicAnalyticsEventSchemaVersionV2 = '2';
 const int mosaicAnalyticsMaximumEventBytes = 32 * 1024;
 const int mosaicAnalyticsMaximumBatchBytes = 512 * 1024;
 const int mosaicAnalyticsMaximumSendBatchSize = 50;
@@ -175,6 +179,53 @@ final class MosaicAnalyticsCorrelation {
       };
 }
 
+/// Immutable Experiment attribution carried by an Analytics Event v2 event.
+///
+/// The four identifiers are all-or-none by construction: Experiment conversion
+/// attribution joins solely on these columns, so a partial tuple would silently
+/// misattribute or drop a conversion.
+final class MosaicExperimentAttribution {
+  const MosaicExperimentAttribution({
+    required this.experimentId,
+    required this.experimentVersionId,
+    required this.experimentVariantId,
+    required this.experimentAllocationVersion,
+  });
+
+  final String experimentId;
+  final String experimentVersionId;
+  final String experimentVariantId;
+  final String experimentAllocationVersion;
+
+  Map<String, Object> toJson() => <String, Object>{
+        'experimentId': experimentId,
+        'experimentVersionId': experimentVersionId,
+        'experimentVariantId': experimentVariantId,
+        'experimentAllocationVersion': experimentAllocationVersion,
+      };
+
+  static const Set<String> jsonKeys = <String>{
+    'experimentId',
+    'experimentVersionId',
+    'experimentVariantId',
+    'experimentAllocationVersion',
+  };
+}
+
+/// Events that may carry the Experiment tuple, per the Analytics Event v1 to v2
+/// migration contract. Every other event forbids it.
+const Set<MosaicAnalyticsEventName> mosaicExperimentAttributableEvents =
+    <MosaicAnalyticsEventName>{
+  MosaicAnalyticsEventName.productSelected,
+  MosaicAnalyticsEventName.purchaseStarted,
+  MosaicAnalyticsEventName.purchaseCompletedClient,
+  MosaicAnalyticsEventName.purchaseCompletedProvider,
+  MosaicAnalyticsEventName.purchasePending,
+  MosaicAnalyticsEventName.purchaseDeferred,
+  MosaicAnalyticsEventName.purchaseCancelled,
+  MosaicAnalyticsEventName.purchaseFailed,
+};
+
 final class MosaicAnalyticsAttribution {
   const MosaicAnalyticsAttribution({
     this.configurationReleaseId,
@@ -188,6 +239,7 @@ final class MosaicAnalyticsAttribution {
     this.planId,
     this.providerId,
     this.providerProductMappingId,
+    this.experiment,
   });
   final String? configurationReleaseId;
   final String? placementId;
@@ -200,6 +252,9 @@ final class MosaicAnalyticsAttribution {
   final String? planId;
   final String? providerId;
   final String? providerProductMappingId;
+
+  /// Present only on an Analytics Event v2 conversion event.
+  final MosaicExperimentAttribution? experiment;
 
   Map<String, Object> toJson() => <String, Object>{
         if (configurationReleaseId != null)
@@ -217,6 +272,7 @@ final class MosaicAnalyticsAttribution {
         if (providerId != null) 'providerId': providerId!,
         if (providerProductMappingId != null)
           'providerProductMappingId': providerProductMappingId!,
+        if (experiment != null) ...experiment!.toJson(),
       };
 }
 
@@ -252,9 +308,15 @@ final class MosaicAnalyticsEvent {
   final MosaicAnalyticsAttribution attribution;
   final Map<String, Object?> payload;
 
+  /// `2` exactly when the event carries Experiment attribution. Analytics Event
+  /// v2 is a superset of v1: the tuple is the only reason to move an event.
+  String get eventSchemaVersion => attribution.experiment == null
+      ? mosaicAnalyticsEventSchemaVersion
+      : mosaicAnalyticsEventSchemaVersionV2;
+
   Map<String, Object?> toJson() => <String, Object?>{
         'eventId': eventId,
-        'eventSchemaVersion': mosaicAnalyticsEventSchemaVersion,
+        'eventSchemaVersion': eventSchemaVersion,
         'eventName': name.wireValue,
         'occurredAt': mosaicAnalyticsTimestamp(occurredAt),
         'queuedAt': mosaicAnalyticsTimestamp(queuedAt),
@@ -290,8 +352,11 @@ final class MosaicAnalyticsEvent {
       'attribution',
       'payload',
     });
-    if (json['eventSchemaVersion'] != '1')
+    final schemaVersion = json['eventSchemaVersion'];
+    if (schemaVersion != mosaicAnalyticsEventSchemaVersion &&
+        schemaVersion != mosaicAnalyticsEventSchemaVersionV2) {
       throw const FormatException('Unsupported event schema.');
+    }
     Map<String, Object?> object(String key) {
       final value = json[key];
       if (value is! Map) throw FormatException('$key must be an object.');
@@ -315,6 +380,14 @@ final class MosaicAnalyticsEvent {
       attribution: _decodeAttribution(object('attribution')),
       payload: object('payload'),
     );
+    // The declared schema version must match the attribution it carries: the
+    // tuple is only valid on v2, and a v2 event without it would be a v1 event
+    // relabelled, which no Mosaic SDK emits.
+    if (event.eventSchemaVersion != schemaVersion) {
+      throw const FormatException(
+        'Event schema version disagrees with Experiment attribution.',
+      );
+    }
     return event;
   }
 
@@ -351,7 +424,7 @@ final class MosaicAnalyticsEvent {
       }
     }
     if (sessionId case final session?) _identifier(session, 'sessionId');
-    _validateContext(context);
+    _validateContext(context, eventSchemaVersion);
     for (final entry in correlation.toJson().entries) {
       _identifier(entry.value, entry.key);
     }
@@ -364,6 +437,12 @@ final class MosaicAnalyticsEvent {
       } else {
         _identifier(entry.value, entry.key);
       }
+    }
+    if (attribution.experiment != null &&
+        !mosaicExperimentAttributableEvents.contains(name)) {
+      throw const FormatException(
+        'Experiment attribution is not permitted on this event.',
+      );
     }
     _validateEventRelationships(name, correlation, attribution);
     _validatePayload(name, payload);
@@ -651,12 +730,32 @@ MosaicAnalyticsAttribution _decodeAttribution(Map<String, Object?> j) {
     'mosaicProductId',
     'planId',
     'providerId',
-    'providerProductMappingId'
+    'providerProductMappingId',
+    ...MosaicExperimentAttribution.jsonKeys,
   });
   String? v(String k) => j[k] == null ? null : _identifier(j[k], k);
   final version = j['placementRuleSetVersion'];
   if (version != null && (version is! int || version < 1))
     throw const FormatException('Invalid Rule Set version.');
+  final tupleKeys =
+      MosaicExperimentAttribution.jsonKeys.where((k) => j[k] != null).toSet();
+  if (tupleKeys.isNotEmpty &&
+      tupleKeys.length != MosaicExperimentAttribution.jsonKeys.length) {
+    throw const FormatException('Incomplete Experiment attribution.');
+  }
+  final experiment = tupleKeys.isEmpty
+      ? null
+      : MosaicExperimentAttribution(
+          experimentId: _identifier(j['experimentId'], 'experimentId'),
+          experimentVersionId:
+              _identifier(j['experimentVersionId'], 'experimentVersionId'),
+          experimentVariantId:
+              _identifier(j['experimentVariantId'], 'experimentVariantId'),
+          experimentAllocationVersion: _identifier(
+            j['experimentAllocationVersion'],
+            'experimentAllocationVersion',
+          ),
+        );
   return MosaicAnalyticsAttribution(
       configurationReleaseId: v('configurationReleaseId'),
       placementId: v('placementId'),
@@ -668,7 +767,8 @@ MosaicAnalyticsAttribution _decodeAttribution(Map<String, Object?> j) {
       mosaicProductId: v('mosaicProductId'),
       planId: v('planId'),
       providerId: v('providerId'),
-      providerProductMappingId: v('providerProductMappingId'));
+      providerProductMappingId: v('providerProductMappingId'),
+      experiment: experiment);
 }
 
 void _validatePayload(
@@ -967,7 +1067,7 @@ void _validatePayload(
     throw const FormatException('Invalid retryable value.');
 }
 
-void _validateContext(MosaicAnalyticsContext? context) {
+void _validateContext(MosaicAnalyticsContext? context, String schemaVersion) {
   if (context == null) return;
   if (!const {'ios', 'android'}.contains(context.platform) ||
       !const {'flutter', 'ios', 'android'}.contains(context.sdkFamily)) {
@@ -979,8 +1079,13 @@ void _validateContext(MosaicAnalyticsContext? context) {
           !versionPattern.hasMatch(context.applicationVersion!)) {
     throw const FormatException('Invalid analytics version context.');
   }
+  // Configuration Delivery v3 may only be reported on a v2 event: the v1
+  // context enum stops at 2 in the canonical schema.
+  final deliveryVersions = schemaVersion == mosaicAnalyticsEventSchemaVersionV2
+      ? const <String>{'1', '2', '3'}
+      : const <String>{'1', '2'};
   if (context.configurationDeliveryVersion != null &&
-          !const {'1', '2'}.contains(context.configurationDeliveryVersion) ||
+          !deliveryVersions.contains(context.configurationDeliveryVersion) ||
       context.commerceProviderContractVersion != null &&
           !const {'1', '2'}.contains(context.commerceProviderContractVersion)) {
     throw const FormatException('Invalid analytics Contract context.');
@@ -1130,6 +1235,9 @@ void _validateEventRelationships(
     'planId',
     'providerId',
     'providerProductMappingId',
+    // Permitted only on the conversion events; `_validate` rejects the tuple on
+    // every other event, including `product_unavailable`.
+    ...MosaicExperimentAttribution.jsonKeys,
   };
   final allowedAttribution = switch (name) {
     MosaicAnalyticsEventName.placementRequested ||

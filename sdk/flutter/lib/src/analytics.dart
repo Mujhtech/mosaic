@@ -233,15 +233,26 @@ final class _QueuedAnalyticsEvent {
   MosaicAnalyticsEventPriority get priority {
     final normal = event;
     if (normal != null) return normal.name.priority;
-    return switch (experimentEvent!['eventName']) {
+    final name = experimentEvent!['eventName'];
+    return switch (name) {
       'experiment_assigned' ||
       'experiment_assignment_failed' =>
         MosaicAnalyticsEventPriority.low,
       'experiment_exposed' ||
       'experiment_fallback_presented' =>
         MosaicAnalyticsEventPriority.presentation,
-      _ => MosaicAnalyticsEventPriority.low,
+      // An attributed conversion event keeps the priority of its shared event
+      // name, so overflow eviction still protects purchase outcomes.
+      _ => _sharedEventPriority(name) ?? MosaicAnalyticsEventPriority.low,
     };
+  }
+
+  static MosaicAnalyticsEventPriority? _sharedEventPriority(Object? name) {
+    try {
+      return MosaicAnalyticsEventName.parse(name).priority;
+    } on FormatException {
+      return null;
+    }
   }
 
   Map<String, Object?> toJson() => {
@@ -398,7 +409,15 @@ final class MosaicAnalyticsRuntime
         payload: payload,
       );
       final encoded = event.encode();
-      final queued = _QueuedAnalyticsEvent(event: event, encoded: encoded);
+      // An event carrying Experiment attribution is an Analytics Event v2
+      // document and must be delivered in a v2 batch. Versions are never mixed
+      // inside one batch.
+      final queued = event.attribution.experiment == null
+          ? _QueuedAnalyticsEvent(event: event, encoded: encoded)
+          : _QueuedAnalyticsEvent.experiment(
+              event: event.toJson(),
+              encoded: encoded,
+            );
       _dropExpired(clock().toUtc());
       _makeRoom(queued);
       if (_queue.length >= mosaicAnalyticsMaximumQueueEvents ||
@@ -861,12 +880,18 @@ final class MosaicAnalyticsPresentationContext {
     required this.attribution,
     this.providerId,
     this.providerProductMappingIds = const <String, String>{},
+    this.experiment,
   });
   final String placementRequestId;
   final String paywallPresentationId;
   final MosaicAnalyticsAttribution attribution;
   final String? providerId;
   final Map<String, String> providerProductMappingIds;
+
+  /// The Experiment Variant this presentation is attributed to, when the SDK
+  /// also emits a statistical exposure for it. Conversion events must carry it:
+  /// Experiment results join conversions to exposures solely on this tuple.
+  final MosaicExperimentAttribution? experiment;
 
   MosaicAnalyticsCorrelation correlation({
     String? productLoadAttemptId,
@@ -883,6 +908,26 @@ final class MosaicAnalyticsPresentationContext {
         providerOperationId: providerOperationId,
       );
 
+  /// Attribution for a conversion event: Product attribution plus the
+  /// Experiment tuple when this presentation is attributed to a Variant. Only
+  /// the conversion events named by the v1-to-v2 migration contract may use it.
+  MosaicAnalyticsAttribution forConversion(String mosaicProductId) =>
+      MosaicAnalyticsAttribution(
+        configurationReleaseId: attribution.configurationReleaseId,
+        placementId: attribution.placementId,
+        placementRuleSetId: attribution.placementRuleSetId,
+        placementRuleSetVersion: attribution.placementRuleSetVersion,
+        winningRuleId: attribution.winningRuleId,
+        paywallId: attribution.paywallId,
+        paywallVersionId: attribution.paywallVersionId,
+        mosaicProductId: mosaicProductId,
+        providerId: providerId,
+        providerProductMappingId: providerProductMappingIds[mosaicProductId],
+        experiment: experiment,
+      );
+
+  /// Product attribution without Experiment attribution, for the Product events
+  /// that forbid the tuple.
   MosaicAnalyticsAttribution forProduct(String mosaicProductId) =>
       MosaicAnalyticsAttribution(
         configurationReleaseId: attribution.configurationReleaseId,

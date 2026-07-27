@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:ui' show Tristate;
 
 import 'package:flutter/material.dart';
@@ -90,6 +91,90 @@ void main() {
       'monthly-plan',
     );
     expect(interactions.last.outcome, MosaicInteractionOutcome.purchased);
+  });
+
+  testWidgets('conversion events carry the Experiment tuple on v2',
+      (tester) async {
+    final storage = MosaicMemoryAnalyticsStorage();
+    final identity = MosaicIdentityController(
+      storage: MosaicMemoryIdentityStorage(),
+      namespace: 'e' * 64,
+    );
+    final runtime = MosaicAnalyticsRuntime(
+      namespace: 'f' * 64,
+      identityController: identity,
+      context: const MosaicAnalyticsContext(
+        platform: 'ios',
+        sdkVersion: mosaicFlutterSdkVersion,
+      ),
+      transport: _UnavailableAnalyticsTransport(),
+      storage: storage,
+    );
+    await runtime.setCollection(
+      environment:
+          const MosaicAnalyticsEnvironmentSettings(collectionEnabled: true),
+    );
+    const context = MosaicAnalyticsPresentationContext(
+      placementRequestId: 'placement_request_1',
+      paywallPresentationId: 'presentation_1',
+      attribution: MosaicAnalyticsAttribution(
+        configurationReleaseId: 'release_1',
+        placementId: 'placement_1',
+        paywallId: 'paywall_1',
+        paywallVersionId: 'paywall_version_1',
+      ),
+      providerId: 'app_store',
+      experiment: MosaicExperimentAttribution(
+        experimentId: 'experiment_checkout',
+        experimentVersionId: 'experiment_version_checkout_1',
+        experimentVariantId: 'variant_treatment',
+        experimentAllocationVersion: 'allocation_checkout_1',
+      ),
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: ThemeData(useMaterial3: true),
+        home: Scaffold(
+          body: MosaicPaywall(
+            document: decodeCanonicalFixture(),
+            purchaseProvider: MockMosaicPurchaseProvider(products: _products),
+            onResult: (_) {},
+            analyticsRuntime: runtime,
+            analyticsContext: context,
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await _tap(tester, 'mosaic-plans-monthly-plan-card');
+    await _tap(tester, 'mosaic-purchase');
+
+    final queued = (jsonDecode(storage.source!) as Map)['events'] as List;
+    final events = queued
+        .map((item) => ((item as Map)['event']! as Map).cast<String, Object?>())
+        .toList();
+    for (final name in <String>[
+      'product_selected',
+      'purchase_completed_client'
+    ]) {
+      final event = events.singleWhere((item) => item['eventName'] == name);
+      expect(event['eventSchemaVersion'], '2', reason: name);
+      expect(
+        (event['attribution']! as Map)['experimentVariantId'],
+        'variant_treatment',
+        reason: name,
+      );
+    }
+    // Presentation events are not conversion events and stay on v1 without the
+    // tuple: carrying it there would be a minimization violation.
+    final presented =
+        events.singleWhere((item) => item['eventName'] == 'paywall_presented');
+    expect(presented['eventSchemaVersion'], '1');
+    expect(
+      (presented['attribution']! as Map).containsKey('experimentId'),
+      isFalse,
+    );
   });
 
   for (final entry
@@ -494,4 +579,11 @@ final class _ThrowingLoadProvider implements MosaicPurchaseProvider {
 
   @override
   Future<MosaicRestoreResult> restore() async => const MosaicNothingToRestore();
+}
+
+/// Delivery is irrelevant to this suite; the queue is inspected directly.
+final class _UnavailableAnalyticsTransport implements MosaicAnalyticsTransport {
+  @override
+  Future<MosaicAnalyticsIngestionResponse> send(MosaicAnalyticsBatch batch) =>
+      throw const FormatException('Analytics delivery is unavailable.');
 }

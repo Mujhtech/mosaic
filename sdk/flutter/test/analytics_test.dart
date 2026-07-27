@@ -130,26 +130,9 @@ void main() {
 
     test('decodes and re-encodes every canonical v2 Experiment fixture', () {
       final root = repositoryDirectory('protocol/fixtures/analytics-event/v2');
-      // Canonical v2 events this SDK never emits: standard monetization events
-      // carrying Experiment attribution. Flutter emits those on the v1 schema,
-      // so its v2 codec is Experiment-only. Recorded in
-      // docs/known-limitations.md; adding v2 emission is a post-GA change.
-      const notEmittedByFlutter = <String>{
-        'product-selection-attributed.json',
-        'purchase-started-attributed.json',
-      };
       var decoded = 0;
       for (final fixture in canonicalFixtureFiles(root)) {
-        final name = fixture.uri.pathSegments.last;
         final object = jsonDecode(fixture.readAsStringSync());
-        if (notEmittedByFlutter.contains(name)) {
-          expect(
-            () => mosaicDecodeExperimentAnalyticsEvent(object),
-            throwsFormatException,
-            reason: fixture.path,
-          );
-          continue;
-        }
         expect(
           mosaicDecodeExperimentAnalyticsEvent(object),
           object,
@@ -157,7 +140,8 @@ void main() {
         );
         decoded++;
       }
-      expect(decoded, 4, reason: 'every Experiment event fixture is covered');
+      // Four Experiment events plus the two attributed conversion events.
+      expect(decoded, 6, reason: 'every v2 event fixture is covered');
 
       for (final batchFile
           in canonicalFixtureFiles(Directory('${root.path}/batches'))) {
@@ -529,6 +513,221 @@ void main() {
     );
   });
 
+  test('an active Experiment stamps conversions as v2 and keeps v1 otherwise',
+      () async {
+    const experiment = MosaicExperimentAttribution(
+      experimentId: 'experiment_checkout',
+      experimentVersionId: 'experiment_version_checkout_1',
+      experimentVariantId: 'variant_control',
+      experimentAllocationVersion: 'allocation_checkout_1',
+    );
+    const presentation = MosaicAnalyticsPresentationContext(
+      placementRequestId: 'placement_request_1',
+      paywallPresentationId: 'presentation_1',
+      attribution: MosaicAnalyticsAttribution(
+        paywallId: 'paywall_1',
+        paywallVersionId: 'paywall_version_1',
+      ),
+      providerId: 'app_store',
+      experiment: experiment,
+    );
+    const unattributed = MosaicAnalyticsPresentationContext(
+      placementRequestId: 'placement_request_2',
+      paywallPresentationId: 'presentation_2',
+      attribution: MosaicAnalyticsAttribution(
+        paywallId: 'paywall_1',
+        paywallVersionId: 'paywall_version_1',
+      ),
+      providerId: 'app_store',
+    );
+
+    // Conversion attribution carries the tuple; Product attribution never does,
+    // because `product_unavailable` forbids it.
+    expect(presentation.forConversion('product_1').experiment, experiment);
+    expect(presentation.forProduct('product_1').experiment, isNull);
+    expect(unattributed.forConversion('product_1').experiment, isNull);
+
+    final storage = MosaicMemoryAnalyticsStorage();
+    final transport = _RecordingTransport();
+    final runtime = _runtime(
+      storage,
+      MosaicIdentityController(
+        storage: MosaicMemoryIdentityStorage(),
+        namespace: 'd' * 64,
+      ),
+      _Clock(DateTime.utc(2026, 7, 26, 12)),
+      transport,
+    );
+    await runtime.setCollection(
+      environment:
+          const MosaicAnalyticsEnvironmentSettings(collectionEnabled: true),
+    );
+
+    Future<bool> conversion(
+      MosaicAnalyticsPresentationContext context,
+      MosaicAnalyticsEventName name,
+      Map<String, Object?> payload,
+    ) =>
+        runtime.record(
+          name: name,
+          correlation: context.correlation(purchaseAttemptId: 'attempt_1'),
+          attribution: context.forConversion('product_1'),
+          payload: payload,
+        );
+
+    expect(
+      await conversion(
+        presentation,
+        MosaicAnalyticsEventName.purchaseCompletedClient,
+        const <String, Object?>{
+          'outcome': 'purchased',
+          'durationMs': 5,
+          'observedEntitlementKeys': <String>[],
+        },
+      ),
+      isTrue,
+    );
+    expect(
+      await runtime.record(
+        name: MosaicAnalyticsEventName.productSelected,
+        correlation: presentation.correlation(),
+        attribution: presentation.forConversion('product_1'),
+        payload: const <String, Object?>{'source': 'user'},
+      ),
+      isTrue,
+    );
+    expect(
+      await conversion(
+        unattributed,
+        MosaicAnalyticsEventName.purchaseCompletedClient,
+        const <String, Object?>{
+          'outcome': 'purchased',
+          'durationMs': 5,
+          'observedEntitlementKeys': <String>[],
+        },
+      ),
+      isTrue,
+    );
+
+    // The attributed events must survive a restart: they are persisted as v2
+    // documents and reconstructed through the v2 decoder.
+    final reconstructed = _runtime(
+      storage,
+      MosaicIdentityController(
+        storage: MosaicMemoryIdentityStorage(),
+        namespace: 'd' * 64,
+      ),
+      _Clock(DateTime.utc(2026, 7, 26, 12)),
+      transport,
+    );
+    await reconstructed.setCollection(
+      environment:
+          const MosaicAnalyticsEnvironmentSettings(collectionEnabled: true),
+    );
+    expect((await reconstructed.diagnostics()).queuedEvents, 3);
+
+    // Versions are never mixed inside one batch, so the attributed events are
+    // delivered as v2 and the unattributed one as v1.
+    while (await reconstructed.flush() is MosaicAnalyticsFlushCompleted) {}
+    expect(transport.experimentBatches, hasLength(1));
+    expect(transport.batches, hasLength(1));
+    final attributed = transport.experimentBatches.single.events;
+    expect(attributed, hasLength(2));
+    for (final event in attributed) {
+      expect(event['eventSchemaVersion'], '2', reason: '${event['eventName']}');
+      expect(
+        (event['attribution']! as Map)['experimentVariantId'],
+        'variant_control',
+      );
+    }
+    expect(
+      attributed.map((event) => event['eventName']).toSet(),
+      <String>{'purchase_completed_client', 'product_selected'},
+    );
+    final plain = transport.batches.single.events.single;
+    expect(plain.eventSchemaVersion, '1');
+    expect(plain.attribution.experiment, isNull);
+    expect(plain.toJson().containsKey('experimentId'), isFalse);
+  });
+
+  test('Experiment attribution is all-or-none and conversion-only', () {
+    Map<String, Object?> attributed(
+      String eventName,
+      Map<String, Object?> attribution,
+    ) =>
+        <String, Object?>{
+          'eventId': 'event_1',
+          'eventSchemaVersion': '2',
+          'eventName': eventName,
+          'occurredAt': '2026-07-26T12:00:00.000Z',
+          'queuedAt': '2026-07-26T12:00:00.000Z',
+          'authority': 'client_observed',
+          'identity': <String, Object?>{
+            'installationId': 'installation_1',
+            'generation': 1,
+          },
+          'sessionId': 'session_1',
+          'context': <String, Object?>{
+            'platform': 'ios',
+            'sdkFamily': 'flutter',
+            'sdkVersion': '0.2.0-dev.11',
+          },
+          'correlation': <String, Object?>{
+            'paywallPresentationId': 'presentation_1',
+          },
+          'attribution': attribution,
+          'payload': <String, Object?>{'source': 'user'},
+        };
+    const complete = <String, Object?>{
+      'paywallId': 'paywall_1',
+      'paywallVersionId': 'paywall_version_1',
+      'mosaicProductId': 'product_1',
+      'experimentId': 'experiment_1',
+      'experimentVersionId': 'experiment_version_1',
+      'experimentVariantId': 'variant_1',
+      'experimentAllocationVersion': 'allocation_1',
+    };
+    expect(
+      MosaicAnalyticsEvent.fromJson(attributed('product_selected', complete))
+          .attribution
+          .experiment
+          ?.experimentVariantId,
+      'variant_1',
+    );
+
+    // A partial tuple cannot be interpreted, so the document is rejected.
+    final partial = Map<String, Object?>.from(complete)
+      ..remove('experimentVariantId');
+    expect(
+      () => MosaicAnalyticsEvent.fromJson(
+        attributed('product_selected', partial),
+      ),
+      throwsFormatException,
+    );
+
+    // The tuple is forbidden on every event that is not a conversion event.
+    expect(
+      () => MosaicAnalyticsEvent.fromJson(
+        attributed('paywall_dismissed', complete),
+      ),
+      throwsFormatException,
+    );
+
+    // A v1 event may never carry the tuple, and a v2 event must carry it.
+    final asV1 = attributed('product_selected', complete)
+      ..['eventSchemaVersion'] = '1';
+    expect(() => MosaicAnalyticsEvent.fromJson(asV1), throwsFormatException);
+    final withoutTuple = attributed('product_selected', <String, Object?>{
+      'paywallId': 'paywall_1',
+      'paywallVersionId': 'paywall_version_1',
+      'mosaicProductId': 'product_1',
+    });
+    expect(
+      () => MosaicAnalyticsEvent.fromJson(withoutTuple),
+      throwsFormatException,
+    );
+  });
+
   test('disposal and delivery survive an unavailable analytics storage',
       () async {
     final storage = _UnavailableAnalyticsStorage();
@@ -747,5 +946,46 @@ final class _UnavailableIdentityStorage implements MosaicIdentityStorage {
       throw const FileSystemException('Identity storage is unavailable.');
     }
     this.source = source;
+  }
+}
+
+/// Transport that retains the exact batches it was asked to deliver, so a test
+/// can assert that v1 and v2 events are never mixed inside one batch.
+final class _RecordingTransport
+    implements MosaicAnalyticsTransport, MosaicExperimentAnalyticsTransport {
+  final List<MosaicAnalyticsBatch> batches = <MosaicAnalyticsBatch>[];
+  final List<MosaicExperimentAnalyticsBatch> experimentBatches =
+      <MosaicExperimentAnalyticsBatch>[];
+
+  @override
+  Future<MosaicAnalyticsIngestionResponse> send(
+      MosaicAnalyticsBatch batch) async {
+    batches.add(batch);
+    return MosaicAnalyticsIngestionResponse(
+      batchId: batch.batchId,
+      receivedAt: batch.sentAt,
+      results: batch.events
+          .map((event) => MosaicAnalyticsIngestionResult(
+                eventId: event.eventId,
+                status: MosaicAnalyticsIngestionStatus.accepted,
+              ))
+          .toList(),
+    );
+  }
+
+  @override
+  Future<MosaicAnalyticsIngestionResponse> sendExperiment(
+      MosaicExperimentAnalyticsBatch batch) async {
+    experimentBatches.add(batch);
+    return MosaicAnalyticsIngestionResponse(
+      batchId: batch.batchId,
+      receivedAt: batch.sentAt,
+      results: batch.events
+          .map((event) => MosaicAnalyticsIngestionResult(
+                eventId: event['eventId']! as String,
+                status: MosaicAnalyticsIngestionStatus.accepted,
+              ))
+          .toList(),
+    );
   }
 }

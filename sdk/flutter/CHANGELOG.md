@@ -17,6 +17,27 @@
 - Add `MosaicIdentityController.lastSafeCode` and the
   `mosaicAnalyticsStorageUnavailableCode` /
   `mosaicIdentityStorageUnavailableCode` diagnostic codes.
+- Emit Analytics Event v2 conversion events for an Experiment presentation.
+  `product_selected` and the purchase lifecycle events now carry the immutable
+  all-or-none Experiment tuple whenever the presented Paywall is a successfully
+  exposed original Variant. Experiment conversion attribution joins solely on
+  that tuple, so emitting exposures on v2 while emitting conversions on v1
+  reported zero conversions for every Experiment, silently.
+- Conversions from a fallback presentation, and from a QA override, are emitted
+  without the tuple: neither is an exposed Variant presentation, and a
+  tuple-carrying fallback conversion can displace the Variant's own row in the
+  conversion denominator.
+- Accept and exactly re-encode the canonical attributed v2 conversion fixtures;
+  reject a partial tuple, a tuple on a non-conversion event, a v1 event carrying
+  a tuple, and a v2 event without one.
+- Deliver v2 events in a v2 batch and read the acknowledgement as v2. Previously
+  every Experiment batch was read as a delivery failure, retried, and dropped.
+- Accept `configurationDeliveryVersion: "3"` in the analytics context of a v2
+  event, matching the canonical schema.
+- Reject an incomplete rollout attribution tuple, and never emit one. A
+  `placement_paywall_selected` or `placement_no_paywall` event carrying an
+  assignment key type without its bucket and algorithm was permanently rejected
+  by ingestion.
 - Document honest installation (git pin or local path; not published to
   pub.dev) and record the known limitations register.
 

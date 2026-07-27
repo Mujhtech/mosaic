@@ -98,6 +98,78 @@ void main() {
     mosaic.dispose();
   });
 
+  test('only an exposed original Variant stamps conversion attribution', () {
+    final assignment = const MosaicExperimentAssignmentDecoder().decode(
+      jsonDecode(File(
+        '$root/protocol/fixtures/experiment-assignment/v1/running-ab.json',
+      ).readAsStringSync()),
+      production: true,
+    );
+    final envelope = const MosaicConfigurationDeliveryDecoder().decode(
+      File(
+        '$root/protocol/fixtures/configuration-delivery/v3/experiment-release.json',
+      ).readAsStringSync(),
+    );
+    final configuration = MosaicAcceptedConfiguration(
+      envelope: envelope,
+      source: MosaicConfigurationSource.bundledFallback,
+    );
+    final paywallVersion = envelope.release.paywallVersions.values.first;
+    MosaicExperimentAssigned assigned({required bool qaOverride}) =>
+        MosaicExperimentAssigned(
+          assignment: assignment,
+          variant: assignment.variants.first,
+          assignmentKeyType: 'installation',
+          bucket: 1118,
+          groupBucket: null,
+          qaOverride: qaOverride,
+        );
+    MosaicPlacementDecisionPaywall resolution({
+      MosaicExperimentAssigned? experiment,
+      MosaicExperimentAssigned? fallback,
+    }) =>
+        MosaicPlacementDecisionPaywall(
+          placementKey: 'export_pdf',
+          paywallVersion: paywallVersion,
+          configuration: configuration,
+          decision: null,
+          experiment: experiment,
+          experimentFallback: fallback,
+          experimentFallbackReason:
+              fallback == null ? null : 'product_unavailable',
+        );
+
+    // An exposed original-Variant presentation attributes its conversions.
+    expect(
+      mosaicConversionExperimentAttribution(
+        resolution(experiment: assigned(qaOverride: false)),
+      )?.experimentVariantId,
+      assignment.variants.first.id,
+    );
+
+    // A fallback presented the normal Placement. Its conversions must not claim
+    // the Variant: they would enter the Variant's conversion denominator and can
+    // displace the Variant's own row.
+    expect(
+      mosaicConversionExperimentAttribution(
+        resolution(fallback: assigned(qaOverride: false)),
+      ),
+      isNull,
+    );
+
+    // A QA override emits no statistical exposure, so it emits no attributed
+    // conversion either.
+    expect(
+      mosaicConversionExperimentAttribution(
+        resolution(experiment: assigned(qaOverride: true)),
+      ),
+      isNull,
+    );
+
+    // No Experiment at all: conversions stay on v1.
+    expect(mosaicConversionExperimentAttribution(resolution()), isNull);
+  });
+
   test('canonical Delivery v3 decodes atomically', () {
     final source = File(
       '$root/protocol/fixtures/configuration-delivery/v3/experiment-release.json',
