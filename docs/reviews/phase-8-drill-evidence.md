@@ -1593,7 +1593,7 @@ Beyond the five assigned pass-one defects (A–E above):
 | D3 Failed-migration recovery | **PASS** (readiness-on-pending expectation corrected: the API fails startup instead) |
 | D4 PostgreSQL backup and restore | **PASS** |
 | D5 Object-storage backup and restore | **PASS** |
-| D6 Process recovery | **PASS** on worker recovery and state integrity; **FAIL** on the observable drain (defect reported) |
+| D6 Process recovery | **PASS** on worker recovery and state integrity; the observable drain FAILED here and is **PASS** after the authorised fix (see the fix pass below) |
 | D7 Dependency failure | **PASS** (pass one; re-verified with the readiness fix) |
 | D8 Configuration delivery recovery | **PASS** (pass one) |
 | D9 Credential rotation | **PASS** |
@@ -1617,3 +1617,216 @@ away with the teardown. All drill scratch files — env files, keyring material,
 generated batches, helper scripts, backup artifacts — live outside the repository
 in the session scratchpad and were removed; nothing was left in the working tree
 except the fixes and this document.
+
+---
+
+## Owner-authorised fix pass (2026-07-27, after the pass-two drills)
+
+The orchestrator ruled the four reported items release-blocking/compatibility
+fixes and authorised a writer/schema sweep. All five are implemented, tested,
+and — where observable — re-verified against a rebuilt isolated installation
+(`mosaic-drill2`, `MOSAIC_VERSION=drill2-verify`).
+
+### 1. Pre-shutdown drain delay — Drill 6 drain assertion is now PASS
+
+`MOSAIC_HTTP_DRAIN_DELAY` (default `5s`, `0` disables, negative rejected at
+startup). Shutdown is now: `StartDraining()` → readiness answers 503 → wait the
+delay → `server.Shutdown()`.
+
+Re-verified by polling readiness at 100 ms while sending SIGTERM:
+
+```
+ -1.00s  status=200      {"data":{"status":"ready","version":"drill2-verify"}}
+ +0.38s  status=503      {"error":{"code":"draining","message":"The instance is shutting down…"}}
+ +5.40s  status=refused  connection refused
+observable draining window: 4.90s
+api: state=exited exit=0
+```
+
+Pass two recorded this as **FAIL** (200 → connection refused, no observable
+draining state). It is now **PASS**: a load balancer polling readiness gets a
+clean 503 for the full configured window before the listener closes, and the
+process still exits 0. The Drill 6 row in the pass-two status table should be
+read together with this section.
+
+Files: `internal/platform/config/config.go` (+ test), `cmd/api/main.go`,
+`.env.example`.
+
+### 2. A v1-only SDK is served again after an Experiment publishes
+
+Experiment publish wrote only v2 and v3 representations, so once an Experiment
+was published every v1-only SDK was answered `406` and could not fetch
+configuration at all. Publish now also stores a v1 representation.
+
+The first implementation projected v1 from the v2 envelope and produced a v1
+payload with **no Placements** — `placements` is v1-only vocabulary (v2 replaces
+it with `placementDecisions`), so the projection served a technically valid but
+useless document. Recorded because the drill caught it before it shipped:
+
+```
+v1 of release_000007 (projected)                 placements: []
+v1 of release_000005 (ordinary publish)          placements: ["verify_main","verify_stage"]
+```
+
+The publisher now carries the preceding Release's v1 representation forward and
+restamps its identity — an Experiment publish does not change Placement
+bindings — falling back to the projection only when there is no previous v1.
+
+Re-verified against a Release carrying an active Experiment:
+
+```
+advertises "1"      -> 200  application/vnd.mosaic.configuration+json;version=1
+   members: assetReferences, compatibility, contentDigest, environment, id,
+            number, paywallVersions, placements, productReferences, publishedAt
+   placements delivered: ["verify_main", "verify_stage"]
+advertises "2"      -> 200  …;version=2
+advertises "3,2,1"  -> 200  …;version=3
+advertises "3"      -> 200  …;version=3
+```
+
+Honest note: the `"2"` case first returned 406. The named detail added earlier in
+this pass explained it immediately —
+`decisionFeature outcome.paywall is required by this Configuration Release but
+was not advertised by the SDK` — and the fault was the drill client's header
+set, not the server. The verification client and `cmd/loadgen` now advertise the
+outcome features a real SDK sends. This is negotiation behaving correctly.
+
+Files: `internal/platform/experimentpostgres/repository.go` (+
+`delivery_v1_projection_test.go`), `cmd/loadgen/main.go`.
+
+### 3. The Experiment prerequisite has its own code and states the action
+
+```
+POST …/experiments/{id}/publish   (no Placement rule set published yet)
+-> 409 {"code":"experiment_placement_decision_required",
+        "message":"Publish a Placement rule set in this Environment before
+                   publishing an Experiment: the current Configuration Release
+                   carries no Placement Decision representation for an
+                   Experiment release to build on."}
+```
+
+Previously a generic `422 experiment_invalid`, which sent operators to inspect
+the Experiment rather than the Environment.
+
+Files: `internal/experiment/errors.go`,
+`internal/platform/experimentpostgres/repository.go`,
+`internal/transport/experiment/handler.go` (+ `handler_error_test.go`).
+
+### 4. A missing Asset object is a safe 404
+
+```
+GET /v1/sdk/assets/{id}/{digest}   (row present, object wiped from the bucket)
+-> 404 {"code":"asset_object_missing",
+        "message":"The Asset's stored bytes are not available."}
+GET …/{wrong digest}  -> 404 not_found          (unchanged)
+```
+
+The operator log still records the integrity problem in full
+(`asset object is referenced by the database but missing from object storage`,
+with `asset_id` and `storage_key`), so the diagnosis an operator needs is
+preserved while the SDK gets a signal it can act on. Object storage that is
+genuinely failing remains a retryable `503 asset_storage_failed`; the two are
+now distinguishable, which they were not when both were `500 internal_error`.
+
+Files: `internal/platform/objectstoreminio/store.go` (+
+`missing_object_test.go`), `internal/hostedpublishing/errors.go`,
+`internal/hostedpublishing/service_assets.go`,
+`internal/transport/hostedpublishing/handler.go` (+ test).
+
+### 5. Writer/schema drift sweep
+
+**Why.** Four defects of one shape were found during these drills: a migration
+requires a column, the repository write does not supply it, and nothing fails
+until a specific runtime path is exercised. Compilation proves nothing, because
+the column list is a string literal.
+
+**Method.** `scripts/check-writer-schema-drift.py` parses every migration's Up
+section, applies `CREATE TABLE`, `ADD COLUMN`, `ALTER COLUMN SET/DROP NOT NULL`,
+and `DROP COLUMN` in order to derive, per table, the columns that are NOT NULL
+with no default; extracts the column list of every literal `INSERT INTO <table>(…)`
+in the Go repositories; and reports any required column a writer omits. Run:
+
+```bash
+python3 scripts/check-writer-schema-drift.py [--verbose]   # exit 1 on drift
+```
+
+**Self-test.** The checker was validated by reintroducing the known
+`available_at` defect, which it caught:
+
+```
+DRIFT (1):
+  experiment_scheduling_jobs  apps/api/internal/platform/experimentpostgres/repository.go:827
+    omits required column(s): available_at
+```
+
+**Result.**
+
+```
+tables with literal INSERT writers: 88
+writes not analysed (dynamic SQL):  4
+DRIFT: none
+```
+
+All 88 tables are clean, covering 1–5 writers each and 1–22 required columns
+each (full per-table listing available from `--verbose`; the largest are
+`analytics_events` 22, `experiment_versions` 17, `experiment_daily_unique_units`
+15, `placement_rule_set_versions` 14, `provider_mapping_observations` 13,
+`placement_rule_set_draft_revisions` 13, `assets` 12, `analytics_deletion_jobs`
+12). The four writes the sweep does not analyse are the
+`INSERT INTO … SELECT …` carry-forwards in
+`experimentpostgres/repository.go:812-815`, which have no explicit column list;
+they select from the same table they insert into, so column order is consistent
+by construction, and they are already covered at prepare time by
+`TestReleaseClosureStatementsMatchTheSchema`.
+
+**Two further drift classes the column sweep cannot see were audited separately.**
+
+*Class B — the column is written but the bound Go value can be nil.* This is the
+`normalized_metadata` defect. All 39 NOT NULL `jsonb`/`bytea` columns without a
+default, across 20 tables, were enumerated and their writers inspected. Every
+one binds a literal (`'{}'`), an explicit conversion (`string(...)`,
+`[]byte(...)`), a helper that cannot return nil (`documentBytes`,
+`validationBytes`, `jsonObjectOrEmpty`), or a field the canonical protocol
+schema marks required — `analytics_events.payload` is required in both
+Analytics Event v1 and v2, so an accepted event always carries it. No further
+hits.
+
+*Class C — a nullable column read into a non-pointer target.* This is the
+`diagnostic_code` defect. 98 `SELECT`/`Scan` pairs were matched against derived
+per-column nullability; after excluding primary keys and pointer targets, 12
+candidates remained and each was inspected by hand. All 12 are safe: nine scan
+into `*time.Time`/pointer fields declared in another package (which the
+heuristic could not see), and three are guarded by an `IS NOT NULL` predicate or
+a status predicate in the query itself
+(`analytics/queries.go:261,477`, `analytics/jobs.go:82`,
+`experimentpostgres/repository.go:562`). One residual is benign but worth
+recording: `environment_release_state.current_release_id` is scanned into a
+`string`, so a NULL produces a scan error rather than an empty value — the
+existing `if e != nil || oldID == ""` branch handles both identically.
+
+No further drift was found. The two defects already fixed in this pass
+(`normalized_metadata`, `diagnostic_code`) remain the only members of classes B
+and C.
+
+### Validation for this fix pass
+
+```
+gofmt -l internal cmd                       clean
+go vet ./...                                clean
+go build ./...                              OK
+go test -p 1 -count=1 ./...                 exit 0, 31 packages ok, 0 skipped
+  (DATABASE_TEST_URL + object-store vars pointed at the drill services)
+python3 scripts/check-writer-schema-drift.py   DRIFT: none (exit 0)
+```
+
+### Tests added in this fix pass
+
+| Test | Risk it protects |
+| --- | --- |
+| `TestDrainDelayDefaultsToAnObservableWindow` (`platform/config`) | A zero default would silently restore the traffic-shedding behaviour this fix exists to remove. Pins a non-zero default that fits inside the shutdown timeout, keeps `0` as a deliberate opt-out, and rejects a negative value instead of ignoring it. |
+| `TestDeliveryV1ProjectionKeepsLegacyClientsServed` (`experimentpostgres`) | A v1-only SDK must keep receiving a usable Release after an Experiment publishes. Asserts the members a v1 client renders survive (including `placements`, whose loss made the first implementation useless), that non-v1 vocabulary does not leak, that the digest is recomputed over the projection, and that the result passes the publisher's own v1 validation. |
+| `TestPlacementDecisionPrerequisiteIsNamedAndActionable` (`transport/experiment`) | The prerequisite must not regress to a generic code. Asserts the dedicated code and that the message names the action, not just the failure. |
+| `TestMissingObjectIsDistinguishedFromStorageFailure` (`objectstoreminio`) | The 404-versus-503 decision depends entirely on this classification. Pins absent key/bucket as missing, access-denied and transport failures as not, unwrapping, and the `ObjectNotFound()` contract callers use without importing the package. |
+| `TestMissingAssetObjectIsNotFoundAndFailingStorageIsRetryable` (`transport/hostedpublishing`) | An SDK must be able to tell "these bytes are gone, use the bundled Asset" from "storage is down, retry". Asserts both mappings together so neither can drift into the other. |
+
+No new test suite, framework, or dependency was introduced.

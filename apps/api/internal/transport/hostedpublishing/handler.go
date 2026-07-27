@@ -257,6 +257,8 @@ func writeError(w http.ResponseWriter, r *http.Request, err error) {
 		status, code, message = http.StatusConflict, "asset_not_ready", "The Asset is not ready for this operation."
 	case errors.Is(err, hostedpublishing.ErrAssetReferenced):
 		status, code, message = http.StatusConflict, "asset_referenced", "The Asset is referenced and its bytes must be retained."
+	case errors.Is(err, hostedpublishing.ErrAssetObjectMissing):
+		status, code, message = http.StatusNotFound, "asset_object_missing", "The Asset's stored bytes are not available."
 	case errors.Is(err, hostedpublishing.ErrAssetStorage):
 		status, code, message = http.StatusServiceUnavailable, "asset_storage_failed", "Asset storage is temporarily unavailable."
 	case errors.Is(err, hostedpublishing.ErrPlacementUnpublished):

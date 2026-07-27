@@ -10,6 +10,7 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 
 	"github.com/rs/zerolog"
 
@@ -321,6 +322,19 @@ func run() (runErr error) {
 	// Readiness flips first so a load balancer stops routing new work before
 	// in-flight requests are drained.
 	readiness.StartDraining()
+
+	// Then keep serving for the drain delay. http.Server.Shutdown closes every
+	// listener immediately, so without this pause the draining state is
+	// unobservable: a load balancer polling readiness gets connection-refused
+	// instead of the 503 that tells it to stop routing, and every deploy sheds
+	// traffic at the edge. The delay is the window in which readiness answers
+	// 503 while the instance still serves requests already in flight.
+	if delay := cfg.HTTP.DrainDelay; delay > 0 {
+		logger.Info().Dur("drain_delay", delay).Msg("api draining: readiness now reports unavailable")
+		timer := time.NewTimer(delay)
+		defer timer.Stop()
+		<-timer.C
+	}
 
 	shutdownContext, cancel := context.WithTimeout(
 		context.Background(),

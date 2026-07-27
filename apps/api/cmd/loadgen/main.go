@@ -264,7 +264,7 @@ func setCapabilityHeaders(request *http.Request, opts options) {
 	}
 	request.Header.Set("Mosaic-Paywall-Capabilities", strings.Join(capabilities, ","))
 	request.Header.Set("Mosaic-Placement-Decision-Versions", "1")
-	request.Header.Set("Mosaic-Decision-Features", "source.device.platform,source.identity.user_present")
+	request.Header.Set("Mosaic-Decision-Features", "source.device.platform,source.identity.user_present,outcome.paywall,outcome.no_paywall,outcome.fallback")
 	request.Header.Set("Mosaic-Bucketing-Algorithms", "sha256_length_prefixed_v1")
 	request.Header.Set("Mosaic-Experiment-Assignment-Versions", "1")
 	request.Header.Set("Mosaic-Experiment-Features", strings.Join(experimentFeatures, ","))

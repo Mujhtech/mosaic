@@ -2,6 +2,7 @@ package objectstoreminio
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"time"
@@ -115,15 +116,48 @@ func (s *Store) Put(ctx context.Context, key string, reader io.Reader, size int6
 // Open returns a reader for an object. The span covers opening and validating
 // the handle; the returned stream stays bound to the caller's context because
 // the caller, not this package, owns how long the body is streamed for.
+// objectNotFound marks an object-store failure that means "this key is not
+// there", as distinct from "the object store is failing". Callers classify it
+// through the ObjectNotFound() method rather than importing this package, so a
+// missing Asset can be answered 404 instead of 500.
+type objectNotFound struct{ err error }
+
+func (e *objectNotFound) Error() string        { return e.err.Error() }
+func (e *objectNotFound) Unwrap() error        { return e.err }
+func (e *objectNotFound) ObjectNotFound() bool { return true }
+
+// missingKey reports whether an S3 error means the key or bucket is absent.
+// It unwraps, so a caller may classify an error it has already annotated.
+func missingKey(err error) bool {
+	var response minio.ErrorResponse
+	if !errors.As(err, &response) {
+		response = minio.ToErrorResponse(err)
+	}
+	switch response.Code {
+	case "NoSuchKey", "NoSuchBucket":
+		return true
+	}
+	return false
+}
+
 func (s *Store) Open(ctx context.Context, key string) (io.ReadCloser, error) {
 	_, span := s.span(ctx, "open")
 	object, err := s.client.GetObject(ctx, s.bucket, key, minio.GetObjectOptions{})
 	if err != nil {
-		return nil, finish(span, fmt.Errorf("open object: %w", err))
+		wrapped := fmt.Errorf("open object: %w", err)
+		if missingKey(err) {
+			return nil, finish(span, &objectNotFound{err: wrapped})
+		}
+		return nil, finish(span, wrapped)
 	}
+	// GetObject is lazy: a missing key only surfaces on Stat.
 	if _, err := object.Stat(); err != nil {
 		_ = object.Close()
-		return nil, finish(span, fmt.Errorf("stat object: %w", err))
+		wrapped := fmt.Errorf("stat object: %w", err)
+		if missingKey(err) {
+			return nil, finish(span, &objectNotFound{err: wrapped})
+		}
+		return nil, finish(span, wrapped)
 	}
 	return object, finish(span, nil)
 }

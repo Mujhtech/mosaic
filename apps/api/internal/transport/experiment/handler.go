@@ -388,6 +388,11 @@ func writeError(w http.ResponseWriter, r *http.Request, err error) {
 		response.Error(w, r, response.NewAPIError(409, "idempotency_conflict", "The idempotency key was already used for different input."))
 	case errors.Is(err, experiment.ErrConflict):
 		response.Error(w, r, response.NewAPIError(409, "experiment_transition_blocked", "The Experiment action is not valid in its current state."))
+	case errors.Is(err, experiment.ErrPlacementDecisionRequired):
+		response.Error(w, r, response.NewAPIError(409, "experiment_placement_decision_required",
+			"Publish a Placement rule set in this Environment before publishing an Experiment: "+
+				"the current Configuration Release carries no Placement Decision representation for an "+
+				"Experiment release to build on."))
 	case errors.Is(err, experiment.ErrInvalid):
 		x := response.NewAPIError(422, "experiment_invalid", "The Experiment request is not valid.")
 		// Name the precondition that refused. Without it every one of the

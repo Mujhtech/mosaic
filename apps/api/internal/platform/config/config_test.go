@@ -382,3 +382,33 @@ func TestValidationErrorReportsEveryProblem(t *testing.T) {
 		t.Fatalf("problems = %#v, want every problem reported in one pass", validationError.Problems)
 	}
 }
+
+// A rolling restart sheds traffic at the edge unless readiness reports 503 for
+// long enough that a load balancer notices before the listener closes. The
+// default must therefore be non-zero; 0 is a deliberate opt-out, and a negative
+// value is a configuration error rather than a silently-ignored one.
+func TestDrainDelayDefaultsToAnObservableWindow(t *testing.T) {
+	t.Setenv("DATABASE_URL", "postgres://mosaic:mosaic@localhost:5432/mosaic?sslmode=disable")
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("load configuration: %v", err)
+	}
+	if cfg.HTTP.DrainDelay <= 0 {
+		t.Fatalf("MOSAIC_HTTP_DRAIN_DELAY default = %s, want a non-zero window", cfg.HTTP.DrainDelay)
+	}
+	if cfg.HTTP.DrainDelay >= cfg.HTTP.ShutdownTimeout {
+		t.Fatalf("drain delay %s must leave room inside the shutdown timeout %s",
+			cfg.HTTP.DrainDelay, cfg.HTTP.ShutdownTimeout)
+	}
+
+	t.Setenv("MOSAIC_HTTP_DRAIN_DELAY", "-1s")
+	if _, err := Load(); err == nil {
+		t.Fatal("a negative drain delay was accepted")
+	}
+
+	t.Setenv("MOSAIC_HTTP_DRAIN_DELAY", "0s")
+	cfg, err = Load()
+	if err != nil || cfg.HTTP.DrainDelay != 0 {
+		t.Fatalf("0 must be an accepted opt-out: delay=%s err=%v", cfg.HTTP.DrainDelay, err)
+	}
+}

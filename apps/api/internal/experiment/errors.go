@@ -24,6 +24,14 @@ type ValidationError struct{ Result ValidationResult }
 
 func (e *ValidationError) Error() string { return "experiment validation failed" }
 
+// ErrPlacementDecisionRequired means the Environment's current Configuration
+// Release carries no Placement Decision (Delivery v2) representation, so no
+// Delivery v3 Release can be produced from it. An Experiment cannot be
+// published until a Placement rule set has been published in that Environment.
+// It has its own code because it is a prerequisite an operator can act on, not
+// a malformed request.
+var ErrPlacementDecisionRequired = errors.New("environment has no Placement Decision release")
+
 // InvalidError names why an Experiment request was rejected.
 //
 // Fifteen distinct publish preconditions all returned a bare ErrInvalid, so the

@@ -3,6 +3,7 @@ package hostedpublishing
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -189,6 +190,16 @@ func (s *Service) OpenAsset(ctx context.Context, assetID, digest string) (AssetO
 	}
 	body, err := s.objects.Open(ctx, asset.StorageKey)
 	if err != nil {
+		var missing interface{ ObjectNotFound() bool }
+		if errors.As(err, &missing) && missing.ObjectNotFound() {
+			// A referenced object that is not in the bucket is a data-integrity
+			// problem for the operator (see the missing-object detection in
+			// scripts/restore-objects.sh) but a plain "not found" for the caller.
+			zerolog.Ctx(ctx).Error().Err(err).Str("asset_id", asset.ID).
+				Str("storage_key", asset.StorageKey).
+				Msg("asset object is referenced by the database but missing from object storage")
+			return AssetObject{}, ErrAssetObjectMissing
+		}
 		zerolog.Ctx(ctx).Error().Err(err).Str("asset_id", asset.ID).Msg("asset storage read failed")
 		return AssetObject{}, ErrAssetStorage
 	}

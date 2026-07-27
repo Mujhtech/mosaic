@@ -144,14 +144,20 @@ type DatabaseConfig struct {
 }
 
 type HTTPConfig struct {
-	Address                  string        `envconfig:"MOSAIC_HTTP_ADDRESS" default:":8080"`
-	ReadHeaderTimeout        time.Duration `envconfig:"MOSAIC_HTTP_READ_HEADER_TIMEOUT" default:"5s"`
-	ReadTimeout              time.Duration `envconfig:"MOSAIC_HTTP_READ_TIMEOUT" default:"120s"`
-	WriteTimeout             time.Duration `envconfig:"MOSAIC_HTTP_WRITE_TIMEOUT" default:"120s"`
-	IdleTimeout              time.Duration `envconfig:"MOSAIC_HTTP_IDLE_TIMEOUT" default:"60s"`
-	HandlerTimeout           time.Duration `envconfig:"MOSAIC_HTTP_HANDLER_TIMEOUT" default:"10s"`
-	UploadTimeout            time.Duration `envconfig:"MOSAIC_HTTP_UPLOAD_TIMEOUT" default:"90s"`
-	IngestTimeout            time.Duration `envconfig:"MOSAIC_HTTP_INGEST_TIMEOUT" default:"30s"`
+	Address           string        `envconfig:"MOSAIC_HTTP_ADDRESS" default:":8080"`
+	ReadHeaderTimeout time.Duration `envconfig:"MOSAIC_HTTP_READ_HEADER_TIMEOUT" default:"5s"`
+	ReadTimeout       time.Duration `envconfig:"MOSAIC_HTTP_READ_TIMEOUT" default:"120s"`
+	WriteTimeout      time.Duration `envconfig:"MOSAIC_HTTP_WRITE_TIMEOUT" default:"120s"`
+	IdleTimeout       time.Duration `envconfig:"MOSAIC_HTTP_IDLE_TIMEOUT" default:"60s"`
+	HandlerTimeout    time.Duration `envconfig:"MOSAIC_HTTP_HANDLER_TIMEOUT" default:"10s"`
+	UploadTimeout     time.Duration `envconfig:"MOSAIC_HTTP_UPLOAD_TIMEOUT" default:"90s"`
+	IngestTimeout     time.Duration `envconfig:"MOSAIC_HTTP_INGEST_TIMEOUT" default:"30s"`
+	// DrainDelay is how long the instance keeps serving after readiness flips
+	// to draining and before the HTTP listener closes. Without it the listener
+	// closes in the same instant readiness flips, so a load balancer polling
+	// readiness sees connection-refused rather than a clean 503 and routes
+	// traffic into a closing instance. 0 disables the wait.
+	DrainDelay               time.Duration `envconfig:"MOSAIC_HTTP_DRAIN_DELAY" default:"5s"`
 	ShutdownTimeout          time.Duration `envconfig:"MOSAIC_HTTP_SHUTDOWN_TIMEOUT" default:"20s"`
 	TelemetryShutdownTimeout time.Duration `envconfig:"MOSAIC_TELEMETRY_SHUTDOWN_TIMEOUT" default:"5s"`
 	CORSAllowedOrigins       []string      `envconfig:"MOSAIC_CORS_ALLOWED_ORIGINS" default:"http://localhost:3000,http://127.0.0.1:3000"`
@@ -350,6 +356,9 @@ func (cfg Config) validateHTTP(report *problems, productionLike bool) {
 		"MOSAIC_HTTP_SHUTDOWN_TIMEOUT":      cfg.HTTP.ShutdownTimeout,
 		"MOSAIC_TELEMETRY_SHUTDOWN_TIMEOUT": cfg.HTTP.TelemetryShutdownTimeout,
 	})
+	if cfg.HTTP.DrainDelay < 0 {
+		report.add("MOSAIC_HTTP_DRAIN_DELAY must not be negative")
+	}
 	for key, value := range map[string]time.Duration{
 		"MOSAIC_HTTP_HANDLER_TIMEOUT": cfg.HTTP.HandlerTimeout,
 		"MOSAIC_HTTP_UPLOAD_TIMEOUT":  cfg.HTTP.UploadTimeout,

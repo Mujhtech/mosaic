@@ -551,7 +551,7 @@ func (r *Repository) publishRelease(ctx context.Context, tx pgx.Tx, scope experi
 	// then cannot produce a v3 Release. Say so: the generic
 	// `emitted_delivery_invalid` sent the caller looking at the Experiment.
 	if version, _ := envelope["configurationDeliveryVersion"].(string); version != "2" {
-		return "", experiment.Invalid("environment_release_has_no_placement_decision_contract")
+		return "", experiment.ErrPlacementDecisionRequired
 	}
 	if e = validateDeliveryPayload(v2, "2"); e != nil {
 		return "", e
@@ -660,6 +660,54 @@ func (r *Repository) publishRelease(ctx context.Context, tx pgx.Tx, scope experi
 	if e != nil {
 		return "", persistence(e)
 	}
+	// Legacy projection: a v1-only SDK must still receive the highest
+	// representation it can read.
+	//
+	// The preceding Release's v1 representation is the authoritative v1 view:
+	// publishing an Experiment does not change the Environment's
+	// Placement-to-Paywall bindings, and `placements` exists only in v1 (v2
+	// replaces it with placementDecisions), so projecting from the v2 envelope
+	// alone produces a v1 payload with no Placements at all -- served, but
+	// useless to the client it exists for. Carry the previous v1 forward and
+	// restamp its identity; fall back to the projection only when there is no
+	// previous v1 to carry.
+	var previousV1 []byte
+	if e = tx.QueryRow(ctx, `SELECT payload_bytes FROM configuration_release_representations WHERE release_id=$1 AND delivery_contract_version='1'`, oldID).Scan(&previousV1); e != nil && !errors.Is(e, pgx.ErrNoRows) {
+		return "", persistence(e)
+	}
+	var v1Release map[string]any
+	if len(previousV1) > 0 {
+		var previousEnvelope map[string]any
+		if e = json.Unmarshal(previousV1, &previousEnvelope); e != nil {
+			return "", experiment.Invalid("previous_v1_representation_unreadable")
+		}
+		v1Release, _ = previousEnvelope["release"].(map[string]any)
+	}
+	if v1Release == nil {
+		v1Release, e = deliveryV1Projection(release)
+		if e != nil {
+			return "", e
+		}
+	} else {
+		v1Release["id"] = releaseID
+		v1Release["number"] = number + 1
+		v1Release["publishedAt"] = now.Format("2006-01-02T15:04:05.000Z")
+		if e = setReleaseContentDigest(v1Release); e != nil {
+			return "", e
+		}
+	}
+	v1, e := json.Marshal(map[string]any{"configurationDeliveryVersion": "1", "release": v1Release})
+	if e != nil {
+		return "", fmt.Errorf("marshal delivery v1: %w", e)
+	}
+	if e = validateDeliveryPayload(v1, "1"); e != nil {
+		return "", e
+	}
+	sum1 := sha256.Sum256(v1)
+	_, e = tx.Exec(ctx, `INSERT INTO configuration_release_representations(release_id,environment_id,delivery_contract_version,payload,payload_bytes,content_hash,created_at) VALUES($1,$2,'1',$3::jsonb,$4::bytea,$5,$6)`, releaseID, scope.EnvironmentID, string(v1), v1, hex.EncodeToString(sum1[:]), now)
+	if e != nil {
+		return "", persistence(e)
+	}
 	// pgx uses the extended protocol, which accepts exactly one statement per
 	// parameterized Exec. These four carries were previously one semicolon-joined
 	// string, so every Experiment publish failed with SQLSTATE 42601 ("cannot
@@ -682,6 +730,56 @@ func (r *Repository) publishRelease(ctx context.Context, tx pgx.Tx, scope experi
 	}
 	_, e = tx.Exec(ctx, `UPDATE environment_release_state SET current_release_id=$1,last_release_number=$2,updated_at=$3 WHERE environment_id=$4`, releaseID, number+1, now, scope.EnvironmentID)
 	return releaseID, persistence(e)
+}
+
+// deliveryV1Keys is the exact member set of a Delivery v1 Release. The v1
+// projection is built by whitelisting these rather than deleting the v2/v3
+// members, so a future contract addition cannot leak into the legacy view.
+var deliveryV1Keys = []string{
+	"id", "number", "environment", "publishedAt",
+	"compatibility", "placements", "paywallVersions", "productReferences", "assetReferences",
+}
+
+// deliveryV1Projection renders the Delivery v1 view of a v2/v3 Release.
+//
+// Negotiation selects the highest representation a client can read, and a
+// v1-only SDK can read v1. Before this, publishing an Experiment produced a
+// Release carrying only v2 and v3 representations, so every v1-only SDK was
+// answered 406 and could not fetch configuration at all until it upgraded --
+// the opposite of the stated compatibility guarantee. The v1 projection simply
+// contains no Placement decisions and no Experiments: a legacy client keeps
+// receiving the Environment's Placement-to-Paywall bindings and renders them.
+func deliveryV1Projection(release map[string]any) (map[string]any, error) {
+	projected := make(map[string]any, len(deliveryV1Keys))
+	for _, key := range deliveryV1Keys {
+		if value, ok := release[key]; ok {
+			projected[key] = value
+		}
+	}
+	// v1 compatibility declares Paywall protocols and atomic acceptance only;
+	// the Placement-decision and Experiment contracts are not v1 vocabulary.
+	compatibility, _ := release["compatibility"].(map[string]any)
+	v1Compatibility := map[string]any{"acceptance": "atomic"}
+	if compatibility != nil {
+		if protocols, ok := compatibility["paywallProtocols"]; ok {
+			v1Compatibility["paywallProtocols"] = protocols
+		}
+	}
+	projected["compatibility"] = v1Compatibility
+	// The environment member is narrower in v1: identity only.
+	if environment, ok := release["environment"].(map[string]any); ok {
+		v1Environment := map[string]any{}
+		for _, key := range []string{"id", "key"} {
+			if value, present := environment[key]; present {
+				v1Environment[key] = value
+			}
+		}
+		projected["environment"] = v1Environment
+	}
+	if err := setReleaseContentDigest(projected); err != nil {
+		return nil, err
+	}
+	return projected, nil
 }
 
 func setReleaseContentDigest(release map[string]any) error {
