@@ -90,6 +90,30 @@ describe("hosted query recovery state", () => {
       expect(description).not.toContain("changed since it was loaded")
     })
 
+    it("renders the 406 capability details so the failed requirement is actionable", () => {
+      const state = resolveHostedQueryState({
+        ...baseOptions,
+        error: codedError("unsupported_capability", 406, {
+          capability: "Mosaic-Paywall-Capabilities",
+          reason: "malformed",
+          requirement: "configurationDeliveryVersion",
+          version: "1",
+        }),
+        scope,
+      })
+
+      expect(state.kind).toBe("error")
+      const details = "details" in state ? state.details : undefined
+      expect(details).toEqual([
+        { label: "Requirement", value: "configurationDeliveryVersion" },
+        { label: "Capability", value: "Mosaic-Paywall-Capabilities" },
+        { label: "Version", value: "1" },
+        { label: "Reason", value: "malformed" },
+      ])
+      const description = "description" in state ? state.description : ""
+      expect(description).not.toContain("server prose")
+    })
+
     it("points a disabled analytics Environment at Environment settings", () => {
       const state = resolveHostedQueryState({
         ...baseOptions,

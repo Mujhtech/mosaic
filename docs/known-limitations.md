@@ -544,22 +544,6 @@ failure.
 - GA safety: a diagnosability gap on a read-only path. The request fails
   closed with the correct status; no data is returned or mutated.
 
-### Some export routes may sit in a broader rate-limit family than planned
-
-- Surface: per-surface HTTP rate limiting (`auth`, `delivery`, `ingestion`,
-  `api`, `decision` families); analytics export routes.
-- Platforms: server (operators).
-- Symptom: rate-limit families are narrower than originally planned for some
-  export routes, which may share the general `api` family's budget rather than
-  having their own. (Verify at integration — this entry is reconciled against
-  the backend fix report for this round.)
-- Workaround: tune the affected family's `MOSAIC_*_REQUESTS_PER_MINUTE` /
-  `_BURST` variables; rejections are observable as
-  `mosaic.http.rate_limit.rejections` by surface and carry `Retry-After`.
-- Planned resolution: dedicated family assignment post-GA if confirmed.
-- GA safety: limits fail closed with `429` and `Retry-After`; the only effect
-  is coarser-grained throttling, never unthrottled traffic.
-
 ## Dashboard
 
 Each entry is owner-accepted for v1 General Availability. None falls into a

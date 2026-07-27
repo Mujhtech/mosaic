@@ -22,13 +22,6 @@ jobs:
         options: >-
           --health-cmd "pg_isready -U mosaic_ci"
           --health-interval 5s --health-timeout 5s --health-retries 12
-      minio:
-        image: bitnami/minio:latest
-        env:
-          MINIO_ROOT_USER: mosaic_ci
-          MINIO_ROOT_PASSWORD: mosaic_ci_secret
-          MINIO_DEFAULT_BUCKETS: mosaic-ci-assets
-        ports: ["9000:9000"]
     env:
       DATABASE_TEST_URL: postgres://mosaic_ci:mosaic_ci_secret@localhost:5432/mosaic_ci?sslmode=disable
       OBJECT_STORAGE_TEST_ENDPOINT: localhost:9000
@@ -37,6 +30,17 @@ jobs:
       OBJECT_STORAGE_TEST_BUCKET: mosaic-ci-assets
     steps:
       - uses: actions/checkout@v4
+      - name: Start MinIO (pinned to the Compose version)
+        run: |
+          docker run -d --name mosaic-ci-minio -p 9000:9000 \
+            -e MINIO_ROOT_USER=mosaic_ci -e MINIO_ROOT_PASSWORD=mosaic_ci_secret \
+            minio/minio:RELEASE.2025-07-23T15-54-02Z server /data
+          for i in $(seq 1 30); do
+            curl -fsS http://localhost:9000/minio/health/live && break; sleep 2
+          done
+          docker run --rm --network host \
+            minio/mc:RELEASE.2025-07-21T05-28-08Z \
+            sh -c "mc alias set ci http://localhost:9000 mosaic_ci mosaic_ci_secret && mc mb --ignore-existing ci/mosaic-ci-assets"
       - uses: actions/setup-go@v5
         with:
           go-version-file: apps/api/go.mod

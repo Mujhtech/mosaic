@@ -287,7 +287,7 @@ was **not** regenerated here — that file is the dashboard owner's.
 | sdk/android ./gradlew test | PASS — 156 tests, 0 failures |
 | sdk/ios swift test | PASS — 123 tests, 1 skipped, 0 failures |
 | npm audit --omit=dev (dashboard) | PASS — 0 vulnerabilities |
-| npm audit --omit=dev (protocol) | **OPEN** — 1 high (`fast-uri`), protocol owner |
+| npm audit --omit=dev (protocol) | **CLOSED** — `fast-uri` patched (commit 1369c1e); re-run reports 0 vulnerabilities |
 | `docs/backend/openapi.yaml` parse | PASS — 128 paths, 266 schemas |
 | `docker compose config` | PASS |
 
