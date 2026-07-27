@@ -183,9 +183,11 @@ the exact sequence executed and verified in Drill 1.
    key is a `422` field error.
 5. **Bind it** — `PUT .../placements/{placementId}/binding` to the Paywall.
 6. **Publish** — `POST .../environments/{environmentId}/publish` → 201 with a
-   Release and its `contentHash`. **The first publish requires at least one
-   Placement bound to the Paywall**; publishing with none returns
-   `409 placement_unpublished`.
+   Release and its `contentHash`. Publish (and Placement rule-set publish)
+   requires an **`Idempotency-Key` header** — any unique string such as
+   `uuidgen` output; without it the API returns `428 precondition_required`.
+   **The first publish requires at least one Placement bound to the
+   Paywall**; publishing with none returns `409 placement_unpublished`.
 7. **Create a public SDK key** —
    `POST /v1/environments/{environmentId}/api-keys` with kind `public_sdk`.
    The response nests `data.apiKey` (metadata) and `data.secret`; **the secret
@@ -195,22 +197,31 @@ the exact sequence executed and verified in Drill 1.
 
 This is the request every SDK makes; running it once proves the delivery path:
 
+The endpoint also requires `Mosaic-Paywall-Capabilities` — the full Paywall
+Protocol 0.2 capability list every SDK sends automatically. Without it a
+hand-rolled request returns `406 unsupported_capability` naming the header;
+that is negotiation working, not a fault. A complete request:
+
 ```bash
+CAPS="accessibility.metadata,action.close,action.navigateBack,action.navigateTo,action.openExternalUrl,action.purchase,action.restore,asset.bundledImage,asset.bundledVideo,asset.remoteImage,asset.remoteVideo,component.button,component.carousel,component.countdown,component.featureList,component.icon,component.image,component.productBadge,component.productCard,component.productSelector,component.switch,component.text,condition.switchVisibility,fallback.asset,fallback.product,layout.heightSizing,layout.outerInsets,layout.scrollContainer,layout.sizing,layout.stack,localization.catalogs,localization.productTemplate,localization.rtl,navigation.screens,navigation.sheets,outcome.normalized,product.references,style.box,style.clipping,style.colors,style.designTokens,style.gradientBackground,style.mediaBackground,style.productCardStates,style.shadow,style.typography,visibility.static"
 curl -si http://localhost:8080/v1/sdk/configuration \
   -H "Authorization: Bearer <public SDK key secret>" \
   -H "Mosaic-SDK-Platform: ios" \
   -H "Mosaic-SDK-Version: 1.0.0" \
   -H "Mosaic-Configuration-Versions: 3,2,1" \
-  -H "Mosaic-Paywall-Protocol-Versions: 0.2"
+  -H "Mosaic-Paywall-Protocol-Versions: 0.2" \
+  -H "Mosaic-Paywall-Capabilities: $CAPS"
 ```
 
-Expect `200` with `Content-Type: application/vnd.mosaic.configuration+json`,
-an `ETag` equal to `"sha256-<the Release contentHash>"`, and
-`Cache-Control: private, max-age=60, stale-if-error=86400`. Negotiation
-selects the highest delivery contract both sides fully support — a request
-advertising no Placement-decision or Experiment capability headers is served
-contract v1 even when it lists `3,2,1`; that is the negotiation rule, not an
-error. Real SDKs send the full capability set for you.
+Expect `200` with `Content-Type: application/vnd.mosaic.configuration+json`
+and `Cache-Control: private, max-age=60, stale-if-error=86400`. The `ETag`
+identifies the exact negotiated representation (a SHA-256 of its bytes) — it
+is **not** the Release `contentHash` from the publish response, and different
+negotiated contract versions produce different ETags for the same Release.
+Negotiation selects the highest delivery contract both sides fully support —
+a request advertising no Placement-decision or Experiment capability headers
+is served contract v1 even when it lists `3,2,1`; that is the negotiation
+rule, not an error. Real SDKs send the full capability set for you.
 
 Two first-run behaviours worth knowing now:
 
