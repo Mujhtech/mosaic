@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
-	"net"
 	"net/http"
 	"strconv"
 	"strings"
@@ -20,6 +19,7 @@ import (
 
 	"github.com/Mujhtech/mosaic/apps/api/internal/hostedpublishing"
 	"github.com/Mujhtech/mosaic/apps/api/internal/platform/authn"
+	"github.com/Mujhtech/mosaic/apps/api/internal/platform/httpserver/httpmiddleware"
 	"github.com/Mujhtech/mosaic/apps/api/internal/platform/httpserver/response"
 	"github.com/Mujhtech/mosaic/apps/api/internal/platform/requestvalidation"
 )
@@ -724,7 +724,7 @@ func recordDelivery(r *http.Request, surface string, notModified bool) {
 }
 
 func (h *Handler) sdkConfiguration(w http.ResponseWriter, r *http.Request) {
-	if !h.allowDelivery(w, r, "ip:"+requestIP(r)) {
+	if !h.allowDelivery(w, r, "ip:"+httpmiddleware.ClientIP(r)) {
 		return
 	}
 	capabilities, err := capabilityRequestFromHeaders(r)
@@ -776,7 +776,7 @@ func (h *Handler) sdkConfiguration(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) sdkCommerceConfiguration(w http.ResponseWriter, r *http.Request) {
-	if !h.allowDelivery(w, r, "ip:"+requestIP(r)) {
+	if !h.allowDelivery(w, r, "ip:"+httpmiddleware.ClientIP(r)) {
 		return
 	}
 	if !headerContains(r.Header.Get("Accept"), commerceContentType) &&
@@ -853,12 +853,4 @@ func (h *Handler) allowDelivery(w http.ResponseWriter, r *http.Request, key stri
 	w.Header().Set("Retry-After", strconv.FormatInt(seconds, 10))
 	response.Error(w, r, response.NewAPIError(http.StatusTooManyRequests, "rate_limited", "Too many configuration requests. Retry later."))
 	return false
-}
-
-func requestIP(r *http.Request) string {
-	host, _, err := net.SplitHostPort(r.RemoteAddr)
-	if err == nil {
-		return host
-	}
-	return r.RemoteAddr
 }
