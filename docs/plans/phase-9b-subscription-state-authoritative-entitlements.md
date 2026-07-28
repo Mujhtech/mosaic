@@ -77,8 +77,8 @@ Implementation of gated sections must not begin until each is decided.
 | OD-4 | Anonymous installation-scoped access | (a) identified-only in 9B — Mosaic Billing requires an application backend, documented prominently; (b) + installation credential | **(a)**; (b) is the first candidate follow-up |
 | OD-5 | Offline access policy (uniform across all three SDKs) | strict / bounded grace / server-only | **Bounded grace**: `refresh_after` 1h, `valid_until` 7d defaults, per-Environment configurable, hard max 30d; past grace → `unknown` (never `inactive`); server-only documented as guidance for irreversible actions |
 | OD-6 | Authoritative vs provider-observed entitlements in SDKs and placement targeting | (a) purely additive `MosaicCustomer…` namespace; targeting keeps reading provider-observed; no existing symbol changes; (b) authoritative replaces targeting input; (c) configurable | **(a)** for 9B; (c) later behind its own decision |
-| OD-7 | Customer deletion vs the published privacy claims | (a) billing customers/snapshots exempt like other billing records; aliases (the PII) erasable/redactable; `docs/guides/privacy.md` §"no customer table" claim rewritten in the same change; (b) full cascade deletion | **(a)** |
-| OD-8 | Grant-change policy + backfill | prospective-by-period-effective-time + Product replacement; retroactive only as validated **additive-superset** correction with impact preview + confirmation; backfill existing grants as version 1 effective **from the beginning of time** (so historical purchases resolve) or from `created_at` | **Prospective + replacement + additive-superset**; backfill effective from beginning of time |
+| OD-7 | Customer deletion vs the published privacy claims | (a) split: billing facts/customers/snapshots exempt (financial evidence); aliases (the PII — the person-to-purchase link) erasable/redactable; `docs/guides/privacy.md` §"no customer table" claim rewritten in the same change; (b) full cascade deletion | **(a)**. Hard constraint (verified): the Phase 6 deletion job hard-DELETEs analytics identity rows (`analyticspostgres/jobs.go:346-380`), so billing aliases must be an independent table with **no FK into analytics identity tables** — RESTRICT would break accepted deletion behaviour, CASCADE would silently revoke entitlements |
+| OD-8 | Grant-change policy + backfill | prospective-by-period-effective-time + Product replacement; retroactive only as validated **additive-superset** correction with impact preview + confirmation. Backfill: (i) v1 effective from beginning of time; (ii) v1 effective from `created_at`, with prior grant-then-remove cycles reconstructed as closed intervals from `audit_events` (verified reliable: grants are discrete audited INSERT/DELETE operations, never bulk-replaced), plus the deterministic rule that a purchase predating the earliest version selects the earliest version | **Prospective + replacement + additive-superset**; backfill option **(ii)** — exact for live pairs, best-effort-reconstructed for removed pairs, no stranded historical purchase |
 | OD-9 | Family Sharing | (a) exclude; (b) Apple `FAMILY_SHARED` transactions are an independent-lineage source for the family member's customer under the same evidence rules, revoked immediately on `FAMILY_REVOKE`, ownership type recorded in explanations; no family graph; Google N/A | **(b)** |
 | OD-10 | Identity conflict behaviour | (a) freeze projection for the disputed lineage, preserve last committed state, mark `identity_unresolved`, operator resolution; (b) drop to `unknown` immediately | **(a)** |
 | OD-11 | Shadow projection in 9B | (a) defer the diff engine until a second rule version exists (rule versions recorded on every snapshot from day one; replay + checksum comparison ship in 9B); (b) build full shadow infra now per prompt | **(a)** — deviation from the prompt, needs explicit sign-off |
@@ -87,7 +87,7 @@ Implementation of gated sections must not begin until each is decided.
 | OD-14 | Customer Access Token mechanism | (a) opaque random tokens stored as SHA-256 digests (ADR-0017 posture; revocable, Environment-bound, no signing ADR); (b) signed JWS + new ADR | **(a)**; SDKs hold tokens in memory only, never persisted |
 | OD-15 | Contract status | all three 9B contracts born `draft`, promoted alongside Billing Ingestion v1 once live-sandbox evidence exists | **yes** |
 | OD-16 | Webhook consumer tolerance | documented departure from repo-wide fail-closed: producers strict (`additionalProperties: false`), consumers documented tolerant (ignore unknown fields/event types, re-read the snapshot) | **accept** |
-| OD-17 | Test transactions (`is_test_transaction`) | (a) grant entitlements, flagged in source/explanation (Google license testers exercise the real app); (b) never grant in production-mode environments | **(a)** |
+| OD-17 | Test transactions (`is_test_transaction`) | Verified structural asymmetry: Apple sandbox facts (incl. all TestFlight purchases) **cannot** reach a production-mode Environment — `storeEnvironmentMatchesMode` + the 00024 alignment CHECK quarantine them; this is a fraud control (Apple sandbox accounts are free and self-service) and must never be relaxed. TestFlight testers get access by pointing TestFlight builds at a staging Environment. Google has no sandbox: license-tester purchases (operator-allowlisted in Play Console) arrive as production transactions flagged `is_test_transaction`. Options: (a) per-Environment `test_transaction_entitlement_policy` ∈ {deny, grant}, default `grant`, every test-derived Entitlement carrying an `is_test_source` flag on server API, SDK result, and webhook payloads; (b) deny in production-mode Environments | **(a)** — and the Apple/Google asymmetry is documented in the 9B entitlement semantics |
 | OD-18 | Apple prorated refund (`REFUND_PRORATED`) — provider docs do not state remaining-period effect | (a) does not revoke the remaining period unless provider status says revoked; (b) revokes | **(a)** |
 | OD-19 | Backup-exclusion remediation of existing stores (iOS `Identity.swift`, `ConfigurationStore`, `CommerceConfigurationStore`, `MosaicStoreKitAcceptanceStore`; Flutter stores) | (a) fix the acceptance store + identity in 9B as classified corrections, file the rest; (b) fix all in 9B; (c) file all separately | **(a)** |
 
@@ -388,10 +388,17 @@ versions read-only once published with impact preview before publish;
 - Performance: no invented SLOs; measure fact→projection latency,
   sync endpoint latency/QPS (highest-QPS authenticated surface to
   date — in-process rate limiter's multi-instance limitation
-  documented), replay throughput; record in the 9B review. Snapshot
-  retention/compaction policy decided before the next backup drill
-  (quality O1) — proposal: retain all (append-only) in 9B, measure,
-  revisit with evidence.
+  documented), replay throughput; record in the 9B review.
+- Snapshot retention (decided now — no drill baseline exists to
+  extrapolate from; Phase 8 drills 4–5 were NOT RUN and nothing is
+  partitioned): current snapshots and pointers retained indefinitely;
+  **historical** snapshots and timeline entries get an explicit
+  operator-configurable retention window, safe because they are
+  rebuildable from facts + rule versions (Principle 2); webhook
+  delivery **attempts** get a much shorter window than webhook
+  **events** (the stable-ID contract); per-table row-count metrics
+  added to billing observability from day one so the first post-9B
+  drill has a trend.
 
 ## 16. Migrations
 
