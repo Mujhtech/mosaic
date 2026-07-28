@@ -108,6 +108,39 @@ remains optional. Its public SDK key
 is read only by the host app and passed directly to RevenueCat; Mosaic remote
 configuration and diagnostics never contain it.
 
+## Transaction observations
+
+Off by default. Add to the Xcode scheme to opt in:
+
+```text
+MOSAIC_TRANSACTION_OBSERVATIONS=1
+```
+
+The example then passes `transactionObservations: .enabled` to
+`Mosaic.configure` and attaches `mosaic.transactionObservationSink()` to the
+StoreKit provider after configuration. Without the variable the sink is `nil`,
+no queue is created, and nothing is sent.
+
+Use the **Observations** menu for queue diagnostics and an immediate flush. A
+Transaction Observation is a trigger for server-side validation, never proof:
+the status line never reports a transaction as validated, and the purchase
+result is identical whether observations are on or off.
+
+Xcode StoreKit testing produces transactions with no App Store record, so the
+SDK deliberately enqueues nothing for them. **Observations → Queue development
+sample** therefore queues one synthetic observation carrying the canonical
+fixture reference so the queue, restart survival, and flush behaviour can be
+demonstrated in the Simulator. Real sandbox and production purchases are
+observed automatically with no host code.
+
+The deterministic SDK equivalents are:
+
+```bash
+cd sdk/ios
+swift test --filter TransactionObservationTests
+cd StoreKit && swift test --filter MosaicStoreKitProviderTests
+```
+
 ## Analytics offline/restart demonstration
 
 Analytics remains disabled unless both the Environment owner/admin setting and

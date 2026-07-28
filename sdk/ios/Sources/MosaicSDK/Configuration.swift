@@ -89,6 +89,7 @@ public struct Mosaic: Sendable {
   private let configurationClient: MosaicConfigurationClient?
   private let identityStore: MosaicIdentityStore
   private let analyticsRuntime: MosaicAnalyticsRuntime?
+  private let transactionObservationRuntime: MosaicTransactionObservationRuntime?
 
   private init(
     configuration: MosaicConfiguration,
@@ -96,13 +97,15 @@ public struct Mosaic: Sendable {
     configurationClient: MosaicConfigurationClient? = nil,
     identityStore: MosaicIdentityStore = MosaicIdentityStore(
       persistence: MosaicMemoryIdentityPersistence()),
-    analyticsRuntime: MosaicAnalyticsRuntime? = nil
+    analyticsRuntime: MosaicAnalyticsRuntime? = nil,
+    transactionObservationRuntime: MosaicTransactionObservationRuntime? = nil
   ) {
     self.configuration = configuration
     self.purchaseProvider = purchaseProvider
     self.configurationClient = configurationClient
     self.identityStore = identityStore
     self.analyticsRuntime = analyticsRuntime
+    self.transactionObservationRuntime = transactionObservationRuntime
   }
 
   public static func configure(
@@ -128,6 +131,7 @@ public struct Mosaic: Sendable {
     applicationVersion: String? = nil,
     requestTimeout: TimeInterval = 5,
     bundledFallback: MosaicConfigurationBundledFallback = .packaged,
+    transactionObservations: MosaicTransactionObservationMode = .disabled,
     purchaseProvider: any MosaicPurchaseProvider
   ) async throws -> Mosaic {
     try await configureHosted(
@@ -136,6 +140,7 @@ public struct Mosaic: Sendable {
       applicationVersion: applicationVersion,
       requestTimeout: requestTimeout,
       bundledFallback: bundledFallback,
+      transactionObservations: transactionObservations,
       purchaseProvider: purchaseProvider,
       persistenceRoot: .applicationSupport
     )
@@ -147,6 +152,7 @@ public struct Mosaic: Sendable {
     applicationVersion: String?,
     requestTimeout: TimeInterval,
     bundledFallback: MosaicConfigurationBundledFallback,
+    transactionObservations: MosaicTransactionObservationMode = .disabled,
     purchaseProvider: any MosaicPurchaseProvider,
     persistenceRoot: MosaicPersistenceRoot
   ) async throws -> Mosaic {
@@ -201,6 +207,16 @@ public struct Mosaic: Sendable {
     let analyticsRuntime = analytics.runtime
     if analytics.degraded { degraded = true }
 
+    // Opt-in. When observations are disabled no runtime exists, so nothing is
+    // built, queued, persisted, or sent.
+    var observationRuntime: MosaicTransactionObservationRuntime?
+    if transactionObservations == .enabled {
+      let observations = await MosaicTransactionObservationRuntimeRegistry.shared.runtime(
+        baseURL: baseURL, apiKey: key, timeout: requestTimeout, rootDirectory: root)
+      observationRuntime = observations.runtime
+      if observations.degraded { degraded = true }
+    }
+
     let client = MosaicConfigurationClient(
       publicSDKKey: key,
       baseURL: baseURL,
@@ -219,15 +235,24 @@ public struct Mosaic: Sendable {
     )
     await client.bootstrap()
     _ = await client.refresh()
+    let namespace = baseURL.absoluteString + "\n" + key
     await MosaicAnalyticsLifecycleRegistry.install(
       runtime: analyticsRuntime,
-      namespace: baseURL.absoluteString + "\n" + key)
+      namespace: namespace)
+    if let observationRuntime {
+      await MosaicTransactionObservationLifecycleRegistry.install(
+        runtime: observationRuntime, namespace: namespace)
+      // Delivery of anything left over from a previous launch must never
+      // delay the host's configure call.
+      Task.detached(priority: .utility) { _ = await observationRuntime.flush() }
+    }
     return Mosaic(
       configuration: configuration,
       purchaseProvider: purchaseProvider,
       configurationClient: client,
       identityStore: identityStore,
-      analyticsRuntime: analyticsRuntime
+      analyticsRuntime: analyticsRuntime,
+      transactionObservationRuntime: observationRuntime
     )
   }
 
@@ -434,6 +459,30 @@ public struct Mosaic: Sendable {
         lastSafeCode: "analytics_not_configured", isFlushInFlight: false)
     }
     return await analyticsRuntime.diagnostics()
+  }
+
+  /// The sink a native-store commerce provider hands observed transactions to,
+  /// or `nil` when transaction observations are disabled.
+  ///
+  /// A provider is constructed before `configure`, so the sink is attached to
+  /// the provider after configuration rather than passed through it.
+  public func transactionObservationSink() -> (any MosaicTransactionObservationSink)? {
+    guard let transactionObservationRuntime else { return nil }
+    return MosaicTransactionObservationQueueSink(runtime: transactionObservationRuntime)
+  }
+
+  /// Attempts delivery of the queued observations now. This never affects a
+  /// purchase result and never reports a transaction as validated.
+  public func flushTransactionObservations() async -> MosaicTransactionObservationFlushResult {
+    guard let transactionObservationRuntime else { return .disabled }
+    return await transactionObservationRuntime.flush()
+  }
+
+  public func transactionObservationDiagnostics() async
+    -> MosaicTransactionObservationDiagnostics
+  {
+    guard let transactionObservationRuntime else { return .disabled }
+    return await transactionObservationRuntime.diagnostics()
   }
 
   func analyticsPlacementMetadata(_ placement: String) async

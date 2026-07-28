@@ -148,6 +148,29 @@ func canonicalBucketVectors() throws -> (
   return (try vectors("assignmentVectors"), try vectors("groupVectors"))
 }
 
+/// The shared cross-SDK billing reference vectors.
+///
+/// Reading them keeps the Swift reference handling bound to the same values
+/// Flutter, Android, and the backend assert against, instead of numbers copied
+/// into this test target.
+func billingReferenceVectors() throws -> [String: Any] {
+  let fileManager = FileManager.default
+  var directory = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
+  while directory.path != "/" {
+    let candidate = directory.appendingPathComponent(
+      "packages/test-fixtures/src/billing-reference-vectors.json")
+    if fileManager.fileExists(atPath: candidate.path) {
+      guard
+        let root = try JSONSerialization.jsonObject(with: Data(contentsOf: candidate))
+          as? [String: Any]
+      else { throw CanonicalFixtureLookupError.invalidShape }
+      return root
+    }
+    directory.deleteLastPathComponent()
+  }
+  throw CanonicalFixtureLookupError.notFound
+}
+
 func commerceConfigurationFixtureData(
   named name: String = "revenuecat-configuration.json"
 ) throws -> Data {

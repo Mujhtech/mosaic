@@ -150,6 +150,14 @@ private struct HostedConfigurationPreview: View {
           }
         }
         .disabled(model.mosaic == nil)
+        Menu("Observations") {
+          Button("Queue diagnostics") { Task { await model.showObservationDiagnostics() } }
+          Button("Flush now") { Task { await model.flushObservations() } }
+          Button("Queue development sample") {
+            Task { await model.queueSampleObservation() }
+          }
+        }
+        .disabled(model.mosaic == nil)
       }
       .padding(.horizontal)
       .padding(.bottom, 10)
@@ -198,6 +206,8 @@ private final class HostedConfigurationModel: ObservableObject {
   private let revenueCatPublicSDKKey: String?
   private let commerceProviderSelection: String?
   private let analyticsEnabled: Bool
+  private let transactionObservationsEnabled: Bool
+  private var storeKitProvider: MosaicStoreKitProvider?
   private var commerceManager: MosaicCommerceConfigurationManager?
   private var commerceProvider: (any MosaicCommerceProvider)?
   private var commerceRouter: MosaicCommerceProviderRouter?
@@ -209,6 +219,7 @@ private final class HostedConfigurationModel: ObservableObject {
     revenueCatPublicSDKKey = environment["REVENUECAT_PUBLIC_SDK_KEY"]
     commerceProviderSelection = environment["MOSAIC_COMMERCE_PROVIDER"]
     analyticsEnabled = environment["MOSAIC_ANALYTICS_ENABLED"] == "1"
+    transactionObservationsEnabled = environment["MOSAIC_TRANSACTION_OBSERVATIONS"] == "1"
     placement = environment["MOSAIC_PLACEMENT"] ?? "onboarding_complete"
     setupMessage =
       "Set MOSAIC_PUBLIC_SDK_KEY and MOSAIC_SDK_BASE_URL in the Xcode scheme. "
@@ -230,6 +241,7 @@ private final class HostedConfigurationModel: ObservableObject {
           acceptor: ExampleStoreKitUpdateAcceptor()
         )
         let router = MosaicCommerceProviderRouter()
+        storeKitProvider = provider
         commerceProvider = provider
         commerceRouter = router
         commerceManager = try MosaicCommerceConfigurationManager(
@@ -255,12 +267,17 @@ private final class HostedConfigurationModel: ObservableObject {
         publicSDKKey: publicSDKKey,
         baseURL: baseURL,
         applicationVersion: applicationVersion,
+        transactionObservations: transactionObservationsEnabled ? .enabled : .disabled,
         purchaseProvider: purchaseProvider
       )
       mosaic = configured
       await configured.setAnalyticsCollection(
         environmentEnabled: analyticsEnabled,
         hostEnabled: true)
+      // The provider exists before `configure`, so the observation sink is
+      // attached afterwards. It is nil unless observations were opted in.
+      await storeKitProvider?.attachTransactionObservationSink(
+        configured.transactionObservationSink())
       await refreshCommerce(for: configured)
       await updateStatus(for: configured)
     } catch {
@@ -324,6 +341,51 @@ private final class HostedConfigurationModel: ObservableObject {
     let diagnostics = await mosaic.analyticsDiagnostics()
     statusText =
       "Analytics \(String(describing: result)) · \(diagnostics.queuedEventCount) retained"
+  }
+
+  func showObservationDiagnostics() async {
+    guard let mosaic else { return }
+    let diagnostics = await mosaic.transactionObservationDiagnostics()
+    guard diagnostics.mode == .enabled else {
+      statusText = "Observations off · set MOSAIC_TRANSACTION_OBSERVATIONS=1"
+      return
+    }
+    statusText =
+      "Observations · \(diagnostics.queuedCount) queued · "
+      + "\(diagnostics.acceptedForValidationCount) accepted for validation · "
+      + "\(diagnostics.duplicateCount) duplicate · "
+      + "\(diagnostics.permanentlyRejectedCount) rejected · "
+      + (diagnostics.lastSafeCode ?? "no code")
+  }
+
+  func flushObservations() async {
+    guard let mosaic else { return }
+    let result = await mosaic.flushTransactionObservations()
+    let diagnostics = await mosaic.transactionObservationDiagnostics()
+    statusText =
+      "Observations \(String(describing: result)) · \(diagnostics.queuedCount) retained"
+  }
+
+  /// Queues one synthetic observation for the canonical fixture reference.
+  ///
+  /// This exists only because StoreKit Testing in Xcode produces transactions
+  /// with no App Store record, which the SDK deliberately never observes. A
+  /// real purchase in sandbox or production is observed automatically and
+  /// needs no host code at all.
+  func queueSampleObservation() async {
+    guard let mosaic, let sink = mosaic.transactionObservationSink() else {
+      statusText = "Observations off · set MOSAIC_TRANSACTION_OBSERVATIONS=1"
+      return
+    }
+    guard
+      let observation = MosaicTransactionObservation(
+        submissionID: "storekit_transaction_2000000900000001",
+        referenceKind: .appStoreTransactionID,
+        reference: "2000000900000001",
+        storeEnvironment: .sandbox)
+    else { return }
+    sink.enqueue(observation)
+    statusText = "Observation queued · development sample only, never proof"
   }
 
   func showExperimentDiagnostics() async {

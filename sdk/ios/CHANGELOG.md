@@ -1,5 +1,25 @@
 # Changelog
 
+## Unreleased
+
+- Add the optional Apple transaction-observation handoff, off by default
+  (`Mosaic.configure(transactionObservations:)`). When enabled,
+  `MosaicStoreKitProvider.attachTransactionObservationSink(_:)` hands each
+  locally accepted transaction to a persistent, duplicate-safe queue that
+  submits the deterministic submission identifier, the reference kind
+  `app_store_transaction_id`, the raw decimal `Transaction.id` as a string,
+  the Store Environment where StoreKit reports it, and `observedAt` to
+  `POST /v1/sdk/billing/observations`. Nothing else is submitted;
+  `jwsRepresentation`, `deviceVerification`, `appAccountToken`, and
+  `appTransactionID` are never read.
+- The handoff never blocks a purchase, never changes a purchase or restore
+  result, and never re-labels a local purchase as server-validated:
+  `serverConfirmedTransactions` remains `unsupported` and the submission
+  outcome vocabulary has no validated member. Xcode StoreKit-testing
+  transactions are suppressed, and Phase 9A adds no background-execution
+  machinery. New: `transactionObservationSink()`,
+  `flushTransactionObservations()`, `transactionObservationDiagnostics()`.
+
 ## 0.1.0-dev.6 — 2026-07-27
 
 Operational hardening. The SDK remains pre-1.0; see

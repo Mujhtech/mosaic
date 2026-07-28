@@ -126,6 +126,102 @@ final class MosaicStoreKitProviderTests: XCTestCase {
     XCTAssertEqual(code, "commerce.entitlementLookupFailed")
   }
 
+  /// The purchase path must never suspend on observation handoff.
+  ///
+  /// The sink here starts a delivery that never completes, which is what a
+  /// saturated or unreachable ingest endpoint looks like. The purchase must
+  /// still return `.purchased` with the existing accept, persist, finish
+  /// ordering intact; if a future change awaited delivery this test would hang
+  /// instead of passing.
+  func testPurchaseNeverBlocksOnObservationDeliveryAndSubmitsRawDecimalReference() async throws {
+    let order = OrderRecorder()
+    let sink = ObservationSinkSpy(blocksForever: true)
+    let provider = MosaicStoreKitProvider(
+      client: StoreKitClientStub(
+        order: order,
+        purchase: .verified(
+          .init(
+            id: 42, storeProductID: "com.example.pro.monthly", occurredAt: Date(),
+            environment: .production))
+      ),
+      acceptor: AcceptorStub(order: order),
+      acceptanceStore: AcceptanceStoreStub(order: order),
+      observationSink: sink
+    )
+    try await provider.install(configuration: configuration, mappings: [mapping])
+    _ = await provider.loadProducts(mappings: [mapping])
+
+    let result = await provider.purchase(mosaicProductID: mapping.mosaicProductID)
+
+    XCTAssertEqual(
+      result,
+      .purchased(productID: mapping.mosaicProductID, transactionID: "storekit_42"))
+    let events = await order.values()
+    XCTAssertEqual(
+      events,
+      ["accept:storekit_transaction_42:pro", "persist:storekit_transaction_42", "finish:42"])
+
+    // The wire reference is the raw decimal identifier Apple's lookup accepts,
+    // not the prefixed host-facing reference on MosaicCommerceUpdate.
+    let observations = sink.captured()
+    XCTAssertEqual(observations.count, 1)
+    XCTAssertEqual(observations.first?.reference, "42")
+    XCTAssertEqual(observations.first?.submissionID, "storekit_transaction_42")
+    XCTAssertEqual(observations.first?.referenceKind, .appStoreTransactionID)
+    XCTAssertEqual(observations.first?.storeEnvironment, .production)
+  }
+
+  /// Two independent ways an integrator ends up sending nothing: never opting
+  /// in, and running against StoreKit Testing in Xcode, whose transactions have
+  /// no App Store record to validate.
+  func testNoObservationWithoutOptInOrForXcodeTestingTransactions() async throws {
+    let unattached = ObservationSinkSpy()
+    let order = OrderRecorder()
+    let provider = MosaicStoreKitProvider(
+      client: StoreKitClientStub(
+        order: order,
+        purchase: .verified(
+          .init(
+            id: 42, storeProductID: "com.example.pro.monthly", occurredAt: Date(),
+            environment: .production))
+      ),
+      acceptor: AcceptorStub(order: order),
+      acceptanceStore: AcceptanceStoreStub(order: order)
+    )
+    try await provider.install(configuration: configuration, mappings: [mapping])
+    _ = await provider.loadProducts(mappings: [mapping])
+    _ = await provider.purchase(mosaicProductID: mapping.mosaicProductID)
+    XCTAssertTrue(unattached.captured().isEmpty)
+    let events = await order.values()
+    XCTAssertEqual(
+      events,
+      ["accept:storekit_transaction_42:pro", "persist:storekit_transaction_42", "finish:42"])
+
+    let localOrder = OrderRecorder()
+    let sink = ObservationSinkSpy()
+    let localTesting = MosaicStoreKitProvider(
+      client: StoreKitClientStub(
+        order: localOrder,
+        purchase: .verified(
+          .init(
+            id: 43, storeProductID: "com.example.pro.monthly", occurredAt: Date(),
+            environment: .localTesting))
+      ),
+      acceptor: AcceptorStub(order: localOrder),
+      acceptanceStore: AcceptanceStoreStub(order: localOrder),
+      observationSink: sink
+    )
+    try await localTesting.install(configuration: configuration, mappings: [mapping])
+    _ = await localTesting.loadProducts(mappings: [mapping])
+    let result = await localTesting.purchase(mosaicProductID: mapping.mosaicProductID)
+
+    // Local delivery is unchanged; only the observation is suppressed.
+    XCTAssertEqual(
+      result,
+      .purchased(productID: mapping.mosaicProductID, transactionID: "storekit_43"))
+    XCTAssertTrue(sink.captured().isEmpty)
+  }
+
   private var configuration: MosaicCommerceConfigurationReference {
     .init(
       configurationID: "commerce_configuration_storekit_42",
@@ -164,6 +260,30 @@ private enum Outcome {
       }
       XCTAssertEqual(code, expectedCode, file: file, line: line)
     }
+  }
+}
+
+/// Records what the provider handed over, and optionally starts a delivery
+/// that never finishes.
+private final class ObservationSinkSpy: MosaicTransactionObservationSink, @unchecked Sendable {
+  private let lock = NSLock()
+  private var observations: [MosaicTransactionObservation] = []
+  private let blocksForever: Bool
+
+  init(blocksForever: Bool = false) { self.blocksForever = blocksForever }
+
+  func enqueue(_ observation: MosaicTransactionObservation) {
+    lock.lock()
+    observations.append(observation)
+    lock.unlock()
+    guard blocksForever else { return }
+    Task.detached { try? await Task.sleep(nanoseconds: 60 * NSEC_PER_SEC) }
+  }
+
+  func captured() -> [MosaicTransactionObservation] {
+    lock.lock()
+    defer { lock.unlock() }
+    return observations
   }
 }
 
