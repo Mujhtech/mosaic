@@ -1914,6 +1914,78 @@ paths:
         "404": { $ref: "#/components/responses/Error" }
         "409": { $ref: "#/components/responses/Error" }
         "422": { $ref: "#/components/responses/Error" }
+  /v1/sdk/billing/restores:
+    post:
+      security: []
+      operationId: submitSDKRestore
+      tags: [Authoritative Entitlements]
+      description: |
+        Report a completed native restore and the observations it produced. The public SDK key
+        proves which Environment is asking and nothing more: the request names no customer, and
+        `billingCustomerId` is dropped unconditionally on this surface. Identity is resolved
+        server-side from validated store lineage, never from anything a client asserts.
+
+        The body carries **observation submission ids**, not provider transaction references. A
+        Google purchase-token digest is computable by anyone holding the token, so accepting
+        caller-supplied digests would let a caller attach someone else's input to its own
+        restore.
+
+        `202` and the body already carries the honest current answer, which is what a caller
+        polls against. `restored` is never reported until an accepted snapshot reflects it.
+      parameters:
+        - { in: header, name: Mosaic-SDK-Key, required: true, schema: { type: string }, description: Public SDK key identifying the Environment and Application. It proves which Environment is asking and can never select a customer. }
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/RestoreRequestRecord" } } } }
+      responses:
+        "202": { description: The restore was recorded and the chain is running., content: { application/json: { schema: { $ref: "#/components/schemas/RestoreResultRecord" } } } }
+        "401": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+        "422": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/Error" }
+  /v1/sdk/billing/restores/{restoreId}:
+    get:
+      security: []
+      operationId: getSDKRestore
+      tags: [Authoritative Entitlements]
+      description: |
+        Poll one restore. The record carries two axes that are never merged: Mosaic's `outcome`
+        and the native `providerOutcome`. A native restore that succeeded while Mosaic is still
+        validating is `providerOutcome: completed` with `outcome: validation_pending`, which is
+        the honest answer and the reason the two axes exist.
+
+        Restore ids are 128-bit and server-minted. The read is Environment-scoped rather than
+        customer-scoped, because a restore may have no customer yet.
+      parameters:
+        - { in: path, name: restoreId, required: true, schema: { type: string } }
+        - { in: header, name: Mosaic-SDK-Key, required: true, schema: { type: string } }
+      responses:
+        "200": { description: The restore record., content: { application/json: { schema: { $ref: "#/components/schemas/RestoreResultRecord" } } } }
+        "401": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+  /v1/billing/server/restores:
+    post:
+      security: [{ ServerSecretKey: [] }]
+      operationId: submitServerRestore
+      tags: [Authoritative Entitlements]
+      description: |
+        The trusted equivalent of the SDK restore submission. This surface may name a
+        `billingCustomerId`, because the caller is the application backend that already
+        authenticated the user.
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/RestoreRequestRecord" } } } }
+      responses:
+        "202": { description: The restore was recorded and the chain is running., content: { application/json: { schema: { $ref: "#/components/schemas/RestoreResultRecord" } } } }
+        "401": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+        "422": { $ref: "#/components/responses/Error" }
+  /v1/billing/server/restores/{restoreId}:
+    get:
+      security: [{ ServerSecretKey: [] }]
+      operationId: getServerRestore
+      tags: [Authoritative Entitlements]
+      parameters: [{ in: path, name: restoreId, required: true, schema: { type: string } }]
+      responses:
+        "200": { description: The restore record., content: { application/json: { schema: { $ref: "#/components/schemas/RestoreResultRecord" } } } }
+        "401": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
   /v1/billing/identity/customers:
     post:
       security: [{ ServerSecretKey: [] }]
@@ -3052,6 +3124,59 @@ components:
             supportedAuthoritativeEntitlementContracts: { type: array, minItems: 1, maxItems: 8, uniqueItems: true, items: { type: string, enum: ["1"] } }
             requestedEntitlementKeys: { type: array, minItems: 1, maxItems: 64, uniqueItems: true, items: { type: string, pattern: "^[a-z][a-z0-9_.-]*$" } }
             correlationId: { type: string, minLength: 1, maxLength: 128 }
+    RestoreRequestRecord:
+      type: object
+      additionalProperties: false
+      description: |
+        The Authoritative Entitlement Contract v1 restoreRequest envelope. The normative shape is
+        protocol/schema/authoritative-entitlement/v1/restore.schema.json; this declaration exists
+        so the operation has a resolvable request schema and is deliberately not a second source
+        of truth for the contract.
+      required: [authoritativeEntitlementContractVersion, recordType, payload]
+      properties:
+        authoritativeEntitlementContractVersion: { type: string, const: "1" }
+        recordType: { type: string, const: restoreRequest }
+        payload:
+          type: object
+          additionalProperties: false
+          required: [storePlatform, providerOutcome, correlationId]
+          properties:
+            storePlatform: { type: string, enum: [apple_app_store, google_play] }
+            providerOutcome: { type: string, enum: [completed, no_purchases_found, cancelled, failed, unsupported, not_attempted], description: What the native restore itself did. Recorded verbatim and never merged into Mosaic's own outcome. }
+            observationSubmissionIds: { type: array, items: { type: string, minLength: 1, maxLength: 128 }, description: Observations already submitted for this restore. No provider transaction reference travels on this surface. }
+            billingCustomerId: { type: string, maxLength: 128, description: Honoured on the trusted surface only. The SDK surface drops it. }
+            correlationId: { type: string, minLength: 1, maxLength: 128 }
+    RestoreResultRecord:
+      type: object
+      description: |
+        The Authoritative Entitlement Contract v1 restoreResult envelope. Normative shape:
+        protocol/schema/authoritative-entitlement/v1/restore.schema.json.
+      required: [authoritativeEntitlementContractVersion, recordType, payload]
+      properties:
+        authoritativeEntitlementContractVersion: { type: string, const: "1" }
+        recordType: { type: string, const: restoreResult }
+        payload:
+          type: object
+          properties:
+            restoreId: { type: string }
+            billingCustomerId: { type: string, description: Absent while identity is unresolved, which is a first-class restore outcome rather than an error. }
+            projectId: { type: string }
+            environmentId: { type: string }
+            storePlatform: { type: string, enum: [apple_app_store, google_play] }
+            outcome: { type: string, enum: [restored, no_additional_purchases, validation_pending, identity_unresolved, product_unresolved, provider_unavailable, failed], description: Mosaic's own answer. `restored` is only ever written together with the accepted snapshot version that demonstrates it. }
+            providerOutcome: { type: string, enum: [completed, no_purchases_found, cancelled, failed, unsupported, not_attempted] }
+            snapshotVersion: { type: integer, description: The accepted snapshot that reflects the restore. Present only for `restored`, and it is the evidence for that outcome. }
+            observedTransactionCount: { type: integer, description: Inputs actually linked, never the number the caller claimed. }
+            pendingValidationCount: { type: integer }
+            uncertainty:
+              type: object
+              properties:
+                reason: { type: string, enum: [none, provider_unavailable, missing_fact, identity_unresolved, product_unresolved, conflicting_facts, projection_failed, stale_validation, unsupported_provider_state] }
+                since: { type: string, format: date-time }
+                diagnosticCode: { type: string }
+            requestedAt: { type: string, format: date-time }
+            completedAt: { type: string, format: date-time }
+            correlationId: { type: string }
     CustomerEntitlementSnapshotRecord:
       type: object
       description: |
