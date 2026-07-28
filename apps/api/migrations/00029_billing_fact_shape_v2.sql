@@ -9,6 +9,44 @@
 -- facts are immutable and are never rewritten; all of them participate in
 -- FactDigest under validator version 2.
 --
+-- Stated consequence of the validator bump (OD-13, review finding I-13):
+-- validator version 2 mints a SECOND fact for a provider transaction that was
+-- already recorded under validator version 1.
+--
+-- Fact identity is UNIQUE (environment_id, fact_digest), and FactDigest covers
+-- the validator version and every column above. Re-validating a 9A input under
+-- validator 2 therefore recomputes a different digest and inserts a new row
+-- rather than colliding with the v1 row. Both rows describe the same provider
+-- transaction. Neither is rewritten: 9A facts are immutable, which is the whole
+-- reason the duplicate exists instead of an UPDATE.
+--
+-- Where that duplication is absorbed, and where it is not:
+--
+--   Access: absorbed. An Entitlement Source's identity is (purchase lineage,
+--   product, grant version) — never a fact id — so two facts describing one
+--   purchase produce one source and one grant. The projection engine is a fold
+--   over the ordered timeline in which a restatement of the current position
+--   changes nothing, so the derived snapshot and its checksum are unchanged.
+--   This is why revalidation is safe to run.
+--
+--   Timeline: NOT absorbed. subscription_timeline_entries emits one entry per
+--   fact that changes the story, and a v2 restatement of a v1 fact is a
+--   distinct fact id. A customer's timeline can therefore show the same
+--   purchase, renewal, or refund twice after a revalidation pass. The entries
+--   are append-only and are explanations rather than state, so the duplication
+--   is cosmetic — but it is customer-visible in the operator console and in any
+--   surface that renders the timeline, and it is not deduplicated anywhere.
+--
+--   subscription_snapshot_facts: NOT absorbed. The snapshot-to-fact evidence
+--   join lists every source fact by id, so a revalidated lineage cites both the
+--   v1 and the v2 fact for the same provider statement. Counting rows there is
+--   not a count of provider statements after a validator bump.
+--
+-- Removing either duplication would mean either rewriting immutable 9A facts or
+-- teaching the timeline a cross-validator identity that facts deliberately do
+-- not carry. Both are worse than the stated consequence, so the consequence is
+-- stated here rather than engineered away.
+--
 -- Also extends the quarantine reason vocabulary with
 -- 'missing_provider_timestamp' (9A correction B7): an input whose provider
 -- payload carries no usable timestamp quarantines instead of producing a fact
