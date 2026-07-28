@@ -86,6 +86,10 @@ type LineageInput struct {
 	Checkpoint string
 	// CheckpointChecksum is the checksum recorded with that checkpoint.
 	CheckpointChecksum []byte
+	// CheckpointFacts is how many facts that checkpoint covered. It is what
+	// makes "does the checkpoint still describe a prefix of this timeline?" an
+	// answerable question rather than a guess.
+	CheckpointFacts int64
 	// Frozen lineages are skipped: their last committed state is preserved.
 	Frozen bool
 	// CustomerResolved is false when no accepted association exists yet.

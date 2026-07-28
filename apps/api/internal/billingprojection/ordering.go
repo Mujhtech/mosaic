@@ -166,14 +166,48 @@ func less(a, b Fact) bool {
 // ordering is not comparable with a position computed under another, and
 // silently comparing them would make an ordering change look like an
 // out-of-order fact for every lineage at once.
+// The provider transaction id is variable width, so the delimiter that follows
+// it must sort below every character the field can contain — otherwise the
+// encoded position disagrees with the comparison the sort actually uses. With
+// the ordinary "|" delimiter, "abc|…" compared greater than "abcd|…" while
+// less() puts "abc" first, so a resumed projection could skip or replay a fact.
+// "!" (0x21) is below every character admissible in a provider transaction id
+// (digits, hex, "token:"), which makes prefix ordering agree with field
+// ordering.
 func Position(fact Fact) string {
-	return fmt.Sprintf("v%d|%020d|%03d|%s|%020d|%s",
+	return fmt.Sprintf("v%d|%020d|%03d|%s!%020d|%s",
 		OrderingVersion,
 		EffectiveAt(fact).UnixMilli(),
 		factKindPrecedence(fact.FactKind),
 		fact.ProviderTransactionID,
 		fact.OccurredAt.UnixMilli(),
 		fact.ID)
+}
+
+// PrefixIntact reports whether a checkpoint still describes a prefix of the
+// canonically ordered timeline.
+//
+// The question is not "does any fact sort at or before the watermark" — every
+// already-projected fact does, which made that check permanently true after the
+// first checkpoint and rendered the invalidated flag meaningless. The question
+// is whether the fact now sitting at the checkpoint's own depth is still the
+// fact the checkpoint recorded. A fact inserted earlier in the timeline shifts
+// that position and is exactly the out-of-order arrival the checkpoint rules
+// require a full reprojection for.
+func PrefixIntact(ordered []Fact, watermark string, factsProjected int64) bool {
+	if watermark == "" {
+		return true
+	}
+	if !strings.HasPrefix(watermark, fmt.Sprintf("v%d|", OrderingVersion)) {
+		// A watermark from another ordering version is not comparable at all.
+		return false
+	}
+	if factsProjected <= 0 || factsProjected > int64(len(ordered)) {
+		// Facts disappeared, or the checkpoint predates the count being
+		// recorded. Reprojecting is the conservative answer either way.
+		return false
+	}
+	return Position(ordered[factsProjected-1]) == watermark
 }
 
 // HighWatermark is the position of the last fact in a canonically ordered

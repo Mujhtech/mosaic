@@ -197,7 +197,7 @@ func loadLineages(ctx context.Context, tx pgx.Tx, scope billingprojection.Scope,
 		        l.billing_customer_id IS NOT NULL,
 		        l.superseded_by_lineage_id IS NOT NULL,
 		        COALESCE(si.id, oi.id, ''), COALESCE(si.current_snapshot_id, ''),
-		        COALESCE(c.high_watermark, ''), c.checksum
+		        COALESCE(c.high_watermark, ''), c.checksum, COALESCE(c.facts_projected, 0)
 		 FROM purchase_lineages l
 		 LEFT JOIN subscription_instances si ON si.purchase_lineage_id = l.id
 		 LEFT JOIN one_time_purchase_instances oi ON oi.purchase_lineage_id = l.id
@@ -224,7 +224,7 @@ func loadLineages(ctx context.Context, tx pgx.Tx, scope billingprojection.Scope,
 		if err := rows.Scan(&item.lineage.LineageID, &item.lineage.Type, &item.digest,
 			&item.lineage.Frozen, &item.lineage.CustomerResolved, &item.lineage.SupersededByLineage,
 			&item.lineage.InstanceID, &item.lineage.SnapshotID, &item.lineage.Checkpoint,
-			&checkpointChecksum); err != nil {
+			&checkpointChecksum, &item.lineage.CheckpointFacts); err != nil {
 			return fmt.Errorf("scan purchase lineage: %w", err)
 		}
 		item.lineage.CheckpointChecksum = checkpointChecksum
@@ -495,8 +495,8 @@ func writeSubscription(ctx context.Context, tx pgx.Tx, scope billingprojection.S
 		}
 	}
 
-	for index, entry := range commit.Timeline {
-		if err := writeTimeline(ctx, tx, scope, entry, snapshotID, commit.InstanceID, "", index, now); err != nil {
+	for _, entry := range commit.Timeline {
+		if err := writeTimeline(ctx, tx, scope, entry, snapshotID, commit.InstanceID, "", now); err != nil {
 			return err
 		}
 	}
@@ -525,15 +525,15 @@ func writeOneTime(ctx context.Context, tx pgx.Tx, scope billingprojection.Scope,
 		snapshot.RevocationEffectiveAt, snapshot.MosaicProductID, now); err != nil {
 		return fmt.Errorf("update one-time purchase instance: %w", err)
 	}
-	for index, entry := range commit.Timeline {
-		if err := writeTimeline(ctx, tx, scope, entry, "", "", commit.InstanceID, index, now); err != nil {
+	for _, entry := range commit.Timeline {
+		if err := writeTimeline(ctx, tx, scope, entry, "", "", commit.InstanceID, now); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-func writeTimeline(ctx context.Context, tx pgx.Tx, scope billingprojection.Scope, entry billingprojection.TimelineEntry, snapshotID, subscriptionInstanceID, oneTimeInstanceID string, index int, now time.Time) error {
+func writeTimeline(ctx context.Context, tx pgx.Tx, scope billingprojection.Scope, entry billingprojection.TimelineEntry, snapshotID, subscriptionInstanceID, oneTimeInstanceID string, now time.Time) error {
 	detail := []byte("{}")
 	if len(entry.Detail) > 0 {
 		if encoded, err := json.Marshal(entry.Detail); err == nil {
@@ -542,8 +542,11 @@ func writeTimeline(ctx context.Context, tx pgx.Tx, scope billingprojection.Scope
 	}
 	// The entry id is derived from its content so a reprojection of the same
 	// timeline is absorbed rather than duplicating history.
+	// The id is derived from content alone. Including the entry's index made it
+	// positional: one late-arriving fact shifted every following index and the
+	// whole tail of the timeline was re-inserted as new history.
 	id := "bte_" + hashID(subscriptionInstanceID, oneTimeInstanceID, entry.EntryType,
-		entry.EffectiveAt.UnixMilli(), strings.Join(entry.SourceFactIDs, ","), index)
+		entry.EffectiveAt.UnixMilli(), strings.Join(entry.SourceFactIDs, ","))
 	_, err := tx.Exec(ctx,
 		`INSERT INTO subscription_timeline_entries(
 			id, project_id, environment_id, subscription_instance_id, one_time_purchase_instance_id,

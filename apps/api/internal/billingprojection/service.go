@@ -210,12 +210,9 @@ func Compute(input Input, asOf time.Time) Output {
 		ordered := Sort(append([]Fact(nil), lineage.Facts...))
 		watermark := HighWatermark(ordered)
 		watermarks = append(watermarks, watermark)
-		invalidated := false
-		if _, out := OutOfOrder(ordered, lineage.Checkpoint); out {
-			// The checkpoint no longer describes a prefix of the timeline, so
-			// it is invalidated and the lineage is reprojected from zero.
-			invalidated = true
-		}
+		// The checkpoint is invalidated when it no longer describes a prefix of
+		// the timeline — a fact arrived that belongs earlier than the watermark.
+		invalidated := !PrefixIntact(ordered, lineage.Checkpoint, lineage.CheckpointFacts)
 
 		if lineage.Type == "one_time" {
 			result := ProjectOneTimePurchase(ordered, asOf)

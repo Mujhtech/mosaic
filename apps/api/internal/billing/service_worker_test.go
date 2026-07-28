@@ -194,10 +194,10 @@ func TestSupersessionFactDigestStableAcrossRenewals(t *testing.T) {
 
 	serviceOne := testService(at("2026-01-01T01:00:00Z"))
 	serviceTwo := testService(at("2026-03-15T09:30:00Z"))
-	supersessionOne := serviceOne.supersessionFactFrom(factOne)
-	supersessionTwo := serviceTwo.supersessionFactFrom(factTwo)
-	if supersessionOne == nil || supersessionTwo == nil {
-		t.Fatal("supersession fact was not built")
+	supersessionOne, errOne := serviceOne.supersessionFactFrom(factOne)
+	supersessionTwo, errTwo := serviceTwo.supersessionFactFrom(factTwo)
+	if errOne != nil || errTwo != nil {
+		t.Fatalf("supersession fact was not built: %v / %v", errOne, errTwo)
 	}
 	if supersessionOne.FactKind != KindPurchaseSuperseded {
 		t.Fatalf("supersession fact kind %q", supersessionOne.FactKind)

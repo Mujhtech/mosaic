@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"strconv"
 	"strings"
 	"time"
@@ -688,7 +689,13 @@ func (s *Service) validateGoogle(ctx context.Context, job ValidationJob, input R
 		// and the unique fact constraint absorbs every observation after the
 		// first. The link is thereby "emitted once when newly observed" as a
 		// structural property rather than a lookup.
-		outcome.Supersession = s.supersessionFactFrom(*outcome.Fact)
+		supersession, err := s.supersessionFactFrom(*outcome.Fact)
+		if err != nil {
+			return s.quarantineAttempt(job, input, attemptID, attemptNumber, started,
+				Permanent(CategoryInvalid, "supersession_fact_unavailable"),
+				QuarantineMalformedReference, "error")
+		}
+		outcome.Supersession = supersession
 	}
 	return outcome
 }
@@ -794,11 +801,14 @@ func applyGoogleVoid(fact *TransactionFact, work googleWork, providerOccurredAt 
 // successor's life (order id, period end, revocation, renewal intent) is
 // cleared or replaced with a lineage-constant value, so re-observing the same
 // link always recomputes the same FactDigest.
-func (s *Service) supersessionFactFrom(main TransactionFact) *TransactionFact {
+func (s *Service) supersessionFactFrom(main TransactionFact) (*TransactionFact, error) {
 	fact := main
 	id, err := s.newID("btf")
 	if err != nil {
-		return nil
+		// Previously this returned nil and the link was silently never emitted.
+		// A supersession edge that is dropped without a trace is a lineage that
+		// never learns its own chain root, so the failure is reported.
+		return nil, fmt.Errorf("generate supersession fact identifier: %w", err)
 	}
 	fact.ID = id
 	fact.FactKind = KindPurchaseSuperseded
@@ -814,9 +824,28 @@ func (s *Service) supersessionFactFrom(main TransactionFact) *TransactionFact {
 	fact.RevocationReason = nil
 	fact.RefundType = ""
 	fact.ProviderEventOccurredAt = nil
+
+	// The edge is a statement about two purchase tokens and nothing else, so
+	// every field that can move underneath it is cleared before the digest is
+	// taken. Product identity in particular is not lineage-constant: an offer
+	// expires, a mapping is edited, an unresolved fact is later resolved — and
+	// each of those recomputed a different digest for the same link, minting a
+	// duplicate purchase_superseded fact every time.
+	fact.ProviderProductIdentifier = "superseded"
+	fact.ProviderBasePlanIdentifier = ""
+	fact.ProviderOfferIdentifier = ""
+	fact.ResolutionState = StateUnresolved
+	fact.MosaicProductID = ""
+	fact.ProviderProductMappingID = ""
+	fact.ResolvedMappingVersion = nil
+	// A void rewrites OccurredAt to the refund instant, so the subscription's
+	// own start is used where it exists: that value is constant for the chain.
+	if fact.PeriodStartAt != nil {
+		fact.OccurredAt = fact.PeriodStartAt.UTC()
+	}
 	fact.RecordedAt = s.now()
 	fact.FactDigest = FactDigest(fact)
-	return &fact
+	return &fact, nil
 }
 
 // googleWork is the decoded intent of one Google raw body: which purchase to
