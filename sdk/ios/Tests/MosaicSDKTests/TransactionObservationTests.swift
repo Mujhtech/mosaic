@@ -83,66 +83,76 @@ final class TransactionObservationTests: XCTestCase {
     return try XCTUnwrap(root["payload"] as? [String: Any])
   }
 
-  /// The submitted record must be the canonical client observation envelope
-  /// and must carry exactly the agreed keys, nothing more.
+  /// The submitted record must reproduce the canonical client observation
+  /// fixture exactly.
   ///
-  /// A key allowlist checked against the canonical fixture is the only
-  /// assertion that fails by default when a future change adds a field, which
-  /// is what would smuggle a JWS representation, device-verification material,
-  /// or an account token onto the wire.
-  func testSubmittedRecordMatchesTheCanonicalObservationEnvelope() throws {
-    let correlated = try XCTUnwrap(
-      MosaicTransactionObservation(
-        submissionID: "storekit_transaction_2000000900000001",
-        reference: "2000000900000001", observedAt: observedAt,
-        correlation: MosaicTransactionObservationCorrelation(
-          providerOperationID: "storekit_purchase_0001")))
-    let encoded = try MosaicTransactionObservationCodec.encode(correlated, context: context)
-    let root = try XCTUnwrap(JSONSerialization.jsonObject(with: encoded) as? [String: Any])
-
+  /// Every value the SDK does not author itself is taken *from* the fixture and
+  /// the whole encoded document is compared to it, so drift in either direction
+  /// — a field the SDK stops emitting, a value the fixture changes — fails
+  /// here. Comparing key sets against inline literals would not.
+  func testSubmittedRecordReproducesTheCanonicalObservationFixture() throws {
     let fixture = try XCTUnwrap(
       JSONSerialization.jsonObject(
         with: try phase5FixtureData("billing-ingestion/v1/apple-client-observation.json"))
         as? [String: Any])
     let fixturePayload = try XCTUnwrap(fixture["payload"] as? [String: Any])
-
-    // Envelope.
-    XCTAssertEqual(Set(root.keys), Set(fixture.keys))
-    XCTAssertEqual(Set(root.keys), MosaicTransactionObservationCodec.envelopeKeys)
-    XCTAssertEqual(root["billingIngestionContractVersion"] as? String, "1")
-    XCTAssertEqual(root["recordType"] as? String, "clientTransactionObservation")
-
-    // Payload: exactly the canonical fixture's keys, and within the allowlist.
-    let body = try XCTUnwrap(root["payload"] as? [String: Any])
-    XCTAssertEqual(Set(body.keys), Set(fixturePayload.keys))
-    XCTAssertTrue(Set(body.keys).isSubset(of: MosaicTransactionObservationCodec.wireKeys))
-    XCTAssertEqual(
-      body["observationId"] as? String, "observation_storekit_transaction_2000000900000001")
-    XCTAssertEqual(body["submissionId"] as? String, "storekit_transaction_2000000900000001")
-    XCTAssertEqual(body["providerId"] as? String, "app_store")
-    XCTAssertEqual(body["storePlatform"] as? String, "apple_app_store")
-    XCTAssertEqual(body["sourceAuthority"] as? String, "client_observation")
-    XCTAssertEqual(body["observedAt"] as? String, "2026-07-31T12:13:20.000Z")
-
-    let reference = try XCTUnwrap(body["transactionReference"] as? [String: Any])
     let fixtureReference = try XCTUnwrap(fixturePayload["transactionReference"] as? [String: Any])
-    XCTAssertEqual(Set(reference.keys), Set(fixtureReference.keys))
-    XCTAssertEqual(reference["referenceKind"] as? String, "app_store_transaction_id")
-    XCTAssertEqual(reference["value"] as? String, "2000000900000001")
-
-    let sdkContext = try XCTUnwrap(body["context"] as? [String: Any])
     let fixtureContext = try XCTUnwrap(fixturePayload["context"] as? [String: Any])
-    XCTAssertTrue(Set(sdkContext.keys).isSubset(of: Set(fixtureContext.keys)))
-    XCTAssertEqual(sdkContext["platform"] as? String, "ios")
-    XCTAssertEqual(sdkContext["sdkFamily"] as? String, "ios")
-    XCTAssertEqual(sdkContext["sdkVersion"] as? String, mosaicSDKVersion)
-    XCTAssertEqual(sdkContext["applicationVersion"] as? String, "1.4.2")
+    let fixtureCorrelation = try XCTUnwrap(fixturePayload["correlation"] as? [String: Any])
 
-    let correlation = try XCTUnwrap(body["correlation"] as? [String: Any])
+    let fixtureRecord = try XCTUnwrap(
+      MosaicTransactionObservation(
+        submissionID: try XCTUnwrap(fixturePayload["submissionId"] as? String),
+        referenceKind: try XCTUnwrap(
+          MosaicTransactionObservationReferenceKind(
+            rawValue: try XCTUnwrap(fixtureReference["referenceKind"] as? String))),
+        reference: try XCTUnwrap(fixtureReference["value"] as? String),
+        providerID: try XCTUnwrap(fixturePayload["providerId"] as? String),
+        observationID: try XCTUnwrap(fixturePayload["observationId"] as? String),
+        observedAt: try XCTUnwrap(
+          MosaicAnalyticsRuntime.parseTimestamp(
+            try XCTUnwrap(fixturePayload["observedAt"] as? String))),
+        correlation: MosaicTransactionObservationCorrelation(
+          purchaseAttemptID: try XCTUnwrap(fixtureCorrelation["purchaseAttemptId"] as? String))))
+    let fixtureSDKContext = MosaicTransactionObservationContext(
+      sdkVersion: try XCTUnwrap(fixtureContext["sdkVersion"] as? String),
+      operatingSystemVersion: try XCTUnwrap(fixtureContext["operatingSystemVersion"] as? String),
+      applicationVersion: try XCTUnwrap(fixtureContext["applicationVersion"] as? String))
+
+    let encoded = try MosaicTransactionObservationCodec.encode(
+      fixtureRecord, context: fixtureSDKContext)
+    let root = try XCTUnwrap(JSONSerialization.jsonObject(with: encoded) as? [String: Any])
+
+    // Full-document equality. `storePlatform`, `sourceAuthority`, the contract
+    // version, the record type, and the reference envelope are all authored by
+    // the codec, so this pins them to the canonical values rather than to a
+    // literal repeated in this file.
+    XCTAssertEqual(NSDictionary(dictionary: root), NSDictionary(dictionary: fixture))
+    XCTAssertEqual(Set(root.keys), MosaicTransactionObservationCodec.envelopeKeys)
     XCTAssertTrue(
-      Set(correlation.keys).isSubset(
-        of: ["purchaseAttemptId", "providerOperationId", "providerUpdateId"]))
-    XCTAssertFalse(correlation.isEmpty)
+      Set(fixturePayload.keys).isSubset(of: MosaicTransactionObservationCodec.wireKeys))
+
+    // The identifiers the SDK authors itself cannot come from the fixture, so
+    // they are checked against the contract's identifier rule and, for the
+    // derived one, against its derivation.
+    let authored = try XCTUnwrap(
+      MosaicTransactionObservation(
+        submissionID: "storekit_transaction_2000000900000001", reference: "2000000900000001"))
+    XCTAssertEqual(
+      authored.observationID, "observation_storekit_transaction_2000000900000001")
+    for identifier in [authored.observationID, authored.submissionID, authored.providerID] {
+      XCTAssertTrue(
+        MosaicTransactionObservation.isIdentifier(identifier), identifier)
+      XCTAssertLessThanOrEqual(identifier.count, 128, identifier)
+    }
+    let live = MosaicTransactionObservationContext(applicationVersion: "1.4.2")
+    XCTAssertEqual(live.platform, fixtureContext["platform"] as? String)
+    XCTAssertEqual(live.sdkFamily, fixtureContext["sdkFamily"] as? String)
+    XCTAssertEqual(live.sdkVersion, mosaicSDKVersion)
+    XCTAssertNotNil(
+      live.sdkVersion.range(
+        of: "^[A-Za-z0-9][A-Za-z0-9.+_-]*$", options: .regularExpression))
+    XCTAssertLessThanOrEqual(live.sdkVersion.count, 64)
 
     // Correlation is the only optional member, and it is absent when there is
     // no handle to carry.

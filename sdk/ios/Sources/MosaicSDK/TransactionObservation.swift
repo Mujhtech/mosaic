@@ -154,10 +154,16 @@ struct MosaicTransactionObservationContext: Sendable, Equatable, Codable {
   let applicationVersion: String?
 
   init(sdkVersion: String = mosaicSDKVersion, applicationVersion: String?) {
+    self.init(
+      sdkVersion: sdkVersion,
+      operatingSystemVersion: ProcessInfo.processInfo.operatingSystemVersionString
+        .split(separator: " ").first(where: { $0.first?.isNumber == true }).map(String.init),
+      applicationVersion: applicationVersion)
+  }
+
+  init(sdkVersion: String, operatingSystemVersion: String?, applicationVersion: String?) {
     self.sdkVersion = Self.bounded(sdkVersion) ?? "0"
-    operatingSystemVersion = Self.bounded(
-      ProcessInfo.processInfo.operatingSystemVersionString
-        .split(separator: " ").first(where: { $0.first?.isNumber == true }).map(String.init))
+    self.operatingSystemVersion = Self.bounded(operatingSystemVersion)
     self.applicationVersion = Self.bounded(applicationVersion)
   }
 
