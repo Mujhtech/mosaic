@@ -337,10 +337,16 @@ sources — because an absent entry reads to every consumer as "this customer ne
 is exactly the definite answer the uncertainty vocabulary exists to avoid asserting.
 
 Resolution is an operator action with three outcomes — `assigned_first`, `assigned_second`,
-`detached_both` — after which the disputed subject is unfrozen and **both** candidate customers
-are reprojected, not only the winner: the loser is the one holding the stale snapshot. There is
-no automatic-merge path. Automatic merge stays an ADR checkpoint rather than something a
-heuristic reaches on its own.
+`detached_both` — and it requires a stated reason, after which the disputed subject is unfrozen and
+**both** candidate customers are reprojected, not only the winner: the loser is the one holding the
+stale snapshot. There is no automatic-merge path. Automatic merge stays an ADR checkpoint rather
+than something a heuristic reaches on its own.
+
+Resolution is reachable only from the dashboard operator surface
+(`POST /v1/projects/{projectId}/billing/identity-conflicts/{conflictId}/resolution`), never from a
+secret server key. Deciding which of two people owns a purchase is a human judgement about
+evidence, and an application backend holding a long-lived key is not the party that should be able
+to make it unattended. See *The operator surface (dashboard)*.
 
 ## Restore and sync
 
@@ -575,6 +581,146 @@ duplicate cannot double-grant and the checksum is unchanged. It is **not** absor
 `subscription_timeline_entries` (one entry per fact id, so the same purchase can render twice) or
 for `subscription_snapshot_facts` (both facts are cited as evidence). The full statement is in the
 header of migration `00029_billing_fact_shape_v2.sql`.
+
+## The operator surface (dashboard)
+
+Every surface described above authenticates a *machine*. The identity, access, and restore APIs
+take their tenant entirely from a secret server key, which is exactly right for an application
+backend and is something a browser must never hold. The consequence is structural: none of that
+state was reachable from a dashboard session at all, and Mosaic Studio could not show a Billing
+Customer.
+
+The operator surface is the second door. It serves the same state, read through the same
+repositories, behind a different lock.
+
+| Question | Route |
+| --- | --- |
+| Which customers exist here? | `GET /v1/projects/{projectId}/environments/{environmentId}/billing/customers` |
+| Who holds this identifier? | `POST …/billing/customer-lookups` |
+| Everything about one customer | `GET …/billing/customers/{customerId}` |
+| Their current entitlements | `GET …/billing/customers/{customerId}/entitlements` |
+| Their subscriptions | `GET …/billing/customers/{customerId}/subscriptions` |
+| Recompute their state | `POST …/billing/customers/{customerId}/sync-requests` |
+| One subscription | `GET …/billing/subscriptions/{instanceId}` |
+| Why it changed | `GET …/billing/subscriptions/{instanceId}/timeline` |
+| Restore and sync jobs | `GET …/billing/restore-jobs`, `GET …/billing/restore-jobs/{restoreId}` |
+| Disputed identities | `GET /v1/projects/{projectId}/billing/identity-conflicts` (+ `/{conflictId}`) |
+| Settle a dispute | `POST /v1/projects/{projectId}/billing/identity-conflicts/{conflictId}/resolution` |
+
+Projection health and bounded projection replay already live on this surface and use the same
+authorization; they are documented under *Projection health* and *Projection replay and rule
+versions*.
+
+### Who can see what, and why the server decides it
+
+Authentication is the opaque browser session (ADR-0017); authorization is the actor's
+**organization role, resolved in SQL against `organization_members` alongside every query**. Owner
+and admin reach this surface; every other role is refused. That is the same bar the Phase 9A
+ledger, quarantine, and reconciliation pages use, and it is a deliberate step above plain project
+membership: this is the most sensitive read Mosaic offers, because it names who bought what.
+
+Three properties are worth stating explicitly, because each one is a decision rather than a
+default.
+
+- **The dashboard is not trusted to hide anything.** No route relies on a client not asking. A
+  session that is authenticated but not owner or admin receives `403` with the standard error
+  envelope, and a session belonging to another organization receives `404` — because telling a
+  caller that a Project exists but is not theirs is an existence oracle over other tenants.
+- **The Environment on the route is checked for containment.** Pairing a Project you can read with
+  an Environment you cannot would otherwise pass the role check while every subsequent query,
+  which filters on `environment_id`, answered about someone else's Environment. A Subscription
+  Instance belonging to another Environment is likewise reported as absent rather than forbidden.
+- **Enablement is checked after authorization.** "Billing is not enabled for this Project" is
+  itself information about a Project, and a caller who may not read the Project must not learn it.
+
+The secret-server surfaces are untouched by any of this. They are the application-backend
+contract, and adding a browser-reachable route to them would have handed a public front end the
+credential that names a customer.
+
+### The lookup is read-only by construction
+
+`POST …/billing/customer-lookups` takes a typed identifier — `billing_customer_id`,
+`application_user_id`, or `installation_id` — and answers with at most one customer summary.
+
+It is not the trusted identify endpoint. That one is create-or-get, and using it as a search would
+mint one Billing Customer per mistyped support query, which is precisely the duplicate-customer
+trap plan §5a exists to avoid. The read model behind the operator surface declares **no writer at
+all**, so this is a property of the code rather than a promise about it.
+
+The submitted value is digested server-side under the same domain separation the alias table uses,
+and is never stored, never logged, and never echoed — which is also why the operation is a POST
+with a body rather than a GET with a query string that would be written to access logs, proxy
+logs, browser history, and referrer headers. It is rate limited in the export-class bucket,
+because it is the one operator surface that accepts an attacker-chosen identifier and reports
+whether it matched.
+
+`application_user_id` resolves through the active alias resolution. `installation_id` resolves
+through **association evidence**, because an installation identifier is evidence and never an
+anchor (plan §5a rule 2a) and therefore has no alias resolution to read. Reading recorded evidence
+backwards for an authorized operator is a different act from letting a client-asserted identifier
+select a customer at request time, and the two stay different because this path exists only behind
+the authorization above.
+
+A miss answers `200` with `found: false` rather than `404`: "no customer holds this identifier" is
+a true and useful answer to a support question.
+
+### What a customer detail actually shows
+
+One read returns the lifecycle, the Environment's current snapshot version and as-of instant,
+aliases, purchase lineages, subscriptions, one-time purchases, identity conflicts on either side,
+the current entitlement entries with their sources, and projection status. It is one call rather
+than eight so the page describes one instant — an operator comparing a snapshot version against a
+projection status assembled from eight requests would be comparing eight different moments.
+
+`currentSnapshot` is **absent**, not empty, when the customer has never been projected in this
+Environment. "No answer yet" and "no entitlements" are different states and the surface keeps them
+different.
+
+Aliases appear as protected representations: `aliasId`, `aliasType`, authority, verification
+status, and validity dates. There is no value field and no digest field anywhere in the response
+shape. The alias id is random and identifies the row for a revocation; an alias digest is still a
+stable per-person identifier and would let one tenant's export be joined against another's, so it
+never leaves the persistence layer.
+
+The list distinguishes `identified` from `purchaseAnchored` as two independent booleans rather
+than one state, because the interesting customers are the ones where they disagree: a
+purchase-anchored customer who never identified is real revenue with no person attached, and an
+identified customer with no purchase is a person with no revenue.
+
+The Environment filter admits a customer holding a pointer or a lineage in this Environment, and
+additionally a customer holding a lineage in no Environment at all — a customer created by a
+trusted identify and not yet party to any purchase belongs to the Project and to no Environment,
+and hiding it everywhere would make a just-created customer invisible.
+
+### Resolving a conflict from the dashboard
+
+Identity conflicts are Project-scoped and the route says so. A conflict is a dispute about who a
+person is, and identity in Mosaic belongs to the Project (OD-3(b)); filing the page under an
+Environment would imply it could be resolved differently in staging than in production.
+
+The resolution endpoint speaks the OD-10 vocabulary — `keep_existing`, `reassign_to_candidate`,
+`operator_split` — mapped in exactly one place onto the schema's `assigned_first`,
+`assigned_second`, `detached_both`. `reason` is **required**: every action moves committed access
+for at least one paying customer, and the audit entry an investigation reads months later is worth
+nothing without the why. The reason is written to the conflict's detail document and to the audit
+event, so it survives a later resolution rewriting the row.
+
+The endpoint delegates the whole operation to the identity service rather than issuing SQL of its
+own. That service applies the assignment under a row lock, unfreezes the disputed subject, audits,
+and reprojects **both** candidates — the loser included, because the loser is the one holding a
+committed snapshot that still grants the purchase. Duplicating that sequence behind a second write
+path is how two copies come to disagree, so there is only one.
+
+### "Sync now" is not a restore
+
+`POST …/customers/{customerId}/sync-requests` enqueues a recomputation of the customer's
+entitlement aggregate and reaches the same enqueue the trusted surface does, so an operator's
+button and a backend's call produce one job on one queue rather than two answers. It computes
+nothing itself.
+
+It is deliberately not a restore. A restore needs a device to ask its store for purchases, which
+no operator can do on a customer's behalf, and a control that claimed to would report a native
+outcome nobody produced. Restore visibility on this surface is read-only.
 
 ## Projection health
 

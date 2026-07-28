@@ -2392,6 +2392,403 @@ paths:
         "404": { $ref: "#/components/responses/Error" }
         "409": { $ref: "#/components/responses/Error" }
         "422": { $ref: "#/components/responses/Error" }
+  /v1/projects/{projectId}/environments/{environmentId}/billing/customers:
+    get:
+      operationId: listBillingCustomers
+      tags: [Billing Customers]
+      security: [{ BrowserSession: [] }]
+      description: |
+        The Environment's Billing Customers, newest first. Owner or admin only, enforced
+        server-side: this is the most sensitive read surface Mosaic has, because it names who
+        bought what.
+
+        `identified` and `purchaseAnchored` are separate booleans rather than one state, because
+        the interesting customers are the ones where they disagree — a purchase-anchored customer
+        who never identified is real revenue with no person attached, and an identified customer
+        with no purchase is a person with no revenue.
+
+        The Environment filter admits a customer holding a pointer or a lineage here, and
+        additionally a customer holding a lineage in no Environment at all: a customer created by
+        a trusted identify and not yet party to any purchase belongs to the Project and to no
+        Environment, and hiding it everywhere would make a just-created customer invisible.
+
+        No alias value and no alias digest appears anywhere in the response.
+      parameters:
+        - { $ref: "#/components/parameters/ProjectID" }
+        - { $ref: "#/components/parameters/EnvironmentID" }
+        - { in: query, name: status, schema: { type: string, enum: [active, frozen, anonymized] } }
+        - { in: query, name: identified, description: Restrict to identified or to purchase-anchored-only customers., schema: { type: boolean } }
+        - { in: query, name: conflictedOnly, description: Only customers party to an open identity conflict., schema: { type: boolean } }
+        - { $ref: "#/components/parameters/Limit" }
+        - { $ref: "#/components/parameters/Cursor" }
+      responses:
+        "200":
+          description: Billing Customers.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      items: { type: array, items: { $ref: "#/components/schemas/BillingCustomerSummary" } }
+                      nextCursor: { type: string }
+        "401": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+        "503": { $ref: "#/components/responses/Error" }
+  /v1/projects/{projectId}/environments/{environmentId}/billing/customer-lookups:
+    post:
+      operationId: lookupBillingCustomer
+      tags: [Billing Customers]
+      security: [{ BrowserSession: [] }]
+      description: |
+        Read-only typed-identifier search. It resolves at most one Billing Customer and is
+        structurally incapable of creating one: the read model behind it declares no writer at
+        all. That distinction matters — the trusted identify endpoint is create-or-get, and using
+        it as a search would mint one Billing Customer per mistyped support query.
+
+        `application_user_id` resolves through the active alias resolution;
+        `installation_id` resolves through association evidence, because an installation
+        identifier is evidence and never an anchor and therefore has no alias resolution to read.
+        The submitted value is digested server-side and is never stored, never logged, and never
+        echoed — which is also why this is a POST with a body rather than a GET with a query
+        string that would reach access logs, proxy logs, and browser history.
+
+        A miss answers `200` with `found: false` rather than `404`: "no customer holds this
+        identifier" is a true answer to a support question. Rate limited.
+      parameters: [{ $ref: "#/components/parameters/ProjectID" }, { $ref: "#/components/parameters/EnvironmentID" }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/BillingCustomerLookupRequest" }
+      responses:
+        "200": { description: The lookup result., content: { application/json: { schema: { type: object, properties: { data: { $ref: "#/components/schemas/BillingCustomerLookupResult" } } } } } }
+        "401": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+        "422": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/Error" }
+  /v1/projects/{projectId}/environments/{environmentId}/billing/customers/{customerId}:
+    get:
+      operationId: getOperatorBillingCustomer
+      tags: [Billing Customers]
+      security: [{ BrowserSession: [] }]
+      description: |
+        One Billing Customer with everything the customer page shows: lifecycle, the Environment's
+        current snapshot version and as-of instant, aliases as protected representations, purchase
+        lineages, subscriptions, one-time purchases, identity conflicts, the current entitlement
+        entries with their sources, and projection status.
+
+        It is one read rather than eight so the page describes one instant. `currentSnapshot` is
+        absent — not empty — when the customer has never been projected in this Environment: "no
+        answer yet" and "no entitlements" are different states and stay different.
+
+        Aliases carry `aliasId`, `aliasType`, authority, and validity dates. There is no value
+        field and no digest field: the alias id is the protected representation, and an alias
+        digest is still a stable per-person identifier. Owner or admin only.
+      parameters:
+        - { $ref: "#/components/parameters/ProjectID" }
+        - { $ref: "#/components/parameters/EnvironmentID" }
+        - { $ref: "#/components/parameters/BillingCustomerID" }
+      responses:
+        "200": { description: The Billing Customer., content: { application/json: { schema: { type: object, properties: { data: { $ref: "#/components/schemas/BillingCustomerDetail" } } } } } }
+        "401": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+        "503": { $ref: "#/components/responses/Error" }
+  /v1/projects/{projectId}/environments/{environmentId}/billing/customers/{customerId}/entitlements:
+    get:
+      operationId: getBillingCustomerEntitlementSnapshot
+      tags: [Billing Customers]
+      security: [{ BrowserSession: [] }]
+      description: |
+        The customer's current committed Customer Entitlement Snapshot in this Environment, read
+        through the same repository the trusted-server access API reads through — so the dashboard
+        and an application backend see one answer derived once.
+
+        `snapshotVersion` is the per-customer monotonic cache-monotonicity key. The snapshot
+        checksum is deliberately not on this surface: it is a determinism control the replay
+        surface compares, and an operator reading it can only mistake it for a state.
+        Owner or admin only.
+      parameters:
+        - { $ref: "#/components/parameters/ProjectID" }
+        - { $ref: "#/components/parameters/EnvironmentID" }
+        - { $ref: "#/components/parameters/BillingCustomerID" }
+      responses:
+        "200":
+          description: The current snapshot.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      snapshot: { $ref: "#/components/schemas/BillingEntitlementSnapshot" }
+                      projectionStatus: { $ref: "#/components/schemas/BillingProjectionStatus" }
+        "401": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+        "503": { $ref: "#/components/responses/Error" }
+  /v1/projects/{projectId}/environments/{environmentId}/billing/customers/{customerId}/subscriptions:
+    get:
+      operationId: listBillingCustomerSubscriptions
+      tags: [Billing Customers]
+      security: [{ BrowserSession: [] }]
+      description: The customer's projected Subscription Instances in this Environment, keyset-paginated. Owner or admin only.
+      parameters:
+        - { $ref: "#/components/parameters/ProjectID" }
+        - { $ref: "#/components/parameters/EnvironmentID" }
+        - { $ref: "#/components/parameters/BillingCustomerID" }
+        - { $ref: "#/components/parameters/Limit" }
+        - { $ref: "#/components/parameters/Cursor" }
+      responses:
+        "200":
+          description: Subscriptions.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      items: { type: array, items: { $ref: "#/components/schemas/BillingSubscriptionSnapshot" } }
+                      nextCursor: { type: string }
+        "401": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+        "503": { $ref: "#/components/responses/Error" }
+  /v1/projects/{projectId}/environments/{environmentId}/billing/customers/{customerId}/sync-requests:
+    post:
+      operationId: createBillingCustomerSyncRequest
+      tags: [Billing Customers]
+      security: [{ BrowserSession: [] }]
+      description: |
+        Enqueue a recomputation of the customer's committed entitlement aggregate. It reaches the
+        same enqueue the trusted-server surface does, so an operator's "sync now" and a backend's
+        produce one job on one queue rather than two answers, and it computes nothing itself.
+
+        It is deliberately not a restore: a restore needs a device to ask its store for purchases,
+        which no operator can do on a customer's behalf, and a control claiming to would report a
+        native outcome nobody produced. `202` — queued, not done. Rate limited. Audited.
+      parameters:
+        - { $ref: "#/components/parameters/ProjectID" }
+        - { $ref: "#/components/parameters/EnvironmentID" }
+        - { $ref: "#/components/parameters/BillingCustomerID" }
+      responses:
+        "202": { description: The projection was queued., content: { application/json: { schema: { type: object, properties: { data: { $ref: "#/components/schemas/BillingSyncRequest" } } } } } }
+        "401": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/Error" }
+        "503": { $ref: "#/components/responses/Error" }
+  /v1/projects/{projectId}/environments/{environmentId}/billing/subscriptions/{instanceId}:
+    get:
+      operationId: getBillingSubscription
+      tags: [Billing Customers]
+      security: [{ BrowserSession: [] }]
+      description: |
+        One projected Subscription Instance. An instance belonging to another Environment is
+        reported as absent rather than forbidden: a staging URL that happens to name a production
+        instance must not confirm that the instance exists. Owner or admin only.
+      parameters:
+        - { $ref: "#/components/parameters/ProjectID" }
+        - { $ref: "#/components/parameters/EnvironmentID" }
+        - { $ref: "#/components/parameters/SubscriptionInstanceID" }
+      responses:
+        "200": { description: The Subscription Instance., content: { application/json: { schema: { type: object, properties: { data: { $ref: "#/components/schemas/BillingSubscriptionSnapshot" } } } } } }
+        "401": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+        "503": { $ref: "#/components/responses/Error" }
+  /v1/projects/{projectId}/environments/{environmentId}/billing/subscriptions/{instanceId}/timeline:
+    get:
+      operationId: listBillingSubscriptionTimeline
+      tags: [Billing Customers]
+      security: [{ BrowserSession: [] }]
+      description: |
+        The append-only explanation history for one Subscription Instance, newest first. `detail`
+        passes through the ledger guard function, which is what keeps a provider token or a raw
+        payload fragment out of an explanation. Owner or admin only.
+      parameters:
+        - { $ref: "#/components/parameters/ProjectID" }
+        - { $ref: "#/components/parameters/EnvironmentID" }
+        - { $ref: "#/components/parameters/SubscriptionInstanceID" }
+        - { $ref: "#/components/parameters/Limit" }
+        - { $ref: "#/components/parameters/Cursor" }
+      responses:
+        "200":
+          description: Timeline entries.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      items: { type: array, items: { $ref: "#/components/schemas/BillingTimelineEntry" } }
+                      nextCursor: { type: string }
+        "401": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+        "503": { $ref: "#/components/responses/Error" }
+  /v1/projects/{projectId}/environments/{environmentId}/billing/restore-jobs:
+    get:
+      operationId: listBillingRestoreJobs
+      tags: [Billing Customers]
+      security: [{ BrowserSession: [] }]
+      description: |
+        Restore and sync jobs in this Environment, newest first. Mosaic's `outcome` and the native
+        `providerOutcome` are separate axes and are never merged: a completed native restore whose
+        facts have not reached a snapshot is not restored access. Owner or admin only.
+      parameters:
+        - { $ref: "#/components/parameters/ProjectID" }
+        - { $ref: "#/components/parameters/EnvironmentID" }
+        - { in: query, name: billingCustomerId, schema: { type: string } }
+        - { $ref: "#/components/parameters/Limit" }
+        - { $ref: "#/components/parameters/Cursor" }
+      responses:
+        "200":
+          description: Restore jobs.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      items: { type: array, items: { $ref: "#/components/schemas/BillingRestoreJob" } }
+                      nextCursor: { type: string }
+        "401": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+        "503": { $ref: "#/components/responses/Error" }
+  /v1/projects/{projectId}/environments/{environmentId}/billing/restore-jobs/{restoreId}:
+    get:
+      operationId: getBillingRestoreJob
+      tags: [Billing Customers]
+      security: [{ BrowserSession: [] }]
+      description: One restore or sync job's status. Owner or admin only.
+      parameters:
+        - { $ref: "#/components/parameters/ProjectID" }
+        - { $ref: "#/components/parameters/EnvironmentID" }
+        - { $ref: "#/components/parameters/RestoreJobID" }
+      responses:
+        "200": { description: The restore job., content: { application/json: { schema: { type: object, properties: { data: { $ref: "#/components/schemas/BillingRestoreJob" } } } } } }
+        "401": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+        "503": { $ref: "#/components/responses/Error" }
+  /v1/projects/{projectId}/billing/identity-conflicts:
+    get:
+      operationId: listOperatorBillingIdentityConflicts
+      tags: [Billing Identity Conflicts]
+      security: [{ BrowserSession: [] }]
+      description: |
+        Identity conflicts awaiting or holding an operator decision. They are Project-scoped, not
+        Environment-scoped, and the route says so: a conflict is a dispute about who a person is,
+        and identity in Mosaic belongs to the Project. Filing it under an Environment would imply
+        it could be resolved differently in staging than in production.
+
+        A conflict carries the disputed alias *family* and never the disputed alias digest.
+        Owner or admin only.
+      parameters:
+        - { $ref: "#/components/parameters/ProjectID" }
+        - { in: query, name: status, schema: { type: string, enum: [open, resolved] } }
+      responses:
+        "200":
+          description: Identity conflicts.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      items: { type: array, items: { $ref: "#/components/schemas/BillingIdentityConflict" } }
+        "401": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+        "422": { $ref: "#/components/responses/Error" }
+        "503": { $ref: "#/components/responses/Error" }
+  /v1/projects/{projectId}/billing/identity-conflicts/{conflictId}:
+    get:
+      operationId: getOperatorBillingIdentityConflict
+      tags: [Billing Identity Conflicts]
+      security: [{ BrowserSession: [] }]
+      description: One conflict with the purchase lineage it disputes, which is what an operator needs before choosing a resolution. Owner or admin only.
+      parameters:
+        - { $ref: "#/components/parameters/ProjectID" }
+        - { $ref: "#/components/parameters/IdentityConflictID" }
+      responses:
+        "200": { description: The conflict., content: { application/json: { schema: { type: object, properties: { data: { $ref: "#/components/schemas/BillingIdentityConflictDetail" } } } } } }
+        "401": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+        "503": { $ref: "#/components/responses/Error" }
+  /v1/projects/{projectId}/billing/identity-conflicts/{conflictId}/resolution:
+    post:
+      operationId: resolveBillingIdentityConflict
+      tags: [Billing Identity Conflicts]
+      security: [{ BrowserSession: [] }]
+      description: |
+        Apply an operator's decision and release the freeze.
+
+        The three actions are the whole vocabulary. `keep_existing` awards the disputed subject to
+        the incumbent; `reassign_to_candidate` awards it to the challenger the evidence proposed;
+        `operator_split` awards it to neither — the operator has decided these are two people and
+        the disputed link is removed rather than moved. There is deliberately no automatic-merge
+        action: automatic merge remains an ADR checkpoint, not something a control reaches on its
+        own.
+
+        `reason` is required. Every action moves committed access for at least one paying
+        customer, and the audit entry an investigation reads months later is worth nothing without
+        the why. The reason is written to the conflict and to the audit event.
+
+        Resolving unfreezes the disputed subject and reprojects **both** candidates, not only the
+        assigned one: whichever customer loses the lineage is the one holding a committed snapshot
+        that still grants it. `assignedBillingCustomerId` is optional and, when present, must name
+        the party the action already implies — a resolution surface accepting an arbitrary
+        customer would be an unaudited "give this purchase to anyone" control.
+
+        Owner or admin only. Audited.
+      parameters:
+        - { $ref: "#/components/parameters/ProjectID" }
+        - { $ref: "#/components/parameters/IdentityConflictID" }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ResolveIdentityConflictRequest" }
+      responses:
+        "200": { description: The resolved conflict., content: { application/json: { schema: { type: object, properties: { data: { $ref: "#/components/schemas/BillingIdentityConflict" } } } } } }
+        "401": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+        "422": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/Error" }
+        "503": { $ref: "#/components/responses/Error" }
   /v1/projects/{projectId}/billing/grant-versions:
     get:
       operationId: listProductEntitlementGrantVersions
@@ -2800,6 +3197,10 @@ components:
     WebhookDestinationID: { in: path, name: destinationId, required: true, schema: { type: string } }
     WebhookDeliveryID: { in: path, name: deliveryId, required: true, schema: { type: string } }
     EnvironmentID: { in: path, name: environmentId, required: true, schema: { type: string } }
+    BillingCustomerID: { in: path, name: customerId, required: true, schema: { type: string } }
+    SubscriptionInstanceID: { in: path, name: instanceId, required: true, schema: { type: string } }
+    RestoreJobID: { in: path, name: restoreId, required: true, schema: { type: string } }
+    IdentityConflictID: { in: path, name: conflictId, required: true, schema: { type: string } }
     ApplicationID: { in: path, name: applicationId, required: true, schema: { type: string } }
     ProviderConnectionID: { in: path, name: connectionId, required: true, schema: { type: string } }
     ProviderMappingID: { in: path, name: mappingId, required: true, schema: { type: string } }
@@ -4056,6 +4457,270 @@ components:
         activeWebhookDestinations: { type: integer, format: int64 }
         lastProjectionCommittedAt: { type: string, format: date-time }
         observedAt: { type: string, format: date-time }
+    BillingCustomerSummary:
+      type: object
+      description: |
+        One Billing Customer as the operator list and the detail header report it. It carries no
+        alias value and no alias digest, because Mosaic exposes neither on any surface.
+      properties:
+        billingCustomerId: { type: string }
+        projectId: { type: string }
+        environmentId: { type: string }
+        status: { type: string, enum: [active, frozen, anonymized] }
+        diagnosticsStatus: { type: string, enum: [none, identity_conflict, projection_stale, projection_failed] }
+        identified: { type: boolean, description: An active application-user alias exists - a person is attached. }
+        purchaseAnchored: { type: boolean, description: A purchase lineage exists in this Environment - revenue is attached. }
+        hasOpenIdentityConflict: { type: boolean }
+        frozenLineageCount: { type: integer }
+        currentProjectionVersion: { type: integer, format: int64 }
+        lastProjectedAt: { type: string, format: date-time }
+        snapshotVersion: { type: integer, format: int64, description: Absent when the customer has never been projected in this Environment, which is not the same as having no entitlements. }
+        snapshotUpdatedAt: { type: string, format: date-time }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+    BillingCustomerLookupRequest:
+      type: object
+      additionalProperties: false
+      required: [identifierType, identifierValue]
+      properties:
+        identifierType: { type: string, enum: [billing_customer_id, application_user_id, installation_id] }
+        identifierValue:
+          type: string
+          minLength: 1
+          maxLength: 512
+          description: The raw identifier. It is digested server-side and is never stored, never logged, and never echoed back.
+    BillingCustomerLookupResult:
+      type: object
+      properties:
+        found: { type: boolean }
+        customer: { $ref: "#/components/schemas/BillingCustomerSummary" }
+    BillingCustomerAlias:
+      type: object
+      description: |
+        One accepted external identity bound to a customer, as a protected representation. There
+        is no value field and no digest field: the alias id identifies the row for a revocation
+        and reveals nothing about the person, whereas an alias digest is still a stable
+        per-person identifier.
+      properties:
+        aliasId: { type: string }
+        aliasType: { type: string, enum: [application_user_id, installation_id, apple_app_account_token, google_obfuscated_account_id] }
+        sourceAuthority: { type: string, enum: [trusted_server, sdk_installation, provider_payload, operator, restore] }
+        verificationStatus: { type: string, enum: [asserted, verified] }
+        active: { type: boolean }
+        effectiveStart: { type: string, format: date-time }
+        effectiveEnd: { type: string, format: date-time }
+    BillingPurchaseLineage:
+      type: object
+      description: One provider purchase chain. Supersession is an explicit edge; nothing is ever deleted.
+      properties:
+        purchaseLineageId: { type: string }
+        environmentId: { type: string }
+        provider: { type: string, enum: [app_store, google_play] }
+        storeEnvironment: { type: string, enum: [sandbox, production] }
+        lineageType: { type: string, enum: [subscription, one_time] }
+        projectionFrozen: { type: boolean, description: Set while an identity conflict is open - the projector skips it and the last committed state is preserved. }
+        diagnosticStatus: { type: string, enum: [none, identity_unresolved, identity_conflict, product_unresolved] }
+        supersededByLineageId: { type: string }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+    BillingOneTimePurchase:
+      type: object
+      description: Validated ownership of a non-consumable. Consumables are excluded from Mosaic Billing.
+      properties:
+        oneTimePurchaseInstanceId: { type: string }
+        purchaseLineageId: { type: string }
+        provider: { type: string, enum: [app_store, google_play] }
+        mosaicProductId: { type: string }
+        providerProductIdentifier: { type: string }
+        acquiredAt: { type: string, format: date-time }
+        validityState: { type: string, enum: [owned, refunded, revoked, unknown] }
+        refundEffectiveAt: { type: string, format: date-time }
+        revocationEffectiveAt: { type: string, format: date-time }
+    BillingProjectionStatus:
+      type: object
+      properties:
+        state: { type: string, enum: [current, pending, stale, degraded, failed] }
+        lastProjectedAt: { type: string, format: date-time }
+        pendingFactCount: { type: integer }
+        diagnosticCode: { type: string }
+    BillingEntitlementSnapshotEntry:
+      type: object
+      properties:
+        entitlementId: { type: string }
+        entitlementKey: { type: string }
+        state: { type: string, enum: [active, inactive, unknown], description: unavailable is a read-time service state and is never persisted on a snapshot. }
+        effectiveStart: { type: string, format: date-time }
+        effectiveEnd: { type: string, format: date-time }
+        endKnown: { type: boolean }
+        sourceCount: { type: integer }
+        uncertaintyReason: { type: string, enum: [none, provider_unavailable, missing_fact, identity_unresolved, product_unresolved, conflicting_facts, projection_failed, stale_validation, unsupported_provider_state] }
+        isTestSource: { type: boolean }
+        explanationCode: { type: string }
+        sourceIds: { type: array, items: { type: string } }
+    BillingEntitlementSource:
+      type: object
+      description: |
+        One reason the customer holds, or may hold, an Entitlement. Source identity is
+        (purchase lineage, product, grant version) and never a fact id, so multiple facts
+        describing one purchase cannot double-grant.
+      properties:
+        sourceId: { type: string }
+        entitlementId: { type: string }
+        purchaseLineageId: { type: string }
+        mosaicProductId: { type: string }
+        grantVersionId: { type: string }
+        subscriptionInstanceId: { type: string }
+        oneTimePurchaseInstanceId: { type: string }
+        storePlatform: { type: string }
+        sourceType: { type: string }
+        sourceState: { type: string }
+        sourceStart: { type: string, format: date-time }
+        sourceEnd: { type: string, format: date-time }
+        endKnown: { type: boolean }
+        uncertaintyReason: { type: string }
+        isTestSource: { type: boolean }
+        explanationCode: { type: string }
+    BillingEntitlementSnapshot:
+      type: object
+      properties:
+        snapshotId: { type: string }
+        snapshotVersion: { type: integer, format: int64, description: Per-customer monotonic. It is the sole cache-monotonicity key; a no-change projection does not advance it. }
+        previousSnapshotVersion: { type: integer, format: int64 }
+        projectionRuleVersion: { type: integer }
+        computedAt: { type: string, format: date-time }
+        asOf: { type: string, format: date-time }
+        changeReason: { type: string }
+        entries: { type: array, items: { $ref: "#/components/schemas/BillingEntitlementSnapshotEntry" } }
+        sources: { type: array, items: { $ref: "#/components/schemas/BillingEntitlementSource" } }
+    BillingSubscriptionSnapshot:
+      type: object
+      description: |
+        One projected Subscription Instance. Access and lifecycle are separate axes on purpose:
+        a cancelled subscription keeps access until its validated period end, so cancellation
+        moves renewal intent and nothing else.
+      properties:
+        subscriptionInstanceId: { type: string }
+        purchaseLineageId: { type: string }
+        billingCustomerId: { type: string }
+        environmentId: { type: string }
+        storePlatform: { type: string }
+        mosaicProductId: { type: string }
+        priorMosaicProductId: { type: string }
+        accessState: { type: string, enum: [active, inactive, unknown, unavailable] }
+        lifecycleState: { type: string, enum: [trialing, active, grace_period, billing_retry, paused, expired, revoked, refunded, superseded, unknown] }
+        renewalIntent: { type: string }
+        billingState: { type: string }
+        uncertaintyReason: { type: string }
+        projectionVersion: { type: integer, format: int64 }
+        projectionRuleVersion: { type: integer }
+        computedAt: { type: string, format: date-time }
+        asOf: { type: string, format: date-time }
+        periodStart: { type: string, format: date-time }
+        periodEnd: { type: string, format: date-time }
+        gracePeriodEnd: { type: string, format: date-time }
+        billingRetryStart: { type: string, format: date-time }
+        pauseEffectiveAt: { type: string, format: date-time }
+        pauseResumeAt: { type: string, format: date-time }
+        cancellationEffectiveAt: { type: string, format: date-time }
+        expirationEffectiveAt: { type: string, format: date-time }
+        revocationEffectiveAt: { type: string, format: date-time }
+        refundEffectiveAt: { type: string, format: date-time }
+        supersededBySubscriptionInstanceId: { type: string }
+        isTestSource: { type: boolean }
+        sourceFactCount: { type: integer }
+        changeReason: { type: string }
+        explanationCode: { type: string }
+    BillingTimelineEntry:
+      type: object
+      properties:
+        timelineEntryId: { type: string }
+        entryType: { type: string }
+        effectiveAt: { type: string, format: date-time }
+        observedAt: { type: string, format: date-time }
+        subscriptionInstanceId: { type: string }
+        mosaicProductId: { type: string }
+        priorMosaicProductId: { type: string }
+        explanationCode: { type: string }
+        detail: { type: object, additionalProperties: { type: string }, description: Passed through the ledger guard function, so no provider token or raw payload fragment can appear here. }
+    BillingCustomerDetail:
+      type: object
+      properties:
+        customer: { $ref: "#/components/schemas/BillingCustomerSummary" }
+        aliases: { type: array, items: { $ref: "#/components/schemas/BillingCustomerAlias" } }
+        purchaseLineages: { type: array, items: { $ref: "#/components/schemas/BillingPurchaseLineage" } }
+        subscriptions: { type: array, items: { $ref: "#/components/schemas/BillingSubscriptionSnapshot" } }
+        oneTimePurchases: { type: array, items: { $ref: "#/components/schemas/BillingOneTimePurchase" } }
+        identityConflicts: { type: array, items: { $ref: "#/components/schemas/BillingIdentityConflict" } }
+        currentSnapshot: { $ref: "#/components/schemas/BillingEntitlementSnapshot" }
+        projectionStatus: { $ref: "#/components/schemas/BillingProjectionStatus" }
+    BillingIdentityConflict:
+      type: object
+      description: |
+        One disputed association held open for operator resolution. Access is granted to neither
+        candidate while it is open: the disputed subject is frozen and the last committed state is
+        preserved. The disputed alias digest is never part of this shape.
+      properties:
+        conflictId: { type: string }
+        projectId: { type: string }
+        scope: { type: string, enum: [lineage, alias] }
+        status: { type: string, enum: [open, resolved] }
+        purchaseLineageId: { type: string }
+        aliasType: { type: string }
+        firstCustomerId: { type: string, description: The incumbent. }
+        secondCustomerId: { type: string, description: The challenger the evidence proposed. }
+        diagnosticCode: { type: string, enum: [multiple_customers_claim_lineage, reassignment_requires_operator_resolution, application_user_alias_claims_two_customers] }
+        openedAt: { type: string, format: date-time }
+        resolvedAt: { type: string, format: date-time }
+        resolutionAction: { type: string, enum: [keep_existing, reassign_to_candidate, operator_split] }
+        resolutionReason: { type: string }
+    BillingIdentityConflictDetail:
+      type: object
+      properties:
+        conflict: { $ref: "#/components/schemas/BillingIdentityConflict" }
+        lineage: { $ref: "#/components/schemas/BillingPurchaseLineage" }
+    ResolveIdentityConflictRequest:
+      type: object
+      additionalProperties: false
+      required: [action, reason]
+      properties:
+        action: { type: string, enum: [keep_existing, reassign_to_candidate, operator_split] }
+        assignedBillingCustomerId: { type: string, maxLength: 128, description: Optional. When present it must name the party the action already implies. }
+        reason: { type: string, minLength: 1, maxLength: 500, description: Required. Recorded on the conflict and on the audit event. }
+    BillingSyncRequest:
+      type: object
+      properties:
+        billingCustomerId: { type: string }
+        projectId: { type: string }
+        environmentId: { type: string }
+        projectionScopeKey: { type: string, description: What the projection queue coalesces on. }
+        triggerKind: { type: string }
+        requestedAt: { type: string, format: date-time }
+        status: { type: string, enum: [queued] }
+    BillingRestoreJob:
+      type: object
+      description: |
+        One restore or sync job. Mosaic's authoritative `outcome` and the native `providerOutcome`
+        are separate axes and are never merged: a completed native restore whose facts have not
+        reached a snapshot is not restored access. `restored` is admissible only together with the
+        accepted `snapshotVersion` that demonstrates it.
+      properties:
+        restoreId: { type: string }
+        environmentId: { type: string }
+        billingCustomerId: { type: string, description: Empty until identity resolves - which is exactly the identity_unresolved outcome. }
+        storePlatform: { type: string, enum: [apple_app_store, google_play] }
+        status: { type: string, enum: [queued, leased, completed, failed] }
+        outcome: { type: string, enum: [restored, no_additional_purchases, validation_pending, identity_unresolved, product_unresolved, provider_unavailable, failed] }
+        providerOutcome: { type: string, enum: [completed, no_purchases_found, cancelled, failed, unsupported, not_attempted] }
+        uncertaintyReason: { type: string }
+        observedTransactionCount: { type: integer }
+        pendingValidationCount: { type: integer }
+        baselineSnapshotVersion: { type: integer, format: int64 }
+        snapshotVersion: { type: integer, format: int64 }
+        attemptCount: { type: integer }
+        maxAttempts: { type: integer }
+        requestedAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+        completedAt: { type: string, format: date-time }
     CreateExperimentRequest:
       type: object
       additionalProperties: false
