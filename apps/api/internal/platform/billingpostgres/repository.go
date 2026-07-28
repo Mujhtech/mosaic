@@ -144,31 +144,35 @@ func (r *Repository) SetBillingEnabled(ctx context.Context, actor billing.Actor,
 	if _, err := requireRole(ctx, r.pool, actor, projectID, "owner", "admin"); err != nil {
 		return err
 	}
-	if !enabled {
-		// Turning billing off must actually stop ingestion. It cannot, while a
-		// credential is live: Apple posts to an endpoint whose intake token
-		// still resolves, and every refusal spends one of five non-renewable
-		// delivery attempts. Requiring revocation first makes the switch mean
-		// what it says, and makes the operator's action the one that stops the
-		// store rather than a setting the store cannot see.
-		var active int
-		if err := r.pool.QueryRow(ctx,
-			`SELECT count(*) FROM store_server_credentials WHERE project_id=$1 AND status='active'`,
-			projectID).Scan(&active); err != nil {
-			return fmt.Errorf("count active store server credentials: %w", err)
-		}
-		if active > 0 {
-			return billing.ErrCredentialsStillActive
-		}
-	}
-	_, err := r.pool.Exec(ctx,
+	// Turning billing off must actually stop ingestion. It cannot, while a
+	// credential is live: Apple posts to an endpoint whose intake token still
+	// resolves, and every refusal spends one of five non-renewable delivery
+	// attempts. Requiring revocation first makes the switch mean what it says,
+	// and makes the operator's action the one that stops the store rather than a
+	// setting the store cannot see.
+	//
+	// The check and the write are **one statement**. Counting credentials and
+	// then writing separately is check-then-act: a credential created between
+	// the two calls leaves billing disabled with a live credential, which is
+	// precisely the state the rule exists to prevent. Folding the predicate into
+	// the INSERT ... SELECT makes the guard evaluate against the same snapshot
+	// that performs the write, and zero rows affected is the refusal.
+	tag, err := r.pool.Exec(ctx,
 		`INSERT INTO billing_project_settings(project_id, billing_enabled, updated_by_actor_id, created_at, updated_at)
-		 VALUES ($1,$2,$3,$4,$4)
+		 SELECT $1,$2,$3,$4,$4
+		 WHERE $2::boolean
+		    OR NOT EXISTS (
+		        SELECT 1 FROM store_server_credentials
+		        WHERE project_id = $1 AND status = 'active')
 		 ON CONFLICT (project_id) DO UPDATE SET billing_enabled = EXCLUDED.billing_enabled,
 		   updated_by_actor_id = EXCLUDED.updated_by_actor_id, updated_at = EXCLUDED.updated_at`,
 		projectID, enabled, actor.ID, now)
 	if err != nil {
 		return fmt.Errorf("write billing settings: %w", err)
+	}
+	if tag.RowsAffected() == 0 {
+		// The only predicate that can suppress the write is the credential rule.
+		return billing.ErrCredentialsStillActive
 	}
 	return nil
 }
@@ -665,8 +669,24 @@ func (r *Repository) PersistRawInput(ctx context.Context, input billing.RawInput
 				return billing.PersistResult{}, err
 			}
 		}
+		// The duplicate-detected entry is bucketed by hour, not stamped with the
+		// instant.
+		//
+		// Including `now` in the id made every repeat post a fresh ledger row,
+		// which handed the unbounded-growth problem straight back to the ledger:
+		// the intake endpoint is deliberately unlimited (a 429 to Apple spends a
+		// non-renewable delivery attempt), so whoever holds a leaked intake token
+		// could post the same body forever and grow the table without bound. The
+		// raw input is already capped the same way; the ledger has to be too, or
+		// the cap accomplishes nothing.
+		//
+		// One entry per input per hour is the right granularity for what the
+		// entry actually says. "This input was delivered again" is not new
+		// information on the thousandth repeat, and the volume already lives in
+		// the intake counters, which is where a rate belongs.
 		if err := insertLedger(ctx, tx, billing.LedgerEntry{
-			ID: "ble_" + hashID(existingID, "duplicate", now), ProjectID: input.ProjectID,
+			ID:            "ble_" + hashID(existingID, "duplicate", now.UTC().Truncate(time.Hour)),
+			ProjectID:     input.ProjectID,
 			EnvironmentID: input.EnvironmentID, EntryType: billing.LedgerInputDuplicateDetected,
 			RawInputID: existingID, CorrelationID: input.CorrelationID, OccurredAt: now,
 		}); err != nil {

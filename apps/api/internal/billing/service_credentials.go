@@ -148,9 +148,11 @@ func (s *Service) TestCredential(ctx context.Context, actor Actor, projectID, cr
 		// Get Notification History over a one-minute window is the cheapest call
 		// that proves the whole path: the key signs, Apple accepts the issuer,
 		// and the team is authorized. It reads nothing that changes.
+		// Team-scoped: the credential test proves the key signs and the team is
+		// authorized, not that one Application works.
 		apple, _, credErr := s.appleCredential(ctx, RawInput{
 			ProjectID: projectID, CredentialID: credentialID, Provider: ProviderAppStore,
-		})
+		}, scopedToTeam)
 		if credErr != nil {
 			health, code = "unavailable", "credential_unusable"
 			break

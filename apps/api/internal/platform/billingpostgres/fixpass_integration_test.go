@@ -2,6 +2,7 @@ package billingpostgres
 
 import (
 	"context"
+	"encoding/base64"
 	"strings"
 	"testing"
 	"time"
@@ -625,6 +626,20 @@ func TestUnverifiedInputsCollapseOntoAnHourlyBucket(t *testing.T) {
 		t.Fatalf("%d unverified rows after three distinct malformed bodies in one hour, want 1", rows)
 	}
 
+	// Q-2 — the ledger must be capped too. Bucketing the raw input while the
+	// duplicate-detected ledger entry still carried the instant simply handed
+	// the unbounded write one table over, on the same unlimited endpoint.
+	var ledgerRows int
+	if err := pool.QueryRow(ctx,
+		`SELECT count(*) FROM billing_ledger_entries
+		 WHERE project_id=$1 AND entry_type='input_duplicate_detected'`, projectID).Scan(&ledgerRows); err != nil {
+		t.Fatal(err)
+	}
+	if ledgerRows > 1 {
+		t.Fatalf("%d duplicate-detected ledger entries from repeats inside one hour, want at most 1; "+
+			"the raw-input cap accomplishes nothing if the ledger grows instead", ledgerRows)
+	}
+
 	// A different hour, or a different reason, is genuinely different
 	// information and gets its own row.
 	nextHour := now.Add(time.Hour)
@@ -644,5 +659,140 @@ func TestUnverifiedInputsCollapseOntoAnHourlyBucket(t *testing.T) {
 	}
 	if rows != 3 {
 		t.Fatalf("%d unverified rows across two hours and two reasons, want 3", rows)
+	}
+}
+
+// T-7 / Q-1 — a billing list cursor must walk the list to exhaustion.
+//
+// Every billing list orders by a timestamp, and billing identifiers are
+// deliberately not time-ordered: `Service.newID` is sixteen random bytes and
+// quarantine ids are a SHA-256 prefix. A cursor carrying only the id therefore
+// cannot express "after this row in timestamp order" — the previous
+// implementation emitted the last row's id and applied `id < $cursor` against a
+// timestamp ordering, so page two returned whatever happened to sort low by
+// random id and silently dropped the rest.
+//
+// This matters most on the quarantine queue, whose entire job is surfacing
+// inputs that need attention: a paging control that hides records is worse than
+// no control, because the operator believes they have seen everything.
+//
+// The ids below are chosen so that id order and timestamp order actively
+// disagree, which is what the random-id production case does in aggregate.
+func TestQuarantineListCursorWalksEveryRecord(t *testing.T) {
+	pool, ctx := testPool(t)
+	repository := New(pool)
+	projectID, environmentID, applicationID := seed(t, ctx, pool, "paging")
+	base := time.Now().UTC().Add(-time.Hour)
+
+	// Descending by last_attempt_at: zz, aa, mm, bb, yy. Ascending by id:
+	// aa, bb, mm, yy, zz. The two orders share no prefix.
+	order := []string{"zz", "aa", "mm", "bb", "yy"}
+	expected := make(map[string]bool, len(order))
+	for index, suffix := range order {
+		at := base.Add(-time.Duration(index) * time.Minute)
+		input := sampleInput(projectID, environmentID, applicationID, "fixture-uuid-paging-"+suffix)
+		input.ReceivedAt = at
+		input.ExpiresAt = at.Add(90 * 24 * time.Hour)
+		input.IngestionStatus = billing.IngestQuarantined
+		result, err := repository.PersistRawInput(ctx, input, false, at)
+		if err != nil {
+			t.Fatal(err)
+		}
+		// Force the quarantine id and its ordering timestamp so the disagreement
+		// between the two orders is deterministic rather than incidental.
+		recordID := "bqr_" + suffix
+		if _, err := pool.Exec(ctx,
+			`UPDATE billing_quarantine_records SET id=$1, last_attempt_at=$2, first_seen_at=$2
+			 WHERE raw_input_id=$3`, recordID, at, result.RawInputID); err != nil {
+			t.Fatal(err)
+		}
+		expected[recordID] = true
+	}
+
+	var organizationID string
+	if err := pool.QueryRow(ctx, `SELECT organization_id FROM projects WHERE id=$1`, projectID).
+		Scan(&organizationID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := pool.Exec(ctx,
+		`INSERT INTO organization_members(organization_id,actor_id,role,created_at,updated_at)
+		 VALUES ($1,'actor_owner_paging','owner',$2,$2)
+		 ON CONFLICT (organization_id,actor_id) DO UPDATE SET role=EXCLUDED.role`,
+		organizationID, time.Now().UTC()); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		cleanupContext, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+		defer cancel()
+		_, _ = pool.Exec(cleanupContext,
+			`DELETE FROM organization_members WHERE organization_id=$1 AND actor_id='actor_owner_paging'`, organizationID)
+	})
+	actor := billing.Actor{ID: "actor_owner_paging"}
+
+	// Page at two, as an operator clicking "Next page" would.
+	seen := map[string]int{}
+	cursor := ""
+	var previous time.Time
+	for page := 0; ; page++ {
+		if page > 10 {
+			t.Fatal("the cursor never exhausted a five-record list")
+		}
+		result, err := repository.ListQuarantine(ctx, actor, projectID, environmentID,
+			billing.ListOptions{Limit: 2, Cursor: cursor})
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, record := range result.Items {
+			seen[record.ID]++
+			// Ordering must stay monotonic across the page boundary, otherwise
+			// the cursor is resuming from the wrong place even if the counts
+			// happen to add up.
+			if !previous.IsZero() && record.LastAttemptAt.After(previous) {
+				t.Fatalf("record %s (%s) sorted after %s: paging broke the ordering",
+					record.ID, record.LastAttemptAt, previous)
+			}
+			previous = record.LastAttemptAt
+		}
+		if result.NextCursor == "" {
+			break
+		}
+		if result.NextCursor == cursor {
+			t.Fatal("the cursor did not advance; paging would loop forever")
+		}
+		cursor = result.NextCursor
+	}
+
+	if len(seen) != len(expected) {
+		t.Fatalf("paging surfaced %d of %d quarantine records; a paging control that hides "+
+			"records from the security queue is worse than no control", len(seen), len(expected))
+	}
+	for id := range expected {
+		if seen[id] != 1 {
+			t.Fatalf("record %s was returned %d times across the walk, want exactly 1", id, seen[id])
+		}
+	}
+}
+
+// A cursor is opaque: callers forward it unchanged and must never construct or
+// parse one. A mangled or stale value must start from the beginning rather than
+// erroring or silently truncating — the failure mode that hides records.
+func TestListCursorIsOpaqueAndFailsSafe(t *testing.T) {
+	at := time.Date(2026, 7, 28, 12, 0, 0, 0, time.UTC)
+	encoded := encodeCursor(at, "bqr_fixture")
+	if strings.Contains(encoded, "bqr_fixture") || strings.Contains(encoded, ":") {
+		t.Fatalf("cursor %q exposes its internals; callers will start parsing it", encoded)
+	}
+	decoded := decodeCursor(encoded)
+	if decoded.At == nil || !decoded.At.Equal(at) || decoded.ID != "bqr_fixture" {
+		t.Fatalf("cursor did not round-trip: %+v", decoded)
+	}
+	for _, malformed := range []string{"", "   ", "not-base64!!", "bqr_raw_id",
+		base64.RawURLEncoding.EncodeToString([]byte("no-colon")),
+		base64.RawURLEncoding.EncodeToString([]byte("notanumber:bqr_x")),
+		base64.RawURLEncoding.EncodeToString([]byte("123:"))} {
+		if got := decodeCursor(malformed); got.At != nil {
+			t.Fatalf("malformed cursor %q decoded to a position (%+v); it must start from the beginning",
+				malformed, got)
+		}
 	}
 }

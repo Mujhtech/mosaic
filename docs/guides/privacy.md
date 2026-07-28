@@ -6,6 +6,13 @@ ingestion-boundary rejection of values shaped like emails, phone numbers,
 tokens, or payment identifiers. This guide covers the identity model and the
 operator-facing privacy operations.
 
+**Mosaic Billing is the one subsystem that deliberately departs from that
+rule, and it is off by default.** If you enable it, Mosaic stores store-issued
+transaction material — including full Google Play purchase tokens and Apple
+signed payloads — encrypted at rest. See
+[Mosaic Billing](#mosaic-billing-store-transaction-data) below before enabling
+it.
+
 ## Identity model
 
 Two identity kinds exist:
@@ -54,6 +61,62 @@ and counts, never the raw submitted identity.
   enforced from received time by the worker.
 - UTC daily aggregates and privacy audit rows: 24 months, not configurable.
 - Ingestion refuses events older than seven days.
+
+## Mosaic Billing: store transaction data
+
+Mosaic Billing is off by default at two levels: the deployment
+(`MOSAIC_BILLING_ENABLED`) and each Project. Nothing below applies unless both
+are on. Turning it off for a Project stops intake, validation, reconciliation
+and replay for that Project, and Mosaic refuses to turn it off while a Store
+Server Credential is still active — revoking the credential is what actually
+stops the store delivering.
+
+### What is stored
+
+| Data | Retention | Notes |
+| --- | --- | --- |
+| Store Server Credentials (Apple In-App Purchase key, Google service-account key) | Until revoked | Encrypted at rest under the Mosaic keyring; never returned by any read |
+| Raw Billing Inputs — Apple signed payloads and **full Google Play purchase tokens** | `MOSAIC_BILLING_RAW_RETENTION_DAYS`, default **90 days** | Encrypted at rest; the body is deleted at expiry while the record of the input remains |
+| Transaction Facts — the normalized statements validation produced | Indefinite | Carry **no customer identity, no price, no currency, and no subject reference** |
+| Validation attempts, Product resolutions, ledger entries, quarantine records | Indefinite | Operational history; diagnostics and identifiers only |
+
+A purchase token is a reference the buyer's own purchase produced, and it is
+what makes a server-to-server observation actionable — a digest cannot be
+reversed into something the Play API will answer. It is encrypted on receipt,
+never logged, never returned by any endpoint, and expires with the raw body.
+
+### What is deliberately **not** stored
+
+Apple's `appAccountToken` and Google's `obfuscatedExternalAccountId` are the
+developer-chosen customer correlators, and Mosaic never decodes or persists
+either. There is no customer, subscriber, entitlement-state, or access-grant
+table anywhere in Mosaic Billing, and no price or currency column: Phase 9A
+records that a store confirmed a transaction, and decides nothing about
+customer access.
+
+### Billing data and identity deletion
+
+**Billing records are exempt from analytics identity deletion**, by owner
+decision. This is not an oversight and it does not leave a subject's data
+behind: Transaction Facts carry no customer identity, so an identity deletion
+has nothing in them to reach. The link between a transaction and a person
+exists in your own systems and in the store's, not in Mosaic's ledger.
+
+The store-issued material that *is* sensitive — signed payloads and purchase
+tokens — ages out on the raw-input retention window rather than on a deletion
+request, because it is evidence of what a store said rather than a record about
+a person. If you need it gone sooner, lower
+`MOSAIC_BILLING_RAW_RETENTION_DAYS` (minimum 30) or disable billing for the
+Project.
+
+### Backup and key handling
+
+The keyring that seals billing envelopes is a backup artifact in its own right
+and must be stored separately from the database; losing it makes stored
+credentials and retained bodies permanently undecryptable. Backups taken before
+a retention expiry still contain the encrypted bodies. See
+[SECURITY.md](../../SECURITY.md) and
+[key rotation](../backend/operations/key-rotation.md).
 
 ## Disabling collection
 

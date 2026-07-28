@@ -643,3 +643,152 @@ func TestObservationValidatesAgainstEnvironmentScopedCredential(t *testing.T) {
 			reason, bareDiagnostic, billing.QuarantineMissingCredential)
 	}
 }
+
+// T-6 — the trusted-server Google observation must reach a fact using the token
+// it carried.
+//
+// This is the end-to-end half of BL-1, and it is the only server-actionable
+// Google observation path: a client observation carries a digest, a digest
+// cannot be reversed, and it correctly quarantines as `purchase_token_unavailable`
+// until an RTDN arrives. The token travels handler -> Observation.PurchaseToken
+// -> sealed raw body under the key "purchaseToken" -> decodeGoogleWork ->
+// GetSubscription.
+//
+// Every link in that chain is a rename away from silently restoring BL-1 — every
+// Google trusted observation dead-ending again — with a green suite, because
+// nothing else asserts the token survives the round trip through encryption.
+func TestTrustedServerObservationValidatesUsingItsPurchaseToken(t *testing.T) {
+	pool, ctx := testPool(t)
+	fixture := newRevalidationFixture(t, ctx, pool, "trustedtok")
+
+	start := time.Now().Add(-24 * time.Hour).UTC().Truncate(time.Second)
+	fixture.google.subscriptions[fixturePurchaseToken] =
+		subscriptionPurchase(fixtureProviderProduct, fixtureOrderID, start, start.Add(30*24*time.Hour))
+
+	// Exactly the body the service seals for a trusted-server observation: the
+	// reference is the token's own digest, and the token itself rides alongside.
+	digest := hexDigestOf(fixturePurchaseToken)
+	body, _ := json.Marshal(map[string]string{
+		"referenceKind":    billing.ReferenceGooglePlayTokenDigest,
+		"reference":        digest,
+		"orderReference":   "",
+		"purchaseToken":    fixturePurchaseToken,
+		"storeEnvironment": billing.StoreUnclassified,
+	})
+	input := fixture.ingest(t, ctx, "bri_trusted_token",
+		billing.SourceTrustedServerObservation, billing.AuthorityTrustedServer, "", body, true)
+
+	if _, err := fixture.service.ProcessNextValidation(ctx, "worker"); err != nil {
+		t.Fatalf("validate trusted-server observation: %v", err)
+	}
+
+	var outcome, diagnostic string
+	if err := pool.QueryRow(ctx,
+		`SELECT outcome, COALESCE(diagnostic_code,'') FROM billing_validation_attempts WHERE raw_input_id=$1`,
+		input.ID).Scan(&outcome, &diagnostic); err != nil {
+		t.Fatal(err)
+	}
+	if outcome != billing.OutcomeValidated {
+		t.Fatalf("trusted-server observation outcome %q (%s), want validated — the purchase token did not "+
+			"survive the round trip through the sealed body, so BL-1 has regressed", outcome, diagnostic)
+	}
+	if got := fixture.factCount(t, ctx, input.ID); got != 1 {
+		t.Fatalf("%d facts from a validated trusted-server observation, want 1", got)
+	}
+	// The token had to be used: no order id was supplied, so orders.get cannot
+	// have stood in for it.
+	if fixture.google.orderCalls != 0 {
+		t.Fatalf("%d orders.get calls; the observation carried a token and needed none", fixture.google.orderCalls)
+	}
+
+	// The fact must carry the token's digest as the purchase chain, and the raw
+	// token must not appear anywhere in the ledger or the fact row.
+	var chainDigest []byte
+	if err := pool.QueryRow(ctx,
+		`SELECT purchase_chain_digest FROM billing_transaction_facts WHERE source_raw_input_id=$1`,
+		input.ID).Scan(&chainDigest); err != nil {
+		t.Fatal(err)
+	}
+	if hexOfBytes(chainDigest) != digest {
+		t.Fatalf("fact chain digest %s, want %s", hexOfBytes(chainDigest), digest)
+	}
+	var leaked int
+	if err := pool.QueryRow(ctx,
+		`SELECT count(*) FROM billing_ledger_entries WHERE project_id=$1 AND detail::text LIKE '%'||$2||'%'`,
+		fixture.projectID, fixturePurchaseToken).Scan(&leaked); err != nil {
+		t.Fatal(err)
+	}
+	if leaked != 0 {
+		t.Fatalf("the raw purchase token appears in %d ledger entries; it must never leave the sealed body", leaked)
+	}
+}
+
+// T-3 — a wrong-Application input must quarantine.
+//
+// Tenant and Application isolation is the highest-value property of the intake
+// design, and plan §13 names it: "wrong-application and wrong-environment inputs
+// quarantine". The environment half is covered by
+// TestSandboxFactCannotLandInProductionEnvironment; this is the application
+// half. A regression in ApplicationForIdentifier or its wiring would attribute
+// another Application's transaction to this credential's Application, silently.
+func TestInputForAnUnscopedApplicationQuarantines(t *testing.T) {
+	pool, ctx := testPool(t)
+	fixture := newRevalidationFixture(t, ctx, pool, "wrongapp")
+
+	start := time.Now().Add(-24 * time.Hour).UTC().Truncate(time.Second)
+	fixture.google.subscriptions[fixturePurchaseToken] =
+		subscriptionPurchase(fixtureProviderProduct, fixtureOrderID, start, start.Add(30*24*time.Hour))
+
+	// The credential no longer scopes any Application, so the package name the
+	// notification carries cannot be attributed.
+	if _, err := pool.Exec(ctx,
+		`DELETE FROM store_server_credential_applications WHERE credential_id=$1`, fixture.credentialID); err != nil {
+		t.Fatal(err)
+	}
+
+	body, _ := json.Marshal(map[string]string{
+		"referenceKind":    billing.ReferenceGooglePlayTokenDigest,
+		"reference":        hexDigestOf(fixturePurchaseToken),
+		"purchaseToken":    fixturePurchaseToken,
+		"storeEnvironment": billing.StoreUnclassified,
+	})
+	input := fixture.ingest(t, ctx, "bri_wrong_application",
+		billing.SourceTrustedServerObservation, billing.AuthorityTrustedServer, "", body, true)
+
+	if _, err := fixture.service.ProcessNextValidation(ctx, "worker"); err != nil {
+		t.Fatal(err)
+	}
+
+	var outcome string
+	if err := pool.QueryRow(ctx,
+		`SELECT outcome FROM billing_validation_attempts WHERE raw_input_id=$1`, input.ID).Scan(&outcome); err != nil {
+		t.Fatal(err)
+	}
+	if outcome == billing.OutcomeValidated {
+		t.Fatal("an input whose Application is not scoped to the credential produced a validated attempt; " +
+			"that is a cross-Application attribution")
+	}
+	var reason string
+	if err := pool.QueryRow(ctx,
+		`SELECT reason_code FROM billing_quarantine_records WHERE raw_input_id=$1`, input.ID).Scan(&reason); err != nil {
+		t.Fatalf("no quarantine record for an unscoped Application: %v", err)
+	}
+	if reason != billing.QuarantineApplicationMismatch && reason != billing.QuarantineMissingCredential {
+		t.Fatalf("quarantined as %q; an unscoped Application must be reported as an attribution problem", reason)
+	}
+	if got := fixture.factCount(t, ctx, input.ID); got != 0 {
+		t.Fatalf("%d facts recorded for an unattributable input, want 0", got)
+	}
+}
+
+func hexDigestOf(token string) string { return hexOfBytes(billing.TokenDigest(token)) }
+
+func hexOfBytes(value []byte) string {
+	const digits = "0123456789abcdef"
+	out := make([]byte, len(value)*2)
+	for i, b := range value {
+		out[i*2] = digits[b>>4]
+		out[i*2+1] = digits[b&0x0f]
+	}
+	return string(out)
+}

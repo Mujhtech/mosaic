@@ -1,7 +1,13 @@
 package billinghttp
 
 import (
+	"bytes"
 	"encoding/json"
+	"errors"
+	"fmt"
+	"github.com/rs/zerolog"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -458,5 +464,75 @@ func TestClientObservationRejectsPurchaseToken(t *testing.T) {
 	if code != billing.CodeUnknownField {
 		t.Fatalf("a client observation carrying a purchase token was rejected with %q, want %q",
 			code, billing.CodeUnknownField)
+	}
+}
+
+// T-5 — the billing error path must never emit request content.
+//
+// response.Error logs the cause behind every 5xx. On this surface a cause can
+// quote a URL containing a purchase token, a decode fragment, or a transport
+// error naming internal hosts, so writeError deliberately never populates
+// APIError.Cause and logs the error's *type* rather than its message. Nothing
+// exercised that until now, and m-3 — errorTypeName returning a message prefix
+// and logging colon-less errors verbatim — is exactly the regression this
+// catches. Plan §13 names a redaction test explicitly.
+func TestBillingErrorPathEmitsNoRequestContent(t *testing.T) {
+	const secret = "gtokenAbCdEf0123456789-SECRET-PURCHASE-TOKEN"
+	causes := map[string]error{
+		"transport error with a token in a URL": errors.New(
+			"Get \"https://androidpublisher.googleapis.com/v3/tokens/" + secret + "\": dial tcp 10.1.2.3:443: refused"),
+		"error with no colon at all": errors.New("purchase token " + secret + " was rejected"),
+		"wrapped safe error": fmt.Errorf("outer context: %w",
+			errors.New("signedPayload eyJhbGciOiJFUzI1NiJ9."+secret)),
+	}
+
+	for name, cause := range causes {
+		t.Run(name, func(t *testing.T) {
+			var logged bytes.Buffer
+			logger := zerolog.New(&logged)
+			request := httptest.NewRequest(http.MethodGet, "/v1/projects/p/billing/store-credentials", nil)
+			request = request.WithContext(logger.WithContext(request.Context()))
+			recorder := httptest.NewRecorder()
+
+			writeError(recorder, request, cause)
+
+			if recorder.Code != http.StatusInternalServerError {
+				t.Fatalf("status %d, want 500 for an unmapped error", recorder.Code)
+			}
+			// Neither the operator log nor the response body may carry it.
+			if strings.Contains(logged.String(), secret) {
+				t.Fatalf("the operator log leaked request content: %s", logged.String())
+			}
+			if strings.Contains(recorder.Body.String(), secret) {
+				t.Fatalf("the response body leaked request content: %s", recorder.Body.String())
+			}
+			// The whole message must be absent, not just the token: a message is
+			// where internal topology leaks.
+			if strings.Contains(logged.String(), "dial tcp") ||
+				strings.Contains(logged.String(), "androidpublisher") {
+				t.Fatalf("the operator log leaked the cause message: %s", logged.String())
+			}
+			// The type is what makes the line useful for triage, so it must be
+			// present — otherwise a future refactor could "fix" this test by
+			// logging nothing at all.
+			if !strings.Contains(logged.String(), "billing_error_kind") {
+				t.Fatalf("no billing_error_kind field was logged; triage has nothing to go on: %s", logged.String())
+			}
+		})
+	}
+
+	// A mapped error keeps its stable code and its fixed message, and still
+	// carries no cause.
+	var logged bytes.Buffer
+	logger := zerolog.New(&logged)
+	request := httptest.NewRequest(http.MethodGet, "/v1/projects/p/billing/store-credentials", nil)
+	request = request.WithContext(logger.WithContext(request.Context()))
+	recorder := httptest.NewRecorder()
+	writeError(recorder, request, fmt.Errorf("reading credential %s: %w", secret, billing.ErrNotFound))
+	if recorder.Code != http.StatusNotFound {
+		t.Fatalf("status %d, want 404", recorder.Code)
+	}
+	if strings.Contains(recorder.Body.String(), secret) || strings.Contains(logged.String(), secret) {
+		t.Fatalf("a mapped error leaked its wrapped content: body=%s log=%s", recorder.Body.String(), logged.String())
 	}
 }

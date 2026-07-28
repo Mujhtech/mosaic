@@ -2,6 +2,7 @@ package billingpostgres
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -49,16 +50,64 @@ func pageLimit(options billing.ListOptions) int {
 	return options.Limit
 }
 
-// cursorAfter turns an opaque cursor into a keyset predicate value. The cursor
-// is the last row's identifier, so paging is stable under concurrent appends —
-// an offset would silently skip rows as the ledger grows.
-func cursorAfter(options billing.ListOptions) string { return strings.TrimSpace(options.Cursor) }
+// listCursor is a keyset position over a billing list: the ordering timestamp
+// of the last row returned, plus its id as the tie-break.
+//
+// Both halves are required. Every billing list orders by a timestamp, and
+// billing identifiers are deliberately *not* time-ordered — `Service.newID` is
+// sixteen random bytes and quarantine ids are a SHA-256 prefix — so a cursor
+// carrying only the id cannot express "after this row in timestamp order". The
+// previous implementation did exactly that: it emitted the last row's id and
+// applied `id < $cursor` against a timestamp ordering, so page two returned
+// whatever happened to sort low by random id and silently dropped the rest.
+// On the quarantine queue, whose whole job is surfacing inputs that need
+// attention, a paging control that hides records is worse than no control.
+type listCursor struct {
+	At *time.Time
+	ID string
+}
+
+// encodeCursor renders a keyset position as one opaque token.
+//
+// It is opaque on purpose: callers forward it unchanged and must not construct
+// or parse it, so the ordering key can change without a client change. The
+// encoding is base64url over "<unix-millis>:<id>" rather than JSON, because it
+// travels in a query string.
+func encodeCursor(at time.Time, id string) string {
+	return base64.RawURLEncoding.EncodeToString(
+		[]byte(strconv.FormatInt(at.UTC().UnixMilli(), 10) + ":" + id))
+}
+
+// decodeCursor parses an opaque cursor. A malformed or stale value yields the
+// zero cursor, which starts from the beginning: a caller that mangles a cursor
+// gets the first page rather than an error page or a silently truncated list.
+func decodeCursor(raw string) listCursor {
+	trimmed := strings.TrimSpace(raw)
+	if trimmed == "" {
+		return listCursor{}
+	}
+	decoded, err := base64.RawURLEncoding.DecodeString(trimmed)
+	if err != nil {
+		return listCursor{}
+	}
+	millis, id, found := strings.Cut(string(decoded), ":")
+	if !found || id == "" {
+		return listCursor{}
+	}
+	value, err := strconv.ParseInt(millis, 10, 64)
+	if err != nil {
+		return listCursor{}
+	}
+	at := time.UnixMilli(value).UTC()
+	return listCursor{At: &at, ID: id}
+}
 
 func (r *Repository) ListFacts(ctx context.Context, actor billing.Actor, projectID, environmentID string, options billing.ListOptions) (billing.Page[billing.TransactionFact], error) {
 	if err := r.authorizeEnvironment(ctx, actor, projectID, environmentID); err != nil {
 		return billing.Page[billing.TransactionFact]{}, err
 	}
 	limit := pageLimit(options)
+	cursor := decodeCursor(options.Cursor)
 	rows, err := r.pool.Query(ctx,
 		`SELECT id, project_id, environment_id, application_id, provider, store_environment,
 		        provider_transaction_id, COALESCE(provider_original_transaction_id,''),
@@ -71,12 +120,12 @@ func (r *Repository) ListFacts(ctx context.Context, actor billing.Actor, project
 		        source_raw_input_id, validation_attempt_id, recorded_at
 		 FROM billing_transaction_facts
 		 WHERE environment_id=$1
-		   AND ($2 = '' OR id < $2)
-		   AND ($3::text = '' OR provider = $3)
-		   AND ($4::timestamptz IS NULL OR occurred_at >= $4)
-		   AND ($5::timestamptz IS NULL OR occurred_at <= $5)
+		   AND ($2::timestamptz IS NULL OR (occurred_at, id) < ($2::timestamptz, $3))
+		   AND ($4::text = '' OR provider = $4)
+		   AND ($5::timestamptz IS NULL OR occurred_at >= $5)
+		   AND ($6::timestamptz IS NULL OR occurred_at <= $6)
 		 ORDER BY occurred_at DESC, id DESC
-		 LIMIT $6`, environmentID, cursorAfter(options), options.Provider, options.From, options.To, limit+1)
+		 LIMIT $7`, environmentID, cursor.At, cursor.ID, options.Provider, options.From, options.To, limit+1)
 	if err != nil {
 		return billing.Page[billing.TransactionFact]{}, fmt.Errorf("list transaction facts: %w", err)
 	}
@@ -100,14 +149,20 @@ func (r *Repository) ListFacts(ctx context.Context, actor billing.Actor, project
 	if err := rows.Err(); err != nil {
 		return billing.Page[billing.TransactionFact]{}, fmt.Errorf("read transaction facts: %w", err)
 	}
-	return paginate(items, limit, func(fact billing.TransactionFact) string { return fact.ID }), nil
+	return paginate(items, limit, func(fact billing.TransactionFact) (time.Time, string) {
+		return fact.OccurredAt, fact.ID
+	}), nil
 }
 
-func paginate[T any](items []T, limit int, key func(T) string) billing.Page[T] {
+// paginate trims the lookahead row and emits the keyset cursor for the next
+// page. key returns the ordering timestamp and id of a row — the same pair the
+// query orders by, which is what makes the cursor and the sort agree.
+func paginate[T any](items []T, limit int, key func(T) (time.Time, string)) billing.Page[T] {
 	page := billing.Page[T]{Items: items}
 	if len(items) > limit {
 		page.Items = items[:limit]
-		page.NextCursor = key(page.Items[limit-1])
+		at, id := key(page.Items[limit-1])
+		page.NextCursor = encodeCursor(at, id)
 	}
 	return page
 }
@@ -117,6 +172,7 @@ func (r *Repository) ListAttempts(ctx context.Context, actor billing.Actor, proj
 		return billing.Page[billing.ValidationAttempt]{}, err
 	}
 	limit := pageLimit(options)
+	cursor := decodeCursor(options.Cursor)
 	rows, err := r.pool.Query(ctx,
 		`SELECT id, project_id, environment_id, raw_input_id, COALESCE(credential_id,''), attempt_number,
 		        validator_version, started_at, completed_at, outcome, retryable,
@@ -124,11 +180,12 @@ func (r *Repository) ListAttempts(ctx context.Context, actor billing.Actor, proj
 		        COALESCE(provider_http_status,0), store_environment, latency_ms,
 		        COALESCE(replay_of_attempt_id,''), correlation_id
 		 FROM billing_validation_attempts
-		 WHERE environment_id=$1 AND ($2 = '' OR id < $2)
-		   AND ($3::text = '' OR outcome = $3)
-		   AND ($4::text = '' OR raw_input_id = $4)
-		 ORDER BY started_at DESC, id DESC LIMIT $5`,
-		environmentID, cursorAfter(options), options.Status, options.RawInputID, limit+1)
+		 WHERE environment_id=$1
+		   AND ($2::timestamptz IS NULL OR (started_at, id) < ($2::timestamptz, $3))
+		   AND ($4::text = '' OR outcome = $4)
+		   AND ($5::text = '' OR raw_input_id = $5)
+		 ORDER BY started_at DESC, id DESC LIMIT $6`,
+		environmentID, cursor.At, cursor.ID, options.Status, options.RawInputID, limit+1)
 	if err != nil {
 		return billing.Page[billing.ValidationAttempt]{}, fmt.Errorf("list validation attempts: %w", err)
 	}
@@ -149,7 +206,9 @@ func (r *Repository) ListAttempts(ctx context.Context, actor billing.Actor, proj
 	if err := rows.Err(); err != nil {
 		return billing.Page[billing.ValidationAttempt]{}, fmt.Errorf("read validation attempts: %w", err)
 	}
-	return paginate(items, limit, func(a billing.ValidationAttempt) string { return a.ID }), nil
+	return paginate(items, limit, func(a billing.ValidationAttempt) (time.Time, string) {
+		return a.StartedAt, a.ID
+	}), nil
 }
 
 func (r *Repository) ListLedger(ctx context.Context, actor billing.Actor, projectID, environmentID string, options billing.ListOptions) (billing.Page[billing.LedgerEntry], error) {
@@ -157,17 +216,19 @@ func (r *Repository) ListLedger(ctx context.Context, actor billing.Actor, projec
 		return billing.Page[billing.LedgerEntry]{}, err
 	}
 	limit := pageLimit(options)
+	cursor := decodeCursor(options.Cursor)
 	rows, err := r.pool.Query(ctx,
 		`SELECT id, project_id, environment_id, entry_type, COALESCE(raw_input_id,''),
 		        COALESCE(validation_attempt_id,''), COALESCE(transaction_fact_id,''),
 		        COALESCE(credential_id,''), correlation_id, occurred_at
 		 FROM billing_ledger_entries
-		 WHERE environment_id=$1 AND ($2 = '' OR id < $2)
-		   AND ($3::text = '' OR entry_type = $3)
-		   AND ($4::timestamptz IS NULL OR occurred_at >= $4)
-		   AND ($5::timestamptz IS NULL OR occurred_at <= $5)
-		 ORDER BY occurred_at DESC, id DESC LIMIT $6`,
-		environmentID, cursorAfter(options), options.Status, options.From, options.To, limit+1)
+		 WHERE environment_id=$1
+		   AND ($2::timestamptz IS NULL OR (occurred_at, id) < ($2::timestamptz, $3))
+		   AND ($4::text = '' OR entry_type = $4)
+		   AND ($5::timestamptz IS NULL OR occurred_at >= $5)
+		   AND ($6::timestamptz IS NULL OR occurred_at <= $6)
+		 ORDER BY occurred_at DESC, id DESC LIMIT $7`,
+		environmentID, cursor.At, cursor.ID, options.Status, options.From, options.To, limit+1)
 	if err != nil {
 		return billing.Page[billing.LedgerEntry]{}, fmt.Errorf("list billing ledger: %w", err)
 	}
@@ -185,7 +246,9 @@ func (r *Repository) ListLedger(ctx context.Context, actor billing.Actor, projec
 	if err := rows.Err(); err != nil {
 		return billing.Page[billing.LedgerEntry]{}, fmt.Errorf("read billing ledger: %w", err)
 	}
-	return paginate(items, limit, func(e billing.LedgerEntry) string { return e.ID }), nil
+	return paginate(items, limit, func(e billing.LedgerEntry) (time.Time, string) {
+		return e.OccurredAt, e.ID
+	}), nil
 }
 
 // quarantineColumns joins the Store Environment back from the quarantined
@@ -230,15 +293,17 @@ func (r *Repository) ListQuarantine(ctx context.Context, actor billing.Actor, pr
 		return billing.Page[billing.QuarantineRecord]{}, err
 	}
 	limit := pageLimit(options)
+	cursor := decodeCursor(options.Cursor)
 	rows, err := r.pool.Query(ctx,
 		`SELECT `+quarantineColumns+`
 		 `+quarantineFrom+`
-		 WHERE q.environment_id=$1 AND ($2 = '' OR q.id < $2)
-		   AND ($3::text = '' OR q.status = $3)
-		   AND ($4::text = '' OR q.reason_code = $4)
-		   AND ($5::text = '' OR q.provider = $5)
-		 ORDER BY q.last_attempt_at DESC, q.id DESC LIMIT $6`,
-		environmentID, cursorAfter(options), options.Status, options.ReasonCode, options.Provider, limit+1)
+		 WHERE q.environment_id=$1
+		   AND ($2::timestamptz IS NULL OR (q.last_attempt_at, q.id) < ($2::timestamptz, $3))
+		   AND ($4::text = '' OR q.status = $4)
+		   AND ($5::text = '' OR q.reason_code = $5)
+		   AND ($6::text = '' OR q.provider = $6)
+		 ORDER BY q.last_attempt_at DESC, q.id DESC LIMIT $7`,
+		environmentID, cursor.At, cursor.ID, options.Status, options.ReasonCode, options.Provider, limit+1)
 	if err != nil {
 		return billing.Page[billing.QuarantineRecord]{}, fmt.Errorf("list quarantine records: %w", err)
 	}
@@ -254,7 +319,9 @@ func (r *Repository) ListQuarantine(ctx context.Context, actor billing.Actor, pr
 	if err := rows.Err(); err != nil {
 		return billing.Page[billing.QuarantineRecord]{}, fmt.Errorf("read quarantine records: %w", err)
 	}
-	return paginate(items, limit, func(q billing.QuarantineRecord) string { return q.ID }), nil
+	return paginate(items, limit, func(q billing.QuarantineRecord) (time.Time, string) {
+		return q.LastAttemptAt, q.ID
+	}), nil
 }
 
 func (r *Repository) Quarantine(ctx context.Context, actor billing.Actor, projectID, recordID string) (billing.QuarantineRecord, error) {
@@ -466,11 +533,14 @@ func (r *Repository) ListReconciliationRuns(ctx context.Context, actor billing.A
 		return billing.Page[billing.ReconciliationRun]{}, err
 	}
 	limit := pageLimit(options)
+	cursor := decodeCursor(options.Cursor)
 	rows, err := r.pool.Query(ctx,
 		`SELECT `+reconciliationColumns+` FROM billing_reconciliation_runs
-		 WHERE environment_id=$1 AND ($2 = '' OR id < $2) AND ($3::text = '' OR status = $3)
-		 ORDER BY created_at DESC, id DESC LIMIT $4`,
-		environmentID, cursorAfter(options), options.Status, limit+1)
+		 WHERE environment_id=$1
+		   AND ($2::timestamptz IS NULL OR (created_at, id) < ($2::timestamptz, $3))
+		   AND ($4::text = '' OR status = $4)
+		 ORDER BY created_at DESC, id DESC LIMIT $5`,
+		environmentID, cursor.At, cursor.ID, options.Status, limit+1)
 	if err != nil {
 		return billing.Page[billing.ReconciliationRun]{}, fmt.Errorf("list reconciliation runs: %w", err)
 	}
@@ -486,7 +556,9 @@ func (r *Repository) ListReconciliationRuns(ctx context.Context, actor billing.A
 	if err := rows.Err(); err != nil {
 		return billing.Page[billing.ReconciliationRun]{}, fmt.Errorf("read reconciliation runs: %w", err)
 	}
-	return paginate(items, limit, func(run billing.ReconciliationRun) string { return run.ID }), nil
+	return paginate(items, limit, func(run billing.ReconciliationRun) (time.Time, string) {
+		return run.CreatedAt, run.ID
+	}), nil
 }
 
 func (r *Repository) LeaseReconciliationRun(ctx context.Context, workerID string, now, leaseUntil time.Time) (billing.ReconciliationRun, bool, error) {
@@ -604,11 +676,14 @@ func (r *Repository) ListReplayJobs(ctx context.Context, actor billing.Actor, pr
 		return billing.Page[billing.ReplayJob]{}, err
 	}
 	limit := pageLimit(options)
+	cursor := decodeCursor(options.Cursor)
 	rows, err := r.pool.Query(ctx,
 		`SELECT `+replayColumns+` FROM billing_replay_jobs
-		 WHERE environment_id=$1 AND ($2 = '' OR id < $2) AND ($3::text = '' OR status = $3)
-		 ORDER BY created_at DESC, id DESC LIMIT $4`,
-		environmentID, cursorAfter(options), options.Status, limit+1)
+		 WHERE environment_id=$1
+		   AND ($2::timestamptz IS NULL OR (created_at, id) < ($2::timestamptz, $3))
+		   AND ($4::text = '' OR status = $4)
+		 ORDER BY created_at DESC, id DESC LIMIT $5`,
+		environmentID, cursor.At, cursor.ID, options.Status, limit+1)
 	if err != nil {
 		return billing.Page[billing.ReplayJob]{}, fmt.Errorf("list replay jobs: %w", err)
 	}
@@ -624,7 +699,9 @@ func (r *Repository) ListReplayJobs(ctx context.Context, actor billing.Actor, pr
 	if err := rows.Err(); err != nil {
 		return billing.Page[billing.ReplayJob]{}, fmt.Errorf("read replay jobs: %w", err)
 	}
-	return paginate(items, limit, func(job billing.ReplayJob) string { return job.ID }), nil
+	return paginate(items, limit, func(job billing.ReplayJob) (time.Time, string) {
+		return job.CreatedAt, job.ID
+	}), nil
 }
 
 func (r *Repository) LeaseReplayJob(ctx context.Context, workerID string, now, leaseUntil time.Time) (billing.ReplayJob, bool, error) {

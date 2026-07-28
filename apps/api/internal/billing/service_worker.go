@@ -42,7 +42,7 @@ func (s *Service) ProcessNextValidation(ctx context.Context, workerID string) (b
 	// no facts. The job is parked rather than failed — disabling is reversible,
 	// and a failed job would need an operator action to recover work that only
 	// ever needed to wait.
-	if enabled, err := s.repository.BillingEnabled(ctx, job.ProjectID); err == nil && !enabled {
+	if !s.billingEnabled(ctx, job.ProjectID) {
 		return true, s.repository.ParkValidationJob(ctx, job, "billing_disabled", s.now())
 	}
 
@@ -122,7 +122,7 @@ func (s *Service) openBody(input RawInput) ([]byte, bool) {
 // ---------------------------------------------------------------------------
 
 func (s *Service) validateApple(ctx context.Context, job ValidationJob, input RawInput, body []byte, bodyAvailable bool, attemptID string, attemptNumber int, started time.Time) AttemptOutcome {
-	credential, credentialID, err := s.appleCredential(ctx, input)
+	credential, credentialID, err := s.appleCredential(ctx, input, scopedToInput)
 	// The resolved credential is stamped on the input before any early return,
 	// so an attempt recorded for a failure still names the credential the
 	// pipeline was trying to use.
@@ -364,7 +364,27 @@ func (s *Service) credentialIDFor(ctx context.Context, input RawInput) (string, 
 // appleCredential returns the App Store Server API credential and the id of the
 // Store Server Credential it came from, so the caller can stamp provenance on
 // the attempt even when the input arrived without one.
-func (s *Service) appleCredential(ctx context.Context, input RawInput) (appstoreserver.Credential, string, error) {
+// applicationScope says how strictly the per-request Apple `bid` must be bound.
+//
+// Apple requires a `bid` claim on every JWT, but not every call is about one
+// Application. Get Transaction Info answers about a specific transaction and
+// must carry that transaction's own bundle id; Get Notification History is
+// team-scoped and any bundle id inside the credential's scope is a truthful
+// claim. Conflating the two either sends the wrong `bid` for a specific
+// transaction (the original M-1 defect) or refuses a team-scoped call that has
+// no Application to name.
+type applicationScope int
+
+const (
+	// scopedToInput requires the input's own Application. Used for anything
+	// that answers about a specific transaction.
+	scopedToInput applicationScope = iota
+	// scopedToTeam accepts any Application in the credential's scope. Used for
+	// team-wide calls such as notification history and the credential test.
+	scopedToTeam
+)
+
+func (s *Service) appleCredential(ctx context.Context, input RawInput, scope applicationScope) (appstoreserver.Credential, string, error) {
 	if s.apple == nil {
 		return appstoreserver.Credential{}, "", ErrCredentialUnusable
 	}
@@ -408,14 +428,35 @@ func (s *Service) appleCredential(ctx context.Context, input RawInput) (appstore
 	// rejection would be retried eight times before dead-lettering with a
 	// diagnostic pointing at the wrong cause. Failing closed here reports the
 	// real problem immediately.
-	if input.ApplicationID != "" {
-		resolved, resolveErr := s.repository.ProviderApplicationIdentifier(ctx, input.CredentialID, input.ApplicationID)
-		if resolveErr == nil && resolved != "" {
-			bundleID = resolved
+	// For an input-scoped call the `bid` must name this input's Application, and
+	// nothing else is an acceptable substitute. The value CredentialSecretFor
+	// returns is the credential's alphabetically-first scoped Application, which
+	// is correct only for a single-Application credential; falling back to it on
+	// a resolution error reintroduces the original defect on exactly the
+	// multi-Application credentials the model exists to support, and the 401 it
+	// eventually produces points the operator at credential rotation rather than
+	// at the missing Application scope.
+	//
+	// So the resolution error is propagated rather than absorbed. A transient
+	// read failure retries; a genuinely unscoped Application quarantines with a
+	// diagnostic that names the real problem.
+	if scope == scopedToInput {
+		if input.ApplicationID == "" {
+			return appstoreserver.Credential{}, credentialID, ErrApplicationNotScoped
 		}
+		resolved, resolveErr := s.repository.ProviderApplicationIdentifier(ctx, input.CredentialID, input.ApplicationID)
+		if resolveErr != nil || resolved == "" {
+			return appstoreserver.Credential{}, credentialID, ErrApplicationNotScoped
+		}
+		bundleID = resolved
 	}
+	// A team-scoped call keeps whichever scoped Application CredentialSecretFor
+	// supplied: the request is not about one Application, and any bundle id
+	// inside the credential's scope is a truthful claim. An empty one still
+	// fails closed, because a credential with no scoped Application cannot make
+	// any Apple call at all.
 	if bundleID == "" {
-		return appstoreserver.Credential{}, credentialID, ErrCredentialUnusable
+		return appstoreserver.Credential{}, credentialID, ErrApplicationNotScoped
 	}
 	return appstoreserver.Credential{
 		IssuerID: credential.AppleIssuerID, KeyID: credential.AppleKeyID, PrivateKey: key,
@@ -973,10 +1014,16 @@ func (o *AttemptOutcome) NextAttemptAtSet(at time.Time) { o.NextAvailableAt = at
 // secret — so they get different quarantine reasons and different diagnostics
 // rather than being flattened into one misleading code.
 func credentialFailure(err error) (reason, diagnostic string) {
-	if errors.Is(err, ErrCredentialMissing) {
+	switch {
+	case errors.Is(err, ErrCredentialMissing):
 		return QuarantineMissingCredential, "no_credential_for_environment"
+	case errors.Is(err, ErrApplicationNotScoped):
+		// A different operator action from a bad credential: scope the
+		// Application to the credential rather than replace the key.
+		return QuarantineApplicationMismatch, "application_not_scoped_to_credential"
+	default:
+		return QuarantineCredentialUnavailable, "credential_unusable"
 	}
-	return QuarantineCredentialUnavailable, "credential_unusable"
 }
 
 // storeEnvironmentMatchesMode enforces the sandbox/production separation the

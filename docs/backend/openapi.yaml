@@ -1857,28 +1857,28 @@ paths:
         Validated, provider-independent Transaction Facts. A fact is never a subscription, an
         entitlement, or an access grant, and carries no customer identity, price, or currency.
         Mosaic Environment and Store Environment are always two separate values.
-      parameters: [{ $ref: "#/components/parameters/ProjectID" }, { $ref: "#/components/parameters/EnvironmentID" }, { $ref: "#/components/parameters/Cursor" }, { $ref: "#/components/parameters/Limit" }, { $ref: "#/components/parameters/BillingProviderFilter" }, { $ref: "#/components/parameters/BillingFrom" }, { $ref: "#/components/parameters/BillingTo" }]
+      parameters: [{ $ref: "#/components/parameters/ProjectID" }, { $ref: "#/components/parameters/EnvironmentID" }, { $ref: "#/components/parameters/BillingCursor" }, { $ref: "#/components/parameters/Limit" }, { $ref: "#/components/parameters/BillingProviderFilter" }, { $ref: "#/components/parameters/BillingFrom" }, { $ref: "#/components/parameters/BillingTo" }]
       responses: { "200": { description: Transaction Facts., content: { application/json: { schema: { type: object, properties: { data: { type: object, properties: { items: { type: array, items: { $ref: "#/components/schemas/TransactionFact" } }, nextCursor: { type: string } } } } } } } }, "403": { $ref: "#/components/responses/Error" }, "404": { $ref: "#/components/responses/Error" } }
   /v1/projects/{projectId}/environments/{environmentId}/billing/validation-attempts:
     get:
       operationId: listValidationAttempts
       tags: [Billing Ledger]
       description: Append-only history of every validation try. Earlier attempts are never overwritten and no provider response body is ever stored.
-      parameters: [{ $ref: "#/components/parameters/ProjectID" }, { $ref: "#/components/parameters/EnvironmentID" }, { $ref: "#/components/parameters/Cursor" }, { $ref: "#/components/parameters/Limit" }, { in: query, name: status, schema: { type: string, enum: [validated, recorded_no_fact, quarantined, retryable_failure, permanently_failed] } }, { in: query, name: rawInputId, description: Narrow the list to one input's attempt history., schema: { type: string, maxLength: 128 } }]
+      parameters: [{ $ref: "#/components/parameters/ProjectID" }, { $ref: "#/components/parameters/EnvironmentID" }, { $ref: "#/components/parameters/BillingCursor" }, { $ref: "#/components/parameters/Limit" }, { in: query, name: status, schema: { type: string, enum: [validated, recorded_no_fact, quarantined, retryable_failure, permanently_failed] } }, { in: query, name: rawInputId, description: Narrow the list to one input's attempt history., schema: { type: string, maxLength: 128 } }]
       responses: { "200": { description: Validation Attempts., content: { application/json: { schema: { type: object, properties: { data: { type: object, properties: { items: { type: array, items: { $ref: "#/components/schemas/ValidationAttempt" } }, nextCursor: { type: string } } } } } } } }, "403": { $ref: "#/components/responses/Error" }, "404": { $ref: "#/components/responses/Error" } }
   /v1/projects/{projectId}/environments/{environmentId}/billing/ledger:
     get:
       operationId: listBillingLedger
       tags: [Billing Ledger]
       description: Append-only operational Billing Event Ledger. There is deliberately no update endpoint.
-      parameters: [{ $ref: "#/components/parameters/ProjectID" }, { $ref: "#/components/parameters/EnvironmentID" }, { $ref: "#/components/parameters/Cursor" }, { $ref: "#/components/parameters/Limit" }, { $ref: "#/components/parameters/BillingFrom" }, { $ref: "#/components/parameters/BillingTo" }]
+      parameters: [{ $ref: "#/components/parameters/ProjectID" }, { $ref: "#/components/parameters/EnvironmentID" }, { $ref: "#/components/parameters/BillingCursor" }, { $ref: "#/components/parameters/Limit" }, { $ref: "#/components/parameters/BillingFrom" }, { $ref: "#/components/parameters/BillingTo" }]
       responses: { "200": { description: Billing Ledger Entries., content: { application/json: { schema: { type: object, properties: { data: { type: object, properties: { items: { type: array, items: { $ref: "#/components/schemas/BillingLedgerEntry" } }, nextCursor: { type: string } } } } } } } }, "403": { $ref: "#/components/responses/Error" }, "404": { $ref: "#/components/responses/Error" } }
   /v1/projects/{projectId}/environments/{environmentId}/billing/quarantine:
     get:
       operationId: listBillingQuarantine
       tags: [Billing Operations]
       description: Inputs and facts that cannot safely proceed.
-      parameters: [{ $ref: "#/components/parameters/ProjectID" }, { $ref: "#/components/parameters/EnvironmentID" }, { $ref: "#/components/parameters/Cursor" }, { $ref: "#/components/parameters/Limit" }, { in: query, name: status, schema: { type: string, enum: [open, retrying, closed_after_success, closed_superseded] } }, { in: query, name: reasonCode, schema: { type: string } }, { $ref: "#/components/parameters/BillingProviderFilter" }]
+      parameters: [{ $ref: "#/components/parameters/ProjectID" }, { $ref: "#/components/parameters/EnvironmentID" }, { $ref: "#/components/parameters/BillingCursor" }, { $ref: "#/components/parameters/Limit" }, { in: query, name: status, schema: { type: string, enum: [open, retrying, closed_after_success, closed_superseded] } }, { in: query, name: reasonCode, schema: { type: string } }, { $ref: "#/components/parameters/BillingProviderFilter" }]
       responses: { "200": { description: Quarantine Records., content: { application/json: { schema: { type: object, properties: { data: { type: object, properties: { items: { type: array, items: { $ref: "#/components/schemas/QuarantineRecord" } }, nextCursor: { type: string } } } } } } } }, "403": { $ref: "#/components/responses/Error" }, "404": { $ref: "#/components/responses/Error" } }
   /v1/projects/{projectId}/environments/{environmentId}/billing/health:
     get:
@@ -1890,7 +1890,7 @@ paths:
     get:
       operationId: listReconciliationRuns
       tags: [Billing Operations]
-      parameters: [{ $ref: "#/components/parameters/ProjectID" }, { $ref: "#/components/parameters/EnvironmentID" }, { $ref: "#/components/parameters/Cursor" }, { $ref: "#/components/parameters/Limit" }, { in: query, name: status, schema: { type: string, enum: [queued, leased, completed, partial, failed] } }]
+      parameters: [{ $ref: "#/components/parameters/ProjectID" }, { $ref: "#/components/parameters/EnvironmentID" }, { $ref: "#/components/parameters/BillingCursor" }, { $ref: "#/components/parameters/Limit" }, { in: query, name: status, schema: { type: string, enum: [queued, leased, completed, partial, failed] } }]
       responses: { "200": { description: Reconciliation runs., content: { application/json: { schema: { type: object, properties: { data: { type: object, properties: { items: { type: array, items: { $ref: "#/components/schemas/ReconciliationRun" } }, nextCursor: { type: string } } } } } } } }, "403": { $ref: "#/components/responses/Error" }, "404": { $ref: "#/components/responses/Error" } }
     post:
       operationId: createReconciliationRun
@@ -1906,7 +1906,7 @@ paths:
     get:
       operationId: listReplayJobs
       tags: [Billing Operations]
-      parameters: [{ $ref: "#/components/parameters/ProjectID" }, { $ref: "#/components/parameters/EnvironmentID" }, { $ref: "#/components/parameters/Cursor" }, { $ref: "#/components/parameters/Limit" }, { in: query, name: status, schema: { type: string, enum: [queued, leased, completed, failed] } }]
+      parameters: [{ $ref: "#/components/parameters/ProjectID" }, { $ref: "#/components/parameters/EnvironmentID" }, { $ref: "#/components/parameters/BillingCursor" }, { $ref: "#/components/parameters/Limit" }, { in: query, name: status, schema: { type: string, enum: [queued, leased, completed, failed] } }]
       responses: { "200": { description: Replay jobs., content: { application/json: { schema: { type: object, properties: { data: { type: object, properties: { items: { type: array, items: { $ref: "#/components/schemas/ReplayJob" } }, nextCursor: { type: string } } } } } } } }, "403": { $ref: "#/components/responses/Error" }, "404": { $ref: "#/components/responses/Error" } }
     post:
       operationId: createReplayJob
@@ -1981,6 +1981,19 @@ components:
     ApplicationID: { in: path, name: applicationId, required: true, schema: { type: string } }
     ProviderConnectionID: { in: path, name: connectionId, required: true, schema: { type: string } }
     ProviderMappingID: { in: path, name: mappingId, required: true, schema: { type: string } }
+    BillingCursor:
+      in: query
+      name: cursor
+      description: |
+        Opaque cursor from the immediately preceding list response. Forward it unchanged; do not
+        construct or parse one — it encodes both the ordering timestamp and the row id, because
+        billing identifiers are not time-ordered and an id alone cannot express a position in a
+        timestamp ordering.
+
+        A malformed or stale value starts from the first page rather than erroring, so a mangled
+        cursor cannot silently truncate a list. Omit it for the first page; a response with no
+        `nextCursor` is the last page.
+      schema: { type: string }
     StoreCredentialID: { in: path, name: credentialId, required: true, schema: { type: string } }
     QuarantineRecordID: { in: path, name: recordId, required: true, schema: { type: string } }
     BillingProviderFilter: { in: query, name: provider, schema: { type: string, enum: [app_store, google_play] } }

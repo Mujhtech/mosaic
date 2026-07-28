@@ -20,6 +20,11 @@ var (
 	// a failure: the caller leaves its own job queued rather than running a
 	// second validation concurrently with the one already in flight.
 	ErrValidationBusy = errors.New("the input is already being validated")
+	// ErrApplicationNotScoped reports that the input's Application is not inside
+	// the credential's scope, so no correct per-request bundle id exists. It is
+	// distinct from ErrCredentialUnusable because the operator action differs:
+	// scope the Application to the credential, rather than replace the key.
+	ErrApplicationNotScoped = errors.New("the Application is not scoped to this Store Server Credential")
 	// ErrCredentialsStillActive blocks disabling Mosaic Billing while a Store
 	// Server Credential is still active. Disabling with credentials in place
 	// would mean Apple keeps posting notifications Mosaic refuses to record,

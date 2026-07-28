@@ -146,7 +146,7 @@ func (s *Service) ProcessNextRTDN(ctx context.Context, workerID string) (bool, e
 		// A disabled Project records nothing. Skipping before the pull also
 		// avoids acknowledging messages Mosaic would then refuse to store,
 		// which would lose them permanently.
-		if enabled, err := s.repository.BillingEnabled(ctx, identity.ProjectID); err == nil && !enabled {
+		if !s.billingEnabled(ctx, identity.ProjectID) {
 			continue
 		}
 		processed, err := s.pullOne(ctx, identity)
@@ -321,7 +321,7 @@ func (s *Service) ProcessNextReconciliation(ctx context.Context, workerID string
 	})
 	// A disabled Project runs no reconciliation: it would call the provider and
 	// append facts for a Project that asked to record nothing.
-	if enabled, enabledErr := s.repository.BillingEnabled(ctx, run.ProjectID); enabledErr == nil && !enabled {
+	if !s.billingEnabled(ctx, run.ProjectID) {
 		return true, s.repository.CompleteReconciliationRun(ctx, run, "failed", "billing_disabled", s.now())
 	}
 
@@ -347,9 +347,11 @@ func (s *Service) ProcessNextReconciliation(ctx context.Context, workerID string
 // idempotency key that deduplicates a live delivery deduplicates a recovered
 // one.
 func (s *Service) reconcileAppleNotifications(ctx context.Context, run ReconciliationRun) error {
+	// Team-scoped: Get Notification History answers for the whole team, and the
+	// discovered notifications name their own Applications.
 	apple, _, err := s.appleCredential(ctx, RawInput{
 		ProjectID: run.ProjectID, CredentialID: run.CredentialID, Provider: ProviderAppStore,
-	})
+	}, scopedToTeam)
 	if err != nil {
 		return s.repository.CompleteReconciliationRun(ctx, run, "failed", "credential_unusable", s.now())
 	}
@@ -562,7 +564,7 @@ func (s *Service) ProcessNextReplay(ctx context.Context, workerID string) (bool,
 		JobID: job.ID, JobKind: "billing_replay",
 		ProjectID: job.ProjectID, EnvironmentID: job.EnvironmentID, ResourceID: job.RawInputID,
 	})
-	if enabled, enabledErr := s.repository.BillingEnabled(ctx, job.ProjectID); enabledErr == nil && !enabled {
+	if !s.billingEnabled(ctx, job.ProjectID) {
 		return true, s.repository.CompleteReplayJob(ctx, job, "", "billing_disabled", s.now())
 	}
 

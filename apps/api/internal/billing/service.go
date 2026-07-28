@@ -185,7 +185,7 @@ func (s *Service) AcceptAppleNotification(ctx context.Context, intakeToken strin
 	// not only of SDK observations. Apple is answered 202 either way: a 4xx
 	// would spend one of five non-renewable retries on a condition retrying
 	// cannot fix.
-	if enabled, err := s.repository.BillingEnabled(ctx, identity.ProjectID); err == nil && !enabled {
+	if !s.billingEnabled(ctx, identity.ProjectID) {
 		s.intakeRejected.Add(ctx, 1, metric.WithAttributes(
 			attribute.String("provider", ProviderAppStore),
 			attribute.String("reason", "billing_disabled")))
@@ -663,4 +663,31 @@ func logSafely(ctx context.Context, message string, fields map[string]string) {
 		}
 	}
 	event.Msg(message)
+}
+
+// billingEnabled reports whether a Project may record billing data, failing
+// **closed** when the setting cannot be read.
+//
+// "Off means nothing is recorded" is the phase's frozen optionality promise,
+// and a transient database error must not be able to break it: treating an
+// unreadable setting as enabled would let a disabled Project accept and store
+// signed payloads, call Apple and Google, and append facts. Unknown is
+// therefore treated as disabled, and the read failure is logged so the
+// difference between "the operator turned it off" and "Mosaic could not tell"
+// is visible to an operator rather than inferred from a gap in the ledger.
+//
+// The cost of the conservative choice is bounded and recoverable: notification
+// intake still answers 2xx, so no provider retry budget is spent, and queued
+// work is parked rather than failed. The cost of the permissive choice is
+// storing bearer material for a tenant that asked Mosaic not to.
+func (s *Service) billingEnabled(ctx context.Context, projectID string) bool {
+	enabled, err := s.repository.BillingEnabled(ctx, projectID)
+	if err != nil {
+		zerolog.Ctx(ctx).Error().
+			Str("project_id", projectID).
+			Str("billing_error_kind", fmt.Sprintf("%T", err)).
+			Msg("billing enablement could not be read; treating the Project as disabled")
+		return false
+	}
+	return enabled
 }
