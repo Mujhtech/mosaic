@@ -1,0 +1,27 @@
+{
+  "billingIngestionContractVersion": "1",
+  "recordType": "serverTransactionObservation",
+  "payload": {
+    "observationId": "fixture-observation-apple-notification-0001",
+    "submissionId": "fixture-submission-apple-notification-0001",
+    "providerId": "fixture-provider-apple",
+    "storePlatform": "apple_app_store",
+    "transactionReference": {
+      "referenceKind": "app_store_transaction_id",
+      "value": "2000000900000001"
+    },
+    "sourceAuthority": "provider_notification",
+    "trustBasis": "provider_signature_verified",
+    "receivedAt": "2026-07-27T12:00:04.000Z",
+    "providerReportedAt": "2026-07-27T11:59:58.000Z",
+    "providerNotificationReference": "fixture-apple-notification-0001",
+    "storeEnvironmentClassification": {
+      "classification": "production",
+      "basis": "signature_environment"
+    },
+    "correlation": {
+      "purchaseAttemptId": "fixture-purchase-attempt-0001"
+    },
+    "originatingObservationId": "fixture-observation-apple-0001"
+  }
+}

@@ -1,0 +1,20 @@
+{
+  "billingIngestionContractVersion": "1",
+  "recordType": "observationSubmissionResult",
+  "payload": {
+    "submissionId": "fixture-submission-malformed-0001",
+    "receivedAt": "2026-07-27T12:01:00.000Z",
+    "status": "permanently_rejected",
+    "code": "provider_reference_malformed",
+    "diagnostics": [
+      {
+        "code": "billing.observation.reference_malformed",
+        "safeMessage": "The transaction reference does not match the declared reference kind.",
+        "severity": "error",
+        "retryable": false,
+        "correlationId": "fixture-correlation-0001",
+        "recoveryAction": "none"
+      }
+    ]
+  }
+}

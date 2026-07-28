@@ -1,0 +1,307 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:mosaic:protocol:schema:billing-ingestion:v1:compatibility-manifest",
+  "title": "Mosaic Billing Ingestion Contract v1 compatibility manifest",
+  "description": "Machine-checked compatibility surface for Billing Ingestion Contract 1. Every frozen rule of this contract is pinned here as a const, so the reader policy is enforced rather than merely documented.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "billingIngestionContractVersion",
+    "status",
+    "schemas",
+    "canonicalFixtures",
+    "recordTypes",
+    "referenceKinds",
+    "limits",
+    "readerPolicy"
+  ],
+  "properties": {
+    "billingIngestionContractVersion": {
+      "const": "1"
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "draft",
+        "releaseCandidate",
+        "approved",
+        "deprecated",
+        "retired"
+      ]
+    },
+    "deprecation": {
+      "type": "object",
+      "description": "Lifecycle metadata present only once this contract version enters the deprecated or retired state. Absent for draft, releaseCandidate, and approved contracts. See docs/protocol/deprecation-policy.md.",
+      "additionalProperties": false,
+      "required": [
+        "deprecatedAt",
+        "retiresAt"
+      ],
+      "properties": {
+        "deprecatedAt": {
+          "type": "string",
+          "pattern": "^[0-9]{4}-(0[1-9]|1[0-2])-([0-2][0-9]|3[01])$"
+        },
+        "retiresAt": {
+          "type": "string",
+          "pattern": "^[0-9]{4}-(0[1-9]|1[0-2])-([0-2][0-9]|3[01])$"
+        },
+        "supersededBy": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "migrationGuide": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        }
+      }
+    },
+    "schemas": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "observation",
+        "submissionResponse",
+        "validation",
+        "transactionFact"
+      ],
+      "properties": {
+        "observation": {
+          "$ref": "#/$defs/relativeJsonPath"
+        },
+        "submissionResponse": {
+          "$ref": "#/$defs/relativeJsonPath"
+        },
+        "validation": {
+          "$ref": "#/$defs/relativeJsonPath"
+        },
+        "transactionFact": {
+          "$ref": "#/$defs/relativeJsonPath"
+        }
+      }
+    },
+    "canonicalFixtures": {
+      "type": "array",
+      "minItems": 20,
+      "maxItems": 48,
+      "uniqueItems": true,
+      "items": {
+        "$ref": "#/$defs/relativeJsonPath"
+      }
+    },
+    "recordTypes": {
+      "description": "The record-type set is closed by the manifest as well as by the schemas. Adding a member is a breaking change requiring Billing Ingestion 2.",
+      "type": "array",
+      "minItems": 7,
+      "maxItems": 7,
+      "uniqueItems": true,
+      "items": {
+        "$ref": "urn:mosaic:protocol:schema:billing-ingestion:v1:observation#/$defs/recordType"
+      }
+    },
+    "referenceKinds": {
+      "description": "The provider-reference discriminator, pinned so the SDK-side derivation is a machine-checked cross-SDK contract rather than prose. google_play_token_digest is SHA-256 over the UTF-8 bytes of the purchase token, lowercase hexadecimal.",
+      "type": "array",
+      "minItems": 3,
+      "maxItems": 3,
+      "uniqueItems": true,
+      "items": {
+        "oneOf": [
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "referenceKind",
+              "storePlatform",
+              "role",
+              "derivation"
+            ],
+            "properties": {
+              "referenceKind": {
+                "const": "app_store_transaction_id"
+              },
+              "storePlatform": {
+                "const": "apple_app_store"
+              },
+              "role": {
+                "const": "transaction"
+              },
+              "derivation": {
+                "const": "raw_decimal_provider_value"
+              }
+            }
+          },
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "referenceKind",
+              "storePlatform",
+              "role",
+              "derivation"
+            ],
+            "properties": {
+              "referenceKind": {
+                "const": "google_play_token_digest"
+              },
+              "storePlatform": {
+                "const": "google_play"
+              },
+              "role": {
+                "const": "transaction"
+              },
+              "derivation": {
+                "const": "sha256_utf8_lowercase_hex"
+              }
+            }
+          },
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "referenceKind",
+              "storePlatform",
+              "role",
+              "derivation"
+            ],
+            "properties": {
+              "referenceKind": {
+                "const": "google_play_order_id"
+              },
+              "storePlatform": {
+                "const": "google_play"
+              },
+              "role": {
+                "const": "providerOrder"
+              },
+              "derivation": {
+                "const": "raw_provider_value"
+              }
+            }
+          }
+        ]
+      }
+    },
+    "limits": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "maxRecordBytes",
+        "maxTransactionReferenceLength",
+        "maxDiagnosticsPerRecord",
+        "maxValidationAttempts",
+        "maxRetryAfterSeconds",
+        "maxCandidateMappings",
+        "observedAtFutureSkewSeconds",
+        "observationExpirySeconds"
+      ],
+      "properties": {
+        "maxRecordBytes": {
+          "const": 32768
+        },
+        "maxTransactionReferenceLength": {
+          "const": 128
+        },
+        "maxDiagnosticsPerRecord": {
+          "const": 10
+        },
+        "maxValidationAttempts": {
+          "const": 8
+        },
+        "maxRetryAfterSeconds": {
+          "const": 86400
+        },
+        "maxCandidateMappings": {
+          "const": 16
+        },
+        "observedAtFutureSkewSeconds": {
+          "const": 300
+        },
+        "observationExpirySeconds": {
+          "const": 604800
+        }
+      }
+    },
+    "readerPolicy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "unknownContractVersion",
+        "unknownRecordType",
+        "unknownField",
+        "unknownOutcome",
+        "unknownQuarantineReason",
+        "unknownSourceAuthority",
+        "unknownTransactionType",
+        "acceptedSubmission",
+        "unresolvedProduct",
+        "unclassifiedStoreEnvironment",
+        "clientAuthoritativeFact",
+        "entitlementInference",
+        "factMutation",
+        "rawProviderCredential",
+        "rawProviderError"
+      ],
+      "properties": {
+        "unknownContractVersion": {
+          "const": "rejectRecord"
+        },
+        "unknownRecordType": {
+          "const": "rejectRecord"
+        },
+        "unknownField": {
+          "const": "rejectRecord"
+        },
+        "unknownOutcome": {
+          "const": "rejectRecord"
+        },
+        "unknownQuarantineReason": {
+          "const": "rejectRecord"
+        },
+        "unknownSourceAuthority": {
+          "const": "rejectRecord"
+        },
+        "unknownTransactionType": {
+          "const": "rejectRecord"
+        },
+        "acceptedSubmission": {
+          "description": "Acceptance means queued for validation. A reader must never treat it as proof that a transaction is authentic.",
+          "const": "neverTreatAsValidated"
+        },
+        "unresolvedProduct": {
+          "description": "An unknown, ambiguous, cross-environment, or unsupported Product resolution quarantines. There is no best guess and no fallback mapping.",
+          "const": "quarantineNeverGuess"
+        },
+        "unclassifiedStoreEnvironment": {
+          "description": "Sandbox and unclassified Store Environment records form a separate logical stream and are never aggregated, reported, or exported alongside production.",
+          "const": "neverAggregateWithProduction"
+        },
+        "clientAuthoritativeFact": {
+          "const": "forbidden"
+        },
+        "entitlementInference": {
+          "const": "forbidden"
+        },
+        "factMutation": {
+          "const": "forbidden"
+        },
+        "rawProviderCredential": {
+          "const": "forbidden"
+        },
+        "rawProviderError": {
+          "const": "forbidden"
+        }
+      }
+    }
+  },
+  "$defs": {
+    "relativeJsonPath": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 256,
+      "pattern": "^\\.\\./\\.\\./.*\\.json$"
+    }
+  }
+}

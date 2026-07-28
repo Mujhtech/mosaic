@@ -1,0 +1,12 @@
+{
+  "billingIngestionContractVersion": "1",
+  "recordType": "quarantineRecord",
+  "payload": {
+    "quarantineId": "fixture-quarantine-0006",
+    "reason": "product_probably_fine",
+    "severity": "warning",
+    "status": "open",
+    "detectedAt": "2026-07-27T12:10:00.000Z",
+    "diagnostics": []
+  }
+}

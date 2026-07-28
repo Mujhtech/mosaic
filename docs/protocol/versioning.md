@@ -9,6 +9,11 @@ Protocol `0.2`; Local Preview `0.2` (development-only); Configuration Delivery
 Earlier experimental contracts were retired before approval rather than carried
 as compatibility readers.
 
+Billing Ingestion `1` exists but is **not** in the approved set: it is born
+`status: "draft"` and carries no compatibility guarantee until an explicit
+product-owner decision approves it. See
+[Billing Ingestion versioning](#billing-ingestion-versioning).
+
 These are independent versioned contracts. Their exact version values do not
 imply compatibility with one another and do not change the Paywall
 `schemaVersion`.
@@ -186,6 +191,39 @@ Commerce Provider v2 operation and update references use the exact accepted
 Commerce Configuration v2 content digest as `configurationRevision`. A
 different digest is a different immutable revision; readers do not compare
 numeric ordering or accept aliases.
+
+## Billing Ingestion versioning
+
+Billing Ingestion records require exact `billingIngestionContractVersion: "1"`.
+Readers reject unknown versions, record types, fields, outcomes, resolutions,
+quarantine reasons, source authorities, transaction types, and reference kinds
+by rejecting the **whole record** — never by stripping the part they cannot
+read.
+
+Every enumeration in the contract is closed. Adding a record type, outcome,
+quarantine reason, transaction type, source authority, resolution, or reference
+kind is therefore a breaking change requiring Billing Ingestion `2`. The v1
+vocabularies are deliberately over-provisioned for that reason.
+
+The manifest is born `status: "draft"`, becomes `releaseCandidate` for the
+Phase 9A review gate, and reaches `approved` only by an explicit product-owner
+decision. While it is a draft or a release candidate, narrowing corrections
+remain permitted under the
+[breaking-change process](breaking-change-process.md).
+
+Billing Ingestion is optional and independent. No other contract gains a
+required reference to it, an SDK that never submits an observation loses no
+capability, and changing Billing Ingestion never authorizes a change to Paywall
+Protocol `0.2`, Configuration Delivery `1`/`2`/`3`, Placement Decision `1`,
+Experiment Assignment `1`, Analytics Event `1`/`2`, Commerce Provider `1`/`2`,
+or Commerce Configuration `1`/`2`. Billing-to-analytics correlation uses only
+the existing opaque `purchaseAttemptId`, `providerOperationId`, and
+`providerUpdateId` handles.
+
+Billing records are server-only in Phase 9A and are deliberately not generated
+into the browser contract. Adding browser generation later is additive and does
+not require a contract version. See
+[Billing Ingestion Contract v1](billing-ingestion-v1.md) and ADR-0022.
 
 ## Related policy documents
 

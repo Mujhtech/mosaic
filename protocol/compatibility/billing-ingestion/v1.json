@@ -1,0 +1,96 @@
+{
+  "billingIngestionContractVersion": "1",
+  "status": "draft",
+  "schemas": {
+    "observation": "../../schema/billing-ingestion/v1/observation.schema.json",
+    "submissionResponse": "../../schema/billing-ingestion/v1/submission-response.schema.json",
+    "validation": "../../schema/billing-ingestion/v1/validation.schema.json",
+    "transactionFact": "../../schema/billing-ingestion/v1/transaction-fact.schema.json"
+  },
+  "canonicalFixtures": [
+    "../../fixtures/billing-ingestion/v1/apple-client-observation.json",
+    "../../fixtures/billing-ingestion/v1/google-client-observation.json",
+    "../../fixtures/billing-ingestion/v1/apple-provider-notification-observation.json",
+    "../../fixtures/billing-ingestion/v1/google-provider-notification-observation.json",
+    "../../fixtures/billing-ingestion/v1/trusted-server-observation.json",
+    "../../fixtures/billing-ingestion/v1/reconciliation-discovery-observation.json",
+    "../../fixtures/billing-ingestion/v1/manual-revalidation-observation.json",
+    "../../fixtures/billing-ingestion/v1/responses/accepted-for-validation.json",
+    "../../fixtures/billing-ingestion/v1/responses/duplicate-observation.json",
+    "../../fixtures/billing-ingestion/v1/responses/permanent-rejection.json",
+    "../../fixtures/billing-ingestion/v1/responses/retryable-failure.json",
+    "../../fixtures/billing-ingestion/v1/validation/validated-initial-purchase-production.json",
+    "../../fixtures/billing-ingestion/v1/validation/validated-renewal-sandbox.json",
+    "../../fixtures/billing-ingestion/v1/validation/validated-through-replacement-chain.json",
+    "../../fixtures/billing-ingestion/v1/validation/transient-failure-provider-unavailable.json",
+    "../../fixtures/billing-ingestion/v1/validation/permanent-failure-provider-rejected.json",
+    "../../fixtures/billing-ingestion/v1/validation/permanent-failure-attempts-exhausted.json",
+    "../../fixtures/billing-ingestion/v1/validation/quarantined-unknown-product.json",
+    "../../fixtures/billing-ingestion/v1/validation/quarantined-ambiguous-product.json",
+    "../../fixtures/billing-ingestion/v1/validation/quarantined-cross-environment-mismatch.json",
+    "../../fixtures/billing-ingestion/v1/validation/quarantined-unsupported-product-type.json",
+    "../../fixtures/billing-ingestion/v1/validation/superseded-by-provider-notification.json",
+    "../../fixtures/billing-ingestion/v1/validation/replayed-fact-supersedes.json",
+    "../../fixtures/billing-ingestion/v1/validation/product-resolution-resolved.json",
+    "../../fixtures/billing-ingestion/v1/validation/quarantine-record-open.json",
+    "../../fixtures/billing-ingestion/v1/transaction-facts/apple-initial-purchase-fact.json",
+    "../../fixtures/billing-ingestion/v1/transaction-facts/google-non-consumable-fact.json",
+    "../../fixtures/billing-ingestion/v1/transaction-facts/refund-revocation-fact.json"
+  ],
+  "recordTypes": [
+    "clientTransactionObservation",
+    "serverTransactionObservation",
+    "observationSubmissionResult",
+    "validationResult",
+    "transactionFact",
+    "productResolution",
+    "quarantineRecord"
+  ],
+  "referenceKinds": [
+    {
+      "referenceKind": "app_store_transaction_id",
+      "storePlatform": "apple_app_store",
+      "role": "transaction",
+      "derivation": "raw_decimal_provider_value"
+    },
+    {
+      "referenceKind": "google_play_token_digest",
+      "storePlatform": "google_play",
+      "role": "transaction",
+      "derivation": "sha256_utf8_lowercase_hex"
+    },
+    {
+      "referenceKind": "google_play_order_id",
+      "storePlatform": "google_play",
+      "role": "providerOrder",
+      "derivation": "raw_provider_value"
+    }
+  ],
+  "limits": {
+    "maxRecordBytes": 32768,
+    "maxTransactionReferenceLength": 128,
+    "maxDiagnosticsPerRecord": 10,
+    "maxValidationAttempts": 8,
+    "maxRetryAfterSeconds": 86400,
+    "maxCandidateMappings": 16,
+    "observedAtFutureSkewSeconds": 300,
+    "observationExpirySeconds": 604800
+  },
+  "readerPolicy": {
+    "unknownContractVersion": "rejectRecord",
+    "unknownRecordType": "rejectRecord",
+    "unknownField": "rejectRecord",
+    "unknownOutcome": "rejectRecord",
+    "unknownQuarantineReason": "rejectRecord",
+    "unknownSourceAuthority": "rejectRecord",
+    "unknownTransactionType": "rejectRecord",
+    "acceptedSubmission": "neverTreatAsValidated",
+    "unresolvedProduct": "quarantineNeverGuess",
+    "unclassifiedStoreEnvironment": "neverAggregateWithProduction",
+    "clientAuthoritativeFact": "forbidden",
+    "entitlementInference": "forbidden",
+    "factMutation": "forbidden",
+    "rawProviderCredential": "forbidden",
+    "rawProviderError": "forbidden"
+  }
+}

@@ -1,0 +1,23 @@
+{
+  "billingIngestionContractVersion": "1",
+  "recordType": "billingLedgerEntry",
+  "payload": {
+    "observationId": "fixture-observation-apple-0001",
+    "submissionId": "fixture-submission-apple-0001",
+    "providerId": "fixture-provider-apple",
+    "storePlatform": "apple_app_store",
+    "transactionReference": {
+      "referenceKind": "app_store_transaction_id",
+      "value": "2000000900000001"
+    },
+    "observedAt": "2026-07-27T12:00:00.000Z",
+    "sourceAuthority": "client_observation",
+    "context": {
+      "platform": "ios",
+      "sdkFamily": "ios",
+      "sdkVersion": "0.9.0",
+      "applicationVersion": "1.4.2",
+      "operatingSystemVersion": "18.5"
+    }
+  }
+}

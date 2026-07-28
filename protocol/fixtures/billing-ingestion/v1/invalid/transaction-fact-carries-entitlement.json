@@ -1,0 +1,33 @@
+{
+  "billingIngestionContractVersion": "1",
+  "recordType": "transactionFact",
+  "payload": {
+    "transactionFactId": "fixture-fact-apple-0001",
+    "factDigest": "sha256:66720e8760b45e54b50419aca36d175c69ecd9fc548f944fc4051f9867c783f2",
+    "factVersion": 1,
+    "providerId": "fixture-provider-apple",
+    "storePlatform": "apple_app_store",
+    "transactionReference": {
+      "referenceKind": "app_store_transaction_id",
+      "value": "2000000900000001"
+    },
+    "mosaicProductId": "fixture-mosaic-product-pro-monthly",
+    "mappingId": "fixture-mapping-0003",
+    "mappingVersion": 3,
+    "productType": "subscription",
+    "transactionType": "initial_purchase",
+    "storeEnvironment": "production",
+    "sourceAuthority": "provider_notification",
+    "occurredAt": "2026-07-27T11:59:58.000Z",
+    "providerReportedAt": "2026-07-27T11:59:58.000Z",
+    "recordedAt": "2026-07-27T12:00:08.000Z",
+    "periodStart": "2026-07-27T11:59:58.000Z",
+    "periodEnd": "2026-08-27T11:59:58.000Z",
+    "quantity": 1,
+    "validatorVersion": "1",
+    "correlation": {
+      "purchaseAttemptId": "fixture-purchase-attempt-0001"
+    },
+    "entitlementActive": true
+  }
+}

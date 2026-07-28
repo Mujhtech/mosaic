@@ -1,0 +1,29 @@
+{
+  "billingIngestionContractVersion": "1",
+  "recordType": "validationResult",
+  "payload": {
+    "validationId": "fixture-validation-0011",
+    "observationId": "fixture-observation-apple-0001",
+    "submissionId": "fixture-submission-apple-0001",
+    "outcome": "superseded",
+    "attempt": 1,
+    "validatorVersion": "1",
+    "decidedAt": "2026-07-27T12:00:09.000Z",
+    "sourceAuthority": "client_observation",
+    "storeEnvironmentClassification": {
+      "classification": "production",
+      "basis": "signature_environment"
+    },
+    "diagnostics": [
+      {
+        "code": "billing.replay.superseded",
+        "safeMessage": "A higher-authority observation produced the authoritative fact instead.",
+        "severity": "info",
+        "retryable": false,
+        "correlationId": "fixture-correlation-0001",
+        "recoveryAction": "none"
+      }
+    ],
+    "supersededByValidationId": "fixture-validation-0001"
+  }
+}

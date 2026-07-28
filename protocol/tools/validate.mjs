@@ -67,6 +67,11 @@ import {
   validateAnalyticsEventV2Artifacts,
   validateAnalyticsEventV2JsonFormatting,
 } from "./analytics-event-validation-v2.mjs";
+import {
+  loadBillingIngestionV1Artifacts,
+  validateBillingIngestionV1Artifacts,
+  validateBillingIngestionV1JsonFormatting,
+} from "./billing-ingestion-validation-v1.mjs";
 import { validateAnalyticsMinimizationProjection } from "./generate-analytics-minimization.mjs";
 import { validateRejectionLayers } from "./generate-rejection-layers.mjs";
 
@@ -86,6 +91,7 @@ try {
   const experimentAssignmentArtifactsV1 = loadExperimentAssignmentV1Artifacts();
   const deliveryArtifactsV3 = loadDeliveryV3Artifacts();
   const analyticsEventArtifactsV2 = loadAnalyticsEventV2Artifacts();
+  const billingIngestionArtifactsV1 = loadBillingIngestionV1Artifacts();
   const errors = [
     ...validateBrowserContractGeneration(),
     ...validateProtocolV02(artifactsV02),
@@ -135,6 +141,8 @@ try {
     ...validateDeliveryV3JsonFormatting(),
     ...validateAnalyticsEventV2Artifacts(analyticsEventArtifactsV2),
     ...validateAnalyticsEventV2JsonFormatting(),
+    ...validateBillingIngestionV1Artifacts(billingIngestionArtifactsV1),
+    ...validateBillingIngestionV1JsonFormatting(),
     ...validateAnalyticsMinimizationProjection(),
     ...validateRejectionLayers(),
   ];
@@ -151,7 +159,8 @@ try {
         "validated Local Preview 0.2 fixtures, Configuration Delivery v1, " +
         "Commerce Provider Contracts v1/v2, Commerce Configurations v1/v2, " +
         "Placement Decision v1, Configuration Delivery v2, Analytics Event " +
-        "v1/v2, Experiment Assignment v1, Configuration Delivery v3, and the browser contract.",
+        "v1/v2, Experiment Assignment v1, Configuration Delivery v3, Billing " +
+        "Ingestion v1 (draft), and the browser contract.",
     );
   }
 } catch (error) {

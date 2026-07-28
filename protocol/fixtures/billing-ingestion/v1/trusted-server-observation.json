@@ -1,0 +1,21 @@
+{
+  "billingIngestionContractVersion": "1",
+  "recordType": "serverTransactionObservation",
+  "payload": {
+    "observationId": "fixture-observation-trusted-0001",
+    "submissionId": "fixture-submission-trusted-0001",
+    "providerId": "fixture-provider-google",
+    "storePlatform": "google_play",
+    "transactionReference": {
+      "referenceKind": "google_play_token_digest",
+      "value": "bc9bd8b5795fab18943a5b50c84de2c3f915096c8e962797d167e66d5bcb59ee"
+    },
+    "sourceAuthority": "trusted_server_observation",
+    "trustBasis": "provider_server_api",
+    "receivedAt": "2026-07-27T12:05:00.000Z",
+    "storeEnvironmentClassification": {
+      "classification": "production",
+      "basis": "mosaic_environment_policy"
+    }
+  }
+}

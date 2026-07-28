@@ -1,0 +1,54 @@
+{
+  "billingIngestionContractVersion": "1",
+  "recordType": "validationResult",
+  "payload": {
+    "validationId": "fixture-validation-0007",
+    "observationId": "fixture-observation-apple-notification-0001",
+    "submissionId": "fixture-submission-apple-notification-0001",
+    "outcome": "quarantined",
+    "attempt": 1,
+    "validatorVersion": "1",
+    "decidedAt": "2026-07-27T12:06:00.000Z",
+    "sourceAuthority": "provider_notification",
+    "storeEnvironmentClassification": {
+      "classification": "production",
+      "basis": "signature_environment"
+    },
+    "diagnostics": [
+      {
+        "code": "billing.resolution.unknown_product",
+        "safeMessage": "No Provider Product mapping matched the provider Product reference.",
+        "severity": "error",
+        "retryable": false,
+        "correlationId": "fixture-correlation-0001",
+        "recoveryAction": "fixProductMapping"
+      }
+    ],
+    "productResolution": {
+      "resolutionId": "fixture-resolution-0007",
+      "resolvedAt": "2026-07-27T12:05:59.000Z",
+      "resolution": "unknown",
+      "providerProductReference": "fixture.unmapped.monthly",
+      "reason": "no_mapping"
+    },
+    "quarantine": {
+      "quarantineId": "fixture-quarantine-0001",
+      "reason": "product_unknown",
+      "severity": "error",
+      "status": "open",
+      "detectedAt": "2026-07-27T12:06:00.000Z",
+      "observationId": "fixture-observation-apple-notification-0001",
+      "validationId": "fixture-validation-0007",
+      "diagnostics": [
+        {
+          "code": "billing.resolution.unknown_product",
+          "safeMessage": "No Provider Product mapping matched the provider Product reference.",
+          "severity": "error",
+          "retryable": false,
+          "correlationId": "fixture-correlation-0001",
+          "recoveryAction": "fixProductMapping"
+        }
+      ]
+    }
+  }
+}

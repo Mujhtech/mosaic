@@ -1,0 +1,28 @@
+{
+  "billingIngestionContractVersion": "1",
+  "recordType": "validationResult",
+  "payload": {
+    "validationId": "fixture-validation-0005",
+    "observationId": "fixture-observation-apple-unknown-0001",
+    "submissionId": "fixture-submission-apple-unknown-0001",
+    "outcome": "provider_rejected",
+    "attempt": 1,
+    "validatorVersion": "1",
+    "decidedAt": "2026-07-27T12:03:00.000Z",
+    "sourceAuthority": "provider_notification",
+    "storeEnvironmentClassification": {
+      "classification": "production",
+      "basis": "signature_environment"
+    },
+    "diagnostics": [
+      {
+        "code": "billing.provider.transaction_rejected",
+        "safeMessage": "The provider does not recognise this transaction reference.",
+        "severity": "error",
+        "retryable": false,
+        "correlationId": "fixture-correlation-0001",
+        "recoveryAction": "none"
+      }
+    ]
+  }
+}

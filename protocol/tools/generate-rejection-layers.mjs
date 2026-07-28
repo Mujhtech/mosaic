@@ -68,6 +68,36 @@ const DELIVERY_V2 = [
   "schema/configuration-delivery/v2/capability-request.schema.json",
 ];
 
+const BILLING_INGESTION = [
+  "schema/billing-ingestion/v1/observation.schema.json",
+  "schema/billing-ingestion/v1/transaction-fact.schema.json",
+  "schema/billing-ingestion/v1/submission-response.schema.json",
+  "schema/billing-ingestion/v1/validation.schema.json",
+];
+
+/**
+ * Billing Ingestion v1 is four sibling envelope schemas rather than one. Its
+ * invalid fixtures are documents of all four, so the pure-schema probe is a
+ * union: each schema pins its own `recordType` subset, so a well-formed record
+ * matches exactly one branch and a rejected record matches none.
+ */
+function billingIngestionV1UnionValidator() {
+  const ajv = new Ajv2020({
+    allErrors: true,
+    strict: true,
+    strictRequired: false,
+    strictTypes: false,
+  });
+  for (const schema of BILLING_INGESTION) ajv.addSchema(schemaAt(schema));
+  return ajv.compile({
+    $schema: "https://json-schema.org/draft/2020-12/schema",
+    $id: "urn:mosaic:protocol:schema:billing-ingestion:v1:rejection-probe",
+    anyOf: BILLING_INGESTION.map((schema) => ({
+      $ref: schemaAt(schema).$id,
+    })),
+  });
+}
+
 /**
  * Every `invalid/` fixture directory, with the pure schema its fixtures are
  * documents of. Kept explicit: a new contract must be registered deliberately,
@@ -121,6 +151,11 @@ export const rejectionLayerTargets = Object.freeze([
     directory: "fixtures/analytics-event/v2/invalid",
     validator: () =>
       pureSchemaValidator("schema/analytics-event/v2/event.schema.json"),
+  },
+  {
+    contract: "Billing Ingestion v1",
+    directory: "fixtures/billing-ingestion/v1/invalid",
+    validator: billingIngestionV1UnionValidator,
   },
 ]);
 

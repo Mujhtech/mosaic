@@ -1,0 +1,271 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:mosaic:protocol:schema:billing-ingestion:v1:transaction-fact",
+  "title": "Mosaic Billing Ingestion Contract v1 transaction fact",
+  "description": "The provider-independent normalized fact produced by a successful validation, and the append-only replay provenance attached to it. A transaction fact is a record of what a provider confirmed. It is never a subscription, never an entitlement, never an access decision, and never financial accounting.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "billingIngestionContractVersion",
+    "recordType",
+    "payload"
+  ],
+  "properties": {
+    "billingIngestionContractVersion": {
+      "const": "1"
+    },
+    "recordType": {
+      "const": "transactionFact"
+    },
+    "payload": {
+      "$ref": "#/$defs/transactionFact"
+    }
+  },
+  "$defs": {
+    "transactionType": {
+      "description": "The complete, closed transaction-type set. It is deliberately over-provisioned: readers reject unknown members, so every later addition costs a contract version.",
+      "enum": [
+        "initial_purchase",
+        "renewal",
+        "trial_start",
+        "trial_conversion",
+        "offer_redemption",
+        "upgrade",
+        "downgrade",
+        "crossgrade",
+        "restore",
+        "billing_retry",
+        "grace_period",
+        "cancellation_signal",
+        "refund",
+        "revocation",
+        "unknown"
+      ]
+    },
+    "productType": {
+      "description": "Phase 9A supports auto-renewable subscriptions and non-consumables. A provider-reported type outside this set quarantines as unsupported_product_type; it never resolves approximately.",
+      "enum": [
+        "subscription",
+        "one_time_non_consumable"
+      ]
+    },
+    "revocationReason": {
+      "enum": [
+        "refund",
+        "chargeback",
+        "provider_revocation",
+        "family_sharing_removed",
+        "unknown"
+      ]
+    },
+    "revocation": {
+      "description": "A provider-reported revocation recorded as a fact. It has no entitlement or access effect, because no access state exists in Phase 9A.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "reason",
+        "revokedAt"
+      ],
+      "properties": {
+        "reason": {
+          "$ref": "#/$defs/revocationReason"
+        },
+        "revokedAt": {
+          "$ref": "urn:mosaic:protocol:schema:billing-ingestion:v1:observation#/$defs/utcTimestamp"
+        }
+      }
+    },
+    "replayReason": {
+      "enum": [
+        "validator_defect",
+        "mapping_corrected",
+        "provider_outage_recovery",
+        "quarantine_review",
+        "scheduled_reconciliation",
+        "operator_request"
+      ]
+    },
+    "replay": {
+      "description": "Provenance of a deterministic re-run. Replay appends; it never mutates. A superseding fact names what it supersedes and the superseded fact remains byte-identical in the ledger. A replay of a client observation never elevates its authority.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "replayId",
+        "reason",
+        "originalValidationId",
+        "originalValidatorVersion",
+        "requestedAt"
+      ],
+      "properties": {
+        "replayId": {
+          "$ref": "urn:mosaic:protocol:schema:billing-ingestion:v1:observation#/$defs/identifier"
+        },
+        "reason": {
+          "$ref": "#/$defs/replayReason"
+        },
+        "originalValidationId": {
+          "$ref": "urn:mosaic:protocol:schema:billing-ingestion:v1:observation#/$defs/identifier"
+        },
+        "originalValidatorVersion": {
+          "$ref": "urn:mosaic:protocol:schema:billing-ingestion:v1:observation#/$defs/validatorVersion"
+        },
+        "requestedAt": {
+          "$ref": "urn:mosaic:protocol:schema:billing-ingestion:v1:observation#/$defs/utcTimestamp"
+        },
+        "requestedBy": {
+          "description": "Opaque actor reference. Never a name, an email address, or a credential.",
+          "$ref": "urn:mosaic:protocol:schema:billing-ingestion:v1:observation#/$defs/identifier"
+        },
+        "supersedesTransactionFactId": {
+          "$ref": "urn:mosaic:protocol:schema:billing-ingestion:v1:observation#/$defs/identifier"
+        }
+      }
+    },
+    "transactionFact": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "transactionFactId",
+        "factDigest",
+        "factVersion",
+        "providerId",
+        "storePlatform",
+        "transactionReference",
+        "mosaicProductId",
+        "mappingId",
+        "mappingVersion",
+        "productType",
+        "transactionType",
+        "storeEnvironment",
+        "sourceAuthority",
+        "occurredAt",
+        "recordedAt",
+        "validatorVersion"
+      ],
+      "properties": {
+        "transactionFactId": {
+          "$ref": "urn:mosaic:protocol:schema:billing-ingestion:v1:observation#/$defs/identifier"
+        },
+        "factDigest": {
+          "description": "Provider-independent fact identity, unique within a Mosaic Environment. Because it is a digest, the raw provider reference need not be replayed into exports. Never derived from a timestamp, price, subject, or display name.",
+          "$ref": "urn:mosaic:protocol:schema:billing-ingestion:v1:observation#/$defs/digest"
+        },
+        "factVersion": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 1000000
+        },
+        "providerId": {
+          "$ref": "urn:mosaic:protocol:schema:billing-ingestion:v1:observation#/$defs/identifier"
+        },
+        "storePlatform": {
+          "$ref": "urn:mosaic:protocol:schema:billing-ingestion:v1:observation#/$defs/storePlatform"
+        },
+        "transactionReference": {
+          "$ref": "urn:mosaic:protocol:schema:billing-ingestion:v1:observation#/$defs/transactionReference"
+        },
+        "providerOrderReference": {
+          "$ref": "urn:mosaic:protocol:schema:billing-ingestion:v1:observation#/$defs/providerOrderReference"
+        },
+        "originalTransactionReference": {
+          "description": "Links a renewal or a later chain member to its originating transaction.",
+          "$ref": "urn:mosaic:protocol:schema:billing-ingestion:v1:observation#/$defs/transactionReference"
+        },
+        "mosaicProductId": {
+          "$ref": "urn:mosaic:protocol:schema:billing-ingestion:v1:observation#/$defs/identifier"
+        },
+        "mappingId": {
+          "description": "Resolution Snapshot: the exact Provider Product mapping that matched, so historical resolution is reproducible.",
+          "$ref": "urn:mosaic:protocol:schema:billing-ingestion:v1:observation#/$defs/identifier"
+        },
+        "mappingVersion": {
+          "$ref": "urn:mosaic:protocol:schema:billing-ingestion:v1:observation#/$defs/mappingVersion"
+        },
+        "resolvedThroughReplacementChain": {
+          "type": "boolean"
+        },
+        "originalMappingId": {
+          "$ref": "urn:mosaic:protocol:schema:billing-ingestion:v1:observation#/$defs/identifier"
+        },
+        "productType": {
+          "$ref": "#/$defs/productType"
+        },
+        "transactionType": {
+          "$ref": "#/$defs/transactionType"
+        },
+        "storeEnvironment": {
+          "description": "A fact is always exactly sandbox or production. unclassified is structurally impossible here, and sandbox facts are a separate logical stream that must never be aggregated, reported, or exported alongside production facts.",
+          "$ref": "urn:mosaic:protocol:schema:billing-ingestion:v1:observation#/$defs/classifiedStoreEnvironment"
+        },
+        "sourceAuthority": {
+          "description": "Never client_observation. A client observation triggers validation; the authority on the resulting fact is that of the server-side verification.",
+          "$ref": "urn:mosaic:protocol:schema:billing-ingestion:v1:observation#/$defs/nonClientSourceAuthority"
+        },
+        "occurredAt": {
+          "$ref": "urn:mosaic:protocol:schema:billing-ingestion:v1:observation#/$defs/utcTimestamp"
+        },
+        "providerReportedAt": {
+          "$ref": "urn:mosaic:protocol:schema:billing-ingestion:v1:observation#/$defs/utcTimestamp"
+        },
+        "recordedAt": {
+          "$ref": "urn:mosaic:protocol:schema:billing-ingestion:v1:observation#/$defs/utcTimestamp"
+        },
+        "periodStart": {
+          "description": "Provider-reported service period, recorded as a fact. It is not an authorization to serve content.",
+          "$ref": "urn:mosaic:protocol:schema:billing-ingestion:v1:observation#/$defs/utcTimestamp"
+        },
+        "periodEnd": {
+          "$ref": "urn:mosaic:protocol:schema:billing-ingestion:v1:observation#/$defs/utcTimestamp"
+        },
+        "quantity": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 1000
+        },
+        "revocation": {
+          "$ref": "#/$defs/revocation"
+        },
+        "validatorVersion": {
+          "$ref": "urn:mosaic:protocol:schema:billing-ingestion:v1:observation#/$defs/validatorVersion"
+        },
+        "supersedesTransactionFactId": {
+          "$ref": "urn:mosaic:protocol:schema:billing-ingestion:v1:observation#/$defs/identifier"
+        },
+        "replay": {
+          "$ref": "#/$defs/replay"
+        },
+        "correlation": {
+          "$ref": "urn:mosaic:protocol:schema:billing-ingestion:v1:observation#/$defs/correlation"
+        },
+        "subjectReference": {
+          "$ref": "urn:mosaic:protocol:schema:billing-ingestion:v1:observation#/$defs/subjectReference"
+        },
+        "monetaryAmount": {
+          "$ref": "urn:mosaic:protocol:schema:billing-ingestion:v1:observation#/$defs/monetaryAmount"
+        }
+      },
+      "allOf": [
+        {
+          "$ref": "urn:mosaic:protocol:schema:billing-ingestion:v1:observation#/$defs/storePlatformReferenceAlignment"
+        },
+        {
+          "if": {
+            "required": [
+              "originalMappingId"
+            ]
+          },
+          "then": {
+            "required": [
+              "resolvedThroughReplacementChain"
+            ],
+            "properties": {
+              "resolvedThroughReplacementChain": {
+                "const": true
+              }
+            }
+          }
+        }
+      ]
+    }
+  }
+}

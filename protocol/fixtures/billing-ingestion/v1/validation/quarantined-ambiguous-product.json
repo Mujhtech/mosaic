@@ -1,0 +1,56 @@
+{
+  "billingIngestionContractVersion": "1",
+  "recordType": "validationResult",
+  "payload": {
+    "validationId": "fixture-validation-0008",
+    "observationId": "fixture-observation-apple-notification-0001",
+    "submissionId": "fixture-submission-apple-notification-0001",
+    "outcome": "quarantined",
+    "attempt": 1,
+    "validatorVersion": "1",
+    "decidedAt": "2026-07-27T12:07:00.000Z",
+    "sourceAuthority": "provider_notification",
+    "storeEnvironmentClassification": {
+      "classification": "production",
+      "basis": "signature_environment"
+    },
+    "diagnostics": [
+      {
+        "code": "billing.resolution.ambiguous_mapping",
+        "safeMessage": "Two mappings matched. Mosaic never selects one on the reader's behalf.",
+        "severity": "error",
+        "retryable": false,
+        "correlationId": "fixture-correlation-0001",
+        "recoveryAction": "resolveMappingAmbiguity"
+      }
+    ],
+    "productResolution": {
+      "resolutionId": "fixture-resolution-0008",
+      "resolvedAt": "2026-07-27T12:06:59.000Z",
+      "resolution": "ambiguous",
+      "providerProductReference": "fixture.pro.monthly",
+      "candidateMappingIds": [
+        "fixture-mapping-0003",
+        "fixture-mapping-0021"
+      ]
+    },
+    "quarantine": {
+      "quarantineId": "fixture-quarantine-0002",
+      "reason": "product_ambiguous",
+      "severity": "error",
+      "status": "open",
+      "detectedAt": "2026-07-27T12:07:00.000Z",
+      "validationId": "fixture-validation-0008",
+      "diagnostics": [
+        {
+          "code": "billing.resolution.ambiguous_mapping",
+          "safeMessage": "Two mappings matched. Mosaic never selects one on the reader's behalf.",
+          "severity": "error",
+          "retryable": false,
+          "correlationId": "fixture-correlation-0001",
+          "recoveryAction": "resolveMappingAmbiguity"
+        }
+      ]
+    }
+  }
+}

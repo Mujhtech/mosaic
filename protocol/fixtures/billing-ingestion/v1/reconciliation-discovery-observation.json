@@ -1,0 +1,22 @@
+{
+  "billingIngestionContractVersion": "1",
+  "recordType": "serverTransactionObservation",
+  "payload": {
+    "observationId": "fixture-observation-reconciliation-0001",
+    "submissionId": "fixture-submission-reconciliation-0001",
+    "providerId": "fixture-provider-apple",
+    "storePlatform": "apple_app_store",
+    "transactionReference": {
+      "referenceKind": "app_store_transaction_id",
+      "value": "2000000900000009"
+    },
+    "sourceAuthority": "reconciliation_discovery",
+    "trustBasis": "provider_server_api",
+    "receivedAt": "2026-07-28T03:00:00.000Z",
+    "providerReportedAt": "2026-07-26T09:14:21.000Z",
+    "storeEnvironmentClassification": {
+      "classification": "production",
+      "basis": "provider_endpoint"
+    }
+  }
+}

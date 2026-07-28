@@ -1,0 +1,22 @@
+{
+  "billingIngestionContractVersion": "1",
+  "recordType": "observationSubmissionResult",
+  "payload": {
+    "submissionId": "fixture-submission-google-0001",
+    "receivedAt": "2026-07-27T12:02:00.000Z",
+    "status": "retryable_failure",
+    "code": "rate_limited",
+    "retryAfterSeconds": 30,
+    "diagnostics": [
+      {
+        "code": "billing.observation.rate_limited",
+        "safeMessage": "Observation intake is rate limited for this key. Queue and resubmit.",
+        "severity": "warning",
+        "retryable": true,
+        "correlationId": "fixture-correlation-0001",
+        "retryAfterSeconds": 30,
+        "recoveryAction": "retry"
+      }
+    ]
+  }
+}

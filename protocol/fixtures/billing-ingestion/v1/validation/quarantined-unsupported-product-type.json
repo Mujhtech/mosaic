@@ -1,0 +1,53 @@
+{
+  "billingIngestionContractVersion": "1",
+  "recordType": "validationResult",
+  "payload": {
+    "validationId": "fixture-validation-0010",
+    "observationId": "fixture-observation-apple-notification-0001",
+    "submissionId": "fixture-submission-apple-notification-0001",
+    "outcome": "quarantined",
+    "attempt": 1,
+    "validatorVersion": "1",
+    "decidedAt": "2026-07-27T12:09:00.000Z",
+    "sourceAuthority": "provider_notification",
+    "storeEnvironmentClassification": {
+      "classification": "production",
+      "basis": "signature_environment"
+    },
+    "diagnostics": [
+      {
+        "code": "billing.resolution.unsupported_product_type",
+        "safeMessage": "The provider reports a Product type outside the supported set.",
+        "severity": "warning",
+        "retryable": false,
+        "correlationId": "fixture-correlation-0001",
+        "recoveryAction": "none"
+      }
+    ],
+    "productResolution": {
+      "resolutionId": "fixture-resolution-0010",
+      "resolvedAt": "2026-07-27T12:08:59.000Z",
+      "resolution": "unsupported_product_type",
+      "providerProductReference": "fixture.coins.100",
+      "providerReportedProductType": "fixture-consumable"
+    },
+    "quarantine": {
+      "quarantineId": "fixture-quarantine-0004",
+      "reason": "unsupported_product_type",
+      "severity": "warning",
+      "status": "open",
+      "detectedAt": "2026-07-27T12:09:00.000Z",
+      "validationId": "fixture-validation-0010",
+      "diagnostics": [
+        {
+          "code": "billing.resolution.unsupported_product_type",
+          "safeMessage": "The provider reports a Product type outside the supported set.",
+          "severity": "warning",
+          "retryable": false,
+          "correlationId": "fixture-correlation-0001",
+          "recoveryAction": "none"
+        }
+      ]
+    }
+  }
+}

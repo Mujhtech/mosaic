@@ -1,0 +1,670 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:mosaic:protocol:schema:billing-ingestion:v1:validation",
+  "title": "Mosaic Billing Ingestion Contract v1 validation, product resolution, and quarantine",
+  "description": "The result of validating an observation against the provider, the deterministic Product resolution it depends on, and the quarantine record produced when a result cannot be normalized safely. Retryability is explicit, never inferred. Only a resolved Product resolution may feed a transaction fact: there is no best guess, no nearest match, and no fallback mapping.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "billingIngestionContractVersion",
+    "recordType",
+    "payload"
+  ],
+  "properties": {
+    "billingIngestionContractVersion": {
+      "const": "1"
+    },
+    "recordType": {
+      "enum": [
+        "validationResult",
+        "productResolution",
+        "quarantineRecord"
+      ]
+    },
+    "payload": {}
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "recordType": {
+            "const": "validationResult"
+          }
+        },
+        "required": [
+          "recordType"
+        ]
+      },
+      "then": {
+        "properties": {
+          "payload": {
+            "$ref": "#/$defs/validationResult"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "recordType": {
+            "const": "productResolution"
+          }
+        },
+        "required": [
+          "recordType"
+        ]
+      },
+      "then": {
+        "properties": {
+          "payload": {
+            "$ref": "#/$defs/productResolution"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "recordType": {
+            "const": "quarantineRecord"
+          }
+        },
+        "required": [
+          "recordType"
+        ]
+      },
+      "then": {
+        "properties": {
+          "payload": {
+            "$ref": "#/$defs/quarantineRecord"
+          }
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "resolution": {
+      "description": "The complete, closed Product-resolution set.",
+      "enum": [
+        "resolved",
+        "unknown",
+        "ambiguous",
+        "cross_environment_mismatch",
+        "unsupported_product_type"
+      ]
+    },
+    "unknownProductReason": {
+      "enum": [
+        "no_mapping",
+        "mapping_archived",
+        "mapping_replaced_without_successor",
+        "mapping_out_of_scope"
+      ]
+    },
+    "productResolution": {
+      "description": "Each branch requires exactly the evidence its outcome implies, so a malformed resolution cannot be expressed. Nothing resolves by display name, price, billing period, or approximate match.",
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "resolutionId",
+            "resolvedAt",
+            "resolution",
+            "providerProductReference",
+            "mosaicProductId",
+            "mappingId",
+            "mappingVersion",
+            "productType"
+          ],
+          "properties": {
+            "resolutionId": {
+              "$ref": "urn:mosaic:protocol:schema:billing-ingestion:v1:observation#/$defs/identifier"
+            },
+            "resolvedAt": {
+              "$ref": "urn:mosaic:protocol:schema:billing-ingestion:v1:observation#/$defs/utcTimestamp"
+            },
+            "resolution": {
+              "const": "resolved"
+            },
+            "providerProductReference": {
+              "$ref": "urn:mosaic:protocol:schema:billing-ingestion:v1:observation#/$defs/safeProviderCode"
+            },
+            "mosaicProductId": {
+              "$ref": "urn:mosaic:protocol:schema:billing-ingestion:v1:observation#/$defs/identifier"
+            },
+            "mappingId": {
+              "$ref": "urn:mosaic:protocol:schema:billing-ingestion:v1:observation#/$defs/identifier"
+            },
+            "mappingVersion": {
+              "$ref": "urn:mosaic:protocol:schema:billing-ingestion:v1:observation#/$defs/mappingVersion"
+            },
+            "productType": {
+              "$ref": "urn:mosaic:protocol:schema:billing-ingestion:v1:transaction-fact#/$defs/productType"
+            },
+            "resolvedThroughReplacementChain": {
+              "description": "Mapping replacement preserves historical identity, so a resolution records which mapping generation matched.",
+              "type": "boolean"
+            },
+            "originalMappingId": {
+              "$ref": "urn:mosaic:protocol:schema:billing-ingestion:v1:observation#/$defs/identifier"
+            }
+          },
+          "allOf": [
+            {
+              "if": {
+                "required": [
+                  "originalMappingId"
+                ]
+              },
+              "then": {
+                "required": [
+                  "resolvedThroughReplacementChain"
+                ],
+                "properties": {
+                  "resolvedThroughReplacementChain": {
+                    "const": true
+                  }
+                }
+              }
+            }
+          ]
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "resolutionId",
+            "resolvedAt",
+            "resolution",
+            "providerProductReference",
+            "reason"
+          ],
+          "properties": {
+            "resolutionId": {
+              "$ref": "urn:mosaic:protocol:schema:billing-ingestion:v1:observation#/$defs/identifier"
+            },
+            "resolvedAt": {
+              "$ref": "urn:mosaic:protocol:schema:billing-ingestion:v1:observation#/$defs/utcTimestamp"
+            },
+            "resolution": {
+              "const": "unknown"
+            },
+            "providerProductReference": {
+              "$ref": "urn:mosaic:protocol:schema:billing-ingestion:v1:observation#/$defs/safeProviderCode"
+            },
+            "reason": {
+              "$ref": "#/$defs/unknownProductReason"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "resolutionId",
+            "resolvedAt",
+            "resolution",
+            "providerProductReference",
+            "candidateMappingIds"
+          ],
+          "properties": {
+            "resolutionId": {
+              "$ref": "urn:mosaic:protocol:schema:billing-ingestion:v1:observation#/$defs/identifier"
+            },
+            "resolvedAt": {
+              "$ref": "urn:mosaic:protocol:schema:billing-ingestion:v1:observation#/$defs/utcTimestamp"
+            },
+            "resolution": {
+              "const": "ambiguous"
+            },
+            "providerProductReference": {
+              "$ref": "urn:mosaic:protocol:schema:billing-ingestion:v1:observation#/$defs/safeProviderCode"
+            },
+            "candidateMappingIds": {
+              "description": "Mosaic never picks one. Emitting a single candidate is invalid by construction.",
+              "type": "array",
+              "minItems": 2,
+              "maxItems": 16,
+              "uniqueItems": true,
+              "items": {
+                "$ref": "urn:mosaic:protocol:schema:billing-ingestion:v1:observation#/$defs/identifier"
+              }
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "resolutionId",
+            "resolvedAt",
+            "resolution",
+            "providerProductReference",
+            "mappingId",
+            "observedStoreEnvironment",
+            "mappingStoreEnvironment"
+          ],
+          "properties": {
+            "resolutionId": {
+              "$ref": "urn:mosaic:protocol:schema:billing-ingestion:v1:observation#/$defs/identifier"
+            },
+            "resolvedAt": {
+              "$ref": "urn:mosaic:protocol:schema:billing-ingestion:v1:observation#/$defs/utcTimestamp"
+            },
+            "resolution": {
+              "const": "cross_environment_mismatch"
+            },
+            "providerProductReference": {
+              "$ref": "urn:mosaic:protocol:schema:billing-ingestion:v1:observation#/$defs/safeProviderCode"
+            },
+            "mappingId": {
+              "$ref": "urn:mosaic:protocol:schema:billing-ingestion:v1:observation#/$defs/identifier"
+            },
+            "observedStoreEnvironment": {
+              "$ref": "urn:mosaic:protocol:schema:billing-ingestion:v1:observation#/$defs/classifiedStoreEnvironment"
+            },
+            "mappingStoreEnvironment": {
+              "$ref": "urn:mosaic:protocol:schema:billing-ingestion:v1:observation#/$defs/classifiedStoreEnvironment"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "resolutionId",
+            "resolvedAt",
+            "resolution",
+            "providerProductReference",
+            "providerReportedProductType"
+          ],
+          "properties": {
+            "resolutionId": {
+              "$ref": "urn:mosaic:protocol:schema:billing-ingestion:v1:observation#/$defs/identifier"
+            },
+            "resolvedAt": {
+              "$ref": "urn:mosaic:protocol:schema:billing-ingestion:v1:observation#/$defs/utcTimestamp"
+            },
+            "resolution": {
+              "const": "unsupported_product_type"
+            },
+            "providerProductReference": {
+              "$ref": "urn:mosaic:protocol:schema:billing-ingestion:v1:observation#/$defs/safeProviderCode"
+            },
+            "providerReportedProductType": {
+              "$ref": "urn:mosaic:protocol:schema:billing-ingestion:v1:observation#/$defs/safeProviderCode"
+            }
+          }
+        }
+      ]
+    },
+    "quarantineReason": {
+      "description": "The complete, closed quarantine set. A quarantined input is never marked valid: only a successful revalidation can produce a fact.",
+      "enum": [
+        "product_unknown",
+        "product_ambiguous",
+        "cross_environment_mismatch",
+        "unsupported_product_type",
+        "unsupported_transaction_type",
+        "application_mismatch",
+        "tenant_unresolved",
+        "unverifiable_input",
+        "credential_unavailable",
+        "normalization_conflict",
+        "replay_comparison_conflict",
+        "attempts_exhausted"
+      ]
+    },
+    "quarantineStatus": {
+      "enum": [
+        "open",
+        "recovering",
+        "recovered",
+        "dismissed"
+      ]
+    },
+    "quarantineRecord": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "quarantineId",
+        "reason",
+        "severity",
+        "status",
+        "detectedAt",
+        "diagnostics"
+      ],
+      "properties": {
+        "quarantineId": {
+          "$ref": "urn:mosaic:protocol:schema:billing-ingestion:v1:observation#/$defs/identifier"
+        },
+        "reason": {
+          "$ref": "#/$defs/quarantineReason"
+        },
+        "severity": {
+          "enum": [
+            "warning",
+            "error"
+          ]
+        },
+        "status": {
+          "$ref": "#/$defs/quarantineStatus"
+        },
+        "detectedAt": {
+          "$ref": "urn:mosaic:protocol:schema:billing-ingestion:v1:observation#/$defs/utcTimestamp"
+        },
+        "lastAttemptAt": {
+          "$ref": "urn:mosaic:protocol:schema:billing-ingestion:v1:observation#/$defs/utcTimestamp"
+        },
+        "attemptCount": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 1000
+        },
+        "observationId": {
+          "$ref": "urn:mosaic:protocol:schema:billing-ingestion:v1:observation#/$defs/identifier"
+        },
+        "submissionId": {
+          "$ref": "urn:mosaic:protocol:schema:billing-ingestion:v1:observation#/$defs/identifier"
+        },
+        "validationId": {
+          "$ref": "urn:mosaic:protocol:schema:billing-ingestion:v1:observation#/$defs/identifier"
+        },
+        "productResolution": {
+          "$ref": "#/$defs/productResolution"
+        },
+        "storeEnvironmentClassification": {
+          "$ref": "urn:mosaic:protocol:schema:billing-ingestion:v1:observation#/$defs/storeEnvironmentClassification"
+        },
+        "diagnostics": {
+          "$ref": "urn:mosaic:protocol:schema:billing-ingestion:v1:observation#/$defs/diagnostics"
+        }
+      }
+    },
+    "retry": {
+      "description": "Retryability is explicit. There is no such thing as a non-retryable transient failure: retryable is pinned true here. Attempt exhaustion transitions the outcome to permanent_failure; it never silently becomes validated or quarantined.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "retryable",
+        "attempt",
+        "maxAttempts",
+        "exhausted"
+      ],
+      "properties": {
+        "retryable": {
+          "const": true
+        },
+        "attempt": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 1000
+        },
+        "maxAttempts": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 1000
+        },
+        "retryAfterSeconds": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 86400
+        },
+        "nextAttemptAt": {
+          "$ref": "urn:mosaic:protocol:schema:billing-ingestion:v1:observation#/$defs/utcTimestamp"
+        },
+        "exhausted": {
+          "type": "boolean"
+        }
+      }
+    },
+    "outcome": {
+      "description": "The complete, closed validation-outcome set.",
+      "enum": [
+        "validated",
+        "provider_rejected",
+        "quarantined",
+        "transient_failure",
+        "permanent_failure",
+        "superseded"
+      ]
+    },
+    "validationResult": {
+      "description": "Produced after server-side validation against the provider. It is never returned synchronously from submission.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "validationId",
+        "observationId",
+        "submissionId",
+        "outcome",
+        "attempt",
+        "validatorVersion",
+        "decidedAt",
+        "diagnostics"
+      ],
+      "properties": {
+        "validationId": {
+          "$ref": "urn:mosaic:protocol:schema:billing-ingestion:v1:observation#/$defs/identifier"
+        },
+        "observationId": {
+          "$ref": "urn:mosaic:protocol:schema:billing-ingestion:v1:observation#/$defs/identifier"
+        },
+        "submissionId": {
+          "$ref": "urn:mosaic:protocol:schema:billing-ingestion:v1:observation#/$defs/identifier"
+        },
+        "outcome": {
+          "$ref": "#/$defs/outcome"
+        },
+        "attempt": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 1000
+        },
+        "validatorVersion": {
+          "$ref": "urn:mosaic:protocol:schema:billing-ingestion:v1:observation#/$defs/validatorVersion"
+        },
+        "decidedAt": {
+          "$ref": "urn:mosaic:protocol:schema:billing-ingestion:v1:observation#/$defs/utcTimestamp"
+        },
+        "sourceAuthority": {
+          "$ref": "urn:mosaic:protocol:schema:billing-ingestion:v1:observation#/$defs/sourceAuthority"
+        },
+        "storeEnvironmentClassification": {
+          "$ref": "urn:mosaic:protocol:schema:billing-ingestion:v1:observation#/$defs/storeEnvironmentClassification"
+        },
+        "productResolution": {
+          "$ref": "#/$defs/productResolution"
+        },
+        "transactionFact": {
+          "$ref": "urn:mosaic:protocol:schema:billing-ingestion:v1:transaction-fact#/$defs/transactionFact"
+        },
+        "quarantine": {
+          "$ref": "#/$defs/quarantineRecord"
+        },
+        "retry": {
+          "$ref": "#/$defs/retry"
+        },
+        "replay": {
+          "$ref": "urn:mosaic:protocol:schema:billing-ingestion:v1:transaction-fact#/$defs/replay"
+        },
+        "supersededByValidationId": {
+          "$ref": "urn:mosaic:protocol:schema:billing-ingestion:v1:observation#/$defs/identifier"
+        },
+        "diagnostics": {
+          "$ref": "urn:mosaic:protocol:schema:billing-ingestion:v1:observation#/$defs/diagnostics"
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "outcome": {
+                "const": "validated"
+              }
+            },
+            "required": [
+              "outcome"
+            ]
+          },
+          "then": {
+            "required": [
+              "transactionFact",
+              "productResolution"
+            ],
+            "properties": {
+              "productResolution": {
+                "properties": {
+                  "resolution": {
+                    "const": "resolved"
+                  }
+                },
+                "required": [
+                  "resolution"
+                ]
+              }
+            },
+            "allOf": [
+              {
+                "not": {
+                  "required": [
+                    "quarantine"
+                  ]
+                }
+              },
+              {
+                "not": {
+                  "required": [
+                    "retry"
+                  ]
+                }
+              },
+              {
+                "not": {
+                  "required": [
+                    "supersededByValidationId"
+                  ]
+                }
+              }
+            ]
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "outcome": {
+                "const": "quarantined"
+              }
+            },
+            "required": [
+              "outcome"
+            ]
+          },
+          "then": {
+            "required": [
+              "quarantine"
+            ],
+            "allOf": [
+              {
+                "not": {
+                  "required": [
+                    "transactionFact"
+                  ]
+                }
+              },
+              {
+                "not": {
+                  "required": [
+                    "retry"
+                  ]
+                }
+              }
+            ]
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "outcome": {
+                "const": "transient_failure"
+              }
+            },
+            "required": [
+              "outcome"
+            ]
+          },
+          "then": {
+            "required": [
+              "retry"
+            ],
+            "allOf": [
+              {
+                "not": {
+                  "required": [
+                    "transactionFact"
+                  ]
+                }
+              },
+              {
+                "not": {
+                  "required": [
+                    "quarantine"
+                  ]
+                }
+              }
+            ]
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "outcome": {
+                "enum": [
+                  "provider_rejected",
+                  "permanent_failure",
+                  "superseded"
+                ]
+              }
+            },
+            "required": [
+              "outcome"
+            ]
+          },
+          "then": {
+            "allOf": [
+              {
+                "not": {
+                  "required": [
+                    "transactionFact"
+                  ]
+                }
+              },
+              {
+                "not": {
+                  "required": [
+                    "retry"
+                  ]
+                }
+              }
+            ]
+          }
+        },
+        {
+          "if": {
+            "required": [
+              "supersededByValidationId"
+            ]
+          },
+          "then": {
+            "properties": {
+              "outcome": {
+                "const": "superseded"
+              }
+            }
+          }
+        }
+      ]
+    }
+  }
+}

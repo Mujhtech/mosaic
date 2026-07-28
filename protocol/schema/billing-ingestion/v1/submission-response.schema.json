@@ -1,0 +1,170 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:mosaic:protocol:schema:billing-ingestion:v1:submission-response",
+  "title": "Mosaic Billing Ingestion Contract v1 observation submission result",
+  "description": "The synchronous answer to submitting a transaction observation. The status set contains no member named validated, verified, confirmed, or entitled: acceptance means the observation is well formed and queued, and asserts nothing about the transaction being real. A reader must never grant access, unlock content, or emit a provider-confirmed Analytics Event on accepted_for_validation.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "billingIngestionContractVersion",
+    "recordType",
+    "payload"
+  ],
+  "properties": {
+    "billingIngestionContractVersion": {
+      "const": "1"
+    },
+    "recordType": {
+      "const": "observationSubmissionResult"
+    },
+    "payload": {
+      "$ref": "#/$defs/observationSubmissionResult"
+    }
+  },
+  "$defs": {
+    "permanentCode": {
+      "description": "Resubmitting the identical document cannot succeed.",
+      "enum": [
+        "observation_schema_invalid",
+        "unsupported_contract_version",
+        "unsupported_record_type",
+        "unknown_field",
+        "invalid_identifier",
+        "invalid_timestamp",
+        "observed_at_too_far_future",
+        "observation_expired",
+        "observation_too_large",
+        "provider_reference_malformed",
+        "provider_reference_too_long",
+        "reference_kind_not_supported_for_platform",
+        "credential_shaped_value_rejected",
+        "sensitive_value_rejected",
+        "tenant_field_forbidden",
+        "authority_not_allowed",
+        "unknown_provider",
+        "billing_not_enabled_for_environment",
+        "observation_id_conflict"
+      ]
+    },
+    "retryableCode": {
+      "description": "Transient. Resubmit the identical document later.",
+      "enum": [
+        "rate_limited",
+        "storage_temporarily_unavailable",
+        "service_temporarily_unavailable",
+        "ingestion_timeout",
+        "validation_backlog_saturated"
+      ]
+    },
+    "observationSubmissionResult": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "submissionId",
+            "receivedAt",
+            "status"
+          ],
+          "properties": {
+            "submissionId": {
+              "$ref": "urn:mosaic:protocol:schema:billing-ingestion:v1:observation#/$defs/identifier"
+            },
+            "receivedAt": {
+              "$ref": "urn:mosaic:protocol:schema:billing-ingestion:v1:observation#/$defs/utcTimestamp"
+            },
+            "status": {
+              "description": "The observation is well formed and queued for validation. Nothing more.",
+              "const": "accepted_for_validation"
+            },
+            "estimatedValidationDelaySeconds": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 86400
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "submissionId",
+            "receivedAt",
+            "status"
+          ],
+          "properties": {
+            "submissionId": {
+              "description": "Identifier of the pre-existing submission. A duplicate is idempotent, not an error.",
+              "$ref": "urn:mosaic:protocol:schema:billing-ingestion:v1:observation#/$defs/identifier"
+            },
+            "receivedAt": {
+              "$ref": "urn:mosaic:protocol:schema:billing-ingestion:v1:observation#/$defs/utcTimestamp"
+            },
+            "status": {
+              "const": "duplicate"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "submissionId",
+            "receivedAt",
+            "status",
+            "code"
+          ],
+          "properties": {
+            "submissionId": {
+              "$ref": "urn:mosaic:protocol:schema:billing-ingestion:v1:observation#/$defs/identifier"
+            },
+            "receivedAt": {
+              "$ref": "urn:mosaic:protocol:schema:billing-ingestion:v1:observation#/$defs/utcTimestamp"
+            },
+            "status": {
+              "const": "permanently_rejected"
+            },
+            "code": {
+              "$ref": "#/$defs/permanentCode"
+            },
+            "diagnostics": {
+              "$ref": "urn:mosaic:protocol:schema:billing-ingestion:v1:observation#/$defs/diagnostics"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "submissionId",
+            "receivedAt",
+            "status",
+            "code"
+          ],
+          "properties": {
+            "submissionId": {
+              "$ref": "urn:mosaic:protocol:schema:billing-ingestion:v1:observation#/$defs/identifier"
+            },
+            "receivedAt": {
+              "$ref": "urn:mosaic:protocol:schema:billing-ingestion:v1:observation#/$defs/utcTimestamp"
+            },
+            "status": {
+              "const": "retryable_failure"
+            },
+            "code": {
+              "$ref": "#/$defs/retryableCode"
+            },
+            "retryAfterSeconds": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 86400
+            },
+            "diagnostics": {
+              "$ref": "urn:mosaic:protocol:schema:billing-ingestion:v1:observation#/$defs/diagnostics"
+            }
+          }
+        }
+      ]
+    }
+  }
+}

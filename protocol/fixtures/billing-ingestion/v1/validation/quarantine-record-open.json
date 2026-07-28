@@ -1,0 +1,25 @@
+{
+  "billingIngestionContractVersion": "1",
+  "recordType": "quarantineRecord",
+  "payload": {
+    "quarantineId": "fixture-quarantine-0005",
+    "reason": "unsupported_transaction_type",
+    "severity": "warning",
+    "status": "open",
+    "detectedAt": "2026-07-27T12:10:00.000Z",
+    "lastAttemptAt": "2026-07-27T12:10:00.000Z",
+    "attemptCount": 1,
+    "observationId": "fixture-observation-google-0001",
+    "submissionId": "fixture-submission-google-0001",
+    "diagnostics": [
+      {
+        "code": "billing.validation.unsupported_transaction_type",
+        "safeMessage": "Consumable transactions are outside the supported set and are never resolved approximately.",
+        "severity": "warning",
+        "retryable": false,
+        "correlationId": "fixture-correlation-0001",
+        "recoveryAction": "none"
+      }
+    ]
+  }
+}
