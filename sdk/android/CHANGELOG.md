@@ -9,6 +9,12 @@
   notification. An observation is a trigger, never proof: the SDK never learns a
   validation outcome, `serverConfirmedTransactions` remains `unsupported`, and no
   `MosaicPurchaseResult` changes.
+- Both the submitted observation and the submission answer are Billing Ingestion
+  Contract 1 records, asserted against the canonical fixtures: the request is a
+  `clientTransactionObservation` envelope carrying a stable `observationId`
+  beside the deterministic `submissionId`, and only an
+  `observationSubmissionResult` record is decoded. No Store Environment is ever
+  sent — classification is server-side, from verified provider metadata.
 - The raw purchase token never leaves the device. The wire carries the existing
   SHA-256/UTF-8/lowercase-hex token digest plus, when Google supplies one, the
   order identifier verbatim. `getOriginalJson()`, `getSignature()`, obfuscated

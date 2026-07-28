@@ -35,7 +35,9 @@ class MosaicTransactionObservationRuntime internal constructor(
     private val queue: MosaicTransactionObservationQueue,
     private val transport: MosaicTransactionObservationTransport,
     enabled: Boolean,
+    private val context: MosaicTransactionObservationContext = MosaicTransactionObservationContext(),
     private val now: () -> Long = System::currentTimeMillis,
+    private val identity: () -> String = { mosaicAnalyticsId("observation") },
     private val jitter: (Long) -> Long = { cap -> if (cap <= 0) 0 else Random.nextLong(cap + 1) },
 ) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
@@ -115,14 +117,27 @@ class MosaicTransactionObservationRuntime internal constructor(
         if (update.outcome != MosaicCommerceUpdateOutcome.PURCHASED) return null
         if (update.providerId != MOSAIC_GOOGLE_PLAY_PROVIDER_ID) return null
         val reference = update.transactionReference ?: return null
+        val correlation = MosaicTransactionObservationCorrelation(
+            purchaseAttemptId = update.operationId,
+            providerUpdateId = update.updateId,
+        )
         return MosaicTransactionObservation(
+            // Generated once here. The queue deduplicates on submissionId and never rewrites a
+            // stored entry, so this record identity is stable across every retry and every restart.
+            observationId = identity(),
             // The adapter's update identity is already deterministic in the reference and the
             // outcome, and is derived from neither a timestamp, a price, a Product, nor a subject.
             submissionId = update.updateId,
+            providerId = update.providerId,
             referenceKind = MOSAIC_REFERENCE_GOOGLE_PLAY_TOKEN_DIGEST,
             reference = reference,
             providerOrderReference = update.providerOrderReference,
             observedAt = mosaicAnalyticsTimestamp(now()),
+            context = context,
+            correlation = correlation.takeIf { !it.isEmpty },
+            // A claim only; the server resolves the Mosaic Product from its own mapping history.
+            claimedMosaicProductId = update.mosaicProductId
+                .takeIf(MosaicTransactionObservationBounds::isValidIdentifier),
         )
     }
 }
@@ -147,6 +162,10 @@ internal object MosaicTransactionObservationRuntimeRegistry {
             ),
             transport = MosaicHTTPTransactionObservationTransport(configuration),
             enabled = configuration.transactionObservationEnabled,
+            context = MosaicTransactionObservationContext(
+                applicationVersion = configuration.applicationVersion,
+                operatingSystemVersion = android.os.Build.VERSION.RELEASE?.takeIf(String::isNotBlank),
+            ),
         ).also { runtime ->
             runtime.collect(updates)
             lifecycles[namespace] = MosaicTransactionObservationLifecycle(application, runtime)

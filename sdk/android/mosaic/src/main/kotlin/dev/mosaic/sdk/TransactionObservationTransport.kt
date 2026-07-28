@@ -51,15 +51,26 @@ internal class MosaicHTTPTransactionObservationTransport(
             call.execute().use { response ->
                 val retryAfter = response.header("Retry-After")?.toLongOrNull()?.coerceIn(1, 300)?.times(1_000)
                 when {
-                    response.code == 202 -> {
+                    response.code in 200..299 -> {
                         val decoded = response.body?.string()?.let {
                             MosaicTransactionObservationCodec.decodeResult(it, observation.submissionId)
                         }
                         // An unreadable or unrecognized acknowledgement is retried rather than
                         // treated as accepted: removal must be justified by a result this SDK
                         // understands.
-                        decoded?.let { MosaicTransactionObservationTransportResult.Received(it) }
-                            ?: MosaicTransactionObservationTransportResult.Retryable("ingestion_timeout")
+                        decoded?.let {
+                            MosaicTransactionObservationTransportResult.Received(
+                                // The record's own retryAfterSeconds wins; the transport header is
+                                // only consulted when the contract record did not state one.
+                                if (it is MosaicTransactionObservationResult.RetryableFailure &&
+                                    it.retryAfterSeconds == null
+                                ) {
+                                    it.copy(retryAfterSeconds = retryAfter?.div(1_000)?.toInt())
+                                } else {
+                                    it
+                                },
+                            )
+                        } ?: MosaicTransactionObservationTransportResult.Retryable("ingestion_timeout", retryAfter)
                     }
                     response.code == 429 ->
                         MosaicTransactionObservationTransportResult.Retryable("rate_limited", retryAfter)

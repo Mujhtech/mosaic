@@ -183,16 +183,29 @@ val hosted = mosaic.hostedConfiguration(applicationContext)
 val diagnostics = hosted.transactionObservationDiagnostics()
 ```
 
-What is transmitted, and nothing else:
+The request and the response are both **Billing Ingestion Contract 1 records**
+(`protocol/schema/billing-ingestion/v1/`), asserted against the canonical
+fixtures. The submitted record is
+`{ billingIngestionContractVersion: "1", recordType: "clientTransactionObservation", payload }`,
+and the payload is exactly:
 
 | Field | Value |
 | --- | --- |
+| `observationId` | Record identity, generated once and persisted; stable across every retry. |
 | `submissionId` | The adapter's deterministic update identity; the deduplication key. |
-| `referenceKind` | `google_play_token_digest`. |
-| `reference` | SHA-256 over the **UTF-8 bytes** of the purchase token, lowercase hexadecimal, unprefixed. |
-| `providerOrderReference` | `Purchase.getOrderId()` verbatim, when Google supplies a usable one. |
-| `storeEnvironment` | Always `unclassified`; a device cannot truthfully classify it. |
+| `providerId` | The provider adapter's identity. |
+| `storePlatform` | `google_play`. |
+| `transactionReference` | `{ google_play_token_digest, SHA-256 over the UTF-8 bytes of the purchase token, lowercase hex, unprefixed }`. |
+| `providerOrderReference` | `{ google_play_order_id, Purchase.getOrderId() verbatim }`, when Google supplies a usable one. |
 | `observedAt` | UTC timestamp of the observation. |
+| `sourceAuthority` | Always `client_observation`; emitted by the codec, not settable. |
+| `context` | `platform`/`sdkFamily` `android`, SDK version, and optional application and OS versions. |
+| `correlation` | Existing opaque analytics handles only; omitted when empty. |
+| `claimedMosaicProductId` | A claim only — the server resolves the Mosaic Product itself. |
+
+**No Store Environment is ever sent.** Classification is a server-side decision
+made from verified provider metadata, and the contract rejects a client
+observation that asserts one.
 
 **The raw purchase token never leaves the device.** The digest is one-way, and
 the purchase token, `getOriginalJson()`, `getSignature()`, obfuscated account and
@@ -217,9 +230,13 @@ Behaviour:
   reliable path, so a late or lost observation costs correlation latency and
   never a purchase.
 - Submission outcomes are `AcceptedForValidation`, `Duplicate`,
-  `PermanentlyRejected`, and `RetryableFailure`. There is deliberately no member
-  meaning validated; `AcceptedForValidation` means only that Mosaic queued the
-  observation.
+  `PermanentlyRejected`, and `RetryableFailure`, decoded only from the
+  contract's `observationSubmissionResult` record. There is deliberately no
+  member meaning validated; `AcceptedForValidation` means only that Mosaic
+  queued the observation. An unknown record type, contract version, or status is
+  never decoded — it retries rather than discarding the handoff. A
+  `retryAfterSeconds` inside the record takes precedence over a `Retry-After`
+  header.
 - No store credential exists in any Mosaic SDK.
 
 ## Supported version matrix
