@@ -133,8 +133,10 @@
     "clockSkewToleranceSeconds": 60,
     "defaultRefreshAfterSeconds": 3600,
     "defaultValidUntilSeconds": 604800,
+    "defaultStaleGraceSeconds": 86400,
     "maxValidUntilSeconds": 2592000,
     "maxStaleGraceSeconds": 2592000,
+    "maxCacheHorizonSeconds": 2592000,
     "restorePollAttempts": 3,
     "restorePollBudgetSeconds": 6
   },

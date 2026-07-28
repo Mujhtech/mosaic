@@ -102,7 +102,10 @@ caller may shorten a token's life but never lengthen it past the maximum.
 
 ## Audience, scopes, and binding
 
-- **Audience** is `sdk_sync`, and the enumeration is closed. A token minted for
+- **Audience** is `sdk_sync` in Phase 9B. The enumeration is closed, so it is
+  over-provisioned: `server_check` is declared now, reserved for a future
+  server-facing audience and **not issued in 9B**, because adding an audience to
+  a closed enumeration later would cost a contract version. A token minted for
   one audience is refused by every other surface.
 - **Scopes** are `entitlements.read`, `entitlements.sync`, and
   `restore.request`. A token carries the least it can; `restore.request` is

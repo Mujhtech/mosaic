@@ -249,8 +249,10 @@
         "clockSkewToleranceSeconds",
         "defaultRefreshAfterSeconds",
         "defaultValidUntilSeconds",
+        "defaultStaleGraceSeconds",
         "maxValidUntilSeconds",
         "maxStaleGraceSeconds",
+        "maxCacheHorizonSeconds",
         "restorePollAttempts",
         "restorePollBudgetSeconds"
       ],
@@ -282,10 +284,18 @@
         "defaultValidUntilSeconds": {
           "const": 604800
         },
+        "defaultStaleGraceSeconds": {
+          "description": "Bounded grace is the shipped offline policy (OD-5), so the default grace window is 24 hours rather than zero. A zero default would ship the strict policy under a bounded-grace decision. Per-Environment configurable server-side; strict remains expressible as a grace window of zero.",
+          "const": 86400
+        },
         "maxValidUntilSeconds": {
           "const": 2592000
         },
         "maxStaleGraceSeconds": {
+          "const": 2592000
+        },
+        "maxCacheHorizonSeconds": {
+          "description": "The hard bound is on the COMBINED horizon: (validUntil - issuedAt) + staleGraceSeconds may never exceed 30 days. The two individual maxima above bound each field, but only this bound stops a 30-day validity and a 30-day grace window from composing into 60 days of offline access. Enforced by the semantic validator.",
           "const": 2592000
         },
         "restorePollAttempts": {

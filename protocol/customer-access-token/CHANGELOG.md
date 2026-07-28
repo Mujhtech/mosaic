@@ -22,6 +22,9 @@ the wire form the three SDKs and the backend must agree on exactly.
   second clock skew, evaluated by the **server**.
 - **Immediate revocation** with a closed seven-member reason set, and
   all-or-nothing revocation state enforced in the schema.
+- **An over-provisioned audience set.** `sdk_sync` is the only audience issued in
+  Phase 9B; `server_check` is declared and reserved so a future server-facing
+  audience costs no contract version.
 - **SDK obligations** pinned in the manifest: memory-only storage, never parsed,
   never logged, one forced refresh per 401 generation, discard-and-clear on
   logout, generation bump on identity change, and `unavailable` — never

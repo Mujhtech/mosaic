@@ -395,5 +395,58 @@ test("the freshness policy matches the limits the manifest pins", () => {
   assert.equal(document.policy.clockSkewToleranceSeconds, limits.clockSkewToleranceSeconds);
   assert.equal(document.policy.defaultRefreshAfterSeconds, limits.defaultRefreshAfterSeconds);
   assert.equal(document.policy.defaultValidUntilSeconds, limits.defaultValidUntilSeconds);
+  assert.equal(document.policy.defaultStaleGraceSeconds, limits.defaultStaleGraceSeconds);
   assert.equal(document.policy.maxStaleGraceSeconds, limits.maxStaleGraceSeconds);
+  assert.equal(document.policy.maxCacheHorizonSeconds, limits.maxCacheHorizonSeconds);
+});
+
+test("bounded grace is the shipped default, and strict is still expressible", () => {
+  // A zero default would ship the strict policy under a bounded-grace decision.
+  assert.equal(artifacts.compatibilityManifest.limits.defaultStaleGraceSeconds, 86400);
+  const document = vectors("entitlement-freshness-vectors.json");
+  const strict = document.vectors.find(
+    (vector) => vector.id === "strict-policy-past-valid-until",
+  );
+  assert.equal(strict.snapshot.staleGraceSeconds, 0);
+  assert.equal(strict.state, "expired");
+});
+
+test("validity plus stale grace may never exceed thirty days", () => {
+  // Bounding each field alone lets a 30-day validity and a 30-day grace window
+  // compose into 60 days of offline access Mosaic never confirmed.
+  const limits = artifacts.compatibilityManifest.limits;
+  assert.equal(limits.maxCacheHorizonSeconds, 2592000);
+
+  const document = fixture("snapshots/bounded-offline-cache.json");
+  assert.deepEqual(
+    validateAuthoritativeEntitlementV1Record(document, artifacts),
+    [],
+  );
+
+  document.payload.validUntil = "2026-08-27T12:00:00.000Z"; // 30 days of validity
+  document.payload.staleGraceSeconds = 86400; // plus a day of grace
+  document.payload.contentDigest = canonicalDigest(
+    document.payload,
+    "contentDigest",
+  );
+  const errors = validateAuthoritativeEntitlementV1Record(document, artifacts);
+  assert.ok(
+    errors.some((error) => error.includes("combined offline horizon")),
+    `expected a combined-horizon error, got: ${errors.join("; ")}`,
+  );
+});
+
+test("an unchanged response is bound by the same horizon as a snapshot", () => {
+  // Otherwise the bound could be evaded by confirming a snapshot rather than
+  // reissuing it.
+  const document = fixture("snapshots/snapshot-unchanged.json");
+  assert.deepEqual(
+    validateAuthoritativeEntitlementV1Record(document, artifacts),
+    [],
+  );
+  document.payload.validUntil = "2026-09-27T12:45:00.000Z";
+  assert.notDeepEqual(
+    validateAuthoritativeEntitlementV1Record(document, artifacts),
+    [],
+  );
 });

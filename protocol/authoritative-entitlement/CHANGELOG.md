@@ -37,8 +37,11 @@ rejection yields `accessState: unknown` and preserves the cache, never
   digest covers the customer, Project, Environment, and version binding, so a
   snapshot cannot be accepted into another customer's cache.
 - **Bounded-grace freshness** per OD-5: `refreshAfter` default 1 h, `validUntil`
-  default 7 d, 30-day hard maximum, optional `staleGraceSeconds`, 60-second clock
-  skew tolerance evaluated in the direction that favours the user.
+  default 7 d, `staleGraceSeconds` default 24 h, all per-Environment configurable
+  server-side, with a 60-second clock skew tolerance evaluated in the direction
+  that favours the user. The 30-day hard maximum applies to the **combined**
+  horizon, `(validUntil - issuedAt) + staleGraceSeconds`, enforced by the
+  semantic validator on snapshots and on unchanged responses alike.
 - **Cache acceptance order** with binding checked before version, because
   snapshot versions are monotonic per Environment and a staging snapshot
   legitimately starts at 1.
@@ -61,7 +64,10 @@ rejection yields `accessState: unknown` and preserves the cache, never
   defaults for `refresh_after` and `valid_until`. Making the grace window its own
   field expresses both without either interpretation being silently assumed, and
   makes the strict policy the same fields with a zero grace window rather than a
-  separate mode. **Flagged for owner confirmation.**
+  separate mode. **Ratified by the orchestrator on 2026-07-28**, with the
+  documented default set to 86400 rather than 0: bounded grace is the approved
+  shipped policy, and a zero default would have shipped strict behaviour under a
+  bounded-grace decision.
 - **Billing disabled uses `uncertainty.reason: "provider_unavailable"`** with
   `explanationCode: "billing_disabled"`. The nine uncertainty reasons are fixed
   by the Stage 1 plan and none of them names a Mosaic-side service state; the

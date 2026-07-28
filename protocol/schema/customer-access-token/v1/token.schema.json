@@ -138,9 +138,10 @@
       "pattern": "^mcat_[A-Za-z0-9_-]{43}$"
     },
     "audience": {
-      "description": "What the token may be presented to. A token minted for one audience is refused by every other surface. The set is closed; sdk_sync is the only audience in this version.",
+      "description": "What the token may be presented to. A token minted for one audience is refused by every other surface. The set is closed, so it is over-provisioned: server_check is reserved for a future server-facing audience and is NOT issued in Phase 9B, but declaring it now means adding that audience later costs no contract version.",
       "enum": [
-        "sdk_sync"
+        "sdk_sync",
+        "server_check"
       ]
     },
     "scope": {

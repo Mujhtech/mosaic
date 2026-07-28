@@ -268,11 +268,29 @@ optional `staleGraceSeconds`.
 | `validUntil` → `validUntil + staleGraceSeconds` | `stale_within_grace` | Previously active Entitlements stay active and **must be surfaced as stale**. |
 | after that | `expired` | Report `unknown`. Never `inactive`. |
 
-Per OD-5 the defaults are `refreshAfter` = issuance + 1 h and `validUntil` =
-issuance + 7 d, with a 30-day hard maximum, per-Environment configurable.
-`staleGraceSeconds` absent or `0` **is** the strict policy, expressed through the
-same fields rather than a separate mode; the server-only policy is guidance for
+`staleGraceSeconds` defaults to 24 hours, so the fourth row is a real band in the
+shipped configuration rather than a theoretical one.
+
+Per OD-5, **bounded grace is the shipped policy**, and the defaults are
+`refreshAfter` = issuance + 1 h, `validUntil` = issuance + 7 d, and
+`staleGraceSeconds` = 86400 (24 h). All three are per-Environment configurable
+server-side. A zero grace default would have shipped the strict policy under a
+bounded-grace decision, so the default is stated rather than left to fall out of
+an absent field.
+
+`staleGraceSeconds` absent means zero, so a producer that intends bounded grace
+states it explicitly. Zero **is** the strict policy, expressed through the same
+fields rather than as a separate mode; the server-only policy is guidance for
 irreversible actions rather than a contract state.
+
+**The 30-day hard maximum is on the combined horizon.** `maxValidUntilSeconds`
+and `maxStaleGraceSeconds` bound each field individually, but only
+`maxCacheHorizonSeconds` stops them composing: `(validUntil - issuedAt) +
+staleGraceSeconds` may never exceed 2592000 seconds, or a 30-day validity and a
+30-day grace window would together license 60 days during which a device serves
+access Mosaic never confirmed. The semantic validator enforces it, on
+`snapshotUnchanged` as well as on a snapshot — otherwise the bound could be
+evaded by confirming a snapshot rather than reissuing it.
 
 Clock skew tolerance is 60 seconds, applied in the direction that favours the
 user. A device clock earlier than `issuedAt` by more than the tolerance is

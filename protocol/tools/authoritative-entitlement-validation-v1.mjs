@@ -251,8 +251,44 @@ function walkValues(value, path, visit) {
   }
 }
 
-function snapshotSemantics(label, payload) {
+const MAX_CACHE_HORIZON_SECONDS = 2_592_000;
+
+/**
+ * The freshness window, shared by a snapshot and by the unchanged response that
+ * slides it.
+ *
+ * The combined-horizon bound is the one that actually matters. `validUntil` and
+ * `staleGraceSeconds` each have their own 30-day maximum, but only a bound on
+ * their sum stops a 30-day validity and a 30-day grace window from composing
+ * into 60 days during which a device serves access Mosaic has not confirmed.
+ */
+function freshnessWindowSemantics(label, payload) {
   const errors = [];
+  if (!notAfter(payload.asOf, payload.issuedAt)) {
+    errors.push(`${label} was issued before the instant it evaluated state at`);
+  }
+  if (!notAfter(payload.issuedAt, payload.refreshAfter)) {
+    errors.push(`${label} recommends a refresh before it was issued`);
+  }
+  if (!notAfter(payload.refreshAfter, payload.validUntil)) {
+    errors.push(
+      `${label} refreshAfter is later than validUntil; the freshness window is ordered issuedAt <= refreshAfter <= validUntil`,
+    );
+  }
+  const validitySeconds =
+    (Date.parse(payload.validUntil) - Date.parse(payload.issuedAt)) / 1000;
+  const horizon = validitySeconds + (payload.staleGraceSeconds ?? 0);
+  if (horizon > MAX_CACHE_HORIZON_SECONDS) {
+    errors.push(
+      `${label} offers a combined offline horizon of ${horizon} seconds; ` +
+        `validity plus stale grace may never exceed ${MAX_CACHE_HORIZON_SECONDS} seconds`,
+    );
+  }
+  return errors;
+}
+
+function snapshotSemantics(label, payload) {
+  const errors = [...freshnessWindowSemantics(label, payload)];
 
   const expected = canonicalDigest(payload, "contentDigest");
   if (payload.contentDigest !== expected) {
@@ -269,18 +305,6 @@ function snapshotSemantics(label, payload) {
     errors.push(
       `${label} snapshotVersion ${payload.snapshotVersion} does not advance past ` +
         `previousSnapshotVersion ${payload.previousSnapshotVersion}; snapshot versions are monotonic per customer per Environment`,
-    );
-  }
-
-  if (!notAfter(payload.asOf, payload.issuedAt)) {
-    errors.push(`${label} was issued before the instant it evaluated state at`);
-  }
-  if (!notAfter(payload.issuedAt, payload.refreshAfter)) {
-    errors.push(`${label} recommends a refresh before it was issued`);
-  }
-  if (!notAfter(payload.refreshAfter, payload.validUntil)) {
-    errors.push(
-      `${label} refreshAfter is later than validUntil; the freshness window is ordered issuedAt <= refreshAfter <= validUntil`,
     );
   }
 
@@ -452,6 +476,12 @@ function recordSemantics(label, document) {
   switch (document.recordType) {
     case "customerEntitlementSnapshot":
       errors.push(...snapshotSemantics(label, payload));
+      break;
+    case "snapshotUnchanged":
+      // An unchanged response slides the freshness window, so it is bound by
+      // the same horizon a snapshot is. Otherwise the bound could be evaded by
+      // confirming a snapshot rather than reissuing it.
+      errors.push(...freshnessWindowSemantics(label, payload));
       break;
     case "subscriptionSnapshot":
       errors.push(...subscriptionSemantics(label, payload));

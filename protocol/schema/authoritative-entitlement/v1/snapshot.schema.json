@@ -809,7 +809,7 @@
           "$ref": "#/$defs/utcTimestamp"
         },
         "staleGraceSeconds": {
-          "description": "Bounded-grace window past validUntil during which a reader may keep serving previously active Entitlements while clearly marking them stale. Absent means zero, that is, a strict policy.",
+          "description": "Bounded-grace window past validUntil during which a reader may keep serving previously active Entitlements while clearly marking them stale. The shipped default is 86400 (24 hours), per-Environment configurable server-side; a strict policy is expressed as zero. Absent means zero, so a producer that intends bounded grace must state it. The combined horizon (validUntil - issuedAt) + staleGraceSeconds may never exceed 30 days.",
           "type": "integer",
           "minimum": 0,
           "maximum": 2592000
