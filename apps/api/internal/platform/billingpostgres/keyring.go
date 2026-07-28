@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/Mujhtech/mosaic/apps/api/internal/billing"
 	"github.com/Mujhtech/mosaic/apps/api/internal/providercredential"
 )
 
@@ -52,7 +53,9 @@ func (r *Repository) EnvelopeCountsByKeyID(ctx context.Context) (map[string]int6
 	rows, err := r.pool.Query(ctx,
 		`SELECT key_id, count(*) FROM store_server_credentials WHERE revoked_at IS NULL GROUP BY key_id
 		 UNION ALL
-		 SELECT key_id, count(*) FROM billing_raw_inputs WHERE body_state = 'stored' AND key_id IS NOT NULL GROUP BY key_id`)
+		 SELECT key_id, count(*) FROM billing_raw_inputs WHERE body_state = 'stored' AND key_id IS NOT NULL GROUP BY key_id
+		 UNION ALL
+		 SELECT key_id, count(*) FROM webhook_signing_secrets WHERE status = 'active' GROUP BY key_id`)
 	if err != nil {
 		return nil, fmt.Errorf("count billing envelopes: %w", err)
 	}
@@ -102,6 +105,40 @@ func (r *Repository) EnvelopesNotUnderKey(ctx context.Context, keyID string, lim
 	rows.Close()
 	if err := rows.Err(); err != nil {
 		return nil, fmt.Errorf("read credential envelopes: %w", err)
+	}
+	if len(envelopes) >= limit {
+		return envelopes, nil
+	}
+
+	// Webhook signing secrets rank with credentials rather than with bodies: an
+	// unrotatable signing secret means a destination's deliveries can no longer
+	// be signed, which breaks every consumer of that tenant.
+	secretRows, err := r.pool.Query(ctx,
+		`SELECT s.id, p.organization_id, s.project_id, s.envelope_version, s.algorithm, s.key_id,
+		        s.nonce, s.ciphertext, s.fingerprint
+		 FROM webhook_signing_secrets s
+		 JOIN projects p ON p.id = s.project_id
+		 WHERE s.key_id <> $1 AND s.status = 'active' ORDER BY s.id LIMIT $2`,
+		keyID, limit-len(envelopes))
+	if err != nil {
+		return nil, fmt.Errorf("read webhook signing secret envelopes: %w", err)
+	}
+	for secretRows.Next() {
+		envelope := BillingEnvelope{
+			Table: "webhook_signing_secrets", SubjectKind: providercredential.SubjectWebhookSigningSecret,
+			CredentialClass: billing.ClassWebhookSigningSecret,
+		}
+		if err := secretRows.Scan(&envelope.RowID, &envelope.OrganizationID, &envelope.ProjectID,
+			&envelope.Version, &envelope.Algorithm, &envelope.KeyID, &envelope.Nonce,
+			&envelope.Ciphertext, &envelope.Fingerprint); err != nil {
+			secretRows.Close()
+			return nil, fmt.Errorf("scan webhook signing secret envelope: %w", err)
+		}
+		envelopes = append(envelopes, envelope)
+	}
+	secretRows.Close()
+	if err := secretRows.Err(); err != nil {
+		return nil, fmt.Errorf("read webhook signing secret envelopes: %w", err)
 	}
 	if len(envelopes) >= limit {
 		return envelopes, nil
@@ -161,6 +198,13 @@ func (r *Repository) ReplaceEnvelopes(ctx context.Context, envelopes []BillingEn
 				SET envelope_version=$2, algorithm=$3, key_id=$4, nonce=$5, ciphertext=$6,
 				    fingerprint=$7, envelope_rotated_at=$8
 				WHERE id=$1`
+		case "webhook_signing_secrets":
+			// $8 is accepted and discarded so every branch shares one argument
+			// list; the table records no rotation timestamp of its own.
+			statement = `UPDATE webhook_signing_secrets
+				SET envelope_version=$2, algorithm=$3, key_id=$4, nonce=$5, ciphertext=$6,
+				    fingerprint=$7
+				WHERE id=$1 AND $8 IS NOT NULL`
 		default:
 			return fmt.Errorf("unsupported billing envelope table %q", envelope.Table)
 		}

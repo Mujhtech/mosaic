@@ -251,6 +251,8 @@ const (
 	ClassAppleInAppPurchaseKey   = "appleInAppPurchaseKey"
 	ClassGoogleServiceAccountKey = "googleServiceAccountKey"
 	ClassBillingRawPayload       = "billingRawPayload"
+	// ClassWebhookSigningSecret is the Phase 9B addition (ADR-0024).
+	ClassWebhookSigningSecret = "webhookSigningSecret"
 )
 
 // Actor is the authenticated dashboard principal.

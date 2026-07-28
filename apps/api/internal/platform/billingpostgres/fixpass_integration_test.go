@@ -49,11 +49,14 @@ func TestKeyringRotationCoversEveryEnvelopeTable(t *testing.T) {
 	}
 
 	// provider_connection_credentials is rotated by the Provider Connection
-	// path in cloudworkspacepostgres; the two billing tables are rotated here.
+	// path in cloudworkspacepostgres; the billing tables are rotated here.
+	// webhook_signing_secrets joined them in Phase 9B (ADR-0024) and is sealed
+	// under the webhook_signing_secret SubjectKind.
 	rotatable := map[string]bool{
 		"provider_connection_credentials": true,
 		"store_server_credentials":        true,
 		"billing_raw_inputs":              true,
+		"webhook_signing_secrets":         true,
 	}
 	for table := range found {
 		if !rotatable[table] {

@@ -22,12 +22,14 @@ import (
 
 	"github.com/Mujhtech/mosaic/apps/api/internal/analytics"
 	"github.com/Mujhtech/mosaic/apps/api/internal/billing"
+	"github.com/Mujhtech/mosaic/apps/api/internal/billingprojection"
 	"github.com/Mujhtech/mosaic/apps/api/internal/cloudworkspace"
 	"github.com/Mujhtech/mosaic/apps/api/internal/experiment"
 	"github.com/Mujhtech/mosaic/apps/api/internal/platform/analyticspostgres"
 	"github.com/Mujhtech/mosaic/apps/api/internal/platform/appstorejws"
 	"github.com/Mujhtech/mosaic/apps/api/internal/platform/appstoreserver"
 	"github.com/Mujhtech/mosaic/apps/api/internal/platform/billingpostgres"
+	"github.com/Mujhtech/mosaic/apps/api/internal/platform/billingprojectionpostgres"
 	"github.com/Mujhtech/mosaic/apps/api/internal/platform/buildinfo"
 	"github.com/Mujhtech/mosaic/apps/api/internal/platform/cloudworkspacepostgres"
 	"github.com/Mujhtech/mosaic/apps/api/internal/platform/config"
@@ -145,6 +147,7 @@ func run() (runErr error) {
 
 	var billingService *billing.Service
 	var billingRepository *billingpostgres.Repository
+	var projectionService *billingprojection.Service
 	if cfg.Billing.Enabled {
 		billingCipher, err := providercredential.NewAESGCMCipher(cfg.Providers.CredentialKeyring, rand.Reader)
 		if err != nil {
@@ -178,6 +181,7 @@ func run() (runErr error) {
 		billingService = billing.NewService(billingRepository, billingCipher, verifier,
 			billing.WithProviders(appleClient, googleClient),
 			billing.WithRetention(cfg.Billing.RawRetention()))
+		projectionService = billingprojection.NewService(billingprojectionpostgres.New(pool))
 	}
 
 	workerID, err := os.Hostname()
@@ -221,8 +225,12 @@ func run() (runErr error) {
 	if billingService != nil {
 		// Validation runs first in the round-robin because a store notification
 		// waiting on validation is the latency an operator actually sees.
+		// Projection runs immediately after it: a validated fact that has not
+		// been projected has not yet changed anyone's access, so the two
+		// latencies are one user-visible number.
 		families = append(families,
 			jobFamily{"billing_validation", billingService.ProcessNextValidation},
+			jobFamily{"billing_projection", projectionService.ProcessNextProjection},
 			jobFamily{"billing_rtdn", billingService.ProcessNextRTDN},
 			jobFamily{"billing_reconciliation", billingService.ProcessNextReconciliation},
 			jobFamily{"billing_replay", billingService.ProcessNextReplay},

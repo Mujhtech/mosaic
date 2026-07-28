@@ -2,6 +2,7 @@ package billingpostgres
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"time"
@@ -291,6 +292,20 @@ func (r *Repository) CompleteAttempt(ctx context.Context, job billing.Validation
 		}
 	}
 
+	// A committed fact enqueues its projection in the same transaction that
+	// records it. Enqueueing after the commit would leave a window in which a
+	// crash loses the trigger and the fact never reaches anyone's access;
+	// enqueueing inside means the trigger is exactly as durable as the fact.
+	//
+	// The job is scoped to the lineage the fact belongs to. It coalesces onto
+	// the scope key, so a burst of facts for one purchase produces one
+	// projection rather than one per fact.
+	if factRecorded && outcome.Fact != nil {
+		if err := enqueueProjectionForFact(ctx, tx, *outcome.Fact, now); err != nil {
+			return err
+		}
+	}
+
 	status := outcome.JobStatus
 	if status == "" {
 		status = "completed"
@@ -309,6 +324,54 @@ func (r *Repository) CompleteAttempt(ctx context.Context, job billing.Validation
 
 	if err := tx.Commit(ctx); err != nil {
 		return fmt.Errorf("commit attempt: %w", err)
+	}
+	return nil
+}
+
+// enqueueProjectionForFact queues a projection for the lineage a newly
+// recorded fact belongs to.
+//
+// The lineage may not exist yet — a fact can be validated before its lineage
+// and customer association are established — in which case there is nothing to
+// project and the association path enqueues instead. That is why a missing
+// lineage is silence rather than an error: the fact is safe either way, and
+// the projection is triggered by whichever step completes last.
+func enqueueProjectionForFact(ctx context.Context, tx pgx.Tx, fact billing.TransactionFact, now time.Time) error {
+	if len(fact.PurchaseChainDigest) == 0 {
+		return nil
+	}
+	var lineageID, customerID string
+	err := tx.QueryRow(ctx,
+		`SELECT id, COALESCE(billing_customer_id,'') FROM purchase_lineages
+		 WHERE environment_id=$1 AND provider=$2 AND lineage_key_digest=$3`,
+		fact.EnvironmentID, fact.Provider, fact.PurchaseChainDigest).Scan(&lineageID, &customerID)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil
+	}
+	if err != nil {
+		return fmt.Errorf("locate lineage for projection trigger: %w", err)
+	}
+
+	scopeKey := "lineage:" + lineageID
+	if customerID != "" {
+		scopeKey = "customer:" + customerID
+	}
+	detail, err := json.Marshal(map[string]string{"customerId": customerID, "lineageId": lineageID})
+	if err != nil {
+		return fmt.Errorf("encode projection job detail: %w", err)
+	}
+	// ON CONFLICT DO NOTHING against the scope-key partial unique index is the
+	// coalescing: a scope that already has queued or leased work absorbs this
+	// trigger rather than creating a second job.
+	if _, err := tx.Exec(ctx,
+		`INSERT INTO projection_jobs(
+			id, project_id, environment_id, scope_key, kind, detail, status,
+			attempt_count, max_attempts, available_at, created_at, updated_at)
+		 VALUES ($1,$2,$3,$4,'fact_committed',$5,'queued',0,8,$6,$6,$6)
+		 ON CONFLICT DO NOTHING`,
+		"pjb_"+hashID(scopeKey, "fact_committed", fact.ID), fact.ProjectID, fact.EnvironmentID,
+		scopeKey, detail, now); err != nil {
+		return fmt.Errorf("enqueue projection for committed fact: %w", err)
 	}
 	return nil
 }
