@@ -115,24 +115,7 @@ func (s *Service) ConflictDetailForServer(ctx context.Context, rawKey, conflictI
 	if err != nil {
 		return ConflictDetail{}, err
 	}
-	if err := s.requireEnabled(ctx, scope.ProjectID); err != nil {
-		return ConflictDetail{}, err
-	}
-	conflict, err := s.repository.Conflict(ctx, trustedActor(scope), scope.ProjectID, strings.TrimSpace(conflictID))
-	if err != nil {
-		return ConflictDetail{}, err
-	}
-	detail := ConflictDetail{Conflict: conflict}
-	if conflict.Scope != ConflictScopeAlias && conflict.PurchaseLineageID != "" {
-		lineage, lineageErr := s.repository.Lineage(ctx, scope.ProjectID, conflict.PurchaseLineageID)
-		if lineageErr != nil {
-			// The conflict is still worth returning without it; an operator can
-			// act on the customer identifiers alone.
-			return detail, nil
-		}
-		detail.Lineage = &lineage
-	}
-	return detail, nil
+	return s.ConflictDetail(ctx, trustedActor(scope), scope.ProjectID, conflictID)
 }
 
 // RequestSync enqueues a manual recomputation of one customer's entitlement
@@ -159,14 +142,54 @@ func (s *Service) RequestSync(ctx context.Context, rawKey, customerID string) (S
 		// wrong Environment's state.
 		return SyncRequest{}, ErrInvalidAlias
 	}
-	actor := trustedActor(scope)
-	customer, err := s.repository.Customer(ctx, actor, scope.ProjectID, strings.TrimSpace(customerID))
+	request, err := s.enqueueManualSync(ctx, trustedActor(scope), scope.ProjectID, scope.EnvironmentID, customerID)
+	if err != nil {
+		return SyncRequest{}, err
+	}
+	span.SetAttributes(
+		attribute.String("mosaic.billing.customer.id", request.BillingCustomerID),
+		attribute.String("mosaic.billing.projection.scope_key", request.ScopeKey))
+	return request, nil
+}
+
+// RequestSyncForOperator is the dashboard-authenticated manual sync. It reaches
+// exactly the same enqueue the trusted surface does, so an operator's "sync
+// now" and a backend's produce one job on one queue rather than two answers.
+//
+// The tenant comes from the route the principal middleware already authorized;
+// the repository re-checks organization membership on the customer read, so a
+// route that lost its check would still not read another tenant's customer.
+func (s *Service) RequestSyncForOperator(ctx context.Context, actor Actor, projectID, environmentID, customerID string) (SyncRequest, error) {
+	ctx, span := s.tracer.Start(ctx, "billing.customer.request_sync")
+	defer span.End()
+
+	if err := s.requireEnabled(ctx, projectID); err != nil {
+		return SyncRequest{}, err
+	}
+	if strings.TrimSpace(environmentID) == "" {
+		return SyncRequest{}, ErrInvalidAlias
+	}
+	request, err := s.enqueueManualSync(ctx, actor, projectID, environmentID, customerID)
+	if err != nil {
+		return SyncRequest{}, err
+	}
+	span.SetAttributes(
+		attribute.String("mosaic.billing.customer.id", request.BillingCustomerID),
+		attribute.String("mosaic.billing.projection.scope_key", request.ScopeKey))
+	return request, nil
+}
+
+// enqueueManualSync is the one body both manual-sync entry points share. It
+// computes nothing: a support-facing "sync now" that derived its own answer
+// would produce a second authoritative result alongside the projection's.
+func (s *Service) enqueueManualSync(ctx context.Context, actor Actor, projectID, environmentID, customerID string) (SyncRequest, error) {
+	customer, err := s.repository.Customer(ctx, actor, projectID, strings.TrimSpace(customerID))
 	if err != nil {
 		return SyncRequest{}, err
 	}
 
 	projectionScope := billingprojection.Scope{
-		ProjectID: scope.ProjectID, EnvironmentID: scope.EnvironmentID, CustomerID: customer.ID,
+		ProjectID: projectID, EnvironmentID: environmentID, CustomerID: customer.ID,
 	}
 	if s.reprojector == nil {
 		return SyncRequest{}, ErrUnavailable
@@ -176,20 +199,17 @@ func (s *Service) RequestSync(ctx context.Context, rawKey, customerID string) (S
 	}
 
 	now := s.now()
-	_ = s.repository.RecordAudit(ctx, actor, scope.ProjectID, "billing.customer.sync_requested",
+	_ = s.repository.RecordAudit(ctx, actor, projectID, "billing.customer.sync_requested",
 		"billing_customer", customer.ID, map[string]string{
-			"environmentId": scope.EnvironmentID, "triggerKind": billingprojection.KindManualSync,
+			"environmentId": environmentID, "triggerKind": billingprojection.KindManualSync,
 		}, now)
-	span.SetAttributes(
-		attribute.String("mosaic.billing.customer.id", customer.ID),
-		attribute.String("mosaic.billing.projection.scope_key", projectionScope.Key()))
 	logSafely(ctx, "billing customer projection requested manually", map[string]string{
-		"project_id": scope.ProjectID, "environment_id": scope.EnvironmentID,
+		"project_id": projectID, "environment_id": environmentID,
 		"billing_customer_id": customer.ID,
 	})
 
 	return SyncRequest{
-		ProjectID: scope.ProjectID, EnvironmentID: scope.EnvironmentID,
+		ProjectID: projectID, EnvironmentID: environmentID,
 		BillingCustomerID: customer.ID, ScopeKey: projectionScope.Key(),
 		Kind: billingprojection.KindManualSync, RequestedAt: now,
 	}, nil

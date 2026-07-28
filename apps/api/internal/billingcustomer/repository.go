@@ -58,7 +58,12 @@ type Repository interface {
 	OpenConflict(ctx context.Context, conflict Conflict) (Conflict, error)
 	Conflict(ctx context.Context, actor Actor, projectID, conflictID string) (Conflict, error)
 	ListConflicts(ctx context.Context, actor Actor, projectID string, status string) ([]Conflict, error)
-	ResolveConflict(ctx context.Context, actor Actor, projectID, conflictID, action, assignedCustomerID string, now time.Time) (Conflict, error)
+	// ResolveConflict applies an operator's decision. `reason` is the operator's
+	// stated justification and is required: a resolution moves a purchase between
+	// two customers, and an investigation months later needs the why alongside
+	// the what. It is stored on the conflict's existing detail document, so the
+	// reason and the diagnostic that opened the conflict live in one place.
+	ResolveConflict(ctx context.Context, actor Actor, projectID, conflictID, action, assignedCustomerID, reason string, now time.Time) (Conflict, error)
 
 	// RecordAudit writes an audit event in the caller's transaction scope.
 	RecordAudit(ctx context.Context, actor Actor, projectID, action, resourceType, resourceID string, metadata map[string]string, now time.Time) error

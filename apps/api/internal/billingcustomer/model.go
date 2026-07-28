@@ -190,6 +190,10 @@ type Conflict struct {
 	OpenedAt         time.Time  `json:"openedAt"`
 	ResolvedAt       *time.Time `json:"resolvedAt,omitempty"`
 	ResolutionAction string     `json:"resolutionAction,omitempty"`
+	// ResolutionReason is the operator's stated justification, required at
+	// resolution time. It is operator-authored free text about a dispute, never
+	// an alias value, and is safe on an operator surface.
+	ResolutionReason string `json:"resolutionReason,omitempty"`
 }
 
 // Digest exposes the disputed alias digest to the persistence layer without

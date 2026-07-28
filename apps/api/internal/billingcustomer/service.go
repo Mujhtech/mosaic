@@ -455,10 +455,44 @@ func (s *Service) ListConflicts(ctx context.Context, actor Actor, projectID, sta
 	return s.repository.ListConflicts(ctx, actor, projectID, status)
 }
 
+// ConflictDetail returns one conflict with the lineage it disputes, which is
+// what an operator needs before choosing a resolution action.
+func (s *Service) ConflictDetail(ctx context.Context, actor Actor, projectID, conflictID string) (ConflictDetail, error) {
+	if err := s.requireEnabled(ctx, projectID); err != nil {
+		return ConflictDetail{}, err
+	}
+	conflict, err := s.repository.Conflict(ctx, actor, projectID, strings.TrimSpace(conflictID))
+	if err != nil {
+		return ConflictDetail{}, err
+	}
+	detail := ConflictDetail{Conflict: conflict}
+	if conflict.Scope != ConflictScopeAlias && conflict.PurchaseLineageID != "" {
+		lineage, lineageErr := s.repository.Lineage(ctx, projectID, conflict.PurchaseLineageID)
+		if lineageErr != nil {
+			// The conflict is still worth returning without it; an operator can
+			// act on the customer identifiers alone.
+			return detail, nil
+		}
+		detail.Lineage = &lineage
+	}
+	return detail, nil
+}
+
+// MaxResolutionReasonLength bounds the operator's stated justification. The
+// conflict detail document is capped at 2 KiB by the schema, so the reason is
+// bounded well inside it rather than being allowed to consume the whole budget.
+const MaxResolutionReasonLength = 500
+
 // ResolveConflict applies an operator's decision and unfreezes the lineage.
 // There is deliberately no automatic-merge path: automatic merge stays an ADR
 // checkpoint, not something a heuristic reaches on its own.
-func (s *Service) ResolveConflict(ctx context.Context, actor Actor, projectID, conflictID, action, assignedCustomerID string) (Conflict, error) {
+//
+// `reason` is required. The three actions map to the OD-10 vocabulary:
+// `assigned_first` keeps the incumbent, `assigned_second` reassigns to the
+// challenger, and `detached_both` is the operator split that awards the
+// disputed subject to neither. All three move committed access for at least one
+// customer, so none of them may be taken without a recorded justification.
+func (s *Service) ResolveConflict(ctx context.Context, actor Actor, projectID, conflictID, action, assignedCustomerID, reason string) (Conflict, error) {
 	if err := s.requireEnabled(ctx, projectID); err != nil {
 		return Conflict{}, err
 	}
@@ -467,8 +501,12 @@ func (s *Service) ResolveConflict(ctx context.Context, actor Actor, projectID, c
 	default:
 		return Conflict{}, ErrConflict
 	}
+	reason = strings.TrimSpace(reason)
+	if reason == "" || len(reason) > MaxResolutionReasonLength {
+		return Conflict{}, ErrInvalidAlias
+	}
 	now := s.now()
-	conflict, err := s.repository.ResolveConflict(ctx, actor, projectID, conflictID, action, assignedCustomerID, now)
+	conflict, err := s.repository.ResolveConflict(ctx, actor, projectID, conflictID, action, assignedCustomerID, reason, now)
 	if err != nil {
 		return Conflict{}, err
 	}
@@ -492,9 +530,13 @@ func (s *Service) ResolveConflict(ctx context.Context, actor Actor, projectID, c
 		}
 	}
 
+	// The reason is on the audit event as well as on the conflict row. The row
+	// is the current state of one dispute; the audit trail is what an
+	// investigation reads, and it must not have to join back to a row that a
+	// later resolution could have rewritten.
 	_ = s.repository.RecordAudit(ctx, actor, projectID, "billing.identity_conflict.resolved",
 		"billing_identity_conflict", conflictID, map[string]string{
-			"action": action, "conflictScope": conflict.Scope,
+			"action": action, "conflictScope": conflict.Scope, "reason": reason,
 		}, now)
 
 	// Corrects review finding I-10. Both candidates are reprojected, not only

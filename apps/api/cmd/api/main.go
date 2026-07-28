@@ -20,6 +20,7 @@ import (
 	"github.com/Mujhtech/mosaic/apps/api/internal/billingcustomer"
 	"github.com/Mujhtech/mosaic/apps/api/internal/billingdiagnostics"
 	"github.com/Mujhtech/mosaic/apps/api/internal/billinggrant"
+	"github.com/Mujhtech/mosaic/apps/api/internal/billingoperator"
 	"github.com/Mujhtech/mosaic/apps/api/internal/billingprojection"
 	"github.com/Mujhtech/mosaic/apps/api/internal/billingrestore"
 	"github.com/Mujhtech/mosaic/apps/api/internal/billingwebhook"
@@ -37,6 +38,7 @@ import (
 	"github.com/Mujhtech/mosaic/apps/api/internal/platform/billingdiagnosticspostgres"
 	"github.com/Mujhtech/mosaic/apps/api/internal/platform/billinggrantpostgres"
 	"github.com/Mujhtech/mosaic/apps/api/internal/platform/billingkeys"
+	"github.com/Mujhtech/mosaic/apps/api/internal/platform/billingoperatorpostgres"
 	"github.com/Mujhtech/mosaic/apps/api/internal/platform/billingpostgres"
 	"github.com/Mujhtech/mosaic/apps/api/internal/platform/billingprojectionpostgres"
 	"github.com/Mujhtech/mosaic/apps/api/internal/platform/billingrestorepostgres"
@@ -275,6 +277,7 @@ func run() (runErr error) {
 	var billingGrantService *billinggrant.Service
 	var billingRestoreService *billingrestore.Service
 	var billingCustomerService *billingcustomer.Service
+	var billingOperatorService *billingoperator.Service
 	var billingProjectionService *billingprojection.Service
 	var billingWebhookService *billingwebhook.Service
 	var billingIPLimiter, billingKeyLimiter, entitlementSyncLimiter *ratelimit.Limiter
@@ -341,6 +344,14 @@ func run() (runErr error) {
 		billingCustomerService = billingcustomer.NewService(
 			billingcustomerpostgres.New(databasePool), billingKeys.Identity(), billingProjectionService)
 		billingGrantService = billinggrant.NewService(billinggrantpostgres.New(databasePool))
+		// The operator surface reads through the same repositories the trusted
+		// APIs read through, so the dashboard and an application backend see one
+		// answer derived once. Its own repository holds only the read model the
+		// dashboard needs and no writer at all.
+		billingOperatorService = billingoperator.NewService(
+			billingoperatorpostgres.New(databasePool),
+			billingaccesspostgres.New(databasePool),
+			billingCustomerService)
 		billingWebhookService = billingwebhook.NewService(
 			billingwebhookpostgres.New(databasePool), billingCipher,
 			billingwebhook.NewPolicy(billingwebhook.WithSelfHostedAllowlist(
@@ -390,6 +401,7 @@ func run() (runErr error) {
 		BillingGrant:           billingGrantService,
 		BillingRestore:         billingRestoreService,
 		BillingCustomer:        billingCustomerService,
+		BillingOperator:        billingOperatorService,
 		BillingWebhook:         billingWebhookService,
 		BillingIPLimiter:       billingIPLimiter,
 		BillingKeyLimiter:      billingKeyLimiter,

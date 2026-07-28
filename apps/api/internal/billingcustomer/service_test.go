@@ -147,7 +147,7 @@ func (s *stubRepository) ListConflicts(context.Context, Actor, string, string) (
 	return nil, nil
 }
 
-func (s *stubRepository) ResolveConflict(context.Context, Actor, string, string, string, string, time.Time) (Conflict, error) {
+func (s *stubRepository) ResolveConflict(context.Context, Actor, string, string, string, string, string, time.Time) (Conflict, error) {
 	return Conflict{}, ErrNotFound
 }
 

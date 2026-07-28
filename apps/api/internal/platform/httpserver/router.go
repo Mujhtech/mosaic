@@ -18,6 +18,7 @@ import (
 	"github.com/Mujhtech/mosaic/apps/api/internal/billingcustomer"
 	"github.com/Mujhtech/mosaic/apps/api/internal/billingdiagnostics"
 	"github.com/Mujhtech/mosaic/apps/api/internal/billinggrant"
+	"github.com/Mujhtech/mosaic/apps/api/internal/billingoperator"
 	"github.com/Mujhtech/mosaic/apps/api/internal/billingrestore"
 	"github.com/Mujhtech/mosaic/apps/api/internal/billingwebhook"
 	"github.com/Mujhtech/mosaic/apps/api/internal/browserauth"
@@ -34,6 +35,7 @@ import (
 	billingcustomerhttp "github.com/Mujhtech/mosaic/apps/api/internal/transport/billingcustomer"
 	billingdiagnosticshttp "github.com/Mujhtech/mosaic/apps/api/internal/transport/billingdiagnostics"
 	billinggranthttp "github.com/Mujhtech/mosaic/apps/api/internal/transport/billinggrant"
+	billingoperatorhttp "github.com/Mujhtech/mosaic/apps/api/internal/transport/billingoperator"
 	billingrestorehttp "github.com/Mujhtech/mosaic/apps/api/internal/transport/billingrestore"
 	billingwebhookhttp "github.com/Mujhtech/mosaic/apps/api/internal/transport/billingwebhook"
 	browserauthhttp "github.com/Mujhtech/mosaic/apps/api/internal/transport/browserauth"
@@ -117,6 +119,14 @@ type Dependencies struct {
 	// trusted request surfaces and the status read. It is nil whenever Billing
 	// is.
 	BillingRestore *billingrestore.Service
+	// BillingOperator owns the Phase 9B dashboard surface over billing customer,
+	// subscription, entitlement, identity-conflict, and restore state. It is a
+	// separate dependency from BillingCustomer and BillingAccess because it
+	// authenticates differently: those two take their tenant from a secret
+	// server key, which a browser session does not hold, so without this the
+	// dashboard can reach none of the state they serve. It is nil whenever
+	// Billing is.
+	BillingOperator *billingoperator.Service
 	// BillingCustomer owns the Phase 9B billing-identity APIs: customer
 	// create-or-get, aliases, identity conflicts, and manual sync requests. It
 	// is nil whenever Billing is.
@@ -234,6 +244,16 @@ func NewWithDependencies(cfg Config, logger zerolog.Logger, dependencies Depende
 							// export-class bucket with the other
 							// history-scanning billing operations.
 							billinggranthttp.RegisterProjectRoutes(project, dependencies.BillingGrant,
+								httpmiddleware.RateLimit("export", dependencies.ExportLimiter, principalKey))
+						}
+						if dependencies.BillingOperator != nil {
+							// The customer lookup and the manual sync share the
+							// export-class bucket: the lookup is the one surface
+							// that accepts an attacker-chosen identifier and
+							// reports whether it matched, and the sync enqueues
+							// projection work. The reads keep the baseline API
+							// bucket the whole authenticated subtree already has.
+							billingoperatorhttp.RegisterProjectRoutes(project, dependencies.BillingOperator,
 								httpmiddleware.RateLimit("export", dependencies.ExportLimiter, principalKey))
 						}
 						if dependencies.BillingWebhook != nil {

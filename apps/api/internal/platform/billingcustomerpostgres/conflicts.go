@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -21,13 +22,15 @@ import (
 // into a column that could disagree with the document.
 const conflictColumns = `id, project_id, conflict_scope, COALESCE(purchase_lineage_id,''),
 	COALESCE(alias_type,''), status, first_customer_id, second_customer_id,
-	COALESCE(detail->>'diagnosticCode',''), opened_at, resolved_at, COALESCE(resolution_action,'')`
+	COALESCE(detail->>'diagnosticCode',''), opened_at, resolved_at, COALESCE(resolution_action,''),
+	COALESCE(detail->>'resolutionReason','')`
 
 func scanConflict(row pgx.Row) (billingcustomer.Conflict, error) {
 	var conflict billingcustomer.Conflict
 	err := row.Scan(&conflict.ID, &conflict.ProjectID, &conflict.Scope, &conflict.PurchaseLineageID,
 		&conflict.AliasType, &conflict.Status, &conflict.FirstCustomerID, &conflict.SecondCustomerID,
-		&conflict.DiagnosticCode, &conflict.OpenedAt, &conflict.ResolvedAt, &conflict.ResolutionAction)
+		&conflict.DiagnosticCode, &conflict.OpenedAt, &conflict.ResolvedAt, &conflict.ResolutionAction,
+		&conflict.ResolutionReason)
 	return conflict, err
 }
 
@@ -250,7 +253,7 @@ func (r *Repository) ListConflicts(ctx context.Context, actor billingcustomer.Ac
 // resolution surface that accepted an arbitrary customer identifier would be an
 // unaudited "give this purchase to anyone" control, which is strictly more
 // authority than the dispute it is supposed to settle.
-func (r *Repository) ResolveConflict(ctx context.Context, actor billingcustomer.Actor, projectID, conflictID, action, assignedCustomerID string, now time.Time) (billingcustomer.Conflict, error) {
+func (r *Repository) ResolveConflict(ctx context.Context, actor billingcustomer.Actor, projectID, conflictID, action, assignedCustomerID, reason string, now time.Time) (billingcustomer.Conflict, error) {
 	if _, err := requireRole(ctx, r.pool, actor, projectID, operatorRoles...); err != nil {
 		return billingcustomer.Conflict{}, err
 	}
@@ -258,6 +261,9 @@ func (r *Repository) ResolveConflict(ctx context.Context, actor billingcustomer.
 	case "assigned_first", "assigned_second", "detached_both":
 	default:
 		return billingcustomer.Conflict{}, billingcustomer.ErrConflict
+	}
+	if strings.TrimSpace(reason) == "" || len(reason) > billingcustomer.MaxResolutionReasonLength {
+		return billingcustomer.Conflict{}, billingcustomer.ErrInvalidAlias
 	}
 
 	tx, err := r.pool.Begin(ctx)
@@ -304,11 +310,16 @@ func (r *Repository) ResolveConflict(ctx context.Context, actor billingcustomer.
 		}
 	}
 
+	// The reason joins the diagnostic code in the existing detail document
+	// rather than taking a column of its own: 00044 already established detail
+	// as where a conflict's explanatory fields live, and one document cannot
+	// disagree with itself the way a column and a document can.
 	if _, err := tx.Exec(ctx,
 		`UPDATE billing_identity_conflicts
-		 SET status='resolved', resolved_at=$3, resolved_by_actor_id=NULLIF($4,''), resolution_action=$5
+		 SET status='resolved', resolved_at=$3, resolved_by_actor_id=NULLIF($4,''), resolution_action=$5,
+		     detail = detail || jsonb_build_object('resolutionReason', $6::text)
 		 WHERE id=$1 AND project_id=$2 AND status='open'`,
-		conflictID, projectID, now, actor.ID, action); err != nil {
+		conflictID, projectID, now, actor.ID, action, strings.TrimSpace(reason)); err != nil {
 		return billingcustomer.Conflict{}, fmt.Errorf("close identity conflict: %w", err)
 	}
 
