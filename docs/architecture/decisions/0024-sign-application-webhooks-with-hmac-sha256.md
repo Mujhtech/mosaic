@@ -34,8 +34,13 @@ server-side request forgery primitive unless it is bounded.
 Every delivery carries:
 
 ```text
-Mosaic-Signature: t=<unix seconds>, v1=<hex(hmac_sha256(secret, "1." + t + "." + eventId + "." + body))>
+Mosaic-Signature: t=<unix seconds>, v1=<hex(hmac_sha256(secret, "v1." + t + "." + eventId + "." + body))>
 ```
+
+The signed payload begins with the literal `v1`, matching the header element name and the
+reference vectors in `packages/test-fixtures/src/webhook-signature-vectors.json`. This ADR was
+drafted with a bare `1` before the Billing State Webhook Contract was frozen; the contract and
+its vectors are the authority, and the literal above is corrected to agree with them.
 
 The signed string binds four things deliberately:
 
