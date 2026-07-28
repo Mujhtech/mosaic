@@ -289,6 +289,112 @@ func TestRefundScopeRespectsProration(t *testing.T) {
 	}
 }
 
+// Google's quantity-based partial refund must not end the subscription.
+//
+// The Google void path stamps `revoked_at` from its own event time for every
+// void, partial included, so the previous rule ("not prorated and carries a
+// revocation date invalidates") terminated the lineage on a partial refund.
+// A customer refunded for one unit of a multi-quantity purchase, or given a
+// partial goodwill refund, lost the rest of the period they had paid for — the
+// same class of wrongful removal OD-18(a) rejects for Apple's prorated refund.
+func TestGoogleQuantityPartialRefundKeepsSubscriptionActive(t *testing.T) {
+	base := purchase("t1", "2026-01-01T00:00:00Z", "2026-02-01T00:00:00Z")
+	base.Provider = "google_play"
+	partial := Fact{
+		ID: "t2", Provider: "google_play", ProviderTransactionID: "t1",
+		FactKind: "refund", OccurredAt: at("2026-01-10T00:00:00Z"),
+		RecordedAt: at("2026-01-10T00:00:00Z"), ProviderEventOccurredAt: ptr("2026-01-10T00:00:00Z"),
+		RefundedAt: ptr("2026-01-10T00:00:00Z"), RevokedAt: ptr("2026-01-10T00:00:00Z"),
+		RefundType:      "quantity_partial",
+		MosaicProductID: "prod_pro", ResolutionState: "active_mapping",
+	}
+
+	result := ProjectSubscription([]Fact{base, partial}, at("2026-01-20T00:00:00Z"), DefaultPolicy(), false)
+	if result.Snapshot.AccessState != AccessActive {
+		t.Fatalf("quantity_partial refund got %q/%q, want the remaining period preserved",
+			result.Snapshot.AccessState, result.Snapshot.LifecycleState)
+	}
+	if result.Snapshot.LifecycleState == LifecycleRefunded {
+		t.Fatal("a partial refund terminated the lineage as fully refunded")
+	}
+	if result.Snapshot.RefundEffectiveAt == nil {
+		t.Fatal("the partial refund was not recorded on the snapshot at all")
+	}
+
+	// A full void still revokes: the correction must not have widened into
+	// "Google refunds never end access".
+	full := partial
+	full.ID, full.RefundType = "t3", "full"
+	revoked := ProjectSubscription([]Fact{base, full}, at("2026-01-20T00:00:00Z"), DefaultPolicy(), false)
+	if revoked.Snapshot.AccessState != AccessInactive || revoked.Snapshot.LifecycleState != LifecycleRefunded {
+		t.Fatalf("full Google void got %q/%q, want inactive/refunded",
+			revoked.Snapshot.AccessState, revoked.Snapshot.LifecycleState)
+	}
+}
+
+// A refund fact Mosaic could not attribute to a Product must drive the purchase
+// to `unknown`, never leave it owned.
+//
+// This is the projection half of the void-without-SKU correction: the worker now
+// records a product-unresolved refund fact for a Google void whose order cannot
+// be attributed. If the one-time engine kept reading the Product from the
+// original purchase fact and ignored the later unresolved statement, the whole
+// point of recording that fact — stopping a refunded purchase from granting —
+// would be lost, and the customer would keep the Entitlement forever.
+func TestProductUnresolvedRefundDrivesOwnershipToUnknown(t *testing.T) {
+	acquire := Fact{
+		ID: "p1", Provider: "google_play", ProviderTransactionID: "p1",
+		FactKind: "one_time_purchase", TransactionType: "non_consumable",
+		OccurredAt: at("2026-01-01T00:00:00Z"), RecordedAt: at("2026-01-01T00:00:00Z"),
+		PeriodStartAt:   ptr("2026-01-01T00:00:00Z"),
+		MosaicProductID: "prod_lifetime", ResolutionState: "active_mapping",
+	}
+	// The fact the void path records when orders.get cannot attribute a SKU:
+	// no Mosaic Product, resolution_state unresolved.
+	unattributedRefund := Fact{
+		ID: "p2", Provider: "google_play", ProviderTransactionID: "order-1",
+		FactKind: "refund", TransactionType: "non_consumable",
+		OccurredAt: at("2026-02-01T00:00:00Z"), RecordedAt: at("2026-02-01T00:00:00Z"),
+		ProviderEventOccurredAt: ptr("2026-02-01T00:00:00Z"),
+		RefundedAt:              ptr("2026-02-01T00:00:00Z"), RevokedAt: ptr("2026-02-01T00:00:00Z"),
+		RefundType:      "full",
+		ResolutionState: "unresolved",
+	}
+
+	result := ProjectOneTimePurchase([]Fact{acquire, unattributedRefund}, at("2026-03-01T00:00:00Z"))
+	if result.Snapshot.ValidityState != OwnershipUnknown {
+		t.Fatalf("unattributed refund got %q, want unknown", result.Snapshot.ValidityState)
+	}
+	if result.Snapshot.UncertaintyReason != UncertaintyProductUnresolved {
+		t.Fatalf("uncertainty reason %q, want product_unresolved", result.Snapshot.UncertaintyReason)
+	}
+
+	// The Entitlement source built from it must not grant access.
+	snapshot := ProjectEntitlements(CustomerProjection{
+		OneTimes: []OneTimeSource{{
+			InstanceID: "one_1", PurchaseLineageID: "lin_1", Snapshot: result.Snapshot,
+			Grants: []GrantVersion{{ID: "v1", ProductID: "prod_lifetime",
+				EntitlementID: "ent_pro", EntitlementKey: "pro", Policy: DefaultPolicy()}},
+		}},
+	}, at("2026-03-01T00:00:00Z"))
+	if len(snapshot.Entries) != 1 {
+		t.Fatalf("got %d entries, want one", len(snapshot.Entries))
+	}
+	if snapshot.Entries[0].State != AccessUnknown {
+		t.Fatalf("refunded-but-unattributed purchase produced %q, want unknown",
+			snapshot.Entries[0].State)
+	}
+
+	// Re-attributing the refund clears the uncertainty rather than sticking.
+	attributed := unattributedRefund
+	attributed.ID, attributed.ResolutionState = "p3", "active_mapping"
+	attributed.MosaicProductID = "prod_lifetime"
+	repaired := ProjectOneTimePurchase([]Fact{acquire, attributed}, at("2026-03-01T00:00:00Z"))
+	if repaired.Snapshot.ValidityState != OwnershipRefunded {
+		t.Fatalf("re-attributed refund got %q, want refunded", repaired.Snapshot.ValidityState)
+	}
+}
+
 // Apple REFUND_REVERSED reinstates access. A revocation that is later
 // contradicted by a validated renewal must not leave the customer locked out.
 func TestLateRenewalReinstatesRevokedLineage(t *testing.T) {

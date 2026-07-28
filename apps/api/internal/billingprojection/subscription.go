@@ -397,12 +397,22 @@ func accumulate(ordered []Fact) lineageState {
 			refundedAt := effectiveRefund(fact)
 			state.refundedAt = refundedAt
 			// A refund invalidates the remaining period only when the provider
-			// says ownership ended: a full/unspecified refund with a
-			// revocation date, or a Google void. A prorated Apple refund does
-			// not (OD-18(a)).
-			state.refundInvalidates = fact.RefundType != "prorated" && fact.RevokedAt != nil
-			if fact.RefundType == "prorated" {
-				state.warnings = append(state.warnings, "prorated_refund_preserves_period")
+			// says ownership ended: a full/unspecified refund carrying a
+			// revocation date. A *partial* refund never does.
+			//
+			// Review finding I-14.1: Google's `quantity_partial` void was read
+			// as fully invalidating. The Google void path sets `revoked_at`
+			// from its own event time for every void, partial included, so
+			// `RefundType != "prorated" && RevokedAt != nil` made every
+			// quantity-partial refund terminate the subscription. Per OD-18's
+			// spirit — a partial refund does not revoke the remaining period
+			// unless provider state says revoked — both partial shapes are now
+			// non-invalidating. A genuine revocation still arrives as a
+			// `revocation` fact or a provider status that produces one, and
+			// that branch is untouched.
+			state.refundInvalidates = !partialRefund(fact.RefundType) && fact.RevokedAt != nil
+			if partialRefund(fact.RefundType) {
+				state.warnings = append(state.warnings, "partial_refund_preserves_period")
 			}
 		case "revocation":
 			if fact.RevokedAt != nil {
@@ -437,6 +447,14 @@ func (s *lineageState) clearTerminal() {
 	// provider took the money. Leaving either set would keep reporting a
 	// recovery state after the recovery happened.
 	s.graceEnd, s.retryStart = nil, nil
+}
+
+// partialRefund reports whether the provider described a refund of part of the
+// purchase rather than all of it. Apple states this as `prorated`
+// (REFUND_PRORATED); Google states it as `quantity_partial` on a voided
+// purchase. Neither ends ownership of the remaining period on its own.
+func partialRefund(refundType string) bool {
+	return refundType == "prorated" || refundType == "quantity_partial"
 }
 
 func effectiveRefund(fact Fact) *time.Time {
