@@ -1914,6 +1914,119 @@ paths:
         "404": { $ref: "#/components/responses/Error" }
         "409": { $ref: "#/components/responses/Error" }
         "422": { $ref: "#/components/responses/Error" }
+  /v1/billing/identity/customers:
+    post:
+      security: [{ ServerSecretKey: [] }]
+      operationId: identifyBillingCustomer
+      tags: [Billing Identity]
+      description: |
+        Create-or-get the Billing Customer for one of your users. This is one of exactly two ways
+        a Billing Customer comes into existence (plan section 5a); the other is a validated
+        purchase fact that needs somewhere to attach. SDK initialization and installation
+        registration create nothing, which is what keeps Mosaic clear of the duplicate-customer
+        trap that client-anchored systems fall into.
+
+        The body accepts exactly one field, so a caller cannot smuggle an installation
+        identifier, a Project, or an Environment into the creation path: the tenant comes from
+        the authenticated secret key. Answers 201 when a customer was created and 200 when an
+        existing one was returned.
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/IdentifyBillingCustomerRequest" } } } }
+      responses:
+        "200": { description: The existing Billing Customer., content: { application/json: { schema: { type: object, properties: { data: { $ref: "#/components/schemas/BillingIdentityCustomer" } } } } } }
+        "201": { description: A Billing Customer was created., content: { application/json: { schema: { type: object, properties: { data: { $ref: "#/components/schemas/BillingIdentityCustomer" } } } } } }
+        "401": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+        "422": { $ref: "#/components/responses/Error" }
+  /v1/billing/identity/customers/{customerId}/aliases:
+    get:
+      security: [{ ServerSecretKey: [] }]
+      operationId: listBillingCustomerAliases
+      tags: [Billing Identity]
+      description: |
+        A customer's alias history. No response in this family carries an alias value or an alias
+        digest: a digest is still a stable per-person identifier and nothing on a server surface
+        needs one.
+      parameters: [{ in: path, name: customerId, required: true, schema: { type: string } }]
+      responses:
+        "200": { description: Aliases., content: { application/json: { schema: { type: object, properties: { data: { type: object, properties: { items: { type: array, items: { $ref: "#/components/schemas/BillingCustomerAlias" } } } } } } } } }
+        "401": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+    post:
+      security: [{ ServerSecretKey: [] }]
+      operationId: attachBillingCustomerAlias
+      tags: [Billing Identity]
+      description: |
+        Attach an application-user alias to an existing customer. Login attaches; it never merges
+        (plan section 5a rule 3). When the alias already resolves to a different customer the
+        result is 409 `identity_conflict`: an identity conflict is opened, the named customer is
+        frozen, and an operator resolves it. Neither candidate is granted anything automatically
+        (OD-10).
+      parameters: [{ in: path, name: customerId, required: true, schema: { type: string } }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/AttachBillingCustomerAliasRequest" } } } }
+      responses:
+        "201": { description: The attached alias., content: { application/json: { schema: { type: object, properties: { data: { $ref: "#/components/schemas/BillingCustomerAlias" } } } } } }
+        "401": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+        "422": { $ref: "#/components/responses/Error" }
+  /v1/billing/identity/aliases/{aliasId}/revoke:
+    post:
+      security: [{ ServerSecretKey: [] }]
+      operationId: revokeBillingCustomerAlias
+      tags: [Billing Identity]
+      description: |
+        End-date an alias. The alias is the person-to-purchase link and therefore the erasable
+        personal data in Mosaic Billing; the purchase evidence it pointed at is exempt and
+        survives (see the privacy guide). Audited.
+      parameters: [{ in: path, name: aliasId, required: true, schema: { type: string } }]
+      responses:
+        "204": { description: The alias was revoked. }
+        "401": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+  /v1/billing/identity/customers/{customerId}/sync-requests:
+    post:
+      security: [{ ServerSecretKey: [] }]
+      operationId: requestBillingCustomerSync
+      tags: [Billing Identity]
+      description: |
+        Schedule a projection for one customer. Deliberately not a read: the answer is "this has
+        been queued", and a caller that needs the result reads the entitlement surfaces once the
+        snapshot version moves. Triggers coalesce onto the customer scope, so a burst of requests
+        produces one projection rather than a job storm.
+      parameters: [{ in: path, name: customerId, required: true, schema: { type: string } }]
+      responses:
+        "202": { description: A projection was queued., content: { application/json: { schema: { type: object, properties: { data: { $ref: "#/components/schemas/BillingSyncRequest" } } } } } }
+        "401": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+  /v1/billing/identity/conflicts:
+    get:
+      security: [{ ServerSecretKey: [] }]
+      operationId: listBillingIdentityConflicts
+      tags: [Billing Identity]
+      description: |
+        Open identity conflicts awaiting operator resolution. A conflict freezes its disputed
+        subject and grants neither candidate anything (OD-10). There is deliberately no automatic
+        merge: automatic merge stays an ADR checkpoint, not something a heuristic reaches on its
+        own.
+      parameters: [{ in: query, name: status, schema: { type: string, enum: [open, resolved] } }]
+      responses:
+        "200": { description: Identity conflicts., content: { application/json: { schema: { type: object, properties: { data: { type: object, properties: { items: { type: array, items: { $ref: "#/components/schemas/BillingIdentityConflict" } } } } } } } } }
+        "401": { $ref: "#/components/responses/Error" }
+  /v1/billing/identity/conflicts/{conflictId}:
+    get:
+      security: [{ ServerSecretKey: [] }]
+      operationId: getBillingIdentityConflict
+      tags: [Billing Identity]
+      description: |
+        One conflict with the disputed Purchase Lineage, where the conflict is lineage-scoped.
+        The disputed alias *type* is reported; the disputed alias digest is not rendered under
+        any scope.
+      parameters: [{ in: path, name: conflictId, required: true, schema: { type: string } }]
+      responses:
+        "200": { description: The conflict., content: { application/json: { schema: { type: object, properties: { data: { $ref: "#/components/schemas/BillingIdentityConflictDetail" } } } } } }
+        "401": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
   /v1/billing/server/customers/{customerId}:
     get:
       security: [{ ServerSecretKey: [] }]
@@ -3192,6 +3305,81 @@ components:
         factCount: { type: integer, format: int64 }
         lastFactRecordedAt: { type: string, format: date-time }
         lastReconciliationAt: { type: string, format: date-time }
+    IdentifyBillingCustomerRequest:
+      type: object
+      additionalProperties: false
+      required: [applicationUserId]
+      properties:
+        applicationUserId: { type: string, minLength: 1, maxLength: 512, description: Your own identifier for the user. Stored only as a domain-separated SHA-256 digest. }
+    AttachBillingCustomerAliasRequest:
+      type: object
+      additionalProperties: false
+      required: [applicationUserId]
+      properties:
+        applicationUserId: { type: string, minLength: 1, maxLength: 512 }
+    BillingIdentityCustomer:
+      type: object
+      properties:
+        billingCustomerId: { type: string }
+        projectId: { type: string }
+        status: { type: string, enum: [active, frozen, anonymized] }
+        diagnosticsStatus: { type: string }
+        currentProjectionVersion: { type: integer, format: int64 }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+        lastProjectedAt: { type: string, format: date-time }
+    BillingCustomerAlias:
+      type: object
+      description: An alias record. The alias digest is never a member of this shape.
+      properties:
+        aliasId: { type: string }
+        billingCustomerId: { type: string }
+        aliasType: { type: string, enum: [application_user, installation, app_account_token, obfuscated_external_account_id] }
+        sourceAuthority: { type: string }
+        verificationStatus: { type: string }
+        effectiveStart: { type: string, format: date-time }
+        effectiveEnd: { type: string, format: date-time }
+        createdAt: { type: string, format: date-time }
+    BillingIdentityConflict:
+      type: object
+      properties:
+        conflictId: { type: string }
+        projectId: { type: string }
+        scope: { type: string, enum: [purchase_lineage, alias] }
+        status: { type: string, enum: [open, resolved] }
+        firstCustomerId: { type: string, description: The incumbent. }
+        secondCustomerId: { type: string, description: The challenger. }
+        purchaseLineageId: { type: string, description: Present only for a lineage-scoped conflict. }
+        aliasType: { type: string, description: Present only for an alias-scoped conflict. The digest is never reported. }
+        diagnosticCode: { type: string }
+        openedAt: { type: string, format: date-time }
+        resolvedAt: { type: string, format: date-time }
+        resolutionAction: { type: string, enum: [assigned_first, assigned_second, detached_both] }
+    BillingIdentityConflictDetail:
+      type: object
+      properties:
+        conflict: { $ref: "#/components/schemas/BillingIdentityConflict" }
+        lineage:
+          type: object
+          description: The disputed Purchase Lineage, for a lineage-scoped conflict.
+          properties:
+            purchaseLineageId: { type: string }
+            environmentId: { type: string }
+            provider: { type: string, enum: [app_store, google_play] }
+            storeEnvironment: { type: string, enum: [sandbox, production] }
+            lineageType: { type: string, enum: [subscription, one_time] }
+            projectionFrozen: { type: boolean }
+            diagnosticStatus: { type: string }
+    BillingSyncRequest:
+      type: object
+      properties:
+        billingCustomerId: { type: string }
+        projectId: { type: string }
+        environmentId: { type: string }
+        projectionScopeKey: { type: string }
+        triggerKind: { type: string, enum: [manual_sync] }
+        requestedAt: { type: string, format: date-time }
+        status: { type: string, enum: [queued] }
     BillingProjectionHealth:
       type: object
       properties:
