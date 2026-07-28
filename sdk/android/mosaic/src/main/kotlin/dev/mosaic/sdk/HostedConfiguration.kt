@@ -407,6 +407,7 @@ class MosaicHostedConfigurationClient(
     private val applicationVersion: String? = null,
     internal val analyticsRuntime: MosaicAnalyticsRuntime? = null,
     private val experimentStore: MosaicExperimentAssignmentStore? = null,
+    internal val transactionObservationRuntime: MosaicTransactionObservationRuntime? = null,
 ) {
     private val refreshLock = Mutex()
     @Volatile private var accepted: MosaicAcceptedConfiguration? = null
@@ -614,6 +615,16 @@ class MosaicHostedConfigurationClient(
 
     suspend fun analyticsDiagnostics(): MosaicAnalyticsDiagnostics = analyticsRuntime?.diagnostics()
         ?: MosaicAnalyticsDiagnostics(0, 0, 0, 0, 0, 0, "analytics.unavailable")
+
+    /**
+     * Best-effort delivery of queued Transaction Observations. Calling it is never required: nothing
+     * in a paywall, a purchase, or an Entitlement depends on an observation reaching Mosaic.
+     */
+    suspend fun flushTransactionObservations(): MosaicTransactionObservationDiagnostics =
+        transactionObservationRuntime?.flush() ?: MOSAIC_TRANSACTION_OBSERVATIONS_UNAVAILABLE
+
+    suspend fun transactionObservationDiagnostics(): MosaicTransactionObservationDiagnostics =
+        transactionObservationRuntime?.diagnostics() ?: MOSAIC_TRANSACTION_OBSERVATIONS_UNAVAILABLE
 
     suspend fun experimentDiagnostics(): List<MosaicExperimentAssignmentRecord> =
         experimentStore?.diagnostics().orEmpty()

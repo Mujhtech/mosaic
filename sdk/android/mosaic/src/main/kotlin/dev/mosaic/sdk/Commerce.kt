@@ -213,7 +213,23 @@ data class MosaicCommerceUpdate(
     val activeEntitlements: Set<MosaicEntitlement>,
     val occurredAt: String,
     val diagnostics: List<MosaicCommerceSafeDiagnostic> = emptyList(),
-)
+    /**
+     * Optional provider order reference — a join handle only, never the identity of a transaction
+     * and never a substitute for [transactionReference]. It is bounded to the same charset and
+     * length as every other provider code precisely so a purchase token, a receipt, or a signed
+     * payload cannot be carried here by a future adapter.
+     */
+    val providerOrderReference: String? = null,
+) {
+    init {
+        require(
+            providerOrderReference == null ||
+                Regex("^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$").matches(providerOrderReference),
+        ) {
+            "providerOrderReference must be a bounded provider order code when provided."
+        }
+    }
+}
 
 /**
  * Host acceptance is the local delivery boundary. Returning true promises idempotent acceptance;
@@ -276,6 +292,13 @@ class MosaicConfiguredPurchaseProvider(
     private var configuration: MosaicCommerceConfiguration? = null
     private var configurationGeneration: Long = 0
     private var loadedMappingIds: Set<String> = emptySet()
+
+    /**
+     * The adapter's asynchronous update stream, when it has one. Exposed internally so the optional
+     * Transaction Observation runtime can subscribe without the SDK growing a second commerce seam.
+     */
+    internal val commerceUpdateSource: Flow<MosaicCommerceUpdate>?
+        get() = (adapter as? MosaicCommerceProviderAdapterV2)?.commerceUpdates
 
     override fun accept(configuration: MosaicCommerceConfiguration) {
         synchronized(lock) {

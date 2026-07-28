@@ -24,6 +24,10 @@ android {
 
     testOptions {
         unitTests.isReturnDefaultValues = true
+        unitTests.all {
+            // Lets the digest conformance test read the shared cross-SDK reference vectors.
+            it.systemProperty("mosaic.repositoryRoot", rootProject.file("../..").canonicalPath)
+        }
     }
 
     publishing {

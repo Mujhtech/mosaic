@@ -110,7 +110,9 @@ assign and present an Experiment through the same `mosaic.placement` extra; no
 Experiment-specific application code or Paywall ID is required. Google Play remains optional.
 Hosted analytics is disabled by default; pass
 `--ez mosaic.analytics.enabled true` only after an owner enables analytics for
-the Environment. The on-screen status reports persistent queue depth.
+the Environment. The on-screen status reports persistent queue depth. The
+optional Transaction Observation handoff is likewise off unless
+`--ez mosaic.observations.enabled true` is passed.
 
 The example includes the optional `:mosaic-revenuecat` module, initializes it
 only when the host supplies that public key, and lets hosted refresh atomically
@@ -161,4 +163,34 @@ The reproducible JVM proof uses the frozen canonical mixed response:
 ```bash
 ../../sdk/android/gradlew -p ../../sdk/android :mosaic:testDebugUnitTest \
   --tests 'dev.mosaic.sdk.AnalyticsQueueTest.offlineQueueSurvivesReconstructionThenAppliesCanonicalPartialBatch'
+```
+
+### Transaction Observations
+
+The optional handoff is off unless the launch adds
+`--ez mosaic.observations.enabled true`, and it does something only when the
+example runs against Google Play (`--ez mosaic.google.play true`) with a real
+purchase. The second status line reports queue depth, how many observations
+Mosaic accepted **for validation**, how many were dropped, and the last safe
+code. Accepted never means validated: the example has no way to learn whether a
+transaction was authentic, and it never changes what the paywall shows.
+
+```bash
+adb shell am start -n dev.mosaic.example/.MainActivity \
+  --es mosaic.sdk.key SDK_KEY \
+  --es mosaic.application.id APPLICATION_ID \
+  --es mosaic.placement onboarding_complete \
+  --ez mosaic.google.play true \
+  --ez mosaic.observations.enabled true
+```
+
+Emulator note: a Google Play purchase needs a Play-enabled image and a licence
+tester account, so the handoff cannot be exercised on a bare AVD. The
+device-independent proofs run on the JVM:
+
+```bash
+../../sdk/android/gradlew -p ../../sdk/android :mosaic:testDebugUnitTest \
+  --tests 'dev.mosaic.sdk.TransactionObservationQueueTest'
+../../sdk/android/gradlew -p ../../sdk/android :mosaic-google-play:testDebugUnitTest \
+  --tests 'dev.mosaic.sdk.googleplay.MosaicGooglePlayAdapterTest'
 ```

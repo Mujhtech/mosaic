@@ -162,6 +162,66 @@ The deterministic offline reconstruction and canonical partial-response demo is:
   --tests 'dev.mosaic.sdk.AnalyticsQueueTest.offlineQueueSurvivesReconstructionThenAppliesCanonicalPartialBatch'
 ```
 
+## Transaction Observations (optional, off by default)
+
+A Transaction Observation tells Mosaic that a Google Play purchase may exist so
+server-side validation can begin sooner than a store notification would allow.
+It is a **trigger, never proof**. The SDK never learns, reports, or acts on the
+result of a validation, `serverConfirmedTransactions` stays `unsupported`, and a
+`MosaicPurchaseResult` is never re-labelled by a submission answer.
+
+It is disabled unless the host opts in:
+
+```kotlin
+val mosaic = Mosaic.configure(
+    apiKey = publicSdkKey,
+    purchaseProvider = purchaseProvider,
+    applicationId = "application_android",
+    transactionObservationEnabled = true, // false is the default
+)
+val hosted = mosaic.hostedConfiguration(applicationContext)
+val diagnostics = hosted.transactionObservationDiagnostics()
+```
+
+What is transmitted, and nothing else:
+
+| Field | Value |
+| --- | --- |
+| `submissionId` | The adapter's deterministic update identity; the deduplication key. |
+| `referenceKind` | `google_play_token_digest`. |
+| `reference` | SHA-256 over the **UTF-8 bytes** of the purchase token, lowercase hexadecimal, unprefixed. |
+| `providerOrderReference` | `Purchase.getOrderId()` verbatim, when Google supplies a usable one. |
+| `storeEnvironment` | Always `unclassified`; a device cannot truthfully classify it. |
+| `observedAt` | UTC timestamp of the observation. |
+
+**The raw purchase token never leaves the device.** The digest is one-way, and
+the purchase token, `getOriginalJson()`, `getSignature()`, obfuscated account and
+profile identifiers, prices, and subject data are never read into an observation,
+a log, a diagnostic, or an exception message. The digest derivation is a
+documented cross-SDK contract, asserted against the shared reference vectors in
+`packages/test-fixtures/src/billing-reference-vectors.json`.
+
+Behaviour:
+
+- Observed on a completed purchase only, strictly after the transaction is
+  finalized. **Acknowledgement is unchanged** — it stays client-side and always
+  happens before any report, so Mosaic availability can never affect Google's
+  refund window.
+- Fire and forget. The purchase flow never waits for a submission, and a hung or
+  unreachable endpoint cannot stall a paywall.
+- App-private, backup-excluded, duplicate-safe queue that survives process
+  restart, bounded to 64 observations or 64 KiB, expiring after seven days, with
+  at most ten attempts using full-jitter exponential backoff and `Retry-After`.
+- Retries only on foreground entry. Phase 9A adds no WorkManager or
+  JobScheduler: store notifications and server-side reconciliation are the
+  reliable path, so a late or lost observation costs correlation latency and
+  never a purchase.
+- Submission outcomes are `AcceptedForValidation`, `Duplicate`,
+  `PermanentlyRejected`, and `RetryableFailure`. There is deliberately no member
+  meaning validated; `AcceptedForValidation` means only that Mosaic queued the
+  observation.
+- No store credential exists in any Mosaic SDK.
+
 ## Supported version matrix
 
 This is a support policy, not a compatibility guess. "Tested" means Phase 8

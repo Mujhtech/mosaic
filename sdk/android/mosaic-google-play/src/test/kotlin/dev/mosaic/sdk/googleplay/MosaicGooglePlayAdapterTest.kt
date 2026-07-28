@@ -12,8 +12,10 @@ import dev.mosaic.sdk.MosaicCommerceUpdateAcceptanceDisposition
 import dev.mosaic.sdk.MosaicProductLoadResult
 import dev.mosaic.sdk.MosaicPurchaseResult
 import dev.mosaic.sdk.MosaicActiveEntitlementsResult
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.async
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
@@ -122,6 +124,131 @@ class MosaicGooglePlayAdapterTest {
         val result = adapter.activeEntitlements(emptyList())
 
         assertTrue(result is MosaicActiveEntitlementsResult.ProviderUnavailable)
+    }
+
+    /**
+     * The single rule this whole feature rests on: the raw purchase token never leaves the device.
+     * A refactor that maps `purchaseToken` (or `originalJson`, which contains it) into the commerce
+     * update would be invisible in every other test and would put credential-grade material on the
+     * wire and into host logs. The order reference is carried verbatim beside the digest — never
+     * instead of it — because the digest is the idempotency and correlation key.
+     */
+    @Test
+    fun `a purchased update carries the digest and the order reference and never the raw token`() = runTest {
+        val token = "sensitive-token-value"
+        val order = mutableListOf<String>()
+        val service = FakeBillingService(
+            candidate = subscriptionCandidate(),
+            purchase = GooglePurchase(
+                products = listOf("pro_subscription"),
+                state = Purchase.PurchaseState.PURCHASED,
+                acknowledged = false,
+                token = token,
+                orderId = "GPA.1111-2222-3333-44444",
+            ),
+            order = order,
+        )
+        val adapter = adapter(service, RecordingDeliveryStore(order)) {
+            MosaicCommerceUpdateAcceptanceDisposition.ACCEPTED
+        }
+        val observed = mutableListOf<dev.mosaic.sdk.MosaicCommerceUpdate>()
+        val collector = launch { adapter.commerceUpdates.collect { observed += it } }
+        advanceUntilIdle()
+        adapter.loadProducts(listOf(mapping()))
+
+        val result = async { adapter.purchase(mapping(), emptyList()) }
+        advanceUntilIdle()
+        assertTrue(result.await() is MosaicPurchaseResult.Purchased)
+
+        val update = observed.single()
+        assertEquals(tokenDigest(token), update.transactionReference)
+        assertEquals("GPA.1111-2222-3333-44444", update.providerOrderReference)
+        // The purchased update is only visible to subscribers after the transaction is finalized,
+        // so an observation can never be reported ahead of Google Play acknowledgement.
+        assertEquals(listOf("pending", "accepted", "acknowledge", "finalized"), order)
+        assertTrue(token !in update.toString())
+        assertTrue(adapter.diagnostics.none { token in it.toString() })
+        collector.cancel()
+    }
+
+    /**
+     * A Transaction Observation is best effort and must never sit on the purchase path. If any
+     * subscriber to the update stream could back-pressure it, a slow, hung, or hostile endpoint
+     * would stall the paywall and — far worse — could push Google Play acknowledgement past the
+     * three-day refund window (three minutes for licence testers). The purchase must complete while
+     * a subscriber is still suspended.
+     */
+    @Test
+    fun `a purchase completes while an update subscriber is still suspended`() = runTest {
+        val order = mutableListOf<String>()
+        val service = FakeBillingService(
+            candidate = subscriptionCandidate(),
+            purchase = GooglePurchase(
+                products = listOf("pro_subscription"),
+                state = Purchase.PurchaseState.PURCHASED,
+                acknowledged = false,
+                token = "sensitive-token",
+                orderId = "GPA.1111-2222-3333-44444",
+            ),
+            order = order,
+        )
+        val adapter = adapter(service, RecordingDeliveryStore(order)) {
+            MosaicCommerceUpdateAcceptanceDisposition.ACCEPTED
+        }
+        val suspended = CompletableDeferred<Unit>()
+        val collector = launch { adapter.commerceUpdates.collect { suspended.await() } }
+        advanceUntilIdle()
+        adapter.loadProducts(listOf(mapping()))
+
+        val result = async { adapter.purchase(mapping(), emptyList()) }
+        advanceUntilIdle()
+
+        assertTrue(result.await() is MosaicPurchaseResult.Purchased)
+        assertTrue("acknowledge" in order)
+        assertTrue(!suspended.isCompleted)
+        collector.cancel()
+    }
+
+    /**
+     * The Google reference derivation is a documented cross-SDK contract, not an implementation
+     * detail: Mosaic's server recomputes the identical digest to join a store notification to this
+     * observation, so a platform-default or UTF-16 encoding would agree on every ASCII token and
+     * silently break correlation on any other one. These are the shared vectors every SDK asserts.
+     */
+    @Test
+    fun `the token digest reproduces the shared cross-SDK reference vectors`() {
+        val vectors = billingReferenceVectors()
+
+        assertEquals(4, vectors.size)
+        vectors.forEach { (token, digest) -> assertEquals(digest, tokenDigest(token)) }
+        assertTrue(
+            vectors.keys.any { token -> token.any { it.code > 127 } },
+        )
+    }
+
+    /** Reads token/digest pairs from the shared generated vectors without adding a JSON dependency. */
+    private fun billingReferenceVectors(): Map<String, String> {
+        val source = java.nio.file.Files.readAllBytes(
+            repositoryFile("packages/test-fixtures/src/billing-reference-vectors.json"),
+        ).toString(Charsets.UTF_8)
+        val google = source.substringAfter("\"googlePlayTokenDigest\"").substringBefore("\"appStoreTransactionId\"")
+        return Regex("\"token\": \"([^\"]+)\"[\\s\\S]*?\"digest\": \"([a-f0-9]{64})\"")
+            .findAll(google)
+            .associate { it.groupValues[1] to it.groupValues[2] }
+    }
+
+    private fun repositoryFile(relativePath: String): java.nio.file.Path {
+        System.getProperty("mosaic.repositoryRoot")?.let { root ->
+            val configured = java.nio.file.Path.of(root).resolve(relativePath)
+            if (java.nio.file.Files.exists(configured)) return configured
+        }
+        var directory: java.nio.file.Path? = java.nio.file.Path.of("").toAbsolutePath()
+        while (directory != null) {
+            val candidate = directory.resolve(relativePath)
+            if (java.nio.file.Files.exists(candidate)) return candidate
+            directory = directory.parent
+        }
+        error("Cannot locate $relativePath in the Mosaic repository.")
     }
 
     private fun CoroutineScope.adapter(

@@ -23,6 +23,13 @@ internal data class GooglePurchase(
     val state: Int,
     val acknowledged: Boolean,
     val token: String,
+    /**
+     * Google's order identifier. Null while a purchase is pending, and — per the Play Billing
+     * reference — null-able in general, so nothing may depend on its presence. On a subscription
+     * renewal it is the *initial* order's identifier, which makes it a subscription-level join
+     * handle, never a per-transaction identity.
+     */
+    val orderId: String? = null,
 )
 
 internal interface GooglePlayBillingService {
@@ -162,5 +169,9 @@ internal class AndroidGooglePlayBillingService(context: Context) : GooglePlayBil
     }
 
     private fun BillingResult.normalized() = GoogleBillingResult(responseCode)
-    private fun Purchase.normalized() = GooglePurchase(products, purchaseState, isAcknowledged, purchaseToken)
+    // orderId is the only additional Purchase value that is normalized. getOriginalJson(),
+    // getSignature(), and getAccountIdentifiers() are deliberately never read: the first two are
+    // equivalent to the purchase token, and the third is developer-supplied subject data.
+    private fun Purchase.normalized() =
+        GooglePurchase(products, purchaseState, isAcknowledged, purchaseToken, orderId)
 }
