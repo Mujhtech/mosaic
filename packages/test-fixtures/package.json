@@ -4,12 +4,16 @@
   "private": true,
   "type": "module",
   "exports": {
-    "./billing-reference-vectors.json": "./src/billing-reference-vectors.json"
+    "./billing-reference-vectors.json": "./src/billing-reference-vectors.json",
+    "./entitlement-snapshot-digest-vectors.json": "./src/entitlement-snapshot-digest-vectors.json",
+    "./entitlement-cache-decision-vectors.json": "./src/entitlement-cache-decision-vectors.json",
+    "./entitlement-freshness-vectors.json": "./src/entitlement-freshness-vectors.json",
+    "./webhook-signature-vectors.json": "./src/webhook-signature-vectors.json"
   },
   "files": [
     "src"
   ],
   "scripts": {
-    "generate": "node src/build-billing-reference-vectors.mjs"
+    "generate": "node src/build-billing-reference-vectors.mjs && node src/build-entitlement-reference-vectors.mjs && node src/build-webhook-signature-vectors.mjs"
   }
 }

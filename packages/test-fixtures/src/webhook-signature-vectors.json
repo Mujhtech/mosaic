@@ -1,0 +1,116 @@
+{
+  "$comment": "Generated cross-implementation reference vectors. Regenerate with packages/test-fixtures/src/build-webhook-signature-vectors.mjs; never hand-edit a signature.",
+  "contract": "Billing State Webhook Contract v1",
+  "contractVersion": "1",
+  "compatibilityManifest": "protocol/compatibility/billing-state-webhook/v1.json",
+  "eventFixture": "protocol/fixtures/billing-state-webhook/v1/events/entitlement-activated.json",
+  "scheme": {
+    "header": "Mosaic-Signature",
+    "algorithm": "HMAC-SHA256",
+    "signingVersion": "v1",
+    "signedPayloadTemplate": "{signingVersion}.{timestamp}.{eventId}.{rawBody}",
+    "separator": ".",
+    "keyEncoding": "UTF-8 bytes of the secret, used verbatim; the secret is not hex- or base64-decoded first",
+    "output": "lowercase hexadecimal, 64 characters",
+    "timestampFormat": "unix seconds, decimal, no fractional part",
+    "replayWindowSeconds": 300
+  },
+  "rules": [
+    "Hash the raw request body exactly as received. Do not parse and re-serialize it: whitespace, member order, and Unicode escaping all change the bytes and therefore the signature.",
+    "The event ID is inside the signed payload, so a captured signature cannot be replayed onto a different event body even within the replay window.",
+    "Reject a delivery whose timestamp is more than 300 seconds from your own clock, before comparing signatures.",
+    "During key rotation the header carries one v1 parameter per active key. Accept the delivery if ANY of them verifies. A verifier that reads only the first parameter drops every delivery signed with the new key.",
+    "Compare signatures with a constant-time comparison. A byte-by-byte early-exit comparison leaks the expected value over enough requests.",
+    "Compare case-insensitively or lowercase your own output first. Several HMAC libraries emit uppercase hexadecimal by default."
+  ],
+  "vectors": [
+    {
+      "id": "canonical-event-primary-key",
+      "secret": "whsec_fixture_primary_0000000000000000",
+      "timestamp": 1785243603,
+      "eventId": "fixture-event-0001",
+      "rawBody": "{\n  \"billingStateWebhookContractVersion\": \"1\",\n  \"recordType\": \"billingStateEvent\",\n  \"payload\": {\n    \"eventType\": \"customer.entitlements.changed\",\n    \"projectId\": \"fixture-project-mosaic\",\n    \"environmentId\": \"fixture-environment-production\",\n    \"billingCustomerId\": \"fixture-customer-0001\",\n    \"projectionRuleVersion\": 1,\n    \"sourceReason\": \"initial_projection\",\n    \"isTestSource\": false,\n    \"eventId\": \"fixture-event-0001\",\n    \"subscriptionInstanceId\": \"fixture-subscription-instance-0001\",\n    \"snapshotVersion\": 1,\n    \"occurredAt\": \"2026-07-01T09:00:00.000Z\",\n    \"createdAt\": \"2026-07-01T09:00:03.000Z\",\n    \"changedEntitlements\": [\n      {\n        \"entitlementKey\": \"pro\",\n        \"previousState\": \"absent\",\n        \"currentState\": \"active\"\n      }\n    ],\n    \"stateSummary\": {\n      \"accessState\": \"active\",\n      \"lifecycleState\": \"active\",\n      \"renewalIntent\": \"auto_renew_enabled\",\n      \"billingState\": \"current\",\n      \"uncertainty\": {\n        \"reason\": \"none\"\n      }\n    },\n    \"correlationId\": \"fixture-correlation-0100\"\n  }\n}",
+      "signedPayload": "v1.1785243603.fixture-event-0001.{\n  \"billingStateWebhookContractVersion\": \"1\",\n  \"recordType\": \"billingStateEvent\",\n  \"payload\": {\n    \"eventType\": \"customer.entitlements.changed\",\n    \"projectId\": \"fixture-project-mosaic\",\n    \"environmentId\": \"fixture-environment-production\",\n    \"billingCustomerId\": \"fixture-customer-0001\",\n    \"projectionRuleVersion\": 1,\n    \"sourceReason\": \"initial_projection\",\n    \"isTestSource\": false,\n    \"eventId\": \"fixture-event-0001\",\n    \"subscriptionInstanceId\": \"fixture-subscription-instance-0001\",\n    \"snapshotVersion\": 1,\n    \"occurredAt\": \"2026-07-01T09:00:00.000Z\",\n    \"createdAt\": \"2026-07-01T09:00:03.000Z\",\n    \"changedEntitlements\": [\n      {\n        \"entitlementKey\": \"pro\",\n        \"previousState\": \"absent\",\n        \"currentState\": \"active\"\n      }\n    ],\n    \"stateSummary\": {\n      \"accessState\": \"active\",\n      \"lifecycleState\": \"active\",\n      \"renewalIntent\": \"auto_renew_enabled\",\n      \"billingState\": \"current\",\n      \"uncertainty\": {\n        \"reason\": \"none\"\n      }\n    },\n    \"correlationId\": \"fixture-correlation-0100\"\n  }\n}",
+      "signature": "e0af000fe574596fad9a154a3d74357a986a4896ceb188dcef6c486759257905",
+      "header": "t=1785243603, v1=e0af000fe574596fad9a154a3d74357a986a4896ceb188dcef6c486759257905",
+      "notes": "The signature Mosaic produces for protocol/fixtures/billing-state-webhook/v1/events/entitlement-activated.json. A verifier that reproduces this agrees with the canonical fixture."
+    },
+    {
+      "id": "canonical-event-rotation-key",
+      "secret": "whsec_fixture_rotation_000000000000000",
+      "timestamp": 1785243603,
+      "eventId": "fixture-event-0001",
+      "rawBody": "{\n  \"billingStateWebhookContractVersion\": \"1\",\n  \"recordType\": \"billingStateEvent\",\n  \"payload\": {\n    \"eventType\": \"customer.entitlements.changed\",\n    \"projectId\": \"fixture-project-mosaic\",\n    \"environmentId\": \"fixture-environment-production\",\n    \"billingCustomerId\": \"fixture-customer-0001\",\n    \"projectionRuleVersion\": 1,\n    \"sourceReason\": \"initial_projection\",\n    \"isTestSource\": false,\n    \"eventId\": \"fixture-event-0001\",\n    \"subscriptionInstanceId\": \"fixture-subscription-instance-0001\",\n    \"snapshotVersion\": 1,\n    \"occurredAt\": \"2026-07-01T09:00:00.000Z\",\n    \"createdAt\": \"2026-07-01T09:00:03.000Z\",\n    \"changedEntitlements\": [\n      {\n        \"entitlementKey\": \"pro\",\n        \"previousState\": \"absent\",\n        \"currentState\": \"active\"\n      }\n    ],\n    \"stateSummary\": {\n      \"accessState\": \"active\",\n      \"lifecycleState\": \"active\",\n      \"renewalIntent\": \"auto_renew_enabled\",\n      \"billingState\": \"current\",\n      \"uncertainty\": {\n        \"reason\": \"none\"\n      }\n    },\n    \"correlationId\": \"fixture-correlation-0100\"\n  }\n}",
+      "signedPayload": "v1.1785243603.fixture-event-0001.{\n  \"billingStateWebhookContractVersion\": \"1\",\n  \"recordType\": \"billingStateEvent\",\n  \"payload\": {\n    \"eventType\": \"customer.entitlements.changed\",\n    \"projectId\": \"fixture-project-mosaic\",\n    \"environmentId\": \"fixture-environment-production\",\n    \"billingCustomerId\": \"fixture-customer-0001\",\n    \"projectionRuleVersion\": 1,\n    \"sourceReason\": \"initial_projection\",\n    \"isTestSource\": false,\n    \"eventId\": \"fixture-event-0001\",\n    \"subscriptionInstanceId\": \"fixture-subscription-instance-0001\",\n    \"snapshotVersion\": 1,\n    \"occurredAt\": \"2026-07-01T09:00:00.000Z\",\n    \"createdAt\": \"2026-07-01T09:00:03.000Z\",\n    \"changedEntitlements\": [\n      {\n        \"entitlementKey\": \"pro\",\n        \"previousState\": \"absent\",\n        \"currentState\": \"active\"\n      }\n    ],\n    \"stateSummary\": {\n      \"accessState\": \"active\",\n      \"lifecycleState\": \"active\",\n      \"renewalIntent\": \"auto_renew_enabled\",\n      \"billingState\": \"current\",\n      \"uncertainty\": {\n        \"reason\": \"none\"\n      }\n    },\n    \"correlationId\": \"fixture-correlation-0100\"\n  }\n}",
+      "signature": "3d945c3ec0cc961f7fc9109f9de27961db7e2e097ae29e098c77e8240edb51ab",
+      "header": "t=1785243603, v1=3d945c3ec0cc961f7fc9109f9de27961db7e2e097ae29e098c77e8240edb51ab",
+      "notes": "The same event signed with a second active key. During rotation both parameters appear in one header and either one verifying is enough."
+    },
+    {
+      "id": "tampered-body-must-not-verify",
+      "secret": "whsec_fixture_primary_0000000000000000",
+      "timestamp": 1785243603,
+      "eventId": "fixture-event-0001",
+      "rawBody": "{\n  \"billingStateWebhookContractVersion\": \"1\",\n  \"recordType\": \"billingStateEvent\",\n  \"payload\": {\n    \"eventType\": \"customer.entitlements.changed\",\n    \"projectId\": \"fixture-project-mosaic\",\n    \"environmentId\": \"fixture-environment-production\",\n    \"billingCustomerId\": \"fixture-customer-0001\",\n    \"projectionRuleVersion\": 1,\n    \"sourceReason\": \"initial_projection\",\n    \"isTestSource\": false,\n    \"eventId\": \"fixture-event-0001\",\n    \"subscriptionInstanceId\": \"fixture-subscription-instance-0001\",\n    \"snapshotVersion\": 1,\n    \"occurredAt\": \"2026-07-01T09:00:00.000Z\",\n    \"createdAt\": \"2026-07-01T09:00:03.000Z\",\n    \"changedEntitlements\": [\n      {\n        \"entitlementKey\": \"pro_lifetime\",\n        \"previousState\": \"absent\",\n        \"currentState\": \"active\"\n      }\n    ],\n    \"stateSummary\": {\n      \"accessState\": \"active\",\n      \"lifecycleState\": \"active\",\n      \"renewalIntent\": \"auto_renew_enabled\",\n      \"billingState\": \"current\",\n      \"uncertainty\": {\n        \"reason\": \"none\"\n      }\n    },\n    \"correlationId\": \"fixture-correlation-0100\"\n  }\n}",
+      "signedPayload": "v1.1785243603.fixture-event-0001.{\n  \"billingStateWebhookContractVersion\": \"1\",\n  \"recordType\": \"billingStateEvent\",\n  \"payload\": {\n    \"eventType\": \"customer.entitlements.changed\",\n    \"projectId\": \"fixture-project-mosaic\",\n    \"environmentId\": \"fixture-environment-production\",\n    \"billingCustomerId\": \"fixture-customer-0001\",\n    \"projectionRuleVersion\": 1,\n    \"sourceReason\": \"initial_projection\",\n    \"isTestSource\": false,\n    \"eventId\": \"fixture-event-0001\",\n    \"subscriptionInstanceId\": \"fixture-subscription-instance-0001\",\n    \"snapshotVersion\": 1,\n    \"occurredAt\": \"2026-07-01T09:00:00.000Z\",\n    \"createdAt\": \"2026-07-01T09:00:03.000Z\",\n    \"changedEntitlements\": [\n      {\n        \"entitlementKey\": \"pro_lifetime\",\n        \"previousState\": \"absent\",\n        \"currentState\": \"active\"\n      }\n    ],\n    \"stateSummary\": {\n      \"accessState\": \"active\",\n      \"lifecycleState\": \"active\",\n      \"renewalIntent\": \"auto_renew_enabled\",\n      \"billingState\": \"current\",\n      \"uncertainty\": {\n        \"reason\": \"none\"\n      }\n    },\n    \"correlationId\": \"fixture-correlation-0100\"\n  }\n}",
+      "signature": "97407155d0b1c905d3211caa2be5fb35d1dc0727d1972fdf4471cf2c177a01d6",
+      "header": "t=1785243603, v1=97407155d0b1c905d3211caa2be5fb35d1dc0727d1972fdf4471cf2c177a01d6",
+      "notes": "One entitlement key changed. Its signature differs from canonical-event-primary-key, which is the property that makes the signature worth computing. An implementation must NOT accept this signature for the canonical body."
+    },
+    {
+      "id": "different-event-id-must-not-verify",
+      "secret": "whsec_fixture_primary_0000000000000000",
+      "timestamp": 1785243603,
+      "eventId": "fixture-event-9999",
+      "rawBody": "{\n  \"billingStateWebhookContractVersion\": \"1\",\n  \"recordType\": \"billingStateEvent\",\n  \"payload\": {\n    \"eventType\": \"customer.entitlements.changed\",\n    \"projectId\": \"fixture-project-mosaic\",\n    \"environmentId\": \"fixture-environment-production\",\n    \"billingCustomerId\": \"fixture-customer-0001\",\n    \"projectionRuleVersion\": 1,\n    \"sourceReason\": \"initial_projection\",\n    \"isTestSource\": false,\n    \"eventId\": \"fixture-event-0001\",\n    \"subscriptionInstanceId\": \"fixture-subscription-instance-0001\",\n    \"snapshotVersion\": 1,\n    \"occurredAt\": \"2026-07-01T09:00:00.000Z\",\n    \"createdAt\": \"2026-07-01T09:00:03.000Z\",\n    \"changedEntitlements\": [\n      {\n        \"entitlementKey\": \"pro\",\n        \"previousState\": \"absent\",\n        \"currentState\": \"active\"\n      }\n    ],\n    \"stateSummary\": {\n      \"accessState\": \"active\",\n      \"lifecycleState\": \"active\",\n      \"renewalIntent\": \"auto_renew_enabled\",\n      \"billingState\": \"current\",\n      \"uncertainty\": {\n        \"reason\": \"none\"\n      }\n    },\n    \"correlationId\": \"fixture-correlation-0100\"\n  }\n}",
+      "signedPayload": "v1.1785243603.fixture-event-9999.{\n  \"billingStateWebhookContractVersion\": \"1\",\n  \"recordType\": \"billingStateEvent\",\n  \"payload\": {\n    \"eventType\": \"customer.entitlements.changed\",\n    \"projectId\": \"fixture-project-mosaic\",\n    \"environmentId\": \"fixture-environment-production\",\n    \"billingCustomerId\": \"fixture-customer-0001\",\n    \"projectionRuleVersion\": 1,\n    \"sourceReason\": \"initial_projection\",\n    \"isTestSource\": false,\n    \"eventId\": \"fixture-event-0001\",\n    \"subscriptionInstanceId\": \"fixture-subscription-instance-0001\",\n    \"snapshotVersion\": 1,\n    \"occurredAt\": \"2026-07-01T09:00:00.000Z\",\n    \"createdAt\": \"2026-07-01T09:00:03.000Z\",\n    \"changedEntitlements\": [\n      {\n        \"entitlementKey\": \"pro\",\n        \"previousState\": \"absent\",\n        \"currentState\": \"active\"\n      }\n    ],\n    \"stateSummary\": {\n      \"accessState\": \"active\",\n      \"lifecycleState\": \"active\",\n      \"renewalIntent\": \"auto_renew_enabled\",\n      \"billingState\": \"current\",\n      \"uncertainty\": {\n        \"reason\": \"none\"\n      }\n    },\n    \"correlationId\": \"fixture-correlation-0100\"\n  }\n}",
+      "signature": "e6933cf08b74e760abeb13fd9b9009fada06c9532124a8fc623efa45c10b708c",
+      "header": "t=1785243603, v1=e6933cf08b74e760abeb13fd9b9009fada06c9532124a8fc623efa45c10b708c",
+      "notes": "Same body, same secret, same timestamp, different event ID. The differing signature proves the event ID is genuinely inside the signed payload rather than merely carried beside it."
+    },
+    {
+      "id": "different-timestamp-must-not-verify",
+      "secret": "whsec_fixture_primary_0000000000000000",
+      "timestamp": 1785243604,
+      "eventId": "fixture-event-0001",
+      "rawBody": "{\n  \"billingStateWebhookContractVersion\": \"1\",\n  \"recordType\": \"billingStateEvent\",\n  \"payload\": {\n    \"eventType\": \"customer.entitlements.changed\",\n    \"projectId\": \"fixture-project-mosaic\",\n    \"environmentId\": \"fixture-environment-production\",\n    \"billingCustomerId\": \"fixture-customer-0001\",\n    \"projectionRuleVersion\": 1,\n    \"sourceReason\": \"initial_projection\",\n    \"isTestSource\": false,\n    \"eventId\": \"fixture-event-0001\",\n    \"subscriptionInstanceId\": \"fixture-subscription-instance-0001\",\n    \"snapshotVersion\": 1,\n    \"occurredAt\": \"2026-07-01T09:00:00.000Z\",\n    \"createdAt\": \"2026-07-01T09:00:03.000Z\",\n    \"changedEntitlements\": [\n      {\n        \"entitlementKey\": \"pro\",\n        \"previousState\": \"absent\",\n        \"currentState\": \"active\"\n      }\n    ],\n    \"stateSummary\": {\n      \"accessState\": \"active\",\n      \"lifecycleState\": \"active\",\n      \"renewalIntent\": \"auto_renew_enabled\",\n      \"billingState\": \"current\",\n      \"uncertainty\": {\n        \"reason\": \"none\"\n      }\n    },\n    \"correlationId\": \"fixture-correlation-0100\"\n  }\n}",
+      "signedPayload": "v1.1785243604.fixture-event-0001.{\n  \"billingStateWebhookContractVersion\": \"1\",\n  \"recordType\": \"billingStateEvent\",\n  \"payload\": {\n    \"eventType\": \"customer.entitlements.changed\",\n    \"projectId\": \"fixture-project-mosaic\",\n    \"environmentId\": \"fixture-environment-production\",\n    \"billingCustomerId\": \"fixture-customer-0001\",\n    \"projectionRuleVersion\": 1,\n    \"sourceReason\": \"initial_projection\",\n    \"isTestSource\": false,\n    \"eventId\": \"fixture-event-0001\",\n    \"subscriptionInstanceId\": \"fixture-subscription-instance-0001\",\n    \"snapshotVersion\": 1,\n    \"occurredAt\": \"2026-07-01T09:00:00.000Z\",\n    \"createdAt\": \"2026-07-01T09:00:03.000Z\",\n    \"changedEntitlements\": [\n      {\n        \"entitlementKey\": \"pro\",\n        \"previousState\": \"absent\",\n        \"currentState\": \"active\"\n      }\n    ],\n    \"stateSummary\": {\n      \"accessState\": \"active\",\n      \"lifecycleState\": \"active\",\n      \"renewalIntent\": \"auto_renew_enabled\",\n      \"billingState\": \"current\",\n      \"uncertainty\": {\n        \"reason\": \"none\"\n      }\n    },\n    \"correlationId\": \"fixture-correlation-0100\"\n  }\n}",
+      "signature": "fd5be439b687960c00c30b60e5cd9e34db6cdce75069da35d1bf35693615e2ef",
+      "header": "t=1785243604, v1=fd5be439b687960c00c30b60e5cd9e34db6cdce75069da35d1bf35693615e2ef",
+      "notes": "One second later. Proves the timestamp is covered, which is what makes the replay window enforceable."
+    },
+    {
+      "id": "minimal-body",
+      "secret": "whsec_fixture_primary_0000000000000000",
+      "timestamp": 1785243603,
+      "eventId": "fixture-event-0001",
+      "rawBody": "{}",
+      "signedPayload": "v1.1785243603.fixture-event-0001.{}",
+      "signature": "228fa05ec965d33cd5a727906d1f12a76a33ad31cd8cc0369abfcef0b96e434a",
+      "header": "t=1785243603, v1=228fa05ec965d33cd5a727906d1f12a76a33ad31cd8cc0369abfcef0b96e434a",
+      "notes": "A trivial body, so an implementation can be bootstrapped against this vector before it can produce a real event."
+    },
+    {
+      "id": "non-ascii-body",
+      "secret": "whsec_fixture_primary_0000000000000000",
+      "timestamp": 1785243603,
+      "eventId": "fixture-event-0001",
+      "rawBody": "{\"safeMessage\":\"Abonnement actif — 続き\"}",
+      "signedPayload": "v1.1785243603.fixture-event-0001.{\"safeMessage\":\"Abonnement actif — 続き\"}",
+      "signature": "03f3ae588e661d58b9cc5f419764f4ef9dbd5c7ef95e19620a32568aed6dfaaa",
+      "header": "t=1785243603, v1=03f3ae588e661d58b9cc5f419764f4ef9dbd5c7ef95e19620a32568aed6dfaaa",
+      "notes": "Proves the payload is hashed as UTF-8. A UTF-16 or platform-default encoding agrees on every ASCII vector and disagrees here, so this is the vector that catches the bug."
+    },
+    {
+      "id": "non-ascii-secret",
+      "secret": "whsec_fixture_ünïcödé_secret",
+      "timestamp": 1785243603,
+      "eventId": "fixture-event-0001",
+      "rawBody": "{}",
+      "signedPayload": "v1.1785243603.fixture-event-0001.{}",
+      "signature": "2058a59486dc7f45fe261b7f7760befe0cbd30b4a7e691f07480e49efd499d51",
+      "header": "t=1785243603, v1=2058a59486dc7f45fe261b7f7760befe0cbd30b4a7e691f07480e49efd499d51",
+      "notes": "Proves the key is also taken as UTF-8 bytes and is not decoded from hex or base64 first."
+    }
+  ]
+}
