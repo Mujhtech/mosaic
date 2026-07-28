@@ -483,6 +483,414 @@ export type CreateReplayJobRequest = {
     validatorVersion?: number;
 };
 
+export type CustomerAccessTokenIssuanceRequest = {
+    customerAccessTokenContractVersion: '1';
+    recordType: 'customerAccessTokenIssuanceRequest';
+    payload: {
+        billingCustomerId: string;
+        /**
+         * Only sdk_sync is issued in Phase 9B.
+         */
+        audience: 'sdk_sync' | 'server_check';
+        scopes: Array<'entitlements.read' | 'entitlements.sync' | 'restore.request'>;
+        /**
+         * A request, not an instruction. Clamped to the contract maximum.
+         */
+        requestedTtlSeconds?: number;
+        correlationId: string;
+    };
+};
+
+export type CustomerAccessTokenIssuanceResult = {
+    customerAccessTokenContractVersion: '1';
+    recordType: 'customerAccessTokenIssuanceResult';
+    payload: {
+        /**
+         * The opaque credential. Returned exactly once; Mosaic stores only its SHA-256 digest and can never reproduce it.
+         */
+        token: string;
+        metadata: CustomerAccessTokenMetadata;
+        correlationId: string;
+    };
+};
+
+/**
+ * Everything Mosaic knows about a token, which is deliberately everything the token itself does not carry.
+ */
+export type CustomerAccessTokenMetadata = {
+    /**
+     * A stable public handle
+     */
+    tokenId: string;
+    projectId: string;
+    environmentId: string;
+    billingCustomerId: string;
+    audience: 'sdk_sync' | 'server_check';
+    scopes: Array<'entitlements.read' | 'entitlements.sync' | 'restore.request'>;
+    issuer: string;
+    issuedAt: string;
+    expiresAt: string;
+    status: 'active' | 'expired' | 'revoked';
+    revokedAt?: string;
+    revocationReason?: 'customer_signed_out' | 'identity_changed' | 'operator_revoked' | 'customer_deleted' | 'key_rotated' | 'suspected_compromise' | 'superseded_by_new_token';
+    lastUsedAt?: string;
+    tokenPrefix: 'mcat_';
+    digestAlgorithm: 'sha256';
+};
+
+export type EntitlementSyncRequestRecord = {
+    authoritativeEntitlementContractVersion: '1';
+    recordType: 'entitlementSyncRequest';
+    payload: {
+        /**
+         * A hint only. Verified against the token; a mismatch is refused.
+         */
+        billingCustomerId?: string;
+        knownSnapshotVersion?: number;
+        entityTag?: string;
+        supportedAuthoritativeEntitlementContracts: Array<'1'>;
+        requestedEntitlementKeys?: Array<string>;
+        correlationId: string;
+    };
+};
+
+/**
+ * The Authoritative Entitlement Contract v1 restoreRequest envelope. The normative shape is
+ * protocol/schema/authoritative-entitlement/v1/restore.schema.json; this declaration exists
+ * so the operation has a resolvable request schema and is deliberately not a second source
+ * of truth for the contract.
+ *
+ */
+export type RestoreRequestRecord = {
+    authoritativeEntitlementContractVersion: '1';
+    recordType: 'restoreRequest';
+    payload: {
+        storePlatform: 'apple_app_store' | 'google_play';
+        /**
+         * What the native restore itself did. Recorded verbatim and never merged into Mosaic's own outcome.
+         */
+        providerOutcome: 'completed' | 'no_purchases_found' | 'cancelled' | 'failed' | 'unsupported' | 'not_attempted';
+        /**
+         * Observations already submitted for this restore. No provider transaction reference travels on this surface.
+         */
+        observationSubmissionIds?: Array<string>;
+        /**
+         * Honoured on the trusted surface only. The SDK surface drops it.
+         */
+        billingCustomerId?: string;
+        correlationId: string;
+    };
+};
+
+/**
+ * The Authoritative Entitlement Contract v1 restoreResult envelope. Normative shape:
+ * protocol/schema/authoritative-entitlement/v1/restore.schema.json.
+ *
+ */
+export type RestoreResultRecord = {
+    authoritativeEntitlementContractVersion: '1';
+    recordType: 'restoreResult';
+    payload: {
+        restoreId?: string;
+        /**
+         * Absent while identity is unresolved
+         */
+        billingCustomerId?: string;
+        projectId?: string;
+        environmentId?: string;
+        storePlatform?: 'apple_app_store' | 'google_play';
+        /**
+         * Mosaic's own answer. `restored` is only ever written together with the accepted snapshot version that demonstrates it.
+         */
+        outcome?: 'restored' | 'no_additional_purchases' | 'validation_pending' | 'identity_unresolved' | 'product_unresolved' | 'provider_unavailable' | 'failed';
+        providerOutcome?: 'completed' | 'no_purchases_found' | 'cancelled' | 'failed' | 'unsupported' | 'not_attempted';
+        /**
+         * The accepted snapshot that reflects the restore. Present only for `restored`
+         */
+        snapshotVersion?: number;
+        /**
+         * Inputs actually linked
+         */
+        observedTransactionCount?: number;
+        pendingValidationCount?: number;
+        uncertainty?: {
+            reason?: 'none' | 'provider_unavailable' | 'missing_fact' | 'identity_unresolved' | 'product_unresolved' | 'conflicting_facts' | 'projection_failed' | 'stale_validation' | 'unsupported_provider_state';
+            since?: string;
+            diagnosticCode?: string;
+        };
+        requestedAt?: string;
+        completedAt?: string;
+        correlationId?: string;
+    };
+};
+
+/**
+ * The Authoritative Entitlement Contract v1 customerEntitlementSnapshot envelope. The
+ * normative shape is protocol/schema/authoritative-entitlement/v1/snapshot.schema.json;
+ * this declaration exists so the operation has a resolvable response schema and is
+ * deliberately not a second source of truth for the contract.
+ *
+ */
+export type CustomerEntitlementSnapshotRecord = {
+    authoritativeEntitlementContractVersion: '1';
+    recordType: 'customerEntitlementSnapshot' | 'snapshotUnchanged';
+    payload: {
+        snapshotId?: string;
+        billingCustomerId?: string;
+        projectId?: string;
+        environmentId?: string;
+        /**
+         * Monotonic per (customer
+         */
+        snapshotVersion?: number;
+        previousSnapshotVersion?: number;
+        projectionRuleVersion?: number;
+        issuedAt?: string;
+        asOf?: string;
+        refreshAfter?: string;
+        validUntil?: string;
+        staleGraceSeconds?: number;
+        entityTag?: string;
+        contentDigest?: string;
+        entries?: Array<EntitlementEntry>;
+        sources?: Array<EntitlementSourceSummary>;
+        projectionStatus?: ProjectionStatus;
+        changeReason?: string;
+        correlationId?: string;
+    };
+};
+
+/**
+ * Product and Subscription Instance identity are deliberately absent; they live on the contributing source summaries, which sourceIds resolves against.
+ */
+export type EntitlementEntry = {
+    entitlementId: string;
+    entitlementKey: string;
+    /**
+     * `unavailable` is deliberately absent: it describes Mosaic's ability to answer, never the customer's access.
+     */
+    state: 'active' | 'inactive' | 'unknown';
+    effectiveStart?: string;
+    effectiveEnd?: string;
+    /**
+     * False means an active source has an uncertain end
+     */
+    endKnown: boolean;
+    sourceIds: Array<string>;
+    sourceCount: number;
+    primaryExplanation: PrimaryExplanation;
+    uncertainty?: Uncertainty;
+};
+
+export type EntitlementSourceSummary = {
+    /**
+     * Derived from (purchase lineage
+     */
+    sourceId: string;
+    sourceType: 'active_subscription' | 'trial' | 'grace_period' | 'billing_retry' | 'one_time_non_consumable' | 'family_shared';
+    subscriptionInstanceId?: string;
+    oneTimePurchaseInstanceId?: string;
+    mosaicProductId: string;
+    grantVersionId: string;
+    sourceSnapshotId: string;
+    storePlatform?: 'apple_app_store' | 'google_play';
+    start: string;
+    /**
+     * Absent means this source has no finite end Mosaic can state.
+     */
+    end?: string;
+    sourceState: 'granting' | 'not_granting' | 'unknown';
+    uncertainty: Uncertainty;
+    explanationCode: string;
+    /**
+     * True for an Apple sandbox transaction or a Google Play license-tester purchase
+     */
+    isTestSource: boolean;
+};
+
+export type ProjectionStatus = {
+    state: 'current' | 'pending' | 'stale' | 'degraded' | 'failed';
+    lastProjectedAt: string;
+    pendingFactCount?: number;
+    diagnosticCode?: string;
+};
+
+/**
+ * Why a state is not definitive. reason `none` means the state is definitive, and a definitive state carries no since instant.
+ */
+export type Uncertainty = {
+    reason: 'none' | 'provider_unavailable' | 'missing_fact' | 'identity_unresolved' | 'product_unresolved' | 'conflicting_facts' | 'projection_failed' | 'stale_validation' | 'unsupported_provider_state';
+    since?: string;
+    expectedResolution?: 'automatic_retry' | 'next_provider_notification' | 'next_projection_run' | 'operator_action' | 'customer_action' | 'none_expected';
+    diagnosticCode?: string;
+};
+
+export type PrimaryExplanation = {
+    /**
+     * A member of the contract's closed explanation vocabulary. A reader may render its own copy for a code but must never invent one.
+     */
+    code: string;
+    sourceId?: string;
+    safeSummary?: string;
+};
+
+export type EntitlementCheckRequestRecord = {
+    authoritativeEntitlementContractVersion: '1';
+    recordType: 'entitlementCheckRequest';
+    payload: {
+        billingCustomerId: string;
+        entitlementKeys: Array<string>;
+        expectedSnapshotVersion?: number;
+        supportedAuthoritativeEntitlementContracts: Array<'1'>;
+        correlationId: string;
+    };
+};
+
+export type EntitlementCheckResultRecord = {
+    authoritativeEntitlementContractVersion: '1';
+    recordType: 'entitlementCheckResult';
+    payload: {
+        billingCustomerId: string;
+        projectId: string;
+        environmentId: string;
+        /**
+         * Absent only when no snapshot could be read at all
+         */
+        snapshotVersion?: number;
+        projectionRuleVersion?: number;
+        issuedAt: string;
+        asOf?: string;
+        results: Array<{
+            entitlementKey: string;
+            /**
+             * This is the only place `unavailable` is admissible for an Entitlement: it says Mosaic could not answer, not that the customer lacks access.
+             */
+            state: 'active' | 'inactive' | 'unknown' | 'unavailable';
+            effectiveStart?: string;
+            effectiveEnd?: string;
+            endKnown: boolean;
+            sourceCount: number;
+            sourceIds?: Array<string>;
+            primaryExplanation: PrimaryExplanation;
+            uncertainty?: Uncertainty;
+            isTestSource?: boolean;
+        }>;
+        projectionStatus?: ProjectionStatus;
+        correlationId: string;
+    };
+};
+
+/**
+ * The Authoritative Entitlement Contract v1 subscriptionSnapshot envelope. The normative
+ * shape is protocol/schema/authoritative-entitlement/v1/subscription.schema.json.
+ *
+ */
+export type SubscriptionSnapshotRecord = {
+    authoritativeEntitlementContractVersion: '1';
+    recordType: 'subscriptionSnapshot';
+    payload: {
+        subscriptionSnapshotId?: string;
+        subscriptionInstanceId?: string;
+        purchaseLineageId?: string;
+        billingCustomerId?: string;
+        projectId?: string;
+        environmentId?: string;
+        projectionVersion?: number;
+        projectionRuleVersion?: number;
+        computedAt?: string;
+        asOf?: string;
+        storePlatform?: 'apple_app_store' | 'google_play';
+        mosaicProductId?: string;
+        priorMosaicProductId?: string;
+        accessState?: 'active' | 'inactive' | 'unknown' | 'unavailable';
+        lifecycleState?: 'trialing' | 'active' | 'grace_period' | 'billing_retry' | 'paused' | 'expired' | 'revoked' | 'refunded' | 'superseded' | 'unknown';
+        renewalIntent?: 'auto_renew_enabled' | 'auto_renew_disabled' | 'provider_managed' | 'paused' | 'unknown';
+        billingState?: 'current' | 'retrying' | 'grace' | 'failed' | 'refunded' | 'revoked' | 'unknown';
+        uncertainty?: Uncertainty;
+        periodStart?: string;
+        periodEnd?: string;
+        gracePeriodEnd?: string;
+        billingRetryStart?: string;
+        pauseEffectiveAt?: string;
+        pauseResumeAt?: string;
+        /**
+         * When the provider recorded the cancellation. It changes renewalIntent; it does not end access.
+         */
+        cancellationEffectiveAt?: string;
+        expirationEffectiveAt?: string;
+        revocationEffectiveAt?: string;
+        refundEffectiveAt?: string;
+        supersededBySubscriptionInstanceId?: string;
+        isTestSource?: boolean;
+        sourceFactCount?: number;
+        checksum?: string;
+        changeReason?: string;
+        explanationCode?: string;
+        correlationId?: string;
+    };
+};
+
+export type SubscriptionSummary = {
+    subscriptionInstanceId?: string;
+    subscriptionSnapshotId?: string;
+    projectionVersion?: number;
+    accessState?: 'active' | 'inactive' | 'unknown';
+    lifecycleState?: string;
+    renewalIntent?: string;
+    billingState?: string;
+    isTestSource?: boolean;
+    asOf?: string;
+};
+
+export type SubscriptionTimelineEntry = {
+    timelineEntryId?: string;
+    entryType?: string;
+    effectiveAt?: string;
+    observedAt?: string;
+    explanationCode?: string;
+    mosaicProductId?: string;
+    detail?: {
+        [key: string]: string;
+    };
+};
+
+/**
+ * A Billing Customer as the trusted-server API reports it. Alias values never appear: aliases are stored as digests.
+ */
+export type BillingCustomer = {
+    billingCustomerId?: string;
+    projectId?: string;
+    status?: 'active' | 'frozen' | 'anonymized';
+    diagnosticsStatus?: 'none' | 'identity_conflict' | 'projection_stale' | 'projection_failed';
+    currentProjectionVersion?: number;
+    lastProjectedAt?: string;
+    /**
+     * True when an application backend has named this customer. False means purchase-anchored but never identified.
+     */
+    identified?: boolean;
+    createdAt?: string;
+    updatedAt?: string;
+};
+
+/**
+ * Per-Project Mosaic Billing configuration. Off by default.
+ */
+export type BillingSettings = {
+    projectId?: string;
+    billingEnabled?: boolean;
+    /**
+     * Active Store Server Credentials. Disabling is refused while this is above zero.
+     */
+    activeCredentialCount?: number;
+    /**
+     * Whether a disable would be accepted right now. False while any Store Server Credential
+     * is active: revoking the credential is what actually stops the store delivering.
+     *
+     */
+    canDisable?: boolean;
+    updatedAt?: string;
+};
+
 export type BillingHealth = {
     environmentId?: string;
     billingEnabled?: boolean;
@@ -494,6 +902,424 @@ export type BillingHealth = {
     factCount?: number;
     lastFactRecordedAt?: string;
     lastReconciliationAt?: string;
+};
+
+export type IdentifyBillingCustomerRequest = {
+    /**
+     * Your own identifier for the user. Stored only as a domain-separated SHA-256 digest.
+     */
+    applicationUserId: string;
+};
+
+export type AttachBillingCustomerAliasRequest = {
+    applicationUserId: string;
+};
+
+export type BillingIdentityCustomer = {
+    billingCustomerId?: string;
+    projectId?: string;
+    status?: 'active' | 'frozen' | 'anonymized';
+    diagnosticsStatus?: string;
+    currentProjectionVersion?: number;
+    createdAt?: string;
+    updatedAt?: string;
+    lastProjectedAt?: string;
+};
+
+/**
+ * An alias record. The alias digest is never a member of this shape.
+ */
+export type BillingCustomerAlias = {
+    aliasId?: string;
+    billingCustomerId?: string;
+    aliasType?: 'application_user' | 'installation' | 'app_account_token' | 'obfuscated_external_account_id';
+    sourceAuthority?: string;
+    verificationStatus?: string;
+    effectiveStart?: string;
+    effectiveEnd?: string;
+    createdAt?: string;
+};
+
+export type BillingIdentityConflict = {
+    conflictId?: string;
+    projectId?: string;
+    scope?: 'purchase_lineage' | 'alias';
+    status?: 'open' | 'resolved';
+    /**
+     * The incumbent.
+     */
+    firstCustomerId?: string;
+    /**
+     * The challenger.
+     */
+    secondCustomerId?: string;
+    /**
+     * Present only for a lineage-scoped conflict.
+     */
+    purchaseLineageId?: string;
+    /**
+     * Present only for an alias-scoped conflict. The digest is never reported.
+     */
+    aliasType?: string;
+    diagnosticCode?: string;
+    openedAt?: string;
+    resolvedAt?: string;
+    resolutionAction?: 'assigned_first' | 'assigned_second' | 'detached_both';
+};
+
+export type BillingIdentityConflictDetail = {
+    conflict?: BillingIdentityConflict;
+    /**
+     * The disputed Purchase Lineage, for a lineage-scoped conflict.
+     */
+    lineage?: {
+        purchaseLineageId?: string;
+        environmentId?: string;
+        provider?: 'app_store' | 'google_play';
+        storeEnvironment?: 'sandbox' | 'production';
+        lineageType?: 'subscription' | 'one_time';
+        projectionFrozen?: boolean;
+        diagnosticStatus?: string;
+    };
+};
+
+export type BillingSyncRequest = {
+    billingCustomerId?: string;
+    projectId?: string;
+    environmentId?: string;
+    projectionScopeKey?: string;
+    triggerKind?: 'manual_sync';
+    requestedAt?: string;
+    status?: 'queued';
+};
+
+/**
+ * Must be bounded by at least one of subscriptionInstanceId, billingCustomerId, or a complete window.
+ */
+export type CreateProjectionReplayRequest = {
+    subscriptionInstanceId?: string;
+    billingCustomerId?: string;
+    /**
+     * Bounds on facts rather than on lineage creation - a scope is in scope when it holds a fact whose effective or recorded time falls inside the window.
+     */
+    windowStart?: string;
+    windowEnd?: string;
+    /**
+     * Zero selects the active version. A version this build does not derive under is refused rather than approximated.
+     */
+    projectionRuleVersion?: number;
+    limit?: number;
+};
+
+export type ProjectionReplayResult = {
+    projectionRuleVersion?: number;
+    scopesReplayed?: number;
+    scopesChanged?: number;
+    outcomes?: Array<{
+        projectionScopeKey?: string;
+        /**
+         * The whole point of a replay - proving determinism
+         */
+        comparison?: 'unchanged' | 'changed';
+        /**
+         * Whether a new snapshot was written. Materialization is changes-only
+         */
+        materialized?: boolean;
+        changedEntitlementIds?: Array<string>;
+    }>;
+};
+
+/**
+ * One immutable Product-to-Entitlement grant interval. Half-open - [effectiveStart, effectiveEnd).
+ */
+export type ProductEntitlementGrantVersion = {
+    grantVersionId?: string;
+    projectId?: string;
+    productId?: string;
+    productKey?: string;
+    entitlementId?: string;
+    entitlementKey?: string;
+    /**
+     * Monotonic per (Product
+     */
+    version?: number;
+    /**
+     * The access-policy vocabulary this version was written under
+     */
+    grantPolicyVersion?: number;
+    effectiveStart?: string;
+    /**
+     * Absent on the current version. Set once
+     */
+    effectiveEnd?: string;
+    current?: boolean;
+    /**
+     * Derived from effectiveStart preceding createdAt - a version whose meaning began before it existed was backdated.
+     */
+    retroactive?: boolean;
+    supportedPurchaseTypes?: Array<'auto_renewable_subscription' | 'non_consumable'>;
+    accessPolicy?: GrantAccessPolicy;
+    createdAt?: string;
+    createdByActorId?: string;
+    reason?: string;
+};
+
+/**
+ * Which subscription states this grant treats as granting access (plan policy version 1).
+ */
+export type GrantAccessPolicy = {
+    grantsInActive?: boolean;
+    grantsInTrial?: boolean;
+    /**
+     * Both providers grant access during grace
+     */
+    grantsInGrace?: boolean;
+    /**
+     * Contradicts both providers' documentation. Closed by default and settable only by an organization owner.
+     */
+    grantsInBillingRetry?: boolean;
+    /**
+     * Always false. Google's pause never grants access and the policy is not overridable.
+     */
+    grantsInPaused?: boolean;
+    grantsInOneTimeOwnership?: boolean;
+};
+
+/**
+ * A proposed grant version. The same body is accepted by the impact preview and by publish,
+ * so what is previewed is what is published. Omitted policy flags take their documented
+ * defaults rather than false - a missing grantsInActive defaulting to false would publish a
+ * version granting nothing during an active subscription, the opposite of what an operator
+ * leaving the field out meant.
+ *
+ */
+export type PublishGrantVersionRequest = {
+    productId: string;
+    entitlementId: string;
+    /**
+     * Now or later unless retroactive is true.
+     */
+    effectiveStart: string;
+    /**
+     * Backdate the change. Held to the additive-superset rule and confined to the currently open interval.
+     */
+    retroactive?: boolean;
+    supportedPurchaseTypes?: Array<'auto_renewable_subscription' | 'non_consumable'>;
+    grantsInActive?: boolean;
+    grantsInTrial?: boolean;
+    grantsInGrace?: boolean;
+    grantsInBillingRetry?: boolean;
+    /**
+     * Accepted only so it can be refused with 422.
+     */
+    grantsInPaused?: boolean;
+    grantsInOneTimeOwnership?: boolean;
+    /**
+     * Required to publish. It is what an investigation reads months later
+     */
+    reason?: string;
+};
+
+/**
+ * Read-only counts of what a proposed grant change would touch, from current committed state.
+ */
+export type GrantVersionImpact = {
+    productId?: string;
+    entitlementId?: string;
+    /**
+     * Products a reprojection of the affected customers would re-derive.
+     */
+    impactedProducts?: number;
+    /**
+     * Entitlements a reprojection of the affected customers would re-derive.
+     */
+    impactedEntitlements?: number;
+    /**
+     * Billing Customers whose current snapshot cites this Product.
+     */
+    impactedCustomers?: number;
+    /**
+     * How many of those citations are currently granting access - the number that answers how many people could lose access.
+     */
+    impactedActiveSources?: number;
+    /**
+     * Purchase lineages resolved to this Product
+     */
+    impactedLineages?: number;
+    retroactive?: boolean;
+    /**
+     * Whether the proposal passes the widen-only rule. Meaningful for a retroactive change; a preview reports it
+     */
+    additiveSuperset?: boolean;
+    /**
+     * The first narrowing found when additiveSuperset is false
+     */
+    narrowingCode?: string;
+    currentVersion?: ProductEntitlementGrantVersion;
+    observedAt?: string;
+};
+
+export type WebhookDestination = {
+    id?: string;
+    projectId?: string;
+    environmentId?: string;
+    /**
+     * HTTPS only. Screened against the resolved address at registration and again on every delivery attempt.
+     */
+    url?: string;
+    status?: 'active' | 'paused' | 'disabled';
+    /**
+     * Phase 9B emits one event type. The other nine the contract declares are reserved names.
+     */
+    eventTypes?: Array<'customer.entitlements.changed'>;
+    description?: string;
+    createdAt?: string;
+    updatedAt?: string;
+    secretLastRotatedAt?: string;
+    /**
+     * What an operator wrote when they disabled it by hand.
+     */
+    disabledReason?: string;
+    /**
+     * Exhausted deliveries in a row. Any success resets it
+     */
+    consecutiveFailureCount?: number;
+    autoDisabledAt?: string;
+    /**
+     * Set only by the automatic path
+     */
+    autoDisableReason?: 'consecutive_exhausted_deliveries' | 'destination_refused';
+};
+
+export type WebhookDestinationWithSecret = {
+    destination?: WebhookDestination;
+    /**
+     * Displayed exactly once. Mosaic keeps only the sealed form
+     */
+    secret?: string;
+    secretId?: string;
+    /**
+     * Set by a rotation. Until this instant the superseded secret still signs. Absent on a create
+     */
+    previousSecretHonoredUntil?: string;
+};
+
+export type WebhookSigningSecretMetadata = {
+    id?: string;
+    status?: 'active' | 'retired';
+    createdAt?: string;
+    retiredAt?: string;
+    /**
+     * A retired secret keeps signing until this instant
+     */
+    honoredUntil?: string;
+};
+
+export type CreateWebhookDestinationRequest = {
+    url: string;
+    eventTypes?: Array<'customer.entitlements.changed'>;
+    description?: string;
+};
+
+export type UpdateWebhookDestinationRequest = {
+    url?: string;
+    eventTypes?: Array<'customer.entitlements.changed'>;
+    description?: string;
+};
+
+export type SetWebhookDestinationStatusRequest = {
+    status: 'active' | 'paused' | 'disabled';
+    reason?: string;
+};
+
+export type WebhookDelivery = {
+    id?: string;
+    projectId?: string;
+    environmentId?: string;
+    /**
+     * Stable across every attempt and every manual replay. It is the consumer's deduplication key.
+     */
+    eventId?: string;
+    destinationId?: string;
+    status?: 'pending' | 'succeeded' | 'failed' | 'exhausted' | 'skipped';
+    skippedReason?: 'destination_disabled' | 'event_type_not_enabled' | 'destination_deleted' | 'tenant_suspended';
+    attemptCount?: number;
+    maxAttempts?: number;
+    nextAttemptAt?: string;
+    createdAt?: string;
+    updatedAt?: string;
+    completedAt?: string;
+};
+
+/**
+ * One recorded try. Mirrors the Billing State Webhook Contract v1 webhookDeliveryAttempt
+ * record; the normative shape is protocol/schema/billing-state-webhook/v1/delivery.schema.json.
+ *
+ */
+export type WebhookDeliveryAttempt = {
+    id?: string;
+    deliveryId?: string;
+    eventId?: string;
+    destinationId?: string;
+    attempt?: number;
+    maxAttempts?: number;
+    outcome?: 'delivered' | 'retryable_failure' | 'permanent_failure' | 'exhausted' | 'skipped';
+    responseStatusCode?: number;
+    /**
+     * Bounded and control-character-free. Never parsed
+     */
+    responseExcerpt?: string;
+    errorCode?: string;
+    latencyMs?: number;
+    skippedReason?: 'destination_disabled' | 'event_type_not_enabled' | 'destination_deleted' | 'tenant_suspended';
+    requestedAt?: string;
+    respondedAt?: string;
+    nextAttemptAt?: string;
+};
+
+export type BillingProjectionHealth = {
+    environmentId?: string;
+    billingEnabled?: boolean;
+    /**
+     * The rule version new projections are computed under.
+     */
+    activeProjectionRuleVersion?: number;
+    /**
+     * A count above one with no replay in flight means a promotion was prepared and never run.
+     */
+    projectionRuleVersionCount?: number;
+    projectionQueueDepth?: number;
+    /**
+     * The alerting signal. Depth alone cannot distinguish a busy queue from a stuck one.
+     */
+    projectionOldestQueuedAgeSeconds?: number;
+    projectionFailedJobs?: number;
+    /**
+     * A rate signal the queue depth cannot give
+     */
+    projectionFailuresLastHour?: number;
+    /**
+     * Customers whose committed state in this Environment is older than the staleness threshold.
+     */
+    staleCustomers?: number;
+    neverProjectedCustomers?: number;
+    /**
+     * A spike here is a security-relevant signal
+     */
+    openIdentityConflicts?: number;
+    frozenLineages?: number;
+    unresolvedLineages?: number;
+    /**
+     * Entries on current snapshots stating unknown - how often Mosaic is declining to answer.
+     */
+    unknownEntitlementEntries?: number;
+    restoreBacklog?: number;
+    restoreFailedJobs?: number;
+    webhookDeliveryBacklog?: number;
+    webhookDeliveriesExhausted?: number;
+    activeWebhookDestinations?: number;
+    lastProjectionCommittedAt?: string;
+    observedAt?: string;
 };
 
 export type CreateExperimentRequest = {
@@ -2496,6 +3322,10 @@ export type ActorId = string;
 
 export type ProjectId = string;
 
+export type WebhookDestinationId = string;
+
+export type WebhookDeliveryId = string;
+
 export type EnvironmentId = string;
 
 export type ApplicationId = string;
@@ -2503,6 +3333,19 @@ export type ApplicationId = string;
 export type ProviderConnectionId = string;
 
 export type ProviderMappingId = string;
+
+/**
+ * Opaque cursor from the immediately preceding list response. Forward it unchanged; do not
+ * construct or parse one — it encodes both the ordering timestamp and the row id, because
+ * billing identifiers are not time-ordered and an id alone cannot express a position in a
+ * timestamp ordering.
+ *
+ * A malformed or stale value starts from the first page rather than erroring, so a mangled
+ * cursor cannot silently truncate a list. Omit it for the first page; a response with no
+ * `nextCursor` is the last page.
+ *
+ */
+export type BillingCursor = string;
 
 export type StoreCredentialId = string;
 
@@ -7707,6 +8550,899 @@ export type SubmitServerTransactionObservationResponses = {
 
 export type SubmitServerTransactionObservationResponse = SubmitServerTransactionObservationResponses[keyof SubmitServerTransactionObservationResponses];
 
+export type SyncCustomerEntitlementsData = {
+    body?: never;
+    headers: {
+        /**
+         * Public SDK key identifying the Environment and Application.
+         */
+        'Mosaic-SDK-Key': string;
+        /**
+         * Strong entity tag from a previous response. Answered 304 only when the caller's snapshot version also matches.
+         */
+        'If-None-Match'?: string;
+    };
+    path?: never;
+    query?: never;
+    url: '/v1/sdk/billing/entitlements';
+};
+
+export type SyncCustomerEntitlementsErrors = {
+    /**
+     * Stable machine-readable failure.
+     */
+    401: ErrorEnvelope;
+    /**
+     * Stable machine-readable failure.
+     */
+    403: ErrorEnvelope;
+    /**
+     * Stable machine-readable failure.
+     */
+    409: ErrorEnvelope;
+    /**
+     * Stable machine-readable failure.
+     */
+    429: ErrorEnvelope;
+};
+
+export type SyncCustomerEntitlementsError = SyncCustomerEntitlementsErrors[keyof SyncCustomerEntitlementsErrors];
+
+export type SyncCustomerEntitlementsResponses = {
+    /**
+     * The current Customer Entitlement Snapshot.
+     */
+    200: CustomerEntitlementSnapshotRecord;
+};
+
+export type SyncCustomerEntitlementsResponse = SyncCustomerEntitlementsResponses[keyof SyncCustomerEntitlementsResponses];
+
+export type SyncCustomerEntitlementsWithNegotiationData = {
+    body: EntitlementSyncRequestRecord;
+    headers: {
+        'Mosaic-SDK-Key': string;
+        'If-None-Match'?: string;
+    };
+    path?: never;
+    query?: never;
+    url: '/v1/sdk/billing/entitlements';
+};
+
+export type SyncCustomerEntitlementsWithNegotiationErrors = {
+    /**
+     * Stable machine-readable failure.
+     */
+    401: ErrorEnvelope;
+    /**
+     * Stable machine-readable failure.
+     */
+    403: ErrorEnvelope;
+    /**
+     * Stable machine-readable failure.
+     */
+    406: ErrorEnvelope;
+    /**
+     * Stable machine-readable failure.
+     */
+    409: ErrorEnvelope;
+    /**
+     * Stable machine-readable failure.
+     */
+    422: ErrorEnvelope;
+    /**
+     * Stable machine-readable failure.
+     */
+    429: ErrorEnvelope;
+};
+
+export type SyncCustomerEntitlementsWithNegotiationError = SyncCustomerEntitlementsWithNegotiationErrors[keyof SyncCustomerEntitlementsWithNegotiationErrors];
+
+export type SyncCustomerEntitlementsWithNegotiationResponses = {
+    /**
+     * The current Customer Entitlement Snapshot.
+     */
+    200: CustomerEntitlementSnapshotRecord;
+};
+
+export type SyncCustomerEntitlementsWithNegotiationResponse = SyncCustomerEntitlementsWithNegotiationResponses[keyof SyncCustomerEntitlementsWithNegotiationResponses];
+
+export type ListCustomerAccessTokensData = {
+    body?: never;
+    path?: never;
+    query: {
+        billingCustomerId: string;
+        limit?: number;
+    };
+    url: '/v1/billing/server/customer-tokens';
+};
+
+export type ListCustomerAccessTokensErrors = {
+    /**
+     * Stable machine-readable failure.
+     */
+    401: ErrorEnvelope;
+    /**
+     * Stable machine-readable failure.
+     */
+    409: ErrorEnvelope;
+    /**
+     * Stable machine-readable failure.
+     */
+    422: ErrorEnvelope;
+};
+
+export type ListCustomerAccessTokensError = ListCustomerAccessTokensErrors[keyof ListCustomerAccessTokensErrors];
+
+export type ListCustomerAccessTokensResponses = {
+    /**
+     * Token metadata.
+     */
+    200: {
+        data?: {
+            items?: Array<CustomerAccessTokenMetadata>;
+        };
+    };
+};
+
+export type ListCustomerAccessTokensResponse = ListCustomerAccessTokensResponses[keyof ListCustomerAccessTokensResponses];
+
+export type IssueCustomerAccessTokenData = {
+    body: CustomerAccessTokenIssuanceRequest;
+    path?: never;
+    query?: never;
+    url: '/v1/billing/server/customer-tokens';
+};
+
+export type IssueCustomerAccessTokenErrors = {
+    /**
+     * Stable machine-readable failure.
+     */
+    401: ErrorEnvelope;
+    /**
+     * Stable machine-readable failure.
+     */
+    404: ErrorEnvelope;
+    /**
+     * Stable machine-readable failure.
+     */
+    409: ErrorEnvelope;
+    /**
+     * Stable machine-readable failure.
+     */
+    422: ErrorEnvelope;
+};
+
+export type IssueCustomerAccessTokenError = IssueCustomerAccessTokenErrors[keyof IssueCustomerAccessTokenErrors];
+
+export type IssueCustomerAccessTokenResponses = {
+    /**
+     * The token and its metadata. The token value appears here and nowhere else.
+     */
+    201: CustomerAccessTokenIssuanceResult;
+};
+
+export type IssueCustomerAccessTokenResponse = IssueCustomerAccessTokenResponses[keyof IssueCustomerAccessTokenResponses];
+
+export type RevokeCustomerAccessTokenData = {
+    body: {
+        revocationReason: 'customer_signed_out' | 'identity_changed' | 'operator_revoked' | 'customer_deleted' | 'key_rotated' | 'suspected_compromise' | 'superseded_by_new_token';
+    };
+    path: {
+        tokenId: string;
+    };
+    query?: never;
+    url: '/v1/billing/server/customer-tokens/{tokenId}/revoke';
+};
+
+export type RevokeCustomerAccessTokenErrors = {
+    /**
+     * Stable machine-readable failure.
+     */
+    401: ErrorEnvelope;
+    /**
+     * Stable machine-readable failure.
+     */
+    404: ErrorEnvelope;
+    /**
+     * Stable machine-readable failure.
+     */
+    409: ErrorEnvelope;
+    /**
+     * Stable machine-readable failure.
+     */
+    422: ErrorEnvelope;
+};
+
+export type RevokeCustomerAccessTokenError = RevokeCustomerAccessTokenErrors[keyof RevokeCustomerAccessTokenErrors];
+
+export type RevokeCustomerAccessTokenResponses = {
+    /**
+     * The revoked token's metadata.
+     */
+    200: {
+        data?: CustomerAccessTokenMetadata;
+    };
+};
+
+export type RevokeCustomerAccessTokenResponse = RevokeCustomerAccessTokenResponses[keyof RevokeCustomerAccessTokenResponses];
+
+export type SubmitSdkRestoreData = {
+    body: RestoreRequestRecord;
+    headers: {
+        /**
+         * Public SDK key identifying the Environment and Application. It proves which Environment is asking and can never select a customer.
+         */
+        'Mosaic-SDK-Key': string;
+    };
+    path?: never;
+    query?: never;
+    url: '/v1/sdk/billing/restores';
+};
+
+export type SubmitSdkRestoreErrors = {
+    /**
+     * Stable machine-readable failure.
+     */
+    401: ErrorEnvelope;
+    /**
+     * Stable machine-readable failure.
+     */
+    409: ErrorEnvelope;
+    /**
+     * Stable machine-readable failure.
+     */
+    422: ErrorEnvelope;
+    /**
+     * Stable machine-readable failure.
+     */
+    429: ErrorEnvelope;
+};
+
+export type SubmitSdkRestoreError = SubmitSdkRestoreErrors[keyof SubmitSdkRestoreErrors];
+
+export type SubmitSdkRestoreResponses = {
+    /**
+     * The restore was recorded and the chain is running.
+     */
+    202: RestoreResultRecord;
+};
+
+export type SubmitSdkRestoreResponse = SubmitSdkRestoreResponses[keyof SubmitSdkRestoreResponses];
+
+export type GetSdkRestoreData = {
+    body?: never;
+    headers: {
+        'Mosaic-SDK-Key': string;
+    };
+    path: {
+        restoreId: string;
+    };
+    query?: never;
+    url: '/v1/sdk/billing/restores/{restoreId}';
+};
+
+export type GetSdkRestoreErrors = {
+    /**
+     * Stable machine-readable failure.
+     */
+    401: ErrorEnvelope;
+    /**
+     * Stable machine-readable failure.
+     */
+    404: ErrorEnvelope;
+};
+
+export type GetSdkRestoreError = GetSdkRestoreErrors[keyof GetSdkRestoreErrors];
+
+export type GetSdkRestoreResponses = {
+    /**
+     * The restore record.
+     */
+    200: RestoreResultRecord;
+};
+
+export type GetSdkRestoreResponse = GetSdkRestoreResponses[keyof GetSdkRestoreResponses];
+
+export type SubmitServerRestoreData = {
+    body: RestoreRequestRecord;
+    path?: never;
+    query?: never;
+    url: '/v1/billing/server/restores';
+};
+
+export type SubmitServerRestoreErrors = {
+    /**
+     * Stable machine-readable failure.
+     */
+    401: ErrorEnvelope;
+    /**
+     * Stable machine-readable failure.
+     */
+    409: ErrorEnvelope;
+    /**
+     * Stable machine-readable failure.
+     */
+    422: ErrorEnvelope;
+};
+
+export type SubmitServerRestoreError = SubmitServerRestoreErrors[keyof SubmitServerRestoreErrors];
+
+export type SubmitServerRestoreResponses = {
+    /**
+     * The restore was recorded and the chain is running.
+     */
+    202: RestoreResultRecord;
+};
+
+export type SubmitServerRestoreResponse = SubmitServerRestoreResponses[keyof SubmitServerRestoreResponses];
+
+export type GetServerRestoreData = {
+    body?: never;
+    path: {
+        restoreId: string;
+    };
+    query?: never;
+    url: '/v1/billing/server/restores/{restoreId}';
+};
+
+export type GetServerRestoreErrors = {
+    /**
+     * Stable machine-readable failure.
+     */
+    401: ErrorEnvelope;
+    /**
+     * Stable machine-readable failure.
+     */
+    404: ErrorEnvelope;
+};
+
+export type GetServerRestoreError = GetServerRestoreErrors[keyof GetServerRestoreErrors];
+
+export type GetServerRestoreResponses = {
+    /**
+     * The restore record.
+     */
+    200: RestoreResultRecord;
+};
+
+export type GetServerRestoreResponse = GetServerRestoreResponses[keyof GetServerRestoreResponses];
+
+export type IdentifyBillingCustomerData = {
+    body: IdentifyBillingCustomerRequest;
+    path?: never;
+    query?: never;
+    url: '/v1/billing/identity/customers';
+};
+
+export type IdentifyBillingCustomerErrors = {
+    /**
+     * Stable machine-readable failure.
+     */
+    401: ErrorEnvelope;
+    /**
+     * Stable machine-readable failure.
+     */
+    409: ErrorEnvelope;
+    /**
+     * Stable machine-readable failure.
+     */
+    422: ErrorEnvelope;
+};
+
+export type IdentifyBillingCustomerError = IdentifyBillingCustomerErrors[keyof IdentifyBillingCustomerErrors];
+
+export type IdentifyBillingCustomerResponses = {
+    /**
+     * The existing Billing Customer.
+     */
+    200: {
+        data?: BillingIdentityCustomer;
+    };
+    /**
+     * A Billing Customer was created.
+     */
+    201: {
+        data?: BillingIdentityCustomer;
+    };
+};
+
+export type IdentifyBillingCustomerResponse = IdentifyBillingCustomerResponses[keyof IdentifyBillingCustomerResponses];
+
+export type ListBillingCustomerAliasesData = {
+    body?: never;
+    path: {
+        customerId: string;
+    };
+    query?: never;
+    url: '/v1/billing/identity/customers/{customerId}/aliases';
+};
+
+export type ListBillingCustomerAliasesErrors = {
+    /**
+     * Stable machine-readable failure.
+     */
+    401: ErrorEnvelope;
+    /**
+     * Stable machine-readable failure.
+     */
+    404: ErrorEnvelope;
+};
+
+export type ListBillingCustomerAliasesError = ListBillingCustomerAliasesErrors[keyof ListBillingCustomerAliasesErrors];
+
+export type ListBillingCustomerAliasesResponses = {
+    /**
+     * Aliases.
+     */
+    200: {
+        data?: {
+            items?: Array<BillingCustomerAlias>;
+        };
+    };
+};
+
+export type ListBillingCustomerAliasesResponse = ListBillingCustomerAliasesResponses[keyof ListBillingCustomerAliasesResponses];
+
+export type AttachBillingCustomerAliasData = {
+    body: AttachBillingCustomerAliasRequest;
+    path: {
+        customerId: string;
+    };
+    query?: never;
+    url: '/v1/billing/identity/customers/{customerId}/aliases';
+};
+
+export type AttachBillingCustomerAliasErrors = {
+    /**
+     * Stable machine-readable failure.
+     */
+    401: ErrorEnvelope;
+    /**
+     * Stable machine-readable failure.
+     */
+    404: ErrorEnvelope;
+    /**
+     * Stable machine-readable failure.
+     */
+    409: ErrorEnvelope;
+    /**
+     * Stable machine-readable failure.
+     */
+    422: ErrorEnvelope;
+};
+
+export type AttachBillingCustomerAliasError = AttachBillingCustomerAliasErrors[keyof AttachBillingCustomerAliasErrors];
+
+export type AttachBillingCustomerAliasResponses = {
+    /**
+     * The attached alias.
+     */
+    201: {
+        data?: BillingCustomerAlias;
+    };
+};
+
+export type AttachBillingCustomerAliasResponse = AttachBillingCustomerAliasResponses[keyof AttachBillingCustomerAliasResponses];
+
+export type RevokeBillingCustomerAliasData = {
+    body?: never;
+    path: {
+        aliasId: string;
+    };
+    query?: never;
+    url: '/v1/billing/identity/aliases/{aliasId}/revoke';
+};
+
+export type RevokeBillingCustomerAliasErrors = {
+    /**
+     * Stable machine-readable failure.
+     */
+    401: ErrorEnvelope;
+    /**
+     * Stable machine-readable failure.
+     */
+    404: ErrorEnvelope;
+};
+
+export type RevokeBillingCustomerAliasError = RevokeBillingCustomerAliasErrors[keyof RevokeBillingCustomerAliasErrors];
+
+export type RevokeBillingCustomerAliasResponses = {
+    /**
+     * The alias was revoked.
+     */
+    204: void;
+};
+
+export type RevokeBillingCustomerAliasResponse = RevokeBillingCustomerAliasResponses[keyof RevokeBillingCustomerAliasResponses];
+
+export type RequestBillingCustomerSyncData = {
+    body?: never;
+    path: {
+        customerId: string;
+    };
+    query?: never;
+    url: '/v1/billing/identity/customers/{customerId}/sync-requests';
+};
+
+export type RequestBillingCustomerSyncErrors = {
+    /**
+     * Stable machine-readable failure.
+     */
+    401: ErrorEnvelope;
+    /**
+     * Stable machine-readable failure.
+     */
+    404: ErrorEnvelope;
+    /**
+     * Stable machine-readable failure.
+     */
+    409: ErrorEnvelope;
+};
+
+export type RequestBillingCustomerSyncError = RequestBillingCustomerSyncErrors[keyof RequestBillingCustomerSyncErrors];
+
+export type RequestBillingCustomerSyncResponses = {
+    /**
+     * A projection was queued.
+     */
+    202: {
+        data?: BillingSyncRequest;
+    };
+};
+
+export type RequestBillingCustomerSyncResponse = RequestBillingCustomerSyncResponses[keyof RequestBillingCustomerSyncResponses];
+
+export type ListBillingIdentityConflictsData = {
+    body?: never;
+    path?: never;
+    query?: {
+        status?: 'open' | 'resolved';
+    };
+    url: '/v1/billing/identity/conflicts';
+};
+
+export type ListBillingIdentityConflictsErrors = {
+    /**
+     * Stable machine-readable failure.
+     */
+    401: ErrorEnvelope;
+};
+
+export type ListBillingIdentityConflictsError = ListBillingIdentityConflictsErrors[keyof ListBillingIdentityConflictsErrors];
+
+export type ListBillingIdentityConflictsResponses = {
+    /**
+     * Identity conflicts.
+     */
+    200: {
+        data?: {
+            items?: Array<BillingIdentityConflict>;
+        };
+    };
+};
+
+export type ListBillingIdentityConflictsResponse = ListBillingIdentityConflictsResponses[keyof ListBillingIdentityConflictsResponses];
+
+export type GetBillingIdentityConflictData = {
+    body?: never;
+    path: {
+        conflictId: string;
+    };
+    query?: never;
+    url: '/v1/billing/identity/conflicts/{conflictId}';
+};
+
+export type GetBillingIdentityConflictErrors = {
+    /**
+     * Stable machine-readable failure.
+     */
+    401: ErrorEnvelope;
+    /**
+     * Stable machine-readable failure.
+     */
+    404: ErrorEnvelope;
+};
+
+export type GetBillingIdentityConflictError = GetBillingIdentityConflictErrors[keyof GetBillingIdentityConflictErrors];
+
+export type GetBillingIdentityConflictResponses = {
+    /**
+     * The conflict.
+     */
+    200: {
+        data?: BillingIdentityConflictDetail;
+    };
+};
+
+export type GetBillingIdentityConflictResponse = GetBillingIdentityConflictResponses[keyof GetBillingIdentityConflictResponses];
+
+export type GetBillingCustomerData = {
+    body?: never;
+    path: {
+        customerId: string;
+    };
+    query?: never;
+    url: '/v1/billing/server/customers/{customerId}';
+};
+
+export type GetBillingCustomerErrors = {
+    /**
+     * Stable machine-readable failure.
+     */
+    401: ErrorEnvelope;
+    /**
+     * Stable machine-readable failure.
+     */
+    404: ErrorEnvelope;
+    /**
+     * Stable machine-readable failure.
+     */
+    409: ErrorEnvelope;
+};
+
+export type GetBillingCustomerError = GetBillingCustomerErrors[keyof GetBillingCustomerErrors];
+
+export type GetBillingCustomerResponses = {
+    /**
+     * The Billing Customer.
+     */
+    200: {
+        data?: BillingCustomer;
+    };
+};
+
+export type GetBillingCustomerResponse = GetBillingCustomerResponses[keyof GetBillingCustomerResponses];
+
+export type GetCustomerEntitlementSnapshotData = {
+    body?: never;
+    path: {
+        customerId: string;
+    };
+    query?: {
+        /**
+         * Defaults to the Environment the secret key belongs to. Any other value is 403.
+         */
+        environmentId?: string;
+    };
+    url: '/v1/billing/server/customers/{customerId}/entitlements';
+};
+
+export type GetCustomerEntitlementSnapshotErrors = {
+    /**
+     * Stable machine-readable failure.
+     */
+    401: ErrorEnvelope;
+    /**
+     * Stable machine-readable failure.
+     */
+    403: ErrorEnvelope;
+    /**
+     * Stable machine-readable failure.
+     */
+    404: ErrorEnvelope;
+    /**
+     * Stable machine-readable failure.
+     */
+    409: ErrorEnvelope;
+};
+
+export type GetCustomerEntitlementSnapshotError = GetCustomerEntitlementSnapshotErrors[keyof GetCustomerEntitlementSnapshotErrors];
+
+export type GetCustomerEntitlementSnapshotResponses = {
+    /**
+     * The current snapshot.
+     */
+    200: CustomerEntitlementSnapshotRecord;
+};
+
+export type GetCustomerEntitlementSnapshotResponse = GetCustomerEntitlementSnapshotResponses[keyof GetCustomerEntitlementSnapshotResponses];
+
+export type CheckCustomerEntitlementsData = {
+    body: EntitlementCheckRequestRecord;
+    path: {
+        customerId: string;
+    };
+    query?: {
+        environmentId?: string;
+    };
+    url: '/v1/billing/server/customers/{customerId}/entitlement-checks';
+};
+
+export type CheckCustomerEntitlementsErrors = {
+    /**
+     * Stable machine-readable failure.
+     */
+    401: ErrorEnvelope;
+    /**
+     * Stable machine-readable failure.
+     */
+    403: ErrorEnvelope;
+    /**
+     * Stable machine-readable failure.
+     */
+    404: ErrorEnvelope;
+    /**
+     * Stable machine-readable failure.
+     */
+    406: ErrorEnvelope;
+    /**
+     * Stable machine-readable failure.
+     */
+    422: ErrorEnvelope;
+};
+
+export type CheckCustomerEntitlementsError = CheckCustomerEntitlementsErrors[keyof CheckCustomerEntitlementsErrors];
+
+export type CheckCustomerEntitlementsResponses = {
+    /**
+     * The check result.
+     */
+    200: EntitlementCheckResultRecord;
+};
+
+export type CheckCustomerEntitlementsResponse = CheckCustomerEntitlementsResponses[keyof CheckCustomerEntitlementsResponses];
+
+export type ListCustomerSubscriptionsData = {
+    body?: never;
+    path: {
+        customerId: string;
+    };
+    query?: {
+        environmentId?: string;
+        limit?: number;
+        /**
+         * Opaque cursor from the immediately preceding list response. Malformed or stale values return validation_failed.
+         */
+        cursor?: string;
+    };
+    url: '/v1/billing/server/customers/{customerId}/subscriptions';
+};
+
+export type ListCustomerSubscriptionsErrors = {
+    /**
+     * Stable machine-readable failure.
+     */
+    401: ErrorEnvelope;
+    /**
+     * Stable machine-readable failure.
+     */
+    403: ErrorEnvelope;
+    /**
+     * Stable machine-readable failure.
+     */
+    409: ErrorEnvelope;
+};
+
+export type ListCustomerSubscriptionsError = ListCustomerSubscriptionsErrors[keyof ListCustomerSubscriptionsErrors];
+
+export type ListCustomerSubscriptionsResponses = {
+    /**
+     * Projected subscriptions.
+     */
+    200: {
+        data?: {
+            items?: Array<SubscriptionSummary>;
+            nextCursor?: string;
+        };
+    };
+};
+
+export type ListCustomerSubscriptionsResponse = ListCustomerSubscriptionsResponses[keyof ListCustomerSubscriptionsResponses];
+
+export type GetSubscriptionSnapshotData = {
+    body?: never;
+    path: {
+        instanceId: string;
+    };
+    query?: never;
+    url: '/v1/billing/server/subscriptions/{instanceId}';
+};
+
+export type GetSubscriptionSnapshotErrors = {
+    /**
+     * Stable machine-readable failure.
+     */
+    401: ErrorEnvelope;
+    /**
+     * Stable machine-readable failure.
+     */
+    404: ErrorEnvelope;
+    /**
+     * Stable machine-readable failure.
+     */
+    409: ErrorEnvelope;
+};
+
+export type GetSubscriptionSnapshotError = GetSubscriptionSnapshotErrors[keyof GetSubscriptionSnapshotErrors];
+
+export type GetSubscriptionSnapshotResponses = {
+    /**
+     * The subscription snapshot.
+     */
+    200: SubscriptionSnapshotRecord;
+};
+
+export type GetSubscriptionSnapshotResponse = GetSubscriptionSnapshotResponses[keyof GetSubscriptionSnapshotResponses];
+
+export type ListSubscriptionTimelineData = {
+    body?: never;
+    path: {
+        instanceId: string;
+    };
+    query?: {
+        limit?: number;
+        /**
+         * Opaque cursor from the immediately preceding list response. Malformed or stale values return validation_failed.
+         */
+        cursor?: string;
+    };
+    url: '/v1/billing/server/subscriptions/{instanceId}/timeline';
+};
+
+export type ListSubscriptionTimelineErrors = {
+    /**
+     * Stable machine-readable failure.
+     */
+    401: ErrorEnvelope;
+    /**
+     * Stable machine-readable failure.
+     */
+    404: ErrorEnvelope;
+    /**
+     * Stable machine-readable failure.
+     */
+    409: ErrorEnvelope;
+};
+
+export type ListSubscriptionTimelineError = ListSubscriptionTimelineErrors[keyof ListSubscriptionTimelineErrors];
+
+export type ListSubscriptionTimelineResponses = {
+    /**
+     * Timeline entries.
+     */
+    200: {
+        data?: {
+            items?: Array<SubscriptionTimelineEntry>;
+            nextCursor?: string;
+        };
+    };
+};
+
+export type ListSubscriptionTimelineResponse = ListSubscriptionTimelineResponses[keyof ListSubscriptionTimelineResponses];
+
+export type GetBillingSettingsData = {
+    body?: never;
+    path: {
+        projectId: string;
+    };
+    query?: never;
+    url: '/v1/projects/{projectId}/billing/settings';
+};
+
+export type GetBillingSettingsErrors = {
+    /**
+     * Stable machine-readable failure.
+     */
+    403: ErrorEnvelope;
+    /**
+     * Stable machine-readable failure.
+     */
+    404: ErrorEnvelope;
+};
+
+export type GetBillingSettingsError = GetBillingSettingsErrors[keyof GetBillingSettingsErrors];
+
+export type GetBillingSettingsResponses = {
+    /**
+     * Billing settings.
+     */
+    200: {
+        data?: BillingSettings;
+    };
+};
+
+export type GetBillingSettingsResponse = GetBillingSettingsResponses[keyof GetBillingSettingsResponses];
+
 export type UpdateBillingSettingsData = {
     body: {
         billingEnabled: boolean;
@@ -7973,7 +9709,15 @@ export type ListTransactionFactsData = {
     };
     query?: {
         /**
-         * Opaque cursor from the immediately preceding list response. Malformed or stale values return validation_failed.
+         * Opaque cursor from the immediately preceding list response. Forward it unchanged; do not
+         * construct or parse one — it encodes both the ordering timestamp and the row id, because
+         * billing identifiers are not time-ordered and an id alone cannot express a position in a
+         * timestamp ordering.
+         *
+         * A malformed or stale value starts from the first page rather than erroring, so a mangled
+         * cursor cannot silently truncate a list. Omit it for the first page; a response with no
+         * `nextCursor` is the last page.
+         *
          */
         cursor?: string;
         limit?: number;
@@ -8019,7 +9763,15 @@ export type ListValidationAttemptsData = {
     };
     query?: {
         /**
-         * Opaque cursor from the immediately preceding list response. Malformed or stale values return validation_failed.
+         * Opaque cursor from the immediately preceding list response. Forward it unchanged; do not
+         * construct or parse one — it encodes both the ordering timestamp and the row id, because
+         * billing identifiers are not time-ordered and an id alone cannot express a position in a
+         * timestamp ordering.
+         *
+         * A malformed or stale value starts from the first page rather than erroring, so a mangled
+         * cursor cannot silently truncate a list. Omit it for the first page; a response with no
+         * `nextCursor` is the last page.
+         *
          */
         cursor?: string;
         limit?: number;
@@ -8067,7 +9819,15 @@ export type ListBillingLedgerData = {
     };
     query?: {
         /**
-         * Opaque cursor from the immediately preceding list response. Malformed or stale values return validation_failed.
+         * Opaque cursor from the immediately preceding list response. Forward it unchanged; do not
+         * construct or parse one — it encodes both the ordering timestamp and the row id, because
+         * billing identifiers are not time-ordered and an id alone cannot express a position in a
+         * timestamp ordering.
+         *
+         * A malformed or stale value starts from the first page rather than erroring, so a mangled
+         * cursor cannot silently truncate a list. Omit it for the first page; a response with no
+         * `nextCursor` is the last page.
+         *
          */
         cursor?: string;
         limit?: number;
@@ -8112,7 +9872,15 @@ export type ListBillingQuarantineData = {
     };
     query?: {
         /**
-         * Opaque cursor from the immediately preceding list response. Malformed or stale values return validation_failed.
+         * Opaque cursor from the immediately preceding list response. Forward it unchanged; do not
+         * construct or parse one — it encodes both the ordering timestamp and the row id, because
+         * billing identifiers are not time-ordered and an id alone cannot express a position in a
+         * timestamp ordering.
+         *
+         * A malformed or stale value starts from the first page rather than erroring, so a mangled
+         * cursor cannot silently truncate a list. Omit it for the first page; a response with no
+         * `nextCursor` is the last page.
+         *
          */
         cursor?: string;
         limit?: number;
@@ -8184,6 +9952,773 @@ export type GetBillingHealthResponses = {
 
 export type GetBillingHealthResponse = GetBillingHealthResponses[keyof GetBillingHealthResponses];
 
+export type GetBillingProjectionHealthData = {
+    body?: never;
+    path: {
+        projectId: string;
+        environmentId: string;
+    };
+    query?: never;
+    url: '/v1/projects/{projectId}/environments/{environmentId}/billing/projection-health';
+};
+
+export type GetBillingProjectionHealthErrors = {
+    /**
+     * Stable machine-readable failure.
+     */
+    401: ErrorEnvelope;
+    /**
+     * Stable machine-readable failure.
+     */
+    403: ErrorEnvelope;
+    /**
+     * Stable machine-readable failure.
+     */
+    404: ErrorEnvelope;
+    /**
+     * Stable machine-readable failure.
+     */
+    503: ErrorEnvelope;
+};
+
+export type GetBillingProjectionHealthError = GetBillingProjectionHealthErrors[keyof GetBillingProjectionHealthErrors];
+
+export type GetBillingProjectionHealthResponses = {
+    /**
+     * Projection health summary.
+     */
+    200: {
+        data?: BillingProjectionHealth;
+    };
+};
+
+export type GetBillingProjectionHealthResponse = GetBillingProjectionHealthResponses[keyof GetBillingProjectionHealthResponses];
+
+export type CreateBillingProjectionReplayData = {
+    body: CreateProjectionReplayRequest;
+    path: {
+        projectId: string;
+        environmentId: string;
+    };
+    query?: never;
+    url: '/v1/projects/{projectId}/environments/{environmentId}/billing/projection-replays';
+};
+
+export type CreateBillingProjectionReplayErrors = {
+    /**
+     * Stable machine-readable failure.
+     */
+    401: ErrorEnvelope;
+    /**
+     * Stable machine-readable failure.
+     */
+    403: ErrorEnvelope;
+    /**
+     * Stable machine-readable failure.
+     */
+    404: ErrorEnvelope;
+    /**
+     * Stable machine-readable failure.
+     */
+    409: ErrorEnvelope;
+    /**
+     * Stable machine-readable failure.
+     */
+    422: ErrorEnvelope;
+};
+
+export type CreateBillingProjectionReplayError = CreateBillingProjectionReplayErrors[keyof CreateBillingProjectionReplayErrors];
+
+export type CreateBillingProjectionReplayResponses = {
+    /**
+     * The replay ran.
+     */
+    200: {
+        data?: ProjectionReplayResult;
+    };
+};
+
+export type CreateBillingProjectionReplayResponse = CreateBillingProjectionReplayResponses[keyof CreateBillingProjectionReplayResponses];
+
+export type ListProductEntitlementGrantVersionsData = {
+    body?: never;
+    path: {
+        projectId: string;
+    };
+    query: {
+        productId: string;
+        /**
+         * Restricts the history to one (Product
+         */
+        entitlementId?: string;
+        /**
+         * Return only the open-ended version in force now.
+         */
+        currentOnly?: boolean;
+        limit?: number;
+    };
+    url: '/v1/projects/{projectId}/billing/grant-versions';
+};
+
+export type ListProductEntitlementGrantVersionsErrors = {
+    /**
+     * Stable machine-readable failure.
+     */
+    401: ErrorEnvelope;
+    /**
+     * Stable machine-readable failure.
+     */
+    403: ErrorEnvelope;
+    /**
+     * Stable machine-readable failure.
+     */
+    404: ErrorEnvelope;
+    /**
+     * Stable machine-readable failure.
+     */
+    409: ErrorEnvelope;
+    /**
+     * Stable machine-readable failure.
+     */
+    503: ErrorEnvelope;
+};
+
+export type ListProductEntitlementGrantVersionsError = ListProductEntitlementGrantVersionsErrors[keyof ListProductEntitlementGrantVersionsErrors];
+
+export type ListProductEntitlementGrantVersionsResponses = {
+    /**
+     * Grant versions.
+     */
+    200: {
+        data?: {
+            items?: Array<ProductEntitlementGrantVersion>;
+        };
+    };
+};
+
+export type ListProductEntitlementGrantVersionsResponse = ListProductEntitlementGrantVersionsResponses[keyof ListProductEntitlementGrantVersionsResponses];
+
+export type PublishProductEntitlementGrantVersionData = {
+    body: PublishGrantVersionRequest;
+    path: {
+        projectId: string;
+    };
+    query?: never;
+    url: '/v1/projects/{projectId}/billing/grant-versions';
+};
+
+export type PublishProductEntitlementGrantVersionErrors = {
+    /**
+     * Stable machine-readable failure.
+     */
+    401: ErrorEnvelope;
+    /**
+     * Stable machine-readable failure.
+     */
+    403: ErrorEnvelope;
+    /**
+     * Stable machine-readable failure.
+     */
+    404: ErrorEnvelope;
+    /**
+     * Stable machine-readable failure.
+     */
+    409: ErrorEnvelope;
+    /**
+     * Stable machine-readable failure.
+     */
+    422: ErrorEnvelope;
+    /**
+     * Stable machine-readable failure.
+     */
+    503: ErrorEnvelope;
+};
+
+export type PublishProductEntitlementGrantVersionError = PublishProductEntitlementGrantVersionErrors[keyof PublishProductEntitlementGrantVersionErrors];
+
+export type PublishProductEntitlementGrantVersionResponses = {
+    /**
+     * The published grant version.
+     */
+    201: {
+        data?: ProductEntitlementGrantVersion;
+    };
+};
+
+export type PublishProductEntitlementGrantVersionResponse = PublishProductEntitlementGrantVersionResponses[keyof PublishProductEntitlementGrantVersionResponses];
+
+export type PreviewProductEntitlementGrantImpactData = {
+    body: PublishGrantVersionRequest;
+    path: {
+        projectId: string;
+    };
+    query?: never;
+    url: '/v1/projects/{projectId}/billing/grant-versions/impact-preview';
+};
+
+export type PreviewProductEntitlementGrantImpactErrors = {
+    /**
+     * Stable machine-readable failure.
+     */
+    401: ErrorEnvelope;
+    /**
+     * Stable machine-readable failure.
+     */
+    403: ErrorEnvelope;
+    /**
+     * Stable machine-readable failure.
+     */
+    404: ErrorEnvelope;
+    /**
+     * Stable machine-readable failure.
+     */
+    409: ErrorEnvelope;
+    /**
+     * Stable machine-readable failure.
+     */
+    422: ErrorEnvelope;
+};
+
+export type PreviewProductEntitlementGrantImpactError = PreviewProductEntitlementGrantImpactErrors[keyof PreviewProductEntitlementGrantImpactErrors];
+
+export type PreviewProductEntitlementGrantImpactResponses = {
+    /**
+     * The impact preview.
+     */
+    200: {
+        data?: GrantVersionImpact;
+    };
+};
+
+export type PreviewProductEntitlementGrantImpactResponse = PreviewProductEntitlementGrantImpactResponses[keyof PreviewProductEntitlementGrantImpactResponses];
+
+export type GetProductEntitlementGrantVersionData = {
+    body?: never;
+    path: {
+        projectId: string;
+        grantVersionId: string;
+    };
+    query?: never;
+    url: '/v1/projects/{projectId}/billing/grant-versions/{grantVersionId}';
+};
+
+export type GetProductEntitlementGrantVersionErrors = {
+    /**
+     * Stable machine-readable failure.
+     */
+    401: ErrorEnvelope;
+    /**
+     * Stable machine-readable failure.
+     */
+    404: ErrorEnvelope;
+};
+
+export type GetProductEntitlementGrantVersionError = GetProductEntitlementGrantVersionErrors[keyof GetProductEntitlementGrantVersionErrors];
+
+export type GetProductEntitlementGrantVersionResponses = {
+    /**
+     * The grant version.
+     */
+    200: {
+        data?: ProductEntitlementGrantVersion;
+    };
+};
+
+export type GetProductEntitlementGrantVersionResponse = GetProductEntitlementGrantVersionResponses[keyof GetProductEntitlementGrantVersionResponses];
+
+export type UpdateProductEntitlementGrantVersionData = {
+    body?: never;
+    path: {
+        projectId: string;
+        grantVersionId: string;
+    };
+    query?: never;
+    url: '/v1/projects/{projectId}/billing/grant-versions/{grantVersionId}';
+};
+
+export type UpdateProductEntitlementGrantVersionErrors = {
+    /**
+     * Stable machine-readable failure.
+     */
+    409: ErrorEnvelope;
+};
+
+export type UpdateProductEntitlementGrantVersionError = UpdateProductEntitlementGrantVersionErrors[keyof UpdateProductEntitlementGrantVersionErrors];
+
+export type ListWebhookDestinationsData = {
+    body?: never;
+    path: {
+        projectId: string;
+        environmentId: string;
+    };
+    query?: never;
+    url: '/v1/projects/{projectId}/environments/{environmentId}/billing/webhook-destinations';
+};
+
+export type ListWebhookDestinationsErrors = {
+    /**
+     * Stable machine-readable failure.
+     */
+    401: ErrorEnvelope;
+    /**
+     * Stable machine-readable failure.
+     */
+    403: ErrorEnvelope;
+    /**
+     * Stable machine-readable failure.
+     */
+    404: ErrorEnvelope;
+};
+
+export type ListWebhookDestinationsError = ListWebhookDestinationsErrors[keyof ListWebhookDestinationsErrors];
+
+export type ListWebhookDestinationsResponses = {
+    /**
+     * Destinations.
+     */
+    200: {
+        data?: Array<WebhookDestination>;
+    };
+};
+
+export type ListWebhookDestinationsResponse = ListWebhookDestinationsResponses[keyof ListWebhookDestinationsResponses];
+
+export type CreateWebhookDestinationData = {
+    body: CreateWebhookDestinationRequest;
+    path: {
+        projectId: string;
+        environmentId: string;
+    };
+    query?: never;
+    url: '/v1/projects/{projectId}/environments/{environmentId}/billing/webhook-destinations';
+};
+
+export type CreateWebhookDestinationErrors = {
+    /**
+     * Stable machine-readable failure.
+     */
+    401: ErrorEnvelope;
+    /**
+     * Stable machine-readable failure.
+     */
+    403: ErrorEnvelope;
+    /**
+     * Stable machine-readable failure.
+     */
+    422: ErrorEnvelope;
+};
+
+export type CreateWebhookDestinationError = CreateWebhookDestinationErrors[keyof CreateWebhookDestinationErrors];
+
+export type CreateWebhookDestinationResponses = {
+    /**
+     * The destination and its one-time signing secret.
+     */
+    201: {
+        data?: WebhookDestinationWithSecret;
+    };
+};
+
+export type CreateWebhookDestinationResponse = CreateWebhookDestinationResponses[keyof CreateWebhookDestinationResponses];
+
+export type DeleteWebhookDestinationData = {
+    body?: never;
+    path: {
+        projectId: string;
+        destinationId: string;
+    };
+    query?: never;
+    url: '/v1/projects/{projectId}/billing/webhook-destinations/{destinationId}';
+};
+
+export type DeleteWebhookDestinationErrors = {
+    /**
+     * Stable machine-readable failure.
+     */
+    401: ErrorEnvelope;
+    /**
+     * Stable machine-readable failure.
+     */
+    404: ErrorEnvelope;
+    /**
+     * Stable machine-readable failure.
+     */
+    409: ErrorEnvelope;
+};
+
+export type DeleteWebhookDestinationError = DeleteWebhookDestinationErrors[keyof DeleteWebhookDestinationErrors];
+
+export type DeleteWebhookDestinationResponses = {
+    /**
+     * The destination was removed.
+     */
+    204: void;
+};
+
+export type DeleteWebhookDestinationResponse = DeleteWebhookDestinationResponses[keyof DeleteWebhookDestinationResponses];
+
+export type GetWebhookDestinationData = {
+    body?: never;
+    path: {
+        projectId: string;
+        destinationId: string;
+    };
+    query?: never;
+    url: '/v1/projects/{projectId}/billing/webhook-destinations/{destinationId}';
+};
+
+export type GetWebhookDestinationErrors = {
+    /**
+     * Stable machine-readable failure.
+     */
+    401: ErrorEnvelope;
+    /**
+     * Stable machine-readable failure.
+     */
+    404: ErrorEnvelope;
+};
+
+export type GetWebhookDestinationError = GetWebhookDestinationErrors[keyof GetWebhookDestinationErrors];
+
+export type GetWebhookDestinationResponses = {
+    /**
+     * The destination.
+     */
+    200: {
+        data?: WebhookDestination;
+    };
+};
+
+export type GetWebhookDestinationResponse = GetWebhookDestinationResponses[keyof GetWebhookDestinationResponses];
+
+export type UpdateWebhookDestinationData = {
+    body: UpdateWebhookDestinationRequest;
+    path: {
+        projectId: string;
+        destinationId: string;
+    };
+    query?: never;
+    url: '/v1/projects/{projectId}/billing/webhook-destinations/{destinationId}';
+};
+
+export type UpdateWebhookDestinationErrors = {
+    /**
+     * Stable machine-readable failure.
+     */
+    401: ErrorEnvelope;
+    /**
+     * Stable machine-readable failure.
+     */
+    404: ErrorEnvelope;
+    /**
+     * Stable machine-readable failure.
+     */
+    422: ErrorEnvelope;
+};
+
+export type UpdateWebhookDestinationError = UpdateWebhookDestinationErrors[keyof UpdateWebhookDestinationErrors];
+
+export type UpdateWebhookDestinationResponses = {
+    /**
+     * The updated destination.
+     */
+    200: {
+        data?: WebhookDestination;
+    };
+};
+
+export type UpdateWebhookDestinationResponse = UpdateWebhookDestinationResponses[keyof UpdateWebhookDestinationResponses];
+
+export type SetWebhookDestinationStatusData = {
+    body: SetWebhookDestinationStatusRequest;
+    path: {
+        projectId: string;
+        destinationId: string;
+    };
+    query?: never;
+    url: '/v1/projects/{projectId}/billing/webhook-destinations/{destinationId}/status';
+};
+
+export type SetWebhookDestinationStatusErrors = {
+    /**
+     * Stable machine-readable failure.
+     */
+    401: ErrorEnvelope;
+    /**
+     * Stable machine-readable failure.
+     */
+    404: ErrorEnvelope;
+    /**
+     * Stable machine-readable failure.
+     */
+    422: ErrorEnvelope;
+};
+
+export type SetWebhookDestinationStatusError = SetWebhookDestinationStatusErrors[keyof SetWebhookDestinationStatusErrors];
+
+export type SetWebhookDestinationStatusResponses = {
+    /**
+     * The updated destination.
+     */
+    200: {
+        data?: WebhookDestination;
+    };
+};
+
+export type SetWebhookDestinationStatusResponse = SetWebhookDestinationStatusResponses[keyof SetWebhookDestinationStatusResponses];
+
+export type ListWebhookSigningSecretsData = {
+    body?: never;
+    path: {
+        projectId: string;
+        destinationId: string;
+    };
+    query?: never;
+    url: '/v1/projects/{projectId}/billing/webhook-destinations/{destinationId}/secrets';
+};
+
+export type ListWebhookSigningSecretsErrors = {
+    /**
+     * Stable machine-readable failure.
+     */
+    401: ErrorEnvelope;
+    /**
+     * Stable machine-readable failure.
+     */
+    404: ErrorEnvelope;
+};
+
+export type ListWebhookSigningSecretsError = ListWebhookSigningSecretsErrors[keyof ListWebhookSigningSecretsErrors];
+
+export type ListWebhookSigningSecretsResponses = {
+    /**
+     * Secret metadata.
+     */
+    200: {
+        data?: Array<WebhookSigningSecretMetadata>;
+    };
+};
+
+export type ListWebhookSigningSecretsResponse = ListWebhookSigningSecretsResponses[keyof ListWebhookSigningSecretsResponses];
+
+export type RotateWebhookSigningSecretData = {
+    body?: never;
+    path: {
+        projectId: string;
+        destinationId: string;
+    };
+    query?: never;
+    url: '/v1/projects/{projectId}/billing/webhook-destinations/{destinationId}/secrets/rotate';
+};
+
+export type RotateWebhookSigningSecretErrors = {
+    /**
+     * Stable machine-readable failure.
+     */
+    401: ErrorEnvelope;
+    /**
+     * Stable machine-readable failure.
+     */
+    404: ErrorEnvelope;
+};
+
+export type RotateWebhookSigningSecretError = RotateWebhookSigningSecretErrors[keyof RotateWebhookSigningSecretErrors];
+
+export type RotateWebhookSigningSecretResponses = {
+    /**
+     * The new secret and the overlap deadline.
+     */
+    201: {
+        data?: WebhookDestinationWithSecret;
+    };
+};
+
+export type RotateWebhookSigningSecretResponse = RotateWebhookSigningSecretResponses[keyof RotateWebhookSigningSecretResponses];
+
+export type RetireWebhookSigningSecretData = {
+    body?: never;
+    path: {
+        projectId: string;
+        destinationId: string;
+        secretId: string;
+    };
+    query?: never;
+    url: '/v1/projects/{projectId}/billing/webhook-destinations/{destinationId}/secrets/{secretId}/retire';
+};
+
+export type RetireWebhookSigningSecretErrors = {
+    /**
+     * Stable machine-readable failure.
+     */
+    401: ErrorEnvelope;
+    /**
+     * Stable machine-readable failure.
+     */
+    404: ErrorEnvelope;
+    /**
+     * Stable machine-readable failure.
+     */
+    409: ErrorEnvelope;
+};
+
+export type RetireWebhookSigningSecretError = RetireWebhookSigningSecretErrors[keyof RetireWebhookSigningSecretErrors];
+
+export type RetireWebhookSigningSecretResponses = {
+    /**
+     * The retired secret's metadata.
+     */
+    200: {
+        data?: WebhookSigningSecretMetadata;
+    };
+};
+
+export type RetireWebhookSigningSecretResponse = RetireWebhookSigningSecretResponses[keyof RetireWebhookSigningSecretResponses];
+
+export type ListWebhookDeliveriesData = {
+    body?: never;
+    path: {
+        projectId: string;
+    };
+    query?: {
+        environmentId?: string;
+        eventId?: string;
+        destinationId?: string;
+        status?: 'pending' | 'succeeded' | 'failed' | 'exhausted' | 'skipped';
+        limit?: number;
+    };
+    url: '/v1/projects/{projectId}/billing/webhook-deliveries';
+};
+
+export type ListWebhookDeliveriesErrors = {
+    /**
+     * Stable machine-readable failure.
+     */
+    401: ErrorEnvelope;
+    /**
+     * Stable machine-readable failure.
+     */
+    404: ErrorEnvelope;
+};
+
+export type ListWebhookDeliveriesError = ListWebhookDeliveriesErrors[keyof ListWebhookDeliveriesErrors];
+
+export type ListWebhookDeliveriesResponses = {
+    /**
+     * Deliveries.
+     */
+    200: {
+        data?: Array<WebhookDelivery>;
+    };
+};
+
+export type ListWebhookDeliveriesResponse = ListWebhookDeliveriesResponses[keyof ListWebhookDeliveriesResponses];
+
+export type GetWebhookDeliveryData = {
+    body?: never;
+    path: {
+        projectId: string;
+        deliveryId: string;
+    };
+    query?: never;
+    url: '/v1/projects/{projectId}/billing/webhook-deliveries/{deliveryId}';
+};
+
+export type GetWebhookDeliveryErrors = {
+    /**
+     * Stable machine-readable failure.
+     */
+    401: ErrorEnvelope;
+    /**
+     * Stable machine-readable failure.
+     */
+    404: ErrorEnvelope;
+};
+
+export type GetWebhookDeliveryError = GetWebhookDeliveryErrors[keyof GetWebhookDeliveryErrors];
+
+export type GetWebhookDeliveryResponses = {
+    /**
+     * The delivery.
+     */
+    200: {
+        data?: WebhookDelivery;
+    };
+};
+
+export type GetWebhookDeliveryResponse = GetWebhookDeliveryResponses[keyof GetWebhookDeliveryResponses];
+
+export type ListWebhookDeliveryAttemptsData = {
+    body?: never;
+    path: {
+        projectId: string;
+        deliveryId: string;
+    };
+    query?: never;
+    url: '/v1/projects/{projectId}/billing/webhook-deliveries/{deliveryId}/attempts';
+};
+
+export type ListWebhookDeliveryAttemptsErrors = {
+    /**
+     * Stable machine-readable failure.
+     */
+    401: ErrorEnvelope;
+    /**
+     * Stable machine-readable failure.
+     */
+    404: ErrorEnvelope;
+};
+
+export type ListWebhookDeliveryAttemptsError = ListWebhookDeliveryAttemptsErrors[keyof ListWebhookDeliveryAttemptsErrors];
+
+export type ListWebhookDeliveryAttemptsResponses = {
+    /**
+     * Attempts.
+     */
+    200: {
+        data?: Array<WebhookDeliveryAttempt>;
+    };
+};
+
+export type ListWebhookDeliveryAttemptsResponse = ListWebhookDeliveryAttemptsResponses[keyof ListWebhookDeliveryAttemptsResponses];
+
+export type ReplayWebhookDeliveryData = {
+    body?: never;
+    path: {
+        projectId: string;
+        deliveryId: string;
+    };
+    query?: never;
+    url: '/v1/projects/{projectId}/billing/webhook-deliveries/{deliveryId}/replay';
+};
+
+export type ReplayWebhookDeliveryErrors = {
+    /**
+     * Stable machine-readable failure.
+     */
+    401: ErrorEnvelope;
+    /**
+     * Stable machine-readable failure.
+     */
+    404: ErrorEnvelope;
+    /**
+     * Stable machine-readable failure.
+     */
+    409: ErrorEnvelope;
+};
+
+export type ReplayWebhookDeliveryError = ReplayWebhookDeliveryErrors[keyof ReplayWebhookDeliveryErrors];
+
+export type ReplayWebhookDeliveryResponses = {
+    /**
+     * The delivery was queued.
+     */
+    202: {
+        data?: WebhookDelivery;
+    };
+};
+
+export type ReplayWebhookDeliveryResponse = ReplayWebhookDeliveryResponses[keyof ReplayWebhookDeliveryResponses];
+
 export type ListReconciliationRunsData = {
     body?: never;
     path: {
@@ -8192,7 +10727,15 @@ export type ListReconciliationRunsData = {
     };
     query?: {
         /**
-         * Opaque cursor from the immediately preceding list response. Malformed or stale values return validation_failed.
+         * Opaque cursor from the immediately preceding list response. Forward it unchanged; do not
+         * construct or parse one — it encodes both the ordering timestamp and the row id, because
+         * billing identifiers are not time-ordered and an id alone cannot express a position in a
+         * timestamp ordering.
+         *
+         * A malformed or stale value starts from the first page rather than erroring, so a mangled
+         * cursor cannot silently truncate a list. Omit it for the first page; a response with no
+         * `nextCursor` is the last page.
+         *
          */
         cursor?: string;
         limit?: number;
@@ -8274,7 +10817,15 @@ export type ListReplayJobsData = {
     };
     query?: {
         /**
-         * Opaque cursor from the immediately preceding list response. Malformed or stale values return validation_failed.
+         * Opaque cursor from the immediately preceding list response. Forward it unchanged; do not
+         * construct or parse one — it encodes both the ordering timestamp and the row id, because
+         * billing identifiers are not time-ordered and an id alone cannot express a position in a
+         * timestamp ordering.
+         *
+         * A malformed or stale value starts from the first page rather than erroring, so a mangled
+         * cursor cannot silently truncate a list. Omit it for the first page; a response with no
+         * `nextCursor` is the last page.
+         *
          */
         cursor?: string;
         limit?: number;
