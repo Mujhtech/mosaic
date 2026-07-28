@@ -34,8 +34,26 @@ Billing is off by default at two independent levels, and both must be on:
 1. **Deployment**: `MOSAIC_BILLING_ENABLED=true` plus `MOSAIC_BILLING_NOTIFICATION_BASE_URL`.
    Without these the routes are not registered and the worker families are not started.
 2. **Project**: `PUT /v1/projects/{projectId}/billing/settings` with `billingEnabled: true`.
-   Observations from a Project with billing off are permanently rejected so SDK queues drain
-   rather than retrying forever.
+
+### What "off" means
+
+Off means nothing is recorded, on every path — not only for SDK observations. A disabled
+Project skips notification intake, the RTDN pull consumer, and the validation, reconciliation,
+and replay workers. Observations are permanently rejected so SDK queues drain rather than
+retrying forever; a validation job already in the queue is parked without consuming an attempt,
+because disabling is reversible and a failed job would need an operator action to recover work
+that only ever needed to wait.
+
+**Disabling is refused while any Store Server Credential is active**
+(`409 store_credentials_still_active`). Revoke the credentials first. This is not bureaucracy:
+while a credential is live, Apple keeps posting to an endpoint whose intake token still
+resolves, and every notification Mosaic refuses spends one of five non-renewable delivery
+attempts. Revoking the credential clears the intake token, which is the thing that actually
+stops the store. The switch therefore means what it says rather than describing an intent the
+store cannot see.
+
+The per-Project checks in intake and the workers are defense in depth. The credential rule is
+the real guarantee: a resolvable intake token implies an enabled Project.
 
 `MOSAIC_PROVIDER_CREDENTIAL_KEYRING` is required when billing is enabled: every Store Server
 Credential and every retained Raw Billing Input body is sealed under it.
@@ -137,6 +155,34 @@ customer identifier. On a key collision the stored content digest is compared in
 time: equal is a duplicate, different is a security-severity quarantine and never overwrites
 the original.
 
+## What a Transaction Fact is, and how many there are
+
+A Transaction Fact is **one statement about a transaction, from one route, at one moment.** It
+is not a purchase record, and the number of facts for a transaction is not the number of
+purchases.
+
+A single transaction can carry several facts for two legitimate reasons:
+
+- **Two routes reported it.** A store notification and a client observation are two independent
+  statements that differ in what they know — the notification carries renewal information the
+  observation cannot — and both are recorded.
+- **Product-mapping history changed.** Re-validating after an operator repairs a mapping
+  produces a fact with a different Resolution Snapshot beside the original.
+
+Duplicate *delivery* still produces exactly one fact, and replay of an unchanged input still
+produces none: fact identity is `UNIQUE (environment_id, fact_digest)` over the meaning of the
+statement.
+
+**The supported read** is to group facts by `(environment_id, provider, provider_transaction_id)`
+and select within the group, preferring the notification-sourced statement (source authority
+`store_notification`) and, within equal authority, the latest `recorded_at`. Never count facts
+as purchases.
+
+This is deliberate. Collapsing the two statements would mean discarding the richer one whenever
+the poorer one arrived first, which is a worse failure than a second row in a ledger whose
+entire purpose is evidence. A future change to fact identity is a 9B decision with a migration,
+not a fix-pass edit.
+
 ## Product resolution
 
 `Provider + Application + Environment + provider Product identifier + mapping history →
@@ -150,6 +196,27 @@ Nothing resolves by display name, price, billing period, or approximate match. A
 Product still produces a fact with `resolution_state = 'unresolved'`, because the ledger must
 be complete: the store confirmed a real purchase of something Mosaic does not recognise, and
 that is evidence rather than noise. The operator repairs the mapping and retries.
+
+## Reconciliation and replay
+
+Reconciliation detects **missing or conflicting** state, and the two are counted separately:
+
+- `discoveredCount` — an input Mosaic had never seen, or a purchase whose state it had not yet
+  learned. New information.
+- `conflictCount` — a provider answer that contradicts a fact already on record for the same
+  transaction. Each conflict also opens a quarantine record (`replay_conflict`). Nothing is
+  overwritten: both facts stand, and the quarantine is the diagnostic over the contradiction
+  rather than a resolution of it. A run with conflicts reports `partial`, never `completed`.
+
+Both reconciliation and replay walk their window with a **keyset cursor** over
+`(received_at, id)`, committing progress after each bounded page. A pass that fills its page
+returns the job to the queue and resumes from the committed position; `completed` is reported
+only when the scan actually reaches the end of the window. This matters more than it looks:
+reporting `completed` over a silently partial scan is worse than an outright failure, because
+an operator cannot tell it from a real one.
+
+An input another worker is currently validating is never taken over mid-flight. The cursor
+does not advance past it, so the next pass picks it up.
 
 ## Retry and dead-lettering
 
@@ -180,6 +247,10 @@ A provider instruction may push a retry later but never pull it earlier.
 - **No access decision is made from any event.** Facts are never labelled active
   subscriptions, and reconciliation validates provider facts rather than calculating customer
   access.
+- **Apple transaction-history reconciliation is not implemented.** Only
+  `apple_notification_history` and `google_token_requery` run. The API rejects
+  `apple_transaction_history` with a validation error and the dashboard does not offer it, so it
+  is unreachable rather than silently failing.
 - **Consumables and non-renewing subscriptions are unsupported** and quarantine as
   `unsupported_transaction_type` rather than being coerced into a type Phase 9A can model.
 - **Raw bodies expire after 90 days by default.** After that, an input cannot be re-validated

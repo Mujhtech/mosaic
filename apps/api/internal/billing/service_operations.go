@@ -2,6 +2,7 @@ package billing
 
 import (
 	"context"
+	"errors"
 	"time"
 
 	"go.opentelemetry.io/otel/attribute"
@@ -42,6 +43,20 @@ type revalidationResult struct {
 	// is the actual comparison: an unchanged provider answer recomputes a digest
 	// Mosaic already holds, and a changed one does not.
 	Existing bool
+	// Conflicted reports that the recomputed fact contradicts what was already
+	// recorded for this input: the input had facts before, and this attempt
+	// produced a digest that is not among them.
+	//
+	// The distinction from a plain discovery is the whole point. An input that
+	// had no facts and now has one is Mosaic learning something new. An input
+	// that had a fact and now produces a different one is the provider saying
+	// something different from what Mosaic recorded — which is the "conflicting
+	// state" half of the Gate 9A reconciliation criterion, and needs an
+	// operator's attention rather than a counter labelled "discovered".
+	//
+	// Nothing is overwritten either way: both facts remain, and the conflict is
+	// a diagnostic over an append-only ledger.
+	Conflicted bool
 }
 
 // revalidate runs the full validation pipeline once against an input that has
@@ -67,6 +82,13 @@ func (s *Service) revalidate(ctx context.Context, workerID string, input RawInpu
 
 	now := s.now()
 	job, err := s.repository.LeaseValidationJobFor(ctx, workerID, input, now, now.Add(validationLease))
+	if errors.Is(err, ErrValidationBusy) {
+		// Another worker holds a live lease on this input. Running anyway would
+		// put two validations on the same input concurrently, and the loser of
+		// the attempt-number race would discard everything it produced. The
+		// caller leaves the input for the next pass instead.
+		return revalidationResult{}, ErrValidationBusy
+	}
 	if err != nil {
 		return revalidationResult{}, safeFailure(err, "billing_revalidation_lease_failed")
 	}
@@ -92,6 +114,9 @@ func (s *Service) revalidate(ctx context.Context, workerID string, input RawInpu
 				break
 			}
 		}
+		// A new digest where facts already existed is a contradiction, not a
+		// discovery. Where no facts existed it is simply new information.
+		result.Conflicted = !result.Existing && len(baseline) > 0
 	}
 	return result, nil
 }
@@ -118,6 +143,12 @@ func (s *Service) ProcessNextRTDN(ctx context.Context, workerID string) (bool, e
 	}
 	processedAny := false
 	for _, identity := range credentials {
+		// A disabled Project records nothing. Skipping before the pull also
+		// avoids acknowledging messages Mosaic would then refuse to store,
+		// which would lose them permanently.
+		if enabled, err := s.repository.BillingEnabled(ctx, identity.ProjectID); err == nil && !enabled {
+			continue
+		}
 		processed, err := s.pullOne(ctx, identity)
 		if err != nil {
 			// One tenant's misconfiguration must not stop every other tenant's
@@ -290,6 +321,12 @@ func (s *Service) ProcessNextReconciliation(ctx context.Context, workerID string
 		JobID: run.ID, JobKind: "billing_reconciliation",
 		ProjectID: run.ProjectID, EnvironmentID: run.EnvironmentID, ResourceID: run.CredentialID,
 	})
+	// A disabled Project runs no reconciliation: it would call the provider and
+	// append facts for a Project that asked to record nothing.
+	if enabled, enabledErr := s.repository.BillingEnabled(ctx, run.ProjectID); enabledErr == nil && !enabled {
+		return true, s.repository.CompleteReconciliationRun(ctx, run, "failed", "billing_disabled", s.now())
+	}
+
 	ctx, span := s.tracer.Start(ctx, "billing.reconcile.run")
 	defer span.End()
 
@@ -333,9 +370,22 @@ func (s *Service) reconcileAppleNotifications(ctx context.Context, run Reconcili
 		if classification.Retryable {
 			// Leave the run queued: the cursor is unchanged, so the retry resumes
 			// exactly where this attempt started.
-			return s.repository.UpdateReconciliationProgress(ctx, run, run.cursorToken(), s.now())
+			return s.repository.UpdateReconciliationProgress(ctx, run, run.cursorToken(), run.Cursor, s.now())
 		}
 		return s.repository.CompleteReconciliationRun(ctx, run, "failed", classification.Diagnostic, s.now())
+	}
+
+	// The Environment's mode is read from the Environment, not derived from the
+	// Store Environment. Deriving it produced only "production" or
+	// "development", so every discovery in a staging Environment failed the
+	// composite FK onto environments(id, project_id, mode), incremented
+	// FailureCount silently, and left the run reporting `partial` with no
+	// diagnostic — the recovery path failing in exactly the outage it exists to
+	// repair. The intake path always read it from the credential row; this one
+	// now reads it from the same source of truth.
+	environmentMode, organizationID, scopeErr := s.repository.EnvironmentScope(ctx, run.ProjectID, run.EnvironmentID)
+	if scopeErr != nil {
+		return s.repository.CompleteReconciliationRun(ctx, run, "failed", "environment_unresolvable", s.now())
 	}
 
 	now := s.now()
@@ -372,8 +422,8 @@ func (s *Service) reconcileAppleNotifications(ctx context.Context, run Reconcili
 			ReceivedAt:           now,
 			ExpiresAt:            now.Add(s.retention),
 		}
-		input.OrganizationID, _ = s.repository.OrganizationForProject(ctx, run.ProjectID)
-		input.EnvironmentMode = productionModeFor(storeEnvironment)
+		input.OrganizationID = organizationID
+		input.EnvironmentMode = environmentMode
 		if err := s.sealBody(&input, body); err != nil {
 			run.FailureCount++
 			continue
@@ -382,6 +432,10 @@ func (s *Service) reconcileAppleNotifications(ctx context.Context, run Reconcili
 		switch {
 		case persistErr != nil:
 			run.FailureCount++
+		case result.Conflicted:
+			// The same notification UUID arrived carrying different content than
+			// the copy already on record. That is contradiction, not discovery.
+			run.ConflictCount++
 		case result.Status == IngestDuplicate:
 			run.DuplicateCount++
 		default:
@@ -390,13 +444,19 @@ func (s *Service) reconcileAppleNotifications(ctx context.Context, run Reconcili
 	}
 
 	if page.HasMore && page.PaginationToken != "" {
-		return s.repository.UpdateReconciliationProgress(ctx, run, page.PaginationToken, s.now())
+		return s.repository.UpdateReconciliationProgress(ctx, run, page.PaginationToken, run.Cursor, s.now())
 	}
-	status := "completed"
-	if run.FailureCount > 0 {
-		status = "partial"
+	return s.repository.CompleteReconciliationRun(ctx, run, reconciliationStatus(run), "", s.now())
+}
+
+// reconciliationStatus reports partial when anything went wrong. A conflict is
+// not a failure of the run — the run did its job by finding it — but it must
+// not read as a clean sweep either.
+func reconciliationStatus(run ReconciliationRun) string {
+	if run.FailureCount > 0 || run.ConflictCount > 0 {
+		return "partial"
 	}
-	return s.repository.CompleteReconciliationRun(ctx, run, status, "", s.now())
+	return "completed"
 }
 
 // reconcileGoogleTokens re-queries known purchase tokens.
@@ -412,13 +472,16 @@ func (s *Service) reconcileGoogleTokens(ctx context.Context, run ReconciliationR
 	// an observation carries a token digest, and a digest cannot be reversed
 	// into the token the Play API needs, so including them would make every run
 	// report `partial` and leave an alarm that never clears.
-	inputs, err := s.repository.ReplayInputs(ctx, ReplayJob{
+	// One bounded page per pass, resumed from the committed cursor. A single
+	// unbounded scan would either stall the worker on a large window or — as it
+	// previously did — examine one batch and report the whole window complete.
+	inputs, next, err := s.repository.ReplayInputs(ctx, ReplayJob{
 		ProjectID: run.ProjectID, EnvironmentID: run.EnvironmentID,
 		WindowStart: &run.WindowStart, WindowEnd: &run.WindowEnd,
 	}, InputFilter{
 		Provider: ProviderGooglePlay,
 		Sources:  []string{SourceGoogleRTDN, SourceGoogleTokenRequery},
-	}, reconciliationPageSize)
+	}, run.Cursor, reconciliationPageSize)
 	if err != nil {
 		return s.repository.CompleteReconciliationRun(ctx, run, "failed", "candidate_scan_failed", s.now())
 	}
@@ -430,28 +493,48 @@ func (s *Service) reconcileGoogleTokens(ctx context.Context, run ReconciliationR
 		// missed while it was unavailable shows up as a new fact digest.
 		result, revalidateErr := s.revalidate(ctx, "reconcile:"+run.ID, input)
 		switch {
+		case errors.Is(revalidateErr, ErrValidationBusy):
+			// Another worker holds the lease. The cursor does not advance past
+			// this input, so the next pass picks it up rather than skipping it.
+			run.ExaminedCount--
+			next = run.Cursor
+			return s.repository.UpdateReconciliationProgress(ctx, run, run.cursorToken(), next, s.now())
 		case revalidateErr != nil:
 			run.FailureCount++
 		case result.Outcome != OutcomeValidated && result.Outcome != OutcomeRecordedNoFact:
 			run.FailureCount++
+		case result.Conflicted:
+			// The provider's current answer contradicts a fact already on
+			// record for this transaction. That is the "conflicting state" half
+			// of the Gate 9A criterion, and it is not the same thing as
+			// learning something new. Both facts stand — the ledger is
+			// append-only and nothing is rewritten — so the quarantine is the
+			// operator-visible diagnostic over the contradiction rather than a
+			// resolution of it.
+			run.ConflictCount++
+			if quarantineErr := s.repository.OpenQuarantine(ctx, run.ProjectID, run.EnvironmentID, QuarantineWrite{
+				RawInputID: input.ID, ApplicationID: input.ApplicationID, Provider: input.Provider,
+				ReasonCode: QuarantineReplayConflict, Severity: "warning",
+				Scopes:         []string{"reconciliation"},
+				DiagnosticCode: "reconciliation_contradicts_recorded_fact",
+				OccurredAt:     s.now(),
+			}); quarantineErr != nil {
+				run.FailureCount++
+			}
 		case result.Digest != "" && !result.Existing:
 			run.DiscoveredCount++
 		default:
 			run.DuplicateCount++
 		}
 	}
-	status := "completed"
-	if run.FailureCount > 0 {
-		status = "partial"
-	}
-	return s.repository.CompleteReconciliationRun(ctx, run, status, "", s.now())
-}
 
-func productionModeFor(storeEnvironment string) string {
-	if storeEnvironment == StoreProduction {
-		return "production"
+	// A short page means the window is exhausted. Anything else commits the
+	// cursor and comes back, so `completed` is only ever reported over a scan
+	// that actually reached the end.
+	if len(inputs) == reconciliationPageSize {
+		return s.repository.UpdateReconciliationProgress(ctx, run, run.cursorToken(), next, s.now())
 	}
-	return "development"
+	return s.repository.CompleteReconciliationRun(ctx, run, reconciliationStatus(run), "", s.now())
 }
 
 // cursorToken exposes the persisted pagination cursor.
@@ -481,12 +564,17 @@ func (s *Service) ProcessNextReplay(ctx context.Context, workerID string) (bool,
 		JobID: job.ID, JobKind: "billing_replay",
 		ProjectID: job.ProjectID, EnvironmentID: job.EnvironmentID, ResourceID: job.RawInputID,
 	})
+	if enabled, enabledErr := s.repository.BillingEnabled(ctx, job.ProjectID); enabledErr == nil && !enabled {
+		return true, s.repository.CompleteReplayJob(ctx, job, "", "billing_disabled", s.now())
+	}
+
 	ctx, span := s.tracer.Start(ctx, "billing.replay.run")
 	defer span.End()
 
 	// The zero filter: replaying a window deliberately covers every input in it,
-	// unlike a provider-specific reconciliation.
-	inputs, err := s.repository.ReplayInputs(ctx, job, InputFilter{}, replayBatchSize)
+	// unlike a provider-specific reconciliation. One bounded page per pass,
+	// resumed from the committed cursor.
+	inputs, next, err := s.repository.ReplayInputs(ctx, job, InputFilter{}, job.Cursor, replayBatchSize)
 	if err != nil {
 		return true, s.repository.CompleteReplayJob(ctx, job, "", "input_scan_failed", s.now())
 	}
@@ -496,6 +584,10 @@ func (s *Service) ProcessNextReplay(ctx context.Context, workerID string) (bool,
 		// it, so determinism still lives in exactly one place.
 		result, revalidateErr := s.revalidate(ctx, "replay:"+job.ID, input)
 		switch {
+		case errors.Is(revalidateErr, ErrValidationBusy):
+			// Do not advance past an input another worker is validating.
+			job.ExaminedCount--
+			return true, s.repository.UpdateReplayProgress(ctx, job, job.Cursor, s.now())
 		case revalidateErr != nil:
 			job.ConflictCount++
 		case result.Outcome != OutcomeValidated && result.Outcome != OutcomeRecordedNoFact:
@@ -509,6 +601,14 @@ func (s *Service) ProcessNextReplay(ctx context.Context, workerID string) (bool,
 			job.NewFactCount++
 		}
 	}
+
+	// A full page means there is more window to walk. Committing the cursor and
+	// returning the job to the queue is what makes a four-hundred-input replay
+	// actually cover four hundred inputs instead of the first twenty-five.
+	if len(inputs) == replayBatchSize {
+		return true, s.repository.UpdateReplayProgress(ctx, job, next, s.now())
+	}
+
 	comparison := "identical"
 	switch {
 	case job.ConflictCount > 0:

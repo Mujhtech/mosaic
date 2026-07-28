@@ -177,6 +177,21 @@ func (s *Service) AcceptAppleNotification(ctx context.Context, intakeToken strin
 		attribute.String("mosaic.environment.id", identity.EnvironmentID),
 	)
 
+	// Defense in depth. The credential rule on the settings endpoint is the
+	// real guarantee — billing cannot be disabled while a credential is live,
+	// so a resolvable intake token implies an enabled Project. This check
+	// covers the window where a Project was disabled by some other path, and
+	// makes "off means nothing is recorded" true of the notification path and
+	// not only of SDK observations. Apple is answered 202 either way: a 4xx
+	// would spend one of five non-renewable retries on a condition retrying
+	// cannot fix.
+	if enabled, err := s.repository.BillingEnabled(ctx, identity.ProjectID); err == nil && !enabled {
+		s.intakeRejected.Add(ctx, 1, metric.WithAttributes(
+			attribute.String("provider", ProviderAppStore),
+			attribute.String("reason", "billing_disabled")))
+		return nil
+	}
+
 	var envelope struct {
 		SignedPayload string `json:"signedPayload"`
 	}

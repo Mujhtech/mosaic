@@ -3,8 +3,10 @@
 Operator: mosaic-backend agent
 Date: 2026-07-28
 Branch: `phase/9a-transaction-ingestion-validation`
-Baseline commit: `9c311ac` (first demonstration run and driver); defect fixes are
-uncommitted on top of it and are recorded here as **fix commit pending**.
+Baseline commit: `9c311ac` (first demonstration run and driver). The three
+defects this run found were fixed and committed as `8aeffef` (replay attempts,
+Google re-query, observation credential resolution) and `3397ea4` (dashboard
+support for the missing-credential quarantine reason).
 Specification: `docs/plans/phase-9a-transaction-ingestion-validation.md` §15, §6–§8
 
 **This document records two runs.** The first run (commit `9c311ac`) found three
@@ -651,6 +653,14 @@ strategy             | status    | examined_count | discovered_count | duplicate
 google_token_requery | completed | 1              | 0                | 1               | 0
 ```
 
+Re-verified after the Stage 5 fix pass. The run summary is unchanged; the API
+response now additionally carries `conflictCount`, which is `0` here because the
+provider's answer agreed with the fact already on record. A run whose provider
+answer *contradicted* a recorded fact would report a non-zero `conflictCount`,
+land `partial` rather than `completed`, and open a `replay_conflict` quarantine
+record — the "conflicting state" half of the Gate 9A criterion, which this run
+does not exercise because nothing in the demonstration contradicts itself.
+
 ```
 validation attempts before the run: 9; after: 10 (+1)
 Play API calls before the run: 1; after: 2 (+1)
@@ -820,7 +830,7 @@ access to change — structurally, not by policy.
 The first run (commit `9c311ac`) found three blocking defects. All three are now
 fixed, each has a test that fails against the reintroduced bug, and the
 demonstration has been re-run against a fresh container. **The fixes are
-uncommitted: fix commit pending.**
+committed as `8aeffef` and `3397ea4`.**
 
 Every test below was checked by reintroducing its defect and confirming the test
 fails — a test that has never seen the bug it claims to catch is a decoration.

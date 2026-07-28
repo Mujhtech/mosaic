@@ -14,6 +14,9 @@ type ListOptions struct {
 	Status     string
 	ReasonCode string
 	Provider   string
+	// RawInputID narrows a validation-attempt list to one input's history,
+	// which is how an operator follows a quarantined input's attempts.
+	RawInputID string
 	From       *time.Time
 	To         *time.Time
 }
@@ -144,6 +147,11 @@ type Repository interface {
 	// Settings and tenancy.
 	BillingEnabled(ctx context.Context, projectID string) (bool, error)
 	OrganizationForProject(ctx context.Context, projectID string) (string, error)
+	// EnvironmentScope returns the Environment's own mode and owning
+	// organization. Callers that persist a Raw Billing Input must read the mode
+	// from here rather than deriving it, because the mode participates in a
+	// composite foreign key.
+	EnvironmentScope(ctx context.Context, projectID, environmentID string) (mode string, organizationID string, err error)
 	SetBillingEnabled(ctx context.Context, actor Actor, projectID string, enabled bool, now time.Time) error
 
 	// Credentials.
@@ -155,6 +163,11 @@ type Repository interface {
 	// CredentialSecretFor decrypts through the supplied opener. The repository
 	// owns the envelope columns; the service owns the cipher.
 	CredentialSecretFor(ctx context.Context, projectID, credentialID string) (StoreServerCredential, Envelope, string, string, string, error)
+	// ProviderApplicationIdentifier resolves the store-side identifier for one
+	// Application in one credential's scope. Apple's per-request `bid` must
+	// name the Application the transaction belongs to, not whichever Application
+	// happens to sort first.
+	ProviderApplicationIdentifier(ctx context.Context, credentialID, applicationID string) (string, error)
 	CredentialForApplication(ctx context.Context, environmentID, provider, providerApplicationIdentifier string) (IntakeIdentity, string, error)
 	// CredentialForEnvironment resolves the single active credential a
 	// (Project, provider, Environment) scope has. Migration 00022 makes that
@@ -194,6 +207,9 @@ type Repository interface {
 	// and no other worker can claim the job underneath it.
 	LeaseValidationJobFor(ctx context.Context, workerID string, input RawInput, now, leaseUntil time.Time) (ValidationJob, error)
 	CompleteAttempt(ctx context.Context, job ValidationJob, outcome AttemptOutcome, now time.Time) error
+	// ParkValidationJob returns a job to the queue without consuming an attempt,
+	// for conditions that are expected to resolve without operator action.
+	ParkValidationJob(ctx context.Context, job ValidationJob, reason string, now time.Time) error
 	NextAttemptNumber(ctx context.Context, rawInputID string) (int, error)
 	// FactDigestsForInput returns the lowercase-hex fact digests already recorded
 	// for one input. It is the baseline a replay compares its recomputed digest
@@ -212,6 +228,11 @@ type Repository interface {
 	ListQuarantine(ctx context.Context, actor Actor, projectID, environmentID string, options ListOptions) (Page[QuarantineRecord], error)
 	Quarantine(ctx context.Context, actor Actor, projectID, recordID string) (QuarantineRecord, error)
 
+	// OpenQuarantine records a quarantine for an input outside the validation
+	// attempt transaction, used when a reconciliation discovery contradicts a
+	// fact already on record.
+	OpenQuarantine(ctx context.Context, projectID, environmentID string, write QuarantineWrite) error
+
 	// Recovery actions.
 	RequeueValidation(ctx context.Context, actor Actor, projectID, recordID string, now time.Time) (QuarantineRecord, error)
 	CloseQuarantineSuperseded(ctx context.Context, actor Actor, projectID, recordID, supersededBy string, now time.Time) (QuarantineRecord, error)
@@ -220,7 +241,7 @@ type Repository interface {
 	CreateReconciliationRun(ctx context.Context, actor Actor, run ReconciliationRun, now time.Time) (ReconciliationRun, error)
 	ListReconciliationRuns(ctx context.Context, actor Actor, projectID, environmentID string, options ListOptions) (Page[ReconciliationRun], error)
 	LeaseReconciliationRun(ctx context.Context, workerID string, now, leaseUntil time.Time) (ReconciliationRun, bool, error)
-	UpdateReconciliationProgress(ctx context.Context, run ReconciliationRun, cursorToken string, now time.Time) error
+	UpdateReconciliationProgress(ctx context.Context, run ReconciliationRun, cursorToken string, cursor InputCursor, now time.Time) error
 	CompleteReconciliationRun(ctx context.Context, run ReconciliationRun, status, errorCode string, now time.Time) error
 
 	CreateReplayJob(ctx context.Context, actor Actor, job ReplayJob, now time.Time) (ReplayJob, error)
@@ -229,8 +250,14 @@ type Repository interface {
 	// ReplayInputs selects the inputs a replay or reconciliation run will
 	// revalidate, narrowed by filter. Replay passes the zero filter, because
 	// replaying a window deliberately covers everything in it.
-	ReplayInputs(ctx context.Context, job ReplayJob, filter InputFilter, limit int) ([]RawInput, error)
+	// ReplayInputs returns one bounded page of candidate inputs starting after
+	// cursor, plus the cursor to resume from. A page shorter than limit means
+	// the window is exhausted.
+	ReplayInputs(ctx context.Context, job ReplayJob, filter InputFilter, cursor InputCursor, limit int) ([]RawInput, InputCursor, error)
 	CompleteReplayJob(ctx context.Context, job ReplayJob, comparison, errorCode string, now time.Time) error
+	// UpdateReplayProgress commits counters and the cursor and returns the job
+	// to the queue so the next pass resumes where this one stopped.
+	UpdateReplayProgress(ctx context.Context, job ReplayJob, cursor InputCursor, now time.Time) error
 
 	// Retention. The only path that removes a raw body.
 	ExpireRawInputBodies(ctx context.Context, now time.Time, limit int) (int64, error)

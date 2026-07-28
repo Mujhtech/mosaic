@@ -317,7 +317,12 @@ func (c *Client) do(ctx context.Context, credential Credential, method, path str
 	if err != nil {
 		return &Error{Op: operation, cause: err}
 	}
+	// url.Parse puts the decoded form in Path and the escaped form in RawPath.
+	// Copying only Path and letting URL.String() re-encode silently drops the
+	// escaping every url.PathEscape call above added, so a %2F would become a
+	// real path separator. Both halves are carried so the escaping survives.
 	endpoint.Path += target.Path
+	endpoint.RawPath = escapedPath(base) + escapedPath(target)
 	endpoint.RawQuery = target.RawQuery
 
 	var reader io.Reader
@@ -415,4 +420,13 @@ func (c *Client) signJWT(credential Credential) (string, error) {
 func copyPadded(destination []byte, value *big.Int) {
 	bytesValue := value.Bytes()
 	copy(destination[len(destination)-len(bytesValue):], bytesValue)
+}
+
+// escapedPath returns the percent-encoded path of u, falling back to the
+// decoded form when the two are identical (url.URL leaves RawPath empty then).
+func escapedPath(u *url.URL) string {
+	if u.RawPath != "" {
+		return u.RawPath
+	}
+	return u.Path
 }

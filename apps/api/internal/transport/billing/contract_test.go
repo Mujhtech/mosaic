@@ -7,6 +7,7 @@ import (
 	"reflect"
 	"regexp"
 	"sort"
+	"strings"
 	"testing"
 	"time"
 
@@ -26,9 +27,13 @@ func fixturePath(parts ...string) string {
 
 func loadJSON(t *testing.T, path string) map[string]any {
 	t.Helper()
+	// A missing fixture is a failure, not a skip. Skipping meant a renamed or
+	// deleted fixture turned every contract assertion into a silent no-op —
+	// the suite would stay green while the server drifted away from the
+	// document four SDKs are written against.
 	raw, err := os.ReadFile(path)
 	if err != nil {
-		t.Skipf("contract fixture %s is unavailable: %v", path, err)
+		t.Fatalf("contract fixture %s could not be read: %v", path, err)
 	}
 	var decoded map[string]any
 	if err := json.Unmarshal(raw, &decoded); err != nil {
@@ -285,6 +290,8 @@ func TestInvalidObservationFixturesAreRejected(t *testing.T) {
 			"a reference must not be able to carry credential-shaped material"},
 		{"malformed-token-digest-reference.json",
 			"a malformed token digest cannot address a Google purchase"},
+		{"client-observation-carries-purchase-token.json",
+			"a public SDK may never carry a full purchase token"},
 		{"unknown-contract-version.json",
 			"a reader of another contract version must be told so precisely"},
 		{"unknown-record-type.json",
@@ -338,7 +345,7 @@ func readFixture(t *testing.T, path string) []byte {
 	t.Helper()
 	raw, err := os.ReadFile(path)
 	if err != nil {
-		t.Skipf("contract fixture %s is unavailable: %v", path, err)
+		t.Fatalf("contract fixture %s could not be read: %v", path, err)
 	}
 	return raw
 }
@@ -350,4 +357,106 @@ func regexpMustCompile(t *testing.T, pattern string) *regexp.Regexp {
 		t.Fatalf("contract pattern %q is not a Go-compatible regular expression: %v", pattern, err)
 	}
 	return expression
+}
+
+// BL-1 — the trusted server endpoint carries the full Google purchase token.
+//
+// Without it a Google observation carries only a digest, a digest cannot be
+// reversed, and the observation can never validate: an operator wiring an app
+// backend to the trusted endpoint would receive accepted_for_validation for
+// every submission and watch every one land in quarantine.
+func TestTrustedServerObservationAcceptsPurchaseToken(t *testing.T) {
+	body := readFixture(t, fixturePath("trusted-server-observation.json"))
+	envelope, code := decodeEnvelope[serverObservationPayload](body, recordTypeServerObservation)
+	if code != "" {
+		t.Fatalf("the canonical trusted-server fixture was rejected with %q", code)
+	}
+	if code := envelope.Payload.validate(); code != "" {
+		t.Fatalf("the canonical trusted-server fixture failed validation with %q", code)
+	}
+	if envelope.Payload.PurchaseToken == "" {
+		t.Skip("the canonical fixture carries no purchase token; the synthetic cases below still apply")
+	}
+	if got := envelope.Payload.toObservation().PurchaseToken; got != envelope.Payload.PurchaseToken {
+		t.Fatal("the decoded purchase token did not reach the observation")
+	}
+}
+
+// The token is bound to the record's own reference. Without the binding a
+// caller could file a real purchase token under a *different* transaction's
+// reference; Mosaic would validate the token against Google, get a genuine
+// answer, and record it as a fact about the transaction the reference named.
+func TestPurchaseTokenMustDigestToItsOwnReference(t *testing.T) {
+	token := "fixture-google-purchase-token-0001"
+	matching := hexOf(billing.TokenDigest(token))
+
+	base := func() serverObservationPayload {
+		return serverObservationPayload{
+			ObservationID: "fixture-observation-google-0001",
+			SubmissionID:  "fixture-submission-google-0001",
+			ProviderID:    "fixture-provider-google",
+			StorePlatform: storePlatformGoogle,
+			TransactionReference: transactionReference{
+				ReferenceKind: billing.ReferenceGooglePlayTokenDigest, Value: matching,
+			},
+			SourceAuthority: authorityTrustedServer,
+			TrustBasis:      "provider_server_api",
+			ReceivedAt:      "2026-07-27T12:05:00.000Z",
+			PurchaseToken:   token,
+		}
+	}
+
+	if code := base().validate(); code != "" {
+		t.Fatalf("a token matching its own reference was rejected with %q", code)
+	}
+
+	mismatched := base()
+	mismatched.TransactionReference.Value = hexOf(billing.TokenDigest("fixture-a-different-purchase"))
+	if code := mismatched.validate(); code != billing.CodeProviderReferenceMalformed {
+		t.Fatalf("a token filed under another transaction's reference was accepted (code=%q)", code)
+	}
+
+	// Gated to Google: an Apple record may never carry one.
+	apple := base()
+	apple.StorePlatform = storePlatformApple
+	apple.TransactionReference = transactionReference{
+		ReferenceKind: billing.ReferenceAppStoreTransactionID, Value: "2000000900000001",
+	}
+	if code := apple.validate(); code != billing.CodeReferenceKindUnsupported {
+		t.Fatalf("an Apple record carried a purchase token (code=%q)", code)
+	}
+
+	// Gated to trusted-server authority.
+	foreign := base()
+	foreign.SourceAuthority = "provider_notification"
+	if code := foreign.validate(); code != billing.CodeAuthorityNotAllowed {
+		t.Fatalf("a non-trusted authority carried a purchase token (code=%q)", code)
+	}
+
+	// Bounds: control characters and over-length values are refused before the
+	// digest comparison, so a hostile value cannot reach storage.
+	oversize := base()
+	oversize.PurchaseToken = strings.Repeat("t", maxPurchaseTokenLength+1)
+	if code := oversize.validate(); code != billing.CodeSensitiveValueRejected {
+		t.Fatalf("an over-length token was accepted (code=%q)", code)
+	}
+	control := base()
+	control.PurchaseToken = "fixture\ntoken"
+	if code := control.validate(); code != billing.CodeSensitiveValueRejected {
+		t.Fatalf("a token with a control character was accepted (code=%q)", code)
+	}
+}
+
+// The client record has no place to put a token at all, so a client that sends
+// one is rejected as an unknown field rather than silently ignored.
+func TestClientObservationRejectsPurchaseToken(t *testing.T) {
+	body := readFixture(t, fixturePath("invalid", "client-observation-carries-purchase-token.json"))
+	envelope, code := decodeEnvelope[clientObservationPayload](body, recordTypeClientObservation)
+	if code == "" {
+		code = envelope.Payload.validate()
+	}
+	if code != billing.CodeUnknownField {
+		t.Fatalf("a client observation carrying a purchase token was rejected with %q, want %q",
+			code, billing.CodeUnknownField)
+	}
 }

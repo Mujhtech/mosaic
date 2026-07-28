@@ -255,17 +255,28 @@ type clientObservationPayload struct {
 // purchase tokens are structurally impossible to carry across this boundary,
 // and the reference is the same digest a client would send.
 type serverObservationPayload struct {
-	ObservationID                  string                          `json:"observationId"`
-	SubmissionID                   string                          `json:"submissionId"`
-	ProviderID                     string                          `json:"providerId"`
-	StorePlatform                  string                          `json:"storePlatform"`
-	TransactionReference           transactionReference            `json:"transactionReference"`
-	ProviderOrderReference         *providerOrderReference         `json:"providerOrderReference,omitempty"`
-	SourceAuthority                string                          `json:"sourceAuthority"`
-	TrustBasis                     string                          `json:"trustBasis"`
-	ReceivedAt                     string                          `json:"receivedAt"`
-	ProviderReportedAt             string                          `json:"providerReportedAt,omitempty"`
-	ProviderNotificationReference  string                          `json:"providerNotificationReference,omitempty"`
+	ObservationID                 string                  `json:"observationId"`
+	SubmissionID                  string                  `json:"submissionId"`
+	ProviderID                    string                  `json:"providerId"`
+	StorePlatform                 string                  `json:"storePlatform"`
+	TransactionReference          transactionReference    `json:"transactionReference"`
+	ProviderOrderReference        *providerOrderReference `json:"providerOrderReference,omitempty"`
+	SourceAuthority               string                  `json:"sourceAuthority"`
+	TrustBasis                    string                  `json:"trustBasis"`
+	ReceivedAt                    string                  `json:"receivedAt"`
+	ProviderReportedAt            string                  `json:"providerReportedAt,omitempty"`
+	ProviderNotificationReference string                  `json:"providerNotificationReference,omitempty"`
+	// PurchaseToken is the full Google Play purchase token. It is permitted
+	// only here, only on a Google record, and only under trusted-server
+	// authority; the client record has no such member at all and rejects one as
+	// an unknown field.
+	//
+	// It is a transaction reference the buyer's own purchase produced, not a
+	// Mosaic provider credential — service-account keys and signing material
+	// remain forbidden everywhere. It is encrypted at rest on receipt, never
+	// logged, never returned on any read, and never relieves the record of full
+	// provider validation.
+	PurchaseToken                  string                          `json:"purchaseToken,omitempty"`
 	StoreEnvironmentClassification *storeEnvironmentClassification `json:"storeEnvironmentClassification,omitempty"`
 	Correlation                    *observationCorrelation         `json:"correlation,omitempty"`
 	OriginatingObservationID       string                          `json:"originatingObservationId,omitempty"`
@@ -389,7 +400,46 @@ func (p serverObservationPayload) validate() string {
 			return billing.CodeObservationSchemaInvalid
 		}
 	}
+	if code := p.validatePurchaseToken(); code != "" {
+		return code
+	}
 	return validateReference(p.StorePlatform, p.TransactionReference, p.ProviderOrderReference)
+}
+
+// maxPurchaseTokenLength and purchaseTokenCharset mirror the contract's bounds:
+// printable, no control characters, at most 4096 runes.
+const maxPurchaseTokenLength = 4096
+
+var purchaseTokenCharset = regexp.MustCompile(`^[^\r\n\x00-\x1F\x7F]+$`)
+
+// validatePurchaseToken enforces the three rules the contract attaches to the
+// token, in the order that fails fastest.
+//
+// The last of them is the important one: a present token must SHA-256-digest to
+// the record's own transactionReference.value. Without that check a caller
+// could file a real purchase token under a *different* transaction's reference,
+// and Mosaic would validate the token against Google, get a genuine answer, and
+// record it as a fact about the transaction named in the reference. Binding the
+// two makes the reference and the token two views of one purchase rather than
+// two independent claims.
+func (p serverObservationPayload) validatePurchaseToken() string {
+	if p.PurchaseToken == "" {
+		return ""
+	}
+	// Gated to Google and to trusted-server authority by the contract's if/then.
+	if p.StorePlatform != storePlatformGoogle {
+		return billing.CodeReferenceKindUnsupported
+	}
+	if p.SourceAuthority != authorityTrustedServer {
+		return billing.CodeAuthorityNotAllowed
+	}
+	if len([]rune(p.PurchaseToken)) > maxPurchaseTokenLength || !purchaseTokenCharset.MatchString(p.PurchaseToken) {
+		return billing.CodeSensitiveValueRejected
+	}
+	if hexOf(billing.TokenDigest(p.PurchaseToken)) != p.TransactionReference.Value {
+		return billing.CodeProviderReferenceMalformed
+	}
+	return ""
 }
 
 var contractTimestamp = regexp.MustCompile(`^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(?:\.[0-9]{1,6})?Z$`)
@@ -431,7 +481,22 @@ func (p serverObservationPayload) toObservation() billing.Observation {
 	if p.StoreEnvironmentClassification != nil {
 		observation.StoreEnvironment = p.StoreEnvironmentClassification.Classification
 	}
+	// The token travels no further than the service, which seals it into the
+	// encrypted raw body immediately. It is never logged and never echoed.
+	observation.PurchaseToken = p.PurchaseToken
 	return observation
+}
+
+// hexOf renders a digest as lowercase hex, matching the cross-SDK contract for
+// the Google token digest.
+func hexOf(value []byte) string {
+	const digits = "0123456789abcdef"
+	out := make([]byte, len(value)*2)
+	for i, b := range value {
+		out[i*2] = digits[b>>4]
+		out[i*2+1] = digits[b&0x0f]
+	}
+	return string(out)
 }
 
 func parseContractTime(value string) time.Time {
@@ -815,6 +880,11 @@ func listOptions(r *http.Request, statuses ...string) billing.ListOptions {
 	options.Status = allowed(query.Get("status"), statuses)
 	options.ReasonCode = allowed(query.Get("reasonCode"), quarantineReasons)
 	options.Provider = allowed(query.Get("provider"), []string{billing.ProviderAppStore, billing.ProviderGooglePlay})
+	// The raw-input filter is an identifier, so it is bounded by the same
+	// charset every other caller-supplied identifier on this surface is.
+	if rawInputID, ok := billing.SafeProviderCode(query.Get("rawInputId")); ok && validIdentifier(rawInputID) {
+		options.RawInputID = rawInputID
+	}
 	if from, err := time.Parse(time.RFC3339, query.Get("from")); err == nil {
 		utc := from.UTC()
 		options.From = &utc
@@ -959,8 +1029,14 @@ func (v *reconciliationRequest) Validate() error {
 	return validation.ValidateStruct(v,
 		validation.Field(&v.CredentialID, validation.Required),
 		validation.Field(&v.Provider, validation.Required, validation.In(billing.ProviderAppStore, billing.ProviderGooglePlay)),
+		// apple_transaction_history is deliberately absent. The worker has no
+		// run loop for it, so accepting it produced a 202 followed by a run
+		// that landed `failed / unsupported_strategy` with no explanation
+		// anywhere in the product — a UI-reachable action that can never
+		// succeed. The migration CHECK still permits the value for forward
+		// compatibility; the API refuses it until the loop exists.
 		validation.Field(&v.Strategy, validation.Required, validation.In(
-			"apple_notification_history", "apple_transaction_history", "google_token_requery")),
+			"apple_notification_history", "google_token_requery")),
 		validation.Field(&v.WindowStart, validation.Required),
 		validation.Field(&v.WindowEnd, validation.Required),
 	)
@@ -1123,6 +1199,14 @@ func writeError(w http.ResponseWriter, r *http.Request, err error) {
 		status, code, message = http.StatusUnprocessableEntity, "validation_failed", "The billing request is invalid."
 	case errors.Is(err, billing.ErrRateLimited):
 		status, code, message = http.StatusTooManyRequests, "rate_limited", "Billing submissions are temporarily rate limited."
+	case errors.Is(err, billing.ErrCredentialsStillActive):
+		status, code = http.StatusConflict, "store_credentials_still_active"
+		message = "Revoke every active Store Server Credential before disabling Mosaic Billing. " +
+			"While a credential is active the store keeps delivering notifications, and refusing them " +
+			"would spend a retry budget that is never re-issued."
+	case errors.Is(err, billing.ErrValidationBusy):
+		status, code, message = http.StatusConflict, "validation_in_progress",
+			"This input is already being validated. Retry once the current attempt finishes."
 	case errors.Is(err, billing.ErrCredentialUnusable):
 		status, code, message = http.StatusConflict, "store_credential_unusable", "The Store Server Credential could not be used."
 	case errors.Is(err, billing.ErrUnavailable):

@@ -56,12 +56,23 @@ func (r *Repository) LeaseValidationJob(ctx context.Context, workerID string, no
 // The row is written already leased. That matters: if it were written as
 // 'queued' the ordinary validation worker could claim it between this statement
 // and the caller's own run, and the replay or reconciliation that asked for the
-// work would attribute an outcome it never produced. Taking the lease in the
-// same statement makes the handover impossible.
+// work would attribute an outcome it never produced.
 //
-// attempt_count is reset because a caller-initiated revalidation is a fresh
-// budget, exactly as an operator's quarantine retry is. The attempt history
-// itself is append-only and is unaffected.
+// Taking the lease is not, however, permission to take it *from someone*. The
+// DO UPDATE is guarded so a live lease is never stolen: takeover happens only
+// when the existing lease has expired or the job is already terminal. Without
+// the guard, an operator's quarantine retry could overwrite lease_owner while
+// ProcessNextValidation was mid-flight inside an eight-second provider call;
+// both paths would then read the same NextAttemptNumber before either
+// committed, one CompleteAttempt would abort on
+// UNIQUE (raw_input_id, attempt_number), and the losing side would silently
+// discard its attempt, fact, resolution snapshot and ledger entries while
+// reporting a failure it did not cause.
+//
+// Zero rows updated means busy, and the caller reports that rather than
+// proceeding. attempt_count is reset on a successful takeover because a
+// caller-initiated revalidation is a fresh budget, exactly as an operator's
+// quarantine retry is; the attempt history itself is append-only and unaffected.
 func (r *Repository) LeaseValidationJobFor(ctx context.Context, workerID string, input billing.RawInput, now, leaseUntil time.Time) (billing.ValidationJob, error) {
 	job := billing.ValidationJob{
 		ProjectID: input.ProjectID, EnvironmentID: input.EnvironmentID,
@@ -76,14 +87,30 @@ func (r *Repository) LeaseValidationJobFor(ctx context.Context, workerID string,
 		 ON CONFLICT (raw_input_id) DO UPDATE
 		   SET status='leased', attempt_count=1, available_at=$7,
 		       lease_owner=$8, lease_expires_at=$9, updated_at=$7
+		 WHERE billing_validation_jobs.status <> 'leased'
+		    OR billing_validation_jobs.lease_expires_at IS NULL
+		    OR billing_validation_jobs.lease_expires_at <= $7
 		 RETURNING id, attempt_count, max_attempts`,
 		"bvj_"+hashID(input.ID, "revalidate", now), input.ProjectID, input.EnvironmentID, input.ID,
 		input.Provider, billing.MaxValidationAttempts, now, workerID, leaseUntil).
 		Scan(&job.ID, &job.AttemptCount, &job.MaxAttempts)
+	if errors.Is(err, pgx.ErrNoRows) {
+		// The ON CONFLICT WHERE clause suppressed the update: another worker
+		// holds a live lease on this input.
+		return billing.ValidationJob{}, billing.ErrValidationBusy
+	}
 	if err != nil {
 		return billing.ValidationJob{}, fmt.Errorf("lease validation job for input: %w", err)
 	}
 	return job, nil
+}
+
+// ReplayInputsForTest lists this Environment's stored inputs. It exists so the
+// lease tests can obtain a real RawInput without duplicating the scan query.
+func (r *Repository) ReplayInputsForTest(ctx context.Context, projectID, environmentID string) ([]billing.RawInput, error) {
+	inputs, _, err := r.ReplayInputs(ctx, billing.ReplayJob{ProjectID: projectID, EnvironmentID: environmentID},
+		billing.InputFilter{}, billing.InputCursor{}, 10)
+	return inputs, err
 }
 
 // FactDigestsForInput reads the fact digests already on record for one input.
@@ -105,6 +132,29 @@ func (r *Repository) FactDigestsForInput(ctx context.Context, projectID, rawInpu
 	}
 	return digests, rows.Err()
 }
+
+// ParkValidationJob returns a leased job to the queue without recording an
+// attempt and without consuming one from the budget.
+//
+// It exists for conditions that are not failures and not the input's fault —
+// today, a Project whose owner turned billing off. Recording a failed attempt
+// would put a diagnostic in the append-only ledger about a decision the
+// operator made deliberately, and consuming an attempt would mean re-enabling
+// billing left the input with a depleted budget.
+func (r *Repository) ParkValidationJob(ctx context.Context, job billing.ValidationJob, reason string, now time.Time) error {
+	_, err := r.pool.Exec(ctx,
+		`UPDATE billing_validation_jobs
+		 SET status='queued', attempt_count=GREATEST(attempt_count-1,0), available_at=$2,
+		     lease_owner=NULL, lease_expires_at=NULL, last_error_code=NULLIF($3,''), updated_at=$2
+		 WHERE id=$1`, job.ID, now.Add(parkedRetryDelay), reason)
+	if err != nil {
+		return fmt.Errorf("park validation job: %w", err)
+	}
+	return nil
+}
+
+// parkedRetryDelay keeps a parked job from spinning the worker loop.
+const parkedRetryDelay = 5 * time.Minute
 
 func (r *Repository) NextAttemptNumber(ctx context.Context, rawInputID string) (int, error) {
 	var next int

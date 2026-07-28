@@ -78,6 +78,12 @@ func seed(t *testing.T, ctx context.Context, pool *pgxpool.Pool, suffix string) 
 		{`INSERT INTO applications(id,project_id,name,platform,identifier,created_at,updated_at)
 		  VALUES ($1,$2,'iOS','ios',$3,$4,$4) ON CONFLICT (id) DO NOTHING`,
 			[]any{applicationID, projectID, "com.fixture.app." + suffix, now}},
+		// Mosaic Billing is opt-in and genuinely gates intake and every worker,
+		// so a seeded tenant that is exercising the pipeline must have opted in.
+		// Tests that care about the off state turn it off explicitly.
+		{`INSERT INTO billing_project_settings(project_id,billing_enabled,updated_by_actor_id,created_at,updated_at)
+		  VALUES ($1,true,'seed',$2,$2) ON CONFLICT (project_id) DO UPDATE SET billing_enabled=true`,
+			[]any{projectID, now}},
 	}
 	for _, statement := range statements {
 		if _, err := pool.Exec(ctx, statement.query, statement.args...); err != nil {

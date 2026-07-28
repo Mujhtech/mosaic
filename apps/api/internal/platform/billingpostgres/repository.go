@@ -96,9 +96,44 @@ func (r *Repository) OrganizationForProject(ctx context.Context, projectID strin
 	return organizationID, nil
 }
 
+// EnvironmentScope reads the Environment's own mode alongside the owning
+// organization, in one statement, so the two can never be resolved from
+// different rows.
+func (r *Repository) EnvironmentScope(ctx context.Context, projectID, environmentID string) (string, string, error) {
+	var mode, organizationID string
+	err := r.pool.QueryRow(ctx,
+		`SELECT e.mode, p.organization_id FROM environments e
+		 JOIN projects p ON p.id = e.project_id
+		 WHERE e.id = $1 AND e.project_id = $2`, environmentID, projectID).Scan(&mode, &organizationID)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return "", "", billing.ErrNotFound
+	}
+	if err != nil {
+		return "", "", fmt.Errorf("resolve environment scope: %w", err)
+	}
+	return mode, organizationID, nil
+}
+
 func (r *Repository) SetBillingEnabled(ctx context.Context, actor billing.Actor, projectID string, enabled bool, now time.Time) error {
 	if _, err := requireRole(ctx, r.pool, actor, projectID, "owner", "admin"); err != nil {
 		return err
+	}
+	if !enabled {
+		// Turning billing off must actually stop ingestion. It cannot, while a
+		// credential is live: Apple posts to an endpoint whose intake token
+		// still resolves, and every refusal spends one of five non-renewable
+		// delivery attempts. Requiring revocation first makes the switch mean
+		// what it says, and makes the operator's action the one that stops the
+		// store rather than a setting the store cannot see.
+		var active int
+		if err := r.pool.QueryRow(ctx,
+			`SELECT count(*) FROM store_server_credentials WHERE project_id=$1 AND status='active'`,
+			projectID).Scan(&active); err != nil {
+			return fmt.Errorf("count active store server credentials: %w", err)
+		}
+		if active > 0 {
+			return billing.ErrCredentialsStillActive
+		}
 	}
 	_, err := r.pool.Exec(ctx,
 		`INSERT INTO billing_project_settings(project_id, billing_enabled, updated_by_actor_id, created_at, updated_at)
@@ -468,6 +503,34 @@ func (r *Repository) ResolveIntakeToken(ctx context.Context, tokenDigest []byte)
 		return billing.IntakeIdentity{}, fmt.Errorf("resolve intake token: %w", err)
 	}
 	return identity, nil
+}
+
+// ProviderApplicationIdentifier resolves the store-side identifier (Apple
+// bundle id, Google package name) for one Application inside one credential's
+// scope.
+//
+// Apple requires a `bid` claim on every JWT, and it must be the bundle id of
+// the Application the transaction actually belongs to. Taking the credential's
+// alphabetically-first scoped Application instead — which is what a bare
+// "LIMIT 1" does — silently sends the wrong `bid` for every Application after
+// the first, and Apple answers 401. Because a 401 classifies as retryable, the
+// input then burns its whole attempt budget and dead-letters with a diagnostic
+// pointing the operator at credential rotation, which is not the problem.
+func (r *Repository) ProviderApplicationIdentifier(ctx context.Context, credentialID, applicationID string) (string, error) {
+	if strings.TrimSpace(applicationID) == "" {
+		return "", billing.ErrNotFound
+	}
+	var identifier string
+	err := r.pool.QueryRow(ctx,
+		`SELECT provider_application_identifier FROM store_server_credential_applications
+		 WHERE credential_id=$1 AND application_id=$2`, credentialID, applicationID).Scan(&identifier)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return "", billing.ErrNotFound
+	}
+	if err != nil {
+		return "", fmt.Errorf("resolve provider application identifier: %w", err)
+	}
+	return identifier, nil
 }
 
 func (r *Repository) ApplicationForIdentifier(ctx context.Context, credentialID, identifier string) (string, string, error) {

@@ -38,6 +38,14 @@ func (s *Service) ProcessNextValidation(ctx context.Context, workerID string) (b
 		ProjectID: job.ProjectID, EnvironmentID: job.EnvironmentID, ResourceID: job.RawInputID,
 	})
 
+	// Defense in depth: a disabled Project makes no provider calls and records
+	// no facts. The job is parked rather than failed — disabling is reversible,
+	// and a failed job would need an operator action to recover work that only
+	// ever needed to wait.
+	if enabled, err := s.repository.BillingEnabled(ctx, job.ProjectID); err == nil && !enabled {
+		return true, s.repository.ParkValidationJob(ctx, job, "billing_disabled", s.now())
+	}
+
 	ctx, span := s.tracer.Start(ctx, "billing.validate."+job.Provider)
 	defer span.End()
 
@@ -388,8 +396,26 @@ func (s *Service) appleCredential(ctx context.Context, input RawInput) (appstore
 	if err != nil {
 		return appstoreserver.Credential{}, credentialID, ErrCredentialUnusable
 	}
+	// The `bid` must name the Application this input belongs to. The fallback
+	// from CredentialSecretFor is the credential's first scoped Application,
+	// which is correct only for a single-Application credential; for a team with
+	// two apps on one key it would send the wrong bundle id and Apple would
+	// answer 401.
+	//
+	// There is deliberately no fallback to the issuer id. An issuer UUID is not
+	// a bundle id under any circumstance, so sending one can only produce a
+	// request Apple rejects — and because a 401 is classified retryable, that
+	// rejection would be retried eight times before dead-lettering with a
+	// diagnostic pointing at the wrong cause. Failing closed here reports the
+	// real problem immediately.
+	if input.ApplicationID != "" {
+		resolved, resolveErr := s.repository.ProviderApplicationIdentifier(ctx, input.CredentialID, input.ApplicationID)
+		if resolveErr == nil && resolved != "" {
+			bundleID = resolved
+		}
+	}
 	if bundleID == "" {
-		bundleID = credential.AppleIssuerID
+		return appstoreserver.Credential{}, credentialID, ErrCredentialUnusable
 	}
 	return appstoreserver.Credential{
 		IssuerID: credential.AppleIssuerID, KeyID: credential.AppleKeyID, PrivateKey: key,

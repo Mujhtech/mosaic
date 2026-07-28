@@ -394,7 +394,12 @@ func (c *Client) call(ctx context.Context, account *ServiceAccount, method strin
 	if err != nil {
 		return &Error{Op: operation, cause: err}
 	}
+	// url.Parse puts the decoded form in Path and the escaped form in RawPath.
+	// Copying only Path and letting URL.String() re-encode silently drops the
+	// escaping every url.PathEscape call above added, so a %2F would become a
+	// real path separator. Both halves are carried so the escaping survives.
 	endpoint.Path += target.Path
+	endpoint.RawPath = escapedPath(base) + escapedPath(target)
 	endpoint.RawQuery = target.RawQuery
 
 	var reader io.Reader
@@ -470,4 +475,13 @@ func (c *Client) executeRaw(ctx context.Context, request *http.Request) ([]byte,
 	}
 	_ = ctx
 	return payload, response.StatusCode, response.Header, nil
+}
+
+// escapedPath returns the percent-encoded path of u, falling back to the
+// decoded form when the two are identical (url.URL leaves RawPath empty then).
+func escapedPath(u *url.URL) string {
+	if u.RawPath != "" {
+		return u.RawPath
+	}
+	return u.Path
 }

@@ -15,6 +15,17 @@ var (
 	// ErrUnavailable is the only condition an intake endpoint answers non-2xx
 	// for: Mosaic genuinely could not durably record the input.
 	ErrUnavailable = errors.New("billing storage is temporarily unavailable")
+	// ErrValidationBusy reports that another worker holds a live lease on the
+	// input a caller asked to revalidate. It is a "come back later" signal, not
+	// a failure: the caller leaves its own job queued rather than running a
+	// second validation concurrently with the one already in flight.
+	ErrValidationBusy = errors.New("the input is already being validated")
+	// ErrCredentialsStillActive blocks disabling Mosaic Billing while a Store
+	// Server Credential is still active. Disabling with credentials in place
+	// would mean Apple keeps posting notifications Mosaic refuses to record,
+	// silently spending a five-attempt retry budget that is never re-issued;
+	// revoking the credential first is what actually stops the store.
+	ErrCredentialsStillActive = errors.New("active Store Server Credentials must be revoked before Mosaic Billing can be disabled")
 	// ErrCredentialUnusable covers a revoked or undecryptable Store Server
 	// Credential — one that exists but cannot be used. It never carries the
 	// underlying cryptographic error.

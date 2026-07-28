@@ -2,12 +2,15 @@ package billingpostgres
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"strconv"
 	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 
 	"github.com/Mujhtech/mosaic/apps/api/internal/billing"
 )
@@ -123,8 +126,9 @@ func (r *Repository) ListAttempts(ctx context.Context, actor billing.Actor, proj
 		 FROM billing_validation_attempts
 		 WHERE environment_id=$1 AND ($2 = '' OR id < $2)
 		   AND ($3::text = '' OR outcome = $3)
-		 ORDER BY started_at DESC, id DESC LIMIT $4`,
-		environmentID, cursorAfter(options), options.Status, limit+1)
+		   AND ($4::text = '' OR raw_input_id = $4)
+		 ORDER BY started_at DESC, id DESC LIMIT $5`,
+		environmentID, cursorAfter(options), options.Status, options.RawInputID, limit+1)
 	if err != nil {
 		return billing.Page[billing.ValidationAttempt]{}, fmt.Errorf("list validation attempts: %w", err)
 	}
@@ -191,19 +195,30 @@ func (r *Repository) ListLedger(ctx context.Context, actor billing.Actor, projec
 // because sandbox and production must stay visibly separate everywhere.
 const quarantineColumns = `q.id, q.project_id, q.environment_id, q.raw_input_id, COALESCE(q.application_id,''), q.provider,
 	COALESCE(i.store_environment, 'unclassified'),
+	COALESCE(res.provider_product_identifier, ''),
 	q.reason_code, q.severity, q.scopes, q.status, q.attempt_count, q.first_seen_at, q.last_attempt_at,
 	COALESCE(q.closing_attempt_id,''), COALESCE(q.superseded_by_record_id,''), q.closed_at, COALESCE(q.diagnostic_code,'')`
 
 // quarantineFrom is the shared join. LEFT JOIN rather than INNER: a record must
 // remain listable even if its input row is somehow unreachable, and the COALESCE
 // above turns that into an explicit "unclassified" instead of dropping the row.
+// The resolution join is LATERAL and ordered: an input may have several
+// resolution attempts, and the operator needs the most recent one — the
+// Product identifier that is currently failing to resolve, not the first one
+// that ever did.
 const quarantineFrom = `FROM billing_quarantine_records q
-	LEFT JOIN billing_raw_inputs i ON i.id = q.raw_input_id AND i.project_id = q.project_id`
+	LEFT JOIN billing_raw_inputs i ON i.id = q.raw_input_id AND i.project_id = q.project_id
+	LEFT JOIN LATERAL (
+		SELECT r.provider_product_identifier FROM billing_product_resolutions r
+		WHERE r.raw_input_id = q.raw_input_id AND r.project_id = q.project_id
+		ORDER BY r.resolved_at DESC LIMIT 1
+	) res ON true`
 
 func scanQuarantine(row pgx.Row) (billing.QuarantineRecord, error) {
 	var record billing.QuarantineRecord
 	err := row.Scan(&record.ID, &record.ProjectID, &record.EnvironmentID, &record.RawInputID,
 		&record.ApplicationID, &record.Provider, &record.StoreEnvironment,
+		&record.ProviderProductIdentifier,
 		&record.ReasonCode, &record.Severity, &record.Scopes,
 		&record.Status, &record.AttemptCount, &record.FirstSeenAt, &record.LastAttemptAt,
 		&record.ClosingAttemptID, &record.SupersededByRecordID, &record.ClosedAt, &record.DiagnosticCode)
@@ -264,6 +279,25 @@ func (r *Repository) Quarantine(ctx context.Context, actor billing.Actor, projec
 // change the record's status to anything resembling resolved: only a subsequent
 // successful attempt can do that, inside CompleteAttempt, with the attempt id
 // recorded as the justification.
+// OpenQuarantine records a quarantine outside a validation attempt.
+//
+// Reconciliation needs this because a conflicting discovery is not a failure of
+// the attempt that produced it — that attempt validated successfully and
+// appended a legitimate fact. What needs an operator is the contradiction
+// between that fact and the one already on record, and nothing is overwritten
+// either way: both facts stand and the quarantine is the diagnostic over them.
+func (r *Repository) OpenQuarantine(ctx context.Context, projectID, environmentID string, write billing.QuarantineWrite) error {
+	tx, err := r.pool.Begin(ctx)
+	if err != nil {
+		return fmt.Errorf("begin quarantine write: %w", err)
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+	if err := upsertQuarantine(ctx, tx, projectID, environmentID, write); err != nil {
+		return err
+	}
+	return tx.Commit(ctx)
+}
+
 func (r *Repository) RequeueValidation(ctx context.Context, actor billing.Actor, projectID, recordID string, now time.Time) (billing.QuarantineRecord, error) {
 	if _, err := requireRole(ctx, r.pool, actor, projectID, "owner", "admin"); err != nil {
 		return billing.QuarantineRecord{}, err
@@ -351,22 +385,58 @@ func (r *Repository) CloseQuarantineSuperseded(ctx context.Context, actor billin
 
 const reconciliationColumns = `id, project_id, environment_id, credential_id, provider, trigger, strategy,
 	status, window_start, window_end, COALESCE(cursor_token,''), examined_count, discovered_count,
-	duplicate_count, failure_count, COALESCE(last_error_code,''), created_at, started_at, completed_at`
+	duplicate_count, failure_count, conflict_count, COALESCE(last_error_code,''), created_at, started_at, completed_at,
+	cursor_received_at, COALESCE(cursor_input_id,'')`
 
 func scanReconciliation(row pgx.Row) (billing.ReconciliationRun, error) {
 	var run billing.ReconciliationRun
 	err := row.Scan(&run.ID, &run.ProjectID, &run.EnvironmentID, &run.CredentialID, &run.Provider,
 		&run.Trigger, &run.Strategy, &run.Status, &run.WindowStart, &run.WindowEnd, &run.CursorToken,
 		&run.ExaminedCount, &run.DiscoveredCount, &run.DuplicateCount, &run.FailureCount,
-		&run.LastErrorCode, &run.CreatedAt, &run.StartedAt, &run.CompletedAt)
+		&run.ConflictCount, &run.LastErrorCode, &run.CreatedAt, &run.StartedAt, &run.CompletedAt,
+		&run.Cursor.ReceivedAt, &run.Cursor.InputID)
 	return run, err
 }
 
+// writeAuditEvent records a sensitive billing operation in the shared audit
+// log.
+//
+// Credential lifecycle and quarantine recovery already have append-only domain
+// tables of their own. Replay and manual reconciliation did not: their only
+// actor record was `requested_by_actor_id` on a mutable job row, which anyone
+// with database access could rewrite after the fact. Metadata carries
+// identifiers and enumerations only — never a token, a payload, or a window an
+// attacker could use to infer content.
+func writeAuditEvent(ctx context.Context, q execer, actor billing.Actor, organizationID, projectID, environmentID,
+	action, resourceType, resourceID string, metadata map[string]string, now time.Time) error {
+	encoded := []byte("{}")
+	if len(metadata) > 0 {
+		if raw, err := json.Marshal(metadata); err == nil {
+			encoded = raw
+		}
+	}
+	_, err := q.Exec(ctx,
+		`INSERT INTO audit_events(id, actor_id, organization_id, project_id, environment_id,
+			action, resource_type, resource_id, metadata, created_at)
+		 VALUES ($1,$2,$3,$4,NULLIF($5,''),$6,$7,$8,$9,$10)`,
+		"aud_"+hashID(resourceID, action, now), actor.ID, organizationID, projectID, environmentID,
+		action, resourceType, resourceID, encoded, now)
+	if err != nil {
+		return fmt.Errorf("write billing audit event: %w", err)
+	}
+	return nil
+}
+
+type execer interface {
+	Exec(context.Context, string, ...any) (pgconn.CommandTag, error)
+}
+
 func (r *Repository) CreateReconciliationRun(ctx context.Context, actor billing.Actor, run billing.ReconciliationRun, now time.Time) (billing.ReconciliationRun, error) {
-	if _, err := requireRole(ctx, r.pool, actor, run.ProjectID, "owner", "admin"); err != nil {
+	organizationID, err := requireRole(ctx, r.pool, actor, run.ProjectID, "owner", "admin")
+	if err != nil {
 		return billing.ReconciliationRun{}, err
 	}
-	_, err := r.pool.Exec(ctx,
+	_, err = r.pool.Exec(ctx,
 		`INSERT INTO billing_reconciliation_runs(
 			id, project_id, environment_id, credential_id, provider, trigger, strategy, status,
 			window_start, window_end, available_at, requested_by_actor_id, created_at, updated_at)
@@ -380,6 +450,12 @@ func (r *Repository) CreateReconciliationRun(ctx context.Context, actor billing.
 			return billing.ReconciliationRun{}, billing.ErrConflict
 		}
 		return billing.ReconciliationRun{}, fmt.Errorf("create reconciliation run: %w", err)
+	}
+	if err := writeAuditEvent(ctx, r.pool, actor, organizationID, run.ProjectID, run.EnvironmentID,
+		"billing.reconciliation_run.created", "billing_reconciliation_run", run.ID,
+		map[string]string{"provider": run.Provider, "strategy": run.Strategy, "trigger": run.Trigger},
+		now); err != nil {
+		return billing.ReconciliationRun{}, err
 	}
 	return scanReconciliation(r.pool.QueryRow(ctx,
 		`SELECT `+reconciliationColumns+` FROM billing_reconciliation_runs WHERE id=$1`, run.ID))
@@ -451,14 +527,15 @@ func (r *Repository) LeaseReconciliationRun(ctx context.Context, workerID string
 
 // UpdateReconciliationProgress commits the cursor and returns the run to the
 // queue. Committing after each page is what makes a run restart-safe.
-func (r *Repository) UpdateReconciliationProgress(ctx context.Context, run billing.ReconciliationRun, cursorToken string, now time.Time) error {
+func (r *Repository) UpdateReconciliationProgress(ctx context.Context, run billing.ReconciliationRun, cursorToken string, cursor billing.InputCursor, now time.Time) error {
 	_, err := r.pool.Exec(ctx,
 		`UPDATE billing_reconciliation_runs
 		 SET status='queued', cursor_token=NULLIF($2,''), examined_count=$3, discovered_count=$4,
-		     duplicate_count=$5, failure_count=$6, available_at=$7, lease_owner=NULL,
-		     lease_expires_at=NULL, updated_at=$7
+		     duplicate_count=$5, failure_count=$6, conflict_count=$7, available_at=$8, lease_owner=NULL,
+		     lease_expires_at=NULL, cursor_received_at=$9, cursor_input_id=NULLIF($10,''), updated_at=$8
 		 WHERE id=$1`, run.ID, cursorToken, run.ExaminedCount, run.DiscoveredCount,
-		run.DuplicateCount, run.FailureCount, now)
+		run.DuplicateCount, run.FailureCount, run.ConflictCount, now,
+		cursor.ReceivedAt, cursor.InputID)
 	if err != nil {
 		return fmt.Errorf("update reconciliation progress: %w", err)
 	}
@@ -469,9 +546,10 @@ func (r *Repository) CompleteReconciliationRun(ctx context.Context, run billing.
 	_, err := r.pool.Exec(ctx,
 		`UPDATE billing_reconciliation_runs
 		 SET status=$2, examined_count=$3, discovered_count=$4, duplicate_count=$5, failure_count=$6,
-		     last_error_code=NULLIF($7,''), completed_at=$8, lease_owner=NULL, lease_expires_at=NULL, updated_at=$8
+		     conflict_count=$7,
+		     last_error_code=NULLIF($8,''), completed_at=$9, lease_owner=NULL, lease_expires_at=NULL, updated_at=$9
 		 WHERE id=$1`, run.ID, status, run.ExaminedCount, run.DiscoveredCount, run.DuplicateCount,
-		run.FailureCount, errorCode, now)
+		run.FailureCount, run.ConflictCount, errorCode, now)
 	if err != nil {
 		return fmt.Errorf("complete reconciliation run: %w", err)
 	}
@@ -484,22 +562,25 @@ func (r *Repository) CompleteReconciliationRun(ctx context.Context, run billing.
 
 const replayColumns = `id, project_id, environment_id, kind, COALESCE(raw_input_id,''), window_start, window_end,
 	validator_version, status, COALESCE(comparison_result,''), examined_count, unchanged_count,
-	new_fact_count, conflict_count, COALESCE(last_error_code,''), created_at, completed_at`
+	new_fact_count, conflict_count, COALESCE(last_error_code,''), created_at, completed_at,
+	cursor_received_at, COALESCE(cursor_input_id,'')`
 
 func scanReplay(row pgx.Row) (billing.ReplayJob, error) {
 	var job billing.ReplayJob
 	err := row.Scan(&job.ID, &job.ProjectID, &job.EnvironmentID, &job.Kind, &job.RawInputID,
 		&job.WindowStart, &job.WindowEnd, &job.ValidatorVersion, &job.Status, &job.ComparisonResult,
 		&job.ExaminedCount, &job.UnchangedCount, &job.NewFactCount, &job.ConflictCount,
-		&job.LastErrorCode, &job.CreatedAt, &job.CompletedAt)
+		&job.LastErrorCode, &job.CreatedAt, &job.CompletedAt,
+		&job.Cursor.ReceivedAt, &job.Cursor.InputID)
 	return job, err
 }
 
 func (r *Repository) CreateReplayJob(ctx context.Context, actor billing.Actor, job billing.ReplayJob, now time.Time) (billing.ReplayJob, error) {
-	if _, err := requireRole(ctx, r.pool, actor, job.ProjectID, "owner", "admin"); err != nil {
+	organizationID, err := requireRole(ctx, r.pool, actor, job.ProjectID, "owner", "admin")
+	if err != nil {
 		return billing.ReplayJob{}, err
 	}
-	_, err := r.pool.Exec(ctx,
+	_, err = r.pool.Exec(ctx,
 		`INSERT INTO billing_replay_jobs(
 			id, project_id, environment_id, kind, raw_input_id, window_start, window_end,
 			validator_version, status, available_at, requested_by_actor_id, created_at, updated_at)
@@ -508,6 +589,12 @@ func (r *Repository) CreateReplayJob(ctx context.Context, actor billing.Actor, j
 		job.WindowEnd, job.ValidatorVersion, now, actor.ID)
 	if err != nil {
 		return billing.ReplayJob{}, fmt.Errorf("create replay job: %w", err)
+	}
+	if err := writeAuditEvent(ctx, r.pool, actor, organizationID, job.ProjectID, job.EnvironmentID,
+		"billing.replay_job.created", "billing_replay_job", job.ID,
+		map[string]string{"kind": job.Kind, "validatorVersion": strconv.Itoa(job.ValidatorVersion)},
+		now); err != nil {
+		return billing.ReplayJob{}, err
 	}
 	return scanReplay(r.pool.QueryRow(ctx, `SELECT `+replayColumns+` FROM billing_replay_jobs WHERE id=$1`, job.ID))
 }
@@ -578,7 +665,7 @@ func (r *Repository) LeaseReplayJob(ctx context.Context, workerID string, now, l
 // Only inputs whose body is still retained are eligible: an expired body cannot
 // be re-validated, and pretending otherwise would produce an attempt with
 // nothing behind it.
-func (r *Repository) ReplayInputs(ctx context.Context, job billing.ReplayJob, filter billing.InputFilter, limit int) ([]billing.RawInput, error) {
+func (r *Repository) ReplayInputs(ctx context.Context, job billing.ReplayJob, filter billing.InputFilter, cursor billing.InputCursor, limit int) ([]billing.RawInput, billing.InputCursor, error) {
 	if limit <= 0 {
 		limit = 50
 	}
@@ -586,31 +673,41 @@ func (r *Repository) ReplayInputs(ctx context.Context, job billing.ReplayJob, fi
 	if sources == nil {
 		sources = []string{}
 	}
+	// The keyset predicate. Ordering by (received_at, id) is stable under the
+	// continuous appends this table sees, so resuming strictly after the last
+	// examined position can neither skip nor repeat a row — which an OFFSET
+	// would do in both directions as the window fills underneath a multi-pass
+	// scan.
 	rows, err := r.pool.Query(ctx,
-		`SELECT id FROM billing_raw_inputs
+		`SELECT id, received_at FROM billing_raw_inputs
 		 WHERE project_id=$1 AND environment_id=$2 AND body_state='stored'
 		   AND ($3 = '' OR id = $3)
 		   AND ($4::timestamptz IS NULL OR received_at >= $4)
 		   AND ($5::timestamptz IS NULL OR received_at <= $5)
 		   AND ($6 = '' OR provider = $6)
 		   AND (cardinality($7::text[]) = 0 OR source = ANY($7::text[]))
-		 ORDER BY received_at, id LIMIT $8`,
+		   AND ($8::timestamptz IS NULL OR (received_at, id) > ($8::timestamptz, $9))
+		 ORDER BY received_at, id LIMIT $10`,
 		job.ProjectID, job.EnvironmentID, job.RawInputID, job.WindowStart, job.WindowEnd,
-		filter.Provider, sources, limit)
+		filter.Provider, sources, cursor.ReceivedAt, cursor.InputID, limit)
 	if err != nil {
-		return nil, fmt.Errorf("select replay inputs: %w", err)
+		return nil, billing.InputCursor{}, fmt.Errorf("select replay inputs: %w", err)
 	}
 	defer rows.Close()
 	ids := make([]string, 0, limit)
+	next := cursor
 	for rows.Next() {
 		var id string
-		if err := rows.Scan(&id); err != nil {
-			return nil, fmt.Errorf("scan replay input id: %w", err)
+		var receivedAt time.Time
+		if err := rows.Scan(&id, &receivedAt); err != nil {
+			return nil, billing.InputCursor{}, fmt.Errorf("scan replay input id: %w", err)
 		}
 		ids = append(ids, id)
+		at := receivedAt
+		next = billing.InputCursor{ReceivedAt: &at, InputID: id}
 	}
 	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("read replay inputs: %w", err)
+		return nil, billing.InputCursor{}, fmt.Errorf("read replay inputs: %w", err)
 	}
 	inputs := make([]billing.RawInput, 0, len(ids))
 	for _, id := range ids {
@@ -620,7 +717,25 @@ func (r *Repository) ReplayInputs(ctx context.Context, job billing.ReplayJob, fi
 		}
 		inputs = append(inputs, input)
 	}
-	return inputs, nil
+	return inputs, next, nil
+}
+
+// UpdateReplayProgress commits counters and the cursor and returns the job to
+// the queue. Committing after each page is what makes a long replay resumable:
+// a worker that dies mid-window resumes from the last committed position rather
+// than restarting or, worse, reporting the partial scan as complete.
+func (r *Repository) UpdateReplayProgress(ctx context.Context, job billing.ReplayJob, cursor billing.InputCursor, now time.Time) error {
+	_, err := r.pool.Exec(ctx,
+		`UPDATE billing_replay_jobs
+		 SET status='queued', examined_count=$2, unchanged_count=$3, new_fact_count=$4,
+		     conflict_count=$5, available_at=$6, lease_owner=NULL, lease_expires_at=NULL,
+		     cursor_received_at=$7, cursor_input_id=NULLIF($8,''), updated_at=$6
+		 WHERE id=$1`, job.ID, job.ExaminedCount, job.UnchangedCount, job.NewFactCount,
+		job.ConflictCount, now, cursor.ReceivedAt, cursor.InputID)
+	if err != nil {
+		return fmt.Errorf("update replay progress: %w", err)
+	}
+	return nil
 }
 
 func (r *Repository) CompleteReplayJob(ctx context.Context, job billing.ReplayJob, comparison, errorCode string, now time.Time) error {

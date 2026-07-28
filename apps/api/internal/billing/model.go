@@ -396,18 +396,24 @@ type QuarantineRecord struct {
 	// input whose environment was not classified before it quarantined reports
 	// "unclassified" explicitly rather than an absent field, because a missing
 	// value on this surface reads as production to a careless eye.
-	StoreEnvironment     string     `json:"storeEnvironment"`
-	ReasonCode           string     `json:"reasonCode"`
-	Severity             string     `json:"severity"`
-	Scopes               []string   `json:"scopes"`
-	Status               string     `json:"status"`
-	AttemptCount         int        `json:"attemptCount"`
-	FirstSeenAt          time.Time  `json:"firstSeenAt"`
-	LastAttemptAt        time.Time  `json:"lastAttemptAt"`
-	ClosingAttemptID     string     `json:"closingAttemptId,omitempty"`
-	SupersededByRecordID string     `json:"supersededByRecordId,omitempty"`
-	ClosedAt             *time.Time `json:"closedAt,omitempty"`
-	DiagnosticCode       string     `json:"diagnosticCode,omitempty"`
+	StoreEnvironment string `json:"storeEnvironment"`
+	// ProviderProductIdentifier is the store Product the quarantined input
+	// named, carried from the input's resolution attempt. For the common
+	// product_unknown case it is the single most actionable field on the
+	// record — it is exactly what the operator has to create a mapping for —
+	// and without it the dashboard had to send them elsewhere to find it.
+	ProviderProductIdentifier string     `json:"providerProductIdentifier,omitempty"`
+	ReasonCode                string     `json:"reasonCode"`
+	Severity                  string     `json:"severity"`
+	Scopes                    []string   `json:"scopes"`
+	Status                    string     `json:"status"`
+	AttemptCount              int        `json:"attemptCount"`
+	FirstSeenAt               time.Time  `json:"firstSeenAt"`
+	LastAttemptAt             time.Time  `json:"lastAttemptAt"`
+	ClosingAttemptID          string     `json:"closingAttemptId,omitempty"`
+	SupersededByRecordID      string     `json:"supersededByRecordId,omitempty"`
+	ClosedAt                  *time.Time `json:"closedAt,omitempty"`
+	DiagnosticCode            string     `json:"diagnosticCode,omitempty"`
 }
 
 // ReconciliationRun is one bounded, restart-safe reconciliation pass.
@@ -423,38 +429,62 @@ type ReconciliationRun struct {
 	WindowStart   time.Time `json:"windowStart"`
 	// CursorToken is the provider pagination position a restarted run resumes
 	// from. It is opaque and bounded, and is never a credential.
-	CursorToken     string     `json:"-"`
-	WindowEnd       time.Time  `json:"windowEnd"`
-	ExaminedCount   int64      `json:"examinedCount"`
-	DiscoveredCount int64      `json:"discoveredCount"`
-	DuplicateCount  int64      `json:"duplicateCount"`
-	FailureCount    int64      `json:"failureCount"`
-	LastErrorCode   string     `json:"lastErrorCode,omitempty"`
-	CreatedAt       time.Time  `json:"createdAt"`
-	StartedAt       *time.Time `json:"startedAt,omitempty"`
-	CompletedAt     *time.Time `json:"completedAt,omitempty"`
+	CursorToken string `json:"-"`
+	// Cursor is the keyset position of the last input examined. It is distinct
+	// from CursorToken: one is a provider position, the other a Mosaic row
+	// position, and sharing a column would conflate them.
+	Cursor          InputCursor `json:"-"`
+	WindowEnd       time.Time   `json:"windowEnd"`
+	ExaminedCount   int64       `json:"examinedCount"`
+	DiscoveredCount int64       `json:"discoveredCount"`
+	DuplicateCount  int64       `json:"duplicateCount"`
+	// ConflictCount records discoveries that contradicted a fact already on
+	// record, as distinct from discoveries that were merely new. Gate 9A
+	// requires reconciliation to detect missing *or conflicting* state, and
+	// without a separate counter the two are indistinguishable.
+	ConflictCount int64      `json:"conflictCount"`
+	FailureCount  int64      `json:"failureCount"`
+	LastErrorCode string     `json:"lastErrorCode,omitempty"`
+	CreatedAt     time.Time  `json:"createdAt"`
+	StartedAt     *time.Time `json:"startedAt,omitempty"`
+	CompletedAt   *time.Time `json:"completedAt,omitempty"`
 }
 
 // ReplayJob is one replay or revalidation.
 type ReplayJob struct {
-	ID               string     `json:"id"`
-	ProjectID        string     `json:"projectId"`
-	EnvironmentID    string     `json:"environmentId"`
-	Kind             string     `json:"kind"`
-	RawInputID       string     `json:"rawInputId,omitempty"`
-	WindowStart      *time.Time `json:"windowStart,omitempty"`
-	WindowEnd        *time.Time `json:"windowEnd,omitempty"`
-	ValidatorVersion int        `json:"validatorVersion"`
-	Status           string     `json:"status"`
-	ComparisonResult string     `json:"comparisonResult,omitempty"`
-	ExaminedCount    int64      `json:"examinedCount"`
-	UnchangedCount   int64      `json:"unchangedCount"`
-	NewFactCount     int64      `json:"newFactCount"`
-	ConflictCount    int64      `json:"conflictCount"`
-	LastErrorCode    string     `json:"lastErrorCode,omitempty"`
-	CreatedAt        time.Time  `json:"createdAt"`
-	CompletedAt      *time.Time `json:"completedAt,omitempty"`
+	ID               string      `json:"id"`
+	ProjectID        string      `json:"projectId"`
+	EnvironmentID    string      `json:"environmentId"`
+	Kind             string      `json:"kind"`
+	RawInputID       string      `json:"rawInputId,omitempty"`
+	WindowStart      *time.Time  `json:"windowStart,omitempty"`
+	WindowEnd        *time.Time  `json:"windowEnd,omitempty"`
+	ValidatorVersion int         `json:"validatorVersion"`
+	Status           string      `json:"status"`
+	ComparisonResult string      `json:"comparisonResult,omitempty"`
+	ExaminedCount    int64       `json:"examinedCount"`
+	UnchangedCount   int64       `json:"unchangedCount"`
+	NewFactCount     int64       `json:"newFactCount"`
+	ConflictCount    int64       `json:"conflictCount"`
+	LastErrorCode    string      `json:"lastErrorCode,omitempty"`
+	Cursor           InputCursor `json:"-"`
+	CreatedAt        time.Time   `json:"createdAt"`
+	CompletedAt      *time.Time  `json:"completedAt,omitempty"`
 }
+
+// InputCursor is a keyset position over Raw Billing Inputs ordered by
+// (received_at, id).
+//
+// A keyset rather than an offset: inputs are appended continuously, so an
+// offset would skip rows as the table grows underneath a multi-pass scan. Zero
+// value means "start at the beginning".
+type InputCursor struct {
+	ReceivedAt *time.Time
+	InputID    string
+}
+
+// Set reports whether the cursor names a position.
+func (c InputCursor) Set() bool { return c.ReceivedAt != nil && c.InputID != "" }
 
 // LedgerEntry is one append-only operational event.
 type LedgerEntry struct {
