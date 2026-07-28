@@ -23,14 +23,24 @@ private actor ObservationTestTransport: MosaicTransactionObservationTransport {
 }
 
 extension MosaicTransactionObservationHTTPResponse {
+  /// One Billing Ingestion Contract 1 `observationSubmissionResult` record.
   fileprivate static func result(
-    _ outcome: String, submissionID: String, code: String? = nil, status: Int = 202
+    _ status: String, submissionID: String, code: String? = nil,
+    contractVersion: String = "1", recordType: String = "observationSubmissionResult",
+    statusCode: Int = 202
   ) -> MosaicTransactionObservationHTTPResponse {
-    var payload: [String: Any] = ["submissionId": submissionID, "outcome": outcome]
+    var payload: [String: Any] = [
+      "submissionId": submissionID, "receivedAt": "2026-07-27T12:00:00.400Z", "status": status,
+    ]
     if let code { payload["code"] = code }
+    let record: [String: Any] = [
+      "billingIngestionContractVersion": contractVersion,
+      "recordType": recordType,
+      "payload": payload,
+    ]
     return .init(
-      statusCode: status,
-      data: (try? JSONSerialization.data(withJSONObject: ["data": payload])) ?? Data(),
+      statusCode: statusCode,
+      data: (try? JSONSerialization.data(withJSONObject: record)) ?? Data(),
       retryAfterSeconds: nil)
   }
 }
@@ -40,13 +50,12 @@ final class TransactionObservationTests: XCTestCase {
 
   private func observation(
     submissionID: String = "storekit_transaction_2000000900000001",
-    reference: String = "2000000900000001",
-    environment: MosaicTransactionObservationStoreEnvironment? = .production
+    reference: String = "2000000900000001"
   ) throws -> MosaicTransactionObservation {
     try XCTUnwrap(
       MosaicTransactionObservation(
         submissionID: submissionID, referenceKind: .appStoreTransactionID,
-        reference: reference, storeEnvironment: environment, observedAt: observedAt))
+        reference: reference, observedAt: observedAt))
   }
 
   /// A runtime with a fixed clock and a deterministic worst-case backoff, so
@@ -59,44 +68,135 @@ final class TransactionObservationTests: XCTestCase {
     let now = Date(timeIntervalSince1970: 1_785_500_000 + secondsAfterObservation)
     return MosaicTransactionObservationRuntime(
       persistence: persistence, transport: transport,
+      context: MosaicTransactionObservationContext(applicationVersion: "1.4.2"),
       clock: { now }, jitter: { $0.upperBound })
   }
 
-  /// The submission body must carry exactly the agreed keys and nothing else.
+  private var context: MosaicTransactionObservationContext {
+    MosaicTransactionObservationContext(applicationVersion: "1.4.2")
+  }
+
+  /// The payload of the submitted record.
+  private func payload(_ observation: MosaicTransactionObservation) throws -> [String: Any] {
+    let encoded = try MosaicTransactionObservationCodec.encode(observation, context: context)
+    let root = try XCTUnwrap(JSONSerialization.jsonObject(with: encoded) as? [String: Any])
+    return try XCTUnwrap(root["payload"] as? [String: Any])
+  }
+
+  /// The submitted record must be the canonical client observation envelope
+  /// and must carry exactly the agreed keys, nothing more.
   ///
-  /// A key allowlist is the only assertion that fails by default when a future
-  /// change adds a field, which is what would smuggle a JWS representation,
-  /// device-verification material, or an account token onto the wire.
-  func testSubmissionBodyCarriesExactlyTheAllowlistedKeys() throws {
-    let encoded = try MosaicTransactionObservationCodec.encode(observation())
-    let object = try XCTUnwrap(
-      JSONSerialization.jsonObject(with: encoded) as? [String: Any])
+  /// A key allowlist checked against the canonical fixture is the only
+  /// assertion that fails by default when a future change adds a field, which
+  /// is what would smuggle a JWS representation, device-verification material,
+  /// or an account token onto the wire.
+  func testSubmittedRecordMatchesTheCanonicalObservationEnvelope() throws {
+    let correlated = try XCTUnwrap(
+      MosaicTransactionObservation(
+        submissionID: "storekit_transaction_2000000900000001",
+        reference: "2000000900000001", observedAt: observedAt,
+        correlation: MosaicTransactionObservationCorrelation(
+          providerOperationID: "storekit_purchase_0001")))
+    let encoded = try MosaicTransactionObservationCodec.encode(correlated, context: context)
+    let root = try XCTUnwrap(JSONSerialization.jsonObject(with: encoded) as? [String: Any])
 
+    let fixture = try XCTUnwrap(
+      JSONSerialization.jsonObject(
+        with: try phase5FixtureData("billing-ingestion/v1/apple-client-observation.json"))
+        as? [String: Any])
+    let fixturePayload = try XCTUnwrap(fixture["payload"] as? [String: Any])
+
+    // Envelope.
+    XCTAssertEqual(Set(root.keys), Set(fixture.keys))
+    XCTAssertEqual(Set(root.keys), MosaicTransactionObservationCodec.envelopeKeys)
+    XCTAssertEqual(root["billingIngestionContractVersion"] as? String, "1")
+    XCTAssertEqual(root["recordType"] as? String, "clientTransactionObservation")
+
+    // Payload: exactly the canonical fixture's keys, and within the allowlist.
+    let body = try XCTUnwrap(root["payload"] as? [String: Any])
+    XCTAssertEqual(Set(body.keys), Set(fixturePayload.keys))
+    XCTAssertTrue(Set(body.keys).isSubset(of: MosaicTransactionObservationCodec.wireKeys))
     XCTAssertEqual(
-      Set(object.keys),
-      ["submissionId", "referenceKind", "reference", "storeEnvironment", "observedAt"])
-    XCTAssertEqual(Set(object.keys), MosaicTransactionObservationCodec.wireKeys)
-    XCTAssertEqual(object["referenceKind"] as? String, "app_store_transaction_id")
-    XCTAssertEqual(object["reference"] as? String, "2000000900000001")
-    XCTAssertEqual(object["storeEnvironment"] as? String, "production")
-    XCTAssertEqual(object["observedAt"] as? String, "2026-07-31T12:13:20.000Z")
+      body["observationId"] as? String, "observation_storekit_transaction_2000000900000001")
+    XCTAssertEqual(body["submissionId"] as? String, "storekit_transaction_2000000900000001")
+    XCTAssertEqual(body["providerId"] as? String, "app_store")
+    XCTAssertEqual(body["storePlatform"] as? String, "apple_app_store")
+    XCTAssertEqual(body["sourceAuthority"] as? String, "client_observation")
+    XCTAssertEqual(body["observedAt"] as? String, "2026-07-31T12:13:20.000Z")
 
-    // The environment is omitted rather than guessed where StoreKit cannot
-    // report it, and a client never asserts a Store Environment it invented.
-    let withoutEnvironment = try MosaicTransactionObservationCodec.encode(
-      observation(environment: nil))
-    let reduced = try XCTUnwrap(
-      JSONSerialization.jsonObject(with: withoutEnvironment) as? [String: Any])
-    XCTAssertEqual(
-      Set(reduced.keys), ["submissionId", "referenceKind", "reference", "observedAt"])
+    let reference = try XCTUnwrap(body["transactionReference"] as? [String: Any])
+    let fixtureReference = try XCTUnwrap(fixturePayload["transactionReference"] as? [String: Any])
+    XCTAssertEqual(Set(reference.keys), Set(fixtureReference.keys))
+    XCTAssertEqual(reference["referenceKind"] as? String, "app_store_transaction_id")
+    XCTAssertEqual(reference["value"] as? String, "2000000900000001")
 
-    let body = try XCTUnwrap(String(data: encoded, encoding: .utf8))
+    let sdkContext = try XCTUnwrap(body["context"] as? [String: Any])
+    let fixtureContext = try XCTUnwrap(fixturePayload["context"] as? [String: Any])
+    XCTAssertTrue(Set(sdkContext.keys).isSubset(of: Set(fixtureContext.keys)))
+    XCTAssertEqual(sdkContext["platform"] as? String, "ios")
+    XCTAssertEqual(sdkContext["sdkFamily"] as? String, "ios")
+    XCTAssertEqual(sdkContext["sdkVersion"] as? String, mosaicSDKVersion)
+    XCTAssertEqual(sdkContext["applicationVersion"] as? String, "1.4.2")
+
+    let correlation = try XCTUnwrap(body["correlation"] as? [String: Any])
+    XCTAssertTrue(
+      Set(correlation.keys).isSubset(
+        of: ["purchaseAttemptId", "providerOperationId", "providerUpdateId"]))
+    XCTAssertFalse(correlation.isEmpty)
+
+    // Correlation is the only optional member, and it is absent when there is
+    // no handle to carry.
+    let plain = try payload(observation())
+    XCTAssertEqual(Set(plain.keys), Set(fixturePayload.keys).subtracting(["correlation"]))
+
+    let serialized = try XCTUnwrap(String(data: encoded, encoding: .utf8))
     for forbidden in [
       "jws", "signedTransaction", "deviceVerification", "appAccountToken", "appTransactionID",
       "originalID", "purchaseToken", "receipt",
+      // A client observation never asserts a Store Environment, a tenant, a
+      // price, or an entitlement.
+      "storeEnvironment", "sandbox", "production", "organizationId", "projectId",
+      "environmentId", "monetaryAmount", "entitlement",
     ] {
-      XCTAssertFalse(body.localizedCaseInsensitiveContains(forbidden), forbidden)
+      XCTAssertFalse(serialized.localizedCaseInsensitiveContains(forbidden), forbidden)
     }
+  }
+
+  /// The four canonical response fixtures must decode to the four contract
+  /// outcomes.
+  ///
+  /// Asserting against the shared fixtures rather than hand-built JSON is what
+  /// binds the Swift decoder to the frozen record shape; a change to the
+  /// envelope, the status vocabulary, or the retry hint fails here.
+  func testCanonicalSubmissionResultFixturesDecodeToTheContractOutcomes() throws {
+    func decode(_ fixture: String, submissionID: String)
+      throws -> MosaicTransactionObservationSubmissionResult
+    {
+      MosaicTransactionObservationCodec.decodeResult(
+        try phase5FixtureData("billing-ingestion/v1/responses/\(fixture)"),
+        submissionID: submissionID)
+    }
+
+    XCTAssertEqual(
+      try decode("accepted-for-validation.json", submissionID: "fixture-submission-apple-0001"),
+      .init(outcome: .acceptedForValidation, retryAfterSeconds: nil))
+    XCTAssertEqual(
+      try decode("duplicate-observation.json", submissionID: "fixture-submission-apple-0001"),
+      .init(outcome: .duplicate, retryAfterSeconds: nil))
+    XCTAssertEqual(
+      try decode("permanent-rejection.json", submissionID: "fixture-submission-malformed-0001"),
+      .init(
+        outcome: .permanentlyRejected(code: "provider_reference_malformed"),
+        retryAfterSeconds: nil))
+    XCTAssertEqual(
+      try decode("retryable-failure.json", submissionID: "fixture-submission-google-0001"),
+      .init(outcome: .retryableFailure(code: "rate_limited"), retryAfterSeconds: 30))
+
+    // A result addressed to a different submission is never applied to this
+    // record.
+    XCTAssertEqual(
+      try decode("accepted-for-validation.json", submissionID: "storekit_transaction_1"),
+      .init(outcome: .retryableFailure(code: "submission_id_mismatch"), retryAfterSeconds: nil))
   }
 
   /// The App Store reference is a decimal string end to end.
@@ -123,12 +223,11 @@ final class TransactionObservationTests: XCTestCase {
 
       // Round-tripping through JSON proves the value is carried as a string
       // rather than as a JSON number.
-      let object = try XCTUnwrap(
-        JSONSerialization.jsonObject(with: MosaicTransactionObservationCodec.encode(candidate))
-          as? [String: Any])
-      XCTAssertEqual(object["reference"] as? String, value)
-      XCTAssertLessThanOrEqual(
-        try XCTUnwrap(object["submissionId"] as? String).count, 128)
+      let body = try payload(candidate)
+      let reference = try XCTUnwrap(body["transactionReference"] as? [String: Any])
+      XCTAssertEqual(reference["value"] as? String, value)
+      XCTAssertLessThanOrEqual(try XCTUnwrap(body["submissionId"] as? String).count, 128)
+      XCTAssertLessThanOrEqual(try XCTUnwrap(body["observationId"] as? String).count, 128)
     }
 
     XCTAssertTrue(identifiers.contains("uint64-max"))
@@ -205,7 +304,9 @@ final class TransactionObservationTests: XCTestCase {
     XCTAssertEqual(submitted.count, 2)
     let references = try submitted.map { body -> String in
       let object = try XCTUnwrap(JSONSerialization.jsonObject(with: body) as? [String: Any])
-      return try XCTUnwrap(object["reference"] as? String)
+      let payload = try XCTUnwrap(object["payload"] as? [String: Any])
+      let reference = try XCTUnwrap(payload["transactionReference"] as? [String: Any])
+      return try XCTUnwrap(reference["value"] as? String)
     }
     XCTAssertEqual(Set(references), ["2000000900000001", "2000000900000002"])
   }
@@ -221,8 +322,18 @@ final class TransactionObservationTests: XCTestCase {
       .result("confirmed", submissionID: submissionID),
       .result("", submissionID: submissionID),
       .result("accepted_for_validation", submissionID: "storekit_transaction_9"),
+      // A future contract version carries different semantics and is never
+      // reinterpreted under this one's rules, even when it says accepted.
+      .result("accepted_for_validation", submissionID: submissionID, contractVersion: "2"),
+      .result(
+        "accepted_for_validation", submissionID: submissionID, recordType: "validationResult"),
       .init(statusCode: 500, data: Data(), retryAfterSeconds: nil),
       .init(statusCode: 202, data: Data("{}".utf8), retryAfterSeconds: nil),
+      // The superseded flat envelope must not be honoured either.
+      .init(
+        statusCode: 202,
+        data: Data(#"{"data":{"submissionId":"x","outcome":"accepted_for_validation"}}"#.utf8),
+        retryAfterSeconds: nil),
     ]
     for response in responses {
       let persistence = MosaicMemoryTransactionObservationPersistence()

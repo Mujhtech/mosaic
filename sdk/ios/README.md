@@ -479,16 +479,28 @@ let mosaic = try await Mosaic.configure(
 await provider.attachTransactionObservationSink(mosaic.transactionObservationSink())
 ```
 
-What is submitted, and nothing else: the deterministic `submissionId`, the
-reference kind `app_store_transaction_id`, the raw decimal
-`Transaction.id` as a string, the Store Environment where StoreKit can report
-it, and `observedAt`. The following are never read from StoreKit and can never
-reach a Mosaic payload: `jwsRepresentation`, `deviceVerification`,
+The submitted document is the canonical Billing Ingestion Contract 1
+`clientTransactionObservation` record: contract version `1`, the record type,
+and a payload of `observationId`, the deterministic `submissionId`,
+`providerId`, `storePlatform`, a `transactionReference` of
+`app_store_transaction_id` plus the raw decimal `Transaction.id` as a string,
+`observedAt`, `sourceAuthority: client_observation`, SDK `context`, and
+`correlation` when a purchase-attempt handle exists.
+
+Nothing else is submitted. The following are never read from StoreKit and can
+never reach a Mosaic payload: `jwsRepresentation`, `deviceVerification`,
 `deviceVerificationNonce`, `appAccountToken`, `appTransactionID`,
 `originalID`, price, and store product identity.
 
+A client never asserts a **Store Environment**. Sandbox and production
+classification is derived server-side from verified provider metadata during
+validation, so no environment field appears on the wire.
+
 Behaviour worth knowing before enabling it:
 
+- **Only a trigger is claimed.** `sourceAuthority` is always
+  `client_observation`, which the contract defines as the lowest authority: a
+  client observation can trigger validation but can never author a fact.
 - **The purchase result never changes.** `MosaicPurchaseResult` and
   `MosaicCommerceUpdate` are byte-identical regardless of submission outcome,
   and `serverConfirmedTransactions` stays `unsupported`. Nothing in the
@@ -498,9 +510,10 @@ Behaviour worth knowing before enabling it:
   returns immediately; delivery happens on a detached task.
 - **The reference is a string end to end.** App Store transaction identifiers
   exceed IEEE-754 double precision and `Int64`; never parse one.
-- **Xcode StoreKit testing is suppressed.** Those transactions have no App
-  Store record, so no observation is enqueued for them. Sandbox and production
-  transactions are observed normally.
+- **Xcode StoreKit testing is suppressed.** `Transaction.environment` is read
+  on iOS 16 and later for exactly one purpose: those transactions have no App
+  Store record, so no observation is enqueued for them. The value is never
+  submitted. Sandbox and production transactions are observed normally.
 - **The queue is persistent and duplicate-safe.** It lives in Application
   Support beside the analytics queue, is excluded from backup, survives
   relaunch, and de-duplicates on the deterministic submission identifier.

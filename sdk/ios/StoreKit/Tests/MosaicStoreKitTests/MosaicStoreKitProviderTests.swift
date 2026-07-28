@@ -167,8 +167,15 @@ final class MosaicStoreKitProviderTests: XCTestCase {
     XCTAssertEqual(observations.count, 1)
     XCTAssertEqual(observations.first?.reference, "42")
     XCTAssertEqual(observations.first?.submissionID, "storekit_transaction_42")
+    XCTAssertEqual(observations.first?.observationID, "observation_storekit_transaction_42")
     XCTAssertEqual(observations.first?.referenceKind, .appStoreTransactionID)
-    XCTAssertEqual(observations.first?.storeEnvironment, .production)
+    XCTAssertEqual(observations.first?.storePlatform, .appleAppStore)
+    // The provider identity, not an invented value.
+    XCTAssertEqual(observations.first?.providerID, "app_store")
+    // Correlation carries the existing opaque handles only.
+    XCTAssertEqual(
+      observations.first?.correlation?.providerUpdateID, "storekit_transaction_42")
+    XCTAssertNotNil(observations.first?.correlation?.providerOperationID)
   }
 
   /// Two independent ways an integrator ends up sending nothing: never opting

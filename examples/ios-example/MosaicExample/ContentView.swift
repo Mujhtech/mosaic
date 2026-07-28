@@ -381,8 +381,7 @@ private final class HostedConfigurationModel: ObservableObject {
       let observation = MosaicTransactionObservation(
         submissionID: "storekit_transaction_2000000900000001",
         referenceKind: .appStoreTransactionID,
-        reference: "2000000900000001",
-        storeEnvironment: .sandbox)
+        reference: "2000000900000001")
     else { return }
     sink.enqueue(observation)
     statusText = "Observation queued · development sample only, never proof"

@@ -50,6 +50,9 @@ struct MosaicURLSessionTransactionObservationTransport: MosaicTransactionObserva
 
 struct MosaicTransactionObservationRecord: Codable, Sendable, Equatable {
   var observation: MosaicTransactionObservation
+  /// Stamped when the observation was queued, so a record submitted after an
+  /// app update still reports the SDK and application that observed it.
+  var context: MosaicTransactionObservationContext
   var attempts: Int
   var nextAttemptAt: Date?
 }
@@ -139,6 +142,7 @@ actor MosaicTransactionObservationRuntime {
 
   private let persistence: any MosaicTransactionObservationPersistence
   private let transport: any MosaicTransactionObservationTransport
+  private let context: MosaicTransactionObservationContext
   private let clock: @Sendable () -> Date
   private let jitter: @Sendable (ClosedRange<Double>) -> Double
   private var state: MosaicTransactionObservationState?
@@ -148,11 +152,13 @@ actor MosaicTransactionObservationRuntime {
   init(
     persistence: any MosaicTransactionObservationPersistence,
     transport: any MosaicTransactionObservationTransport,
+    context: MosaicTransactionObservationContext,
     clock: @escaping @Sendable () -> Date = Date.init,
     jitter: @escaping @Sendable (ClosedRange<Double>) -> Double = { Double.random(in: $0) }
   ) {
     self.persistence = persistence
     self.transport = transport
+    self.context = context
     self.clock = clock
     self.jitter = jitter
   }
@@ -164,7 +170,8 @@ actor MosaicTransactionObservationRuntime {
     var value = await load()
     guard !value.queue.contains(where: { $0.observation.submissionID == observation.submissionID })
     else { return }
-    value.queue.append(.init(observation: observation, attempts: 0, nextAttemptAt: nil))
+    value.queue.append(
+      .init(observation: observation, context: context, attempts: 0, nextAttemptAt: nil))
     prune(&value, now: clock())
     await saveBestEffort(value)
     _ = await flush()
@@ -209,7 +216,7 @@ actor MosaicTransactionObservationRuntime {
     var removed = 0
     var deferredAny = false
     for record in eligible {
-      let outcome = await submit(record.observation)
+      let outcome = await submit(record.observation, context: record.context)
       switch outcome.result {
       case .acceptedForValidation:
         value.acceptedForValidationCount &+= 1
@@ -238,9 +245,11 @@ actor MosaicTransactionObservationRuntime {
   }
 
   private func submit(
-    _ observation: MosaicTransactionObservation
+    _ observation: MosaicTransactionObservation,
+    context: MosaicTransactionObservationContext
   ) async -> (result: MosaicTransactionObservationOutcome, retryAfterSeconds: Int?) {
-    guard let body = try? MosaicTransactionObservationCodec.encode(observation) else {
+    guard let body = try? MosaicTransactionObservationCodec.encode(observation, context: context)
+    else {
       // An observation that cannot be encoded can never succeed.
       return (.permanentlyRejected(code: "observation_schema_invalid"), nil)
     }
@@ -251,11 +260,11 @@ actor MosaicTransactionObservationRuntime {
           .retryableFailure(code: safeHTTPCode(response.statusCode)), response.retryAfterSeconds
         )
       }
-      return (
-        MosaicTransactionObservationCodec.decodeOutcome(
-          response.data, submissionID: observation.submissionID),
-        response.retryAfterSeconds
-      )
+      let result = MosaicTransactionObservationCodec.decodeResult(
+        response.data, submissionID: observation.submissionID)
+      // The record's own retry hint wins over the transport header; the
+      // header remains the fallback for a response with no readable record.
+      return (result.outcome, result.retryAfterSeconds ?? response.retryAfterSeconds)
     } catch {
       // A network failure must never surface to the host or the purchase path.
       return (.retryableFailure(code: "service_temporarily_unavailable"), nil)
@@ -353,9 +362,10 @@ actor MosaicTransactionObservationRuntimeRegistry {
   /// Returns the shared runtime for this endpoint and key, plus whether it had
   /// to fall back to process-lifetime persistence. A degraded queue still
   /// delivers; it just cannot survive relaunch.
-  func runtime(baseURL: URL, apiKey: String, timeout: TimeInterval, rootDirectory: URL?) -> (
-    runtime: MosaicTransactionObservationRuntime, degraded: Bool
-  ) {
+  func runtime(
+    baseURL: URL, apiKey: String, timeout: TimeInterval, applicationVersion: String?,
+    rootDirectory: URL?
+  ) -> (runtime: MosaicTransactionObservationRuntime, degraded: Bool) {
     let namespace = baseURL.absoluteString + "\n" + apiKey
     if let existing = runtimes[namespace] { return (existing, false) }
     var degraded = false
@@ -372,7 +382,8 @@ actor MosaicTransactionObservationRuntimeRegistry {
     let runtime = MosaicTransactionObservationRuntime(
       persistence: persistence,
       transport: MosaicURLSessionTransactionObservationTransport(
-        baseURL: baseURL, apiKey: apiKey, timeout: timeout))
+        baseURL: baseURL, apiKey: apiKey, timeout: timeout),
+      context: MosaicTransactionObservationContext(applicationVersion: applicationVersion))
     runtimes[namespace] = runtime
     return (runtime, degraded)
   }

@@ -6,18 +6,24 @@
   (`Mosaic.configure(transactionObservations:)`). When enabled,
   `MosaicStoreKitProvider.attachTransactionObservationSink(_:)` hands each
   locally accepted transaction to a persistent, duplicate-safe queue that
-  submits the deterministic submission identifier, the reference kind
-  `app_store_transaction_id`, the raw decimal `Transaction.id` as a string,
-  the Store Environment where StoreKit reports it, and `observedAt` to
-  `POST /v1/sdk/billing/observations`. Nothing else is submitted;
+  submits the canonical Billing Ingestion Contract 1
+  `clientTransactionObservation` record — deterministic `observationId` and
+  `submissionId`, `providerId`, `storePlatform`, a `transactionReference` of
+  `app_store_transaction_id` plus the raw decimal `Transaction.id` as a string,
+  `observedAt`, `sourceAuthority: client_observation`, SDK context, and
+  optional correlation — to `POST /v1/sdk/billing/observations`. A client never
+  asserts a Store Environment; the server classifies it during validation.
+  `Transaction.environment` is read on iOS 16 and later only to suppress
+  Xcode StoreKit-testing transactions. Nothing else is submitted;
   `jwsRepresentation`, `deviceVerification`, `appAccountToken`, and
   `appTransactionID` are never read.
 - The handoff never blocks a purchase, never changes a purchase or restore
   result, and never re-labels a local purchase as server-validated:
   `serverConfirmedTransactions` remains `unsupported` and the submission
-  outcome vocabulary has no validated member. Xcode StoreKit-testing
-  transactions are suppressed, and Phase 9A adds no background-execution
-  machinery. New: `transactionObservationSink()`,
+  outcome vocabulary has no validated member. Submission results are decoded
+  as Billing Ingestion Contract 1 `observationSubmissionResult` records; an
+  unrecognized envelope, contract version, or status is retryable and can never
+  become acceptance. Phase 9A adds no background-execution machinery. New: `transactionObservationSink()`,
   `flushTransactionObservations()`, `transactionObservationDiagnostics()`.
 
 ## 0.1.0-dev.6 — 2026-07-27

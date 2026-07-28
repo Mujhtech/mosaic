@@ -459,7 +459,7 @@ public actor MosaicStoreKitProvider:
       // and unfinished-transaction recovery, and inherits the acceptance
       // store's de-duplication. The call is synchronous by contract so the
       // purchase path cannot suspend on it.
-      observe(transaction)
+      observe(transaction, updateID: updateID, operationID: operationID)
       if emitsUpdate {
         updateContinuation.yield(update)
       }
@@ -482,25 +482,26 @@ public actor MosaicStoreKitProvider:
   /// The submitted reference is the raw decimal `Transaction.id`, which is what
   /// Apple's transaction lookup accepts; the prefixed `safeReference` stays on
   /// the host-facing `MosaicCommerceUpdate`. Nothing else about the transaction
-  /// is submitted.
-  private func observe(_ transaction: StoreKitTransaction) {
+  /// is submitted — in particular the Store Environment is read here only to
+  /// suppress Xcode transactions, and is never asserted on the wire. Sandbox
+  /// and production classification is the server's job during validation.
+  private func observe(
+    _ transaction: StoreKitTransaction, updateID: String, operationID: String?
+  ) {
     guard let observationSink else { return }
-    let environment: MosaicTransactionObservationStoreEnvironment?
-    switch transaction.environment {
-    case .production: environment = .production
-    case .sandbox: environment = .sandbox
-    case .localTesting:
-      // StoreKit Testing in Xcode produces no App Store record, so submitting
-      // one would be guaranteed rejection noise.
-      return
-    case nil: environment = nil
-    }
+    // StoreKit Testing in Xcode produces no App Store record, so submitting one
+    // would be guaranteed rejection noise.
+    guard transaction.environment != .localTesting else { return }
     guard
       let observation = MosaicTransactionObservation(
-        submissionID: "storekit_transaction_\(transaction.id)",
+        submissionID: updateID,
         referenceKind: .appStoreTransactionID,
         reference: transaction.providerTransactionID,
-        storeEnvironment: environment
+        providerID: identity.id,
+        // Correlation uses the existing opaque handles only, so a validated
+        // fact can be joined to the purchase attempt that triggered it.
+        correlation: MosaicTransactionObservationCorrelation(
+          providerOperationID: operationID, providerUpdateID: updateID)
       )
     else { return }
     observationSink.enqueue(observation)

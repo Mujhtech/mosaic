@@ -212,7 +212,8 @@ public struct Mosaic: Sendable {
     var observationRuntime: MosaicTransactionObservationRuntime?
     if transactionObservations == .enabled {
       let observations = await MosaicTransactionObservationRuntimeRegistry.shared.runtime(
-        baseURL: baseURL, apiKey: key, timeout: requestTimeout, rootDirectory: root)
+        baseURL: baseURL, apiKey: key, timeout: requestTimeout,
+        applicationVersion: configuration.applicationVersion, rootDirectory: root)
       observationRuntime = observations.runtime
       if observations.degraded { degraded = true }
     }
