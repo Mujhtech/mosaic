@@ -13,6 +13,7 @@ import (
 	"github.com/rs/zerolog"
 
 	"github.com/Mujhtech/mosaic/apps/api/internal/analytics"
+	"github.com/Mujhtech/mosaic/apps/api/internal/billing"
 	"github.com/Mujhtech/mosaic/apps/api/internal/browserauth"
 	"github.com/Mujhtech/mosaic/apps/api/internal/cloudworkspace"
 	"github.com/Mujhtech/mosaic/apps/api/internal/experiment"
@@ -22,6 +23,7 @@ import (
 	"github.com/Mujhtech/mosaic/apps/api/internal/platform/httpserver/httpmiddleware"
 	"github.com/Mujhtech/mosaic/apps/api/internal/platform/httpserver/response"
 	analyticshttp "github.com/Mujhtech/mosaic/apps/api/internal/transport/analytics"
+	billinghttp "github.com/Mujhtech/mosaic/apps/api/internal/transport/billing"
 	browserauthhttp "github.com/Mujhtech/mosaic/apps/api/internal/transport/browserauth"
 	cloudworkspacehttp "github.com/Mujhtech/mosaic/apps/api/internal/transport/cloudworkspace"
 	experimenthttp "github.com/Mujhtech/mosaic/apps/api/internal/transport/experiment"
@@ -85,6 +87,12 @@ type Dependencies struct {
 	AnalyticsKeyLimiter   analyticshttp.Limiter
 	AnalyticsEventLimiter analyticshttp.EventLimiter
 	Experiment            *experiment.Service
+	// Billing is nil unless MOSAIC_BILLING_ENABLED is set.
+	Billing *billing.Service
+	// BillingIPLimiter and BillingKeyLimiter bound the observation endpoints
+	// only. The store notification endpoint is deliberately unlimited.
+	BillingIPLimiter  httpmiddleware.Limiter
+	BillingKeyLimiter httpmiddleware.Limiter
 	// APILimiter is the baseline limit for authenticated dashboard APIs.
 	APILimiter httpmiddleware.Limiter
 	// DecisionLimiter bounds Placement and Experiment decision reads.
@@ -127,13 +135,13 @@ func NewWithDependencies(cfg Config, logger zerolog.Logger, dependencies Depende
 	// Compatibility aliases retained for existing probes while documented callers migrate.
 	router.Mount("/health", health.LiveRoutes())
 	router.Mount("/ready", readinessRoutes(dependencies))
-	if dependencies.BrowserAuth != nil || dependencies.CloudWorkspace != nil || dependencies.HostedPublishing != nil || dependencies.PlacementDecision != nil || dependencies.Analytics != nil {
+	if dependencies.BrowserAuth != nil || dependencies.CloudWorkspace != nil || dependencies.HostedPublishing != nil || dependencies.PlacementDecision != nil || dependencies.Analytics != nil || dependencies.Billing != nil {
 		router.Route("/v1", func(versioned chi.Router) {
 			versioned.Use(trustedMutationOrigins(cfg.AllowedOrigins))
 			if dependencies.BrowserAuth != nil {
 				browserauthhttp.RegisterRoutes(versioned, dependencies.BrowserAuth, dependencies.BrowserAuthConfig)
 			}
-			if dependencies.CloudWorkspace != nil || dependencies.HostedPublishing != nil || dependencies.Analytics != nil {
+			if dependencies.CloudWorkspace != nil || dependencies.HostedPublishing != nil || dependencies.Analytics != nil || dependencies.Billing != nil {
 				versioned.Group(func(authenticated chi.Router) {
 					authenticated.Use(authn.Middleware(dependencies.PrincipalResolver))
 					// Authenticated dashboard APIs had no limit at all before
@@ -164,6 +172,14 @@ func NewWithDependencies(cfg Config, logger zerolog.Logger, dependencies Depende
 							analyticshttp.RegisterProjectRoutes(project, dependencies.Analytics,
 								httpmiddleware.RateLimit("export", dependencies.ExportLimiter, principalKey))
 						}
+						if dependencies.Billing != nil {
+							// Credential tests, reconciliation, replay, and
+							// quarantine retries each reach a provider or enqueue
+							// history-scanning work, so they share the
+							// export-class bucket rather than the baseline API one.
+							billinghttp.RegisterProjectRoutes(project, dependencies.Billing,
+								httpmiddleware.RateLimit("export", dependencies.ExportLimiter, principalKey))
+						}
 						if dependencies.Experiment != nil {
 							project.Group(func(decision chi.Router) {
 								decision.Use(httpmiddleware.RateLimit("decision", dependencies.DecisionLimiter, principalKey))
@@ -179,6 +195,16 @@ func NewWithDependencies(cfg Config, logger zerolog.Logger, dependencies Depende
 			if dependencies.Analytics != nil {
 				analyticshttp.RegisterPublicRoutes(versioned, dependencies.Analytics, dependencies.AnalyticsIPLimiter, dependencies.AnalyticsKeyLimiter, dependencies.AnalyticsEventLimiter,
 					routeTimeout(cfg.IngestTimeout, cfg.RequestTimeout))
+			}
+			if dependencies.Billing != nil {
+				// Store notification intake is registered outside every
+				// 429-returning limiter family: a 429 to Apple consumes one of
+				// five non-renewable retries and can lose a transaction
+				// permanently. Observations, which SDKs queue and retry, keep
+				// their limiter.
+				billinghttp.RegisterNotificationRoutes(versioned, dependencies.Billing)
+				billinghttp.RegisterPublicRoutes(versioned, dependencies.Billing,
+					dependencies.BillingIPLimiter, dependencies.BillingKeyLimiter)
 			}
 		})
 	}

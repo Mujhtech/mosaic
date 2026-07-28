@@ -21,14 +21,19 @@ import (
 	"github.com/rs/zerolog"
 
 	"github.com/Mujhtech/mosaic/apps/api/internal/analytics"
+	"github.com/Mujhtech/mosaic/apps/api/internal/billing"
 	"github.com/Mujhtech/mosaic/apps/api/internal/cloudworkspace"
 	"github.com/Mujhtech/mosaic/apps/api/internal/experiment"
 	"github.com/Mujhtech/mosaic/apps/api/internal/platform/analyticspostgres"
+	"github.com/Mujhtech/mosaic/apps/api/internal/platform/appstorejws"
+	"github.com/Mujhtech/mosaic/apps/api/internal/platform/appstoreserver"
+	"github.com/Mujhtech/mosaic/apps/api/internal/platform/billingpostgres"
 	"github.com/Mujhtech/mosaic/apps/api/internal/platform/buildinfo"
 	"github.com/Mujhtech/mosaic/apps/api/internal/platform/cloudworkspacepostgres"
 	"github.com/Mujhtech/mosaic/apps/api/internal/platform/config"
 	"github.com/Mujhtech/mosaic/apps/api/internal/platform/database"
 	"github.com/Mujhtech/mosaic/apps/api/internal/platform/experimentpostgres"
+	"github.com/Mujhtech/mosaic/apps/api/internal/platform/googleplay"
 	"github.com/Mujhtech/mosaic/apps/api/internal/platform/logging"
 	"github.com/Mujhtech/mosaic/apps/api/internal/platform/objectstoreminio"
 	"github.com/Mujhtech/mosaic/apps/api/internal/platform/revenuecat"
@@ -138,6 +143,43 @@ func run() (runErr error) {
 		providerService = cloudworkspace.NewService(cloudworkspacepostgres.New(pool), cloudworkspace.WithProviderOperations(cipher, client, cfg.Providers.SnapshotTTL))
 	}
 
+	var billingService *billing.Service
+	var billingRepository *billingpostgres.Repository
+	if cfg.Billing.Enabled {
+		billingCipher, err := providercredential.NewAESGCMCipher(cfg.Providers.CredentialKeyring, rand.Reader)
+		if err != nil {
+			return fmt.Errorf("configure billing credential encryption: %w", err)
+		}
+		verifier, err := appstorejws.NewVerifier()
+		if err != nil {
+			return fmt.Errorf("configure Apple notification verification: %w", err)
+		}
+		appleClient, err := appstoreserver.New(appstoreserver.Config{
+			ProductionBaseURL: cfg.Billing.AppleProductionBaseURL,
+			SandboxBaseURL:    cfg.Billing.AppleSandboxBaseURL,
+			RequestTimeout:    cfg.Providers.RequestTimeout,
+			ConnectTimeout:    cfg.Providers.ConnectTimeout,
+			MaxResponseBytes:  cfg.Providers.MaxResponseBytes,
+		})
+		if err != nil {
+			return fmt.Errorf("configure App Store Server client: %w", err)
+		}
+		googleClient, err := googleplay.New(googleplay.Config{
+			PlayBaseURL:      cfg.Billing.GooglePlayBaseURL,
+			PubSubBaseURL:    cfg.Billing.GooglePubSubBaseURL,
+			RequestTimeout:   cfg.Providers.RequestTimeout,
+			ConnectTimeout:   cfg.Providers.ConnectTimeout,
+			MaxResponseBytes: cfg.Providers.MaxResponseBytes,
+		})
+		if err != nil {
+			return fmt.Errorf("configure Google Play client: %w", err)
+		}
+		billingRepository = billingpostgres.New(pool)
+		billingService = billing.NewService(billingRepository, billingCipher, verifier,
+			billing.WithProviders(appleClient, googleClient),
+			billing.WithRetention(cfg.Billing.RawRetention()))
+	}
+
 	workerID, err := os.Hostname()
 	if err != nil || workerID == "" {
 		workerID = "mosaic-worker"
@@ -164,10 +206,28 @@ func run() (runErr error) {
 	if err := experimentRepository.RegisterQueueMetrics(); err != nil {
 		return fmt.Errorf("register Experiment queue metrics: %w", err)
 	}
+	if billingRepository != nil {
+		// Billing queues publish depth, oldest age, and dead-letter count from
+		// day one rather than being added after the first incident.
+		if err := billingRepository.RegisterQueueMetrics(); err != nil {
+			return fmt.Errorf("register billing queue metrics: %w", err)
+		}
+	}
 
-	families := make([]jobFamily, 0, 3)
+	families := make([]jobFamily, 0, 8)
 	if providerService != nil {
 		families = append(families, jobFamily{"provider_sync", providerService.ProcessNextProviderSync})
+	}
+	if billingService != nil {
+		// Validation runs first in the round-robin because a store notification
+		// waiting on validation is the latency an operator actually sees.
+		families = append(families,
+			jobFamily{"billing_validation", billingService.ProcessNextValidation},
+			jobFamily{"billing_rtdn", billingService.ProcessNextRTDN},
+			jobFamily{"billing_reconciliation", billingService.ProcessNextReconciliation},
+			jobFamily{"billing_replay", billingService.ProcessNextReplay},
+			jobFamily{"billing_retention", billingService.ProcessRetention},
+		)
 	}
 	families = append(families,
 		jobFamily{"analytics", analyticsService.ProcessNextJob},
@@ -212,6 +272,11 @@ func run() (runErr error) {
 		interval := cfg.Analytics.WorkerPollInterval
 		if providerService != nil && cfg.Providers.WorkerPollInterval < interval {
 			interval = cfg.Providers.WorkerPollInterval
+		}
+		// Billing carries its own interval so store-notification latency is not
+		// coupled to analytics aggregation load.
+		if billingService != nil && cfg.Billing.WorkerPollInterval < interval {
+			interval = cfg.Billing.WorkerPollInterval
 		}
 		select {
 		case <-runContext.Done():

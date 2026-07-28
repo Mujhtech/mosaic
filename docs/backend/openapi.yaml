@@ -1,11 +1,19 @@
 openapi: 3.1.0
 info:
   title: Mosaic API
-  version: 0.7.0-phase7
+  version: 0.9.0-phase9a
   description: |
-    Hosted workspace, provider foundation, publishing, Asset, browser-session, and SDK-delivery API.
+    Hosted workspace, provider foundation, publishing, Asset, browser-session, SDK-delivery,
+    and Mosaic Billing ingestion API.
     RevenueCat server-connected integrations use least-privilege v2 secret keys. Secrets
     are accepted only on create, rotate, and reconnect and are never returned.
+
+    Mosaic Billing (Phase 9A) proves a store transaction is authentic, associates it with a
+    Mosaic Product, and preserves an auditable history. It performs no access update from any
+    event, validated or not: there is no customer, entitlement-state, subscription-state, or
+    access-grant resource anywhere in this API, and no endpoint marks a quarantined input
+    valid. Store Server Credential secrets are write-only; the notification endpoint URL is
+    returned only on create and rotate.
 servers:
   - url: /
 security:
@@ -1661,6 +1669,236 @@ paths:
       tags: [Analytics Privacy]
       parameters: [{ $ref: "#/components/parameters/ProjectID" }, { name: jobId, in: path, required: true, schema: { type: string } }]
       responses: { "200": { description: Private export artifact., content: { application/x-ndjson: { schema: { type: string, format: binary } }, text/csv: { schema: { type: string, format: binary } } } }, "403": { $ref: "#/components/responses/Error" }, "404": { $ref: "#/components/responses/Error" } }
+  /v1/billing/apple/notifications/{intakeToken}:
+    post:
+      security: []
+      operationId: receiveAppleStoreNotification
+      tags: [Billing Ingestion]
+      description: |
+        App Store Server Notifications V2 intake. Authenticity comes from two independent
+        factors: the unguessable per-credential intake token in the path (stored SHA-256 only)
+        and JWS x5c-chain verification against the Apple Root CA compiled into the binary.
+        Tenant identity always comes from the intake token, never from payload content.
+
+        The endpoint never validates inline and never calls a store API on the request path:
+        it verifies, persists the Raw Billing Input, enqueues validation, and returns 202.
+        It is deliberately excluded from every 429-returning rate-limiter family, because a
+        429 consumes one of Apple's five non-renewable retries and can lose a transaction
+        permanently. An unknown bundle, a wrong Application, or an unsupported notification
+        type is recorded and answered 202; only a durable-storage failure answers non-2xx.
+      parameters:
+        - { in: path, name: intakeToken, required: true, schema: { type: string }, description: One-time intake token issued with the credential. }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [signedPayload]
+              properties:
+                signedPayload: { type: string, description: Apple JWS notification payload. Never logged or echoed. }
+      responses:
+        "202": { description: The notification was durably recorded and queued for validation., content: { application/json: { schema: { type: object, properties: { data: { type: object, properties: { status: { type: string, enum: [accepted] } } } } } } } }
+        "404": { $ref: "#/components/responses/Error" }
+        "503": { $ref: "#/components/responses/Error" }
+  /v1/sdk/billing/observations:
+    post:
+      security: [{ PublicSDKKey: [] }]
+      operationId: submitTransactionObservation
+      tags: [Billing Ingestion]
+      description: |
+        Untrusted client report of a purchase reference. A Transaction Observation is a
+        trigger, never proof: the response cannot and does not claim validation, and the
+        outcome enumeration has no member meaning validated. Every reference is bounded by
+        safeProviderCode, which structurally excludes a JWS or a raw Google purchase token.
+        This endpoint may return 429; SDKs hold a durable queue and retry.
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/TransactionObservationRequest" } } } }
+      responses:
+        "202": { $ref: "#/components/responses/SubmissionResult" }
+        "401": { $ref: "#/components/responses/Error" }
+        "422": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/Error" }
+  /v1/billing/server/observations:
+    post:
+      security: [{ ServerSecretKey: [] }]
+      operationId: submitServerTransactionObservation
+      tags: [Billing Ingestion]
+      description: |
+        Trusted app-backend observation, authenticated by a Mosaic secret server key. It may
+        carry a full Google purchase token, which is encrypted on receipt and never logged.
+        A trusted caller is more accountable, not more authoritative: the observation is still
+        subject to complete provider validation.
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/TransactionObservationRequest" } } } }
+      responses:
+        "202": { $ref: "#/components/responses/SubmissionResult" }
+        "401": { $ref: "#/components/responses/Error" }
+        "422": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/Error" }
+  /v1/projects/{projectId}/billing/settings:
+    put:
+      operationId: updateBillingSettings
+      tags: [Billing Operations]
+      description: Enable or disable Mosaic Billing for a Project. Off by default. Owner or admin only.
+      parameters: [{ $ref: "#/components/parameters/ProjectID" }]
+      requestBody: { required: true, content: { application/json: { schema: { type: object, additionalProperties: false, required: [billingEnabled], properties: { billingEnabled: { type: boolean } } } } } }
+      responses: { "200": { description: Updated settings., content: { application/json: { schema: { type: object, properties: { data: { type: object, properties: { billingEnabled: { type: boolean } } } } } } } }, "403": { $ref: "#/components/responses/Error" }, "404": { $ref: "#/components/responses/Error" } }
+  /v1/projects/{projectId}/billing/store-credentials:
+    get:
+      operationId: listStoreServerCredentials
+      tags: [Billing Credentials]
+      description: Owner or admin only. Secret material is never returned, and neither is the notification endpoint URL.
+      parameters: [{ $ref: "#/components/parameters/ProjectID" }]
+      responses: { "200": { description: Store Server Credentials., content: { application/json: { schema: { type: object, properties: { data: { type: object, properties: { items: { type: array, items: { $ref: "#/components/schemas/StoreServerCredential" } } } } } } } } }, "403": { $ref: "#/components/responses/Error" } }
+    post:
+      operationId: createStoreServerCredential
+      tags: [Billing Credentials]
+      description: |
+        Store a new Store Server Credential. The secret (an Apple .p8 In-App Purchase key or a
+        Google service-account JSON key) is parsed and validated before it is persisted, then
+        sealed under the Mosaic keyring. For Apple, the response carries the full notification
+        endpoint URL exactly once; it embeds an intake token stored only as SHA-256 and is
+        never returned by any read. Owner or admin only. Audited.
+      parameters: [{ $ref: "#/components/parameters/ProjectID" }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/CreateStoreServerCredentialRequest" } } } }
+      responses: { "201": { $ref: "#/components/responses/StoreServerCredentialWithEndpoint" }, "403": { $ref: "#/components/responses/Error" }, "409": { $ref: "#/components/responses/Error" }, "422": { $ref: "#/components/responses/Error" } }
+  /v1/projects/{projectId}/billing/store-credentials/{credentialId}:
+    get:
+      operationId: getStoreServerCredential
+      tags: [Billing Credentials]
+      parameters: [{ $ref: "#/components/parameters/ProjectID" }, { $ref: "#/components/parameters/StoreCredentialID" }]
+      responses: { "200": { $ref: "#/components/responses/StoreServerCredential" }, "403": { $ref: "#/components/responses/Error" }, "404": { $ref: "#/components/responses/Error" } }
+  /v1/projects/{projectId}/billing/store-credentials/{credentialId}/rotate:
+    post:
+      operationId: rotateStoreServerCredential
+      tags: [Billing Credentials]
+      description: |
+        Replace the secret and mint a new intake token. The previous token stops resolving
+        immediately, which is the point of rotating after a suspected compromise. The new
+        endpoint URL is returned exactly once. Owner or admin only. Audited.
+      parameters: [{ $ref: "#/components/parameters/ProjectID" }, { $ref: "#/components/parameters/StoreCredentialID" }]
+      requestBody: { required: true, content: { application/json: { schema: { type: object, additionalProperties: false, required: [secret], properties: { secret: { type: string, description: Write-only. Never returned. } } } } } }
+      responses: { "200": { $ref: "#/components/responses/StoreServerCredentialWithEndpoint" }, "403": { $ref: "#/components/responses/Error" }, "404": { $ref: "#/components/responses/Error" }, "409": { $ref: "#/components/responses/Error" } }
+  /v1/projects/{projectId}/billing/store-credentials/{credentialId}/revoke:
+    post:
+      operationId: revokeStoreServerCredential
+      tags: [Billing Credentials]
+      description: |
+        Stop the credential being used and clear its intake token so the notification endpoint
+        stops resolving. Nothing already recorded is removed: the ledger is the evidence trail
+        a revocation is usually part of investigating. Owner or admin only. Audited.
+      parameters: [{ $ref: "#/components/parameters/ProjectID" }, { $ref: "#/components/parameters/StoreCredentialID" }]
+      responses: { "200": { $ref: "#/components/responses/StoreServerCredential" }, "403": { $ref: "#/components/responses/Error" }, "404": { $ref: "#/components/responses/Error" } }
+  /v1/projects/{projectId}/billing/store-credentials/{credentialId}/test:
+    post:
+      operationId: testStoreServerCredential
+      tags: [Billing Credentials]
+      description: |
+        Prove the stored secret still authenticates against the store without changing any
+        store state. Apple is tested with a one-minute Get Notification History window; Google
+        with a zero-consumption Pub/Sub pull. Owner or admin only. Audited.
+      parameters: [{ $ref: "#/components/parameters/ProjectID" }, { $ref: "#/components/parameters/StoreCredentialID" }]
+      responses: { "200": { $ref: "#/components/responses/StoreServerCredential" }, "403": { $ref: "#/components/responses/Error" }, "404": { $ref: "#/components/responses/Error" }, "429": { $ref: "#/components/responses/Error" } }
+  /v1/projects/{projectId}/environments/{environmentId}/billing/facts:
+    get:
+      operationId: listTransactionFacts
+      tags: [Billing Ledger]
+      description: |
+        Validated, provider-independent Transaction Facts. A fact is never a subscription, an
+        entitlement, or an access grant, and carries no customer identity, price, or currency.
+        Mosaic Environment and Store Environment are always two separate values.
+      parameters: [{ $ref: "#/components/parameters/ProjectID" }, { $ref: "#/components/parameters/EnvironmentID" }, { $ref: "#/components/parameters/Cursor" }, { $ref: "#/components/parameters/Limit" }, { $ref: "#/components/parameters/BillingProviderFilter" }, { $ref: "#/components/parameters/BillingFrom" }, { $ref: "#/components/parameters/BillingTo" }]
+      responses: { "200": { description: Transaction Facts., content: { application/json: { schema: { type: object, properties: { data: { type: object, properties: { items: { type: array, items: { $ref: "#/components/schemas/TransactionFact" } }, nextCursor: { type: string } } } } } } } }, "403": { $ref: "#/components/responses/Error" }, "404": { $ref: "#/components/responses/Error" } }
+  /v1/projects/{projectId}/environments/{environmentId}/billing/validation-attempts:
+    get:
+      operationId: listValidationAttempts
+      tags: [Billing Ledger]
+      description: Append-only history of every validation try. Earlier attempts are never overwritten and no provider response body is ever stored.
+      parameters: [{ $ref: "#/components/parameters/ProjectID" }, { $ref: "#/components/parameters/EnvironmentID" }, { $ref: "#/components/parameters/Cursor" }, { $ref: "#/components/parameters/Limit" }, { in: query, name: status, schema: { type: string, enum: [validated, recorded_no_fact, quarantined, retryable_failure, permanently_failed] } }]
+      responses: { "200": { description: Validation Attempts., content: { application/json: { schema: { type: object, properties: { data: { type: object, properties: { items: { type: array, items: { $ref: "#/components/schemas/ValidationAttempt" } }, nextCursor: { type: string } } } } } } } }, "403": { $ref: "#/components/responses/Error" }, "404": { $ref: "#/components/responses/Error" } }
+  /v1/projects/{projectId}/environments/{environmentId}/billing/ledger:
+    get:
+      operationId: listBillingLedger
+      tags: [Billing Ledger]
+      description: Append-only operational Billing Event Ledger. There is deliberately no update endpoint.
+      parameters: [{ $ref: "#/components/parameters/ProjectID" }, { $ref: "#/components/parameters/EnvironmentID" }, { $ref: "#/components/parameters/Cursor" }, { $ref: "#/components/parameters/Limit" }, { $ref: "#/components/parameters/BillingFrom" }, { $ref: "#/components/parameters/BillingTo" }]
+      responses: { "200": { description: Billing Ledger Entries., content: { application/json: { schema: { type: object, properties: { data: { type: object, properties: { items: { type: array, items: { $ref: "#/components/schemas/BillingLedgerEntry" } }, nextCursor: { type: string } } } } } } } }, "403": { $ref: "#/components/responses/Error" }, "404": { $ref: "#/components/responses/Error" } }
+  /v1/projects/{projectId}/environments/{environmentId}/billing/quarantine:
+    get:
+      operationId: listBillingQuarantine
+      tags: [Billing Operations]
+      description: Inputs and facts that cannot safely proceed.
+      parameters: [{ $ref: "#/components/parameters/ProjectID" }, { $ref: "#/components/parameters/EnvironmentID" }, { $ref: "#/components/parameters/Cursor" }, { $ref: "#/components/parameters/Limit" }, { in: query, name: status, schema: { type: string, enum: [open, retrying, closed_after_success, closed_superseded] } }, { in: query, name: reasonCode, schema: { type: string } }, { $ref: "#/components/parameters/BillingProviderFilter" }]
+      responses: { "200": { description: Quarantine Records., content: { application/json: { schema: { type: object, properties: { data: { type: object, properties: { items: { type: array, items: { $ref: "#/components/schemas/QuarantineRecord" } }, nextCursor: { type: string } } } } } } } }, "403": { $ref: "#/components/responses/Error" }, "404": { $ref: "#/components/responses/Error" } }
+  /v1/projects/{projectId}/environments/{environmentId}/billing/health:
+    get:
+      operationId: getBillingHealth
+      tags: [Billing Operations]
+      parameters: [{ $ref: "#/components/parameters/ProjectID" }, { $ref: "#/components/parameters/EnvironmentID" }]
+      responses: { "200": { description: Billing health summary., content: { application/json: { schema: { type: object, properties: { data: { $ref: "#/components/schemas/BillingHealth" } } } } } }, "403": { $ref: "#/components/responses/Error" }, "404": { $ref: "#/components/responses/Error" } }
+  /v1/projects/{projectId}/environments/{environmentId}/billing/reconciliation-runs:
+    get:
+      operationId: listReconciliationRuns
+      tags: [Billing Operations]
+      parameters: [{ $ref: "#/components/parameters/ProjectID" }, { $ref: "#/components/parameters/EnvironmentID" }, { $ref: "#/components/parameters/Cursor" }, { $ref: "#/components/parameters/Limit" }, { in: query, name: status, schema: { type: string, enum: [queued, leased, completed, partial, failed] } }]
+      responses: { "200": { description: Reconciliation runs., content: { application/json: { schema: { type: object, properties: { data: { type: object, properties: { items: { type: array, items: { $ref: "#/components/schemas/ReconciliationRun" } }, nextCursor: { type: string } } } } } } } }, "403": { $ref: "#/components/responses/Error" }, "404": { $ref: "#/components/responses/Error" } }
+    post:
+      operationId: createReconciliationRun
+      tags: [Billing Operations]
+      description: |
+        Start a bounded, restart-safe reconciliation pass. Reconciliation validates provider
+        facts and does not calculate customer access. The window may not exceed 180 days,
+        which is Apple's own notification-history retention. Owner or admin only. Audited.
+      parameters: [{ $ref: "#/components/parameters/ProjectID" }, { $ref: "#/components/parameters/EnvironmentID" }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/CreateReconciliationRunRequest" } } } }
+      responses: { "202": { description: Reconciliation queued., content: { application/json: { schema: { type: object, properties: { data: { $ref: "#/components/schemas/ReconciliationRun" } } } } } }, "403": { $ref: "#/components/responses/Error" }, "409": { $ref: "#/components/responses/Error" }, "422": { $ref: "#/components/responses/Error" } }
+  /v1/projects/{projectId}/environments/{environmentId}/billing/replay-jobs:
+    get:
+      operationId: listReplayJobs
+      tags: [Billing Operations]
+      parameters: [{ $ref: "#/components/parameters/ProjectID" }, { $ref: "#/components/parameters/EnvironmentID" }, { $ref: "#/components/parameters/Cursor" }, { $ref: "#/components/parameters/Limit" }, { in: query, name: status, schema: { type: string, enum: [queued, leased, completed, failed] } }]
+      responses: { "200": { description: Replay jobs., content: { application/json: { schema: { type: object, properties: { data: { type: object, properties: { items: { type: array, items: { $ref: "#/components/schemas/ReplayJob" } }, nextCursor: { type: string } } } } } } } }, "403": { $ref: "#/components/responses/Error" }, "404": { $ref: "#/components/responses/Error" } }
+    post:
+      operationId: createReplayJob
+      tags: [Billing Operations]
+      description: |
+        Re-run accepted inputs deterministically. Replay appends new Validation Attempts and
+        never rewrites prior attempts or facts: an unchanged outcome recomputes the same fact
+        digest and writes nothing, a changed outcome appends a new fact beside the old one,
+        and no customer access can change because no access state exists. Owner or admin only.
+        Audited.
+      parameters: [{ $ref: "#/components/parameters/ProjectID" }, { $ref: "#/components/parameters/EnvironmentID" }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/CreateReplayJobRequest" } } } }
+      responses: { "202": { description: Replay queued., content: { application/json: { schema: { type: object, properties: { data: { $ref: "#/components/schemas/ReplayJob" } } } } } }, "403": { $ref: "#/components/responses/Error" }, "422": { $ref: "#/components/responses/Error" } }
+  /v1/projects/{projectId}/billing/quarantine/{recordId}:
+    get:
+      operationId: getQuarantineRecord
+      tags: [Billing Operations]
+      parameters: [{ $ref: "#/components/parameters/ProjectID" }, { $ref: "#/components/parameters/QuarantineRecordID" }]
+      responses: { "200": { $ref: "#/components/responses/QuarantineRecord" }, "403": { $ref: "#/components/responses/Error" }, "404": { $ref: "#/components/responses/Error" } }
+  /v1/projects/{projectId}/billing/quarantine/{recordId}/retry:
+    post:
+      operationId: retryQuarantinedInput
+      tags: [Billing Operations]
+      description: |
+        Re-queue a quarantined input for validation, typically after repairing a Product
+        mapping. This is the only recovery action that can lead to a Transaction Fact, and it
+        leads there only by asking the store again: the record is closed only by a subsequent
+        successful attempt, which is recorded as the justification. There is deliberately no
+        endpoint that marks a quarantined input valid. Owner or admin only. Audited.
+      parameters: [{ $ref: "#/components/parameters/ProjectID" }, { $ref: "#/components/parameters/QuarantineRecordID" }]
+      responses: { "202": { $ref: "#/components/responses/QuarantineRecord" }, "403": { $ref: "#/components/responses/Error" }, "404": { $ref: "#/components/responses/Error" } }
+  /v1/projects/{projectId}/billing/quarantine/{recordId}/close-superseded:
+    post:
+      operationId: closeQuarantineRecordSuperseded
+      tags: [Billing Operations]
+      description: |
+        Close a record because a later record replaced it. It asserts nothing about the
+        original input's authenticity and produces no Transaction Fact. Owner or admin only.
+        Audited.
+      parameters: [{ $ref: "#/components/parameters/ProjectID" }, { $ref: "#/components/parameters/QuarantineRecordID" }]
+      requestBody: { required: true, content: { application/json: { schema: { type: object, additionalProperties: false, required: [supersededByRecordId], properties: { supersededByRecordId: { type: string } } } } } }
+      responses: { "200": { $ref: "#/components/responses/QuarantineRecord" }, "403": { $ref: "#/components/responses/Error" }, "404": { $ref: "#/components/responses/Error" } }
 components:
   securitySchemes:
     BrowserSession:
@@ -1672,6 +1910,10 @@ components:
       type: http
       scheme: bearer
       bearerFormat: Mosaic public SDK key
+    ServerSecretKey:
+      type: http
+      scheme: bearer
+      bearerFormat: Mosaic secret server key
   parameters:
     Cursor:
       in: query
@@ -1689,6 +1931,11 @@ components:
     ApplicationID: { in: path, name: applicationId, required: true, schema: { type: string } }
     ProviderConnectionID: { in: path, name: connectionId, required: true, schema: { type: string } }
     ProviderMappingID: { in: path, name: mappingId, required: true, schema: { type: string } }
+    StoreCredentialID: { in: path, name: credentialId, required: true, schema: { type: string } }
+    QuarantineRecordID: { in: path, name: recordId, required: true, schema: { type: string } }
+    BillingProviderFilter: { in: query, name: provider, schema: { type: string, enum: [app_store, google_play] } }
+    BillingFrom: { in: query, name: from, schema: { type: string, format: date-time } }
+    BillingTo: { in: query, name: to, schema: { type: string, format: date-time } }
     APIKeyID: { in: path, name: apiKeyId, required: true, schema: { type: string } }
     PlanID: { in: path, name: planId, required: true, schema: { type: string } }
     ProductID: { in: path, name: productId, required: true, schema: { type: string } }
@@ -1711,6 +1958,10 @@ components:
     AnalyticsLocale: { in: query, name: locale, schema: { type: string } }
     AnalyticsApplicationVersion: { in: query, name: applicationVersion, schema: { type: string } }
   responses:
+    SubmissionResult: { description: "Observation submission outcome. There is deliberately no member meaning validated: the store has not been consulted when this response is written.", content: { application/json: { schema: { type: object, properties: { data: { $ref: "#/components/schemas/SubmissionResult" } } } } } }
+    StoreServerCredential: { description: Store Server Credential without secret material or endpoint URL., content: { application/json: { schema: { type: object, properties: { data: { $ref: "#/components/schemas/StoreServerCredential" } } } } } }
+    StoreServerCredentialWithEndpoint: { description: "Store Server Credential including the one-time notification endpoint URL. This is the only response that ever carries it.", content: { application/json: { schema: { type: object, properties: { data: { $ref: "#/components/schemas/StoreServerCredentialWithEndpoint" } } } } } }
+    QuarantineRecord: { description: Quarantine Record., content: { application/json: { schema: { type: object, properties: { data: { $ref: "#/components/schemas/QuarantineRecord" } } } } } }
     Error:
       description: Stable machine-readable failure.
       content:
@@ -1834,6 +2085,260 @@ components:
     ReleaseList: { description: Configuration Release history, content: { application/json: { schema: { $ref: "#/components/schemas/ReleaseListEnvelope" } } } }
     PublishResult: { description: Publication result and nonblocking warnings, content: { application/json: { schema: { $ref: "#/components/schemas/PublishResultEnvelope" } } } }
   schemas:
+    TransactionObservationRequest:
+      type: object
+      additionalProperties: false
+      required: [submissionId, referenceKind, reference]
+      description: |
+        A Transaction Observation is a trigger, never proof. referenceKind discriminates how
+        reference must be read, which resolves the iOS-prefix and Android-digest ambiguity.
+      properties:
+        submissionId: { type: string, maxLength: 128, description: Deterministic client-computed identifier. The deduplication key. }
+        referenceKind: { type: string, enum: [app_store_transaction_id, google_play_token_digest, google_play_order_id] }
+        reference:
+          type: string
+          maxLength: 128
+          description: |
+            Bounded by safeProviderCode (printable ASCII, at most 128 runes), which structurally
+            excludes a JWS or a raw Google purchase token. iOS submits the raw decimal StoreKit
+            transaction id; Android submits the SHA-256 digest of the purchase token as lowercase hex.
+        providerOrderReference: { type: string, maxLength: 128, description: "Optional Google order id. Never a deduplication key: promotional purchases have none." }
+        purchaseToken: { type: string, description: "Trusted server endpoint only. Encrypted on receipt, never logged, never returned. Ignored by the public SDK endpoint." }
+        storeEnvironment: { type: string, enum: [sandbox, production, unclassified] }
+        observedAt: { type: string, format: date-time }
+    SubmissionResult:
+      type: object
+      properties:
+        submissionId: { type: string }
+        outcome: { type: string, enum: [accepted_for_validation, duplicate, permanently_rejected, retryable_failure] }
+        code: { type: string }
+    StoreServerCredentialApplication:
+      type: object
+      properties:
+        applicationId: { type: string }
+        platform: { type: string, enum: [ios, android] }
+        providerApplicationIdentifier: { type: string, description: Apple bundle id or Google package name. The verified payload must match one of these. }
+    StoreServerCredential:
+      type: object
+      description: Encrypted Apple or Google server credential. Secret material is never returned.
+      properties:
+        id: { type: string }
+        projectId: { type: string }
+        environmentId: { type: string }
+        provider: { type: string, enum: [app_store, google_play] }
+        storeEnvironment: { type: string, enum: [sandbox, production], description: Store Environment, always distinct from the Mosaic Environment. }
+        name: { type: string }
+        status: { type: string, enum: [active, revoked] }
+        healthStatus: { type: string, enum: [untested, healthy, degraded, unavailable, revoked] }
+        appleIssuerId: { type: string }
+        appleKeyId: { type: string }
+        googleClientEmail: { type: string }
+        googlePubSubProjectId: { type: string }
+        googlePubSubSubscriptionId: { type: string }
+        applications: { type: array, items: { $ref: "#/components/schemas/StoreServerCredentialApplication" } }
+        lastErrorCode: { type: string }
+        lastTestedAt: { type: string, format: date-time }
+        createdAt: { type: string, format: date-time }
+        rotatedAt: { type: string, format: date-time }
+        revokedAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+    StoreServerCredentialWithEndpoint:
+      allOf:
+        - $ref: "#/components/schemas/StoreServerCredential"
+        - type: object
+          properties:
+            notificationEndpointUrl:
+              type: string
+              description: |
+                Full Apple notification endpoint including the intake token. Returned only on
+                create and rotate. The token is stored as SHA-256 only and cannot be recovered.
+    CreateStoreServerCredentialRequest:
+      type: object
+      additionalProperties: false
+      required: [environmentId, provider, storeEnvironment, name, secret, applications]
+      properties:
+        environmentId: { type: string }
+        provider: { type: string, enum: [app_store, google_play] }
+        storeEnvironment: { type: string, enum: [sandbox, production], description: Must align with the Environment mode; sandbox and production never mix. }
+        name: { type: string, maxLength: 120 }
+        secret: { type: string, description: "Write-only. Apple .p8 PEM or Google service-account JSON. Validated before persistence, never returned." }
+        appleIssuerId: { type: string }
+        appleKeyId: { type: string }
+        googleClientEmail: { type: string }
+        googlePubSubProjectId: { type: string }
+        googlePubSubSubscriptionId: { type: string }
+        applications: { type: array, minItems: 1, maxItems: 32, items: { $ref: "#/components/schemas/StoreServerCredentialApplication" } }
+    TransactionFact:
+      type: object
+      description: |
+        A normalized, provider-independent statement that a store confirmed something
+        happened. Never a subscription, an entitlement, or an access grant. Carries no
+        customer identity, price, or currency.
+      properties:
+        id: { type: string }
+        projectId: { type: string }
+        environmentId: { type: string }
+        applicationId: { type: string }
+        provider: { type: string, enum: [app_store, google_play] }
+        storeEnvironment: { type: string, enum: [sandbox, production] }
+        providerTransactionId: { type: string }
+        providerOriginalTransactionId: { type: string }
+        transactionType: { type: string, enum: [auto_renewable_subscription, non_consumable] }
+        factKind: { type: string, enum: [initial_purchase, renewal, one_time_purchase, plan_change, offer_redeemed, refund, revocation, expiration, grace_period_start, billing_retry_start, cancellation_scheduled, auto_renew_disabled, auto_renew_enabled, purchase_superseded, paused, resumed] }
+        occurredAt: { type: string, format: date-time }
+        periodStartAt: { type: string, format: date-time, description: "Provider-stated validity only. Never interpreted as customer access." }
+        periodEndAt: { type: string, format: date-time, description: "Provider-stated validity only. Never interpreted as customer access." }
+        revokedAt: { type: string, format: date-time }
+        refundedAt: { type: string, format: date-time }
+        renewalExpected: { type: boolean }
+        isTestTransaction: { type: boolean }
+        providerProductIdentifier: { type: string }
+        providerBasePlanIdentifier: { type: string }
+        providerOfferIdentifier: { type: string }
+        resolutionState: { type: string, enum: [active_mapping, archived_mapping, replacement_chain, unresolved] }
+        mosaicProductId: { type: string }
+        providerProductMappingId: { type: string }
+        resolvedMappingVersion: { type: integer, format: int64, description: Resolution Snapshot version, so historical resolution is reproducible. }
+        validatorVersion: { type: integer }
+        factVersion: { type: integer }
+        sourceRawInputId: { type: string }
+        validationAttemptId: { type: string }
+        recordedAt: { type: string, format: date-time }
+    ValidationAttempt:
+      type: object
+      description: One append-only record of one validation try. No provider response body is ever stored.
+      properties:
+        id: { type: string }
+        projectId: { type: string }
+        environmentId: { type: string }
+        rawInputId: { type: string }
+        credentialId: { type: string }
+        attemptNumber: { type: integer }
+        validatorVersion: { type: integer }
+        startedAt: { type: string, format: date-time }
+        completedAt: { type: string, format: date-time }
+        outcome: { type: string, enum: [validated, recorded_no_fact, quarantined, retryable_failure, permanently_failed] }
+        retryable: { type: boolean }
+        failureCategory: { type: string, enum: [transient, rate_limited, auth, quota, not_found_retryable, not_found_terminal, invalid, signature, resolution, configuration] }
+        diagnosticCode: { type: string, description: Mosaic-owned stable code. }
+        providerCode: { type: string, description: Provider machine code, bounded to a safe charset. }
+        providerHttpStatus: { type: integer }
+        storeEnvironment: { type: string, enum: [sandbox, production, unclassified] }
+        latencyMs: { type: integer }
+        replayOfAttemptId: { type: string }
+        correlationId: { type: string }
+    BillingLedgerEntry:
+      type: object
+      properties:
+        id: { type: string }
+        projectId: { type: string }
+        environmentId: { type: string }
+        entryType: { type: string, enum: [input_received, input_authenticated, input_duplicate_detected, validation_started, validation_succeeded, validation_failed, product_resolved, product_resolution_failed, fact_recorded, fact_deduplicated, input_quarantined, quarantine_closed, reconciliation_started, reconciliation_discovery, reconciliation_completed, replay_started, replay_completed, revalidation_completed, credential_health_changed] }
+        rawInputId: { type: string }
+        validationAttemptId: { type: string }
+        transactionFactId: { type: string }
+        credentialId: { type: string }
+        correlationId: { type: string }
+        occurredAt: { type: string, format: date-time }
+    QuarantineRecord:
+      type: object
+      description: |
+        An input that cannot safely proceed. The only status that follows a successful
+        revalidation is closed_after_success, and it always names the attempt that justified
+        it. There is no status, field, or action meaning an operator declared the input valid.
+      properties:
+        id: { type: string }
+        projectId: { type: string }
+        environmentId: { type: string }
+        rawInputId: { type: string }
+        applicationId: { type: string }
+        provider: { type: string, enum: [app_store, google_play] }
+        reasonCode: { type: string, enum: [signature_invalid, application_mismatch, environment_mismatch, store_environment_mismatch, credential_unavailable, credential_revoked, product_unknown, product_ambiguous, cross_environment_mismatch, unsupported_product_type, unsupported_transaction_type, malformed_reference, input_content_conflict, replay_conflict, provider_permanently_failed, validation_exhausted] }
+        severity: { type: string, enum: [warning, error, security] }
+        scopes: { type: array, items: { type: string } }
+        status: { type: string, enum: [open, retrying, closed_after_success, closed_superseded] }
+        attemptCount: { type: integer }
+        firstSeenAt: { type: string, format: date-time }
+        lastAttemptAt: { type: string, format: date-time }
+        closingAttemptId: { type: string, description: The successful attempt that justified closure. }
+        supersededByRecordId: { type: string }
+        closedAt: { type: string, format: date-time }
+        diagnosticCode: { type: string }
+    ReconciliationRun:
+      type: object
+      properties:
+        id: { type: string }
+        projectId: { type: string }
+        environmentId: { type: string }
+        credentialId: { type: string }
+        provider: { type: string, enum: [app_store, google_play] }
+        trigger: { type: string, enum: [scheduled, manual] }
+        strategy: { type: string, enum: [apple_notification_history, apple_transaction_history, google_token_requery] }
+        status: { type: string, enum: [queued, leased, completed, partial, failed] }
+        windowStart: { type: string, format: date-time }
+        windowEnd: { type: string, format: date-time }
+        examinedCount: { type: integer, format: int64 }
+        discoveredCount: { type: integer, format: int64 }
+        duplicateCount: { type: integer, format: int64 }
+        failureCount: { type: integer, format: int64 }
+        lastErrorCode: { type: string }
+        createdAt: { type: string, format: date-time }
+        startedAt: { type: string, format: date-time }
+        completedAt: { type: string, format: date-time }
+    CreateReconciliationRunRequest:
+      type: object
+      additionalProperties: false
+      required: [credentialId, provider, strategy, windowStart, windowEnd]
+      properties:
+        credentialId: { type: string }
+        provider: { type: string, enum: [app_store, google_play] }
+        strategy: { type: string, enum: [apple_notification_history, apple_transaction_history, google_token_requery] }
+        windowStart: { type: string, format: date-time }
+        windowEnd: { type: string, format: date-time, description: The window may not exceed 180 days, which is Apple's own notification-history retention. }
+    ReplayJob:
+      type: object
+      properties:
+        id: { type: string }
+        projectId: { type: string }
+        environmentId: { type: string }
+        kind: { type: string, enum: [replay, revalidation] }
+        rawInputId: { type: string }
+        windowStart: { type: string, format: date-time }
+        windowEnd: { type: string, format: date-time }
+        validatorVersion: { type: integer }
+        status: { type: string, enum: [queued, leased, completed, failed] }
+        comparisonResult: { type: string, enum: [identical, new_facts, conflicting, still_failing] }
+        examinedCount: { type: integer, format: int64 }
+        unchangedCount: { type: integer, format: int64 }
+        newFactCount: { type: integer, format: int64 }
+        conflictCount: { type: integer, format: int64 }
+        lastErrorCode: { type: string }
+        createdAt: { type: string, format: date-time }
+        completedAt: { type: string, format: date-time }
+    CreateReplayJobRequest:
+      type: object
+      additionalProperties: false
+      required: [kind]
+      description: Supply either a single rawInputId or a bounded window, never both.
+      properties:
+        kind: { type: string, enum: [replay, revalidation] }
+        rawInputId: { type: string }
+        windowStart: { type: string, format: date-time }
+        windowEnd: { type: string, format: date-time }
+        validatorVersion: { type: integer, minimum: 1 }
+    BillingHealth:
+      type: object
+      properties:
+        environmentId: { type: string }
+        billingEnabled: { type: boolean }
+        credentialCount: { type: integer }
+        unhealthyCredentials: { type: integer }
+        queueDepth: { type: integer, format: int64 }
+        oldestQueuedAgeSeconds: { type: number }
+        openQuarantineCount: { type: integer, format: int64 }
+        factCount: { type: integer, format: int64 }
+        lastFactRecordedAt: { type: string, format: date-time }
+        lastReconciliationAt: { type: string, format: date-time }
     CreateExperimentRequest:
       type: object
       additionalProperties: false

@@ -1,0 +1,915 @@
+package billing
+
+import (
+	"context"
+	"encoding/json"
+	"errors"
+	"strconv"
+	"strings"
+	"time"
+
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/metric"
+
+	"github.com/Mujhtech/mosaic/apps/api/internal/platform/appstorejws"
+	"github.com/Mujhtech/mosaic/apps/api/internal/platform/appstoreserver"
+	"github.com/Mujhtech/mosaic/apps/api/internal/platform/googleplay"
+	"github.com/Mujhtech/mosaic/apps/api/internal/platform/jobtelemetry"
+	"github.com/Mujhtech/mosaic/apps/api/internal/providercredential"
+)
+
+// validationLease bounds how long one worker may hold a validation job.
+const validationLease = 2 * time.Minute
+
+// ProcessNextValidation leases and runs one validation job. It matches the
+// (processed, error) contract every other Mosaic job family uses so the worker
+// loop treats billing exactly like analytics and Experiment scheduling.
+func (s *Service) ProcessNextValidation(ctx context.Context, workerID string) (bool, error) {
+	now := s.now()
+	job, leased, err := s.repository.LeaseValidationJob(ctx, workerID, now, now.Add(validationLease))
+	if err != nil {
+		return false, safeFailure(err, "billing_lease_failed")
+	}
+	if !leased {
+		return false, nil
+	}
+	jobtelemetry.Annotate(ctx, jobtelemetry.Identity{
+		JobID: job.ID, JobKind: "billing_validation",
+		ProjectID: job.ProjectID, EnvironmentID: job.EnvironmentID, ResourceID: job.RawInputID,
+	})
+
+	ctx, span := s.tracer.Start(ctx, "billing.validate."+job.Provider)
+	defer span.End()
+
+	started := s.now()
+	outcome := s.runValidation(ctx, job, started)
+	s.validationLatency.Record(ctx, float64(outcome.Attempt.LatencyMs), metric.WithAttributes(
+		attribute.String("provider", job.Provider)))
+	s.validationOutcome.Add(ctx, 1, metric.WithAttributes(
+		attribute.String("provider", job.Provider),
+		attribute.String("outcome", outcome.Attempt.Outcome)))
+
+	if err := s.repository.CompleteAttempt(ctx, job, outcome, s.now()); err != nil {
+		return true, safeFailure(err, "billing_attempt_write_failed")
+	}
+	return true, nil
+}
+
+// runValidation performs one attempt and assembles everything it produced. It
+// never returns an error: a failure is an outcome that must be recorded, not a
+// condition that discards the work.
+func (s *Service) runValidation(ctx context.Context, job ValidationJob, started time.Time) AttemptOutcome {
+	attemptNumber, err := s.repository.NextAttemptNumber(ctx, job.RawInputID)
+	if err != nil || attemptNumber < 1 {
+		attemptNumber = job.AttemptCount + 1
+	}
+	attemptID, _ := s.newID("bva")
+
+	input, err := s.repository.RawInput(ctx, job.ProjectID, job.RawInputID)
+	if err != nil {
+		return s.failedAttempt(job, attemptID, attemptNumber, started,
+			Permanent(CategoryInvalid, "raw_input_unavailable"), StoreUnclassified, "")
+	}
+
+	body, bodyAvailable := s.openBody(input)
+
+	switch {
+	case input.Provider == ProviderAppStore:
+		return s.validateApple(ctx, job, input, body, bodyAvailable, attemptID, attemptNumber, started)
+	case input.Provider == ProviderGooglePlay:
+		return s.validateGoogle(ctx, job, input, body, bodyAvailable, attemptID, attemptNumber, started)
+	default:
+		return s.failedAttempt(job, attemptID, attemptNumber, started,
+			Permanent(CategoryInvalid, "unsupported_provider"), input.StoreEnvironment, input.CredentialID)
+	}
+}
+
+// openBody decrypts a raw body. A body that has aged out of retention is not an
+// error: replay after expiry runs from normalized facts and is labelled as
+// such, which is why the caller is told availability rather than handed a
+// failure.
+func (s *Service) openBody(input RawInput) ([]byte, bool) {
+	if input.BodyState != "stored" || input.Envelope == nil || s.cipher == nil {
+		return nil, false
+	}
+	plaintext, err := s.cipher.DecryptSubject(providercredential.Envelope{
+		Version: input.Envelope.Version, Algorithm: input.Envelope.Algorithm, KeyID: input.Envelope.KeyID,
+		Nonce: input.Envelope.Nonce, Ciphertext: input.Envelope.Ciphertext,
+		CredentialClass: ClassBillingRawPayload, Fingerprint: input.Envelope.Fingerprint,
+	}, providercredential.SubjectScope{
+		OrganizationID:  input.OrganizationID,
+		ProjectID:       input.ProjectID,
+		SubjectKind:     providercredential.SubjectBillingRawInput,
+		SubjectID:       input.ID,
+		CredentialClass: ClassBillingRawPayload,
+	})
+	if err != nil {
+		return nil, false
+	}
+	return plaintext, true
+}
+
+// ---------------------------------------------------------------------------
+// Apple validation
+// ---------------------------------------------------------------------------
+
+func (s *Service) validateApple(ctx context.Context, job ValidationJob, input RawInput, body []byte, bodyAvailable bool, attemptID string, attemptNumber int, started time.Time) AttemptOutcome {
+	credential, account, err := s.appleCredential(ctx, input)
+	if err != nil {
+		return s.quarantineAttempt(job, input, attemptID, attemptNumber, started,
+			Permanent(CategoryConfiguration, "credential_unusable"), QuarantineCredentialUnavailable, "error")
+	}
+	_ = account
+
+	transactionID := ""
+	var transaction appstorejws.TransactionPayload
+	var renewal *appstorejws.RenewalPayload
+
+	// A notification carries a signed transaction; an observation carries only a
+	// reference. Either way the App Store Server API is the authority and the
+	// notification is a trigger, so the signed payload is used to learn *which*
+	// transaction to ask about rather than as the answer itself.
+	notificationSource := input.Source == SourceAppleNotification || input.Source == SourceAppleNotificationHistory
+	if bodyAvailable && notificationSource {
+		var envelope struct {
+			SignedPayload string `json:"signedPayload"`
+		}
+		if json.Unmarshal(body, &envelope) == nil && envelope.SignedPayload != "" {
+			notification, decodeErr := s.verifier.DecodeNotification(envelope.SignedPayload)
+			if decodeErr != nil {
+				s.signatureFailure.Add(ctx, 1, metric.WithAttributes(attribute.String("provider", ProviderAppStore)))
+				return s.quarantineAttempt(job, input, attemptID, attemptNumber, started,
+					Permanent(CategorySignature, string(appstorejws.ReasonOf(decodeErr))), QuarantineSignatureInvalid, "security")
+			}
+			if notification.NotificationType == "TEST" {
+				// A test notification proves the endpoint works and models
+				// nothing. Recording it without a fact keeps the ledger
+				// complete without inventing a transaction.
+				return s.recordedNoFactAttempt(job, input, attemptID, attemptNumber, started, "apple_test_notification")
+			}
+			if notification.Data != nil && notification.Data.SignedTransactionInfo != "" {
+				decoded, txErr := s.verifier.DecodeTransaction(notification.Data.SignedTransactionInfo)
+				if txErr != nil {
+					s.signatureFailure.Add(ctx, 1, metric.WithAttributes(attribute.String("provider", ProviderAppStore)))
+					return s.quarantineAttempt(job, input, attemptID, attemptNumber, started,
+						Permanent(CategorySignature, string(appstorejws.ReasonOf(txErr))), QuarantineSignatureInvalid, "security")
+				}
+				transactionID = decoded.TransactionID
+			}
+			if notification.Data != nil && notification.Data.SignedRenewalInfo != "" {
+				if decoded, renewalErr := s.verifier.DecodeRenewal(notification.Data.SignedRenewalInfo); renewalErr == nil {
+					renewal = &decoded
+				}
+			}
+		}
+	}
+	if transactionID == "" && bodyAvailable {
+		var observation struct {
+			Reference string `json:"reference"`
+		}
+		if json.Unmarshal(body, &observation) == nil {
+			transactionID = observation.Reference
+		}
+	}
+	if transactionID == "" {
+		return s.quarantineAttempt(job, input, attemptID, attemptNumber, started,
+			Permanent(CategoryInvalid, "no_transaction_reference"), QuarantineMalformedReference, "error")
+	}
+
+	// The authority call.
+	signed, err := s.apple.TransactionInfo(ctx, credential, transactionID)
+	s.providerRequests.Add(ctx, 1, metric.WithAttributes(
+		attribute.String("provider", ProviderAppStore),
+		attribute.String("endpoint", "transaction_info"),
+		attribute.Bool("failed", err != nil)))
+	if err != nil {
+		return s.classifiedFailure(job, input, attemptID, attemptNumber, started, err)
+	}
+	transaction, err = s.verifier.DecodeTransaction(signed)
+	if err != nil {
+		// A response that does not verify is a far more serious signal than a
+		// notification that does not verify: it means the transport or the host
+		// is not who it claims to be.
+		s.signatureFailure.Add(ctx, 1, metric.WithAttributes(attribute.String("provider", ProviderAppStore)))
+		return s.quarantineAttempt(job, input, attemptID, attemptNumber, started,
+			Permanent(CategorySignature, string(appstorejws.ReasonOf(err))), QuarantineSignatureInvalid, "security")
+	}
+
+	// Bind the verified payload to the tenant that received it.
+	applicationID, platform, appErr := s.repository.ApplicationForIdentifier(ctx, input.CredentialID, transaction.BundleID)
+	if appErr != nil || applicationID == "" {
+		return s.quarantineAttempt(job, input, attemptID, attemptNumber, started,
+			Permanent(CategoryResolution, "bundle_not_in_credential_scope"), QuarantineApplicationMismatch, "error")
+	}
+	storeEnvironment := normalizeAppleEnvironment(transaction.Environment)
+	if storeEnvironment == StoreUnclassified {
+		return s.quarantineAttempt(job, input, attemptID, attemptNumber, started,
+			Permanent(CategoryInvalid, "unclassified_store_environment"), QuarantineStoreEnvironmentMismatch, "error")
+	}
+	if !storeEnvironmentMatchesMode(storeEnvironment, input.EnvironmentMode) {
+		// A sandbox transaction in a production Environment (or the reverse) is
+		// exactly the mixing the schema forbids; quarantining here means the
+		// insert never has to be attempted.
+		return s.quarantineAttempt(job, input, attemptID, attemptNumber, started,
+			Permanent(CategoryInvalid, "store_environment_mismatch"), QuarantineStoreEnvironmentMismatch, "error")
+	}
+
+	transactionType, supported := appleTransactionType(transaction.Type)
+	if !supported {
+		return s.quarantineAttempt(job, input, attemptID, attemptNumber, started,
+			Permanent(CategoryInvalid, "unsupported_transaction_type"), QuarantineUnsupportedTransaction, "warning")
+	}
+
+	fact := TransactionFact{
+		ProjectID:                     input.ProjectID,
+		EnvironmentID:                 input.EnvironmentID,
+		EnvironmentMode:               input.EnvironmentMode,
+		ApplicationID:                 applicationID,
+		Provider:                      ProviderAppStore,
+		StoreEnvironment:              storeEnvironment,
+		ProviderTransactionID:         transaction.TransactionID,
+		ProviderOriginalTransactionID: transaction.OriginalTransactionID,
+		TransactionType:               transactionType,
+		FactKind:                      appleFactKind(input.NotificationKind, transaction, renewal),
+		IsTestTransaction:             storeEnvironment == StoreSandbox,
+		ProviderProductIdentifier:     transaction.ProductID,
+		ValidatorVersion:              ValidatorVersion,
+		FactVersion:                   1,
+		SourceRawInputID:              input.ID,
+		ValidationAttemptID:           attemptID,
+	}
+	if transaction.OriginalTransactionID != "" {
+		fact.PurchaseChainDigest = AppleTransactionKey(storeEnvironment, transaction.OriginalTransactionID)
+	}
+	if when, ok := appstorejws.Millis(transaction.PurchaseDate); ok {
+		fact.OccurredAt = when
+		fact.PeriodStartAt = &when
+	}
+	if when, ok := appstorejws.Millis(transaction.ExpiresDate); ok {
+		fact.PeriodEndAt = &when
+	}
+	if when, ok := appstorejws.Millis(transaction.RevocationDate); ok {
+		fact.RevokedAt = &when
+		if transaction.RevocationReason != nil && *transaction.RevocationReason == 1 {
+			fact.RefundedAt = &when
+		}
+	}
+	if renewal != nil {
+		expected := renewal.AutoRenewStatus == 1
+		fact.RenewalExpected = &expected
+	}
+	if fact.OccurredAt.IsZero() {
+		if when, ok := appstorejws.Millis(transaction.SignedDate); ok {
+			fact.OccurredAt = when
+		} else {
+			fact.OccurredAt = started
+		}
+	}
+
+	return s.resolveAndBuild(ctx, job, input, fact, platform, attemptID, attemptNumber, started, storeEnvironment)
+}
+
+// appleTransactionType maps Apple's product type onto the two types Phase 9A
+// models. Consumables and non-renewing subscriptions are deliberately
+// unsupported: modelling them would require quantity and consumption semantics
+// this phase excludes, and silently coercing them into another type would put a
+// wrong statement into an append-only ledger.
+func appleTransactionType(value string) (string, bool) {
+	switch value {
+	case appstorejws.ProductTypeAutoRenewable:
+		return TypeAutoRenewableSubscription, true
+	case appstorejws.ProductTypeNonConsumable:
+		return TypeNonConsumable, true
+	default:
+		return "", false
+	}
+}
+
+// appleFactKind classifies what happened. The notification type is the best
+// signal when present; the transaction alone falls back to purchase semantics.
+func appleFactKind(notificationType string, transaction appstorejws.TransactionPayload, renewal *appstorejws.RenewalPayload) string {
+	switch notificationType {
+	case "SUBSCRIBED":
+		return KindInitialPurchase
+	case "DID_RENEW":
+		return KindRenewal
+	case "EXPIRED":
+		return KindExpiration
+	case "REFUND":
+		return KindRefund
+	case "REVOKE":
+		return KindRevocation
+	case "ONE_TIME_CHARGE":
+		return KindOneTimePurchase
+	case "OFFER_REDEEMED":
+		return KindOfferRedeemed
+	case "DID_CHANGE_RENEWAL_PREF":
+		return KindPlanChange
+	case "DID_CHANGE_RENEWAL_STATUS":
+		if renewal != nil && renewal.AutoRenewStatus == 1 {
+			return KindAutoRenewEnabled
+		}
+		return KindAutoRenewDisabled
+	case "DID_FAIL_TO_RENEW":
+		return KindBillingRetryStart
+	case "GRACE_PERIOD_EXPIRED":
+		return KindExpiration
+	}
+	switch transaction.TransactionReason {
+	case "RENEWAL":
+		return KindRenewal
+	default:
+		if transaction.Type == appstorejws.ProductTypeNonConsumable {
+			return KindOneTimePurchase
+		}
+		return KindInitialPurchase
+	}
+}
+
+func (s *Service) appleCredential(ctx context.Context, input RawInput) (appstoreserver.Credential, *googleplay.ServiceAccount, error) {
+	if input.CredentialID == "" || s.apple == nil {
+		return appstoreserver.Credential{}, nil, ErrCredentialUnusable
+	}
+	credential, envelope, class, organizationID, bundleID, err := s.repository.CredentialSecretFor(ctx, input.ProjectID, input.CredentialID)
+	if err != nil || credential.Status != "active" {
+		return appstoreserver.Credential{}, nil, ErrCredentialUnusable
+	}
+	plaintext, err := s.cipher.DecryptSubject(providercredential.Envelope{
+		Version: envelope.Version, Algorithm: envelope.Algorithm, KeyID: envelope.KeyID,
+		Nonce: envelope.Nonce, Ciphertext: envelope.Ciphertext,
+		CredentialClass: class, Fingerprint: envelope.Fingerprint,
+	}, providercredential.SubjectScope{
+		OrganizationID:  organizationID,
+		ProjectID:       input.ProjectID,
+		SubjectKind:     providercredential.SubjectStoreServerCredential,
+		SubjectID:       input.CredentialID,
+		CredentialClass: class,
+	})
+	if err != nil {
+		return appstoreserver.Credential{}, nil, ErrCredentialUnusable
+	}
+	defer zero(plaintext)
+	key, err := appstoreserver.ParsePrivateKey(plaintext)
+	if err != nil {
+		return appstoreserver.Credential{}, nil, ErrCredentialUnusable
+	}
+	if bundleID == "" {
+		bundleID = credential.AppleIssuerID
+	}
+	return appstoreserver.Credential{
+		IssuerID: credential.AppleIssuerID, KeyID: credential.AppleKeyID, PrivateKey: key,
+		BundleID: bundleID, Sandbox: credential.StoreEnvironment == StoreSandbox,
+	}, nil, nil
+}
+
+// ---------------------------------------------------------------------------
+// Google validation
+// ---------------------------------------------------------------------------
+
+func (s *Service) validateGoogle(ctx context.Context, job ValidationJob, input RawInput, body []byte, bodyAvailable bool, attemptID string, attemptNumber int, started time.Time) AttemptOutcome {
+	account, credential, err := s.googleCredential(ctx, input)
+	if err != nil {
+		return s.quarantineAttempt(job, input, attemptID, attemptNumber, started,
+			Permanent(CategoryConfiguration, "credential_unusable"), QuarantineCredentialUnavailable, "error")
+	}
+	if !bodyAvailable {
+		return s.quarantineAttempt(job, input, attemptID, attemptNumber, started,
+			Permanent(CategoryInvalid, "raw_body_unavailable"), QuarantineMalformedReference, "warning")
+	}
+
+	packageName, purchaseToken, productID, orderID, subscription, ok := decodeGoogleWork(body)
+	if !ok {
+		return s.quarantineAttempt(job, input, attemptID, attemptNumber, started,
+			Permanent(CategoryInvalid, "malformed_google_input"), QuarantineMalformedReference, "error")
+	}
+	if packageName == "" {
+		packageName = credential.GooglePubSubProjectID
+	}
+
+	// An observation may carry only an order id. orders.get is the documented
+	// way to turn one into a purchase token, and it is the reason a client that
+	// knows nothing but an order id is still server-actionable.
+	if purchaseToken == "" && orderID != "" {
+		order, orderErr := s.google.GetOrder(ctx, account, packageName, orderID)
+		s.providerRequests.Add(ctx, 1, metric.WithAttributes(
+			attribute.String("provider", ProviderGooglePlay),
+			attribute.String("endpoint", "order_get"),
+			attribute.Bool("failed", orderErr != nil)))
+		if orderErr != nil {
+			return s.classifiedFailure(job, input, attemptID, attemptNumber, started, orderErr)
+		}
+		purchaseToken = order.PurchaseToken
+		if productID == "" && len(order.LineItems) == 1 {
+			productID = order.LineItems[0].ProductID
+		}
+	}
+	if purchaseToken == "" {
+		// A client observation carries only a digest by design, and a digest
+		// cannot be reversed into a token. Such an input waits for the RTDN that
+		// carries the real token rather than failing permanently.
+		return s.quarantineAttempt(job, input, attemptID, attemptNumber, started,
+			Permanent(CategoryInvalid, "purchase_token_unavailable"), QuarantineMalformedReference, "warning")
+	}
+
+	applicationID, platform, appErr := s.repository.ApplicationForIdentifier(ctx, input.CredentialID, packageName)
+	if appErr != nil || applicationID == "" {
+		return s.quarantineAttempt(job, input, attemptID, attemptNumber, started,
+			Permanent(CategoryResolution, "package_not_in_credential_scope"), QuarantineApplicationMismatch, "error")
+	}
+
+	fact := TransactionFact{
+		ProjectID:           input.ProjectID,
+		EnvironmentID:       input.EnvironmentID,
+		EnvironmentMode:     input.EnvironmentMode,
+		ApplicationID:       applicationID,
+		Provider:            ProviderGooglePlay,
+		StoreEnvironment:    credential.StoreEnvironment,
+		PurchaseChainDigest: TokenDigest(purchaseToken),
+		ValidatorVersion:    ValidatorVersion,
+		FactVersion:         1,
+		SourceRawInputID:    input.ID,
+		ValidationAttemptID: attemptID,
+		OccurredAt:          started,
+	}
+
+	if subscription {
+		purchase, err := s.google.GetSubscription(ctx, account, packageName, purchaseToken)
+		s.providerRequests.Add(ctx, 1, metric.WithAttributes(
+			attribute.String("provider", ProviderGooglePlay),
+			attribute.String("endpoint", "subscription_get"),
+			attribute.Bool("failed", err != nil)))
+		if err != nil {
+			return s.classifiedFailure(job, input, attemptID, attemptNumber, started, err)
+		}
+		if len(purchase.LineItems) == 0 {
+			return s.quarantineAttempt(job, input, attemptID, attemptNumber, started,
+				Permanent(CategoryInvalid, "subscription_has_no_line_items"), QuarantineMalformedReference, "error")
+		}
+		item := purchase.LineItems[0]
+		fact.TransactionType = TypeAutoRenewableSubscription
+		fact.ProviderProductIdentifier = item.ProductID
+		fact.ProviderTransactionID = purchase.LatestOrderID
+		fact.FactKind = googleSubscriptionKind(purchase.SubscriptionState)
+		fact.IsTestTransaction = purchase.TestPurchase != nil
+		if item.OfferDetails != nil {
+			fact.ProviderBasePlanIdentifier = item.OfferDetails.BasePlanID
+			fact.ProviderOfferIdentifier = item.OfferDetails.OfferID
+		}
+		if item.AutoRenewingPlan != nil {
+			expected := item.AutoRenewingPlan.AutoRenewEnabled
+			fact.RenewalExpected = &expected
+		}
+		if when, ok := parseRFC3339(purchase.StartTime); ok {
+			fact.PeriodStartAt = &when
+			fact.OccurredAt = when
+		}
+		if when, ok := parseRFC3339(item.ExpiryTime); ok {
+			fact.PeriodEndAt = &when
+		}
+		if purchase.LinkedPurchaseToken != "" {
+			// The link is recorded, not acted on: acting on it would mean
+			// revoking access, and no access state exists to revoke.
+			fact.SupersedesChainDigest = TokenDigest(purchase.LinkedPurchaseToken)
+			fact.FactKind = KindPurchaseSuperseded
+		}
+	} else {
+		if productID == "" {
+			return s.quarantineAttempt(job, input, attemptID, attemptNumber, started,
+				Permanent(CategoryInvalid, "product_identifier_unavailable"), QuarantineMalformedReference, "error")
+		}
+		purchase, err := s.google.GetProduct(ctx, account, packageName, productID, purchaseToken)
+		s.providerRequests.Add(ctx, 1, metric.WithAttributes(
+			attribute.String("provider", ProviderGooglePlay),
+			attribute.String("endpoint", "product_get"),
+			attribute.Bool("failed", err != nil)))
+		if err != nil {
+			return s.classifiedFailure(job, input, attemptID, attemptNumber, started, err)
+		}
+		if purchase.PurchaseState != 0 {
+			// Only PURCHASED is a completed purchase. PENDING and CANCELLED are
+			// recorded as inputs but produce no fact, because a fact asserts that
+			// the store confirmed a completed transaction.
+			return s.recordedNoFactAttempt(job, input, attemptID, attemptNumber, started, "google_purchase_not_completed")
+		}
+		fact.TransactionType = TypeNonConsumable
+		fact.FactKind = KindOneTimePurchase
+		fact.ProviderProductIdentifier = purchase.ProductID
+		fact.ProviderTransactionID = purchase.OrderID
+		if purchase.PurchaseType != nil && *purchase.PurchaseType == 0 {
+			fact.IsTestTransaction = true
+		}
+		if millis, err := strconv.ParseInt(purchase.PurchaseTimeMillis, 10, 64); err == nil && millis > 0 {
+			when := time.UnixMilli(millis).UTC()
+			fact.OccurredAt = when
+			fact.PeriodStartAt = &when
+		}
+	}
+
+	if fact.ProviderTransactionID == "" {
+		// Google does not always supply an order id (promotional purchases have
+		// none), and the token digest is the documented stable identity, so it
+		// stands in rather than leaving the column empty.
+		fact.ProviderTransactionID = "token:" + hexOf(fact.PurchaseChainDigest)
+	}
+	if !storeEnvironmentMatchesMode(fact.StoreEnvironment, input.EnvironmentMode) {
+		return s.quarantineAttempt(job, input, attemptID, attemptNumber, started,
+			Permanent(CategoryInvalid, "store_environment_mismatch"), QuarantineStoreEnvironmentMismatch, "error")
+	}
+	return s.resolveAndBuild(ctx, job, input, fact, platform, attemptID, attemptNumber, started, fact.StoreEnvironment)
+}
+
+// decodeGoogleWork reads whichever shape the raw body holds: a decoded RTDN or
+// a Mosaic-built observation record.
+func decodeGoogleWork(body []byte) (packageName, purchaseToken, productID, orderID string, subscription bool, ok bool) {
+	var notification googleplay.DeveloperNotification
+	if err := json.Unmarshal(body, &notification); err == nil && notification.PackageName != "" {
+		packageName = notification.PackageName
+		switch {
+		case notification.SubscriptionNotification != nil:
+			return packageName, notification.SubscriptionNotification.PurchaseToken,
+				notification.SubscriptionNotification.SubscriptionID, "", true, true
+		case notification.OneTimeProductNotification != nil:
+			return packageName, notification.OneTimeProductNotification.PurchaseToken,
+				notification.OneTimeProductNotification.SKU, "", false, true
+		case notification.VoidedPurchaseNotification != nil:
+			return packageName, notification.VoidedPurchaseNotification.PurchaseToken, "",
+				notification.VoidedPurchaseNotification.OrderID,
+				notification.VoidedPurchaseNotification.ProductType == 1, true
+		case notification.TestNotification != nil:
+			return packageName, "", "", "", false, true
+		}
+	}
+	var observation struct {
+		Reference      string `json:"reference"`
+		ReferenceKind  string `json:"referenceKind"`
+		OrderReference string `json:"orderReference"`
+		PurchaseToken  string `json:"purchaseToken"`
+	}
+	if err := json.Unmarshal(body, &observation); err != nil {
+		return "", "", "", "", false, false
+	}
+	return "", observation.PurchaseToken, "", observation.OrderReference, true, true
+}
+
+func googleSubscriptionKind(state string) string {
+	switch state {
+	case "SUBSCRIPTION_STATE_ACTIVE":
+		return KindRenewal
+	case "SUBSCRIPTION_STATE_CANCELED":
+		return KindCancellationScheduled
+	case "SUBSCRIPTION_STATE_EXPIRED":
+		return KindExpiration
+	case "SUBSCRIPTION_STATE_IN_GRACE_PERIOD":
+		return KindGracePeriodStart
+	case "SUBSCRIPTION_STATE_ON_HOLD":
+		return KindBillingRetryStart
+	case "SUBSCRIPTION_STATE_PAUSED":
+		return KindPaused
+	case "SUBSCRIPTION_STATE_PENDING":
+		return KindInitialPurchase
+	default:
+		return KindInitialPurchase
+	}
+}
+
+func (s *Service) googleCredential(ctx context.Context, input RawInput) (*googleplay.ServiceAccount, StoreServerCredential, error) {
+	if input.CredentialID == "" || s.google == nil {
+		return nil, StoreServerCredential{}, ErrCredentialUnusable
+	}
+	credential, envelope, class, organizationID, _, err := s.repository.CredentialSecretFor(ctx, input.ProjectID, input.CredentialID)
+	if err != nil || credential.Status != "active" {
+		return nil, StoreServerCredential{}, ErrCredentialUnusable
+	}
+	plaintext, err := s.cipher.DecryptSubject(providercredential.Envelope{
+		Version: envelope.Version, Algorithm: envelope.Algorithm, KeyID: envelope.KeyID,
+		Nonce: envelope.Nonce, Ciphertext: envelope.Ciphertext,
+		CredentialClass: class, Fingerprint: envelope.Fingerprint,
+	}, providercredential.SubjectScope{
+		OrganizationID:  organizationID,
+		ProjectID:       input.ProjectID,
+		SubjectKind:     providercredential.SubjectStoreServerCredential,
+		SubjectID:       input.CredentialID,
+		CredentialClass: class,
+	})
+	if err != nil {
+		return nil, StoreServerCredential{}, ErrCredentialUnusable
+	}
+	defer zero(plaintext)
+	account, err := googleplay.ParseServiceAccount(plaintext)
+	if err != nil {
+		return nil, StoreServerCredential{}, ErrCredentialUnusable
+	}
+	return account, credential, nil
+}
+
+// ---------------------------------------------------------------------------
+// Resolution and outcome assembly
+// ---------------------------------------------------------------------------
+
+// resolveAndBuild runs Product resolution and assembles the attempt outcome.
+//
+// An unresolved Product still produces a fact, with resolution_state
+// 'unresolved' and no Mosaic Product. Dropping it instead would make the ledger
+// incomplete exactly where an operator most needs it: the store confirmed a
+// real purchase of something Mosaic does not recognise, and that is evidence,
+// not noise. The input is quarantined in parallel so the operator is asked to
+// create the mapping.
+func (s *Service) resolveAndBuild(ctx context.Context, job ValidationJob, input RawInput, fact TransactionFact, platform, attemptID string, attemptNumber int, started time.Time, storeEnvironment string) AttemptOutcome {
+	candidates, err := s.repository.MappingCandidates(ctx, input.EnvironmentID, fact.ApplicationID, platform, fact.Provider, fact.ProviderProductIdentifier)
+	if err != nil {
+		return s.failedAttempt(job, attemptID, attemptNumber, started,
+			Classification{Category: CategoryTransient, Retryable: true, Diagnostic: "mapping_lookup_failed"},
+			storeEnvironment, input.CredentialID)
+	}
+	ids := make([]string, 0, len(candidates))
+	for _, candidate := range candidates {
+		ids = append(ids, candidate.ID)
+	}
+	successors, err := s.repository.MappingSuccessors(ctx, input.ProjectID, ids)
+	if err != nil {
+		successors = map[string]MappingCandidate{}
+	}
+
+	resolution := Resolve(ResolutionInput{
+		Provider:                   fact.Provider,
+		ProviderProductIdentifier:  fact.ProviderProductIdentifier,
+		ProviderBasePlanIdentifier: fact.ProviderBasePlanIdentifier,
+		ProviderOfferIdentifier:    fact.ProviderOfferIdentifier,
+		OccurredAt:                 fact.OccurredAt,
+		TransactionType:            fact.TransactionType,
+		Candidates:                 candidates,
+		Successors:                 successors,
+	})
+
+	resolutionID, _ := s.newID("bpr")
+	record := &ResolutionRecord{
+		ID:                         resolutionID,
+		ProjectID:                  input.ProjectID,
+		EnvironmentID:              input.EnvironmentID,
+		ApplicationID:              fact.ApplicationID,
+		ValidationAttemptID:        attemptID,
+		RawInputID:                 input.ID,
+		Provider:                   fact.Provider,
+		ProviderProductIdentifier:  fact.ProviderProductIdentifier,
+		ProviderBasePlanIdentifier: fact.ProviderBasePlanIdentifier,
+		ProviderOfferIdentifier:    fact.ProviderOfferIdentifier,
+		Outcome:                    resolution.Outcome,
+		CandidateCount:             resolution.CandidateCount,
+		DiagnosticCode:             resolution.DiagnosticCode,
+		OccurredAt:                 fact.OccurredAt,
+		ResolvedAt:                 s.now(),
+	}
+
+	if resolution.Outcome == ResolutionResolved {
+		record.ResolutionState = resolution.State
+		record.MosaicProductID = resolution.MosaicProductID
+		record.ProviderProductMappingID = resolution.MappingID
+		record.MatchedMappingID = resolution.MatchedMappingID
+		version := resolution.MappingVersion
+		record.MappingVersion = &version
+
+		fact.ResolutionState = resolution.State
+		fact.MosaicProductID = resolution.MosaicProductID
+		fact.ProviderProductMappingID = resolution.MappingID
+		fact.ResolvedMappingVersion = &version
+	} else {
+		fact.ResolutionState = StateUnresolved
+	}
+
+	factID, _ := s.newID("btf")
+	fact.ID = factID
+	fact.RecordedAt = s.now()
+	fact.FactDigest = FactDigest(fact)
+
+	completed := s.now()
+	outcome := AttemptOutcome{
+		Attempt: ValidationAttempt{
+			ID: attemptID, ProjectID: input.ProjectID, EnvironmentID: input.EnvironmentID,
+			RawInputID: input.ID, CredentialID: input.CredentialID,
+			AttemptNumber: attemptNumber, ValidatorVersion: ValidatorVersion,
+			StartedAt: started, CompletedAt: completed,
+			Outcome: OutcomeValidated, Retryable: false,
+			StoreEnvironment: storeEnvironment,
+			LatencyMs:        int(completed.Sub(started).Milliseconds()),
+			CorrelationID:    input.CorrelationID,
+		},
+		Resolution: record,
+		Fact:       &fact,
+		JobStatus:  "completed",
+	}
+
+	if reason, quarantines := QuarantineReasonFor(resolution.Outcome); quarantines {
+		outcome.Attempt.Outcome = OutcomeQuarantined
+		outcome.Attempt.FailureCategory = CategoryResolution
+		outcome.Attempt.DiagnosticCode = resolution.DiagnosticCode
+		outcome.Quarantine = &QuarantineWrite{
+			RawInputID: input.ID, ApplicationID: fact.ApplicationID, Provider: fact.Provider,
+			ReasonCode: reason, Severity: "warning",
+			Scopes:         []string{"provider_product_mapping"},
+			DiagnosticCode: resolution.DiagnosticCode, OccurredAt: completed,
+		}
+	}
+	outcome.Ledger = s.ledgerFor(input, outcome)
+	return outcome
+}
+
+func (s *Service) ledgerFor(input RawInput, outcome AttemptOutcome) []LedgerEntry {
+	now := s.now()
+	entries := make([]LedgerEntry, 0, 4)
+	add := func(entryType string, detail map[string]string) {
+		id, _ := s.newID("ble")
+		entries = append(entries, LedgerEntry{
+			ID: id, ProjectID: input.ProjectID, EnvironmentID: input.EnvironmentID,
+			EntryType: entryType, RawInputID: input.ID,
+			ValidationAttemptID: outcome.Attempt.ID,
+			CorrelationID:       input.CorrelationID, OccurredAt: now, Detail: detail,
+		})
+	}
+	add(LedgerValidationStarted, nil)
+	switch outcome.Attempt.Outcome {
+	case OutcomeValidated:
+		add(LedgerValidationSucceeded, nil)
+	case OutcomeQuarantined:
+		add(LedgerValidationFailed, map[string]string{"diagnosticCode": outcome.Attempt.DiagnosticCode})
+	default:
+		add(LedgerValidationFailed, map[string]string{"diagnosticCode": outcome.Attempt.DiagnosticCode})
+	}
+	if outcome.Resolution != nil {
+		entryType := LedgerProductResolved
+		if outcome.Resolution.Outcome != ResolutionResolved {
+			entryType = LedgerProductResolutionFailed
+		}
+		add(entryType, map[string]string{"outcome": outcome.Resolution.Outcome})
+	}
+	if outcome.Fact != nil {
+		add(LedgerFactRecorded, nil)
+	}
+	if outcome.Quarantine != nil {
+		add(LedgerInputQuarantined, map[string]string{"reasonCode": outcome.Quarantine.ReasonCode})
+	}
+	return entries
+}
+
+// ---------------------------------------------------------------------------
+// Attempt shapes
+// ---------------------------------------------------------------------------
+
+func (s *Service) classifiedFailure(job ValidationJob, input RawInput, attemptID string, attemptNumber int, started time.Time, err error) AttemptOutcome {
+	now := s.now()
+	classification := Classify(err, now)
+	outcome := AttemptOutcome{
+		Attempt: ValidationAttempt{
+			ID: attemptID, ProjectID: input.ProjectID, EnvironmentID: input.EnvironmentID,
+			RawInputID: input.ID, CredentialID: input.CredentialID,
+			AttemptNumber: attemptNumber, ValidatorVersion: ValidatorVersion,
+			StartedAt: started, CompletedAt: now,
+			FailureCategory:    classification.Category,
+			DiagnosticCode:     classification.Diagnostic,
+			ProviderCode:       classification.ProviderCode,
+			ProviderHTTPStatus: classification.HTTPStatus,
+			StoreEnvironment:   input.StoreEnvironment,
+			LatencyMs:          int(now.Sub(started).Milliseconds()),
+			CorrelationID:      input.CorrelationID,
+		},
+	}
+	exhausted := attemptNumber >= job.MaxAttempts
+	switch {
+	case classification.Retryable && !exhausted:
+		outcome.Attempt.Outcome = OutcomeRetryableFailure
+		outcome.Attempt.Retryable = true
+		outcome.NextAttemptAtSet(NextAttemptAt(now, attemptNumber, classification, s.jitter))
+		outcome.JobStatus = "queued"
+	case classification.Retryable && exhausted:
+		// A retryable failure that has run out of attempts is a dead letter, not
+		// a silent drop: it becomes a quarantine record an operator can retry.
+		outcome.Attempt.Outcome = OutcomePermanentlyFailed
+		outcome.JobStatus = "failed"
+		outcome.Quarantine = &QuarantineWrite{
+			RawInputID: input.ID, Provider: input.Provider,
+			ReasonCode: QuarantineValidationExhausted, Severity: "error",
+			DiagnosticCode: classification.Diagnostic, OccurredAt: now,
+		}
+	default:
+		outcome.Attempt.Outcome = OutcomePermanentlyFailed
+		outcome.JobStatus = "failed"
+		outcome.Quarantine = &QuarantineWrite{
+			RawInputID: input.ID, Provider: input.Provider,
+			ReasonCode: QuarantineProviderPermanentlyFailed, Severity: "error",
+			DiagnosticCode: classification.Diagnostic, OccurredAt: now,
+		}
+	}
+	outcome.Ledger = s.ledgerFor(input, outcome)
+	return outcome
+}
+
+func (s *Service) quarantineAttempt(job ValidationJob, input RawInput, attemptID string, attemptNumber int, started time.Time, classification Classification, reason, severity string) AttemptOutcome {
+	now := s.now()
+	outcome := AttemptOutcome{
+		Attempt: ValidationAttempt{
+			ID: attemptID, ProjectID: input.ProjectID, EnvironmentID: input.EnvironmentID,
+			RawInputID: input.ID, CredentialID: input.CredentialID,
+			AttemptNumber: attemptNumber, ValidatorVersion: ValidatorVersion,
+			StartedAt: started, CompletedAt: now,
+			Outcome: OutcomeQuarantined, Retryable: false,
+			FailureCategory: classification.Category, DiagnosticCode: classification.Diagnostic,
+			StoreEnvironment: input.StoreEnvironment,
+			LatencyMs:        int(now.Sub(started).Milliseconds()),
+			CorrelationID:    input.CorrelationID,
+		},
+		Quarantine: &QuarantineWrite{
+			RawInputID: input.ID, ApplicationID: input.ApplicationID, Provider: input.Provider,
+			ReasonCode: reason, Severity: severity,
+			DiagnosticCode: classification.Diagnostic, OccurredAt: now,
+		},
+		JobStatus: "failed",
+	}
+	outcome.Ledger = s.ledgerFor(input, outcome)
+	return outcome
+}
+
+func (s *Service) recordedNoFactAttempt(job ValidationJob, input RawInput, attemptID string, attemptNumber int, started time.Time, diagnostic string) AttemptOutcome {
+	now := s.now()
+	outcome := AttemptOutcome{
+		Attempt: ValidationAttempt{
+			ID: attemptID, ProjectID: input.ProjectID, EnvironmentID: input.EnvironmentID,
+			RawInputID: input.ID, CredentialID: input.CredentialID,
+			AttemptNumber: attemptNumber, ValidatorVersion: ValidatorVersion,
+			StartedAt: started, CompletedAt: now,
+			Outcome: OutcomeRecordedNoFact, Retryable: false,
+			DiagnosticCode:   diagnostic,
+			StoreEnvironment: input.StoreEnvironment,
+			LatencyMs:        int(now.Sub(started).Milliseconds()),
+			CorrelationID:    input.CorrelationID,
+		},
+		JobStatus: "completed",
+	}
+	outcome.Ledger = s.ledgerFor(input, outcome)
+	return outcome
+}
+
+func (s *Service) failedAttempt(job ValidationJob, attemptID string, attemptNumber int, started time.Time, classification Classification, storeEnvironment, credentialID string) AttemptOutcome {
+	now := s.now()
+	return AttemptOutcome{
+		Attempt: ValidationAttempt{
+			ID: attemptID, ProjectID: job.ProjectID, EnvironmentID: job.EnvironmentID,
+			RawInputID: job.RawInputID, CredentialID: credentialID,
+			AttemptNumber: attemptNumber, ValidatorVersion: ValidatorVersion,
+			StartedAt: started, CompletedAt: now,
+			Outcome: OutcomePermanentlyFailed, Retryable: false,
+			FailureCategory: classification.Category, DiagnosticCode: classification.Diagnostic,
+			StoreEnvironment: storeEnvironment,
+			LatencyMs:        int(now.Sub(started).Milliseconds()),
+			CorrelationID:    "worker",
+		},
+		JobStatus: "failed",
+	}
+}
+
+// NextAttemptAtSet assigns the retry instant. It exists as a method so the
+// zero value keeps its meaning ("no retry scheduled") at the call sites above.
+func (o *AttemptOutcome) NextAttemptAtSet(at time.Time) { o.NextAvailableAt = at }
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+// storeEnvironmentMatchesMode enforces the sandbox/production separation the
+// schema also enforces, so a mismatch becomes a quarantine record rather than a
+// constraint violation.
+func storeEnvironmentMatchesMode(storeEnvironment, environmentMode string) bool {
+	if environmentMode == "production" {
+		return storeEnvironment == StoreProduction
+	}
+	return storeEnvironment == StoreSandbox
+}
+
+func parseRFC3339(value string) (time.Time, bool) {
+	trimmed := strings.TrimSpace(value)
+	if trimmed == "" {
+		return time.Time{}, false
+	}
+	parsed, err := time.Parse(time.RFC3339, trimmed)
+	if err != nil {
+		return time.Time{}, false
+	}
+	return parsed.UTC(), true
+}
+
+func hexOf(value []byte) string {
+	const digits = "0123456789abcdef"
+	out := make([]byte, len(value)*2)
+	for i, b := range value {
+		out[i*2] = digits[b>>4]
+		out[i*2+1] = digits[b&0x0f]
+	}
+	return string(out)
+}
+
+// zero clears decrypted material as soon as it is no longer needed.
+func zero(value []byte) {
+	for i := range value {
+		value[i] = 0
+	}
+}
+
+var _ = errors.Is

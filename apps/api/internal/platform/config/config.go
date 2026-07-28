@@ -47,7 +47,41 @@ type Config struct {
 	Delivery    DeliveryConfig
 	Analytics   AnalyticsConfig
 	Providers   ProviderConfig
+	Billing     BillingConfig
 	Worker      WorkerConfig
+}
+
+// BillingConfig holds Phase 9A's deployment-level settings. Mosaic Billing is
+// additionally per-Project opt-in and off by default, so enabling it here only
+// makes it available, never active.
+type BillingConfig struct {
+	Enabled bool `envconfig:"MOSAIC_BILLING_ENABLED" default:"false"`
+	// NotificationBaseURL is the public origin Apple posts notifications to. It
+	// is used solely to render the endpoint URL returned once on credential
+	// create and rotate.
+	NotificationBaseURL string `envconfig:"MOSAIC_BILLING_NOTIFICATION_BASE_URL"`
+	// RawRetentionDays bounds how long an encrypted Raw Billing Input body is
+	// kept. Ninety days is the midpoint of Apple's 180-day production and
+	// 30-day sandbox notification-history windows. Normalized facts are kept
+	// indefinitely; only the sensitive payload behind them expires.
+	RawRetentionDays int `envconfig:"MOSAIC_BILLING_RAW_RETENTION_DAYS" default:"90"`
+	// WorkerPollInterval is dedicated so notification latency is not coupled to
+	// analytics aggregation load in the shared worker loop.
+	WorkerPollInterval     time.Duration `envconfig:"MOSAIC_BILLING_WORKER_POLL_INTERVAL" default:"1s"`
+	AppleProductionBaseURL string        `envconfig:"MOSAIC_APPLE_STOREKIT_BASE_URL" default:"https://api.storekit.apple.com"`
+	AppleSandboxBaseURL    string        `envconfig:"MOSAIC_APPLE_STOREKIT_SANDBOX_BASE_URL" default:"https://api.storekit-sandbox.apple.com"`
+	GooglePlayBaseURL      string        `envconfig:"MOSAIC_GOOGLE_PLAY_BASE_URL" default:"https://androidpublisher.googleapis.com"`
+	GooglePubSubBaseURL    string        `envconfig:"MOSAIC_GOOGLE_PUBSUB_BASE_URL" default:"https://pubsub.googleapis.com"`
+	// Observation submissions may be shed with a 429 because SDKs queue and
+	// retry. Notification intake deliberately has no limiter.
+	ObservationsPerMinute int `envconfig:"MOSAIC_BILLING_OBSERVATIONS_PER_MINUTE" default:"600"`
+	ObservationBurst      int `envconfig:"MOSAIC_BILLING_OBSERVATION_BURST" default:"120"`
+	LimiterEntries        int `envconfig:"MOSAIC_BILLING_LIMITER_ENTRIES" default:"10000"`
+}
+
+// RawRetention is the configured retention window as a duration.
+func (cfg BillingConfig) RawRetention() time.Duration {
+	return time.Duration(cfg.RawRetentionDays) * 24 * time.Hour
 }
 
 // ProductionLike reports whether the deployment must satisfy the strict
@@ -233,6 +267,11 @@ func load() (Config, error) {
 	cfg.Analytics.EventSchemaPath = strings.TrimSpace(cfg.Analytics.EventSchemaPath)
 	cfg.Analytics.EventV2SchemaPath = strings.TrimSpace(cfg.Analytics.EventV2SchemaPath)
 	cfg.Providers.CredentialKeyring = strings.TrimSpace(cfg.Providers.CredentialKeyring)
+	cfg.Billing.NotificationBaseURL = strings.TrimSpace(cfg.Billing.NotificationBaseURL)
+	cfg.Billing.AppleProductionBaseURL = strings.TrimSpace(cfg.Billing.AppleProductionBaseURL)
+	cfg.Billing.AppleSandboxBaseURL = strings.TrimSpace(cfg.Billing.AppleSandboxBaseURL)
+	cfg.Billing.GooglePlayBaseURL = strings.TrimSpace(cfg.Billing.GooglePlayBaseURL)
+	cfg.Billing.GooglePubSubBaseURL = strings.TrimSpace(cfg.Billing.GooglePubSubBaseURL)
 	cfg.Providers.RevenueCatBaseURL = strings.TrimSpace(cfg.Providers.RevenueCatBaseURL)
 	cfg.ObjectStore.Endpoint = strings.TrimSpace(cfg.ObjectStore.Endpoint)
 	cfg.ObjectStore.AccessKey = strings.TrimSpace(cfg.ObjectStore.AccessKey)
@@ -322,6 +361,7 @@ func (cfg Config) validate() error {
 	cfg.validateObjectStore(report, productionLike)
 	cfg.validateProviders(report, productionLike)
 	cfg.validateAnalytics(report)
+	cfg.validateBilling(report, productionLike)
 	cfg.validateWorker(report)
 
 	if strings.TrimSpace(cfg.Telemetry.ServiceName) == "" {
@@ -559,6 +599,55 @@ func (cfg Config) validateAnalytics(report *problems) {
 	if cfg.Analytics.WorkerPollInterval <= 0 {
 		report.add("MOSAIC_ANALYTICS_WORKER_POLL_INTERVAL must be greater than zero")
 	}
+}
+
+func (cfg Config) validateBilling(report *problems, productionLike bool) {
+	if !cfg.Billing.Enabled {
+		return
+	}
+	// Billing cannot run without the keyring: every Store Server Credential and
+	// every retained Raw Billing Input body is sealed under it.
+	if cfg.Providers.CredentialKeyring == "" {
+		report.add("MOSAIC_PROVIDER_CREDENTIAL_KEYRING is required when MOSAIC_BILLING_ENABLED is true")
+	}
+	if cfg.Billing.RawRetentionDays < 30 || cfg.Billing.RawRetentionDays > 400 {
+		report.add("MOSAIC_BILLING_RAW_RETENTION_DAYS must be between 30 and 400")
+	}
+	if cfg.Billing.WorkerPollInterval <= 0 {
+		report.add("MOSAIC_BILLING_WORKER_POLL_INTERVAL must be greater than zero")
+	}
+	// Apple posts notifications to this origin, so it must be a real HTTPS
+	// origin an operator can hand to App Store Connect.
+	base, err := url.Parse(cfg.Billing.NotificationBaseURL)
+	switch {
+	case cfg.Billing.NotificationBaseURL == "":
+		report.add("MOSAIC_BILLING_NOTIFICATION_BASE_URL is required when MOSAIC_BILLING_ENABLED is true")
+	case err != nil || base.Host == "" || base.User != nil || (base.Scheme != "https" && base.Scheme != "http"):
+		report.add("MOSAIC_BILLING_NOTIFICATION_BASE_URL must be an absolute HTTP(S) URL without credentials")
+	case productionLike && base.Scheme != "https":
+		report.add("MOSAIC_BILLING_NOTIFICATION_BASE_URL must use HTTPS outside development and test")
+	}
+	for name, value := range map[string]string{
+		"MOSAIC_APPLE_STOREKIT_BASE_URL":         cfg.Billing.AppleProductionBaseURL,
+		"MOSAIC_APPLE_STOREKIT_SANDBOX_BASE_URL": cfg.Billing.AppleSandboxBaseURL,
+		"MOSAIC_GOOGLE_PLAY_BASE_URL":            cfg.Billing.GooglePlayBaseURL,
+		"MOSAIC_GOOGLE_PUBSUB_BASE_URL":          cfg.Billing.GooglePubSubBaseURL,
+	} {
+		parsed, err := url.Parse(value)
+		if value == "" || err != nil || parsed.Host == "" || parsed.User != nil ||
+			(parsed.Scheme != "https" && parsed.Scheme != "http") {
+			report.add("%s must be an absolute HTTP(S) URL without credentials", name)
+			continue
+		}
+		if productionLike && parsed.Scheme != "https" {
+			report.add("%s must use HTTPS outside development and test", name)
+		}
+	}
+	report.requirePositiveInts(map[string]int{
+		"MOSAIC_BILLING_OBSERVATIONS_PER_MINUTE": cfg.Billing.ObservationsPerMinute,
+		"MOSAIC_BILLING_OBSERVATION_BURST":       cfg.Billing.ObservationBurst,
+		"MOSAIC_BILLING_LIMITER_ENTRIES":         cfg.Billing.LimiterEntries,
+	})
 }
 
 func (cfg Config) validateWorker(report *problems) {

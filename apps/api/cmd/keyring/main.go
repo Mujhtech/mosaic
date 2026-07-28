@@ -21,6 +21,7 @@ import (
 	"time"
 
 	"github.com/Mujhtech/mosaic/apps/api/internal/cloudworkspace"
+	"github.com/Mujhtech/mosaic/apps/api/internal/platform/billingpostgres"
 	"github.com/Mujhtech/mosaic/apps/api/internal/platform/cloudworkspacepostgres"
 	"github.com/Mujhtech/mosaic/apps/api/internal/platform/config"
 	"github.com/Mujhtech/mosaic/apps/api/internal/platform/database"
@@ -80,21 +81,35 @@ func run(args []string) error {
 	}
 	defer pool.Close()
 	repository := cloudworkspacepostgres.New(pool)
+	// Phase 9A added Store Server Credential and Raw Billing Input envelopes.
+	// They are sealed under the same keyring, so rotation has to reach them:
+	// a key left sealing billing rows cannot safely be dropped from the keyring.
+	billingRepository := billingpostgres.New(pool)
 
 	switch action {
 	case "inspect":
-		return inspect(ctx, repository, cipher)
+		return inspect(ctx, repository, billingRepository, cipher)
 	case "rotate":
-		return rotate(ctx, repository, cipher, *batchSize, *dryRun)
+		if err := rotate(ctx, repository, cipher, *batchSize, *dryRun); err != nil {
+			return err
+		}
+		return rotateBilling(ctx, billingRepository, cipher, *batchSize, *dryRun)
 	default:
 		return fmt.Errorf("unsupported keyring action %q", action)
 	}
 }
 
-func inspect(ctx context.Context, repository *cloudworkspacepostgres.Repository, cipher *providercredential.AESGCMCipher) error {
+func inspect(ctx context.Context, repository *cloudworkspacepostgres.Repository, billingRepository *billingpostgres.Repository, cipher *providercredential.AESGCMCipher) error {
 	counts, err := repository.CredentialCountsByKeyID(ctx)
 	if err != nil {
 		return err
+	}
+	billingCounts, err := billingRepository.EnvelopeCountsByKeyID(ctx)
+	if err != nil {
+		return err
+	}
+	for keyID, count := range billingCounts {
+		counts[keyID] += count
 	}
 	known := make(map[string]struct{}, len(cipher.KeyIDs()))
 	for _, id := range cipher.KeyIDs() {
@@ -195,6 +210,67 @@ func rotate(ctx context.Context, repository *cloudworkspacepostgres.Repository, 
 		return nil
 	}
 	fmt.Printf("rotation complete: %d envelope(s) now sealed under %s\n", rotated, activeKeyID)
+	return nil
+}
+
+// rotateBilling reseals Phase 9A envelopes under the active key.
+//
+// The scope is rebuilt from the row itself rather than assumed, because the v2
+// additional data binds the ciphertext to the organization, Project, subject
+// kind, subject id, and class; resealing under a reconstructed-but-wrong scope
+// would produce a row that decrypts nowhere.
+func rotateBilling(ctx context.Context, repository *billingpostgres.Repository, cipher *providercredential.AESGCMCipher, batchSize int, dryRun bool) error {
+	activeKeyID := cipher.ActiveKeyID()
+	rotated := 0
+	for {
+		envelopes, err := repository.EnvelopesNotUnderKey(ctx, activeKeyID, batchSize)
+		if err != nil {
+			return err
+		}
+		if len(envelopes) == 0 {
+			break
+		}
+		if dryRun {
+			fmt.Printf("would rotate %d billing envelope(s) in this batch\n", len(envelopes))
+			rotated += len(envelopes)
+			break
+		}
+		resealed := make([]billingpostgres.BillingEnvelope, 0, len(envelopes))
+		for _, envelope := range envelopes {
+			scope := envelope.Scope()
+			plaintext, err := cipher.DecryptSubject(providercredential.Envelope{
+				Version: envelope.Version, Algorithm: envelope.Algorithm, KeyID: envelope.KeyID,
+				Nonce: envelope.Nonce, Ciphertext: envelope.Ciphertext,
+				CredentialClass: envelope.CredentialClass, Fingerprint: envelope.Fingerprint,
+			}, scope)
+			if err != nil {
+				return fmt.Errorf("billing envelope %s/%s cannot be decrypted with the configured keyring; keep key %q in the keyring and retry: %w",
+					envelope.Table, envelope.RowID, envelope.KeyID, err)
+			}
+			sealed, err := cipher.EncryptSubject(plaintext, scope)
+			zero(plaintext)
+			if err != nil {
+				return fmt.Errorf("re-encrypt billing envelope %s/%s: %w", envelope.Table, envelope.RowID, err)
+			}
+			envelope.Version = sealed.Version
+			envelope.Algorithm = sealed.Algorithm
+			envelope.KeyID = sealed.KeyID
+			envelope.Nonce = sealed.Nonce
+			envelope.Ciphertext = sealed.Ciphertext
+			envelope.Fingerprint = sealed.Fingerprint
+			resealed = append(resealed, envelope)
+		}
+		if err := repository.ReplaceEnvelopes(ctx, resealed, time.Now().UTC()); err != nil {
+			return err
+		}
+		rotated += len(resealed)
+		fmt.Printf("rotated %d billing envelope(s)\n", rotated)
+	}
+	if dryRun {
+		fmt.Printf("dry run complete: at least %d billing envelope(s) need rotation to key %s\n", rotated, activeKeyID)
+		return nil
+	}
+	fmt.Printf("billing rotation complete: %d envelope(s) now sealed under %s\n", rotated, activeKeyID)
 	return nil
 }
 
