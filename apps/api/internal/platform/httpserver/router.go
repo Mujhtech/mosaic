@@ -17,6 +17,7 @@ import (
 	"github.com/Mujhtech/mosaic/apps/api/internal/billingaccess"
 	"github.com/Mujhtech/mosaic/apps/api/internal/billingcustomer"
 	"github.com/Mujhtech/mosaic/apps/api/internal/billingdiagnostics"
+	"github.com/Mujhtech/mosaic/apps/api/internal/billinggrant"
 	"github.com/Mujhtech/mosaic/apps/api/internal/billingrestore"
 	"github.com/Mujhtech/mosaic/apps/api/internal/billingwebhook"
 	"github.com/Mujhtech/mosaic/apps/api/internal/browserauth"
@@ -32,6 +33,7 @@ import (
 	billingaccesshttp "github.com/Mujhtech/mosaic/apps/api/internal/transport/billingaccess"
 	billingcustomerhttp "github.com/Mujhtech/mosaic/apps/api/internal/transport/billingcustomer"
 	billingdiagnosticshttp "github.com/Mujhtech/mosaic/apps/api/internal/transport/billingdiagnostics"
+	billinggranthttp "github.com/Mujhtech/mosaic/apps/api/internal/transport/billinggrant"
 	billingrestorehttp "github.com/Mujhtech/mosaic/apps/api/internal/transport/billingrestore"
 	billingwebhookhttp "github.com/Mujhtech/mosaic/apps/api/internal/transport/billingwebhook"
 	browserauthhttp "github.com/Mujhtech/mosaic/apps/api/internal/transport/browserauth"
@@ -107,6 +109,10 @@ type Dependencies struct {
 	// sibling of Phase 9A billing health, not a field on it: the two summaries
 	// answer different operator questions.
 	BillingDiagnostics *billingdiagnostics.Service
+	// BillingGrant owns the Phase 9B Product-to-Entitlement Grant Version
+	// management surface: history, impact preview, and publish. It is nil
+	// whenever Billing is.
+	BillingGrant *billinggrant.Service
 	// BillingRestore owns the Phase 9B restore and sync chain: the SDK and
 	// trusted request surfaces and the status read. It is nil whenever Billing
 	// is.
@@ -219,6 +225,15 @@ func NewWithDependencies(cfg Config, logger zerolog.Logger, dependencies Depende
 							// bucket with the other history-scanning billing
 							// operations rather than the baseline API one.
 							billingdiagnosticshttp.RegisterProjectRoutes(project, dependencies.BillingDiagnostics,
+								httpmiddleware.RateLimit("export", dependencies.ExportLimiter, principalKey))
+						}
+						if dependencies.BillingGrant != nil {
+							// Publishing enqueues a reprojection for every
+							// affected customer and the preview counts across
+							// the Project's current snapshots, so both share the
+							// export-class bucket with the other
+							// history-scanning billing operations.
+							billinggranthttp.RegisterProjectRoutes(project, dependencies.BillingGrant,
 								httpmiddleware.RateLimit("export", dependencies.ExportLimiter, principalKey))
 						}
 						if dependencies.BillingWebhook != nil {

@@ -19,6 +19,7 @@ import (
 	"github.com/Mujhtech/mosaic/apps/api/internal/billingaccess"
 	"github.com/Mujhtech/mosaic/apps/api/internal/billingcustomer"
 	"github.com/Mujhtech/mosaic/apps/api/internal/billingdiagnostics"
+	"github.com/Mujhtech/mosaic/apps/api/internal/billinggrant"
 	"github.com/Mujhtech/mosaic/apps/api/internal/billingprojection"
 	"github.com/Mujhtech/mosaic/apps/api/internal/billingrestore"
 	"github.com/Mujhtech/mosaic/apps/api/internal/billingwebhook"
@@ -34,6 +35,7 @@ import (
 	"github.com/Mujhtech/mosaic/apps/api/internal/platform/billingaccesspostgres"
 	"github.com/Mujhtech/mosaic/apps/api/internal/platform/billingcustomerpostgres"
 	"github.com/Mujhtech/mosaic/apps/api/internal/platform/billingdiagnosticspostgres"
+	"github.com/Mujhtech/mosaic/apps/api/internal/platform/billinggrantpostgres"
 	"github.com/Mujhtech/mosaic/apps/api/internal/platform/billingkeys"
 	"github.com/Mujhtech/mosaic/apps/api/internal/platform/billingpostgres"
 	"github.com/Mujhtech/mosaic/apps/api/internal/platform/billingprojectionpostgres"
@@ -270,6 +272,7 @@ func run() (runErr error) {
 	var billingService *billing.Service
 	var billingAccessService *billingaccess.Service
 	var billingDiagnosticsService *billingdiagnostics.Service
+	var billingGrantService *billinggrant.Service
 	var billingRestoreService *billingrestore.Service
 	var billingCustomerService *billingcustomer.Service
 	var billingProjectionService *billingprojection.Service
@@ -337,6 +340,7 @@ func run() (runErr error) {
 			billingrestorepostgres.New(databasePool), billingKeys.Restore())
 		billingCustomerService = billingcustomer.NewService(
 			billingcustomerpostgres.New(databasePool), billingKeys.Identity(), billingProjectionService)
+		billingGrantService = billinggrant.NewService(billinggrantpostgres.New(databasePool))
 		billingWebhookService = billingwebhook.NewService(
 			billingwebhookpostgres.New(databasePool), billingCipher,
 			billingwebhook.NewPolicy(billingwebhook.WithSelfHostedAllowlist(
@@ -383,6 +387,7 @@ func run() (runErr error) {
 		Billing:                billingService,
 		BillingAccess:          billingAccessService,
 		BillingDiagnostics:     billingDiagnosticsService,
+		BillingGrant:           billingGrantService,
 		BillingRestore:         billingRestoreService,
 		BillingCustomer:        billingCustomerService,
 		BillingWebhook:         billingWebhookService,

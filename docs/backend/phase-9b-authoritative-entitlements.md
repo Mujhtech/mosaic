@@ -180,6 +180,67 @@ customer's entitlement state is exactly the access a later investigation needs t
 List endpoints page by keyset. The cursor is opaque and carries one value — the last id of the
 previous page — so callers cannot come to depend on its shape.
 
+## Product-to-Entitlement Grant Versions (WP9)
+
+What a Product grants is versioned, and the projection engine selects the version in force at the
+**purchase's own effective time**, never at "now". Selecting by current time would silently rewrite
+historical access meaning every time an operator edits their catalog, which is the failure
+versioning exists to prevent. Three routes, mounted on the Project-scoped dashboard-authenticated
+subtree:
+
+| Operation | Route | Who |
+| --- | --- | --- |
+| Read a Product's grant history | `GET /v1/projects/{projectId}/billing/grant-versions?productId=…` | any organization member |
+| Preview the impact of a change | `POST …/billing/grant-versions/impact-preview` | owner or admin |
+| Publish a new version | `POST …/billing/grant-versions` | owner or admin |
+| Edit a published version | `PATCH`/`PUT`/`DELETE …/billing/grant-versions/{id}` | always `409` |
+
+**Publishing is the separate, explicit act.** Previewing changes nothing — not even the audit
+trail, because an operator comparing three candidate policies before choosing one has not made
+three changes. Publishing requires an actor, a `reason`, and an admin role, and writes the version,
+the audit event, and the reprojection work in one transaction.
+
+**Prospective by default, retroactive only as an additive superset (OD-8).** `effectiveStart` must
+be now or later unless the caller sets `retroactive: true`, and a retroactive version is then held
+to the widen-only rule — it may add Entitlements or widen policy, never remove or narrow either.
+The comparison is `billingprojection.ValidateAdditiveSuperset`, the same function access is derived
+under, rather than a second copy in the management package that could drift from it.
+
+**Replacement, not edit.** Publishing closes the current version at exactly the new version's
+start, so the two intervals abut: never a gap (purchases made inside it would strand with no
+applicable grant and project as `unknown`) and never an overlap (which version applies would become
+a function of row order). A proposal reaching into an interval that has already closed is refused
+with `grant_interval_overlap`; a retroactive correction is confined to the currently open interval,
+because a closed interval is what a historical purchase already selected.
+
+Migration `00047` is what makes this expressible. `00033` gave the table a blanket append-only
+trigger *and* a partial unique index permitting one open-ended version per pair, which together
+made replacement impossible — closing requires an UPDATE the trigger refused, and a second
+open-ended row the index refused. `00047` replaces the blanket trigger with one that permits
+exactly one change: setting `effective_end` once, from NULL, to a later instant, with every other
+column byte-identical. Reopening, re-closing at a different instant, rewriting a policy, and DELETE
+are all still refused by the database, so no future repository method or migration bypasses the
+guarantee either.
+
+**The change is applied, not merely recorded.** The publish transaction enqueues a projection job
+for every Billing Customer whose current snapshot cites the Product, coalescing on the existing
+scope-key uniqueness. A grant version that is recorded but never applied is worse than one never
+published: every surface would report the new meaning while every customer kept the old access, and
+nothing in the system would ever retry.
+
+Two policy flags are special. `grantsInPaused` is accepted only so it can be refused with a
+sentence — Google's pause never grants access and the policy is not overridable. `grantsInBillingRetry`
+contradicts both providers' documentation, so it is closed by default and settable only by an
+organization **owner**, not by an admin.
+
+The impact preview counts from *current* committed state only — the snapshot each customer's
+pointer names. `impactedCustomers` is who would be recomputed; `impactedActiveSources` is how many
+of those citations are currently granting, which is the number that answers "how many people could
+lose access if I get this wrong?"; `impactedLineages` includes purchases with no customer resolved
+yet, which the customer count cannot see. `impactedEntitlements` and `impactedProducts` count
+everything a reprojection of the affected customers re-derives, not only the pair being changed,
+because that is the real blast radius of the confirmation being given.
+
 ## Test transactions: the Apple/Google asymmetry (OD-17)
 
 The two providers are structurally different here, and the difference is a fraud control rather

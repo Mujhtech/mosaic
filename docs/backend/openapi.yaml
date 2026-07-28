@@ -2392,6 +2392,134 @@ paths:
         "404": { $ref: "#/components/responses/Error" }
         "409": { $ref: "#/components/responses/Error" }
         "422": { $ref: "#/components/responses/Error" }
+  /v1/projects/{projectId}/billing/grant-versions:
+    get:
+      operationId: listProductEntitlementGrantVersions
+      tags: [Billing Grant Versions]
+      description: |
+        The recorded history of what one Product grants, newest version first.
+
+        Grant versions exist because the projection engine selects a version by the **purchase's
+        own effective time**, not by "now". Reading the history is therefore how an operator
+        answers "why is this customer entitled?" for a purchase made under a rule that has since
+        been replaced. Any member of the owning organization may read it: an operator who can see
+        a customer's entitlements but not the rule that produced them has been given a fact with
+        no explanation.
+
+        Intervals are half-open `[effectiveStart, effectiveEnd)` and abut exactly, so every
+        instant is covered by at most one version per Entitlement.
+      parameters:
+        - { $ref: "#/components/parameters/ProjectID" }
+        - { in: query, name: productId, required: true, schema: { type: string, maxLength: 128 } }
+        - { in: query, name: entitlementId, schema: { type: string, maxLength: 128 }, description: Restricts the history to one (Product, Entitlement) pair. }
+        - { in: query, name: currentOnly, schema: { type: boolean }, description: Return only the open-ended version in force now. }
+        - { in: query, name: limit, schema: { type: integer, minimum: 1, maximum: 200 } }
+      responses:
+        "200": { description: Grant versions., content: { application/json: { schema: { type: object, properties: { data: { type: object, properties: { items: { type: array, items: { $ref: "#/components/schemas/ProductEntitlementGrantVersion" } } } } } } } } }
+        "401": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+        "503": { $ref: "#/components/responses/Error" }
+    post:
+      operationId: publishProductEntitlementGrantVersion
+      tags: [Billing Grant Versions]
+      description: |
+        Publish a new immutable grant version. This is the **only** call on this surface that
+        changes what a Product grants, and it is deliberately separate from the impact preview:
+        previewing is free and repeatable, publishing requires an actor, a `reason`, and an owner
+        or admin role, and writes an audit event in the same transaction as the version.
+
+        **Prospective by default (OD-8).** `effectiveStart` must be now or later. Publishing a
+        change that silently applies to yesterday is the failure grant versioning exists to
+        prevent, so backdating requires `retroactive: true` — and a retroactive version is then
+        held to the additive-superset rule: it may add Entitlements or widen access policy, never
+        remove or narrow either. Retroactive change is the one operation that can take access
+        from a customer who did nothing wrong, so the only retroactive shape Mosaic accepts is the
+        one that cannot.
+
+        **Replacement, not edit.** Publishing closes the current version at exactly the new
+        version's start, so the two intervals abut: never a gap (which would strand purchases made
+        inside it with no applicable grant) and never an overlap (which would make the applicable
+        version a function of row order). A proposal that reaches into an interval that has
+        already closed is refused with `grant_interval_overlap`.
+
+        **The change is applied, not just recorded.** The same transaction enqueues a reprojection
+        for every Billing Customer whose current snapshot cites the Product. A grant version that
+        is recorded but never applied is worse than one never published: every surface would
+        report the new meaning while every customer kept the old access, and nothing would retry.
+
+        `grantsInPaused` is accepted only so it can be refused: Google's pause never grants access
+        and the policy is not overridable. `grantsInBillingRetry` contradicts both providers'
+        documentation and requires an organization **owner**.
+      parameters: [{ $ref: "#/components/parameters/ProjectID" }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/PublishGrantVersionRequest" } } } }
+      responses:
+        "201": { description: The published grant version., content: { application/json: { schema: { type: object, properties: { data: { $ref: "#/components/schemas/ProductEntitlementGrantVersion" } } } } } }
+        "401": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+        "422": { $ref: "#/components/responses/Error" }
+        "503": { $ref: "#/components/responses/Error" }
+  /v1/projects/{projectId}/billing/grant-versions/impact-preview:
+    post:
+      operationId: previewProductEntitlementGrantImpact
+      tags: [Billing Grant Versions]
+      description: |
+        Report what a proposed grant change would touch. **Nothing is written, including the audit
+        trail**: an operator comparing three candidate policies before choosing one has not made
+        three changes, and an audit trail suggesting otherwise would be worse than none.
+
+        It takes the same body as the publish call, so an operator previews exactly what they are
+        about to publish rather than something adjacent to it.
+
+        Every count is from *current* committed state — the snapshot each customer's pointer names,
+        not the whole snapshot history. Counting superseded snapshots would report a much larger
+        number that no operator action can change, which is the worst possible combination for a
+        confirmation dialog. `impactedEntitlements` and `impactedProducts` count everything a
+        reprojection of the affected customers would re-derive, not only the pair being changed,
+        because that is the actual blast radius of the confirmation being given.
+
+        A preview never refuses a retroactive narrowing; it reports `additiveSuperset: false` with
+        the `narrowingCode`, so the operator sees *why* the publish would be rejected before they
+        attempt it. It is gated on the publish permission even though it writes nothing: the counts
+        describe how much damage the change could do, and an actor who may not make the change has
+        no reason to be shown the blast radius.
+      parameters: [{ $ref: "#/components/parameters/ProjectID" }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/PublishGrantVersionRequest" } } } }
+      responses:
+        "200": { description: The impact preview., content: { application/json: { schema: { type: object, properties: { data: { $ref: "#/components/schemas/GrantVersionImpact" } } } } } }
+        "401": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+        "422": { $ref: "#/components/responses/Error" }
+  /v1/projects/{projectId}/billing/grant-versions/{grantVersionId}:
+    get:
+      operationId: getProductEntitlementGrantVersion
+      tags: [Billing Grant Versions]
+      parameters: [{ $ref: "#/components/parameters/ProjectID" }, { in: path, name: grantVersionId, required: true, schema: { type: string } }]
+      responses:
+        "200": { description: The grant version., content: { application/json: { schema: { type: object, properties: { data: { $ref: "#/components/schemas/ProductEntitlementGrantVersion" } } } } } }
+        "401": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+    patch:
+      operationId: updateProductEntitlementGrantVersion
+      tags: [Billing Grant Versions]
+      description: |
+        Always answers `409 grant_version_immutable`. The route exists so the answer is a sentence
+        an integrator can act on rather than a bare 405 that reads like a routing mistake.
+
+        A published grant version is a historical fact: the projection engine selects it by the
+        purchase's own effective time, so rewriting its policy or moving its boundary would change
+        what a customer was entitled to at a moment that has already passed. The database enforces
+        this too — the only permitted update to a grant version row is closing an open interval
+        once — so no future repository method or migration can bypass it either. `PUT` and
+        `DELETE` answer identically.
+      parameters: [{ $ref: "#/components/parameters/ProjectID" }, { in: path, name: grantVersionId, required: true, schema: { type: string } }]
+      responses:
+        "409": { $ref: "#/components/responses/Error" }
   /v1/projects/{projectId}/environments/{environmentId}/billing/webhook-destinations:
     get:
       operationId: listWebhookDestinations
@@ -3744,6 +3872,75 @@ components:
               comparison: { type: string, enum: [unchanged, changed], description: The whole point of a replay - proving determinism, or naming exactly what a rule change moved. }
               materialized: { type: boolean, description: Whether a new snapshot was written. Materialization is changes-only, so an unchanged scope writes nothing. }
               changedEntitlementIds: { type: array, items: { type: string } }
+    ProductEntitlementGrantVersion:
+      type: object
+      description: One immutable Product-to-Entitlement grant interval. Half-open - [effectiveStart, effectiveEnd).
+      properties:
+        grantVersionId: { type: string }
+        projectId: { type: string }
+        productId: { type: string }
+        productKey: { type: string }
+        entitlementId: { type: string }
+        entitlementKey: { type: string }
+        version: { type: integer, minimum: 1, description: Monotonic per (Product, Entitlement) pair. }
+        grantPolicyVersion: { type: integer, description: The access-policy vocabulary this version was written under, so a later vocabulary cannot silently reinterpret what an operator approved. }
+        effectiveStart: { type: string, format: date-time }
+        effectiveEnd: { type: string, format: date-time, description: Absent on the current version. Set once, to the successor's start, and never moved. }
+        current: { type: boolean }
+        retroactive: { type: boolean, description: Derived from effectiveStart preceding createdAt - a version whose meaning began before it existed was backdated. }
+        supportedPurchaseTypes: { type: array, items: { type: string, enum: [auto_renewable_subscription, non_consumable] } }
+        accessPolicy: { $ref: "#/components/schemas/GrantAccessPolicy" }
+        createdAt: { type: string, format: date-time }
+        createdByActorId: { type: string }
+        reason: { type: string }
+    GrantAccessPolicy:
+      type: object
+      description: Which subscription states this grant treats as granting access (plan policy version 1).
+      properties:
+        grantsInActive: { type: boolean }
+        grantsInTrial: { type: boolean }
+        grantsInGrace: { type: boolean, description: Both providers grant access during grace, so the default is true. }
+        grantsInBillingRetry: { type: boolean, description: Contradicts both providers' documentation. Closed by default and settable only by an organization owner. }
+        grantsInPaused: { type: boolean, description: Always false. Google's pause never grants access and the policy is not overridable. }
+        grantsInOneTimeOwnership: { type: boolean }
+    PublishGrantVersionRequest:
+      type: object
+      required: [productId, entitlementId, effectiveStart]
+      description: |
+        A proposed grant version. The same body is accepted by the impact preview and by publish,
+        so what is previewed is what is published. Omitted policy flags take their documented
+        defaults rather than false - a missing grantsInActive defaulting to false would publish a
+        version granting nothing during an active subscription, the opposite of what an operator
+        leaving the field out meant.
+      properties:
+        productId: { type: string, maxLength: 128 }
+        entitlementId: { type: string, maxLength: 128 }
+        effectiveStart: { type: string, format: date-time, description: Now or later unless retroactive is true. }
+        retroactive: { type: boolean, default: false, description: Backdate the change. Held to the additive-superset rule and confined to the currently open interval. }
+        supportedPurchaseTypes: { type: array, maxItems: 4, items: { type: string, enum: [auto_renewable_subscription, non_consumable] } }
+        grantsInActive: { type: boolean, default: true }
+        grantsInTrial: { type: boolean, default: true }
+        grantsInGrace: { type: boolean, default: true }
+        grantsInBillingRetry: { type: boolean, default: false }
+        grantsInPaused: { type: boolean, default: false, description: Accepted only so it can be refused with 422. }
+        grantsInOneTimeOwnership: { type: boolean, default: true }
+        reason: { type: string, maxLength: 512, description: Required to publish. It is what an investigation reads months later, when the operator who published is gone and the only remaining question is why access changed. }
+    GrantVersionImpact:
+      type: object
+      description: Read-only counts of what a proposed grant change would touch, from current committed state.
+      properties:
+        productId: { type: string }
+        entitlementId: { type: string }
+        impactedProducts: { type: integer, description: Products a reprojection of the affected customers would re-derive. }
+        impactedEntitlements: { type: integer, description: Entitlements a reprojection of the affected customers would re-derive. }
+        impactedCustomers: { type: integer, description: Billing Customers whose current snapshot cites this Product. }
+        impactedActiveSources: { type: integer, description: How many of those citations are currently granting access - the number that answers how many people could lose access. }
+        impactedLineages: { type: integer, description: Purchase lineages resolved to this Product, including ones with no customer resolved yet. }
+        retroactive: { type: boolean }
+        additiveSuperset: { type: boolean, description: Whether the proposal passes the widen-only rule. Meaningful for a retroactive change; a preview reports it, the publish enforces it. }
+        narrowingCode: { type: string, description: The first narrowing found when additiveSuperset is false, in the projection engine's own vocabulary. }
+        currentVersion: { $ref: "#/components/schemas/ProductEntitlementGrantVersion" }
+        observedAt: { type: string, format: date-time }
     WebhookDestination:
       type: object
       properties:
