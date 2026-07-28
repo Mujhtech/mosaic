@@ -14,11 +14,20 @@ import type { QuarantineRecord, TransactionFact, ValidationAttempt } from "@/gen
  */
 
 /**
- * Rendered in the header of every billing surface. It states the phase
- * boundary without using any of the words 9A forbids on new surfaces.
+ * Rendered in the header of every ledger and ingestion surface.
+ *
+ * Revised in Phase 9B. The 9A wording ended "…does not grant, revoke, or
+ * represent any person's access to your app", which was true while nothing in
+ * Mosaic computed access. It stopped being true the moment the projection engine
+ * shipped, and a note that asserts something false about the neighbouring
+ * feature is worse than no note: an operator who believes Mosaic still holds no
+ * access state will go looking for one somewhere else.
+ *
+ * The boundary it draws is now the honest one — recorded evidence here,
+ * computed access there — and it names what computes it.
  */
 export const BILLING_BOUNDARY_NOTE =
-  "Mosaic Billing records store-confirmed transaction facts and their full validation history. It does not grant, revoke, or represent any person's access to your app."
+  "Mosaic Billing records store-confirmed transaction facts and their full validation history. Nothing on these ledger pages grants or revokes access: authoritative customer access is computed from these facts only by the Mosaic projection engine, whose state is reported under Projection health."
 
 /** Billing is per-Project opt-in. No empty state may read like a dead end. */
 export const BILLING_OPTIONAL_NOTE =

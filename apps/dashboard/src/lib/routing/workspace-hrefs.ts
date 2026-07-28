@@ -113,6 +113,30 @@ export function billingHealthHref(scope: WorkspaceScope) {
 }
 
 /**
+ * Projection health is a sibling of billing health, not a tab inside it. The
+ * two answer different questions — "is store input still becoming facts?" and
+ * "is the access answer still current?" — and either can be red while the other
+ * is green.
+ */
+export function billingProjectionHealthHref(scope: WorkspaceScope) {
+  const base = billingEnvironmentBase(scope)
+  return base ? `${base}/projection-health` : undefined
+}
+
+/**
+ * Grant versions are Project-scoped, like the Products and Entitlements they
+ * relate, so they live in Catalog rather than under an Environment.
+ */
+export function grantVersionsHref(
+  scope: WorkspaceScope,
+  filters: { entitlementId?: string; productId?: string } = {},
+) {
+  const base = projectBase(scope)
+  if (!base) return undefined
+  return appendSearch(`${base}/catalog/grant-versions`, filters)
+}
+
+/**
  * Names the destination a `returnTo` points back to.
  *
  * A recovery round trip sends an operator from the surface that found a problem
@@ -125,7 +149,11 @@ export function describeReturnDestination(href: string | undefined) {
   if (href.includes("/billing/") && href.includes("/quarantine/")) {
     return "Return to the quarantine record"
   }
+  if (href.includes("/billing/") && href.includes("/projection-health")) {
+    return "Return to projection health"
+  }
   if (href.includes("/billing/")) return "Return to Mosaic Billing"
+  if (href.includes("/catalog/grant-versions")) return "Return to grant versions"
   if (href.includes("/studio-hosted/")) return "Return to Publish review"
   return "Return to where you started"
 }
