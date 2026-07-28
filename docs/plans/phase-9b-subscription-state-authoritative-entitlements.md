@@ -278,11 +278,13 @@ projection_failed/stale_validation/unsupported_provider_state).
 
 Derivation order (deterministic at snapshot `as_of`; half-open
 intervals `[start, end)` per backend §3.4-8): effective revocation →
-effective invalidating refund (per OD-18) → supersession → verified
-current period → verified grace (`access active` per provider docs +
-grant policy) → billing retry (`access inactive` by default) → pause
-(Google only; `inactive`; scheduled pause keeps access until
-effective) → period ended → `unknown`. Cancellation flips renewal
+effective invalidating refund (per OD-18) → supersession → effective
+pause (Google only; `inactive`; a *scheduled* pause keeps access until
+its effective time, which is why pause is evaluated before the
+current-period branch — an effective pause overrides an otherwise
+active period) → verified current period → verified grace
+(`access active` per provider docs + grant policy) → billing retry
+(`access inactive` by default) → period ended → `unknown`. Cancellation flips renewal
 intent only. Schema-level `if/then` invariants encode
 revoked⇒inactive, grace⇒grace-end-present,
 unknown/unavailable⇒uncertainty≠none.
@@ -472,11 +474,15 @@ versions read-only once published with impact preview before publish;
 
 ## 16. Migrations
 
-00029 customers/aliases/evidence/conflicts · 00030 lineages/instances ·
-00031 subscription projection (+ jobs/attempts/rule versions) ·
-00032 grant versions + entitlement lifecycle · 00033 entitlement
-snapshots/sources/pointers (two-step circular FK) · 00034 tokens ·
-00035 webhooks [OD-1] · 00036 restore/replay (+ shadow iff OD-11(b)).
+As landed (numbering shifted one from the original outline because the
+fact-shape pass took 00029): 00029 fact-shape v2 · 00030 customers/
+aliases/evidence/conflicts · 00031 lineages/instances · 00032
+subscription projection (+ projection_jobs/attempts/rule versions —
+replay reuses `projection_jobs.kind='replay'` rather than a separate
+table) · 00033 grant versions + entitlement lifecycle · 00034
+entitlement snapshots/sources/pointers (two-step circular FK) · 00035
+tokens · 00036 webhooks [OD-1] · 00037 restore/sync jobs (batch 2).
+Shadow tables deferred per OD-11(a).
 All `ON DELETE RESTRICT`, composite Project/Environment FKs,
 append-only triggers, up→down→up verified against clean 9A schema and
 representative data.
