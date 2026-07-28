@@ -3,6 +3,7 @@ import { ChartLineUpIcon } from "@phosphor-icons/react/dist/ssr/ChartLineUp"
 import { GearSixIcon } from "@phosphor-icons/react/dist/ssr/GearSix"
 import { KeyIcon } from "@phosphor-icons/react/dist/ssr/Key"
 import { PackageIcon } from "@phosphor-icons/react/dist/ssr/Package"
+import { ReceiptIcon } from "@phosphor-icons/react/dist/ssr/Receipt"
 import { StorefrontIcon } from "@phosphor-icons/react/dist/ssr/Storefront"
 import { SquaresFourIcon } from "@phosphor-icons/react/dist/ssr/SquaresFour"
 import { UsersThreeIcon } from "@phosphor-icons/react/dist/ssr/UsersThree"
@@ -96,7 +97,50 @@ export function CloudWorkspaceShell() {
                   },
                 ],
               },
+              // Mosaic Billing is per-Project opt-in and owner/admin only. The
+              // group is hidden from members who could not act on it, so it is
+              // never a dead end; Environment-scoped items fall back to the
+              // Project overview exactly as Monetization and Analytics do.
               ...withManagement([
+                {
+                  icon: <ReceiptIcon aria-hidden size={18} />,
+                  title: "Billing",
+                  subItems: [
+                    {
+                      to: scope.environmentId
+                        ? `/organizations/${scope.organizationId}/projects/${scope.projectId}/billing/${scope.environmentId}/transactions`
+                        : `/organizations/${scope.organizationId}/projects/${scope.projectId}`,
+                      title: "Transactions",
+                      icon: <></>,
+                    },
+                    {
+                      to: scope.environmentId
+                        ? `/organizations/${scope.organizationId}/projects/${scope.projectId}/billing/${scope.environmentId}/quarantine`
+                        : `/organizations/${scope.organizationId}/projects/${scope.projectId}`,
+                      title: "Quarantine",
+                      icon: <></>,
+                    },
+                    {
+                      to: scope.environmentId
+                        ? `/organizations/${scope.organizationId}/projects/${scope.projectId}/billing/${scope.environmentId}/reconciliation`
+                        : `/organizations/${scope.organizationId}/projects/${scope.projectId}`,
+                      title: "Reconciliation",
+                      icon: <></>,
+                    },
+                    {
+                      to: scope.environmentId
+                        ? `/organizations/${scope.organizationId}/projects/${scope.projectId}/billing/${scope.environmentId}/health`
+                        : `/organizations/${scope.organizationId}/projects/${scope.projectId}`,
+                      title: "Billing health",
+                      icon: <></>,
+                    },
+                    {
+                      to: `/organizations/${scope.organizationId}/projects/${scope.projectId}/billing/connections`,
+                      title: "Store connections",
+                      icon: <></>,
+                    },
+                  ],
+                },
                 {
                   to: `/organizations/${scope.organizationId}/projects/${scope.projectId}/settings/environments`,
                   icon: <GearSixIcon aria-hidden size={18} />,

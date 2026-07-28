@@ -2,7 +2,7 @@ import { fireEvent, render, screen } from "@testing-library/react"
 import { useState } from "react"
 import { describe, expect, it, vi } from "vitest"
 
-import { OneTimeSecret } from "@/features/api-keys/components/one-time-secret"
+import { OneTimeSecret } from "@/components/feedback/one-time-secret"
 
 function SecretHarness({
   writeToClipboard,

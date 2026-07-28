@@ -12,7 +12,7 @@ import {
   SheetHeader,
   SheetTitle,
 } from "@/components/ui/sheet"
-import { OneTimeSecret } from "@/features/api-keys/components/one-time-secret"
+import { OneTimeSecret } from "@/components/feedback/one-time-secret"
 import { HostedResourceBoundary } from "@/features/auth/components/hosted-resource-boundary"
 import { resolveHostedQueryState } from "@/features/auth/types/hosted-query-state"
 import {

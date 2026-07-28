@@ -1,9 +1,11 @@
 import {
   assetsHref,
+  billingQuarantineHref,
   catalogProductsHref,
   environmentSettingsHref,
   placementsHref,
   providersHref,
+  storeConnectionsHref,
   type WorkspaceScope,
 } from "@/lib/routing/workspace-hrefs"
 
@@ -232,6 +234,40 @@ const CODE_DESCRIPTORS: Record<string, CodeDescriptor> = {
       "The stored bytes for this Asset are no longer available, so it cannot be served or published. Upload the Asset again to restore it.",
     href: assetsHref,
     label: "Review Assets",
+  },
+  billing_disabled: {
+    description:
+      "Mosaic Billing is turned off for this Project, so no store input is accepted or recorded. The rest of Mosaic — Studio, Products, Paywalls, Placements, Analytics, and Experiments — is unaffected.",
+    href: storeConnectionsHref,
+    label: "Open Mosaic Billing setup",
+  },
+  product_resolution_ambiguous: {
+    description:
+      "More than one provider Product mapping matched this store transaction, so Mosaic refused to guess which Mosaic Product it belongs to. Correct the overlapping mappings, then re-run validation from the quarantine record.",
+    href: billingQuarantineHref,
+    label: "Review quarantine",
+  },
+  reconciliation_window_invalid: {
+    description:
+      "The reconciliation window was rejected. A run must cover a bounded past range, and it may not exceed 180 days — the retention Apple applies to its own notification history.",
+  },
+  store_credential_invalid: {
+    description:
+      "The stored Store Server Credential no longer authenticates against the store, so validation cannot proceed. Rotate the credential with a current key; nothing already recorded is removed.",
+    href: storeConnectionsHref,
+    label: "Open Store Server Credentials",
+  },
+  store_credential_revoked: {
+    description:
+      "This Store Server Credential is revoked, so its notification endpoint no longer resolves and no store lookup can be made with it. Add a replacement credential to resume ingestion.",
+    href: storeConnectionsHref,
+    label: "Open Store Server Credentials",
+  },
+  store_environment_mismatch: {
+    description:
+      "The Store Environment reported by the store does not match the Store Environment this credential is registered for. Sandbox and production are always separate connections and never mix.",
+    href: storeConnectionsHref,
+    label: "Open Store Server Credentials",
   },
   asset_storage_unavailable: {
     description:

@@ -67,3 +67,47 @@ export function environmentSettingsHref(scope: WorkspaceScope) {
   const base = projectBase(scope)
   return base ? `${base}/settings/environments` : undefined
 }
+
+/**
+ * Mosaic Billing destinations.
+ *
+ * Store Server Credentials are Project-scoped because one credential can serve
+ * several Mosaic Environments. Everything the ingestion pipeline records is
+ * Environment-owned, so those destinations carry the Environment in the path,
+ * exactly as Monetization and Analytics do.
+ */
+function billingEnvironmentBase(scope: WorkspaceScope) {
+  const base = projectBase(scope)
+  if (!base || !scope.environmentId) return undefined
+  return `${base}/billing/${encodeURIComponent(scope.environmentId)}`
+}
+
+export function storeConnectionsHref(scope: WorkspaceScope) {
+  const base = projectBase(scope)
+  return base ? `${base}/billing/connections` : undefined
+}
+
+export function storeConnectionHref(scope: WorkspaceScope, credentialId: string) {
+  const base = storeConnectionsHref(scope)
+  return base ? `${base}/${encodeURIComponent(credentialId)}` : undefined
+}
+
+export function billingTransactionsHref(scope: WorkspaceScope) {
+  const base = billingEnvironmentBase(scope)
+  return base ? `${base}/transactions` : undefined
+}
+
+export function billingQuarantineHref(scope: WorkspaceScope) {
+  const base = billingEnvironmentBase(scope)
+  return base ? `${base}/quarantine` : undefined
+}
+
+export function billingReconciliationHref(scope: WorkspaceScope) {
+  const base = billingEnvironmentBase(scope)
+  return base ? `${base}/reconciliation` : undefined
+}
+
+export function billingHealthHref(scope: WorkspaceScope) {
+  const base = billingEnvironmentBase(scope)
+  return base ? `${base}/health` : undefined
+}
