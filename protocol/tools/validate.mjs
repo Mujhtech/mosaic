@@ -72,6 +72,21 @@ import {
   validateBillingIngestionV1Artifacts,
   validateBillingIngestionV1JsonFormatting,
 } from "./billing-ingestion-validation-v1.mjs";
+import {
+  loadAuthoritativeEntitlementV1Artifacts,
+  validateAuthoritativeEntitlementV1Artifacts,
+  validateAuthoritativeEntitlementV1JsonFormatting,
+} from "./authoritative-entitlement-validation-v1.mjs";
+import {
+  loadCustomerAccessTokenV1Artifacts,
+  validateCustomerAccessTokenV1Artifacts,
+  validateCustomerAccessTokenV1JsonFormatting,
+} from "./customer-access-token-validation-v1.mjs";
+import {
+  loadBillingStateWebhookV1Artifacts,
+  validateBillingStateWebhookV1Artifacts,
+  validateBillingStateWebhookV1JsonFormatting,
+} from "./billing-state-webhook-validation-v1.mjs";
 import { validateAnalyticsMinimizationProjection } from "./generate-analytics-minimization.mjs";
 import { validateRejectionLayers } from "./generate-rejection-layers.mjs";
 
@@ -92,6 +107,10 @@ try {
   const deliveryArtifactsV3 = loadDeliveryV3Artifacts();
   const analyticsEventArtifactsV2 = loadAnalyticsEventV2Artifacts();
   const billingIngestionArtifactsV1 = loadBillingIngestionV1Artifacts();
+  const authoritativeEntitlementArtifactsV1 =
+    loadAuthoritativeEntitlementV1Artifacts();
+  const customerAccessTokenArtifactsV1 = loadCustomerAccessTokenV1Artifacts();
+  const billingStateWebhookArtifactsV1 = loadBillingStateWebhookV1Artifacts();
   const errors = [
     ...validateBrowserContractGeneration(),
     ...validateProtocolV02(artifactsV02),
@@ -143,6 +162,14 @@ try {
     ...validateAnalyticsEventV2JsonFormatting(),
     ...validateBillingIngestionV1Artifacts(billingIngestionArtifactsV1),
     ...validateBillingIngestionV1JsonFormatting(),
+    ...validateAuthoritativeEntitlementV1Artifacts(
+      authoritativeEntitlementArtifactsV1,
+    ),
+    ...validateAuthoritativeEntitlementV1JsonFormatting(),
+    ...validateCustomerAccessTokenV1Artifacts(customerAccessTokenArtifactsV1),
+    ...validateCustomerAccessTokenV1JsonFormatting(),
+    ...validateBillingStateWebhookV1Artifacts(billingStateWebhookArtifactsV1),
+    ...validateBillingStateWebhookV1JsonFormatting(),
     ...validateAnalyticsMinimizationProjection(),
     ...validateRejectionLayers(),
   ];
@@ -160,7 +187,9 @@ try {
         "Commerce Provider Contracts v1/v2, Commerce Configurations v1/v2, " +
         "Placement Decision v1, Configuration Delivery v2, Analytics Event " +
         "v1/v2, Experiment Assignment v1, Configuration Delivery v3, Billing " +
-        "Ingestion v1 (draft), and the browser contract.",
+        "Ingestion v1 (draft), Authoritative Entitlement v1 (draft), Customer " +
+        "Access Token v1 (draft), Billing State Webhook v1 (draft), and the " +
+        "browser contract.",
     );
   }
 } catch (error) {

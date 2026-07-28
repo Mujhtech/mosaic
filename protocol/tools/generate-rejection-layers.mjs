@@ -98,6 +98,42 @@ function billingIngestionV1UnionValidator() {
   });
 }
 
+const AUTHORITATIVE_ENTITLEMENT = [
+  "schema/authoritative-entitlement/v1/snapshot.schema.json",
+  "schema/authoritative-entitlement/v1/sync-request.schema.json",
+  "schema/authoritative-entitlement/v1/check.schema.json",
+  "schema/authoritative-entitlement/v1/subscription.schema.json",
+  "schema/authoritative-entitlement/v1/restore.schema.json",
+];
+
+const BILLING_STATE_WEBHOOK = [
+  "schema/billing-state-webhook/v1/event.schema.json",
+  "schema/billing-state-webhook/v1/delivery.schema.json",
+];
+
+/**
+ * Compiles a union probe for a contract whose invalid fixtures are documents of
+ * several sibling envelope schemas. Each schema pins its own `recordType`
+ * subset, so a well-formed record matches exactly one branch and a rejected
+ * record matches none.
+ */
+function unionValidator(schemas) {
+  return () => {
+    const ajv = new Ajv2020({
+      allErrors: true,
+      strict: true,
+      strictRequired: false,
+      strictTypes: false,
+    });
+    for (const schema of schemas) ajv.addSchema(schemaAt(schema));
+    return ajv.compile({
+      $schema: "https://json-schema.org/draft/2020-12/schema",
+      $id: `urn:mosaic:protocol:schema:rejection-probe:${schemas[0]}`,
+      anyOf: schemas.map((schema) => ({ $ref: schemaAt(schema).$id })),
+    });
+  };
+}
+
 /**
  * Every `invalid/` fixture directory, with the pure schema its fixtures are
  * documents of. Kept explicit: a new contract must be registered deliberately,
@@ -156,6 +192,22 @@ export const rejectionLayerTargets = Object.freeze([
     contract: "Billing Ingestion v1",
     directory: "fixtures/billing-ingestion/v1/invalid",
     validator: billingIngestionV1UnionValidator,
+  },
+  {
+    contract: "Authoritative Entitlement v1",
+    directory: "fixtures/authoritative-entitlement/v1/invalid",
+    validator: unionValidator(AUTHORITATIVE_ENTITLEMENT),
+  },
+  {
+    contract: "Billing State Webhook v1",
+    directory: "fixtures/billing-state-webhook/v1/invalid",
+    validator: unionValidator(BILLING_STATE_WEBHOOK),
+  },
+  {
+    contract: "Customer Access Token v1",
+    directory: "fixtures/customer-access-token/v1/invalid",
+    validator: () =>
+      pureSchemaValidator("schema/customer-access-token/v1/token.schema.json"),
   },
 ]);
 
