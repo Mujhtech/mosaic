@@ -211,6 +211,14 @@ const (
 	// with worker wall-clock is forbidden: occurred_at participates in
 	// FactDigest, so a wall-clock value defeats replay idempotency (9A B7).
 	QuarantineMissingProviderTimestamp = "missing_provider_timestamp"
+	// QuarantineVoidProductUnresolved marks a Google voided purchase whose
+	// Product could not be attributed — a multi-line-item order, or an
+	// orders.get that failed permanently. It is deliberately distinct from
+	// `malformed_reference` (review finding I-4): the refund *was* recorded, so
+	// the operator action is to attribute the Product and re-resolve, not to
+	// investigate a broken input. Access for the purchase reads `unknown`
+	// meanwhile, never `owned`.
+	QuarantineVoidProductUnresolved = "void_product_unresolved"
 )
 
 // Quarantine statuses. There is no status meaning "operator declared this

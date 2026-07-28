@@ -624,13 +624,41 @@ func (s *Service) validateGoogle(ctx context.Context, job ValidationJob, input R
 				attribute.String("endpoint", "order_get"),
 				attribute.Bool("failed", orderErr != nil)))
 			if orderErr != nil {
-				return s.classifiedFailure(job, input, attemptID, attemptNumber, started, orderErr)
+				// Review finding I-4: a *permanently* failing orders.get on a
+				// void used to burn attempts and record nothing, so the refund
+				// never became a fact and the purchase kept granting forever.
+				// A transient failure still retries — the order may come back —
+				// but once the failure is permanent (or retries are spent) the
+				// void is recorded with an unresolved Product instead of being
+				// dropped.
+				classification := Classify(orderErr, s.now())
+				if !work.voided || (classification.Retryable &&
+					!classification.ExhaustedFor(attemptNumber, job.MaxAttempts)) {
+					return s.classifiedFailure(job, input, attemptID, attemptNumber, started, orderErr)
+				}
+				return s.voidWithoutProduct(job, input, fact, work, attemptID, attemptNumber, started,
+					orderID, "void_order_lookup_permanently_failed")
 			}
 			if len(order.LineItems) == 1 {
 				productID = order.LineItems[0].ProductID
+			} else if work.voided {
+				// Review finding I-4: a multi-line-item order cannot be
+				// attributed to one SKU from the order alone. Quarantining the
+				// whole input left the refund unrecorded and the purchase
+				// entitled, so the void is recorded product-unresolved instead
+				// and gets its own quarantine reason — an operator looking at
+				// `product_identifier_unavailable` had no way to tell this case
+				// (revenue already refunded, access still to be corrected) from
+				// a plainly malformed reference.
+				return s.voidWithoutProduct(job, input, fact, work, attemptID, attemptNumber, started,
+					orderID, "void_order_line_items_ambiguous")
 			}
 		}
 		if productID == "" {
+			if work.voided {
+				return s.voidWithoutProduct(job, input, fact, work, attemptID, attemptNumber, started,
+					orderID, "void_product_identifier_unavailable")
+			}
 			return s.quarantineAttempt(job, input, attemptID, attemptNumber, started,
 				Permanent(CategoryInvalid, "product_identifier_unavailable"), QuarantineMalformedReference, "error")
 		}
@@ -794,6 +822,99 @@ func applyGoogleVoid(fact *TransactionFact, work googleWork, providerOccurredAt 
 		fact.RefundType = RefundTypeQuantityPartial
 	}
 	return true
+}
+
+// ProviderProductVoidUnresolved stands in for the SKU of a voided Google
+// purchase Mosaic could not attribute to one product. Play product identifiers
+// cannot contain a colon, so the sentinel can never collide with a real one, and
+// it exists only because `provider_product_identifier` is NOT NULL and non-blank
+// on every fact.
+const ProviderProductVoidUnresolved = "unresolved:voided_purchase"
+
+// voidWithoutProduct records a Google void whose Product could not be resolved
+// (review finding I-4).
+//
+// Two provider shapes reach here: an order with several line items, which
+// cannot be attributed to one SKU, and an orders.get that fails permanently.
+// Both previously produced no fact at all — the first quarantined the input as
+// a malformed reference, the second exhausted its attempts — so a refunded
+// purchase went on granting its Entitlement indefinitely. Money left the
+// merchant and access did not.
+//
+// The refund is therefore recorded as a fact with `resolution_state =
+// unresolved`, which drives the lineage to `unknown` rather than leaving it
+// `owned`: Mosaic states that this purchase is no longer good without claiming
+// to know which Product it was. The input is quarantined alongside it under its
+// own reason code, so the operator queue distinguishes "refund recorded,
+// product needs attribution" from a plainly malformed reference.
+func (s *Service) voidWithoutProduct(job ValidationJob, input RawInput, fact TransactionFact, work googleWork,
+	attemptID string, attemptNumber int, started time.Time, orderID, diagnostic string) AttemptOutcome {
+
+	fact.TransactionType = TypeNonConsumable
+	fact.ProviderProductIdentifier = ProviderProductVoidUnresolved
+	fact.ResolutionState = StateUnresolved
+	fact.MosaicProductID = ""
+	fact.ProviderProductMappingID = ""
+	fact.ResolvedMappingVersion = nil
+	if orderID != "" {
+		fact.ProviderTransactionID = orderID
+	} else {
+		fact.ProviderTransactionID = "token:" + hexOf(fact.PurchaseChainDigest)
+	}
+	if !applyGoogleVoid(&fact, work, input.ProviderOccurredAt) || fact.OccurredAt.IsZero() {
+		// 9A correction B7 still governs: no provider timestamp, no fact. The
+		// void is reported under the timestamp reason rather than this one,
+		// because the operator's next action is different.
+		return s.quarantineAttempt(job, input, attemptID, attemptNumber, started,
+			Permanent(CategoryInvalid, "void_event_time_unavailable"),
+			QuarantineMissingProviderTimestamp, "error")
+	}
+	if !storeEnvironmentMatchesMode(fact.StoreEnvironment, input.EnvironmentMode) {
+		return s.quarantineAttempt(job, input, attemptID, attemptNumber, started,
+			Permanent(CategoryInvalid, "store_environment_mismatch"),
+			QuarantineStoreEnvironmentMismatch, "error")
+	}
+
+	factID, err := s.newID("btf")
+	if err != nil {
+		return s.quarantineAttempt(job, input, attemptID, attemptNumber, started,
+			Permanent(CategoryInvalid, "fact_identifier_unavailable"),
+			QuarantineMalformedReference, "error")
+	}
+	fact.ID = factID
+	fact.RecordedAt = s.now()
+	fact.FactDigest = FactDigest(fact)
+
+	completed := s.now()
+	outcome := AttemptOutcome{
+		Attempt: ValidationAttempt{
+			ID: attemptID, ProjectID: input.ProjectID, EnvironmentID: input.EnvironmentID,
+			RawInputID: input.ID, CredentialID: input.CredentialID,
+			AttemptNumber: attemptNumber, ValidatorVersion: ValidatorVersion,
+			StartedAt: started, CompletedAt: completed,
+			// Quarantined rather than validated: a fact was produced, but the
+			// input still needs operator attention, which is the same shape
+			// resolveAndBuild uses for an unresolvable Product.
+			Outcome: OutcomeQuarantined, Retryable: false,
+			FailureCategory:  CategoryResolution,
+			DiagnosticCode:   diagnostic,
+			StoreEnvironment: fact.StoreEnvironment,
+			LatencyMs:        int(completed.Sub(started).Milliseconds()),
+			CorrelationID:    input.CorrelationID,
+		},
+		Fact: &fact,
+		Quarantine: &QuarantineWrite{
+			RawInputID: input.ID, ApplicationID: fact.ApplicationID, Provider: fact.Provider,
+			ReasonCode: QuarantineVoidProductUnresolved, Severity: "error",
+			Scopes:         []string{"provider_product_mapping"},
+			DiagnosticCode: diagnostic, OccurredAt: completed,
+		},
+		// The work is done: re-running it would re-query the same order and
+		// reach the same answer, and the fact is already recorded.
+		JobStatus: "completed",
+	}
+	outcome.Ledger = s.ledgerFor(input, outcome)
+	return outcome
 }
 
 // supersessionFactFrom derives the once-per-lineage purchase_superseded fact

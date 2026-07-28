@@ -28,13 +28,24 @@ func ProjectOneTimePurchase(facts []Fact, asOf time.Time) OneTimeResult {
 	}
 
 	acquired := false
+	productUnresolved := false
 	for _, fact := range ordered {
 		snapshot.SourceFactIDs = append(snapshot.SourceFactIDs, fact.ID)
 		if fact.IsTestSource {
 			snapshot.IsTestSource = true
 		}
+		// Resolution is a per-fact provider statement and the latest one wins,
+		// exactly as it does for subscriptions. Review finding I-4: the previous
+		// rule only reported `unresolved` while the lineage had never resolved a
+		// Product at all, so a refund fact that Mosaic could not map — the Google
+		// void whose SKU cannot be recovered — left the lineage reading `owned`
+		// from its original purchase fact and kept granting a refunded purchase.
+		if fact.ResolutionState == "unresolved" {
+			productUnresolved = true
+		}
 		if fact.MosaicProductID != "" {
 			snapshot.MosaicProductID = fact.MosaicProductID
+			productUnresolved = false
 		}
 		switch fact.FactKind {
 		case "one_time_purchase", "initial_purchase":
@@ -67,10 +78,6 @@ func ProjectOneTimePurchase(facts []Fact, asOf time.Time) OneTimeResult {
 			snapshot.ValidityState = OwnershipRevoked
 			snapshot.UncertaintyReason = UncertaintyNone
 		}
-		if fact.ResolutionState == "unresolved" && snapshot.MosaicProductID == "" {
-			snapshot.UncertaintyReason = UncertaintyProductUnresolved
-			snapshot.ValidityState = OwnershipUnknown
-		}
 	}
 
 	// An effective time in the future has not happened yet. Ownership survives
@@ -88,6 +95,15 @@ func ProjectOneTimePurchase(facts []Fact, asOf time.Time) OneTimeResult {
 		} else {
 			snapshot.ValidityState = OwnershipOwned
 		}
+	}
+
+	// An unresolved Product outranks every ownership reading, and it is applied
+	// after the future-effective adjustments above so a refund Mosaic cannot map
+	// cannot be quietly restored to `owned`. Real revenue with unknown meaning is
+	// reported as unknown; guessing an Entitlement would be worse.
+	if productUnresolved {
+		snapshot.ValidityState = OwnershipUnknown
+		snapshot.UncertaintyReason = UncertaintyProductUnresolved
 	}
 
 	snapshot.Checksum = oneTimeChecksum(snapshot)

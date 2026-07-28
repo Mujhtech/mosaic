@@ -206,3 +206,71 @@ func TestSupersessionFactDigestStableAcrossRenewals(t *testing.T) {
 		t.Fatal("supersession fact digest changed across renewals; the link would be recorded repeatedly")
 	}
 }
+
+// Review finding I-4: a Google void whose Product cannot be attributed used to
+// produce no Transaction Fact at all — a multi-line-item order quarantined the
+// input as a malformed reference, and a permanently failing orders.get burned
+// its attempts — so the refunded purchase kept granting its Entitlement
+// indefinitely. Money left the merchant and access did not.
+//
+// This pins the shape of the recovery: a refund fact is recorded with an
+// unresolved Product (which the projection reads as `unknown`, never `owned`),
+// dated with the provider's own event time, and the input is quarantined under
+// its own reason code so the operator queue can tell "refund recorded, product
+// attribution owed" from a broken input.
+func TestVoidWithoutResolvableProductStillRecordsTheRefund(t *testing.T) {
+	now := time.Date(2026, 3, 1, 0, 0, 0, 0, time.UTC)
+	service := testService(now)
+	eventTime := time.Date(2026, 2, 1, 0, 0, 0, 0, time.UTC)
+
+	input := RawInput{
+		ID: "bri_1", ProjectID: "prj_1", EnvironmentID: "env_1",
+		EnvironmentMode: "production", Provider: ProviderGooglePlay,
+		CorrelationID: "corr_1",
+	}
+	fact := TransactionFact{
+		ProjectID: "prj_1", EnvironmentID: "env_1", EnvironmentMode: "production",
+		ApplicationID: "app_1", Provider: ProviderGooglePlay,
+		StoreEnvironment: StoreProduction, PurchaseChainDigest: TokenDigest("token-1"),
+		ValidatorVersion: ValidatorVersion, FactVersion: 1,
+		SourceRawInputID: "bri_1", ValidationAttemptID: "bva_1",
+	}
+	work := googleWork{voided: true, refundType: 1, eventTime: eventTime}
+
+	outcome := service.voidWithoutProduct(ValidationJob{}, input, fact, work,
+		"bva_1", 1, now, "GPA.900-1", "void_order_line_items_ambiguous")
+
+	if outcome.Fact == nil {
+		t.Fatal("an unattributable void produced no fact; the refunded purchase would keep granting")
+	}
+	if outcome.Fact.FactKind != KindRefund {
+		t.Fatalf("fact kind %q, want %q", outcome.Fact.FactKind, KindRefund)
+	}
+	if outcome.Fact.ResolutionState != StateUnresolved || outcome.Fact.MosaicProductID != "" {
+		t.Fatalf("fact must be product-unresolved, got state %q product %q",
+			outcome.Fact.ResolutionState, outcome.Fact.MosaicProductID)
+	}
+	if !outcome.Fact.OccurredAt.Equal(eventTime) || outcome.Fact.RefundedAt == nil {
+		t.Fatalf("refund must be dated with the provider event time, got %v", outcome.Fact.OccurredAt)
+	}
+	if len(outcome.Fact.FactDigest) == 0 {
+		t.Fatal("fact digest was not computed; duplicate delivery would not deduplicate")
+	}
+	if outcome.Quarantine == nil || outcome.Quarantine.ReasonCode != QuarantineVoidProductUnresolved {
+		t.Fatalf("quarantine reason %+v, want %q", outcome.Quarantine, QuarantineVoidProductUnresolved)
+	}
+	if outcome.JobStatus != "completed" {
+		t.Fatalf("job status %q, want completed: re-running reaches the same answer", outcome.JobStatus)
+	}
+
+	// No provider timestamp anywhere still yields no fact (9A correction B7);
+	// the recovery must not become a wall-clock backdoor.
+	undated := service.voidWithoutProduct(ValidationJob{}, input, fact,
+		googleWork{voided: true}, "bva_2", 1, now, "GPA.900-1", "void_order_line_items_ambiguous")
+	if undated.Fact != nil {
+		t.Fatal("a void with no provider timestamp produced a fact")
+	}
+	if undated.Quarantine == nil || undated.Quarantine.ReasonCode != QuarantineMissingProviderTimestamp {
+		t.Fatalf("undated void quarantine %+v, want missing_provider_timestamp", undated.Quarantine)
+	}
+}
