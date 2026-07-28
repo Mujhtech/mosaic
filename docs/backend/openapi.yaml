@@ -2358,6 +2358,217 @@ paths:
         an alias digest, a provider token, or a secret. Owner or admin only.
       parameters: [{ $ref: "#/components/parameters/ProjectID" }, { $ref: "#/components/parameters/EnvironmentID" }]
       responses: { "200": { description: Projection health summary., content: { application/json: { schema: { type: object, properties: { data: { $ref: "#/components/schemas/BillingProjectionHealth" } } } } } }, "401": { $ref: "#/components/responses/Error" }, "403": { $ref: "#/components/responses/Error" }, "404": { $ref: "#/components/responses/Error" }, "503": { $ref: "#/components/responses/Error" } }
+  /v1/projects/{projectId}/environments/{environmentId}/billing/projection-replays:
+    post:
+      operationId: createBillingProjectionReplay
+      tags: [Billing Operations]
+      description: |
+        Recompute committed entitlement state from the immutable facts and report what moved.
+        Replay is the operational expression of principle 2: a projection is derived state, so a
+        corrupt checkpoint, a promoted rule version, or a mapping repair is answered by
+        recomputing rather than by patching what was derived. It reuses the ordinary projection
+        command, so replayed state goes through the same lock, compare-and-swap, and atomic
+        commit as live projection, and prior snapshots are never deleted.
+
+        The request must be **bounded** — one subscription instance, one customer, or a fact
+        window. There is deliberately no "replay everything" member: an unbounded replay is a
+        migration, and bulk migration tooling is out of Phase 9B.
+
+        `projectionRuleVersion` selects the semantics. A version this build does not derive under
+        is refused with 422 rather than recomputed under the active engine and labelled with the
+        requested number, because a checksum produced by the wrong engine is indistinguishable
+        from a genuine determinism result.
+
+        Provider asymmetry, stated rather than hidden: Apple replay is input-sourced, because a
+        stored Apple payload re-validates to the same transaction. Google replay is fact-sourced,
+        because Google validation re-queries live provider state and a re-query today does not
+        reproduce what the provider said last month. Owner or admin only. Audited.
+      parameters: [{ $ref: "#/components/parameters/ProjectID" }, { $ref: "#/components/parameters/EnvironmentID" }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/CreateProjectionReplayRequest" } } } }
+      responses:
+        "200": { description: The replay ran., content: { application/json: { schema: { type: object, properties: { data: { $ref: "#/components/schemas/ProjectionReplayResult" } } } } } }
+        "401": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+        "422": { $ref: "#/components/responses/Error" }
+  /v1/projects/{projectId}/environments/{environmentId}/billing/webhook-destinations:
+    get:
+      operationId: listWebhookDestinations
+      tags: [Billing Webhooks]
+      description: Application webhook destinations for one Environment. No response ever carries a signing secret.
+      parameters: [{ $ref: "#/components/parameters/ProjectID" }, { $ref: "#/components/parameters/EnvironmentID" }]
+      responses:
+        "200": { description: Destinations., content: { application/json: { schema: { type: object, properties: { data: { type: array, items: { $ref: "#/components/schemas/WebhookDestination" } } } } } } }
+        "401": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+    post:
+      operationId: createWebhookDestination
+      tags: [Billing Webhooks]
+      description: |
+        Register a destination and mint its first signing secret. **The secret is in this
+        response and in no other**: Mosaic keeps only the sealed form, so there is no read that
+        returns it again.
+
+        The URL is screened under the ADR-0024 SSRF policy at registration and again on every
+        delivery attempt: HTTPS only, no redirects, and RFC1918, loopback, link-local (including
+        the cloud metadata address), CGNAT, IPv6 unique-local, IPv4-mapped, and unspecified
+        addresses refused against the *resolved* address. Operators running Mosaic and their
+        application backend on one private network enable
+        `MOSAIC_BILLING_WEBHOOK_ALLOW_PRIVATE_DESTINATIONS`; there is deliberately no
+        per-destination override.
+      parameters: [{ $ref: "#/components/parameters/ProjectID" }, { $ref: "#/components/parameters/EnvironmentID" }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/CreateWebhookDestinationRequest" } } } }
+      responses:
+        "201": { description: The destination and its one-time signing secret., content: { application/json: { schema: { type: object, properties: { data: { $ref: "#/components/schemas/WebhookDestinationWithSecret" } } } } } }
+        "401": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "422": { $ref: "#/components/responses/Error" }
+  /v1/projects/{projectId}/billing/webhook-destinations/{destinationId}:
+    get:
+      operationId: getWebhookDestination
+      tags: [Billing Webhooks]
+      parameters: [{ $ref: "#/components/parameters/ProjectID" }, { $ref: "#/components/parameters/WebhookDestinationID" }]
+      responses:
+        "200": { description: The destination., content: { application/json: { schema: { type: object, properties: { data: { $ref: "#/components/schemas/WebhookDestination" } } } } } }
+        "401": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+    patch:
+      operationId: updateWebhookDestination
+      tags: [Billing Webhooks]
+      description: Change the URL, the enabled event types, or the description. A changed URL is re-screened.
+      parameters: [{ $ref: "#/components/parameters/ProjectID" }, { $ref: "#/components/parameters/WebhookDestinationID" }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/UpdateWebhookDestinationRequest" } } } }
+      responses:
+        "200": { description: The updated destination., content: { application/json: { schema: { type: object, properties: { data: { $ref: "#/components/schemas/WebhookDestination" } } } } } }
+        "401": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "422": { $ref: "#/components/responses/Error" }
+    delete:
+      operationId: deleteWebhookDestination
+      tags: [Billing Webhooks]
+      description: Remove a destination that has no delivery history. A destination with attempts is disabled rather than deleted, because the attempts are append-only evidence.
+      parameters: [{ $ref: "#/components/parameters/ProjectID" }, { $ref: "#/components/parameters/WebhookDestinationID" }]
+      responses:
+        "204": { description: The destination was removed. }
+        "401": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+  /v1/projects/{projectId}/billing/webhook-destinations/{destinationId}/status:
+    post:
+      operationId: setWebhookDestinationStatus
+      tags: [Billing Webhooks]
+      description: |
+        Pause, resume, or disable a destination. Mosaic also disables a destination automatically
+        after a bounded run of consecutive exhausted deliveries; `autoDisableReason` distinguishes
+        that from an operator's own action, so "did Mosaic disable this, or did a person?" is
+        answerable without reading prose.
+      parameters: [{ $ref: "#/components/parameters/ProjectID" }, { $ref: "#/components/parameters/WebhookDestinationID" }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/SetWebhookDestinationStatusRequest" } } } }
+      responses:
+        "200": { description: The updated destination., content: { application/json: { schema: { type: object, properties: { data: { $ref: "#/components/schemas/WebhookDestination" } } } } } }
+        "401": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "422": { $ref: "#/components/responses/Error" }
+  /v1/projects/{projectId}/billing/webhook-destinations/{destinationId}/secrets:
+    get:
+      operationId: listWebhookSigningSecrets
+      tags: [Billing Webhooks]
+      description: Signing-secret metadata. The secret values are sealed and are never returned.
+      parameters: [{ $ref: "#/components/parameters/ProjectID" }, { $ref: "#/components/parameters/WebhookDestinationID" }]
+      responses:
+        "200": { description: Secret metadata., content: { application/json: { schema: { type: object, properties: { data: { type: array, items: { $ref: "#/components/schemas/WebhookSigningSecretMetadata" } } } } } } }
+        "401": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+  /v1/projects/{projectId}/billing/webhook-destinations/{destinationId}/secrets/rotate:
+    post:
+      operationId: rotateWebhookSigningSecret
+      tags: [Billing Webhooks]
+      description: |
+        Mint a new signing secret and start an overlap window. During the overlap every delivery
+        carries one `v1` element per honoured secret, so a receiver that has adopted the new
+        secret and one that has not both verify. `previousSecretHonoredUntil` is when the
+        superseded secret stops signing, which is the whole information an integrator needs to
+        schedule their own side. Without an overlap, rotating means a simultaneous change on both
+        sides or a period of rejected deliveries, and an operator can achieve neither.
+
+        The new secret is displayed once, here. Audited.
+      parameters: [{ $ref: "#/components/parameters/ProjectID" }, { $ref: "#/components/parameters/WebhookDestinationID" }]
+      responses:
+        "201": { description: The new secret and the overlap deadline., content: { application/json: { schema: { type: object, properties: { data: { $ref: "#/components/schemas/WebhookDestinationWithSecret" } } } } } }
+        "401": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+  /v1/projects/{projectId}/billing/webhook-destinations/{destinationId}/secrets/{secretId}/retire:
+    post:
+      operationId: retireWebhookSigningSecret
+      tags: [Billing Webhooks]
+      description: |
+        End a secret's overlap immediately — the response to a suspected compromise. Retiring the
+        last secret that can still sign is refused: a destination with no signing secret would
+        send unsigned deliveries, and an unsigned entitlement webhook is an unauthenticated
+        instruction to grant access. Audited.
+      parameters: [{ $ref: "#/components/parameters/ProjectID" }, { $ref: "#/components/parameters/WebhookDestinationID" }, { in: path, name: secretId, required: true, schema: { type: string } }]
+      responses:
+        "200": { description: The retired secret's metadata., content: { application/json: { schema: { type: object, properties: { data: { $ref: "#/components/schemas/WebhookSigningSecretMetadata" } } } } } }
+        "401": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+  /v1/projects/{projectId}/billing/webhook-deliveries:
+    get:
+      operationId: listWebhookDeliveries
+      tags: [Billing Webhooks]
+      description: One delivery per (event, destination). A retry is a further attempt on the same delivery, never a new logical event, which is what keeps the event id stable for consumer deduplication.
+      parameters:
+        - { $ref: "#/components/parameters/ProjectID" }
+        - { in: query, name: environmentId, schema: { type: string } }
+        - { in: query, name: eventId, schema: { type: string } }
+        - { in: query, name: destinationId, schema: { type: string } }
+        - { in: query, name: status, schema: { type: string, enum: [pending, succeeded, failed, exhausted, skipped] } }
+        - { $ref: "#/components/parameters/Limit" }
+      responses:
+        "200": { description: Deliveries., content: { application/json: { schema: { type: object, properties: { data: { type: array, items: { $ref: "#/components/schemas/WebhookDelivery" } } } } } } }
+        "401": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+  /v1/projects/{projectId}/billing/webhook-deliveries/{deliveryId}:
+    get:
+      operationId: getWebhookDelivery
+      tags: [Billing Webhooks]
+      parameters: [{ $ref: "#/components/parameters/ProjectID" }, { $ref: "#/components/parameters/WebhookDeliveryID" }]
+      responses:
+        "200": { description: The delivery., content: { application/json: { schema: { type: object, properties: { data: { $ref: "#/components/schemas/WebhookDelivery" } } } } } }
+        "401": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+  /v1/projects/{projectId}/billing/webhook-deliveries/{deliveryId}/attempts:
+    get:
+      operationId: listWebhookDeliveryAttempts
+      tags: [Billing Webhooks]
+      description: |
+        Append-only attempt history. It is API-facing only — it is never sent to a destination and
+        a destination never sees another tenant's attempts — so it carries no URL and no secret.
+        `responseExcerpt` is a bounded, control-character-free excerpt of the destination's own
+        response, kept only so an integrator can see why their endpoint refused; it is never
+        parsed and never influences Mosaic state.
+      parameters: [{ $ref: "#/components/parameters/ProjectID" }, { $ref: "#/components/parameters/WebhookDeliveryID" }]
+      responses:
+        "200": { description: Attempts., content: { application/json: { schema: { type: object, properties: { data: { type: array, items: { $ref: "#/components/schemas/WebhookDeliveryAttempt" } } } } } } }
+        "401": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+  /v1/projects/{projectId}/billing/webhook-deliveries/{deliveryId}/replay:
+    post:
+      operationId: replayWebhookDelivery
+      tags: [Billing Webhooks]
+      description: |
+        Re-queue an exhausted or failed delivery. It reuses the same delivery row and the same
+        event id, appending a further attempt: a receiver deduplicating on event id still sees
+        the change once. `202` — the delivery is queued, not performed; the worker owns the
+        attempt. Audited.
+      parameters: [{ $ref: "#/components/parameters/ProjectID" }, { $ref: "#/components/parameters/WebhookDeliveryID" }]
+      responses:
+        "202": { description: The delivery was queued., content: { application/json: { schema: { type: object, properties: { data: { $ref: "#/components/schemas/WebhookDelivery" } } } } } }
+        "401": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
   /v1/projects/{projectId}/environments/{environmentId}/billing/reconciliation-runs:
     get:
       operationId: listReconciliationRuns
@@ -2458,6 +2669,8 @@ components:
     OrganizationID: { in: path, name: organizationId, required: true, schema: { type: string } }
     ActorID: { in: path, name: actorId, required: true, schema: { type: string } }
     ProjectID: { in: path, name: projectId, required: true, schema: { type: string } }
+    WebhookDestinationID: { in: path, name: destinationId, required: true, schema: { type: string } }
+    WebhookDeliveryID: { in: path, name: deliveryId, required: true, schema: { type: string } }
     EnvironmentID: { in: path, name: environmentId, required: true, schema: { type: string } }
     ApplicationID: { in: path, name: applicationId, required: true, schema: { type: string } }
     ProviderConnectionID: { in: path, name: connectionId, required: true, schema: { type: string } }
@@ -3505,6 +3718,123 @@ components:
         triggerKind: { type: string, enum: [manual_sync] }
         requestedAt: { type: string, format: date-time }
         status: { type: string, enum: [queued] }
+    CreateProjectionReplayRequest:
+      type: object
+      additionalProperties: false
+      description: Must be bounded by at least one of subscriptionInstanceId, billingCustomerId, or a complete window.
+      properties:
+        subscriptionInstanceId: { type: string, maxLength: 128 }
+        billingCustomerId: { type: string, maxLength: 128 }
+        windowStart: { type: string, format: date-time, description: Bounds on facts rather than on lineage creation - a scope is in scope when it holds a fact whose effective or recorded time falls inside the window. }
+        windowEnd: { type: string, format: date-time }
+        projectionRuleVersion: { type: integer, minimum: 0, maximum: 1000000, description: Zero selects the active version. A version this build does not derive under is refused rather than approximated. }
+        limit: { type: integer, minimum: 0, maximum: 500 }
+    ProjectionReplayResult:
+      type: object
+      properties:
+        projectionRuleVersion: { type: integer }
+        scopesReplayed: { type: integer }
+        scopesChanged: { type: integer }
+        outcomes:
+          type: array
+          items:
+            type: object
+            properties:
+              projectionScopeKey: { type: string }
+              comparison: { type: string, enum: [unchanged, changed], description: The whole point of a replay - proving determinism, or naming exactly what a rule change moved. }
+              materialized: { type: boolean, description: Whether a new snapshot was written. Materialization is changes-only, so an unchanged scope writes nothing. }
+              changedEntitlementIds: { type: array, items: { type: string } }
+    WebhookDestination:
+      type: object
+      properties:
+        id: { type: string }
+        projectId: { type: string }
+        environmentId: { type: string }
+        url: { type: string, description: HTTPS only. Screened against the resolved address at registration and again on every delivery attempt. }
+        status: { type: string, enum: [active, paused, disabled] }
+        eventTypes: { type: array, items: { type: string, enum: [customer.entitlements.changed] }, description: Phase 9B emits one event type. The other nine the contract declares are reserved names. }
+        description: { type: string }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+        secretLastRotatedAt: { type: string, format: date-time }
+        disabledReason: { type: string, description: What an operator wrote when they disabled it by hand. }
+        consecutiveFailureCount: { type: integer, description: Exhausted deliveries in a row. Any success resets it, so a recovering outage never trips the auto-disable policy. }
+        autoDisabledAt: { type: string, format: date-time }
+        autoDisableReason: { type: string, enum: [consecutive_exhausted_deliveries, destination_refused], description: Set only by the automatic path, so a Mosaic disable is distinguishable from a human one. }
+    WebhookDestinationWithSecret:
+      type: object
+      properties:
+        destination: { $ref: "#/components/schemas/WebhookDestination" }
+        secret: { type: string, description: Displayed exactly once. Mosaic keeps only the sealed form, so no read returns it again. }
+        secretId: { type: string }
+        previousSecretHonoredUntil: { type: string, format: date-time, description: Set by a rotation. Until this instant the superseded secret still signs. Absent on a create, which has no previous secret. }
+    WebhookSigningSecretMetadata:
+      type: object
+      properties:
+        id: { type: string }
+        status: { type: string, enum: [active, retired] }
+        createdAt: { type: string, format: date-time }
+        retiredAt: { type: string, format: date-time }
+        honoredUntil: { type: string, format: date-time, description: A retired secret keeps signing until this instant, which is the rotation overlap window. }
+    CreateWebhookDestinationRequest:
+      type: object
+      additionalProperties: false
+      required: [url]
+      properties:
+        url: { type: string, minLength: 1, maxLength: 2048 }
+        eventTypes: { type: array, maxItems: 10, items: { type: string, enum: [customer.entitlements.changed] } }
+        description: { type: string, maxLength: 500 }
+    UpdateWebhookDestinationRequest:
+      type: object
+      additionalProperties: false
+      properties:
+        url: { type: string, minLength: 1, maxLength: 2048 }
+        eventTypes: { type: array, maxItems: 10, items: { type: string, enum: [customer.entitlements.changed] } }
+        description: { type: string, maxLength: 500 }
+    SetWebhookDestinationStatusRequest:
+      type: object
+      additionalProperties: false
+      required: [status]
+      properties:
+        status: { type: string, enum: [active, paused, disabled] }
+        reason: { type: string, maxLength: 128 }
+    WebhookDelivery:
+      type: object
+      properties:
+        id: { type: string }
+        projectId: { type: string }
+        environmentId: { type: string }
+        eventId: { type: string, description: Stable across every attempt and every manual replay. It is the consumer's deduplication key. }
+        destinationId: { type: string }
+        status: { type: string, enum: [pending, succeeded, failed, exhausted, skipped] }
+        skippedReason: { type: string, enum: [destination_disabled, event_type_not_enabled, destination_deleted, tenant_suspended] }
+        attemptCount: { type: integer }
+        maxAttempts: { type: integer }
+        nextAttemptAt: { type: string, format: date-time }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+        completedAt: { type: string, format: date-time }
+    WebhookDeliveryAttempt:
+      type: object
+      description: |
+        One recorded try. Mirrors the Billing State Webhook Contract v1 webhookDeliveryAttempt
+        record; the normative shape is protocol/schema/billing-state-webhook/v1/delivery.schema.json.
+      properties:
+        id: { type: string }
+        deliveryId: { type: string }
+        eventId: { type: string }
+        destinationId: { type: string }
+        attempt: { type: integer, minimum: 1, maximum: 32 }
+        maxAttempts: { type: integer, minimum: 1, maximum: 32 }
+        outcome: { type: string, enum: [delivered, retryable_failure, permanent_failure, exhausted, skipped] }
+        responseStatusCode: { type: integer, minimum: 100, maximum: 599 }
+        responseExcerpt: { type: string, maxLength: 240, description: Bounded and control-character-free. Never parsed, never influences Mosaic state. }
+        errorCode: { type: string }
+        latencyMs: { type: integer }
+        skippedReason: { type: string, enum: [destination_disabled, event_type_not_enabled, destination_deleted, tenant_suspended] }
+        requestedAt: { type: string, format: date-time }
+        respondedAt: { type: string, format: date-time }
+        nextAttemptAt: { type: string, format: date-time }
     BillingProjectionHealth:
       type: object
       properties:
