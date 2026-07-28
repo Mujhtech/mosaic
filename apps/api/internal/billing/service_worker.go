@@ -250,8 +250,25 @@ func (s *Service) validateApple(ctx context.Context, job ValidationJob, input Ra
 		SourceRawInputID:              input.ID,
 		ValidationAttemptID:           attemptID,
 	}
+	if !applyAppleTransaction(&fact, transaction, renewal) {
+		// 9A correction (B7): worker wall-clock must never stand in for
+		// occurred_at — it participates in FactDigest, so a wall-clock value
+		// makes every replay of the same input a "new" fact and defeats replay
+		// idempotency. An Apple payload with neither purchaseDate nor
+		// signedDate quarantines instead.
+		return s.quarantineAttempt(job, input, attemptID, attemptNumber, started,
+			Permanent(CategoryInvalid, "no_provider_timestamp"), QuarantineMissingProviderTimestamp, "error")
+	}
+
+	return s.resolveAndBuild(ctx, job, input, fact, platform, attemptID, attemptNumber, started, storeEnvironment)
+}
+
+// applyAppleTransaction populates the transaction-derived fields of an Apple
+// fact. It reports false when the payload carries no provider timestamp at
+// all, in which case no fact may be recorded (9A correction B7).
+func applyAppleTransaction(fact *TransactionFact, transaction appstorejws.TransactionPayload, renewal *appstorejws.RenewalPayload) bool {
 	if transaction.OriginalTransactionID != "" {
-		fact.PurchaseChainDigest = AppleTransactionKey(storeEnvironment, transaction.OriginalTransactionID)
+		fact.PurchaseChainDigest = AppleTransactionKey(fact.StoreEnvironment, transaction.OriginalTransactionID)
 	}
 	if when, ok := appstorejws.Millis(transaction.PurchaseDate); ok {
 		fact.OccurredAt = when
@@ -261,10 +278,11 @@ func (s *Service) validateApple(ctx context.Context, job ValidationJob, input Ra
 		fact.PeriodEndAt = &when
 	}
 	if when, ok := appstorejws.Millis(transaction.RevocationDate); ok {
+		// 9A correction: both of Apple's revocation reasons are refunds — 0 is
+		// "refunded for another reason", 1 is "refunded due to an app issue" —
+		// so a revocation always carries refunded_at, not only reason 1.
 		fact.RevokedAt = &when
-		if transaction.RevocationReason != nil && *transaction.RevocationReason == 1 {
-			fact.RefundedAt = &when
-		}
+		fact.RefundedAt = &when
 	}
 	if renewal != nil {
 		expected := renewal.AutoRenewStatus == 1
@@ -273,12 +291,9 @@ func (s *Service) validateApple(ctx context.Context, job ValidationJob, input Ra
 	if fact.OccurredAt.IsZero() {
 		if when, ok := appstorejws.Millis(transaction.SignedDate); ok {
 			fact.OccurredAt = when
-		} else {
-			fact.OccurredAt = started
 		}
 	}
-
-	return s.resolveAndBuild(ctx, job, input, fact, platform, attemptID, attemptNumber, started, storeEnvironment)
+	return !fact.OccurredAt.IsZero()
 }
 
 // appleTransactionType maps Apple's product type onto the two types Phase 9A
@@ -543,7 +558,9 @@ func (s *Service) validateGoogle(ctx context.Context, job ValidationJob, input R
 		FactVersion:         1,
 		SourceRawInputID:    input.ID,
 		ValidationAttemptID: attemptID,
-		OccurredAt:          started,
+		// OccurredAt is deliberately not defaulted: only a provider-stated
+		// time may date a fact (9A correction B7), and a branch that cannot
+		// supply one quarantines below.
 	}
 
 	linkedPurchaseToken := ""
@@ -563,7 +580,7 @@ func (s *Service) validateGoogle(ctx context.Context, job ValidationJob, input R
 		applyGoogleSubscription(&fact, purchase)
 		if !applyGoogleVoid(&fact, work, input.ProviderOccurredAt) {
 			return s.quarantineAttempt(job, input, attemptID, attemptNumber, started,
-				Permanent(CategoryInvalid, "void_event_time_unavailable"), QuarantineMalformedReference, "error")
+				Permanent(CategoryInvalid, "void_event_time_unavailable"), QuarantineMissingProviderTimestamp, "error")
 		}
 		linkedPurchaseToken = purchase.LinkedPurchaseToken
 	} else {
@@ -609,7 +626,7 @@ func (s *Service) validateGoogle(ctx context.Context, job ValidationJob, input R
 		applyGoogleOneTime(&fact, purchase)
 		if !applyGoogleVoid(&fact, work, input.ProviderOccurredAt) {
 			return s.quarantineAttempt(job, input, attemptID, attemptNumber, started,
-				Permanent(CategoryInvalid, "void_event_time_unavailable"), QuarantineMalformedReference, "error")
+				Permanent(CategoryInvalid, "void_event_time_unavailable"), QuarantineMissingProviderTimestamp, "error")
 		}
 	}
 
@@ -622,6 +639,13 @@ func (s *Service) validateGoogle(ctx context.Context, job ValidationJob, input R
 	if !storeEnvironmentMatchesMode(fact.StoreEnvironment, input.EnvironmentMode) {
 		return s.quarantineAttempt(job, input, attemptID, attemptNumber, started,
 			Permanent(CategoryInvalid, "store_environment_mismatch"), QuarantineStoreEnvironmentMismatch, "error")
+	}
+	if fact.OccurredAt.IsZero() {
+		// 9A correction (B7): occurred_at participates in FactDigest, so worker
+		// wall-clock would make every replay a different fact. No provider
+		// timestamp means no fact.
+		return s.quarantineAttempt(job, input, attemptID, attemptNumber, started,
+			Permanent(CategoryInvalid, "no_provider_timestamp"), QuarantineMissingProviderTimestamp, "error")
 	}
 	outcome := s.resolveAndBuild(ctx, job, input, fact, platform, attemptID, attemptNumber, started, fact.StoreEnvironment)
 	if linkedPurchaseToken != "" && outcome.Fact != nil {

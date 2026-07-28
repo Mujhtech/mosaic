@@ -191,6 +191,11 @@ const (
 	QuarantineReplayConflict            = "replay_conflict"
 	QuarantineProviderPermanentlyFailed = "provider_permanently_failed"
 	QuarantineValidationExhausted       = "validation_exhausted"
+	// QuarantineMissingProviderTimestamp marks an input whose provider payload
+	// carried no usable event or transaction timestamp. Recording a fact dated
+	// with worker wall-clock is forbidden: occurred_at participates in
+	// FactDigest, so a wall-clock value defeats replay idempotency (9A B7).
+	QuarantineMissingProviderTimestamp = "missing_provider_timestamp"
 )
 
 // Quarantine statuses. There is no status meaning "operator declared this

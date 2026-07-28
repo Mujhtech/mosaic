@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/Mujhtech/mosaic/apps/api/internal/platform/appstorejws"
 	"github.com/Mujhtech/mosaic/apps/api/internal/platform/googleplay"
 )
 
@@ -96,6 +97,67 @@ func TestVoidWithoutProviderTimestampIsRejected(t *testing.T) {
 	fact := TransactionFact{}
 	if applyGoogleVoid(&fact, googleWork{voided: true}, nil) {
 		t.Fatal("a void without any provider timestamp must not produce a fact")
+	}
+}
+
+// 9A defect B7: worker wall-clock must never date a fact. An Apple payload
+// with no provider timestamp yields no fact, and two validations of the same
+// payload at different wall-clock instants produce identical digests.
+func TestAppleFactRejectsMissingProviderTimestamp(t *testing.T) {
+	fact := TransactionFact{StoreEnvironment: StoreProduction}
+	if applyAppleTransaction(&fact, appstorejws.TransactionPayload{TransactionID: "100"}, nil) {
+		t.Fatal("a payload with no provider timestamp must not produce a fact")
+	}
+
+	// SignedDate alone is an acceptable provider timestamp.
+	fact = TransactionFact{StoreEnvironment: StoreProduction}
+	if !applyAppleTransaction(&fact, appstorejws.TransactionPayload{TransactionID: "100", SignedDate: 1767225600000}, nil) {
+		t.Fatal("signedDate is a provider timestamp and must be accepted")
+	}
+	if !fact.OccurredAt.Equal(time.UnixMilli(1767225600000).UTC()) {
+		t.Fatalf("occurred_at %v, want the provider signedDate", fact.OccurredAt)
+	}
+}
+
+// Digest stability across validations at different wall-clock times is the
+// property B7 protects: replay of the same input must be a structural no-op.
+func TestFactDigestStableAcrossWallClock(t *testing.T) {
+	build := func() TransactionFact {
+		fact := TransactionFact{
+			EnvironmentID: "env_1", ApplicationID: "app_1", Provider: ProviderAppStore,
+			StoreEnvironment: StoreProduction, ProviderTransactionID: "100",
+			TransactionType: TypeAutoRenewableSubscription, ValidatorVersion: ValidatorVersion, FactVersion: 1,
+		}
+		applyAppleTransaction(&fact, appstorejws.TransactionPayload{
+			TransactionID: "100", OriginalTransactionID: "90",
+			PurchaseDate: 1767225600000, ExpiresDate: 1769904000000,
+		}, nil)
+		fact.FactKind = KindRenewal
+		return fact
+	}
+	one, two := build(), build()
+	one.RecordedAt = at("2026-01-01T00:00:00Z")
+	two.RecordedAt = at("2026-06-01T12:34:56Z")
+	if string(FactDigest(one)) != string(FactDigest(two)) {
+		t.Fatal("FactDigest depends on wall-clock state; replay idempotency is broken")
+	}
+}
+
+// 9A correction: both Apple revocation reasons are refunds. Reason 0
+// ("refunded for another reason") previously recorded revoked_at with no
+// refunded_at, so the refund scope was invisible to any consumer.
+func TestAppleRevocationAlwaysCarriesRefund(t *testing.T) {
+	reason := 0
+	fact := TransactionFact{StoreEnvironment: StoreProduction}
+	applyAppleTransaction(&fact, appstorejws.TransactionPayload{
+		TransactionID: "100", PurchaseDate: 1767225600000,
+		RevocationDate: 1768000000000, RevocationReason: &reason,
+	}, nil)
+	if fact.RevokedAt == nil || fact.RefundedAt == nil {
+		t.Fatalf("revocation with reason 0 must set both revoked_at and refunded_at, got %+v", fact)
+	}
+	if !fact.RefundedAt.Equal(time.UnixMilli(1768000000000).UTC()) {
+		t.Fatalf("refunded_at %v, want the provider revocationDate", fact.RefundedAt)
 	}
 }
 
