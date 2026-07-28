@@ -113,6 +113,7 @@ const ACTIONS_BY_REASON: Record<ReasonCode, readonly QuarantineRecoveryAction[]>
   // newcomer legitimate.
   input_content_conflict: [CLOSE_SUPERSEDED],
   malformed_reference: [CLOSE_SUPERSEDED],
+  missing_validation_credential: [REPLACE_CREDENTIAL, RETRY_VALIDATION],
   product_ambiguous: [REPAIR_MAPPING, RETRY_VALIDATION],
   product_unknown: [REPAIR_MAPPING, RETRY_VALIDATION],
   provider_permanently_failed: [CLOSE_SUPERSEDED],

@@ -121,6 +121,7 @@ const QUARANTINE_REASON_LABELS: Record<QuarantineReasonCode, string> = {
   environment_mismatch: "Mosaic Environment mismatch",
   input_content_conflict: "Conflicting content for a known key",
   malformed_reference: "Malformed transaction reference",
+  missing_validation_credential: "No Store Server Credential for this scope",
   product_ambiguous: "Ambiguous Product mapping",
   product_unknown: "Unknown provider Product",
   provider_permanently_failed: "Store rejected permanently",
@@ -147,6 +148,8 @@ const QUARANTINE_REASON_EXPLANATIONS: Record<QuarantineReasonCode, string> = {
     "A second input reused an existing idempotency key with different content. The original record was preserved untouched and this one was held for review.",
   malformed_reference:
     "The transaction reference did not have a shape the store could be asked about.",
+  missing_validation_credential:
+    "No Store Server Credential exists for this provider and Mosaic Environment, so no store lookup can be made. Add a credential for the scope, then retry validation.",
   product_ambiguous:
     "More than one mapping matched. Mosaic never picks by display name, price, billing period, or approximate match.",
   product_unknown:

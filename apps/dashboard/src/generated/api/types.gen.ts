@@ -360,7 +360,7 @@ export type QuarantineRecord = {
      *
      */
     storeEnvironment?: 'sandbox' | 'production' | 'unclassified';
-    reasonCode?: 'signature_invalid' | 'application_mismatch' | 'environment_mismatch' | 'store_environment_mismatch' | 'credential_unavailable' | 'credential_revoked' | 'product_unknown' | 'product_ambiguous' | 'cross_environment_mismatch' | 'unsupported_product_type' | 'unsupported_transaction_type' | 'malformed_reference' | 'input_content_conflict' | 'replay_conflict' | 'provider_permanently_failed' | 'validation_exhausted';
+    reasonCode?: 'signature_invalid' | 'application_mismatch' | 'environment_mismatch' | 'store_environment_mismatch' | 'credential_unavailable' | 'credential_revoked' | 'missing_validation_credential' | 'product_unknown' | 'product_ambiguous' | 'cross_environment_mismatch' | 'unsupported_product_type' | 'unsupported_transaction_type' | 'malformed_reference' | 'input_content_conflict' | 'replay_conflict' | 'provider_permanently_failed' | 'validation_exhausted';
     severity?: 'warning' | 'error' | 'security';
     scopes?: Array<string>;
     status?: 'open' | 'retrying' | 'closed_after_success' | 'closed_superseded';
