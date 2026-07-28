@@ -1,0 +1,15 @@
+{
+  "name": "@mosaic/test-fixtures",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    "./billing-reference-vectors.json": "./src/billing-reference-vectors.json"
+  },
+  "files": [
+    "src"
+  ],
+  "scripts": {
+    "generate": "node src/build-billing-reference-vectors.mjs"
+  }
+}

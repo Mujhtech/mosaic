@@ -277,3 +277,27 @@ digest kind to lowercase hexadecimal, so those two carry obviously synthetic
 values of the required shape rather than a prefix.
 
 Run `npm --prefix protocol run validate` and `npm --prefix protocol test`.
+
+## Cross-SDK reference vectors
+
+The `google_play_token_digest` derivation is a contract, not an implementation
+detail: if the Android, Flutter, iOS, and backend implementations do not compute
+byte-identical digests, observations silently fail to join and duplicates cannot
+be detected. The schema constrains the digest's *shape* but cannot constrain its
+*value*, so shared vectors carry that obligation:
+
+```
+packages/test-fixtures/src/billing-reference-vectors.json
+```
+
+It holds four Google Play token/digest pairs — including a non-ASCII token,
+which is the only vector that distinguishes UTF-8 from UTF-16, Latin-1, or a
+platform default — and four App Store transaction-id values including
+`UInt64.max`, which fails any implementation that parses the identifier rather
+than carrying it as a string.
+
+`protocol/tools/billing-ingestion-validation-v1.test.mjs` recomputes every
+digest and asserts the canonical vectors match the values actually carried by
+`google-client-observation.json` and `apple-client-observation.json`, so the
+vectors and the canonical fixtures cannot drift apart. See
+[the package README](../../packages/test-fixtures/README.md).

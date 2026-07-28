@@ -71,7 +71,7 @@ apps/api/         Go API, worker binary, and CLI commands (migrate, keyring)
 apps/dashboard/   dashboard and Studio (TanStack Start)
 protocol/         canonical JSON Schemas, validators, and fixtures
 sdk/flutter/      Flutter SDK        sdk/ios/  Swift SDK    sdk/android/  Kotlin SDK
-packages/         design tokens and design system
+packages/         design tokens, design system, and cross-SDK test fixtures
 examples/         example host apps for all three platforms
 deploy/ scripts/  deployment profile and operational scripts
 docs/             documentation
