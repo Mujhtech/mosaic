@@ -395,7 +395,24 @@ class TransactionObservationQueueTest {
         val NOW: Long = Instant.parse("2026-07-27T12:00:00.000Z").toEpochMilli()
         const val OBSERVATION_ID = "observation_0f2b6c1a"
 
-        /** The canonical fixture's Google reference; see billing-reference-vectors.json. */
-        const val DIGEST = "ecdb16b8fb3378895aeb12223bc53edc67ac874ac2ea15c01e15c897af2c2478"
+        /**
+         * The canonical Google reference, read from the shared cross-SDK vectors rather than pinned
+         * here, so a regenerated digest fails this suite instead of silently diverging from the
+         * contract every other SDK asserts against.
+         */
+        val DIGEST: String = googlePlayTokenDigestVector("canonical-fixture-token")
+
+        private fun googlePlayTokenDigestVector(id: String): String {
+            val root = JsonParser.parseString(
+                Files.readAllBytes(
+                    repositoryFile("packages/test-fixtures/src/billing-reference-vectors.json"),
+                ).toString(Charsets.UTF_8),
+            ).asJsonObject
+            return root.getAsJsonObject("googlePlayTokenDigest")
+                .getAsJsonArray("vectors")
+                .map { it.asJsonObject }
+                .single { it.get("id").asString == id }
+                .get("digest").asString
+        }
     }
 }

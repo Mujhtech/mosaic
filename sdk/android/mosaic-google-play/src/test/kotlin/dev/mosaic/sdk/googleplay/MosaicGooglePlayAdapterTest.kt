@@ -219,23 +219,73 @@ class MosaicGooglePlayAdapterTest {
     fun `the token digest reproduces the shared cross-SDK reference vectors`() {
         val vectors = billingReferenceVectors()
 
-        assertEquals(4, vectors.size)
-        vectors.forEach { (token, digest) -> assertEquals(digest, tokenDigest(token)) }
-        assertTrue(
-            vectors.keys.any { token -> token.any { it.code > 127 } },
-        )
+        // Every vector the shared file publishes, however many there are, must reproduce. The count
+        // is deliberately not asserted: adding a vector is how the contract gets stronger, and a
+        // count assertion would turn that into an Android failure.
+        assertTrue(vectors.isNotEmpty())
+        vectors.forEach { (id, vector) ->
+            assertEquals("Vector $id disagrees.", vector.digest, tokenDigest(vector.token))
+        }
+
+        // The vectors this SDK specifically relies on must still exist; silently losing the UTF-8
+        // proof would leave an all-ASCII suite that passes under a wrong encoding.
+        listOf("canonical-fixture-token", "distinct-token", "non-ascii-token", "long-token")
+            .forEach { assertTrue("Missing vector $it.", it in vectors) }
+        assertTrue(vectors.getValue("non-ascii-token").token.any { it.code > 127 })
     }
 
-    /** Reads token/digest pairs from the shared generated vectors without adding a JSON dependency. */
-    private fun billingReferenceVectors(): Map<String, String> {
+    private data class ReferenceVector(val token: String, val digest: String)
+
+    /**
+     * Reads the shared generated vectors without adding a JSON dependency to this module.
+     *
+     * Each vector is isolated by brace balance inside the `vectors` array and its fields are then
+     * read by name, so reformatting the generated file, reordering keys within a vector, and adding
+     * vectors are all tolerated. `tokenUtf8ByteLength` cannot be mistaken for `token` because the
+     * key is matched with its closing quote.
+     */
+    private fun billingReferenceVectors(): Map<String, ReferenceVector> {
         val source = java.nio.file.Files.readAllBytes(
             repositoryFile("packages/test-fixtures/src/billing-reference-vectors.json"),
         ).toString(Charsets.UTF_8)
-        val google = source.substringAfter("\"googlePlayTokenDigest\"").substringBefore("\"appStoreTransactionId\"")
-        return Regex("\"token\": \"([^\"]+)\"[\\s\\S]*?\"digest\": \"([a-f0-9]{64})\"")
-            .findAll(google)
-            .associate { it.groupValues[1] to it.groupValues[2] }
+        val google = source
+            .substringAfter("\"googlePlayTokenDigest\"", "")
+            .substringBefore("\"appStoreTransactionId\"")
+        check(google.isNotBlank()) { "The shared vectors no longer publish a googlePlayTokenDigest section." }
+        val array = google.substringAfter("\"vectors\"", "")
+        check(array.isNotBlank()) { "The googlePlayTokenDigest section no longer publishes vectors." }
+        return objectsIn(array).associate { body ->
+            val id = field(body, "id") ?: error("A shared reference vector has no id.")
+            id to ReferenceVector(
+                token = field(body, "token") ?: error("Vector $id has no token."),
+                digest = field(body, "digest") ?: error("Vector $id has no digest."),
+            )
+        }
     }
+
+    /** Brace-balanced top-level objects, up to the close of the array they live in. */
+    private fun objectsIn(array: String): List<String> {
+        val objects = mutableListOf<String>()
+        var depth = 0
+        var start = -1
+        for ((index, character) in array.withIndex()) {
+            when (character) {
+                '{' -> { if (depth == 0) start = index; depth += 1 }
+                '}' -> {
+                    depth -= 1
+                    if (depth == 0 && start >= 0) {
+                        objects += array.substring(start, index + 1)
+                        start = -1
+                    }
+                }
+                ']' -> if (depth == 0) return objects
+            }
+        }
+        return objects
+    }
+
+    private fun field(body: String, name: String): String? =
+        Regex("\"" + name + "\"\\s*:\\s*\"([^\"]*)\"").find(body)?.groupValues?.get(1)
 
     private fun repositoryFile(relativePath: String): java.nio.file.Path {
         System.getProperty("mosaic.repositoryRoot")?.let { root ->
