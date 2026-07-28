@@ -200,6 +200,62 @@ Consequently `isTestSource` appears on source summaries, on check results, and o
 payloads — but never on an Entitlement entry, because an Entitlement can be held for several
 reasons at once and only the reasons can be test-derived.
 
+## Billing identity APIs and the conflict workflow
+
+The identity surface mounts under `/v1/billing/identity` rather than under `/billing/server`, so
+the identity and access modules own disjoint route trees and neither can shadow the other. Every
+route is authenticated by a secret server key.
+
+| Operation | Route |
+| --- | --- |
+| Create-or-get a Billing Customer | `POST /v1/billing/identity/customers` |
+| List a customer's aliases | `GET /v1/billing/identity/customers/{customerId}/aliases` |
+| Attach an application-user alias | `POST /v1/billing/identity/customers/{customerId}/aliases` |
+| Revoke an alias | `POST /v1/billing/identity/aliases/{aliasId}/revoke` |
+| Request a projection for one customer | `POST /v1/billing/identity/customers/{customerId}/sync-requests` |
+| List identity conflicts | `GET /v1/billing/identity/conflicts` |
+| Read one conflict | `GET /v1/billing/identity/conflicts/{conflictId}` |
+
+There is deliberately **no public-SDK-key path and no route anywhere that accepts an installation
+identifier**. The application-user alias is assertable only by the customer's own backend, and a
+client-generated installation id must never be able to create or select a customer (plan §5a,
+OD-4(a)). Both properties are enforced by the absence of a surface rather than by a check a later
+edit could remove. The installation alias is recorded as association evidence with outcome
+`unsupported`, which is what gives purchase→install attribution at zero proliferation cost while
+never letting the identifier resolve anything.
+
+No response on this surface carries an alias value or an alias digest. A digest is still a stable
+per-person identifier, and nothing an operator or an application backend does needs one.
+
+### When identity is disputed (OD-10, review finding I-10)
+
+Two situations open a conflict rather than resolving:
+
+1. **Reassignment.** A Purchase Lineage already attached to customer A produces evidence that
+   resolves to customer B. Before this was fixed, the lineage moved silently: customer A kept a
+   committed snapshot granting access to a subscription that was no longer theirs, and nothing
+   recorded that it had happened. Now the resolution is downgraded to `conflicting` *before* any
+   evidence row is written — so the persisted evidence records a conflict rather than a
+   resolution that never took effect — a lineage-scoped conflict is opened with the incumbent
+   first and the challenger second, the lineage is frozen, and **the previous customer is
+   scheduled for reprojection** so the stale grant is recomputed.
+2. **An alias that already resolves elsewhere.** Attaching an application-user alias whose digest
+   already has a live resolution to another customer answers `409 identity_conflict` — distinct
+   from `409 conflict`, which invites a retry — opens an alias-scoped conflict, and freezes the
+   customer named in the request. Only that customer: freezing the counterparty would let one
+   careless backend take a paying customer's identity offline.
+
+A frozen lineage keeps its last committed state. It is not projected and it does not advance a
+checkpoint, but it still names the Entitlements in question and they are emitted as `unknown`
+sources — because an absent entry reads to every consumer as "this customer never had it", which
+is exactly the definite answer the uncertainty vocabulary exists to avoid asserting.
+
+Resolution is an operator action with three outcomes — `assigned_first`, `assigned_second`,
+`detached_both` — after which the disputed subject is unfrozen and **both** candidate customers
+are reprojected, not only the winner: the loser is the one holding the stale snapshot. There is
+no automatic-merge path. Automatic merge stays an ADR checkpoint rather than something a
+heuristic reaches on its own.
+
 ## Observability
 
 Spans: `billing.token.issue`, `billing.token.revoke`, `billing.entitlement.sync`,
