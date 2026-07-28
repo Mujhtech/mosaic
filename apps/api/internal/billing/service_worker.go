@@ -544,6 +544,7 @@ func (s *Service) validateGoogle(ctx context.Context, job ValidationJob, input R
 		OccurredAt:          started,
 	}
 
+	linkedPurchaseToken := ""
 	if subscription {
 		purchase, err := s.google.GetSubscription(ctx, account, packageName, purchaseToken)
 		s.providerRequests.Add(ctx, 1, metric.WithAttributes(
@@ -557,33 +558,8 @@ func (s *Service) validateGoogle(ctx context.Context, job ValidationJob, input R
 			return s.quarantineAttempt(job, input, attemptID, attemptNumber, started,
 				Permanent(CategoryInvalid, "subscription_has_no_line_items"), QuarantineMalformedReference, "error")
 		}
-		item := purchase.LineItems[0]
-		fact.TransactionType = TypeAutoRenewableSubscription
-		fact.ProviderProductIdentifier = item.ProductID
-		fact.ProviderTransactionID = purchase.LatestOrderID
-		fact.FactKind = googleSubscriptionKind(purchase.SubscriptionState)
-		fact.IsTestTransaction = purchase.TestPurchase != nil
-		if item.OfferDetails != nil {
-			fact.ProviderBasePlanIdentifier = item.OfferDetails.BasePlanID
-			fact.ProviderOfferIdentifier = item.OfferDetails.OfferID
-		}
-		if item.AutoRenewingPlan != nil {
-			expected := item.AutoRenewingPlan.AutoRenewEnabled
-			fact.RenewalExpected = &expected
-		}
-		if when, ok := parseRFC3339(purchase.StartTime); ok {
-			fact.PeriodStartAt = &when
-			fact.OccurredAt = when
-		}
-		if when, ok := parseRFC3339(item.ExpiryTime); ok {
-			fact.PeriodEndAt = &when
-		}
-		if purchase.LinkedPurchaseToken != "" {
-			// The link is recorded, not acted on: acting on it would mean
-			// revoking access, and no access state exists to revoke.
-			fact.SupersedesChainDigest = TokenDigest(purchase.LinkedPurchaseToken)
-			fact.FactKind = KindPurchaseSuperseded
-		}
+		applyGoogleSubscription(&fact, purchase)
+		linkedPurchaseToken = purchase.LinkedPurchaseToken
 	} else {
 		if productID == "" {
 			return s.quarantineAttempt(job, input, attemptID, attemptNumber, started,
@@ -627,7 +603,77 @@ func (s *Service) validateGoogle(ctx context.Context, job ValidationJob, input R
 		return s.quarantineAttempt(job, input, attemptID, attemptNumber, started,
 			Permanent(CategoryInvalid, "store_environment_mismatch"), QuarantineStoreEnvironmentMismatch, "error")
 	}
-	return s.resolveAndBuild(ctx, job, input, fact, platform, attemptID, attemptNumber, started, fact.StoreEnvironment)
+	outcome := s.resolveAndBuild(ctx, job, input, fact, platform, attemptID, attemptNumber, started, fact.StoreEnvironment)
+	if linkedPurchaseToken != "" && outcome.Fact != nil {
+		// 9A correction (B1): the linked purchase token is a persistent attribute
+		// of the successor subscription, present on every re-query for its whole
+		// life. The state-derived fact kind is kept — overwriting it hid every
+		// later expiration, cancellation, and grace fact behind
+		// purchase_superseded — and the supersession edge is recorded as its own
+		// fact built only from lineage-constant fields, so its digest is stable
+		// and the unique fact constraint absorbs every observation after the
+		// first. The link is thereby "emitted once when newly observed" as a
+		// structural property rather than a lookup.
+		outcome.Supersession = s.supersessionFactFrom(*outcome.Fact)
+	}
+	return outcome
+}
+
+// applyGoogleSubscription populates the subscription-specific fields of a
+// Google fact from the authoritative subscriptionsv2 resource. It is a pure
+// assembly step, split out so the fact-kind and supersession behaviour is
+// testable without provider plumbing.
+func applyGoogleSubscription(fact *TransactionFact, purchase googleplay.SubscriptionPurchase) {
+	item := purchase.LineItems[0]
+	fact.TransactionType = TypeAutoRenewableSubscription
+	fact.ProviderProductIdentifier = item.ProductID
+	fact.ProviderTransactionID = purchase.LatestOrderID
+	fact.FactKind = googleSubscriptionKind(purchase.SubscriptionState)
+	fact.IsTestTransaction = purchase.TestPurchase != nil
+	if item.OfferDetails != nil {
+		fact.ProviderBasePlanIdentifier = item.OfferDetails.BasePlanID
+		fact.ProviderOfferIdentifier = item.OfferDetails.OfferID
+	}
+	if item.AutoRenewingPlan != nil {
+		expected := item.AutoRenewingPlan.AutoRenewEnabled
+		fact.RenewalExpected = &expected
+	}
+	if when, ok := parseRFC3339(purchase.StartTime); ok {
+		fact.PeriodStartAt = &when
+		fact.OccurredAt = when
+	}
+	if when, ok := parseRFC3339(item.ExpiryTime); ok {
+		fact.PeriodEndAt = &when
+	}
+	if purchase.LinkedPurchaseToken != "" {
+		// The link is recorded, not acted on: acting on it would mean revoking
+		// access, and no access state exists to revoke. The state-derived
+		// fact_kind above is deliberately not overwritten (9A defect B1).
+		fact.SupersedesChainDigest = TokenDigest(purchase.LinkedPurchaseToken)
+	}
+}
+
+// supersessionFactFrom derives the once-per-lineage purchase_superseded fact
+// from a validated successor fact. Every field that changes across the
+// successor's life (order id, period end, revocation, renewal intent) is
+// cleared or replaced with a lineage-constant value, so re-observing the same
+// link always recomputes the same FactDigest.
+func (s *Service) supersessionFactFrom(main TransactionFact) *TransactionFact {
+	fact := main
+	id, err := s.newID("btf")
+	if err != nil {
+		return nil
+	}
+	fact.ID = id
+	fact.FactKind = KindPurchaseSuperseded
+	fact.ProviderTransactionID = "token:" + hexOf(fact.PurchaseChainDigest)
+	fact.PeriodEndAt = nil
+	fact.RevokedAt = nil
+	fact.RefundedAt = nil
+	fact.RenewalExpected = nil
+	fact.RecordedAt = s.now()
+	fact.FactDigest = FactDigest(fact)
+	return &fact
 }
 
 // decodeGoogleWork reads whichever shape the raw body holds: a decoded RTDN or

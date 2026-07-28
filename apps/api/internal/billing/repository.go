@@ -96,8 +96,13 @@ type AttemptOutcome struct {
 	Attempt    ValidationAttempt
 	Resolution *ResolutionRecord
 	Fact       *TransactionFact
-	Ledger     []LedgerEntry
-	Quarantine *QuarantineWrite
+	// Supersession is the once-per-lineage purchase_superseded fact recorded
+	// when a Google linkedPurchaseToken is observed. It is built only from
+	// lineage-constant fields, so its digest is stable across re-observations
+	// and the fact-identity constraint absorbs every write after the first.
+	Supersession *TransactionFact
+	Ledger       []LedgerEntry
+	Quarantine   *QuarantineWrite
 	// NextAvailableAt schedules a retry; zero completes or fails the job.
 	NextAvailableAt time.Time
 	JobStatus       string

@@ -219,40 +219,41 @@ func (r *Repository) CompleteAttempt(ctx context.Context, job billing.Validation
 
 	factRecorded := false
 	if fact := outcome.Fact; fact != nil {
-		tag, err := tx.Exec(ctx,
-			`INSERT INTO billing_transaction_facts(
-				id, project_id, environment_id, environment_mode, application_id, provider, store_environment,
-				provider_transaction_id, provider_original_transaction_id, purchase_chain_digest,
-				supersedes_chain_digest, transaction_type, fact_kind, occurred_at, period_start_at,
-				period_end_at, revoked_at, refunded_at, renewal_expected, is_test_transaction,
-				provider_product_identifier, provider_base_plan_identifier, provider_offer_identifier,
-				resolution_state, mosaic_product_id, provider_product_mapping_id, resolved_mapping_version,
-				validator_version, fact_version, source_raw_input_id, validation_attempt_id, fact_digest, recorded_at)
-			 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,NULLIF($9,''),$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,
-				$21,NULLIF($22,''),NULLIF($23,''),$24,NULLIF($25,''),NULLIF($26,''),$27,$28,$29,$30,$31,$32,$33)
-			 ON CONFLICT (environment_id, fact_digest) DO NOTHING`,
-			fact.ID, fact.ProjectID, fact.EnvironmentID, fact.EnvironmentMode, fact.ApplicationID,
-			fact.Provider, fact.StoreEnvironment, fact.ProviderTransactionID,
-			fact.ProviderOriginalTransactionID, nullBytes(fact.PurchaseChainDigest),
-			nullBytes(fact.SupersedesChainDigest), fact.TransactionType, fact.FactKind, fact.OccurredAt,
-			fact.PeriodStartAt, fact.PeriodEndAt, fact.RevokedAt, fact.RefundedAt, fact.RenewalExpected,
-			fact.IsTestTransaction, fact.ProviderProductIdentifier, fact.ProviderBasePlanIdentifier,
-			fact.ProviderOfferIdentifier, fact.ResolutionState, fact.MosaicProductID,
-			fact.ProviderProductMappingID, fact.ResolvedMappingVersion, fact.ValidatorVersion,
-			fact.FactVersion, fact.SourceRawInputID, fact.ValidationAttemptID, fact.FactDigest, fact.RecordedAt)
+		recorded, err := insertFact(ctx, tx, *fact)
 		if err != nil {
-			return fmt.Errorf("append transaction fact: %w", err)
+			return err
 		}
 		// Zero rows means the identical fact already exists. That is the replay
 		// no-op, and it is recorded as a deduplication rather than silently
 		// dropped so the ledger shows the pipeline ran and found nothing new.
-		factRecorded = tag.RowsAffected() == 1
+		factRecorded = recorded
 		if !factRecorded {
 			if err := insertLedger(ctx, tx, billing.LedgerEntry{
 				ID: "ble_" + hashID(fact.SourceRawInputID, "dedup", now), ProjectID: fact.ProjectID,
 				EnvironmentID: fact.EnvironmentID, EntryType: billing.LedgerFactDeduplicated,
 				RawInputID: fact.SourceRawInputID, ValidationAttemptID: attempt.ID,
 				CorrelationID: attempt.CorrelationID, OccurredAt: now,
+			}); err != nil {
+				return err
+			}
+		}
+	}
+
+	// A supersession fact rides in the same transaction as the state fact it
+	// was derived from, and is recorded in the ledger only when this write is
+	// the first observation of the link.
+	if fact := outcome.Supersession; fact != nil {
+		recorded, err := insertFact(ctx, tx, *fact)
+		if err != nil {
+			return err
+		}
+		if recorded {
+			if err := insertLedger(ctx, tx, billing.LedgerEntry{
+				ID: "ble_" + hashID(fact.SourceRawInputID, "supersession", now), ProjectID: fact.ProjectID,
+				EnvironmentID: fact.EnvironmentID, EntryType: billing.LedgerFactRecorded,
+				RawInputID: fact.SourceRawInputID, ValidationAttemptID: attempt.ID,
+				TransactionFactID: fact.ID,
+				CorrelationID:     attempt.CorrelationID, OccurredAt: now,
 			}); err != nil {
 				return err
 			}
@@ -310,6 +311,37 @@ func (r *Repository) CompleteAttempt(ctx context.Context, job billing.Validation
 		return fmt.Errorf("commit attempt: %w", err)
 	}
 	return nil
+}
+
+// insertFact appends one Transaction Fact, reporting whether the row was new.
+// The ON CONFLICT target is the fact-identity constraint, so a recomputed
+// identical fact is a structural no-op.
+func insertFact(ctx context.Context, tx pgx.Tx, fact billing.TransactionFact) (bool, error) {
+	tag, err := tx.Exec(ctx,
+		`INSERT INTO billing_transaction_facts(
+			id, project_id, environment_id, environment_mode, application_id, provider, store_environment,
+			provider_transaction_id, provider_original_transaction_id, purchase_chain_digest,
+			supersedes_chain_digest, transaction_type, fact_kind, occurred_at, period_start_at,
+			period_end_at, revoked_at, refunded_at, renewal_expected, is_test_transaction,
+			provider_product_identifier, provider_base_plan_identifier, provider_offer_identifier,
+			resolution_state, mosaic_product_id, provider_product_mapping_id, resolved_mapping_version,
+			validator_version, fact_version, source_raw_input_id, validation_attempt_id, fact_digest, recorded_at)
+		 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,NULLIF($9,''),$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,
+			$21,NULLIF($22,''),NULLIF($23,''),$24,NULLIF($25,''),NULLIF($26,''),$27,$28,$29,$30,$31,$32,$33)
+		 ON CONFLICT (environment_id, fact_digest) DO NOTHING`,
+		fact.ID, fact.ProjectID, fact.EnvironmentID, fact.EnvironmentMode, fact.ApplicationID,
+		fact.Provider, fact.StoreEnvironment, fact.ProviderTransactionID,
+		fact.ProviderOriginalTransactionID, nullBytes(fact.PurchaseChainDigest),
+		nullBytes(fact.SupersedesChainDigest), fact.TransactionType, fact.FactKind, fact.OccurredAt,
+		fact.PeriodStartAt, fact.PeriodEndAt, fact.RevokedAt, fact.RefundedAt, fact.RenewalExpected,
+		fact.IsTestTransaction, fact.ProviderProductIdentifier, fact.ProviderBasePlanIdentifier,
+		fact.ProviderOfferIdentifier, fact.ResolutionState, fact.MosaicProductID,
+		fact.ProviderProductMappingID, fact.ResolvedMappingVersion, fact.ValidatorVersion,
+		fact.FactVersion, fact.SourceRawInputID, fact.ValidationAttemptID, fact.FactDigest, fact.RecordedAt)
+	if err != nil {
+		return false, fmt.Errorf("append transaction fact: %w", err)
+	}
+	return tag.RowsAffected() == 1, nil
 }
 
 // MappingCandidates returns every mapping in scope regardless of status.
