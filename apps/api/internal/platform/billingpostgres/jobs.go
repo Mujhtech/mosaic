@@ -325,9 +325,13 @@ func insertFact(ctx context.Context, tx pgx.Tx, fact billing.TransactionFact) (b
 			period_end_at, revoked_at, refunded_at, renewal_expected, is_test_transaction,
 			provider_product_identifier, provider_base_plan_identifier, provider_offer_identifier,
 			resolution_state, mosaic_product_id, provider_product_mapping_id, resolved_mapping_version,
-			validator_version, fact_version, source_raw_input_id, validation_attempt_id, fact_digest, recorded_at)
+			validator_version, fact_version, source_raw_input_id, validation_attempt_id, fact_digest, recorded_at,
+			grace_period_expires_at, billing_retry_active, auto_renew_product_identifier, is_upgraded,
+			revocation_reason, refund_type, in_app_ownership_type, subscription_group_identifier,
+			provider_event_occurred_at)
 		 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,NULLIF($9,''),$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,
-			$21,NULLIF($22,''),NULLIF($23,''),$24,NULLIF($25,''),NULLIF($26,''),$27,$28,$29,$30,$31,$32,$33)
+			$21,NULLIF($22,''),NULLIF($23,''),$24,NULLIF($25,''),NULLIF($26,''),$27,$28,$29,$30,$31,$32,$33,
+			$34,$35,NULLIF($36,''),$37,$38,NULLIF($39,''),NULLIF($40,''),NULLIF($41,''),$42)
 		 ON CONFLICT (environment_id, fact_digest) DO NOTHING`,
 		fact.ID, fact.ProjectID, fact.EnvironmentID, fact.EnvironmentMode, fact.ApplicationID,
 		fact.Provider, fact.StoreEnvironment, fact.ProviderTransactionID,
@@ -337,7 +341,10 @@ func insertFact(ctx context.Context, tx pgx.Tx, fact billing.TransactionFact) (b
 		fact.IsTestTransaction, fact.ProviderProductIdentifier, fact.ProviderBasePlanIdentifier,
 		fact.ProviderOfferIdentifier, fact.ResolutionState, fact.MosaicProductID,
 		fact.ProviderProductMappingID, fact.ResolvedMappingVersion, fact.ValidatorVersion,
-		fact.FactVersion, fact.SourceRawInputID, fact.ValidationAttemptID, fact.FactDigest, fact.RecordedAt)
+		fact.FactVersion, fact.SourceRawInputID, fact.ValidationAttemptID, fact.FactDigest, fact.RecordedAt,
+		fact.GracePeriodExpiresAt, fact.BillingRetryActive, fact.AutoRenewProductIdentifier,
+		fact.IsUpgraded, fact.RevocationReason, fact.RefundType, fact.InAppOwnershipType,
+		fact.SubscriptionGroupIdentifier, fact.ProviderEventOccurredAt)
 	if err != nil {
 		return false, fmt.Errorf("append transaction fact: %w", err)
 	}

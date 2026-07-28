@@ -7,7 +7,22 @@ import "time"
 // validator 2") and so a fact records which normalization produced it. It is
 // incremented whenever normalization changes in a way that could produce a
 // different fact from the same input.
-const ValidatorVersion = 1
+//
+// Version 2 is the Phase 9B fact-shape pass: provider fields that version 1
+// parsed but never persisted (grace end, billing retry, scheduled renewal
+// product, upgrade marker, revocation reason and refund type, ownership type,
+// subscription group) plus a recovered provider event time for Google facts.
+// All of them participate in FactDigest v2.
+const ValidatorVersion = 2
+
+// Refund types recorded on a refund fact. Apple does not state refund scope in
+// the transaction payload, so Apple facts leave the field empty; Google voided
+// purchases state it explicitly.
+const (
+	RefundTypeFull            = "full"
+	RefundTypeQuantityPartial = "quantity_partial"
+	RefundTypeProrated        = "prorated"
+)
 
 // Providers.
 const (
@@ -372,20 +387,36 @@ type TransactionFact struct {
 	RevokedAt                     *time.Time `json:"revokedAt,omitempty"`
 	RefundedAt                    *time.Time `json:"refundedAt,omitempty"`
 	RenewalExpected               *bool      `json:"renewalExpected,omitempty"`
-	IsTestTransaction             bool       `json:"isTestTransaction"`
-	ProviderProductIdentifier     string     `json:"providerProductIdentifier"`
-	ProviderBasePlanIdentifier    string     `json:"providerBasePlanIdentifier,omitempty"`
-	ProviderOfferIdentifier       string     `json:"providerOfferIdentifier,omitempty"`
-	ResolutionState               string     `json:"resolutionState"`
-	MosaicProductID               string     `json:"mosaicProductId,omitempty"`
-	ProviderProductMappingID      string     `json:"providerProductMappingId,omitempty"`
-	ResolvedMappingVersion        *int64     `json:"resolvedMappingVersion,omitempty"`
-	ValidatorVersion              int        `json:"validatorVersion"`
-	FactVersion                   int        `json:"factVersion"`
-	SourceRawInputID              string     `json:"sourceRawInputId"`
-	ValidationAttemptID           string     `json:"validationAttemptId"`
-	FactDigest                    []byte     `json:"-"`
-	RecordedAt                    time.Time  `json:"recordedAt"`
+	// Fact-shape v2 fields (Phase 9B §8). All are provider statements, never
+	// interpretations, and all participate in FactDigest.
+	GracePeriodExpiresAt        *time.Time `json:"gracePeriodExpiresAt,omitempty"`
+	BillingRetryActive          *bool      `json:"billingRetryActive,omitempty"`
+	AutoRenewProductIdentifier  string     `json:"autoRenewProductIdentifier,omitempty"`
+	IsUpgraded                  *bool      `json:"isUpgraded,omitempty"`
+	RevocationReason            *int       `json:"revocationReason,omitempty"`
+	RefundType                  string     `json:"refundType,omitempty"`
+	InAppOwnershipType          string     `json:"inAppOwnershipType,omitempty"`
+	SubscriptionGroupIdentifier string     `json:"subscriptionGroupIdentifier,omitempty"`
+	// ProviderEventOccurredAt is the provider-stated event time of the input
+	// that produced this fact. It exists because every fact in a Google
+	// lineage shares occurred_at = startTime, which would make ordering tie on
+	// a constant; the event time recovered from the RTDN (or the raw input's
+	// provider_occurred_at) breaks that tie with a provider statement.
+	ProviderEventOccurredAt    *time.Time `json:"providerEventOccurredAt,omitempty"`
+	IsTestTransaction          bool       `json:"isTestTransaction"`
+	ProviderProductIdentifier  string     `json:"providerProductIdentifier"`
+	ProviderBasePlanIdentifier string     `json:"providerBasePlanIdentifier,omitempty"`
+	ProviderOfferIdentifier    string     `json:"providerOfferIdentifier,omitempty"`
+	ResolutionState            string     `json:"resolutionState"`
+	MosaicProductID            string     `json:"mosaicProductId,omitempty"`
+	ProviderProductMappingID   string     `json:"providerProductMappingId,omitempty"`
+	ResolvedMappingVersion     *int64     `json:"resolvedMappingVersion,omitempty"`
+	ValidatorVersion           int        `json:"validatorVersion"`
+	FactVersion                int        `json:"factVersion"`
+	SourceRawInputID           string     `json:"sourceRawInputId"`
+	ValidationAttemptID        string     `json:"validationAttemptId"`
+	FactDigest                 []byte     `json:"-"`
+	RecordedAt                 time.Time  `json:"recordedAt"`
 }
 
 // QuarantineRecord is one input that cannot safely proceed.

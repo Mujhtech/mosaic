@@ -103,6 +103,14 @@ func ContentDigest(body []byte) []byte {
 // the same mapping history recomputes the same digest and the unique constraint
 // absorbs the write, while a genuinely different outcome produces a different
 // digest and is recorded as a new fact rather than overwriting the old one.
+//
+// Digest v2 (validator version 2) appends the fact-shape fields of Phase 9B
+// §8: grace end, billing retry, scheduled renewal product, upgrade marker,
+// revocation reason, refund type, ownership type, subscription group, and the
+// recovered provider event time. Every one is a provider statement, so a
+// change in any of them is a genuinely different fact. Facts recorded under
+// validator 1 keep their v1 digests; the validator version inside the digest
+// separates the two populations structurally.
 func FactDigest(fact TransactionFact) []byte {
 	fields := []string{
 		fact.EnvironmentID,
@@ -131,8 +139,27 @@ func FactDigest(fact TransactionFact) []byte {
 		int64Field(fact.ResolvedMappingVersion),
 		strconv.Itoa(fact.ValidatorVersion),
 		strconv.Itoa(fact.FactVersion),
+		// v2 fact-shape fields. Any revalidation now runs under validator 2, so
+		// its digest differs from the stored v1 digest by the version field
+		// alone; the appended fields never collide with the v1 population.
+		timeField(fact.GracePeriodExpiresAt),
+		boolField(fact.BillingRetryActive),
+		fact.AutoRenewProductIdentifier,
+		boolField(fact.IsUpgraded),
+		intField(fact.RevocationReason),
+		fact.RefundType,
+		fact.InAppOwnershipType,
+		fact.SubscriptionGroupIdentifier,
+		timeField(fact.ProviderEventOccurredAt),
 	}
 	return digestOf("mosaic-billing-fact-v1", fields...)
+}
+
+func intField(value *int) string {
+	if value == nil {
+		return ""
+	}
+	return strconv.Itoa(*value)
 }
 
 func timeField(value *time.Time) string {

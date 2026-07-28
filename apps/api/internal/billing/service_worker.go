@@ -284,9 +284,28 @@ func applyAppleTransaction(fact *TransactionFact, transaction appstorejws.Transa
 		fact.RevokedAt = &when
 		fact.RefundedAt = &when
 	}
+	// Fact-shape v2: persist what was already parsed but dropped (quality B10).
+	fact.RevocationReason = transaction.RevocationReason
+	fact.InAppOwnershipType = transaction.InAppOwnershipType
+	fact.SubscriptionGroupIdentifier = transaction.SubscriptionGroupIdentifier
+	if transaction.IsUpgraded {
+		upgraded := true
+		fact.IsUpgraded = &upgraded
+	}
 	if renewal != nil {
 		expected := renewal.AutoRenewStatus == 1
 		fact.RenewalExpected = &expected
+		fact.AutoRenewProductIdentifier = renewal.AutoRenewProductID
+		if renewal.IsInBillingRetry {
+			retrying := true
+			fact.BillingRetryActive = &retrying
+		}
+		if when, ok := appstorejws.Millis(renewal.GracePeriodExpiresAt); ok {
+			fact.GracePeriodExpiresAt = &when
+		}
+	}
+	if when, ok := appstorejws.Millis(transaction.SignedDate); ok {
+		fact.ProviderEventOccurredAt = &when
 	}
 	if fact.OccurredAt.IsZero() {
 		if when, ok := appstorejws.Millis(transaction.SignedDate); ok {
@@ -562,6 +581,17 @@ func (s *Service) validateGoogle(ctx context.Context, job ValidationJob, input R
 		// time may date a fact (9A correction B7), and a branch that cannot
 		// supply one quarantines below.
 	}
+	// Fact-shape v2: recover the provider event time so ordering inside a
+	// Google lineage does not tie on the constant startTime. The RTDN's
+	// eventTimeMillis is the provider's own statement; the raw input's
+	// provider_occurred_at (Pub/Sub publish time) is the fallback.
+	if !work.eventTime.IsZero() {
+		when := work.eventTime
+		fact.ProviderEventOccurredAt = &when
+	} else if input.ProviderOccurredAt != nil {
+		when := input.ProviderOccurredAt.UTC()
+		fact.ProviderEventOccurredAt = &when
+	}
 
 	linkedPurchaseToken := ""
 	if subscription {
@@ -674,6 +704,10 @@ func applyGoogleSubscription(fact *TransactionFact, purchase googleplay.Subscrip
 	fact.ProviderTransactionID = purchase.LatestOrderID
 	fact.FactKind = googleSubscriptionKind(purchase.SubscriptionState)
 	fact.IsTestTransaction = purchase.TestPurchase != nil
+	if purchase.SubscriptionState == "SUBSCRIPTION_STATE_ON_HOLD" {
+		retrying := true
+		fact.BillingRetryActive = &retrying
+	}
 	if item.OfferDetails != nil {
 		fact.ProviderBasePlanIdentifier = item.OfferDetails.BasePlanID
 		fact.ProviderOfferIdentifier = item.OfferDetails.OfferID
@@ -735,6 +769,12 @@ func applyGoogleVoid(fact *TransactionFact, work googleWork, providerOccurredAt 
 	fact.OccurredAt = when
 	fact.RefundedAt = &when
 	fact.RevokedAt = &when
+	switch work.refundType {
+	case 1:
+		fact.RefundType = RefundTypeFull
+	case 2:
+		fact.RefundType = RefundTypeQuantityPartial
+	}
 	return true
 }
 
@@ -756,6 +796,13 @@ func (s *Service) supersessionFactFrom(main TransactionFact) *TransactionFact {
 	fact.RevokedAt = nil
 	fact.RefundedAt = nil
 	fact.RenewalExpected = nil
+	fact.GracePeriodExpiresAt = nil
+	fact.BillingRetryActive = nil
+	fact.AutoRenewProductIdentifier = ""
+	fact.IsUpgraded = nil
+	fact.RevocationReason = nil
+	fact.RefundType = ""
+	fact.ProviderEventOccurredAt = nil
 	fact.RecordedAt = s.now()
 	fact.FactDigest = FactDigest(fact)
 	return &fact

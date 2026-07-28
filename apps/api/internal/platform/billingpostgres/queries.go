@@ -117,7 +117,11 @@ func (r *Repository) ListFacts(ctx context.Context, actor billing.Actor, project
 		        COALESCE(provider_offer_identifier,''), resolution_state,
 		        COALESCE(mosaic_product_id,''), COALESCE(provider_product_mapping_id,''),
 		        resolved_mapping_version, validator_version, fact_version,
-		        source_raw_input_id, validation_attempt_id, recorded_at
+		        source_raw_input_id, validation_attempt_id, recorded_at,
+		        grace_period_expires_at, billing_retry_active,
+		        COALESCE(auto_renew_product_identifier,''), is_upgraded, revocation_reason,
+		        COALESCE(refund_type,''), COALESCE(in_app_ownership_type,''),
+		        COALESCE(subscription_group_identifier,''), provider_event_occurred_at
 		 FROM billing_transaction_facts
 		 WHERE environment_id=$1
 		   AND ($2::timestamptz IS NULL OR (occurred_at, id) < ($2::timestamptz, $3))
@@ -141,7 +145,10 @@ func (r *Repository) ListFacts(ctx context.Context, actor billing.Actor, project
 			&fact.ProviderBasePlanIdentifier, &fact.ProviderOfferIdentifier, &fact.ResolutionState,
 			&fact.MosaicProductID, &fact.ProviderProductMappingID, &fact.ResolvedMappingVersion,
 			&fact.ValidatorVersion, &fact.FactVersion, &fact.SourceRawInputID,
-			&fact.ValidationAttemptID, &fact.RecordedAt); err != nil {
+			&fact.ValidationAttemptID, &fact.RecordedAt,
+			&fact.GracePeriodExpiresAt, &fact.BillingRetryActive, &fact.AutoRenewProductIdentifier,
+			&fact.IsUpgraded, &fact.RevocationReason, &fact.RefundType, &fact.InAppOwnershipType,
+			&fact.SubscriptionGroupIdentifier, &fact.ProviderEventOccurredAt); err != nil {
 			return billing.Page[billing.TransactionFact]{}, fmt.Errorf("scan transaction fact: %w", err)
 		}
 		items = append(items, fact)
