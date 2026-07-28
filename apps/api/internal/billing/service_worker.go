@@ -483,11 +483,13 @@ func (s *Service) validateGoogle(ctx context.Context, job ValidationJob, input R
 			Permanent(CategoryInvalid, "raw_body_unavailable"), QuarantineMalformedReference, "warning")
 	}
 
-	packageName, purchaseToken, productID, orderID, subscription, ok := decodeGoogleWork(body)
+	work, ok := decodeGoogleWork(body)
 	if !ok {
 		return s.quarantineAttempt(job, input, attemptID, attemptNumber, started,
 			Permanent(CategoryInvalid, "malformed_google_input"), QuarantineMalformedReference, "error")
 	}
+	packageName, purchaseToken, productID, orderID := work.packageName, work.purchaseToken, work.productID, work.orderID
+	subscription := work.subscription
 	if packageName == "" {
 		// Only an RTDN carries a packageName; an observation does not.
 		packageName = scopedPackageName
@@ -559,8 +561,27 @@ func (s *Service) validateGoogle(ctx context.Context, job ValidationJob, input R
 				Permanent(CategoryInvalid, "subscription_has_no_line_items"), QuarantineMalformedReference, "error")
 		}
 		applyGoogleSubscription(&fact, purchase)
+		if !applyGoogleVoid(&fact, work, input.ProviderOccurredAt) {
+			return s.quarantineAttempt(job, input, attemptID, attemptNumber, started,
+				Permanent(CategoryInvalid, "void_event_time_unavailable"), QuarantineMalformedReference, "error")
+		}
 		linkedPurchaseToken = purchase.LinkedPurchaseToken
 	} else {
+		// A voided-purchase notification carries no SKU; recover it from the
+		// order so the refund fact still resolves to a Product.
+		if productID == "" && orderID != "" {
+			order, orderErr := s.google.GetOrder(ctx, account, packageName, orderID)
+			s.providerRequests.Add(ctx, 1, metric.WithAttributes(
+				attribute.String("provider", ProviderGooglePlay),
+				attribute.String("endpoint", "order_get"),
+				attribute.Bool("failed", orderErr != nil)))
+			if orderErr != nil {
+				return s.classifiedFailure(job, input, attemptID, attemptNumber, started, orderErr)
+			}
+			if len(order.LineItems) == 1 {
+				productID = order.LineItems[0].ProductID
+			}
+		}
 		if productID == "" {
 			return s.quarantineAttempt(job, input, attemptID, attemptNumber, started,
 				Permanent(CategoryInvalid, "product_identifier_unavailable"), QuarantineMalformedReference, "error")
@@ -573,23 +594,22 @@ func (s *Service) validateGoogle(ctx context.Context, job ValidationJob, input R
 		if err != nil {
 			return s.classifiedFailure(job, input, attemptID, attemptNumber, started, err)
 		}
-		if purchase.PurchaseState != 0 {
+		if purchase.PurchaseState != 0 && !work.voided {
 			// Only PURCHASED is a completed purchase. PENDING and CANCELLED are
 			// recorded as inputs but produce no fact, because a fact asserts that
 			// the store confirmed a completed transaction.
 			return s.recordedNoFactAttempt(job, input, attemptID, attemptNumber, started, "google_purchase_not_completed")
 		}
-		fact.TransactionType = TypeNonConsumable
-		fact.FactKind = KindOneTimePurchase
-		fact.ProviderProductIdentifier = purchase.ProductID
-		fact.ProviderTransactionID = purchase.OrderID
-		if purchase.PurchaseType != nil && *purchase.PurchaseType == 0 {
-			fact.IsTestTransaction = true
-		}
-		if millis, err := strconv.ParseInt(purchase.PurchaseTimeMillis, 10, 64); err == nil && millis > 0 {
-			when := time.UnixMilli(millis).UTC()
-			fact.OccurredAt = when
-			fact.PeriodStartAt = &when
+		// 9A correction (B2): a voided one-time purchase re-queries as
+		// purchaseState != 0, and recording no fact left refunded
+		// non-consumables entitled forever. The voided-purchase notification is
+		// the provider's refund statement — its 30-day lookback is why the void
+		// must become a fact on receipt — so it produces a refund fact even
+		// though the re-queried state alone says only "not purchased".
+		applyGoogleOneTime(&fact, purchase)
+		if !applyGoogleVoid(&fact, work, input.ProviderOccurredAt) {
+			return s.quarantineAttempt(job, input, attemptID, attemptNumber, started,
+				Permanent(CategoryInvalid, "void_event_time_unavailable"), QuarantineMalformedReference, "error")
 		}
 	}
 
@@ -653,6 +673,47 @@ func applyGoogleSubscription(fact *TransactionFact, purchase googleplay.Subscrip
 	}
 }
 
+// applyGoogleOneTime populates the one-time-purchase fields of a Google fact
+// from the authoritative purchases.products resource.
+func applyGoogleOneTime(fact *TransactionFact, purchase googleplay.ProductPurchase) {
+	fact.TransactionType = TypeNonConsumable
+	fact.FactKind = KindOneTimePurchase
+	fact.ProviderProductIdentifier = purchase.ProductID
+	fact.ProviderTransactionID = purchase.OrderID
+	if purchase.PurchaseType != nil && *purchase.PurchaseType == 0 {
+		fact.IsTestTransaction = true
+	}
+	if millis, err := strconv.ParseInt(purchase.PurchaseTimeMillis, 10, 64); err == nil && millis > 0 {
+		when := time.UnixMilli(millis).UTC()
+		fact.OccurredAt = when
+		fact.PeriodStartAt = &when
+	}
+}
+
+// applyGoogleVoid rewrites a fact as the refund the voided-purchase
+// notification asserts (9A correction B2). A Google void both refunds and
+// revokes ownership, so both effective timestamps are set from the provider's
+// own event time. It reports false when the input is voided but no provider
+// timestamp exists to date the refund — a fact must never be dated with worker
+// wall-clock.
+func applyGoogleVoid(fact *TransactionFact, work googleWork, providerOccurredAt *time.Time) bool {
+	if !work.voided {
+		return true
+	}
+	when := work.eventTime
+	if when.IsZero() && providerOccurredAt != nil {
+		when = providerOccurredAt.UTC()
+	}
+	if when.IsZero() {
+		return false
+	}
+	fact.FactKind = KindRefund
+	fact.OccurredAt = when
+	fact.RefundedAt = &when
+	fact.RevokedAt = &when
+	return true
+}
+
 // supersessionFactFrom derives the once-per-lineage purchase_superseded fact
 // from a validated successor fact. Every field that changes across the
 // successor's life (order id, period end, revocation, renewal intent) is
@@ -676,25 +737,56 @@ func (s *Service) supersessionFactFrom(main TransactionFact) *TransactionFact {
 	return &fact
 }
 
+// googleWork is the decoded intent of one Google raw body: which purchase to
+// re-query, and — for a voided purchase notification — the void semantics the
+// re-queried state alone cannot express.
+type googleWork struct {
+	packageName   string
+	purchaseToken string
+	productID     string
+	orderID       string
+	subscription  bool
+	// voided marks a voidedPurchaseNotification. Google's own state on
+	// re-query says only "not purchased"; the notification is the evidence
+	// that the reason is a refund, and its 30-day lookback means the void
+	// must be persisted on receipt.
+	voided bool
+	// refundType is Google's voided refundType: 1 full, 2 quantity-based
+	// partial. Zero when absent.
+	refundType int
+	// eventTime is the RTDN eventTimeMillis, the provider-stated instant the
+	// event occurred. Zero when the body carried none.
+	eventTime time.Time
+}
+
 // decodeGoogleWork reads whichever shape the raw body holds: a decoded RTDN or
 // a Mosaic-built observation record.
-func decodeGoogleWork(body []byte) (packageName, purchaseToken, productID, orderID string, subscription bool, ok bool) {
+func decodeGoogleWork(body []byte) (googleWork, bool) {
 	var notification googleplay.DeveloperNotification
 	if err := json.Unmarshal(body, &notification); err == nil && notification.PackageName != "" {
-		packageName = notification.PackageName
+		work := googleWork{packageName: notification.PackageName}
+		if millis, err := strconv.ParseInt(notification.EventTimeMillis, 10, 64); err == nil && millis > 0 {
+			work.eventTime = time.UnixMilli(millis).UTC()
+		}
 		switch {
 		case notification.SubscriptionNotification != nil:
-			return packageName, notification.SubscriptionNotification.PurchaseToken,
-				notification.SubscriptionNotification.SubscriptionID, "", true, true
+			work.purchaseToken = notification.SubscriptionNotification.PurchaseToken
+			work.productID = notification.SubscriptionNotification.SubscriptionID
+			work.subscription = true
+			return work, true
 		case notification.OneTimeProductNotification != nil:
-			return packageName, notification.OneTimeProductNotification.PurchaseToken,
-				notification.OneTimeProductNotification.SKU, "", false, true
+			work.purchaseToken = notification.OneTimeProductNotification.PurchaseToken
+			work.productID = notification.OneTimeProductNotification.SKU
+			return work, true
 		case notification.VoidedPurchaseNotification != nil:
-			return packageName, notification.VoidedPurchaseNotification.PurchaseToken, "",
-				notification.VoidedPurchaseNotification.OrderID,
-				notification.VoidedPurchaseNotification.ProductType == 1, true
+			work.purchaseToken = notification.VoidedPurchaseNotification.PurchaseToken
+			work.orderID = notification.VoidedPurchaseNotification.OrderID
+			work.subscription = notification.VoidedPurchaseNotification.ProductType == 1
+			work.voided = true
+			work.refundType = notification.VoidedPurchaseNotification.RefundType
+			return work, true
 		case notification.TestNotification != nil:
-			return packageName, "", "", "", false, true
+			return work, true
 		}
 	}
 	var observation struct {
@@ -704,9 +796,13 @@ func decodeGoogleWork(body []byte) (packageName, purchaseToken, productID, order
 		PurchaseToken  string `json:"purchaseToken"`
 	}
 	if err := json.Unmarshal(body, &observation); err != nil {
-		return "", "", "", "", false, false
+		return googleWork{}, false
 	}
-	return "", observation.PurchaseToken, "", observation.OrderReference, true, true
+	return googleWork{
+		purchaseToken: observation.PurchaseToken,
+		orderID:       observation.OrderReference,
+		subscription:  true,
+	}, true
 }
 
 func googleSubscriptionKind(state string) string {

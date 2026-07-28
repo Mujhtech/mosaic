@@ -50,6 +50,55 @@ func TestGoogleSubscriptionKeepsStateKindWhenLinkedTokenPresent(t *testing.T) {
 	}
 }
 
+// 9A defect B2: a voided (refunded) Google one-time purchase re-queries as
+// purchaseState != 0 and recorded no fact, leaving refunded non-consumables
+// entitled forever. The voided-purchase notification must become a refund fact
+// with both refund and revocation effective times.
+func TestVoidedGoogleOneTimePurchaseProducesRefundFact(t *testing.T) {
+	body := []byte(`{
+		"version": "1.0",
+		"packageName": "com.fixture.app",
+		"eventTimeMillis": "1767225600000",
+		"voidedPurchaseNotification": {
+			"purchaseToken": "token-1", "orderId": "GPA.200-1", "productType": 2, "refundType": 1
+		}
+	}`)
+	work, ok := decodeGoogleWork(body)
+	if !ok || !work.voided || work.subscription {
+		t.Fatalf("voided one-time decode: ok=%v work=%+v", ok, work)
+	}
+	if work.refundType != 1 || work.eventTime.IsZero() {
+		t.Fatalf("void semantics lost: %+v", work)
+	}
+
+	fact := TransactionFact{}
+	applyGoogleOneTime(&fact, googleplay.ProductPurchase{
+		PurchaseTimeMillis: "1764547200000", PurchaseState: 1,
+		OrderID: "GPA.200-1", ProductID: "lifetime.pro",
+	})
+	if !applyGoogleVoid(&fact, work, nil) {
+		t.Fatal("void with provider event time must not be rejected")
+	}
+	if fact.FactKind != KindRefund {
+		t.Fatalf("fact kind %q, want %q", fact.FactKind, KindRefund)
+	}
+	if fact.RefundedAt == nil || fact.RevokedAt == nil {
+		t.Fatal("refund fact must carry refunded_at and revoked_at")
+	}
+	if !fact.RefundedAt.Equal(work.eventTime) || !fact.OccurredAt.Equal(work.eventTime) {
+		t.Fatalf("refund must be dated with the provider event time, got %v", fact.RefundedAt)
+	}
+}
+
+// A voided input with no provider timestamp anywhere must be rejected rather
+// than dated with worker wall-clock (which would poison FactDigest — B7).
+func TestVoidWithoutProviderTimestampIsRejected(t *testing.T) {
+	fact := TransactionFact{}
+	if applyGoogleVoid(&fact, googleWork{voided: true}, nil) {
+		t.Fatal("a void without any provider timestamp must not produce a fact")
+	}
+}
+
 // The supersession edge itself is a separate fact whose digest must be stable
 // across re-observations of the same lineage: renewals change the order id and
 // expiry, and if those leaked into the supersession fact every renewal would
