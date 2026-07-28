@@ -1,6 +1,10 @@
 # Phase 9B Plan: Subscription State and Authoritative Entitlements
 
-Status: **Stage 1 complete — awaiting owner decisions (§2) before Stage 2.**
+Status: **Stage 2 in progress.** All 19 owner decisions in §2 approved
+as recommended by the owner on 2026-07-28 ("approve all
+recommendations"), including the OD-14 opaque-token deviation from the
+orchestration prompt's "signed" wording. Every recommendation column in
+§2 is now the accepted policy.
 Branch: `phase/9b-subscription-state-entitlements` (base `ecfe845`, one chore
 commit after accepted 9A review head `1867605`). Entry review:
 `docs/reviews/phase-9b-entry.md`.
