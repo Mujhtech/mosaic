@@ -17,8 +17,11 @@ import (
 	"github.com/Mujhtech/mosaic/apps/api/internal/analytics"
 	"github.com/Mujhtech/mosaic/apps/api/internal/billing"
 	"github.com/Mujhtech/mosaic/apps/api/internal/billingaccess"
+	"github.com/Mujhtech/mosaic/apps/api/internal/billingcustomer"
 	"github.com/Mujhtech/mosaic/apps/api/internal/billingdiagnostics"
+	"github.com/Mujhtech/mosaic/apps/api/internal/billingprojection"
 	"github.com/Mujhtech/mosaic/apps/api/internal/billingrestore"
+	"github.com/Mujhtech/mosaic/apps/api/internal/billingwebhook"
 	"github.com/Mujhtech/mosaic/apps/api/internal/browserauth"
 	"github.com/Mujhtech/mosaic/apps/api/internal/cloudworkspace"
 	"github.com/Mujhtech/mosaic/apps/api/internal/experiment"
@@ -29,10 +32,13 @@ import (
 	"github.com/Mujhtech/mosaic/apps/api/internal/platform/appstoreserver"
 	"github.com/Mujhtech/mosaic/apps/api/internal/platform/authn"
 	"github.com/Mujhtech/mosaic/apps/api/internal/platform/billingaccesspostgres"
+	"github.com/Mujhtech/mosaic/apps/api/internal/platform/billingcustomerpostgres"
 	"github.com/Mujhtech/mosaic/apps/api/internal/platform/billingdiagnosticspostgres"
 	"github.com/Mujhtech/mosaic/apps/api/internal/platform/billingkeys"
 	"github.com/Mujhtech/mosaic/apps/api/internal/platform/billingpostgres"
+	"github.com/Mujhtech/mosaic/apps/api/internal/platform/billingprojectionpostgres"
 	"github.com/Mujhtech/mosaic/apps/api/internal/platform/billingrestorepostgres"
+	"github.com/Mujhtech/mosaic/apps/api/internal/platform/billingwebhookpostgres"
 	"github.com/Mujhtech/mosaic/apps/api/internal/platform/browserauthpostgres"
 	"github.com/Mujhtech/mosaic/apps/api/internal/platform/buildinfo"
 	"github.com/Mujhtech/mosaic/apps/api/internal/platform/cloudworkspacepostgres"
@@ -265,6 +271,9 @@ func run() (runErr error) {
 	var billingAccessService *billingaccess.Service
 	var billingDiagnosticsService *billingdiagnostics.Service
 	var billingRestoreService *billingrestore.Service
+	var billingCustomerService *billingcustomer.Service
+	var billingProjectionService *billingprojection.Service
+	var billingWebhookService *billingwebhook.Service
 	var billingIPLimiter, billingKeyLimiter, entitlementSyncLimiter *ratelimit.Limiter
 	if cfg.Billing.Enabled {
 		billingCipher, err := providercredential.NewAESGCMCipher(cfg.Providers.CredentialKeyring, rand.Reader)
@@ -314,10 +323,24 @@ func run() (runErr error) {
 			}))
 		entitlementSyncLimiter = ratelimit.New(cfg.Billing.EntitlementSyncPerMinute,
 			cfg.Billing.EntitlementSyncBurst, cfg.Billing.LimiterEntries)
-		billingDiagnosticsService = billingdiagnostics.NewService(billingdiagnosticspostgres.New(databasePool))
+		// The API process runs no projection jobs; it constructs the projection
+		// service only to enqueue triggers (identity movements) and to run
+		// bounded operator replays. Both go through the same command the worker
+		// runs, so there is no second write path.
+		projectionRepository := billingprojectionpostgres.New(databasePool)
+		billingProjectionService = billingprojection.NewService(projectionRepository)
+		billingDiagnosticsService = billingdiagnostics.NewService(
+			billingdiagnosticspostgres.New(databasePool),
+			billingdiagnostics.WithReplay(billingProjectionService, projectionRepository))
 		billingKeys := billingkeys.New(billingpostgres.New(databasePool))
 		billingRestoreService = billingrestore.NewService(
 			billingrestorepostgres.New(databasePool), billingKeys.Restore())
+		billingCustomerService = billingcustomer.NewService(
+			billingcustomerpostgres.New(databasePool), billingKeys.Identity(), billingProjectionService)
+		billingWebhookService = billingwebhook.NewService(
+			billingwebhookpostgres.New(databasePool), billingCipher,
+			billingwebhook.NewPolicy(billingwebhook.WithSelfHostedAllowlist(
+				cfg.Billing.WebhookAllowPrivateDestinations)))
 	}
 
 	readiness := health.NewReadiness(
@@ -361,6 +384,8 @@ func run() (runErr error) {
 		BillingAccess:          billingAccessService,
 		BillingDiagnostics:     billingDiagnosticsService,
 		BillingRestore:         billingRestoreService,
+		BillingCustomer:        billingCustomerService,
+		BillingWebhook:         billingWebhookService,
 		BillingIPLimiter:       billingIPLimiter,
 		BillingKeyLimiter:      billingKeyLimiter,
 		EntitlementSyncLimiter: entitlementSyncLimiter,

@@ -9,6 +9,8 @@ package billingdiagnosticspostgres
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
@@ -172,4 +174,71 @@ func (r *Repository) ProjectionHealth(ctx context.Context, actor billingdiagnost
 		health.LastProjectionCommittedAt = &utc
 	}
 	return health, nil
+}
+
+// AuthorizeReplay guards the one state change this package can trigger.
+//
+// It is deliberately a separate method from the health authorization rather
+// than a shared helper with a boolean: a reader and a writer of the same
+// resource should not share one permission check, because widening the read
+// later would silently widen the write.
+func (r *Repository) AuthorizeReplay(ctx context.Context, actor billingdiagnostics.Actor,
+	projectID, environmentID string) error {
+
+	if err := r.requireRole(ctx, actor, projectID); err != nil {
+		return err
+	}
+	var exists bool
+	err := r.pool.QueryRow(ctx,
+		`SELECT true FROM environments WHERE id=$1 AND project_id=$2`, environmentID, projectID).Scan(&exists)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return billingdiagnostics.ErrNotFound
+	}
+	if err != nil {
+		return fmt.Errorf("resolve replay environment: %w", err)
+	}
+	return nil
+}
+
+// RecordReplayAudit records that a replay ran and what it moved.
+//
+// The count of changed scopes is on the audit entry rather than only in the
+// response, because the response is seen once by the operator who asked and the
+// audit trail is what an investigation reads months later — and "a replay ran
+// and changed nothing" and "a replay ran and rewrote four hundred customers"
+// are the two answers such an investigation is actually asking about.
+func (r *Repository) RecordReplayAudit(ctx context.Context, actor billingdiagnostics.Actor,
+	projectID, environmentID string, ruleVersion, scopes, changed int, now time.Time) error {
+
+	var organizationID string
+	if err := r.pool.QueryRow(ctx, `SELECT organization_id FROM projects WHERE id=$1`, projectID).
+		Scan(&organizationID); err != nil {
+		return fmt.Errorf("read organization for replay audit: %w", err)
+	}
+	metadata, err := json.Marshal(map[string]any{
+		"projectionRuleVersion": ruleVersion,
+		"scopesReplayed":        scopes,
+		"scopesChanged":         changed,
+	})
+	if err != nil {
+		return fmt.Errorf("encode replay audit metadata: %w", err)
+	}
+	_, err = r.pool.Exec(ctx,
+		`INSERT INTO audit_events(id, actor_id, organization_id, project_id, environment_id,
+			action, resource_type, resource_id, metadata, created_at)
+		 VALUES ($1,$2,$3,$4,$5,'billing.projection.replayed','billing_projection',$5,$6,$7)`,
+		"aud_"+auditID(projectID, environmentID, now), actor.ID, organizationID, projectID,
+		environmentID, metadata, now)
+	if err != nil {
+		return fmt.Errorf("insert replay audit event: %w", err)
+	}
+	return nil
+}
+
+func auditID(parts ...any) string {
+	hasher := sha256.New()
+	for _, part := range parts {
+		fmt.Fprintf(hasher, "%v\x00", part)
+	}
+	return fmt.Sprintf("%x", hasher.Sum(nil))[:24]
 }

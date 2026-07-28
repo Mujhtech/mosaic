@@ -4,11 +4,14 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/rs/zerolog"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/trace"
+
+	"github.com/Mujhtech/mosaic/apps/api/internal/billingprojection"
 )
 
 // Stable domain errors, mapped onto HTTP in exactly one place by the handler.
@@ -27,6 +30,12 @@ type Actor struct{ ID string }
 type Repository interface {
 	BillingEnabled(ctx context.Context, projectID string) (bool, error)
 	ProjectionHealth(ctx context.Context, actor Actor, projectID, environmentID string) (ProjectionHealth, error)
+	// AuthorizeReplay is separate from the health authorization because a
+	// replay is a write. It is the only permission check in this package that
+	// guards state change rather than a read.
+	AuthorizeReplay(ctx context.Context, actor Actor, projectID, environmentID string) error
+	RecordReplayAudit(ctx context.Context, actor Actor, projectID, environmentID string,
+		ruleVersion, scopes, changed int, now time.Time) error
 }
 
 // Service is the diagnostics application service. It is thin by nature — the
@@ -35,13 +44,36 @@ type Repository interface {
 type Service struct {
 	repository Repository
 	tracer     trace.Tracer
+
+	replayer     Replayer
+	replayScopes billingprojection.ReplayScopeKeys
 }
 
-func NewService(repository Repository) *Service {
-	return &Service{
+type Option func(*Service)
+
+// WithReplay enables the bounded projection-replay operation.
+//
+// Both halves are required together. A replay needs the projection command and
+// the scope enumeration; having one without the other is not a degraded replay,
+// it is no replay, so the option refuses a partial configuration rather than
+// leaving an endpoint that fails at the first request.
+func WithReplay(replayer Replayer, scopes billingprojection.ReplayScopeKeys) Option {
+	return func(s *Service) {
+		if replayer != nil && scopes != nil {
+			s.replayer, s.replayScopes = replayer, scopes
+		}
+	}
+}
+
+func NewService(repository Repository, options ...Option) *Service {
+	service := &Service{
 		repository: repository,
 		tracer:     otel.Tracer("github.com/Mujhtech/mosaic/apps/api/billingdiagnostics"),
 	}
+	for _, option := range options {
+		option(service)
+	}
+	return service
 }
 
 // ProjectionHealth reports the Environment's projection health.

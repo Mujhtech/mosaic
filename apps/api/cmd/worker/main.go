@@ -24,6 +24,7 @@ import (
 	"github.com/Mujhtech/mosaic/apps/api/internal/billing"
 	"github.com/Mujhtech/mosaic/apps/api/internal/billingprojection"
 	"github.com/Mujhtech/mosaic/apps/api/internal/billingrestore"
+	"github.com/Mujhtech/mosaic/apps/api/internal/billingwebhook"
 	"github.com/Mujhtech/mosaic/apps/api/internal/cloudworkspace"
 	"github.com/Mujhtech/mosaic/apps/api/internal/experiment"
 	"github.com/Mujhtech/mosaic/apps/api/internal/platform/analyticspostgres"
@@ -34,6 +35,7 @@ import (
 	"github.com/Mujhtech/mosaic/apps/api/internal/platform/billingpostgres"
 	"github.com/Mujhtech/mosaic/apps/api/internal/platform/billingprojectionpostgres"
 	"github.com/Mujhtech/mosaic/apps/api/internal/platform/billingrestorepostgres"
+	"github.com/Mujhtech/mosaic/apps/api/internal/platform/billingwebhookpostgres"
 	"github.com/Mujhtech/mosaic/apps/api/internal/platform/buildinfo"
 	"github.com/Mujhtech/mosaic/apps/api/internal/platform/cloudworkspacepostgres"
 	"github.com/Mujhtech/mosaic/apps/api/internal/platform/config"
@@ -154,6 +156,8 @@ func run() (runErr error) {
 	var projectionService *billingprojection.Service
 	var restoreService *billingrestore.Service
 	var restoreRepository *billingrestorepostgres.Repository
+	var webhookService *billingwebhook.Service
+	var webhookRepository *billingwebhookpostgres.Repository
 	if cfg.Billing.Enabled {
 		billingCipher, err := providercredential.NewAESGCMCipher(cfg.Providers.CredentialKeyring, rand.Reader)
 		if err != nil {
@@ -191,6 +195,10 @@ func run() (runErr error) {
 		restoreRepository = billingrestorepostgres.New(pool)
 		restoreService = billingrestore.NewService(restoreRepository,
 			billingkeys.New(billingRepository).Restore())
+		webhookRepository = billingwebhookpostgres.New(pool)
+		webhookService = billingwebhook.NewService(webhookRepository, billingCipher,
+			billingwebhook.NewPolicy(billingwebhook.WithSelfHostedAllowlist(
+				cfg.Billing.WebhookAllowPrivateDestinations)))
 	}
 
 	workerID, err := os.Hostname()
@@ -234,6 +242,9 @@ func run() (runErr error) {
 		if err := restoreRepository.RegisterQueueMetrics(); err != nil {
 			return fmt.Errorf("register billing restore queue metrics: %w", err)
 		}
+		if err := webhookRepository.RegisterQueueMetrics(); err != nil {
+			return fmt.Errorf("register billing webhook queue metrics: %w", err)
+		}
 	}
 
 	families := make([]jobFamily, 0, 8)
@@ -255,6 +266,11 @@ func run() (runErr error) {
 			// previous poll's state and reschedule itself once more than it
 			// needed to.
 			jobFamily{"billing_restore_sync", restoreService.ProcessNextRestoreSync},
+			// Delivery runs strictly outside the projection transaction. A
+			// destination that is down produces retries and eventually an
+			// exhausted delivery; it never rolls back an entitlement change and
+			// never blocks a projection.
+			jobFamily{"billing_webhook_delivery", webhookService.ProcessNextDelivery},
 			jobFamily{"billing_rtdn", billingService.ProcessNextRTDN},
 			jobFamily{"billing_reconciliation", billingService.ProcessNextReconciliation},
 			jobFamily{"billing_replay", billingService.ProcessNextReplay},

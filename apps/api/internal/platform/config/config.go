@@ -91,6 +91,18 @@ type BillingConfig struct {
 	EntitlementRefreshAfter    time.Duration `envconfig:"MOSAIC_BILLING_ENTITLEMENT_REFRESH_AFTER" default:"1h"`
 	EntitlementValidFor        time.Duration `envconfig:"MOSAIC_BILLING_ENTITLEMENT_VALID_FOR" default:"168h"`
 	EntitlementStaleGraceHours int           `envconfig:"MOSAIC_BILLING_ENTITLEMENT_STALE_GRACE_HOURS" default:"24"`
+
+	// WebhookAllowPrivateDestinations is the self-hosted exception to the
+	// ADR-0024 SSRF policy: it permits webhook destinations that resolve to
+	// private address space, which operators running Mosaic and their
+	// application backend on one private network legitimately need.
+	//
+	// It is deployment-level on purpose and must never become a request field
+	// or a per-destination column. A per-destination override would let anyone
+	// holding destination-write permission point Mosaic at the internal
+	// network, which is the whole attack the policy exists to prevent. Off by
+	// default: a deployment that has not thought about it does not have it.
+	WebhookAllowPrivateDestinations bool `envconfig:"MOSAIC_BILLING_WEBHOOK_ALLOW_PRIVATE_DESTINATIONS" default:"false"`
 }
 
 // EntitlementStaleGrace is the configured bounded-grace window as a duration.

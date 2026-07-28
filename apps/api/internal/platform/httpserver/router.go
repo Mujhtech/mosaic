@@ -15,8 +15,10 @@ import (
 	"github.com/Mujhtech/mosaic/apps/api/internal/analytics"
 	"github.com/Mujhtech/mosaic/apps/api/internal/billing"
 	"github.com/Mujhtech/mosaic/apps/api/internal/billingaccess"
+	"github.com/Mujhtech/mosaic/apps/api/internal/billingcustomer"
 	"github.com/Mujhtech/mosaic/apps/api/internal/billingdiagnostics"
 	"github.com/Mujhtech/mosaic/apps/api/internal/billingrestore"
+	"github.com/Mujhtech/mosaic/apps/api/internal/billingwebhook"
 	"github.com/Mujhtech/mosaic/apps/api/internal/browserauth"
 	"github.com/Mujhtech/mosaic/apps/api/internal/cloudworkspace"
 	"github.com/Mujhtech/mosaic/apps/api/internal/experiment"
@@ -28,8 +30,10 @@ import (
 	analyticshttp "github.com/Mujhtech/mosaic/apps/api/internal/transport/analytics"
 	billinghttp "github.com/Mujhtech/mosaic/apps/api/internal/transport/billing"
 	billingaccesshttp "github.com/Mujhtech/mosaic/apps/api/internal/transport/billingaccess"
+	billingcustomerhttp "github.com/Mujhtech/mosaic/apps/api/internal/transport/billingcustomer"
 	billingdiagnosticshttp "github.com/Mujhtech/mosaic/apps/api/internal/transport/billingdiagnostics"
 	billingrestorehttp "github.com/Mujhtech/mosaic/apps/api/internal/transport/billingrestore"
+	billingwebhookhttp "github.com/Mujhtech/mosaic/apps/api/internal/transport/billingwebhook"
 	browserauthhttp "github.com/Mujhtech/mosaic/apps/api/internal/transport/browserauth"
 	cloudworkspacehttp "github.com/Mujhtech/mosaic/apps/api/internal/transport/cloudworkspace"
 	experimenthttp "github.com/Mujhtech/mosaic/apps/api/internal/transport/experiment"
@@ -107,6 +111,14 @@ type Dependencies struct {
 	// trusted request surfaces and the status read. It is nil whenever Billing
 	// is.
 	BillingRestore *billingrestore.Service
+	// BillingCustomer owns the Phase 9B billing-identity APIs: customer
+	// create-or-get, aliases, identity conflicts, and manual sync requests. It
+	// is nil whenever Billing is.
+	BillingCustomer *billingcustomer.Service
+	// BillingWebhook owns the Phase 9B application-webhook destinations,
+	// signing secrets, and delivery history (OD-1(b)). It is nil whenever
+	// Billing is.
+	BillingWebhook *billingwebhook.Service
 	// EntitlementSyncLimiter bounds the SDK sync endpoint, which is the
 	// highest-QPS authenticated surface Mosaic serves.
 	EntitlementSyncLimiter httpmiddleware.Limiter
@@ -202,7 +214,19 @@ func NewWithDependencies(cfg Config, logger zerolog.Logger, dependencies Depende
 								httpmiddleware.RateLimit("export", dependencies.ExportLimiter, principalKey))
 						}
 						if dependencies.BillingDiagnostics != nil {
-							billingdiagnosticshttp.RegisterProjectRoutes(project, dependencies.BillingDiagnostics)
+							// A replay recomputes committed state for every
+							// scope it names, so it shares the export-class
+							// bucket with the other history-scanning billing
+							// operations rather than the baseline API one.
+							billingdiagnosticshttp.RegisterProjectRoutes(project, dependencies.BillingDiagnostics,
+								httpmiddleware.RateLimit("export", dependencies.ExportLimiter, principalKey))
+						}
+						if dependencies.BillingWebhook != nil {
+							// Destination creation and secret rotation each
+							// perform a DNS resolution or an envelope seal, and
+							// a manual replay enqueues delivery work.
+							billingwebhookhttp.RegisterProjectRoutes(project, dependencies.BillingWebhook,
+								httpmiddleware.RateLimit("export", dependencies.ExportLimiter, principalKey))
 						}
 						if dependencies.Experiment != nil {
 							project.Group(func(decision chi.Router) {
@@ -240,6 +264,10 @@ func NewWithDependencies(cfg Config, logger zerolog.Logger, dependencies Depende
 				billingaccesshttp.RegisterSDKRoutes(versioned, dependencies.BillingAccess,
 					httpmiddleware.RateLimit("entitlement_sync", dependencies.EntitlementSyncLimiter, sdkKeyBucket))
 				billingaccesshttp.RegisterTrustedRoutes(versioned, dependencies.BillingAccess,
+					httpmiddleware.RateLimit("billing_server_api", dependencies.APILimiter, clientAddressBucket))
+			}
+			if dependencies.BillingCustomer != nil {
+				billingcustomerhttp.RegisterTrustedRoutes(versioned, dependencies.BillingCustomer,
 					httpmiddleware.RateLimit("billing_server_api", dependencies.APILimiter, clientAddressBucket))
 			}
 			if dependencies.BillingRestore != nil {
