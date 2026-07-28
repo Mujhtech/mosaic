@@ -115,6 +115,10 @@ type Output struct {
 	CustomerSnapshot *CustomerSnapshot
 	SnapshotVersion  int64
 	Changes          ChangeSet
+	// Event is the planned Billing State Webhook announcement. It is nil for a
+	// no-change projection, which is what makes "a no-change replay emits
+	// nothing" a property of the plan rather than of the writer.
+	Event *Event
 	// Checkpoints advance even on a no-change projection: the facts were
 	// examined and must not be examined again.
 	Checkpoints []CheckpointCommit

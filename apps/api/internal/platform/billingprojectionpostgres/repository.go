@@ -663,13 +663,13 @@ func writeCustomerSnapshot(ctx context.Context, tx pgx.Tx, scope billingprojecti
 	// The webhook event is created here, inside the same transaction as the
 	// state it announces, so an event can never exist for state that was not
 	// committed. Delivery happens elsewhere, outside this transaction.
-	if len(output.Changes.Changed) > 0 {
-		payload, err := json.Marshal(map[string]any{
-			"billingCustomerId":   scope.CustomerID,
-			"environmentId":       scope.EnvironmentID,
-			"snapshotVersion":     output.SnapshotVersion,
-			"changedEntitlements": output.Changes.Changed,
-		})
+	//
+	// output.Event is nil for a no-change projection, so a replay that
+	// recomputes identical state emits nothing — the property the whole
+	// no-change path exists to guarantee.
+	if output.Event != nil {
+		eventID := "whe_" + hashID(snapshotID)
+		payload, err := json.Marshal(billingStateEventEnvelope(eventID, scope, input, output, now))
 		if err != nil {
 			return fmt.Errorf("encode webhook payload: %w", err)
 		}
@@ -677,14 +677,90 @@ func writeCustomerSnapshot(ctx context.Context, tx pgx.Tx, scope billingprojecti
 			`INSERT INTO webhook_events(
 				id, project_id, environment_id, event_type, billing_customer_id,
 				customer_entitlement_snapshot_id, snapshot_version, payload, occurred_at, created_at)
-			 VALUES ($1,$2,$3,'customer.entitlements.changed',$4,$5,$6,$7,$8,$8)
+			 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
 			 ON CONFLICT (customer_entitlement_snapshot_id, event_type) DO NOTHING`,
-			"whe_"+hashID(snapshotID), scope.ProjectID, scope.EnvironmentID, scope.CustomerID,
-			snapshotID, output.SnapshotVersion, payload, now); err != nil {
+			eventID, scope.ProjectID, scope.EnvironmentID,
+			billingprojection.EventTypeEntitlementsChanged, scope.CustomerID,
+			snapshotID, output.SnapshotVersion, payload, output.Event.OccurredAt, now); err != nil {
 			return fmt.Errorf("create webhook event: %w", err)
 		}
 	}
 	return nil
+}
+
+// billingStateEventEnvelope renders the complete Billing State Webhook Contract
+// v1 event record.
+//
+// The whole envelope is stored rather than a partial payload the delivery
+// worker would have to finish assembling. Two reasons: the delivered body is
+// then byte-identical across every attempt and every manual replay, which is
+// what makes a signature reproducible; and a contract change becomes one
+// migration of stored rows rather than a silent difference between what was
+// committed and what was sent.
+func billingStateEventEnvelope(eventID string, scope billingprojection.Scope,
+	input billingprojection.Input, output billingprojection.Output, now time.Time) map[string]any {
+
+	event := output.Event
+	changed := make([]map[string]any, 0, len(output.Changes.Entries))
+	for _, change := range output.Changes.Entries {
+		changed = append(changed, map[string]any{
+			"entitlementKey": change.EntitlementKey,
+			"previousState":  change.PreviousState,
+			"currentState":   change.CurrentState,
+		})
+	}
+
+	uncertainty := map[string]any{"reason": event.UncertaintyReason}
+	if event.UncertaintyReason != billingprojection.UncertaintyNone {
+		// The schema requires `since` on every non-`none` uncertainty. The
+		// instant the change became effective is the instant from which this
+		// uncertainty holds, so there is no second timestamp to invent.
+		uncertainty["since"] = contractTimestamp(event.OccurredAt)
+	}
+
+	payload := map[string]any{
+		"eventId":               eventID,
+		"eventType":             billingprojection.EventTypeEntitlementsChanged,
+		"projectId":             scope.ProjectID,
+		"environmentId":         scope.EnvironmentID,
+		"billingCustomerId":     scope.CustomerID,
+		"snapshotVersion":       output.SnapshotVersion,
+		"projectionRuleVersion": billingprojection.RuleVersion,
+		"occurredAt":            contractTimestamp(event.OccurredAt),
+		"createdAt":             contractTimestamp(now),
+		"changedEntitlements":   changed,
+		"stateSummary": map[string]any{
+			"accessState":    event.AccessState,
+			"lifecycleState": event.LifecycleState,
+			"renewalIntent":  event.RenewalIntent,
+			"billingState":   event.BillingState,
+			"uncertainty":    uncertainty,
+		},
+		"sourceReason": event.SourceReason,
+		"isTestSource": event.IsTestSource,
+		// The idempotency key is a digest of scope, watermark, rule version, and
+		// grant version set: stable across attempts, derived from identifiers
+		// only, and safe to hand to a consumer for correlation.
+		"correlationId": billingprojection.HexKey(output.IdempotencyKey),
+	}
+	if event.SubscriptionInstanceID != "" {
+		payload["subscriptionInstanceId"] = event.SubscriptionInstanceID
+	}
+	if input.CurrentSnapshotVersion > 0 {
+		payload["previousSnapshotVersion"] = input.CurrentSnapshotVersion
+	}
+	return map[string]any{
+		"billingStateWebhookContractVersion": "1",
+		"recordType":                         "billingStateEvent",
+		"payload":                            payload,
+	}
+}
+
+// contractTimestamp renders the millisecond-precision UTC form every Mosaic
+// contract timestamp uses. The schemas pin the length exactly, so a
+// nanosecond-precision or offset-bearing rendering is a rejection.
+func contractTimestamp(value time.Time) string {
+	return value.UTC().Format("2006-01-02T15:04:05.000Z")
 }
 
 func changeReason(output billingprojection.Output) string {

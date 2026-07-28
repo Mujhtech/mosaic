@@ -323,6 +323,8 @@ func Compute(input Input, asOf time.Time) Output {
 
 	output.CustomerSnapshot = &candidate
 	output.SnapshotVersion = input.CurrentSnapshotVersion + 1
+	output.Event = planEvent(input.PriorCustomerSnapshot, candidate, output.Changes,
+		subscriptionSources, asOf)
 	output.Outcome = OutcomeProjected
 	return output
 }

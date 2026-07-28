@@ -97,9 +97,34 @@ type CustomerSnapshot struct {
 // committed snapshot. It is what a webhook announces and what makes a
 // no-change projection observable as such.
 type ChangeSet struct {
-	Changed  []string
+	Changed []string
+	// Entries is the same change set in the shape the Billing State Webhook
+	// Contract declares: key, previous state, current state. It is carried
+	// alongside Changed rather than replacing it because the identifier list is
+	// what the audit trail and the projection outcome are written from, while
+	// only the wire event needs the keys and the before/after pair.
+	Entries  []EntitlementChange
 	NoChange bool
 }
+
+// EntitlementChange is one Entitlement whose authoritative state moved.
+//
+// PreviousState may be `absent`, which is how a first grant is reported without
+// claiming the customer was previously inactive. CurrentState has no `absent`
+// member: an Entitlement that disappeared from the candidate has no source at
+// all any more, and "no source" is exactly `inactive`. An Entitlement that
+// merely became undecidable keeps an entry with state `unknown`, so the two
+// cases stay distinguishable.
+type EntitlementChange struct {
+	EntitlementID  string
+	EntitlementKey string
+	PreviousState  string
+	CurrentState   string
+}
+
+// EntitlementAbsent is the previous-state member used when the prior snapshot
+// carried no entry for the Entitlement at all.
+const EntitlementAbsent = "absent"
 
 // ProjectEntitlements aggregates every accepted source into per-Entitlement
 // state (plan §5 "Authoritative Entitlement Computation").
@@ -352,20 +377,42 @@ func Diff(prior *CustomerSnapshot, candidate CustomerSnapshot) ChangeSet {
 		}
 	}
 	changed := make([]string, 0, len(candidate.Entries))
+	entries := make([]EntitlementChange, 0, len(candidate.Entries))
 	for _, entry := range candidate.Entries {
 		before, existed := priorEntries[entry.EntitlementID]
 		if !existed || before.State != entry.State || !sameInstant(before.EffectiveEnd, entry.EffectiveEnd) ||
 			before.EndKnown != entry.EndKnown || before.UncertaintyReason != entry.UncertaintyReason {
 			changed = append(changed, entry.EntitlementID)
+			previous := EntitlementAbsent
+			if existed {
+				previous = before.State
+			}
+			entries = append(entries, EntitlementChange{
+				EntitlementID: entry.EntitlementID, EntitlementKey: entry.EntitlementKey,
+				PreviousState: previous, CurrentState: entry.State,
+			})
 		}
 		delete(priorEntries, entry.EntitlementID)
 	}
 	// An Entitlement that disappeared from the candidate changed too.
-	for entitlementID := range priorEntries {
+	for entitlementID, before := range priorEntries {
 		changed = append(changed, entitlementID)
+		entries = append(entries, EntitlementChange{
+			EntitlementID: entitlementID, EntitlementKey: before.EntitlementKey,
+			PreviousState: before.State, CurrentState: AccessInactive,
+		})
 	}
 	sort.Strings(changed)
-	return ChangeSet{Changed: changed, NoChange: len(changed) == 0}
+	// Ascending and unique by entitlement key, as the contract requires of the
+	// wire array. Sorting by key rather than by identifier means the array a
+	// consumer reads is ordered the way the consumer indexes it.
+	sort.Slice(entries, func(i, j int) bool {
+		if entries[i].EntitlementKey != entries[j].EntitlementKey {
+			return entries[i].EntitlementKey < entries[j].EntitlementKey
+		}
+		return entries[i].EntitlementID < entries[j].EntitlementID
+	})
+	return ChangeSet{Changed: changed, Entries: entries, NoChange: len(changed) == 0}
 }
 
 func sameInstant(a, b *time.Time) bool {
