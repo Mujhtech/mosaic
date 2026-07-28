@@ -18,6 +18,7 @@
  * ever be named `validated`, and no billing record may name entitlement,
  * subscription, customer, or access-grant vocabulary).
  */
+import { createHash } from "node:crypto";
 import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { dirname, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -240,8 +241,26 @@ function recordSemantics(label, document) {
     }
   });
 
-  const facts = [];
   const payload = document.payload;
+
+  // A trusted server observation may carry the full Google Play purchase token.
+  // When it does, the token and the reference must be the same fact stated two
+  // ways: the reference is the token's digest. A mismatch means the record
+  // would validate one purchase and be filed under another, which no schema
+  // rule can catch.
+  if (document.recordType === "serverTransactionObservation" && payload?.purchaseToken) {
+    const expected = createHash("sha256")
+      .update(payload.purchaseToken, "utf8")
+      .digest("hex");
+    if (payload.transactionReference?.value !== expected) {
+      errors.push(
+        `${label} purchaseToken does not digest to its transactionReference; ` +
+          "the reference must be SHA-256 over the UTF-8 token in lowercase hexadecimal",
+      );
+    }
+  }
+
+  const facts = [];
   if (document.recordType === "transactionFact") facts.push(payload);
   if (document.recordType === "validationResult" && payload?.transactionFact) {
     facts.push(payload.transactionFact);

@@ -4,6 +4,7 @@
   "layers": {
     "ambiguous-resolution-single-candidate.json": "schema",
     "client-observation-asserts-store-environment.json": "schema",
+    "client-observation-carries-purchase-token.json": "schema",
     "client-observation-credential-shaped-reference.json": "schema",
     "client-observation-foreign-authority.json": "schema",
     "client-observation-platform-reference-mismatch.json": "schema",

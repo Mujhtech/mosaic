@@ -91,6 +91,7 @@
     "entitlementInference": "forbidden",
     "factMutation": "forbidden",
     "rawProviderCredential": "forbidden",
-    "rawProviderError": "forbidden"
+    "rawProviderError": "forbidden",
+    "purchaseTokenTransport": "trustedServerObservationOnly"
   }
 }

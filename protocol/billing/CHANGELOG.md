@@ -4,6 +4,47 @@
 
 Status: draft
 
+**Approval is gated on live-sandbox verification.** The manifest stays `draft`
+until Billing Ingestion `1` has been verified end to end against a live Apple
+sandbox and a live Google Play test track — real credentials, a real purchase, a
+real store notification, and a real provider validation. The Phase 9A
+demonstration used synthetic signed vectors and recorded that limitation, which
+is sufficient for `draft` and explicitly not sufficient for `approved`. A
+contract that has only ever seen fixtures it authored has not been tested
+against the provider behaviour it exists to normalize.
+
+While the contract is `draft`, narrowing and additive corrections are permitted
+without a version bump, per
+[the breaking-change process](../../docs/protocol/breaking-change-process.md).
+Amendments made under that allowance are listed below.
+
+### Draft amendments
+
+**2026-07-28 — optional `purchaseToken` on trusted server observations.**
+Added an optional `purchaseToken` (string, 1–4096 printable non-control
+characters) to `serverTransactionObservation`, permitted **only** when
+`sourceAuthority` is `trusted_server_observation` and `storePlatform` is
+`google_play`. A public SDK can never carry it: `clientTransactionObservation`
+has no such property, so `additionalProperties: false` rejects it, and
+`fixtures/billing-ingestion/v1/invalid/client-observation-carries-purchase-token.json`
+pins that rejection.
+
+This is additive and optional; every record valid before the amendment remains
+valid. It exists because the app-backend endpoint accepted in the Phase 9A plan
+may pass a full purchase token server-to-server, which is what makes an
+observation carrying only an order reference actionable against the Play
+Developer API.
+
+A purchase token is a transaction reference the buyer's own purchase produced,
+not a Mosaic provider credential. `rawProviderCredential: "forbidden"` is
+unchanged and still holds: service-account keys, signing keys, and Authorization
+values remain forbidden everywhere in the contract. The new transport rule is
+pinned as reader policy `purchaseTokenTransport: "trustedServerObservationOnly"`
+rather than left to prose, so the most dangerous field in the contract is not
+the only one unenforced. The semantic validator additionally requires that a
+present `purchaseToken` digests to its own `transactionReference.value`, so a
+record cannot validate one purchase and be filed under another.
+
 Billing Ingestion `1` is a new, independently versioned contract. It is not
 part of the Paywall document, not embedded in Configuration Delivery, and not
 carried in a Commerce Configuration sidecar. Paywall Protocol `0.2`,

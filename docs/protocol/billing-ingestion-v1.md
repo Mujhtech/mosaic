@@ -95,12 +95,41 @@ UTF-8 token bytes, or emitted in uppercase, is a different value and will not
 join.
 
 A record's reference kind must match its store platform, and an Apple record
-may not carry a Google order reference. The raw Google purchase token, an Apple
-JWS representation, a receipt, a device-verification value, an
-`appAccountToken`, an `appTransactionID`, and any service-account material are
-all absent from the contract and structurally impossible to carry: the decimal
-and hexadecimal patterns admit nothing else, and no free-form provider blob
-field exists.
+may not carry a Google order reference. An Apple JWS representation, a receipt,
+a device-verification value, an `appAccountToken`, an `appTransactionID`, and
+any service-account or signing material are absent from the contract and
+structurally impossible to carry: the decimal and hexadecimal patterns admit
+nothing else, and no free-form provider blob field exists.
+
+### The one exception: `purchaseToken` on a trusted server observation
+
+`serverTransactionObservation` carries an optional `purchaseToken` — the full
+Google Play purchase token, 1–4096 printable non-control characters — permitted
+**only** when `sourceAuthority` is `trusted_server_observation` **and**
+`storePlatform` is `google_play`. Both conditions are enforced by the schema.
+
+A public SDK can never carry it. `clientTransactionObservation` has no such
+property, so `additionalProperties: false` rejects it, and
+`invalid/client-observation-carries-purchase-token.json` pins that rejection.
+The token reaches Mosaic only over the app-backend endpoint authenticated by a
+Mosaic secret key.
+
+It exists because an app backend that holds the token can make an observation
+immediately actionable against the Play Developer API, rather than requiring
+Mosaic to recover the token from an order reference first.
+
+A purchase token is a transaction reference the buyer's own purchase produced —
+not a Mosaic provider credential. `rawProviderCredential: "forbidden"` is
+unchanged and still holds for service-account keys, signing keys, and
+Authorization values. The token's own transport rule is pinned separately as
+`purchaseTokenTransport: "trustedServerObservationOnly"`, so the most dangerous
+field in the contract is not the only one left to prose.
+
+When present, the token must digest to its own `transactionReference.value`
+under the same SHA-256/UTF-8/lowercase-hex derivation. The semantic validator
+enforces this: a record must not be able to validate one purchase and be filed
+under another. The token is encrypted at rest on receipt, never logged, never
+returned on any read, and never relieves the record of full provider validation.
 
 ## Store Environment
 
@@ -254,8 +283,94 @@ populates or persists either one, and no fixture carries either one.
   `unsupported_capability` detail, that is additive REST vocabulary and does not
   require a contract version bump.
 
+### Quarantine vocabulary is not REST vocabulary
+
+`quarantineRecord.reason` is the **contract** vocabulary: a closed, cross-SDK
+record vocabulary that every reader must understand exactly, where adding a
+member costs a contract version. The `reasonCode` on
+`GET /v1/projects/{projectId}/billing/quarantine` is the **operator** vocabulary:
+a diagnostics vocabulary tuned for someone reading a dashboard, free to grow with
+the backend's ability to distinguish causes.
+
+The two are deliberately not required to be equal, and today they are not. REST
+carries 17 reason codes to the contract's 12, `severity` adds `security`, and
+`status` uses entirely different member names. This is correct rather than a
+defect: a fine-grained operator distinction such as "the credential was revoked"
+versus "no credential was ever configured" is exactly what an operator needs and
+exactly what a cross-SDK reader must not be forced to enumerate.
+
+`quarantineRecord` is **not emitted on any wire in Phase 9A** — the dashboard
+consumes OpenAPI types — so the collapse is defined here, before the record type
+first travels, rather than discovered afterwards.
+
+| REST `reasonCode` | Contract `quarantineReason` |
+| --- | --- |
+| `signature_invalid` | `unverifiable_input` |
+| `application_mismatch` | `application_mismatch` |
+| `environment_mismatch` | `cross_environment_mismatch` |
+| `store_environment_mismatch` | `cross_environment_mismatch` |
+| `credential_unavailable` | `credential_unavailable` |
+| `credential_revoked` | `credential_unavailable` |
+| `missing_validation_credential` | `credential_unavailable` |
+| `product_unknown` | `product_unknown` |
+| `product_ambiguous` | `product_ambiguous` |
+| `cross_environment_mismatch` | `cross_environment_mismatch` |
+| `unsupported_product_type` | `unsupported_product_type` |
+| `unsupported_transaction_type` | `unsupported_transaction_type` |
+| `malformed_reference` | `unverifiable_input` |
+| `input_content_conflict` | `normalization_conflict` |
+| `replay_conflict` | `replay_comparison_conflict` |
+| `provider_permanently_failed` | `unverifiable_input` |
+| `validation_exhausted` | `attempts_exhausted` |
+
+Supporting projections:
+
+| REST | Contract |
+| --- | --- |
+| `severity: security` | `severity: error` |
+| `status: retrying` | `status: recovering` |
+| `status: closed_after_success` | `status: recovered` |
+| `status: closed_superseded` | `status: dismissed` |
+
+`tenant_unresolved` has no REST source: an input whose tenant cannot be resolved
+is quarantined by metadata alone and never reaches a Project-scoped REST
+resource. It exists in the contract because a future reconciliation or export
+surface would need to name that state.
+
+The projection is lossy by design — three REST codes collapse onto
+`credential_unavailable` and three onto `unverifiable_input`. If that loss turns
+out to matter to operators, the fix is **one deliberate decision covering every
+unmapped code at once**, taken while the manifest is still `draft` or
+`releaseCandidate`. Adding members one at a time as each is noticed would
+produce a contract vocabulary that mirrors the backend's internal taxonomy
+without ever matching it, and would spend a contract version on each step.
+
+### Clients may clamp `retryAfterSeconds`
+
+The schema bounds `retryAfterSeconds` at 86400 on both the submission result and
+the `retry` block, matching the Commerce Provider bound, because the driving
+case is a provider outage measured in hours rather than an ingestion backpressure
+signal measured in minutes.
+
+A reader **may clamp** the value it honours to something shorter. Every Mosaic
+SDK clamps to **300 seconds**: an observation queue that stops trying for a day
+because one response said so is indistinguishable from a broken queue, and the
+observation is a latency and attribution optimization rather than the reliable
+path — store notifications are. Clamping is a local scheduling decision, not a
+contract violation, and a clamping reader still accepts the full documented
+range without error.
+
+The schema maximum stays 86400 and is not narrowed to match the SDK clamp: the
+server must remain able to state a long backoff to a non-SDK reader, such as an
+app backend draining a queue after a provider outage.
+
 The manifest is born `status: "draft"`, moves to `releaseCandidate` for the
 Phase 9A review gate, and reaches `approved` only by explicit owner decision.
+**Approval is additionally gated on live-sandbox verification**: the contract
+stays `draft` until it has been exercised end to end against a live Apple
+sandbox and a live Google Play test track. The Phase 9A demonstration used
+synthetic signed vectors and recorded that limitation, which is enough for a
+draft and deliberately not enough for an approved contract.
 Narrowing corrections remain permitted while it is a release candidate, per
 [the breaking-change process](breaking-change-process.md).
 
@@ -268,7 +383,8 @@ exactly one rule. `invalid/rejection-layers.json` is generated and records that
 21 are rejected by the schema alone and 3 by the semantic validator (time
 ordering and retry arithmetic).
 
-Every value is synthetic. No fixture contains a real credential, purchase token,
+Every value is synthetic, including the trusted-server fixture's
+`purchaseToken`. No fixture contains a real credential, purchase token,
 receipt, signed payload, JWS, service-account key, order identifier, or customer
 identifier, and a validator test asserts that no fixture contains a
 signed-payload-shaped value. Free-form identifiers are `fixture-`-prefixed;

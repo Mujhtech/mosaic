@@ -16,6 +16,7 @@
     "storeEnvironmentClassification": {
       "classification": "production",
       "basis": "mosaic_environment_policy"
-    }
+    },
+    "purchaseToken": "fixture-google-purchase-token-0002"
   }
 }

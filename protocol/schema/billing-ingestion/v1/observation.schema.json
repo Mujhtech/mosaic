@@ -621,11 +621,35 @@
         "originatingObservationId": {
           "description": "Set when this trusted observation was triggered by an earlier observation. Referencing a client observation never raises that observation's authority.",
           "$ref": "#/$defs/identifier"
+        },
+        "purchaseToken": {
+          "description": "The full Google Play purchase token, permitted ONLY on a trusted server observation submitted server-to-server with a Mosaic secret key. A public SDK can never carry it: clientTransactionObservation has no such property and rejects it as an unknown field. This is a transaction reference the buyer's own purchase produced, not a Mosaic provider credential; service-account keys, signing keys, and Authorization values remain forbidden everywhere. It is encrypted at rest on receipt, never logged, never returned on any read, and never relieves the record of full provider validation. When present it must digest to transactionReference.value.",
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 4096,
+          "pattern": "^[^\\r\\n\\u0000-\\u001F\\u007F]+$"
         }
       },
       "allOf": [
         {
           "$ref": "#/$defs/storePlatformReferenceAlignment"
+        },
+        {
+          "if": {
+            "required": [
+              "purchaseToken"
+            ]
+          },
+          "then": {
+            "properties": {
+              "sourceAuthority": {
+                "const": "trusted_server_observation"
+              },
+              "storePlatform": {
+                "const": "google_play"
+              }
+            }
+          }
         },
         {
           "if": {

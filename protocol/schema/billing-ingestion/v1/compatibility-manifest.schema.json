@@ -242,7 +242,8 @@
         "entitlementInference",
         "factMutation",
         "rawProviderCredential",
-        "rawProviderError"
+        "rawProviderError",
+        "purchaseTokenTransport"
       ],
       "properties": {
         "unknownContractVersion": {
@@ -292,6 +293,10 @@
         },
         "rawProviderError": {
           "const": "forbidden"
+        },
+        "purchaseTokenTransport": {
+          "description": "A full Google Play purchase token may cross this contract only on a trusted server observation authenticated by a Mosaic secret key. A public SDK observation can never carry one.",
+          "const": "trustedServerObservationOnly"
         }
       }
     }
