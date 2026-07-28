@@ -519,7 +519,7 @@ export type CustomerAccessTokenIssuanceResult = {
  */
 export type CustomerAccessTokenMetadata = {
     /**
-     * A stable public handle
+     * A stable public handle, safe to log and to name in an audit event. It is not the token and cannot be presented as one.
      */
     tokenId: string;
     projectId: string;
@@ -932,7 +932,7 @@ export type BillingIdentityCustomer = {
 export type BillingCustomerAlias = {
     aliasId?: string;
     billingCustomerId?: string;
-    aliasType?: 'application_user' | 'installation' | 'app_account_token' | 'obfuscated_external_account_id';
+    aliasType?: 'application_user_id' | 'installation_id' | 'apple_app_account_token' | 'google_obfuscated_account_id';
     sourceAuthority?: string;
     verificationStatus?: string;
     effectiveStart?: string;
@@ -943,7 +943,7 @@ export type BillingCustomerAlias = {
 export type BillingIdentityConflict = {
     conflictId?: string;
     projectId?: string;
-    scope?: 'purchase_lineage' | 'alias';
+    scope?: 'lineage' | 'alias';
     status?: 'open' | 'resolved';
     /**
      * The incumbent.
@@ -1320,6 +1320,325 @@ export type BillingProjectionHealth = {
     activeWebhookDestinations?: number;
     lastProjectionCommittedAt?: string;
     observedAt?: string;
+};
+
+/**
+ * One Billing Customer as the operator list and the detail header report it. It carries no
+ * alias value and no alias digest, because Mosaic exposes neither on any surface.
+ *
+ */
+export type BillingCustomerSummary = {
+    billingCustomerId?: string;
+    projectId?: string;
+    environmentId?: string;
+    status?: 'active' | 'frozen' | 'anonymized';
+    diagnosticsStatus?: 'none' | 'identity_conflict' | 'projection_stale' | 'projection_failed';
+    /**
+     * An active application-user alias exists - a person is attached.
+     */
+    identified?: boolean;
+    /**
+     * A purchase lineage exists in this Environment - revenue is attached.
+     */
+    purchaseAnchored?: boolean;
+    hasOpenIdentityConflict?: boolean;
+    frozenLineageCount?: number;
+    currentProjectionVersion?: number;
+    lastProjectedAt?: string;
+    /**
+     * Absent when the customer has never been projected in this Environment, which is not the same as having no entitlements.
+     */
+    snapshotVersion?: number;
+    snapshotUpdatedAt?: string;
+    createdAt?: string;
+    updatedAt?: string;
+};
+
+export type BillingCustomerLookupRequest = {
+    identifierType: 'billing_customer_id' | 'application_user_id' | 'installation_id';
+    /**
+     * The raw identifier. It is digested server-side and is never stored, never logged, and never echoed back.
+     */
+    identifierValue: string;
+};
+
+export type BillingCustomerLookupResult = {
+    found?: boolean;
+    customer?: BillingCustomerSummary;
+};
+
+/**
+ * One accepted external identity bound to a customer, as a protected representation. There
+ * is no value field and no digest field: the alias id identifies the row for a revocation
+ * and reveals nothing about the person, whereas an alias digest is still a stable
+ * per-person identifier.
+ *
+ */
+export type OperatorBillingCustomerAlias = {
+    aliasId?: string;
+    aliasType?: 'application_user_id' | 'installation_id' | 'apple_app_account_token' | 'google_obfuscated_account_id';
+    sourceAuthority?: 'trusted_server' | 'sdk_installation' | 'provider_payload' | 'operator' | 'restore';
+    verificationStatus?: 'asserted' | 'verified';
+    active?: boolean;
+    effectiveStart?: string;
+    effectiveEnd?: string;
+};
+
+/**
+ * One provider purchase chain. Supersession is an explicit edge; nothing is ever deleted.
+ */
+export type BillingPurchaseLineage = {
+    purchaseLineageId?: string;
+    environmentId?: string;
+    provider?: 'app_store' | 'google_play';
+    storeEnvironment?: 'sandbox' | 'production';
+    lineageType?: 'subscription' | 'one_time';
+    /**
+     * Set while an identity conflict is open - the projector skips it and the last committed state is preserved.
+     */
+    projectionFrozen?: boolean;
+    diagnosticStatus?: 'none' | 'identity_unresolved' | 'identity_conflict' | 'product_unresolved';
+    supersededByLineageId?: string;
+    createdAt?: string;
+    updatedAt?: string;
+};
+
+/**
+ * Validated ownership of a non-consumable. Consumables are excluded from Mosaic Billing.
+ */
+export type BillingOneTimePurchase = {
+    oneTimePurchaseInstanceId?: string;
+    purchaseLineageId?: string;
+    provider?: 'app_store' | 'google_play';
+    mosaicProductId?: string;
+    providerProductIdentifier?: string;
+    acquiredAt?: string;
+    validityState?: 'owned' | 'refunded' | 'revoked' | 'unknown';
+    refundEffectiveAt?: string;
+    revocationEffectiveAt?: string;
+};
+
+export type BillingProjectionStatus = {
+    state?: 'current' | 'pending' | 'stale' | 'degraded' | 'failed';
+    lastProjectedAt?: string;
+    pendingFactCount?: number;
+    diagnosticCode?: string;
+};
+
+export type BillingEntitlementSnapshotEntry = {
+    entitlementId?: string;
+    entitlementKey?: string;
+    /**
+     * unavailable is a read-time service state and is never persisted on a snapshot.
+     */
+    state?: 'active' | 'inactive' | 'unknown';
+    effectiveStart?: string;
+    effectiveEnd?: string;
+    endKnown?: boolean;
+    sourceCount?: number;
+    uncertaintyReason?: 'none' | 'provider_unavailable' | 'missing_fact' | 'identity_unresolved' | 'product_unresolved' | 'conflicting_facts' | 'projection_failed' | 'stale_validation' | 'unsupported_provider_state';
+    isTestSource?: boolean;
+    explanationCode?: string;
+    sourceIds?: Array<string>;
+};
+
+/**
+ * One reason the customer holds, or may hold, an Entitlement. Source identity is
+ * (purchase lineage, product, grant version) and never a fact id, so multiple facts
+ * describing one purchase cannot double-grant.
+ *
+ */
+export type BillingEntitlementSource = {
+    sourceId?: string;
+    entitlementId?: string;
+    purchaseLineageId?: string;
+    mosaicProductId?: string;
+    grantVersionId?: string;
+    subscriptionInstanceId?: string;
+    oneTimePurchaseInstanceId?: string;
+    storePlatform?: string;
+    sourceType?: string;
+    sourceState?: string;
+    sourceStart?: string;
+    sourceEnd?: string;
+    endKnown?: boolean;
+    uncertaintyReason?: string;
+    isTestSource?: boolean;
+    explanationCode?: string;
+};
+
+export type BillingEntitlementSnapshot = {
+    snapshotId?: string;
+    /**
+     * Per-customer monotonic. It is the sole cache-monotonicity key; a no-change projection does not advance it.
+     */
+    snapshotVersion?: number;
+    previousSnapshotVersion?: number;
+    projectionRuleVersion?: number;
+    computedAt?: string;
+    asOf?: string;
+    changeReason?: string;
+    entries?: Array<BillingEntitlementSnapshotEntry>;
+    sources?: Array<BillingEntitlementSource>;
+};
+
+/**
+ * One projected Subscription Instance. Access and lifecycle are separate axes on purpose:
+ * a cancelled subscription keeps access until its validated period end, so cancellation
+ * moves renewal intent and nothing else.
+ *
+ */
+export type BillingSubscriptionSnapshot = {
+    subscriptionInstanceId?: string;
+    purchaseLineageId?: string;
+    billingCustomerId?: string;
+    environmentId?: string;
+    storePlatform?: string;
+    mosaicProductId?: string;
+    priorMosaicProductId?: string;
+    /**
+     * unavailable is a read-time service state and is never persisted on a snapshot.
+     */
+    accessState?: 'active' | 'inactive' | 'unknown';
+    lifecycleState?: 'trialing' | 'active' | 'grace_period' | 'billing_retry' | 'paused' | 'expired' | 'revoked' | 'refunded' | 'superseded' | 'unknown';
+    renewalIntent?: string;
+    billingState?: string;
+    uncertaintyReason?: string;
+    projectionVersion?: number;
+    projectionRuleVersion?: number;
+    computedAt?: string;
+    asOf?: string;
+    periodStart?: string;
+    periodEnd?: string;
+    gracePeriodEnd?: string;
+    billingRetryStart?: string;
+    pauseEffectiveAt?: string;
+    pauseResumeAt?: string;
+    cancellationEffectiveAt?: string;
+    expirationEffectiveAt?: string;
+    revocationEffectiveAt?: string;
+    refundEffectiveAt?: string;
+    supersededBySubscriptionInstanceId?: string;
+    isTestSource?: boolean;
+    sourceFactCount?: number;
+    changeReason?: string;
+    explanationCode?: string;
+};
+
+export type BillingTimelineEntry = {
+    timelineEntryId?: string;
+    entryType?: string;
+    effectiveAt?: string;
+    observedAt?: string;
+    subscriptionInstanceId?: string;
+    mosaicProductId?: string;
+    priorMosaicProductId?: string;
+    explanationCode?: string;
+    /**
+     * Passed through the ledger guard function, so no provider token or raw payload fragment can appear here.
+     */
+    detail?: {
+        [key: string]: string;
+    };
+};
+
+export type BillingCustomerDetail = {
+    customer?: BillingCustomerSummary;
+    aliases?: Array<OperatorBillingCustomerAlias>;
+    purchaseLineages?: Array<BillingPurchaseLineage>;
+    subscriptions?: Array<BillingSubscriptionSnapshot>;
+    oneTimePurchases?: Array<BillingOneTimePurchase>;
+    identityConflicts?: Array<OperatorBillingIdentityConflict>;
+    currentSnapshot?: BillingEntitlementSnapshot;
+    projectionStatus?: BillingProjectionStatus;
+};
+
+/**
+ * One disputed association held open for operator resolution. Access is granted to neither
+ * candidate while it is open: the disputed subject is frozen and the last committed state is
+ * preserved. The disputed alias digest is never part of this shape.
+ *
+ */
+export type OperatorBillingIdentityConflict = {
+    conflictId?: string;
+    projectId?: string;
+    scope?: 'lineage' | 'alias';
+    status?: 'open' | 'resolved';
+    purchaseLineageId?: string;
+    aliasType?: string;
+    /**
+     * The incumbent.
+     */
+    firstCustomerId?: string;
+    /**
+     * The challenger the evidence proposed.
+     */
+    secondCustomerId?: string;
+    diagnosticCode?: 'multiple_customers_claim_lineage' | 'reassignment_requires_operator_resolution' | 'application_user_alias_claims_two_customers';
+    openedAt?: string;
+    resolvedAt?: string;
+    resolutionAction?: 'keep_existing' | 'reassign_to_candidate' | 'operator_split';
+    resolutionReason?: string;
+};
+
+export type OperatorBillingIdentityConflictDetail = {
+    conflict?: OperatorBillingIdentityConflict;
+    lineage?: BillingPurchaseLineage;
+};
+
+export type ResolveIdentityConflictRequest = {
+    action: 'keep_existing' | 'reassign_to_candidate' | 'operator_split';
+    /**
+     * Optional. When present it must name the party the action already implies.
+     */
+    assignedBillingCustomerId?: string;
+    /**
+     * Required. Recorded on the conflict and on the audit event.
+     */
+    reason: string;
+};
+
+export type OperatorBillingSyncRequest = {
+    billingCustomerId?: string;
+    projectId?: string;
+    environmentId?: string;
+    /**
+     * What the projection queue coalesces on.
+     */
+    projectionScopeKey?: string;
+    triggerKind?: string;
+    requestedAt?: string;
+    status?: 'queued';
+};
+
+/**
+ * One restore or sync job. Mosaic's authoritative `outcome` and the native `providerOutcome`
+ * are separate axes and are never merged: a completed native restore whose facts have not
+ * reached a snapshot is not restored access. `restored` is admissible only together with the
+ * accepted `snapshotVersion` that demonstrates it.
+ *
+ */
+export type BillingRestoreJob = {
+    restoreId?: string;
+    environmentId?: string;
+    /**
+     * Empty until identity resolves - which is exactly the identity_unresolved outcome.
+     */
+    billingCustomerId?: string;
+    storePlatform?: 'apple_app_store' | 'google_play';
+    status?: 'queued' | 'leased' | 'completed' | 'failed';
+    outcome?: 'restored' | 'no_additional_purchases' | 'validation_pending' | 'identity_unresolved' | 'product_unresolved' | 'provider_unavailable' | 'failed';
+    providerOutcome?: 'completed' | 'no_purchases_found' | 'cancelled' | 'failed' | 'unsupported' | 'not_attempted';
+    uncertaintyReason?: string;
+    observedTransactionCount?: number;
+    pendingValidationCount?: number;
+    baselineSnapshotVersion?: number;
+    snapshotVersion?: number;
+    attemptCount?: number;
+    maxAttempts?: number;
+    requestedAt?: string;
+    updatedAt?: string;
+    completedAt?: string;
 };
 
 export type CreateExperimentRequest = {
@@ -3327,6 +3646,14 @@ export type WebhookDestinationId = string;
 export type WebhookDeliveryId = string;
 
 export type EnvironmentId = string;
+
+export type BillingCustomerId = string;
+
+export type SubscriptionInstanceId = string;
+
+export type RestoreJobId = string;
+
+export type IdentityConflictId = string;
 
 export type ApplicationId = string;
 
@@ -10039,6 +10366,683 @@ export type CreateBillingProjectionReplayResponses = {
 };
 
 export type CreateBillingProjectionReplayResponse = CreateBillingProjectionReplayResponses[keyof CreateBillingProjectionReplayResponses];
+
+export type ListBillingCustomersData = {
+    body?: never;
+    path: {
+        projectId: string;
+        environmentId: string;
+    };
+    query?: {
+        status?: 'active' | 'frozen' | 'anonymized';
+        /**
+         * Restrict to identified or to purchase-anchored-only customers.
+         */
+        identified?: boolean;
+        /**
+         * Only customers party to an open identity conflict.
+         */
+        conflictedOnly?: boolean;
+        limit?: number;
+        /**
+         * Opaque cursor from the immediately preceding list response. Malformed or stale values return validation_failed.
+         */
+        cursor?: string;
+    };
+    url: '/v1/projects/{projectId}/environments/{environmentId}/billing/customers';
+};
+
+export type ListBillingCustomersErrors = {
+    /**
+     * Stable machine-readable failure.
+     */
+    401: ErrorEnvelope;
+    /**
+     * Stable machine-readable failure.
+     */
+    403: ErrorEnvelope;
+    /**
+     * Stable machine-readable failure.
+     */
+    404: ErrorEnvelope;
+    /**
+     * Stable machine-readable failure.
+     */
+    409: ErrorEnvelope;
+    /**
+     * Stable machine-readable failure.
+     */
+    503: ErrorEnvelope;
+};
+
+export type ListBillingCustomersError = ListBillingCustomersErrors[keyof ListBillingCustomersErrors];
+
+export type ListBillingCustomersResponses = {
+    /**
+     * Billing Customers.
+     */
+    200: {
+        data?: {
+            items?: Array<BillingCustomerSummary>;
+            nextCursor?: string;
+        };
+    };
+};
+
+export type ListBillingCustomersResponse = ListBillingCustomersResponses[keyof ListBillingCustomersResponses];
+
+export type LookupBillingCustomerData = {
+    body: BillingCustomerLookupRequest;
+    path: {
+        projectId: string;
+        environmentId: string;
+    };
+    query?: never;
+    url: '/v1/projects/{projectId}/environments/{environmentId}/billing/customer-lookups';
+};
+
+export type LookupBillingCustomerErrors = {
+    /**
+     * Stable machine-readable failure.
+     */
+    401: ErrorEnvelope;
+    /**
+     * Stable machine-readable failure.
+     */
+    403: ErrorEnvelope;
+    /**
+     * Stable machine-readable failure.
+     */
+    404: ErrorEnvelope;
+    /**
+     * Stable machine-readable failure.
+     */
+    409: ErrorEnvelope;
+    /**
+     * Stable machine-readable failure.
+     */
+    422: ErrorEnvelope;
+    /**
+     * Stable machine-readable failure.
+     */
+    429: ErrorEnvelope;
+};
+
+export type LookupBillingCustomerError = LookupBillingCustomerErrors[keyof LookupBillingCustomerErrors];
+
+export type LookupBillingCustomerResponses = {
+    /**
+     * The lookup result.
+     */
+    200: {
+        data?: BillingCustomerLookupResult;
+    };
+};
+
+export type LookupBillingCustomerResponse = LookupBillingCustomerResponses[keyof LookupBillingCustomerResponses];
+
+export type GetOperatorBillingCustomerData = {
+    body?: never;
+    path: {
+        projectId: string;
+        environmentId: string;
+        customerId: string;
+    };
+    query?: never;
+    url: '/v1/projects/{projectId}/environments/{environmentId}/billing/customers/{customerId}';
+};
+
+export type GetOperatorBillingCustomerErrors = {
+    /**
+     * Stable machine-readable failure.
+     */
+    401: ErrorEnvelope;
+    /**
+     * Stable machine-readable failure.
+     */
+    403: ErrorEnvelope;
+    /**
+     * Stable machine-readable failure.
+     */
+    404: ErrorEnvelope;
+    /**
+     * Stable machine-readable failure.
+     */
+    409: ErrorEnvelope;
+    /**
+     * Stable machine-readable failure.
+     */
+    503: ErrorEnvelope;
+};
+
+export type GetOperatorBillingCustomerError = GetOperatorBillingCustomerErrors[keyof GetOperatorBillingCustomerErrors];
+
+export type GetOperatorBillingCustomerResponses = {
+    /**
+     * The Billing Customer.
+     */
+    200: {
+        data?: BillingCustomerDetail;
+    };
+};
+
+export type GetOperatorBillingCustomerResponse = GetOperatorBillingCustomerResponses[keyof GetOperatorBillingCustomerResponses];
+
+export type GetBillingCustomerEntitlementSnapshotData = {
+    body?: never;
+    path: {
+        projectId: string;
+        environmentId: string;
+        customerId: string;
+    };
+    query?: never;
+    url: '/v1/projects/{projectId}/environments/{environmentId}/billing/customers/{customerId}/entitlements';
+};
+
+export type GetBillingCustomerEntitlementSnapshotErrors = {
+    /**
+     * Stable machine-readable failure.
+     */
+    401: ErrorEnvelope;
+    /**
+     * Stable machine-readable failure.
+     */
+    403: ErrorEnvelope;
+    /**
+     * Stable machine-readable failure.
+     */
+    404: ErrorEnvelope;
+    /**
+     * Stable machine-readable failure.
+     */
+    409: ErrorEnvelope;
+    /**
+     * Stable machine-readable failure.
+     */
+    503: ErrorEnvelope;
+};
+
+export type GetBillingCustomerEntitlementSnapshotError = GetBillingCustomerEntitlementSnapshotErrors[keyof GetBillingCustomerEntitlementSnapshotErrors];
+
+export type GetBillingCustomerEntitlementSnapshotResponses = {
+    /**
+     * The current snapshot.
+     */
+    200: {
+        data?: {
+            snapshot?: BillingEntitlementSnapshot;
+            projectionStatus?: BillingProjectionStatus;
+        };
+    };
+};
+
+export type GetBillingCustomerEntitlementSnapshotResponse = GetBillingCustomerEntitlementSnapshotResponses[keyof GetBillingCustomerEntitlementSnapshotResponses];
+
+export type ListBillingCustomerSubscriptionsData = {
+    body?: never;
+    path: {
+        projectId: string;
+        environmentId: string;
+        customerId: string;
+    };
+    query?: {
+        limit?: number;
+        /**
+         * Opaque cursor from the immediately preceding list response. Malformed or stale values return validation_failed.
+         */
+        cursor?: string;
+    };
+    url: '/v1/projects/{projectId}/environments/{environmentId}/billing/customers/{customerId}/subscriptions';
+};
+
+export type ListBillingCustomerSubscriptionsErrors = {
+    /**
+     * Stable machine-readable failure.
+     */
+    401: ErrorEnvelope;
+    /**
+     * Stable machine-readable failure.
+     */
+    403: ErrorEnvelope;
+    /**
+     * Stable machine-readable failure.
+     */
+    404: ErrorEnvelope;
+    /**
+     * Stable machine-readable failure.
+     */
+    409: ErrorEnvelope;
+    /**
+     * Stable machine-readable failure.
+     */
+    503: ErrorEnvelope;
+};
+
+export type ListBillingCustomerSubscriptionsError = ListBillingCustomerSubscriptionsErrors[keyof ListBillingCustomerSubscriptionsErrors];
+
+export type ListBillingCustomerSubscriptionsResponses = {
+    /**
+     * Subscriptions.
+     */
+    200: {
+        data?: {
+            items?: Array<BillingSubscriptionSnapshot>;
+            nextCursor?: string;
+        };
+    };
+};
+
+export type ListBillingCustomerSubscriptionsResponse = ListBillingCustomerSubscriptionsResponses[keyof ListBillingCustomerSubscriptionsResponses];
+
+export type CreateBillingCustomerSyncRequestData = {
+    body?: never;
+    path: {
+        projectId: string;
+        environmentId: string;
+        customerId: string;
+    };
+    query?: never;
+    url: '/v1/projects/{projectId}/environments/{environmentId}/billing/customers/{customerId}/sync-requests';
+};
+
+export type CreateBillingCustomerSyncRequestErrors = {
+    /**
+     * Stable machine-readable failure.
+     */
+    401: ErrorEnvelope;
+    /**
+     * Stable machine-readable failure.
+     */
+    403: ErrorEnvelope;
+    /**
+     * Stable machine-readable failure.
+     */
+    404: ErrorEnvelope;
+    /**
+     * Stable machine-readable failure.
+     */
+    409: ErrorEnvelope;
+    /**
+     * Stable machine-readable failure.
+     */
+    429: ErrorEnvelope;
+    /**
+     * Stable machine-readable failure.
+     */
+    503: ErrorEnvelope;
+};
+
+export type CreateBillingCustomerSyncRequestError = CreateBillingCustomerSyncRequestErrors[keyof CreateBillingCustomerSyncRequestErrors];
+
+export type CreateBillingCustomerSyncRequestResponses = {
+    /**
+     * The projection was queued.
+     */
+    202: {
+        data?: OperatorBillingSyncRequest;
+    };
+};
+
+export type CreateBillingCustomerSyncRequestResponse = CreateBillingCustomerSyncRequestResponses[keyof CreateBillingCustomerSyncRequestResponses];
+
+export type GetBillingSubscriptionData = {
+    body?: never;
+    path: {
+        projectId: string;
+        environmentId: string;
+        instanceId: string;
+    };
+    query?: never;
+    url: '/v1/projects/{projectId}/environments/{environmentId}/billing/subscriptions/{instanceId}';
+};
+
+export type GetBillingSubscriptionErrors = {
+    /**
+     * Stable machine-readable failure.
+     */
+    401: ErrorEnvelope;
+    /**
+     * Stable machine-readable failure.
+     */
+    403: ErrorEnvelope;
+    /**
+     * Stable machine-readable failure.
+     */
+    404: ErrorEnvelope;
+    /**
+     * Stable machine-readable failure.
+     */
+    409: ErrorEnvelope;
+    /**
+     * Stable machine-readable failure.
+     */
+    503: ErrorEnvelope;
+};
+
+export type GetBillingSubscriptionError = GetBillingSubscriptionErrors[keyof GetBillingSubscriptionErrors];
+
+export type GetBillingSubscriptionResponses = {
+    /**
+     * The Subscription Instance.
+     */
+    200: {
+        data?: BillingSubscriptionSnapshot;
+    };
+};
+
+export type GetBillingSubscriptionResponse = GetBillingSubscriptionResponses[keyof GetBillingSubscriptionResponses];
+
+export type ListBillingSubscriptionTimelineData = {
+    body?: never;
+    path: {
+        projectId: string;
+        environmentId: string;
+        instanceId: string;
+    };
+    query?: {
+        limit?: number;
+        /**
+         * Opaque cursor from the immediately preceding list response. Malformed or stale values return validation_failed.
+         */
+        cursor?: string;
+    };
+    url: '/v1/projects/{projectId}/environments/{environmentId}/billing/subscriptions/{instanceId}/timeline';
+};
+
+export type ListBillingSubscriptionTimelineErrors = {
+    /**
+     * Stable machine-readable failure.
+     */
+    401: ErrorEnvelope;
+    /**
+     * Stable machine-readable failure.
+     */
+    403: ErrorEnvelope;
+    /**
+     * Stable machine-readable failure.
+     */
+    404: ErrorEnvelope;
+    /**
+     * Stable machine-readable failure.
+     */
+    409: ErrorEnvelope;
+    /**
+     * Stable machine-readable failure.
+     */
+    503: ErrorEnvelope;
+};
+
+export type ListBillingSubscriptionTimelineError = ListBillingSubscriptionTimelineErrors[keyof ListBillingSubscriptionTimelineErrors];
+
+export type ListBillingSubscriptionTimelineResponses = {
+    /**
+     * Timeline entries.
+     */
+    200: {
+        data?: {
+            items?: Array<BillingTimelineEntry>;
+            nextCursor?: string;
+        };
+    };
+};
+
+export type ListBillingSubscriptionTimelineResponse = ListBillingSubscriptionTimelineResponses[keyof ListBillingSubscriptionTimelineResponses];
+
+export type ListBillingRestoreJobsData = {
+    body?: never;
+    path: {
+        projectId: string;
+        environmentId: string;
+    };
+    query?: {
+        billingCustomerId?: string;
+        limit?: number;
+        /**
+         * Opaque cursor from the immediately preceding list response. Malformed or stale values return validation_failed.
+         */
+        cursor?: string;
+    };
+    url: '/v1/projects/{projectId}/environments/{environmentId}/billing/restore-jobs';
+};
+
+export type ListBillingRestoreJobsErrors = {
+    /**
+     * Stable machine-readable failure.
+     */
+    401: ErrorEnvelope;
+    /**
+     * Stable machine-readable failure.
+     */
+    403: ErrorEnvelope;
+    /**
+     * Stable machine-readable failure.
+     */
+    404: ErrorEnvelope;
+    /**
+     * Stable machine-readable failure.
+     */
+    409: ErrorEnvelope;
+    /**
+     * Stable machine-readable failure.
+     */
+    503: ErrorEnvelope;
+};
+
+export type ListBillingRestoreJobsError = ListBillingRestoreJobsErrors[keyof ListBillingRestoreJobsErrors];
+
+export type ListBillingRestoreJobsResponses = {
+    /**
+     * Restore jobs.
+     */
+    200: {
+        data?: {
+            items?: Array<BillingRestoreJob>;
+            nextCursor?: string;
+        };
+    };
+};
+
+export type ListBillingRestoreJobsResponse = ListBillingRestoreJobsResponses[keyof ListBillingRestoreJobsResponses];
+
+export type GetBillingRestoreJobData = {
+    body?: never;
+    path: {
+        projectId: string;
+        environmentId: string;
+        restoreId: string;
+    };
+    query?: never;
+    url: '/v1/projects/{projectId}/environments/{environmentId}/billing/restore-jobs/{restoreId}';
+};
+
+export type GetBillingRestoreJobErrors = {
+    /**
+     * Stable machine-readable failure.
+     */
+    401: ErrorEnvelope;
+    /**
+     * Stable machine-readable failure.
+     */
+    403: ErrorEnvelope;
+    /**
+     * Stable machine-readable failure.
+     */
+    404: ErrorEnvelope;
+    /**
+     * Stable machine-readable failure.
+     */
+    409: ErrorEnvelope;
+    /**
+     * Stable machine-readable failure.
+     */
+    503: ErrorEnvelope;
+};
+
+export type GetBillingRestoreJobError = GetBillingRestoreJobErrors[keyof GetBillingRestoreJobErrors];
+
+export type GetBillingRestoreJobResponses = {
+    /**
+     * The restore job.
+     */
+    200: {
+        data?: BillingRestoreJob;
+    };
+};
+
+export type GetBillingRestoreJobResponse = GetBillingRestoreJobResponses[keyof GetBillingRestoreJobResponses];
+
+export type ListOperatorBillingIdentityConflictsData = {
+    body?: never;
+    path: {
+        projectId: string;
+    };
+    query?: {
+        status?: 'open' | 'resolved';
+    };
+    url: '/v1/projects/{projectId}/billing/identity-conflicts';
+};
+
+export type ListOperatorBillingIdentityConflictsErrors = {
+    /**
+     * Stable machine-readable failure.
+     */
+    401: ErrorEnvelope;
+    /**
+     * Stable machine-readable failure.
+     */
+    403: ErrorEnvelope;
+    /**
+     * Stable machine-readable failure.
+     */
+    404: ErrorEnvelope;
+    /**
+     * Stable machine-readable failure.
+     */
+    409: ErrorEnvelope;
+    /**
+     * Stable machine-readable failure.
+     */
+    422: ErrorEnvelope;
+    /**
+     * Stable machine-readable failure.
+     */
+    503: ErrorEnvelope;
+};
+
+export type ListOperatorBillingIdentityConflictsError = ListOperatorBillingIdentityConflictsErrors[keyof ListOperatorBillingIdentityConflictsErrors];
+
+export type ListOperatorBillingIdentityConflictsResponses = {
+    /**
+     * Identity conflicts.
+     */
+    200: {
+        data?: {
+            items?: Array<OperatorBillingIdentityConflict>;
+        };
+    };
+};
+
+export type ListOperatorBillingIdentityConflictsResponse = ListOperatorBillingIdentityConflictsResponses[keyof ListOperatorBillingIdentityConflictsResponses];
+
+export type GetOperatorBillingIdentityConflictData = {
+    body?: never;
+    path: {
+        projectId: string;
+        conflictId: string;
+    };
+    query?: never;
+    url: '/v1/projects/{projectId}/billing/identity-conflicts/{conflictId}';
+};
+
+export type GetOperatorBillingIdentityConflictErrors = {
+    /**
+     * Stable machine-readable failure.
+     */
+    401: ErrorEnvelope;
+    /**
+     * Stable machine-readable failure.
+     */
+    403: ErrorEnvelope;
+    /**
+     * Stable machine-readable failure.
+     */
+    404: ErrorEnvelope;
+    /**
+     * Stable machine-readable failure.
+     */
+    409: ErrorEnvelope;
+    /**
+     * Stable machine-readable failure.
+     */
+    503: ErrorEnvelope;
+};
+
+export type GetOperatorBillingIdentityConflictError = GetOperatorBillingIdentityConflictErrors[keyof GetOperatorBillingIdentityConflictErrors];
+
+export type GetOperatorBillingIdentityConflictResponses = {
+    /**
+     * The conflict.
+     */
+    200: {
+        data?: OperatorBillingIdentityConflictDetail;
+    };
+};
+
+export type GetOperatorBillingIdentityConflictResponse = GetOperatorBillingIdentityConflictResponses[keyof GetOperatorBillingIdentityConflictResponses];
+
+export type ResolveBillingIdentityConflictData = {
+    body: ResolveIdentityConflictRequest;
+    path: {
+        projectId: string;
+        conflictId: string;
+    };
+    query?: never;
+    url: '/v1/projects/{projectId}/billing/identity-conflicts/{conflictId}/resolution';
+};
+
+export type ResolveBillingIdentityConflictErrors = {
+    /**
+     * Stable machine-readable failure.
+     */
+    401: ErrorEnvelope;
+    /**
+     * Stable machine-readable failure.
+     */
+    403: ErrorEnvelope;
+    /**
+     * Stable machine-readable failure.
+     */
+    404: ErrorEnvelope;
+    /**
+     * Stable machine-readable failure.
+     */
+    409: ErrorEnvelope;
+    /**
+     * Stable machine-readable failure.
+     */
+    422: ErrorEnvelope;
+    /**
+     * Stable machine-readable failure.
+     */
+    429: ErrorEnvelope;
+    /**
+     * Stable machine-readable failure.
+     */
+    503: ErrorEnvelope;
+};
+
+export type ResolveBillingIdentityConflictError = ResolveBillingIdentityConflictErrors[keyof ResolveBillingIdentityConflictErrors];
+
+export type ResolveBillingIdentityConflictResponses = {
+    /**
+     * The resolved conflict.
+     */
+    200: {
+        data?: OperatorBillingIdentityConflict;
+    };
+};
+
+export type ResolveBillingIdentityConflictResponse = ResolveBillingIdentityConflictResponses[keyof ResolveBillingIdentityConflictResponses];
 
 export type ListProductEntitlementGrantVersionsData = {
     body?: never;
