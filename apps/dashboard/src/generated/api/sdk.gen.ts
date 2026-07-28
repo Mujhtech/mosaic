@@ -2075,6 +2075,16 @@ export const submitServerTransactionObservation = <ThrowOnError extends boolean 
 
 /**
  * Enable or disable Mosaic Billing for a Project. Off by default. Owner or admin only.
+ *
+ * Disabling is refused with `409 store_credentials_still_active` while any Store Server
+ * Credential is active. Disabling with a credential in place would not stop ingestion: Apple
+ * keeps posting to an endpoint whose intake token still resolves, and every refusal spends
+ * one of five non-renewable delivery attempts. Revoking the credential is what actually stops
+ * the store, so the switch requires it first and then means exactly what it says.
+ *
+ * While disabled, notification intake, the RTDN pull consumer, and the validation,
+ * reconciliation, and replay workers all skip the Project as defense in depth.
+ *
  */
 export const updateBillingSettings = <ThrowOnError extends boolean = false>(options: Options<UpdateBillingSettingsData, ThrowOnError>): RequestResult<UpdateBillingSettingsResponses, UpdateBillingSettingsErrors, ThrowOnError> => (options.client ?? client).put<UpdateBillingSettingsResponses, UpdateBillingSettingsErrors, ThrowOnError>({
     security: [{

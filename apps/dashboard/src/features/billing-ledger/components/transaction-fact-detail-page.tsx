@@ -17,6 +17,7 @@ import { RawInputPanel } from "@/features/billing-ledger/components/raw-input-pa
 import { ReplayPanel } from "@/features/billing-ledger/components/replay-panel"
 import { ValidationAttemptsPanel } from "@/features/billing-ledger/components/validation-attempts-panel"
 import { createReplayJobMutationOptions } from "@/features/billing-ledger/mutations/replay-mutations"
+import { replayJobsQueryOptions } from "@/features/billing-ledger/queries/replay-queries"
 import {
   billingLedgerQueryOptions,
   transactionFactQueryOptions,
@@ -60,12 +61,19 @@ export function TransactionFactDetailPage({
   const environments = useQuery({ ...environmentsQueryOptions(projectId), enabled: scopeReady })
   const applications = useQuery({ ...applicationsQueryOptions(projectId), enabled: scopeReady })
   const products = useQuery({ ...productsQueryOptions(projectId), enabled: scopeReady })
+  const rawInputId = fact.data?.sourceRawInputId ?? ""
   const attempts = useQuery({
-    ...validationAttemptsQueryOptions(projectId, environmentId),
-    enabled: scopeReady,
+    ...validationAttemptsQueryOptions(projectId, environmentId, rawInputId),
+    enabled: scopeReady && rawInputId.length > 0,
   })
   const ledger = useQuery({
     ...billingLedgerQueryOptions(projectId, environmentId),
+    enabled: scopeReady,
+  })
+  // Replay runs on a worker. Its job rows are what turn "Re-run validation"
+  // from a button that does nothing visible into an operation with feedback.
+  const replayJobs = useQuery({
+    ...replayJobsQueryOptions(projectId, environmentId),
     enabled: scopeReady,
   })
   // Sibling facts share the source input; they are what a replay comparison
@@ -86,8 +94,12 @@ export function TransactionFactDetailPage({
     applications.data?.items.find((item) => item.id === record?.applicationId)?.name ??
     record?.applicationId ??
     "—"
-  const relatedAttempts = (attempts.data ?? []).filter(
-    (attempt) => record?.sourceRawInputId && attempt.rawInputId === record.sourceRawInputId,
+  // Scoped by the API to this input, so the list is the input's complete
+  // attempt history rather than whatever fell inside an Environment-wide page.
+  const relatedAttempts = attempts.data ?? []
+  // Replay jobs for this input, plus window replays that could have touched it.
+  const relatedReplayJobs = (replayJobs.data ?? []).filter(
+    (job) => !job.rawInputId || job.rawInputId === rawInputId,
   )
   const factsByAttemptId = new Map<string, TransactionFact>(
     (siblingFacts.data?.items ?? []).flatMap((item) =>
@@ -114,8 +126,8 @@ export function TransactionFactDetailPage({
         (fact.isPending ||
           environments.isPending ||
           applications.isPending ||
-          attempts.isPending ||
-          ledger.isPending)),
+          ledger.isPending ||
+          (rawInputId.length > 0 && attempts.isPending))),
     loadingDescription: "Loading the Transaction Fact, its attempts, and its ledger trail.",
     onRetry: () => {
       void fact.refetch()
@@ -242,6 +254,8 @@ export function TransactionFactDetailPage({
               canManage={access.canManage}
               factsByAttemptId={factsByAttemptId}
               isReplaying={replay.isPending}
+              jobs={relatedReplayJobs}
+              justQueued={replay.isSuccess}
               {...(record.mosaicProductId
                 ? {
                     mappingHistoryHref: `${projectBase}/catalog/products/${encodeURIComponent(record.mosaicProductId)}`,

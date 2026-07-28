@@ -111,3 +111,21 @@ export function billingHealthHref(scope: WorkspaceScope) {
   const base = billingEnvironmentBase(scope)
   return base ? `${base}/health` : undefined
 }
+
+/**
+ * Names the destination a `returnTo` points back to.
+ *
+ * A recovery round trip sends an operator from the surface that found a problem
+ * to the surface that fixes it. On arrival the way back has to say where it
+ * goes, and only the sending surface knows — so the label is derived from the
+ * path shape rather than hard-coded by whichever page happens to render it.
+ */
+export function describeReturnDestination(href: string | undefined) {
+  if (!href) return undefined
+  if (href.includes("/billing/") && href.includes("/quarantine/")) {
+    return "Return to the quarantine record"
+  }
+  if (href.includes("/billing/")) return "Return to Mosaic Billing"
+  if (href.includes("/studio-hosted/")) return "Return to Publish review"
+  return "Return to where you started"
+}

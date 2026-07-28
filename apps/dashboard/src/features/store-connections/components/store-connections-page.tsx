@@ -20,13 +20,16 @@ import { ScopeMismatchRecovery } from "@/features/organizations/components/scope
 import { WorkspacePage, WorkflowPanel } from "@/features/organizations/components/workspace-page"
 import { useValidatedProjectScope } from "@/features/projects/hooks/use-validated-project-scope"
 import { applicationsQueryOptions } from "@/features/projects/queries/projects-query"
+import { BillingEnablementPanel } from "@/features/store-connections/components/billing-enablement-panel"
 import { ConnectStoreCredentialSheet } from "@/features/store-connections/components/connect-store-credential-sheet"
 import { NotificationEndpointPanel } from "@/features/store-connections/components/notification-endpoint-panel"
+import { updateBillingSettingsMutationOptions } from "@/features/store-connections/mutations/billing-settings-mutations"
 import { createStoreCredentialMutationOptions } from "@/features/store-connections/mutations/store-credential-mutations"
 import {
   clearStoreCredentialSecretMutationCache,
   transferStoreCredentialEndpoint,
 } from "@/features/store-connections/mutations/store-credential-secret-cache"
+import { billingSettingsQueryOptions } from "@/features/store-connections/queries/billing-settings-queries"
 import { storeCredentialsQueryOptions } from "@/features/store-connections/queries/store-connection-queries"
 import {
   storeCredentialHealthLabel,
@@ -52,7 +55,15 @@ export function StoreConnectionsPage({ organizationId, projectId }: StoreConnect
   })
   const environments = useQuery({ ...environmentsQueryOptions(projectId), enabled: scopeReady })
   const applications = useQuery({ ...applicationsQueryOptions(projectId), enabled: scopeReady })
+  // Billing enablement is a Project-level flag with no read endpoint of its
+  // own, so it is probed through billing health on any one Environment.
+  const probeEnvironmentId = environments.data?.items[0]?.id ?? ""
+  const billingSettings = useQuery({
+    ...billingSettingsQueryOptions(projectId, probeEnvironmentId),
+    enabled: scopeReady && probeEnvironmentId.length > 0,
+  })
   const create = useMutation(createStoreCredentialMutationOptions(projectId, queryClient))
+  const updateSettings = useMutation(updateBillingSettingsMutationOptions(projectId, queryClient))
 
   function sanitizeSecretMutationState() {
     create.reset()
@@ -65,10 +76,15 @@ export function StoreConnectionsPage({ organizationId, projectId }: StoreConnect
   }
 
   const items = credentials.data ?? []
+  const activeCredentialCount = items.filter((credential) => credential.status !== "revoked").length
+  const billingEnabled = billingSettings.data?.billingEnabled ?? null
   const error = project.error ?? credentials.error ?? environments.error ?? applications.error
   const state = resolveHostedQueryState({
-    emptyDescription: `Add an Apple or Google Store Server Credential to start recording store-confirmed transaction facts. ${BILLING_OPTIONAL_NOTE}`,
-    emptyTitle: "Mosaic Billing is not set up for this Project",
+    emptyDescription:
+      billingEnabled === false
+        ? `Turn Mosaic Billing on above, then add an Apple or Google Store Server Credential. ${BILLING_OPTIONAL_NOTE}`
+        : `Add an Apple or Google Store Server Credential to start recording store-confirmed transaction facts. ${BILLING_OPTIONAL_NOTE}`,
+    emptyTitle: "No Store Server Credential yet",
     error,
     isEmpty: scopeReady && credentials.isSuccess && items.length === 0,
     isPending:
@@ -123,30 +139,28 @@ export function StoreConnectionsPage({ organizationId, projectId }: StoreConnect
           />
         ) : null
       }
-      description="Store Server Credentials let Mosaic ask Apple and Google whether a transaction is authentic. Secret material is written once and never returned."
-      eyebrow="Mosaic Billing"
+      description="Set Mosaic Billing up for this Project here: turn it on, then give Mosaic the credentials it needs to ask Apple and Google whether a transaction is authentic. Secret material is written once and never returned."
+      eyebrow="Mosaic Billing · Setup"
       title="Store Server Credentials"
     >
       <BillingBoundaryNote>{ENVIRONMENT_DISTINCTION_NOTE}</BillingBoundaryNote>
+
+      <BillingEnablementPanel
+        activeCredentialCount={activeCredentialCount}
+        billingEnabled={billingEnabled}
+        canManage={access.canManage}
+        error={updateSettings.error}
+        isPending={billingSettings.isPending && probeEnvironmentId.length > 0}
+        isSaving={updateSettings.isPending}
+        membersHref={`/organizations/${encodeURIComponent(organizationId)}/members`}
+        onChange={(nextEnabled) => updateSettings.mutate({ billingEnabled: nextEnabled })}
+      />
 
       {revealed?.notificationEndpointUrl ? (
         <NotificationEndpointPanel
           endpointUrl={revealed.notificationEndpointUrl}
           onDismiss={dismissEndpoint}
         />
-      ) : null}
-
-      {!access.canManage && !access.isPending ? (
-        <p className="text-muted-foreground text-sm">
-          Viewing only. Ask an Organization Owner or Admin to add or rotate a Store Server
-          Credential.{" "}
-          <a
-            className="text-primary font-semibold"
-            href={`/organizations/${encodeURIComponent(organizationId)}/members`}
-          >
-            Open Members
-          </a>
-        </p>
       ) : null}
 
       {create.error ? (

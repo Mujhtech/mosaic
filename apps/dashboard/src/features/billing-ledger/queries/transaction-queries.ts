@@ -18,7 +18,9 @@ import { generatedDashboardClient } from "@/lib/api/generated-dashboard-client"
  * the filter values that are already in the URL.
  */
 export const transactionKeys = {
-  attempts: (projectId: string, environmentId: string) =>
+  attempts: (projectId: string, environmentId: string, rawInputId: string) =>
+    ["billing-ledger", projectId, environmentId, "validation-attempts", rawInputId] as const,
+  attemptsScope: (projectId: string, environmentId: string) =>
     ["billing-ledger", projectId, environmentId, "validation-attempts"] as const,
   fact: (projectId: string, environmentId: string, factId: string) =>
     ["billing-ledger", projectId, environmentId, "fact", factId] as const,
@@ -91,18 +93,31 @@ export function transactionFactQueryOptions(
 }
 
 /**
- * Validation Attempts are listed per Environment, not per input, so callers
- * filter by `rawInputId` after loading. The list stays newest-first and is
- * never trimmed: a superseded attempt is still part of the audit trail.
+ * One input's complete attempt history.
+ *
+ * The `rawInputId` filter is applied by the API. Filtering an Environment-wide
+ * page client-side was wrong in a way that mattered: in an Environment with
+ * real traffic the attempts belonging to the opened record fall outside the
+ * window, and the panel then asserted "no attempt recorded" about a record
+ * whose own attempt count said otherwise. For a phase whose promise is a
+ * preserved, readable attempt history, that claim is worse than showing
+ * nothing.
+ *
+ * The list stays newest-first and is never trimmed: a superseded attempt is
+ * still part of the audit trail.
  */
-export function validationAttemptsQueryOptions(projectId: string, environmentId: string) {
+export function validationAttemptsQueryOptions(
+  projectId: string,
+  environmentId: string,
+  rawInputId: string,
+) {
   return queryOptions({
-    queryKey: transactionKeys.attempts(projectId, environmentId),
+    queryKey: transactionKeys.attempts(projectId, environmentId, rawInputId),
     queryFn: async ({ signal }) => {
       const result = await listValidationAttempts({
         client: generatedDashboardClient,
         path: { environmentId, projectId },
-        query: { limit: 100 },
+        query: { limit: 100, rawInputId },
         signal,
         throwOnError: true,
       })

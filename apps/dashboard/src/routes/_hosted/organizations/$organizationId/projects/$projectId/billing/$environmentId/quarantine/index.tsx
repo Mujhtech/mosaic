@@ -17,6 +17,10 @@ export const Route = createFileRoute(
   // Unknown values fall back to "no filter" rather than throwing: a stale link
   // should still render the page it names.
   validateSearch: (search: Record<string, unknown>): QuarantineListFilters => ({
+    cursor:
+      typeof search.cursor === "string" && search.cursor.length > 0 && search.cursor.length <= 512
+        ? search.cursor
+        : undefined,
     provider: PROVIDERS.find((value) => value === search.provider),
     reasonCode:
       typeof search.reasonCode === "string" && REASON_CODE.test(search.reasonCode)

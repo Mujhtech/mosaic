@@ -15,6 +15,7 @@ import {
 } from "@/components/ui/sheet"
 import {
   providerLabel,
+  reconciliationStrategyLabel,
   storeEnvironmentLabel,
 } from "@/features/billing-ledger/types/billing-vocabulary"
 import {
@@ -29,18 +30,19 @@ import type { CreateReconciliationRunRequest, StoreServerCredential } from "@/ge
 const fieldClass =
   "border-input bg-background focus-visible:border-ring focus-visible:ring-ring/40 h-9 w-full rounded border px-3 text-sm outline-none focus-visible:ring-3"
 
+/**
+ * The strategies the API accepts today.
+ *
+ * `apple_transaction_history` is deliberately absent: the worker has no run
+ * loop for it, so offering it produced a queued run that failed later with
+ * `unsupported_strategy` and no explanation anywhere the operator could see.
+ * It stays in the stored enumeration for forward compatibility, which is why
+ * the read side still labels it on historical runs.
+ */
 type Strategy = NonNullable<CreateReconciliationRunRequest["strategy"]>
 
-const STRATEGY_LABELS: Record<Strategy, string> = {
-  apple_notification_history: "Apple · notification history",
-  apple_transaction_history: "Apple · transaction history",
-  google_token_requery: "Google · re-query known purchases",
-}
-
 function strategiesFor(provider: string | undefined): readonly Strategy[] {
-  return provider === "google_play"
-    ? ["google_token_requery"]
-    : ["apple_notification_history", "apple_transaction_history"]
+  return provider === "google_play" ? ["google_token_requery"] : ["apple_notification_history"]
 }
 
 interface CreateReconciliationRunSheetProps {
@@ -197,7 +199,7 @@ export function CreateReconciliationRunSheet({
                   >
                     {strategiesFor(selected?.provider).map((strategy) => (
                       <option key={strategy} value={strategy}>
-                        {STRATEGY_LABELS[strategy]}
+                        {reconciliationStrategyLabel(strategy)}
                       </option>
                     ))}
                   </select>

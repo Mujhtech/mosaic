@@ -11,7 +11,12 @@ import {
   ProviderBadge,
   StatusPill,
 } from "@/features/billing-ledger/components/billing-chrome"
-import { formatBillingTimestamp } from "@/features/billing-ledger/types/billing-vocabulary"
+import {
+  formatBillingTimestamp,
+  reconciliationStrategyLabel,
+  runStatusLabel,
+  runTriggerLabel,
+} from "@/features/billing-ledger/types/billing-vocabulary"
 import {
   reconciliationRunIsTerminal,
   reconciliationRunQueryOptions,
@@ -20,6 +25,8 @@ import { environmentsQueryOptions } from "@/features/environments/queries/enviro
 import { ScopeMismatchRecovery } from "@/features/organizations/components/scope-mismatch-recovery"
 import { WorkspacePage, WorkflowPanel } from "@/features/organizations/components/workspace-page"
 import { useValidatedProjectScope } from "@/features/projects/hooks/use-validated-project-scope"
+import { storeCredentialsQueryOptions } from "@/features/store-connections/queries/store-connection-queries"
+import { storeConnectionHref } from "@/lib/routing/workspace-hrefs"
 
 interface ReconciliationRunDetailPageProps {
   environmentId: string
@@ -40,20 +47,30 @@ export function ReconciliationRunDetailPage({
     ...reconciliationRunQueryOptions(projectId, environmentId, runId),
     enabled: scopeReady,
   })
+  const credentials = useQuery({
+    ...storeCredentialsQueryOptions(projectId),
+    enabled: scopeReady,
+  })
 
   const data = run.data
   const environmentName =
     environments.data?.items.find((item) => item.id === environmentId)?.name ?? environmentId
   const terminal = reconciliationRunIsTerminal(data ?? undefined)
+  // The run carries no Store Environment of its own; it is fixed by the
+  // credential the run authenticated with, so it is read from there rather
+  // than rendered as "Unclassified" on an operator surface.
+  const credential = (credentials.data ?? []).find((item) => item.id === data?.credentialId)
 
-  const error = project.error ?? environments.error ?? run.error
+  const error = project.error ?? environments.error ?? run.error ?? credentials.error
   const state = resolveHostedQueryState({
     emptyDescription:
       "This run is no longer in the recent reconciliation history for this Mosaic Environment.",
     emptyTitle: "Reconciliation run unavailable",
     error,
     isEmpty: run.isSuccess && !data,
-    isPending: project.isPending || (scopeReady && (environments.isPending || run.isPending)),
+    isPending:
+      project.isPending ||
+      (scopeReady && (environments.isPending || run.isPending || credentials.isPending)),
     loadingDescription: "Loading the reconciliation run.",
     onRetry: () => {
       void run.refetch()
@@ -103,10 +120,10 @@ export function ReconciliationRunDetailPage({
               <ProviderBadge provider={data.provider} />
               <EnvironmentBadges
                 mosaicEnvironmentName={environmentName}
-                storeEnvironment={undefined}
+                storeEnvironment={credential?.storeEnvironment}
               />
               <StatusPill
-                label={data.status ?? "queued"}
+                label={runStatusLabel(data.status)}
                 tone={
                   data.status === "completed"
                     ? "positive"
@@ -127,24 +144,44 @@ export function ReconciliationRunDetailPage({
               </h2>
               <p className="text-muted-foreground mt-1 text-sm leading-6">
                 {terminal
-                  ? `Examined ${data.examinedCount ?? 0} store record(s): ${data.discoveredCount ?? 0} newly ingested, ${data.duplicateCount ?? 0} already recorded, ${data.failureCount ?? 0} failed.`
+                  ? `Examined ${data.examinedCount ?? 0} store record(s): ${data.discoveredCount ?? 0} newly ingested, ${data.duplicateCount ?? 0} already recorded, ${data.conflictCount ?? 0} conflicting with a recorded fact, ${data.failureCount ?? 0} failed.`
                   : `Mosaic is walking store history for this window. Examined ${data.examinedCount ?? 0} record(s) so far. This status refreshes automatically.`}
               </p>
+              {(data.conflictCount ?? 0) > 0 ? (
+                <div className="border-destructive/30 bg-destructive/5 mt-3 rounded border p-3">
+                  <p className="text-destructive text-sm font-semibold">
+                    {data.conflictCount} discovery contradicted a fact already on record
+                  </p>
+                  <p className="text-muted-foreground mt-1 text-sm leading-6">
+                    Nothing was overwritten — both facts stand — and each conflict also opened a
+                    quarantine record for an operator to judge.
+                  </p>
+                  <a
+                    className="text-primary mt-2 inline-flex text-sm font-semibold"
+                    href={`${base}/quarantine?status=open`}
+                  >
+                    Review the conflicts
+                  </a>
+                </div>
+              ) : null}
               {data.status === "failed" || data.status === "partial" ? (
                 <div className="mt-3">
                   <p className="text-destructive text-sm" role="alert">
                     The run stopped with code {data.lastErrorCode ?? "unknown_error"}.
                   </p>
                   <p className="text-muted-foreground mt-1 text-sm leading-6">
-                    Recovery is a new run over the remaining window, not a restart of this one: the
-                    original run stays as the record of what was examined, and everything discovered
-                    twice is deduplicated.
+                    Recovery is a new run, not a restart of this one: the original stays as the
+                    record of what was examined. Re-running the same window is safe — reconciliation
+                    is idempotent, so everything discovered twice is deduplicated rather than
+                    recorded again — and the run does not report how far through the window it got,
+                    so covering the whole window again is also the only reliable option.
                   </p>
                   <a
                     className={`${buttonVariants({ size: "sm", variant: "outline" })} mt-3`}
                     href={`${base}/reconciliation`}
                   >
-                    Start a new run
+                    Start a new run over{" "}
+                    {`${formatBillingTimestamp(data.windowStart)} → ${formatBillingTimestamp(data.windowEnd)}`}
                   </a>
                 </div>
               ) : null}
@@ -155,9 +192,29 @@ export function ReconciliationRunDetailPage({
               title="Run summary"
             >
               <dl>
-                <DefinitionRow label="Strategy" value={data.strategy ?? "—"} />
-                <DefinitionRow label="Trigger" value={data.trigger ?? "—"} />
-                <DefinitionRow label="Store Server Credential" value={data.credentialId ?? "—"} />
+                <DefinitionRow
+                  label="Strategy"
+                  value={reconciliationStrategyLabel(data.strategy)}
+                />
+                <DefinitionRow label="Trigger" value={runTriggerLabel(data.trigger)} />
+                <DefinitionRow
+                  label="Store Server Credential"
+                  value={
+                    data.credentialId ? (
+                      <a
+                        className="text-primary font-medium"
+                        href={
+                          storeConnectionHref({ organizationId, projectId }, data.credentialId) ??
+                          "#"
+                        }
+                      >
+                        {credential?.name ?? data.credentialId}
+                      </a>
+                    ) : (
+                      "—"
+                    )
+                  }
+                />
                 <DefinitionRow
                   label="Window"
                   value={`${formatBillingTimestamp(data.windowStart)} → ${formatBillingTimestamp(data.windowEnd)}`}
@@ -175,10 +232,28 @@ export function ReconciliationRunDetailPage({
                   label="Already recorded (deduplicated)"
                   value={String(data.duplicateCount ?? 0)}
                 />
+                {/* Distinct from "discovered": a conflict contradicts a fact
+                    already on record, which is what Gate 9A asks reconciliation
+                    to detect. Both facts stand. */}
+                <DefinitionRow
+                  label="Conflicting with a recorded fact"
+                  value={
+                    (data.conflictCount ?? 0) > 0 ? (
+                      <a
+                        className="text-primary font-medium"
+                        href={`${base}/quarantine?status=open`}
+                      >
+                        {data.conflictCount} · open quarantine
+                      </a>
+                    ) : (
+                      "0"
+                    )
+                  }
+                />
                 <DefinitionRow
                   label="Failed"
                   value={
-                    <a className="text-primary font-medium" href={`${base}/quarantine`}>
+                    <a className="text-primary font-medium" href={`${base}/quarantine?status=open`}>
                       {data.failureCount ?? 0} · open quarantine
                     </a>
                   }

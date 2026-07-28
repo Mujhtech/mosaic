@@ -251,6 +251,12 @@ const CODE_DESCRIPTORS: Record<string, CodeDescriptor> = {
     description:
       "The reconciliation window was rejected. A run must cover a bounded past range, and it may not exceed 180 days — the retention Apple applies to its own notification history.",
   },
+  store_credentials_still_active: {
+    description:
+      "Mosaic Billing cannot be turned off while a Store Server Credential is active. Turning it off alone would not stop the store: Apple keeps posting to an endpoint whose intake token still resolves, and every refusal spends one of its five non-renewable delivery attempts. Revoke the credentials first.",
+    href: storeConnectionsHref,
+    label: "Open Store Server Credentials",
+  },
   store_credential_invalid: {
     description:
       "The stored Store Server Credential no longer authenticates against the store, so validation cannot proceed. Rotate the credential with a current key; nothing already recorded is removed.",

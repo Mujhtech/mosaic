@@ -17,6 +17,7 @@ import {
   formatBillingTimestamp,
   quarantineReasonExplanation,
   quarantineReasonLabel,
+  quarantineSeverityLabel,
   quarantineStatusLabel,
 } from "@/features/billing-ledger/types/billing-vocabulary"
 import { QuarantineRecoveryActionsPanel } from "@/features/billing-operations/components/quarantine-recovery-actions"
@@ -29,8 +30,9 @@ import { environmentsQueryOptions } from "@/features/environments/queries/enviro
 import { ScopeMismatchRecovery } from "@/features/organizations/components/scope-mismatch-recovery"
 import { WorkspacePage, WorkflowPanel } from "@/features/organizations/components/workspace-page"
 import { useValidatedProjectScope } from "@/features/projects/hooks/use-validated-project-scope"
+import { applicationsQueryOptions } from "@/features/projects/queries/projects-query"
 import { useOrganizationAccess } from "@/hooks/use-organization-access"
-import { storeConnectionsHref } from "@/lib/routing/workspace-hrefs"
+import { appendSearch, storeConnectionsHref } from "@/lib/routing/workspace-hrefs"
 
 interface QuarantineDetailPageProps {
   environmentId: string
@@ -53,9 +55,11 @@ export function QuarantineDetailPage({
     enabled: scopeReady,
   })
   const environments = useQuery({ ...environmentsQueryOptions(projectId), enabled: scopeReady })
+  const applications = useQuery({ ...applicationsQueryOptions(projectId), enabled: scopeReady })
+  const rawInputId = record.data?.rawInputId ?? ""
   const attempts = useQuery({
-    ...validationAttemptsQueryOptions(projectId, environmentId),
-    enabled: scopeReady,
+    ...validationAttemptsQueryOptions(projectId, environmentId, rawInputId),
+    enabled: scopeReady && rawInputId.length > 0,
   })
   const retry = useMutation(
     retryQuarantinedInputMutationOptions(projectId, environmentId, recordId, queryClient),
@@ -67,9 +71,13 @@ export function QuarantineDetailPage({
   const data = record.data
   const environmentName =
     environments.data?.items.find((item) => item.id === environmentId)?.name ?? environmentId
-  const relatedAttempts = (attempts.data ?? []).filter(
-    (attempt) => data?.rawInputId && attempt.rawInputId === data.rawInputId,
-  )
+  // Scoped by the API to this record's input, so the panel shows the input's
+  // real attempt history rather than whatever fell inside an Environment page.
+  const relatedAttempts = attempts.data ?? []
+  const applicationName =
+    applications.data?.items.find((item) => item.id === data?.applicationId)?.name ??
+    data?.applicationId ??
+    "—"
 
   const error = project.error ?? record.error ?? environments.error ?? attempts.error
   const state = resolveHostedQueryState({
@@ -79,7 +87,11 @@ export function QuarantineDetailPage({
     isEmpty: record.isSuccess && !data,
     isPending:
       project.isPending ||
-      (scopeReady && (record.isPending || environments.isPending || attempts.isPending)),
+      (scopeReady &&
+        (record.isPending ||
+          environments.isPending ||
+          applications.isPending ||
+          (rawInputId.length > 0 && attempts.isPending))),
     loadingDescription: "Loading the quarantine record and its attempt history.",
     onRetry: () => {
       void record.refetch()
@@ -130,15 +142,21 @@ export function QuarantineDetailPage({
               <ProviderBadge provider={data.provider} />
               <EnvironmentBadges
                 mosaicEnvironmentName={environmentName}
-                storeEnvironment={undefined}
+                storeEnvironment={data.storeEnvironment}
               />
               <StatusPill
                 label={quarantineStatusLabel(data.status)}
                 tone={data.status === "open" ? "attention" : "neutral"}
               />
               <StatusPill
-                label={data.severity ?? "warning"}
-                tone={data.severity === "security" ? "negative" : "neutral"}
+                label={quarantineSeverityLabel(data.severity)}
+                tone={
+                  data.severity === "security"
+                    ? "negative"
+                    : data.severity === "error"
+                      ? "attention"
+                      : "neutral"
+                }
               />
             </div>
 
@@ -149,8 +167,14 @@ export function QuarantineDetailPage({
               <dl>
                 <DefinitionRow label="Reason code" value={data.reasonCode ?? "—"} />
                 <DefinitionRow label="Diagnostic code" value={data.diagnosticCode ?? "—"} />
+                {/* The store Product the input named. For product_unknown it is
+                    the single value the operator has to create a mapping for. */}
+                <DefinitionRow
+                  label="Store Product identifier"
+                  value={data.providerProductIdentifier ?? "Not recorded for this input"}
+                />
                 <DefinitionRow label="Raw Billing Input" value={data.rawInputId ?? "—"} />
-                <DefinitionRow label="Application" value={data.applicationId ?? "—"} />
+                <DefinitionRow label="Application" value={applicationName} />
                 <DefinitionRow
                   label="Affected scopes"
                   value={(data.scopes ?? []).join(", ") || "—"}
@@ -172,7 +196,21 @@ export function QuarantineDetailPage({
                     "None — this record has never been closed by a successful attempt"
                   }
                 />
-                <DefinitionRow label="Superseded by" value={data.supersededByRecordId ?? "—"} />
+                <DefinitionRow
+                  label="Superseded by"
+                  value={
+                    data.supersededByRecordId ? (
+                      <a
+                        className="text-primary font-medium"
+                        href={`${billingBase}/quarantine/${encodeURIComponent(data.supersededByRecordId)}`}
+                      >
+                        {data.supersededByRecordId}
+                      </a>
+                    ) : (
+                      "—"
+                    )
+                  }
+                />
               </dl>
               {data.status === "closed_after_success" ? (
                 <p className="text-muted-foreground mt-4 text-sm leading-6">
@@ -193,7 +231,17 @@ export function QuarantineDetailPage({
                 closeSuperseded.mutate({ supersededByRecordId })
               }
               onRetryValidation={() => retry.mutate()}
-              productMappingHref={`${projectBase}/catalog/products`}
+              {...(data.providerProductIdentifier
+                ? { providerProductIdentifier: data.providerProductIdentifier }
+                : {})}
+              // Carries the store Product identifier into the Product search and
+              // a return path back to this record, so the repair loop —
+              // quarantine → map the Product → re-run validation — can be walked
+              // without navigating back from memory.
+              productMappingHref={appendSearch(`${projectBase}/catalog/products`, {
+                returnTo: `${billingBase}/quarantine/${encodeURIComponent(recordId)}`,
+                search: data.providerProductIdentifier,
+              })}
               record={data}
               {...(retry.error ? { retryError: retry.error.message } : {})}
               storeConnectionsHref={storeConnectionsHref({ organizationId, projectId }) ?? "#"}

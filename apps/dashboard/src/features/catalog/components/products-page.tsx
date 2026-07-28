@@ -13,12 +13,19 @@ import { productsQueryOptions, type ProductFilters } from "@/features/catalog/qu
 import { WorkspacePage, WorkflowPanel } from "@/features/organizations/components/workspace-page"
 import { ScopeMismatchRecovery } from "@/features/organizations/components/scope-mismatch-recovery"
 import { useValidatedProjectScope } from "@/features/projects/hooks/use-validated-project-scope"
+import { describeReturnDestination } from "@/lib/routing/workspace-hrefs"
 
 interface ProductsPageProps {
   filters: ProductFilters
   onFiltersChange: (filters: ProductFilters) => void
   organizationId: string
   projectId: string
+  /**
+   * Where a recovery round trip came from. Mosaic Billing sends operators here
+   * from a quarantine record to map a store Product, and the way back has to
+   * survive the trip or the repair loop cannot be walked.
+   */
+  returnTo?: string
 }
 
 export function ProductsPage({
@@ -26,6 +33,7 @@ export function ProductsPage({
   onFiltersChange,
   organizationId,
   projectId,
+  returnTo,
 }: ProductsPageProps) {
   const queryClient = useQueryClient()
   const { project, scopeMismatch, scopeReady } = useValidatedProjectScope(organizationId, projectId)
@@ -88,6 +96,11 @@ export function ProductsPage({
       eyebrow="Catalog · Project-wide"
       title="Products"
     >
+      {returnTo ? (
+        <a className="text-primary inline-flex text-sm font-semibold" href={returnTo}>
+          {describeReturnDestination(returnTo)}
+        </a>
+      ) : null}
       <WorkflowPanel
         description="Import and synchronization begin from one explicit, tested Provider Connection."
         title="Connected Catalog"
@@ -173,9 +186,10 @@ export function ProductsPage({
                 <Link
                   className="text-primary text-sm font-medium hover:underline"
                   params={{ organizationId, productId: product.id, projectId }}
+                  search={returnTo ? { returnTo } : {}}
                   to="/organizations/$organizationId/projects/$projectId/catalog/products/$productId"
                 >
-                  View usage
+                  {returnTo ? "Open mappings" : "View usage"}
                 </Link>
               </li>
             ))}

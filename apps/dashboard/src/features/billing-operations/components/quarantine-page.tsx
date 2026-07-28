@@ -1,5 +1,6 @@
 import { useQuery } from "@tanstack/react-query"
 
+import { Button } from "@/components/ui/button"
 import { buttonVariants } from "@/components/ui/button-variants"
 import { EmptyState } from "@/components/feedback/empty-state"
 import {
@@ -21,7 +22,9 @@ import {
   formatBillingTimestamp,
   providerLabel,
   quarantineReasonLabel,
+  quarantineSeverityLabel,
   quarantineStatusLabel,
+  storeEnvironmentLabel,
 } from "@/features/billing-ledger/types/billing-vocabulary"
 import {
   quarantineRecordsQueryOptions,
@@ -59,8 +62,17 @@ export function QuarantinePage({
 
   const environmentName =
     environments.data?.items.find((item) => item.id === environmentId)?.name ?? environmentId
-  const items = records.data ?? []
-  const filtered = Object.values(filters).some(Boolean)
+  const items = records.data?.items ?? []
+  const nextCursor = records.data?.nextCursor
+  const { cursor: _cursor, ...activeFilters } = filters
+  void _cursor
+  const filtered = Object.values(activeFilters).some(Boolean)
+
+  // Any filter change invalidates the cursor: a cursor is only meaningful for
+  // the query that produced it.
+  function updateFilters(patch: Partial<QuarantineListFilters>) {
+    onFiltersChange({ ...activeFilters, ...patch })
+  }
 
   const error = project.error ?? environments.error ?? records.error
   const state = resolveHostedQueryState({
@@ -108,8 +120,7 @@ export function QuarantinePage({
             <select
               className={`${fieldClass} block`}
               onChange={(event) =>
-                onFiltersChange({
-                  ...filters,
+                updateFilters({
                   status:
                     event.currentTarget.value === ""
                       ? undefined
@@ -130,8 +141,7 @@ export function QuarantinePage({
             <select
               className={`${fieldClass} block`}
               onChange={(event) =>
-                onFiltersChange({
-                  ...filters,
+                updateFilters({
                   provider:
                     event.currentTarget.value === ""
                       ? undefined
@@ -145,6 +155,19 @@ export function QuarantinePage({
               <option value="google_play">{providerLabel("google_play")}</option>
             </select>
           </label>
+          {/* A reason-code filter can arrive from a health or ledger recovery
+              link. Without a visible control it would filter invisibly. */}
+          {filters.reasonCode ? (
+            <label className="space-y-1 text-sm font-medium">
+              Reason
+              <input
+                className={`${fieldClass} text-muted-foreground block`}
+                disabled
+                readOnly
+                value={quarantineReasonLabel(filters.reasonCode)}
+              />
+            </label>
+          ) : null}
           <label className="space-y-1 text-sm font-medium">
             Mosaic Environment
             <input
@@ -153,41 +176,71 @@ export function QuarantinePage({
               readOnly
               value={environmentName}
             />
+            <span className="text-muted-foreground block text-xs font-normal">
+              Fixed by the address. It is the tenant boundary, never a filter.
+            </span>
           </label>
         </div>
+        {filtered ? (
+          <Button
+            className="mt-4"
+            onClick={() => onFiltersChange({})}
+            size="sm"
+            type="button"
+            variant="outline"
+          >
+            Clear filters
+          </Button>
+        ) : null}
       </WorkflowPanel>
 
       <HostedResourceBoundary state={state}>
         {items.length === 0 ? (
-          <EmptyState
-            action={
-              filtered ? (
-                <button
-                  className={buttonVariants({ variant: "outline" })}
-                  onClick={() => onFiltersChange({})}
-                  type="button"
-                >
-                  Clear filters
-                </button>
-              ) : (
-                <a className={buttonVariants({ variant: "outline" })} href={`${base}/transactions`}>
-                  Open the transaction ledger
-                </a>
-              )
-            }
-            description={
-              filtered
-                ? "Quarantine records exist in this Mosaic Environment, but none matches the current filters."
-                : "Every input Mosaic has accepted in this Mosaic Environment either produced a fact or is still being validated."
-            }
-            title={
-              filtered ? "No quarantine records match these filters" : "Nothing is quarantined"
-            }
-          />
+          <>
+            <EmptyState
+              action={
+                filtered ? (
+                  <button
+                    className={buttonVariants({ variant: "outline" })}
+                    onClick={() => onFiltersChange({})}
+                    type="button"
+                  >
+                    Clear filters
+                  </button>
+                ) : (
+                  <a
+                    className={buttonVariants({ variant: "outline" })}
+                    href={`${base}/transactions`}
+                  >
+                    Open the transaction ledger
+                  </a>
+                )
+              }
+              description={
+                filters.cursor
+                  ? "This page of the quarantine history is empty. Return to the first page, or continue forward."
+                  : filtered
+                    ? "Quarantine records exist in this Mosaic Environment, but none matches the current filters."
+                    : "Every input Mosaic has accepted in this Mosaic Environment either produced a fact or is still being validated."
+              }
+              title={
+                filtered ? "No quarantine records match these filters" : "Nothing is quarantined"
+              }
+            />
+            <QuarantinePaging
+              cursor={filters.cursor}
+              nextCursor={nextCursor}
+              onCursorChange={(cursor) => onFiltersChange({ ...activeFilters, cursor })}
+            />
+          </>
         ) : (
           <WorkflowPanel
             description="Every record names the reason it could not proceed and keeps the attempts that led there."
-            title={`${items.length} quarantine record(s)`}
+            title={
+              nextCursor || filters.cursor
+                ? `${items.length} quarantine record(s) on this page`
+                : `${items.length} quarantine record(s)`
+            }
           >
             <Table>
               <TableCaption>
@@ -197,6 +250,8 @@ export function QuarantinePage({
                 <TableRow>
                   <TableHead scope="col">Reason</TableHead>
                   <TableHead scope="col">Store</TableHead>
+                  <TableHead scope="col">Store Environment</TableHead>
+                  <TableHead scope="col">Store Product</TableHead>
                   <TableHead scope="col">Severity</TableHead>
                   <TableHead scope="col">Status</TableHead>
                   <TableHead scope="col">Attempts</TableHead>
@@ -216,9 +271,15 @@ export function QuarantinePage({
                       </a>
                     </TableCell>
                     <TableCell>{providerLabel(record.provider)}</TableCell>
+                    <TableCell>{storeEnvironmentLabel(record.storeEnvironment)}</TableCell>
+                    <TableCell>
+                      {record.providerProductIdentifier ?? (
+                        <span className="text-muted-foreground">—</span>
+                      )}
+                    </TableCell>
                     <TableCell>
                       <StatusPill
-                        label={record.severity ?? "warning"}
+                        label={quarantineSeverityLabel(record.severity)}
                         tone={
                           record.severity === "security"
                             ? "negative"
@@ -240,9 +301,55 @@ export function QuarantinePage({
                 ))}
               </TableBody>
             </Table>
+            <QuarantinePaging
+              cursor={filters.cursor}
+              nextCursor={nextCursor}
+              onCursorChange={(cursor) => onFiltersChange({ ...activeFilters, cursor })}
+            />
           </WorkflowPanel>
         )}
       </HostedResourceBoundary>
     </WorkspacePage>
+  )
+}
+
+/**
+ * Forward paging over the quarantine history.
+ *
+ * A page is never presented as a total. Without this control an Environment
+ * with more open records than one page holds would report the page size as the
+ * count, on the surface whose entire job is "what needs attention".
+ */
+function QuarantinePaging({
+  cursor,
+  nextCursor,
+  onCursorChange,
+}: {
+  cursor: string | undefined
+  nextCursor: string | undefined
+  onCursorChange: (cursor: string | undefined) => void
+}) {
+  if (!cursor && !nextCursor) return null
+
+  return (
+    <div className="mt-4 flex flex-wrap items-center gap-2">
+      {cursor ? (
+        <Button onClick={() => onCursorChange(undefined)} size="sm" type="button" variant="outline">
+          First page
+        </Button>
+      ) : null}
+      {nextCursor ? (
+        <Button
+          onClick={() => onCursorChange(nextCursor)}
+          size="sm"
+          type="button"
+          variant="outline"
+        >
+          Next page
+        </Button>
+      ) : (
+        <p className="text-muted-foreground text-xs">End of the quarantine history.</p>
+      )}
+    </div>
   )
 }

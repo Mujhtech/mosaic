@@ -6,11 +6,13 @@ import { generatedDashboardClient } from "@/lib/api/generated-dashboard-client"
 export const reconciliationKeys = {
   detail: (projectId: string, environmentId: string, runId: string) =>
     ["billing-reconciliation", projectId, environmentId, "detail", runId] as const,
-  list: (projectId: string, environmentId: string) =>
-    ["billing-reconciliation", projectId, environmentId, "list"] as const,
+  list: (projectId: string, environmentId: string, cursor: string) =>
+    ["billing-reconciliation", projectId, environmentId, "list", cursor] as const,
   scope: (projectId: string, environmentId: string) =>
     ["billing-reconciliation", projectId, environmentId] as const,
 }
+
+export const RECONCILIATION_PAGE_SIZE = 25
 
 const TERMINAL_STATUSES: readonly ReconciliationRun["status"][] = ["completed", "failed", "partial"]
 
@@ -18,23 +20,32 @@ export function reconciliationRunIsTerminal(run: Pick<ReconciliationRun, "status
   return run ? TERMINAL_STATUSES.includes(run.status) : false
 }
 
-export function reconciliationRunsQueryOptions(projectId: string, environmentId: string) {
+export function reconciliationRunsQueryOptions(
+  projectId: string,
+  environmentId: string,
+  cursor = "",
+) {
   return queryOptions({
-    queryKey: reconciliationKeys.list(projectId, environmentId),
+    queryKey: reconciliationKeys.list(projectId, environmentId, cursor),
     queryFn: async ({ signal }) => {
       const result = await listReconciliationRuns({
         client: generatedDashboardClient,
         path: { environmentId, projectId },
-        query: { limit: 25 },
+        query: { limit: RECONCILIATION_PAGE_SIZE, ...(cursor ? { cursor } : {}) },
         signal,
         throwOnError: true,
       })
-      return result.data.data?.items ?? []
+      return {
+        items: result.data.data?.items ?? [],
+        nextCursor: result.data.data?.nextCursor,
+      }
     },
     // Bounded polling while a run is in flight, and none once every run has
     // reached a terminal state.
     refetchInterval: (query) =>
-      (query.state.data ?? []).some((run) => !reconciliationRunIsTerminal(run)) ? 5000 : false,
+      (query.state.data?.items ?? []).some((run) => !reconciliationRunIsTerminal(run))
+        ? 5000
+        : false,
   })
 }
 

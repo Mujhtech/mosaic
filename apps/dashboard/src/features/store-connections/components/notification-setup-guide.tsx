@@ -73,8 +73,10 @@ export function NotificationSetupGuide({ credential }: { credential: StoreServer
           <code className="text-xs">{credential.appleKeyId ?? "—"}</code>.
         </li>
         <li>
-          Watch the billing health view for the first accepted notification. Apple retries a failed
-          notification only five times in production and never in sandbox, so a misconfigured
+          Confirm delivery by watching <strong>Last fact recorded</strong> on the billing health
+          view, or by opening the transaction ledger. Mosaic does not publish a last-notification
+          timestamp, so a recorded fact is the signal that intake worked end to end. Apple retries a
+          failed notification only five times in production and never in sandbox, so a misconfigured
           endpoint loses transactions rather than queuing them.
         </li>
       </ol>

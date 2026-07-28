@@ -176,6 +176,63 @@ const QUARANTINE_STATUS_LABELS: Record<QuarantineStatus, string> = {
   retrying: "Retrying",
 }
 
+const QUARANTINE_SEVERITY_LABELS: Record<string, string> = {
+  error: "Error",
+  security: "Security",
+  warning: "Warning",
+}
+
+/**
+ * Worker-queue states an operator should never have to decode. "Leased" means a
+ * worker has picked the job up, which is "Running" from the outside.
+ */
+const RUN_STATUS_LABELS: Record<string, string> = {
+  completed: "Completed",
+  failed: "Failed",
+  leased: "Running",
+  partial: "Completed with failures",
+  queued: "Queued",
+}
+
+const RUN_TRIGGER_LABELS: Record<string, string> = {
+  manual: "Started by an operator",
+  scheduled: "Scheduled",
+}
+
+const RECONCILIATION_STRATEGY_LABELS: Record<string, string> = {
+  apple_notification_history: "App Store · notification history",
+  apple_transaction_history: "App Store · transaction history",
+  google_token_requery: "Google Play · re-query known purchases",
+}
+
+const REPLAY_KIND_LABELS: Record<string, string> = {
+  replay: "Replay",
+  revalidation: "Revalidation",
+}
+
+const REPLAY_COMPARISON_LABELS: Record<string, string> = {
+  conflicting: "Conflicting with recorded facts",
+  identical: "Identical to the recorded result",
+  new_facts: "New facts recorded",
+  still_failing: "Still failing",
+}
+
+const REPLAY_COMPARISON_EXPLANATIONS: Record<string, string> = {
+  conflicting:
+    "At least one input produced a result that contradicts the fact already on record. Both are retained and nothing was overwritten; each conflict also opens a quarantine record.",
+  identical:
+    "Every input recomputed the same fact digest, so nothing was written. This is the expected outcome of a replay against unchanged mappings.",
+  new_facts:
+    "The store answered with something Mosaic had not recorded before, so new facts were appended beside the existing ones.",
+  still_failing:
+    "The store still could not confirm these inputs. Every attempt is preserved, and permanently failing inputs stay quarantined.",
+}
+
+const CREDENTIAL_STATUS_LABELS: Record<string, string> = {
+  active: "Active",
+  revoked: "Revoked",
+}
+
 function humanize(value: string) {
   const spaced = value.replaceAll("_", " ")
   return spaced.charAt(0).toUpperCase() + spaced.slice(1)
@@ -230,6 +287,52 @@ export function quarantineReasonExplanation(value: string | undefined) {
     QUARANTINE_REASON_EXPLANATIONS[value as QuarantineReasonCode] ??
     "Mosaic held this input because it could not safely proceed."
   )
+}
+
+export function quarantineSeverityLabel(value: string | undefined) {
+  if (!value) return "Warning"
+  return QUARANTINE_SEVERITY_LABELS[value] ?? humanize(value)
+}
+
+/** Shared by reconciliation runs and replay jobs: both are worker-queue jobs. */
+export function runStatusLabel(value: string | undefined) {
+  if (!value) return "Queued"
+  return RUN_STATUS_LABELS[value] ?? humanize(value)
+}
+
+export function runTriggerLabel(value: string | undefined) {
+  if (!value) return "—"
+  return RUN_TRIGGER_LABELS[value] ?? humanize(value)
+}
+
+export function reconciliationStrategyLabel(value: string | undefined) {
+  if (!value) return "—"
+  return RECONCILIATION_STRATEGY_LABELS[value] ?? humanize(value)
+}
+
+export function replayKindLabel(value: string | undefined) {
+  if (!value) return "Replay"
+  return REPLAY_KIND_LABELS[value] ?? humanize(value)
+}
+
+export function replayComparisonLabel(value: string | undefined) {
+  if (!value) return "Not compared yet"
+  return REPLAY_COMPARISON_LABELS[value] ?? humanize(value)
+}
+
+export function replayComparisonExplanation(value: string | undefined) {
+  if (!value) {
+    return "Mosaic has not finished re-running these inputs. Every attempt it makes is appended; nothing already recorded changes."
+  }
+  return (
+    REPLAY_COMPARISON_EXPLANATIONS[value] ??
+    "Every attempt is appended; nothing already recorded changes."
+  )
+}
+
+export function credentialStatusLabel(value: string | undefined) {
+  if (!value) return "—"
+  return CREDENTIAL_STATUS_LABELS[value] ?? humanize(value)
 }
 
 export function quarantineStatusLabel(value: string | undefined) {

@@ -22,6 +22,7 @@ const REASON_CODES = [
   "environment_mismatch",
   "input_content_conflict",
   "malformed_reference",
+  "missing_validation_credential",
   "product_ambiguous",
   "product_unknown",
   "provider_permanently_failed",

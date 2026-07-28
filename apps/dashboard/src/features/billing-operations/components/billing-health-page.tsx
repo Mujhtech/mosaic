@@ -145,7 +145,7 @@ export function BillingHealthPage({
             value={formatDurationSeconds(backlogSeconds)}
           />
           <Metric
-            href={`${base}/quarantine`}
+            href={`${base}/quarantine?status=open`}
             hrefLabel="Open quarantine"
             label="Open quarantine records"
             tone={quarantineOpen > 0 ? "attention" : "positive"}

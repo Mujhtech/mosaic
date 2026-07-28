@@ -19,6 +19,8 @@ interface QuarantineRecoveryActionsProps {
   onCloseSuperseded: (supersededByRecordId: string) => void
   onRetryValidation: () => void
   productMappingHref: string
+  /** The store Product this input named; absent when it never got that far. */
+  providerProductIdentifier?: string
   record: QuarantineRecord
   retryError?: string
   storeConnectionsHref: string
@@ -42,6 +44,7 @@ export function QuarantineRecoveryActionsPanel({
   onCloseSuperseded,
   onRetryValidation,
   productMappingHref,
+  providerProductIdentifier,
   record,
   retryError,
   storeConnectionsHref,
@@ -88,6 +91,7 @@ export function QuarantineRecoveryActionsPanel({
                 onCloseSuperseded={() => onCloseSuperseded(supersededBy.trim())}
                 onRetryValidation={onRetryValidation}
                 productMappingHref={productMappingHref}
+                {...(providerProductIdentifier ? { providerProductIdentifier } : {})}
                 retryError={retryError}
                 setSupersededBy={setSupersededBy}
                 storeConnectionsHref={storeConnectionsHref}
@@ -109,6 +113,7 @@ function ActionControl({
   onCloseSuperseded,
   onRetryValidation,
   productMappingHref,
+  providerProductIdentifier,
   retryError,
   setSupersededBy,
   storeConnectionsHref,
@@ -121,6 +126,7 @@ function ActionControl({
   onCloseSuperseded: () => void
   onRetryValidation: () => void
   productMappingHref: string
+  providerProductIdentifier?: string
   retryError?: string
   setSupersededBy: (value: string) => void
   storeConnectionsHref: string
@@ -173,12 +179,32 @@ function ActionControl({
       )
     case "repair_product_mapping":
       return (
-        <a
-          className="text-primary mt-3 inline-flex text-sm font-semibold"
-          href={productMappingHref}
-        >
-          Open Products and repair the mapping
-        </a>
+        <div className="mt-3 space-y-2">
+          {providerProductIdentifier ? (
+            <p className="text-muted-foreground text-xs leading-5">
+              Map the store Product{" "}
+              <code className="bg-muted rounded px-1 py-0.5 font-mono select-all">
+                {providerProductIdentifier}
+              </code>{" "}
+              to a Mosaic Product. Replacing a mapping keeps the previous one in history, so past
+              resolutions stay reproducible.
+            </p>
+          ) : (
+            <p className="text-muted-foreground text-xs leading-5">
+              This input never got far enough to name a store Product, so there is nothing to map
+              yet. Confirm the credential and Application scope first.
+            </p>
+          )}
+          <a className="text-primary inline-flex text-sm font-semibold" href={productMappingHref}>
+            {providerProductIdentifier
+              ? "Find the Mosaic Product for this store Product"
+              : "Open Products"}
+          </a>
+          <p className="text-muted-foreground text-xs leading-5">
+            Mosaic brings you back to this record when you are done, so you can re-run validation
+            without navigating from memory.
+          </p>
+        </div>
       )
     default:
       return (

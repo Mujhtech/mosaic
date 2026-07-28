@@ -13,11 +13,16 @@ import {
   ProviderBadge,
   StatusPill,
 } from "@/features/billing-ledger/components/billing-chrome"
-import { formatBillingTimestamp } from "@/features/billing-ledger/types/billing-vocabulary"
+import {
+  credentialStatusLabel,
+  formatBillingTimestamp,
+  storeEnvironmentLabel,
+} from "@/features/billing-ledger/types/billing-vocabulary"
 import { environmentsQueryOptions } from "@/features/environments/queries/environments-query"
 import { ScopeMismatchRecovery } from "@/features/organizations/components/scope-mismatch-recovery"
 import { WorkspacePage, WorkflowPanel } from "@/features/organizations/components/workspace-page"
 import { useValidatedProjectScope } from "@/features/projects/hooks/use-validated-project-scope"
+import { applicationsQueryOptions } from "@/features/projects/queries/projects-query"
 import { NotificationEndpointPanel } from "@/features/store-connections/components/notification-endpoint-panel"
 import { NotificationSetupGuide } from "@/features/store-connections/components/notification-setup-guide"
 import { RotateStoreCredentialSheet } from "@/features/store-connections/components/rotate-store-credential-sheet"
@@ -62,6 +67,7 @@ export function StoreConnectionDetailPage({
     enabled: scopeReady,
   })
   const environments = useQuery({ ...environmentsQueryOptions(projectId), enabled: scopeReady })
+  const applications = useQuery({ ...applicationsQueryOptions(projectId), enabled: scopeReady })
   const rotate = useMutation(
     rotateStoreCredentialMutationOptions(credentialId, projectId, queryClient),
   )
@@ -83,14 +89,15 @@ export function StoreConnectionDetailPage({
   const actions = record
     ? storeCredentialActions(record)
     : { revoke: false, rotate: false, test: false }
-  const error = project.error ?? credential.error ?? environments.error
+  const error = project.error ?? credential.error ?? environments.error ?? applications.error
   const state = resolveHostedQueryState({
     emptyDescription: "Return to Store Server Credentials and choose an existing connection.",
     emptyTitle: "Store Server Credential unavailable",
     error,
     isEmpty: credential.isSuccess && !record,
     isPending:
-      project.isPending || (scopeReady && (credential.isPending || environments.isPending)),
+      project.isPending ||
+      (scopeReady && (credential.isPending || environments.isPending || applications.isPending)),
     loadingDescription: "Loading Store Server Credential metadata and health.",
     onRetry: () => {
       void credential.refetch()
@@ -270,8 +277,11 @@ export function StoreConnectionDetailPage({
               title="Credential metadata"
             >
               <dl>
-                <DefinitionRow label="Status" value={record.status ?? "—"} />
-                <DefinitionRow label="Store Environment" value={record.storeEnvironment ?? "—"} />
+                <DefinitionRow label="Status" value={credentialStatusLabel(record.status)} />
+                <DefinitionRow
+                  label="Store Environment"
+                  value={storeEnvironmentLabel(record.storeEnvironment)}
+                />
                 <DefinitionRow label="Mosaic Environment" value={environmentName} />
                 {record.provider === "app_store" ? (
                   <>
@@ -317,7 +327,11 @@ export function StoreConnectionDetailPage({
                       className="flex flex-wrap items-center justify-between gap-2 rounded border p-3 text-sm"
                       key={application.applicationId}
                     >
-                      <span className="font-medium">{application.applicationId}</span>
+                      <span className="font-medium">
+                        {applications.data?.items.find(
+                          (item) => item.id === application.applicationId,
+                        )?.name ?? application.applicationId}
+                      </span>
                       <span className="text-muted-foreground text-xs">
                         {application.platform?.toUpperCase()} ·{" "}
                         {application.providerApplicationIdentifier}

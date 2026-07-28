@@ -127,6 +127,27 @@ export type ServerTransactionObservation = {
     providerOrderReference?: ProviderOrderReference;
     sourceAuthority: 'trusted_server_observation';
     trustBasis: 'provider_signature_verified' | 'mutual_tls' | 'provider_server_api' | 'operator_initiated';
+    /**
+     * The full Google Play purchase token, permitted only here, only on a `google_play`
+     * record, and only under `trusted_server_observation` authority. The client record has
+     * no such member and rejects one as `unknown_field`.
+     *
+     * It is a transaction reference the buyer's own purchase produced, not a Mosaic provider
+     * credential; service-account keys, signing keys, and Authorization values remain
+     * forbidden everywhere. It is encrypted at rest on receipt, never logged, never returned
+     * on any read, and never relieves the record of full provider validation.
+     *
+     * When present it MUST SHA-256-digest to this record's own `transactionReference.value`.
+     * Without that binding a caller could file a real token under a different transaction's
+     * reference, and Mosaic would validate the token, get a genuine answer from Google, and
+     * record it as a fact about the transaction the reference named. A mismatch is rejected
+     * with `provider_reference_malformed`.
+     *
+     * It exists because a digest cannot be reversed: without a token a Google observation
+     * has nothing to validate against and can only wait for the notification.
+     *
+     */
+    purchaseToken?: string;
     receivedAt: string;
     providerReportedAt?: string;
     /**
@@ -360,6 +381,14 @@ export type QuarantineRecord = {
      *
      */
     storeEnvironment?: 'sandbox' | 'production' | 'unclassified';
+    /**
+     * The store Product the quarantined input named, carried from the input's most recent
+     * resolution attempt. For the common `product_unknown` case it is the single most
+     * actionable field on the record: it is exactly what the operator has to create a mapping
+     * for.
+     *
+     */
+    providerProductIdentifier?: string;
     reasonCode?: 'signature_invalid' | 'application_mismatch' | 'environment_mismatch' | 'store_environment_mismatch' | 'credential_unavailable' | 'credential_revoked' | 'missing_validation_credential' | 'product_unknown' | 'product_ambiguous' | 'cross_environment_mismatch' | 'unsupported_product_type' | 'unsupported_transaction_type' | 'malformed_reference' | 'input_content_conflict' | 'replay_conflict' | 'provider_permanently_failed' | 'validation_exhausted';
     severity?: 'warning' | 'error' | 'security';
     scopes?: Array<string>;
@@ -390,6 +419,14 @@ export type ReconciliationRun = {
     examinedCount?: number;
     discoveredCount?: number;
     duplicateCount?: number;
+    /**
+     * Discoveries that contradicted a fact already on record, as distinct from discoveries
+     * that were merely new. Gate 9A requires reconciliation to detect missing *or*
+     * conflicting state; without a separate counter the two are indistinguishable. Nothing is
+     * overwritten — both facts stand — and each conflict also opens a quarantine record.
+     *
+     */
+    conflictCount?: number;
     failureCount?: number;
     lastErrorCode?: string;
     createdAt?: string;
@@ -400,7 +437,14 @@ export type ReconciliationRun = {
 export type CreateReconciliationRunRequest = {
     credentialId: string;
     provider: 'app_store' | 'google_play';
-    strategy: 'apple_notification_history' | 'apple_transaction_history' | 'google_token_requery';
+    /**
+     * apple_transaction_history is deliberately absent: the worker has no run loop for it, so
+     * accepting it produced a 202 followed by a run that failed with `unsupported_strategy`
+     * and no explanation anywhere in the product. It remains in the stored enumeration for
+     * forward compatibility and is rejected at the API boundary until the loop exists.
+     *
+     */
+    strategy: 'apple_notification_history' | 'google_token_requery';
     windowStart: string;
     /**
      * The window may not exceed 180 days
@@ -7683,6 +7727,10 @@ export type UpdateBillingSettingsErrors = {
      * Stable machine-readable failure.
      */
     404: ErrorEnvelope;
+    /**
+     * Stable machine-readable failure.
+     */
+    409: ErrorEnvelope;
 };
 
 export type UpdateBillingSettingsError = UpdateBillingSettingsErrors[keyof UpdateBillingSettingsErrors];
@@ -7976,6 +8024,10 @@ export type ListValidationAttemptsData = {
         cursor?: string;
         limit?: number;
         status?: 'validated' | 'recorded_no_fact' | 'quarantined' | 'retryable_failure' | 'permanently_failed';
+        /**
+         * Narrow the list to one input's attempt history.
+         */
+        rawInputId?: string;
     };
     url: '/v1/projects/{projectId}/environments/{environmentId}/billing/validation-attempts';
 };

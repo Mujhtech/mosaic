@@ -120,29 +120,47 @@ export function TransactionLedgerPage({
             title="Mosaic Billing is not enabled for this Project"
           />
         ) : loaded.length === 0 && !hasActiveTransactionFilters(filters) ? (
-          <EmptyState
-            action={
-              <a className={buttonVariants({ variant: "outline" })} href={`${base}/health`}>
-                Check intake health
-              </a>
-            }
-            description="No Store Notification or Transaction Observation has produced a validated fact in this Mosaic Environment yet. Confirm the store-side notification setup, then watch billing health for the first accepted input."
-            title="No Transaction Facts recorded yet"
-          />
+          <>
+            <EmptyState
+              action={
+                <a className={buttonVariants({ variant: "outline" })} href={`${base}/health`}>
+                  Check intake health
+                </a>
+              }
+              description="No Store Notification or Transaction Observation has produced a validated fact in this Mosaic Environment yet. Confirm the store-side notification setup, then watch billing health for the first accepted input."
+              title="No Transaction Facts recorded yet"
+            />
+            <LedgerPaging
+              cursor={filters.cursor}
+              nextCursor={facts.data?.nextCursor}
+              onCursorChange={(cursor) => onFiltersChange({ ...filters, cursor })}
+            />
+          </>
         ) : visible.length === 0 ? (
-          <EmptyState
-            action={
-              <Button onClick={() => onFiltersChange({ limit: filters.limit })} type="button">
-                Clear filters
-              </Button>
-            }
-            description="Facts exist in this Mosaic Environment, but none on the loaded page matches the current filters."
-            title="No Transaction Facts match these filters"
-          />
+          <>
+            <EmptyState
+              action={
+                <Button onClick={() => onFiltersChange({ limit: filters.limit })} type="button">
+                  Clear filters
+                </Button>
+              }
+              description="Facts exist in this Mosaic Environment, but none on the loaded page matches the current filters. Application, Product, Store Environment, resolution, and reference narrow the loaded page only — matches further back in the ledger are on later pages."
+              title="No Transaction Facts match these filters"
+            />
+            {/* Paging has to survive the filtered-empty branch. Without it, an
+                operator filtering for an Application whose facts start on page
+                three has no way forward and discarding the filter is the only
+                exit. */}
+            <LedgerPaging
+              cursor={filters.cursor}
+              nextCursor={facts.data?.nextCursor}
+              onCursorChange={(cursor) => onFiltersChange({ ...filters, cursor })}
+            />
+          </>
         ) : (
           <WorkflowPanel
             description="Occurred at is the store's own clock. Recorded at is when Mosaic durably accepted the input. They are never the same."
-            title={`${visible.length} Transaction Fact(s)`}
+            title={`${visible.length} Transaction Fact(s) on this page`}
           >
             <TransactionLedgerTable
               applications={applications.data?.items ?? []}
@@ -152,35 +170,55 @@ export function TransactionLedgerPage({
               items={visible}
               products={products.data?.items ?? []}
             />
-            <div className="mt-4 flex flex-wrap items-center gap-2">
-              {filters.cursor ? (
-                <Button
-                  onClick={() => onFiltersChange({ ...filters, cursor: undefined })}
-                  size="sm"
-                  type="button"
-                  variant="outline"
-                >
-                  First page
-                </Button>
-              ) : null}
-              {facts.data?.nextCursor ? (
-                <Button
-                  onClick={() => onFiltersChange({ ...filters, cursor: facts.data?.nextCursor })}
-                  size="sm"
-                  type="button"
-                  variant="outline"
-                >
-                  Next page
-                </Button>
-              ) : (
-                <p className="text-muted-foreground text-xs">
-                  End of the ledger for these filters.
-                </p>
-              )}
-            </div>
+            <LedgerPaging
+              cursor={filters.cursor}
+              nextCursor={facts.data?.nextCursor}
+              onCursorChange={(cursor) => onFiltersChange({ ...filters, cursor })}
+            />
           </WorkflowPanel>
         )}
       </HostedResourceBoundary>
     </WorkspacePage>
+  )
+}
+
+/**
+ * Forward paging over the ledger.
+ *
+ * Rendered beside every branch, including the filtered-empty one: several
+ * filters are applied to the loaded page only, so "nothing matched here" must
+ * still offer a way to look at the next page.
+ */
+function LedgerPaging({
+  cursor,
+  nextCursor,
+  onCursorChange,
+}: {
+  cursor: string | undefined
+  nextCursor: string | undefined
+  onCursorChange: (cursor: string | undefined) => void
+}) {
+  if (!cursor && !nextCursor) return null
+
+  return (
+    <div className="mt-4 flex flex-wrap items-center gap-2">
+      {cursor ? (
+        <Button onClick={() => onCursorChange(undefined)} size="sm" type="button" variant="outline">
+          First page
+        </Button>
+      ) : null}
+      {nextCursor ? (
+        <Button
+          onClick={() => onCursorChange(nextCursor)}
+          size="sm"
+          type="button"
+          variant="outline"
+        >
+          Next page
+        </Button>
+      ) : (
+        <p className="text-muted-foreground text-xs">End of the ledger for these filters.</p>
+      )}
+    </div>
   )
 }

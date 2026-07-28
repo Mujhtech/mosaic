@@ -29,7 +29,7 @@ export function createReplayJobMutationOptions(
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: replayKeys.list(projectId, environmentId) }),
         queryClient.invalidateQueries({
-          queryKey: transactionKeys.attempts(projectId, environmentId),
+          queryKey: transactionKeys.attemptsScope(projectId, environmentId),
         }),
       ])
     },

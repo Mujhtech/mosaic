@@ -1,6 +1,8 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 
 import { EmptyState } from "@/components/feedback/empty-state"
+import { Button } from "@/components/ui/button"
+import { buttonVariants } from "@/components/ui/button-variants"
 import {
   Table,
   TableBody,
@@ -19,6 +21,8 @@ import {
 import {
   formatBillingTimestamp,
   providerLabel,
+  runStatusLabel,
+  runTriggerLabel,
 } from "@/features/billing-ledger/types/billing-vocabulary"
 import { CreateReconciliationRunSheet } from "@/features/billing-operations/components/create-reconciliation-run-sheet"
 import { createReconciliationRunMutationOptions } from "@/features/billing-operations/mutations/reconciliation-mutations"
@@ -35,13 +39,17 @@ import { useOrganizationAccess } from "@/hooks/use-organization-access"
 import { storeConnectionsHref } from "@/lib/routing/workspace-hrefs"
 
 interface ReconciliationPageProps {
+  cursor?: string
   environmentId: string
+  onCursorChange: (cursor: string | undefined) => void
   organizationId: string
   projectId: string
 }
 
 export function ReconciliationPage({
+  cursor,
   environmentId,
+  onCursorChange,
   organizationId,
   projectId,
 }: ReconciliationPageProps) {
@@ -54,7 +62,7 @@ export function ReconciliationPage({
     enabled: scopeReady,
   })
   const runs = useQuery({
-    ...reconciliationRunsQueryOptions(projectId, environmentId),
+    ...reconciliationRunsQueryOptions(projectId, environmentId, cursor ?? ""),
     enabled: scopeReady,
   })
   const create = useMutation(
@@ -63,10 +71,15 @@ export function ReconciliationPage({
 
   const environmentName =
     environments.data?.items.find((item) => item.id === environmentId)?.name ?? environmentId
-  const items = runs.data ?? []
+  const items = runs.data?.items ?? []
+  const nextCursor = runs.data?.nextCursor
   const environmentCredentials = (credentials.data ?? []).filter(
     (credential) => credential.environmentId === environmentId,
   )
+  function credentialName(credentialId: string | undefined) {
+    if (!credentialId) return "—"
+    return environmentCredentials.find((item) => item.id === credentialId)?.name ?? credentialId
+  }
 
   const error = project.error ?? environments.error ?? credentials.error ?? runs.error
   const state = resolveHostedQueryState({
@@ -129,14 +142,40 @@ export function ReconciliationPage({
 
       <HostedResourceBoundary state={state}>
         {items.length === 0 ? (
-          <EmptyState
-            description="No reconciliation pass has run in this Mosaic Environment. Scheduled passes appear here alongside any you start by hand."
-            title="No reconciliation runs yet"
-          />
+          <>
+            <EmptyState
+              action={
+                cursor ? (
+                  <Button onClick={() => onCursorChange(undefined)} type="button" variant="outline">
+                    Back to the most recent runs
+                  </Button>
+                ) : (
+                  <a className={buttonVariants({ variant: "outline" })} href={`${base}/health`}>
+                    Check billing health first
+                  </a>
+                )
+              }
+              description={
+                cursor
+                  ? "This page of the reconciliation history is empty."
+                  : "No reconciliation pass has run in this Mosaic Environment. Scheduled passes appear here alongside any you start with Start reconciliation above."
+              }
+              title="No reconciliation runs yet"
+            />
+            <ReconciliationPaging
+              cursor={cursor}
+              nextCursor={nextCursor}
+              onCursorChange={onCursorChange}
+            />
+          </>
         ) : (
           <WorkflowPanel
             description="Runs are restart-safe and idempotent: a re-run over an overlapping window records nothing twice, so recovery from a partial run is a new run rather than an edit of the old one."
-            title={`${items.length} reconciliation run(s)`}
+            title={
+              nextCursor || cursor
+                ? `${items.length} reconciliation run(s) on this page`
+                : `${items.length} reconciliation run(s)`
+            }
           >
             <Table>
               <TableCaption>
@@ -146,11 +185,13 @@ export function ReconciliationPage({
                 <TableRow>
                   <TableHead scope="col">Window</TableHead>
                   <TableHead scope="col">Store</TableHead>
+                  <TableHead scope="col">Store Server Credential</TableHead>
                   <TableHead scope="col">Trigger</TableHead>
                   <TableHead scope="col">Status</TableHead>
                   <TableHead scope="col">Examined</TableHead>
                   <TableHead scope="col">Discovered</TableHead>
                   <TableHead scope="col">Duplicates</TableHead>
+                  <TableHead scope="col">Conflicts</TableHead>
                   <TableHead scope="col">Failures</TableHead>
                   <TableHead scope="col">Completed</TableHead>
                 </TableRow>
@@ -170,10 +211,11 @@ export function ReconciliationPage({
                       </span>
                     </TableCell>
                     <TableCell>{providerLabel(run.provider)}</TableCell>
-                    <TableCell>{run.trigger ?? "—"}</TableCell>
+                    <TableCell>{credentialName(run.credentialId)}</TableCell>
+                    <TableCell>{runTriggerLabel(run.trigger)}</TableCell>
                     <TableCell>
                       <StatusPill
-                        label={run.status ?? "queued"}
+                        label={runStatusLabel(run.status)}
                         tone={
                           run.status === "completed"
                             ? "positive"
@@ -188,6 +230,13 @@ export function ReconciliationPage({
                     <TableCell>{run.examinedCount ?? 0}</TableCell>
                     <TableCell>{run.discoveredCount ?? 0}</TableCell>
                     <TableCell>{run.duplicateCount ?? 0}</TableCell>
+                    <TableCell>
+                      {(run.conflictCount ?? 0) > 0 ? (
+                        <span className="text-destructive font-medium">{run.conflictCount}</span>
+                      ) : (
+                        0
+                      )}
+                    </TableCell>
                     <TableCell>{run.failureCount ?? 0}</TableCell>
                     <TableCell title={run.completedAt}>
                       {reconciliationRunIsTerminal(run)
@@ -198,9 +247,49 @@ export function ReconciliationPage({
                 ))}
               </TableBody>
             </Table>
+            <ReconciliationPaging
+              cursor={cursor}
+              nextCursor={nextCursor}
+              onCursorChange={onCursorChange}
+            />
           </WorkflowPanel>
         )}
       </HostedResourceBoundary>
     </WorkspacePage>
+  )
+}
+
+/** Forward paging, so a page of runs is never presented as the whole history. */
+function ReconciliationPaging({
+  cursor,
+  nextCursor,
+  onCursorChange,
+}: {
+  cursor: string | undefined
+  nextCursor: string | undefined
+  onCursorChange: (cursor: string | undefined) => void
+}) {
+  if (!cursor && !nextCursor) return null
+
+  return (
+    <div className="mt-4 flex flex-wrap items-center gap-2">
+      {cursor ? (
+        <Button onClick={() => onCursorChange(undefined)} size="sm" type="button" variant="outline">
+          Most recent runs
+        </Button>
+      ) : null}
+      {nextCursor ? (
+        <Button
+          onClick={() => onCursorChange(nextCursor)}
+          size="sm"
+          type="button"
+          variant="outline"
+        >
+          Older runs
+        </Button>
+      ) : (
+        <p className="text-muted-foreground text-xs">End of the reconciliation history.</p>
+      )}
+    </div>
   )
 }
