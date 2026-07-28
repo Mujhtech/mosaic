@@ -17,6 +17,7 @@ import (
 	"github.com/Mujhtech/mosaic/apps/api/internal/analytics"
 	"github.com/Mujhtech/mosaic/apps/api/internal/billing"
 	"github.com/Mujhtech/mosaic/apps/api/internal/billingaccess"
+	"github.com/Mujhtech/mosaic/apps/api/internal/billingdiagnostics"
 	"github.com/Mujhtech/mosaic/apps/api/internal/browserauth"
 	"github.com/Mujhtech/mosaic/apps/api/internal/cloudworkspace"
 	"github.com/Mujhtech/mosaic/apps/api/internal/experiment"
@@ -27,6 +28,7 @@ import (
 	"github.com/Mujhtech/mosaic/apps/api/internal/platform/appstoreserver"
 	"github.com/Mujhtech/mosaic/apps/api/internal/platform/authn"
 	"github.com/Mujhtech/mosaic/apps/api/internal/platform/billingaccesspostgres"
+	"github.com/Mujhtech/mosaic/apps/api/internal/platform/billingdiagnosticspostgres"
 	"github.com/Mujhtech/mosaic/apps/api/internal/platform/billingpostgres"
 	"github.com/Mujhtech/mosaic/apps/api/internal/platform/browserauthpostgres"
 	"github.com/Mujhtech/mosaic/apps/api/internal/platform/buildinfo"
@@ -258,6 +260,7 @@ func run() (runErr error) {
 
 	var billingService *billing.Service
 	var billingAccessService *billingaccess.Service
+	var billingDiagnosticsService *billingdiagnostics.Service
 	var billingIPLimiter, billingKeyLimiter, entitlementSyncLimiter *ratelimit.Limiter
 	if cfg.Billing.Enabled {
 		billingCipher, err := providercredential.NewAESGCMCipher(cfg.Providers.CredentialKeyring, rand.Reader)
@@ -307,6 +310,7 @@ func run() (runErr error) {
 			}))
 		entitlementSyncLimiter = ratelimit.New(cfg.Billing.EntitlementSyncPerMinute,
 			cfg.Billing.EntitlementSyncBurst, cfg.Billing.LimiterEntries)
+		billingDiagnosticsService = billingdiagnostics.NewService(billingdiagnosticspostgres.New(databasePool))
 	}
 
 	readiness := health.NewReadiness(
@@ -348,6 +352,7 @@ func run() (runErr error) {
 		Experiment:             experimentService,
 		Billing:                billingService,
 		BillingAccess:          billingAccessService,
+		BillingDiagnostics:     billingDiagnosticsService,
 		BillingIPLimiter:       billingIPLimiter,
 		BillingKeyLimiter:      billingKeyLimiter,
 		EntitlementSyncLimiter: entitlementSyncLimiter,

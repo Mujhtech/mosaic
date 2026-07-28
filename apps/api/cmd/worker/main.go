@@ -28,6 +28,7 @@ import (
 	"github.com/Mujhtech/mosaic/apps/api/internal/platform/analyticspostgres"
 	"github.com/Mujhtech/mosaic/apps/api/internal/platform/appstorejws"
 	"github.com/Mujhtech/mosaic/apps/api/internal/platform/appstoreserver"
+	"github.com/Mujhtech/mosaic/apps/api/internal/platform/billingdiagnosticspostgres"
 	"github.com/Mujhtech/mosaic/apps/api/internal/platform/billingpostgres"
 	"github.com/Mujhtech/mosaic/apps/api/internal/platform/billingprojectionpostgres"
 	"github.com/Mujhtech/mosaic/apps/api/internal/platform/buildinfo"
@@ -215,6 +216,12 @@ func run() (runErr error) {
 		// day one rather than being added after the first incident.
 		if err := billingRepository.RegisterQueueMetrics(); err != nil {
 			return fmt.Errorf("register billing queue metrics: %w", err)
+		}
+		// Per-table row counts for the Phase 9B schema. Plan §15 decided
+		// snapshot retention with no drill baseline to extrapolate from, so the
+		// trend has to start being recorded before it is needed.
+		if err := billingdiagnosticspostgres.New(pool).RegisterRowCountMetrics(); err != nil {
+			return fmt.Errorf("register billing table row metrics: %w", err)
 		}
 	}
 

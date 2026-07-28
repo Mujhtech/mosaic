@@ -15,6 +15,7 @@ import (
 	"github.com/Mujhtech/mosaic/apps/api/internal/analytics"
 	"github.com/Mujhtech/mosaic/apps/api/internal/billing"
 	"github.com/Mujhtech/mosaic/apps/api/internal/billingaccess"
+	"github.com/Mujhtech/mosaic/apps/api/internal/billingdiagnostics"
 	"github.com/Mujhtech/mosaic/apps/api/internal/browserauth"
 	"github.com/Mujhtech/mosaic/apps/api/internal/cloudworkspace"
 	"github.com/Mujhtech/mosaic/apps/api/internal/experiment"
@@ -26,6 +27,7 @@ import (
 	analyticshttp "github.com/Mujhtech/mosaic/apps/api/internal/transport/analytics"
 	billinghttp "github.com/Mujhtech/mosaic/apps/api/internal/transport/billing"
 	billingaccesshttp "github.com/Mujhtech/mosaic/apps/api/internal/transport/billingaccess"
+	billingdiagnosticshttp "github.com/Mujhtech/mosaic/apps/api/internal/transport/billingdiagnostics"
 	browserauthhttp "github.com/Mujhtech/mosaic/apps/api/internal/transport/browserauth"
 	cloudworkspacehttp "github.com/Mujhtech/mosaic/apps/api/internal/transport/cloudworkspace"
 	experimenthttp "github.com/Mujhtech/mosaic/apps/api/internal/transport/experiment"
@@ -95,6 +97,10 @@ type Dependencies struct {
 	// Access Tokens, the SDK entitlement sync endpoint, and the trusted-server
 	// entitlement reads. It is nil whenever Billing is.
 	BillingAccess *billingaccess.Service
+	// BillingDiagnostics owns the Phase 9B projection health surface. It is a
+	// sibling of Phase 9A billing health, not a field on it: the two summaries
+	// answer different operator questions.
+	BillingDiagnostics *billingdiagnostics.Service
 	// EntitlementSyncLimiter bounds the SDK sync endpoint, which is the
 	// highest-QPS authenticated surface Mosaic serves.
 	EntitlementSyncLimiter httpmiddleware.Limiter
@@ -188,6 +194,9 @@ func NewWithDependencies(cfg Config, logger zerolog.Logger, dependencies Depende
 							// export-class bucket rather than the baseline API one.
 							billinghttp.RegisterProjectRoutes(project, dependencies.Billing,
 								httpmiddleware.RateLimit("export", dependencies.ExportLimiter, principalKey))
+						}
+						if dependencies.BillingDiagnostics != nil {
+							billingdiagnosticshttp.RegisterProjectRoutes(project, dependencies.BillingDiagnostics)
 						}
 						if dependencies.Experiment != nil {
 							project.Group(func(decision chi.Router) {

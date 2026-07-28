@@ -301,13 +301,27 @@ func (r *Repository) ProjectionStatusFor(ctx context.Context, projectID, environ
 	// Facts recorded after the last projection are the backlog. Counting rows
 	// rather than trusting a queue depth means an enqueue that never happened
 	// still shows up.
+	//
+	// The join goes through the materialized chain-digest closure rather than
+	// comparing `lineage_key_digest` to `purchase_chain_digest` directly. Only
+	// the first fact of a Google chain carries the lineage's root digest; every
+	// fact recorded after a plan change carries the successor token's digest, so
+	// the direct comparison omitted precisely the customers whose state is most
+	// likely to be behind and reported them as current. Reaching for the
+	// projection loader's recursive CTE instead would put a per-customer chain
+	// walk on the SDK sync path, which is the highest-QPS authenticated surface
+	// Mosaic has — the closure is maintained by trigger so this stays one join.
 	var pending int
 	if err := r.pool.QueryRow(ctx,
 		`SELECT count(*)
 		 FROM billing_transaction_facts f
+		 JOIN purchase_chain_digest_links d
+		   ON d.project_id = f.project_id
+		  AND d.environment_id = f.environment_id
+		  AND d.chain_digest = f.purchase_chain_digest
 		 JOIN purchase_lineages l
-		   ON l.environment_id = f.environment_id
-		  AND l.lineage_key_digest = f.purchase_chain_digest
+		   ON l.environment_id = d.environment_id
+		  AND l.lineage_key_digest = d.root_digest
 		 WHERE l.project_id = $1 AND l.environment_id = $2 AND l.billing_customer_id = $3
 		   AND ($4::timestamptz IS NULL OR f.recorded_at > $4)`,
 		projectID, environmentID, customerID, lastProjected).Scan(&pending); err != nil {
