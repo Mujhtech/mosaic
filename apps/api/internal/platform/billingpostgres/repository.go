@@ -373,6 +373,33 @@ func (r *Repository) CredentialForApplication(ctx context.Context, environmentID
 	return identity, applicationID, nil
 }
 
+// CredentialForEnvironment resolves the one active credential a (Project,
+// provider, Environment) scope has.
+//
+// Migration 00022 declares UNIQUE (project_id, provider, environment_id) on
+// store_server_credentials, so this returns at most one row by schema rather
+// than by an ordering rule an application defect could get wrong. The Project is
+// part of the predicate as well as the Environment, so a caller that supplied a
+// mismatched pair gets nothing rather than another tenant's credential.
+func (r *Repository) CredentialForEnvironment(ctx context.Context, projectID, provider, environmentID string) (billing.IntakeIdentity, error) {
+	var identity billing.IntakeIdentity
+	err := r.pool.QueryRow(ctx,
+		`SELECT id, project_id, organization_id, environment_id, environment_mode,
+		        store_environment, provider, status
+		 FROM store_server_credentials
+		 WHERE project_id=$1 AND provider=$2 AND environment_id=$3 AND status='active'`,
+		projectID, provider, environmentID).
+		Scan(&identity.CredentialID, &identity.ProjectID, &identity.OrganizationID, &identity.EnvironmentID,
+			&identity.EnvironmentMode, &identity.StoreEnvironment, &identity.Provider, &identity.Status)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return billing.IntakeIdentity{}, billing.ErrCredentialMissing
+	}
+	if err != nil {
+		return billing.IntakeIdentity{}, fmt.Errorf("resolve credential for Environment: %w", err)
+	}
+	return identity, nil
+}
+
 func (r *Repository) RecordCredentialEvent(ctx context.Context, projectID, credentialID, action, outcome, diagnosticCode, actorID string, now time.Time) error {
 	id := "sce_" + hashID(credentialID, action, now)
 	_, err := r.pool.Exec(ctx,

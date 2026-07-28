@@ -18,6 +18,23 @@ type ListOptions struct {
 	To         *time.Time
 }
 
+// InputFilter narrows a replay or reconciliation scan over Raw Billing Inputs.
+//
+// Both members exist because of the same failure: a scan that is wider than the
+// work the run can actually do reports counts it did not earn. A Google
+// reconciliation over an unfiltered Environment picks up Apple notifications it
+// cannot re-query, and a token re-query over every Google input picks up
+// observations that carry a digest rather than a token — which can never
+// succeed, so every run would report `partial` and the alarm would never clear.
+// The zero value means "everything", which is what replay wants.
+type InputFilter struct {
+	// Provider limits the scan to one store.
+	Provider string
+	// Sources limits the scan to inputs that arrived by particular routes. Empty
+	// means every source.
+	Sources []string
+}
+
 // Page is one page of results plus the cursor for the next.
 type Page[T any] struct {
 	Items      []T    `json:"items"`
@@ -139,6 +156,13 @@ type Repository interface {
 	// owns the envelope columns; the service owns the cipher.
 	CredentialSecretFor(ctx context.Context, projectID, credentialID string) (StoreServerCredential, Envelope, string, string, string, error)
 	CredentialForApplication(ctx context.Context, environmentID, provider, providerApplicationIdentifier string) (IntakeIdentity, string, error)
+	// CredentialForEnvironment resolves the single active credential a
+	// (Project, provider, Environment) scope has. Migration 00022 makes that
+	// tuple UNIQUE, so the answer is unambiguous by construction rather than by
+	// a "pick the first" rule. It exists for inputs that arrive without a
+	// credential of their own — observations, whose tenancy comes from an API
+	// key — and returns ErrCredentialMissing when the scope has none.
+	CredentialForEnvironment(ctx context.Context, projectID, provider, environmentID string) (IntakeIdentity, error)
 	RecordCredentialEvent(ctx context.Context, projectID, credentialID, action, outcome, diagnosticCode, actorID string, now time.Time) error
 	UpdateCredentialHealth(ctx context.Context, projectID, credentialID, health, errorCode string, tested bool, now time.Time) error
 	// ActiveCredentials lists every usable credential for the worker loops.
@@ -158,8 +182,24 @@ type Repository interface {
 
 	// Validation worker.
 	LeaseValidationJob(ctx context.Context, workerID string, now, leaseUntil time.Time) (ValidationJob, bool, error)
+	// LeaseValidationJobFor creates (or takes over) the validation job for one
+	// named Raw Billing Input and returns it already leased to workerID.
+	//
+	// It exists because replay and Google reconciliation must revalidate an
+	// input that has already been ingested. Routing them back through
+	// PersistRawInput cannot work: that path is idempotent by design, so a
+	// second write of an existing input takes the duplicate branch and is
+	// suppressed — including the enqueue. Handing back a leased job instead
+	// means the caller runs the identical validation pipeline the worker runs,
+	// and no other worker can claim the job underneath it.
+	LeaseValidationJobFor(ctx context.Context, workerID string, input RawInput, now, leaseUntil time.Time) (ValidationJob, error)
 	CompleteAttempt(ctx context.Context, job ValidationJob, outcome AttemptOutcome, now time.Time) error
 	NextAttemptNumber(ctx context.Context, rawInputID string) (int, error)
+	// FactDigestsForInput returns the lowercase-hex fact digests already recorded
+	// for one input. It is the baseline a replay compares its recomputed digest
+	// against, which is what makes the comparison a real one rather than an
+	// assumption that nothing changed.
+	FactDigestsForInput(ctx context.Context, projectID, rawInputID string) ([]string, error)
 
 	// Resolution.
 	MappingCandidates(ctx context.Context, environmentID, applicationID, platform, provider, providerProductIdentifier string) ([]MappingCandidate, error)
@@ -186,7 +226,10 @@ type Repository interface {
 	CreateReplayJob(ctx context.Context, actor Actor, job ReplayJob, now time.Time) (ReplayJob, error)
 	ListReplayJobs(ctx context.Context, actor Actor, projectID, environmentID string, options ListOptions) (Page[ReplayJob], error)
 	LeaseReplayJob(ctx context.Context, workerID string, now, leaseUntil time.Time) (ReplayJob, bool, error)
-	ReplayInputs(ctx context.Context, job ReplayJob, limit int) ([]RawInput, error)
+	// ReplayInputs selects the inputs a replay or reconciliation run will
+	// revalidate, narrowed by filter. Replay passes the zero filter, because
+	// replaying a window deliberately covers everything in it.
+	ReplayInputs(ctx context.Context, job ReplayJob, filter InputFilter, limit int) ([]RawInput, error)
 	CompleteReplayJob(ctx context.Context, job ReplayJob, comparison, errorCode string, now time.Time) error
 
 	// Retention. The only path that removes a raw body.

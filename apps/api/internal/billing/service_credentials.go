@@ -166,7 +166,7 @@ func (s *Service) TestCredential(ctx context.Context, actor Actor, projectID, cr
 			}
 		}
 	case ProviderGooglePlay:
-		account, _, credErr := s.googleCredential(ctx, RawInput{
+		account, _, _, credErr := s.googleCredential(ctx, RawInput{
 			ProjectID: projectID, CredentialID: credentialID, Provider: ProviderGooglePlay,
 		})
 		if credErr != nil {

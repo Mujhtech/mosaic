@@ -3,8 +3,15 @@
 Operator: mosaic-backend agent
 Date: 2026-07-28
 Branch: `phase/9a-transaction-ingestion-validation`
-Baseline commit: `715f9ac` (Stage 2/3 work, uncommitted demo driver on top)
+Baseline commit: `9c311ac` (first demonstration run and driver); defect fixes are
+uncommitted on top of it and are recorded here as **fix commit pending**.
 Specification: `docs/plans/phase-9a-transaction-ingestion-validation.md` §15, §6–§8
+
+**This document records two runs.** The first run (commit `9c311ac`) found three
+blocking defects. They were fixed, the minimum tests that catch each were added,
+and the driver was re-run against a fresh container. Every evidence block below
+is from the **second, post-fix run** unless it is explicitly labelled
+"before the fix". §9 records each defect as found → fixed → re-verified.
 
 **Honesty rule applied throughout.** Every claim below is backed by an HTTP
 response or a SQL result produced by the run recorded here. Nothing is
@@ -29,10 +36,10 @@ exactly what only a live sandbox can prove.
 | Host | Apple Silicon macOS (Darwin 25.5.0), `arm64` |
 | Go toolchain | go1.26.x darwin/arm64 |
 | PostgreSQL | `postgres:17` (Docker, container `mosaic-9a-demo`, published port 55447) |
-| Migrations | `go run ./cmd/migrate up` → 25/25 applied to an empty database |
+| Migrations | `go run ./cmd/migrate up` → 26/26 applied to an empty database (00026 is the fix migration, §9 defect 3) |
 | Demo driver | `apps/api/cmd/billingdemo` (new; see §8) |
 | Run command | `DATABASE_URL=postgres://demo:demo@127.0.0.1:55447/mosaic_demo?sslmode=disable go run ./cmd/billingdemo` |
-| Wall-clock | **26.965 s** for the complete eight-stage sequence, including a real 26 s retry backoff wait |
+| Wall-clock | **37.046 s** for the complete eight-stage sequence, including a real retry backoff wait (26.965 s on the pre-fix run) |
 | Tenant | `org_demo9a` / `proj_demo9a` / `env_demo9a` (mode `production`); applications `app_demo9a_ios` (ios, `com.mosaic.demo`) and `app_demo9a_android` (android, `com.mosaic.demo.android`) |
 | Data | Created by this run only. No production data exists or was used. |
 | Cleanup | Container removed after the run (§11) |
@@ -52,7 +59,7 @@ evidence below.
 
 | Component | Evidence it was the real thing |
 | --- | --- |
-| PostgreSQL schema, constraints, append-only triggers | `cmd/migrate up`, 25/25 migrations; every write below went through them |
+| PostgreSQL schema, constraints, append-only triggers | `cmd/migrate up`, 26/26 migrations; every write below went through them |
 | chi router with the full middleware stack | built by `httpserver.NewWithDependencies` and mounted on `httptest.NewServer`; the notification POSTs carry no `Origin` header and pass `trustedMutationOrigins` |
 | Every billing HTTP handler and its ozzo validation | all HTTP lines below are real handler responses |
 | `billing.Service` — intake, observations, workers, operations | called directly for the worker jobs, via HTTP for everything else |
@@ -252,30 +259,43 @@ POST /v1/billing/apple/notifications/<INTAKE-TOKEN-REDACTED>   -> 202
 ```
 apple_inputs | facts | jobs | attempts
 -------------+-------+------+---------
-2            | 1     | 2    | 2
+2            | 2     | 2    | 2
 ```
 
-Two Apple inputs and two jobs exist because the *client observation* is also an
-Apple input with its own job; the notification itself produced exactly one input
-and one job on both deliveries. One fact.
+Broken down by source — this is the row that answers "did the redelivery
+duplicate anything?":
+
+```
+source             | inputs | jobs | facts
+-------------------+--------+------+------
+apple_notification | 1      | 1    | 1
+client_observation | 1      | 1    | 1
+```
+
+The notification produced **exactly one input, one job, and one fact across both
+deliveries**. The second Apple input and the second fact belong to the *client
+observation* from step 1.3, which is now validated in its own right (see §9
+defect 3 — before the fix it quarantined). The two facts describe the same
+transaction but are not identical statements; §9's "second observation" explains
+why and why that is deliberate rather than a duplication bug.
 
 Ledger:
 
 ```
 entry_type               | count
 -------------------------+------
-fact_recorded            | 1
+fact_recorded            | 2
 input_duplicate_detected | 1     <-- the redelivery
-input_quarantined        | 1     <-- the client observation, see §9 defect 3
 input_received           | 2
-product_resolved         | 1
-validation_failed        | 1     <-- the client observation, see §9 defect 3
+product_resolved         | 2
 validation_started       | 2
-validation_succeeded     | 1
+validation_succeeded     | 2
 ```
 
 The redelivery produced an `input_duplicate_detected` ledger entry, no second
-input, no second job, and no second fact.
+input, no second job, and no second fact. No `validation_failed` and no
+`input_quarantined` entry appears any more — both were the observation failing,
+and both are gone.
 
 ---
 
@@ -368,6 +388,40 @@ rtdn_inputs | google_facts | rtdn_duplicate_entries
 
 One RTDN input, one fact, one `input_duplicate_detected` entry. The redelivery
 was acknowledged (so Pub/Sub stops redelivering) without re-ingesting.
+
+### Step 2.6 — Observations resolve their credential from the Environment scope
+
+An observation's tenancy comes from an API key, which proves organization,
+Project, Environment, and Application, but names no store connection. The
+credential is therefore resolved at validation time from
+`(project_id, provider, environment_id)` — UNIQUE by migration 00022.
+
+```
+provider    | provider_event_id | input_credential_id | resolved_credential_id     | outcome     | diagnostic_code
+------------+-------------------+---------------------+----------------------------+-------------+---------------------------
+app_store   | sub_demo_apple_1  | (none on input)     | ssc_uGGRAsWaxfM2jqXvLQKnQg | validated   |
+google_play | sub_demo_google_1 | (none on input)     | ssc_g3zxAllOWzJgL0-cPgx6ig | quarantined | purchase_token_unavailable
+```
+
+Both inputs carried no credential of their own; both attempts resolved one and
+recorded it as provenance. The Apple observation validated end to end and
+produced its own fact:
+
+```
+provider  | provider_transaction_id | provider_product_identifier | resolution_state | mosaic_product_id  | renewal_expected | fact_digest
+----------+-------------------------+-----------------------------+------------------+--------------------+------------------+-----------------------------------------------------------------
+app_store | 2000000512345671        | com.mosaic.demo.pro.monthly | active_mapping   | prd_demo9a_monthly | NULL             | cc06f6a9660a055d8ff258e548f10499e0b7ab3d656dfc37c246e0c6a85efe07
+```
+
+This is plan §6's "Get Transaction Info lookup where the input is a bare
+reference", working: the observation carried only the decimal transaction id,
+and the App Store Server API supplied everything else.
+
+The Google observation still quarantines, and correctly so: it carries a token
+*digest*, a digest cannot be reversed into the token the Play API requires, and
+the honest answer is `purchase_token_unavailable`. That is the documented,
+accepted limitation from the Stage 2 report (Addendum 1) — not the credential
+failure it used to report.
 
 ---
 
@@ -585,7 +639,7 @@ The recovered notification collapses onto the same idempotency key a live
 delivery would have produced (`AppleNotificationKey(notificationUUID)`), so
 re-running reconciliation writes nothing.
 
-### Step 5.5 — The other wired strategy did not do what it claims
+### Step 5.5 — The other wired strategy: `google_token_requery`
 
 ```
 POST .../billing/reconciliation-runs (google_token_requery)   -> 202
@@ -594,16 +648,35 @@ POST .../billing/reconciliation-runs (google_token_requery)   -> 202
 ```
 strategy             | status    | examined_count | discovered_count | duplicate_count | failure_count
 ---------------------+-----------+----------------+------------------+-----------------+--------------
-google_token_requery | completed | 7              | 0                | 7               | 0
+google_token_requery | completed | 1              | 0                | 1               | 0
 ```
 
 ```
-validation attempts before the run: 9; after: 9
-Play API calls so far: 1; Pub/Sub pulls so far: 2
+validation attempts before the run: 9; after: 10 (+1)
+Play API calls before the run: 1; after: 2 (+1)
 ```
 
-The run reports `completed` with 7 examined, but **the Play API was never called
-and no validation attempt was created**. See §9 defect 2.
+The run genuinely re-read the Play API (+1 call) and appended a real validation
+attempt (+1). The provider answer was unchanged, so the recomputed fact digest
+matched the one on record and the item is reported as a duplicate rather than a
+discovery — a comparison the run performed rather than assumed.
+
+`examined_count = 1` is the provider and source filter working. The Environment
+holds seven inputs inside the window; exactly one of them — the RTDN — carries a
+purchase token this strategy can re-query:
+
+```
+provider    | source                     | attempts
+------------+----------------------------+---------
+app_store   | apple_notification         | 5
+app_store   | apple_notification_history | 1
+app_store   | client_observation         | 1
+google_play | client_observation         | 1     <-- untouched: carries a digest, not a token
+google_play | google_rtdn                | 2     <-- the reconciliation appended this one
+```
+
+Before the fix this run reported `examined=7, duplicate=7, completed` with zero
+Play API calls and zero attempts. See §9 defect 2.
 
 ---
 
@@ -633,34 +706,56 @@ kind         | status    | validator_version | examined_count | unchanged_count 
 revalidation | completed | 1                 | 1              | 1               | 0              | 0              | identical
 ```
 
-Validation queue state after the replay job ran, and state after draining
-validation:
-
-```
-status    | attempt_count | available_now
-----------+---------------+--------------
-completed | 1             | true
-```
+The replay really re-read the store — the Apple stub's cumulative call count
+rises during this step — and appended an attempt:
 
 ```
 attempts | facts | facts_total
 ---------+-------+------------
-1        | 1     | 6            <-- after replay: unchanged
+2        | 1     | 7            <-- after replay: one more attempt, no new fact
 ```
 
 ```
 attempt_number | outcome   | validator_version | started_at
 ---------------+-----------+-------------------+-------------------------
-1              | validated | 1                 | 2026-07-28T06:27:52.047Z
+1              | validated | 1                 | 2026-07-28T07:24:25.801Z
+2              | validated | 1                 | 2026-07-28T07:25:02.523Z
 ```
 
-**No fact was duplicated and prior attempts were preserved — but no new
-Validation Attempt was appended either, and the `comparison_result: identical`
-was not computed from a re-validation.** The job never re-queued the input. See
-§9 defect 1. The parts of the plan's §8 replay contract this demonstration *did*
-satisfy — facts never duplicated, prior attempts and facts preserved, no
-customer access can change — are satisfied; the part it did not satisfy is
-"new Validation Attempts are appended … normalized output compared".
+The recomputed fact digest matched the one already on record, so the unique
+constraint absorbed the write and exactly one fact remains:
+
+```
+fact_digest                                                      | resolution_state | mosaic_product_id  | recorded_at
+-----------------------------------------------------------------+------------------+--------------------+-------------------------
+d65b1306783317d373c0127fe0b86778b3e6e1685d306201c44d5ccea1a4db4d | active_mapping   | prd_demo9a_monthly | 2026-07-28T07:24:25.808Z
+```
+
+The deduplication is recorded rather than silent, so the ledger shows the
+pipeline ran and found nothing new:
+
+```
+entry_type               | count
+-------------------------+------
+fact_deduplicated        | 1     <-- the replay's recomputed fact, absorbed
+fact_recorded            | 1     <-- the original
+input_duplicate_detected | 1
+input_received           | 1
+product_resolved         | 2     <-- resolution ran on both attempts
+validation_started       | 2
+validation_succeeded     | 2
+```
+
+This satisfies plan §8 in full: new Validation Attempts are appended, prior
+attempts and facts are preserved, the normalized output is compared, facts are
+never duplicated, and no customer access can change (§8 step 6.2). The
+`comparison_result: identical` is now a verdict computed by comparing the
+recomputed digest against the recorded baseline — the changed-answer branch,
+which cannot be produced by this fixed-response stub, is pinned by
+`TestReplayAppendsAttemptAndComparesAgainstRecordedFacts` (§9).
+
+Before the fix this step appended no attempt at all while still reporting
+`identical`. See §9 defect 1.
 
 ### Step 6.2 — No customer-access or entitlement state exists anywhere
 
@@ -720,97 +815,198 @@ access to change — structurally, not by policy.
 
 ---
 
-## 9. Defects the demonstration uncovered
+## 9. Defects: found → fixed → re-verified
 
-All three are new findings. None was fixed during the demonstration: fixing them
-would have invalidated the evidence captured here, and two of them are design
-decisions that belong to the Phase 9A review rather than to a demo run.
+The first run (commit `9c311ac`) found three blocking defects. All three are now
+fixed, each has a test that fails against the reintroduced bug, and the
+demonstration has been re-run against a fresh container. **The fixes are
+uncommitted: fix commit pending.**
 
-### Defect 1 — Replay never appends a Validation Attempt (high)
+Every test below was checked by reintroducing its defect and confirming the test
+fails — a test that has never seen the bug it claims to catch is a decoration.
+The exact failure each produced is quoted.
 
-**Observed:** §8 step 6.1. `ProcessNextReplay` completed with
+### Defect 1 — Replay never appended a Validation Attempt (high) — FIXED
+
+**Found.** `ProcessNextReplay` completed with
 `examined=1, unchanged=1, comparison_result=identical`, yet the input's attempt
 count stayed at 1 and no validation ran.
 
-**Root cause:** `Service.ProcessNextReplay` re-enqueues by calling
+**Root cause.** Replay re-enqueued by calling
 `Repository.PersistRawInput(ctx, input, /*enqueue=*/true, now)` on an input that
-already exists. In `billingpostgres.PersistRawInput`, the `ON CONFLICT DO
+already existed. In `billingpostgres.PersistRawInput` the `ON CONFLICT DO
 NOTHING` insert affects zero rows, the duplicate branch writes an
 `input_duplicate_detected` ledger entry, and it **returns before reaching the
-`if enqueue` block**. Nothing is ever queued.
+`if enqueue` block**. Nothing was ever queued. Worse, the job reported a
+comparison it had never performed.
 
-**Consequence:** replay and revalidation are inert. Worse, the job reports
-`comparison_result: identical`, which is a comparison that was never performed —
-an operator reading the dashboard would conclude the ledger had been
-re-verified. Plan §8 requires "new Validation Attempts are appended; prior
-attempts and facts preserved; normalized output compared".
+**Fixed.** A new repository method `LeaseValidationJobFor` creates — or takes
+over — the validation job for one named input and returns it **already leased**
+to the caller. Writing it as `queued` would have let the ordinary validation
+worker claim it in between, so the replay would attribute an outcome it did not
+produce; taking the lease in the same statement makes that handover impossible.
+A new `Service.revalidate` helper then runs the *identical* pipeline the worker
+runs (`runValidation` + `CompleteAttempt`), so determinism still lives in exactly
+one place. The comparison is now real: `FactDigestsForInput` reads the digests
+already on record **before** the attempt runs, and the recomputed digest is
+compared against that baseline. An outcome that is neither `validated` nor
+`recorded_no_fact` counts as a conflict rather than as "unchanged", because a
+quarantine or a provider outage means the replay could not confirm the earlier
+answer.
 
-**Suggested fix:** replay should not go through the duplicate-suppressing intake
-path at all. It should insert the validation job directly, as
-`Repository.RequeueValidation` already does correctly for the quarantine-retry
-path (that path *is* demonstrated working, §5 step 3.3).
+**Re-verified.** §8 step 6.1: attempt 2 appended, one fact retained, a
+`fact_deduplicated` ledger entry written, `comparison_result: identical`
+computed.
 
-### Defect 2 — `google_token_requery` reconciliation performs no re-query (high)
-
-**Observed:** §7 step 5.5. `examined=7, duplicate=7, status=completed`, zero Play
-API calls, zero new validation attempts.
-
-**Root cause:** identical to defect 1 — `Service.reconcileGoogleTokens` calls
-`PersistRawInput(..., true, ...)` on existing inputs and hits the same early
-return. Secondarily, its candidate set comes from `Repository.ReplayInputs`,
-which filters only on project, environment, `body_state='stored'`, and the time
-window — so it examined all 7 inputs in the window including the Apple ones,
-none of which has a Google purchase token.
-
-**Consequence:** the Google half of reconciliation is a counter that always
-reports success. An operator using it to close a suspected ingestion gap after a
-Play outage would be told everything reconciled while nothing was re-read.
-
-### Defect 3 — Every observation-sourced input quarantines as `credential_unusable` (high)
-
-**Observed:** §4 step 2.5.
+**Test.** `TestReplayAppendsAttemptAndComparesAgainstRecordedFacts`. It replays
+twice: once with an unchanged provider answer (must report `identical`,
+`unchanged=1`, one fact) and once after moving the subscription's expiry, which
+moves the fact digest (must report `new_facts`, `new=1`, two facts). The second
+half is what proves the `identical` verdict is computed rather than assumed —
+without it, a hard-coded "identical" would pass. Against the reintroduced bug it
+fails with:
 
 ```
-provider    | provider_event_id | credential_id | outcome     | failure_category | diagnostic_code
-------------+-------------------+---------------+-------------+------------------+--------------------
-app_store   | sub_demo_apple_1  | (none)        | quarantined | configuration    | credential_unusable
-google_play | sub_demo_google_1 | (none)        | quarantined | configuration    | credential_unusable
+1 attempts after replay, want 2 — the replay appended no attempt
 ```
 
-**Root cause:** `Service.submitObservation` builds its `RawInput` from an
+### Defect 2 — `google_token_requery` reconciliation performed no re-query (high) — FIXED
+
+**Found.** `examined=7, duplicate=7, status=completed`, with zero Play API calls
+and zero new validation attempts. It also examined all seven inputs in the
+window, including the Apple ones, none of which has a purchase token.
+
+**Root cause.** Two independent problems. The same early return as defect 1, and
+`Repository.ReplayInputs` filtered only on project, environment, `body_state`,
+and the window.
+
+**Fixed.** `reconcileGoogleTokens` now goes through `Service.revalidate`, so each
+candidate is genuinely re-read from the Play API. `ReplayInputs` gained an
+`InputFilter` with a provider and a source list. The reconciliation passes
+`{Provider: google_play, Sources: [google_rtdn, google_token_requery]}`; replay
+passes the zero filter, because replaying a window deliberately covers
+everything in it.
+
+The **source** half of the filter is not redundant with the provider half, and
+the first fix attempt got this wrong: filtering by provider alone still pulled in
+the Google *client observation*, which carries a token digest rather than a
+token. That can never be re-queried, so the run reported `partial` with
+`failure_count=1` — an alarm that would fire on every reconciliation forever and
+therefore never be believed. Restricting to token-bearing sources is what makes
+`completed` mean something.
+
+**Checked for the same gap elsewhere.** `reconcileAppleNotifications` does not
+use `ReplayInputs` at all: its candidates come from Apple's Get Notification
+History and are constrained by the credential's own Application scope, so it has
+no equivalent filter gap. `ProcessNextReplay` is the only other caller and
+deliberately passes an empty filter.
+
+**Re-verified.** §7 step 5.5: `examined=1, duplicate=1, failure=0, completed`,
+Play API calls +1, validation attempts +1, and the per-source table showing the
+digest-only observation untouched.
+
+**Test.** `TestGoogleReconciliationRequeriesOnlyGoogleInputs` asserts all three
+halves in one place, because fixing one without the others still produces a run
+that lies: the recorded Play API call count must rise by exactly one, the Google
+RTDN input must gain an attempt, and neither the Apple input nor the digest-only
+Google observation may gain one. Against the reintroduced filter bug it fails
+with:
+
+```
+the Apple input gained 1 attempts from a Google reconciliation
+```
+
+### Defect 3 — Every observation quarantined as `credential_unusable` (high) — FIXED
+
+**Found.**
+
+```
+provider    | provider_event_id | credential_id | outcome     | diagnostic_code
+------------+-------------------+---------------+-------------+--------------------
+app_store   | sub_demo_apple_1  | (none)        | quarantined | credential_unusable
+google_play | sub_demo_google_1 | (none)        | quarantined | credential_unusable
+```
+
+**Root cause.** `Service.submitObservation` builds its `RawInput` from an
 `ObservationScope` derived from the API key, which carries organization,
-project, environment, application, and platform — but **no `credential_id`**.
-Both `Service.appleCredential` and `Service.googleCredential` begin
-`if input.CredentialID == "" { return ErrCredentialUnusable }`. Every
-observation therefore fails at the first step of validation, before any
-reference is even read.
+Project, Environment, Application, and platform — but **no `credential_id`**.
+Both `appleCredential` and `googleCredential` began
+`if input.CredentialID == "" { return ErrCredentialUnusable }`, so every
+observation failed before its reference was read. The entire SDK-facing surface
+was inert while the endpoint kept answering `accepted_for_validation`.
 
-**Consequence:** the entire SDK-facing surface is inert. The four SDK teams have
-shipped the contract envelope; the server accepts it with
-`accepted_for_validation` and then quarantines it 100 % of the time. For Apple
-this contradicts plan §6 directly ("Get Transaction Info lookup where the input
-is a bare reference"). For Google it is partly masked by the known and accepted
-`purchase_token_unavailable` limitation (Stage 2 report, Addendum 1), but the
-failure occurs earlier and for a different reason, so that limitation is not the
-explanation.
+**Fixed.** Four parts:
 
-**Suggested fix:** resolve the credential at validation time from
-`(project_id, provider, environment_id)` — which is unique by the migration-00022
-constraint — whenever the input carries none. This is a small change in
-`appleCredential`/`googleCredential` and needs no schema change. It also removes
-the multi-Application `bid` bootstrapping awkwardness noted in Stage 2 §7.5 for
-the observation path.
+1. A new repository method `CredentialForEnvironment(projectID, provider,
+   environmentID)`. Migration 00022's `UNIQUE (project_id, provider,
+   environment_id)` is what makes this answer unambiguous by schema rather than
+   by a "pick the first" rule an application defect could get wrong. The Project
+   is in the predicate as well as the Environment, so a mismatched pair returns
+   nothing rather than another tenant's credential.
+2. `Service.credentialIDFor` uses the input's own credential when it has one and
+   falls back to the scope lookup when it does not. The resolved id is stamped
+   onto the attempt, so provenance is recorded even for a failure — and it is
+   what `ApplicationForIdentifier` now receives, which was the second blocker
+   behind the first.
+3. A new sentinel `ErrCredentialMissing`, distinct from `ErrCredentialUnusable`,
+   and a new quarantine reason `missing_validation_credential` (migration
+   00026). The two failures have different causes and different fixes: an
+   unusable credential is a broken secret and the answer is rotation; a missing
+   one means Mosaic was asked to validate against a store it has never been
+   connected to. Reporting the second as the first sends an operator to rotate a
+   credential that does not exist.
+4. A fourth defect found while fixing this one: when the body carried no
+   `packageName` — which is every observation, since only an RTDN carries one —
+   `validateGoogle` fell back to the credential's **Pub/Sub project id**, which
+   is not a package name and can never match an Application scope. It now falls
+   back to the credential's first scoped Application identifier, the same
+   convention the Apple path already uses for `bid`, and quarantines explicitly
+   if the credential has no scoped Application at all.
 
-### Non-defect worth recording
+**Re-verified.** §4 step 2.6: both observations resolve a credential from their
+Environment scope and record it; the Apple observation validates end to end and
+produces its own fact from a bare transaction id, which is plan §6's
+"Get Transaction Info lookup where the input is a bare reference". The Google
+observation now reports `purchase_token_unavailable` — the documented, accepted
+limitation — instead of a credential failure.
 
-The quarantine-repair flow (§5) produces **two** Transaction Facts for one
-transaction — one `unresolved`, one `active_mapping`. This is correct and
-intentional: `FactDigest` covers the resolution outcome, so a repaired
-resolution is a new statement rather than a rewrite of the old one. It is called
-out here only because a reader counting facts against transactions will notice
-it.
+**Test.** `TestObservationValidatesAgainstEnvironmentScopedCredential` asserts
+the positive case (an observation with no credential of its own validates
+against the Environment's credential, records that credential on the attempt,
+produces a fact, and actually called the provider) and the negative case (an
+Environment with no credential quarantines as `missing_validation_credential`).
+Against the reintroduced bug it fails with:
 
----
+```
+observation attempt outcome "quarantined" (credential_unusable), want validated
+— the credential gate still blocks observations
+```
+
+### Second observation: one transaction, two facts, by design
+
+With defect 3 fixed, the Apple transaction `2000000512345671` now carries **two**
+Transaction Facts — one from the notification, one from the client observation:
+
+| Source | `renewal_expected` | Fact digest |
+| --- | --- | --- |
+| `apple_notification` | `true` | `d65b1306…` |
+| `client_observation` | `NULL` | `cc06f6a9…` |
+
+They differ in exactly one field. Apple's notification carries `signedRenewalInfo`
+and Get Transaction Info does not, so the observation genuinely knows less.
+`FactDigest` covers `renewal_expected`, so the two are different statements and
+both are recorded.
+
+This is **not** a duplication defect — duplicate *delivery* of the same
+notification still produces one fact (§3 step 1.6), and replaying the same input
+still produces none (§8 step 6.1). But it does mean the number of facts for a
+transaction depends on how many independent routes told Mosaic about it, which an
+analytics consumer in a later phase must not read as a count of purchases. It is
+raised here as a design question for the 9A review — should `renewal_expected`
+participate in fact identity, or should it be a projection over facts? — and
+deliberately not changed, because altering `FactDigest` semantics is a
+correctness decision with ledger-wide consequences and is outside the fix scope
+the coordinator set.
 
 ## 10. Limitations — what only a live sandbox can prove
 
@@ -850,9 +1046,19 @@ Every item below is **unavailable, not passing**.
 9. **`apple_transaction_history` reconciliation** is still unimplemented and was
    therefore not demonstrated (Stage 2 report §7.7).
 10. **The trusted server observation endpoint** (`POST
-    /v1/billing/server/observations`) was not exercised in this run. Given
-    defect 3 it would have quarantined identically; it is listed here so the
-    omission is not mistaken for a pass.
+    /v1/billing/server/observations`) was not exercised in either run. It shares
+    the observation validation path that §9 defect 3 fixed, so it is expected to
+    behave as the client endpoint now does — but expectation is not evidence, and
+    it is listed here so the omission is not mistaken for a pass.
+12. **A replay whose provider answer changed** was not shown by the driver: the
+    Apple stub returns a fixed transaction, so the demonstration can only exhibit
+    the `identical` branch. The `new_facts` branch is covered by
+    `TestReplayAppendsAttemptAndComparesAgainstRecordedFacts` against a mutated
+    Play response (§9 defect 1), not by this document.
+13. **The `missing_validation_credential` quarantine** does not appear in the
+    demonstration, because the demo tenant always has a credential. It is covered
+    by the negative half of
+    `TestObservationValidatesAgainstEnvironmentScopedCredential`.
 11. **`cmd/api` and `cmd/worker` as processes.** See §2 — the real router and the
     real job functions ran, but not inside the deployed binaries, because those
     binaries pin Apple's real root with no override.
@@ -867,11 +1073,13 @@ single scripted sequence, which is the property such a path would be asserting:
 ```
 DATABASE_URL=… go run ./cmd/billingdemo
 …
-=== demonstration complete in 26.965s ===
+=== demonstration complete in 37.046s ===
 ```
 
-One command, no manual steps, 27 seconds — of which 26 seconds is the real retry
-backoff wait in §6.
+One command, no manual steps, 37 seconds — of which roughly 26 seconds is the
+real retry backoff wait in §6. (The pre-fix run took 26.965 s; the post-fix run
+is longer because replay and Google reconciliation now do real work instead of
+returning immediately.)
 
 ---
 
@@ -904,43 +1112,73 @@ cd apps/api && go run ./cmd/migrate up && go run ./cmd/billingdemo
 docker rm -f mosaic-9a-demo
 ```
 
-### Checks run
+### Checks run (post-fix)
 
 | Check | Command | Result |
 | --- | --- | --- |
-| Formatting | `gofmt -l ./cmd/billingdemo` | clean |
-| Static analysis | `go vet ./cmd/billingdemo` | clean |
+| Formatting | `gofmt -l .` (apps/api) | clean |
+| Static analysis | `go vet ./...` | clean |
 | Build | `go build ./...` | ok |
-| Migrations | `go run ./cmd/migrate up` on empty `postgres:17` | 25/25 applied |
-| Demonstration | `go run ./cmd/billingdemo` | exit 0, 26.965 s |
+| Full test suite | `go test -p 1 -count=1 ./...` with `DATABASE_TEST_URL` on a fresh `postgres:17` | all packages ok, 0 failures |
+| Defect tests fail against the reintroduced bugs | each defect re-added in turn, single test run | all three fail with the messages quoted in §9 |
+| Migrations up | `go run ./cmd/migrate up` on empty `postgres:17` | 26/26 applied |
+| Migration 00026 rollback | `migrate down-to 25` with a `missing_validation_credential` row present, then `up` | the quarantine record and its action are removed, the Raw Billing Input survives, re-applies cleanly |
+| Migrations full down/up | `migrate up` → `down-to 0 --confirm` → `up` on a **clean** database | rolled back to 0 and re-applied, `verdict: compatible` |
+| Preflight | `go run ./cmd/migrate preflight` | `verdict: compatible`, not dirty |
+| Demonstration | `go run ./cmd/billingdemo` on a fresh container | exit 0, 37.046 s |
+
+One honest caveat on the full down/up: run against the **demonstration** database
+it fails at migration 8 with
+`check constraint "provider_product_mappings_scope_shape_check" is violated by
+some row`. That is migration 8's own down path reacting to connection-less
+Provider Product Mappings the demo seeds, not a regression from 00026 — the same
+rollback succeeds on a clean database, and 00026's own down/up was verified
+separately with a real row present. It is recorded here rather than omitted.
 
 ### Cleanup
 
-The `mosaic-9a-demo` container and its volume were removed after the run. Port
-55441 was avoided because an unrelated local process already held it; 55447 was
-used instead.
+The `mosaic-9a-demo`, `mosaic-9a-test`, `mosaic-9a-fix`, and `mosaic-9a-clean`
+containers and their volumes were removed after the runs. Port 55441 was avoided
+because an unrelated local process already held it; 55447, 55449, 55450, and
+55451 were used instead.
 
 ---
 
 ## 12. Stage 4 verdict
 
-**Demonstrations 1, 2, 3, 4, and 5 (Apple notification-history strategy) pass**
-against synthetic vectors and local provider stubs, with every synthetic element
-classified in §2 and every live-store gap recorded in §10.
+**All six demonstrations pass**, against synthetic vectors and local provider
+stubs, with every synthetic element classified in §2 and every live-store gap
+recorded in §10.
 
-**Demonstration 6 (replay) fails**: it duplicated no fact and preserved all prior
-attempts, but it appended no new Validation Attempt and reported a comparison it
-never performed (§9 defect 1).
+| # | Demonstration | Verdict |
+| --- | --- | --- |
+| 1 | Apple: credential encrypted at rest → intake token → observation → signed notification → verify → persist → 2xx → worker → fact → resolution → duplicate idempotency | pass |
+| 2 | Google: credential → RTDN via pull consumer → authoritative Play lookup → validate → resolve → fact → duplicate idempotency | pass |
+| 3 | Quarantine: authentic transaction, unmapped Product → verified → resolution fails → quarantine → repair mapping → re-run → fact; original input and attempt history preserved | pass |
+| 4 | Retry: provider 503 → retryable attempt → recovery → success; failed attempt preserved (real 26 s wall-clock wait, no clock mocking) | pass |
+| 5 | Reconciliation: omitted notification → discovered → ingested idempotently → validated → resolved → run summary; `google_token_requery` re-queries for real | pass |
+| 6 | Replay: new Validation Attempt appended, prior attempts and facts preserved, comparison computed, no fact duplicated | pass |
+| — | No customer-access, entitlement, or subscription state exists anywhere | pass |
 
-**Demonstration 5 is partial**: the Apple notification-history strategy works
-end to end; the `google_token_requery` strategy is inert (§9 defect 2).
+The three defects the first run found (§9) were all in application-service
+wiring — not in the schema, the frozen contract, the security boundary, or the
+product resolver, which are the parts that would have been expensive to get
+wrong. All three are fixed, each is pinned by a test that fails against the
+reintroduced bug, and the demonstration has been re-run end to end on a fresh
+container.
 
-**A third defect outside the six demonstrations** makes the entire SDK
-observation surface inert (§9 defect 3).
+**Two things this document does not establish, and which the 9A review still
+owns:**
 
-Under the Phase 9A plan, Stage 4 therefore cannot be recorded as a clean pass.
-The three defects are all in application-service wiring rather than in the
-schema, the contract, the security boundary, or the resolver — the parts that
-would have been expensive to get wrong — and all three have small, local fixes.
-Recommendation: fix defects 1–3, re-run this driver, and re-record §8 step 6.1,
-§7 step 5.5, and §4 step 2.5.
+1. **Nothing here proves Mosaic works against a real store.** §10 lists eleven
+   specific gaps. The most consequential is that the JWS verifier has never seen
+   an authentic Apple signature. Live-sandbox confirmation of
+   credential → purchase → notification → validation → fact remains an operator
+   follow-up before GA.
+2. **One transaction can carry more than one fact** when Mosaic learns about it
+   by more than one route (§9, "Second observation"). That is deliberate under
+   the current `FactDigest` definition, but it is a design decision a later phase
+   will consume, and it should be confirmed explicitly rather than inherited.
+
+Fix commit pending: the changes described in §9 are uncommitted at the time of
+writing.

@@ -50,6 +50,62 @@ func (r *Repository) LeaseValidationJob(ctx context.Context, workerID string, no
 	return job, true, nil
 }
 
+// LeaseValidationJobFor claims the validation job for one named input, creating
+// it if this input has never been queued.
+//
+// The row is written already leased. That matters: if it were written as
+// 'queued' the ordinary validation worker could claim it between this statement
+// and the caller's own run, and the replay or reconciliation that asked for the
+// work would attribute an outcome it never produced. Taking the lease in the
+// same statement makes the handover impossible.
+//
+// attempt_count is reset because a caller-initiated revalidation is a fresh
+// budget, exactly as an operator's quarantine retry is. The attempt history
+// itself is append-only and is unaffected.
+func (r *Repository) LeaseValidationJobFor(ctx context.Context, workerID string, input billing.RawInput, now, leaseUntil time.Time) (billing.ValidationJob, error) {
+	job := billing.ValidationJob{
+		ProjectID: input.ProjectID, EnvironmentID: input.EnvironmentID,
+		RawInputID: input.ID, Provider: input.Provider,
+		MaxAttempts: billing.MaxValidationAttempts,
+	}
+	err := r.pool.QueryRow(ctx,
+		`INSERT INTO billing_validation_jobs(
+			id, project_id, environment_id, raw_input_id, provider, status,
+			attempt_count, max_attempts, available_at, lease_owner, lease_expires_at, created_at, updated_at)
+		 VALUES ($1,$2,$3,$4,$5,'leased',1,$6,$7,$8,$9,$7,$7)
+		 ON CONFLICT (raw_input_id) DO UPDATE
+		   SET status='leased', attempt_count=1, available_at=$7,
+		       lease_owner=$8, lease_expires_at=$9, updated_at=$7
+		 RETURNING id, attempt_count, max_attempts`,
+		"bvj_"+hashID(input.ID, "revalidate", now), input.ProjectID, input.EnvironmentID, input.ID,
+		input.Provider, billing.MaxValidationAttempts, now, workerID, leaseUntil).
+		Scan(&job.ID, &job.AttemptCount, &job.MaxAttempts)
+	if err != nil {
+		return billing.ValidationJob{}, fmt.Errorf("lease validation job for input: %w", err)
+	}
+	return job, nil
+}
+
+// FactDigestsForInput reads the fact digests already on record for one input.
+func (r *Repository) FactDigestsForInput(ctx context.Context, projectID, rawInputID string) ([]string, error) {
+	rows, err := r.pool.Query(ctx,
+		`SELECT encode(fact_digest,'hex') FROM billing_transaction_facts
+		 WHERE project_id=$1 AND source_raw_input_id=$2`, projectID, rawInputID)
+	if err != nil {
+		return nil, fmt.Errorf("read fact digests for input: %w", err)
+	}
+	defer rows.Close()
+	digests := make([]string, 0, 2)
+	for rows.Next() {
+		var digest string
+		if err := rows.Scan(&digest); err != nil {
+			return nil, fmt.Errorf("scan fact digest: %w", err)
+		}
+		digests = append(digests, digest)
+	}
+	return digests, rows.Err()
+}
+
 func (r *Repository) NextAttemptNumber(ctx context.Context, rawInputID string) (int, error) {
 	var next int
 	err := r.pool.QueryRow(ctx,

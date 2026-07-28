@@ -170,12 +170,17 @@ const (
 
 // Quarantine reason codes.
 const (
-	QuarantineSignatureInvalid          = "signature_invalid"
-	QuarantineApplicationMismatch       = "application_mismatch"
-	QuarantineEnvironmentMismatch       = "environment_mismatch"
-	QuarantineStoreEnvironmentMismatch  = "store_environment_mismatch"
-	QuarantineCredentialUnavailable     = "credential_unavailable"
-	QuarantineCredentialRevoked         = "credential_revoked"
+	QuarantineSignatureInvalid         = "signature_invalid"
+	QuarantineApplicationMismatch      = "application_mismatch"
+	QuarantineEnvironmentMismatch      = "environment_mismatch"
+	QuarantineStoreEnvironmentMismatch = "store_environment_mismatch"
+	QuarantineCredentialUnavailable    = "credential_unavailable"
+	QuarantineCredentialRevoked        = "credential_revoked"
+	// QuarantineMissingCredential is not the same failure as
+	// credential_unavailable. It says the Environment has no Store Server
+	// Credential for the provider at all, so the input can never be validated
+	// until one is connected — a setup gap, not a broken secret.
+	QuarantineMissingCredential         = "missing_validation_credential"
 	QuarantineProductUnknown            = "product_unknown"
 	QuarantineProductAmbiguous          = "product_ambiguous"
 	QuarantineCrossEnvironmentMismatch  = "cross_environment_mismatch"

@@ -15,9 +15,20 @@ var (
 	// ErrUnavailable is the only condition an intake endpoint answers non-2xx
 	// for: Mosaic genuinely could not durably record the input.
 	ErrUnavailable = errors.New("billing storage is temporarily unavailable")
-	// ErrCredentialUnusable covers a missing, revoked, or undecryptable Store
-	// Server Credential. It never carries the underlying cryptographic error.
+	// ErrCredentialUnusable covers a revoked or undecryptable Store Server
+	// Credential — one that exists but cannot be used. It never carries the
+	// underlying cryptographic error.
 	ErrCredentialUnusable = errors.New("store server credential is unusable")
+	// ErrCredentialMissing is distinct from ErrCredentialUnusable: the tenant
+	// scope has no active Store Server Credential for the provider at all.
+	//
+	// The two are separated because the operator action is different and the
+	// severity is different. An unusable credential is a broken secret, and the
+	// fix is rotation. A missing credential means Mosaic was asked to validate
+	// against a store it has never been connected to, and the fix is to connect
+	// it. Reporting the second as the first sends an operator to rotate a
+	// credential that does not exist.
+	ErrCredentialMissing = errors.New("no store server credential is configured for this environment")
 )
 
 // SafeError wraps a failure so that a 5xx response never carries the cause into

@@ -840,6 +840,7 @@ var quarantineReasons = []string{
 	billing.QuarantineSignatureInvalid, billing.QuarantineApplicationMismatch,
 	billing.QuarantineEnvironmentMismatch, billing.QuarantineStoreEnvironmentMismatch,
 	billing.QuarantineCredentialUnavailable, billing.QuarantineCredentialRevoked,
+	billing.QuarantineMissingCredential,
 	billing.QuarantineProductUnknown, billing.QuarantineProductAmbiguous,
 	billing.QuarantineCrossEnvironmentMismatch, billing.QuarantineUnsupportedProductType,
 	billing.QuarantineUnsupportedTransaction, billing.QuarantineMalformedReference,

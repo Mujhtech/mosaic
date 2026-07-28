@@ -21,8 +21,80 @@ const (
 	// reconciliationPageSize bounds one reconciliation step so a run yields the
 	// worker regularly and can be resumed from its cursor.
 	reconciliationPageSize = 20
-	replayBatchSize        = 50
+	// replayBatchSize bounds one replay job. Both this and the page size above
+	// are sized against operationLease rather than chosen round: each input in
+	// the batch makes a bounded provider call (8 s ceiling in both clients), so
+	// 25 × 8 s = 200 s stays inside the five-minute lease with room to spare. A
+	// larger batch could have its lease expire mid-run and let a second worker
+	// duplicate the work.
+	replayBatchSize = 25
 )
+
+// revalidationResult is what one caller-initiated revalidation produced. It is
+// the input to a replay's comparison and to a reconciliation's counters.
+type revalidationResult struct {
+	// Outcome is the validation attempt's own outcome.
+	Outcome string
+	// Digest is the lowercase-hex fact digest the revalidation recomputed, empty
+	// when the attempt asserted no fact.
+	Digest string
+	// Existing reports whether Digest was already on record for this input. This
+	// is the actual comparison: an unchanged provider answer recomputes a digest
+	// Mosaic already holds, and a changed one does not.
+	Existing bool
+}
+
+// revalidate runs the full validation pipeline once against an input that has
+// already been ingested, and reports how its result compares with what is
+// already recorded.
+//
+// It does not go through PersistRawInput. That path is idempotent by design: a
+// second write of an existing input takes the duplicate branch, which returns
+// before the enqueue and therefore queues nothing. Anything built on it would
+// report work it never did. Instead the validation job is created (or taken
+// over) already leased to this caller, so the ordinary validation worker cannot
+// claim it in between, and the attempt is committed through exactly the same
+// CompleteAttempt transaction the worker uses — the same append-only attempt,
+// the same fact deduplication, the same ledger entries, the same quarantine
+// closure on success.
+func (s *Service) revalidate(ctx context.Context, workerID string, input RawInput) (revalidationResult, error) {
+	// The baseline is read before the attempt runs, so a fact this very attempt
+	// appends cannot be mistaken for one that was already there.
+	baseline, err := s.repository.FactDigestsForInput(ctx, input.ProjectID, input.ID)
+	if err != nil {
+		return revalidationResult{}, safeFailure(err, "billing_fact_baseline_failed")
+	}
+
+	now := s.now()
+	job, err := s.repository.LeaseValidationJobFor(ctx, workerID, input, now, now.Add(validationLease))
+	if err != nil {
+		return revalidationResult{}, safeFailure(err, "billing_revalidation_lease_failed")
+	}
+
+	started := s.now()
+	outcome := s.runValidation(ctx, job, started)
+	s.validationLatency.Record(ctx, float64(outcome.Attempt.LatencyMs), metric.WithAttributes(
+		attribute.String("provider", job.Provider)))
+	s.validationOutcome.Add(ctx, 1, metric.WithAttributes(
+		attribute.String("provider", job.Provider),
+		attribute.String("outcome", outcome.Attempt.Outcome),
+		attribute.String("trigger", "revalidation")))
+	if err := s.repository.CompleteAttempt(ctx, job, outcome, s.now()); err != nil {
+		return revalidationResult{}, safeFailure(err, "billing_attempt_write_failed")
+	}
+
+	result := revalidationResult{Outcome: outcome.Attempt.Outcome}
+	if outcome.Fact != nil {
+		result.Digest = hexOf(outcome.Fact.FactDigest)
+		for _, known := range baseline {
+			if known == result.Digest {
+				result.Existing = true
+				break
+			}
+		}
+	}
+	return result, nil
+}
 
 // ---------------------------------------------------------------------------
 // Google RTDN pull consumer
@@ -68,7 +140,7 @@ func (s *Service) pullOne(ctx context.Context, identity IntakeIdentity) (bool, e
 	if err != nil {
 		return false, err
 	}
-	account, _, err := s.googleCredential(ctx, RawInput{
+	account, _, _, err := s.googleCredential(ctx, RawInput{
 		ProjectID: identity.ProjectID, CredentialID: identity.CredentialID, Provider: ProviderGooglePlay,
 	})
 	if err != nil {
@@ -334,26 +406,39 @@ func (s *Service) reconcileAppleNotifications(ctx context.Context, run Reconcili
 // re-read from the Play API, which detects state Mosaic missed while it was
 // unavailable.
 func (s *Service) reconcileGoogleTokens(ctx context.Context, run ReconciliationRun) error {
-	// The candidate set is bounded by the run's window and paged by the cursor,
-	// so the work per step is fixed regardless of ledger size.
+	// The candidate set is bounded by the run's window and narrowed twice. The
+	// provider filter keeps Apple notifications — which this strategy cannot
+	// re-query — out of the counts. The source filter keeps observations out:
+	// an observation carries a token digest, and a digest cannot be reversed
+	// into the token the Play API needs, so including them would make every run
+	// report `partial` and leave an alarm that never clears.
 	inputs, err := s.repository.ReplayInputs(ctx, ReplayJob{
 		ProjectID: run.ProjectID, EnvironmentID: run.EnvironmentID,
 		WindowStart: &run.WindowStart, WindowEnd: &run.WindowEnd,
+	}, InputFilter{
+		Provider: ProviderGooglePlay,
+		Sources:  []string{SourceGoogleRTDN, SourceGoogleTokenRequery},
 	}, reconciliationPageSize)
 	if err != nil {
 		return s.repository.CompleteReconciliationRun(ctx, run, "failed", "candidate_scan_failed", s.now())
 	}
-	now := s.now()
 	for _, input := range inputs {
 		run.ExaminedCount++
-		// Re-queueing the existing input is the whole reconciliation: it runs the
-		// same validation path, and an unchanged provider answer produces the
-		// same fact digest and therefore no new fact.
-		if _, persistErr := s.repository.PersistRawInput(ctx, input, true, now); persistErr != nil {
+		// Each candidate is genuinely re-read from the Play API. Google offers no
+		// notification-history equivalent, so reconciliation here is forward
+		// polling: the authoritative state is fetched again, and a state Mosaic
+		// missed while it was unavailable shows up as a new fact digest.
+		result, revalidateErr := s.revalidate(ctx, "reconcile:"+run.ID, input)
+		switch {
+		case revalidateErr != nil:
 			run.FailureCount++
-			continue
+		case result.Outcome != OutcomeValidated && result.Outcome != OutcomeRecordedNoFact:
+			run.FailureCount++
+		case result.Digest != "" && !result.Existing:
+			run.DiscoveredCount++
+		default:
+			run.DuplicateCount++
 		}
-		run.DuplicateCount++
 	}
 	status := "completed"
 	if run.FailureCount > 0 {
@@ -399,19 +484,30 @@ func (s *Service) ProcessNextReplay(ctx context.Context, workerID string) (bool,
 	ctx, span := s.tracer.Start(ctx, "billing.replay.run")
 	defer span.End()
 
-	inputs, err := s.repository.ReplayInputs(ctx, job, replayBatchSize)
+	// The zero filter: replaying a window deliberately covers every input in it,
+	// unlike a provider-specific reconciliation.
+	inputs, err := s.repository.ReplayInputs(ctx, job, InputFilter{}, replayBatchSize)
 	if err != nil {
 		return true, s.repository.CompleteReplayJob(ctx, job, "", "input_scan_failed", s.now())
 	}
 	for _, input := range inputs {
 		job.ExaminedCount++
-		// Re-enqueueing is the replay. The validation worker owns determinism,
-		// so replay does not duplicate any of its logic.
-		if _, err := s.repository.PersistRawInput(ctx, input, true, s.now()); err != nil {
+		// The replay runs the validation pipeline; it does not reimplement any of
+		// it, so determinism still lives in exactly one place.
+		result, revalidateErr := s.revalidate(ctx, "replay:"+job.ID, input)
+		switch {
+		case revalidateErr != nil:
 			job.ConflictCount++
-			continue
+		case result.Outcome != OutcomeValidated && result.Outcome != OutcomeRecordedNoFact:
+			// A quarantine, a permanent failure, or a provider outage means the
+			// replay could not confirm the earlier answer. Reporting that as
+			// "unchanged" would be a claim the run did not earn.
+			job.ConflictCount++
+		case result.Digest == "" || result.Existing:
+			job.UnchangedCount++
+		default:
+			job.NewFactCount++
 		}
-		job.UnchangedCount++
 	}
 	comparison := "identical"
 	switch {

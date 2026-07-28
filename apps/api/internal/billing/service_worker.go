@@ -114,12 +114,16 @@ func (s *Service) openBody(input RawInput) ([]byte, bool) {
 // ---------------------------------------------------------------------------
 
 func (s *Service) validateApple(ctx context.Context, job ValidationJob, input RawInput, body []byte, bodyAvailable bool, attemptID string, attemptNumber int, started time.Time) AttemptOutcome {
-	credential, account, err := s.appleCredential(ctx, input)
+	credential, credentialID, err := s.appleCredential(ctx, input)
+	// The resolved credential is stamped on the input before any early return,
+	// so an attempt recorded for a failure still names the credential the
+	// pipeline was trying to use.
+	input.CredentialID = credentialID
 	if err != nil {
+		reason, diagnostic := credentialFailure(err)
 		return s.quarantineAttempt(job, input, attemptID, attemptNumber, started,
-			Permanent(CategoryConfiguration, "credential_unusable"), QuarantineCredentialUnavailable, "error")
+			Permanent(CategoryConfiguration, diagnostic), reason, "error")
 	}
-	_ = account
 
 	transactionID := ""
 	var transaction appstorejws.TransactionPayload
@@ -326,13 +330,44 @@ func appleFactKind(notificationType string, transaction appstorejws.TransactionP
 	}
 }
 
-func (s *Service) appleCredential(ctx context.Context, input RawInput) (appstoreserver.Credential, *googleplay.ServiceAccount, error) {
-	if input.CredentialID == "" || s.apple == nil {
-		return appstoreserver.Credential{}, nil, ErrCredentialUnusable
+// credentialIDFor resolves which Store Server Credential an input validates
+// against.
+//
+// A notification carries its own credential, because the intake token or the
+// Pub/Sub subscription identified it. An observation does not: its tenancy comes
+// from an API key, which proves organization, Project, Environment, and
+// Application — but says nothing about which store connection is configured.
+// Requiring a credential on the input made every observation fail before its
+// reference was read, so the credential is resolved here from the scope instead.
+// Migration 00022's UNIQUE (project_id, provider, environment_id) is what makes
+// that resolution unambiguous rather than a guess.
+func (s *Service) credentialIDFor(ctx context.Context, input RawInput) (string, error) {
+	if input.CredentialID != "" {
+		return input.CredentialID, nil
 	}
+	identity, err := s.repository.CredentialForEnvironment(ctx, input.ProjectID, input.Provider, input.EnvironmentID)
+	if err != nil {
+		// Reported as missing rather than unusable: there is nothing to rotate.
+		return "", ErrCredentialMissing
+	}
+	return identity.CredentialID, nil
+}
+
+// appleCredential returns the App Store Server API credential and the id of the
+// Store Server Credential it came from, so the caller can stamp provenance on
+// the attempt even when the input arrived without one.
+func (s *Service) appleCredential(ctx context.Context, input RawInput) (appstoreserver.Credential, string, error) {
+	if s.apple == nil {
+		return appstoreserver.Credential{}, "", ErrCredentialUnusable
+	}
+	credentialID, err := s.credentialIDFor(ctx, input)
+	if err != nil {
+		return appstoreserver.Credential{}, "", err
+	}
+	input.CredentialID = credentialID
 	credential, envelope, class, organizationID, bundleID, err := s.repository.CredentialSecretFor(ctx, input.ProjectID, input.CredentialID)
 	if err != nil || credential.Status != "active" {
-		return appstoreserver.Credential{}, nil, ErrCredentialUnusable
+		return appstoreserver.Credential{}, credentialID, ErrCredentialUnusable
 	}
 	plaintext, err := s.cipher.DecryptSubject(providercredential.Envelope{
 		Version: envelope.Version, Algorithm: envelope.Algorithm, KeyID: envelope.KeyID,
@@ -346,12 +381,12 @@ func (s *Service) appleCredential(ctx context.Context, input RawInput) (appstore
 		CredentialClass: class,
 	})
 	if err != nil {
-		return appstoreserver.Credential{}, nil, ErrCredentialUnusable
+		return appstoreserver.Credential{}, credentialID, ErrCredentialUnusable
 	}
 	defer zero(plaintext)
 	key, err := appstoreserver.ParsePrivateKey(plaintext)
 	if err != nil {
-		return appstoreserver.Credential{}, nil, ErrCredentialUnusable
+		return appstoreserver.Credential{}, credentialID, ErrCredentialUnusable
 	}
 	if bundleID == "" {
 		bundleID = credential.AppleIssuerID
@@ -359,7 +394,7 @@ func (s *Service) appleCredential(ctx context.Context, input RawInput) (appstore
 	return appstoreserver.Credential{
 		IssuerID: credential.AppleIssuerID, KeyID: credential.AppleKeyID, PrivateKey: key,
 		BundleID: bundleID, Sandbox: credential.StoreEnvironment == StoreSandbox,
-	}, nil, nil
+	}, credentialID, nil
 }
 
 // ---------------------------------------------------------------------------
@@ -367,10 +402,14 @@ func (s *Service) appleCredential(ctx context.Context, input RawInput) (appstore
 // ---------------------------------------------------------------------------
 
 func (s *Service) validateGoogle(ctx context.Context, job ValidationJob, input RawInput, body []byte, bodyAvailable bool, attemptID string, attemptNumber int, started time.Time) AttemptOutcome {
-	account, credential, err := s.googleCredential(ctx, input)
+	account, credential, scopedPackageName, err := s.googleCredential(ctx, input)
+	if credential.ID != "" {
+		input.CredentialID = credential.ID
+	}
 	if err != nil {
+		reason, diagnostic := credentialFailure(err)
 		return s.quarantineAttempt(job, input, attemptID, attemptNumber, started,
-			Permanent(CategoryConfiguration, "credential_unusable"), QuarantineCredentialUnavailable, "error")
+			Permanent(CategoryConfiguration, diagnostic), reason, "error")
 	}
 	if !bodyAvailable {
 		return s.quarantineAttempt(job, input, attemptID, attemptNumber, started,
@@ -383,7 +422,13 @@ func (s *Service) validateGoogle(ctx context.Context, job ValidationJob, input R
 			Permanent(CategoryInvalid, "malformed_google_input"), QuarantineMalformedReference, "error")
 	}
 	if packageName == "" {
-		packageName = credential.GooglePubSubProjectID
+		// Only an RTDN carries a packageName; an observation does not.
+		packageName = scopedPackageName
+	}
+	if packageName == "" {
+		return s.quarantineAttempt(job, input, attemptID, attemptNumber, started,
+			Permanent(CategoryConfiguration, "no_package_in_credential_scope"),
+			QuarantineApplicationMismatch, "error")
 	}
 
 	// An observation may carry only an order id. orders.get is the documented
@@ -572,13 +617,26 @@ func googleSubscriptionKind(state string) string {
 	}
 }
 
-func (s *Service) googleCredential(ctx context.Context, input RawInput) (*googleplay.ServiceAccount, StoreServerCredential, error) {
-	if input.CredentialID == "" || s.google == nil {
-		return nil, StoreServerCredential{}, ErrCredentialUnusable
+// googleCredential returns the service account, the credential record, and the
+// package name of the credential's first scoped Application.
+//
+// The package name is returned because an observation's body carries none — only
+// an RTDN does — and the Play API requires one on every call. Falling back to
+// the credential's scoped Application is the same convention the Apple path
+// already uses for `bid`. The previous fallback was the Pub/Sub project id,
+// which is not a package name and could never match an Application scope.
+func (s *Service) googleCredential(ctx context.Context, input RawInput) (*googleplay.ServiceAccount, StoreServerCredential, string, error) {
+	if s.google == nil {
+		return nil, StoreServerCredential{}, "", ErrCredentialUnusable
 	}
-	credential, envelope, class, organizationID, _, err := s.repository.CredentialSecretFor(ctx, input.ProjectID, input.CredentialID)
+	credentialID, err := s.credentialIDFor(ctx, input)
+	if err != nil {
+		return nil, StoreServerCredential{}, "", err
+	}
+	input.CredentialID = credentialID
+	credential, envelope, class, organizationID, packageName, err := s.repository.CredentialSecretFor(ctx, input.ProjectID, input.CredentialID)
 	if err != nil || credential.Status != "active" {
-		return nil, StoreServerCredential{}, ErrCredentialUnusable
+		return nil, StoreServerCredential{}, "", ErrCredentialUnusable
 	}
 	plaintext, err := s.cipher.DecryptSubject(providercredential.Envelope{
 		Version: envelope.Version, Algorithm: envelope.Algorithm, KeyID: envelope.KeyID,
@@ -592,14 +650,14 @@ func (s *Service) googleCredential(ctx context.Context, input RawInput) (*google
 		CredentialClass: class,
 	})
 	if err != nil {
-		return nil, StoreServerCredential{}, ErrCredentialUnusable
+		return nil, credential, packageName, ErrCredentialUnusable
 	}
 	defer zero(plaintext)
 	account, err := googleplay.ParseServiceAccount(plaintext)
 	if err != nil {
-		return nil, StoreServerCredential{}, ErrCredentialUnusable
+		return nil, credential, packageName, ErrCredentialUnusable
 	}
-	return account, credential, nil
+	return account, credential, packageName, nil
 }
 
 // ---------------------------------------------------------------------------
@@ -872,6 +930,17 @@ func (o *AttemptOutcome) NextAttemptAtSet(at time.Time) { o.NextAvailableAt = at
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
+
+// credentialFailure separates "there is no connection" from "the connection is
+// broken". They are different operator actions — connect a store versus rotate a
+// secret — so they get different quarantine reasons and different diagnostics
+// rather than being flattened into one misleading code.
+func credentialFailure(err error) (reason, diagnostic string) {
+	if errors.Is(err, ErrCredentialMissing) {
+		return QuarantineMissingCredential, "no_credential_for_environment"
+	}
+	return QuarantineCredentialUnavailable, "credential_unusable"
+}
 
 // storeEnvironmentMatchesMode enforces the sandbox/production separation the
 // schema also enforces, so a mismatch becomes a quarantine record rather than a

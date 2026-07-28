@@ -578,9 +578,13 @@ func (r *Repository) LeaseReplayJob(ctx context.Context, workerID string, now, l
 // Only inputs whose body is still retained are eligible: an expired body cannot
 // be re-validated, and pretending otherwise would produce an attempt with
 // nothing behind it.
-func (r *Repository) ReplayInputs(ctx context.Context, job billing.ReplayJob, limit int) ([]billing.RawInput, error) {
+func (r *Repository) ReplayInputs(ctx context.Context, job billing.ReplayJob, filter billing.InputFilter, limit int) ([]billing.RawInput, error) {
 	if limit <= 0 {
 		limit = 50
+	}
+	sources := filter.Sources
+	if sources == nil {
+		sources = []string{}
 	}
 	rows, err := r.pool.Query(ctx,
 		`SELECT id FROM billing_raw_inputs
@@ -588,8 +592,11 @@ func (r *Repository) ReplayInputs(ctx context.Context, job billing.ReplayJob, li
 		   AND ($3 = '' OR id = $3)
 		   AND ($4::timestamptz IS NULL OR received_at >= $4)
 		   AND ($5::timestamptz IS NULL OR received_at <= $5)
-		 ORDER BY received_at, id LIMIT $6`,
-		job.ProjectID, job.EnvironmentID, job.RawInputID, job.WindowStart, job.WindowEnd, limit)
+		   AND ($6 = '' OR provider = $6)
+		   AND (cardinality($7::text[]) = 0 OR source = ANY($7::text[]))
+		 ORDER BY received_at, id LIMIT $8`,
+		job.ProjectID, job.EnvironmentID, job.RawInputID, job.WindowStart, job.WindowEnd,
+		filter.Provider, sources, limit)
 	if err != nil {
 		return nil, fmt.Errorf("select replay inputs: %w", err)
 	}

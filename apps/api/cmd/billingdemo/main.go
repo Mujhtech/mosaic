@@ -339,12 +339,24 @@ func (d *demo) stageApple() error {
 	d.step("Redeliver the identical notification (Apple retries on any non-2xx)")
 	status, body = d.raw(http.MethodPost, d.intakePath, notification, nil)
 	d.http("POST /v1/billing/apple/notifications/{intakeToken} (redelivery)", status, body)
-	d.query("one input, one fact, one job — and a duplicate ledger entry",
+	// Two Apple inputs and two jobs: the notification plus the client
+	// observation from step 3, which is now validated in its own right. Two
+	// facts for the same transaction, because the observation's normalized fact
+	// carries no renewal expectation — see the note printed below.
+	d.query("counts after the redelivery",
 		`SELECT
 		   (SELECT count(*) FROM billing_raw_inputs WHERE project_id=$1 AND provider='app_store') AS apple_inputs,
 		   (SELECT count(*) FROM billing_transaction_facts WHERE project_id=$1) AS facts,
 		   (SELECT count(*) FROM billing_validation_jobs WHERE project_id=$1) AS jobs,
 		   (SELECT count(*) FROM billing_validation_attempts WHERE project_id=$1) AS attempts`, projectID)
+	d.query("the notification produced exactly one input and one job on both deliveries",
+		`SELECT i.source, count(DISTINCT i.id) AS inputs, count(DISTINCT j.id) AS jobs,
+		        count(DISTINCT f.id) AS facts
+		 FROM billing_raw_inputs i
+		 LEFT JOIN billing_validation_jobs j ON j.raw_input_id=i.id
+		 LEFT JOIN billing_transaction_facts f ON f.source_raw_input_id=i.id
+		 WHERE i.project_id=$1 AND i.provider='app_store'
+		 GROUP BY i.source ORDER BY i.source`, projectID)
 	d.query("ledger entries for the Apple input",
 		`SELECT entry_type, count(*) FROM billing_ledger_entries
 		 WHERE project_id=$1 GROUP BY entry_type ORDER BY entry_type`, projectID)
@@ -444,15 +456,23 @@ func (d *demo) stageGoogle() error {
 		     WHERE l.entry_type='input_duplicate_detected' AND i.source='google_rtdn') AS rtdn_duplicate_entries`,
 		projectID)
 
-	d.step("Observation-sourced inputs: what actually happened to them")
-	d.query("every observation input and the outcome of its validation attempt",
-		`SELECT i.provider, i.provider_event_id, COALESCE(i.credential_id,'(none)') AS credential_id,
-		        a.outcome, COALESCE(a.failure_category,'') AS failure_category,
-		        COALESCE(a.diagnostic_code,'') AS diagnostic_code
+	d.step("Observation-sourced inputs: the credential is resolved from the Environment scope")
+	d.query("every observation input, the credential its attempt resolved, and the outcome",
+		`SELECT i.provider, i.provider_event_id,
+		        COALESCE(i.credential_id,'(none on input)') AS input_credential_id,
+		        COALESCE(a.credential_id,'(none)') AS resolved_credential_id,
+		        a.outcome, COALESCE(a.diagnostic_code,'') AS diagnostic_code
 		 FROM billing_raw_inputs i
 		 LEFT JOIN billing_validation_attempts a ON a.raw_input_id=i.id
 		 WHERE i.project_id=$1 AND i.source='client_observation'
 		 ORDER BY i.received_at`, projectID)
+	d.query("the fact the Apple client observation produced on its own",
+		`SELECT f.provider, f.provider_transaction_id, f.provider_product_identifier,
+		        f.resolution_state, f.mosaic_product_id, f.renewal_expected,
+		        encode(f.fact_digest,'hex') AS fact_digest
+		 FROM billing_transaction_facts f
+		 JOIN billing_raw_inputs i ON i.id=f.source_raw_input_id
+		 WHERE i.source='client_observation' AND i.project_id=$1`, projectID)
 	return nil
 }
 
@@ -688,10 +708,8 @@ func (d *demo) stageReconciliation() error {
 			"windowEnd":   time.Now().Add(time.Minute).UTC().Format(time.RFC3339),
 		})
 	d.http("POST .../billing/reconciliation-runs (google_token_requery)", status, body)
+	playCallsBefore := len(d.play.callLog())
 	if _, err := d.service.ProcessNextReconciliation(d.ctx, "demo-worker"); err != nil {
-		return err
-	}
-	if err := d.drainValidation(8); err != nil {
 		return err
 	}
 	d.query("google_token_requery run summary",
@@ -702,9 +720,15 @@ func (d *demo) stageReconciliation() error {
 		`SELECT count(*) FROM billing_validation_attempts WHERE project_id=$1`, projectID).Scan(&attemptsAfter); err != nil {
 		return err
 	}
-	d.note("validation attempts before the run: %d; after: %d", attemptsBefore, attemptsAfter)
-	pulls, _ := d.pubsub.state()
-	d.note("Play API calls so far: %d; Pub/Sub pulls so far: %d", len(d.play.callLog()), pulls)
+	d.note("validation attempts before the run: %d; after: %d (+%d)",
+		attemptsBefore, attemptsAfter, attemptsAfter-attemptsBefore)
+	d.note("Play API calls before the run: %d; after: %d (+%d)",
+		playCallsBefore, len(d.play.callLog()), len(d.play.callLog())-playCallsBefore)
+	d.query("the run re-queried only Google inputs, and appended an attempt to each",
+		`SELECT i.provider, i.source, count(a.id) AS attempts
+		 FROM billing_raw_inputs i
+		 LEFT JOIN billing_validation_attempts a ON a.raw_input_id=i.id
+		 WHERE i.project_id=$1 GROUP BY i.provider, i.source ORDER BY i.provider, i.source`, projectID)
 	return nil
 }
 
@@ -743,20 +767,21 @@ func (d *demo) stageReplay() error {
 		`SELECT kind, status, validator_version, examined_count, unchanged_count, new_fact_count,
 		        conflict_count, COALESCE(comparison_result,'') AS comparison_result
 		 FROM billing_replay_jobs WHERE project_id=$1`, projectID)
-	d.query("validation queue state after the replay job ran",
-		`SELECT j.status, j.attempt_count, (j.available_at <= now()) AS available_now
-		 FROM billing_validation_jobs j WHERE j.raw_input_id=$1`, rawInputID)
-	if err := d.drainValidation(4); err != nil {
-		return err
-	}
+	d.note("Apple stub calls during the replay: %d total (the replay really re-read the store)", len(d.apple.callLog()))
 	d.query("state after replay",
 		`SELECT (SELECT count(*) FROM billing_validation_attempts WHERE raw_input_id=$1) AS attempts,
 		        (SELECT count(*) FROM billing_transaction_facts WHERE source_raw_input_id=$1) AS facts,
 		        (SELECT count(*) FROM billing_transaction_facts WHERE project_id=$2) AS facts_total`,
 		rawInputID, projectID)
-	d.query("attempt history for the replayed input",
+	d.query("attempt history for the replayed input — appended, never rewritten",
 		`SELECT attempt_number, outcome, validator_version, started_at
 		 FROM billing_validation_attempts WHERE raw_input_id=$1 ORDER BY attempt_number`, rawInputID)
+	d.query("the replayed attempt recomputed the identical fact digest, so nothing was appended",
+		`SELECT encode(fact_digest,'hex') AS fact_digest, resolution_state, mosaic_product_id, recorded_at
+		 FROM billing_transaction_facts WHERE source_raw_input_id=$1 ORDER BY recorded_at`, rawInputID)
+	d.query("the deduplication is recorded rather than silent",
+		`SELECT entry_type, count(*) FROM billing_ledger_entries
+		 WHERE raw_input_id=$1 GROUP BY entry_type ORDER BY entry_type`, rawInputID)
 	return nil
 }
 
