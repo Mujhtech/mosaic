@@ -1,0 +1,309 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:mosaic:protocol:schema:customer-access-token:v1:compatibility-manifest",
+  "title": "Mosaic Customer Access Token Contract v1 compatibility manifest",
+  "description": "Machine-checked compatibility surface for Customer Access Token Contract 1, including the wire form the SDKs and the backend must agree on and the obligations an SDK accepts by holding a token at all.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "customerAccessTokenContractVersion",
+    "status",
+    "schemas",
+    "canonicalFixtures",
+    "recordTypes",
+    "tokenModel",
+    "wireForm",
+    "lifetime",
+    "sdkObligations",
+    "readerPolicy"
+  ],
+  "properties": {
+    "customerAccessTokenContractVersion": {
+      "const": "1"
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "draft",
+        "releaseCandidate",
+        "approved",
+        "deprecated",
+        "retired"
+      ]
+    },
+    "deprecation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "deprecatedAt",
+        "retiresAt"
+      ],
+      "properties": {
+        "deprecatedAt": {
+          "type": "string",
+          "pattern": "^[0-9]{4}-(0[1-9]|1[0-2])-([0-2][0-9]|3[01])$"
+        },
+        "retiresAt": {
+          "type": "string",
+          "pattern": "^[0-9]{4}-(0[1-9]|1[0-2])-([0-2][0-9]|3[01])$"
+        },
+        "supersededBy": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "migrationGuide": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        }
+      }
+    },
+    "schemas": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "token"
+      ],
+      "properties": {
+        "token": {
+          "$ref": "#/$defs/relativeJsonPath"
+        }
+      }
+    },
+    "canonicalFixtures": {
+      "type": "array",
+      "minItems": 4,
+      "maxItems": 24,
+      "uniqueItems": true,
+      "items": {
+        "$ref": "#/$defs/relativeJsonPath"
+      }
+    },
+    "recordTypes": {
+      "type": "array",
+      "minItems": 4,
+      "maxItems": 4,
+      "uniqueItems": true,
+      "items": {
+        "$ref": "urn:mosaic:protocol:schema:customer-access-token:v1:token#/$defs/recordType"
+      }
+    },
+    "tokenModel": {
+      "description": "The decision this whole contract rests on: the token is opaque, not signed. It is pinned here so a later change to a signed model is a visible contract change with a version bump, not a quiet substitution.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "form",
+        "entropyBits",
+        "prefix",
+        "storage",
+        "digestAlgorithm",
+        "signed",
+        "parseable",
+        "carriesEntitlementState",
+        "revocation",
+        "scopeEvaluation"
+      ],
+      "properties": {
+        "form": {
+          "const": "opaqueRandom"
+        },
+        "entropyBits": {
+          "const": 256
+        },
+        "prefix": {
+          "const": "mcat_"
+        },
+        "storage": {
+          "const": "digestOnly"
+        },
+        "digestAlgorithm": {
+          "const": "sha256"
+        },
+        "signed": {
+          "description": "False, deliberately. There is no JWS, no JWKS, no key identifier, and no signing algorithm to agree on, therefore none to get wrong.",
+          "const": false
+        },
+        "parseable": {
+          "const": false
+        },
+        "carriesEntitlementState": {
+          "description": "A token never carries access state. Access is read from the authoritative snapshot at read time, so a token cannot preserve a grant its holder has since lost.",
+          "const": false
+        },
+        "revocation": {
+          "const": "immediateServerSide"
+        },
+        "scopeEvaluation": {
+          "description": "Scope is evaluated against stored columns, not against claims presented by the caller.",
+          "const": "serverSideColumns"
+        }
+      }
+    },
+    "wireForm": {
+      "description": "Header names are contract-owned: the SDKs, the backend, and any host-backend proxy must agree on them exactly.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "customerTokenHeader",
+        "customerTokenScheme",
+        "publicSdkKeyHeader",
+        "publicSdkKeyAloneSufficient",
+        "clockSkewToleranceSeconds",
+        "clockEvaluatedBy"
+      ],
+      "properties": {
+        "customerTokenHeader": {
+          "const": "Authorization"
+        },
+        "customerTokenScheme": {
+          "const": "Bearer"
+        },
+        "publicSdkKeyHeader": {
+          "const": "Mosaic-SDK-Key"
+        },
+        "publicSdkKeyAloneSufficient": {
+          "description": "False. A public SDK key identifies the application; it can never select a Billing Customer. Both headers are required on the sync surface.",
+          "const": false
+        },
+        "clockSkewToleranceSeconds": {
+          "const": 60
+        },
+        "clockEvaluatedBy": {
+          "description": "The server. A device clock never decides whether a token is still valid, because a device clock is attacker-controlled.",
+          "const": "server"
+        }
+      }
+    },
+    "lifetime": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "defaultSeconds",
+        "maximumSeconds",
+        "minimumSeconds",
+        "refreshResponsibility"
+      ],
+      "properties": {
+        "defaultSeconds": {
+          "const": 3600
+        },
+        "maximumSeconds": {
+          "const": 86400
+        },
+        "minimumSeconds": {
+          "const": 60
+        },
+        "refreshResponsibility": {
+          "description": "The host application backend mints every token. Mosaic never refreshes one on the SDK's behalf, because Mosaic cannot authenticate the host's user.",
+          "const": "hostApplicationBackend"
+        }
+      }
+    },
+    "sdkObligations": {
+      "description": "What an SDK promises by accepting a token. These are conformance obligations, checked by inspection and by the SDK cache tests, not by any schema.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "storage",
+        "attachment",
+        "parsing",
+        "refreshOnUnauthorized",
+        "onLogout",
+        "onIdentityChange",
+        "onProviderFailure",
+        "loggingToken"
+      ],
+      "properties": {
+        "storage": {
+          "const": "memoryOnly"
+        },
+        "attachment": {
+          "const": "everySyncRequest"
+        },
+        "parsing": {
+          "const": "forbidden"
+        },
+        "refreshOnUnauthorized": {
+          "description": "Exactly one forced refresh per token generation. A second 401 on a freshly minted token is a real failure, and retrying it forever is how an SDK turns an outage into a request storm.",
+          "const": "oncePerGeneration"
+        },
+        "onLogout": {
+          "const": "discardTokenAndClearCache"
+        },
+        "onIdentityChange": {
+          "const": "bumpGenerationCancelInFlightClearCache"
+        },
+        "onProviderFailure": {
+          "description": "A host backend that cannot mint a token yields unavailable, never inactive.",
+          "const": "reportUnavailableNeverInactive"
+        },
+        "loggingToken": {
+          "const": "forbidden"
+        }
+      }
+    },
+    "readerPolicy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "unknownContractVersion",
+        "unknownRecordType",
+        "unknownField",
+        "unknownScope",
+        "unknownAudience",
+        "expiredToken",
+        "revokedToken",
+        "audienceMismatch",
+        "customerMismatch",
+        "tokenInQueryString",
+        "tokenPersistedToDisk"
+      ],
+      "properties": {
+        "unknownContractVersion": {
+          "const": "rejectRecord"
+        },
+        "unknownRecordType": {
+          "const": "rejectRecord"
+        },
+        "unknownField": {
+          "const": "rejectRecord"
+        },
+        "unknownScope": {
+          "const": "rejectRecord"
+        },
+        "unknownAudience": {
+          "const": "rejectRecord"
+        },
+        "expiredToken": {
+          "const": "refuseRequestReportUnavailable"
+        },
+        "revokedToken": {
+          "const": "refuseRequestReportUnavailable"
+        },
+        "audienceMismatch": {
+          "const": "refuseRequest"
+        },
+        "customerMismatch": {
+          "description": "A token names exactly one Billing Customer. A request that asserts a different one is refused; the assertion never selects the customer.",
+          "const": "refuseRequest"
+        },
+        "tokenInQueryString": {
+          "const": "forbidden"
+        },
+        "tokenPersistedToDisk": {
+          "const": "forbidden"
+        }
+      }
+    }
+  },
+  "$defs": {
+    "relativeJsonPath": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 256,
+      "pattern": "^\\.\\./\\.\\./.*\\.json$"
+    }
+  }
+}

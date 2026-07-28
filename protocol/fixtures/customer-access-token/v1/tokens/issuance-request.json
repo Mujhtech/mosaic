@@ -1,0 +1,14 @@
+{
+  "customerAccessTokenContractVersion": "1",
+  "recordType": "customerAccessTokenIssuanceRequest",
+  "payload": {
+    "billingCustomerId": "fixture-customer-0001",
+    "audience": "sdk_sync",
+    "scopes": [
+      "entitlements.read",
+      "entitlements.sync"
+    ],
+    "requestedTtlSeconds": 3600,
+    "correlationId": "fixture-correlation-0200"
+  }
+}

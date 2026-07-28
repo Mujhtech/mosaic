@@ -1,0 +1,23 @@
+{
+  "customerAccessTokenContractVersion": "1",
+  "recordType": "customerAccessTokenMetadata",
+  "payload": {
+    "tokenId": "fixture-token-0001",
+    "projectId": "fixture-project-mosaic",
+    "environmentId": "fixture-environment-production",
+    "billingCustomerId": "fixture-customer-0001",
+    "audience": "sdk_sync",
+    "scopes": [
+      "entitlements.read",
+      "entitlements.sync"
+    ],
+    "issuer": "mosaic.example.com",
+    "issuedAt": "2026-07-28T12:00:00.000Z",
+    "expiresAt": "2026-07-28T13:00:00.000Z",
+    "status": "revoked",
+    "tokenPrefix": "mcat_",
+    "digestAlgorithm": "sha256",
+    "lastUsedAt": "2026-07-28T12:04:11.000Z",
+    "revokedAt": "2026-07-28T12:20:00.000Z"
+  }
+}

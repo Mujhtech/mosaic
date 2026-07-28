@@ -1,0 +1,11 @@
+{
+  "customerAccessTokenContractVersion": "1",
+  "recordType": "customerAccessTokenRevocation",
+  "payload": {
+    "tokenId": "fixture-token-0002",
+    "revokedAt": "2026-07-28T12:20:00.000Z",
+    "revocationReason": "identity_changed",
+    "actorReference": "fixture-actor-system",
+    "correlationId": "fixture-correlation-0201"
+  }
+}
