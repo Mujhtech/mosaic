@@ -25,7 +25,14 @@ import "time"
 // Cancellation flips renewal intent only. Access ends at the validated period
 // end, never at the cancellation notice — the single most common way a
 // subscription system wrongly takes access away.
-func ProjectSubscription(facts []Fact, asOf time.Time, policy Policy) SubscriptionResult {
+// supersededByLineage is a property of the *lineage*, not of any fact. A
+// Google purchase-token chain is keyed on its root (plan §5), so the
+// `purchase_superseded` facts inside a chain describe a token handover within
+// one lineage and must never terminate it — the successor token's facts are the
+// same subscription continuing. Only an explicit
+// `purchase_lineages.superseded_by_lineage_id` edge means this lineage was
+// replaced by a different one, and that is what this parameter carries.
+func ProjectSubscription(facts []Fact, asOf time.Time, policy Policy, supersededByLineage bool) SubscriptionResult {
 	ordered := Sort(append([]Fact(nil), facts...))
 	asOf = asOf.UTC()
 
@@ -34,6 +41,7 @@ func ProjectSubscription(facts []Fact, asOf time.Time, policy Policy) Subscripti
 		FactsConsumed: len(ordered),
 	}
 	state := accumulate(ordered)
+	state.superseded = supersededByLineage
 	snapshot := SubscriptionSnapshot{
 		AsOf:                        asOf,
 		PeriodStartAt:               state.periodStart,
@@ -113,19 +121,15 @@ func ProjectSubscription(facts []Fact, asOf time.Time, policy Policy) Subscripti
 		snapshot.BillingState = BillingCurrent
 		snapshot.UncertaintyReason = UncertaintyNone
 
-	case periodActive(state, asOf):
-		snapshot.AccessState = AccessActive
-		snapshot.LifecycleState = LifecycleActive
-		if state.trialing {
-			snapshot.LifecycleState = LifecycleTrialing
-		}
-		snapshot.RenewalIntent = renewalIntent(state)
-		snapshot.BillingState = BillingCurrent
-		snapshot.UncertaintyReason = UncertaintyNone
-
 	case graceActive(state, asOf):
 		// Verified grace grants access on both providers per their own
 		// documentation; a grant version may opt out.
+		//
+		// Grace is evaluated *before* the current period on purpose. Google
+		// extends `expiryTime` through the grace window, so a period check
+		// first would report a customer in grace as plainly active — which
+		// looks harmless until a Project sets grants_in_grace to false and
+		// discovers the opt-out was structurally unreachable on Android.
 		snapshot.LifecycleState = LifecycleGracePeriod
 		snapshot.BillingState = BillingGrace
 		snapshot.RenewalIntent = renewalIntent(state)
@@ -135,6 +139,16 @@ func ProjectSubscription(facts []Fact, asOf time.Time, policy Policy) Subscripti
 		} else {
 			snapshot.AccessState = AccessInactive
 		}
+
+	case periodActive(state, asOf):
+		snapshot.AccessState = AccessActive
+		snapshot.LifecycleState = LifecycleActive
+		if state.trialing {
+			snapshot.LifecycleState = LifecycleTrialing
+		}
+		snapshot.RenewalIntent = renewalIntent(state)
+		snapshot.BillingState = BillingCurrent
+		snapshot.UncertaintyReason = UncertaintyNone
 
 	case retryActive(state, asOf):
 		// Billing retry / account hold does not grant access on either
@@ -191,6 +205,50 @@ type Policy struct {
 	GrantsInGrace        bool
 	GrantsInBillingRetry bool
 	GrantsInOneTime      bool
+}
+
+// GrantsAccess reports whether this policy grants access for a lifecycle
+// state, and whether the lifecycle is policy-dependent at all.
+//
+// The second return value is what keeps a grant version from being able to
+// grant access during a revocation or a refund: those states are not
+// negotiable, so no policy is consulted for them.
+func (p Policy) GrantsAccess(lifecycle string) (grants bool, policyDependent bool) {
+	switch lifecycle {
+	case LifecycleTrialing:
+		return p.GrantsInTrial, true
+	case LifecycleActive:
+		return p.GrantsInActive, true
+	case LifecycleGracePeriod:
+		return p.GrantsInGrace, true
+	case LifecycleBillingRetry:
+		return p.GrantsInBillingRetry, true
+	default:
+		return false, false
+	}
+}
+
+// AnyGrantsAccess reports whether any of the grant versions in force grants
+// access for a lifecycle state. It is the subscription snapshot's headline
+// access answer: the snapshot has one access column but a Product may carry
+// several Entitlement grants with different policies, so the honest single
+// value is "at least one grant version says yes".
+//
+// Per-Entitlement access is decided per grant version in the entitlement
+// engine, not from this value.
+func AnyGrantsAccess(lifecycle string, grants []GrantVersion) (bool, bool) {
+	dependent := false
+	for _, grant := range grants {
+		granted, policyDependent := grant.Policy.GrantsAccess(lifecycle)
+		if !policyDependent {
+			return false, false
+		}
+		dependent = true
+		if granted {
+			return true, true
+		}
+	}
+	return false, dependent
 }
 
 // DefaultPolicy is policy version 1 (plan §7): grace grants access, billing
@@ -251,11 +309,19 @@ func accumulate(ordered []Fact) lineageState {
 		if fact.ResolutionState == "unresolved" {
 			state.productUnresolved = true
 		}
-		if fact.MosaicProductID != "" && fact.MosaicProductID != state.productID {
-			if state.productID != "" {
-				state.priorProductID = state.productID
+		if fact.MosaicProductID != "" {
+			if fact.MosaicProductID != state.productID {
+				if state.productID != "" {
+					state.priorProductID = state.productID
+				}
+				state.productID = fact.MosaicProductID
 			}
-			state.productID = fact.MosaicProductID
+			// Any fact that resolved to a Product clears the unresolved
+			// reading, including one that resolved to the *same* Product.
+			// Clearing only on a change made the flag permanent: an unresolved
+			// fact carries a NULL product, so re-resolution to the product the
+			// lineage already had never satisfied the inequality, and the
+			// lineage stayed `unknown` for the rest of its life.
 			state.productUnresolved = false
 		}
 		if fact.RenewalExpected != nil {
@@ -295,7 +361,14 @@ func accumulate(ordered []Fact) lineageState {
 		case "billing_retry_start":
 			retryAt := EffectiveAt(fact)
 			state.retryStart = &retryAt
-			state.graceEnd = nil
+			// Apple has no separate grace notification. Grace is expressed as
+			// `gracePeriodExpiresDate` on the renewal payload that accompanies
+			// DID_FAIL_TO_RENEW, so a retry fact carrying one *is* the grace
+			// statement. Reading only `grace_period_start` meant an Apple
+			// customer spent a sixteen-day grace window projected as
+			// billing_retry and therefore inactive — access removed while Apple
+			// was still granting it.
+			state.graceEnd = fact.GracePeriodExpiresAt
 		case "paused":
 			pausedAt := EffectiveAt(fact)
 			state.pauseStart = &pausedAt
@@ -342,9 +415,11 @@ func accumulate(ordered []Fact) lineageState {
 				state.refundedAt = fact.RefundedAt
 			}
 		case "purchase_superseded":
-			if fact.SupersededByLineage {
-				state.superseded = true
-			}
+			// Deliberately no state change. Under root lineage keying this fact
+			// records a token handover inside one Google chain: the successor
+			// token's own facts continue the same subscription. Treating it as
+			// terminal is how a live successor was projected inactive.
+			// Cross-lineage supersession arrives as the lineage-level parameter.
 		}
 	}
 	return state
@@ -358,6 +433,10 @@ func (s *lineageState) clearTerminal() {
 	s.revokedAt, s.refundedAt = nil, nil
 	s.refundInvalidates = false
 	s.expiredAt = nil
+	// A successful purchase or renewal also ends grace and billing retry: the
+	// provider took the money. Leaving either set would keep reporting a
+	// recovery state after the recovery happened.
+	s.graceEnd, s.retryStart = nil, nil
 }
 
 func effectiveRefund(fact Fact) *time.Time {

@@ -80,7 +80,14 @@ func ProjectOneTimePurchase(facts []Fact, asOf time.Time) OneTimeResult {
 		snapshot.ValidityState = OwnershipOwned
 	}
 	if snapshot.ValidityState == OwnershipRevoked && !effective(snapshot.RevocationEffectiveAt, asOf) {
-		snapshot.ValidityState = OwnershipOwned
+		// A revocation scheduled for the future must not resurrect a refund
+		// that has already taken effect: the purchase is still refunded, it is
+		// simply not yet revoked.
+		if effective(snapshot.RefundEffectiveAt, asOf) {
+			snapshot.ValidityState = OwnershipRefunded
+		} else {
+			snapshot.ValidityState = OwnershipOwned
+		}
 	}
 
 	snapshot.Checksum = oneTimeChecksum(snapshot)

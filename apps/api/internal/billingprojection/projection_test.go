@@ -57,8 +57,8 @@ func TestProjectionIsOrderIndependent(t *testing.T) {
 	}
 	reversed := []Fact{facts[2], facts[1], facts[0]}
 
-	forward := ProjectSubscription(facts, at("2026-03-15T00:00:00Z"), DefaultPolicy())
-	backward := ProjectSubscription(reversed, at("2026-03-15T00:00:00Z"), DefaultPolicy())
+	forward := ProjectSubscription(facts, at("2026-03-15T00:00:00Z"), DefaultPolicy(), false)
+	backward := ProjectSubscription(reversed, at("2026-03-15T00:00:00Z"), DefaultPolicy(), false)
 
 	if string(forward.Snapshot.Checksum) != string(backward.Snapshot.Checksum) {
 		t.Fatal("reverse-order facts produced a different projection")
@@ -78,8 +78,8 @@ func TestDuplicateFactsDoNotChangeProjection(t *testing.T) {
 	}
 	withDuplicate := append(append([]Fact(nil), facts...), facts[1])
 
-	single := ProjectSubscription(facts, at("2026-02-15T00:00:00Z"), DefaultPolicy())
-	doubled := ProjectSubscription(withDuplicate, at("2026-02-15T00:00:00Z"), DefaultPolicy())
+	single := ProjectSubscription(facts, at("2026-02-15T00:00:00Z"), DefaultPolicy(), false)
+	doubled := ProjectSubscription(withDuplicate, at("2026-02-15T00:00:00Z"), DefaultPolicy(), false)
 
 	if string(single.Snapshot.Checksum) != string(doubled.Snapshot.Checksum) {
 		t.Fatal("a duplicate fact changed the projection")
@@ -97,7 +97,7 @@ func TestCheckpointResumeEqualsFullReplay(t *testing.T) {
 	late := renewal("t3", "2026-03-01T00:00:00Z", "2026-04-01T00:00:00Z")
 	full := append(append([]Fact(nil), early...), late)
 
-	checkpoint := ProjectSubscription(early, at("2026-02-15T00:00:00Z"), DefaultPolicy())
+	checkpoint := ProjectSubscription(early, at("2026-02-15T00:00:00Z"), DefaultPolicy(), false)
 	ordered := Sort(append([]Fact(nil), full...))
 	if _, out := OutOfOrder([]Fact{late}, checkpoint.HighWatermark); out {
 		t.Fatal("a strictly later fact was reported as out-of-order")
@@ -107,12 +107,12 @@ func TestCheckpointResumeEqualsFullReplay(t *testing.T) {
 		t.Fatalf("resume selected %d facts, want just t3", len(remaining))
 	}
 
-	fullReplay := ProjectSubscription(full, at("2026-03-15T00:00:00Z"), DefaultPolicy())
+	fullReplay := ProjectSubscription(full, at("2026-03-15T00:00:00Z"), DefaultPolicy(), false)
 	// The engine is a fold over the whole timeline, so resuming means
 	// reprojecting the lineage; the check that matters is that the watermark
 	// arithmetic selects exactly the unprojected suffix and that the resulting
 	// state is the full-replay state.
-	resumed := ProjectSubscription(full, at("2026-03-15T00:00:00Z"), DefaultPolicy())
+	resumed := ProjectSubscription(full, at("2026-03-15T00:00:00Z"), DefaultPolicy(), false)
 	if string(fullReplay.Snapshot.Checksum) != string(resumed.Snapshot.Checksum) {
 		t.Fatal("checkpoint resume diverged from full replay")
 	}
@@ -123,7 +123,7 @@ func TestCheckpointResumeEqualsFullReplay(t *testing.T) {
 // happened after the renewal that followed it.
 func TestOutOfOrderFactInvalidatesCheckpoint(t *testing.T) {
 	early := []Fact{purchase("t1", "2026-01-01T00:00:00Z", "2026-02-01T00:00:00Z")}
-	checkpoint := ProjectSubscription(early, at("2026-01-15T00:00:00Z"), DefaultPolicy())
+	checkpoint := ProjectSubscription(early, at("2026-01-15T00:00:00Z"), DefaultPolicy(), false)
 
 	late := purchase("t0", "2025-12-01T00:00:00Z", "2026-01-01T00:00:00Z")
 	position, out := OutOfOrder([]Fact{late}, checkpoint.HighWatermark)
@@ -152,7 +152,7 @@ func TestCancellationKeepsAccessUntilPeriodEnd(t *testing.T) {
 		},
 	}
 
-	during := ProjectSubscription(facts, at("2026-01-20T00:00:00Z"), DefaultPolicy())
+	during := ProjectSubscription(facts, at("2026-01-20T00:00:00Z"), DefaultPolicy(), false)
 	if during.Snapshot.AccessState != AccessActive {
 		t.Fatalf("access %q after cancellation but before period end, want active", during.Snapshot.AccessState)
 	}
@@ -160,7 +160,7 @@ func TestCancellationKeepsAccessUntilPeriodEnd(t *testing.T) {
 		t.Fatalf("renewal intent %q, want auto_renew_disabled", during.Snapshot.RenewalIntent)
 	}
 
-	after := ProjectSubscription(facts, at("2026-02-02T00:00:00Z"), DefaultPolicy())
+	after := ProjectSubscription(facts, at("2026-02-02T00:00:00Z"), DefaultPolicy(), false)
 	if after.Snapshot.AccessState != AccessInactive || after.Snapshot.LifecycleState != LifecycleExpired {
 		t.Fatalf("after period end got %q/%q, want inactive/expired",
 			after.Snapshot.AccessState, after.Snapshot.LifecycleState)
@@ -170,27 +170,72 @@ func TestCancellationKeepsAccessUntilPeriodEnd(t *testing.T) {
 // Grace grants access on both providers per their documentation; billing retry
 // and pause do not. Getting any of the three wrong either cuts off a paying
 // customer or gives away months of free access.
+//
+// The grace facts here are pipeline-shaped, which is the point. Apple has no
+// grace notification: a grace period arrives as DID_FAIL_TO_RENEW — fact kind
+// `billing_retry_start` — carrying `gracePeriodExpiresDate` on the renewal
+// payload. An earlier version of this test hand-built an Apple
+// `grace_period_start` fact that the validator cannot emit, so it passed for
+// sixteen days of every Apple grace window during which real customers were
+// projected inactive. Google's grace arrives as `grace_period_start` with the
+// extended expiryTime as the grace end.
 func TestGraceRetryAndPauseAccessPolicy(t *testing.T) {
 	base := purchase("t1", "2026-01-01T00:00:00Z", "2026-02-01T00:00:00Z")
 
-	grace := ProjectSubscription([]Fact{base, {
+	// Apple: DID_FAIL_TO_RENEW with a provider-stated grace end.
+	appleGrace := Fact{
 		ID: "t2", Provider: "app_store", ProviderTransactionID: "t1",
-		FactKind: "grace_period_start", OccurredAt: at("2026-02-01T00:00:00Z"),
-		RecordedAt: at("2026-02-01T00:00:00Z"), PeriodEndAt: ptr("2026-02-01T00:00:00Z"),
-		GracePeriodExpiresAt: ptr("2026-02-16T00:00:00Z"),
-		MosaicProductID:      "prod_pro", ResolutionState: "active_mapping",
-	}}, at("2026-02-05T00:00:00Z"), DefaultPolicy())
+		FactKind: "billing_retry_start", OccurredAt: at("2026-02-01T00:00:00Z"),
+		RecordedAt: at("2026-02-01T00:00:00Z"), ProviderEventOccurredAt: ptr("2026-02-01T00:00:00Z"),
+		PeriodEndAt: ptr("2026-02-01T00:00:00Z"), GracePeriodExpiresAt: ptr("2026-02-16T00:00:00Z"),
+		BillingRetryActive: boolPtr(true),
+		MosaicProductID:    "prod_pro", ResolutionState: "active_mapping",
+	}
+	grace := ProjectSubscription([]Fact{base, appleGrace}, at("2026-02-05T00:00:00Z"), DefaultPolicy(), false)
 	if grace.Snapshot.AccessState != AccessActive || grace.Snapshot.LifecycleState != LifecycleGracePeriod {
-		t.Fatalf("grace got %q/%q, want active/grace_period",
+		t.Fatalf("Apple grace got %q/%q, want active/grace_period",
 			grace.Snapshot.AccessState, grace.Snapshot.LifecycleState)
 	}
+	// Once the provider's grace end passes, the same facts are billing retry.
+	afterGrace := ProjectSubscription([]Fact{base, appleGrace}, at("2026-02-20T00:00:00Z"), DefaultPolicy(), false)
+	if afterGrace.Snapshot.LifecycleState != LifecycleBillingRetry || afterGrace.Snapshot.AccessState != AccessInactive {
+		t.Fatalf("after Apple grace got %q/%q, want inactive/billing_retry",
+			afterGrace.Snapshot.AccessState, afterGrace.Snapshot.LifecycleState)
+	}
 
+	// Google: SUBSCRIPTION_STATE_IN_GRACE_PERIOD, whose extended expiryTime is
+	// both the period end and the grace end. Reading only the period would
+	// report this as plainly active and leave grants_in_grace unenforceable.
+	googleGrace := ProjectSubscription([]Fact{base, {
+		ID: "t2g", Provider: "google_play", ProviderTransactionID: "t1",
+		FactKind: "grace_period_start", OccurredAt: at("2026-02-01T00:00:00Z"),
+		RecordedAt: at("2026-02-01T00:00:00Z"), ProviderEventOccurredAt: ptr("2026-02-01T00:00:00Z"),
+		PeriodEndAt: ptr("2026-02-16T00:00:00Z"), GracePeriodExpiresAt: ptr("2026-02-16T00:00:00Z"),
+		MosaicProductID: "prod_pro", ResolutionState: "active_mapping",
+	}}, at("2026-02-05T00:00:00Z"), DefaultPolicy(), false)
+	if googleGrace.Snapshot.LifecycleState != LifecycleGracePeriod {
+		t.Fatalf("Google grace got lifecycle %q, want grace_period", googleGrace.Snapshot.LifecycleState)
+	}
+	strict := DefaultPolicy()
+	strict.GrantsInGrace = false
+	googleStrict := ProjectSubscription([]Fact{base, {
+		ID: "t2g", Provider: "google_play", ProviderTransactionID: "t1",
+		FactKind: "grace_period_start", OccurredAt: at("2026-02-01T00:00:00Z"),
+		RecordedAt: at("2026-02-01T00:00:00Z"), ProviderEventOccurredAt: ptr("2026-02-01T00:00:00Z"),
+		PeriodEndAt: ptr("2026-02-16T00:00:00Z"), GracePeriodExpiresAt: ptr("2026-02-16T00:00:00Z"),
+		MosaicProductID: "prod_pro", ResolutionState: "active_mapping",
+	}}, at("2026-02-05T00:00:00Z"), strict, false)
+	if googleStrict.Snapshot.AccessState != AccessInactive {
+		t.Fatalf("grants_in_grace=false on Google got %q, want inactive", googleStrict.Snapshot.AccessState)
+	}
+
+	// Billing retry without a provider grace end grants nothing.
 	retry := ProjectSubscription([]Fact{base, {
 		ID: "t3", Provider: "google_play", ProviderTransactionID: "t1",
 		FactKind: "billing_retry_start", OccurredAt: at("2026-02-01T00:00:00Z"),
 		RecordedAt: at("2026-02-01T00:00:00Z"), ProviderEventOccurredAt: ptr("2026-02-01T00:00:00Z"),
 		MosaicProductID: "prod_pro", ResolutionState: "active_mapping",
-	}}, at("2026-02-05T00:00:00Z"), DefaultPolicy())
+	}}, at("2026-02-05T00:00:00Z"), DefaultPolicy(), false)
 	if retry.Snapshot.AccessState != AccessInactive || retry.Snapshot.LifecycleState != LifecycleBillingRetry {
 		t.Fatalf("billing retry got %q/%q, want inactive/billing_retry",
 			retry.Snapshot.AccessState, retry.Snapshot.LifecycleState)
@@ -205,11 +250,11 @@ func TestGraceRetryAndPauseAccessPolicy(t *testing.T) {
 		RecordedAt: at("2026-01-05T00:00:00Z"), ProviderEventOccurredAt: ptr("2026-01-20T00:00:00Z"),
 		MosaicProductID: "prod_pro", ResolutionState: "active_mapping",
 	}
-	scheduled := ProjectSubscription([]Fact{base, paused}, at("2026-01-10T00:00:00Z"), DefaultPolicy())
+	scheduled := ProjectSubscription([]Fact{base, paused}, at("2026-01-10T00:00:00Z"), DefaultPolicy(), false)
 	if scheduled.Snapshot.AccessState != AccessActive {
 		t.Fatalf("scheduled pause got %q, want active until effective", scheduled.Snapshot.AccessState)
 	}
-	effectivePause := ProjectSubscription([]Fact{base, paused}, at("2026-01-25T00:00:00Z"), DefaultPolicy())
+	effectivePause := ProjectSubscription([]Fact{base, paused}, at("2026-01-25T00:00:00Z"), DefaultPolicy(), false)
 	if effectivePause.Snapshot.AccessState != AccessInactive || effectivePause.Snapshot.LifecycleState != LifecyclePaused {
 		t.Fatalf("effective pause got %q/%q, want inactive/paused",
 			effectivePause.Snapshot.AccessState, effectivePause.Snapshot.LifecycleState)
@@ -231,13 +276,13 @@ func TestRefundScopeRespectsProration(t *testing.T) {
 	}
 
 	prorated := ProjectSubscription([]Fact{base, refundFact("prorated", nil)},
-		at("2026-01-20T00:00:00Z"), DefaultPolicy())
+		at("2026-01-20T00:00:00Z"), DefaultPolicy(), false)
 	if prorated.Snapshot.AccessState != AccessActive {
 		t.Fatalf("prorated refund got %q, want the remaining period preserved", prorated.Snapshot.AccessState)
 	}
 
 	full := ProjectSubscription([]Fact{base, refundFact("full", ptr("2026-01-10T00:00:00Z"))},
-		at("2026-01-20T00:00:00Z"), DefaultPolicy())
+		at("2026-01-20T00:00:00Z"), DefaultPolicy(), false)
 	if full.Snapshot.AccessState != AccessInactive || full.Snapshot.LifecycleState != LifecycleRefunded {
 		t.Fatalf("full refund got %q/%q, want inactive/refunded",
 			full.Snapshot.AccessState, full.Snapshot.LifecycleState)
@@ -257,7 +302,7 @@ func TestLateRenewalReinstatesRevokedLineage(t *testing.T) {
 		},
 		renewal("t3", "2026-02-01T00:00:00Z", "2026-03-01T00:00:00Z"),
 	}
-	result := ProjectSubscription(facts, at("2026-02-10T00:00:00Z"), DefaultPolicy())
+	result := ProjectSubscription(facts, at("2026-02-10T00:00:00Z"), DefaultPolicy(), false)
 	if result.Snapshot.AccessState != AccessActive {
 		t.Fatalf("reinstated lineage got %q, want active", result.Snapshot.AccessState)
 	}
@@ -265,7 +310,7 @@ func TestLateRenewalReinstatesRevokedLineage(t *testing.T) {
 
 // Absent or unmappable evidence must never become `inactive` — principle 4.
 func TestUnknownIsNotInactive(t *testing.T) {
-	empty := ProjectSubscription(nil, at("2026-01-01T00:00:00Z"), DefaultPolicy())
+	empty := ProjectSubscription(nil, at("2026-01-01T00:00:00Z"), DefaultPolicy(), false)
 	if empty.Snapshot.AccessState != AccessUnknown || empty.Snapshot.UncertaintyReason == UncertaintyNone {
 		t.Fatalf("no facts got %q/%q, want unknown with a reason",
 			empty.Snapshot.AccessState, empty.Snapshot.UncertaintyReason)
@@ -273,7 +318,7 @@ func TestUnknownIsNotInactive(t *testing.T) {
 
 	unresolved := purchase("t1", "2026-01-01T00:00:00Z", "2026-02-01T00:00:00Z")
 	unresolved.MosaicProductID, unresolved.ResolutionState = "", "unresolved"
-	result := ProjectSubscription([]Fact{unresolved}, at("2026-01-15T00:00:00Z"), DefaultPolicy())
+	result := ProjectSubscription([]Fact{unresolved}, at("2026-01-15T00:00:00Z"), DefaultPolicy(), false)
 	if result.Snapshot.AccessState != AccessUnknown ||
 		result.Snapshot.UncertaintyReason != UncertaintyProductUnresolved {
 		t.Fatalf("unresolved Product got %q/%q, want unknown/product_unresolved",
@@ -410,25 +455,193 @@ func TestAggregationKeepsPermanentSourceWithoutFalseExpiry(t *testing.T) {
 
 // A frozen lineage (open identity conflict) must not grant access to either
 // candidate, and must report unknown rather than inactive.
+//
+// This runs through Compute rather than calling ProjectEntitlements with a
+// pre-built unknown source, because the real path skips frozen lineages
+// entirely — and the failure being guarded against is not "reports inactive",
+// it is "reports nothing at all". A snapshot with no entry for `pro` reads to
+// every consumer as a customer who never had it, which is a definite answer
+// about a customer whose identity is precisely what is in dispute.
 func TestFrozenLineageYieldsUnknownNotInactive(t *testing.T) {
+	grants := []GrantVersion{{ID: "v1", ProductID: "prod_pro", EntitlementID: "ent_pro",
+		EntitlementKey: "pro", Version: 1, EffectiveStart: at("2025-01-01T00:00:00Z"),
+		SupportedPurchaseTypes: []string{"auto_renewable_subscription"}, Policy: DefaultPolicy()}}
+
+	output := Compute(Input{
+		Scope: Scope{ProjectID: "proj", EnvironmentID: "env", CustomerID: "cust"},
+		Lineages: []LineageInput{{
+			LineageID: "lin_1", InstanceID: "sub_1", Type: "subscription",
+			Facts:            []Fact{purchase("t1", "2026-01-01T00:00:00Z", "2026-06-01T00:00:00Z")},
+			Frozen:           true,
+			CustomerResolved: true,
+		}},
+		GrantVersions: grants,
+	}, at("2026-03-01T00:00:00Z"))
+
+	if output.CustomerSnapshot == nil {
+		t.Fatal("a frozen lineage produced no customer snapshot at all")
+	}
+	entries := output.CustomerSnapshot.Entries
+	if len(entries) != 1 {
+		t.Fatalf("got %d entries, want one unknown entry for the disputed Entitlement", len(entries))
+	}
+	if entries[0].State != AccessUnknown {
+		t.Fatalf("frozen lineage produced %q, want unknown", entries[0].State)
+	}
+	if entries[0].UncertaintyReason == UncertaintyNone {
+		t.Fatal("unknown state carried no uncertainty reason")
+	}
+	// A frozen lineage must not advance its checkpoint: it was never projected.
+	if len(output.Checkpoints) != 0 {
+		t.Fatalf("frozen lineage advanced %d checkpoints, want none", len(output.Checkpoints))
+	}
+}
+
+// A Google purchase-token handover inside one root-keyed lineage must not
+// terminate the subscription. The supersession fact is emitted for every plan
+// change, upgrade, downgrade, and resubscribe on Play; reading it as "this
+// lineage was replaced" made the live successor inactive, which is a paying
+// customer losing access the moment they change plan.
+func TestSupersessionInsideOneChainDoesNotEndAccess(t *testing.T) {
+	facts := []Fact{
+		purchase("t1", "2026-01-01T00:00:00Z", "2026-02-01T00:00:00Z"),
+		{
+			// The once-per-lineage edge fact the Google validator emits when it
+			// first observes linkedPurchaseToken.
+			ID: "t2", Provider: "google_play", ProviderTransactionID: "token:abc",
+			FactKind: "purchase_superseded", OccurredAt: at("2026-02-01T00:00:00Z"),
+			RecordedAt: at("2026-02-01T00:00:00Z"), ProviderEventOccurredAt: ptr("2026-02-01T00:00:00Z"),
+			MosaicProductID: "prod_pro", ResolutionState: "active_mapping",
+		},
+		// The successor token's own state fact, loaded into the same lineage by
+		// the chain walk.
+		renewal("t3", "2026-02-01T00:00:00Z", "2026-03-01T00:00:00Z"),
+	}
+
+	live := ProjectSubscription(facts, at("2026-02-15T00:00:00Z"), DefaultPolicy(), false)
+	if live.Snapshot.AccessState != AccessActive {
+		t.Fatalf("successor after an intra-chain handover got %q/%q, want active",
+			live.Snapshot.AccessState, live.Snapshot.LifecycleState)
+	}
+	if live.Snapshot.LifecycleState == LifecycleSuperseded {
+		t.Fatal("an intra-chain token handover was reported as lineage supersession")
+	}
+
+	// A genuine cross-lineage replacement still terminates, and it arrives as a
+	// property of the lineage rather than of any fact.
+	replaced := ProjectSubscription(facts, at("2026-02-15T00:00:00Z"), DefaultPolicy(), true)
+	if replaced.Snapshot.LifecycleState != LifecycleSuperseded || replaced.Snapshot.AccessState != AccessInactive {
+		t.Fatalf("replaced lineage got %q/%q, want inactive/superseded",
+			replaced.Snapshot.AccessState, replaced.Snapshot.LifecycleState)
+	}
+}
+
+// Two grant versions on one Product may hold different policies. Access has to
+// be decided per grant version, or a Project that opted one Entitlement out of
+// grace still grants it whenever some other Entitlement on the same Product
+// opted in.
+func TestPerGrantPolicyIsNotCollapsed(t *testing.T) {
+	permissive := GrantVersion{ID: "v1", ProductID: "prod_pro", EntitlementID: "ent_pro",
+		EntitlementKey: "pro", Policy: DefaultPolicy()}
+	strict := permissive
+	strict.ID, strict.EntitlementID, strict.EntitlementKey = "v2", "ent_beta", "beta"
+	strict.Policy.GrantsInGrace = false
+
 	snapshot := ProjectEntitlements(CustomerProjection{
 		Subscriptions: []SubscriptionSource{{
 			InstanceID: "sub_1", PurchaseLineageID: "lin_1",
-			Grants: []GrantVersion{{ID: "v1", ProductID: "prod_pro", EntitlementID: "ent_pro",
-				EntitlementKey: "pro", Policy: DefaultPolicy()}},
+			Grants: []GrantVersion{permissive, strict},
 			Snapshot: SubscriptionSnapshot{
-				AccessState: AccessUnknown, LifecycleState: LifecycleUnknown,
-				UncertaintyReason: UncertaintyIdentityUnresolved,
+				AccessState: AccessActive, LifecycleState: LifecycleGracePeriod,
+				GracePeriodEndAt: ptr("2026-03-15T00:00:00Z"), UncertaintyReason: UncertaintyNone,
 			},
 		}},
-		FrozenLineages: 1,
 	}, at("2026-03-01T00:00:00Z"))
 
-	if snapshot.Entries[0].State != AccessUnknown {
-		t.Fatalf("frozen lineage produced %q, want unknown", snapshot.Entries[0].State)
+	states := map[string]string{}
+	for _, entry := range snapshot.Entries {
+		states[entry.EntitlementKey] = entry.State
 	}
-	if snapshot.Entries[0].UncertaintyReason == UncertaintyNone {
-		t.Fatal("unknown state carried no uncertainty reason")
+	if states["pro"] != AccessActive {
+		t.Fatalf("grant that grants in grace produced %q, want active", states["pro"])
+	}
+	if states["beta"] != AccessInactive {
+		t.Fatalf("grant that opted out of grace produced %q, want inactive", states["beta"])
+	}
+}
+
+// A fact that re-resolves to the Product the lineage already had must clear the
+// unresolved reading. Unresolved facts carry a NULL Product, so a rule that
+// only cleared on a *different* Product never fired for the overwhelmingly
+// common case — the mapping was fixed, the lineage revalidated, and the
+// customer stayed `unknown` forever.
+func TestResolutionToTheSameProductClearsUnresolved(t *testing.T) {
+	unresolved := purchase("t1", "2026-01-01T00:00:00Z", "2026-06-01T00:00:00Z")
+	unresolved.MosaicProductID, unresolved.ResolutionState = "", "unresolved"
+
+	stuck := ProjectSubscription([]Fact{unresolved}, at("2026-02-01T00:00:00Z"), DefaultPolicy(), false)
+	if stuck.Snapshot.UncertaintyReason != UncertaintyProductUnresolved {
+		t.Fatalf("unresolved fact got %q, want product_unresolved", stuck.Snapshot.UncertaintyReason)
+	}
+
+	repaired := purchase("t2", "2026-01-01T00:00:00Z", "2026-06-01T00:00:00Z")
+	repaired.FactKind = "renewal"
+	recovered := ProjectSubscription([]Fact{unresolved, repaired}, at("2026-02-01T00:00:00Z"), DefaultPolicy(), false)
+	if recovered.Snapshot.AccessState != AccessActive {
+		t.Fatalf("re-resolution to the same Product left the lineage %q/%q, want active",
+			recovered.Snapshot.AccessState, recovered.Snapshot.UncertaintyReason)
+	}
+}
+
+// A cancellation changes the subscription — renewal intent flips and the
+// cancellation instant is recorded — while changing nothing a reader of the
+// Entitlement can observe: the customer keeps `pro` with the same expiry.
+// The subscription snapshot must still commit, and the customer snapshot
+// version must not move, or every SDK cache in the Project is invalidated for a
+// change no reader can see.
+func TestSubscriptionOnlyChangeDoesNotAdvanceSnapshotVersion(t *testing.T) {
+	grants := []GrantVersion{{ID: "v1", ProductID: "prod_pro", EntitlementID: "ent_pro",
+		EntitlementKey: "pro", Version: 1, EffectiveStart: at("2025-01-01T00:00:00Z"),
+		SupportedPurchaseTypes: []string{"auto_renewable_subscription"}, Policy: DefaultPolicy()}}
+	scope := Scope{ProjectID: "proj", EnvironmentID: "env", CustomerID: "cust"}
+
+	first := Compute(Input{
+		Scope:         scope,
+		Lineages:      []LineageInput{{LineageID: "lin_1", InstanceID: "sub_1", Type: "subscription", CustomerResolved: true, Facts: []Fact{purchase("t1", "2026-01-01T00:00:00Z", "2026-02-01T00:00:00Z")}}},
+		GrantVersions: grants,
+	}, at("2026-01-15T00:00:00Z"))
+	if first.CustomerSnapshot == nil {
+		t.Fatal("the first projection minted no customer snapshot")
+	}
+
+	second := Compute(Input{
+		Scope: scope,
+		Lineages: []LineageInput{{LineageID: "lin_1", InstanceID: "sub_1", Type: "subscription", CustomerResolved: true, Facts: []Fact{
+			purchase("t1", "2026-01-01T00:00:00Z", "2026-02-01T00:00:00Z"),
+			{
+				ID: "t2", Provider: "app_store", ProviderTransactionID: "t1",
+				FactKind: "cancellation_scheduled", OccurredAt: at("2026-01-10T00:00:00Z"),
+				RecordedAt: at("2026-01-10T00:00:00Z"), ProviderEventOccurredAt: ptr("2026-01-10T00:00:00Z"),
+				MosaicProductID: "prod_pro", ResolutionState: "active_mapping",
+				RenewalExpected: boolPtr(false),
+			},
+		}}},
+		GrantVersions:          grants,
+		PriorCustomerSnapshot:  first.CustomerSnapshot,
+		CurrentSnapshotVersion: 1,
+	}, at("2026-01-15T00:00:00Z"))
+
+	if !second.Changes.NoChange {
+		t.Fatalf("a cancellation was reported as an entitlement change: %+v", second.Changes.Changed)
+	}
+	if second.CustomerSnapshot != nil {
+		t.Fatal("a no-change projection minted a customer snapshot")
+	}
+	if second.SnapshotVersion != 0 {
+		t.Fatalf("a no-change projection advanced the snapshot version to %d", second.SnapshotVersion)
+	}
+	if len(second.Subscriptions) == 0 {
+		t.Fatal("the subscription snapshot was not committed; the period change would be lost")
 	}
 }
 

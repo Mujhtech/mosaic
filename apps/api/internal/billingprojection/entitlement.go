@@ -186,15 +186,30 @@ func subscriptionSource(subscription SubscriptionSource, grant GrantVersion) Ent
 		source.SourceType = SourceFamilyShared
 	}
 
-	// The snapshot already applied the policy that produced its access state,
-	// so the source state follows it directly rather than re-deciding.
-	switch snapshot.AccessState {
-	case AccessActive:
-		source.SourceState = AccessActive
-	case AccessUnknown:
+	// Access is decided per grant version, from the provider lifecycle plus
+	// *this* grant's policy. Reading it off the snapshot's single access column
+	// collapsed every Entitlement onto one policy, so a grant version that opted
+	// out of grace still granted access whenever some other grant on the same
+	// Product opted in — the §7 per-grant opt-out existed only on paper.
+	//
+	// Lifecycles that are not policy-dependent (revoked, refunded, expired,
+	// superseded, paused, unknown) are never negotiable and fall through to the
+	// snapshot's own answer.
+	switch {
+	case snapshot.AccessState == AccessUnknown:
 		source.SourceState = AccessUnknown
 	default:
-		source.SourceState = AccessInactive
+		if granted, policyDependent := grant.Policy.GrantsAccess(snapshot.LifecycleState); policyDependent {
+			if granted {
+				source.SourceState = AccessActive
+			} else {
+				source.SourceState = AccessInactive
+			}
+		} else if snapshot.AccessState == AccessActive {
+			source.SourceState = AccessActive
+		} else {
+			source.SourceState = AccessInactive
+		}
 	}
 	return source
 }
@@ -300,13 +315,24 @@ func aggregate(sources []EntitlementSource, projection CustomerProjection) Entit
 		entry.State = AccessUnknown
 		entry.UncertaintyReason = unknownReason
 		if entry.UncertaintyReason == UncertaintyNone {
-			if projection.FrozenLineages > 0 {
-				entry.UncertaintyReason = UncertaintyIdentityUnresolved
-			} else {
-				entry.UncertaintyReason = UncertaintyIdentityUnresolved
-			}
+			entry.UncertaintyReason = UncertaintyIdentityUnresolved
 		}
-		entry.ExplanationCode = "unresolved_evidence"
+		// The explanation follows the reason rather than restating "something
+		// is unresolved". A Product mapping gap and an identity conflict need
+		// different operator actions, and reporting both as one code sent every
+		// investigation to the wrong queue.
+		switch entry.UncertaintyReason {
+		case UncertaintyProductUnresolved:
+			entry.ExplanationCode = "product_unresolved"
+		case UncertaintyConflictingFacts:
+			entry.ExplanationCode = "conflicting_facts"
+		case UncertaintyProjectionFailed:
+			entry.ExplanationCode = "projection_failed"
+		case UncertaintyStaleValidation:
+			entry.ExplanationCode = "provider_evidence_stale"
+		default:
+			entry.ExplanationCode = "identity_unresolved"
+		}
 	}
 	return entry
 }

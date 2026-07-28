@@ -722,6 +722,17 @@ func applyGoogleSubscription(fact *TransactionFact, purchase googleplay.Subscrip
 	}
 	if when, ok := parseRFC3339(item.ExpiryTime); ok {
 		fact.PeriodEndAt = &when
+		if purchase.SubscriptionState == "SUBSCRIPTION_STATE_IN_GRACE_PERIOD" {
+			// Play does not publish a separate grace-end field: while a
+			// subscription is in grace it keeps `expiryTime` extended to the
+			// end of the grace window, so that value *is* the provider-stated
+			// grace end. Without it the grace fact carried no bound, the
+			// projection warned on every pass, reported the lineage plainly
+			// active, and a Project's grants_in_grace opt-out had nothing to
+			// act on.
+			graceEnd := when
+			fact.GracePeriodExpiresAt = &graceEnd
+		}
 	}
 	if purchase.LinkedPurchaseToken != "" {
 		// The link is recorded, not acted on: acting on it would mean revoking

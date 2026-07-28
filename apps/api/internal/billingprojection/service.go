@@ -186,16 +186,24 @@ func Compute(input Input, asOf time.Time) Output {
 	unresolved, frozen := input.UnresolvedLineages, input.FrozenLineages
 
 	for _, lineage := range input.Lineages {
-		if lineage.Frozen {
-			// A frozen lineage keeps its last committed state. Projecting it
-			// would grant access on a disputed identity, which is exactly what
-			// the freeze exists to prevent.
-			frozen++
-			continue
-		}
-		if !lineage.CustomerResolved {
-			// Facts are preserved; they simply project to no customer yet.
-			unresolved++
+		if lineage.Frozen || !lineage.CustomerResolved {
+			// A frozen lineage keeps its last committed state (OD-10) and an
+			// unresolved one has no customer to attach to. Neither is projected
+			// and neither advances a checkpoint — projecting either would grant
+			// access on a disputed or absent identity.
+			//
+			// They do, however, still name the Entitlements in question, and
+			// those are emitted as `unknown` sources. Skipping them entirely
+			// produced a customer snapshot with no entry at all for the
+			// Entitlement, and an absent entry reads to every consumer as "this
+			// customer never had it" — which is the definite answer the whole
+			// uncertainty vocabulary exists to avoid asserting.
+			if lineage.Frozen {
+				frozen++
+			} else {
+				unresolved++
+			}
+			collectUndecided(input, lineage, asOf, &subscriptionSources, &oneTimeSources)
 			continue
 		}
 
@@ -232,20 +240,31 @@ func Compute(input Input, asOf time.Time) Output {
 			continue
 		}
 
-		policy := DefaultPolicy()
+		// The lineage is projected once under the default policy to establish
+		// its provider lifecycle, period, and effective timestamps — none of
+		// which depend on any grant. Access policy is then applied per grant
+		// version: re-projecting the whole lineage under grants[0] collapsed
+		// every Entitlement onto the first grant's policy, which made the §7
+		// per-grant opt-out silently ineffective for every grant but one.
+		result := ProjectSubscription(ordered, asOf, DefaultPolicy(), lineage.SupersededByLineage)
 		periodTime := asOf
-		result := ProjectSubscription(ordered, asOf, policy)
 		if result.Snapshot.PeriodStartAt != nil {
 			periodTime = *result.Snapshot.PeriodStartAt
 		}
 		grants := selectGrants(input.GrantVersions, result.Snapshot.CurrentProductID,
 			periodTime, "auto_renewable_subscription")
 		if len(grants) > 0 {
-			// The grant version in force for this period owns the access
-			// policy; re-projecting under it is what keeps policy out of the
-			// engine and out of handlers.
-			policy = grants[0].Policy
-			result = ProjectSubscription(ordered, asOf, policy)
+			// The snapshot's own access column is the union over the grant
+			// versions in force. Per-Entitlement access is decided per grant
+			// in ProjectEntitlements.
+			if granted, dependent := AnyGrantsAccess(result.Snapshot.LifecycleState, grants); dependent {
+				if granted {
+					result.Snapshot.AccessState = AccessActive
+				} else {
+					result.Snapshot.AccessState = AccessInactive
+				}
+				result.Snapshot.Checksum = subscriptionChecksum(result.Snapshot)
+			}
 		}
 		grantVersionIDs = appendGrantIDs(grantVersionIDs, grants)
 
@@ -289,11 +308,17 @@ func Compute(input Input, asOf time.Time) Output {
 	}, asOf)
 	output.Changes = Diff(input.PriorCustomerSnapshot, candidate)
 
-	if output.Changes.NoChange && len(output.Subscriptions) == 0 && len(output.OneTimes) == 0 {
-		// Nothing changed anywhere. Checkpoints still advance; no snapshot is
-		// minted, so the snapshot version does not move and no SDK refetches.
+	if output.Changes.NoChange {
+		// The customer's authoritative state is unchanged, so no customer
+		// snapshot is minted and the snapshot version does not move — even when
+		// a subscription snapshot did change underneath it. A renewal that
+		// extends a period without changing which Entitlements are held is
+		// exactly that case, and advancing the version for it would invalidate
+		// every SDK cache in the Project for a change no reader can observe.
 		output.Outcome = OutcomeNoChange
-		if frozen > 0 {
+		if len(output.Subscriptions) > 0 || len(output.OneTimes) > 0 {
+			output.Outcome = OutcomeProjected
+		} else if frozen > 0 {
 			output.Outcome = OutcomeFrozen
 		}
 		return output
@@ -303,6 +328,51 @@ func Compute(input Input, asOf time.Time) Output {
 	output.SnapshotVersion = input.CurrentSnapshotVersion + 1
 	output.Outcome = OutcomeProjected
 	return output
+}
+
+// collectUndecided emits `unknown` entitlement sources for a lineage that is
+// frozen or has no resolved customer. It projects the lineage only far enough
+// to learn which Product it names, then forces the source state to unknown: the
+// facts are real, the Entitlement is real, and the only thing Mosaic cannot
+// state is whether this customer holds it.
+func collectUndecided(input Input, lineage LineageInput, asOf time.Time,
+	subscriptions *[]SubscriptionSource, oneTimes *[]OneTimeSource) {
+
+	reason := UncertaintyIdentityUnresolved
+	ordered := Sort(append([]Fact(nil), lineage.Facts...))
+
+	if lineage.Type == "one_time" {
+		result := ProjectOneTimePurchase(ordered, asOf)
+		grants := selectGrants(input.GrantVersions, result.Snapshot.MosaicProductID,
+			result.Snapshot.AcquiredAt, "non_consumable")
+		if len(grants) == 0 {
+			return
+		}
+		result.Snapshot.ValidityState = OwnershipUnknown
+		result.Snapshot.UncertaintyReason = reason
+		*oneTimes = append(*oneTimes, OneTimeSource{
+			InstanceID: lineage.InstanceID, PurchaseLineageID: lineage.LineageID,
+			Snapshot: result.Snapshot, Grants: grants,
+		})
+		return
+	}
+
+	result := ProjectSubscription(ordered, asOf, DefaultPolicy(), lineage.SupersededByLineage)
+	periodTime := asOf
+	if result.Snapshot.PeriodStartAt != nil {
+		periodTime = *result.Snapshot.PeriodStartAt
+	}
+	grants := selectGrants(input.GrantVersions, result.Snapshot.CurrentProductID,
+		periodTime, "auto_renewable_subscription")
+	if len(grants) == 0 {
+		return
+	}
+	result.Snapshot.AccessState = AccessUnknown
+	result.Snapshot.UncertaintyReason = reason
+	*subscriptions = append(*subscriptions, SubscriptionSource{
+		InstanceID: lineage.InstanceID, SnapshotID: lineage.SnapshotID,
+		PurchaseLineageID: lineage.LineageID, Snapshot: result.Snapshot, Grants: grants,
+	})
 }
 
 func selectGrants(versions []GrantVersion, productID string, at time.Time, purchaseType string) []GrantVersion {

@@ -90,6 +90,12 @@ type LineageInput struct {
 	Frozen bool
 	// CustomerResolved is false when no accepted association exists yet.
 	CustomerResolved bool
+	// SupersededByLineage is the explicit `superseded_by_lineage_id` edge: this
+	// lineage was replaced by a *different* lineage. It is deliberately not
+	// derived from any fact — a supersession fact inside a Google purchase-token
+	// chain is a token handover within one root-keyed lineage, and reading it as
+	// a lineage replacement projected every live successor as inactive.
+	SupersededByLineage bool
 }
 
 // Output is one projection command's complete result. Everything in it is

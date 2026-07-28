@@ -16,6 +16,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"sort"
 	"strings"
 	"time"
 
@@ -175,13 +176,26 @@ func loadCustomerSnapshot(ctx context.Context, tx pgx.Tx, scope billingprojectio
 // loadLineages reads the lineages in scope, their instances, their checkpoints,
 // and every validated fact that belongs to them.
 //
-// Facts are matched to a lineage by purchase chain digest, which is the
-// provider-stated chain identity. Nothing here joins by Product, customer, or
-// time window.
+// Two scoping rules are load-bearing here:
+//
+//	Environment. Everything that holds Phase 9B state is Environment-scoped
+//	(OD-3(b)), and Apple's chain digest is only unique per (store environment,
+//	original transaction id) — so two sandbox Environments in one Project share
+//	digests. Selecting input by Project alone would let a staging lineage
+//	contribute a source to a production snapshot.
+//
+//	Chain root. A lineage is keyed on the *root* of the provider chain (plan
+//	§5): Apple's original transaction id, Google's purchase token walked
+//	backwards through linkedPurchaseToken. Facts carry their own token digest,
+//	so the fact set for a lineage is the transitive closure of supersession
+//	edges forward from the root, not the rows that happen to name the root.
+//
+// Nothing here joins by Product, customer, or time window.
 func loadLineages(ctx context.Context, tx pgx.Tx, scope billingprojection.Scope, input *billingprojection.Input) error {
 	rows, err := tx.Query(ctx,
 		`SELECT l.id, l.lineage_type, l.lineage_key_digest, l.projection_frozen,
 		        l.billing_customer_id IS NOT NULL,
+		        l.superseded_by_lineage_id IS NOT NULL,
 		        COALESCE(si.id, oi.id, ''), COALESCE(si.current_snapshot_id, ''),
 		        COALESCE(c.high_watermark, ''), c.checksum
 		 FROM purchase_lineages l
@@ -190,9 +204,10 @@ func loadLineages(ctx context.Context, tx pgx.Tx, scope billingprojection.Scope,
 		 LEFT JOIN projection_checkpoints c
 		        ON c.subscription_instance_id = si.id OR c.one_time_purchase_instance_id = oi.id
 		 WHERE l.project_id = $1
-		   AND ($2::text = '' OR l.billing_customer_id = $2)
-		   AND ($3::text = '' OR l.id = $3)`,
-		scope.ProjectID, scope.CustomerID, scope.LineageID)
+		   AND l.environment_id = $2
+		   AND ($3::text = '' OR l.billing_customer_id = $3)
+		   AND ($4::text = '' OR l.id = $4)`,
+		scope.ProjectID, scope.EnvironmentID, scope.CustomerID, scope.LineageID)
 	if err != nil {
 		return fmt.Errorf("read purchase lineages: %w", err)
 	}
@@ -207,8 +222,9 @@ func loadLineages(ctx context.Context, tx pgx.Tx, scope billingprojection.Scope,
 		var item pending
 		var checkpointChecksum []byte
 		if err := rows.Scan(&item.lineage.LineageID, &item.lineage.Type, &item.digest,
-			&item.lineage.Frozen, &item.lineage.CustomerResolved, &item.lineage.InstanceID,
-			&item.lineage.SnapshotID, &item.lineage.Checkpoint, &checkpointChecksum); err != nil {
+			&item.lineage.Frozen, &item.lineage.CustomerResolved, &item.lineage.SupersededByLineage,
+			&item.lineage.InstanceID, &item.lineage.SnapshotID, &item.lineage.Checkpoint,
+			&checkpointChecksum); err != nil {
 			return fmt.Errorf("scan purchase lineage: %w", err)
 		}
 		item.lineage.CheckpointChecksum = checkpointChecksum
@@ -218,38 +234,96 @@ func loadLineages(ctx context.Context, tx pgx.Tx, scope billingprojection.Scope,
 		return fmt.Errorf("read purchase lineages: %w", err)
 	}
 
+	// A customer projection reads every lineage the customer owns, so it must
+	// hold those lineages' locks too. Without them a lineage-scoped projection
+	// — the path a fact takes before its customer association exists — could
+	// commit a subscription snapshot in the middle of the customer aggregate
+	// that reads it. The locks are taken in sorted order after the scope lock
+	// is already held, so no cycle is possible.
+	lineageIDs := make([]string, 0, len(pendings))
 	for _, item := range pendings {
-		facts, err := loadFacts(ctx, tx, scope.ProjectID, item.digest)
+		lineageIDs = append(lineageIDs, item.lineage.LineageID)
+	}
+	if err := lockLineages(ctx, tx, scope, lineageIDs); err != nil {
+		return err
+	}
+
+	for _, item := range pendings {
+		facts, err := loadFacts(ctx, tx, scope.ProjectID, scope.EnvironmentID, item.digest)
 		if err != nil {
 			return err
 		}
 		item.lineage.Facts = facts
-		if item.lineage.Frozen {
-			input.FrozenLineages++
-		} else if !item.lineage.CustomerResolved {
-			input.UnresolvedLineages++
-		}
+		// Frozen and unresolved lineages are counted by Compute as it walks
+		// them. Counting here as well double-counted every one of them.
 		input.Lineages = append(input.Lineages, item.lineage)
 	}
 	return nil
 }
 
-func loadFacts(ctx context.Context, tx pgx.Tx, projectID string, chainDigest []byte) ([]billingprojection.Fact, error) {
+// loadFacts reads every validated fact belonging to one lineage in one
+// Environment.
+//
+// The recursive term walks supersession edges *forward* from the lineage root:
+// a fact whose `supersedes_chain_digest` is already in the chain contributes
+// its own `purchase_chain_digest` to it. That direction is the correction to
+// the defect that read the edge with the opposite sign — `supersedes_chain_digest
+// IS NOT NULL` says "this fact's chain replaced something", which every
+// successor fact says for its whole life, so every live Google successor was
+// projected superseded and inactive.
+//
+// UNION rather than UNION ALL terminates on a cycle: provider data cannot
+// contain one, so reaching a repeat means the data is already wrong and
+// stopping is safer than looping.
+// lockLineages takes the per-lineage advisory locks a scope reads, skipping the
+// one the scope already holds. Ordering is deterministic so two customer
+// projections that overlap on a lineage queue rather than deadlock.
+func lockLineages(ctx context.Context, tx pgx.Tx, scope billingprojection.Scope, lineageIDs []string) error {
+	if len(lineageIDs) == 0 {
+		return nil
+	}
+	names := make([]string, 0, len(lineageIDs))
+	for _, lineageID := range lineageIDs {
+		name := "billing-projection:lineage:" + lineageID
+		if name == scope.LockScope() {
+			continue
+		}
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	for _, name := range names {
+		if _, err := tx.Exec(ctx, `SELECT pg_advisory_xact_lock(hashtextextended($1,0))`, name); err != nil {
+			return fmt.Errorf("acquire lineage projection lock: %w", err)
+		}
+	}
+	return nil
+}
+
+func loadFacts(ctx context.Context, tx pgx.Tx, projectID, environmentID string, chainDigest []byte) ([]billingprojection.Fact, error) {
 	if len(chainDigest) == 0 {
 		return nil, nil
 	}
 	rows, err := tx.Query(ctx,
-		`SELECT id, provider, provider_transaction_id, fact_kind, transaction_type,
+		`WITH RECURSIVE chain(digest) AS (
+			SELECT $3::bytea
+		  UNION
+			SELECT f.purchase_chain_digest
+			FROM billing_transaction_facts f
+			JOIN chain c ON f.supersedes_chain_digest = c.digest
+			WHERE f.project_id = $1 AND f.environment_id = $2
+			  AND f.purchase_chain_digest IS NOT NULL
+		 )
+		 SELECT id, provider, provider_transaction_id, fact_kind, transaction_type,
 		        occurred_at, provider_event_occurred_at, recorded_at,
 		        period_start_at, period_end_at, grace_period_expires_at, revoked_at, refunded_at,
 		        renewal_expected, billing_retry_active, is_upgraded, revocation_reason,
 		        COALESCE(refund_type,''), COALESCE(auto_renew_product_identifier,''),
 		        COALESCE(in_app_ownership_type,''), COALESCE(subscription_group_identifier,''),
-		        COALESCE(mosaic_product_id,''), resolution_state, is_test_transaction,
-		        supersedes_chain_digest IS NOT NULL
+		        COALESCE(mosaic_product_id,''), resolution_state, is_test_transaction
 		 FROM billing_transaction_facts
-		 WHERE project_id=$1 AND (purchase_chain_digest=$2 OR supersedes_chain_digest=$2)`,
-		projectID, chainDigest)
+		 WHERE project_id=$1 AND environment_id=$2
+		   AND purchase_chain_digest IN (SELECT digest FROM chain)`,
+		projectID, environmentID, chainDigest)
 	if err != nil {
 		return nil, fmt.Errorf("read transaction facts: %w", err)
 	}
@@ -264,7 +338,7 @@ func loadFacts(ctx context.Context, tx pgx.Tx, projectID string, chainDigest []b
 			&fact.RefundedAt, &fact.RenewalExpected, &fact.BillingRetryActive, &fact.IsUpgraded,
 			&fact.RevocationReason, &fact.RefundType, &fact.AutoRenewProductIdentifier,
 			&fact.InAppOwnershipType, &fact.SubscriptionGroupIdentifier, &fact.MosaicProductID,
-			&fact.ResolutionState, &fact.IsTestSource, &fact.SupersededByLineage); err != nil {
+			&fact.ResolutionState, &fact.IsTestSource); err != nil {
 			return nil, fmt.Errorf("scan transaction fact: %w", err)
 		}
 		facts = append(facts, fact)
@@ -318,6 +392,17 @@ func (r *Repository) Commit(ctx context.Context, input billingprojection.Input, 
 	scope := output.Scope
 	if _, err := tx.Exec(ctx, `SELECT pg_advisory_xact_lock(hashtextextended($1,0))`, scope.LockScope()); err != nil {
 		return fmt.Errorf("acquire projection commit lock: %w", err)
+	}
+	// The commit writes the same lineages the input read, so it takes the same
+	// lineage locks. LoadInput's locks were released when its read transaction
+	// ended; the compare-and-swap below covers the customer aggregate across
+	// that gap, and these locks cover the per-lineage writes it does not.
+	commitLineages := make([]string, 0, len(input.Lineages))
+	for _, lineage := range input.Lineages {
+		commitLineages = append(commitLineages, lineage.LineageID)
+	}
+	if err := lockLineages(ctx, tx, scope, commitLineages); err != nil {
+		return err
 	}
 
 	if scope.CustomerID != "" {

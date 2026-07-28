@@ -156,10 +156,6 @@ type Fact struct {
 	MosaicProductID string
 	ResolutionState string
 	IsTestSource    bool
-
-	// SupersededByLineage is set when this fact carries a supersession edge
-	// pointing away from the lineage being projected.
-	SupersededByLineage bool
 }
 
 // SubscriptionSnapshot is the projection engine's output candidate. It carries
