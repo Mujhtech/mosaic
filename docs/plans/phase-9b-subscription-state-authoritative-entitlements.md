@@ -316,6 +316,20 @@ recovering event time via join to `billing_raw_inputs.
 provider_occurred_at` where the fact kind needs it; whether that
 becomes an additive fact column (validator-version increment) is a
 Stage 2 WP1/WP5 decision recorded before migration 00031 lands.
+
+**Fact-shape pass (blocking prerequisite for §6/§7):** the 9A fact
+row must gain additive columns for provider fields that are parsed
+today but never persisted (quality B10) — Apple
+`gracePeriodExpiresDate`, `isInBillingRetryPeriod`,
+`autoRenewProductId` (scheduled downgrade), `isUpgraded`,
+`revocationReason`/`revocationType` (full vs prorated),
+`inAppOwnershipType`, `subscriptionGroupIdentifier`, and a recovered
+provider event time for Google — as one additive change with a
+validator-version increment and documented `FactDigest`
+participation. Without these, grace end, billing-retry state,
+scheduled downgrades, refund scope, and Family Sharing are not
+expressible, so this lands in backend WP1 immediately after the
+B1/B2/B7 corrections and before the projection engines.
 Supersession is explicit (`superseded_by_lineage_id`, lifecycle
 `superseded`); nothing is deleted. Out-of-order facts invalidate the
 checkpoint and reproject the lineage from zero.
