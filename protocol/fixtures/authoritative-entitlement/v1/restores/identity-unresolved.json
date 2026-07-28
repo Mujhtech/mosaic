@@ -1,0 +1,21 @@
+{
+  "authoritativeEntitlementContractVersion": "1",
+  "recordType": "restoreResult",
+  "payload": {
+    "restoreId": "fixture-restore-0004",
+    "projectId": "fixture-project-mosaic",
+    "environmentId": "fixture-environment-production",
+    "storePlatform": "apple_app_store",
+    "outcome": "identity_unresolved",
+    "providerOutcome": "completed",
+    "requestedAt": "2026-07-28T12:13:00.000Z",
+    "observedTransactionCount": 1,
+    "uncertainty": {
+      "reason": "identity_unresolved",
+      "since": "2026-07-28T12:13:03.000Z",
+      "expectedResolution": "operator_action",
+      "diagnosticCode": "entitlement.identity.conflict_open"
+    },
+    "correlationId": "fixture-correlation-0023"
+  }
+}

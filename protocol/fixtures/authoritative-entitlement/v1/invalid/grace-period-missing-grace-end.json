@@ -1,0 +1,32 @@
+{
+  "authoritativeEntitlementContractVersion": "1",
+  "recordType": "subscriptionSnapshot",
+  "payload": {
+    "subscriptionSnapshotId": "fixture-subscription-snapshot-0013",
+    "subscriptionInstanceId": "fixture-subscription-instance-0001",
+    "purchaseLineageId": "fixture-lineage-0001",
+    "billingCustomerId": "fixture-customer-0001",
+    "projectId": "fixture-project-mosaic",
+    "environmentId": "fixture-environment-production",
+    "projectionVersion": 6,
+    "projectionRuleVersion": 1,
+    "computedAt": "2026-07-28T11:59:58.000Z",
+    "asOf": "2026-07-28T11:59:58.000Z",
+    "storePlatform": "apple_app_store",
+    "mosaicProductId": "fixture-mosaic-product-pro-monthly",
+    "accessState": "active",
+    "lifecycleState": "grace_period",
+    "renewalIntent": "auto_renew_enabled",
+    "billingState": "grace",
+    "uncertainty": {
+      "reason": "none"
+    },
+    "periodStart": "2026-07-01T09:00:00.000Z",
+    "periodEnd": "2026-08-01T09:00:00.000Z",
+    "isTestSource": false,
+    "checksum": "sha256:466ad2debc1837c3ad14bbf3b5b0a6325109c94f339abf34d2987a548127976a",
+    "changeReason": "subscription_state_changed",
+    "explanationCode": "active_grace_period",
+    "correlationId": "fixture-correlation-0010"
+  }
+}

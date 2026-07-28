@@ -1,0 +1,274 @@
+{
+  "$comment": "Generated cross-implementation reference vectors. Regenerate with packages/test-fixtures/src/build-entitlement-reference-vectors.mjs; never hand-edit a digest.",
+  "contract": "Authoritative Entitlement Contract v1",
+  "contractVersion": "1",
+  "compatibilityManifest": "protocol/compatibility/authoritative-entitlement/v1.json",
+  "evaluationOrder": [
+    "unsupportedContractVersion",
+    "customerBindingMismatch",
+    "contentDigestMismatch",
+    "snapshotVersionNotNewer",
+    "asOfRegression",
+    "accept"
+  ],
+  "rules": [
+    "Evaluate the checks in evaluationOrder. The order is normative: a snapshot that is both bound to a different customer and older must be reported as a binding mismatch, because the binding failure requires clearing the cache and the version failure does not.",
+    "A rejected snapshot NEVER produces accessState inactive. It produces unknown, and the previously accepted cache is preserved -- except on a binding mismatch, where the cache is cleared because continuing to serve the previous customer's access is the leak this rule exists to prevent.",
+    "snapshotVersion is the sole monotonicity key. The entity tag is an opaque equality token and is never compared for magnitude.",
+    "A snapshot whose version equals the cached version is not newer and is not accepted. Re-accepting it would be harmless today and is refused anyway, so that 'accepted' always means 'the state advanced'."
+  ],
+  "vectors": [
+    {
+      "id": "newer-version-accepted",
+      "cached": {
+        "contractVersion": "1",
+        "billingCustomerId": "fixture-customer-0001",
+        "projectId": "fixture-project-mosaic",
+        "environmentId": "fixture-environment-production",
+        "snapshotVersion": 4,
+        "asOf": "2026-07-28T11:59:58.000Z",
+        "contentDigestValid": true
+      },
+      "incoming": {
+        "contractVersion": "1",
+        "billingCustomerId": "fixture-customer-0001",
+        "projectId": "fixture-project-mosaic",
+        "environmentId": "fixture-environment-production",
+        "snapshotVersion": 5,
+        "asOf": "2026-07-28T12:30:00.000Z",
+        "contentDigestValid": true
+      },
+      "decision": "accept",
+      "reason": "newer_snapshot_version",
+      "cacheAction": "replace",
+      "resultingAccessState": "fromSnapshot",
+      "notes": "The ordinary path. The cache is replaced atomically; there is no partial merge."
+    },
+    {
+      "id": "older-version-rejected",
+      "cached": {
+        "contractVersion": "1",
+        "billingCustomerId": "fixture-customer-0001",
+        "projectId": "fixture-project-mosaic",
+        "environmentId": "fixture-environment-production",
+        "snapshotVersion": 4,
+        "asOf": "2026-07-28T11:59:58.000Z",
+        "contentDigestValid": true
+      },
+      "incoming": {
+        "contractVersion": "1",
+        "billingCustomerId": "fixture-customer-0001",
+        "projectId": "fixture-project-mosaic",
+        "environmentId": "fixture-environment-production",
+        "snapshotVersion": 3,
+        "asOf": "2026-07-28T11:00:00.000Z",
+        "contentDigestValid": true
+      },
+      "decision": "reject",
+      "reason": "snapshot_version_not_newer",
+      "cacheAction": "preserve",
+      "resultingAccessState": "unknownIfNoCacheOtherwiseCached",
+      "notes": "A late or replayed response must not roll state backwards. Rejecting it preserves the newer accepted state."
+    },
+    {
+      "id": "equal-version-rejected",
+      "cached": {
+        "contractVersion": "1",
+        "billingCustomerId": "fixture-customer-0001",
+        "projectId": "fixture-project-mosaic",
+        "environmentId": "fixture-environment-production",
+        "snapshotVersion": 4,
+        "asOf": "2026-07-28T11:59:58.000Z",
+        "contentDigestValid": true
+      },
+      "incoming": {
+        "contractVersion": "1",
+        "billingCustomerId": "fixture-customer-0001",
+        "projectId": "fixture-project-mosaic",
+        "environmentId": "fixture-environment-production",
+        "snapshotVersion": 4,
+        "asOf": "2026-07-28T11:59:58.000Z",
+        "contentDigestValid": true
+      },
+      "decision": "reject",
+      "reason": "snapshot_version_not_newer",
+      "cacheAction": "preserve",
+      "resultingAccessState": "unknownIfNoCacheOtherwiseCached",
+      "notes": "Equal is not newer. A 304 unchanged response is the correct way to confirm a current snapshot; it slides freshness without re-accepting anything."
+    },
+    {
+      "id": "version-regression-after-environment-change",
+      "cached": {
+        "contractVersion": "1",
+        "billingCustomerId": "fixture-customer-0001",
+        "projectId": "fixture-project-mosaic",
+        "environmentId": "fixture-environment-production",
+        "snapshotVersion": 4,
+        "asOf": "2026-07-28T11:59:58.000Z",
+        "contentDigestValid": true
+      },
+      "incoming": {
+        "contractVersion": "1",
+        "billingCustomerId": "fixture-customer-0001",
+        "projectId": "fixture-project-mosaic",
+        "environmentId": "fixture-environment-staging",
+        "snapshotVersion": 1,
+        "asOf": "2026-07-28T12:30:00.000Z",
+        "contentDigestValid": true
+      },
+      "decision": "reject",
+      "reason": "environment_mismatch",
+      "cacheAction": "clear",
+      "resultingAccessState": "unknown",
+      "notes": "Snapshot versions are monotonic per customer PER ENVIRONMENT, so a staging snapshot legitimately starts at 1. Treating this as a version regression would be the wrong diagnosis and would preserve a production cache under a staging identity. The binding check runs first for exactly this case."
+    },
+    {
+      "id": "different-customer-clears-cache",
+      "cached": {
+        "contractVersion": "1",
+        "billingCustomerId": "fixture-customer-0001",
+        "projectId": "fixture-project-mosaic",
+        "environmentId": "fixture-environment-production",
+        "snapshotVersion": 4,
+        "asOf": "2026-07-28T11:59:58.000Z",
+        "contentDigestValid": true
+      },
+      "incoming": {
+        "contractVersion": "1",
+        "billingCustomerId": "fixture-customer-0002",
+        "projectId": "fixture-project-mosaic",
+        "environmentId": "fixture-environment-production",
+        "snapshotVersion": 9,
+        "asOf": "2026-07-28T11:59:58.000Z",
+        "contentDigestValid": true
+      },
+      "decision": "reject",
+      "reason": "customer_mismatch",
+      "cacheAction": "clear",
+      "resultingAccessState": "unknown",
+      "notes": "The one rejection that clears rather than preserves. A newer version does not make a snapshot for another person acceptable, and keeping the old cache after an identity change leaks the previous user's access."
+    },
+    {
+      "id": "different-project-clears-cache",
+      "cached": {
+        "contractVersion": "1",
+        "billingCustomerId": "fixture-customer-0001",
+        "projectId": "fixture-project-mosaic",
+        "environmentId": "fixture-environment-production",
+        "snapshotVersion": 4,
+        "asOf": "2026-07-28T11:59:58.000Z",
+        "contentDigestValid": true
+      },
+      "incoming": {
+        "contractVersion": "1",
+        "billingCustomerId": "fixture-customer-0001",
+        "projectId": "fixture-project-other",
+        "environmentId": "fixture-environment-production",
+        "snapshotVersion": 9,
+        "asOf": "2026-07-28T11:59:58.000Z",
+        "contentDigestValid": true
+      },
+      "decision": "reject",
+      "reason": "project_mismatch",
+      "cacheAction": "clear",
+      "resultingAccessState": "unknown",
+      "notes": "Same reasoning as customer mismatch. All three binding members -- customer, Project, Environment -- are covered by the contentDigest so a mismatch is detectable even if a field were tampered with."
+    },
+    {
+      "id": "checksum-failure-preserves-cache",
+      "cached": {
+        "contractVersion": "1",
+        "billingCustomerId": "fixture-customer-0001",
+        "projectId": "fixture-project-mosaic",
+        "environmentId": "fixture-environment-production",
+        "snapshotVersion": 4,
+        "asOf": "2026-07-28T11:59:58.000Z",
+        "contentDigestValid": true
+      },
+      "incoming": {
+        "contractVersion": "1",
+        "billingCustomerId": "fixture-customer-0001",
+        "projectId": "fixture-project-mosaic",
+        "environmentId": "fixture-environment-production",
+        "snapshotVersion": 5,
+        "asOf": "2026-07-28T11:59:58.000Z",
+        "contentDigestValid": false
+      },
+      "decision": "reject",
+      "reason": "content_digest_mismatch",
+      "cacheAction": "preserve",
+      "resultingAccessState": "unknownIfNoCacheOtherwiseCached",
+      "notes": "Corruption in transit or at rest. The snapshot is discarded whole -- never partially applied -- and the last good cache stands."
+    },
+    {
+      "id": "unsupported-contract-version",
+      "cached": {
+        "contractVersion": "1",
+        "billingCustomerId": "fixture-customer-0001",
+        "projectId": "fixture-project-mosaic",
+        "environmentId": "fixture-environment-production",
+        "snapshotVersion": 4,
+        "asOf": "2026-07-28T11:59:58.000Z",
+        "contentDigestValid": true
+      },
+      "incoming": {
+        "contractVersion": "2",
+        "billingCustomerId": "fixture-customer-0001",
+        "projectId": "fixture-project-mosaic",
+        "environmentId": "fixture-environment-production",
+        "snapshotVersion": 5,
+        "asOf": "2026-07-28T11:59:58.000Z",
+        "contentDigestValid": true
+      },
+      "decision": "reject",
+      "reason": "unsupported_contract_version",
+      "cacheAction": "preserve",
+      "resultingAccessState": "unknownIfNoCacheOtherwiseCached",
+      "notes": "Exact-match reading. A '2' document is as unreadable to a '1' reader as a '9.9' document; numeric ordering never implies support. This check runs first because a document in an unknown version cannot be trusted to have interpretable binding fields."
+    },
+    {
+      "id": "as-of-regression-rejected",
+      "cached": {
+        "contractVersion": "1",
+        "billingCustomerId": "fixture-customer-0001",
+        "projectId": "fixture-project-mosaic",
+        "environmentId": "fixture-environment-production",
+        "snapshotVersion": 4,
+        "asOf": "2026-07-28T11:59:58.000Z",
+        "contentDigestValid": true
+      },
+      "incoming": {
+        "contractVersion": "1",
+        "billingCustomerId": "fixture-customer-0001",
+        "projectId": "fixture-project-mosaic",
+        "environmentId": "fixture-environment-production",
+        "snapshotVersion": 5,
+        "asOf": "2026-07-28T10:00:00.000Z",
+        "contentDigestValid": true
+      },
+      "decision": "reject",
+      "reason": "as_of_regression",
+      "cacheAction": "preserve",
+      "resultingAccessState": "unknownIfNoCacheOtherwiseCached",
+      "notes": "A higher version evaluated at an earlier instant means the server projected from a stale read. Accepting it would move the version forward while moving the evidence backward."
+    },
+    {
+      "id": "no-cache-accepts-first-snapshot",
+      "cached": null,
+      "incoming": {
+        "contractVersion": "1",
+        "billingCustomerId": "fixture-customer-0001",
+        "projectId": "fixture-project-mosaic",
+        "environmentId": "fixture-environment-production",
+        "snapshotVersion": 1,
+        "asOf": "2026-07-28T11:59:58.000Z",
+        "contentDigestValid": true
+      },
+      "decision": "accept",
+      "reason": "no_cached_snapshot",
+      "cacheAction": "replace",
+      "resultingAccessState": "fromSnapshot",
+      "notes": "With no cache there is nothing to be monotonic against. Every other check still applies."
+    }
+  ]
+}

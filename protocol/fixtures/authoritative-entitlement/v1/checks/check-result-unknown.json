@@ -1,0 +1,40 @@
+{
+  "authoritativeEntitlementContractVersion": "1",
+  "recordType": "entitlementCheckResult",
+  "payload": {
+    "billingCustomerId": "fixture-customer-0001",
+    "projectId": "fixture-project-mosaic",
+    "environmentId": "fixture-environment-production",
+    "snapshotVersion": 12,
+    "projectionRuleVersion": 1,
+    "issuedAt": "2026-07-28T12:02:00.000Z",
+    "asOf": "2026-07-28T11:59:58.000Z",
+    "results": [
+      {
+        "entitlementKey": "pro",
+        "state": "unknown",
+        "endKnown": false,
+        "sourceCount": 1,
+        "sourceIds": [
+          "fixture-source-subscription-0001"
+        ],
+        "primaryExplanation": {
+          "code": "conflicting_facts",
+          "sourceId": "fixture-source-subscription-0001"
+        },
+        "uncertainty": {
+          "reason": "conflicting_facts",
+          "since": "2026-07-28T10:30:00.000Z",
+          "expectedResolution": "operator_action",
+          "diagnosticCode": "entitlement.projection.conflicting_facts"
+        }
+      }
+    ],
+    "projectionStatus": {
+      "state": "degraded",
+      "lastProjectedAt": "2026-07-28T11:59:58.000Z",
+      "diagnosticCode": "entitlement.projection.conflicting_facts"
+    },
+    "correlationId": "fixture-correlation-0007"
+  }
+}

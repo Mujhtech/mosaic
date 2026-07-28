@@ -1,0 +1,62 @@
+{
+  "authoritativeEntitlementContractVersion": "1",
+  "recordType": "customerEntitlementSnapshot",
+  "payload": {
+    "snapshotId": "fixture-customer-snapshot-0001",
+    "billingCustomerId": "fixture-customer-0001",
+    "projectId": "fixture-project-mosaic",
+    "environmentId": "fixture-environment-production",
+    "snapshotVersion": 4,
+    "previousSnapshotVersion": 3,
+    "projectionRuleVersion": 1,
+    "issuedAt": "2026-07-28T12:00:00.000Z",
+    "asOf": "2026-07-28T11:59:58.000Z",
+    "refreshAfter": "2026-07-28T13:00:00.000Z",
+    "validUntil": "2026-08-04T12:00:00.000Z",
+    "entityTag": "cs-0001-v4",
+    "contentDigest": "sha256:209a06e9c13e785198f87d451ca3f94e7649307ff00b33c2979a1228946135cd",
+    "entries": [
+      {
+        "entitlementId": "fixture-entitlement-pro",
+        "entitlementKey": "pro",
+        "state": "unavailable",
+        "effectiveStart": "2026-07-01T09:00:00.000Z",
+        "effectiveEnd": "2026-08-01T09:00:00.000Z",
+        "endKnown": true,
+        "sourceIds": [
+          "fixture-source-subscription-0001"
+        ],
+        "sourceCount": 1,
+        "primaryExplanation": {
+          "code": "active_subscription_period",
+          "sourceId": "fixture-source-subscription-0001"
+        }
+      }
+    ],
+    "sources": [
+      {
+        "sourceId": "fixture-source-subscription-0001",
+        "sourceType": "active_subscription",
+        "subscriptionInstanceId": "fixture-subscription-instance-0001",
+        "mosaicProductId": "fixture-mosaic-product-pro-monthly",
+        "grantVersionId": "fixture-grant-version-0001",
+        "sourceSnapshotId": "fixture-subscription-snapshot-0001",
+        "storePlatform": "apple_app_store",
+        "start": "2026-07-01T09:00:00.000Z",
+        "end": "2026-08-01T09:00:00.000Z",
+        "sourceState": "granting",
+        "uncertainty": {
+          "reason": "none"
+        },
+        "explanationCode": "active_subscription_period",
+        "isTestSource": false
+      }
+    ],
+    "projectionStatus": {
+      "state": "current",
+      "lastProjectedAt": "2026-07-28T11:59:58.000Z"
+    },
+    "changeReason": "subscription_state_changed",
+    "correlationId": "fixture-correlation-0001"
+  }
+}

@@ -1,0 +1,10 @@
+{
+  "authoritativeEntitlementContractVersion": "1",
+  "recordType": "entitlementSyncRequest",
+  "payload": {
+    "supportedAuthoritativeEntitlementContracts": [
+      "1"
+    ],
+    "correlationId": "fixture-correlation-0003"
+  }
+}

@@ -1,0 +1,197 @@
+{
+  "$comment": "Generated cross-implementation reference vectors. Regenerate with packages/test-fixtures/src/build-entitlement-reference-vectors.mjs; never hand-edit a digest.",
+  "contract": "Authoritative Entitlement Contract v1",
+  "contractVersion": "1",
+  "compatibilityManifest": "protocol/compatibility/authoritative-entitlement/v1.json",
+  "canonicalSerialization": {
+    "form": "minifiedJsonSortedKeys",
+    "hash": "SHA-256",
+    "inputEncoding": "UTF-8",
+    "output": "sha256_prefixed_lowercase_hex",
+    "rules": [
+      "Serialize with no insignificant whitespace: no spaces after ':' or ',', no newlines.",
+      "Order object members ascending by UTF-16 code unit. Sort at every nesting depth.",
+      "Preserve array order exactly. Array order is normative in this contract: snapshot entries ascend by entitlementKey and sources ascend by sourceId, so a serializer must never sort or reorder an array.",
+      "Omit absent members. Never emit null: an absent optional and a null optional are different bytes and therefore different digests, and null is invalid everywhere in this contract.",
+      "Emit every timestamp with exactly three fractional digits and a literal Z, which is what the schema already requires.",
+      "Emit integers in shortest decimal form with no exponent, no leading zeros, and no decimal point. This contract contains no non-integer numbers.",
+      "Escape strings minimally, as JSON requires: only the quotation mark, the reverse solidus, and control characters. Never escape non-ASCII characters into \\u sequences.",
+      "Remove the excluded member -- contentDigest on a customer entitlement snapshot, checksum on a subscription snapshot -- before serializing. Nothing else is removed."
+    ],
+    "excludedMembers": {
+      "customerEntitlementSnapshot": "contentDigest",
+      "subscriptionSnapshot": "checksum"
+    }
+  },
+  "vectors": [
+    {
+      "id": "canonical-fixture-snapshot",
+      "payload": {
+        "snapshotId": "fixture-customer-snapshot-0001",
+        "billingCustomerId": "fixture-customer-0001",
+        "projectId": "fixture-project-mosaic",
+        "environmentId": "fixture-environment-production",
+        "snapshotVersion": 4,
+        "previousSnapshotVersion": 3,
+        "projectionRuleVersion": 1,
+        "issuedAt": "2026-07-28T12:00:00.000Z",
+        "asOf": "2026-07-28T11:59:58.000Z",
+        "refreshAfter": "2026-07-28T13:00:00.000Z",
+        "validUntil": "2026-08-04T12:00:00.000Z",
+        "entityTag": "cs-0001-v4",
+        "entries": [
+          {
+            "entitlementId": "fixture-entitlement-pro",
+            "entitlementKey": "pro",
+            "state": "active",
+            "effectiveStart": "2026-07-01T09:00:00.000Z",
+            "effectiveEnd": "2026-08-01T09:00:00.000Z",
+            "endKnown": true,
+            "sourceIds": [
+              "fixture-source-subscription-0001"
+            ],
+            "sourceCount": 1,
+            "primaryExplanation": {
+              "code": "active_subscription_period",
+              "sourceId": "fixture-source-subscription-0001"
+            }
+          }
+        ],
+        "sources": [
+          {
+            "sourceId": "fixture-source-subscription-0001",
+            "sourceType": "active_subscription",
+            "subscriptionInstanceId": "fixture-subscription-instance-0001",
+            "mosaicProductId": "fixture-mosaic-product-pro-monthly",
+            "grantVersionId": "fixture-grant-version-0001",
+            "sourceSnapshotId": "fixture-subscription-snapshot-0001",
+            "storePlatform": "apple_app_store",
+            "start": "2026-07-01T09:00:00.000Z",
+            "end": "2026-08-01T09:00:00.000Z",
+            "sourceState": "granting",
+            "uncertainty": {
+              "reason": "none"
+            },
+            "explanationCode": "active_subscription_period",
+            "isTestSource": false
+          }
+        ],
+        "projectionStatus": {
+          "state": "current",
+          "lastProjectedAt": "2026-07-28T11:59:58.000Z"
+        },
+        "changeReason": "subscription_state_changed",
+        "correlationId": "fixture-correlation-0001"
+      },
+      "canonicalSerialization": "{\"asOf\":\"2026-07-28T11:59:58.000Z\",\"billingCustomerId\":\"fixture-customer-0001\",\"changeReason\":\"subscription_state_changed\",\"correlationId\":\"fixture-correlation-0001\",\"entityTag\":\"cs-0001-v4\",\"entries\":[{\"effectiveEnd\":\"2026-08-01T09:00:00.000Z\",\"effectiveStart\":\"2026-07-01T09:00:00.000Z\",\"endKnown\":true,\"entitlementId\":\"fixture-entitlement-pro\",\"entitlementKey\":\"pro\",\"primaryExplanation\":{\"code\":\"active_subscription_period\",\"sourceId\":\"fixture-source-subscription-0001\"},\"sourceCount\":1,\"sourceIds\":[\"fixture-source-subscription-0001\"],\"state\":\"active\"}],\"environmentId\":\"fixture-environment-production\",\"issuedAt\":\"2026-07-28T12:00:00.000Z\",\"previousSnapshotVersion\":3,\"projectId\":\"fixture-project-mosaic\",\"projectionRuleVersion\":1,\"projectionStatus\":{\"lastProjectedAt\":\"2026-07-28T11:59:58.000Z\",\"state\":\"current\"},\"refreshAfter\":\"2026-07-28T13:00:00.000Z\",\"snapshotId\":\"fixture-customer-snapshot-0001\",\"snapshotVersion\":4,\"sources\":[{\"end\":\"2026-08-01T09:00:00.000Z\",\"explanationCode\":\"active_subscription_period\",\"grantVersionId\":\"fixture-grant-version-0001\",\"isTestSource\":false,\"mosaicProductId\":\"fixture-mosaic-product-pro-monthly\",\"sourceId\":\"fixture-source-subscription-0001\",\"sourceSnapshotId\":\"fixture-subscription-snapshot-0001\",\"sourceState\":\"granting\",\"sourceType\":\"active_subscription\",\"start\":\"2026-07-01T09:00:00.000Z\",\"storePlatform\":\"apple_app_store\",\"subscriptionInstanceId\":\"fixture-subscription-instance-0001\",\"uncertainty\":{\"reason\":\"none\"}}],\"validUntil\":\"2026-08-04T12:00:00.000Z\"}",
+      "canonicalByteLength": 1510,
+      "digest": "sha256:209a06e9c13e785198f87d451ca3f94e7649307ff00b33c2979a1228946135cd",
+      "notes": "The payload of protocol/fixtures/authoritative-entitlement/v1/snapshots/active-subscription.json with contentDigest removed. An implementation that reproduces this digest agrees with the canonical fixture, which is the only agreement that matters at run time."
+    },
+    {
+      "id": "member-order-is-irrelevant",
+      "payload": {
+        "zeta": 1,
+        "alpha": 2,
+        "Mu": 3,
+        "_underscore": 4
+      },
+      "canonicalSerialization": "{\"Mu\":3,\"_underscore\":4,\"alpha\":2,\"zeta\":1}",
+      "canonicalByteLength": 43,
+      "digest": "sha256:54bdbdf993e66e0a3888172a6c452fc90e60f89ec8371d36b8639fb073bfce07",
+      "notes": "Authoring order is discarded; sorting is by UTF-16 code unit, so uppercase sorts before lowercase and '_' sorts after both. An implementation that sorts case-insensitively or by locale produces a different digest here and agrees on every all-lowercase vector."
+    },
+    {
+      "id": "array-order-is-preserved",
+      "payload": {
+        "entries": [
+          "pro",
+          "pro_lifetime"
+        ],
+        "sources": [
+          "b",
+          "a"
+        ]
+      },
+      "canonicalSerialization": "{\"entries\":[\"pro\",\"pro_lifetime\"],\"sources\":[\"b\",\"a\"]}",
+      "canonicalByteLength": 54,
+      "digest": "sha256:f3125e976c1593cabc75a364ab106585302ef647160f3a0f35db3def77ca8523",
+      "notes": "Arrays are never sorted by the serializer. The 'sources' array here is deliberately out of order: a serializer that sorts it would silently repair a document the semantic validator is supposed to reject."
+    },
+    {
+      "id": "absent-optional",
+      "payload": {
+        "endKnown": true,
+        "entitlementKey": "pro"
+      },
+      "canonicalSerialization": "{\"endKnown\":true,\"entitlementKey\":\"pro\"}",
+      "canonicalByteLength": 40,
+      "digest": "sha256:9727903e1e1718aced890e11cb4683e0cbc6d574cd0e87112114eb08c9b2fe89",
+      "notes": "Paired with null-is-never-emitted and present-optional below. These three prove that absent, null, and present are three different states."
+    },
+    {
+      "id": "present-optional",
+      "payload": {
+        "effectiveEnd": "2026-08-01T09:00:00.000Z",
+        "endKnown": true,
+        "entitlementKey": "pro"
+      },
+      "canonicalSerialization": "{\"effectiveEnd\":\"2026-08-01T09:00:00.000Z\",\"endKnown\":true,\"entitlementKey\":\"pro\"}",
+      "canonicalByteLength": 82,
+      "digest": "sha256:51131e095121ee99aa6171c25dabe0fdb14c97f3ee5df7996e7c818fae5a28de",
+      "notes": "The same payload with the optional present. Its digest differs from absent-optional, which is why an implementation must not invent a default for an absent member."
+    },
+    {
+      "id": "non-ascii-safe-text",
+      "payload": {
+        "safeSummary": "Abonnement actif jusqu'au 1 août — 続き"
+      },
+      "canonicalSerialization": "{\"safeSummary\":\"Abonnement actif jusqu'au 1 août — 続き\"}",
+      "canonicalByteLength": 62,
+      "digest": "sha256:b6eb5181423cfca764278e4554f259991b13a4cc95bd2a16df05c044e583d4bb",
+      "notes": "Proves UTF-8 encoding and minimal escaping. A UTF-16 or Latin-1 encoding, or a serializer that escapes non-ASCII into \\u sequences, produces a different digest here and agrees on every ASCII vector. This is the vector that actually catches the bug."
+    },
+    {
+      "id": "escaped-characters",
+      "payload": {
+        "safeSummary": "quote \" backslash \\ tab\tend"
+      },
+      "canonicalSerialization": "{\"safeSummary\":\"quote \\\" backslash \\\\ tab\\tend\"}",
+      "canonicalByteLength": 48,
+      "digest": "sha256:66708c391188f431c66320fb6b98d37980de0095fadaed2b4bff7ce46ff1a13d",
+      "notes": "The three escapes JSON requires. A serializer that escapes more than this disagrees."
+    },
+    {
+      "id": "integer-form",
+      "payload": {
+        "previousSnapshotVersion": 0,
+        "projectionRuleVersion": 1,
+        "snapshotVersion": 999999999999
+      },
+      "canonicalSerialization": "{\"previousSnapshotVersion\":0,\"projectionRuleVersion\":1,\"snapshotVersion\":999999999999}",
+      "canonicalByteLength": 86,
+      "digest": "sha256:ba7d4fdfd32b9325a032b140ca24c65d1bac631fa5537a0d3fa0be108223f16c",
+      "notes": "Integers are shortest decimal with no exponent. A serializer that emits 1.0, 1e0, or 1E12 for the largest value disagrees. Zero is a legal previousSnapshotVersion and must not be omitted as falsy."
+    },
+    {
+      "id": "nested-sorting",
+      "payload": {
+        "projectionStatus": {
+          "state": "current",
+          "lastProjectedAt": "2026-07-28T11:59:58.000Z"
+        },
+        "entries": [
+          {
+            "state": "active",
+            "entitlementKey": "pro",
+            "endKnown": true
+          }
+        ]
+      },
+      "canonicalSerialization": "{\"entries\":[{\"endKnown\":true,\"entitlementKey\":\"pro\",\"state\":\"active\"}],\"projectionStatus\":{\"lastProjectedAt\":\"2026-07-28T11:59:58.000Z\",\"state\":\"current\"}}",
+      "canonicalByteLength": 155,
+      "digest": "sha256:5b7b6e11c3bfc32c1b33c079215b8bdd946b30e146598350b90e34ebf2402578",
+      "notes": "Sorting applies at every depth, including inside array elements. An implementation that sorts only the top level agrees on flat vectors and disagrees on every real snapshot."
+    }
+  ]
+}
