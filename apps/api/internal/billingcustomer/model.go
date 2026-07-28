@@ -147,17 +147,79 @@ type Lineage struct {
 	UpdatedAt             time.Time `json:"updatedAt"`
 }
 
-// Conflict is one disputed lineage held open for operator resolution.
+// Conflict scopes. A conflict is either about a purchase lineage two customers
+// claim, or about an application-user alias that already resolves elsewhere.
+// The two need different repair actions, so they are not collapsed into one
+// shape an operator has to guess at.
+const (
+	ConflictScopeLineage = "lineage"
+	ConflictScopeAlias   = "alias"
+)
+
+// Conflict diagnostic codes. They are stable machine-readable strings, safe to
+// render on an operator surface, and carry no alias value.
+const (
+	// DiagnosticMultipleClaims is the equal-authority disagreement the resolver
+	// itself detects.
+	DiagnosticMultipleClaims = "multiple_customers_claim_lineage"
+	// DiagnosticReassignmentBlocked marks a lineage whose evidence now names a
+	// different customer than the one it is already attached to. Corrects
+	// review finding I-10: this used to move the lineage silently.
+	DiagnosticReassignmentBlocked = "reassignment_requires_operator_resolution"
+	// DiagnosticAliasClaimsTwoCustomers marks an application-user alias that
+	// already resolves to a different customer (plan §5a rule 4).
+	DiagnosticAliasClaimsTwoCustomers = "application_user_alias_claims_two_customers"
+)
+
+// Conflict is one disputed association held open for operator resolution.
 type Conflict struct {
-	ID                string     `json:"id"`
-	ProjectID         string     `json:"projectId"`
-	PurchaseLineageID string     `json:"purchaseLineageId"`
-	Status            string     `json:"status"`
-	FirstCustomerID   string     `json:"firstCustomerId"`
-	SecondCustomerID  string     `json:"secondCustomerId"`
-	OpenedAt          time.Time  `json:"openedAt"`
-	ResolvedAt        *time.Time `json:"resolvedAt,omitempty"`
-	ResolutionAction  string     `json:"resolutionAction,omitempty"`
+	ID        string `json:"id"`
+	ProjectID string `json:"projectId"`
+	// Scope is ConflictScopeLineage or ConflictScopeAlias. Exactly one of
+	// PurchaseLineageID and the alias fields is populated.
+	Scope             string `json:"scope"`
+	PurchaseLineageID string `json:"purchaseLineageId,omitempty"`
+	// AliasType names the alias family in dispute. The alias *value* is a
+	// digest and is never part of this struct's JSON surface.
+	AliasType        string     `json:"aliasType,omitempty"`
+	aliasDigest      []byte     `json:"-"`
+	Status           string     `json:"status"`
+	FirstCustomerID  string     `json:"firstCustomerId"`
+	SecondCustomerID string     `json:"secondCustomerId"`
+	DiagnosticCode   string     `json:"diagnosticCode,omitempty"`
+	OpenedAt         time.Time  `json:"openedAt"`
+	ResolvedAt       *time.Time `json:"resolvedAt,omitempty"`
+	ResolutionAction string     `json:"resolutionAction,omitempty"`
+}
+
+// Digest exposes the disputed alias digest to the persistence layer without
+// putting it on the JSON surface, exactly as Alias does.
+func (c Conflict) Digest() []byte { return c.aliasDigest }
+
+// WithDigest returns a copy carrying the disputed alias digest.
+func (c Conflict) WithDigest(digest []byte) Conflict {
+	c.aliasDigest = digest
+	return c
+}
+
+// ConflictDetail is one conflict with the lineage it disputes, which is what an
+// operator needs to decide the repair. It is empty for alias-scoped conflicts,
+// which dispute no lineage.
+type ConflictDetail struct {
+	Conflict Conflict `json:"conflict"`
+	Lineage  *Lineage `json:"lineage,omitempty"`
+}
+
+// SyncRequest is the handle returned when a manual projection is requested. It
+// carries no state of its own: the scope key is what the projection job queue
+// coalesces on, so an operator polling projection status uses it directly.
+type SyncRequest struct {
+	ProjectID         string    `json:"projectId"`
+	EnvironmentID     string    `json:"environmentId"`
+	BillingCustomerID string    `json:"billingCustomerId"`
+	ScopeKey          string    `json:"projectionScopeKey"`
+	Kind              string    `json:"triggerKind"`
+	RequestedAt       time.Time `json:"requestedAt"`
 }
 
 // Actor is the authenticated operator principal.

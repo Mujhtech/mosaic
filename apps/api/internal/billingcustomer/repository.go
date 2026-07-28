@@ -52,7 +52,11 @@ type Repository interface {
 	// the existing one. Freezing the lineage happens in the same transaction:
 	// a conflict that did not freeze would let the next projection grant
 	// access to whichever candidate happened to be read first.
+	// For an alias-scoped conflict there is no lineage to freeze; the customer
+	// the caller tried to extend is frozen instead, which is what stops the
+	// next request from quietly retrying the same reassignment.
 	OpenConflict(ctx context.Context, conflict Conflict) (Conflict, error)
+	Conflict(ctx context.Context, actor Actor, projectID, conflictID string) (Conflict, error)
 	ListConflicts(ctx context.Context, actor Actor, projectID string, status string) ([]Conflict, error)
 	ResolveConflict(ctx context.Context, actor Actor, projectID, conflictID, action, assignedCustomerID string, now time.Time) (Conflict, error)
 

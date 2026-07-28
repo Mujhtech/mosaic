@@ -17,4 +17,17 @@ var (
 	ErrFrozen        = errors.New("customer identity is frozen by an open conflict")
 	ErrInvalidAlias  = errors.New("alias value is not acceptable")
 	ErrNotIdentified = errors.New("no customer could be resolved from the supplied evidence")
+
+	// ErrIdentityConflict is returned when a request would have moved an
+	// identity away from a customer that already holds it. It is deliberately
+	// distinct from ErrConflict: the caller is being told that an operator
+	// resolution has been opened and that nothing was reassigned, which is a
+	// different instruction from "retry, you raced someone". Corrects review
+	// finding I-10.
+	ErrIdentityConflict = errors.New("identity is claimed by another customer and is held for operator resolution")
+
+	// ErrUnauthenticated is returned when a trusted-server API key does not
+	// authenticate. It never distinguishes unknown from revoked from wrong
+	// tenant.
+	ErrUnauthenticated = errors.New("the presented API key is not valid")
 )

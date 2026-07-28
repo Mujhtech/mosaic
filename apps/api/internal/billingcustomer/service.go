@@ -14,16 +14,20 @@ import (
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/trace"
+
+	"github.com/Mujhtech/mosaic/apps/api/internal/billingprojection"
 )
 
 // Service is the billing-identity application service. Handlers are thin
 // wrappers over it; it owns every authorization decision, every transaction
 // boundary, and the lazy-creation rules.
 type Service struct {
-	repository Repository
-	now        func() time.Time
-	random     io.Reader
-	tracer     trace.Tracer
+	repository  Repository
+	keys        ServerKeyAuthenticator
+	reprojector Reprojector
+	now         func() time.Time
+	random      io.Reader
+	tracer      trace.Tracer
 }
 
 type Option func(*Service)
@@ -44,12 +48,20 @@ func WithRandom(random io.Reader) Option {
 	}
 }
 
-func NewService(repository Repository, options ...Option) *Service {
+// NewService builds the identity service.
+//
+// The key authenticator and the reprojector are constructor arguments rather
+// than options because neither is optional in a running system: without the
+// first there is no trusted surface, and without the second an identity change
+// leaves a stale grant in place, which is precisely review finding I-10.
+func NewService(repository Repository, keys ServerKeyAuthenticator, reprojector Reprojector, options ...Option) *Service {
 	service := &Service{
-		repository: repository,
-		now:        func() time.Time { return time.Now().UTC() },
-		random:     rand.Reader,
-		tracer:     otel.Tracer("github.com/Mujhtech/mosaic/apps/api/billingcustomer"),
+		repository:  repository,
+		keys:        keys,
+		reprojector: reprojector,
+		now:         func() time.Time { return time.Now().UTC() },
+		random:      rand.Reader,
+		tracer:      otel.Tracer("github.com/Mujhtech/mosaic/apps/api/billingcustomer"),
 	}
 	for _, option := range options {
 		option(service)
@@ -71,16 +83,19 @@ func NewService(repository Repository, options ...Option) *Service {
 // principal; a public SDK key can never reach this method, because an
 // unverified user id accepted as authorization is an
 // impersonate-anyone vulnerability.
-func (s *Service) CreateOrGetForApplicationUser(ctx context.Context, projectID, applicationUserID string) (Customer, error) {
+// It reports whether the customer was created by this call, which is the only
+// thing the caller cannot infer for itself and is what distinguishes a 201 from
+// a 200 on the trusted surface.
+func (s *Service) CreateOrGetForApplicationUser(ctx context.Context, projectID, applicationUserID string) (Customer, bool, error) {
 	ctx, span := s.tracer.Start(ctx, "billing.customer.identify")
 	defer span.End()
 
 	if err := s.requireEnabled(ctx, projectID); err != nil {
-		return Customer{}, err
+		return Customer{}, false, err
 	}
 	value := strings.TrimSpace(applicationUserID)
 	if value == "" || len(value) > 512 {
-		return Customer{}, ErrInvalidAlias
+		return Customer{}, false, ErrInvalidAlias
 	}
 
 	digest := AliasDigest(AliasApplicationUser, value)
@@ -88,27 +103,27 @@ func (s *Service) CreateOrGetForApplicationUser(ctx context.Context, projectID, 
 	switch {
 	case err == nil:
 		span.SetAttributes(attribute.Bool("mosaic.billing.customer.created", false))
-		return existing, nil
+		return existing, false, nil
 	case !errors.Is(err, ErrNotFound):
-		return Customer{}, ErrUnavailable
+		return Customer{}, false, ErrUnavailable
 	}
 
 	now := s.now()
 	id, err := s.newID("bcu")
 	if err != nil {
-		return Customer{}, ErrUnavailable
+		return Customer{}, false, ErrUnavailable
 	}
 	customer, err := s.repository.CreateCustomer(ctx, Customer{
 		ID: id, ProjectID: projectID, Status: StatusActive,
 		DiagnosticsStatus: "none", CreatedAt: now, UpdatedAt: now,
 	})
 	if err != nil {
-		return Customer{}, ErrUnavailable
+		return Customer{}, false, ErrUnavailable
 	}
 
 	aliasID, err := s.newID("bca")
 	if err != nil {
-		return Customer{}, ErrUnavailable
+		return Customer{}, false, ErrUnavailable
 	}
 	alias := Alias{
 		ID: aliasID, ProjectID: projectID, BillingCustomerID: customer.ID,
@@ -121,10 +136,10 @@ func (s *Service) CreateOrGetForApplicationUser(ctx context.Context, projectID, 
 			// partial unique index is the arbiter; re-read rather than
 			// creating a second customer for the same person.
 			if resolved, readErr := s.repository.CustomerForAlias(ctx, projectID, AliasApplicationUser, digest); readErr == nil {
-				return resolved, nil
+				return resolved, false, nil
 			}
 		}
-		return Customer{}, ErrUnavailable
+		return Customer{}, false, ErrUnavailable
 	}
 	_ = s.repository.RecordAudit(ctx, Actor{}, projectID, "billing.customer.created",
 		"billing_customer", customer.ID, map[string]string{"aliasType": AliasApplicationUser}, now)
@@ -132,7 +147,7 @@ func (s *Service) CreateOrGetForApplicationUser(ctx context.Context, projectID, 
 		"project_id": projectID, "billing_customer_id": customer.ID, "creation_path": "trusted_identify",
 	})
 	span.SetAttributes(attribute.Bool("mosaic.billing.customer.created", true))
-	return customer, nil
+	return customer, true, nil
 }
 
 // AttachApplicationUserAlias links an application user to an existing
@@ -160,12 +175,22 @@ func (s *Service) AttachApplicationUserAlias(ctx context.Context, actor Actor, p
 	if err != nil {
 		return Alias{}, ErrUnavailable
 	}
+	digest := AliasDigest(AliasApplicationUser, value)
 	alias, err := s.repository.AttachAlias(ctx, Alias{
 		ID: aliasID, ProjectID: projectID, BillingCustomerID: customerID,
 		AliasType: AliasApplicationUser, SourceAuthority: AuthorityTrustedServer,
 		VerificationStatus: "verified", EffectiveStart: now, CreatedAt: now,
-	}.WithDigest(AliasDigest(AliasApplicationUser, value)))
+	}.WithDigest(digest))
 	if err != nil {
+		// Corrects review finding I-10. A digest that already has a live
+		// resolution elsewhere used to surface as a bare ErrConflict, which
+		// reads like a lost race and invites the caller to retry. It is not a
+		// race: one application user is claiming two customers, which is
+		// exactly the quarantine case of plan §5a rule 4. Open the conflict,
+		// freeze, audit, and tell the caller an operator now owns it.
+		if errors.Is(err, ErrConflict) {
+			return Alias{}, s.openAliasConflict(ctx, actor, projectID, customerID, digest, now)
+		}
 		return Alias{}, err
 	}
 	_ = s.repository.RecordAudit(ctx, actor, projectID, "billing.customer.alias_attached",
@@ -242,6 +267,31 @@ func (s *Service) ResolveLineageCustomer(ctx context.Context, projectID, lineage
 	}
 
 	resolution := Resolve(observations, active)
+
+	// Corrects review finding I-10.
+	//
+	// A lineage that is already attached and whose evidence now names someone
+	// else is a reassignment, and reassignment away from a customer that
+	// already holds the purchase is never automatic. Higher-authority evidence
+	// used to win here and move the pointer silently, which left two wrongs
+	// behind at once: no record an operator could act on, and a previously
+	// granted customer whose committed snapshot still granted the purchase it
+	// no longer owned. The move is downgraded to a conflict *before* evidence
+	// is written, so the persisted evidence records `conflicting` rather than a
+	// resolution that never happened.
+	reassignedFrom := ""
+	if resolution.Outcome == OutcomeResolved && lineage.BillingCustomerID != "" &&
+		lineage.BillingCustomerID != resolution.CustomerID {
+		reassignedFrom = lineage.BillingCustomerID
+		resolution.Outcome = OutcomeConflicting
+		// The incumbent is named first; the challenger the evidence proposed is
+		// second. An operator resolving with `assigned_second` is the explicit
+		// reassignment this path refuses to perform on its own.
+		resolution.ConflictWith = resolution.CustomerID
+		resolution.CustomerID = lineage.BillingCustomerID
+		resolution.DiagnosticCode = DiagnosticReassignmentBlocked
+	}
+
 	now := s.now()
 	for _, observation := range resolution.Considered {
 		id, idErr := s.newID("bae")
@@ -281,9 +331,11 @@ func (s *Service) ResolveLineageCustomer(ctx context.Context, projectID, lineage
 			return Resolution{}, ErrUnavailable
 		}
 		if _, err := s.repository.OpenConflict(ctx, Conflict{
-			ID: conflictID, ProjectID: projectID, PurchaseLineageID: lineageID,
-			Status: "open", FirstCustomerID: resolution.CustomerID,
-			SecondCustomerID: resolution.ConflictWith, OpenedAt: now,
+			ID: conflictID, ProjectID: projectID, Scope: ConflictScopeLineage,
+			PurchaseLineageID: lineageID,
+			Status:            "open", FirstCustomerID: resolution.CustomerID,
+			SecondCustomerID: resolution.ConflictWith, DiagnosticCode: resolution.DiagnosticCode,
+			OpenedAt: now,
 		}); err != nil {
 			return Resolution{}, ErrUnavailable
 		}
@@ -291,10 +343,26 @@ func (s *Service) ResolveLineageCustomer(ctx context.Context, projectID, lineage
 			return Resolution{}, ErrUnavailable
 		}
 		_ = s.repository.RecordAudit(ctx, Actor{}, projectID, "billing.lineage.identity_conflict_opened",
-			"purchase_lineage", lineageID, nil, now)
+			"purchase_lineage", lineageID, map[string]string{
+				"conflictScope": ConflictScopeLineage, "diagnosticCode": resolution.DiagnosticCode,
+			}, now)
 		logSafely(ctx, "billing lineage frozen by identity conflict", map[string]string{
 			"project_id": projectID, "purchase_lineage_id": lineageID,
+			"diagnostic_code": resolution.DiagnosticCode,
 		})
+
+		// Corrects review finding I-10. Freezing the lineage only stops the
+		// *next* projection from using it; the customer that was already
+		// granted this purchase still has a committed snapshot saying so. The
+		// error is returned rather than swallowed: the freeze and the conflict
+		// are idempotent, so the caller's retry re-reaches this point, whereas
+		// dropping the trigger would leave the stale grant standing until some
+		// unrelated event happened to enqueue a projection.
+		if reassignedFrom != "" {
+			if err := s.scheduleReprojection(ctx, projectID, lineage.EnvironmentID, reassignedFrom); err != nil {
+				return Resolution{}, err
+			}
+		}
 	}
 	span.SetAttributes(attribute.String("mosaic.billing.association.outcome", resolution.Outcome))
 	return resolution, nil
@@ -404,12 +472,140 @@ func (s *Service) ResolveConflict(ctx context.Context, actor Actor, projectID, c
 	if err != nil {
 		return Conflict{}, err
 	}
-	if err := s.repository.SetLineageFrozen(ctx, projectID, conflict.PurchaseLineageID, false, "none", now); err != nil {
-		return Conflict{}, ErrUnavailable
+
+	environmentID := ""
+	switch conflict.Scope {
+	case ConflictScopeAlias:
+		// An alias conflict froze the customer the caller tried to extend,
+		// because there was no lineage to freeze. Release it.
+		if err := s.repository.SetCustomerStatus(ctx, projectID, conflict.FirstCustomerID, StatusActive, now); err != nil {
+			return Conflict{}, ErrUnavailable
+		}
+	default:
+		lineage, lineageErr := s.repository.Lineage(ctx, projectID, conflict.PurchaseLineageID)
+		if lineageErr != nil {
+			return Conflict{}, ErrUnavailable
+		}
+		environmentID = lineage.EnvironmentID
+		if err := s.repository.SetLineageFrozen(ctx, projectID, conflict.PurchaseLineageID, false, "none", now); err != nil {
+			return Conflict{}, ErrUnavailable
+		}
 	}
+
 	_ = s.repository.RecordAudit(ctx, actor, projectID, "billing.identity_conflict.resolved",
-		"billing_identity_conflict", conflictID, map[string]string{"action": action}, now)
+		"billing_identity_conflict", conflictID, map[string]string{
+			"action": action, "conflictScope": conflict.Scope,
+		}, now)
+
+	// Corrects review finding I-10. Both candidates are reprojected, not only
+	// the assigned one: whichever customer loses the lineage is the one holding
+	// a committed snapshot that still grants it, and that is the stale grant
+	// the finding is about. Reprojection is idempotent and a no-change
+	// projection is a first-class outcome, so reprojecting the winner too costs
+	// nothing and removes a whole class of "which side needed it" reasoning.
+	if environmentID != "" {
+		for _, customerID := range dedupe(conflict.FirstCustomerID, conflict.SecondCustomerID, assignedCustomerID) {
+			if err := s.scheduleReprojection(ctx, projectID, environmentID, customerID); err != nil {
+				return Conflict{}, err
+			}
+		}
+	}
 	return conflict, nil
+}
+
+// openAliasConflict records that one application-user alias claims two
+// customers, freezes the customer the caller tried to extend, and refuses the
+// attachment. Corrects review finding I-10.
+//
+// The freeze lands on the customer named in the request rather than on both:
+// the other customer's grants come from its own lineages and are not in
+// dispute, and freezing a paying customer's identity because someone else's
+// backend sent a bad attach would be a self-inflicted outage. Freezing the
+// requested customer is what makes the next identical request fail closed
+// instead of quietly retrying the same reassignment.
+func (s *Service) openAliasConflict(ctx context.Context, actor Actor, projectID, customerID string, digest []byte, now time.Time) error {
+	other, err := s.repository.CustomerForAlias(ctx, projectID, AliasApplicationUser, digest)
+	if err != nil {
+		// The alias could not be read back. Report the original conflict rather
+		// than inventing a conflict record against an unknown counterparty.
+		return ErrConflict
+	}
+	if other.ID == customerID {
+		// The alias is already attached to this very customer. Attaching twice
+		// is not a conflict worth an operator's time.
+		return ErrConflict
+	}
+
+	conflictID, idErr := s.newID("bic")
+	if idErr != nil {
+		return ErrUnavailable
+	}
+	if _, err := s.repository.OpenConflict(ctx, Conflict{
+		ID: conflictID, ProjectID: projectID, Scope: ConflictScopeAlias,
+		AliasType: AliasApplicationUser, Status: "open",
+		FirstCustomerID: customerID, SecondCustomerID: other.ID,
+		DiagnosticCode: DiagnosticAliasClaimsTwoCustomers, OpenedAt: now,
+	}.WithDigest(digest)); err != nil {
+		return ErrUnavailable
+	}
+	if err := s.repository.SetCustomerStatus(ctx, projectID, customerID, StatusFrozen, now); err != nil {
+		return ErrUnavailable
+	}
+	_ = s.repository.RecordAudit(ctx, actor, projectID, "billing.customer.identity_conflict_opened",
+		"billing_customer", customerID, map[string]string{
+			"conflictScope": ConflictScopeAlias, "aliasType": AliasApplicationUser,
+			"diagnosticCode": DiagnosticAliasClaimsTwoCustomers,
+		}, now)
+	// Identifiers only. The alias value and its digest never reach a log.
+	logSafely(ctx, "billing customer frozen by alias identity conflict", map[string]string{
+		"project_id": projectID, "billing_customer_id": customerID,
+		"billing_identity_conflict_id": conflictID,
+	})
+	return ErrIdentityConflict
+}
+
+// scheduleReprojection asks the projection module to recompute one customer's
+// aggregate. Corrects review finding I-10: an identity change that does not
+// reach here leaves the previous owner's committed snapshot granting a purchase
+// it no longer holds.
+func (s *Service) scheduleReprojection(ctx context.Context, projectID, environmentID, customerID string) error {
+	if customerID == "" || environmentID == "" {
+		return nil
+	}
+	if s.reprojector == nil {
+		zerolog.Ctx(ctx).Error().
+			Str("project_id", projectID).
+			Str("billing_customer_id", customerID).
+			Msg("no reprojector is wired; a stale entitlement grant cannot be recomputed")
+		return ErrUnavailable
+	}
+	err := s.reprojector.Enqueue(ctx, billingprojection.Scope{
+		ProjectID: projectID, EnvironmentID: environmentID, CustomerID: customerID,
+	}, billingprojection.KindAssociationEstablished)
+	switch {
+	case err == nil:
+		return nil
+	case errors.Is(err, billingprojection.ErrBillingDisabled):
+		return ErrBillingDisabled
+	default:
+		return ErrUnavailable
+	}
+}
+
+func dedupe(values ...string) []string {
+	seen := map[string]struct{}{}
+	result := make([]string, 0, len(values))
+	for _, value := range values {
+		if value == "" {
+			continue
+		}
+		if _, ok := seen[value]; ok {
+			continue
+		}
+		seen[value] = struct{}{}
+		result = append(result, value)
+	}
+	return result
 }
 
 // requireEnabled fails closed. A Project that turned billing off holds no
