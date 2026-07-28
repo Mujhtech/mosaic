@@ -74,7 +74,7 @@ Implementation of gated sections must not begin until each is decided.
 | OD-1 | Webhooks in 9B or 9C (roadmap places them in 9C; prompt places full subsystem in 9B) | (a) defer entirely to 9C — backends poll the Access Decision API; (b) minimal slice: `customer.entitlements.changed` only, HMAC signing, at-least-once delivery, attempt history, API-only destinations, no UI; (c) full subsystem + roadmap amendment | **(b)** with roadmap amended to record the split |
 | OD-2 | Customer-association evidence | (a) submission-context only (token-bound SDK / trusted-server observations); (b) (a) + forward-only protected capture (SHA-256 digests, never raw) of Apple `appAccountToken` and Google `obfuscatedExternalAccountId` parsed server-side from raw payloads into 9B-owned evidence tables — Billing Ingestion v1 stays frozen; privacy guide amended in the same change; pre-9B facts project `unknown` until an explicit restore/link | **(b)** |
 | OD-3 | Billing Customer scoping | (a) Environment-scoped customer (isolation fully structural); (b) Project-scoped customer identity, with Environment-scoped lineages, instances, subscription snapshots, tokens, webhooks, **and Environment-scoped Customer Entitlement Snapshots + current pointers** (one pointer per (customer, environment)) | **(b)** — matches the prompt's "a Customer belongs to one Project" while keeping sandbox/production isolation schema-enforced everywhere state lives |
-| OD-4 | Anonymous installation-scoped access | (a) identified-only in 9B — Mosaic Billing requires an application backend, documented prominently; (b) + installation credential | **(a)**; (b) is the first candidate follow-up |
+| OD-4 | Anonymous installation-scoped access | (a) identified-only in 9B — Mosaic Billing requires an application backend, documented prominently; the installation alias exists only as evidence/diagnostics/cache-key/restore-hint and can never create or select a customer; (b) installation-scoped customers (the prompt's line-1368 anonymous mode — this is structurally the RevenueCat duplicate-customer trap: eager creation anchored to a client-generated device-local ID) | **(a)**; decline (b). See §5a customer-creation model |
 | OD-5 | Offline access policy (uniform across all three SDKs) | strict / bounded grace / server-only | **Bounded grace**: `refresh_after` 1h, `valid_until` 7d defaults, per-Environment configurable, hard max 30d; past grace → `unknown` (never `inactive`); server-only documented as guidance for irreversible actions |
 | OD-6 | Authoritative vs provider-observed entitlements in SDKs and placement targeting | (a) purely additive `MosaicCustomer…` namespace; targeting keeps reading provider-observed; no existing symbol changes; (b) authoritative replaces targeting input; (c) configurable | **(a)** for 9B; (c) later behind its own decision |
 | OD-7 | Customer deletion vs the published privacy claims | (a) split: billing facts/customers/snapshots exempt (financial evidence); aliases (the PII — the person-to-purchase link) erasable/redactable; `docs/guides/privacy.md` §"no customer table" claim rewritten in the same change; (b) full cascade deletion | **(a)**. Hard constraint (verified): the Phase 6 deletion job hard-DELETEs analytics identity rows (`analyticspostgres/jobs.go:346-380`), so billing aliases must be an independent table with **no FK into analytics identity tables** — RESTRICT would break accepted deletion behaviour, CASCADE would silently revoke entitlements |
@@ -84,7 +84,7 @@ Implementation of gated sections must not begin until each is decided.
 | OD-11 | Shadow projection in 9B | (a) defer the diff engine until a second rule version exists (rule versions recorded on every snapshot from day one; replay + checksum comparison ship in 9B); (b) build full shadow infra now per prompt | **(a)** — deviation from the prompt, needs explicit sign-off |
 | OD-12 | Live-sandbox waiver hardening | (a) waiver stands through 9B acceptance; (b) live verification of grace, billing-retry, pause, refund, revocation transitions becomes a named **blocking pre-production follow-up** in the 9B review | **(b)** |
 | OD-13 | 9A defect corrections (B1, B2, B7) | (a) fix within 9B as explicitly classified 9A corrections (first backend work package, own commits, reprojection consequence stated); (b) separate 9A fix branch first | **(a)** |
-| OD-14 | Customer Access Token mechanism | (a) opaque random tokens stored as SHA-256 digests (ADR-0017 posture; revocable, Environment-bound, no signing ADR); (b) signed JWS + new ADR | **(a)**; SDKs hold tokens in memory only, never persisted |
+| OD-14 | Customer Access Token mechanism | (a) opaque random tokens stored as SHA-256 digests (ADR-0017 posture; revocation is one UPDATE; Project/Environment/customer scoping is composite-FK columns, not claims validation; no signing ADR); (b) signed JWS + new ADR. **Note: the orchestration prompt's token list says "signed" — (a) is an explicit deviation** that satisfies every other requirement on that list strictly better (especially "revocable where practical") and needs owner sign-off as a deviation, not a quiet substitution | **(a)**; SDKs hold tokens in memory only, never persisted |
 | OD-15 | Contract status | all three 9B contracts born `draft`, promoted alongside Billing Ingestion v1 once live-sandbox evidence exists | **yes** |
 | OD-16 | Webhook consumer tolerance | documented departure from repo-wide fail-closed: producers strict (`additionalProperties: false`), consumers documented tolerant (ignore unknown fields/event types, re-read the snapshot) | **accept** |
 | OD-17 | Test transactions (`is_test_transaction`) | Verified structural asymmetry: Apple sandbox facts (incl. all TestFlight purchases) **cannot** reach a production-mode Environment — `storeEnvironmentMatchesMode` + the 00024 alignment CHECK quarantine them; this is a fraud control (Apple sandbox accounts are free and self-service) and must never be relaxed. TestFlight testers get access by pointing TestFlight builds at a staging Environment. Google has no sandbox: license-tester purchases (operator-allowlisted in Play Console) arrive as production transactions flagged `is_test_transaction`. Options: (a) per-Environment `test_transaction_entitlement_policy` ∈ {deny, grant}, default `grant`, every test-derived Entitlement carrying an `is_test_source` flag on server API, SDK result, and webhook payloads; (b) deny in production-mode Environments | **(a)** — and the Apple/Google asymmetry is documented in the 9B entitlement semantics |
@@ -209,6 +209,44 @@ scoping amendment of OD-3(b)):
   ≤24h max; audience/scopes; Environment-bound).
 - Webhook tables per OD-1 scope; `restore_sync_jobs`,
   `projection_replay_jobs`; shadow tables deferred per OD-11.
+
+## 5a. Customer creation model (avoiding customer proliferation)
+
+The duplicate-customer failure mode of client-anchored systems (eager
+creation at SDK launch, anchored to a device-local ID, reconciled later
+by lossy merge) is avoided structurally by four rules:
+
+1. **Lazy creation.** No Billing Customer exists until either the host
+   backend identifies a user (trusted flow) or a validated purchase
+   fact needs somewhere to attach. SDK init and installation
+   registration create nothing.
+2. **Anonymous purchases anchor to the purchase lineage, not the
+   device.** 9A already persists store-account-derived anchors
+   (`purchase_chain_digest` from Apple `originalTransactionId`;
+   Google token digest chains + `supersedes_chain_digest`) that
+   survive reinstall, clear-data, and device changes — so a
+   reinstalling user who restores resolves to the *same*
+   purchase-anchored customer.
+3. **Login attaches, it does not merge.** Identifying a user appends
+   an application-user alias to the existing lineage-anchored
+   customer; merge is made rare by construction rather than made good.
+4. **Real conflicts quarantine** (one app-user alias claiming two
+   customers with real purchases): freeze, grant neither
+   automatically, operator resolution, audit — per OD-10. Automatic
+   merge stays an ADR checkpoint, not taken in 9B.
+
+Security corollaries: the client-generated installation ID must
+never, by itself, select an existing Billing Customer (replay/guess ⇒
+reading someone else's entitlements); the application-user alias is
+assertable only by the customer's backend (secret key or a token that
+backend minted), never by a public-SDK-key client; restore resolves
+customers through server-validated store lineage, never a
+client-asserted identifier. Caveat: Apple `originalTransactionId` is
+store-account-scoped, so Family Sharing / shared devices can put two
+people on one lineage — persisting `inAppOwnershipType` (9A gap B10)
+lands in the same fact-shape pass to keep lineage anchoring precise.
+Dashboard consequence: the customer list distinguishes "identified"
+from "purchase-anchored, not yet identified".
 
 ## 6. State model and canonical derivation
 
