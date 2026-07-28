@@ -332,6 +332,40 @@ void main() {
     });
   }
 
+  // Purpose: the highest-risk regression of the billing handoff is a purchase
+  // stalling or changing outcome because an observation was awaited. The risk
+  // lives in the renderer's await ordering, so it is asserted at the widget
+  // layer with a sink that never completes and a sink that throws.
+  for (final sink in <(String, MosaicTransactionObservationSink)>[
+    ('never completes', _StallingObservationSink()),
+    ('throws', _ThrowingObservationSink()),
+  ]) {
+    testWidgets(
+        'purchase completes unchanged when the observation sink '
+        '${sink.$1}', (tester) async {
+      final results = <MosaicPresentationResult>[];
+      final interactions = <MosaicInteraction>[];
+      await _pumpPaywall(
+        tester,
+        MockMosaicPurchaseProvider(products: _products),
+        results: results,
+        interactions: interactions,
+        transactionObservations: sink.$2,
+      );
+
+      await _tap(tester, 'mosaic-plans-monthly-plan-card');
+      await _tap(tester, 'mosaic-purchase');
+
+      expect(results.single, isA<MosaicPurchasedPresentationResult>());
+      expect(
+        (results.single as MosaicPurchasedPresentationResult)
+            .productReferenceId,
+        'monthly-plan',
+      );
+      expect(interactions.last.outcome, MosaicInteractionOutcome.purchased);
+    });
+  }
+
   testWidgets('close reports dismissed without owning modal dismissal',
       (tester) async {
     final results = <MosaicPresentationResult>[];
@@ -485,6 +519,7 @@ Future<void> _pumpPaywall(
   List<MosaicPresentationResult>? results,
   List<MosaicInteraction>? interactions,
   List<MosaicDiagnostic>? diagnostics,
+  MosaicTransactionObservationSink? transactionObservations,
 }) async {
   await tester.pumpWidget(
     MaterialApp(
@@ -496,6 +531,7 @@ Future<void> _pumpPaywall(
           onResult: results?.add ?? (_) {},
           onInteraction: interactions?.add,
           onDiagnostic: diagnostics?.add,
+          transactionObservations: transactionObservations,
         ),
       ),
     ),
@@ -579,6 +615,30 @@ final class _ThrowingLoadProvider implements MosaicPurchaseProvider {
 
   @override
   Future<MosaicRestoreResult> restore() async => const MosaicNothingToRestore();
+}
+
+/// A sink whose work never finishes. The renderer must not be able to wait on
+/// it, so the purchase result must arrive within the normal pump.
+final class _StallingObservationSink
+    implements MosaicTransactionObservationSink {
+  @override
+  void observePurchaseResult({
+    required String? transactionReference,
+    String? providerOrderReference,
+  }) {
+    unawaited(Completer<void>().future);
+  }
+}
+
+final class _ThrowingObservationSink
+    implements MosaicTransactionObservationSink {
+  @override
+  void observePurchaseResult({
+    required String? transactionReference,
+    String? providerOrderReference,
+  }) {
+    throw StateError('billing handoff failure');
+  }
 }
 
 /// Delivery is irrelevant to this suite; the queue is inspected directly.

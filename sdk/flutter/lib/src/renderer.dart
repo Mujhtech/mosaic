@@ -13,6 +13,7 @@ import 'configuration.dart';
 import 'localization.dart';
 import 'presentation.dart';
 import 'protocol.dart';
+import 'transaction_observation.dart';
 
 part 'renderer_actions.dart';
 part 'renderer_layout.dart';
@@ -202,6 +203,7 @@ final class MosaicPaywall extends StatefulWidget {
     this.onDiagnostic,
     this.analyticsRuntime,
     this.analyticsContext,
+    this.transactionObservations,
     this.onPresented,
     this.clock = _mosaicSystemClock,
     this.externalUrlOpener = mosaicExternalUrlOpener,
@@ -218,6 +220,11 @@ final class MosaicPaywall extends StatefulWidget {
   final MosaicDiagnosticCallback? onDiagnostic;
   final MosaicAnalyticsRuntime? analyticsRuntime;
   final MosaicAnalyticsPresentationContext? analyticsContext;
+
+  /// Optional billing handoff. It is fire-and-forget by construction: the sink
+  /// returns `void`, so the purchase flow can never await, block on, or be
+  /// altered by it, and it never re-labels a local purchase result.
+  final MosaicTransactionObservationSink? transactionObservations;
   final VoidCallback? onPresented;
   final MosaicClock clock;
   final MosaicExternalUrlOpener externalUrlOpener;

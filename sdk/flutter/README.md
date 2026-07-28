@@ -137,6 +137,69 @@ Analytics delivery is always best effort and never changes Placement,
 rendering, purchase, or restore results. Local Preview, lower-level local
 `MosaicPaywall`, and bundled/unhosted paywalls do not emit hosted analytics.
 
+## Transaction observation handoff
+
+Off by default. When a host opts in, Mosaic reports the *reference* of a
+completed purchase so the server can begin validating it. It is a trigger, not
+proof.
+
+```dart
+final mosaic = Mosaic.configure(
+  publicSdkKey: 'public_sdk_key',
+  baseUrl: Uri.parse('https://mosaic.example.com'),
+  applicationId: 'application_ios',
+  storePlatform: MosaicStorePlatform.ios,
+  purchaseProvider: provider,
+  transactionObservation: const MosaicTransactionObservationSettings(),
+);
+
+await mosaic.setTransactionObservation(hostEnabled: consentAllowsHandoff);
+final result = await mosaic.flushTransactionObservations();
+final diagnostics = await mosaic.transactionObservationDiagnostics();
+```
+
+What it never does:
+
+- It never claims a transaction is validated, verified, confirmed, or
+  entitled. The submission result has four members and none of them means
+  that. `serverConfirmedTransactions` remains unsupported.
+- It never blocks, delays, or changes a purchase. The renderer's sink returns
+  `void`, is never awaited, and a sink that throws cannot become a failed
+  purchase.
+- It never carries a credential. The reference is structurally bounded to the
+  contract's shape for the Store Platform: a raw decimal App Store transaction
+  identifier, or the SHA-256 digest of a Google Play purchase token in
+  lowercase hexadecimal. An Apple JWS representation, a device-verification
+  value, a raw purchase token, and a `mock-*`/`preview-*` placeholder all fail
+  that check and are dropped and counted. No App Store key, Google
+  service-account key, or shared secret can be configured into the SDK.
+- It never emits an entitlement, price, subject, tenant identity, or Store
+  Environment assertion, and it never rides on the analytics queue or the
+  analytics consent decision.
+
+How it behaves:
+
+- Two sources feed it: the purchase result the renderer received, and
+  asynchronous Commerce Provider updates whose outcome is `purchased`, which
+  also cover store-replayed renewals and out-of-band purchases. Both produce
+  the same deterministic submission identifier, so one purchase is submitted
+  once.
+- The queue lives in app-private application-support storage, is written
+  atomically after every mutation, and survives an app restart with the same
+  submission identifier, so a retry after an ambiguous timeout is answered
+  `duplicate` rather than creating a second record. It is bounded to 128
+  observations/64 KiB, expires after 14 days, and retries at most 10 times with
+  full-jitter exponential backoff honouring an explicit `Retry-After`.
+- Disabling collection clears the queue and deletes the persisted document.
+- A `MosaicStorePlatform` is required, because it determines the contract's
+  reference kind. Without one the handoff stays disabled rather than guessing.
+- There is no background-execution machinery. An observation queued just
+  before the app is killed is delivered on the next launch. Store
+  Notifications, not this handoff, are the authoritative and timely ingestion
+  path.
+- Every storage and network failure degrades to a stable safe code and never
+  throws into the host application.
+
 ## Requirements
 
 - Flutter 3.22 or newer (the tested minimum)

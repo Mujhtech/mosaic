@@ -354,7 +354,20 @@ extension on _MosaicPaywallState {
         return;
       }
       switch (result) {
-        case MosaicPurchased(:final activeEntitlements):
+        case MosaicPurchased(:final activeEntitlements, :final transactionId):
+          // Fire-and-forget billing handoff. It returns void, is never awaited,
+          // and its outcome never reaches onInteraction or onResult: an
+          // observation triggers server-side validation and is never proof.
+          // A host-supplied sink that throws must not become a failed purchase.
+          try {
+            widget.transactionObservations?.observePurchaseResult(
+              transactionReference: transactionId,
+            );
+          } on Object {
+            // Deliberately swallowed: this is the one failure that must never
+            // alter a purchase outcome. The subsystem records its own safe
+            // diagnostic code.
+          }
           _analytics(
             MosaicAnalyticsEventName.purchaseCompletedClient,
             correlation: widget.analyticsContext?.correlation(
