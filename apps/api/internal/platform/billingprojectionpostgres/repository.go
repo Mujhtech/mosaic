@@ -911,17 +911,60 @@ func (r *Repository) CompleteJob(ctx context.Context, job billingprojection.Job,
 }
 
 // ScopesForReplay enumerates the scopes a bounded replay will recompute.
+//
+// The Project window bounds on *facts in the window*, not on when the lineage
+// row happened to be created (review finding I-12). A lineage's created_at is
+// the instant Mosaic first saw the purchase chain; bounding on it meant
+// "replay yesterday" enumerated only chains discovered yesterday and silently
+// skipped every long-lived subscription that received a renewal, refund, or
+// grace fact in that window — the exact population an operator replays a window
+// to inspect. A fact counts as in-window when either its provider-effective
+// time or the instant Mosaic recorded it falls inside, because an operator
+// investigating a window may be reasoning about either clock.
+//
+// The chain CTE walks supersession edges forward from each lineage root, the
+// same direction loadFacts walks, so a fact that arrived on a successor Google
+// purchase token brings its root lineage into scope. UNION rather than UNION ALL
+// terminates on the cycle that provider data cannot contain but corrupt data
+// could.
 func (r *Repository) ScopesForReplay(ctx context.Context, replay billingprojection.ReplayScope, limit int) ([]billingprojection.Scope, error) {
 	rows, err := r.pool.Query(ctx,
-		`SELECT DISTINCT l.project_id, l.environment_id, COALESCE(l.billing_customer_id,''), l.id
-		 FROM purchase_lineages l
-		 LEFT JOIN subscription_instances si ON si.purchase_lineage_id = l.id
-		 WHERE ($1::text = '' OR l.project_id = $1)
-		   AND ($2::text = '' OR l.billing_customer_id = $2)
-		   AND ($3::text = '' OR si.id = $3)
-		   AND ($4::timestamptz IS NULL OR l.created_at >= $4)
-		   AND ($5::timestamptz IS NULL OR l.created_at <= $5)
-		 ORDER BY l.project_id, l.environment_id, 3, l.id
+		`WITH RECURSIVE roots AS (
+		    SELECT l.id AS lineage_id, l.project_id, l.environment_id,
+		           COALESCE(l.billing_customer_id,'') AS billing_customer_id,
+		           l.lineage_key_digest AS digest
+		    FROM purchase_lineages l
+		    LEFT JOIN subscription_instances si ON si.purchase_lineage_id = l.id
+		    WHERE ($1::text = '' OR l.project_id = $1)
+		      AND ($2::text = '' OR l.billing_customer_id = $2)
+		      AND ($3::text = '' OR si.id = $3)
+		 ), chain(lineage_id, environment_id, digest) AS (
+		    SELECT lineage_id, environment_id, digest FROM roots
+		  UNION
+		    SELECT c.lineage_id, c.environment_id, f.purchase_chain_digest
+		    FROM billing_transaction_facts f
+		    JOIN chain c ON f.supersedes_chain_digest = c.digest
+		    WHERE f.environment_id = c.environment_id
+		      AND f.purchase_chain_digest IS NOT NULL
+		 )
+		 SELECT DISTINCT r.project_id, r.environment_id, r.billing_customer_id, r.lineage_id
+		 FROM roots r
+		 WHERE ($4::timestamptz IS NULL AND $5::timestamptz IS NULL)
+		    OR EXISTS (
+		         SELECT 1
+		         FROM chain c
+		         JOIN billing_transaction_facts f
+		           ON f.environment_id = c.environment_id
+		          AND f.purchase_chain_digest = c.digest
+		         WHERE c.lineage_id = r.lineage_id
+		           AND (
+		                (($4::timestamptz IS NULL OR f.occurred_at >= $4)
+		                 AND ($5::timestamptz IS NULL OR f.occurred_at <= $5))
+		             OR (($4::timestamptz IS NULL OR f.recorded_at >= $4)
+		                 AND ($5::timestamptz IS NULL OR f.recorded_at <= $5))
+		           )
+		       )
+		 ORDER BY 1, 2, 3, 4
 		 LIMIT $6`,
 		replay.ProjectID, replay.CustomerID, replay.SubscriptionInstanceID,
 		replay.WindowStart, replay.WindowEnd, limit)

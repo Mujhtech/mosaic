@@ -21,6 +21,9 @@ var (
 	// another worker committed a newer projection for the same scope, so the
 	// job retries and reads the newer state.
 	ErrVersionConflict = errors.New("projection version changed underneath this transaction")
+	// ErrUnsupportedRuleVersion is a request to project under rule semantics
+	// this build does not implement (review finding I-12).
+	ErrUnsupportedRuleVersion = errors.New("projection rule version is not implemented by this build")
 )
 
 // Scope names what one projection command covers.
@@ -71,6 +74,10 @@ type Input struct {
 	// keeps an Entitlement at `unknown` rather than `inactive`.
 	UnresolvedLineages int
 	FrozenLineages     int
+	// RuleVersion selects the projection semantics this command derives under.
+	// Zero means the active version, which is what every live trigger uses; a
+	// replay is the only caller that sets it (plan §12, review finding I-12).
+	RuleVersion int
 }
 
 // LineageInput is one lineage and the facts that belong to it.

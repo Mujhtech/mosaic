@@ -126,11 +126,26 @@ func (s *Service) ProcessNextProjection(ctx context.Context, workerID string) (b
 // advances, and the attempt is recorded. Without that, every reprojection
 // would churn every SDK cache in the Project.
 func (s *Service) Project(ctx context.Context, scope Scope, jobID string) (Output, error) {
+	return s.ProjectUnder(ctx, scope, jobID, ActiveRuleVersion)
+}
+
+// ProjectUnder runs one projection command under a selected rule version. Every
+// live trigger uses the active version through Project; a replay is the only
+// caller that selects (plan §12, review finding I-12).
+//
+// A rule version this build does not derive under is refused before any work
+// begins, rather than silently recomputed under the active semantics.
+func (s *Service) ProjectUnder(ctx context.Context, scope Scope, jobID string, ruleVersion int) (Output, error) {
 	ctx, span := s.tracer.Start(ctx, "billing.projection.commit")
 	defer span.End()
-	span.SetAttributes(attribute.String("mosaic.billing.projection.scope", scope.Key()))
+	span.SetAttributes(
+		attribute.String("mosaic.billing.projection.scope", scope.Key()),
+		attribute.Int("mosaic.billing.projection.rule_version", ResolveRuleVersion(ruleVersion)))
 
 	started := s.now()
+	if !RuleVersionImplemented(ruleVersion) {
+		return Output{}, ErrUnsupportedRuleVersion
+	}
 	if err := s.requireEnabled(ctx, scope.ProjectID); err != nil {
 		return Output{}, err
 	}
@@ -139,6 +154,7 @@ func (s *Service) Project(ctx context.Context, scope Scope, jobID string) (Outpu
 	if err != nil {
 		return Output{}, err
 	}
+	input.RuleVersion = ruleVersion
 
 	output := Compute(input, s.now())
 	commitErr := s.repository.Commit(ctx, input, output, s.now())
@@ -177,6 +193,15 @@ func (s *Service) Project(ctx context.Context, scope Scope, jobID string) (Outpu
 func Compute(input Input, asOf time.Time) Output {
 	asOf = asOf.UTC()
 	output := Output{Scope: input.Scope, Outcome: OutcomeNoChange}
+
+	if !RuleVersionImplemented(input.RuleVersion) {
+		// Review finding I-12: derivation under semantics this build does not
+		// implement decides nothing. The command produces an empty plan, so
+		// there is no snapshot, no checkpoint, and no event to commit — the
+		// caller's refusal is the primary guard and this is the structural one.
+		output.Outcome = OutcomeFailed
+		return output
+	}
 
 	subscriptionSources := make([]SubscriptionSource, 0, len(input.Lineages))
 	oneTimeSources := make([]OneTimeSource, 0, len(input.Lineages))

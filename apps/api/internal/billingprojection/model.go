@@ -9,10 +9,60 @@ package billingprojection
 
 import "time"
 
-// RuleVersion is the projection-rule version this build implements. It is
-// recorded on every snapshot so a later semantic change is a version bump with
-// a replay, never a silent reinterpretation of committed state.
-const RuleVersion = 1
+// ActiveRuleVersion is the projection-rule version new projections derive
+// under. It is recorded on every snapshot so a later semantic change is a
+// version bump with a replay, never a silent reinterpretation of committed
+// state.
+const ActiveRuleVersion = 1
+
+// RuleVersion is the value persisted on every snapshot, timeline entry, and
+// checkpoint. It is the active version by definition: a projection is only ever
+// committed under semantics this build derives.
+const RuleVersion = ActiveRuleVersion
+
+// implementedRuleVersions lists every rule version whose derivation semantics
+// this build can reproduce.
+//
+// Review finding I-12: `Replay.RuleVersion` was accepted and ignored, so a
+// replay under a hypothetical version 2 silently recomputed version 1 and
+// reported the resulting checksum as if version 2 had produced it. A checksum
+// produced by the wrong engine is indistinguishable from a genuine determinism
+// result, which is the one thing a replay exists to prove — so a rule version
+// this build does not implement is refused rather than approximated.
+//
+// OD-11(a) deferred the shadow diff engine until a second rule version exists;
+// when one lands, its derivation is added to the engine and listed here, and
+// the selection plumbing below already carries it.
+var implementedRuleVersions = []int{ActiveRuleVersion}
+
+// ImplementedRuleVersions reports the rule versions this build can replay
+// under, in ascending order.
+func ImplementedRuleVersions() []int {
+	return append([]int(nil), implementedRuleVersions...)
+}
+
+// RuleVersionImplemented reports whether this build derives under a rule
+// version. Zero means "the active version" and is always implemented.
+func RuleVersionImplemented(version int) bool {
+	if version == 0 {
+		return true
+	}
+	for _, implemented := range implementedRuleVersions {
+		if implemented == version {
+			return true
+		}
+	}
+	return false
+}
+
+// ResolveRuleVersion maps a requested rule version onto the one derivation will
+// actually use. Zero selects the active version.
+func ResolveRuleVersion(version int) int {
+	if version == 0 {
+		return ActiveRuleVersion
+	}
+	return version
+}
 
 // OrderingVersion identifies the canonical ordering tuple (plan §8). It is
 // separate from RuleVersion because ordering can change without changing

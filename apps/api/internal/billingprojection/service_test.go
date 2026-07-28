@@ -1,7 +1,10 @@
 package billingprojection
 
 import (
+	"context"
+	"errors"
 	"testing"
+	"time"
 )
 
 // The projection command is where a correct engine can still produce wrong
@@ -217,5 +220,101 @@ func TestReprojectionMatchesFullHistory(t *testing.T) {
 	if string(incremental.Subscriptions[0].Snapshot.Checksum) !=
 		string(fromScratch.Subscriptions[0].Snapshot.Checksum) {
 		t.Fatal("resuming from a checkpoint diverged from projecting the full history")
+	}
+}
+
+// --- replay ---------------------------------------------------------------
+
+// replayRepository is the smallest Repository that can observe what a replay
+// asked the projection command to do. It exists only so the rule-version
+// selection can be checked end to end without a database; nothing here models
+// persistence behaviour, which projection_integration_test.go covers against
+// PostgreSQL.
+type replayRepository struct {
+	scope Scope
+	// commandRuleVersions records the rule version each committed projection
+	// command carried, which is the observable proof that the selection reached
+	// the engine rather than being dropped on the way.
+	commandRuleVersions []int
+	loads               int
+}
+
+func (r *replayRepository) BillingEnabled(context.Context, string) (bool, error) { return true, nil }
+
+func (r *replayRepository) LoadInput(_ context.Context, scope Scope) (Input, error) {
+	r.loads++
+	return Input{Scope: scope}, nil
+}
+
+func (r *replayRepository) Commit(_ context.Context, input Input, _ Output, _ time.Time) error {
+	r.commandRuleVersions = append(r.commandRuleVersions, input.RuleVersion)
+	return nil
+}
+
+func (r *replayRepository) RecordAttempt(context.Context, Scope, string, Output, string, time.Time, time.Time) error {
+	return nil
+}
+func (r *replayRepository) Enqueue(context.Context, Scope, string, time.Time) error { return nil }
+func (r *replayRepository) LeaseJob(context.Context, string, time.Time, time.Time) (Job, bool, error) {
+	return Job{}, false, nil
+}
+func (r *replayRepository) CompleteJob(context.Context, Job, string, string, time.Time, time.Time) error {
+	return nil
+}
+
+type replayScopeKeys struct {
+	scopes []Scope
+	calls  int
+}
+
+func (k *replayScopeKeys) ScopesForReplay(context.Context, ReplayScope, int) ([]Scope, error) {
+	k.calls++
+	return k.scopes, nil
+}
+
+// Replay.RuleVersion was accepted and ignored, so a replay requested under a
+// rule version this build does not derive under silently recomputed the active
+// semantics and reported the resulting checksum as that version's answer — a
+// determinism proof produced by the wrong engine, which is worse than no proof.
+//
+// This pins both halves of the correction: the requested version reaches the
+// projection command, and a version the build does not implement is refused
+// before any scope is touched. A recomputation under genuinely different
+// semantics cannot be asserted until a second rule version exists (OD-11(a)
+// defers that), so what is proven here is that the parameter is read and
+// honoured rather than discarded.
+func TestReplayHonoursTheSelectedRuleVersion(t *testing.T) {
+	scope := Scope{ProjectID: "proj_1", EnvironmentID: "env_1", CustomerID: "bcu_1"}
+	repository := &replayRepository{scope: scope}
+	keys := &replayScopeKeys{scopes: []Scope{scope}}
+	service := NewService(repository)
+
+	results, err := service.RunReplay(context.Background(), keys,
+		Replay{RuleVersion: ActiveRuleVersion}, ReplayScope{ProjectID: "proj_1"}, 10)
+	if err != nil {
+		t.Fatalf("replay under the active rule version failed: %v", err)
+	}
+	if len(results) != 1 {
+		t.Fatalf("got %d replay results, want one per scope", len(results))
+	}
+	if len(repository.commandRuleVersions) != 1 || repository.commandRuleVersions[0] != ActiveRuleVersion {
+		t.Fatalf("projection command carried rule versions %v, want [%d]",
+			repository.commandRuleVersions, ActiveRuleVersion)
+	}
+
+	unsupported := ActiveRuleVersion + 1
+	if RuleVersionImplemented(unsupported) {
+		t.Skip("a second rule version now exists; rewrite this case against its semantics")
+	}
+	loadsBefore, callsBefore := repository.loads, keys.calls
+	if _, err := service.RunReplay(context.Background(), keys,
+		Replay{RuleVersion: unsupported}, ReplayScope{ProjectID: "proj_1"}, 10); !errors.Is(err, ErrUnsupportedRuleVersion) {
+		t.Fatalf("replay under an unimplemented rule version returned %v, want ErrUnsupportedRuleVersion", err)
+	}
+	if keys.calls != callsBefore || repository.loads != loadsBefore {
+		t.Fatal("a refused rule version still enumerated scopes or loaded projection input")
+	}
+	if len(repository.commandRuleVersions) != 1 {
+		t.Fatal("a refused rule version still committed a projection")
 	}
 }

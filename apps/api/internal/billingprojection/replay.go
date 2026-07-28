@@ -19,14 +19,21 @@ import (
 // re-queries live provider state and a re-query today does not reproduce what
 // the provider said last month. A Google replay therefore replays the facts
 // Mosaic recorded, not the provider's current answer.
+//
+// Materialization is changes-only and has no switch. Plan §12 names
+// `changes_only` as the *default*; there is no second mode, because the
+// projection command mints a customer snapshot only when the recomputed
+// checksum differs from the committed one, and a replay reuses that command
+// rather than owning a second write path. A `ChangesOnly` field was previously
+// declared here and never read (review finding I-12); it has been removed
+// rather than left as a parameter that lies about being adjustable. Restoring
+// the alternative would mean a "materialize regardless" write path, which is
+// churn every SDK cache in the Project for no observable change.
 type Replay struct {
-	// ChangesOnly materializes a new snapshot only where the checksum differs
-	// from the committed one. It is the default because a replay that mints a
-	// snapshot per customer regardless of outcome would churn every SDK cache
-	// in the Project for no reason.
-	ChangesOnly bool
 	// RuleVersion selects the projection semantics to replay under. Zero means
-	// the active version.
+	// the active version. A version this build does not derive under is refused
+	// with ErrUnsupportedRuleVersion rather than approximated by the active
+	// engine — see ImplementedRuleVersions.
 	RuleVersion int
 }
 
@@ -38,7 +45,14 @@ type ReplayScope struct {
 	CustomerID             string
 	// ProjectWindow replays every scope in a Project whose facts fall inside
 	// the window. It is bounded in time deliberately.
-	ProjectID   string
+	ProjectID string
+	// WindowStart and WindowEnd bound the replay on *facts*, not on lineage
+	// creation: a scope is in scope when it holds at least one fact whose
+	// effective or recorded time falls inside the window. Bounding on
+	// `purchase_lineages.created_at` (review finding I-12) selected lineages
+	// that were first seen in the window and silently skipped every long-lived
+	// lineage that received a fact in it — which is exactly the population a
+	// "replay last Tuesday" is asked about.
 	WindowStart *time.Time
 	WindowEnd   *time.Time
 }
@@ -80,6 +94,12 @@ func (s *Service) RunReplay(ctx context.Context, keys ReplayScopeKeys, replay Re
 	if limit <= 0 || limit > 500 {
 		limit = 100
 	}
+	if !RuleVersionImplemented(replay.RuleVersion) {
+		// Refused before any scope is enumerated: recomputing under the active
+		// engine and labelling the result with the requested version would make
+		// a replay's checksum comparison meaningless.
+		return nil, ErrUnsupportedRuleVersion
+	}
 	if err := s.requireEnabled(ctx, scope.ProjectID); err != nil && scope.ProjectID != "" {
 		return nil, err
 	}
@@ -90,7 +110,7 @@ func (s *Service) RunReplay(ctx context.Context, keys ReplayScopeKeys, replay Re
 
 	results := make([]ReplayResult, 0, len(scopes))
 	for _, target := range scopes {
-		output, err := s.Project(ctx, target, "")
+		output, err := s.ProjectUnder(ctx, target, "", replay.RuleVersion)
 		if err != nil {
 			// One failed scope does not abandon the run: a replay is a
 			// diagnostic operation and a partial answer is more useful than
