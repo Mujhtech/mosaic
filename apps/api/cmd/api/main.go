@@ -18,6 +18,7 @@ import (
 	"github.com/Mujhtech/mosaic/apps/api/internal/billing"
 	"github.com/Mujhtech/mosaic/apps/api/internal/billingaccess"
 	"github.com/Mujhtech/mosaic/apps/api/internal/billingdiagnostics"
+	"github.com/Mujhtech/mosaic/apps/api/internal/billingrestore"
 	"github.com/Mujhtech/mosaic/apps/api/internal/browserauth"
 	"github.com/Mujhtech/mosaic/apps/api/internal/cloudworkspace"
 	"github.com/Mujhtech/mosaic/apps/api/internal/experiment"
@@ -29,7 +30,9 @@ import (
 	"github.com/Mujhtech/mosaic/apps/api/internal/platform/authn"
 	"github.com/Mujhtech/mosaic/apps/api/internal/platform/billingaccesspostgres"
 	"github.com/Mujhtech/mosaic/apps/api/internal/platform/billingdiagnosticspostgres"
+	"github.com/Mujhtech/mosaic/apps/api/internal/platform/billingkeys"
 	"github.com/Mujhtech/mosaic/apps/api/internal/platform/billingpostgres"
+	"github.com/Mujhtech/mosaic/apps/api/internal/platform/billingrestorepostgres"
 	"github.com/Mujhtech/mosaic/apps/api/internal/platform/browserauthpostgres"
 	"github.com/Mujhtech/mosaic/apps/api/internal/platform/buildinfo"
 	"github.com/Mujhtech/mosaic/apps/api/internal/platform/cloudworkspacepostgres"
@@ -261,6 +264,7 @@ func run() (runErr error) {
 	var billingService *billing.Service
 	var billingAccessService *billingaccess.Service
 	var billingDiagnosticsService *billingdiagnostics.Service
+	var billingRestoreService *billingrestore.Service
 	var billingIPLimiter, billingKeyLimiter, entitlementSyncLimiter *ratelimit.Limiter
 	if cfg.Billing.Enabled {
 		billingCipher, err := providercredential.NewAESGCMCipher(cfg.Providers.CredentialKeyring, rand.Reader)
@@ -311,6 +315,9 @@ func run() (runErr error) {
 		entitlementSyncLimiter = ratelimit.New(cfg.Billing.EntitlementSyncPerMinute,
 			cfg.Billing.EntitlementSyncBurst, cfg.Billing.LimiterEntries)
 		billingDiagnosticsService = billingdiagnostics.NewService(billingdiagnosticspostgres.New(databasePool))
+		billingKeys := billingkeys.New(billingpostgres.New(databasePool))
+		billingRestoreService = billingrestore.NewService(
+			billingrestorepostgres.New(databasePool), billingKeys.Restore())
 	}
 
 	readiness := health.NewReadiness(
@@ -353,6 +360,7 @@ func run() (runErr error) {
 		Billing:                billingService,
 		BillingAccess:          billingAccessService,
 		BillingDiagnostics:     billingDiagnosticsService,
+		BillingRestore:         billingRestoreService,
 		BillingIPLimiter:       billingIPLimiter,
 		BillingKeyLimiter:      billingKeyLimiter,
 		EntitlementSyncLimiter: entitlementSyncLimiter,

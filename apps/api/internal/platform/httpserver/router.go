@@ -16,6 +16,7 @@ import (
 	"github.com/Mujhtech/mosaic/apps/api/internal/billing"
 	"github.com/Mujhtech/mosaic/apps/api/internal/billingaccess"
 	"github.com/Mujhtech/mosaic/apps/api/internal/billingdiagnostics"
+	"github.com/Mujhtech/mosaic/apps/api/internal/billingrestore"
 	"github.com/Mujhtech/mosaic/apps/api/internal/browserauth"
 	"github.com/Mujhtech/mosaic/apps/api/internal/cloudworkspace"
 	"github.com/Mujhtech/mosaic/apps/api/internal/experiment"
@@ -28,6 +29,7 @@ import (
 	billinghttp "github.com/Mujhtech/mosaic/apps/api/internal/transport/billing"
 	billingaccesshttp "github.com/Mujhtech/mosaic/apps/api/internal/transport/billingaccess"
 	billingdiagnosticshttp "github.com/Mujhtech/mosaic/apps/api/internal/transport/billingdiagnostics"
+	billingrestorehttp "github.com/Mujhtech/mosaic/apps/api/internal/transport/billingrestore"
 	browserauthhttp "github.com/Mujhtech/mosaic/apps/api/internal/transport/browserauth"
 	cloudworkspacehttp "github.com/Mujhtech/mosaic/apps/api/internal/transport/cloudworkspace"
 	experimenthttp "github.com/Mujhtech/mosaic/apps/api/internal/transport/experiment"
@@ -101,6 +103,10 @@ type Dependencies struct {
 	// sibling of Phase 9A billing health, not a field on it: the two summaries
 	// answer different operator questions.
 	BillingDiagnostics *billingdiagnostics.Service
+	// BillingRestore owns the Phase 9B restore and sync chain: the SDK and
+	// trusted request surfaces and the status read. It is nil whenever Billing
+	// is.
+	BillingRestore *billingrestore.Service
 	// EntitlementSyncLimiter bounds the SDK sync endpoint, which is the
 	// highest-QPS authenticated surface Mosaic serves.
 	EntitlementSyncLimiter httpmiddleware.Limiter
@@ -234,6 +240,15 @@ func NewWithDependencies(cfg Config, logger zerolog.Logger, dependencies Depende
 				billingaccesshttp.RegisterSDKRoutes(versioned, dependencies.BillingAccess,
 					httpmiddleware.RateLimit("entitlement_sync", dependencies.EntitlementSyncLimiter, sdkKeyBucket))
 				billingaccesshttp.RegisterTrustedRoutes(versioned, dependencies.BillingAccess,
+					httpmiddleware.RateLimit("billing_server_api", dependencies.APILimiter, clientAddressBucket))
+			}
+			if dependencies.BillingRestore != nil {
+				// A restore is a burst of work per device, not a poll, so the
+				// SDK surface shares the observation bucket rather than the
+				// sync one: a device restoring is submitting, not reading.
+				billingrestorehttp.RegisterSDKRoutes(versioned, dependencies.BillingRestore,
+					httpmiddleware.RateLimit("billing_restore", dependencies.BillingKeyLimiter, sdkKeyBucket))
+				billingrestorehttp.RegisterTrustedRoutes(versioned, dependencies.BillingRestore,
 					httpmiddleware.RateLimit("billing_server_api", dependencies.APILimiter, clientAddressBucket))
 			}
 		})
