@@ -2161,6 +2161,18 @@ paths:
       tags: [Billing Operations]
       parameters: [{ $ref: "#/components/parameters/ProjectID" }, { $ref: "#/components/parameters/EnvironmentID" }]
       responses: { "200": { description: Billing health summary., content: { application/json: { schema: { type: object, properties: { data: { $ref: "#/components/schemas/BillingHealth" } } } } } }, "403": { $ref: "#/components/responses/Error" }, "404": { $ref: "#/components/responses/Error" } }
+  /v1/projects/{projectId}/environments/{environmentId}/billing/projection-health:
+    get:
+      operationId: getBillingProjectionHealth
+      tags: [Billing Operations]
+      description: |
+        Phase 9B projection health. A sibling of billing health rather than a field on it: billing
+        health answers whether Mosaic can still turn store notifications into facts, while this
+        answers whether the authoritative answer Mosaic gives about a customer's access is still
+        current. Every value is a count or a timestamp; nothing here can carry a customer value,
+        an alias digest, a provider token, or a secret. Owner or admin only.
+      parameters: [{ $ref: "#/components/parameters/ProjectID" }, { $ref: "#/components/parameters/EnvironmentID" }]
+      responses: { "200": { description: Projection health summary., content: { application/json: { schema: { type: object, properties: { data: { $ref: "#/components/schemas/BillingProjectionHealth" } } } } } }, "401": { $ref: "#/components/responses/Error" }, "403": { $ref: "#/components/responses/Error" }, "404": { $ref: "#/components/responses/Error" }, "503": { $ref: "#/components/responses/Error" } }
   /v1/projects/{projectId}/environments/{environmentId}/billing/reconciliation-runs:
     get:
       operationId: listReconciliationRuns
@@ -3180,6 +3192,30 @@ components:
         factCount: { type: integer, format: int64 }
         lastFactRecordedAt: { type: string, format: date-time }
         lastReconciliationAt: { type: string, format: date-time }
+    BillingProjectionHealth:
+      type: object
+      properties:
+        environmentId: { type: string }
+        billingEnabled: { type: boolean }
+        activeProjectionRuleVersion: { type: integer, description: The rule version new projections are computed under. }
+        projectionRuleVersionCount: { type: integer, description: A count above one with no replay in flight means a promotion was prepared and never run. }
+        projectionQueueDepth: { type: integer, format: int64 }
+        projectionOldestQueuedAgeSeconds: { type: number, description: The alerting signal. Depth alone cannot distinguish a busy queue from a stuck one. }
+        projectionFailedJobs: { type: integer, format: int64 }
+        projectionFailuresLastHour: { type: integer, format: int64, description: A rate signal the queue depth cannot give, because a scope that fails and requeues forever keeps the depth at one. }
+        staleCustomers: { type: integer, format: int64, description: Customers whose committed state in this Environment is older than the staleness threshold. }
+        neverProjectedCustomers: { type: integer, format: int64 }
+        openIdentityConflicts: { type: integer, format: int64, description: A spike here is a security-relevant signal, not a backlog. }
+        frozenLineages: { type: integer, format: int64 }
+        unresolvedLineages: { type: integer, format: int64 }
+        unknownEntitlementEntries: { type: integer, format: int64, description: Entries on current snapshots stating unknown - how often Mosaic is declining to answer. }
+        restoreBacklog: { type: integer, format: int64 }
+        restoreFailedJobs: { type: integer, format: int64 }
+        webhookDeliveryBacklog: { type: integer, format: int64 }
+        webhookDeliveriesExhausted: { type: integer, format: int64 }
+        activeWebhookDestinations: { type: integer, format: int64 }
+        lastProjectionCommittedAt: { type: string, format: date-time }
+        observedAt: { type: string, format: date-time }
     CreateExperimentRequest:
       type: object
       additionalProperties: false
