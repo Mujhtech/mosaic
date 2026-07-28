@@ -3833,7 +3833,7 @@ components:
       description: Everything Mosaic knows about a token, which is deliberately everything the token itself does not carry.
       required: [tokenId, projectId, environmentId, billingCustomerId, audience, scopes, issuer, issuedAt, expiresAt, status, tokenPrefix, digestAlgorithm]
       properties:
-        tokenId: { type: string, description: A stable public handle, safe to log and to name in an audit event. It is not the token and cannot be presented as one. }
+        tokenId: { type: string, description: "A stable public handle, safe to log and to name in an audit event. It is not the token and cannot be presented as one." }
         projectId: { type: string }
         environmentId: { type: string }
         billingCustomerId: { type: string }
@@ -4201,7 +4201,7 @@ components:
       properties:
         aliasId: { type: string }
         billingCustomerId: { type: string }
-        aliasType: { type: string, enum: [application_user, installation, app_account_token, obfuscated_external_account_id] }
+        aliasType: { type: string, enum: [application_user_id, installation_id, apple_app_account_token, google_obfuscated_account_id] }
         sourceAuthority: { type: string }
         verificationStatus: { type: string }
         effectiveStart: { type: string, format: date-time }
@@ -4212,7 +4212,7 @@ components:
       properties:
         conflictId: { type: string }
         projectId: { type: string }
-        scope: { type: string, enum: [purchase_lineage, alias] }
+        scope: { type: string, enum: [lineage, alias] }
         status: { type: string, enum: [open, resolved] }
         firstCustomerId: { type: string, description: The incumbent. }
         secondCustomerId: { type: string, description: The challenger. }
@@ -4474,7 +4474,7 @@ components:
         frozenLineageCount: { type: integer }
         currentProjectionVersion: { type: integer, format: int64 }
         lastProjectedAt: { type: string, format: date-time }
-        snapshotVersion: { type: integer, format: int64, description: Absent when the customer has never been projected in this Environment, which is not the same as having no entitlements. }
+        snapshotVersion: { type: integer, format: int64, description: "Absent when the customer has never been projected in this Environment, which is not the same as having no entitlements." }
         snapshotUpdatedAt: { type: string, format: date-time }
         createdAt: { type: string, format: date-time }
         updatedAt: { type: string, format: date-time }
@@ -4606,7 +4606,7 @@ components:
         storePlatform: { type: string }
         mosaicProductId: { type: string }
         priorMosaicProductId: { type: string }
-        accessState: { type: string, enum: [active, inactive, unknown, unavailable] }
+        accessState: { type: string, enum: [active, inactive, unknown], description: unavailable is a read-time service state and is never persisted on a snapshot. }
         lifecycleState: { type: string, enum: [trialing, active, grace_period, billing_retry, paused, expired, revoked, refunded, superseded, unknown] }
         renewalIntent: { type: string }
         billingState: { type: string }
@@ -4641,7 +4641,7 @@ components:
         mosaicProductId: { type: string }
         priorMosaicProductId: { type: string }
         explanationCode: { type: string }
-        detail: { type: object, additionalProperties: { type: string }, description: Passed through the ledger guard function, so no provider token or raw payload fragment can appear here. }
+        detail: { type: object, additionalProperties: { type: string }, description: "Passed through the ledger guard function, so no provider token or raw payload fragment can appear here." }
     BillingCustomerDetail:
       type: object
       properties:
