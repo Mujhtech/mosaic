@@ -14,6 +14,7 @@ import (
 
 	"github.com/Mujhtech/mosaic/apps/api/internal/analytics"
 	"github.com/Mujhtech/mosaic/apps/api/internal/billing"
+	"github.com/Mujhtech/mosaic/apps/api/internal/billingaccess"
 	"github.com/Mujhtech/mosaic/apps/api/internal/browserauth"
 	"github.com/Mujhtech/mosaic/apps/api/internal/cloudworkspace"
 	"github.com/Mujhtech/mosaic/apps/api/internal/experiment"
@@ -24,6 +25,7 @@ import (
 	"github.com/Mujhtech/mosaic/apps/api/internal/platform/httpserver/response"
 	analyticshttp "github.com/Mujhtech/mosaic/apps/api/internal/transport/analytics"
 	billinghttp "github.com/Mujhtech/mosaic/apps/api/internal/transport/billing"
+	billingaccesshttp "github.com/Mujhtech/mosaic/apps/api/internal/transport/billingaccess"
 	browserauthhttp "github.com/Mujhtech/mosaic/apps/api/internal/transport/browserauth"
 	cloudworkspacehttp "github.com/Mujhtech/mosaic/apps/api/internal/transport/cloudworkspace"
 	experimenthttp "github.com/Mujhtech/mosaic/apps/api/internal/transport/experiment"
@@ -89,6 +91,13 @@ type Dependencies struct {
 	Experiment            *experiment.Service
 	// Billing is nil unless MOSAIC_BILLING_ENABLED is set.
 	Billing *billing.Service
+	// BillingAccess owns the Phase 9B authoritative access surfaces: Customer
+	// Access Tokens, the SDK entitlement sync endpoint, and the trusted-server
+	// entitlement reads. It is nil whenever Billing is.
+	BillingAccess *billingaccess.Service
+	// EntitlementSyncLimiter bounds the SDK sync endpoint, which is the
+	// highest-QPS authenticated surface Mosaic serves.
+	EntitlementSyncLimiter httpmiddleware.Limiter
 	// BillingIPLimiter and BillingKeyLimiter bound the observation endpoints
 	// only. The store notification endpoint is deliberately unlimited.
 	BillingIPLimiter  httpmiddleware.Limiter
@@ -135,7 +144,7 @@ func NewWithDependencies(cfg Config, logger zerolog.Logger, dependencies Depende
 	// Compatibility aliases retained for existing probes while documented callers migrate.
 	router.Mount("/health", health.LiveRoutes())
 	router.Mount("/ready", readinessRoutes(dependencies))
-	if dependencies.BrowserAuth != nil || dependencies.CloudWorkspace != nil || dependencies.HostedPublishing != nil || dependencies.PlacementDecision != nil || dependencies.Analytics != nil || dependencies.Billing != nil {
+	if dependencies.BrowserAuth != nil || dependencies.CloudWorkspace != nil || dependencies.HostedPublishing != nil || dependencies.PlacementDecision != nil || dependencies.Analytics != nil || dependencies.Billing != nil || dependencies.BillingAccess != nil {
 		router.Route("/v1", func(versioned chi.Router) {
 			versioned.Use(trustedMutationOrigins(cfg.AllowedOrigins))
 			if dependencies.BrowserAuth != nil {
@@ -206,6 +215,18 @@ func NewWithDependencies(cfg Config, logger zerolog.Logger, dependencies Depende
 				billinghttp.RegisterPublicRoutes(versioned, dependencies.Billing,
 					dependencies.BillingIPLimiter, dependencies.BillingKeyLimiter)
 			}
+			if dependencies.BillingAccess != nil {
+				// Both surfaces authenticate by API key rather than by browser
+				// session, so they are registered outside the principal
+				// middleware. The SDK sync endpoint is bucketed by the public
+				// SDK key it presents; the trusted APIs share the baseline API
+				// bucket keyed on the caller's client address, because a secret
+				// server key has no dashboard principal to bucket on.
+				billingaccesshttp.RegisterSDKRoutes(versioned, dependencies.BillingAccess,
+					httpmiddleware.RateLimit("entitlement_sync", dependencies.EntitlementSyncLimiter, sdkKeyBucket))
+				billingaccesshttp.RegisterTrustedRoutes(versioned, dependencies.BillingAccess,
+					httpmiddleware.RateLimit("billing_server_api", dependencies.APILimiter, clientAddressBucket))
+			}
 		})
 	}
 	router.NotFound(func(w http.ResponseWriter, r *http.Request) {
@@ -249,6 +270,27 @@ func principalKey(r *http.Request) string {
 	if principal, ok := authn.FromContext(r.Context()); ok && principal.ActorID != "" {
 		return "actor:" + principal.ActorID
 	}
+	return "ip:" + httpmiddleware.ClientIP(r)
+}
+
+// sdkKeyBucket buckets the entitlement sync endpoint by the public SDK key
+// presented. Bucketing by client address alone would put every customer behind
+// one mobile carrier NAT into a single bucket.
+func sdkKeyBucket(r *http.Request) string {
+	if key := strings.TrimSpace(r.Header.Get(billingaccesshttp.SDKKeyHeader)); key != "" {
+		// Only the key prefix is used as the bucket label: it identifies the key
+		// without the bucket map ever holding a credential.
+		if index := strings.Index(key, "."); index > 0 {
+			return "sdkkey:" + key[:index]
+		}
+	}
+	return "ip:" + httpmiddleware.ClientIP(r)
+}
+
+// clientAddressBucket buckets a trusted-server call. The secret key itself is
+// never used as a bucket key, so the limiter map cannot become a place
+// credentials accumulate.
+func clientAddressBucket(r *http.Request) string {
 	return "ip:" + httpmiddleware.ClientIP(r)
 }
 

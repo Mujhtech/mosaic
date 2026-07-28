@@ -1758,6 +1758,281 @@ paths:
         "422": { $ref: "#/components/responses/SubmissionRejected" }
         "429": { $ref: "#/components/responses/SubmissionRetryable" }
         "503": { $ref: "#/components/responses/SubmissionRetryable" }
+  /v1/sdk/billing/entitlements:
+    get:
+      security: [{ CustomerAccessToken: [] }]
+      operationId: syncCustomerEntitlements
+      tags: [Authoritative Entitlements]
+      description: |
+        The Access Decision Snapshot for the Billing Customer the Customer Access Token names,
+        as the Authoritative Entitlement Contract v1 customerEntitlementSnapshot record.
+
+        Two credentials are required and they answer different questions: the token decides
+        WHICH customer is read, and the public SDK key in Mosaic-SDK-Key decides which
+        Environment is asking. A public SDK key alone can never select a customer — it ships
+        inside an application binary. A token presented with another Environment's key is 403.
+
+        The response body is the contract's canonical serialization, byte for byte, because an
+        SDK recomputes contentDigest over exactly the bytes it received.
+
+        Freshness travels as headers as well as inside the record, so a 304 — which carries no
+        body — still slides the caller's window. A confirmed-current snapshot therefore never
+        expires merely because it was confirmed instead of resent. The combined horizon
+        (validUntil minus issuedAt, plus staleGraceSeconds) never exceeds thirty days.
+
+        A customer with no committed projection in this Environment is answered with a valid
+        snapshot carrying no entries and projectionStatus.state `pending`. That is `unknown`,
+        never `inactive`: absence of evidence is not evidence of absence.
+      parameters:
+        - { in: header, name: Mosaic-SDK-Key, required: true, schema: { type: string }, description: Public SDK key identifying the Environment and Application. }
+        - { in: header, name: If-None-Match, required: false, schema: { type: string }, description: Strong entity tag from a previous response. Answered 304 only when the caller's snapshot version also matches. }
+      responses:
+        "200":
+          description: The current Customer Entitlement Snapshot.
+          headers:
+            ETag: { schema: { type: string }, description: Opaque equality validator. It carries no ordering; snapshot monotonicity is decided by snapshotVersion alone. }
+            Mosaic-Refresh-After: { schema: { type: string, format: date-time }, description: After this instant a reader should refresh. The snapshot stays fully valid. }
+            Mosaic-Valid-Until: { schema: { type: string, format: date-time }, description: Hard end of authoritative validity. }
+            Mosaic-Stale-Grace-Seconds: { schema: { type: integer }, description: Bounded window past validUntil in which previously active Entitlements may still be served, clearly marked stale. Zero is a strict policy. }
+          content: { application/json: { schema: { $ref: "#/components/schemas/CustomerEntitlementSnapshotRecord" } } }
+        "304":
+          description: The cached snapshot is still current. No body; the freshness headers are refreshed.
+          headers:
+            ETag: { schema: { type: string } }
+            Mosaic-Refresh-After: { schema: { type: string, format: date-time } }
+            Mosaic-Valid-Until: { schema: { type: string, format: date-time } }
+            Mosaic-Stale-Grace-Seconds: { schema: { type: integer } }
+        "401": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/Error" }
+    post:
+      security: [{ CustomerAccessToken: [] }]
+      operationId: syncCustomerEntitlementsWithNegotiation
+      tags: [Authoritative Entitlements]
+      description: |
+        The conditional and negotiated form of the sync. The body is the contract's
+        entitlementSyncRequest: supported contract versions, the snapshot version the caller
+        already holds, its entity tag, and optionally the Entitlement keys to narrow to.
+
+        billingCustomerId in the body is a hint only. The server derives the customer from the
+        token and verifies the hint against it; a mismatch is refused rather than ignored,
+        because silently ignoring it would let a client believe it had read a customer it had
+        not. A caller can never widen access by asserting an identifier.
+
+        Narrowing removes both entries and the sources no remaining entry references, so a
+        narrowed snapshot never carries an orphan source.
+      parameters:
+        - { in: header, name: Mosaic-SDK-Key, required: true, schema: { type: string } }
+        - { in: header, name: If-None-Match, required: false, schema: { type: string } }
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/EntitlementSyncRequestRecord" } } } }
+      responses:
+        "200": { description: The current Customer Entitlement Snapshot., content: { application/json: { schema: { $ref: "#/components/schemas/CustomerEntitlementSnapshotRecord" } } } }
+        "304": { description: The cached snapshot is still current. }
+        "401": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "406": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+        "422": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/Error" }
+  /v1/billing/server/customer-tokens:
+    post:
+      security: [{ ServerSecretKey: [] }]
+      operationId: issueCustomerAccessToken
+      tags: [Authoritative Entitlements]
+      description: |
+        Mint a Customer Access Token for a customer the calling backend has already
+        authenticated. This is the second consumer of secret server key authentication.
+
+        The request carries no Project and no Environment: tenant scope comes entirely from the
+        authenticated key, so a compromised or careless caller cannot mint a token into a tenant
+        it does not own.
+
+        The token is opaque — 256 bits of randomness behind an mcat_ prefix, with no claims and
+        no parseable structure. Mosaic stores only its SHA-256 digest, so the value in this
+        response is the only time it exists outside the caller's process: it is never logged,
+        never stored, and never returned again.
+
+        requestedTtlSeconds is a request, not an instruction. The default is one hour and the
+        contract maximum is twenty-four; a caller may shorten a token's life and can never
+        lengthen it past the maximum, which the schema enforces independently.
+
+        Only the sdk_sync audience is issued in Phase 9B. server_check is declared by the
+        contract so adding it later costs no contract version, and is refused with
+        validation_failed until the surface it names exists.
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/CustomerAccessTokenIssuanceRequest" } } } }
+      responses:
+        "201": { description: The token and its metadata. The token value appears here and nowhere else., content: { application/json: { schema: { $ref: "#/components/schemas/CustomerAccessTokenIssuanceResult" } } } }
+        "401": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+        "422": { $ref: "#/components/responses/Error" }
+    get:
+      security: [{ ServerSecretKey: [] }]
+      operationId: listCustomerAccessTokens
+      tags: [Authoritative Entitlements]
+      description: |
+        Token metadata for one Billing Customer. No token value is ever returned, because Mosaic
+        does not have one to return — only digests are stored.
+      parameters:
+        - { in: query, name: billingCustomerId, required: true, schema: { type: string } }
+        - { $ref: "#/components/parameters/Limit" }
+      responses:
+        "200": { description: Token metadata., content: { application/json: { schema: { type: object, properties: { data: { type: object, properties: { items: { type: array, items: { $ref: "#/components/schemas/CustomerAccessTokenMetadata" } } } } } } } } }
+        "401": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+        "422": { $ref: "#/components/responses/Error" }
+  /v1/billing/server/customer-tokens/{tokenId}/revoke:
+    post:
+      security: [{ ServerSecretKey: [] }]
+      operationId: revokeCustomerAccessToken
+      tags: [Authoritative Entitlements]
+      description: |
+        Revoke a token immediately. Revocation is one row update — the practical advantage of an
+        opaque credential over a signed one is that there is nothing to wait out — and takes
+        effect on the next presentation regardless of remaining lifetime. The revocation is
+        audited.
+
+        A token belonging to another tenant matches no row and is reported as not found rather
+        than forbidden, so a caller cannot probe for the existence of another tenant's tokens.
+      parameters:
+        - { in: path, name: tokenId, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [revocationReason]
+              properties:
+                revocationReason:
+                  type: string
+                  enum: [customer_signed_out, identity_changed, operator_revoked, customer_deleted, key_rotated, suspected_compromise, superseded_by_new_token]
+      responses:
+        "200": { description: The revoked token's metadata., content: { application/json: { schema: { type: object, properties: { data: { $ref: "#/components/schemas/CustomerAccessTokenMetadata" } } } } } }
+        "401": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+        "422": { $ref: "#/components/responses/Error" }
+  /v1/billing/server/customers/{customerId}:
+    get:
+      security: [{ ServerSecretKey: [] }]
+      operationId: getBillingCustomer
+      tags: [Authoritative Entitlements]
+      description: |
+        Read one Billing Customer directly. The response carries no alias values: aliases are
+        stored as SHA-256 digests and the digest is never a read-side field.
+
+        `identified` distinguishes a customer an application backend has named from one anchored
+        only to a purchase — the distinction an operator needs first when a customer list looks
+        larger than the user base.
+      parameters:
+        - { in: path, name: customerId, required: true, schema: { type: string } }
+      responses:
+        "200": { description: The Billing Customer., content: { application/json: { schema: { type: object, properties: { data: { $ref: "#/components/schemas/BillingCustomer" } } } } } }
+        "401": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+  /v1/billing/server/customers/{customerId}/entitlements:
+    get:
+      security: [{ ServerSecretKey: [] }]
+      operationId: getCustomerEntitlementSnapshot
+      tags: [Authoritative Entitlements]
+      description: |
+        The customer's current Customer Entitlement Snapshot, as the contract record. The read is
+        audited: an operator credential reading a named customer's entitlement state is exactly
+        the access a later investigation needs to be able to reconstruct.
+      parameters:
+        - { in: path, name: customerId, required: true, schema: { type: string } }
+        - { in: query, name: environmentId, required: false, schema: { type: string }, description: Defaults to the Environment the secret key belongs to. Any other value is 403. }
+      responses:
+        "200": { description: The current snapshot., content: { application/json: { schema: { $ref: "#/components/schemas/CustomerEntitlementSnapshotRecord" } } } }
+        "401": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+  /v1/billing/server/customers/{customerId}/entitlement-checks:
+    post:
+      security: [{ ServerSecretKey: [] }]
+      operationId: checkCustomerEntitlements
+      tags: [Authoritative Entitlements]
+      description: |
+        The focused multi-key access question, answered as the contract's entitlementCheckResult.
+
+        The answer is never a bare boolean. Every requested key carries a state, a primary
+        explanation, whether its end is known, and the contributing source count; the result
+        carries the snapshot version, rule version, and asOf instant it was derived from. A
+        caller that acts on the answer can say afterwards exactly which committed state it acted
+        on, which a boolean makes impossible.
+
+        This is the only surface on which `unavailable` is admissible for an Entitlement, and it
+        means Mosaic could not answer — not that the customer lacks access. Billing being
+        disabled for the Project is answered here with 200 and every key `unavailable`, rather
+        than with an HTTP error, so a caller handles one shape.
+      parameters:
+        - { in: path, name: customerId, required: true, schema: { type: string } }
+        - { in: query, name: environmentId, required: false, schema: { type: string } }
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/EntitlementCheckRequestRecord" } } } }
+      responses:
+        "200": { description: The check result., content: { application/json: { schema: { $ref: "#/components/schemas/EntitlementCheckResultRecord" } } } }
+        "401": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "406": { $ref: "#/components/responses/Error" }
+        "422": { $ref: "#/components/responses/Error" }
+  /v1/billing/server/customers/{customerId}/subscriptions:
+    get:
+      security: [{ ServerSecretKey: [] }]
+      operationId: listCustomerSubscriptions
+      tags: [Authoritative Entitlements]
+      description: |
+        The customer's projected Subscription Instances with their current four-axis state.
+        Keyset-paginated; the cursor is opaque and carries one value.
+      parameters:
+        - { in: path, name: customerId, required: true, schema: { type: string } }
+        - { in: query, name: environmentId, required: false, schema: { type: string } }
+        - { $ref: "#/components/parameters/Limit" }
+        - { $ref: "#/components/parameters/Cursor" }
+      responses:
+        "200": { description: Projected subscriptions., content: { application/json: { schema: { type: object, properties: { data: { type: object, properties: { items: { type: array, items: { $ref: "#/components/schemas/SubscriptionSummary" } }, nextCursor: { type: string } } } } } } } }
+        "401": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+  /v1/billing/server/subscriptions/{instanceId}:
+    get:
+      security: [{ ServerSecretKey: [] }]
+      operationId: getSubscriptionSnapshot
+      tags: [Authoritative Entitlements]
+      description: |
+        One Subscription Instance's current projected state as the contract's
+        subscriptionSnapshot record: four state axes, every provider-derived effective
+        timestamp, and a checksum over the canonical serialization. No provider status string is
+        admissible anywhere in the record.
+      parameters:
+        - { in: path, name: instanceId, required: true, schema: { type: string } }
+      responses:
+        "200": { description: The subscription snapshot., content: { application/json: { schema: { $ref: "#/components/schemas/SubscriptionSnapshotRecord" } } } }
+        "401": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+  /v1/billing/server/subscriptions/{instanceId}/timeline:
+    get:
+      security: [{ ServerSecretKey: [] }]
+      operationId: listSubscriptionTimeline
+      tags: [Authoritative Entitlements]
+      description: |
+        The append-only explanation history for one Subscription Instance. Entries restate what a
+        provider said and when it took effect; detail passes the same ledger safety guard as the
+        9A ledger, so no provider payload fragment can appear here.
+      parameters:
+        - { in: path, name: instanceId, required: true, schema: { type: string } }
+        - { $ref: "#/components/parameters/Limit" }
+        - { $ref: "#/components/parameters/Cursor" }
+      responses:
+        "200": { description: Timeline entries., content: { application/json: { schema: { type: object, properties: { data: { type: object, properties: { items: { type: array, items: { $ref: "#/components/schemas/SubscriptionTimelineEntry" } }, nextCursor: { type: string } } } } } } } }
+        "401": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
   /v1/projects/{projectId}/billing/settings:
     get:
       operationId: getBillingSettings
@@ -1964,6 +2239,15 @@ components:
       type: http
       scheme: bearer
       bearerFormat: Mosaic secret server key
+    CustomerAccessToken:
+      type: http
+      scheme: bearer
+      bearerFormat: Mosaic Customer Access Token (mcat_ + 43 base64url characters)
+      description: |
+        Opaque bearer credential scoping a read to one Billing Customer. It has no claims and
+        no parseable structure; Mosaic stores only its SHA-256 digest. It is presented together
+        with the public SDK key in Mosaic-SDK-Key, and the two must agree on Project and
+        Environment.
   parameters:
     Cursor:
       in: query
@@ -2572,6 +2856,302 @@ components:
         windowStart: { type: string, format: date-time }
         windowEnd: { type: string, format: date-time }
         validatorVersion: { type: integer, minimum: 1 }
+    CustomerAccessTokenIssuanceRequest:
+      type: object
+      additionalProperties: false
+      required: [customerAccessTokenContractVersion, recordType, payload]
+      properties:
+        customerAccessTokenContractVersion: { type: string, const: "1" }
+        recordType: { type: string, const: customerAccessTokenIssuanceRequest }
+        payload:
+          type: object
+          additionalProperties: false
+          required: [billingCustomerId, audience, scopes, correlationId]
+          properties:
+            billingCustomerId: { type: string, minLength: 1, maxLength: 128 }
+            audience: { type: string, enum: [sdk_sync, server_check], description: "Only sdk_sync is issued in Phase 9B." }
+            scopes: { type: array, minItems: 1, maxItems: 3, uniqueItems: true, items: { type: string, enum: [entitlements.read, entitlements.sync, restore.request] } }
+            requestedTtlSeconds: { type: integer, minimum: 60, maximum: 86400, description: "A request, not an instruction. Clamped to the contract maximum." }
+            correlationId: { type: string, minLength: 1, maxLength: 128 }
+    CustomerAccessTokenIssuanceResult:
+      type: object
+      required: [customerAccessTokenContractVersion, recordType, payload]
+      properties:
+        customerAccessTokenContractVersion: { type: string, const: "1" }
+        recordType: { type: string, const: customerAccessTokenIssuanceResult }
+        payload:
+          type: object
+          required: [token, metadata, correlationId]
+          properties:
+            token:
+              type: string
+              pattern: "^mcat_[A-Za-z0-9_-]{43}$"
+              description: The opaque credential. Returned exactly once; Mosaic stores only its SHA-256 digest and can never reproduce it.
+            metadata: { $ref: "#/components/schemas/CustomerAccessTokenMetadata" }
+            correlationId: { type: string }
+    CustomerAccessTokenMetadata:
+      type: object
+      description: Everything Mosaic knows about a token, which is deliberately everything the token itself does not carry.
+      required: [tokenId, projectId, environmentId, billingCustomerId, audience, scopes, issuer, issuedAt, expiresAt, status, tokenPrefix, digestAlgorithm]
+      properties:
+        tokenId: { type: string, description: A stable public handle, safe to log and to name in an audit event. It is not the token and cannot be presented as one. }
+        projectId: { type: string }
+        environmentId: { type: string }
+        billingCustomerId: { type: string }
+        audience: { type: string, enum: [sdk_sync, server_check] }
+        scopes: { type: array, items: { type: string, enum: [entitlements.read, entitlements.sync, restore.request] } }
+        issuer: { type: string }
+        issuedAt: { type: string, format: date-time }
+        expiresAt: { type: string, format: date-time }
+        status: { type: string, enum: [active, expired, revoked] }
+        revokedAt: { type: string, format: date-time }
+        revocationReason: { type: string, enum: [customer_signed_out, identity_changed, operator_revoked, customer_deleted, key_rotated, suspected_compromise, superseded_by_new_token] }
+        lastUsedAt: { type: string, format: date-time }
+        tokenPrefix: { type: string, const: "mcat_" }
+        digestAlgorithm: { type: string, const: sha256 }
+    EntitlementSyncRequestRecord:
+      type: object
+      additionalProperties: false
+      required: [authoritativeEntitlementContractVersion, recordType, payload]
+      properties:
+        authoritativeEntitlementContractVersion: { type: string, const: "1" }
+        recordType: { type: string, const: entitlementSyncRequest }
+        payload:
+          type: object
+          additionalProperties: false
+          required: [supportedAuthoritativeEntitlementContracts, correlationId]
+          properties:
+            billingCustomerId: { type: string, description: A hint only. Verified against the token; a mismatch is refused. }
+            knownSnapshotVersion: { type: integer, minimum: 1 }
+            entityTag: { type: string }
+            supportedAuthoritativeEntitlementContracts: { type: array, minItems: 1, maxItems: 8, uniqueItems: true, items: { type: string, enum: ["1"] } }
+            requestedEntitlementKeys: { type: array, minItems: 1, maxItems: 64, uniqueItems: true, items: { type: string, pattern: "^[a-z][a-z0-9_.-]*$" } }
+            correlationId: { type: string, minLength: 1, maxLength: 128 }
+    CustomerEntitlementSnapshotRecord:
+      type: object
+      description: |
+        The Authoritative Entitlement Contract v1 customerEntitlementSnapshot envelope. The
+        normative shape is protocol/schema/authoritative-entitlement/v1/snapshot.schema.json;
+        this declaration exists so the operation has a resolvable response schema and is
+        deliberately not a second source of truth for the contract.
+      required: [authoritativeEntitlementContractVersion, recordType, payload]
+      properties:
+        authoritativeEntitlementContractVersion: { type: string, const: "1" }
+        recordType: { type: string, enum: [customerEntitlementSnapshot, snapshotUnchanged] }
+        payload:
+          type: object
+          properties:
+            snapshotId: { type: string }
+            billingCustomerId: { type: string }
+            projectId: { type: string }
+            environmentId: { type: string }
+            snapshotVersion: { type: integer, description: Monotonic per (customer, Environment). The sole cache-monotonicity key. A no-change projection does not advance it. }
+            previousSnapshotVersion: { type: integer }
+            projectionRuleVersion: { type: integer }
+            issuedAt: { type: string, format: date-time }
+            asOf: { type: string, format: date-time }
+            refreshAfter: { type: string, format: date-time }
+            validUntil: { type: string, format: date-time }
+            staleGraceSeconds: { type: integer, minimum: 0, maximum: 2592000 }
+            entityTag: { type: string }
+            contentDigest: { type: string, pattern: "^sha256:[a-f0-9]{64}$" }
+            entries: { type: array, items: { $ref: "#/components/schemas/EntitlementEntry" } }
+            sources: { type: array, items: { $ref: "#/components/schemas/EntitlementSourceSummary" } }
+            projectionStatus: { $ref: "#/components/schemas/ProjectionStatus" }
+            changeReason: { type: string }
+            correlationId: { type: string }
+    EntitlementEntry:
+      type: object
+      description: Product and Subscription Instance identity are deliberately absent; they live on the contributing source summaries, which sourceIds resolves against.
+      required: [entitlementId, entitlementKey, state, endKnown, sourceIds, sourceCount, primaryExplanation]
+      properties:
+        entitlementId: { type: string }
+        entitlementKey: { type: string, pattern: "^[a-z][a-z0-9_.-]*$" }
+        state: { type: string, enum: [active, inactive, unknown], description: "`unavailable` is deliberately absent: it describes Mosaic's ability to answer, never the customer's access." }
+        effectiveStart: { type: string, format: date-time }
+        effectiveEnd: { type: string, format: date-time }
+        endKnown: { type: boolean, description: False means an active source has an uncertain end, and a reader must not display or enforce any expiry. }
+        sourceIds: { type: array, items: { type: string } }
+        sourceCount: { type: integer }
+        primaryExplanation: { $ref: "#/components/schemas/PrimaryExplanation" }
+        uncertainty: { $ref: "#/components/schemas/Uncertainty" }
+    EntitlementSourceSummary:
+      type: object
+      required: [sourceId, sourceType, mosaicProductId, grantVersionId, sourceSnapshotId, start, sourceState, uncertainty, explanationCode, isTestSource]
+      properties:
+        sourceId: { type: string, description: Derived from (purchase lineage, Entitlement, grant version) and never from a transaction fact, so a second fact for one purchase cannot double-grant. }
+        sourceType: { type: string, enum: [active_subscription, trial, grace_period, billing_retry, one_time_non_consumable, family_shared] }
+        subscriptionInstanceId: { type: string }
+        oneTimePurchaseInstanceId: { type: string }
+        mosaicProductId: { type: string }
+        grantVersionId: { type: string }
+        sourceSnapshotId: { type: string }
+        storePlatform: { type: string, enum: [apple_app_store, google_play] }
+        start: { type: string, format: date-time }
+        end: { type: string, format: date-time, description: Absent means this source has no finite end Mosaic can state. }
+        sourceState: { type: string, enum: [granting, not_granting, unknown] }
+        uncertainty: { $ref: "#/components/schemas/Uncertainty" }
+        explanationCode: { type: string }
+        isTestSource: { type: boolean, description: True for an Apple sandbox transaction or a Google Play license-tester purchase, so a test-derived grant is never mistaken for a paid one. }
+    ProjectionStatus:
+      type: object
+      required: [state, lastProjectedAt]
+      properties:
+        state: { type: string, enum: [current, pending, stale, degraded, failed] }
+        lastProjectedAt: { type: string, format: date-time }
+        pendingFactCount: { type: integer }
+        diagnosticCode: { type: string }
+    Uncertainty:
+      type: object
+      description: Why a state is not definitive. reason `none` means the state is definitive, and a definitive state carries no since instant.
+      required: [reason]
+      properties:
+        reason: { type: string, enum: [none, provider_unavailable, missing_fact, identity_unresolved, product_unresolved, conflicting_facts, projection_failed, stale_validation, unsupported_provider_state] }
+        since: { type: string, format: date-time }
+        expectedResolution: { type: string, enum: [automatic_retry, next_provider_notification, next_projection_run, operator_action, customer_action, none_expected] }
+        diagnosticCode: { type: string }
+    PrimaryExplanation:
+      type: object
+      required: [code]
+      properties:
+        code: { type: string, description: A member of the contract's closed explanation vocabulary. A reader may render its own copy for a code but must never invent one. }
+        sourceId: { type: string }
+        safeSummary: { type: string, maxLength: 240 }
+    EntitlementCheckRequestRecord:
+      type: object
+      additionalProperties: false
+      required: [authoritativeEntitlementContractVersion, recordType, payload]
+      properties:
+        authoritativeEntitlementContractVersion: { type: string, const: "1" }
+        recordType: { type: string, const: entitlementCheckRequest }
+        payload:
+          type: object
+          additionalProperties: false
+          required: [billingCustomerId, entitlementKeys, supportedAuthoritativeEntitlementContracts, correlationId]
+          properties:
+            billingCustomerId: { type: string }
+            entitlementKeys: { type: array, minItems: 1, maxItems: 64, uniqueItems: true, items: { type: string, pattern: "^[a-z][a-z0-9_.-]*$" } }
+            expectedSnapshotVersion: { type: integer, minimum: 1 }
+            supportedAuthoritativeEntitlementContracts: { type: array, minItems: 1, items: { type: string, enum: ["1"] } }
+            correlationId: { type: string, minLength: 1, maxLength: 128 }
+    EntitlementCheckResultRecord:
+      type: object
+      required: [authoritativeEntitlementContractVersion, recordType, payload]
+      properties:
+        authoritativeEntitlementContractVersion: { type: string, const: "1" }
+        recordType: { type: string, const: entitlementCheckResult }
+        payload:
+          type: object
+          required: [billingCustomerId, projectId, environmentId, issuedAt, results, correlationId]
+          properties:
+            billingCustomerId: { type: string }
+            projectId: { type: string }
+            environmentId: { type: string }
+            snapshotVersion: { type: integer, description: Absent only when no snapshot could be read at all, in which case every result is unavailable. }
+            projectionRuleVersion: { type: integer }
+            issuedAt: { type: string, format: date-time }
+            asOf: { type: string, format: date-time }
+            results:
+              type: array
+              minItems: 1
+              items:
+                type: object
+                required: [entitlementKey, state, sourceCount, endKnown, primaryExplanation]
+                properties:
+                  entitlementKey: { type: string }
+                  state: { type: string, enum: [active, inactive, unknown, unavailable], description: "This is the only place `unavailable` is admissible for an Entitlement: it says Mosaic could not answer, not that the customer lacks access." }
+                  effectiveStart: { type: string, format: date-time }
+                  effectiveEnd: { type: string, format: date-time }
+                  endKnown: { type: boolean }
+                  sourceCount: { type: integer }
+                  sourceIds: { type: array, items: { type: string } }
+                  primaryExplanation: { $ref: "#/components/schemas/PrimaryExplanation" }
+                  uncertainty: { $ref: "#/components/schemas/Uncertainty" }
+                  isTestSource: { type: boolean }
+            projectionStatus: { $ref: "#/components/schemas/ProjectionStatus" }
+            correlationId: { type: string }
+    SubscriptionSnapshotRecord:
+      type: object
+      description: |
+        The Authoritative Entitlement Contract v1 subscriptionSnapshot envelope. The normative
+        shape is protocol/schema/authoritative-entitlement/v1/subscription.schema.json.
+      required: [authoritativeEntitlementContractVersion, recordType, payload]
+      properties:
+        authoritativeEntitlementContractVersion: { type: string, const: "1" }
+        recordType: { type: string, const: subscriptionSnapshot }
+        payload:
+          type: object
+          properties:
+            subscriptionSnapshotId: { type: string }
+            subscriptionInstanceId: { type: string }
+            purchaseLineageId: { type: string }
+            billingCustomerId: { type: string }
+            projectId: { type: string }
+            environmentId: { type: string }
+            projectionVersion: { type: integer }
+            projectionRuleVersion: { type: integer }
+            computedAt: { type: string, format: date-time }
+            asOf: { type: string, format: date-time }
+            storePlatform: { type: string, enum: [apple_app_store, google_play] }
+            mosaicProductId: { type: string }
+            priorMosaicProductId: { type: string }
+            accessState: { type: string, enum: [active, inactive, unknown, unavailable] }
+            lifecycleState: { type: string, enum: [trialing, active, grace_period, billing_retry, paused, expired, revoked, refunded, superseded, unknown] }
+            renewalIntent: { type: string, enum: [auto_renew_enabled, auto_renew_disabled, provider_managed, paused, unknown] }
+            billingState: { type: string, enum: [current, retrying, grace, failed, refunded, revoked, unknown] }
+            uncertainty: { $ref: "#/components/schemas/Uncertainty" }
+            periodStart: { type: string, format: date-time }
+            periodEnd: { type: string, format: date-time }
+            gracePeriodEnd: { type: string, format: date-time }
+            billingRetryStart: { type: string, format: date-time }
+            pauseEffectiveAt: { type: string, format: date-time }
+            pauseResumeAt: { type: string, format: date-time }
+            cancellationEffectiveAt: { type: string, format: date-time, description: When the provider recorded the cancellation. It changes renewalIntent; it does not end access. }
+            expirationEffectiveAt: { type: string, format: date-time }
+            revocationEffectiveAt: { type: string, format: date-time }
+            refundEffectiveAt: { type: string, format: date-time }
+            supersededBySubscriptionInstanceId: { type: string }
+            isTestSource: { type: boolean }
+            sourceFactCount: { type: integer }
+            checksum: { type: string, pattern: "^sha256:[a-f0-9]{64}$" }
+            changeReason: { type: string }
+            explanationCode: { type: string }
+            correlationId: { type: string }
+    SubscriptionSummary:
+      type: object
+      properties:
+        subscriptionInstanceId: { type: string }
+        subscriptionSnapshotId: { type: string }
+        projectionVersion: { type: integer }
+        accessState: { type: string, enum: [active, inactive, unknown] }
+        lifecycleState: { type: string }
+        renewalIntent: { type: string }
+        billingState: { type: string }
+        isTestSource: { type: boolean }
+        asOf: { type: string, format: date-time }
+    SubscriptionTimelineEntry:
+      type: object
+      properties:
+        timelineEntryId: { type: string }
+        entryType: { type: string }
+        effectiveAt: { type: string, format: date-time }
+        observedAt: { type: string, format: date-time }
+        explanationCode: { type: string }
+        mosaicProductId: { type: string }
+        detail: { type: object, additionalProperties: { type: string } }
+    BillingCustomer:
+      type: object
+      description: "A Billing Customer as the trusted-server API reports it. Alias values never appear: aliases are stored as digests."
+      properties:
+        billingCustomerId: { type: string }
+        projectId: { type: string }
+        status: { type: string, enum: [active, frozen, anonymized] }
+        diagnosticsStatus: { type: string, enum: [none, identity_conflict, projection_stale, projection_failed] }
+        currentProjectionVersion: { type: integer }
+        lastProjectedAt: { type: string, format: date-time }
+        identified: { type: boolean, description: True when an application backend has named this customer. False means purchase-anchored but never identified. }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
     BillingSettings:
       type: object
       description: Per-Project Mosaic Billing configuration. Off by default.

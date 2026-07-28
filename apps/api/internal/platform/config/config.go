@@ -77,6 +77,29 @@ type BillingConfig struct {
 	ObservationsPerMinute int `envconfig:"MOSAIC_BILLING_OBSERVATIONS_PER_MINUTE" default:"600"`
 	ObservationBurst      int `envconfig:"MOSAIC_BILLING_OBSERVATION_BURST" default:"120"`
 	LimiterEntries        int `envconfig:"MOSAIC_BILLING_LIMITER_ENTRIES" default:"10000"`
+
+	// Entitlement sync is expected to be the highest-QPS authenticated surface
+	// Mosaic serves, so it carries its own bucket rather than sharing the
+	// observation one: shedding an observation costs latency, and shedding a
+	// sync costs a customer an answer about their own access.
+	EntitlementSyncPerMinute int `envconfig:"MOSAIC_BILLING_ENTITLEMENT_SYNC_PER_MINUTE" default:"1200"`
+	EntitlementSyncBurst     int `envconfig:"MOSAIC_BILLING_ENTITLEMENT_SYNC_BURST" default:"240"`
+
+	// Offline access policy (OD-5). The defaults are one hour to refresh and
+	// seven days of validity, with a twenty-four hour bounded grace past that.
+	// The combined horizon is capped at thirty days in code as well as here.
+	EntitlementRefreshAfter    time.Duration `envconfig:"MOSAIC_BILLING_ENTITLEMENT_REFRESH_AFTER" default:"1h"`
+	EntitlementValidFor        time.Duration `envconfig:"MOSAIC_BILLING_ENTITLEMENT_VALID_FOR" default:"168h"`
+	EntitlementStaleGraceHours int           `envconfig:"MOSAIC_BILLING_ENTITLEMENT_STALE_GRACE_HOURS" default:"24"`
+}
+
+// EntitlementStaleGrace is the configured bounded-grace window as a duration.
+// A strict policy is expressed as zero.
+func (cfg BillingConfig) EntitlementStaleGrace() time.Duration {
+	if cfg.EntitlementStaleGraceHours <= 0 {
+		return 0
+	}
+	return time.Duration(cfg.EntitlementStaleGraceHours) * time.Hour
 }
 
 // RawRetention is the configured retention window as a duration.

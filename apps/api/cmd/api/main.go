@@ -16,6 +16,7 @@ import (
 
 	"github.com/Mujhtech/mosaic/apps/api/internal/analytics"
 	"github.com/Mujhtech/mosaic/apps/api/internal/billing"
+	"github.com/Mujhtech/mosaic/apps/api/internal/billingaccess"
 	"github.com/Mujhtech/mosaic/apps/api/internal/browserauth"
 	"github.com/Mujhtech/mosaic/apps/api/internal/cloudworkspace"
 	"github.com/Mujhtech/mosaic/apps/api/internal/experiment"
@@ -25,6 +26,7 @@ import (
 	"github.com/Mujhtech/mosaic/apps/api/internal/platform/appstorejws"
 	"github.com/Mujhtech/mosaic/apps/api/internal/platform/appstoreserver"
 	"github.com/Mujhtech/mosaic/apps/api/internal/platform/authn"
+	"github.com/Mujhtech/mosaic/apps/api/internal/platform/billingaccesspostgres"
 	"github.com/Mujhtech/mosaic/apps/api/internal/platform/billingpostgres"
 	"github.com/Mujhtech/mosaic/apps/api/internal/platform/browserauthpostgres"
 	"github.com/Mujhtech/mosaic/apps/api/internal/platform/buildinfo"
@@ -255,7 +257,8 @@ func run() (runErr error) {
 	analyticsEventLimiter := ratelimit.New(cfg.Analytics.KeyEventsPerMinute, cfg.Analytics.KeyEventBurst, cfg.Analytics.LimiterEntries)
 
 	var billingService *billing.Service
-	var billingIPLimiter, billingKeyLimiter *ratelimit.Limiter
+	var billingAccessService *billingaccess.Service
+	var billingIPLimiter, billingKeyLimiter, entitlementSyncLimiter *ratelimit.Limiter
 	if cfg.Billing.Enabled {
 		billingCipher, err := providercredential.NewAESGCMCipher(cfg.Providers.CredentialKeyring, rand.Reader)
 		if err != nil {
@@ -293,6 +296,17 @@ func run() (runErr error) {
 			billing.WithNotificationBaseURL(cfg.Billing.NotificationBaseURL))
 		billingIPLimiter = ratelimit.New(cfg.Billing.ObservationsPerMinute, cfg.Billing.ObservationBurst, cfg.Billing.LimiterEntries)
 		billingKeyLimiter = ratelimit.New(cfg.Billing.ObservationsPerMinute, cfg.Billing.ObservationBurst, cfg.Billing.LimiterEntries)
+		billingAccessService = billingaccess.NewService(
+			billingaccesspostgres.New(databasePool),
+			billingaccesspostgres.NewKeyAuthenticator(billingpostgres.New(databasePool)),
+			billingaccess.WithIssuer(cfg.Telemetry.ServiceName),
+			billingaccess.WithFreshness(billingaccess.Freshness{
+				RefreshAfter: cfg.Billing.EntitlementRefreshAfter,
+				ValidFor:     cfg.Billing.EntitlementValidFor,
+				StaleGrace:   cfg.Billing.EntitlementStaleGrace(),
+			}))
+		entitlementSyncLimiter = ratelimit.New(cfg.Billing.EntitlementSyncPerMinute,
+			cfg.Billing.EntitlementSyncBurst, cfg.Billing.LimiterEntries)
 	}
 
 	readiness := health.NewReadiness(
@@ -320,27 +334,29 @@ func run() (runErr error) {
 		TrustedProxyCIDRs: cfg.HTTP.TrustedProxyCIDRs,
 		EnableHSTS:        cfg.ProductionLike(),
 	}, logger, httpserver.Dependencies{
-		BrowserAuth:           browserAuthService,
-		BrowserAuthConfig:     browserauthhttp.Config{CookieSecure: cfg.BrowserAuth.CookieSecure, CookieDomain: cfg.BrowserAuth.CookieDomain, AllowedOrigins: cfg.HTTP.CORSAllowedOrigins, RateLimiter: authenticationLimiter},
-		CloudWorkspace:        workspaceService,
-		HostedPublishing:      publishingService,
-		PlacementDecision:     placementDecisionService,
-		PrincipalResolver:     authn.NewBrowserSessionResolver(browserAuthService),
-		DeliveryLimiter:       deliveryLimiter,
-		Analytics:             analyticsService,
-		AnalyticsIPLimiter:    analyticsIPLimiter,
-		AnalyticsKeyLimiter:   analyticsKeyLimiter,
-		AnalyticsEventLimiter: analyticsEventLimiter,
-		Experiment:            experimentService,
-		Billing:               billingService,
-		BillingIPLimiter:      billingIPLimiter,
-		BillingKeyLimiter:     billingKeyLimiter,
-		APILimiter:            apiLimiter,
-		DecisionLimiter:       decisionLimiter,
-		UploadLimiter:         uploadLimiter,
-		ExportLimiter:         exportLimiter,
-		Readiness:             readiness,
-		ReadinessChecker:      database.HealthChecker{Pinger: databasePool},
+		BrowserAuth:            browserAuthService,
+		BrowserAuthConfig:      browserauthhttp.Config{CookieSecure: cfg.BrowserAuth.CookieSecure, CookieDomain: cfg.BrowserAuth.CookieDomain, AllowedOrigins: cfg.HTTP.CORSAllowedOrigins, RateLimiter: authenticationLimiter},
+		CloudWorkspace:         workspaceService,
+		HostedPublishing:       publishingService,
+		PlacementDecision:      placementDecisionService,
+		PrincipalResolver:      authn.NewBrowserSessionResolver(browserAuthService),
+		DeliveryLimiter:        deliveryLimiter,
+		Analytics:              analyticsService,
+		AnalyticsIPLimiter:     analyticsIPLimiter,
+		AnalyticsKeyLimiter:    analyticsKeyLimiter,
+		AnalyticsEventLimiter:  analyticsEventLimiter,
+		Experiment:             experimentService,
+		Billing:                billingService,
+		BillingAccess:          billingAccessService,
+		BillingIPLimiter:       billingIPLimiter,
+		BillingKeyLimiter:      billingKeyLimiter,
+		EntitlementSyncLimiter: entitlementSyncLimiter,
+		APILimiter:             apiLimiter,
+		DecisionLimiter:        decisionLimiter,
+		UploadLimiter:          uploadLimiter,
+		ExportLimiter:          exportLimiter,
+		Readiness:              readiness,
+		ReadinessChecker:       database.HealthChecker{Pinger: databasePool},
 	})
 
 	server := &http.Server{

@@ -85,22 +85,59 @@ what makes a server-to-server observation actionable — a digest cannot be
 reversed into something the Play API will answer. It is encrypted on receipt,
 never logged, never returned by any endpoint, and expires with the raw body.
 
-### What is deliberately **not** stored
+### Customer correlators and Billing Customers (Phase 9B)
+
+Phase 9A stored no customer identity at all. Phase 9B changes that, and the
+change is worth stating precisely rather than in summary.
 
 Apple's `appAccountToken` and Google's `obfuscatedExternalAccountId` are the
-developer-chosen customer correlators, and Mosaic never decodes or persists
-either. There is no customer, subscriber, entitlement-state, or access-grant
-table anywhere in Mosaic Billing, and no price or currency column: Phase 9A
-records that a store confirmed a transaction, and decides nothing about
-customer access.
+developer-chosen customer correlators. Mosaic now parses them server-side out of
+raw provider payloads — never from anything a client asserts — and records them
+as **SHA-256 digests with domain separation**. The raw values are never
+persisted, never logged, never returned by any endpoint, and never appear in a
+metric or a span. Capture is **forward-only**: correlators are read from inputs
+received after the feature landed, and no historical raw input is reprocessed to
+mine identity out of it.
+
+A **Billing Customer** is a Project-scoped row that purchases attach to. It is
+created lazily — either when your backend identifies a user, or when a validated
+purchase needs somewhere to attach — so SDK initialization and installation
+registration create nothing. Aliases (application user id, installation id, and
+the two provider correlators) are stored as digests only, one active resolution
+per value, with end-dated history.
+
+Still deliberately absent: any price or currency column, any store account
+identifier, any device identifier beyond the installation alias digest, and any
+raw correlator value.
+
+Mosaic Billing's alias tables carry **no foreign key into the analytics identity
+tables**, deliberately. The identified-user join happens at report time on the
+shared application-user id value. A foreign key would force a choice between
+breaking accepted deletion behaviour and silently revoking entitlements when a
+subject is deleted, and neither is acceptable.
 
 ### Billing data and identity deletion
 
-**Billing records are exempt from analytics identity deletion**, by owner
-decision. This is not an oversight and it does not leave a subject's data
-behind: Transaction Facts carry no customer identity, so an identity deletion
-has nothing in them to reach. The link between a transaction and a person
-exists in your own systems and in the store's, not in Mosaic's ledger.
+The exemption is now a **split**, because the old rationale — "Transaction Facts
+carry no customer identity, so a deletion has nothing to reach" — stopped being
+true when Billing Customers arrived. Repeating it would have been the
+comfortable answer rather than the accurate one.
+
+**Erasable on an identity deletion request:** Billing Customer aliases. The
+alias is the person-to-purchase link and therefore the personal data in Mosaic
+Billing. Deleting a subject end-dates and redacts their alias rows, so the
+correlation between a human being and a purchase is gone.
+
+**Exempt, and why:** Transaction Facts, Billing Customers themselves,
+subscription snapshots, and Customer Entitlement Snapshots. These are financial
+evidence — the record of what a store confirmed and what access was granted on
+the strength of it. They survive an alias deletion carrying no identifier that
+points at a person: a Billing Customer with every alias removed is an anonymous
+purchase anchor, which is what a refund dispute, a tax audit, and a chargeback
+investigation each need to still exist.
+
+The practical consequence: after deletion, the purchase history is still there
+and nothing in Mosaic can tell you whose it was.
 
 The store-issued material that *is* sensitive — signed payloads and purchase
 tokens — ages out on the raw-input retention window rather than on a deletion
