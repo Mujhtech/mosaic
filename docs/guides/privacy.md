@@ -146,6 +146,39 @@ a person. If you need it gone sooner, lower
 `MOSAIC_BILLING_RAW_RETENTION_DAYS` (minimum 30) or disable billing for the
 Project.
 
+### What leaves Mosaic on a billing webhook (Phase 9B)
+
+An application webhook is the one billing path where Mosaic sends data to a URL
+an operator chose, so what it may carry is worth stating rather than implying.
+
+A `customer.entitlements.changed` delivery carries the Project and Environment
+identifiers, the Billing Customer identifier, the snapshot version it announces,
+which Entitlement keys changed and their before/after states, a four-axis state
+summary of the subscription the change came from, and Mosaic's own correlation
+identifier. That is the whole payload; the contract declares
+`additionalProperties: false` at every level, so nothing else can be added to a
+delivery without a contract version.
+
+Structurally absent, and unable to be added by configuration: any raw alias
+value, any alias digest, any provider purchase token, any signed store payload,
+any store account identifier, any price or currency, and any device identifier.
+An event is a notification that state changed, never a copy of the state, which
+is why the contract instructs consumers to re-read the snapshot rather than to
+trust the payload.
+
+The destination is constrained rather than free: HTTPS only, no redirects,
+private and link-local address space refused against the *resolved* address on
+every attempt, and a self-hosted exception that is a deployment-level flag
+rather than a per-destination toggle. The reasoning is in
+[ADR-0024](../architecture/decisions/0024-sign-application-webhooks-with-hmac-sha256.md).
+
+Delivery attempt history keeps a bounded, control-character-free excerpt of your
+endpoint's response body so an integrator can see why their own endpoint
+refused. It is never parsed and never influences Mosaic state. Attempts are
+retained for a much shorter window than the events themselves, because the event
+identifier is a contract a consumer deduplicates on and an attempt is
+operational detail.
+
 ### Backup and key handling
 
 The keyring that seals billing envelopes is a backup artifact in its own right
