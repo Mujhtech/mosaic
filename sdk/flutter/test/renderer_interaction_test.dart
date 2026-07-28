@@ -623,8 +623,11 @@ final class _StallingObservationSink
     implements MosaicTransactionObservationSink {
   @override
   void observePurchaseResult({
+    required String? providerId,
     required String? transactionReference,
     String? providerOrderReference,
+    String? mosaicProductId,
+    String? purchaseAttemptId,
   }) {
     unawaited(Completer<void>().future);
   }
@@ -634,8 +637,11 @@ final class _ThrowingObservationSink
     implements MosaicTransactionObservationSink {
   @override
   void observePurchaseResult({
+    required String? providerId,
     required String? transactionReference,
     String? providerOrderReference,
+    String? mosaicProductId,
+    String? purchaseAttemptId,
   }) {
     throw StateError('billing handoff failure');
   }

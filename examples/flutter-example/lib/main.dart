@@ -339,6 +339,7 @@ final class _HostedPaywallPlaygroundState
       'Observations ${result.runtimeType}: ${diagnostics.queued} queued, '
       '${diagnostics.deduplicated} deduplicated, '
       '${diagnostics.rejectedReferences} references refused, '
+      '${diagnostics.incomplete} incomplete, '
       'last ${diagnostics.lastSafeCode ?? 'none'}',
     );
   }

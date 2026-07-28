@@ -11,6 +11,8 @@ import 'support/canonical_fixture.dart';
 
 /// A stable namespace: the runtime rejects anything that is not a SHA-256 hex
 /// digest, so tests derive one the same way the SDK does.
+const String _providerId = 'fixture-provider-apple';
+
 final String _namespace = mosaicTransactionObservationNamespace(
   Uri.parse('https://api.mosaic.test'),
   'public_sdk_key_test',
@@ -43,9 +45,13 @@ void main() {
       // iOS adapter's local prefix and the raw wire value are one transaction.
       expect(
           await runtime.observe(
+              providerId: _providerId,
               transactionReference: 'storekit_2000000900000001'),
           isTrue);
-      expect(await runtime.observe(transactionReference: '2000000900000001'),
+      expect(
+          await runtime.observe(
+              providerId: _providerId,
+              transactionReference: '2000000900000001'),
           isFalse);
       var diagnostics = await runtime.diagnostics();
       expect(diagnostics.queued, 1);
@@ -65,7 +71,10 @@ void main() {
 
       // The acknowledged key is remembered, so a later re-observation of the
       // same transaction never produces a second submission.
-      expect(await restored.observe(transactionReference: '2000000900000001'),
+      expect(
+          await restored.observe(
+              providerId: _providerId,
+              transactionReference: '2000000900000001'),
           isFalse);
       expect(transport.submitted, hasLength(1));
     });
@@ -83,7 +92,8 @@ void main() {
         ),
       ]);
       final runtime = _runtime(storage: storage, transport: transport);
-      await runtime.observe(transactionReference: '2000000900000001');
+      await runtime.observe(
+          providerId: _providerId, transactionReference: '2000000900000001');
       await runtime.flush();
       await runtime.flush();
       expect(transport.submissionIds, hasLength(2));
@@ -139,7 +149,8 @@ void main() {
             scenario.result,
           ]),
         );
-        await runtime.observe(transactionReference: '2000000900000001');
+        await runtime.observe(
+            providerId: _providerId, transactionReference: '2000000900000001');
         await runtime.flush();
         final diagnostics = await runtime.diagnostics();
         expect(diagnostics.queued, scenario.queued,
@@ -156,7 +167,8 @@ void main() {
         storage: MosaicMemoryTransactionObservationStorage(),
         transport: transport,
       );
-      await runtime.observe(transactionReference: '2000000900000001');
+      await runtime.observe(
+          providerId: _providerId, transactionReference: '2000000900000001');
       for (var attempt = 0;
           attempt < mosaicTransactionObservationMaximumAttempts + 2;
           attempt++) {
@@ -288,7 +300,8 @@ void main() {
     final storage = MosaicMemoryTransactionObservationStorage();
     final transport = _RecordingTransport();
     final runtime = _runtime(storage: storage, transport: transport);
-    await runtime.observe(transactionReference: '2000000900000001');
+    await runtime.observe(
+        providerId: _providerId, transactionReference: '2000000900000001');
     expect(storage.source, isNotNull);
 
     await runtime.setCollection(hostEnabled: false);
@@ -301,7 +314,8 @@ void main() {
 
     // Nothing is observed while collection is off, and re-enabling never
     // resurrects a cleared record.
-    await runtime.observe(transactionReference: '2000000900000002');
+    await runtime.observe(
+        providerId: _providerId, transactionReference: '2000000900000002');
     await runtime.setCollection(hostEnabled: true);
     diagnostics = await runtime.diagnostics();
     expect(diagnostics.enabled, isTrue);
@@ -314,7 +328,8 @@ void main() {
       transport: transport,
       settings: const MosaicTransactionObservationSettings(hostEnabled: false),
     );
-    await off.observe(transactionReference: '2000000900000001');
+    await off.observe(
+        providerId: _providerId, transactionReference: '2000000900000001');
     expect((await off.diagnostics()).queued, isZero);
   });
 
@@ -342,11 +357,17 @@ void main() {
         'ecdb16b8fb3378895aeb12223bc53edc67ac874ac2ea15c01e15c897af2c2478',
       ];
       for (final value in rejected) {
-        expect(await runtime.observe(transactionReference: value), isFalse,
+        expect(
+            await runtime.observe(
+                providerId: _providerId, transactionReference: value),
+            isFalse,
             reason: value);
       }
       // A provider that reports no reference is ordinary, not a rejection.
-      expect(await runtime.observe(transactionReference: null), isFalse);
+      expect(
+          await runtime.observe(
+              providerId: _providerId, transactionReference: null),
+          isFalse);
 
       expect(transport.submitted, isEmpty);
       final diagnostics = await runtime.diagnostics();
@@ -366,7 +387,10 @@ void main() {
           storage: MosaicMemoryTransactionObservationStorage(),
           transport: _RecordingTransport(),
         );
-        expect(await runtime.observe(transactionReference: value), isTrue,
+        expect(
+            await runtime.observe(
+                providerId: _providerId, transactionReference: value),
+            isTrue,
             reason: entry['id'] as String?);
         final reference =
             MosaicTransactionReference.appStoreTransactionId(value);
@@ -395,13 +419,93 @@ void main() {
           transport: _RecordingTransport(),
           storePlatform: MosaicStorePlatform.android,
         );
-        expect(await runtime.observe(transactionReference: digest), isTrue);
+        expect(
+            await runtime.observe(
+                providerId: _providerId, transactionReference: digest),
+            isTrue);
         // The raw token itself is never a submittable reference.
-        expect(await runtime.observe(transactionReference: token), isFalse);
+        expect(
+            await runtime.observe(
+                providerId: _providerId, transactionReference: token),
+            isFalse);
       }
     });
 
-    test('the submitted document carries only contract fields', () async {
+    test('serialization matches the canonical client observation fixtures',
+        () async {
+      // A canonical fixture is reproduced exactly except for the three values
+      // this SDK legitimately authors itself: the two identifiers it generates,
+      // and sdkFamily, which is always "flutter" here. Everything else — the
+      // envelope, record type, provider, store platform, reference and order
+      // reference shapes, source authority, context keys, correlation, claimed
+      // Product, and timestamp format — must match byte for byte.
+      for (final name in <String>[
+        'apple-client-observation',
+        'google-client-observation',
+      ]) {
+        final fixture = jsonDecode(
+          repositoryFile(
+            'protocol/fixtures/billing-ingestion/v1/$name.json',
+          ).readAsStringSync(),
+        ) as Map<String, Object?>;
+        final expected = (fixture['payload']! as Map).cast<String, Object?>();
+        final reference =
+            (expected['transactionReference']! as Map).cast<String, Object?>();
+        final order = expected['providerOrderReference'] as Map?;
+        final context = (expected['context']! as Map).cast<String, Object?>();
+        final correlation = expected['correlation'] as Map?;
+        final storePlatform =
+            mosaicStorePlatformFromWireValue(expected['storePlatform'])!;
+
+        final observation = MosaicTransactionObservation(
+          providerId: expected['providerId']! as String,
+          storePlatform: storePlatform,
+          reference: MosaicTransactionReference.tryFor(
+            storePlatform,
+            reference['value']! as String,
+          )!,
+          observedAt: DateTime.parse(expected['observedAt']! as String),
+          context: MosaicTransactionObservationContext(
+            platform: context['platform']! as String,
+            sdkVersion: context['sdkVersion']! as String,
+            applicationVersion: context['applicationVersion'] as String?,
+            operatingSystemVersion:
+                context['operatingSystemVersion'] as String?,
+          ),
+          providerOrderReference: order?['value'] as String?,
+          correlation: correlation == null
+              ? const MosaicTransactionObservationCorrelation()
+              : MosaicTransactionObservationCorrelation.fromJson(
+                  correlation.cast<String, Object?>(),
+                ),
+          claimedMosaicProductId: expected['claimedMosaicProductId'] as String?,
+        );
+
+        final document = observation.toJson();
+        expect(document['billingIngestionContractVersion'], '1');
+        expect(document['recordType'], 'clientTransactionObservation');
+        final payload = (document['payload']! as Map).cast<String, Object?>();
+
+        // The generated identifiers satisfy the contract's identifier shape.
+        final identifier = RegExp(r'^[A-Za-z0-9][A-Za-z0-9._:-]*$');
+        for (final generated in <String>[
+          payload['observationId']! as String,
+          payload['submissionId']! as String,
+        ]) {
+          expect(identifier.hasMatch(generated), isTrue, reason: generated);
+          expect(generated.length, lessThanOrEqualTo(128));
+        }
+        // The submission identifier is deterministic, never random.
+        expect(payload['submissionId'], isNot(payload['observationId']));
+
+        payload['observationId'] = expected['observationId'];
+        payload['submissionId'] = expected['submissionId'];
+        (payload['context']! as Map)['sdkFamily'] = context['sdkFamily'];
+        expect(payload, expected, reason: name);
+      }
+    });
+
+    test('the record carries no field outside the contract', () async {
       final transport = _RecordingTransport();
       final runtime = _runtime(
         storage: MosaicMemoryTransactionObservationStorage(),
@@ -413,30 +517,94 @@ void main() {
           .cast<Map<String, Object?>>()
           .first['digest']! as String;
       await runtime.observe(
+        providerId: _providerId,
         transactionReference: digest,
         providerOrderReference: 'fixture-GPA.0000-0000-0000-00001',
+        mosaicProductId: 'fixture-mosaic-product-pro-monthly',
+        correlation: const MosaicTransactionObservationCorrelation(
+          providerUpdateId: 'fixture-provider-update-0002',
+        ),
       );
       await runtime.flush();
       final document = transport.submitted.single.toJson();
       expect(document.keys.toSet(), <String>{
+        'billingIngestionContractVersion',
+        'recordType',
+        'payload',
+      });
+      final payload = (document['payload']! as Map).cast<String, Object?>();
+      expect(payload.keys.toSet(), <String>{
+        'observationId',
         'submissionId',
-        'referenceKind',
-        'reference',
+        'providerId',
+        'storePlatform',
+        'transactionReference',
         'providerOrderReference',
         'observedAt',
+        'sourceAuthority',
+        'context',
+        'correlation',
+        'claimedMosaicProductId',
       });
-      expect(document['referenceKind'], 'google_play_token_digest');
-      expect(document['reference'], digest);
+      // A client observation can only trigger validation, never author a fact,
+      // and never asserts a Store Environment.
+      expect(payload['sourceAuthority'], 'client_observation');
+      expect(payload.containsKey('storeEnvironment'), isFalse);
+      expect(payload.containsKey('storeEnvironmentClassification'), isFalse);
+      expect(payload.containsKey('subjectReference'), isFalse);
+      expect(payload.containsKey('monetaryAmount'), isFalse);
       expect(
-        RegExp(r'^observation_[a-f0-9]{64}$')
-            .hasMatch(document['submissionId']! as String),
-        isTrue,
+        (payload['transactionReference']! as Map)['referenceKind'],
+        'google_play_token_digest',
       );
+      expect((payload['transactionReference']! as Map)['value'], digest);
       expect(
         RegExp(r'^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{3}Z$')
-            .hasMatch(document['observedAt']! as String),
+            .hasMatch(payload['observedAt']! as String),
         isTrue,
       );
+      expect((payload['context']! as Map)['sdkFamily'], 'flutter');
+    });
+
+    test('an Apple record can never carry a Google order reference', () async {
+      final transport = _RecordingTransport();
+      final runtime = _runtime(
+        storage: MosaicMemoryTransactionObservationStorage(),
+        transport: transport,
+      );
+      await runtime.observe(
+        providerId: _providerId,
+        transactionReference: '2000000900000001',
+        providerOrderReference: 'fixture-GPA.0000-0000-0000-00001',
+      );
+      await runtime.flush();
+      final payload = (transport.submitted.single.toJson()['payload']! as Map)
+          .cast<String, Object?>();
+      expect(payload.containsKey('providerOrderReference'), isFalse);
+    });
+
+    test('an observation without a Commerce Provider identity is dropped',
+        () async {
+      final transport = _RecordingTransport();
+      final runtime = _runtime(
+        storage: MosaicMemoryTransactionObservationStorage(),
+        transport: transport,
+      );
+      for (final providerId in <String?>[null, '', '  ', '-leading-dash']) {
+        expect(
+          await runtime.observe(
+            providerId: providerId,
+            transactionReference: '2000000900000001',
+          ),
+          isFalse,
+          reason: providerId ?? 'null',
+        );
+      }
+      expect(transport.submitted, isEmpty);
+      final diagnostics = await runtime.diagnostics();
+      expect(diagnostics.incomplete, 4);
+      expect(
+          diagnostics.lastSafeCode, mosaicTransactionObservationIncompleteCode);
     });
   });
 }
@@ -452,6 +620,11 @@ MosaicTransactionObservationRuntime _runtime({
       namespace: _namespace,
       transport: transport,
       storePlatform: storePlatform,
+      context: MosaicTransactionObservationContext(
+        platform: storePlatform.wireValue,
+        applicationVersion: '1.4.2',
+        operatingSystemVersion: '18.5',
+      ),
       settings: settings,
       storage: storage,
       random: () => 0,

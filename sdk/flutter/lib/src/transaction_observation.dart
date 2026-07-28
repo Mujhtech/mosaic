@@ -7,6 +7,7 @@ import 'package:flutter/widgets.dart';
 import 'package:path_provider/path_provider.dart';
 
 import 'commerce_configuration.dart';
+import 'protocol.dart';
 import 'sha256.dart';
 import 'transaction_observation_transport.dart';
 
@@ -17,7 +18,7 @@ const String mosaicBillingIngestionContractVersion = '1';
 /// A device cannot legitimately hold more pending purchase references than
 /// this. The cap bounds a hostile or defective provider adapter.
 const int mosaicTransactionObservationMaximumQueueLength = 128;
-const int mosaicTransactionObservationMaximumQueueBytes = 64 * 1024;
+const int mosaicTransactionObservationMaximumQueueBytes = 256 * 1024;
 const int mosaicTransactionObservationMaximumAttempts = 10;
 
 /// Longer than the analytics event expiry: a purchase reference is worth more
@@ -36,6 +37,8 @@ const String mosaicTransactionObservationQueueRejectedCode =
     'transactions.queue_rejected';
 const String mosaicTransactionObservationReferenceRejectedCode =
     'transactions.reference_rejected';
+const String mosaicTransactionObservationIncompleteCode =
+    'transactions.observation_incomplete';
 const String mosaicTransactionObservationDeliveryUnavailableCode =
     'transactions.delivery_unavailable';
 
@@ -197,20 +200,136 @@ final class MosaicTransactionReference {
   int get hashCode => Object.hash(kind, value);
 }
 
+/// SDK context on an observation, mirroring the Analytics Event context
+/// vocabulary. It carries no Organization, Project, Environment, or
+/// Application identity: tenant scope is derived from the authenticated key.
+final class MosaicTransactionObservationContext {
+  const MosaicTransactionObservationContext({
+    required this.platform,
+    this.sdkVersion = mosaicFlutterSdkVersion,
+    this.applicationVersion,
+    this.operatingSystemVersion,
+  });
+
+  /// `ios` or `android`. The contract's platform vocabulary is closed.
+  final String platform;
+
+  /// Always this package's version. `sdkFamily` is always `flutter`.
+  final String sdkVersion;
+  final String? applicationVersion;
+  final String? operatingSystemVersion;
+
+  Map<String, Object?> toJson() => <String, Object?>{
+        'platform': platform,
+        'sdkFamily': 'flutter',
+        'sdkVersion': sdkVersion,
+        if (_version(operatingSystemVersion, _osVersionPattern) != null)
+          'operatingSystemVersion': operatingSystemVersion!.trim(),
+        if (_version(applicationVersion, _versionPattern) != null)
+          'applicationVersion': applicationVersion!.trim(),
+      };
+
+  static MosaicTransactionObservationContext fromJson(
+    Map<String, Object?> json,
+  ) {
+    final platform = json['platform'];
+    final sdkVersion = json['sdkVersion'];
+    if ((platform != 'ios' && platform != 'android') ||
+        json['sdkFamily'] != 'flutter' ||
+        sdkVersion is! String) {
+      throw const FormatException('Invalid observation context.');
+    }
+    return MosaicTransactionObservationContext(
+      platform: platform! as String,
+      sdkVersion: sdkVersion,
+      applicationVersion: json['applicationVersion'] as String?,
+      operatingSystemVersion: json['operatingSystemVersion'] as String?,
+    );
+  }
+
+  static String? _version(String? value, RegExp pattern) {
+    if (value == null) return null;
+    final trimmed = value.trim();
+    return trimmed.isEmpty || trimmed.length > 64 || !pattern.hasMatch(trimmed)
+        ? null
+        : trimmed;
+  }
+}
+
+/// Correlation to Analytics Event 1/2 using the existing opaque handles only.
+/// No new cross-contract identifier is introduced.
+final class MosaicTransactionObservationCorrelation {
+  const MosaicTransactionObservationCorrelation({
+    this.purchaseAttemptId,
+    this.providerOperationId,
+    this.providerUpdateId,
+  });
+
+  final String? purchaseAttemptId;
+  final String? providerOperationId;
+  final String? providerUpdateId;
+
+  bool get isEmpty => toJson().isEmpty;
+
+  Map<String, Object?> toJson() => <String, Object?>{
+        if (_identifier(purchaseAttemptId) case final value?)
+          'purchaseAttemptId': value,
+        if (_identifier(providerOperationId) case final value?)
+          'providerOperationId': value,
+        if (_identifier(providerUpdateId) case final value?)
+          'providerUpdateId': value,
+      };
+
+  static MosaicTransactionObservationCorrelation fromJson(
+    Map<String, Object?> json,
+  ) =>
+      MosaicTransactionObservationCorrelation(
+        purchaseAttemptId: json['purchaseAttemptId'] as String?,
+        providerOperationId: json['providerOperationId'] as String?,
+        providerUpdateId: json['providerUpdateId'] as String?,
+      );
+}
+
 /// One untrusted client report that a provider transaction may exist.
+///
+/// It is a `clientTransactionObservation` record of Billing Ingestion Contract
+/// 1. It carries no receipt, no signed payload, no purchase token, no
+/// credential, no price, no entitlement assertion, no tenant identity, no
+/// Store Environment assertion, and no subject reference. Its
+/// `sourceAuthority` is always `client_observation`: a client observation can
+/// only trigger validation, never author a fact.
 final class MosaicTransactionObservation {
   MosaicTransactionObservation({
+    required String providerId,
+    required this.storePlatform,
     required this.reference,
     required this.observedAt,
+    required this.context,
     this.providerOrderReference,
-  }) : submissionId = _submissionId(reference);
+    this.correlation = const MosaicTransactionObservationCorrelation(),
+    String? claimedMosaicProductId,
+    String? observationId,
+  })  : providerId = _requiredIdentifier(providerId, 'providerId'),
+        claimedMosaicProductId = _identifier(claimedMosaicProductId),
+        submissionId = _submissionId(reference),
+        observationId = observationId ?? _newObservationId();
 
-  MosaicTransactionObservation._(
-    this.submissionId,
-    this.reference,
-    this.observedAt,
-    this.providerOrderReference,
-  );
+  MosaicTransactionObservation._({
+    required this.observationId,
+    required this.submissionId,
+    required this.providerId,
+    required this.storePlatform,
+    required this.reference,
+    required this.observedAt,
+    required this.context,
+    required this.providerOrderReference,
+    required this.correlation,
+    required this.claimedMosaicProductId,
+  });
+
+  /// Identity of this record, generated once and persisted, so every delivery
+  /// attempt reports the same observation.
+  final String observationId;
 
   /// Deterministic idempotency key. It is derived only from the reference kind
   /// and value, so the renderer path and the provider-update path produce the
@@ -218,65 +337,183 @@ final class MosaicTransactionObservation {
   /// answered `duplicate` instead of creating a second record. It is never
   /// derived from a timestamp, price, Product, or subject.
   final String submissionId;
+  final String providerId;
+  final MosaicStorePlatform storePlatform;
   final MosaicTransactionReference reference;
   final DateTime observedAt;
+  final MosaicTransactionObservationContext context;
   final String? providerOrderReference;
+  final MosaicTransactionObservationCorrelation correlation;
+
+  /// A claim only. The server resolves the Mosaic Product independently; a
+  /// mismatch is a diagnostic and never an override.
+  final String? claimedMosaicProductId;
 
   static String _submissionId(MosaicTransactionReference reference) =>
       'observation_'
       '${mosaicSha256String('mosaic-transaction-observation-v1'
           '|${reference.kind.wireValue}|${reference.value}')}';
 
-  /// The exact public SDK observation endpoint document. It carries no
-  /// receipt, no signed payload, no purchase token, no credential, no price,
-  /// no entitlement assertion, no tenant identity, no Store Environment
-  /// assertion, and no subject reference.
+  static String _newObservationId() {
+    final random = Random.secure();
+    final bytes = List<int>.generate(16, (_) => random.nextInt(256));
+    return 'observation_'
+        '${bytes.map((byte) => byte.toRadixString(16).padLeft(2, '0')).join()}';
+  }
+
+  /// The canonical Billing Ingestion Contract 1 observation record.
   Map<String, Object?> toJson() => <String, Object?>{
-        'submissionId': submissionId,
-        'referenceKind': reference.kind.wireValue,
-        'reference': reference.value,
-        if (providerOrderReference != null)
-          'providerOrderReference': providerOrderReference,
-        'observedAt': mosaicTransactionObservationTimestamp(observedAt),
+        'billingIngestionContractVersion':
+            mosaicBillingIngestionContractVersion,
+        'recordType': 'clientTransactionObservation',
+        'payload': <String, Object?>{
+          'observationId': observationId,
+          'submissionId': submissionId,
+          'providerId': providerId,
+          'storePlatform': mosaicStorePlatformWireValue(storePlatform),
+          'transactionReference': <String, Object?>{
+            'referenceKind': reference.kind.wireValue,
+            'value': reference.value,
+          },
+          // The alignment rule forbids an order reference on an Apple record.
+          if (providerOrderReference != null &&
+              storePlatform == MosaicStorePlatform.android)
+            'providerOrderReference': <String, Object?>{
+              'referenceKind':
+                  MosaicTransactionReferenceKind.googlePlayOrderId.wireValue,
+              'value': providerOrderReference,
+            },
+          'observedAt': mosaicTransactionObservationTimestamp(observedAt),
+          'sourceAuthority': 'client_observation',
+          'context': context.toJson(),
+          if (!correlation.isEmpty) 'correlation': correlation.toJson(),
+          if (claimedMosaicProductId != null)
+            'claimedMosaicProductId': claimedMosaicProductId,
+        },
       };
 
-  /// Re-validates a persisted document. A tampered or corrupted queue file
+  /// Re-validates a persisted record. A tampered or corrupted queue file
   /// cannot smuggle a credential-shaped value back onto the wire, because the
   /// reference is reconstructed through the same structural check.
   static MosaicTransactionObservation fromJson(Map<String, Object?> json) {
-    final kind = MosaicTransactionReferenceKind.tryParse(
-      json['referenceKind'] as String?,
-    );
-    final value = json['reference'];
-    final observedAt = json['observedAt'];
-    if (value is! String || observedAt is! String) {
+    if (json['billingIngestionContractVersion'] !=
+            mosaicBillingIngestionContractVersion ||
+        json['recordType'] != 'clientTransactionObservation') {
+      throw const FormatException('Unsupported observation record.');
+    }
+    final record = json['payload'];
+    final contextValue = record is Map ? record['context'] : null;
+    if (record is! Map || contextValue is! Map) {
       throw const FormatException('Invalid persisted observation.');
     }
-    final reference = switch (kind) {
+    final payload = record.cast<String, Object?>();
+    if (payload['sourceAuthority'] != 'client_observation') {
+      throw const FormatException('Unsupported source authority.');
+    }
+    final storePlatform =
+        mosaicStorePlatformFromWireValue(payload['storePlatform']);
+    final referenceValue = payload['transactionReference'];
+    final observedAt = payload['observedAt'];
+    if (storePlatform == null ||
+        referenceValue is! Map ||
+        observedAt is! String) {
+      throw const FormatException('Invalid persisted observation.');
+    }
+    final referenceRecord = referenceValue.cast<String, Object?>();
+    final value = referenceRecord['value'];
+    if (value is! String) {
+      throw const FormatException('Invalid transaction reference.');
+    }
+    final reference = switch (MosaicTransactionReferenceKind.tryParse(
+      referenceRecord['referenceKind'] as String?,
+    )) {
       MosaicTransactionReferenceKind.appStoreTransactionId =>
         MosaicTransactionReference.appStoreTransactionId(value),
       MosaicTransactionReferenceKind.googlePlayTokenDigest =>
         MosaicTransactionReference.googlePlayTokenDigest(value),
       _ => throw const FormatException('Unsupported reference kind.'),
     };
-    final submissionId = json['submissionId'];
+    if (MosaicTransactionReference.tryFor(storePlatform, value) == null) {
+      throw const FormatException('Reference does not match the platform.');
+    }
+    final submissionId = payload['submissionId'];
+    final observationId = _identifier(payload['observationId'] as String?);
     if (submissionId is! String ||
         submissionId != _submissionId(reference) ||
-        submissionId.length > 128) {
-      throw const FormatException('Invalid submission identifier.');
+        observationId == null) {
+      throw const FormatException('Invalid observation identifiers.');
     }
-    final order = json['providerOrderReference'];
+    final order = payload['providerOrderReference'];
+    final orderValue = order is Map ? order['value'] : null;
     if (order != null &&
-        (order is! String || !_googlePlayOrderIdPattern.hasMatch(order))) {
+        (orderValue is! String ||
+            !_googlePlayOrderIdPattern.hasMatch(orderValue) ||
+            storePlatform != MosaicStorePlatform.android)) {
       throw const FormatException('Invalid order reference.');
     }
+    final correlation = payload['correlation'];
     return MosaicTransactionObservation._(
-      submissionId,
-      reference,
-      DateTime.parse(observedAt).toUtc(),
-      order as String?,
+      observationId: observationId,
+      submissionId: submissionId,
+      providerId: _requiredIdentifier(
+        payload['providerId'] as String?,
+        'providerId',
+      ),
+      storePlatform: storePlatform,
+      reference: reference,
+      observedAt: DateTime.parse(observedAt).toUtc(),
+      context: MosaicTransactionObservationContext.fromJson(
+        contextValue.cast<String, Object?>(),
+      ),
+      providerOrderReference: orderValue as String?,
+      correlation: correlation is Map
+          ? MosaicTransactionObservationCorrelation.fromJson(
+              correlation.cast<String, Object?>(),
+            )
+          : const MosaicTransactionObservationCorrelation(),
+      claimedMosaicProductId:
+          _identifier(payload['claimedMosaicProductId'] as String?),
     );
   }
+}
+
+/// Opaque store platform vocabulary. No StoreKit, Play Billing, or Flutter
+/// type name appears anywhere in the contract.
+String mosaicStorePlatformWireValue(MosaicStorePlatform value) =>
+    switch (value) {
+      MosaicStorePlatform.ios => 'apple_app_store',
+      MosaicStorePlatform.android => 'google_play',
+    };
+
+MosaicStorePlatform? mosaicStorePlatformFromWireValue(Object? value) =>
+    switch (value) {
+      'apple_app_store' => MosaicStorePlatform.ios,
+      'google_play' => MosaicStorePlatform.android,
+      _ => null,
+    };
+
+final RegExp _identifierPattern = RegExp(r'^[A-Za-z0-9][A-Za-z0-9._:-]*$');
+final RegExp _versionPattern = RegExp(r'^[A-Za-z0-9][A-Za-z0-9.+_-]*$');
+final RegExp _osVersionPattern = RegExp(r'^[A-Za-z0-9][A-Za-z0-9.+_ -]*$');
+
+/// Returns the value only when it satisfies the contract's `identifier`
+/// shape. Anything else is dropped rather than sent.
+String? _identifier(String? value) {
+  if (value == null) return null;
+  final trimmed = value.trim();
+  return trimmed.isEmpty ||
+          trimmed.length > 128 ||
+          !_identifierPattern.hasMatch(trimmed)
+      ? null
+      : trimmed;
+}
+
+String _requiredIdentifier(String? value, String field) {
+  final identifier = _identifier(value);
+  if (identifier == null) {
+    throw FormatException('$field is not a valid identifier.');
+  }
+  return identifier;
 }
 
 /// The synchronous answer to submitting one observation.
@@ -373,6 +610,7 @@ final class MosaicTransactionObservationDiagnostics {
     required this.dropped,
     required this.expired,
     required this.rejectedReferences,
+    required this.incomplete,
     required this.permanentlyRejected,
     required this.retryable,
     required this.attemptsExhausted,
@@ -387,6 +625,10 @@ final class MosaicTransactionObservationDiagnostics {
   final int dropped;
   final int expired;
   final int rejectedReferences;
+
+  /// Observations dropped because a required contract field, most often the
+  /// Commerce Provider identity, was not in scope.
+  final int incomplete;
   final int permanentlyRejected;
   final int retryable;
   final int attemptsExhausted;
@@ -400,8 +642,11 @@ final class MosaicTransactionObservationDiagnostics {
 /// awaited from, block, or alter a purchase flow.
 abstract interface class MosaicTransactionObservationSink {
   void observePurchaseResult({
+    required String? providerId,
     required String? transactionReference,
     String? providerOrderReference,
+    String? mosaicProductId,
+    String? purchaseAttemptId,
   });
 }
 
@@ -545,6 +790,7 @@ final class MosaicTransactionObservationRuntime
     required this.namespace,
     required this.transport,
     required this.storePlatform,
+    required this.context,
     this.settings = const MosaicTransactionObservationSettings(),
     this.storage = const MosaicFileTransactionObservationStorage(),
     this.clock = _systemClock,
@@ -555,6 +801,7 @@ final class MosaicTransactionObservationRuntime
   final String namespace;
   final MosaicTransactionObservationTransport transport;
   final MosaicStorePlatform storePlatform;
+  final MosaicTransactionObservationContext context;
   final MosaicTransactionObservationSettings settings;
   final MosaicTransactionObservationStorage storage;
   final MosaicTransactionObservationClock clock;
@@ -572,6 +819,7 @@ final class MosaicTransactionObservationRuntime
       _dropped = 0,
       _expired = 0,
       _rejectedReferences = 0,
+      _incomplete = 0,
       _permanent = 0,
       _retryable = 0,
       _exhausted = 0;
@@ -593,40 +841,65 @@ final class MosaicTransactionObservationRuntime
 
   @override
   void observePurchaseResult({
+    required String? providerId,
     required String? transactionReference,
     String? providerOrderReference,
+    String? mosaicProductId,
+    String? purchaseAttemptId,
   }) {
     if (!settings.submitOnPurchase) return;
     _observeInBackground(
+      providerId: providerId,
       transactionReference: transactionReference,
       providerOrderReference: providerOrderReference,
+      mosaicProductId: mosaicProductId,
+      correlation: MosaicTransactionObservationCorrelation(
+        purchaseAttemptId: purchaseAttemptId,
+      ),
     );
   }
 
   /// Observes an asynchronous Commerce Provider update. Phase 9A observes a
   /// completed purchase only; every other outcome stays local.
   void observeProviderUpdate({
+    required String? providerId,
     required String? transactionReference,
     String? providerOrderReference,
+    String? mosaicProductId,
+    String? providerOperationId,
+    String? providerUpdateId,
     DateTime? observedAt,
   }) {
     if (!settings.submitOnProviderUpdate) return;
     _observeInBackground(
+      providerId: providerId,
       transactionReference: transactionReference,
       providerOrderReference: providerOrderReference,
+      mosaicProductId: mosaicProductId,
+      correlation: MosaicTransactionObservationCorrelation(
+        providerOperationId: providerOperationId,
+        providerUpdateId: providerUpdateId,
+      ),
       observedAt: observedAt,
     );
   }
 
   void _observeInBackground({
+    required String? providerId,
     required String? transactionReference,
     String? providerOrderReference,
+    String? mosaicProductId,
+    MosaicTransactionObservationCorrelation correlation =
+        const MosaicTransactionObservationCorrelation(),
     DateTime? observedAt,
   }) {
     unawaited(
       observe(
+        providerId: providerId,
         transactionReference: transactionReference,
         providerOrderReference: providerOrderReference,
+        mosaicProductId: mosaicProductId,
+        correlation: correlation,
         observedAt: observedAt,
       ).then<void>(
         (_) {},
@@ -640,8 +913,12 @@ final class MosaicTransactionObservationRuntime
   /// Enqueues one observation and starts an unawaited delivery attempt.
   /// Returns whether a new record was queued; a duplicate returns `false`.
   Future<bool> observe({
+    required String? providerId,
     required String? transactionReference,
     String? providerOrderReference,
+    String? mosaicProductId,
+    MosaicTransactionObservationCorrelation correlation =
+        const MosaicTransactionObservationCorrelation(),
     DateTime? observedAt,
   }) async {
     var queued = false;
@@ -664,14 +941,29 @@ final class MosaicTransactionObservationRuntime
         return;
       }
       final now = clock().toUtc();
-      final observation = MosaicTransactionObservation(
-        reference: reference,
-        observedAt: (observedAt ?? now).toUtc(),
-        providerOrderReference: MosaicTransactionReference.tryOrderReference(
-          storePlatform,
-          providerOrderReference,
-        ),
-      );
+      final MosaicTransactionObservation observation;
+      try {
+        observation = MosaicTransactionObservation(
+          providerId: providerId ?? '',
+          storePlatform: storePlatform,
+          reference: reference,
+          observedAt: (observedAt ?? now).toUtc(),
+          context: context,
+          providerOrderReference: MosaicTransactionReference.tryOrderReference(
+            storePlatform,
+            providerOrderReference,
+          ),
+          correlation: correlation,
+          claimedMosaicProductId: mosaicProductId,
+        );
+      } on FormatException {
+        // The record is incomplete, most often because no Commerce Provider
+        // identity was in scope. It is dropped rather than sent malformed.
+        _incomplete++;
+        _lastSafeCode = mosaicTransactionObservationIncompleteCode;
+        await _persistSafely();
+        return;
+      }
       if (_acknowledged.contains(observation.submissionId) ||
           _queue.any(
             (item) => item.observation.submissionId == observation.submissionId,
@@ -795,6 +1087,7 @@ final class MosaicTransactionObservationRuntime
       dropped: _dropped,
       expired: _expired,
       rejectedReferences: _rejectedReferences,
+      incomplete: _incomplete,
       permanentlyRejected: _permanent,
       retryable: _retryable,
       attemptsExhausted: _exhausted,
@@ -920,6 +1213,7 @@ final class MosaicTransactionObservationRuntime
       _dropped = json['dropped'] as int? ?? 0;
       _expired = json['expired'] as int? ?? 0;
       _rejectedReferences = json['rejectedReferences'] as int? ?? 0;
+      _incomplete = json['incomplete'] as int? ?? 0;
       _permanent = json['permanentlyRejected'] as int? ?? 0;
       _retryable = json['retryable'] as int? ?? 0;
       _exhausted = json['attemptsExhausted'] as int? ?? 0;
@@ -959,6 +1253,7 @@ final class MosaicTransactionObservationRuntime
           'dropped': _dropped,
           'expired': _expired,
           'rejectedReferences': _rejectedReferences,
+          'incomplete': _incomplete,
           'permanentlyRejected': _permanent,
           'retryable': _retryable,
           'attemptsExhausted': _exhausted,

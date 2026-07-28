@@ -3,7 +3,13 @@
 ## Unreleased
 
 - Add the opt-in Transaction Observation handoff (Billing Ingestion Contract
-  v1). It is off by default: without
+  v1). The SDK submits and persists the canonical `clientTransactionObservation`
+  record — envelope, `sourceAuthority: client_observation`, typed
+  `transactionReference`/`providerOrderReference`, `context`, and `correlation` —
+  and reads the canonical `observationSubmissionResult` record. Both are
+  asserted against the canonical fixtures. A response in any other shape,
+  contract version, or record type is retried, never guessed at. A client
+  observation never asserts a Store Environment. It is off by default: without
   `Mosaic.configure(transactionObservation: ...)` the subsystem is never
   constructed, and nothing is observed, queued, persisted, or submitted.
 - An observation is a trigger for server-side validation, never proof. The

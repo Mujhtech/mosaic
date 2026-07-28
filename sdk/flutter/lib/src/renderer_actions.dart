@@ -361,7 +361,10 @@ extension on _MosaicPaywallState {
           // A host-supplied sink that throws must not become a failed purchase.
           try {
             widget.transactionObservations?.observePurchaseResult(
+              providerId: widget.analyticsContext?.providerId,
               transactionReference: transactionId,
+              mosaicProductId: reference.productId,
+              purchaseAttemptId: analyticsAttemptId,
             );
           } on Object {
             // Deliberately swallowed: this is the one failure that must never

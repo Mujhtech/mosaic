@@ -165,8 +165,12 @@ final class Mosaic extends ChangeNotifier with WidgetsBindingObserver {
       // including pending and entitlement changes, stays on the device.
       if (update.outcome != MosaicCommerceUpdateOutcome.purchased) return;
       runtime.observeProviderUpdate(
+        providerId: update.providerId,
         transactionReference: update.transactionReference,
         providerOrderReference: update.providerOrderReference,
+        mosaicProductId: update.mosaicProductId,
+        providerOperationId: update.operationId,
+        providerUpdateId: update.updateId,
         observedAt: update.occurredAt,
       );
     });
@@ -306,6 +310,12 @@ final class Mosaic extends ChangeNotifier with WidgetsBindingObserver {
             ),
             transport: resolvedObservationTransport,
             storePlatform: resolvedStorePlatform,
+            context: MosaicTransactionObservationContext(
+              platform: resolvedStorePlatform.wireValue,
+              sdkVersion: analyticsSdkVersion,
+              applicationVersion: configuration.applicationVersion,
+              operatingSystemVersion: operatingSystemVersion,
+            ),
             settings: transactionObservation,
             storage: transactionObservationStorage,
           );
@@ -529,6 +539,7 @@ final class Mosaic extends ChangeNotifier with WidgetsBindingObserver {
             dropped: 0,
             expired: 0,
             rejectedReferences: 0,
+            incomplete: 0,
             permanentlyRejected: 0,
             retryable: 0,
             attemptsExhausted: 0,

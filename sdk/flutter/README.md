@@ -175,7 +175,12 @@ What it never does:
   service-account key, or shared secret can be configured into the SDK.
 - It never emits an entitlement, price, subject, tenant identity, or Store
   Environment assertion, and it never rides on the analytics queue or the
-  analytics consent decision.
+  analytics consent decision. `sourceAuthority` is always `client_observation`:
+  an observation can trigger validation, never author a fact.
+- It never guesses. The response must be a Billing Ingestion Contract 1
+  `observationSubmissionResult` record; any other shape, contract version,
+  record type, or status is retried under the bounded attempt limit rather
+  than being read as acceptance or rejection.
 
 How it behaves:
 
@@ -192,7 +197,10 @@ How it behaves:
   full-jitter exponential backoff honouring an explicit `Retry-After`.
 - Disabling collection clears the queue and deletes the persisted document.
 - A `MosaicStorePlatform` is required, because it determines the contract's
-  reference kind. Without one the handoff stays disabled rather than guessing.
+  reference kind and store platform. Without one the handoff stays disabled
+  rather than guessing. A Commerce Provider identity is also required on each
+  record; an observation that has none is dropped and counted as `incomplete`
+  rather than sent malformed.
 - There is no background-execution machinery. An observation queued just
   before the app is killed is delivered on the next launch. Store
   Notifications, not this handoff, are the authoritative and timely ingestion
