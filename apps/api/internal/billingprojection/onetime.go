@@ -29,6 +29,11 @@ func ProjectOneTimePurchase(facts []Fact, asOf time.Time) OneTimeResult {
 
 	acquired := false
 	productUnresolved := false
+	// refundInvalidates records whether the last refund statement was one that
+	// ends ownership. It is tracked separately from RefundEffectiveAt because a
+	// partial refund is still worth reporting on the snapshot — the money came
+	// back — while not being a reason to stop granting access.
+	refundInvalidates := false
 	for _, fact := range ordered {
 		snapshot.SourceFactIDs = append(snapshot.SourceFactIDs, fact.ID)
 		if fact.IsTestSource {
@@ -61,10 +66,25 @@ func ProjectOneTimePurchase(facts []Fact, asOf time.Time) OneTimeResult {
 			// A re-purchase after a refund restores ownership; the history of
 			// the refund stays in the timeline.
 			snapshot.RefundEffectiveAt, snapshot.RevocationEffectiveAt = nil, nil
+			refundInvalidates = false
 		case "refund":
 			when := effectiveRefund(fact)
 			snapshot.RefundEffectiveAt = when
-			if fact.RefundType != "prorated" {
+			// Only a refund of the whole purchase ends ownership. A partial
+			// refund does not: Apple states it as `prorated` (REFUND_PRORATED),
+			// Google as `quantity_partial` on a voided purchase, and neither is
+			// the provider saying the customer no longer owns the item.
+			//
+			// This branch previously tested `!= "prorated"` alone, so a Google
+			// quantity-partial void — a partial money-back on a multi-quantity
+			// order — revoked a non-consumable outright. The subscription engine
+			// already read both shapes as non-invalidating (review finding
+			// I-14.1); the one-time engine now agrees, so the same provider
+			// statement cannot mean two different things depending on which
+			// purchase type received it. A genuine full void still arrives as a
+			// `full`/unspecified refund or a `revocation` fact.
+			refundInvalidates = !partialRefund(fact.RefundType)
+			if refundInvalidates {
 				snapshot.ValidityState = OwnershipRefunded
 				snapshot.UncertaintyReason = UncertaintyNone
 			}
@@ -89,8 +109,11 @@ func ProjectOneTimePurchase(facts []Fact, asOf time.Time) OneTimeResult {
 	if snapshot.ValidityState == OwnershipRevoked && !effective(snapshot.RevocationEffectiveAt, asOf) {
 		// A revocation scheduled for the future must not resurrect a refund
 		// that has already taken effect: the purchase is still refunded, it is
-		// simply not yet revoked.
-		if effective(snapshot.RefundEffectiveAt, asOf) {
+		// simply not yet revoked. A *partial* refund is not such a refund, which
+		// is why the invalidating flag is consulted rather than the timestamp
+		// alone — otherwise a quantity-partial void followed by a future-dated
+		// revocation would report the purchase as refunded today.
+		if refundInvalidates && effective(snapshot.RefundEffectiveAt, asOf) {
 			snapshot.ValidityState = OwnershipRefunded
 		} else {
 			snapshot.ValidityState = OwnershipOwned

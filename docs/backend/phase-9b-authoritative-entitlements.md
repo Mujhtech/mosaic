@@ -200,6 +200,31 @@ Consequently `isTestSource` appears on source summaries, on check results, and o
 payloads — but never on an Entitlement entry, because an Entitlement can be held for several
 reasons at once and only the reasons can be test-derived.
 
+## Ratified access-semantics decisions
+
+Two decisions are restated here because both are places where a reasonable reader would expect
+the opposite behaviour, and both are deliberate.
+
+**A partial refund never invalidates ownership; only a full one does.** Apple states a partial
+refund as `REFUND_PRORATED`, Google as `quantity_partial` on a voided purchase. Neither is the
+provider saying the customer stopped owning what they bought — a partial money-back on a
+multi-quantity order, or a goodwill refund of part of a period, leaves the purchase standing. This
+holds identically for subscriptions (the remaining period is preserved, per OD-18(a)) and for
+one-time purchases (ownership is preserved). It is a single rule stated twice rather than two
+rules, because the same provider statement must not mean "keep it" on one purchase type and "you
+no longer own it" on another; the one-time engine tested only for Apple's `prorated` until this
+was corrected. A genuine full void still arrives as a `full`/unspecified refund or as a
+`revocation` fact, and both revoke.
+
+Ownership is the harder half. A subscription wrongly terminated by a partial refund recovers at
+the next renewal; a lifetime purchase wrongly revoked has no expiry to recover from and no later
+fact to restore it, so the wrong answer is permanent.
+
+**Replaying under an unimplemented rule version answers `422` by design.** It is not a gap to be
+filled by falling back to the active engine. See "Projection replay and rule versions" below for
+why: a checksum produced by the wrong engine is indistinguishable from a genuine determinism
+result, which is the one thing a replay exists to prove.
+
 ## Billing identity APIs and the conflict workflow
 
 The identity surface mounts under `/v1/billing/identity` rather than under `/billing/server`, so

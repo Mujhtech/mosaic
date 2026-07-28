@@ -463,6 +463,65 @@ func TestOneTimePurchaseOwnershipAndRefund(t *testing.T) {
 	}
 }
 
+// A Google `quantity_partial` void of a one-time purchase does not invalidate
+// ownership; only a full void does (ratified decision, plan §7 / OD-18).
+//
+// The subscription engine already read both partial shapes as non-invalidating
+// (review finding I-14.1) while the one-time engine tested `!= "prorated"`
+// alone, so the same provider statement meant "keep the period" on a
+// subscription and "you no longer own it" on a non-consumable. The customer-
+// visible failure is permanent: a lifetime purchase revoked by a partial
+// money-back has no expiry to recover from and no later fact to restore it.
+func TestGoogleQuantityPartialRefundKeepsOneTimeOwnership(t *testing.T) {
+	acquire := Fact{
+		ID: "p1", Provider: "google_play", ProviderTransactionID: "p1",
+		FactKind: "one_time_purchase", TransactionType: "non_consumable",
+		OccurredAt: at("2026-01-01T00:00:00Z"), RecordedAt: at("2026-01-01T00:00:00Z"),
+		PeriodStartAt:   ptr("2026-01-01T00:00:00Z"),
+		MosaicProductID: "prod_lifetime", ResolutionState: "active_mapping",
+	}
+	// The Google void path stamps revoked_at from its own event time for every
+	// void, partial included, so the revocation date cannot distinguish them.
+	partial := Fact{
+		ID: "p2", Provider: "google_play", ProviderTransactionID: "p1",
+		FactKind: "refund", OccurredAt: at("2026-02-01T00:00:00Z"),
+		RecordedAt: at("2026-02-01T00:00:00Z"), RefundedAt: ptr("2026-02-01T00:00:00Z"),
+		RevokedAt: ptr("2026-02-01T00:00:00Z"), RefundType: "quantity_partial",
+		MosaicProductID: "prod_lifetime", ResolutionState: "active_mapping",
+	}
+
+	result := ProjectOneTimePurchase([]Fact{acquire, partial}, at("2026-03-01T00:00:00Z"))
+	if result.Snapshot.ValidityState != OwnershipOwned {
+		t.Fatalf("quantity_partial void got %q, want ownership preserved",
+			result.Snapshot.ValidityState)
+	}
+	if result.Snapshot.RefundEffectiveAt == nil {
+		t.Fatal("the partial refund was not recorded on the snapshot at all")
+	}
+
+	// A future-dated revocation must not let the recorded partial refund stand
+	// in for one that invalidates.
+	pending := Fact{
+		ID: "p3", Provider: "google_play", ProviderTransactionID: "p1",
+		FactKind: "revocation", OccurredAt: at("2026-02-15T00:00:00Z"),
+		RecordedAt: at("2026-02-15T00:00:00Z"), RevokedAt: ptr("2030-01-01T00:00:00Z"),
+		MosaicProductID: "prod_lifetime", ResolutionState: "active_mapping",
+	}
+	scheduled := ProjectOneTimePurchase([]Fact{acquire, partial, pending}, at("2026-03-01T00:00:00Z"))
+	if scheduled.Snapshot.ValidityState != OwnershipOwned {
+		t.Fatalf("a not-yet-effective revocation after a partial refund got %q, want owned",
+			scheduled.Snapshot.ValidityState)
+	}
+
+	// The correction must not widen into "Google voids never end ownership".
+	full := partial
+	full.ID, full.RefundType = "p4", "full"
+	voided := ProjectOneTimePurchase([]Fact{acquire, full}, at("2026-03-01T00:00:00Z"))
+	if voided.Snapshot.ValidityState != OwnershipRefunded {
+		t.Fatalf("full Google void got %q, want refunded", voided.Snapshot.ValidityState)
+	}
+}
+
 // --- grant selection -------------------------------------------------------
 
 // Grants are selected by the purchase's own effective time, and a purchase
