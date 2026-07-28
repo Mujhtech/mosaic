@@ -7,10 +7,12 @@
 package billinghttp
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
 	"io"
 	"net/http"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -21,6 +23,7 @@ import (
 
 	"github.com/Mujhtech/mosaic/apps/api/internal/billing"
 	"github.com/Mujhtech/mosaic/apps/api/internal/platform/authn"
+	"github.com/Mujhtech/mosaic/apps/api/internal/platform/httpserver/httpmiddleware"
 	chimiddleware "github.com/go-chi/chi/v5/middleware"
 
 	"github.com/Mujhtech/mosaic/apps/api/internal/platform/httpserver/response"
@@ -170,89 +173,477 @@ func (h *Handler) appleNotification(w http.ResponseWriter, r *http.Request) {
 // Observations
 // ---------------------------------------------------------------------------
 
-type observationRequest struct {
-	SubmissionID     string `json:"submissionId"`
-	ReferenceKind    string `json:"referenceKind"`
-	Reference        string `json:"reference"`
-	OrderReference   string `json:"providerOrderReference,omitempty"`
-	PurchaseToken    string `json:"purchaseToken,omitempty"`
-	StoreEnvironment string `json:"storeEnvironment"`
-	ObservedAt       string `json:"observedAt"`
+// The observation endpoints speak the Billing Ingestion Contract v1 record
+// shape on the way in as well as on the way out, so a single platform-neutral
+// document travels from four SDKs to one server. The Go types below mirror the
+// contract's `clientTransactionObservation` and `serverTransactionObservation`
+// records exactly, and every one of them is decoded with
+// DisallowUnknownFields: the schema declares additionalProperties:false at
+// every level, so a member the contract does not define must be a rejection
+// rather than a silently ignored value.
+
+// observationEnvelope is the outer record. recordType and contract version are
+// checked before the payload is interpreted, so a reader of the wrong contract
+// gets a precise code instead of a schema error.
+type observationEnvelope[T any] struct {
+	BillingIngestionContractVersion string `json:"billingIngestionContractVersion"`
+	RecordType                      string `json:"recordType"`
+	Payload                         T      `json:"payload"`
 }
 
-func (v *observationRequest) Validate() error {
-	return validation.ValidateStruct(v,
-		validation.Field(&v.SubmissionID, validation.Required, validation.RuneLength(1, 128)),
-		validation.Field(&v.ReferenceKind, validation.Required, validation.In(
-			billing.ReferenceAppStoreTransactionID,
-			billing.ReferenceGooglePlayTokenDigest,
-			billing.ReferenceGooglePlayOrderID)),
-		validation.Field(&v.Reference, validation.Required, validation.RuneLength(1, 128)),
-		validation.Field(&v.OrderReference, validation.RuneLength(0, 128)),
-		validation.Field(&v.StoreEnvironment, validation.In("sandbox", "production", "unclassified")),
-	)
+// transactionReference is the discriminated provider reference. Raw receipts,
+// signed payloads, JWS representations, and purchase tokens are structurally
+// impossible to carry here: the value bounds are 24 decimal digits for Apple
+// and exactly 64 lowercase hex characters for Google.
+type transactionReference struct {
+	ReferenceKind string `json:"referenceKind"`
+	Value         string `json:"value"`
 }
 
-func (v *observationRequest) toObservation() billing.Observation {
-	observation := billing.Observation{
-		SubmissionID:     strings.TrimSpace(v.SubmissionID),
-		ReferenceKind:    v.ReferenceKind,
-		Reference:        strings.TrimSpace(v.Reference),
-		OrderReference:   strings.TrimSpace(v.OrderReference),
-		PurchaseToken:    v.PurchaseToken,
-		StoreEnvironment: v.StoreEnvironment,
+type providerOrderReference struct {
+	ReferenceKind string `json:"referenceKind"`
+	Value         string `json:"value"`
+}
+
+type observationContext struct {
+	Platform               string `json:"platform"`
+	SDKFamily              string `json:"sdkFamily"`
+	SDKVersion             string `json:"sdkVersion"`
+	OperatingSystemVersion string `json:"operatingSystemVersion,omitempty"`
+	ApplicationVersion     string `json:"applicationVersion,omitempty"`
+}
+
+type observationCorrelation struct {
+	PurchaseAttemptID   string `json:"purchaseAttemptId,omitempty"`
+	ProviderOperationID string `json:"providerOperationId,omitempty"`
+	ProviderUpdateID    string `json:"providerUpdateId,omitempty"`
+}
+
+type storeEnvironmentClassification struct {
+	Classification string `json:"classification"`
+	Basis          string `json:"basis"`
+}
+
+// clientObservationPayload is the contract's clientTransactionObservation.
+//
+// It has no storeEnvironmentClassification member and no purchase-token member,
+// because the contract gives a client neither. A device can be made to say
+// anything, so accepting a client's Store Environment would let a sandbox
+// purchase present itself as production; classification comes only from
+// server-side validation of the store's own response.
+type clientObservationPayload struct {
+	ObservationID          string                  `json:"observationId"`
+	SubmissionID           string                  `json:"submissionId"`
+	ProviderID             string                  `json:"providerId"`
+	StorePlatform          string                  `json:"storePlatform"`
+	TransactionReference   transactionReference    `json:"transactionReference"`
+	ProviderOrderReference *providerOrderReference `json:"providerOrderReference,omitempty"`
+	ObservedAt             string                  `json:"observedAt"`
+	SourceAuthority        string                  `json:"sourceAuthority"`
+	Context                observationContext      `json:"context"`
+	Correlation            *observationCorrelation `json:"correlation,omitempty"`
+	// ClaimedMosaicProductID is a claim only. The server resolves the Mosaic
+	// Product independently and a mismatch is a diagnostic, never an override,
+	// so the value is accepted for shape conformance and deliberately not used.
+	ClaimedMosaicProductID string `json:"claimedMosaicProductId,omitempty"`
+}
+
+// serverObservationPayload is the contract's serverTransactionObservation.
+//
+// A trusted server may classify the Store Environment and record how trust was
+// established. It still carries no purchase token: the contract states that
+// purchase tokens are structurally impossible to carry across this boundary,
+// and the reference is the same digest a client would send.
+type serverObservationPayload struct {
+	ObservationID                  string                          `json:"observationId"`
+	SubmissionID                   string                          `json:"submissionId"`
+	ProviderID                     string                          `json:"providerId"`
+	StorePlatform                  string                          `json:"storePlatform"`
+	TransactionReference           transactionReference            `json:"transactionReference"`
+	ProviderOrderReference         *providerOrderReference         `json:"providerOrderReference,omitempty"`
+	SourceAuthority                string                          `json:"sourceAuthority"`
+	TrustBasis                     string                          `json:"trustBasis"`
+	ReceivedAt                     string                          `json:"receivedAt"`
+	ProviderReportedAt             string                          `json:"providerReportedAt,omitempty"`
+	ProviderNotificationReference  string                          `json:"providerNotificationReference,omitempty"`
+	StoreEnvironmentClassification *storeEnvironmentClassification `json:"storeEnvironmentClassification,omitempty"`
+	Correlation                    *observationCorrelation         `json:"correlation,omitempty"`
+	OriginatingObservationID       string                          `json:"originatingObservationId,omitempty"`
+}
+
+// contract vocabulary the transport enforces before the service is called.
+const (
+	recordTypeClientObservation = "clientTransactionObservation"
+	recordTypeServerObservation = "serverTransactionObservation"
+
+	storePlatformApple  = "apple_app_store"
+	storePlatformGoogle = "google_play"
+
+	authorityClientObservation = "client_observation"
+	authorityTrustedServer     = "trusted_server_observation"
+)
+
+var contractIdentifier = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._:-]*$`)
+
+func validIdentifier(value string) bool {
+	return len(value) >= 1 && len(value) <= 128 && contractIdentifier.MatchString(value)
+}
+
+// validateReference enforces the contract's storePlatformReferenceAlignment: an
+// Apple record carries a decimal transaction id and no Google order reference;
+// a Google record carries a 64-character lowercase hex token digest. Mosaic
+// checks it rather than trusting the sender, because the alignment is what stops
+// an Android digest being validated against Apple's API.
+func validateReference(platform string, reference transactionReference, order *providerOrderReference) string {
+	switch platform {
+	case storePlatformApple:
+		if reference.ReferenceKind != billing.ReferenceAppStoreTransactionID {
+			return billing.CodeReferenceKindUnsupported
+		}
+		if order != nil {
+			return billing.CodeProviderReferenceMalformed
+		}
+		if len(reference.Value) < 1 || len(reference.Value) > 24 || !isDecimalString(reference.Value) {
+			return billing.CodeProviderReferenceMalformed
+		}
+	case storePlatformGoogle:
+		if reference.ReferenceKind != billing.ReferenceGooglePlayTokenDigest {
+			return billing.CodeReferenceKindUnsupported
+		}
+		if _, ok := billing.ValidHexDigest(reference.Value); !ok {
+			return billing.CodeProviderReferenceMalformed
+		}
+		if order != nil {
+			if order.ReferenceKind != billing.ReferenceGooglePlayOrderID || !validIdentifier(order.Value) {
+				return billing.CodeProviderReferenceMalformed
+			}
+		}
+	default:
+		return billing.CodeProviderReferenceMalformed
 	}
-	if when, err := time.Parse(time.RFC3339, strings.TrimSpace(v.ObservedAt)); err == nil {
-		observation.ObservedAt = when.UTC()
+	return ""
+}
+
+func isDecimalString(value string) bool {
+	if value == "" {
+		return false
+	}
+	for _, r := range value {
+		if r < '0' || r > '9' {
+			return false
+		}
+	}
+	return true
+}
+
+func (p clientObservationPayload) validate() string {
+	for _, id := range []string{p.ObservationID, p.SubmissionID, p.ProviderID} {
+		if !validIdentifier(id) {
+			return billing.CodeInvalidIdentifier
+		}
+	}
+	// sourceAuthority must match what this endpoint's authentication actually
+	// proves. A public SDK key proves only that a client sent the document, so
+	// any higher authority claimed in the envelope is refused rather than
+	// quietly downgraded.
+	if p.SourceAuthority != authorityClientObservation {
+		return billing.CodeAuthorityNotAllowed
+	}
+	if p.Context.Platform == "" || p.Context.SDKFamily == "" || p.Context.SDKVersion == "" {
+		return billing.CodeObservationSchemaInvalid
+	}
+	if !contractTimestampValid(p.ObservedAt) {
+		return billing.CodeInvalidTimestamp
+	}
+	return validateReference(p.StorePlatform, p.TransactionReference, p.ProviderOrderReference)
+}
+
+func (p serverObservationPayload) validate() string {
+	for _, id := range []string{p.ObservationID, p.SubmissionID, p.ProviderID} {
+		if !validIdentifier(id) {
+			return billing.CodeInvalidIdentifier
+		}
+	}
+	// A Mosaic secret server key proves a trusted app backend sent the
+	// document. It does not prove a provider signed anything, so
+	// provider_notification, reconciliation_discovery, and manual_revalidation
+	// — which are authorities only Mosaic's own pipeline may author — are
+	// refused on this endpoint.
+	if p.SourceAuthority != authorityTrustedServer {
+		return billing.CodeAuthorityNotAllowed
+	}
+	if p.TrustBasis == "" {
+		return billing.CodeObservationSchemaInvalid
+	}
+	if !contractTimestampValid(p.ReceivedAt) {
+		return billing.CodeInvalidTimestamp
+	}
+	if p.StoreEnvironmentClassification != nil {
+		classification := p.StoreEnvironmentClassification
+		switch classification.Classification {
+		case "sandbox", "production", "unclassified":
+		default:
+			return billing.CodeObservationSchemaInvalid
+		}
+		if classification.Basis == "unknown" && classification.Classification != "unclassified" {
+			return billing.CodeObservationSchemaInvalid
+		}
+	}
+	return validateReference(p.StorePlatform, p.TransactionReference, p.ProviderOrderReference)
+}
+
+var contractTimestamp = regexp.MustCompile(`^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(?:\.[0-9]{1,6})?Z$`)
+
+func contractTimestampValid(value string) bool {
+	if !contractTimestamp.MatchString(value) {
+		return false
+	}
+	_, err := time.Parse(time.RFC3339, value)
+	return err == nil
+}
+
+func (p clientObservationPayload) toObservation() billing.Observation {
+	observation := billing.Observation{
+		SubmissionID:  p.SubmissionID,
+		ReferenceKind: p.TransactionReference.ReferenceKind,
+		Reference:     p.TransactionReference.Value,
+		// Classification comes only from server-side validation.
+		StoreEnvironment: "unclassified",
+		ObservedAt:       parseContractTime(p.ObservedAt),
+	}
+	if p.ProviderOrderReference != nil {
+		observation.OrderReference = p.ProviderOrderReference.Value
 	}
 	return observation
 }
 
-func (h *Handler) clientObservation(w http.ResponseWriter, r *http.Request) {
-	if !h.allow(w, r) {
-		return
+func (p serverObservationPayload) toObservation() billing.Observation {
+	observation := billing.Observation{
+		SubmissionID:     p.SubmissionID,
+		ReferenceKind:    p.TransactionReference.ReferenceKind,
+		Reference:        p.TransactionReference.Value,
+		StoreEnvironment: "unclassified",
+		ObservedAt:       parseContractTime(p.ReceivedAt),
 	}
-	var request observationRequest
-	if !decode(w, r, &request) {
-		return
+	if p.ProviderOrderReference != nil {
+		observation.OrderReference = p.ProviderOrderReference.Value
 	}
-	// The untrusted endpoint never accepts a raw purchase token. The field is
-	// cleared rather than rejected so a well-meaning SDK that sends one is not
-	// broken, but the value can never reach storage from this surface.
-	request.PurchaseToken = ""
+	if p.StoreEnvironmentClassification != nil {
+		observation.StoreEnvironment = p.StoreEnvironmentClassification.Classification
+	}
+	return observation
+}
 
-	result, err := h.service.SubmitClientObservation(r.Context(), bearer(r), request.toObservation(), correlationID(r))
-	if err != nil {
-		writeError(w, r, err)
+func parseContractTime(value string) time.Time {
+	if when, err := time.Parse(time.RFC3339, strings.TrimSpace(value)); err == nil {
+		return when.UTC()
+	}
+	return time.Time{}
+}
+
+func (h *Handler) clientObservation(w http.ResponseWriter, r *http.Request) {
+	body, submissionID, ok := h.readObservation(w, r)
+	if !ok {
 		return
 	}
-	response.Accepted(w, r, result)
+	if !h.allow(w, r, submissionID) {
+		return
+	}
+	envelope, code := decodeEnvelope[clientObservationPayload](body, recordTypeClientObservation)
+	if code == "" {
+		code = envelope.Payload.validate()
+	}
+	if code != "" {
+		writeSubmission(w, billing.Reject(submissionID, h.now(), code))
+		return
+	}
+	result, err := h.service.SubmitClientObservation(r.Context(), bearer(r), envelope.Payload.toObservation(), correlationID(r))
+	if err != nil {
+		h.writeSubmissionError(w, r, submissionID, err)
+		return
+	}
+	writeSubmission(w, result)
 }
 
 func (h *Handler) serverObservation(w http.ResponseWriter, r *http.Request) {
-	if !h.allow(w, r) {
+	body, submissionID, ok := h.readObservation(w, r)
+	if !ok {
 		return
 	}
-	var request observationRequest
-	if !decode(w, r, &request) {
+	if !h.allow(w, r, submissionID) {
 		return
 	}
-	result, err := h.service.SubmitServerObservation(r.Context(), bearer(r), request.toObservation(), correlationID(r))
+	envelope, code := decodeEnvelope[serverObservationPayload](body, recordTypeServerObservation)
+	if code == "" {
+		code = envelope.Payload.validate()
+	}
+	if code != "" {
+		writeSubmission(w, billing.Reject(submissionID, h.now(), code))
+		return
+	}
+	result, err := h.service.SubmitServerObservation(r.Context(), bearer(r), envelope.Payload.toObservation(), correlationID(r))
 	if err != nil {
-		writeError(w, r, err)
+		h.writeSubmissionError(w, r, submissionID, err)
 		return
 	}
-	response.Accepted(w, r, result)
+	writeSubmission(w, result)
 }
 
-func (h *Handler) allow(w http.ResponseWriter, r *http.Request) bool {
-	if h.ipLimiter == nil {
+// readObservation bounds and buffers the body, then leniently peeks the
+// submission id.
+//
+// The peek exists because every response shape in the contract requires
+// submissionId, including rejections: a client that cannot correlate a
+// rejection cannot drain its queue. The peek is tolerant by design and its
+// result is only ever echoed back, never trusted — the strict decode that
+// follows is what actually accepts the document.
+func (h *Handler) readObservation(w http.ResponseWriter, r *http.Request) ([]byte, string, bool) {
+	if encoding := r.Header.Get("Content-Encoding"); encoding != "" && encoding != "identity" {
+		writeSubmission(w, billing.Reject("unknown", h.now(), billing.CodeObservationSchemaInvalid))
+		return nil, "", false
+	}
+	r.Body = http.MaxBytesReader(w, r.Body, billing.MaxObservationBytes)
+	body, err := io.ReadAll(r.Body)
+	if err != nil {
+		writeSubmission(w, billing.Reject("unknown", h.now(), billing.CodeObservationTooLarge))
+		return nil, "", false
+	}
+	return body, peekSubmissionID(body), true
+}
+
+// decodeEnvelope strictly decodes one contract record.
+//
+// The envelope is inspected before the payload is interpreted, in two passes.
+// That order matters: a record of the wrong type or the wrong contract version
+// would otherwise fail on whichever payload member happened to be unknown, and
+// the caller would be told "unknown_field" when the real answer is "this
+// document does not belong on this endpoint".
+func decodeEnvelope[T any](body []byte, expectedRecordType string) (observationEnvelope[T], string) {
+	var envelope observationEnvelope[T]
+
+	var outer observationEnvelope[json.RawMessage]
+	decoder := json.NewDecoder(bytes.NewReader(body))
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&outer); err != nil {
+		if strings.Contains(err.Error(), "unknown field") {
+			return envelope, billing.CodeUnknownField
+		}
+		return envelope, billing.CodeObservationSchemaInvalid
+	}
+	// Trailing JSON would let a caller smuggle a second document past the first.
+	if err := decoder.Decode(&struct{}{}); !errors.Is(err, io.EOF) {
+		return envelope, billing.CodeObservationSchemaInvalid
+	}
+	if outer.BillingIngestionContractVersion != billing.BillingContractVersion {
+		return envelope, "unsupported_contract_version"
+	}
+	if outer.RecordType != expectedRecordType {
+		// Posting a server record to the public endpoint, or the reverse, is a
+		// record-type error rather than an authority error.
+		return envelope, "unsupported_record_type"
+	}
+	envelope.BillingIngestionContractVersion = outer.BillingIngestionContractVersion
+	envelope.RecordType = outer.RecordType
+
+	payloadDecoder := json.NewDecoder(bytes.NewReader(outer.Payload))
+	payloadDecoder.DisallowUnknownFields()
+	if err := payloadDecoder.Decode(&envelope.Payload); err != nil {
+		// An unknown field is reported distinctly: it is how a client learns it
+		// sent something the contract forbids — a Store Environment assertion,
+		// for example — rather than seeing a generic schema error.
+		if strings.Contains(err.Error(), "unknown field") {
+			return envelope, billing.CodeUnknownField
+		}
+		return envelope, billing.CodeObservationSchemaInvalid
+	}
+	return envelope, ""
+}
+
+// peekSubmissionID reads submissionId without strict decoding.
+func peekSubmissionID(body []byte) string {
+	var peek struct {
+		Payload struct {
+			SubmissionID string `json:"submissionId"`
+		} `json:"payload"`
+	}
+	if json.Unmarshal(body, &peek) == nil && validIdentifier(peek.Payload.SubmissionID) {
+		return peek.Payload.SubmissionID
+	}
+	return "unknown"
+}
+
+// writeSubmission emits the contract record envelope.
+//
+// It uses response.Representation rather than response.Accepted because the
+// wire contract here is the Billing Ingestion Contract record, not the
+// dashboard data envelope: an SDK must decode one platform-neutral shape.
+func writeSubmission(w http.ResponseWriter, result billing.SubmissionResult) {
+	status := http.StatusAccepted
+	switch result.Status {
+	case billing.SubmissionDuplicate:
+		status = http.StatusOK
+	case billing.SubmissionPermanentlyRejected:
+		status = http.StatusUnprocessableEntity
+	case billing.SubmissionRetryableFailure:
+		status = http.StatusServiceUnavailable
+		if result.Code == billing.CodeRateLimited {
+			status = http.StatusTooManyRequests
+		}
+		if result.RetryAfterSeconds > 0 {
+			w.Header().Set("Retry-After", strconv.Itoa(result.RetryAfterSeconds))
+		}
+	}
+	encoded, err := json.Marshal(result.Envelope())
+	if err != nil {
+		// The envelope is built from bounded constants and validated
+		// identifiers, so this cannot carry caller content.
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+	response.Representation(w, status, "application/json", encoded)
+}
+
+// writeSubmissionError maps a service failure onto the contract shape.
+// Authentication is the one outcome that is not a submission result: there is
+// no authenticated tenant to answer on behalf of.
+func (h *Handler) writeSubmissionError(w http.ResponseWriter, r *http.Request, submissionID string, err error) {
+	switch {
+	case errors.Is(err, billing.ErrUnauthenticated):
+		writeError(w, r, err)
+	case errors.Is(err, billing.ErrUnavailable):
+		writeSubmission(w, billing.SubmissionResult{
+			SubmissionID: submissionID, ReceivedAt: billing.ContractTimestamp(h.now()),
+			Status: billing.SubmissionRetryableFailure, Code: billing.CodeStorageUnavailable,
+			RetryAfterSeconds: 30,
+		})
+	case errors.Is(err, billing.ErrInvalid):
+		writeSubmission(w, billing.Reject(submissionID, h.now(), billing.CodeObservationSchemaInvalid))
+	default:
+		writeError(w, r, err)
+	}
+}
+
+func (h *Handler) now() time.Time {
+	if h.service != nil {
+		return h.service.Now()
+	}
+	return time.Now().UTC()
+}
+
+func (h *Handler) allow(w http.ResponseWriter, r *http.Request, submissionID string) bool {
+	if h.ipLimiter != nil {
+		if ok, retry := h.ipLimiter.Allow("ip:" + httpmiddleware.ClientIP(r)); !ok {
+			writeSubmission(w, billing.RateLimited(submissionID, h.now(), retry))
+			return false
+		}
+	}
+	if h.keyLimiter == nil {
 		return true
 	}
-	key := bearer(r)
-	if ok, retry := h.keyLimiter.Allow("key:" + digestKey(key)); !ok {
-		w.Header().Set("Retry-After", retryHeader(retry))
-		writeError(w, r, billing.ErrRateLimited)
+	if ok, retry := h.keyLimiter.Allow("key:" + digestKey(bearer(r))); !ok {
+		// Shedding is reported in the contract shape, with a retry hint, so the
+		// SDK queue backs off rather than treating it as a decode failure.
+		writeSubmission(w, billing.RateLimited(submissionID, h.now(), retry))
 		return false
 	}
 	return true
@@ -705,17 +1096,6 @@ func bearer(r *http.Request) string {
 		return strings.TrimSpace(value[7:])
 	}
 	return ""
-}
-
-func retryHeader(value time.Duration) string {
-	seconds := int(value.Round(time.Second) / time.Second)
-	if seconds < 1 {
-		seconds = 1
-	}
-	if seconds > 300 {
-		seconds = 300
-	}
-	return strconv.Itoa(seconds)
 }
 
 // writeError maps billing errors onto HTTP.

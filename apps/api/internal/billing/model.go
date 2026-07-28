@@ -69,14 +69,49 @@ const (
 	OutcomePermanentlyFailed = "permanently_failed"
 )
 
-// Submission outcomes returned to an observation caller. There is deliberately
-// no member meaning "validated": an observation endpoint cannot honestly report
-// that, because validation has not happened yet when the response is written.
+// Submission statuses returned to an observation caller, matching the frozen
+// Billing Ingestion Contract v1 status set verbatim. There is deliberately no
+// member meaning validated, verified, confirmed, or entitled: an observation
+// endpoint cannot honestly report any of those, because validation has not
+// happened when the response is written.
 const (
 	SubmissionAccepted            = "accepted_for_validation"
 	SubmissionDuplicate           = "duplicate"
 	SubmissionPermanentlyRejected = "permanently_rejected"
 	SubmissionRetryableFailure    = "retryable_failure"
+)
+
+// Permanent submission codes. Resubmitting the identical document cannot
+// succeed. The vocabulary is the contract's `permanentCode` enum; a code outside
+// it would fail schema validation in every SDK that checks, so these constants
+// exist rather than free-form strings.
+const (
+	CodeObservationSchemaInvalid   = "observation_schema_invalid"
+	CodeUnknownField               = "unknown_field"
+	CodeInvalidIdentifier          = "invalid_identifier"
+	CodeInvalidTimestamp           = "invalid_timestamp"
+	CodeObservationTooLarge        = "observation_too_large"
+	CodeProviderReferenceMalformed = "provider_reference_malformed"
+	CodeReferenceKindUnsupported   = "reference_kind_not_supported_for_platform"
+	CodeSensitiveValueRejected     = "sensitive_value_rejected"
+	CodeAuthorityNotAllowed        = "authority_not_allowed"
+	CodeBillingNotEnabled          = "billing_not_enabled_for_environment"
+	CodeObservationIDConflict      = "observation_id_conflict"
+)
+
+// Retryable submission codes. Transient; resubmit the identical document later.
+const (
+	CodeRateLimited           = "rate_limited"
+	CodeStorageUnavailable    = "storage_temporarily_unavailable"
+	CodeServiceUnavailable    = "service_temporarily_unavailable"
+	CodeIngestionTimeout      = "ingestion_timeout"
+	CodeValidationBacklogFull = "validation_backlog_saturated"
+)
+
+// SubmissionRecordType and BillingContractVersion identify the response record.
+const (
+	BillingContractVersion = "1"
+	SubmissionRecordType   = "observationSubmissionResult"
 )
 
 // Reference kinds a client may submit. The discriminator resolves the
@@ -345,12 +380,18 @@ type TransactionFact struct {
 
 // QuarantineRecord is one input that cannot safely proceed.
 type QuarantineRecord struct {
-	ID                   string     `json:"id"`
-	ProjectID            string     `json:"projectId"`
-	EnvironmentID        string     `json:"environmentId"`
-	RawInputID           string     `json:"rawInputId"`
-	ApplicationID        string     `json:"applicationId,omitempty"`
-	Provider             string     `json:"provider"`
+	ID            string `json:"id"`
+	ProjectID     string `json:"projectId"`
+	EnvironmentID string `json:"environmentId"`
+	RawInputID    string `json:"rawInputId"`
+	ApplicationID string `json:"applicationId,omitempty"`
+	Provider      string `json:"provider"`
+	// StoreEnvironment is carried from the quarantined input so the operator
+	// surface can keep sandbox and production apart. It is never empty: an
+	// input whose environment was not classified before it quarantined reports
+	// "unclassified" explicitly rather than an absent field, because a missing
+	// value on this surface reads as production to a careless eye.
+	StoreEnvironment     string     `json:"storeEnvironment"`
 	ReasonCode           string     `json:"reasonCode"`
 	Severity             string     `json:"severity"`
 	Scopes               []string   `json:"scopes"`
@@ -453,11 +494,50 @@ type Observation struct {
 	ObservedAt       time.Time
 }
 
-// SubmissionResult is the observation response.
+// SubmissionResult is the observation submission payload.
+//
+// It is the contract's `observationSubmissionResult` record verbatim, so every
+// SDK decodes one platform-neutral shape. The schema declares
+// additionalProperties:false, which is why nothing Mosaic-internal (a request
+// id, a raw input id, a queue position) may be added here.
 type SubmissionResult struct {
 	SubmissionID string `json:"submissionId"`
-	Outcome      string `json:"outcome"`
-	Code         string `json:"code,omitempty"`
+	// ReceivedAt is when Mosaic durably recorded the submission, in the
+	// contract's UTC timestamp form.
+	ReceivedAt string `json:"receivedAt"`
+	Status     string `json:"status"`
+	// Code is required for permanently_rejected and retryable_failure and
+	// forbidden for the other two statuses.
+	Code string `json:"code,omitempty"`
+	// RetryAfterSeconds appears only on retryable_failure.
+	RetryAfterSeconds int `json:"retryAfterSeconds,omitempty"`
+	// EstimatedValidationDelaySeconds appears only on accepted_for_validation.
+	// It is advisory: it says when validation is likely to run, never that it
+	// succeeded.
+	EstimatedValidationDelaySeconds int `json:"estimatedValidationDelaySeconds,omitempty"`
+}
+
+// SubmissionEnvelope wraps a submission result in the contract record envelope.
+type SubmissionEnvelope struct {
+	BillingIngestionContractVersion string           `json:"billingIngestionContractVersion"`
+	RecordType                      string           `json:"recordType"`
+	Payload                         SubmissionResult `json:"payload"`
+}
+
+// Envelope renders the result as the contract record readers expect.
+func (result SubmissionResult) Envelope() SubmissionEnvelope {
+	return SubmissionEnvelope{
+		BillingIngestionContractVersion: BillingContractVersion,
+		RecordType:                      SubmissionRecordType,
+		Payload:                         result,
+	}
+}
+
+// ContractTimestamp renders an instant in the contract's UTC timestamp form:
+// RFC 3339 with millisecond precision and a literal Z, which is what the
+// schema pattern accepts.
+func ContractTimestamp(value time.Time) string {
+	return value.UTC().Format("2006-01-02T15:04:05.000Z")
 }
 
 // ValidationJob is one leased unit of validation work.

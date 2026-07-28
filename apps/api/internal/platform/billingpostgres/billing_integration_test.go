@@ -459,3 +459,85 @@ func TestBillingReadsRequireOwnerOrAdminMembership(t *testing.T) {
 		t.Fatal("an unauthenticated caller was not refused")
 	}
 }
+
+// The quarantine surface must keep sandbox and production visibly apart, and it
+// must never present an unknown environment as an absent one: a missing value
+// on an operator screen reads as production to a careless eye. The record does
+// not carry its own copy of the column — it is always about exactly one input,
+// and duplicating it would create a second place for the two to disagree — so
+// this pins that the join actually happens and that the fallback is explicit.
+func TestQuarantineRecordsCarryStoreEnvironment(t *testing.T) {
+	pool, ctx := testPool(t)
+	repository := New(pool)
+	projectID, environmentID, applicationID := seed(t, ctx, pool, "quarenv")
+	now := time.Now().UTC()
+
+	var organizationID string
+	if err := pool.QueryRow(ctx, `SELECT organization_id FROM projects WHERE id=$1`, projectID).
+		Scan(&organizationID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := pool.Exec(ctx,
+		`INSERT INTO organization_members(organization_id,actor_id,role,created_at,updated_at)
+		 VALUES ($1,'actor_owner_quarenv','owner',$2,$2)
+		 ON CONFLICT (organization_id,actor_id) DO UPDATE SET role=EXCLUDED.role`,
+		organizationID, now); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		cleanupContext, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+		defer cancel()
+		_, _ = pool.Exec(cleanupContext,
+			`DELETE FROM organization_members WHERE organization_id=$1 AND actor_id='actor_owner_quarenv'`, organizationID)
+	})
+
+	// A production-classified input, quarantined at intake.
+	input := sampleInput(projectID, environmentID, applicationID, "fixture-uuid-quarenv")
+	input.IngestionStatus = billing.IngestQuarantined
+	if _, err := repository.PersistRawInput(ctx, input, false, now); err != nil {
+		t.Fatal(err)
+	}
+
+	// An input whose environment could not be classified before it quarantined.
+	unclassified := sampleInput(projectID, environmentID, applicationID, "fixture-uuid-quarenv-unclassified")
+	unclassified.StoreEnvironment = billing.StoreUnclassified
+	unclassified.AuthenticationResult = billing.AuthFailed
+	unclassified.IngestionStatus = billing.IngestQuarantined
+	if _, err := repository.PersistRawInput(ctx, unclassified, false, now); err != nil {
+		t.Fatal(err)
+	}
+
+	actor := billing.Actor{ID: "actor_owner_quarenv"}
+	page, err := repository.ListQuarantine(ctx, actor, projectID, environmentID, billing.ListOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(page.Items) != 2 {
+		t.Fatalf("%d quarantine records, want 2", len(page.Items))
+	}
+	seen := map[string]string{}
+	for _, record := range page.Items {
+		if record.StoreEnvironment == "" {
+			t.Fatalf("quarantine record %s reports an empty store environment", record.ID)
+		}
+		seen[record.RawInputID] = record.StoreEnvironment
+
+		// The detail read must agree with the list read.
+		detail, err := repository.Quarantine(ctx, actor, projectID, record.ID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if detail.StoreEnvironment != record.StoreEnvironment {
+			t.Fatalf("detail reports %q but the list reports %q",
+				detail.StoreEnvironment, record.StoreEnvironment)
+		}
+	}
+	for rawInputID, environment := range seen {
+		if environment != billing.StoreProduction && environment != billing.StoreUnclassified {
+			t.Fatalf("raw input %s reported store environment %q", rawInputID, environment)
+		}
+	}
+	if len(seen) != 2 {
+		t.Fatalf("expected two distinct inputs, got %d", len(seen))
+	}
+}

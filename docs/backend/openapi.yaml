@@ -1708,33 +1708,56 @@ paths:
       operationId: submitTransactionObservation
       tags: [Billing Ingestion]
       description: |
-        Untrusted client report of a purchase reference. A Transaction Observation is a
-        trigger, never proof: the response cannot and does not claim validation, and the
-        outcome enumeration has no member meaning validated. Every reference is bounded by
-        safeProviderCode, which structurally excludes a JWS or a raw Google purchase token.
-        This endpoint may return 429; SDKs hold a durable queue and retry.
-      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/TransactionObservationRequest" } } } }
+        Untrusted client report of a purchase reference, submitted as the Billing Ingestion
+        Contract v1 clientTransactionObservation record. A Transaction Observation is a trigger,
+        never proof: the response cannot and does not claim validation, and the status set has no
+        member meaning validated, verified, confirmed, or entitled.
+
+        A client may not classify the Store Environment. The contract record carries no such
+        member and is additionalProperties:false, so a client-asserted storeEnvironment is
+        rejected with `unknown_field` rather than ignored — a device can be made to say anything,
+        and accepting its classification would let a sandbox purchase present itself as
+        production. Classification comes only from server-side validation of the store's own
+        response.
+
+        sourceAuthority must be `client_observation`, matching what a public SDK key actually
+        proves; a higher claimed authority is refused with `authority_not_allowed`. The
+        reference kind must align with storePlatform, so an Android digest can never be
+        validated against Apple's API.
+
+        Every outcome, including a rejection, is returned as the contract's
+        observationSubmissionResult record so an SDK decodes one shape. This endpoint may return
+        429; SDKs hold a durable queue and retry.
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/ClientTransactionObservationRecord" } } } }
       responses:
-        "202": { $ref: "#/components/responses/SubmissionResult" }
+        "202": { $ref: "#/components/responses/SubmissionAccepted" }
+        "200": { $ref: "#/components/responses/SubmissionDuplicate" }
         "401": { $ref: "#/components/responses/Error" }
-        "422": { $ref: "#/components/responses/Error" }
-        "429": { $ref: "#/components/responses/Error" }
+        "422": { $ref: "#/components/responses/SubmissionRejected" }
+        "429": { $ref: "#/components/responses/SubmissionRetryable" }
+        "503": { $ref: "#/components/responses/SubmissionRetryable" }
   /v1/billing/server/observations:
     post:
       security: [{ ServerSecretKey: [] }]
       operationId: submitServerTransactionObservation
       tags: [Billing Ingestion]
       description: |
-        Trusted app-backend observation, authenticated by a Mosaic secret server key. It may
-        carry a full Google purchase token, which is encrypted on receipt and never logged.
+        Trusted app-backend observation, authenticated by a Mosaic secret server key. Unlike
+        the public SDK endpoint it may classify the Store Environment and may carry a full
+        Google purchase token, which is encrypted on receipt and never logged, because the
+        caller is a server Mosaic issued a secret key to rather than a device.
+
         A trusted caller is more accountable, not more authoritative: the observation is still
-        subject to complete provider validation.
-      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/TransactionObservationRequest" } } } }
+        subject to complete provider validation. Responses use the same
+        observationSubmissionResult record as the public endpoint.
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/ServerTransactionObservationRecord" } } } }
       responses:
-        "202": { $ref: "#/components/responses/SubmissionResult" }
+        "202": { $ref: "#/components/responses/SubmissionAccepted" }
+        "200": { $ref: "#/components/responses/SubmissionDuplicate" }
         "401": { $ref: "#/components/responses/Error" }
-        "422": { $ref: "#/components/responses/Error" }
-        "429": { $ref: "#/components/responses/Error" }
+        "422": { $ref: "#/components/responses/SubmissionRejected" }
+        "429": { $ref: "#/components/responses/SubmissionRetryable" }
+        "503": { $ref: "#/components/responses/SubmissionRetryable" }
   /v1/projects/{projectId}/billing/settings:
     put:
       operationId: updateBillingSettings
@@ -1958,7 +1981,10 @@ components:
     AnalyticsLocale: { in: query, name: locale, schema: { type: string } }
     AnalyticsApplicationVersion: { in: query, name: applicationVersion, schema: { type: string } }
   responses:
-    SubmissionResult: { description: "Observation submission outcome. There is deliberately no member meaning validated: the store has not been consulted when this response is written.", content: { application/json: { schema: { type: object, properties: { data: { $ref: "#/components/schemas/SubmissionResult" } } } } } }
+    SubmissionAccepted: { description: "The observation is well formed and queued for validation. Nothing more: the store has not been consulted when this response is written.", content: { application/json: { schema: { $ref: "#/components/schemas/ObservationSubmissionResultRecord" } } } }
+    SubmissionDuplicate: { description: "The submission was already recorded. A duplicate is idempotent, not an error.", content: { application/json: { schema: { $ref: "#/components/schemas/ObservationSubmissionResultRecord" } } } }
+    SubmissionRejected: { description: "Resubmitting the identical document cannot succeed. The SDK queue should drop it.", content: { application/json: { schema: { $ref: "#/components/schemas/ObservationSubmissionResultRecord" } } } }
+    SubmissionRetryable: { description: "Transient. Resubmit the identical document later; Retry-After carries the hint.", content: { application/json: { schema: { $ref: "#/components/schemas/ObservationSubmissionResultRecord" } } } }
     StoreServerCredential: { description: Store Server Credential without secret material or endpoint URL., content: { application/json: { schema: { type: object, properties: { data: { $ref: "#/components/schemas/StoreServerCredential" } } } } } }
     StoreServerCredentialWithEndpoint: { description: "Store Server Credential including the one-time notification endpoint URL. This is the only response that ever carries it.", content: { application/json: { schema: { type: object, properties: { data: { $ref: "#/components/schemas/StoreServerCredentialWithEndpoint" } } } } } }
     QuarantineRecord: { description: Quarantine Record., content: { application/json: { schema: { type: object, properties: { data: { $ref: "#/components/schemas/QuarantineRecord" } } } } } }
@@ -2085,33 +2111,161 @@ components:
     ReleaseList: { description: Configuration Release history, content: { application/json: { schema: { $ref: "#/components/schemas/ReleaseListEnvelope" } } } }
     PublishResult: { description: Publication result and nonblocking warnings, content: { application/json: { schema: { $ref: "#/components/schemas/PublishResultEnvelope" } } } }
   schemas:
-    TransactionObservationRequest:
+    TransactionReference:
       type: object
       additionalProperties: false
-      required: [submissionId, referenceKind, reference]
+      required: [referenceKind, value]
       description: |
-        A Transaction Observation is a trigger, never proof. referenceKind discriminates how
-        reference must be read, which resolves the iOS-prefix and Android-digest ambiguity.
+        The provider reference a validation is performed against. Raw receipts, signed payloads,
+        JWS representations, purchase tokens, and service-account material are structurally
+        impossible to carry here: an Apple value is at most 24 decimal digits and a Google value
+        is exactly 64 lowercase hexadecimal characters.
       properties:
-        submissionId: { type: string, maxLength: 128, description: Deterministic client-computed identifier. The deduplication key. }
-        referenceKind: { type: string, enum: [app_store_transaction_id, google_play_token_digest, google_play_order_id] }
-        reference:
-          type: string
-          maxLength: 128
-          description: |
-            Bounded by safeProviderCode (printable ASCII, at most 128 runes), which structurally
-            excludes a JWS or a raw Google purchase token. iOS submits the raw decimal StoreKit
-            transaction id; Android submits the SHA-256 digest of the purchase token as lowercase hex.
-        providerOrderReference: { type: string, maxLength: 128, description: "Optional Google order id. Never a deduplication key: promotional purchases have none." }
-        purchaseToken: { type: string, description: "Trusted server endpoint only. Encrypted on receipt, never logged, never returned. Ignored by the public SDK endpoint." }
-        storeEnvironment: { type: string, enum: [sandbox, production, unclassified] }
-        observedAt: { type: string, format: date-time }
-    SubmissionResult:
+        referenceKind: { type: string, enum: [app_store_transaction_id, google_play_token_digest] }
+        value: { type: string, maxLength: 64 }
+    ProviderOrderReference:
       type: object
+      additionalProperties: false
+      required: [referenceKind, value]
+      description: "Optional Google Play order reference. A join handle only; never the identity of a Transaction Fact, because promotional purchases have none."
       properties:
-        submissionId: { type: string }
-        outcome: { type: string, enum: [accepted_for_validation, duplicate, permanently_rejected, retryable_failure] }
-        code: { type: string }
+        referenceKind: { type: string, const: google_play_order_id }
+        value: { type: string, maxLength: 128 }
+    ObservationContext:
+      type: object
+      additionalProperties: false
+      required: [platform, sdkFamily, sdkVersion]
+      description: "SDK context. It carries no Organization, Project, Environment, or Application identity: tenant scope is derived from the authenticated key."
+      properties:
+        platform: { type: string, enum: [ios, android] }
+        sdkFamily: { type: string, enum: [flutter, ios, android] }
+        sdkVersion: { type: string, maxLength: 64 }
+        operatingSystemVersion: { type: string, maxLength: 64 }
+        applicationVersion: { type: string, maxLength: 64 }
+    ObservationCorrelation:
+      type: object
+      additionalProperties: false
+      minProperties: 1
+      description: Correlation to Analytics Event 1/2 through the existing opaque handles only.
+      properties:
+        purchaseAttemptId: { type: string, maxLength: 128 }
+        providerOperationId: { type: string, maxLength: 128 }
+        providerUpdateId: { type: string, maxLength: 128 }
+    StoreEnvironmentClassification:
+      type: object
+      additionalProperties: false
+      required: [classification, basis]
+      description: "Server-derived Store Environment classification. A client never asserts it: no observation submitted by a client carries this property at all."
+      properties:
+        classification: { type: string, enum: [sandbox, production, unclassified] }
+        basis: { type: string, enum: [provider_asserted, provider_endpoint, signature_environment, mosaic_environment_policy, unknown] }
+    ClientTransactionObservationRecord:
+      type: object
+      additionalProperties: false
+      required: [billingIngestionContractVersion, recordType, payload]
+      description: |
+        The Billing Ingestion Contract v1 clientTransactionObservation record, accepted verbatim
+        so one platform-neutral document travels from four SDKs to one server.
+      properties:
+        billingIngestionContractVersion: { type: string, const: "1" }
+        recordType: { type: string, const: clientTransactionObservation }
+        payload: { $ref: "#/components/schemas/ClientTransactionObservation" }
+    ClientTransactionObservation:
+      type: object
+      additionalProperties: false
+      required: [observationId, submissionId, providerId, storePlatform, transactionReference, observedAt, sourceAuthority, context]
+      description: |
+        An untrusted claim that a transaction may exist. It carries no receipt, no signed
+        payload, no purchase token, no credential, no price, no entitlement assertion, no tenant
+        identity, and no Store Environment assertion.
+
+        There is deliberately no storeEnvironmentClassification member, and additionalProperties
+        is false, so a client-asserted Store Environment is rejected with `unknown_field` rather
+        than ignored. Classification comes only from server-side validation.
+
+        sourceAuthority must be `client_observation`: a public SDK key proves only that a client
+        sent the document, and any higher authority claimed here is refused with
+        `authority_not_allowed`.
+      properties:
+        observationId: { type: string, maxLength: 128 }
+        submissionId: { type: string, maxLength: 128, description: "Deterministic idempotency key computed by the SDK. Never derived from a timestamp, price, Product, or subject." }
+        providerId: { type: string, maxLength: 128 }
+        storePlatform: { type: string, enum: [apple_app_store, google_play] }
+        transactionReference: { $ref: "#/components/schemas/TransactionReference" }
+        providerOrderReference: { $ref: "#/components/schemas/ProviderOrderReference" }
+        observedAt: { type: string, description: "UTC timestamp, RFC 3339 with a literal Z." }
+        sourceAuthority: { type: string, const: client_observation }
+        context: { $ref: "#/components/schemas/ObservationContext" }
+        correlation: { $ref: "#/components/schemas/ObservationCorrelation" }
+        claimedMosaicProductId: { type: string, maxLength: 128, description: "A claim only. The server resolves the Mosaic Product independently; a mismatch is a diagnostic and never an override." }
+    ServerTransactionObservationRecord:
+      type: object
+      additionalProperties: false
+      required: [billingIngestionContractVersion, recordType, payload]
+      properties:
+        billingIngestionContractVersion: { type: string, const: "1" }
+        recordType: { type: string, const: serverTransactionObservation }
+        payload: { $ref: "#/components/schemas/ServerTransactionObservation" }
+    ServerTransactionObservation:
+      type: object
+      additionalProperties: false
+      required: [observationId, submissionId, providerId, storePlatform, transactionReference, sourceAuthority, trustBasis, receivedAt]
+      description: |
+        A trusted app-backend observation. It records how trust was established, never the
+        credential that established it. Like the client record it carries no purchase token: the
+        reference is the same digest a client would send.
+
+        On this endpoint sourceAuthority must be `trusted_server_observation`. A Mosaic secret
+        server key proves a trusted backend sent the document; it proves nothing about a provider
+        having signed anything, so `provider_notification`, `reconciliation_discovery`, and
+        `manual_revalidation` — authorities only Mosaic's own pipeline may author — are refused
+        with `authority_not_allowed`.
+      properties:
+        observationId: { type: string, maxLength: 128 }
+        submissionId: { type: string, maxLength: 128 }
+        providerId: { type: string, maxLength: 128 }
+        storePlatform: { type: string, enum: [apple_app_store, google_play] }
+        transactionReference: { $ref: "#/components/schemas/TransactionReference" }
+        providerOrderReference: { $ref: "#/components/schemas/ProviderOrderReference" }
+        sourceAuthority: { type: string, const: trusted_server_observation }
+        trustBasis: { type: string, enum: [provider_signature_verified, mutual_tls, provider_server_api, operator_initiated] }
+        receivedAt: { type: string }
+        providerReportedAt: { type: string }
+        providerNotificationReference: { type: string, maxLength: 128, description: Opaque provider notification identifier. Never the notification body. }
+        storeEnvironmentClassification: { $ref: "#/components/schemas/StoreEnvironmentClassification" }
+        correlation: { $ref: "#/components/schemas/ObservationCorrelation" }
+        originatingObservationId: { type: string, maxLength: 128, description: Referencing a client observation never raises that observation's authority. }
+    ObservationSubmissionResultRecord:
+      type: object
+      additionalProperties: false
+      required: [billingIngestionContractVersion, recordType, payload]
+      description: |
+        The Billing Ingestion Contract v1 observationSubmissionResult record, returned verbatim
+        by both observation endpoints so every SDK decodes one platform-neutral shape. Validated
+        against protocol/schema/billing-ingestion/v1/submission-response.schema.json.
+      properties:
+        billingIngestionContractVersion: { type: string, const: "1" }
+        recordType: { type: string, const: observationSubmissionResult }
+        payload: { $ref: "#/components/schemas/ObservationSubmissionResult" }
+    ObservationSubmissionResult:
+      type: object
+      additionalProperties: false
+      required: [submissionId, receivedAt, status]
+      description: |
+        The status set contains no member named validated, verified, confirmed, or entitled.
+        Acceptance means the observation is well formed and queued and asserts nothing about the
+        transaction being real. A reader must never grant access, unlock content, or emit a
+        provider-confirmed Analytics Event on accepted_for_validation.
+      properties:
+        submissionId: { type: string, maxLength: 128 }
+        receivedAt: { type: string, description: "UTC timestamp, RFC 3339 with a literal Z and at most microsecond precision." }
+        status: { type: string, enum: [accepted_for_validation, duplicate, permanently_rejected, retryable_failure] }
+        code:
+          type: string
+          description: Required for permanently_rejected and retryable_failure, absent otherwise.
+          enum: [observation_schema_invalid, unsupported_contract_version, unsupported_record_type, unknown_field, invalid_identifier, invalid_timestamp, observed_at_too_far_future, observation_expired, observation_too_large, provider_reference_malformed, provider_reference_too_long, reference_kind_not_supported_for_platform, credential_shaped_value_rejected, sensitive_value_rejected, tenant_field_forbidden, authority_not_allowed, unknown_provider, billing_not_enabled_for_environment, observation_id_conflict, rate_limited, storage_temporarily_unavailable, service_temporarily_unavailable, ingestion_timeout, validation_backlog_saturated]
+        retryAfterSeconds: { type: integer, minimum: 1, maximum: 86400, description: Advisory hint on retryable_failure only. }
+        estimatedValidationDelaySeconds: { type: integer, minimum: 1, maximum: 86400, description: "Advisory hint on accepted_for_validation only. Says when validation is likely to run, never that it succeeded." }
     StoreServerCredentialApplication:
       type: object
       properties:
@@ -2253,6 +2407,14 @@ components:
         rawInputId: { type: string }
         applicationId: { type: string }
         provider: { type: string, enum: [app_store, google_play] }
+        storeEnvironment:
+          type: string
+          enum: [sandbox, production, unclassified]
+          description: |
+            Store Environment of the quarantined input, always distinct from the Mosaic
+            Environment. Never absent: an input whose environment was not classified before it
+            quarantined reports `unclassified` explicitly, because a missing value on an operator
+            surface reads as production to a careless eye.
         reasonCode: { type: string, enum: [signature_invalid, application_mismatch, environment_mismatch, store_environment_mismatch, credential_unavailable, credential_revoked, product_unknown, product_ambiguous, cross_environment_mismatch, unsupported_product_type, unsupported_transaction_type, malformed_reference, input_content_conflict, replay_conflict, provider_permanently_failed, validation_exhausted] }
         severity: { type: string, enum: [warning, error, security] }
         scopes: { type: array, items: { type: string } }

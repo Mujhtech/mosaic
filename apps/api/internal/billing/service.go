@@ -350,11 +350,21 @@ func (s *Service) observeIntake(ctx context.Context, provider string, result Per
 // The response never claims validation. `accepted_for_validation` is the
 // strongest thing this endpoint can honestly say, because the store has not
 // been consulted at the point the response is written.
+//
+// A client may not classify the Store Environment. The contract's
+// clientTransactionObservation record has no such field at all, and a device
+// can be made to say anything: accepting a client assertion would let a sandbox
+// purchase present itself as production. Classification for a client
+// observation comes only from server-side validation of the store's own
+// response, so the field is forced to unclassified here regardless of what
+// reached the service.
 func (s *Service) SubmitClientObservation(ctx context.Context, rawKey string, observation Observation, correlationID string) (SubmissionResult, error) {
 	scope, err := s.repository.AuthenticateSDKKey(ctx, rawKey)
 	if err != nil {
 		return SubmissionResult{}, ErrUnauthenticated
 	}
+	observation.StoreEnvironment = StoreUnclassified
+	observation.PurchaseToken = ""
 	return s.submitObservation(ctx, scope, observation, SourceClientObservation, AuthorityClient, AuthUnauthenticated, correlationID)
 }
 
@@ -375,6 +385,8 @@ func (s *Service) submitObservation(ctx context.Context, scope ObservationScope,
 	defer span.End()
 	now := s.now()
 
+	received := ContractTimestamp(now)
+
 	enabled, err := s.repository.BillingEnabled(ctx, scope.ProjectID)
 	if err != nil {
 		return SubmissionResult{}, ErrUnavailable
@@ -382,12 +394,12 @@ func (s *Service) submitObservation(ctx context.Context, scope ObservationScope,
 	if !enabled {
 		// Off by default. A disabled Project rejects permanently so an SDK
 		// queue drains instead of retrying forever.
-		return SubmissionResult{SubmissionID: observation.SubmissionID, Outcome: SubmissionPermanentlyRejected, Code: "billing_not_enabled"}, nil
+		return rejected(observation.SubmissionID, received, CodeBillingNotEnabled), nil
 	}
 
 	provider, referenceDigest, ok := s.classifyReference(observation)
 	if !ok {
-		return SubmissionResult{SubmissionID: observation.SubmissionID, Outcome: SubmissionPermanentlyRejected, Code: "invalid_reference"}, nil
+		return rejected(observation.SubmissionID, received, CodeProviderReferenceMalformed), nil
 	}
 
 	input := RawInput{
@@ -426,7 +438,7 @@ func (s *Service) submitObservation(ctx context.Context, scope ObservationScope,
 		"storeEnvironment": input.StoreEnvironment,
 	})
 	if err != nil {
-		return SubmissionResult{SubmissionID: observation.SubmissionID, Outcome: SubmissionPermanentlyRejected, Code: "invalid_reference"}, nil
+		return rejected(observation.SubmissionID, received, CodeProviderReferenceMalformed), nil
 	}
 	input.ContentDigest = ContentDigest(body)
 	if err := s.sealBody(&input, body); err != nil {
@@ -437,18 +449,74 @@ func (s *Service) submitObservation(ctx context.Context, scope ObservationScope,
 	if err != nil {
 		// SDKs queue and retry, so a storage failure is reported as retryable
 		// rather than swallowed.
-		return SubmissionResult{SubmissionID: observation.SubmissionID, Outcome: SubmissionRetryableFailure, Code: "storage_temporarily_unavailable"}, nil
+		return SubmissionResult{
+			SubmissionID: observation.SubmissionID, ReceivedAt: received,
+			Status: SubmissionRetryableFailure, Code: CodeStorageUnavailable,
+			RetryAfterSeconds: retryableBackoffSeconds,
+		}, nil
 	}
 	s.observeIntake(ctx, provider, result)
 	switch {
 	case result.Conflicted:
-		return SubmissionResult{SubmissionID: observation.SubmissionID, Outcome: SubmissionPermanentlyRejected, Code: "submission_id_conflict"}, nil
+		// The same submission id arrived carrying different content. Accepting
+		// it would let a client overwrite an earlier observation.
+		return rejected(observation.SubmissionID, received, CodeObservationIDConflict), nil
 	case result.Status == IngestDuplicate:
-		return SubmissionResult{SubmissionID: observation.SubmissionID, Outcome: SubmissionDuplicate}, nil
+		// A duplicate is idempotent, not an error: the SDK queue retried and
+		// Mosaic already holds the submission.
+		return SubmissionResult{
+			SubmissionID: observation.SubmissionID, ReceivedAt: received, Status: SubmissionDuplicate,
+		}, nil
 	default:
-		return SubmissionResult{SubmissionID: observation.SubmissionID, Outcome: SubmissionAccepted}, nil
+		return SubmissionResult{
+			SubmissionID: observation.SubmissionID, ReceivedAt: received, Status: SubmissionAccepted,
+			EstimatedValidationDelaySeconds: estimatedValidationDelaySeconds,
+		}, nil
 	}
 }
+
+// retryableBackoffSeconds and estimatedValidationDelaySeconds are the hints the
+// contract lets a submission response carry. Both are advisory: the SDK queue
+// owns its own retry schedule and must not treat either as a guarantee.
+const (
+	retryableBackoffSeconds         = 30
+	estimatedValidationDelaySeconds = 30
+)
+
+// rejected builds a permanent rejection with a contract code.
+func rejected(submissionID, receivedAt, code string) SubmissionResult {
+	return SubmissionResult{
+		SubmissionID: submissionID, ReceivedAt: receivedAt,
+		Status: SubmissionPermanentlyRejected, Code: code,
+	}
+}
+
+// RateLimited builds the retryable_failure a caller receives when the
+// observation limiter sheds it. It lives here rather than in the handler so the
+// contract shape has exactly one construction site.
+func RateLimited(submissionID string, now time.Time, retryAfter time.Duration) SubmissionResult {
+	seconds := int(retryAfter.Round(time.Second) / time.Second)
+	if seconds < 1 {
+		seconds = 1
+	}
+	if seconds > 86400 {
+		seconds = 86400
+	}
+	return SubmissionResult{
+		SubmissionID: submissionID, ReceivedAt: ContractTimestamp(now),
+		Status: SubmissionRetryableFailure, Code: CodeRateLimited, RetryAfterSeconds: seconds,
+	}
+}
+
+// Reject builds a permanent rejection for a transport-level failure such as a
+// malformed body or an unknown field.
+func Reject(submissionID string, now time.Time, code string) SubmissionResult {
+	return rejected(submissionID, ContractTimestamp(now), code)
+}
+
+// Now exposes the service clock so the transport can stamp receivedAt on
+// responses it builds without reaching the service.
+func (s *Service) Now() time.Time { return s.now() }
 
 // classifyReference derives the provider from the reference discriminator and
 // computes the attribution digest.

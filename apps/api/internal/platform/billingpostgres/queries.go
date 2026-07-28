@@ -184,14 +184,27 @@ func (r *Repository) ListLedger(ctx context.Context, actor billing.Actor, projec
 	return paginate(items, limit, func(e billing.LedgerEntry) string { return e.ID }), nil
 }
 
-const quarantineColumns = `id, project_id, environment_id, raw_input_id, COALESCE(application_id,''), provider,
-	reason_code, severity, scopes, status, attempt_count, first_seen_at, last_attempt_at,
-	COALESCE(closing_attempt_id,''), COALESCE(superseded_by_record_id,''), closed_at, COALESCE(diagnostic_code,'')`
+// quarantineColumns joins the Store Environment back from the quarantined
+// input. The quarantine record does not carry its own copy — a record is
+// always about exactly one input, so duplicating the column would create a
+// second place for the two to disagree — but the operator surface must show it,
+// because sandbox and production must stay visibly separate everywhere.
+const quarantineColumns = `q.id, q.project_id, q.environment_id, q.raw_input_id, COALESCE(q.application_id,''), q.provider,
+	COALESCE(i.store_environment, 'unclassified'),
+	q.reason_code, q.severity, q.scopes, q.status, q.attempt_count, q.first_seen_at, q.last_attempt_at,
+	COALESCE(q.closing_attempt_id,''), COALESCE(q.superseded_by_record_id,''), q.closed_at, COALESCE(q.diagnostic_code,'')`
+
+// quarantineFrom is the shared join. LEFT JOIN rather than INNER: a record must
+// remain listable even if its input row is somehow unreachable, and the COALESCE
+// above turns that into an explicit "unclassified" instead of dropping the row.
+const quarantineFrom = `FROM billing_quarantine_records q
+	LEFT JOIN billing_raw_inputs i ON i.id = q.raw_input_id AND i.project_id = q.project_id`
 
 func scanQuarantine(row pgx.Row) (billing.QuarantineRecord, error) {
 	var record billing.QuarantineRecord
 	err := row.Scan(&record.ID, &record.ProjectID, &record.EnvironmentID, &record.RawInputID,
-		&record.ApplicationID, &record.Provider, &record.ReasonCode, &record.Severity, &record.Scopes,
+		&record.ApplicationID, &record.Provider, &record.StoreEnvironment,
+		&record.ReasonCode, &record.Severity, &record.Scopes,
 		&record.Status, &record.AttemptCount, &record.FirstSeenAt, &record.LastAttemptAt,
 		&record.ClosingAttemptID, &record.SupersededByRecordID, &record.ClosedAt, &record.DiagnosticCode)
 	return record, err
@@ -204,12 +217,12 @@ func (r *Repository) ListQuarantine(ctx context.Context, actor billing.Actor, pr
 	limit := pageLimit(options)
 	rows, err := r.pool.Query(ctx,
 		`SELECT `+quarantineColumns+`
-		 FROM billing_quarantine_records
-		 WHERE environment_id=$1 AND ($2 = '' OR id < $2)
-		   AND ($3::text = '' OR status = $3)
-		   AND ($4::text = '' OR reason_code = $4)
-		   AND ($5::text = '' OR provider = $5)
-		 ORDER BY last_attempt_at DESC, id DESC LIMIT $6`,
+		 `+quarantineFrom+`
+		 WHERE q.environment_id=$1 AND ($2 = '' OR q.id < $2)
+		   AND ($3::text = '' OR q.status = $3)
+		   AND ($4::text = '' OR q.reason_code = $4)
+		   AND ($5::text = '' OR q.provider = $5)
+		 ORDER BY q.last_attempt_at DESC, q.id DESC LIMIT $6`,
 		environmentID, cursorAfter(options), options.Status, options.ReasonCode, options.Provider, limit+1)
 	if err != nil {
 		return billing.Page[billing.QuarantineRecord]{}, fmt.Errorf("list quarantine records: %w", err)
@@ -234,7 +247,7 @@ func (r *Repository) Quarantine(ctx context.Context, actor billing.Actor, projec
 		return billing.QuarantineRecord{}, err
 	}
 	record, err := scanQuarantine(r.pool.QueryRow(ctx,
-		`SELECT `+quarantineColumns+` FROM billing_quarantine_records WHERE id=$1 AND project_id=$2`,
+		`SELECT `+quarantineColumns+` `+quarantineFrom+` WHERE q.id=$1 AND q.project_id=$2`,
 		recordID, projectID))
 	if errors.Is(err, pgx.ErrNoRows) {
 		return billing.QuarantineRecord{}, billing.ErrNotFound
