@@ -227,6 +227,20 @@ by lossy merge) is avoided structurally by four rules:
    survive reinstall, clear-data, and device changes — so a
    reinstalling user who restores resolves to the *same*
    purchase-anchored customer.
+2a. **Installation alias is evidence, never an anchor.** When the SDK
+   supplies it, the installation alias is recorded as association
+   evidence on the Billing Customer — giving purchase→install
+   attribution (a real conversion funnel) at zero proliferation cost —
+   but it never creates or selects a customer. Pre-purchase
+   usage questions ("someone is using the app and might subscribe")
+   are answered by Phase 6 analytics (`analytics_installations`,
+   sessions, funnels), not by empty billing rows; the identified-user
+   join happens at report time on the shared application-user ID value
+   (deliberately no FK — see OD-7's deletion constraint). Honest
+   residue: a purchase-anchored, never-identified customer whose
+   installation evidence never arrived has correct revenue but no
+   install attribution. Dashboard shows active installations (Phase 6)
+   and Billing Customers (9B) side by side, never conflated.
 3. **Login attaches, it does not merge.** Identifying a user appends
    an application-user alias to the existing lineage-anchored
    customer; merge is made rare by construction rather than made good.
