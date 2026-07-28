@@ -256,6 +256,261 @@ are reprojected, not only the winner: the loser is the one holding the stale sna
 no automatic-merge path. Automatic merge stays an ADR checkpoint rather than something a
 heuristic reaches on its own.
 
+## Restore and sync
+
+A restore is not one action, it is a chain: the SDK submits provider transaction references as
+observations, those become Raw Billing Inputs, validation turns them into facts, and only then
+does a projection produce a snapshot that reflects them. The `billing_restore_sync` job family
+follows the whole chain, and the outcome reported to the caller is derived from where the chain
+actually got to — never from the fact that the native restore returned.
+
+| Operation | Route | Auth |
+| --- | --- | --- |
+| Request a restore (SDK) | `POST /v1/sdk/billing/restores` | Public SDK key in `Mosaic-SDK-Key` |
+| Poll a restore (SDK) | `GET /v1/sdk/billing/restores/{restoreId}` | Public SDK key |
+| Request a restore (backend) | `POST /v1/billing/server/restores` | Secret server key |
+| Poll a restore (backend) | `GET /v1/billing/server/restores/{restoreId}` | Secret server key |
+
+**Two axes that are never merged**, matching the contract: Mosaic's `outcome` and the native
+`providerOutcome`. A native restore that succeeded while Mosaic is still validating is
+`providerOutcome: completed` with `outcome: validation_pending`. That is the honest answer, and
+being able to say it is the reason the second axis exists.
+
+`outcome` is one of `restored`, `no_additional_purchases`, `validation_pending`,
+`identity_unresolved`, `product_unresolved`, `provider_unavailable`, `failed`. Every non-definite
+one names an uncertainty reason on the same vocabulary every other entitlement surface uses.
+
+**The invariant the whole subsystem exists for: `restored` is only ever reported together with
+the accepted snapshot version that demonstrates it.** The job records a `baseline_snapshot_version`
+when it starts, and `restored` requires the customer's pointer to have moved past it. It is
+enforced three times over — a constructor that will not produce the outcome without the evidence,
+a service-level validation, and a `CHECK` constraint — because reporting restored access that no
+snapshot has yet granted is precisely the lie the contract's two-axis result was designed to
+prevent.
+
+Two deliberate choices worth stating:
+
+- **The SDK surface takes the public SDK key, not a Customer Access Token.** A token is
+  customer-bound, and `identity_unresolved` is a first-class restore outcome: a restore is exactly
+  the flow where the customer may not be known yet, so requiring a customer-bound credential
+  would make the most important case unrepresentable. Safety comes from §5a instead — the request
+  names no customer, a public key cannot select one, and identity resolves server-side from
+  validated store lineage.
+- **The body carries observation submission ids, not provider transaction references.** A Google
+  purchase-token digest is computable by anyone holding the token, so accepting caller-supplied
+  digests would let a caller attach someone else's input to its own restore.
+  `observedTransactionCount` reports what was actually linked, never what the caller claimed.
+
+## Application webhooks (OD-1(b))
+
+Phase 9B ships the minimal slice: one event type, `customer.entitlements.changed`, with
+at-least-once delivery, attempt history, and API-managed destinations. There is no dashboard UI.
+The remaining nine event types the contract declares are reserved names; emitting one before it is
+specified would be a defect.
+
+### The event is created inside the projection transaction
+
+An access-change webhook may only exist for state that was committed, so the complete Billing
+State Webhook Contract v1 envelope is written into `webhook_events.payload` in the same
+transaction as the snapshot it announces. Delivery happens strictly outside it. A destination
+that is down produces retries and eventually an exhausted delivery; it never rolls back an
+entitlement change and never blocks a projection, and no lock is held across the HTTP call.
+
+The whole envelope is stored rather than a partial payload the worker finishes assembling. That
+makes the delivered body byte-identical across every attempt and every manual replay, which is
+what makes the signature reproducible.
+
+**A no-change projection emits nothing.** The projection plans an event only when the customer's
+committed entitlement state actually moved, so a replay that re-derives identical state delivers
+no webhook — which is what stops a Project-wide replay from teaching every receiver to ignore the
+channel.
+
+### Verifying a signature
+
+Every delivery carries:
+
+```http
+Mosaic-Signature: t=1785243603, v1=e0af000fe574596fad9a154a3d74357a986a4896ceb188dcef6c486759257905
+```
+
+The signed string is:
+
+```text
+"v1" + "." + t + "." + eventId + "." + rawBody
+```
+
+hashed with HMAC-SHA256 under the destination's signing secret, taken as UTF-8 bytes verbatim —
+not hex- or base64-decoded first — and rendered as 64 lowercase hexadecimal characters.
+
+> ADR-0024 originally wrote this prefix as a bare `1`. That does not reproduce any of the
+> published vectors; the contract and `packages/test-fixtures/src/webhook-signature-vectors.json`
+> both use `v1`, and the ADR has been corrected to agree with them.
+
+A worked example, taken verbatim from the shared vector `canonical-event-primary-key` so any
+implementation can check itself against the same bytes the Go, Dart, Swift, and Kotlin
+implementations are checked against:
+
+| Input | Value |
+| --- | --- |
+| secret | `whsec_fixture_primary_0000000000000000` |
+| `t` | `1785243603` |
+| `eventId` | `fixture-event-0001` |
+| body | the exact bytes of `protocol/fixtures/billing-state-webhook/v1/events/entitlement-activated.json` |
+| signature | `e0af000fe574596fad9a154a3d74357a986a4896ceb188dcef6c486759257905` |
+
+The vector set is eight entries and every one of them earns its place:
+`canonical-event-rotation-key` proves the same event under a second key; the three
+`must-not-verify` vectors prove the body, the event id, and the timestamp are each genuinely
+inside the signed string rather than merely carried beside it; `minimal-body` bootstraps an
+implementation before it can produce a real event; `non-ascii-body` catches a UTF-16 or
+platform-default body encoding, which agrees on every ASCII vector and disagrees only here; and
+`non-ascii-secret` catches a key that was hex- or base64-decoded before use.
+
+Receiver rules, in order:
+
+1. Reject a delivery whose `t` is more than **300 seconds** from your own clock, *before*
+   comparing signatures.
+2. Hash the raw body exactly as received. Parsing and re-serializing changes whitespace, member
+   order, and Unicode escaping, and every genuine delivery then fails.
+3. **During rotation the header carries one `v1` parameter per honoured secret. Accept if any of
+   them verifies.** A verifier that reads only the first parameter drops every delivery signed
+   with the new key.
+4. Compare in constant time.
+5. Only then parse the body — and treat it as a notification that state changed, never as the
+   authority on what the state now is. Re-read the Customer Entitlement Snapshot.
+
+Consumers are documented as **tolerant** — ignore unknown fields and unknown event types — while
+the producer stays strict. That is a deliberate, recorded departure from Mosaic's fail-closed
+posture (OD-16), because a consumer that rejects an unrecognized field breaks on every additive
+change Mosaic makes.
+
+### Rotation
+
+A destination may hold more than one secret that is still permitted to sign. Rotation mints a new
+secret, returns it once, and sets `previousSecretHonoredUntil` on the superseded one; until that
+instant both sign and both appear in the header. The window lives on the secret row rather than
+on the destination, because a second rotation started before the first overlap lapsed leaves two
+superseded secrets and a single destination-level deadline would retire one of them early —
+exactly the failure the overlap exists to prevent.
+
+Retirement is explicit and audited, and is the response to a suspected compromise. Retiring the
+last secret that can still sign is refused: a destination with no signing secret would send
+unsigned deliveries, and an unsigned entitlement webhook is an unauthenticated instruction to
+grant access.
+
+### Destinations and SSRF
+
+A destination URL is operator-supplied and Mosaic makes outbound requests to it, which is a
+server-side request forgery primitive unless it is bounded. Per ADR-0024: HTTPS only; no
+redirects (a redirect is a second destination the operator never approved); RFC1918, loopback,
+link-local including the cloud metadata address, CGNAT, IPv6 unique-local, IPv4-mapped, and the
+unspecified address all refused **against the resolved address**; the hostname resolved once and
+the connection pinned to the address that was checked; and bounded connect, total, and
+response-body limits.
+
+The resolve-and-pin step is not a nicety. Checking the hostname and then letting the HTTP client
+resolve again is the classic DNS-rebinding hole: the second resolution can return an address the
+first check would have refused. The screen therefore runs **on every delivery attempt**, not only
+at registration.
+
+`MOSAIC_BILLING_WEBHOOK_ALLOW_PRIVATE_DESTINATIONS` is the self-hosted exception, for operators
+running Mosaic and their application backend on one private network. It is deployment-level on
+purpose. A per-destination toggle would let anyone with destination-write permission reach the
+internal network, which is the whole attack the policy prevents.
+
+### Delivery
+
+One `webhook_deliveries` row per (event, destination); attempts hang off it as append-only
+history with `attempt_number` unique per delivery. Retries use exponential backoff with jitter,
+so a destination outage does not produce a synchronized retry burst. Exhaustion is terminal and
+means the attempts actually ran out — a delivery marked exhausted after two of eight looks, in
+every operator view, exactly like one that was tried properly, so the schema refuses it.
+
+A manual replay reuses the same delivery row and the same event id, appending a further attempt.
+A retry is a new delivery attempt, never a new logical event, so a receiver deduplicating on
+event id sees each change once.
+
+A destination whose deliveries keep exhausting is misconfigured or gone, not having an incident,
+so a bounded run of consecutive exhausted deliveries disables it automatically and audibly. The
+counter counts exhausted *deliveries*, not failed attempts — a single delivery already burns its
+whole budget against one provider outage — and any success resets it, so an outage that recovers
+never trips the policy.
+
+Attempt history keeps a bounded, control-character-free excerpt of the destination's response so
+an integrator can see why their own endpoint refused. It is never parsed and never influences
+Mosaic state.
+
+## Projection replay and rule versions
+
+`POST /v1/projects/{projectId}/environments/{environmentId}/billing/projection-replays` recomputes
+committed state from the immutable facts and reports what moved. It reuses the ordinary projection
+command, so replayed state goes through the same advisory lock, compare-and-swap, and atomic
+commit as live projection — there is no second write path that could diverge — and prior snapshots
+are never deleted.
+
+**Bounded by construction.** One subscription instance, one customer, or a fact window. There is
+no "replay everything" member: an unbounded replay is a migration, and bulk migration tooling is
+out of Phase 9B (plan §18). The window bounds on *facts* — a scope is in scope when it holds a
+fact whose effective or recorded time falls inside it — not on lineage creation. Bounding on when
+a lineage was first seen selected the lineages created in the window and silently skipped every
+long-lived lineage that merely *received* a fact in it, which is exactly the population a "replay
+last Tuesday" is asking about.
+
+**Materialization is changes-only and has no switch.** The projection command mints a customer
+snapshot only when the recomputed checksum differs from the committed one, and a replay reuses
+that command. A `changesOnly` parameter previously existed and was never read; it has been removed
+rather than left as a parameter that lies about being adjustable.
+
+**Rule versions are selectable, and an unimplemented one is refused.** `projectionRuleVersion`
+selects the semantics; zero means the active version. A version this build does not derive under
+answers `422` rather than being recomputed under the active engine and labelled with the requested
+number — a checksum produced by the wrong engine is indistinguishable from a genuine determinism
+result, which is the one thing a replay exists to prove. Only version 1 exists today; the shadow
+diff engine is deferred per OD-11(a), so replay plus checksum comparison is how a future rule
+change will be evaluated.
+
+**Provider asymmetry, stated rather than hidden.** Apple replay is input-sourced: a stored Apple
+payload re-validates to the same transaction. Google replay is fact-sourced, because Google
+validation re-queries live provider state and a re-query today does not reproduce what the
+provider said last month. A Google replay therefore replays the facts Mosaic recorded, not the
+provider's current answer.
+
+Every replay is audited with the rule version, the number of scopes replayed, and the number that
+changed. The response is seen once by the operator who ran it; the audit entry is what an
+investigation reads months later, and "a replay ran and changed nothing" versus "a replay ran and
+rewrote four hundred customers" is the question such an investigation is actually asking.
+
+### A consequence of FactDigest v2 worth knowing (review finding I-13)
+
+Revalidating a Phase 9A input under validator version 2 recomputes a different fact digest and
+inserts a **second** fact row for the same provider transaction. This is absorbed for access —
+entitlement-source identity is `(lineage, product, grant version)`, never a fact id, so the
+duplicate cannot double-grant and the checksum is unchanged. It is **not** absorbed for
+`subscription_timeline_entries` (one entry per fact id, so the same purchase can render twice) or
+for `subscription_snapshot_facts` (both facts are cited as evidence). The full statement is in the
+header of migration `00029_billing_fact_shape_v2.sql`.
+
+## Projection health
+
+`GET /v1/projects/{projectId}/environments/{environmentId}/billing/projection-health` is a sibling
+of the Phase 9A `billing/health` route, not a field on it. Billing health answers "can Mosaic still
+turn store notifications into facts?"; projection health answers "is the authoritative answer
+Mosaic gives about a customer's access still current?". An operator paged about one almost never
+wants the other's numbers mixed in.
+
+It reports the projection backlog and its oldest queued age, failed jobs and the failure rate over
+the last hour, stale and never-projected customers, open identity conflicts, frozen and unresolved
+lineages, the count of `unknown` entries on current snapshots, the restore backlog, the webhook
+backlog and exhausted deliveries, and the active projection rule version. Everything is a count or
+a timestamp; nothing on the surface can carry a customer value, an alias digest, or a secret.
+
+Per-table row counts for all Phase 9B tables are published as
+`mosaic.billing.table.rows{phase="9b",table=…}` from the worker. Plan §15 decided snapshot
+retention with no drill baseline to extrapolate from — Phase 8 drills 4 and 5 were never run and
+nothing is partitioned — so the trend has to start being recorded before it is needed. The counts
+come from planner statistics rather than `count(*)`, because an exact count of the whole 9B schema
+on every scrape is a self-inflicted load problem and the question being asked is a trend question.
+
 ## Observability
 
 Spans: `billing.token.issue`, `billing.token.revoke`, `billing.entitlement.sync`,
@@ -295,6 +550,7 @@ response body; on these surfaces a cause can quote a credential, so no handler p
 | `MOSAIC_BILLING_ENTITLEMENT_REFRESH_AFTER` | `1h` | When a reader should refresh. |
 | `MOSAIC_BILLING_ENTITLEMENT_VALID_FOR` | `168h` | Hard end of authoritative validity. |
 | `MOSAIC_BILLING_ENTITLEMENT_STALE_GRACE_HOURS` | `24` | Bounded grace past validity. `0` is a strict policy. |
+| `MOSAIC_BILLING_WEBHOOK_ALLOW_PRIVATE_DESTINATIONS` | `false` | The self-hosted SSRF exception. Deployment-level only; never a per-destination toggle. |
 
 Billing remains off by default at both levels; these surfaces are not registered unless
 `MOSAIC_BILLING_ENABLED` is set, and they answer `billing_not_enabled` for any Project that has
@@ -302,6 +558,8 @@ not opted in.
 
 ## Not yet in this document
 
-The webhook delivery worker and destination management API (OD-1(b)), restore and sync jobs,
-and the projection diagnostics surface land in the following backend batch and are documented
-with them. ADR-0024 is the contract they implement.
+Nothing from the Phase 9B backend scope remains undocumented here. What is deliberately absent is
+deferred rather than missing: the shadow diff engine (OD-11(a) — replay plus checksum comparison
+stands in for it until a second rule version exists), the nine reserved webhook event types, a
+dashboard UI for webhooks (OD-1(b) is API-only), and everything in the plan's §18 Phase 9C
+exclusion list. Quarantine still has structurally no mark-as-valid path.
