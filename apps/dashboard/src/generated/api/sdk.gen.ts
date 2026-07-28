@@ -2012,11 +2012,26 @@ export const receiveAppleStoreNotification = <ThrowOnError extends boolean = fal
 });
 
 /**
- * Untrusted client report of a purchase reference. A Transaction Observation is a
- * trigger, never proof: the response cannot and does not claim validation, and the
- * outcome enumeration has no member meaning validated. Every reference is bounded by
- * safeProviderCode, which structurally excludes a JWS or a raw Google purchase token.
- * This endpoint may return 429; SDKs hold a durable queue and retry.
+ * Untrusted client report of a purchase reference, submitted as the Billing Ingestion
+ * Contract v1 clientTransactionObservation record. A Transaction Observation is a trigger,
+ * never proof: the response cannot and does not claim validation, and the status set has no
+ * member meaning validated, verified, confirmed, or entitled.
+ *
+ * A client may not classify the Store Environment. The contract record carries no such
+ * member and is additionalProperties:false, so a client-asserted storeEnvironment is
+ * rejected with `unknown_field` rather than ignored — a device can be made to say anything,
+ * and accepting its classification would let a sandbox purchase present itself as
+ * production. Classification comes only from server-side validation of the store's own
+ * response.
+ *
+ * sourceAuthority must be `client_observation`, matching what a public SDK key actually
+ * proves; a higher claimed authority is refused with `authority_not_allowed`. The
+ * reference kind must align with storePlatform, so an Android digest can never be
+ * validated against Apple's API.
+ *
+ * Every outcome, including a rejection, is returned as the contract's
+ * observationSubmissionResult record so an SDK decodes one shape. This endpoint may return
+ * 429; SDKs hold a durable queue and retry.
  *
  */
 export const submitTransactionObservation = <ThrowOnError extends boolean = false>(options: Options<SubmitTransactionObservationData, ThrowOnError>): RequestResult<SubmitTransactionObservationResponses, SubmitTransactionObservationErrors, ThrowOnError> => (options.client ?? client).post<SubmitTransactionObservationResponses, SubmitTransactionObservationErrors, ThrowOnError>({

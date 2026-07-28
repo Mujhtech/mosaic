@@ -5,54 +5,140 @@ export type ClientOptions = {
 };
 
 /**
- * Untrusted client report. A Transaction Observation is a trigger, never proof.
- * referenceKind discriminates how reference must be read, which resolves the iOS-prefix
- * and Android-digest ambiguity.
- *
- * There is deliberately no storeEnvironment and no purchaseToken member, matching the
- * contract's clientTransactionObservation record. additionalProperties is false, so
- * sending either is rejected with `unknown_field` rather than silently ignored.
+ * The provider reference a validation is performed against. Raw receipts, signed payloads,
+ * JWS representations, purchase tokens, and service-account material are structurally
+ * impossible to carry here: an Apple value is at most 24 decimal digits and a Google value
+ * is exactly 64 lowercase hexadecimal characters.
  *
  */
-export type ClientTransactionObservationRequest = {
-    /**
-     * Deterministic client-computed identifier. The deduplication key.
-     */
-    submissionId: string;
-    referenceKind: 'app_store_transaction_id' | 'google_play_token_digest' | 'google_play_order_id';
-    /**
-     * Bounded by safeProviderCode (printable ASCII, at most 128 runes), which structurally
-     * excludes a JWS or a raw Google purchase token. iOS submits the raw decimal StoreKit
-     * transaction id; Android submits the SHA-256 digest of the purchase token as lowercase hex.
-     *
-     */
-    reference: string;
-    /**
-     * Optional Google order id. Never a deduplication key: promotional purchases have none.
-     */
-    providerOrderReference?: string;
-    observedAt?: string;
+export type TransactionReference = {
+    referenceKind: 'app_store_transaction_id' | 'google_play_token_digest';
+    value: string;
 };
 
 /**
- * Trusted app-backend report. Identical to the client shape plus the two members only a
- * server may supply. Still not authoritative: full provider validation follows either way.
+ * Optional Google Play order reference. A join handle only; never the identity of a Transaction Fact, because promotional purchases have none.
+ */
+export type ProviderOrderReference = {
+    referenceKind: 'google_play_order_id';
+    value: string;
+};
+
+/**
+ * SDK context. It carries no Organization, Project, Environment, or Application identity: tenant scope is derived from the authenticated key.
+ */
+export type ObservationContext = {
+    platform: 'ios' | 'android';
+    sdkFamily: 'flutter' | 'ios' | 'android';
+    sdkVersion: string;
+    operatingSystemVersion?: string;
+    applicationVersion?: string;
+};
+
+/**
+ * Correlation to Analytics Event 1/2 through the existing opaque handles only.
+ */
+export type ObservationCorrelation = {
+    purchaseAttemptId?: string;
+    providerOperationId?: string;
+    providerUpdateId?: string;
+};
+
+/**
+ * Server-derived Store Environment classification. A client never asserts it: no observation submitted by a client carries this property at all.
+ */
+export type StoreEnvironmentClassification = {
+    classification: 'sandbox' | 'production' | 'unclassified';
+    basis: 'provider_asserted' | 'provider_endpoint' | 'signature_environment' | 'mosaic_environment_policy' | 'unknown';
+};
+
+/**
+ * The Billing Ingestion Contract v1 clientTransactionObservation record, accepted verbatim
+ * so one platform-neutral document travels from four SDKs to one server.
  *
  */
-export type ServerTransactionObservationRequest = {
+export type ClientTransactionObservationRecord = {
+    billingIngestionContractVersion: '1';
+    recordType: 'clientTransactionObservation';
+    payload: ClientTransactionObservation;
+};
+
+/**
+ * An untrusted claim that a transaction may exist. It carries no receipt, no signed
+ * payload, no purchase token, no credential, no price, no entitlement assertion, no tenant
+ * identity, and no Store Environment assertion.
+ *
+ * There is deliberately no storeEnvironmentClassification member, and additionalProperties
+ * is false, so a client-asserted Store Environment is rejected with `unknown_field` rather
+ * than ignored. Classification comes only from server-side validation.
+ *
+ * sourceAuthority must be `client_observation`: a public SDK key proves only that a client
+ * sent the document, and any higher authority claimed here is refused with
+ * `authority_not_allowed`.
+ *
+ */
+export type ClientTransactionObservation = {
+    observationId: string;
+    /**
+     * Deterministic idempotency key computed by the SDK. Never derived from a timestamp, price, Product, or subject.
+     */
     submissionId: string;
-    referenceKind: 'app_store_transaction_id' | 'google_play_token_digest' | 'google_play_order_id';
-    reference: string;
-    providerOrderReference?: string;
+    providerId: string;
+    storePlatform: 'apple_app_store' | 'google_play';
+    transactionReference: TransactionReference;
+    providerOrderReference?: ProviderOrderReference;
     /**
-     * Trusted server endpoint only. Encrypted on receipt, never logged, never returned.
+     * UTC timestamp, RFC 3339 with a literal Z.
      */
-    purchaseToken?: string;
+    observedAt: string;
+    sourceAuthority: 'client_observation';
+    context: ObservationContext;
+    correlation?: ObservationCorrelation;
     /**
-     * A trusted server may classify the Store Environment; a client may not.
+     * A claim only. The server resolves the Mosaic Product independently; a mismatch is a diagnostic and never an override.
      */
-    storeEnvironment?: 'sandbox' | 'production' | 'unclassified';
-    observedAt?: string;
+    claimedMosaicProductId?: string;
+};
+
+export type ServerTransactionObservationRecord = {
+    billingIngestionContractVersion: '1';
+    recordType: 'serverTransactionObservation';
+    payload: ServerTransactionObservation;
+};
+
+/**
+ * A trusted app-backend observation. It records how trust was established, never the
+ * credential that established it. Like the client record it carries no purchase token: the
+ * reference is the same digest a client would send.
+ *
+ * On this endpoint sourceAuthority must be `trusted_server_observation`. A Mosaic secret
+ * server key proves a trusted backend sent the document; it proves nothing about a provider
+ * having signed anything, so `provider_notification`, `reconciliation_discovery`, and
+ * `manual_revalidation` — authorities only Mosaic's own pipeline may author — are refused
+ * with `authority_not_allowed`.
+ *
+ */
+export type ServerTransactionObservation = {
+    observationId: string;
+    submissionId: string;
+    providerId: string;
+    storePlatform: 'apple_app_store' | 'google_play';
+    transactionReference: TransactionReference;
+    providerOrderReference?: ProviderOrderReference;
+    sourceAuthority: 'trusted_server_observation';
+    trustBasis: 'provider_signature_verified' | 'mutual_tls' | 'provider_server_api' | 'operator_initiated';
+    receivedAt: string;
+    providerReportedAt?: string;
+    /**
+     * Opaque provider notification identifier. Never the notification body.
+     */
+    providerNotificationReference?: string;
+    storeEnvironmentClassification?: StoreEnvironmentClassification;
+    correlation?: ObservationCorrelation;
+    /**
+     * Referencing a client observation never raises that observation's authority.
+     */
+    originatingObservationId?: string;
 };
 
 /**
@@ -266,6 +352,14 @@ export type QuarantineRecord = {
     rawInputId?: string;
     applicationId?: string;
     provider?: 'app_store' | 'google_play';
+    /**
+     * Store Environment of the quarantined input, always distinct from the Mosaic
+     * Environment. Never absent: an input whose environment was not classified before it
+     * quarantined reports `unclassified` explicitly, because a missing value on an operator
+     * surface reads as production to a careless eye.
+     *
+     */
+    storeEnvironment?: 'sandbox' | 'production' | 'unclassified';
     reasonCode?: 'signature_invalid' | 'application_mismatch' | 'environment_mismatch' | 'store_environment_mismatch' | 'credential_unavailable' | 'credential_revoked' | 'product_unknown' | 'product_ambiguous' | 'cross_environment_mismatch' | 'unsupported_product_type' | 'unsupported_transaction_type' | 'malformed_reference' | 'input_content_conflict' | 'replay_conflict' | 'provider_permanently_failed' | 'validation_exhausted';
     severity?: 'warning' | 'error' | 'security';
     scopes?: Array<string>;
@@ -7488,7 +7582,7 @@ export type ReceiveAppleStoreNotificationResponses = {
 export type ReceiveAppleStoreNotificationResponse = ReceiveAppleStoreNotificationResponses[keyof ReceiveAppleStoreNotificationResponses];
 
 export type SubmitTransactionObservationData = {
-    body: unknown;
+    body: ClientTransactionObservationRecord;
     path?: never;
     query?: never;
     url: '/v1/sdk/billing/observations';
@@ -7500,23 +7594,36 @@ export type SubmitTransactionObservationErrors = {
      */
     401: ErrorEnvelope;
     /**
-     * Stable machine-readable failure.
+     * Resubmitting the identical document cannot succeed. The SDK queue should drop it.
      */
-    422: ErrorEnvelope;
+    422: ObservationSubmissionResultRecord;
     /**
-     * Stable machine-readable failure.
+     * Transient. Resubmit the identical document later; Retry-After carries the hint.
      */
-    429: ErrorEnvelope;
+    429: ObservationSubmissionResultRecord;
+    /**
+     * Transient. Resubmit the identical document later; Retry-After carries the hint.
+     */
+    503: ObservationSubmissionResultRecord;
 };
 
 export type SubmitTransactionObservationError = SubmitTransactionObservationErrors[keyof SubmitTransactionObservationErrors];
 
 export type SubmitTransactionObservationResponses = {
-    202: unknown;
+    /**
+     * The submission was already recorded. A duplicate is idempotent, not an error.
+     */
+    200: ObservationSubmissionResultRecord;
+    /**
+     * The observation is well formed and queued for validation. Nothing more: the store has not been consulted when this response is written.
+     */
+    202: ObservationSubmissionResultRecord;
 };
 
+export type SubmitTransactionObservationResponse = SubmitTransactionObservationResponses[keyof SubmitTransactionObservationResponses];
+
 export type SubmitServerTransactionObservationData = {
-    body: ServerTransactionObservationRequest;
+    body: ServerTransactionObservationRecord;
     path?: never;
     query?: never;
     url: '/v1/billing/server/observations';
