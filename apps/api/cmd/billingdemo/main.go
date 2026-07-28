@@ -1,3 +1,17 @@
+//go:build billingdemo
+
+// This command is excluded from every ordinary build.
+//
+// It constructs the real Mosaic router and the real billing service but injects
+// a locally generated trust anchor through appstorejws.WithRoot, which is a
+// verification seam that must never exist in a deployed image. cmd/api and
+// cmd/worker call NewVerifier() with no options, so the seam is unreachable
+// from the deployed path — but a buildable binary in the same module is one
+// stray Dockerfile COPY away from being shipped. The tag makes that impossible
+// rather than improbable:
+//
+//	DATABASE_URL=postgres://... go run -tags billingdemo ./cmd/billingdemo
+//
 // Command billingdemo drives the Phase 9A integrated provider demonstration
 // against a real PostgreSQL database, the real Mosaic HTTP router, the real
 // billing application service, and the real worker job functions.
@@ -16,7 +30,7 @@
 //
 // Usage:
 //
-//	DATABASE_URL=postgres://... go run ./cmd/billingdemo
+//	DATABASE_URL=postgres://... go run -tags billingdemo ./cmd/billingdemo
 //
 // The command is destructive to the demo tenant it owns (org_demo9a) and
 // touches nothing else.

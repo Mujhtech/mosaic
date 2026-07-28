@@ -280,6 +280,24 @@ func (s *Service) AcceptAppleNotification(ctx context.Context, intakeToken strin
 // verify is not evidence of anything and retaining it would grow an
 // attacker-controlled table.
 func (s *Service) recordUnverifiedApple(ctx context.Context, identity IntakeIdentity, body []byte, correlationID, reason string, now time.Time) error {
+	// The bucket, not the body, is the identity of an unverified input.
+	//
+	// The notification endpoint has no rate limiter by design — a 429 to Apple
+	// spends one of five non-renewable delivery attempts — so anything keyed by
+	// content digest grows without bound: an intake token is an unauthenticated
+	// bearer value in a URL, and whoever holds one could post a million distinct
+	// malformed bodies and get a million rows. Collapsing onto
+	// (credential, reason, hour) caps that at twenty-four rows per credential
+	// per reason per day while preserving everything an operator can act on:
+	// which credential is receiving garbage, of what kind, and when.
+	//
+	// The content digest is derived from the same bucket rather than the body,
+	// because the body is deliberately not retained here — an unverified payload
+	// is not evidence of anything — and a body-derived digest would make every
+	// repeat look like a content conflict, which is a security-severity signal
+	// this is not.
+	bucket := now.UTC().Truncate(time.Hour).Format(time.RFC3339)
+	identityKey := UnverifiedInputKey(identity.CredentialID, boundedCode(reason), bucket)
 	input := RawInput{
 		ProjectID:            identity.ProjectID,
 		OrganizationID:       identity.OrganizationID,
@@ -289,8 +307,8 @@ func (s *Service) recordUnverifiedApple(ctx context.Context, identity IntakeIden
 		Provider:             ProviderAppStore,
 		Source:               SourceAppleNotification,
 		SourceAuthority:      AuthorityStoreNotification,
-		IdempotencyKey:       digestOf("mosaic-billing-apple-unverified-v1", identity.CredentialID, string(ContentDigest(body))),
-		ContentDigest:        ContentDigest(body),
+		IdempotencyKey:       identityKey,
+		ContentDigest:        identityKey,
 		BodyState:            "not_retained",
 		AuthenticationResult: AuthFailed,
 		StoreEnvironment:     StoreUnclassified,
@@ -302,6 +320,8 @@ func (s *Service) recordUnverifiedApple(ctx context.Context, identity IntakeIden
 	if _, err := s.repository.PersistRawInput(ctx, input, false, now); err != nil {
 		return ErrUnavailable
 	}
+	// The counter is where volume lives. The row records that it happened; the
+	// metric records how often, without a row per occurrence.
 	s.intakeRejected.Add(ctx, 1, metric.WithAttributes(
 		attribute.String("provider", ProviderAppStore),
 		attribute.String("reason", boundedCode(reason))))

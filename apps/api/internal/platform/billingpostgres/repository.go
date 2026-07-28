@@ -84,6 +84,32 @@ func (r *Repository) BillingEnabled(ctx context.Context, projectID string) (bool
 	return enabled, nil
 }
 
+// Settings is the first-class read of a Project's billing configuration.
+//
+// It exists because the dashboard was inferring enablement by probing billing
+// health — a read that answers a different question, costs several aggregate
+// queries, and cannot distinguish "billing is off" from "billing is on and
+// nothing has happened yet".
+func (r *Repository) Settings(ctx context.Context, actor billing.Actor, projectID string) (billing.Settings, error) {
+	if _, err := requireRole(ctx, r.pool, actor, projectID, "owner", "admin"); err != nil {
+		return billing.Settings{}, err
+	}
+	settings := billing.Settings{ProjectID: projectID}
+	err := r.pool.QueryRow(ctx,
+		`SELECT
+			COALESCE((SELECT billing_enabled FROM billing_project_settings WHERE project_id=$1), false),
+			(SELECT updated_at FROM billing_project_settings WHERE project_id=$1),
+			(SELECT count(*) FROM store_server_credentials WHERE project_id=$1 AND status='active')`,
+		projectID).Scan(&settings.BillingEnabled, &settings.UpdatedAt, &settings.ActiveCredentialCount)
+	if err != nil {
+		return billing.Settings{}, fmt.Errorf("read billing settings: %w", err)
+	}
+	// The same rule the write path enforces, reported ahead of time so the
+	// caller can explain it instead of discovering it through a 409.
+	settings.CanDisable = settings.ActiveCredentialCount == 0
+	return settings, nil
+}
+
 func (r *Repository) OrganizationForProject(ctx context.Context, projectID string) (string, error) {
 	var organizationID string
 	err := r.pool.QueryRow(ctx, `SELECT organization_id FROM projects WHERE id = $1`, projectID).Scan(&organizationID)

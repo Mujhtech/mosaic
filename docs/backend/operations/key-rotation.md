@@ -60,6 +60,35 @@ In a Compose deployment the same binary is in the image:
 docker compose run --rm --entrypoint /usr/local/bin/keyring api inspect
 ```
 
+## What the keyring seals
+
+`inspect` and `rotate` cover every table that stores an encryption envelope:
+
+| Table | Contents | Added |
+| --- | --- | --- |
+| `provider_connection_credentials` | Provider Connection server secrets | Phase 4A |
+| `store_server_credentials` | Apple In-App Purchase keys and Google service-account keys | Phase 9A |
+| `billing_raw_inputs` | Retained Raw Billing Input bodies (signed payloads, purchase tokens) | Phase 9A |
+
+The Phase 9A tables use a separate additional-authenticated-data domain (`v2`)
+addressed by a `(subject kind, subject id)` pair, so a Provider Connection
+envelope can never be opened as a billing envelope or the reverse, even under
+the same key. Rotation rebuilds each envelope's scope from its own row rather
+than assuming one.
+
+A test asserts that **any** table carrying both a `key_id` and a `ciphertext`
+column appears in the rotation source set. A new envelope table added without
+registering it fails the suite rather than being discovered by an operator whose
+correct rotation stranded its rows.
+
+**Revoked credentials are excluded** from both `inspect` and `rotate`, by
+design: a revoked secret should become unreadable, and resealing it would keep
+it alive. The consequence is that `inspect` under-reports — a retired key may
+still seal revoked rows it does not count. That is intended, and it means a
+retired key can be removed while revoked envelopes still reference it; those
+envelopes become permanently undecryptable, which is the desired outcome for a
+revoked secret and an unrecoverable one for anything else.
+
 ## Rotation Procedure
 
 1. **Back up the current keyring**, and take a PostgreSQL backup

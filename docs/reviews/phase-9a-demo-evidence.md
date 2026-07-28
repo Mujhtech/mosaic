@@ -40,7 +40,8 @@ exactly what only a live sandbox can prove.
 | PostgreSQL | `postgres:17` (Docker, container `mosaic-9a-demo`, published port 55447) |
 | Migrations | `go run ./cmd/migrate up` → 26/26 applied to an empty database (00026 is the fix migration, §9 defect 3) |
 | Demo driver | `apps/api/cmd/billingdemo` (new; see §8) |
-| Run command | `DATABASE_URL=postgres://demo:demo@127.0.0.1:55447/mosaic_demo?sslmode=disable go run ./cmd/billingdemo` |
+| Run command | `DATABASE_URL=postgres://demo:demo@127.0.0.1:55447/mosaic_demo?sslmode=disable go run -tags billingdemo ./cmd/billingdemo` |
+| Build tag | The driver is behind `//go:build billingdemo` so it cannot be built into a release image: it injects a locally generated trust anchor through `appstorejws.WithRoot`, a verification seam that must never exist in a deployed binary. |
 | Wall-clock | **37.046 s** for the complete eight-stage sequence, including a real retry backoff wait (26.965 s on the pre-fix run) |
 | Tenant | `org_demo9a` / `proj_demo9a` / `env_demo9a` (mode `production`); applications `app_demo9a_ios` (ios, `com.mosaic.demo`) and `app_demo9a_android` (android, `com.mosaic.demo.android`) |
 | Data | Created by this run only. No production data exists or was used. |
@@ -1081,7 +1082,7 @@ synthetic vectors. Rather than invent one, the whole demonstration was built as 
 single scripted sequence, which is the property such a path would be asserting:
 
 ```
-DATABASE_URL=… go run ./cmd/billingdemo
+DATABASE_URL=… go run -tags billingdemo ./cmd/billingdemo
 …
 === demonstration complete in 37.046s ===
 ```
@@ -1118,7 +1119,7 @@ docker run -d --name mosaic-9a-demo \
   -e POSTGRES_PASSWORD=demo -e POSTGRES_USER=demo -e POSTGRES_DB=mosaic_demo \
   -p 55447:5432 postgres:17
 export DATABASE_URL='postgres://demo:demo@127.0.0.1:55447/mosaic_demo?sslmode=disable'
-cd apps/api && go run ./cmd/migrate up && go run ./cmd/billingdemo
+cd apps/api && go run ./cmd/migrate up && go run -tags billingdemo ./cmd/billingdemo
 docker rm -f mosaic-9a-demo
 ```
 
@@ -1135,7 +1136,7 @@ docker rm -f mosaic-9a-demo
 | Migration 00026 rollback | `migrate down-to 25` with a `missing_validation_credential` row present, then `up` | the quarantine record and its action are removed, the Raw Billing Input survives, re-applies cleanly |
 | Migrations full down/up | `migrate up` → `down-to 0 --confirm` → `up` on a **clean** database | rolled back to 0 and re-applied, `verdict: compatible` |
 | Preflight | `go run ./cmd/migrate preflight` | `verdict: compatible`, not dirty |
-| Demonstration | `go run ./cmd/billingdemo` on a fresh container | exit 0, 37.046 s |
+| Demonstration | `go run -tags billingdemo ./cmd/billingdemo` on a fresh container | exit 0, 37.046 s |
 
 One honest caveat on the full down/up: run against the **demonstration** database
 it fails at migration 8 with

@@ -562,3 +562,87 @@ func TestRevokingAnAppleCredentialClearsItsIntakeToken(t *testing.T) {
 		t.Fatalf("the intake token still resolves after revocation: %v", err)
 	}
 }
+
+// M-3 — unverified input on the unlimited endpoint must not grow without bound.
+//
+// The Apple notification endpoint deliberately has no rate limiter: a 429 to
+// Apple spends one of five non-renewable delivery attempts. That makes anything
+// keyed by content digest an unbounded write vector, because an intake token is
+// an unauthenticated bearer value in a URL. Collapsing unverified inputs onto
+// (credential, reason, hour) bounds the growth while keeping what an operator
+// acts on. Repeats must land as duplicates, not as content conflicts — a
+// conflict is a security-severity signal and this is not one.
+func TestUnverifiedInputsCollapseOntoAnHourlyBucket(t *testing.T) {
+	pool, ctx := testPool(t)
+	repository := New(pool)
+	projectID, environmentID, _ := seed(t, ctx, pool, "unverified")
+	now := time.Now().UTC().Truncate(time.Hour).Add(5 * time.Minute)
+
+	// Three distinct garbage bodies inside one hour, as an attacker posting to a
+	// leaked intake token would produce.
+	bucket := now.Truncate(time.Hour).Format(time.RFC3339)
+	key := billing.UnverifiedInputKey("ssc_unverified_fixture", "malformed_body", bucket)
+	build := func(at time.Time, bucketKey []byte) billing.RawInput {
+		input := sampleInput(projectID, environmentID, "", "ignored")
+		input.ID = ""
+		input.ApplicationID = ""
+		input.CredentialID = ""
+		input.IdempotencyKey = bucketKey
+		input.ContentDigest = bucketKey
+		input.BodyState = "not_retained"
+		input.Envelope = nil
+		input.AuthenticationResult = billing.AuthFailed
+		input.StoreEnvironment = billing.StoreUnclassified
+		input.IngestionStatus = billing.IngestQuarantined
+		input.NotificationKind = ""
+		input.ReceivedAt = at
+		input.ExpiresAt = at.Add(90 * 24 * time.Hour)
+		return input
+	}
+
+	for index := range 3 {
+		at := now.Add(time.Duration(index) * time.Minute)
+		result, err := repository.PersistRawInput(ctx, build(at, key), false, at)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if result.Conflicted {
+			t.Fatal("a repeated unverified input was reported as a content conflict; " +
+				"conflicts are a security signal and garbage on an open endpoint is not one")
+		}
+		if index > 0 && result.Status != billing.IngestDuplicate {
+			t.Fatalf("repeat %d reported %q, want duplicate", index, result.Status)
+		}
+	}
+
+	var rows int
+	if err := pool.QueryRow(ctx,
+		`SELECT count(*) FROM billing_raw_inputs WHERE project_id=$1 AND authentication_result='failed'`,
+		projectID).Scan(&rows); err != nil {
+		t.Fatal(err)
+	}
+	if rows != 1 {
+		t.Fatalf("%d unverified rows after three distinct malformed bodies in one hour, want 1", rows)
+	}
+
+	// A different hour, or a different reason, is genuinely different
+	// information and gets its own row.
+	nextHour := now.Add(time.Hour)
+	nextKey := billing.UnverifiedInputKey("ssc_unverified_fixture", "malformed_body",
+		nextHour.Truncate(time.Hour).Format(time.RFC3339))
+	if _, err := repository.PersistRawInput(ctx, build(nextHour, nextKey), false, nextHour); err != nil {
+		t.Fatal(err)
+	}
+	otherReason := billing.UnverifiedInputKey("ssc_unverified_fixture", "signature_invalid", bucket)
+	if _, err := repository.PersistRawInput(ctx, build(now, otherReason), false, now); err != nil {
+		t.Fatal(err)
+	}
+	if err := pool.QueryRow(ctx,
+		`SELECT count(*) FROM billing_raw_inputs WHERE project_id=$1 AND authentication_result='failed'`,
+		projectID).Scan(&rows); err != nil {
+		t.Fatal(err)
+	}
+	if rows != 3 {
+		t.Fatalf("%d unverified rows across two hours and two reasons, want 3", rows)
+	}
+}

@@ -10,6 +10,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"regexp"
@@ -72,6 +73,7 @@ func RegisterProjectRoutes(router chi.Router, service *billing.Service, expensiv
 	guarded := nonNil(expensive)
 
 	router.Route("/billing/settings", func(settings chi.Router) {
+		settings.Get("/", h.settings)
 		settings.Put("/", h.updateSettings)
 	})
 	router.Route("/billing/store-credentials", func(credentials chi.Router) {
@@ -852,6 +854,15 @@ type settingsRequest struct {
 	BillingEnabled bool `json:"billingEnabled"`
 }
 
+func (h *Handler) settings(w http.ResponseWriter, r *http.Request) {
+	value, err := h.service.Settings(r.Context(), actor(r), chi.URLParam(r, "projectId"))
+	if err != nil {
+		writeError(w, r, err)
+		return
+	}
+	response.OK(w, r, value)
+}
+
 func (h *Handler) updateSettings(w http.ResponseWriter, r *http.Request) {
 	var request settingsRequest
 	if !decode(w, r, &request) {
@@ -1224,11 +1235,20 @@ func writeError(w http.ResponseWriter, r *http.Request, err error) {
 	response.Error(w, r, response.NewAPIError(status, code, message))
 }
 
+// errorTypeName reports the Go type of an error and nothing else.
+//
+// It previously returned the first colon-separated segment of err.Error(),
+// which is a *message* prefix rather than a type name — and an error carrying
+// no colon was logged verbatim. On this surface a message can quote a URL
+// containing a purchase token, a decode fragment, or a transport error naming
+// internal hosts, so the one thing this value must never be is caller content.
+// The %T form is the precedent already used by billing.safeFailure and by the
+// authentication resolver, for the same reason.
 func errorTypeName(err error) string {
 	if err == nil {
 		return ""
 	}
-	return strings.TrimPrefix(strings.SplitN(err.Error(), ":", 2)[0], "billing ")
+	return fmt.Sprintf("%T", err)
 }
 
 func digestKey(raw string) string {

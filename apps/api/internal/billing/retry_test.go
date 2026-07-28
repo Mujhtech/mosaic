@@ -182,3 +182,36 @@ func contains(haystack, needle string) bool {
 	}
 	return false
 }
+
+// An authentication failure must not consume the full attempt budget.
+//
+// Mosaic mints a fresh assertion on every request, so a credential still
+// rejected after a second signing is revoked, expired, or wrong — an operator
+// action, not a wait. Letting it run all eight attempts multiplies provider
+// load across ~40 minutes of backoff per input during an outage the operator
+// can already see, and plan §6 lists revoked credentials among the permanent
+// categories.
+func TestAuthFailuresAreCappedBelowTheQueueBudget(t *testing.T) {
+	auth := Classification{Category: CategoryAuth, Retryable: true}
+	transient := Classification{Category: CategoryTransient, Retryable: true}
+
+	if auth.ExhaustedFor(1, MaxValidationAttempts) {
+		t.Fatal("the first authentication failure was treated as terminal; one retry with a fresh assertion is the point")
+	}
+	if !auth.ExhaustedFor(MaxAuthAttempts, MaxValidationAttempts) {
+		t.Fatalf("an authentication failure was still retryable at attempt %d", MaxAuthAttempts)
+	}
+	if MaxAuthAttempts >= MaxValidationAttempts {
+		t.Fatalf("the auth cap (%d) does not actually cap anything below the queue budget (%d)",
+			MaxAuthAttempts, MaxValidationAttempts)
+	}
+
+	// Every other retryable category keeps the queue's own budget: a provider
+	// outage is exactly the case the eight attempts exist for.
+	if transient.ExhaustedFor(MaxAuthAttempts, MaxValidationAttempts) {
+		t.Fatal("the auth cap leaked onto transient failures, which would dead-letter a recoverable outage early")
+	}
+	if !transient.ExhaustedFor(MaxValidationAttempts, MaxValidationAttempts) {
+		t.Fatal("a transient failure never exhausts")
+	}
+}

@@ -144,6 +144,28 @@ func classifyTransport(err error) Classification {
 	return Classification{Category: CategoryTransient, Retryable: true, Diagnostic: "provider_unreachable"}
 }
 
+// MaxAuthAttempts caps how many attempts an authentication failure may consume.
+//
+// A 401 gets exactly one retry, because Mosaic mints a fresh assertion on every
+// request and a genuinely transient signing hiccup will be gone by the second
+// one. A credential that is *still* rejected after a fresh signing is revoked,
+// expired, or wrong — an operator action, not a wait. Letting it run the full
+// eight-attempt budget would multiply provider load across forty minutes of
+// backoff per input during an outage the operator can already see, and plan §6
+// lists revoked credentials among the permanent categories that go straight to
+// quarantine.
+const MaxAuthAttempts = 2
+
+// ExhaustedFor reports the attempt ceiling a classification is subject to.
+// Most categories use the queue's own budget; authentication is capped much
+// lower for the reason above.
+func (c Classification) ExhaustedFor(attemptNumber, maxAttempts int) bool {
+	if c.Category == CategoryAuth && attemptNumber >= MaxAuthAttempts {
+		return true
+	}
+	return attemptNumber >= maxAttempts
+}
+
 // Permanent builds a non-retryable classification for a Mosaic-side decision
 // such as an invalid signature or an unresolvable Product.
 func Permanent(category, diagnostic string) Classification {

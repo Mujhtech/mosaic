@@ -211,6 +211,14 @@ func (s *Service) GetCredential(ctx context.Context, actor Actor, projectID, cre
 	return s.repository.GetCredential(ctx, actor, projectID, credentialID)
 }
 
+// Settings reads a Project's billing configuration.
+func (s *Service) Settings(ctx context.Context, actor Actor, projectID string) (Settings, error) {
+	if actor.ID == "" {
+		return Settings{}, ErrUnauthenticated
+	}
+	return s.repository.Settings(ctx, actor, projectID)
+}
+
 // SetBillingEnabled turns Mosaic Billing on for a Project. It is off by default.
 func (s *Service) SetBillingEnabled(ctx context.Context, actor Actor, projectID string, enabled bool) error {
 	if actor.ID == "" {

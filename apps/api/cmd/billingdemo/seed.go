@@ -1,3 +1,16 @@
+//go:build billingdemo
+
+// This command is excluded from every ordinary build.
+//
+// It constructs the real Mosaic router and the real billing service but injects
+// a locally generated trust anchor through appstorejws.WithRoot, which is a
+// verification seam that must never exist in a deployed image. cmd/api and
+// cmd/worker call NewVerifier() with no options, so the seam is unreachable
+// from the deployed path — but a buildable binary in the same module is one
+// stray Dockerfile COPY away from being shipped. The tag makes that impossible
+// rather than improbable:
+//
+//	DATABASE_URL=postgres://... go run -tags billingdemo ./cmd/billingdemo
 package main
 
 import (

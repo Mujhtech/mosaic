@@ -260,14 +260,21 @@ func (v *Verifier) verifyChain(encoded []string, instant time.Time) (*x509.Certi
 		return nil, reject(ReasonChainUntrusted)
 	}
 
-	if !hasAppStoreExtension(chains[0]) {
+	// The root is excluded from the search. Apple's root does not carry the
+	// extension, so including it changed nothing today — but the rule this
+	// enforces is "an Apple-issued *store* certificate signed this", and a trust
+	// anchor is not evidence of that. Scoping the search to the leaf and its
+	// intermediates keeps the check meaning what it says even if a future root
+	// gained the OID.
+	if !hasAppStoreExtension(chains[0][:len(chains[0])-1]) {
 		return nil, reject(ReasonIntermediateWrong)
 	}
 	return leaf, nil
 }
 
-// hasAppStoreExtension reports whether any non-root certificate in the verified
-// chain carries Apple's App Store Server extension OID.
+// hasAppStoreExtension reports whether any certificate in the supplied slice
+// carries Apple's App Store Server extension OID. Callers pass the chain with
+// the trust anchor removed.
 func hasAppStoreExtension(chain []*x509.Certificate) bool {
 	for _, certificate := range chain {
 		for _, extension := range certificate.Extensions {

@@ -167,7 +167,7 @@ func (s *Service) pullOne(ctx context.Context, identity IntakeIdentity) (bool, e
 	ctx, span := s.tracer.Start(ctx, "billing.intake.google")
 	defer span.End()
 
-	credential, envelope, class, organizationID, _, err := s.repository.CredentialSecretFor(ctx, identity.ProjectID, identity.CredentialID)
+	credential, _, _, _, _, err := s.repository.CredentialSecretFor(ctx, identity.ProjectID, identity.CredentialID)
 	if err != nil {
 		return false, err
 	}
@@ -177,8 +177,6 @@ func (s *Service) pullOne(ctx context.Context, identity IntakeIdentity) (bool, e
 	if err != nil {
 		return false, err
 	}
-	_, _, _ = envelope, class, organizationID
-
 	messages, err := s.google.Pull(ctx, account, credential.GooglePubSubProjectID, credential.GooglePubSubSubscription, rtdnBatchSize)
 	if err != nil {
 		return false, err

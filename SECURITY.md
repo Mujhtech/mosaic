@@ -56,6 +56,17 @@ Mosaic's security model assumes the operator completes these steps:
   it up separately from the database — losing it makes stored provider
   credentials permanently undecryptable. Rotation is documented in
   [docs/backend/operations/key-rotation.md](docs/backend/operations/key-rotation.md).
+- **Mosaic Billing raises what the keyring protects.** With
+  `MOSAIC_BILLING_ENABLED` set, the same keyring also seals Apple In-App
+  Purchase keys, Google service-account keys, and retained Raw Billing Input
+  bodies — which contain Apple signed payloads and full Google purchase tokens
+  ([ADR 0023](docs/architecture/decisions/0023-persist-store-transaction-evidence-in-an-append-only-billing-ledger.md)).
+  Those bodies expire after `MOSAIC_BILLING_RAW_RETENTION_DAYS` (90 by default);
+  normalized Transaction Facts are kept indefinitely and carry no customer
+  identity, no price, and no currency. The Apple notification endpoint is
+  authenticated by an unguessable per-credential intake token in the URL plus
+  JWS verification against a pinned, compiled-in Apple root; treat the endpoint
+  URL as a secret and rotate the credential to invalidate it.
 
 Browser sessions use opaque tokens stored as SHA-256 digests
 ([ADR 0017](docs/architecture/decisions/0017-use-opaque-browser-sessions.md));

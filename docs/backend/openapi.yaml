@@ -1759,6 +1759,23 @@ paths:
         "429": { $ref: "#/components/responses/SubmissionRetryable" }
         "503": { $ref: "#/components/responses/SubmissionRetryable" }
   /v1/projects/{projectId}/billing/settings:
+    get:
+      operationId: getBillingSettings
+      tags: [Billing Operations]
+      description: |
+        Read a Project's Mosaic Billing configuration. Owner or admin only.
+
+        This is the first-class enablement read. Inferring enablement from the billing health
+        endpoint answers a different question, costs several aggregate queries, and cannot
+        distinguish "billing is off" from "billing is on and nothing has happened yet".
+
+        `canDisable` and `activeCredentialCount` report the credential rule ahead of time, so a
+        caller can explain why disabling is unavailable instead of discovering it through a 409.
+      parameters: [{ $ref: "#/components/parameters/ProjectID" }]
+      responses:
+        "200": { description: Billing settings., content: { application/json: { schema: { type: object, properties: { data: { $ref: "#/components/schemas/BillingSettings" } } } } } }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
     put:
       operationId: updateBillingSettings
       tags: [Billing Operations]
@@ -2542,6 +2559,21 @@ components:
         windowStart: { type: string, format: date-time }
         windowEnd: { type: string, format: date-time }
         validatorVersion: { type: integer, minimum: 1 }
+    BillingSettings:
+      type: object
+      description: Per-Project Mosaic Billing configuration. Off by default.
+      properties:
+        projectId: { type: string }
+        billingEnabled: { type: boolean }
+        activeCredentialCount:
+          type: integer
+          description: Active Store Server Credentials. Disabling is refused while this is above zero.
+        canDisable:
+          type: boolean
+          description: |
+            Whether a disable would be accepted right now. False while any Store Server Credential
+            is active: revoking the credential is what actually stops the store delivering.
+        updatedAt: { type: string, format: date-time }
     BillingHealth:
       type: object
       properties:

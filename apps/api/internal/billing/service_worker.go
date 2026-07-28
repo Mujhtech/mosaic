@@ -856,7 +856,7 @@ func (s *Service) classifiedFailure(job ValidationJob, input RawInput, attemptID
 			CorrelationID:      input.CorrelationID,
 		},
 	}
-	exhausted := attemptNumber >= job.MaxAttempts
+	exhausted := classification.ExhaustedFor(attemptNumber, job.MaxAttempts)
 	switch {
 	case classification.Retryable && !exhausted:
 		outcome.Attempt.Outcome = OutcomeRetryableFailure
@@ -866,11 +866,22 @@ func (s *Service) classifiedFailure(job ValidationJob, input RawInput, attemptID
 	case classification.Retryable && exhausted:
 		// A retryable failure that has run out of attempts is a dead letter, not
 		// a silent drop: it becomes a quarantine record an operator can retry.
+		// An authentication failure reaches here after two attempts rather than
+		// eight, and quarantines under a reason that names the credential, so
+		// the operator is pointed at the thing they actually have to fix.
 		outcome.Attempt.Outcome = OutcomePermanentlyFailed
 		outcome.JobStatus = "failed"
+		reason := QuarantineValidationExhausted
+		scopes := []string(nil)
+		if classification.Category == CategoryAuth {
+			// Name the credential, not the input: a rejected assertion is a
+			// credential problem and the operator's next action is to check it.
+			reason = QuarantineCredentialRevoked
+			scopes = []string{"store_server_credential"}
+		}
 		outcome.Quarantine = &QuarantineWrite{
 			RawInputID: input.ID, Provider: input.Provider,
-			ReasonCode: QuarantineValidationExhausted, Severity: "error",
+			ReasonCode: reason, Severity: "error", Scopes: scopes,
 			DiagnosticCode: classification.Diagnostic, OccurredAt: now,
 		}
 	default:

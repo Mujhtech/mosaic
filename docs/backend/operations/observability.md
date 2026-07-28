@@ -100,9 +100,31 @@ rate spike can be attributed to a specific cause.
 | `mosaic.worker.queue.oldest_age_seconds` | Age of the oldest unfinished job |
 | `mosaic.worker.queue.dead_lettered` | Jobs that exhausted their retry budget |
 
-Families: `analytics` (queues `aggregate`, `export`, `deletion`, `retention`) and
-`experiment` (queue `schedule`). Each executed job logs one line with
-`job_family`, `worker_id`, `duration`, and `failed`.
+Families: `analytics` (queues `aggregate`, `export`, `deletion`, `retention`),
+`experiment` (queue `schedule`), and — when `MOSAIC_BILLING_ENABLED` is set —
+`billing` (queues `validation`, `reconciliation`, `replay`). Each executed job
+logs one line with `job_family`, `worker_id`, `duration`, and `failed`.
+
+The worker additionally schedules `billing_rtdn` and `billing_retention`, which
+are polling loops rather than queues and so publish no depth.
+
+### Mosaic Billing
+
+| Metric | Meaning |
+| --- | --- |
+| `mosaic.billing.intake.accepted` / `.rejected` | Store notifications and observations recorded or refused, attributes `provider` and `reason` |
+| `mosaic.billing.signature.failures` | JWS verification failures — a **security** signal, not a health one |
+| `mosaic.billing.validation.outcomes` | Attempts by `provider` and `outcome` |
+| `mosaic.billing.validation.latency` | Attempt duration in milliseconds |
+| `mosaic.billing.facts.appended` / `.deduplicated` | Ledger growth against replay no-ops |
+| `mosaic.billing.provider.requests` | Outbound store calls by `endpoint`, with `failed` |
+| `mosaic.billing.quarantine.depth` | Open quarantine records by `reason_code` |
+
+A sustained non-zero `signature.failures` means forged or misdirected
+notifications, not a Mosaic fault: the intake token resolved but the payload did
+not verify. A rising `quarantine.depth{reason_code="product_unknown"}` means the
+operator has store Products Mosaic has no mapping for, which is an operator
+action rather than an incident.
 
 Depth alone does not distinguish a busy queue from a stuck one; oldest age does.
 

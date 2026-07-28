@@ -146,6 +146,10 @@ type QuarantineWrite struct {
 type Repository interface {
 	// Settings and tenancy.
 	BillingEnabled(ctx context.Context, projectID string) (bool, error)
+	// Settings is the authorized operator read. It reports enablement alongside
+	// the credential count, because whether billing *can* be disabled depends on
+	// it and a caller should not have to infer that from a failed write.
+	Settings(ctx context.Context, actor Actor, projectID string) (Settings, error)
 	OrganizationForProject(ctx context.Context, projectID string) (string, error)
 	// EnvironmentScope returns the Environment's own mode and owning
 	// organization. Callers that persist a Raw Billing Input must read the mode
@@ -264,6 +268,19 @@ type Repository interface {
 
 	// Health.
 	Health(ctx context.Context, actor Actor, projectID, environmentID string) (Health, error)
+}
+
+// Settings is the per-Project billing configuration.
+type Settings struct {
+	ProjectID      string `json:"projectId"`
+	BillingEnabled bool   `json:"billingEnabled"`
+	// ActiveCredentialCount is why CanDisable may be false. Surfacing the
+	// number rather than only the verdict lets the caller say *what* is
+	// blocking rather than only that something is.
+	ActiveCredentialCount int `json:"activeCredentialCount"`
+	// CanDisable reports whether a disable would be accepted right now.
+	CanDisable bool       `json:"canDisable"`
+	UpdatedAt  *time.Time `json:"updatedAt,omitempty"`
 }
 
 // Health is the billing health summary shown to operators.

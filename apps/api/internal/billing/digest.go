@@ -53,6 +53,19 @@ func GooglePurchaseKey(packageName string, tokenDigest []byte) []byte {
 	return digestOf("mosaic-billing-google-purchase-v1", packageName, hex.EncodeToString(tokenDigest))
 }
 
+// UnverifiedInputKey identifies unverified intake for one credential, one
+// failure reason, and one hour.
+//
+// It is deliberately not derived from the body. The notification endpoint has
+// no rate limiter — a 429 to Apple spends a non-renewable delivery attempt — so
+// a body-derived key would let anyone holding a leaked intake token grow the
+// table without bound. The bucket keeps what an operator can act on (which
+// credential, what kind of failure, when) and drops what they cannot (the
+// specific garbage, which is not retained anyway).
+func UnverifiedInputKey(credentialID, reason, hourBucket string) []byte {
+	return digestOf("mosaic-billing-apple-unverified-v1", credentialID, reason, hourBucket)
+}
+
 // ObservationKey identifies one client or trusted-server submission.
 func ObservationKey(environmentID, submissionID string) []byte {
 	return digestOf("mosaic-billing-observation-v1", environmentID, submissionID)
