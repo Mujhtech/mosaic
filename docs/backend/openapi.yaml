@@ -2586,7 +2586,7 @@ paths:
         - { $ref: "#/components/parameters/EnvironmentID" }
         - { $ref: "#/components/parameters/BillingCustomerID" }
       responses:
-        "202": { description: The projection was queued., content: { application/json: { schema: { type: object, properties: { data: { $ref: "#/components/schemas/BillingSyncRequest" } } } } } }
+        "202": { description: The projection was queued., content: { application/json: { schema: { type: object, properties: { data: { $ref: "#/components/schemas/OperatorBillingSyncRequest" } } } } } }
         "401": { $ref: "#/components/responses/Error" }
         "403": { $ref: "#/components/responses/Error" }
         "404": { $ref: "#/components/responses/Error" }
@@ -2723,7 +2723,7 @@ paths:
                   data:
                     type: object
                     properties:
-                      items: { type: array, items: { $ref: "#/components/schemas/BillingIdentityConflict" } }
+                      items: { type: array, items: { $ref: "#/components/schemas/OperatorBillingIdentityConflict" } }
         "401": { $ref: "#/components/responses/Error" }
         "403": { $ref: "#/components/responses/Error" }
         "404": { $ref: "#/components/responses/Error" }
@@ -2740,7 +2740,7 @@ paths:
         - { $ref: "#/components/parameters/ProjectID" }
         - { $ref: "#/components/parameters/IdentityConflictID" }
       responses:
-        "200": { description: The conflict., content: { application/json: { schema: { type: object, properties: { data: { $ref: "#/components/schemas/BillingIdentityConflictDetail" } } } } } }
+        "200": { description: The conflict., content: { application/json: { schema: { type: object, properties: { data: { $ref: "#/components/schemas/OperatorBillingIdentityConflictDetail" } } } } } }
         "401": { $ref: "#/components/responses/Error" }
         "403": { $ref: "#/components/responses/Error" }
         "404": { $ref: "#/components/responses/Error" }
@@ -2781,7 +2781,7 @@ paths:
           application/json:
             schema: { $ref: "#/components/schemas/ResolveIdentityConflictRequest" }
       responses:
-        "200": { description: The resolved conflict., content: { application/json: { schema: { type: object, properties: { data: { $ref: "#/components/schemas/BillingIdentityConflict" } } } } } }
+        "200": { description: The resolved conflict., content: { application/json: { schema: { type: object, properties: { data: { $ref: "#/components/schemas/OperatorBillingIdentityConflict" } } } } } }
         "401": { $ref: "#/components/responses/Error" }
         "403": { $ref: "#/components/responses/Error" }
         "404": { $ref: "#/components/responses/Error" }
@@ -4494,7 +4494,7 @@ components:
       properties:
         found: { type: boolean }
         customer: { $ref: "#/components/schemas/BillingCustomerSummary" }
-    BillingCustomerAlias:
+    OperatorBillingCustomerAlias:
       type: object
       description: |
         One accepted external identity bound to a customer, as a protected representation. There
@@ -4646,14 +4646,14 @@ components:
       type: object
       properties:
         customer: { $ref: "#/components/schemas/BillingCustomerSummary" }
-        aliases: { type: array, items: { $ref: "#/components/schemas/BillingCustomerAlias" } }
+        aliases: { type: array, items: { $ref: "#/components/schemas/OperatorBillingCustomerAlias" } }
         purchaseLineages: { type: array, items: { $ref: "#/components/schemas/BillingPurchaseLineage" } }
         subscriptions: { type: array, items: { $ref: "#/components/schemas/BillingSubscriptionSnapshot" } }
         oneTimePurchases: { type: array, items: { $ref: "#/components/schemas/BillingOneTimePurchase" } }
-        identityConflicts: { type: array, items: { $ref: "#/components/schemas/BillingIdentityConflict" } }
+        identityConflicts: { type: array, items: { $ref: "#/components/schemas/OperatorBillingIdentityConflict" } }
         currentSnapshot: { $ref: "#/components/schemas/BillingEntitlementSnapshot" }
         projectionStatus: { $ref: "#/components/schemas/BillingProjectionStatus" }
-    BillingIdentityConflict:
+    OperatorBillingIdentityConflict:
       type: object
       description: |
         One disputed association held open for operator resolution. Access is granted to neither
@@ -4673,10 +4673,10 @@ components:
         resolvedAt: { type: string, format: date-time }
         resolutionAction: { type: string, enum: [keep_existing, reassign_to_candidate, operator_split] }
         resolutionReason: { type: string }
-    BillingIdentityConflictDetail:
+    OperatorBillingIdentityConflictDetail:
       type: object
       properties:
-        conflict: { $ref: "#/components/schemas/BillingIdentityConflict" }
+        conflict: { $ref: "#/components/schemas/OperatorBillingIdentityConflict" }
         lineage: { $ref: "#/components/schemas/BillingPurchaseLineage" }
     ResolveIdentityConflictRequest:
       type: object
@@ -4686,7 +4686,7 @@ components:
         action: { type: string, enum: [keep_existing, reassign_to_candidate, operator_split] }
         assignedBillingCustomerId: { type: string, maxLength: 128, description: Optional. When present it must name the party the action already implies. }
         reason: { type: string, minLength: 1, maxLength: 500, description: Required. Recorded on the conflict and on the audit event. }
-    BillingSyncRequest:
+    OperatorBillingSyncRequest:
       type: object
       properties:
         billingCustomerId: { type: string }
