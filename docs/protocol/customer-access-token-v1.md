@@ -174,6 +174,19 @@ customer, and neither substitutes for the other.
 `readerPolicy.tokenInQueryString` is `forbidden`. Query strings end up in access
 logs, proxy logs, and browser history.
 
+### Observation submission
+
+The SDK also attaches the token, when it holds one, to Billing Ingestion
+observation submissions, as the optional `Mosaic-Customer-Token` request header.
+This lets the server record submission-context association evidence — that the
+request submitting a provider transaction was authenticated as a known customer.
+
+The header is transport only. No Billing Ingestion record gains a field, and the
+token never enters an observation body, because observation bodies are persisted
+as raw validation inputs, replayed, and digested into fact identity — all three
+of which a credential must never be. See
+[the customer token is transport, not a record field](billing-ingestion-v1.md#the-customer-token-is-transport-not-a-record-field).
+
 ## SDK obligations
 
 Accepting a token means accepting these. They are conformance obligations,

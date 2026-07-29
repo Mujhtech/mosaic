@@ -395,14 +395,20 @@ The response is one of exactly two records, both returned with `200`:
 - `snapshotUnchanged` — when `knownSnapshotVersion` matches the server's current
   version, carrying the refreshed freshness windows.
 
-**SDKs never rely on a bare HTTP `304` or on any freshness header.** Conditional
-`GET` with `If-None-Match` and `304` remains available server-side for non-SDK
-callers, and is a transport convenience rather than part of this contract: a
-`304` carries no body, so it cannot carry the refreshed `refreshAfter` and
-`validUntil`, and there are no header names in the frozen schemas to carry them
-instead. An SDK that took the `304` path would have to invent a freshness
-mechanism the contract does not define, and would have nowhere to put the
-negotiation.
+**`POST` is the only conditional mechanism.** There is no conditional `GET` and
+no `304` on this surface. The `GET` read exists for non-SDK callers and always
+answers with a plain `200` carrying the full `customerEntitlementSnapshot`; it
+is unconditional.
+
+A conditional `GET` was considered and removed. A `304` carries no body, so it
+cannot carry the refreshed `refreshAfter` and `validUntil`, and no freshness
+header name exists anywhere in the frozen schemas to carry them instead — so the
+`304` path could confirm a snapshot without being able to say how long the
+confirmation was good for, which is the one thing the unchanged response exists
+to communicate. It also had nowhere to put the contract negotiation. Both
+problems are solved by `snapshotUnchanged`, which is a body, so the second
+mechanism earned nothing and was a second place for freshness semantics to
+drift.
 
 `billingCustomerId` on the request is a **hint**. The server derives the customer
 from the Customer Access Token and verifies the hint against it, refusing a

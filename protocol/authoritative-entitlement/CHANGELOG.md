@@ -115,6 +115,25 @@ Orchestrator-ratified, documentation only, no schema change:
   **`differentCustomer`**, alongside `fresh`, `refreshRecommended`,
   `staleWithinGrace`, `expired`, `missing`, and `invalid`.
 
+### Stage 4 documentation corrections, 2026-07-29
+
+- **There is no conditional `GET` on the sync surface.** The branch was removed
+  during the Stage 4 defect fixes (D-5). The `GET` read, which exists for non-SDK
+  callers, is unconditional and always answers `200` with the full
+  `customerEntitlementSnapshot`; `POST` with `entitlementSyncRequest` is the only
+  conditional mechanism, and `snapshotUnchanged` the only unchanged response. A
+  `304` could confirm a snapshot without being able to state how long the
+  confirmation held, since it has no body and no freshness header exists in the
+  frozen schemas — so it earned nothing over `snapshotUnchanged` and was a second
+  place for freshness semantics to drift.
+- **The Customer Access Token now travels on observation submission** as the
+  optional `Mosaic-Customer-Token` transport header, so the server can record
+  submission-context association evidence. Documented in the Billing Ingestion
+  transport section under the established transport-is-not-contract rule: no
+  Billing Ingestion record schema changes, the frozen draft stays frozen, and the
+  credential never enters an observation body because those bodies are persisted,
+  replayed, and digested into fact identity.
+
 ### Cross-contract discipline
 
 Authoritative Entitlement `1` does **not** `$ref` Billing Ingestion `1`. Both are
