@@ -267,29 +267,95 @@ func (s *Service) ResolveLineageCustomer(ctx context.Context, projectID, lineage
 	}
 
 	resolution := Resolve(observations, active)
+	// Prior association normally outranks an observation. Purchase-anchored
+	// customers are the one deliberate exception: they represent nobody, and a
+	// claimant that proves ownership must be able to adopt the purchase even
+	// when its evidence rank is lower than the prior pointer. This is evaluated
+	// before the reassignment switch so all later safety rules remain shared.
+	if lineage.BillingCustomerID != "" && resolution.CustomerID == lineage.BillingCustomerID {
+		if anchored, anchorErr := s.repository.PurchaseAnchoredOnly(ctx, projectID, lineage.BillingCustomerID); anchorErr == nil && anchored {
+			provenCandidates := map[string]string{}
+			for _, observation := range observations {
+				candidateID := observation.CustomerID
+				if candidateID == "" && len(observation.Digest) > 0 {
+					candidateID = active[string(observation.Digest)]
+				}
+				if candidateID == "" || candidateID == lineage.BillingCustomerID {
+					continue
+				}
+				if proof, proven := OwnershipProof(observations, active, candidateID); proven {
+					provenCandidates[candidateID] = proof
+				}
+			}
+			if len(provenCandidates) == 1 {
+				for candidateID := range provenCandidates {
+					resolution.Outcome = OutcomeResolved
+					resolution.CustomerID = candidateID
+				}
+			}
+		}
+	}
 
-	// Corrects review finding I-10.
-	//
 	// A lineage that is already attached and whose evidence now names someone
-	// else is a reassignment, and reassignment away from a customer that
-	// already holds the purchase is never automatic. Higher-authority evidence
-	// used to win here and move the pointer silently, which left two wrongs
-	// behind at once: no record an operator could act on, and a previously
-	// granted customer whose committed snapshot still granted the purchase it
-	// no longer owned. The move is downgraded to a conflict *before* evidence
-	// is written, so the persisted evidence records `conflicting` rather than a
-	// resolution that never happened.
-	reassignedFrom := ""
+	// else is a reassignment, and there are three different right answers
+	// depending on who the incumbent is and what the challenger proved.
+	reassignedFrom, adoptedFrom, adoptionProof := "", "", ""
 	if resolution.Outcome == OutcomeResolved && lineage.BillingCustomerID != "" &&
 		lineage.BillingCustomerID != resolution.CustomerID {
-		reassignedFrom = lineage.BillingCustomerID
-		resolution.Outcome = OutcomeConflicting
-		// The incumbent is named first; the challenger the evidence proposed is
-		// second. An operator resolving with `assigned_second` is the explicit
-		// reassignment this path refuses to perform on its own.
-		resolution.ConflictWith = resolution.CustomerID
-		resolution.CustomerID = lineage.BillingCustomerID
-		resolution.DiagnosticCode = DiagnosticReassignmentBlocked
+
+		anchored, anchorErr := s.repository.PurchaseAnchoredOnly(ctx, projectID, lineage.BillingCustomerID)
+		if anchorErr != nil {
+			// Fail closed. An unreadable incumbent must not be treated as an
+			// adoptable anchor, because adoption moves a purchase.
+			anchored = false
+		}
+		proof, proven := OwnershipProof(observations, active, resolution.CustomerID)
+
+		switch {
+		case anchored && proven:
+			// Plan §5a rule 3, the adoption case. The incumbent exists only
+			// because a purchase needed somewhere to attach: it has no aliases
+			// and no evidence beyond the anchor itself, so nobody is behind it
+			// to lose access. The identified customer proved ownership, so it
+			// adopts the lineage rather than being told to wait for an operator
+			// who has strictly less information than the store just supplied.
+			adoptedFrom, adoptionProof = lineage.BillingCustomerID, proof
+			resolution.DiagnosticCode = DiagnosticAnchorAdopted
+
+		case anchored:
+			// An adoption claim with nothing behind it. Recorded so it is
+			// visible on the operator's purchase-anchored customer view, and
+			// refused: without proof this is indistinguishable from someone
+			// asking to be given a stranger's purchase.
+			resolution.Outcome = OutcomeUnresolved
+			resolution.DiagnosticCode = DiagnosticAdoptionRequiresProof
+
+		case resolution.DecidingRank <= RankTokenBoundSubmission:
+			// Corrects the Stage 5 blocking finding. A verdict carried only by
+			// a token-bound public-SDK-key submission (or by weaker evidence)
+			// may not move an established lineage, and — the part that matters
+			// — may not open a conflict either. Freezing on this evidence was a
+			// remote denial-of-access primitive: anybody able to present a
+			// token for a transaction could freeze the purchase of the customer
+			// who actually owns it. The claim is recorded and ignored.
+			resolution.Outcome = OutcomeUnresolved
+			resolution.DiagnosticCode = DiagnosticTokenBoundCannotReassign
+
+		default:
+			// Corrects review finding I-10. Reassignment away from a customer
+			// that already holds the purchase is never automatic on strong
+			// evidence either. The move is downgraded to a conflict *before*
+			// evidence is written, so the persisted evidence records
+			// `conflicting` rather than a resolution that never happened.
+			reassignedFrom = lineage.BillingCustomerID
+			resolution.Outcome = OutcomeConflicting
+			// The incumbent is named first; the challenger the evidence proposed
+			// is second. An operator resolving with `assigned_second` is the
+			// explicit reassignment this path refuses to perform on its own.
+			resolution.ConflictWith = resolution.CustomerID
+			resolution.CustomerID = lineage.BillingCustomerID
+			resolution.DiagnosticCode = DiagnosticReassignmentBlocked
+		}
 	}
 
 	now := s.now()
@@ -302,11 +368,19 @@ func (s *Service) ResolveLineageCustomer(ctx context.Context, projectID, lineage
 		if authorityRank(observation.EvidenceType) == 0 {
 			outcome = OutcomeUnsupported
 		}
+		observationCustomerID := observation.CustomerID
+		if observationCustomerID == "" && len(observation.Digest) > 0 {
+			observationCustomerID = active[string(observation.Digest)]
+		}
 		if err := s.repository.RecordEvidence(ctx, Evidence{
 			ID: id, ProjectID: projectID, EnvironmentID: lineage.EnvironmentID,
 			PurchaseLineageID: lineageID, EvidenceType: observation.EvidenceType,
 			EvidenceDigest: observation.Digest, RawInputID: observation.RawInputID,
-			BillingCustomerID: resolution.CustomerID, ResolverVersion: ResolverVersion,
+			// Preserve the customer this individual observation named. Using the
+			// final winner here erased the previous owner from prior-lineage
+			// evidence, which made a pointer move impossible to recover after a
+			// projection enqueue failure.
+			BillingCustomerID: observationCustomerID, ResolverVersion: ResolverVersion,
 			Outcome: outcome, DiagnosticCode: resolution.DiagnosticCode,
 			ObservedAt: now, CreatedAt: now,
 		}); err != nil {
@@ -317,6 +391,15 @@ func (s *Service) ResolveLineageCustomer(ctx context.Context, projectID, lineage
 	switch resolution.Outcome {
 	case OutcomeResolved:
 		if lineage.BillingCustomerID == resolution.CustomerID {
+			// A previous attempt may have committed the pointer and then failed
+			// while enqueueing one of the affected customer aggregates. Persisted
+			// prior-lineage evidence is the retry record for that half-finished
+			// move, so an identical request converges instead of returning early
+			// with a stale or double grant still committed.
+			if err := s.recoverCommittedAssociation(ctx, projectID, lineage, observations,
+				active, resolution.CustomerID, now); err != nil {
+				return Resolution{}, err
+			}
 			return resolution, nil
 		}
 		if err := s.repository.AttachLineageCustomer(ctx, projectID, lineageID, resolution.CustomerID, now); err != nil {
@@ -336,6 +419,12 @@ func (s *Service) ResolveLineageCustomer(ctx context.Context, projectID, lineage
 		// so a caller's retry re-reaches this point, whereas dropping the trigger
 		// leaves the grant unmade until some unrelated event happens to enqueue a
 		// projection.
+		if adoptedFrom != "" {
+			if err := s.completeAdoption(ctx, projectID, lineage, adoptedFrom,
+				resolution.CustomerID, adoptionProof, now); err != nil {
+				return Resolution{}, err
+			}
+		}
 		if err := s.scheduleReprojection(ctx, projectID, lineage.EnvironmentID, resolution.CustomerID); err != nil {
 			return Resolution{}, err
 		}
@@ -352,9 +441,6 @@ func (s *Service) ResolveLineageCustomer(ctx context.Context, projectID, lineage
 			SecondCustomerID: resolution.ConflictWith, DiagnosticCode: resolution.DiagnosticCode,
 			OpenedAt: now,
 		}); err != nil {
-			return Resolution{}, ErrUnavailable
-		}
-		if err := s.repository.SetLineageFrozen(ctx, projectID, lineageID, true, "identity_conflict", now); err != nil {
 			return Resolution{}, ErrUnavailable
 		}
 		_ = s.repository.RecordAudit(ctx, Actor{}, projectID, "billing.lineage.identity_conflict_opened",
@@ -383,33 +469,116 @@ func (s *Service) ResolveLineageCustomer(ctx context.Context, projectID, lineage
 	return resolution, nil
 }
 
-// LocateLineage finds or creates the lineage for a validated provider chain.
-// It never merges two lineages because they share a Product or a customer.
-func (s *Service) LocateLineage(ctx context.Context, lineage Lineage) (Lineage, error) {
-	if err := s.requireEnabled(ctx, lineage.ProjectID); err != nil {
-		return Lineage{}, err
-	}
-	if lineage.ID == "" {
-		id, err := s.newID("bpl")
-		if err != nil {
-			return Lineage{}, ErrUnavailable
-		}
-		lineage.ID = id
-	}
-	now := s.now()
-	lineage.CreatedAt, lineage.UpdatedAt = now, now
-	if lineage.DiagnosticStatus == "" {
-		lineage.DiagnosticStatus = "none"
-	}
-	located, created, err := s.repository.LocateLineage(ctx, lineage)
+// recoverCommittedAssociation finishes the projection side effects of an
+// association whose lineage pointer already reached its intended customer.
+// Prior-lineage evidence is written before the pointer, so it survives exactly
+// the failure window this method repairs.
+func (s *Service) recoverCommittedAssociation(ctx context.Context, projectID string, lineage Lineage,
+	observations []Observation, active map[string]string, currentCustomerID string, now time.Time) error {
+
+	previous, err := s.repository.PriorLineageCustomers(ctx, projectID, lineage.ID)
 	if err != nil {
-		return Lineage{}, ErrUnavailable
+		return ErrUnavailable
 	}
-	if created {
-		_ = s.repository.RecordAudit(ctx, Actor{}, lineage.ProjectID, "billing.lineage.created",
-			"purchase_lineage", located.ID, map[string]string{"provider": located.Provider}, now)
+	proof, proven := OwnershipProof(observations, active, currentCustomerID)
+	for _, previousCustomerID := range previous {
+		if previousCustomerID == "" || previousCustomerID == currentCustomerID {
+			continue
+		}
+		anchored, anchorErr := s.repository.PurchaseAnchoredOnly(ctx, projectID, previousCustomerID)
+		if anchorErr != nil {
+			return ErrUnavailable
+		}
+		recorded, recordErr := s.repository.AdoptionRecorded(ctx, projectID, lineage.ID, currentCustomerID)
+		if recordErr != nil {
+			return ErrUnavailable
+		}
+		if anchored && recorded {
+			remaining, countErr := s.repository.LineageCountForCustomer(ctx, projectID, previousCustomerID)
+			if countErr != nil {
+				return ErrUnavailable
+			}
+			if remaining == 0 {
+				if err := s.repository.SetCustomerStatus(ctx, projectID, previousCustomerID, StatusAbsorbed, now); err != nil {
+					return ErrUnavailable
+				}
+			}
+			if err := s.scheduleReprojection(ctx, projectID, lineage.EnvironmentID, previousCustomerID); err != nil {
+				return err
+			}
+			continue
+		}
+		if anchored && proven {
+			if err := s.completeAdoption(ctx, projectID, lineage, previousCustomerID,
+				currentCustomerID, proof, now); err != nil {
+				return err
+			}
+			continue
+		}
+		if err := s.scheduleReprojection(ctx, projectID, lineage.EnvironmentID, previousCustomerID); err != nil {
+			return err
+		}
 	}
-	return located, nil
+	return s.scheduleReprojection(ctx, projectID, lineage.EnvironmentID, currentCustomerID)
+}
+
+// completeAdoption finishes an anchored-customer adoption (plan §5a rule 3)
+// after the lineage pointer has already moved.
+//
+// The anchor row is never deleted. Entitlement snapshots, association evidence,
+// and audit events already cite it, and a support investigation has to be able
+// to follow the purchase from the anchor to the person who turned out to own it.
+// It is marked `absorbed` instead — but only once it holds no lineages at all,
+// because a customer that still holds a granting purchase is not absorbed, it is
+// active, and saying otherwise on an operator surface would be a lie about who
+// currently owns what. An anchor holds exactly one lineage by construction
+// (`anchorToNewCustomer` mints one customer per unattached lineage and nothing
+// else ever attaches one to it), so in practice the guard always passes; it
+// exists so that if that ever stops being true the consequence is a visible
+// leftover rather than a silent misstatement.
+//
+// Both customers are reprojected. The loser is the one holding a committed
+// snapshot that still grants the purchase, which is exactly the stale grant
+// review finding I-10 is about.
+func (s *Service) completeAdoption(ctx context.Context, projectID string, lineage Lineage,
+	anchorID, adopterID, proof string, now time.Time) error {
+
+	evidenceID, err := s.newID("bae")
+	if err != nil {
+		return ErrUnavailable
+	}
+	if err := s.repository.RecordEvidence(ctx, Evidence{
+		ID: evidenceID, ProjectID: projectID, EnvironmentID: lineage.EnvironmentID,
+		PurchaseLineageID: lineage.ID, EvidenceType: EvidenceAnchorAdoption,
+		BillingCustomerID: adopterID, ResolverVersion: ResolverVersion,
+		Outcome: OutcomeResolved, DiagnosticCode: DiagnosticAnchorAdopted + ":" + proof,
+		ObservedAt: now, CreatedAt: now,
+	}); err != nil {
+		return ErrUnavailable
+	}
+
+	remaining, err := s.repository.LineageCountForCustomer(ctx, projectID, anchorID)
+	if err != nil {
+		return ErrUnavailable
+	}
+	if remaining == 0 {
+		if err := s.repository.SetCustomerStatus(ctx, projectID, anchorID, StatusAbsorbed, now); err != nil {
+			return ErrUnavailable
+		}
+	}
+	_ = s.repository.RecordAudit(ctx, Actor{}, projectID, "billing.customer.anchor_adopted",
+		"billing_customer", anchorID, map[string]string{
+			"adoptedByBillingCustomerId": adopterID,
+			"purchaseLineageId":          lineage.ID,
+			"ownershipProof":             proof,
+		}, now)
+	logSafely(ctx, "purchase-anchored billing customer adopted", map[string]string{
+		"project_id": projectID, "billing_customer_id": anchorID,
+		"adopted_by_billing_customer_id": adopterID, "purchase_lineage_id": lineage.ID,
+		"ownership_proof": proof,
+	})
+
+	return s.scheduleReprojection(ctx, projectID, lineage.EnvironmentID, anchorID)
 }
 
 // RecordSupersession records that one lineage was replaced by another. Nothing

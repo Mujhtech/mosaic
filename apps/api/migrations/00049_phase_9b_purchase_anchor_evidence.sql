@@ -39,7 +39,15 @@ ALTER TABLE billing_association_evidence
 -- past the migration that made them expressible: the customers they explain
 -- still exist and still hold their lineages, but the recorded reason they were
 -- created does not survive the downgrade.
+--
+-- The comment above described the suspension; the statement that performed it
+-- was missing, so this down path failed against the append-only trigger and the
+-- migration was not reversible at all. The wrapper mirrors 00042's.
+ALTER TABLE billing_association_evidence
+    DISABLE TRIGGER billing_association_evidence_append_only;
 DELETE FROM billing_association_evidence WHERE evidence_type = 'purchase_anchor';
+ALTER TABLE billing_association_evidence
+    ENABLE TRIGGER billing_association_evidence_append_only;
 ALTER TABLE billing_association_evidence
     DROP CONSTRAINT billing_association_evidence_evidence_type_check;
 ALTER TABLE billing_association_evidence

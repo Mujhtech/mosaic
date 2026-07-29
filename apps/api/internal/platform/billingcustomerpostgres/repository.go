@@ -291,6 +291,58 @@ func (r *Repository) SetCustomerStatus(ctx context.Context, projectID, customerI
 	return nil
 }
 
+// PurchaseAnchoredOnly reports whether a customer exists solely to hold a
+// purchase (plan §5a rules 1 and 2) and has never been identified by anything.
+//
+// The excluded evidence types are the ones a purchase-anchored customer
+// acquires *because* it was anchored rather than because anyone identified it:
+// the anchor row itself, the prior association every subsequent renewal
+// re-derives from it, and installation observations, which are attribution-only
+// and can never select a customer at all. Anything else that resolved — a
+// submission, a correlator, a restore link, an operator repair, an earlier
+// adoption — means a person is behind this customer, and taking its purchase
+// away becomes an operator decision rather than a resolver one.
+//
+// Aliases are checked without a type filter. Any alias at all is somebody
+// having said who this is.
+func (r *Repository) PurchaseAnchoredOnly(ctx context.Context, projectID, customerID string) (bool, error) {
+	if customerID == "" {
+		return false, nil
+	}
+	var anchored bool
+	err := r.pool.QueryRow(ctx,
+		`SELECT
+		    EXISTS (SELECT 1 FROM billing_association_evidence
+		             WHERE project_id=$1 AND billing_customer_id=$2
+		               AND evidence_type='purchase_anchor')
+		AND NOT EXISTS (SELECT 1 FROM billing_association_evidence
+		                 WHERE project_id=$1 AND billing_customer_id=$2
+		                   AND outcome='resolved'
+		                   AND evidence_type NOT IN (
+		                       'purchase_anchor', 'prior_lineage_association',
+		                       'installation_observation'))
+		AND NOT EXISTS (SELECT 1 FROM billing_customer_aliases
+		                 WHERE project_id=$1 AND billing_customer_id=$2
+		                   AND effective_end IS NULL)`,
+		projectID, customerID).Scan(&anchored)
+	if err != nil {
+		return false, fmt.Errorf("read purchase-anchored customer state: %w", err)
+	}
+	return anchored, nil
+}
+
+// LineageCountForCustomer counts the purchase lineages a customer still holds,
+// across every Environment.
+func (r *Repository) LineageCountForCustomer(ctx context.Context, projectID, customerID string) (int, error) {
+	var count int
+	if err := r.pool.QueryRow(ctx,
+		`SELECT count(*) FROM purchase_lineages WHERE project_id=$1 AND billing_customer_id=$2`,
+		projectID, customerID).Scan(&count); err != nil {
+		return 0, fmt.Errorf("count purchase lineages for customer: %w", err)
+	}
+	return count, nil
+}
+
 // ---------------------------------------------------------------------------
 // Aliases
 // ---------------------------------------------------------------------------
@@ -475,6 +527,47 @@ func (r *Repository) RecordEvidence(ctx context.Context, evidence billingcustome
 		return fmt.Errorf("record association evidence: %w", err)
 	}
 	return nil
+}
+
+func (r *Repository) PriorLineageCustomers(ctx context.Context, projectID, lineageID string) ([]string, error) {
+	rows, err := r.pool.Query(ctx,
+		`SELECT DISTINCT billing_customer_id
+		 FROM billing_association_evidence
+		 WHERE project_id=$1 AND purchase_lineage_id=$2
+		   AND evidence_type='prior_lineage_association'
+		   AND billing_customer_id IS NOT NULL
+		 ORDER BY billing_customer_id`, projectID, lineageID)
+	if err != nil {
+		return nil, fmt.Errorf("read prior lineage customers: %w", err)
+	}
+	defer rows.Close()
+	customers := make([]string, 0, 2)
+	for rows.Next() {
+		var customerID string
+		if err := rows.Scan(&customerID); err != nil {
+			return nil, fmt.Errorf("scan prior lineage customer: %w", err)
+		}
+		customers = append(customers, customerID)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("read prior lineage customers: %w", err)
+	}
+	return customers, nil
+}
+
+func (r *Repository) AdoptionRecorded(ctx context.Context, projectID, lineageID, adopterID string) (bool, error) {
+	var recorded bool
+	err := r.pool.QueryRow(ctx,
+		`SELECT EXISTS(
+			SELECT 1 FROM billing_association_evidence
+			WHERE project_id=$1 AND purchase_lineage_id=$2
+			  AND evidence_type='anchored_customer_adoption'
+			  AND billing_customer_id=$3
+		)`, projectID, lineageID, adopterID).Scan(&recorded)
+	if err != nil {
+		return false, fmt.Errorf("read anchored customer adoption: %w", err)
+	}
+	return recorded, nil
 }
 
 // EvidenceForReference reads every observation recorded against one transaction

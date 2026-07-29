@@ -2,6 +2,7 @@ package billingcustomer
 
 import (
 	"context"
+	"errors"
 	"testing"
 	"time"
 
@@ -23,10 +24,15 @@ type recordedProjection struct {
 
 type stubReprojector struct {
 	enqueued []recordedProjection
+	failures int
 }
 
 func (s *stubReprojector) Enqueue(_ context.Context, scope billingprojection.Scope, kind string) error {
 	s.enqueued = append(s.enqueued, recordedProjection{scope: scope, kind: kind})
+	if s.failures > 0 {
+		s.failures--
+		return errors.New("injected enqueue failure")
+	}
 	return nil
 }
 
@@ -45,6 +51,11 @@ type stubRepository struct {
 	lineageAttachments  []string
 	frozenLineages      map[string]bool
 	customerStatusCalls map[string]string
+	// anchoredCustomers and lineageCounts drive the anchored-customer adoption
+	// precondition (plan §5a rule 3).
+	anchoredCustomers map[string]bool
+	lineageCounts     map[string]int
+	adoptions         map[string]bool
 }
 
 func newStubRepository() *stubRepository {
@@ -52,6 +63,9 @@ func newStubRepository() *stubRepository {
 		aliasResolution:     map[string]string{},
 		frozenLineages:      map[string]bool{},
 		customerStatusCalls: map[string]string{},
+		anchoredCustomers:   map[string]bool{},
+		lineageCounts:       map[string]int{},
+		adoptions:           map[string]bool{},
 	}
 }
 
@@ -105,15 +119,36 @@ func (s *stubRepository) ActiveAliasResolutions(context.Context, string, [][]byt
 
 func (s *stubRepository) RecordEvidence(_ context.Context, evidence Evidence) error {
 	s.evidence = append(s.evidence, evidence)
+	if evidence.EvidenceType == EvidenceAnchorAdoption {
+		s.adoptions[evidence.PurchaseLineageID+"\x00"+evidence.BillingCustomerID] = true
+	}
 	return nil
+}
+
+func (s *stubRepository) PriorLineageCustomers(_ context.Context, _, lineageID string) ([]string, error) {
+	customers := []string{}
+	for _, evidence := range s.evidence {
+		if evidence.PurchaseLineageID == lineageID && evidence.EvidenceType == EvidencePriorLineage && evidence.BillingCustomerID != "" {
+			customers = append(customers, evidence.BillingCustomerID)
+		}
+	}
+	return dedupe(customers...), nil
+}
+
+func (s *stubRepository) AdoptionRecorded(_ context.Context, _, lineageID, adopterID string) (bool, error) {
+	return s.adoptions[lineageID+"\x00"+adopterID], nil
 }
 
 func (s *stubRepository) EvidenceForReference(context.Context, string, []byte) ([]Evidence, error) {
 	return nil, nil
 }
 
-func (s *stubRepository) LocateLineage(_ context.Context, lineage Lineage) (Lineage, bool, error) {
-	return lineage, false, nil
+func (s *stubRepository) PurchaseAnchoredOnly(_ context.Context, _, customerID string) (bool, error) {
+	return s.anchoredCustomers[customerID], nil
+}
+
+func (s *stubRepository) LineageCountForCustomer(_ context.Context, _, customerID string) (int, error) {
+	return s.lineageCounts[customerID], nil
 }
 
 func (s *stubRepository) Lineage(context.Context, string, string) (Lineage, error) {
@@ -126,6 +161,7 @@ func (s *stubRepository) LineageByKey(context.Context, string, string, []byte) (
 
 func (s *stubRepository) AttachLineageCustomer(_ context.Context, _, lineageID, customerID string, _ time.Time) error {
 	s.lineageAttachments = append(s.lineageAttachments, lineageID+"->"+customerID)
+	s.lineage.BillingCustomerID = customerID
 	return nil
 }
 
@@ -140,6 +176,10 @@ func (s *stubRepository) SetLineageFrozen(_ context.Context, _, lineageID string
 
 func (s *stubRepository) OpenConflict(_ context.Context, conflict Conflict) (Conflict, error) {
 	s.conflicts = append(s.conflicts, conflict)
+	if conflict.Scope == ConflictScopeLineage {
+		s.frozenLineages[conflict.PurchaseLineageID] = true
+		s.lineage.ProjectionFrozen = true
+	}
 	return conflict, nil
 }
 
@@ -278,5 +318,85 @@ func TestInstallationAliasNeverSelectsOrCreatesCustomer(t *testing.T) {
 	}
 	if len(repository.createdCustomers) != 0 {
 		t.Fatal("resolution created a customer from installation evidence")
+	}
+}
+
+// A public SDK key plus a Customer Access Token is intentionally weaker than
+// an established purchase association. The realistic abuse is a device that
+// retained an old token submitting somebody else's transaction reference to
+// freeze or steal that paying customer's lineage.
+func TestTokenBoundSubmissionCannotReassignOrFreezeAttachedLineage(t *testing.T) {
+	repository := newStubRepository()
+	repository.lineage = Lineage{ID: "bpl_attached", ProjectID: "prj_1", EnvironmentID: "env_1", BillingCustomerID: "bcu_owner"}
+	reprojector := &stubReprojector{}
+	service := NewService(repository, nil, reprojector)
+
+	resolution, err := service.ResolveLineageCustomer(context.Background(), "prj_1", "bpl_attached",
+		[]Observation{{EvidenceType: EvidenceTokenBoundSubmission, CustomerID: "bcu_attacker"}})
+	if err != nil {
+		t.Fatalf("resolve token-bound claim: %v", err)
+	}
+	if resolution.CustomerID != "bcu_owner" || repository.lineage.BillingCustomerID != "bcu_owner" {
+		t.Fatalf("token-bound claim moved lineage to %q", repository.lineage.BillingCustomerID)
+	}
+	if len(repository.conflicts) != 0 || repository.frozenLineages["bpl_attached"] {
+		t.Fatal("token-bound claim opened a conflict or froze the attached lineage")
+	}
+}
+
+// The pointer and the prior-lineage evidence may commit before the projection
+// queue reports a transient failure. Retrying the same adoption must find both
+// affected customers and converge, otherwise the anchor keeps a stale grant
+// while the adopter receives a second one.
+func TestAdoptionRetryAfterReprojectorFailureReprojectsBothCustomers(t *testing.T) {
+	repository := newStubRepository()
+	repository.lineage = Lineage{ID: "bpl_anchor", ProjectID: "prj_1", EnvironmentID: "env_1", BillingCustomerID: "bcu_anchor"}
+	repository.anchoredCustomers["bcu_anchor"] = true
+	repository.lineageCounts["bcu_anchor"] = 0
+	reprojector := &stubReprojector{failures: 1}
+	service := NewService(repository, nil, reprojector)
+	observation := []Observation{{EvidenceType: EvidenceTrustedServer, CustomerID: "bcu_person"}}
+
+	if _, err := service.ResolveLineageCustomer(context.Background(), "prj_1", "bpl_anchor", observation); !errors.Is(err, ErrUnavailable) {
+		t.Fatalf("first adoption error = %v, want unavailable", err)
+	}
+	if repository.lineage.BillingCustomerID != "bcu_person" {
+		t.Fatalf("pointer did not commit before injected failure: %q", repository.lineage.BillingCustomerID)
+	}
+	if _, err := service.ResolveLineageCustomer(context.Background(), "prj_1", "bpl_anchor", observation); err != nil {
+		t.Fatalf("retry adoption: %v", err)
+	}
+
+	reprojected := map[string]bool{}
+	for _, projection := range reprojector.enqueued {
+		reprojected[projection.scope.CustomerID] = true
+	}
+	if !reprojected["bcu_anchor"] || !reprojected["bcu_person"] {
+		t.Fatalf("retry projections = %v, want anchor and adopter", reprojector.enqueued)
+	}
+	if repository.customerStatusCalls["bcu_anchor"] != StatusAbsorbed {
+		t.Fatalf("anchor status = %q, want absorbed", repository.customerStatusCalls["bcu_anchor"])
+	}
+}
+
+// Opening and freezing a reassignment conflict is durable before enqueueing
+// the incumbent. A transient queue error must be repairable by replaying the
+// same evidence, or the last committed snapshot can keep granting a frozen
+// lineage forever.
+func TestConflictRetryAfterReprojectorFailureReprojectsIncumbent(t *testing.T) {
+	repository := newStubRepository()
+	repository.lineage = Lineage{ID: "bpl_conflict", ProjectID: "prj_1", EnvironmentID: "env_1", BillingCustomerID: "bcu_owner"}
+	reprojector := &stubReprojector{failures: 1}
+	service := NewService(repository, nil, reprojector)
+	observation := []Observation{{EvidenceType: EvidenceTrustedServer, CustomerID: "bcu_challenger"}}
+
+	if _, err := service.ResolveLineageCustomer(context.Background(), "prj_1", "bpl_conflict", observation); !errors.Is(err, ErrUnavailable) {
+		t.Fatalf("first conflict error = %v, want unavailable", err)
+	}
+	if _, err := service.ResolveLineageCustomer(context.Background(), "prj_1", "bpl_conflict", observation); err != nil {
+		t.Fatalf("retry conflict: %v", err)
+	}
+	if got := reprojector.enqueued[len(reprojector.enqueued)-1].scope.CustomerID; got != "bcu_owner" {
+		t.Fatalf("retry reprojected %q, want incumbent", got)
 	}
 }

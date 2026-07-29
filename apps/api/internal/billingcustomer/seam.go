@@ -6,6 +6,8 @@ import (
 	"time"
 
 	"go.opentelemetry.io/otel/attribute"
+
+	"github.com/Mujhtech/mosaic/apps/api/internal/billing"
 )
 
 // FactAttachment is one committed Transaction Fact's claim on an identity.
@@ -38,6 +40,25 @@ type AttachmentCorrelator struct {
 	EvidenceType string
 	AliasType    string
 	Digest       []byte
+}
+
+// provesPossession reports whether a submission recorded under `referenceDigest`
+// demonstrated possession of the purchase chain's own provider secret.
+//
+// Only Google qualifies, and the asymmetry is not an oversight. A Google
+// transaction reference IS the SHA-256 of the purchase token — an unguessable
+// secret the store issued to the purchasing device — so a submission keyed on it
+// could only have come from something that held the token. An Apple reference is
+// derived from a transaction identifier: a short decimal number, enumerable by
+// anyone, which proves nothing about who bought anything. Accepting Apple
+// possession as proof would turn adoption into a guessing game against every
+// purchase-anchored customer in the Environment.
+func (a FactAttachment) provesPossession(referenceDigest []byte) bool {
+	if a.Provider != billing.ProviderGooglePlay || len(referenceDigest) == 0 {
+		return false
+	}
+	return SameLineage(referenceDigest, a.LineageKeyDigest) ||
+		SameLineage(referenceDigest, a.FactChainDigest)
 }
 
 // AttachLineageForFact decides which Billing Customer owns the Purchase Lineage
@@ -136,6 +157,7 @@ func (s *Service) observationsFor(ctx context.Context, attachment FactAttachment
 		if err != nil {
 			return nil, ErrUnavailable
 		}
+		possession := attachment.provesPossession(digest)
 		for _, entry := range entries {
 			// Only evidence that named a customer is a candidate. An entry the
 			// resolver already refused, or one recorded for attribution alone,
@@ -144,9 +166,10 @@ func (s *Service) observationsFor(ctx context.Context, attachment FactAttachment
 				continue
 			}
 			observations = append(observations, Observation{
-				EvidenceType: entry.EvidenceType,
-				CustomerID:   entry.BillingCustomerID,
-				RawInputID:   entry.RawInputID,
+				EvidenceType:    entry.EvidenceType,
+				CustomerID:      entry.BillingCustomerID,
+				RawInputID:      entry.RawInputID,
+				PossessionProof: possession,
 			})
 		}
 	}
@@ -278,13 +301,25 @@ func (s *Service) anchorToNewCustomer(ctx context.Context, attachment FactAttach
 // `AttachLineageForFact` reads it back through `EvidenceForReference` once the
 // fact commits, which is how a first purchase reaches an identified customer.
 //
-// The authority recorded is `trusted_server_observation`. A Customer Access
-// Token can only be minted by the application's own backend over its secret
-// server key, so a caller presenting one is making the same claim a trusted
-// server observation makes — regardless of whether the request itself arrived on
-// a public SDK key, because the public key is not what proved the identity.
+// The authority recorded depends on the credential that authenticated the
+// request, and that distinction is the whole point of the parameter.
+//
+// `trusted_server_observation` (rank 90) is recorded only when the request
+// itself was authenticated by the application's secret server key. That key
+// lives on a server the application controls, so a submission carrying it is the
+// application's own backend speaking.
+//
+// A request authenticated by the *public SDK key* records
+// `token_bound_submission` instead, which ranks below a prior lineage
+// association. The public key ships inside every install, so the only thing
+// such a request proves is that the caller holds a Customer Access Token — and
+// a device that legitimately held one keeps holding it after it stops being that
+// person's device. Recording it at rank 90, as this used to, meant anyone able
+// to present a token could take an established purchase away from its owner or
+// freeze it in an identity conflict. Both were remote denial-of-access
+// primitives against a paying customer.
 func (s *Service) RecordSubmissionEvidence(ctx context.Context, projectID, environmentID,
-	rawInputID, customerID string, referenceDigest []byte) error {
+	rawInputID, customerID string, referenceDigest []byte, secretServerKey bool) error {
 
 	if err := s.requireEnabled(ctx, projectID); err != nil {
 		return err
@@ -296,13 +331,17 @@ func (s *Service) RecordSubmissionEvidence(ctx context.Context, projectID, envir
 	if err != nil {
 		return ErrUnavailable
 	}
+	evidenceType, diagnostic := EvidenceTokenBoundSubmission, "customer_access_token_submission_public_key"
+	if secretServerKey {
+		evidenceType, diagnostic = EvidenceTrustedServer, "customer_access_token_submission"
+	}
 	now := s.now()
 	return s.repository.RecordEvidence(ctx, Evidence{
 		ID: id, ProjectID: projectID, EnvironmentID: environmentID,
-		EvidenceType: EvidenceTrustedServer, RawInputID: rawInputID,
+		EvidenceType: evidenceType, RawInputID: rawInputID,
 		TransactionReferenceDigest: referenceDigest, BillingCustomerID: customerID,
 		ResolverVersion: ResolverVersion, Outcome: OutcomeResolved,
-		DiagnosticCode: "customer_access_token_submission",
+		DiagnosticCode: diagnostic,
 		ObservedAt:     now, CreatedAt: now,
 	})
 }

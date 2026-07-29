@@ -198,16 +198,16 @@ func wireStorePlatform(provider string) string {
 }
 
 // SourceIdentity is the contract's stable source id, derived from (purchase
-// lineage, Entitlement, grant version) and never from a fact identifier or a
+// lineage, Mosaic Product, grant version) and never from a fact identifier or a
 // per-generation row id.
 //
 // It must be stable across snapshots: a reader resolves an entry's sourceIds
 // against the sources array of the same snapshot, but an operator comparing two
 // snapshots reads the same source under the same identity. The per-generation
 // row id would change on every projection and make that comparison impossible.
-func SourceIdentity(lineageID, entitlementID, grantVersionID string) string {
+func SourceIdentity(lineageID, productID, grantVersionID string) string {
 	sum := sha256.Sum256([]byte("mosaic-entitlement-source-v1\x00" +
-		lineageID + "\x00" + entitlementID + "\x00" + grantVersionID))
+		lineageID + "\x00" + productID + "\x00" + grantVersionID))
 	return "esrc." + hex.EncodeToString(sum[:16])
 }
 
@@ -287,7 +287,7 @@ func expectedResolutionFor(reason string) string {
 func sourceRecord(source SnapshotSource, asOf time.Time) map[string]any {
 	sourceType := wireSourceType(source.SourceType)
 	record := map[string]any{
-		"sourceId":        SourceIdentity(source.PurchaseLineageID, source.EntitlementID, source.GrantVersionID),
+		"sourceId":        SourceIdentity(source.PurchaseLineageID, source.ProductID, source.GrantVersionID),
 		"sourceType":      sourceType,
 		"mosaicProductId": source.ProductID,
 		"grantVersionId":  source.GrantVersionID,
@@ -415,7 +415,7 @@ func SnapshotRecord(view SnapshotView, issuedAt time.Time, freshness Freshness, 
 			if !ok {
 				continue
 			}
-			identity := SourceIdentity(source.PurchaseLineageID, source.EntitlementID, source.GrantVersionID)
+			identity := SourceIdentity(source.PurchaseLineageID, source.ProductID, source.GrantVersionID)
 			identities = append(identities, identity)
 			usedSources[rowID] = true
 		}
@@ -427,8 +427,8 @@ func SnapshotRecord(view SnapshotView, issuedAt time.Time, freshness Freshness, 
 	sources := make([]map[string]any, 0, len(view.Sources))
 	sortedSources := append([]SnapshotSource(nil), view.Sources...)
 	sort.Slice(sortedSources, func(i, j int) bool {
-		left := SourceIdentity(sortedSources[i].PurchaseLineageID, sortedSources[i].EntitlementID, sortedSources[i].GrantVersionID)
-		right := SourceIdentity(sortedSources[j].PurchaseLineageID, sortedSources[j].EntitlementID, sortedSources[j].GrantVersionID)
+		left := SourceIdentity(sortedSources[i].PurchaseLineageID, sortedSources[i].ProductID, sortedSources[i].GrantVersionID)
+		right := SourceIdentity(sortedSources[j].PurchaseLineageID, sortedSources[j].ProductID, sortedSources[j].GrantVersionID)
 		return left < right
 	})
 	seenSource := map[string]bool{}
@@ -436,7 +436,7 @@ func SnapshotRecord(view SnapshotView, issuedAt time.Time, freshness Freshness, 
 		if len(keyFilter) > 0 && !usedSources[source.RowID] {
 			continue
 		}
-		identity := SourceIdentity(source.PurchaseLineageID, source.EntitlementID, source.GrantVersionID)
+		identity := SourceIdentity(source.PurchaseLineageID, source.ProductID, source.GrantVersionID)
 		if seenSource[identity] {
 			continue
 		}
@@ -570,7 +570,7 @@ func CheckResultRecord(customerID, projectID, environmentID string, view *Snapsh
 			if !ok {
 				continue
 			}
-			identities = append(identities, SourceIdentity(source.PurchaseLineageID, source.EntitlementID, source.GrantVersionID))
+			identities = append(identities, SourceIdentity(source.PurchaseLineageID, source.ProductID, source.GrantVersionID))
 			if source.IsTestSource {
 				testSource = true
 			}

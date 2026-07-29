@@ -105,5 +105,16 @@ type SubmissionBinding struct {
 	// TransactionReferenceDigest is the reference the observation named. It is
 	// the join key the seam reads back.
 	TransactionReferenceDigest []byte
-	ObservedAt                 time.Time
+	// SecretServerKey reports whether the submission itself was authenticated
+	// by the application's secret server key rather than by the public SDK key.
+	//
+	// It decides how much authority the recorded evidence carries, and the
+	// distinction is not cosmetic: a secret server key proves the application's
+	// own backend is speaking, while the public key ships inside every install
+	// and proves only that the caller holds a Customer Access Token. Recording
+	// both at the same authority let anyone able to present a token take an
+	// established purchase away from the customer that owns it, or freeze it in
+	// an identity conflict.
+	SecretServerKey bool
+	ObservedAt      time.Time
 }

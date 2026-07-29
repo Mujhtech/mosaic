@@ -20,7 +20,7 @@ signing and destination policy are recorded in ADR-0024.
 | Customer Entitlement Snapshot | Immutable authoritative state of every Entitlement one customer holds, per Environment. |
 | Snapshot Version | Monotonic integer per (customer, Environment). The sole cache-monotonicity key. |
 | Entity Tag | Opaque HTTP validator. Equality only; it carries no ordering. |
-| Entitlement Source | One reason a customer holds an Entitlement. Identity is (lineage, Entitlement, grant version). |
+| Entitlement Source | One reason a customer holds an Entitlement. Identity is (purchase lineage, Mosaic Product, grant version). |
 | Customer Access Token | Opaque bearer credential scoping an SDK read to one customer. |
 
 ## Two axes that are never merged
@@ -101,7 +101,6 @@ GET  /v1/sdk/billing/entitlements
 POST /v1/sdk/billing/entitlements
 Authorization: Bearer mcat_…
 Mosaic-SDK-Key: <public SDK key>
-If-None-Match: "<entity tag>"
 ```
 
 `POST` carries the contract's `entitlementSyncRequest` so a caller can negotiate contract
@@ -372,20 +371,23 @@ Authority order is `billingcustomer.authorityRank`.
 
 | Rung | Evidence | Where it comes from |
 | --- | --- | --- |
-| 1 | `trusted_server_observation` | An SDK or backend submitted an observation for this transaction while holding a Customer Access Token. |
+| 1 | `trusted_server_observation` | The application backend submitted under its secret server key while naming a customer with a Customer Access Token. |
 | 2 | `app_account_token` / `obfuscated_external_account_id` | Provider correlators, matched against alias digests a backend already attached. |
 | 3 | `prior_lineage_association` | An association already accepted for this lineage. |
+| 3a | `token_bound_submission` | A public-SDK-key observation carried a Customer Access Token. It may attach an unowned lineage, but cannot move or freeze an attached one. |
 | 4 | `purchase_anchor` | Nothing identified the purchase, so a customer was created to hold it. |
 
-**Rung 1 is the only thing that can attach a *first* purchase to an identified customer.** A
-store notification arrives out of band and names nobody, and the observation contract carries no
+**Submission context is what can attach a first purchase to an identified customer.** A store
+notification arrives out of band and names nobody, and the observation contract carries no
 customer member. So the submission carries a Customer Access Token in the
 `Mosaic-Customer-Token` header — a header rather than a body member because it is a credential,
 and the observation body is a ratified record Mosaic seals and can replay. A credential must
-never be a thing that gets stored and replayed. The token is trustworthy for this because only
-the application's own backend can mint one, which is why the evidence is recorded at
-trusted-server authority regardless of whether the request itself arrived on a public SDK key:
-the public key is not what proved the identity.
+never be a thing that gets stored and replayed. The credential authenticating the **submission**
+determines its authority. A public SDK key plus token records `token_bound_submission`; it may
+establish a first association, but a device that once held a token can retain it, so that evidence
+can never move or freeze an attached lineage. A request authenticated by the application's secret
+server key records `trusted_server_observation`. Both observation endpoints document the optional
+header in OpenAPI.
 
 The evidence is keyed on the **transaction reference**, not on a lineage, because at submission
 time no lineage exists — the purchase has not been validated yet. `EvidenceForReference` reads it
@@ -417,8 +419,14 @@ other records that none was and a customer was created. The dashboard's "identif
 digest — the whole meaning is the absence of one — and the resolver is never offered it, so it
 can never become a route by which a guessable value reaches someone else's entitlements.
 
-When the person signs in later, `AttachApplicationUserAlias` appends the alias to that same
-customer. **Login attaches; it never merges** (§5a rule 3).
+When the person signs in later, an identified customer may adopt the anchor's lineage only with
+ownership proof: possession of Google's bearer-grade purchase token, a provider correlator that
+already resolves to the identified customer, or a secret-server-key submission. Possession of an
+Apple transaction reference is explicitly not proof; it is a short decimal identifier rather
+than a store-issued secret. The lineage moves, both customer aggregates are reprojected, and the
+empty anchor row becomes `absorbed`. It is retained because snapshots, evidence, and audit history
+already cite it. `absorbed` means “historical purchase anchor, no longer holding a lineage,” not a
+deleted or merged identity, and it is available on the operator status filter.
 
 ### Conflicts and supersession
 
@@ -437,6 +445,12 @@ deleted: a superseded lineage stops granting access and stays fully visible in h
 An association that establishes an owner enqueues a **customer-scoped** projection. Any job
 already queued for that lineage is lineage-scoped — it was queued when the lineage had no
 customer — and a lineage-scoped command deliberately mints no customer snapshot.
+
+Pointer moves and conflict freezes are retry-safe across queue failures. Before a pointer changes,
+the service persists prior-lineage evidence naming the old customer. If enqueueing either affected
+aggregate fails, an identical association request reads that evidence and re-enqueues both the old
+and current owner. Conflict resolution is likewise idempotent when the action and reason match the
+committed decision, so a retry can finish both projections without rewriting operator intent.
 
 ## Billing identity APIs and the conflict workflow
 
@@ -728,7 +742,7 @@ rewrote four hundred customers" is the question such an investigation is actuall
 
 Revalidating a Phase 9A input under validator version 2 recomputes a different fact digest and
 inserts a **second** fact row for the same provider transaction. This is absorbed for access —
-entitlement-source identity is `(lineage, product, grant version)`, never a fact id, so the
+entitlement-source identity is `(purchase lineage, Mosaic Product, grant version)`, never a fact id, so the
 duplicate cannot double-grant and the checksum is unchanged. It is **not** absorbed for
 `subscription_timeline_entries` (one entry per fact id, so the same purchase can render twice) or
 for `subscription_snapshot_facts` (both facts are cited as evidence). The full statement is in the

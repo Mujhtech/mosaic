@@ -35,6 +35,16 @@ type Observation struct {
 	// existing active resolution.
 	AliasType  string
 	RawInputID string
+	// PossessionProof is true when this observation was recorded under a
+	// transaction reference that IS the purchase chain's own unguessable
+	// provider secret — a Google purchase token. It is never set for Apple,
+	// whose transaction identifiers are short decimal numbers that prove
+	// nothing about who made the purchase.
+	//
+	// It does not raise the observation's authority. It is consulted only by
+	// the anchored-customer adoption path, which needs proof of ownership
+	// rather than an ordering.
+	PossessionProof bool
 }
 
 // Resolution is the deterministic verdict for one lineage.
@@ -48,6 +58,12 @@ type Resolution struct {
 	// examined them, each stamped with the outcome it produced. It is
 	// persisted as association evidence so the decision is reconstructable.
 	Considered []Observation
+	// DecidingRank is the authority rank the winning candidates were drawn
+	// from. The caller needs it because what a verdict is allowed to *do*
+	// depends on how it was reached: a verdict carried only by a token-bound
+	// public-SDK-key submission may attach an unattached lineage but may never
+	// move or freeze an attached one.
+	DecidingRank int
 }
 
 // authorityRank orders evidence types by how much authority they carry. The
@@ -62,6 +78,15 @@ type Resolution struct {
 // evidence for attribution and can never select a customer (OD-4(a)), because
 // a client-generated identifier that could select a customer is a
 // read-someone-else's-entitlements vulnerability.
+// A token-bound submission over a *public SDK key* sits below
+// prior_lineage_association on purpose. Rank 90 is reserved for a submission
+// authenticated by the application's secret server key, which is the only
+// credential that proves the application's own backend is speaking. A public
+// SDK key ships inside every install, so a caller presenting one plus a
+// Customer Access Token is making a weaker claim than the association a lineage
+// already carries — and if it outranked that association it could take a
+// purchase away from its owner, or freeze it in a conflict, from any device
+// that ever held a token. Both are remote denial-of-access primitives.
 func authorityRank(evidenceType string) int {
 	switch evidenceType {
 	case EvidenceOperatorRepair:
@@ -70,13 +95,74 @@ func authorityRank(evidenceType string) int {
 		return 90
 	case EvidenceRestoreLink:
 		return 80
+	case EvidenceAnchorAdoption:
+		return 75
 	case EvidencePriorLineage:
 		return 70
+	case EvidenceTokenBoundSubmission:
+		return 65
 	case EvidenceAppAccountToken, EvidenceObfuscatedAccount:
 		return 60
 	default:
 		// Including installation observations.
 		return 0
+	}
+}
+
+// RankTokenBoundSubmission is the authority a token-bound public-SDK-key
+// submission carries. It is exported so the application service can recognise a
+// verdict that was reached on that evidence alone without restating the number.
+var RankTokenBoundSubmission = authorityRank(EvidenceTokenBoundSubmission)
+
+// OwnershipProof reports the proof, if any, that `candidate` owns the purchase
+// chain these observations describe.
+//
+// This is a different question from "which customer does the evidence name",
+// which Resolve answers. Adoption takes a lineage away from a customer that
+// already holds it, so naming is not enough: something has to demonstrate that
+// the claimant is the buyer. Three things do, and the Apple/Google asymmetry is
+// the reason there are three rather than one:
+//
+//   - Possession of the Google purchase token. The token is an unguessable
+//     secret the store issued to the purchasing device; presenting it is proof.
+//     Apple has no equivalent — its transaction identifiers are short decimal
+//     numbers — so possession is never accepted for Apple.
+//   - A provider correlator (Apple `appAccountToken`, Google
+//     `obfuscatedExternalAccountId`) that already resolves to the candidate.
+//     The store itself echoed a value the candidate's backend chose.
+//   - A submission authenticated by the secret server key, which is the
+//     application's own backend speaking.
+func OwnershipProof(observations []Observation, activeAliases map[string]string, candidate string) (string, bool) {
+	if candidate == "" {
+		return "", false
+	}
+	correlator := false
+	trusted := false
+	for _, observation := range observations {
+		switch observation.EvidenceType {
+		case EvidenceTokenBoundSubmission, EvidenceTrustedServer:
+			if observation.CustomerID != candidate {
+				continue
+			}
+			if observation.PossessionProof {
+				return ProofPurchaseTokenPossession, true
+			}
+			if observation.EvidenceType == EvidenceTrustedServer {
+				trusted = true
+			}
+		case EvidenceAppAccountToken, EvidenceObfuscatedAccount:
+			if len(observation.Digest) > 0 && activeAliases[string(observation.Digest)] == candidate {
+				correlator = true
+			}
+		}
+	}
+	switch {
+	case correlator:
+		return ProofProviderCorrelator, true
+	case trusted:
+		return ProofTrustedServer, true
+	default:
+		return "", false
 	}
 }
 
@@ -125,8 +211,10 @@ func Resolve(observations []Observation, activeAliases map[string]string) Resolu
 		}
 	}
 
+	resolution.DecidingRank = bestRank
 	switch len(candidates) {
 	case 0:
+		resolution.DecidingRank = 0
 		return resolution
 	case 1:
 		for candidate := range candidates {

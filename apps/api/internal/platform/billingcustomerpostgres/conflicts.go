@@ -282,7 +282,25 @@ func (r *Repository) ResolveConflict(ctx context.Context, actor billingcustomer.
 		 WHERE id=$1 AND project_id=$2 AND status='open' FOR UPDATE`, conflictID, projectID).
 		Scan(&scope, &lineageID, &aliasType, &aliasDigest, &first, &second)
 	if errors.Is(err, pgx.ErrNoRows) {
-		return billingcustomer.Conflict{}, billingcustomer.ErrNotFound
+		// A prior attempt may have committed the pointer and conflict row before
+		// the application service failed to enqueue every affected aggregate.
+		// Treat an identical resolution as an idempotent retry so the caller can
+		// finish those projection obligations. A different action or reason is a
+		// genuine attempt to rewrite an operator decision and remains refused.
+		existing, readErr := scanConflict(tx.QueryRow(ctx,
+			`SELECT `+conflictColumns+` FROM billing_identity_conflicts WHERE id=$1 AND project_id=$2`,
+			conflictID, projectID))
+		switch {
+		case errors.Is(readErr, pgx.ErrNoRows):
+			return billingcustomer.Conflict{}, billingcustomer.ErrNotFound
+		case readErr != nil:
+			return billingcustomer.Conflict{}, fmt.Errorf("read resolved identity conflict: %w", readErr)
+		case existing.Status == "resolved" && existing.ResolutionAction == action &&
+			existing.ResolutionReason == strings.TrimSpace(reason):
+			return existing, nil
+		default:
+			return billingcustomer.Conflict{}, billingcustomer.ErrConflict
+		}
 	}
 	if err != nil {
 		return billingcustomer.Conflict{}, fmt.Errorf("read identity conflict for resolution: %w", err)

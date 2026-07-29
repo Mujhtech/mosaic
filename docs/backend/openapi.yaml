@@ -1728,6 +1728,8 @@ paths:
         Every outcome, including a rejection, is returned as the contract's
         observationSubmissionResult record so an SDK decodes one shape. This endpoint may return
         429; SDKs hold a durable queue and retry.
+      parameters:
+        - { in: header, name: Mosaic-Customer-Token, required: false, schema: { type: string }, description: Optional Customer Access Token binding the observation to its customer as token-bound public-client evidence. It can attach an unowned lineage but cannot reassign or freeze an attached lineage. }
       requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/ClientTransactionObservationRecord" } } } }
       responses:
         "202": { $ref: "#/components/responses/SubmissionAccepted" }
@@ -1750,6 +1752,8 @@ paths:
         A trusted caller is more accountable, not more authoritative: the observation is still
         subject to complete provider validation. Responses use the same
         observationSubmissionResult record as the public endpoint.
+      parameters:
+        - { in: header, name: Mosaic-Customer-Token, required: false, schema: { type: string }, description: Optional Customer Access Token naming the customer. Because this request is authenticated by the secret server key, accepted submission-context evidence carries trusted-server authority. }
       requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/ServerTransactionObservationRecord" } } } }
       responses:
         "202": { $ref: "#/components/responses/SubmissionAccepted" }
@@ -2421,7 +2425,7 @@ paths:
       parameters:
         - { $ref: "#/components/parameters/ProjectID" }
         - { $ref: "#/components/parameters/EnvironmentID" }
-        - { in: query, name: status, schema: { type: string, enum: [active, frozen, anonymized] } }
+        - { in: query, name: status, schema: { type: string, enum: [active, frozen, anonymized, absorbed] } }
         - { in: query, name: identified, description: Restrict to identified or to purchase-anchored-only customers., schema: { type: boolean } }
         - { in: query, name: conflictedOnly, description: Only customers party to an open identity conflict., schema: { type: boolean } }
         - { $ref: "#/components/parameters/Limit" }
@@ -3976,7 +3980,7 @@ components:
       type: object
       required: [sourceId, sourceType, mosaicProductId, grantVersionId, sourceSnapshotId, start, sourceState, uncertainty, explanationCode, isTestSource]
       properties:
-        sourceId: { type: string, description: Derived from (purchase lineage, Entitlement, grant version) and never from a transaction fact, so a second fact for one purchase cannot double-grant. }
+        sourceId: { type: string, description: Derived from (purchase lineage, Mosaic Product, grant version) and never from a transaction fact, so a second fact for one purchase cannot double-grant. }
         sourceType: { type: string, enum: [active_subscription, trial, grace_period, billing_retry, one_time_non_consumable, family_shared] }
         subscriptionInstanceId: { type: string }
         oneTimePurchaseInstanceId: { type: string }
@@ -4142,7 +4146,7 @@ components:
       properties:
         billingCustomerId: { type: string }
         projectId: { type: string }
-        status: { type: string, enum: [active, frozen, anonymized] }
+        status: { type: string, enum: [active, frozen, anonymized, absorbed] }
         diagnosticsStatus: { type: string, enum: [none, identity_conflict, projection_stale, projection_failed] }
         currentProjectionVersion: { type: integer }
         lastProjectedAt: { type: string, format: date-time }
@@ -4194,7 +4198,7 @@ components:
       properties:
         billingCustomerId: { type: string }
         projectId: { type: string }
-        status: { type: string, enum: [active, frozen, anonymized] }
+        status: { type: string, enum: [active, frozen, anonymized, absorbed] }
         diagnosticsStatus: { type: string }
         currentProjectionVersion: { type: integer, format: int64 }
         createdAt: { type: string, format: date-time }
@@ -4471,7 +4475,7 @@ components:
         billingCustomerId: { type: string }
         projectId: { type: string }
         environmentId: { type: string }
-        status: { type: string, enum: [active, frozen, anonymized] }
+        status: { type: string, enum: [active, frozen, anonymized, absorbed] }
         diagnosticsStatus: { type: string, enum: [none, identity_conflict, projection_stale, projection_failed] }
         identified: { type: boolean, description: An active application-user alias exists - a person is attached. }
         purchaseAnchored: { type: boolean, description: A purchase lineage exists in this Environment - revenue is attached. }
@@ -4566,7 +4570,7 @@ components:
       type: object
       description: |
         One reason the customer holds, or may hold, an Entitlement. Source identity is
-        (purchase lineage, product, grant version) and never a fact id, so multiple facts
+        (purchase lineage, Mosaic Product, grant version) and never a fact id, so multiple facts
         describing one purchase cannot double-grant.
       properties:
         sourceId: { type: string }

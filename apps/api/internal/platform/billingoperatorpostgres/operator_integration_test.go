@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -78,10 +79,17 @@ func testPool(t *testing.T) (*pgxpool.Pool, context.Context) {
 // recordingReprojector stands in for the projection service. The operator
 // surface must be able to prove it *asked* for a recomputation; running one is
 // the projection module's own tested behaviour.
-type recordingReprojector struct{ scopes []billingprojection.Scope }
+type recordingReprojector struct {
+	scopes   []billingprojection.Scope
+	failures int
+}
 
 func (r *recordingReprojector) Enqueue(_ context.Context, scope billingprojection.Scope, _ string) error {
 	r.scopes = append(r.scopes, scope)
+	if r.failures > 0 {
+		r.failures--
+		return errors.New("injected projection enqueue failure")
+	}
 	return nil
 }
 
@@ -525,6 +533,36 @@ func TestConflictResolutionRequiresReasonAuditsAndReprojectsBothCandidates(t *te
 	}
 	if !reprojected[scope.firstCustomer] || !reprojected[scope.secondCustomer] {
 		t.Fatalf("reprojection scopes %v: both candidates must be recomputed", s.reprojector.scopes)
+	}
+}
+
+// The conflict row and lineage reassignment commit before projection enqueue.
+// If the queue is transiently unavailable, repeating the exact operator action
+// must finish both aggregates rather than reject the already-resolved conflict
+// and leave the previous customer with a stale grant.
+func TestConflictResolutionRetryAfterReprojectorFailureConverges(t *testing.T) {
+	pool, ctx := testPool(t)
+	scope := seedTenant(t, ctx, pool, "resolve_retry")
+	s := newSurface(t, pool).as(scope.ownerActor)
+	s.reprojector.failures = 1
+	path := "/v1/projects/" + scope.projectID + "/billing/identity-conflicts/" + scope.conflictID + "/resolution"
+	body := `{"action":"reassign_to_candidate","reason":"support ticket 5519: verified store ownership"}`
+
+	status, _ := s.do(t, http.MethodPost, path, body)
+	if status != http.StatusServiceUnavailable {
+		t.Fatalf("first resolution status = %d, want 503", status)
+	}
+	status, payload := s.do(t, http.MethodPost, path, body)
+	if status != http.StatusOK {
+		t.Fatalf("retry resolution status = %d, want 200 (%v)", status, payload)
+	}
+
+	reprojected := map[string]bool{}
+	for _, scope := range s.reprojector.scopes {
+		reprojected[scope.CustomerID] = true
+	}
+	if !reprojected[scope.firstCustomer] || !reprojected[scope.secondCustomer] {
+		t.Fatalf("retry projections = %v, want both candidates", s.reprojector.scopes)
 	}
 }
 

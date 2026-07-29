@@ -2,6 +2,7 @@ package billingcustomerpostgres
 
 import (
 	"context"
+	"crypto/sha256"
 	"database/sql"
 	"errors"
 	"os"
@@ -187,30 +188,25 @@ func TestOpenConflictFreezesLineageAndIsIdempotent(t *testing.T) {
 	repository := New(pool)
 	now := time.Now().UTC()
 
-	lineage, created, err := repository.LocateLineage(ctx, billingcustomer.Lineage{
-		ID: "bpl_ident_conflict", ProjectID: scope.projectID, EnvironmentID: scope.environmentID,
-		EnvironmentMode: "production", ApplicationID: scope.applicationID,
-		Provider: "app_store", StoreEnvironment: "production",
-		LineageKeyDigest: billingcustomer.LineageKey("app_store", "production", "1000000000000001"),
-		LineageType:      billingcustomer.LineageSubscription,
-		CreatedAt:        now, UpdatedAt: now,
-	})
+	// The fact-commit transaction is the only writer of purchase lineages, so
+	// the row is seeded the way it writes it. This test is about the conflict
+	// and the freeze, not about lineage creation.
+	lineageID := "bpl_ident_conflict"
+	if _, err := pool.Exec(ctx,
+		`INSERT INTO purchase_lineages(
+			id, project_id, environment_id, environment_mode, application_id, provider,
+			store_environment, lineage_key_digest, lineage_type, projection_frozen,
+			diagnostic_status, created_at, updated_at)
+		 VALUES ($1,$2,$3,'production',$4,'app_store','production',$5,'subscription',false,
+			'identity_unresolved',$6,$6)
+		 ON CONFLICT (environment_id, provider, lineage_key_digest) DO NOTHING`,
+		lineageID, scope.projectID, scope.environmentID, scope.applicationID,
+		sha256Of("chain-ident-conflict"), now); err != nil {
+		t.Fatalf("seed purchase lineage: %v", err)
+	}
+	lineage, err := repository.Lineage(ctx, scope.projectID, lineageID)
 	if err != nil {
-		t.Fatalf("locate lineage: %v", err)
-	}
-	if !created {
-		t.Fatal("the first LocateLineage reported the lineage as pre-existing")
-	}
-	// The same chain key must find, not duplicate.
-	if _, again, err := repository.LocateLineage(ctx, billingcustomer.Lineage{
-		ID: "bpl_ident_conflict_dup", ProjectID: scope.projectID, EnvironmentID: scope.environmentID,
-		EnvironmentMode: "production", ApplicationID: scope.applicationID,
-		Provider: "app_store", StoreEnvironment: "production",
-		LineageKeyDigest: billingcustomer.LineageKey("app_store", "production", "1000000000000001"),
-		LineageType:      billingcustomer.LineageSubscription,
-		CreatedAt:        now, UpdatedAt: now,
-	}); err != nil || again {
-		t.Fatalf("re-locating the same chain key returned created=%v err=%v", again, err)
+		t.Fatalf("read seeded lineage: %v", err)
 	}
 
 	conflict := billingcustomer.Conflict{
@@ -255,4 +251,10 @@ func TestOpenConflictFreezesLineageAndIsIdempotent(t *testing.T) {
 	if open != 1 {
 		t.Fatalf("two OpenConflict calls left %d open conflicts, want one", open)
 	}
+}
+
+// sha256Of produces a 32-byte lineage key digest for seeded rows.
+func sha256Of(value string) []byte {
+	sum := sha256.Sum256([]byte(value))
+	return sum[:]
 }

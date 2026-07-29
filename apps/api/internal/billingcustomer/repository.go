@@ -21,6 +21,16 @@ type Repository interface {
 	CustomerForAlias(ctx context.Context, projectID, aliasType string, digest []byte) (Customer, error)
 	ListCustomers(ctx context.Context, actor Actor, projectID string, limit int, cursor string) ([]Customer, string, error)
 	SetCustomerStatus(ctx context.Context, projectID, customerID, status string, now time.Time) error
+	// PurchaseAnchoredOnly reports whether a customer exists solely to hold a
+	// purchase: it carries `purchase_anchor` evidence, nothing has ever
+	// identified it, and it holds no aliases of any kind. It is the
+	// precondition for adoption (plan §5a rule 3) — a customer that fails it
+	// has a person behind it, and taking its purchase away is an operator
+	// decision rather than a resolver one.
+	PurchaseAnchoredOnly(ctx context.Context, projectID, customerID string) (bool, error)
+	// LineageCountForCustomer counts the purchase lineages a customer still
+	// holds, across every Environment.
+	LineageCountForCustomer(ctx context.Context, projectID, customerID string) (int, error)
 
 	// AttachAlias records an alias, failing with ErrConflict when the digest
 	// already has a live resolution to a different customer. The uniqueness is
@@ -34,6 +44,13 @@ type Repository interface {
 	ActiveAliasResolutions(ctx context.Context, projectID string, digests [][]byte) (map[string]string, error)
 
 	RecordEvidence(ctx context.Context, evidence Evidence) error
+	// PriorLineageCustomers returns customers named by persisted prior-lineage
+	// evidence for this lineage. It is the retry record for a move: if the
+	// pointer commit succeeds but scheduling either aggregate fails, the next
+	// identical resolution can still find and reproject the customer that lost
+	// the purchase.
+	PriorLineageCustomers(ctx context.Context, projectID, lineageID string) ([]string, error)
+	AdoptionRecorded(ctx context.Context, projectID, lineageID, adopterID string) (bool, error)
 	// EvidenceForReference reads the association correlators parsed from raw
 	// inputs that share a transaction reference digest. Fact provenance is
 	// first-writer-wins and therefore not authoritative, so authority is
@@ -41,13 +58,10 @@ type Repository interface {
 	// source input.
 	EvidenceForReference(ctx context.Context, projectID string, referenceDigest []byte) ([]Evidence, error)
 
-	// LocateLineage finds or creates the lineage for a provider chain key.
-	LocateLineage(ctx context.Context, lineage Lineage) (Lineage, bool, error)
 	Lineage(ctx context.Context, projectID, lineageID string) (Lineage, error)
-	// LineageByKey reads the lineage for one provider chain key. The seam needs
-	// it because the fact-commit transaction created the row and knows only the
-	// key it used; asking LocateLineage instead would mean reconstructing every
-	// column of a row that already exists just to be told it exists.
+	// LineageByKey reads the lineage for one provider chain key. It is the only
+	// key-based lookup: the fact-commit transaction is the sole writer of
+	// purchase lineages, so this module reads them and never creates them.
 	LineageByKey(ctx context.Context, environmentID, provider string, keyDigest []byte) (Lineage, error)
 	AttachLineageCustomer(ctx context.Context, projectID, lineageID, customerID string, now time.Time) error
 	SetLineageSupersededBy(ctx context.Context, projectID, lineageID, supersededBy string, now time.Time) error

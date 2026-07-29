@@ -101,26 +101,56 @@ func TestAliasDigestIsDomainSeparatedByType(t *testing.T) {
 	}
 }
 
-// A Google lineage is keyed by the root of its token chain. Keying by the
-// current token instead would mint a new lineage on every plan change and
-// fragment one subscription's history into unconnected pieces.
-func TestChainWalkFindsRootAndSurvivesCycles(t *testing.T) {
-	root, middle, latest := []byte("root"), []byte("middle"), []byte("latest")
-	links := []ChainLink{
-		{ChainDigest: latest, SupersedesDigest: middle},
-		{ChainDigest: middle, SupersedesDigest: root},
-	}
-	if got := WalkChainRoot(latest, links); string(got) != "root" {
-		t.Fatalf("chain root %q, want root", got)
+// Adoption moves an already-granting purchase, so each accepted proof needs a
+// pinning test. These cases protect against weakening Apple reference handling
+// to match Google's bearer-grade token semantics.
+func TestOwnershipProofForAnchorAdoption(t *testing.T) {
+	appleCorrelator := AliasDigest(AliasAppleAppAccountToken, "apple-account-token")
+	googleCorrelator := AliasDigest(AliasGoogleObfuscatedAcount, "google-account")
+	tests := []struct {
+		name         string
+		observations []Observation
+		aliases      map[string]string
+		wantProof    string
+		wantProven   bool
+	}{
+		{
+			name: "google purchase token possession",
+			observations: []Observation{{EvidenceType: EvidenceTokenBoundSubmission,
+				CustomerID: "bcu_person", PossessionProof: true}},
+			wantProof: ProofPurchaseTokenPossession, wantProven: true,
+		},
+		{
+			name:         "google provider correlator",
+			observations: []Observation{{EvidenceType: EvidenceObfuscatedAccount, Digest: googleCorrelator}},
+			aliases:      map[string]string{string(googleCorrelator): "bcu_person"},
+			wantProof:    ProofProviderCorrelator, wantProven: true,
+		},
+		{
+			name:         "apple provider correlator",
+			observations: []Observation{{EvidenceType: EvidenceAppAccountToken, Digest: appleCorrelator}},
+			aliases:      map[string]string{string(appleCorrelator): "bcu_person"},
+			wantProof:    ProofProviderCorrelator, wantProven: true,
+		},
+		{
+			name:         "secret server submission",
+			observations: []Observation{{EvidenceType: EvidenceTrustedServer, CustomerID: "bcu_person"}},
+			wantProof:    ProofTrustedServer, wantProven: true,
+		},
+		{
+			name: "apple transaction reference possession is not proof",
+			observations: []Observation{{EvidenceType: EvidenceTokenBoundSubmission,
+				CustomerID: "bcu_person", PossessionProof: false}},
+			wantProven: false,
+		},
 	}
 
-	// Provider data cannot contain a cycle; if one appears the data is already
-	// wrong and the walk must terminate rather than hang.
-	cyclic := []ChainLink{
-		{ChainDigest: []byte("a"), SupersedesDigest: []byte("b")},
-		{ChainDigest: []byte("b"), SupersedesDigest: []byte("a")},
-	}
-	if got := WalkChainRoot([]byte("a"), cyclic); len(got) == 0 {
-		t.Fatal("cyclic chain walk produced no root")
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			proof, proven := OwnershipProof(test.observations, test.aliases, "bcu_person")
+			if proven != test.wantProven || proof != test.wantProof {
+				t.Fatalf("proof = %q/%v, want %q/%v", proof, proven, test.wantProof, test.wantProven)
+			}
+		})
 	}
 }

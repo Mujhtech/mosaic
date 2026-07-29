@@ -23,7 +23,7 @@ import (
 // Identity is the slice of the billing identity service this adapter needs.
 type Identity interface {
 	AttachLineageForFact(ctx context.Context, attachment billingcustomer.FactAttachment) (billingcustomer.Resolution, error)
-	RecordSubmissionEvidence(ctx context.Context, projectID, environmentID, rawInputID, customerID string, referenceDigest []byte) error
+	RecordSubmissionEvidence(ctx context.Context, projectID, environmentID, rawInputID, customerID string, referenceDigest []byte, secretServerKey bool) error
 }
 
 // Tokens is the slice of the entitlement access service this adapter needs: the
@@ -109,7 +109,8 @@ func (b *Binder) BindSubmission(ctx context.Context, token string, submission bi
 		return "", nil
 	}
 	if err := b.identity.RecordSubmissionEvidence(ctx, submission.ProjectID, submission.EnvironmentID,
-		submission.RawInputID, customerID, submission.TransactionReferenceDigest); err != nil {
+		submission.RawInputID, customerID, submission.TransactionReferenceDigest,
+		submission.SecretServerKey); err != nil {
 		if errors.Is(err, billingcustomer.ErrBillingDisabled) {
 			return "", nil
 		}

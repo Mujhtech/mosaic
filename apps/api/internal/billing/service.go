@@ -568,7 +568,12 @@ func (s *Service) submitObservationAs(ctx context.Context, scope ObservationScop
 			ProjectID: scope.ProjectID, EnvironmentID: scope.EnvironmentID,
 			RawInputID:                 result.RawInputID,
 			TransactionReferenceDigest: referenceDigest,
-			ObservedAt:                 now,
+			// The credential that authenticated this submission, not the one
+			// that minted the token. A token-bound observation arriving on the
+			// public SDK key records weaker evidence than the same claim made
+			// by the application's own backend over its secret key.
+			SecretServerKey: authority == AuthorityTrustedServer,
+			ObservedAt:      now,
 		}); err != nil {
 			// The observation itself is recorded and valid. Failing the
 			// submission over the association would turn a transient identity

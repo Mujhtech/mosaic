@@ -18,10 +18,17 @@ import "time"
 const ResolverVersion = 1
 
 // Customer statuses.
+//
+// `absorbed` marks a purchase-anchored customer whose only lineage was adopted
+// by an identified customer (plan §5a rule 3). The row is kept rather than
+// deleted: entitlement snapshots, evidence, and audit events already cite it,
+// and an investigation has to be able to follow the purchase from the anchor to
+// the person.
 const (
 	StatusActive     = "active"
 	StatusFrozen     = "frozen"
 	StatusAnonymized = "anonymized"
+	StatusAbsorbed   = "absorbed"
 )
 
 // Alias types. Every one is stored as a digest; no raw value is persisted.
@@ -60,6 +67,24 @@ const (
 	// so it can never select a customer — which is what keeps it from becoming a
 	// route to someone else's entitlements.
 	EvidencePurchaseAnchor = "purchase_anchor"
+	// EvidenceTokenBoundSubmission records that an observation submitted over a
+	// *public SDK key* carried a Customer Access Token naming a customer.
+	//
+	// It is deliberately distinct from EvidenceTrustedServer and ranks below
+	// EvidencePriorLineage. The two claims are not the same act: a secret server
+	// key proves the application's own backend is speaking, while a public SDK
+	// key is shipped inside every install and proves only that the caller holds
+	// a token — which a device that once legitimately held one keeps holding
+	// after it stops being that person's device. Ranking a token-bound
+	// submission above a prior association would let anyone able to present a
+	// token take a lineage away from the customer that already holds it, or
+	// freeze it in a conflict. Both are remote denial-of-access primitives, and
+	// the rank is what makes them unreachable.
+	EvidenceTokenBoundSubmission = "token_bound_submission"
+	// EvidenceAnchorAdoption records that an identified customer adopted a
+	// purchase-anchored customer's lineage (plan §5a rule 3), with the ownership
+	// proof that permitted it in the diagnostic code.
+	EvidenceAnchorAdoption = "anchored_customer_adoption"
 )
 
 // Association outcomes.
@@ -175,6 +200,33 @@ const (
 	// DiagnosticAliasClaimsTwoCustomers marks an application-user alias that
 	// already resolves to a different customer (plan §5a rule 4).
 	DiagnosticAliasClaimsTwoCustomers = "application_user_alias_claims_two_customers"
+	// DiagnosticTokenBoundCannotReassign marks a token-bound public-SDK-key
+	// submission that named a customer other than the one already holding the
+	// lineage. It is recorded and ignored: it neither reassigns nor conflicts,
+	// because a public key plus a token is not enough to move a purchase and
+	// must not be enough to freeze one either.
+	DiagnosticTokenBoundCannotReassign = "token_bound_submission_cannot_reassign_lineage"
+	// DiagnosticAdoptionRequiresProof marks an adoption claim against a
+	// purchase-anchored customer that carried no ownership proof. The claim is
+	// recorded unresolved and waits for an operator.
+	DiagnosticAdoptionRequiresProof = "anchor_adoption_requires_ownership_proof"
+	// DiagnosticAnchorAdopted marks the accepted adoption itself.
+	DiagnosticAnchorAdopted = "purchase_anchored_customer_adopted"
+)
+
+// Ownership proofs that permit an identified customer to adopt a
+// purchase-anchored customer's lineage (plan §5a rule 3).
+//
+// The Apple/Google asymmetry is deliberate and is documented in
+// docs/backend/phase-9b-authoritative-entitlements.md. A Google purchase token
+// is an unguessable secret issued by the store, so a submission that carries it
+// proves possession of the purchase. An Apple transaction identifier is a short
+// decimal number: possession of one proves nothing, so Apple adoption needs a
+// provider correlator match or a secret-server-key submission instead.
+const (
+	ProofPurchaseTokenPossession = "purchase_token_possession"
+	ProofProviderCorrelator      = "provider_correlator_match"
+	ProofTrustedServer           = "trusted_server_submission"
 )
 
 // Conflict is one disputed association held open for operator resolution.

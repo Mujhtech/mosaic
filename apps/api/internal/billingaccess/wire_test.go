@@ -251,13 +251,16 @@ func TestFreshnessHorizonIsBounded(t *testing.T) {
 // The source id must be stable across snapshots and derived from the source's
 // identity rather than from a per-generation row or a fact.
 func TestSourceIdentityIsStableAndDerivedFromIdentity(t *testing.T) {
-	first := SourceIdentity("plin_1", "ent_pro", "pegv_1")
-	second := SourceIdentity("plin_1", "ent_pro", "pegv_1")
+	first := SourceIdentity("plin_1", "prd_pro", "pegv_1")
+	second := SourceIdentity("plin_1", "prd_pro", "pegv_1")
 	if first != second {
 		t.Fatal("source identity is not deterministic")
 	}
-	if SourceIdentity("plin_1", "ent_pro", "pegv_2") == first {
+	if SourceIdentity("plin_1", "prd_pro", "pegv_2") == first {
 		t.Fatal("a different grant version produced the same source identity")
+	}
+	if SourceIdentity("plin_1", "prd_other", "pegv_1") == first {
+		t.Fatal("a different Mosaic Product produced the same source identity")
 	}
 	sum := sha256.Sum256([]byte("unrelated"))
 	if first == hex.EncodeToString(sum[:]) {

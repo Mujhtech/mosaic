@@ -142,7 +142,8 @@ func (s *Service) ListCustomers(ctx context.Context, actor Actor, projectID, env
 	}
 	if filter.Status != "" {
 		switch filter.Status {
-		case billingcustomer.StatusActive, billingcustomer.StatusFrozen, billingcustomer.StatusAnonymized:
+		case billingcustomer.StatusActive, billingcustomer.StatusFrozen,
+			billingcustomer.StatusAnonymized, billingcustomer.StatusAbsorbed:
 		default:
 			return nil, "", ErrInvalid
 		}

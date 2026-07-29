@@ -82,7 +82,7 @@ func TestValidatedFactBecomesACommittedEntitlementSnapshot(t *testing.T) {
 	// calls; the token authentication itself is billingaccess's and is not
 	// re-proven here.
 	if err := fixture.identity.RecordSubmissionEvidence(ctx, fixture.projectID, fixture.environmentID,
-		fixture.rawInputID, fixture.customerID, fixture.referenceDigest); err != nil {
+		fixture.rawInputID, fixture.customerID, fixture.referenceDigest, false); err != nil {
 		t.Fatalf("record submission evidence: %v", err)
 	}
 
