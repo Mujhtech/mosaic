@@ -305,12 +305,20 @@ public actor MosaicStoreKitProvider:
       )
     do {
       try await client.synchronize()
-      switch await currentEntitlementKeys() {
-      case .success(let keys):
+      switch await currentEntitlements() {
+      case .success(let resolved):
+        // The restore gap this closes: without emitting here, a fresh device
+        // that restores a subscription submits nothing to Mosaic, so the
+        // purchase is never associated with the Billing Customer and the
+        // authoritative snapshot never learns the customer has access. The
+        // purchase path emits on acceptance; the restore path had no
+        // equivalent, because a restored transaction is usually already
+        // finished and so never appears in `Transaction.updates`.
+        observeRestored(resolved.transactions, operationID: operationID)
         completed =
-          keys.isEmpty
+          resolved.keys.isEmpty
           ? (.nothingToRestore, [], [])
-          : (.restored, Set(keys.map(MosaicEntitlement.init(id:))), [])
+          : (.restored, Set(resolved.keys.map(MosaicEntitlement.init(id:))), [])
       case .failure:
         let diagnostic = restoreFailureDiagnostic()
         completed = (.failed, [], [diagnostic])
@@ -507,10 +515,44 @@ public actor MosaicStoreKitProvider:
     observationSink.enqueue(observation)
   }
 
+  /// Emits one observation per restored, mapped transaction.
+  ///
+  /// Idempotence comes from the two layers that already provide it, so a
+  /// customer tapping Restore repeatedly cannot flood the queue or double-grant:
+  /// the submission identifier is the same `storekit_transaction_<id>` the
+  /// purchase path uses, the observation queue drops a submission identifier it
+  /// already holds, and the server de-duplicates by transaction reference during
+  /// validation.
+  ///
+  /// The acceptance store is deliberately *not* written here. It records local
+  /// delivery to the host, and a restore is not a delivery; marking these
+  /// accepted would make a later genuine purchase of the same transaction skip
+  /// the acceptor.
+  private func observeRestored(
+    _ transactions: [StoreKitTransaction], operationID: String
+  ) {
+    for transaction in transactions {
+      observe(
+        transaction,
+        updateID: "storekit_transaction_\(transaction.id)",
+        operationID: operationID)
+    }
+  }
+
   private func currentEntitlementKeys() async -> Result<Set<String>, Error> {
+    switch await currentEntitlements() {
+    case .success(let resolved): .success(resolved.keys)
+    case .failure(let error): .failure(error)
+    }
+  }
+
+  private func currentEntitlements() async -> Result<
+    (keys: Set<String>, transactions: [StoreKitTransaction]), Error
+  > {
     do {
       let events = try await client.currentEntitlements()
       var keys = Set<String>()
+      var transactions: [StoreKitTransaction] = []
       for event in events {
         guard case .verified(let transaction) = event else {
           return .failure(StoreKitProviderFailure.unverifiedEntitlement)
@@ -519,8 +561,9 @@ public actor MosaicStoreKitProvider:
           continue
         }
         keys.formUnion(mapping.entitlementKeys)
+        transactions.append(transaction)
       }
-      return .success(keys)
+      return .success((keys, transactions))
     } catch {
       return .failure(error)
     }
