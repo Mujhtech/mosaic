@@ -47,6 +47,17 @@
   closed keys, and degrades to memory with an
   `entitlements.cache_unavailable` diagnostic when no cache directory exists.
   An identity change deletes sibling records.
+- Transaction Observation submissions now carry the current Customer Access
+  Token in a `Mosaic-Customer-Token` header when one is held. This is the
+  evidence rung that binds an identified user's purchase to their Billing
+  Customer server-side; without it a validated purchase can only anchor to a
+  purchase-anchored customer. It is transport-level only — the Billing
+  Ingestion v1 observation record is unchanged. The token is read at send time
+  rather than enqueue time, so a token minted after the purchase still binds a
+  retry, it is never persisted with the queue, and it never appears in a
+  diagnostic. Reading it never mints: observation delivery is fire-and-forget,
+  so an absent or expired token simply omits the header, which is a valid
+  anonymous submission.
 - Add `restorePurchasesAndSync()`, which reports the native provider outcome and
   Mosaic's authoritative outcome separately. `restored` requires an accepted
   snapshot at a higher version; otherwise it is `validationPending` within a

@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mosaic_sdk/mosaic_sdk.dart';
@@ -28,6 +29,8 @@ Map<String, Object?> _vectors() => jsonDecode(
     ) as Map<String, Object?>;
 
 void main() {
+  group('customer token binding', _customerTokenBindingTests);
+
   // Purpose: a purchase observed on both production paths must reach the
   // ingestion endpoint exactly once, and must survive an app kill. Without
   // this, the two sources double-submit and a purchase completed just before
@@ -705,4 +708,156 @@ final class _AlwaysRetryableTransport
       retryAfter: Duration.zero,
     );
   }
+}
+
+/// Phase 9B: the Customer Access Token binds a validated purchase to an
+/// identified Billing Customer. Without it a purchase can only anchor to a
+/// purchase-anchored customer, so the header is the association evidence rung
+/// — and it must be read at send time, never stored with the queue.
+void _customerTokenBindingTests() {
+  MosaicTransactionObservation observation() => MosaicTransactionObservation(
+        providerId: 'fixture-provider-apple',
+        storePlatform: MosaicStorePlatform.ios,
+        reference: MosaicTransactionReference.tryFor(
+          MosaicStorePlatform.ios,
+          '2000000900000001',
+        )!,
+        observedAt: DateTime.utc(2026, 7, 28, 12),
+        context: const MosaicTransactionObservationContext(
+          platform: 'ios',
+          sdkVersion: '0.2.0',
+        ),
+      );
+
+  Future<(HttpServer, List<HttpHeaders>)> acceptingServer() async {
+    final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+    final seen = <HttpHeaders>[];
+    unawaited(() async {
+      await for (final request in server) {
+        seen.add(request.headers);
+        await request.drain<void>();
+        request.response
+          ..statusCode = 200
+          ..headers.contentType = ContentType.json
+          ..write(jsonEncode(<String, Object?>{
+            'billingIngestionContractVersion':
+                mosaicBillingIngestionContractVersion,
+            'recordType': 'observationSubmissionResult',
+            'payload': <String, Object?>{
+              'submissionId': observation().submissionId,
+              'status': 'accepted_for_validation',
+            },
+          }));
+        await request.response.close();
+      }
+    }());
+    return (server, seen);
+  }
+
+  test('a held token binds the submission at send time', () async {
+    final (server, seen) = await acceptingServer();
+    addTearDown(() => server.close(force: true));
+    final transport = MosaicIoTransactionObservationTransport(
+      baseUrl: Uri.parse('http://127.0.0.1:${server.port}'),
+      publicSdkKey: 'public_sdk_key_test',
+      customerToken: () => 'mcat_customer_token',
+    );
+
+    final result = await transport.submit(observation());
+
+    expect(result, isA<MosaicTransactionObservationAcceptedForValidation>());
+    expect(seen.single.value('Mosaic-Customer-Token'), 'mcat_customer_token');
+    // The public SDK key still identifies the application. Neither header
+    // substitutes for the other.
+    expect(seen.single.value('authorization'), 'Bearer public_sdk_key_test');
+  });
+
+  test('a signed-out submission omits the header rather than waiting',
+      () async {
+    final (server, seen) = await acceptingServer();
+    addTearDown(() => server.close(force: true));
+    final transport = MosaicIoTransactionObservationTransport(
+      baseUrl: Uri.parse('http://127.0.0.1:${server.port}'),
+      publicSdkKey: 'public_sdk_key_test',
+      customerToken: () => null,
+    );
+
+    await transport.submit(observation());
+
+    // Anonymous submission is valid. Blocking or minting here would turn a
+    // fire-and-forget path into a dependency on the host's backend.
+    expect(seen.single.value('Mosaic-Customer-Token'), isNull);
+  });
+
+  test('a token minted after the purchase still binds the retry', () async {
+    final (server, seen) = await acceptingServer();
+    addTearDown(() => server.close(force: true));
+    String? held;
+    final transport = MosaicIoTransactionObservationTransport(
+      baseUrl: Uri.parse('http://127.0.0.1:${server.port}'),
+      publicSdkKey: 'public_sdk_key_test',
+      customerToken: () => held,
+    );
+
+    // Enqueued and sent while signed out, then sent again after sign-in. The
+    // resolver is read at send time, so the second attempt carries the binding.
+    await transport.submit(observation());
+    held = 'mcat_after_sign_in';
+    await transport.submit(observation());
+
+    expect(seen.first.value('Mosaic-Customer-Token'), isNull);
+    expect(seen.last.value('Mosaic-Customer-Token'), 'mcat_after_sign_in');
+  });
+
+  test('a resolver that throws never becomes a failed submission', () async {
+    final (server, seen) = await acceptingServer();
+    addTearDown(() => server.close(force: true));
+    final transport = MosaicIoTransactionObservationTransport(
+      baseUrl: Uri.parse('http://127.0.0.1:${server.port}'),
+      publicSdkKey: 'public_sdk_key_test',
+      customerToken: () => throw StateError('token unavailable'),
+    );
+
+    final result = await transport.submit(observation());
+
+    expect(result, isA<MosaicTransactionObservationAcceptedForValidation>());
+    expect(seen.single.value('Mosaic-Customer-Token'), isNull);
+  });
+
+  test('the token never reaches the persisted queue or diagnostics', () async {
+    final storage = MosaicMemoryTransactionObservationStorage();
+    final runtime = MosaicTransactionObservationRuntime(
+      namespace: _namespace,
+      transport: _NeverDeliversTransport(),
+      storePlatform: MosaicStorePlatform.ios,
+      context: const MosaicTransactionObservationContext(
+        platform: 'ios',
+        sdkVersion: '0.2.0',
+      ),
+      storage: storage,
+    );
+
+    await runtime.observe(
+      providerId: 'fixture-provider-apple',
+      transactionReference: '2000000900000001',
+    );
+
+    // The credential is a transport-time header and nothing else. A queue file
+    // that carried it would persist a bearer token across app restarts.
+    expect(storage.source, isNotNull);
+    expect(storage.source, isNot(contains('mcat_')));
+    expect(storage.source, isNot(contains('customerToken')));
+    final diagnostics = await runtime.diagnostics();
+    expect(diagnostics.toString(), isNot(contains('mcat_')));
+    await runtime.disposeRuntime();
+  });
+}
+
+final class _NeverDeliversTransport
+    implements MosaicTransactionObservationTransport {
+  @override
+  Future<MosaicTransactionObservationSubmission> submit(
+    MosaicTransactionObservation observation,
+  ) =>
+      Completer<MosaicTransactionObservationSubmission>().future;
 }

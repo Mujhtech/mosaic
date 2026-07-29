@@ -313,39 +313,6 @@ final class Mosaic extends ChangeNotifier with WidgetsBindingObserver {
             environmentEnabled: analyticsEnvironmentSettings.collectionEnabled,
             hostEnabled: analyticsHostEnabled,
           );
-    // Off by default: absent opt-in means the subsystem is never constructed,
-    // so nothing is observed, queued, persisted, or submitted. A Store Platform
-    // is required because it determines the contract's reference kind; without
-    // one the handoff stays disabled rather than guessing.
-    final resolvedStorePlatform = configuration.storePlatform;
-    final resolvedObservationTransport = transactionObservationTransport ??
-        (resolvedBaseUrl == null
-            ? null
-            : MosaicIoTransactionObservationTransport(
-                baseUrl: resolvedBaseUrl,
-                publicSdkKey: configuration.publicSdkKey,
-                timeout: configuration.requestTimeout,
-              ));
-    final observationRuntime = transactionObservation == null ||
-            resolvedStorePlatform == null ||
-            resolvedObservationTransport == null
-        ? null
-        : MosaicTransactionObservationRuntime(
-            namespace: mosaicTransactionObservationNamespace(
-              resolvedBaseUrl ?? Uri.parse('mosaic://local'),
-              configuration.publicSdkKey,
-            ),
-            transport: resolvedObservationTransport,
-            storePlatform: resolvedStorePlatform,
-            context: MosaicTransactionObservationContext(
-              platform: resolvedStorePlatform.wireValue,
-              sdkVersion: analyticsSdkVersion,
-              applicationVersion: configuration.applicationVersion,
-              operatingSystemVersion: operatingSystemVersion,
-            ),
-            settings: transactionObservation,
-            storage: transactionObservationStorage,
-          );
     // Authoritative entitlements require an application backend to mint a
     // Customer Access Token. Without a token provider the subsystem is never
     // constructed, and every authoritative read reports unavailable rather
@@ -379,6 +346,45 @@ final class Mosaic extends ChangeNotifier with WidgetsBindingObserver {
                           ),
                         ),
               );
+    // Off by default: absent opt-in means the subsystem is never constructed,
+    // so nothing is observed, queued, persisted, or submitted. A Store Platform
+    // is required because it determines the contract's reference kind; without
+    // one the handoff stays disabled rather than guessing.
+    final resolvedStorePlatform = configuration.storePlatform;
+    final resolvedObservationTransport = transactionObservationTransport ??
+        (resolvedBaseUrl == null
+            ? null
+            : MosaicIoTransactionObservationTransport(
+                baseUrl: resolvedBaseUrl,
+                publicSdkKey: configuration.publicSdkKey,
+                timeout: configuration.requestTimeout,
+                // Read at send time, so a token minted after the purchase
+                // still binds it, and a signed-out submission simply omits the
+                // header rather than waiting for one.
+                customerToken: customerEntitlements == null
+                    ? null
+                    : customerEntitlements.currentCustomerTokenForSubmission,
+              ));
+    final observationRuntime = transactionObservation == null ||
+            resolvedStorePlatform == null ||
+            resolvedObservationTransport == null
+        ? null
+        : MosaicTransactionObservationRuntime(
+            namespace: mosaicTransactionObservationNamespace(
+              resolvedBaseUrl ?? Uri.parse('mosaic://local'),
+              configuration.publicSdkKey,
+            ),
+            transport: resolvedObservationTransport,
+            storePlatform: resolvedStorePlatform,
+            context: MosaicTransactionObservationContext(
+              platform: resolvedStorePlatform.wireValue,
+              sdkVersion: analyticsSdkVersion,
+              applicationVersion: configuration.applicationVersion,
+              operatingSystemVersion: operatingSystemVersion,
+            ),
+            settings: transactionObservation,
+            storage: transactionObservationStorage,
+          );
     return Mosaic._(
       configuration: configuration,
       purchaseProvider: resolvedPurchaseProvider,

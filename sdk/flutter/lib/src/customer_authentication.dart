@@ -174,6 +174,13 @@ final class MosaicCustomerTokenHolder {
   String? _userId;
   String? _installationId;
 
+  /// The held token, only while it is usable. It never mints: callers on
+  /// fire-and-forget paths must not be able to trigger a refresh storm.
+  MosaicCustomerToken? get currentToken {
+    final token = _token;
+    return token != null && token.isUsableAt(_clock()) ? token : null;
+  }
+
   int get identityGeneration => _identityGeneration;
   int get tokenGeneration => _tokenGeneration;
 

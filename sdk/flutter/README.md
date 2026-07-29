@@ -207,6 +207,13 @@ How it behaves:
   path.
 - Every storage and network failure degrades to a stable safe code and never
   throws into the host application.
+- When authoritative entitlements are configured and a Customer Access Token is
+  held, the submission carries it in a `Mosaic-Customer-Token` header so the
+  purchase binds to the identified Billing Customer rather than only to a
+  purchase-anchored one. The contract record is unchanged; this is transport
+  only. The token is read at send time, never stored with the queue, and never
+  logged, and reading it never mints one — a signed-out submission simply omits
+  the header.
 
 ## Authoritative entitlements (Mosaic Billing)
 

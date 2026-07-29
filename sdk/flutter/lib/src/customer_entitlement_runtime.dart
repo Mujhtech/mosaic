@@ -127,6 +127,15 @@ final class MosaicCustomerEntitlementRuntime extends ChangeNotifier
 
   MosaicCustomerEntitlementSnapshot? get snapshot => _snapshot;
 
+  /// The current Customer Access Token, for transport-level binding of a
+  /// Transaction Observation to this Billing Customer.
+  ///
+  /// Internal to the SDK's wiring. It returns the held token only while it is
+  /// usable and never mints one: observation delivery is fire-and-forget, so a
+  /// minting read here would turn a backend outage into a request storm. A
+  /// `null` result omits the header, which is a valid anonymous submission.
+  String? currentCustomerTokenForSubmission() => _tokens.currentToken?.value;
+
   MosaicEntitlementCacheState get cacheState => _cacheState();
 
   MosaicCustomerEntitlementDiagnostics get diagnostics =>
