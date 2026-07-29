@@ -1045,17 +1045,37 @@ func (d *demo) demo12IdentityConflict() error {
 	}
 	versionABefore, versionBBefore := d.snapshotVersion(d.customerA), d.snapshotVersion(d.customerB)
 
-	// Customer B's backend now claims the same purchase, through exactly the
-	// surface Customer A's did: a token-bound observation. Nothing here is a
-	// substitution — the resolver runs because a fact for that transaction was
-	// re-validated, and it sees an accepted association naming A alongside
-	// submission evidence naming B.
+	// Customer B's backend now claims the same purchase through the trusted
+	// server observation surface. A public SDK-key submission deliberately
+	// cannot freeze or reassign an attached lineage; the secret server key is
+	// the authority required to open this operator-resolved conflict.
 	d.step("Conflicting trusted identity evidence arrives naming Customer B")
-	delete(d.boundLineages, lineageConflict)
-	if err := d.bindPurchase(d.tokenB, lineageConflict, "3000000900000018", "b_"); err != nil {
+	status, body = d.raw(http.MethodPost, "/v1/billing/server/observations",
+		encode(trustedObservation9B("obs_bind_b_3000000900000019", "sub_bind_b_3000000900000019", "3000000900000019")),
+		map[string]string{
+			"Authorization":                 "Bearer " + d.serverKey9B.raw,
+			billinghttp.CustomerTokenHeader: d.tokenB,
+		})
+	if status != http.StatusAccepted && status != http.StatusOK {
+		return fmt.Errorf("trusted observation returned %d: %s", status, body)
+	}
+	if err := d.drainValidation(6); err != nil {
 		return err
 	}
-	d.note("both customers' backends have now claimed transaction 3000000900000018")
+	if err := d.deliverApple(appleEvent{
+		NotificationUUID: "9b000012-0000-4000-8000-000000000012",
+		NotificationType: "DID_RENEW", SignedAt: d.at(-8 * time.Minute),
+		Transaction: transactionVector{
+			TransactionID: "3000000900000019", OriginalTransactionID: lineageConflict,
+			ProductID: appleMonthly9B, PurchaseDate: d.at(-8 * time.Minute),
+			ExpiresDate: timePointer(d.at(31 * 24 * time.Hour)),
+		},
+		Renewal: &renewalVector{OriginalTransactionID: lineageConflict, AutoRenewStatus: 1,
+			AutoRenewProductID: appleMonthly9B, ProductID: appleMonthly9B, SignedAt: d.at(-8 * time.Minute)},
+	}); err != nil {
+		return err
+	}
+	d.note("Customer A owns the lineage; Customer B's trusted backend claimed its renewal transaction")
 	d.query("the conflict is open, the lineage is frozen, and nothing was reassigned",
 		`SELECT c.conflict_scope, c.status, c.detail->>'diagnosticCode' AS diagnostic_code,
 		        (c.first_customer_id=$2) AS first_is_a, (c.second_customer_id=$3) AS second_is_b,

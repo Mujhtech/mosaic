@@ -193,6 +193,27 @@ func observation9B(observationID, submissionID, transactionID string) map[string
 	}
 }
 
+// trustedObservation9B builds the server-authenticated form used when an
+// application's backend, rather than an SDK installation, reports a purchase.
+func trustedObservation9B(observationID, submissionID, transactionID string) map[string]any {
+	return map[string]any{
+		"billingIngestionContractVersion": "1",
+		"recordType":                      "serverTransactionObservation",
+		"payload": map[string]any{
+			"observationId": observationID,
+			"submissionId":  submissionID,
+			"providerId":    "apple_app_store",
+			"storePlatform": "apple_app_store",
+			"transactionReference": map[string]string{
+				"referenceKind": billing.ReferenceAppStoreTransactionID, "value": transactionID,
+			},
+			"sourceAuthority": "trusted_server_observation",
+			"trustBasis":      "application_backend",
+			"receivedAt":      time.Now().UTC().Format("2006-01-02T15:04:05Z"),
+		},
+	}
+}
+
 // ---------------------------------------------------------------------------
 // Reads used by more than one demonstration
 // ---------------------------------------------------------------------------
