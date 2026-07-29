@@ -16,6 +16,9 @@ import java.util.TimeZone
 import java.util.concurrent.TimeUnit
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
@@ -408,7 +411,15 @@ class MosaicHostedConfigurationClient(
     internal val analyticsRuntime: MosaicAnalyticsRuntime? = null,
     private val experimentStore: MosaicExperimentAssignmentStore? = null,
     internal val transactionObservationRuntime: MosaicTransactionObservationRuntime? = null,
+    internal val customerEntitlementRuntime: MosaicCustomerEntitlementRuntime? = null,
 ) {
+    /**
+     * Held so the purchase-triggered refresh outlives the call that created it. It is a property
+     * rather than a constructor parameter because this constructor is public API and the refresher
+     * is an internal implementation detail no host should be able to supply.
+     */
+    internal var customerPurchaseRefresh: MosaicCustomerPurchaseRefresh? = null
+
     private val refreshLock = Mutex()
     @Volatile private var accepted: MosaicAcceptedConfiguration? = null
     private val identityMutationLock = Mutex()
@@ -625,6 +636,104 @@ class MosaicHostedConfigurationClient(
 
     suspend fun transactionObservationDiagnostics(): MosaicTransactionObservationDiagnostics =
         transactionObservationRuntime?.diagnostics() ?: MOSAIC_TRANSACTION_OBSERVATIONS_UNAVAILABLE
+
+    // ------------------------------------------------------------------------------------------
+    // Authoritative entitlements
+    //
+    // Every member below is inert unless the host supplied a `customerAccessTokenProvider`, and
+    // every one of them reports `unavailable` rather than `inactive` when it cannot answer. None of
+    // them changes what the provider-observed commerce API does, and Placement targeting continues
+    // to read provider-observed entitlements exactly as before.
+    // ------------------------------------------------------------------------------------------
+
+    /**
+     * What Mosaic has validated about this customer's access.
+     *
+     * `Loading` until the first answer, `SignedOut` when there is no customer, and `Unavailable`
+     * when Mosaic could not answer. A host that needs a single value observes this flow; a host that
+     * needs one Entitlement calls [checkCustomerEntitlement].
+     */
+    val customerEntitlements: StateFlow<MosaicCustomerEntitlementSnapshotState>
+        get() = customerEntitlementRuntime?.customerEntitlements
+            ?: MutableStateFlow(
+                MosaicCustomerEntitlementSnapshotState.Unavailable(
+                    MosaicCustomerEntitlementUnavailableReason.NOT_CONFIGURED,
+                ),
+            ).asStateFlow()
+
+    suspend fun checkCustomerEntitlement(entitlementKey: String): MosaicCustomerEntitlementCheck =
+        customerEntitlementRuntime?.checkCustomerEntitlement(entitlementKey)
+            ?: MosaicCustomerEntitlementCheck(
+                entitlementKey = entitlementKey,
+                state = MosaicCustomerEntitlementState.Unavailable(
+                    MosaicCustomerEntitlementExplanation(
+                        MosaicCustomerEntitlementExplanationCode.BILLING_DISABLED,
+                    ),
+                    MosaicCustomerUncertainty(
+                        MosaicCustomerUncertaintyReason.PROVIDER_UNAVAILABLE,
+                        since = mosaicAnalyticsTimestamp(System.currentTimeMillis()),
+                    ),
+                ),
+                sourceCount = 0,
+                snapshotVersion = null,
+                asOf = null,
+                cacheState = MosaicCustomerEntitlementCacheState.MISSING,
+            )
+
+    suspend fun refreshCustomerEntitlements(): MosaicCustomerEntitlementSyncResult =
+        customerEntitlementRuntime?.refreshCustomerEntitlements()
+            ?: MosaicCustomerEntitlementSyncResult.Unavailable(
+                MosaicCustomerEntitlementUnavailableReason.NOT_CONFIGURED,
+            )
+
+    /**
+     * Binds this device to a Billing Customer the application's backend has authenticated.
+     *
+     * The Phase 6 installation identity is untouched: a person signing in is not a new installation,
+     * and conflating the two would reset analytics identity on every login.
+     */
+    suspend fun identifyCustomer(billingCustomerId: String): MosaicCustomerEntitlementSyncResult =
+        customerEntitlementRuntime?.identifyCustomer(billingCustomerId)
+            ?: MosaicCustomerEntitlementSyncResult.Unavailable(
+                MosaicCustomerEntitlementUnavailableReason.NOT_CONFIGURED,
+            )
+
+    suspend fun signOutCustomer() {
+        customerEntitlementRuntime?.signOutCustomer()
+    }
+
+    /**
+     * Restores through the purchase provider, then waits briefly for Mosaic to validate the result.
+     *
+     * The provider's own recovery path is unchanged, including acknowledgement.
+     */
+    suspend fun restoreAndSyncCustomerEntitlements(): MosaicCustomerSyncResult {
+        val runtime = customerEntitlementRuntime
+            ?: return MosaicCustomerSyncResult.CustomerUnavailable(
+                MosaicCustomerRestoreProviderOutcome.NOT_ATTEMPTED,
+                MosaicCustomerEntitlementUnavailableReason.NOT_CONFIGURED,
+            )
+        val provider = purchaseProvider
+            ?: return MosaicCustomerSyncResult.ProviderUnavailable(
+                MosaicCustomerRestoreProviderOutcome.NOT_ATTEMPTED,
+                MosaicDiagnosticCode.COMMERCE_PROVIDER_UNAVAILABLE.wireName,
+            )
+        return mosaicRestoreAndSyncCustomerEntitlements(runtime, provider)
+    }
+
+    suspend fun customerEntitlementDiagnostics(): MosaicCustomerEntitlementDiagnostics =
+        customerEntitlementRuntime?.customerEntitlementDiagnostics()
+            ?: MosaicCustomerEntitlementDiagnostics(
+                configured = false,
+                cacheState = MosaicCustomerEntitlementCacheState.MISSING,
+                snapshotVersion = null,
+                asOf = null,
+                clockUnreliable = false,
+                lastRejection = null,
+                lastUnavailableReason = MosaicCustomerEntitlementUnavailableReason.NOT_CONFIGURED,
+                acceptedSnapshotCount = 0,
+                rejectedSnapshotCount = 0,
+            )
 
     suspend fun experimentDiagnostics(): List<MosaicExperimentAssignmentRecord> =
         experimentStore?.diagnostics().orEmpty()

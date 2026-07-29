@@ -28,7 +28,17 @@ internal object MosaicForegroundRefreshRegistry {
         init { application.registerActivityLifecycleCallbacks(this) }
         override fun onActivityStarted(activity: Activity) {
             started += 1
-            if (started == 1) client.get()?.let { current -> scope.launch { runCatching { current.refresh() } } }
+            if (started != 1) return
+            // One callback refreshes both surfaces. Authoritative entitlements deliberately reuse
+            // this registration rather than adding a second lifecycle observer: a returning app has
+            // exactly one "came back to the foreground" moment, and two callbacks racing to notice
+            // it would produce two requests for one event.
+            client.get()?.let { current ->
+                scope.launch {
+                    runCatching { current.refresh() }
+                    runCatching { current.refreshCustomerEntitlements() }
+                }
+            }
         }
         override fun onActivityStopped(activity: Activity) { started = (started - 1).coerceAtLeast(0) }
         override fun onActivityCreated(activity: Activity, state: Bundle?) = Unit

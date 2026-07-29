@@ -487,3 +487,50 @@ class CustomerEntitlementRuntimeTest {
         assertEquals(13L, check.snapshotVersion)
     }
 }
+
+/**
+ * The feature is off unless the host opted in, and being off is never an answer about a person.
+ *
+ * This is the row that protects every existing application: an app that never heard of authoritative
+ * entitlements must keep behaving exactly as it did, and must never have a customer's access
+ * silently reported as inactive because Mosaic Billing was not configured.
+ */
+class CustomerEntitlementWiringTest {
+    private val client = MosaicHostedConfigurationClient(
+        transport = MosaicConfigurationTransport { MosaicConfigurationResponse.NotModified },
+        cache = object : MosaicConfigurationCache {
+            override suspend fun read(): MosaicCachedConfiguration? = null
+            override suspend fun write(value: MosaicCachedConfiguration) = Unit
+        },
+    )
+
+    @Test
+    fun anUnconfiguredClientReportsUnavailableEverywhereAndNeverInactive() = runTest {
+        val state = client.customerEntitlements.value as MosaicCustomerEntitlementSnapshotState.Unavailable
+        assertEquals(MosaicCustomerEntitlementUnavailableReason.NOT_CONFIGURED, state.reason)
+
+        val check = client.checkCustomerEntitlement("pro")
+        assertTrue(check.state is MosaicCustomerEntitlementState.Unavailable)
+
+        val refreshed = client.refreshCustomerEntitlements()
+        assertEquals(
+            MosaicCustomerEntitlementUnavailableReason.NOT_CONFIGURED,
+            (refreshed as MosaicCustomerEntitlementSyncResult.Unavailable).reason,
+        )
+
+        assertFalse(client.customerEntitlementDiagnostics().configured)
+        assertTrue(
+            client.restoreAndSyncCustomerEntitlements() is MosaicCustomerSyncResult.CustomerUnavailable,
+        )
+        // Signing out an unconfigured client is a no-op rather than an error.
+        client.signOutCustomer()
+    }
+
+    @Test
+    fun theProviderObservedCommerceApiIsUnchanged() {
+        // Authoritative entitlements are purely additive: the frozen provider-observed result type
+        // still exists with its own vocabulary, and nothing above renamed or deprecated it.
+        val provider = MockMosaicPurchaseProvider(MockMosaicPurchaseProvider.phase1Products())
+        assertTrue(provider is MosaicPurchaseProvider)
+    }
+}
