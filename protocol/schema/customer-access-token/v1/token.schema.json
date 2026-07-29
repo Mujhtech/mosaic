@@ -132,6 +132,7 @@
     },
     "tokenValue": {
       "description": "The opaque credential: the prefix mcat_ followed by 43 base64url characters, which is 256 bits of randomness. It has no internal structure and nothing may be inferred from it. It is returned exactly once, at issuance; Mosaic stores only its SHA-256 digest and can never reproduce it.",
+      "$comment": "The mcat_ value in fixtures/customer-access-token/v1/tokens/issuance-result.json is FABRICATED: it was typed to satisfy this pattern and was never issued by any Mosaic deployment, so it grants nothing anywhere. It exists because the issuance result is the one record that carries a token value at all, and an SDK author needs to see its shape. No fixture, example, or document may ever carry a token a deployment actually minted -- a fixture is copied, committed, and published, and a real credential in one is a leaked credential.",
       "type": "string",
       "minLength": 48,
       "maxLength": 48,

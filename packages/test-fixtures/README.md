@@ -127,10 +127,12 @@ value. The `tampered-body`, `different-event-id`, and `different-timestamp`
 vectors must **not** verify against the canonical signature; that is what proves
 each component is genuinely covered rather than merely carried alongside.
 
-`canonical-event-primary-key` signs the exact bytes of
-`protocol/fixtures/billing-state-webhook/v1/events/entitlement-activated.json`,
-and a test asserts the two cannot drift. The raw body must be hashed **as
-received**: a verifier that parses and re-serializes gets different bytes and
+`canonical-event-primary-key` signs the bytes of
+`protocol/fixtures/billing-state-webhook/v1/events/entitlement-activated.json`
+**with the file's trailing newline removed** — the builder applies `trimEnd()` —
+and a test asserts the two cannot drift. The trailing newline belongs to the file
+on disk, not to a delivery. The raw body must be hashed **as received**: a
+verifier that parses and re-serializes, or that trims, gets different bytes and
 rejects every genuine delivery.
 
 `non-ascii-body` and `non-ascii-secret` prove both the payload and the key are

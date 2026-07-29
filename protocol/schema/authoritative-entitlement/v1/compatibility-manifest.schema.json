@@ -285,7 +285,7 @@
           "const": 604800
         },
         "defaultStaleGraceSeconds": {
-          "description": "Bounded grace is the shipped offline policy (OD-5), so the default grace window is 24 hours rather than zero. A zero default would ship the strict policy under a bounded-grace decision. Per-Environment configurable server-side; strict remains expressible as a grace window of zero.",
+          "description": "Bounded grace is the shipped offline policy (OD-5), so the default grace window is 24 hours rather than zero. A zero default would ship the strict policy under a bounded-grace decision. In Phase 9B this and the other two freshness settings are configured deployment-wide server-side, not per Environment; per-Environment configuration is a tracked follow-up. Strict remains expressible as a grace window of zero.",
           "const": 86400
         },
         "maxValidUntilSeconds": {

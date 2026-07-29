@@ -37,8 +37,9 @@ rejection yields `accessState: unknown` and preserves the cache, never
   digest covers the customer, Project, Environment, and version binding, so a
   snapshot cannot be accepted into another customer's cache.
 - **Bounded-grace freshness** per OD-5: `refreshAfter` default 1 h, `validUntil`
-  default 7 d, `staleGraceSeconds` default 24 h, all per-Environment configurable
-  server-side, with a 60-second clock skew tolerance evaluated in the direction
+  default 7 d, `staleGraceSeconds` default 24 h, all configured deployment-wide
+  server-side in Phase 9B (per-Environment configuration is a tracked follow-up,
+  not a shipped capability), with a 60-second clock skew tolerance evaluated in the direction
   that favours the user. The 30-day hard maximum applies to the **combined**
   horizon, `(validUntil - issuedAt) + staleGraceSeconds`, enforced by the
   semantic validator on snapshots and on unchanged responses alike.

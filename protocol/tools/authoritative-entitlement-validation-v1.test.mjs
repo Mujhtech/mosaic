@@ -298,7 +298,7 @@ test("every snapshot digest vector is the SHA-256 of its canonical serialization
   // The vector that catches a UTF-16 or Latin-1 implementation must contain
   // non-ASCII, or it catches nothing.
   const nonAscii = document.vectors.find((vector) => vector.id === "non-ascii-safe-text");
-  assert.match(nonAscii.payload.safeSummary, /[^ -]/);
+  assert.match(nonAscii.payload.safeSummary, /[^\x00-\x7F]/);
 });
 
 test("the canonical digest vector agrees with the canonical fixture", () => {

@@ -128,6 +128,18 @@ Unknown and unavailable must remain explainable, so both carry an `uncertainty`:
 definite state carries `reason: "none"` and no `since`; a non-definite state
 requires both. The schema enforces the pairing in both directions.
 
+**`product_unresolved` is reachable by an SDK reader**, unlike the
+`restoreResult.outcome` member of the same name, which in Phase 9B only the
+server surface can state (recorded under "Known consumer limitations" in the
+[changelog](../../protocol/authoritative-entitlement/CHANGELOG.md)). A validated
+purchase whose Mosaic Product mapping is missing or ambiguous projects to an
+entry with `state: "unknown"` and this reason, and a client reads it directly
+from the snapshot. Two consequences for a reader: the matching
+`recoveryAction` is `fixProductMapping`, which only an operator can perform, so
+retrying the sync never clears it and a client must not loop on it; and the
+state stays `unknown`, never `inactive` — a catalogue defect is Mosaic failing
+to answer, not the customer losing access.
+
 ### Schema-level invariants
 
 Three invariants are `if`/`then` rules in the canonical schema rather than
@@ -273,10 +285,14 @@ shipped configuration rather than a theoretical one.
 
 Per OD-5, **bounded grace is the shipped policy**, and the defaults are
 `refreshAfter` = issuance + 1 h, `validUntil` = issuance + 7 d, and
-`staleGraceSeconds` = 86400 (24 h). All three are per-Environment configurable
-server-side. A zero grace default would have shipped the strict policy under a
-bounded-grace decision, so the default is stated rather than left to fall out of
-an absent field.
+`staleGraceSeconds` = 86400 (24 h). In Phase 9B all three are configured
+**deployment-wide** server-side, not per Environment: one setting applies to
+every Project and Environment a deployment serves. Per-Environment configuration
+is a tracked follow-up, not a shipped capability — a reader must not assume two
+Environments can be given different windows, and an operator who needs that today
+has no supported way to express it. A zero grace default would have shipped the
+strict policy under a bounded-grace decision, so the default is stated rather
+than left to fall out of an absent field.
 
 `staleGraceSeconds` absent means zero, so a producer that intends bounded grace
 states it explicitly. Zero **is** the strict policy, expressed through the same

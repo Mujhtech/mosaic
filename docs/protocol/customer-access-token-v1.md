@@ -243,6 +243,15 @@ a cache key, and a restore hint; it can never create or select a customer.
 `token-shaped-as-signed-payload.json`, `token-missing-customer-binding.json`, and
 the semantic `token-lifetime-exceeds-maximum.json`.
 
+The `mcat_` value in `tokens/issuance-result.json` is **fabricated** — typed to
+satisfy the pattern, never issued by any deployment, and therefore useless
+anywhere. It is there because the issuance result is the only record that carries
+a token value at all and an SDK author needs to see its shape. No fixture,
+example, or document may ever carry a token a deployment actually minted: a
+fixture is copied, committed, and published, so a real credential in one is a
+leaked credential. The rule is recorded as a `$comment` on `tokenValue` in the
+canonical schema.
+
 ## Related documents
 
 - [Authoritative Entitlement Contract v1](authoritative-entitlement-v1.md)

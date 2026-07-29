@@ -44,7 +44,7 @@ its vectors are the authority, and the literal above is corrected to agree with 
 
 The signed string binds four things deliberately:
 
-- the **scheme version** (`1`), so a future scheme change is a new `v` element rather than a
+- the **scheme version** (`v1`), so a future scheme change is a new `v` element rather than a
   silent reinterpretation of the same bytes;
 - the **timestamp**, so a receiver can reject replays outside its tolerance window;
 - the **event ID**, so a captured signature cannot be re-attached to a different event body;

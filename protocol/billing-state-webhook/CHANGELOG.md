@@ -78,5 +78,5 @@ also recorded in `docs/protocol/compatibility-policy.md`.
 signature vectors — tampered body, changed event ID, changed timestamp, rotation
 key, non-ASCII body, non-ASCII secret — built by
 `build-webhook-signature-vectors.mjs`. Signatures are computed, never
-hand-edited, and a test asserts the canonical vector signs the exact bytes of
-`events/entitlement-activated.json`.
+hand-edited, and a test asserts the canonical vector signs the bytes of
+`events/entitlement-activated.json` with the file's trailing newline removed.

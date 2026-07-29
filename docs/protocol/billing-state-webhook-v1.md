@@ -154,8 +154,12 @@ Reference vectors:
 [`packages/test-fixtures/src/webhook-signature-vectors.json`](../../packages/test-fixtures/src/webhook-signature-vectors.json)
 — eight vectors including a tampered body, a changed event ID, a changed
 timestamp, a rotation key, a non-ASCII body, and a non-ASCII secret. A test
-asserts the canonical vector signs the exact bytes of
-`events/entitlement-activated.json`, so the vectors and the fixture cannot drift.
+asserts the canonical vector signs the bytes of
+`events/entitlement-activated.json` **with the file's trailing newline removed**
+(the builder applies `trimEnd()`), so the vectors and the fixture cannot drift.
+The trailing newline is a property of the file on disk, not of a delivery: a real
+delivery signs the exact body bytes it transmits, whatever they are, and a
+verifier must never trim, re-encode, or re-serialize the body before comparing.
 
 A test endpoint is supported so an integrator can verify a signature before any
 real state change depends on it.
@@ -179,6 +183,17 @@ At-least-once. **Exactly-once is never promised**
 - **Delivery failure never rolls back customer state**
   (`delivery.failureIsolation: "deliveryNeverRollsBackState"`). Delivery is a
   notification path, not a commit path.
+
+**The `webhookDeliveryAttempt` schema is the specification for the
+delivery-attempt surface, not a description of it.** It is the one record type
+in this contract that is never transmitted anywhere: it exists so operators can
+read attempt history, and the 9B API serves exactly this record inside the
+operator response envelope. Where the Go surface and this schema disagree about a
+field name, a status spelling, or a bound, **the schema is authoritative and the
+implementation conforms to it** — the vocabulary an operator sees in the
+dashboard, in the API, and in these fixtures has to be one vocabulary, and the
+contract is where it is defined. Adding an operator-only field to the API without
+adding it here is a drift, not an extension.
 
 Destinations are HTTPS-only and validated against the SSRF policy: RFC1918,
 loopback, link-local, CGNAT, ULA, and IPv4-mapped addresses are denied, DNS is
