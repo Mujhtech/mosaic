@@ -194,3 +194,47 @@ device-independent proofs run on the JVM:
 ../../sdk/android/gradlew -p ../../sdk/android :mosaic-google-play:testDebugUnitTest \
   --tests 'dev.mosaic.sdk.googleplay.MosaicGooglePlayAdapterTest'
 ```
+
+### Authoritative entitlements
+
+Authoritative entitlements are inert unless a Customer Access Token is supplied.
+The example takes one as a launch extra purely to stand in for the application
+backend that a real app must run: a public SDK key can never select a Billing
+Customer, so there is no client-only way to obtain one. Mint the token through
+the trusted server API, then:
+
+```bash
+adb shell am start -n dev.mosaic.example/.MainActivity \
+  --es mosaic.sdk.key SDK_KEY \
+  --es mosaic.sdk.endpoint http://10.0.2.2:8080 \
+  --es mosaic.application.id APPLICATION_ID \
+  --es mosaic.placement onboarding_complete \
+  --es mosaic.customer.token CUSTOMER_ACCESS_TOKEN \
+  --es mosaic.customer.id BILLING_CUSTOMER_ID
+```
+
+The third status line reports the authoritative state of the `pro` Entitlement,
+the accepted snapshot version, and the cache state (`fresh`,
+`refresh_recommended`, `stale_within_grace`, `expired`, `missing`, `invalid`, or
+`different_customer`). Two of those readings are worth understanding rather than
+treating as failures: `unknown` and `unavailable` mean Mosaic could not answer,
+never that the customer has no access, and the example deliberately does not
+render them as a denial.
+
+The **Restore and sync** button appears only when a token was supplied. It runs
+the ordinary provider restore and then waits a bounded three attempts for Mosaic
+to validate the result, so "recovered, Mosaic validation pending" is the expected
+reading immediately after a fresh-device restore — not an error.
+
+Omitting `mosaic.customer.token` shows the signed-out line and leaves every other
+part of the example unchanged, which is what a host that has not adopted Mosaic
+Billing sees.
+
+Emulator note: a real restore needs a Play-enabled image, a licence tester
+account, and `--ez mosaic.google.play true`; a bare AVD cannot exercise it. The
+device-independent proofs run on the JVM:
+
+```bash
+../../sdk/android/gradlew -p ../../sdk/android :mosaic:testDebugUnitTest \
+  --tests 'dev.mosaic.sdk.Customer*'
+```

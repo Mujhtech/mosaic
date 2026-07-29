@@ -239,6 +239,121 @@ Behaviour:
   header.
 - No store credential exists in any Mosaic SDK.
 
+## Authoritative entitlements (optional, off by default)
+
+Two different questions have two different answers, and Mosaic keeps them apart:
+
+- **Provider-observed** — what the store told *this device* a moment ago.
+  `MosaicPurchaseProvider.activeEntitlements()`, `MosaicEntitlement`, and
+  Placement targeting. Nothing about it changed, and no symbol was renamed or
+  deprecated.
+- **Authoritative** — what Mosaic has validated server-side and projected into a
+  Customer Entitlement Snapshot. The `MosaicCustomer…` namespace. This is the
+  answer that survives a refund, a revocation, a reinstall, and a second device.
+
+Both exist because neither is sufficient alone: the provider answer is instant
+but local and easily stale after a server-side change, and the authoritative
+answer is durable but requires a network and an identified customer.
+
+### Mosaic Billing requires an application backend
+
+A public SDK key can never select a Billing Customer. Access is read with a
+**Customer Access Token**, which only the host's own authenticated backend can
+mint (through Mosaic's trusted server API). There is deliberately no client-only
+path: one would have to accept a client-asserted identifier, which is the same
+as letting any device read any customer's entitlements.
+
+```kotlin
+val mosaic = Mosaic.configure(
+    apiKey = "mosaic_sdk_…",
+    purchaseProvider = provider,
+    // Null — the default — leaves the whole feature inert.
+    customerAccessTokenProvider = { forceRefresh ->
+        when (val token = myBackend.mosaicCustomerToken(forceRefresh)) {
+            null -> MosaicCustomerAccessTokenResult.SignedOut
+            else -> MosaicCustomerAccessTokenResult.Issued(MosaicCustomerAccessToken(token))
+        }
+    },
+)
+val client = mosaic.hostedConfiguration(context)
+client.identifyCustomer("billing-customer-id")
+
+when (val check = client.checkCustomerEntitlement("pro").state) {
+    is MosaicCustomerEntitlementState.Active -> unlock(stale = check.isStale)
+    is MosaicCustomerEntitlementState.Inactive -> showPaywall()
+    // Mosaic could not answer. This is never "not entitled".
+    is MosaicCustomerEntitlementState.Unknown,
+    is MosaicCustomerEntitlementState.Unavailable -> keepCurrentAccess()
+}
+```
+
+The token is held in memory only. It is never persisted, never logged, never
+parsed — Mosaic's tokens are opaque — and `MosaicCustomerAccessToken.toString()`
+redacts itself so an interpolated log line cannot leak it. The SDK calls the
+provider on the IO dispatcher and never re-entrantly: concurrent readers collapse
+onto one call, and a refused token triggers exactly one forced refresh and one
+retry.
+
+### There is no boolean API, and never `inactive` from a failure
+
+`unknown` and `unavailable` are real answers and a `Boolean` has nowhere to put
+them. `inactive` means Mosaic looked, found no qualifying source, and is
+confident; it is produced only from a snapshot the SDK fully accepted. A network
+failure, a timeout, an expired cache, a digest mismatch, an unsupported version,
+a rejected document, and an unreadable device clock all produce `unknown`. A
+reader that collapses "I could not find out" into "you do not have it" turns
+every Mosaic outage into a mass revocation experienced by paying customers.
+
+### Caching, bounded grace, and the device clock
+
+The accepted snapshot is written under `noBackupFilesDir`, in a directory named
+by a digest of the Billing Customer identifier, through a four-step atomic write.
+It is backup-excluded from day one so a snapshot cannot travel to another device
+and grant one person's access on somebody else's phone.
+
+Freshness follows the shipped bounded-grace policy, with a 60-second clock-skew
+tolerance applied in the direction that favours the user:
+
+| Window | Cache state | Behaviour |
+| --- | --- | --- |
+| before `refreshAfter` | `fresh` | Serve; do not refresh. |
+| → `validUntil` | `refresh_recommended` | Fully valid; refresh opportunistically. |
+| → `validUntil + staleGraceSeconds` | `stale_within_grace` | Previously active Entitlements stay active and are marked stale. |
+| after that | `expired` | Report `unknown`. |
+
+A device clock earlier than issuance by more than the tolerance is *unreliable*.
+That is not a fifth state: it forces expired-equivalent behaviour and raises the
+`customer.entitlements.clockUnreliable` diagnostic, because a cache whose age
+cannot be measured cannot be trusted to be young. Without that rule, moving the
+device clock backwards buys unlimited offline access.
+
+### Identity changes
+
+`identifyCustomer` and `signOutCustomer` bump an identity generation, orphan
+anything in flight, publish `Loading` **before** reading anything, swap the
+token, and isolate the on-device directory — in that order — so the previous
+customer's grants are never observable for even one frame after a sign-in.
+Sign-out deletes every stored snapshot. The Phase 6 installation identity is
+untouched: a person signing in is not a new installation.
+
+### Restore
+
+`restoreAndSyncCustomerEntitlements()` runs the existing provider recovery
+(unchanged, including Google Play acknowledgement), then waits a bounded three
+attempts over roughly six seconds for Mosaic to validate it.
+`AuthoritativeEntitlementsUpdated` is returned only when an accepted snapshot
+actually advanced; otherwise the honest answer is `NativeRecoveryCompleted` with
+`validationPending`. A purchase also triggers a debounced refresh that is never
+awaited by the purchase path, so a hung entitlement endpoint costs a missed
+refresh rather than a stalled purchase.
+
+### Not a credential
+
+A snapshot is a read model. Possessing it authorizes nothing, and a backend must
+never accept one presented by a client as proof of access. The SDK cache supports
+UI continuity and feature gating; protected backend resources are authorized by
+the application's own server.
+
 ## Supported version matrix
 
 This is a support policy, not a compatibility guess. "Tested" means Phase 8

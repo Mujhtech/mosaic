@@ -1,5 +1,43 @@
 # Changelog
 
+## Unreleased (Phase 9B: subscription state and authoritative entitlements)
+
+- Add authoritative entitlements behind
+  `MosaicConfiguration.customerAccessTokenProvider`, which is `null` by default
+  and leaves the whole feature inert: no request, no file, and every
+  authoritative surface reporting `unavailable`. The change is purely additive —
+  the provider-observed commerce API, `MosaicEntitlement`, and Placement
+  targeting are untouched, and no existing symbol was renamed or deprecated.
+- Mosaic Billing requires an application backend. Access is read with an opaque
+  Customer Access Token that only the host's authenticated server can mint; a
+  public SDK key can never select a Billing Customer. Tokens are held in memory
+  only, never persisted, never logged, and never parsed, and
+  `MosaicCustomerAccessToken.toString()` redacts itself.
+- New API: `customerEntitlements` (a `StateFlow` with explicit `Loading`,
+  `SignedOut`, `Available`, and `Unavailable` states), `checkCustomerEntitlement`,
+  `refreshCustomerEntitlements`, `identifyCustomer`, `signOutCustomer`,
+  `restoreAndSyncCustomerEntitlements`, and `customerEntitlementDiagnostics`.
+  There is no boolean convenience API anywhere: `unknown` and `unavailable` are
+  real answers a `Boolean` cannot carry.
+- `inactive` is produced only from a snapshot the SDK fully accepted. Every
+  failure path — transport, token, digest mismatch, unsupported contract version,
+  rejected record, expired cache, unreliable device clock — produces `unknown`
+  and preserves the cache, except a customer/Project/Environment binding
+  mismatch, which clears it and raises a high-severity diagnostic.
+- Snapshots are cached under `noBackupFilesDir` in a per-customer directory named
+  by a digest of the Billing Customer identifier, written atomically, and
+  verified by an integrity digest that detects truncation and tampering. Sign-out
+  deletes them; an identity change removes every other customer's directory.
+- Offline access follows the shipped bounded-grace policy with a 60-second
+  clock-skew tolerance. A device clock earlier than issuance is treated as
+  unreliable and forces expired-equivalent behaviour rather than becoming a fifth
+  cache state.
+- Conformance is asserted against the canonical fixtures in
+  `protocol/fixtures/authoritative-entitlement/v1/` and the shared cache-decision,
+  freshness, and snapshot-digest reference vectors, so Kotlin cannot drift from
+  the other implementations.
+- No new Gradle dependency.
+
 ## Unreleased (Phase 9A: transaction ingestion and validation)
 
 - Add the optional Transaction Observation handoff, off by default behind
