@@ -101,8 +101,8 @@ Orchestrator-ratified, documentation only, no schema change:
   conditional `knownSnapshotVersion` / `entityTag` live in the body, so an SDK
   never relies on a bare HTTP `304` or on freshness headers — no header name for
   freshness exists in the frozen schemas, and a `304` has no body to carry the
-  refreshed window in. Conditional `GET` with `If-None-Match` remains a
-  server-side option for non-SDK callers and is documented as such. The Customer
+  refreshed window in. `GET` is an unconditional full-snapshot read for non-SDK
+  callers; it ignores `If-None-Match` and always answers `200`. The Customer
   Access Token wire-form example was corrected from `GET` to `POST` to match.
 - **An `entitlementKey` absent from a snapshot reads as `unknown`, never
   `inactive`**, whether or not `requestedEntitlementKeys` narrowed the response.
@@ -134,6 +134,15 @@ Orchestrator-ratified, documentation only, no schema change:
   Billing Ingestion record schema changes, the frozen draft stays frozen, and the
   credential never enters an observation body because those bodies are persisted,
   replayed, and digested into fact identity.
+
+### Stage 5 placeholder completion, 2026-07-29
+
+- A `customerEntitlementSnapshot` at `snapshotVersion: 0` is the cacheable answer
+  for a Billing Customer whose first projection has not committed. It must carry
+  no entries or sources and a pending projection status. Issued snapshots still
+  start at 1, so every SDK replaces the placeholder through the ordinary
+  monotonic comparison. Sync requests may state `knownSnapshotVersion: 0`, but
+  the server reissues the placeholder rather than returning `snapshotUnchanged`.
 
 ### Cross-contract discipline
 

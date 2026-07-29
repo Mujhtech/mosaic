@@ -326,6 +326,7 @@
         "customerBindingMismatch",
         "contentDigestMismatch",
         "expiredCache",
+        "neverProjectedCustomer",
         "unchangedResponse",
         "entityTagOrdering",
         "unavailableInSnapshotEntry",
@@ -386,6 +387,10 @@
         },
         "expiredCache": {
           "const": "reportUnknownNeverInactive"
+        },
+        "neverProjectedCustomer": {
+          "description": "A Billing Customer no projection has ever run for is answered with a customerEntitlementSnapshot at snapshotVersion 0, not with an error and not with an empty version 1. The placeholder is cacheable like any other snapshot, and because issued versions start at 1 it sorts below everything that can supersede it, so the ordinary monotonic gate replaces it and no reader needs a special case. Its entries are empty, which the contract already reads as unknown per key rather than inactive.",
+          "const": "placeholderSnapshotVersionZero"
         },
         "unchangedResponse": {
           "const": "preserveCacheSlideFreshness"

@@ -35,8 +35,8 @@
           "$ref": "urn:mosaic:protocol:schema:authoritative-entitlement:v1:snapshot#/$defs/identifier"
         },
         "knownSnapshotVersion": {
-          "description": "The version the caller already holds. The server answers snapshotUnchanged when its current version equals this value and the entity tag also matches.",
-          "$ref": "urn:mosaic:protocol:schema:authoritative-entitlement:v1:snapshot#/$defs/snapshotVersion"
+          "description": "The version the caller already holds. Zero is the cached never-projected placeholder; issued snapshots start at 1 and replace it through the ordinary monotonic comparison. The placeholder is always re-issued rather than answered as snapshotUnchanged. For issued versions, the server answers snapshotUnchanged when its current version equals this value and the entity tag also matches.",
+          "$ref": "urn:mosaic:protocol:schema:authoritative-entitlement:v1:snapshot#/$defs/snapshotVersionOrPlaceholder"
         },
         "entityTag": {
           "$ref": "urn:mosaic:protocol:schema:authoritative-entitlement:v1:snapshot#/$defs/entityTag"

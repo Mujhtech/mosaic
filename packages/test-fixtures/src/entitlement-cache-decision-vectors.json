@@ -15,7 +15,8 @@
     "Evaluate the checks in evaluationOrder. The order is normative: a snapshot that is both bound to a different customer and older must be reported as a binding mismatch, because the binding failure requires clearing the cache and the version failure does not.",
     "A rejected snapshot NEVER produces accessState inactive. It produces unknown, and the previously accepted cache is preserved -- except on a binding mismatch, where the cache is cleared because continuing to serve the previous customer's access is the leak this rule exists to prevent.",
     "snapshotVersion is the sole monotonicity key. The entity tag is an opaque equality token and is never compared for magnitude.",
-    "A snapshot whose version equals the cached version is not newer and is not accepted. Re-accepting it would be harmless today and is refused anyway, so that 'accepted' always means 'the state advanced'."
+    "A snapshot whose version equals the cached version is not newer and is not accepted. Re-accepting it would be harmless today and is refused anyway, so that 'accepted' always means 'the state advanced'.",
+    "snapshotVersion 0 is the never-projected placeholder and is cached like any other snapshot. Issued snapshots start at 1, so the placeholder sorts below everything that can supersede it and the ordinary monotonicity check promotes it. There is no special case: an implementation that added one would be adding a branch the numbering already handles."
   ],
   "vectors": [
     {
@@ -94,7 +95,7 @@
       "reason": "snapshot_version_not_newer",
       "cacheAction": "preserve",
       "resultingAccessState": "unknownIfNoCacheOtherwiseCached",
-      "notes": "Equal is not newer. A 304 unchanged response is the correct way to confirm a current snapshot; it slides freshness without re-accepting anything."
+      "notes": "Equal is not newer. A 200 snapshotUnchanged response is the correct way to confirm a current snapshot; it slides freshness without re-accepting anything."
     },
     {
       "id": "version-regression-after-environment-change",
@@ -251,6 +252,32 @@
       "cacheAction": "preserve",
       "resultingAccessState": "unknownIfNoCacheOtherwiseCached",
       "notes": "A higher version evaluated at an earlier instant means the server projected from a stale read. Accepting it would move the version forward while moving the evidence backward."
+    },
+    {
+      "id": "placeholder-superseded-by-first-real-snapshot",
+      "cached": {
+        "contractVersion": "1",
+        "billingCustomerId": "fixture-customer-0001",
+        "projectId": "fixture-project-mosaic",
+        "environmentId": "fixture-environment-production",
+        "snapshotVersion": 0,
+        "asOf": "2026-07-28T11:00:00.000Z",
+        "contentDigestValid": true
+      },
+      "incoming": {
+        "contractVersion": "1",
+        "billingCustomerId": "fixture-customer-0001",
+        "projectId": "fixture-project-mosaic",
+        "environmentId": "fixture-environment-production",
+        "snapshotVersion": 1,
+        "asOf": "2026-07-28T12:30:00.000Z",
+        "contentDigestValid": true
+      },
+      "decision": "accept",
+      "reason": "newer_snapshot_version",
+      "cacheAction": "replace",
+      "resultingAccessState": "fromSnapshot",
+      "notes": "A cached never-projected placeholder (version 0, no entries) replaced by the first real snapshot. This is the vector that proves the placeholder needs no special handling: 1 > 0 under the same comparison every other vector uses, and the accepted snapshot replaces it atomically like any other. An implementation that treated version 0 as 'no cache' or as a sentinel would pass every other vector and diverge here."
     },
     {
       "id": "no-cache-accepts-first-snapshot",

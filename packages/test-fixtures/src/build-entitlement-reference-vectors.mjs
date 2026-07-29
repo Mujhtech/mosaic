@@ -207,6 +207,7 @@ const cacheDocument = {
     "A rejected snapshot NEVER produces accessState inactive. It produces unknown, and the previously accepted cache is preserved -- except on a binding mismatch, where the cache is cleared because continuing to serve the previous customer's access is the leak this rule exists to prevent.",
     "snapshotVersion is the sole monotonicity key. The entity tag is an opaque equality token and is never compared for magnitude.",
     "A snapshot whose version equals the cached version is not newer and is not accepted. Re-accepting it would be harmless today and is refused anyway, so that 'accepted' always means 'the state advanced'.",
+    "snapshotVersion 0 is the never-projected placeholder and is cached like any other snapshot. Issued snapshots start at 1, so the placeholder sorts below everything that can supersede it and the ordinary monotonicity check promotes it. There is no special case: an implementation that added one would be adding a branch the numbering already handles.",
   ],
   vectors: [
     cacheVector(
@@ -237,7 +238,7 @@ const cacheDocument = {
       "snapshot_version_not_newer",
       "preserve",
       "unknownIfNoCacheOtherwiseCached",
-      "Equal is not newer. A 304 unchanged response is the correct way to confirm a current snapshot; it slides freshness without re-accepting anything.",
+      "Equal is not newer. A 200 snapshotUnchanged response is the correct way to confirm a current snapshot; it slides freshness without re-accepting anything.",
     ),
     cacheVector(
       "version-regression-after-environment-change",
@@ -302,6 +303,16 @@ const cacheDocument = {
       "preserve",
       "unknownIfNoCacheOtherwiseCached",
       "A higher version evaluated at an earlier instant means the server projected from a stale read. Accepting it would move the version forward while moving the evidence backward.",
+    ),
+    cacheVector(
+      "placeholder-superseded-by-first-real-snapshot",
+      incoming({ snapshotVersion: 0, asOf: "2026-07-28T11:00:00.000Z" }),
+      incoming({ snapshotVersion: 1, asOf: "2026-07-28T12:30:00.000Z" }),
+      "accept",
+      "newer_snapshot_version",
+      "replace",
+      "fromSnapshot",
+      "A cached never-projected placeholder (version 0, no entries) replaced by the first real snapshot. This is the vector that proves the placeholder needs no special handling: 1 > 0 under the same comparison every other vector uses, and the accepted snapshot replaces it atomically like any other. An implementation that treated version 0 as 'no cache' or as a sentinel would pass every other vector and diverge here.",
     ),
     cacheVector(
       "no-cache-accepts-first-snapshot",

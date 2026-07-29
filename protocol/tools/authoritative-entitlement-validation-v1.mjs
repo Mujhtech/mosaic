@@ -298,6 +298,23 @@ function snapshotSemantics(label, payload) {
     );
   }
 
+  // The never-projected placeholder. The schema constrains its content; what it
+  // cannot constrain is the one instant the record carries. `lastProjectedAt` is
+  // required on every projection status, and on a placeholder there is no
+  // projection to date it from, so it is pinned to the record's own evaluation
+  // instant. Leaving it free would let a producer date a placeholder from an
+  // unrelated run and let a reader mistake it for evidence a projection happened.
+  if (
+    payload.snapshotVersion === 0 &&
+    payload.projectionStatus.lastProjectedAt !== payload.asOf
+  ) {
+    errors.push(
+      `${label} is the never-projected placeholder but dates its projection at ` +
+        `${payload.projectionStatus.lastProjectedAt} rather than its own asOf ${payload.asOf}; ` +
+        "no projection has run, so the only instant it can honestly report is the instant it was evaluated",
+    );
+  }
+
   if (
     payload.previousSnapshotVersion !== undefined &&
     payload.snapshotVersion <= payload.previousSnapshotVersion
@@ -537,6 +554,23 @@ function validateFailClosedVocabulary(artifacts) {
       "A persisted Entitlement state must include unknown, or a projection with incomplete evidence has nowhere safe to land",
     );
   }
+  // The placeholder only works because it sorts below every version that can
+  // supersede it. If issued versions ever started at 0, a never-projected
+  // placeholder and a real first snapshot would be indistinguishable, and the
+  // monotonic gate would silently refuse the real one.
+  const issued = artifacts.snapshotSchema.$defs.snapshotVersion;
+  const placeholder = artifacts.snapshotSchema.$defs.snapshotVersionOrPlaceholder;
+  if (issued.minimum !== 1) {
+    errors.push(
+      "An issued snapshot version must start at 1, or the never-projected placeholder collides with a real first snapshot",
+    );
+  }
+  if (placeholder.minimum !== 0) {
+    errors.push(
+      "The placeholder snapshot version must admit 0, which is the version a never-projected customer is answered with",
+    );
+  }
+
   const policy = artifacts.compatibilityManifest.readerPolicy ?? {};
   for (const [key, value] of Object.entries(policy)) {
     // `...NeverInactive` is the rule being stated, not broken.

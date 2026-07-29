@@ -104,9 +104,15 @@
       "pattern": "^[a-z][a-z0-9_.-]*$"
     },
     "snapshotVersion": {
-      "description": "Monotonic integer, per Billing Customer per Environment. It is the sole cache-monotonicity key. A projection that changes nothing does not advance it.",
+      "description": "Monotonic integer, per Billing Customer per Environment. It is the sole cache-monotonicity key. A projection that changes nothing does not advance it. Issued snapshots start at 1; 0 is reserved for the never-projected placeholder and is admissible only where snapshotVersionOrPlaceholder is referenced.",
       "type": "integer",
       "minimum": 1,
+      "maximum": 999999999999
+    },
+    "snapshotVersionOrPlaceholder": {
+      "description": "A snapshot version as carried on an issued customerEntitlementSnapshot, which additionally admits 0. Zero is the never-projected placeholder: the answer to a read for a Billing Customer no projection has ever run for. Because real versions start at 1, the placeholder sorts below every version that can ever supersede it, so the ordinary monotonic gate promotes it with no special casing anywhere. It is admissible only alongside a pending projection and empty entries and sources: it states that there is nothing to say yet, never that there is nothing.",
+      "type": "integer",
+      "minimum": 0,
       "maximum": 999999999999
     },
     "priorSnapshotVersion": {
@@ -783,10 +789,10 @@
           "$ref": "#/$defs/identifier"
         },
         "snapshotVersion": {
-          "$ref": "#/$defs/snapshotVersion"
+          "$ref": "#/$defs/snapshotVersionOrPlaceholder"
         },
         "previousSnapshotVersion": {
-          "description": "The version this snapshot succeeded. Absent on the first snapshot for a customer in an Environment.",
+          "description": "The version this snapshot succeeded. Absent on the first snapshot for a customer in an Environment, and absent on the never-projected placeholder, which succeeds nothing.",
           "$ref": "#/$defs/priorSnapshotVersion"
         },
         "projectionRuleVersion": {
@@ -809,7 +815,7 @@
           "$ref": "#/$defs/utcTimestamp"
         },
         "staleGraceSeconds": {
-          "description": "Bounded-grace window past validUntil during which a reader may keep serving previously active Entitlements while clearly marking them stale. The shipped default is 86400 (24 hours), per-Environment configurable server-side; a strict policy is expressed as zero. Absent means zero, so a producer that intends bounded grace must state it. The combined horizon (validUntil - issuedAt) + staleGraceSeconds may never exceed 30 days.",
+          "description": "Bounded-grace window past validUntil during which a reader may keep serving previously active Entitlements while clearly marking them stale. The shipped default is 86400 (24 hours), configured deployment-wide server-side in Phase 9B; per-Environment configuration is deferred. A strict policy is expressed as zero. Absent means zero, so a producer that intends bounded grace must state it. The combined horizon (validUntil - issuedAt) + staleGraceSeconds may never exceed 30 days.",
           "type": "integer",
           "minimum": 0,
           "maximum": 2592000
@@ -849,7 +855,47 @@
         "diagnostics": {
           "$ref": "#/$defs/diagnostics"
         }
-      }
+      },
+      "allOf": [
+        {
+          "$comment": "The never-projected placeholder. Version 0 is not a snapshot of nothing; it is the statement that no projection has run for this Billing Customer in this Environment. Expressing that as a version rather than as an error is what lets a reader cache the answer and lets the ordinary monotonic gate replace it with version 1: no reader needs a special case, and no reader has to treat an unanswerable read as inactive. The content constraints are here rather than in prose because a producer that emitted version 0 alongside entries would hand a reader projected state under a version that claims none exists.",
+          "if": {
+            "properties": {
+              "snapshotVersion": {
+                "const": 0
+              }
+            },
+            "required": [
+              "snapshotVersion"
+            ]
+          },
+          "then": {
+            "properties": {
+              "projectionStatus": {
+                "properties": {
+                  "state": {
+                    "const": "pending"
+                  }
+                }
+              },
+              "entries": {
+                "maxItems": 0
+              },
+              "sources": {
+                "maxItems": 0
+              },
+              "changeReason": {
+                "const": "initial_projection"
+              }
+            },
+            "not": {
+              "required": [
+                "previousSnapshotVersion"
+              ]
+            }
+          }
+        }
+      ]
     },
     "snapshotUnchanged": {
       "description": "The response to a conditional sync whose cached snapshot is still current. It carries no entries: it confirms the cached snapshot and slides its freshness window, so a confirmed-current snapshot never expires merely because it was confirmed instead of resent.",
@@ -879,6 +925,7 @@
           "$ref": "#/$defs/identifier"
         },
         "snapshotVersion": {
+          "$comment": "Deliberately snapshotVersion rather than snapshotVersionOrPlaceholder: the never-projected placeholder is never confirmed, only re-issued. There is nothing to slide -- a placeholder carries no projected state to keep alive -- and re-issuing it costs an empty record, while admitting version 0 here would create a second surface where the placeholder's rules would have to be restated and could drift.",
           "$ref": "#/$defs/snapshotVersion"
         },
         "entityTag": {

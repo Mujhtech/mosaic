@@ -25,6 +25,7 @@
     "../../fixtures/authoritative-entitlement/v1/snapshots/bounded-offline-cache.json",
     "../../fixtures/authoritative-entitlement/v1/snapshots/inactive-expired-subscription.json",
     "../../fixtures/authoritative-entitlement/v1/snapshots/multiple-active-sources.json",
+    "../../fixtures/authoritative-entitlement/v1/snapshots/never-projected-placeholder.json",
     "../../fixtures/authoritative-entitlement/v1/snapshots/newer-snapshot.json",
     "../../fixtures/authoritative-entitlement/v1/snapshots/one-time-purchase.json",
     "../../fixtures/authoritative-entitlement/v1/snapshots/permanent-source-no-finite-expiry.json",
@@ -45,6 +46,7 @@
     "../../fixtures/authoritative-entitlement/v1/subscriptions/unknown-identity-unresolved.json",
     "../../fixtures/authoritative-entitlement/v1/sync/sync-request-conditional.json",
     "../../fixtures/authoritative-entitlement/v1/sync/sync-request-initial.json",
+    "../../fixtures/authoritative-entitlement/v1/sync/sync-request-placeholder.json",
     "../../fixtures/authoritative-entitlement/v1/sync/sync-request-requested-keys.json"
   ],
   "recordTypes": [
@@ -157,6 +159,7 @@
     "customerBindingMismatch": "clearCacheReportUnknown",
     "contentDigestMismatch": "rejectPreserveCache",
     "expiredCache": "reportUnknownNeverInactive",
+    "neverProjectedCustomer": "placeholderSnapshotVersionZero",
     "unchangedResponse": "preserveCacheSlideFreshness",
     "entityTagOrdering": "equalityOnly",
     "unavailableInSnapshotEntry": "forbidden",

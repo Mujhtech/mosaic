@@ -1,0 +1,27 @@
+{
+  "authoritativeEntitlementContractVersion": "1",
+  "recordType": "customerEntitlementSnapshot",
+  "payload": {
+    "snapshotId": "fixture-customer-snapshot-never-projected",
+    "billingCustomerId": "fixture-customer-never-projected",
+    "projectId": "fixture-project-mosaic",
+    "environmentId": "fixture-environment-production",
+    "snapshotVersion": 0,
+    "projectionRuleVersion": 1,
+    "issuedAt": "2026-07-29T08:00:00.000Z",
+    "asOf": "2026-07-29T08:00:00.000Z",
+    "refreshAfter": "2026-07-29T09:00:00.000Z",
+    "validUntil": "2026-08-05T08:00:00.000Z",
+    "entityTag": "cs-never-projected-v0",
+    "contentDigest": "sha256:20c88af435b8e0a8987aeb7c893fc5411d613b7f4897d8235a8e43d723cfa20a",
+    "entries": [],
+    "sources": [],
+    "projectionStatus": {
+      "state": "pending",
+      "lastProjectedAt": "2026-07-29T08:00:00.000Z",
+      "pendingFactCount": 0
+    },
+    "changeReason": "initial_projection",
+    "correlationId": "fixture-correlation-never-projected"
+  }
+}

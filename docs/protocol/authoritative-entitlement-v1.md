@@ -176,6 +176,20 @@ Source identity is `(purchase lineage, Product, grant version)` and never a
 transaction fact identifier, so a second fact for one purchase — a mapping
 correction, a validator-version bump — cannot double-grant.
 
+### Never-projected customers
+
+A customer whose first projection has not committed receives a
+`customerEntitlementSnapshot` at `snapshotVersion: 0`. This placeholder carries
+no entries or sources, uses `projectionStatus.state: "pending"`, and therefore
+states only that Mosaic has not projected the customer yet. An absent key remains
+`unknown`; the placeholder never means inactive access.
+
+Issued snapshots start at version 1. All SDKs cache version 0 normally and replace
+it through the same monotonic comparison used for every other update. A sync
+request may send `knownSnapshotVersion: 0`; the server reissues the placeholder
+instead of returning `snapshotUnchanged`, because there is no projected state
+whose freshness should be extended.
+
 ### Effective end
 
 `endKnown` and `effectiveEnd` together express three different things, and the
