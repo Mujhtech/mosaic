@@ -106,8 +106,7 @@ const BLOCKED_EXPLANATIONS: Record<ResolutionBlockedReason, string> = {
   already_resolving: "Mosaic is recording this resolution.",
   assignment_mismatch:
     "The customer named for assignment does not match the resolution chosen. Mosaic refuses a resolution whose stated winner and stated action disagree.",
-  no_permission:
-    "Resolving an identity conflict requires organization owner or admin permission.",
+  no_permission: "Resolving an identity conflict requires organization owner or admin permission.",
   reason_required:
     "Give the reason for this resolution. It is recorded on the conflict and on the audit event, and it is what an investigation reads when someone asks why their purchase moved.",
 }
@@ -150,11 +149,7 @@ export function evaluateResolutionGate(input: {
     firstCustomerId: input.firstCustomerId,
     secondCustomerId: input.secondCustomerId,
   })
-  if (
-    input.assignedBillingCustomerId &&
-    expected &&
-    input.assignedBillingCustomerId !== expected
-  ) {
+  if (input.assignedBillingCustomerId && expected && input.assignedBillingCustomerId !== expected) {
     return gate("assignment_mismatch")
   }
 

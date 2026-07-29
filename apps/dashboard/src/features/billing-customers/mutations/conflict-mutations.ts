@@ -1,6 +1,9 @@
 import { mutationOptions, type QueryClient } from "@tanstack/react-query"
 
-import { resolveBillingIdentityConflict, type ResolveIdentityConflictRequest } from "@/generated/api"
+import {
+  resolveBillingIdentityConflict,
+  type ResolveIdentityConflictRequest,
+} from "@/generated/api"
 import { conflictKeys } from "@/features/billing-customers/queries/conflict-queries"
 import { generatedDashboardClient } from "@/lib/api/generated-dashboard-client"
 

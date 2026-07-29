@@ -45,10 +45,7 @@ interface EntitlementExplanationPanelProps {
  * Nothing here is a control. This is a derivation, and the only way to change
  * it is to change the facts or the grant version it was derived from.
  */
-export function EntitlementExplanationPanel({
-  scope,
-  snapshot,
-}: EntitlementExplanationPanelProps) {
+export function EntitlementExplanationPanel({ scope, snapshot }: EntitlementExplanationPanelProps) {
   const entries = snapshot?.entries ?? []
   const sources = snapshot?.sources ?? []
 
@@ -104,9 +101,7 @@ function EntitlementRow({
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div>
           <p className="text-sm font-semibold">{entry.entitlementKey ?? entry.entitlementId}</p>
-          <p className="text-muted-foreground font-mono text-xs break-all">
-            {entry.entitlementId}
-          </p>
+          <p className="text-muted-foreground font-mono text-xs break-all">{entry.entitlementId}</p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <StatusPill label={accessStateLabel(entry.state)} tone={accessStateTone(entry.state)} />
@@ -145,7 +140,10 @@ function EntitlementRow({
                 : "No finite end — a permanent source grants this"
           }
         />
-        <DefinitionRow label="Contributing sources" value={String(entry.sourceCount ?? sources.length)} />
+        <DefinitionRow
+          label="Contributing sources"
+          value={String(entry.sourceCount ?? sources.length)}
+        />
       </dl>
 
       <button
@@ -176,13 +174,7 @@ function EntitlementRow({
   )
 }
 
-function SourceRow({
-  scope,
-  source,
-}: {
-  scope: WorkspaceScope
-  source: BillingEntitlementSource
-}) {
+function SourceRow({ scope, source }: { scope: WorkspaceScope; source: BillingEntitlementSource }) {
   const productHref = source.mosaicProductId
     ? catalogProductHref(scope, source.mosaicProductId)
     : undefined
@@ -203,10 +195,7 @@ function SourceRow({
           tone={sourceStateTone(source.sourceState)}
         />
         {source.uncertaintyReason && source.uncertaintyReason !== "none" ? (
-          <StatusPill
-            label={uncertaintyReasonLabel(source.uncertaintyReason)}
-            tone="attention"
-          />
+          <StatusPill label={uncertaintyReasonLabel(source.uncertaintyReason)} tone="attention" />
         ) : null}
         {/* Apple sandbox and Google licence-tester purchases both reach here.
             A test purchase granting production access is a thing an operator
@@ -219,7 +208,8 @@ function SourceRow({
       </p>
 
       <p className="text-muted-foreground mt-2 text-xs">
-        {formatEntitlementInstant(source.sourceStart)} · {sourceEndStatement({ ...(source.sourceEnd ? { end: source.sourceEnd } : {}) })}
+        {formatEntitlementInstant(source.sourceStart)} ·{" "}
+        {sourceEndStatement({ ...(source.sourceEnd ? { end: source.sourceEnd } : {}) })}
       </p>
 
       <div className="mt-2 flex flex-wrap gap-3 text-xs font-semibold">

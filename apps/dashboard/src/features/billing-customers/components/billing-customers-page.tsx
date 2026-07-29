@@ -79,8 +79,7 @@ export function BillingCustomersPage({
   const state = resolveHostedQueryState({
     error,
     isEmpty: false,
-    isPending:
-      project.isPending || (scopeReady && (environments.isPending || customers.isPending)),
+    isPending: project.isPending || (scopeReady && (environments.isPending || customers.isPending)),
     loadingDescription: `Loading Billing Customers for the ${environmentName} Mosaic Environment.`,
     onRetry: () => {
       void customers.refetch()
@@ -115,9 +114,7 @@ export function BillingCustomersPage({
     setMissMessage(undefined)
     const result = await lookup.mutateAsync(input)
     if (result?.found && result.customer?.billingCustomerId) {
-      window.location.assign(
-        billingCustomerHref(scope, result.customer.billingCustomerId) ?? "#",
-      )
+      window.location.assign(billingCustomerHref(scope, result.customer.billingCustomerId) ?? "#")
       return
     }
     // A miss is an answer. It renders as a result, never as a failure banner.
@@ -220,13 +217,7 @@ export function BillingCustomersPage({
   )
 }
 
-function CustomerRow({
-  customer,
-  href,
-}: {
-  customer: BillingCustomerSummary
-  href: string
-}) {
+function CustomerRow({ customer, href }: { customer: BillingCustomerSummary; href: string }) {
   return (
     <li className="rounded border p-4">
       <div className="flex flex-wrap items-center justify-between gap-2">

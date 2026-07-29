@@ -70,6 +70,7 @@ export function restoreJobQueryOptions(
       })
       return result.data.data
     },
-    refetchInterval: (query) => (query.state.data && isRestoreJobRunning(query.state.data) ? 5000 : false),
+    refetchInterval: (query) =>
+      query.state.data && isRestoreJobRunning(query.state.data) ? 5000 : false,
   })
 }

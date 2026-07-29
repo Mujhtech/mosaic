@@ -36,9 +36,8 @@ interface CustomerSearchFormProps {
  * says what does not exist.
  */
 export function CustomerSearchForm({ isPending, onSearch }: CustomerSearchFormProps) {
-  const [identifierType, setIdentifierType] = useState<CustomerIdentifierType>(
-    "billing_customer_id",
-  )
+  const [identifierType, setIdentifierType] =
+    useState<CustomerIdentifierType>("billing_customer_id")
   const [identifierValue, setIdentifierValue] = useState("")
   const [issue, setIssue] = useState<string | undefined>(undefined)
 
