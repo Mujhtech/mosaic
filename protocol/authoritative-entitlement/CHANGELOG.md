@@ -73,6 +73,48 @@ rejection yields `accessState: unknown` and preserves the cache, never
   by the Stage 1 plan and none of them names a Mosaic-side service state; the
   explanation code carries the precision instead of widening a closed axis.
 
+### Known consumer limitations, for the Stage 5 review
+
+- **`restoreResult.outcome: "product_unresolved"` is currently unreachable from a
+  client.** Reported by the Flutter agent on 2026-07-29 and applicable to all
+  three SDKs: an SDK observing a restore has no signal that distinguishes "the
+  provider transaction validated but its Product could not be resolved" from
+  "validation has not finished yet", so a client-side restore reports
+  `validation_pending` in both cases. The outcome remains reachable and correct
+  on the **server** surface, where the projection knows which it is, and it stays
+  in the enumeration for that reason — removing it would be a breaking change and
+  would leave the server unable to state a condition it can actually detect.
+
+  No action in Phase 9B. The fix is a signal, not a contract change: either the
+  restore poll surfaces the quarantine reason for the observed transactions, or
+  the sync response carries the pending-fact disposition. Raised here so the
+  Stage 5 review decides deliberately rather than discovering it as a gap.
+
+### Documentation pins, 2026-07-29
+
+Orchestrator-ratified, documentation only, no schema change:
+
+- The **SDK-conformant sync form is `POST /v1/sdk/billing/entitlements`** with the
+  `entitlementSyncRequest` envelope, answered by a `200` carrying either
+  `customerEntitlementSnapshot` or `snapshotUnchanged`. Negotiation and the
+  conditional `knownSnapshotVersion` / `entityTag` live in the body, so an SDK
+  never relies on a bare HTTP `304` or on freshness headers — no header name for
+  freshness exists in the frozen schemas, and a `304` has no body to carry the
+  refreshed window in. Conditional `GET` with `If-None-Match` remains a
+  server-side option for non-SDK callers and is documented as such. The Customer
+  Access Token wire-form example was corrected from `GET` to `POST` to match.
+- **An `entitlementKey` absent from a snapshot reads as `unknown`, never
+  `inactive`**, whether or not `requestedEntitlementKeys` narrowed the response.
+  Absence is not a statement: a key can be missing because it was narrowed away,
+  never defined, or not evaluable, and the document gives a reader no way to tell
+  those apart. An `inactive` entry is the opposite — Mosaic stating it looked and
+  is confident — and is present in the document with an explanation and a source
+  count. Documented with the narrowed-request example against the existing
+  `sync/sync-request-requested-keys.json` fixture.
+- The canonical spelling of the cross-customer cache state is
+  **`differentCustomer`**, alongside `fresh`, `refreshRecommended`,
+  `staleWithinGrace`, `expired`, `missing`, and `invalid`.
+
 ### Cross-contract discipline
 
 Authoritative Entitlement `1` does **not** `$ref` Billing Ingestion `1`. Both are

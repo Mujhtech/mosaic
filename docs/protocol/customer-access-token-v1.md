@@ -152,11 +152,20 @@ carry neither.
 rename is a contract change rather than an implementation detail:
 
 ```http
-GET /v1/sdk/billing/entitlements
+POST /v1/sdk/billing/entitlements
 Authorization: Bearer mcat_<43 base64url characters>
 Mosaic-SDK-Key: <public SDK key>
-If-None-Match: "<entity tag>"
+Content-Type: application/json
+
+{ "authoritativeEntitlementContractVersion": "1", "recordType": "entitlementSyncRequest", "payload": { ... } }
 ```
+
+The sync surface is a `POST` because contract negotiation and the conditional
+`knownSnapshotVersion` / `entityTag` live in the
+[`entitlementSyncRequest`](authoritative-entitlement-v1.md#the-sdk-conformant-sync-form)
+body rather than in headers. An SDK does not use conditional `GET`,
+`If-None-Match`, or a bare `304`; the unchanged path is a `200` carrying the
+`snapshotUnchanged` record.
 
 Both headers are required. `wireForm.publicSdkKeyAloneSufficient` is `false`:
 the public SDK key identifies the application, the customer token selects the
@@ -208,7 +217,7 @@ a cache key, and a restore hint; it can never create or select a customer.
 2. Reject the whole record on any unknown version, record type, field, scope, or
    audience.
 3. Present the token in `Authorization: Bearer` with the public SDK key in
-   `Mosaic-SDK-Key`.
+   `Mosaic-SDK-Key`, on a `POST` carrying the `entitlementSyncRequest` envelope.
 4. On `401`, force **one** token refresh through the host backend, then retry
    once.
 5. On expiry, revocation, or an audience or customer mismatch: the request is

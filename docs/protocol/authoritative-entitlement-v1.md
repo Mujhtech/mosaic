@@ -334,12 +334,31 @@ Reference vectors:
 
 ### `snapshotUnchanged`
 
-A conditional sync whose cached snapshot is still current is answered with
-`snapshotUnchanged`, which carries no entries but does carry a refreshed
-`refreshAfter` and `validUntil`. A confirmed-current snapshot must not expire
-merely because it was confirmed instead of resent. A snapshot whose version
-*equals* the cached version is not "newer" and is not accepted; confirming it is
-what this record is for.
+A sync whose cached snapshot is still current is answered with a **`200`
+carrying the `snapshotUnchanged` record**, which has no entries but does carry
+refreshed `refreshAfter` and `validUntil` values. A confirmed-current snapshot
+must not expire merely because it was confirmed instead of resent. A snapshot
+whose version *equals* the cached version is not "newer" and is not accepted;
+confirming it is what this record is for.
+
+The refreshed window travels **in the record, not in headers**. No header name
+for freshness exists anywhere in the frozen schemas, so an SDK that looked for
+one would be reading a field this contract does not define.
+
+### Cross-customer cache state
+
+When a snapshot fails the customer, Project, or Environment binding check, the
+SDK-facing cache state is spelled **`differentCustomer`** — that is the canonical
+spelling across all three SDKs, alongside `fresh`, `refreshRecommended`,
+`staleWithinGrace`, `expired`, `missing`, and `invalid`.
+
+These are SDK API states in camelCase. The freshness reference vectors use
+snake_case identifiers (`fresh`, `refresh_recommended`, `stale_within_grace`,
+`expired`) for the four freshness bands because they are vector-file data rather
+than a public API surface; the mapping is one-to-one and the extra states
+(`missing`, `invalid`, `differentCustomer`) are decided by cache acceptance
+rather than by freshness. Clock unreliability is a diagnostic that forces
+expired-equivalent behaviour, not an eighth state.
 
 ## Sync and check
 
@@ -347,10 +366,86 @@ what this record is for.
 (`supportedAuthoritativeEntitlementContracts: ["1"]`) **in the body**. The
 Configuration Delivery capability request is untouched.
 
+### The SDK-conformant sync form
+
+Negotiation lives in the body, so the sync surface is a `POST`. This is the
+**only** conformant form for an SDK:
+
+```http
+POST /v1/sdk/billing/entitlements
+Authorization: Bearer mcat_<43 base64url characters>
+Mosaic-SDK-Key: <public SDK key>
+Content-Type: application/json
+
+{
+  "authoritativeEntitlementContractVersion": "1",
+  "recordType": "entitlementSyncRequest",
+  "payload": {
+    "knownSnapshotVersion": 4,
+    "entityTag": "cs-0001-v4",
+    "supportedAuthoritativeEntitlementContracts": ["1"],
+    "correlationId": "fixture-correlation-0004"
+  }
+}
+```
+
+The response is one of exactly two records, both returned with `200`:
+
+- `customerEntitlementSnapshot` — the full snapshot.
+- `snapshotUnchanged` — when `knownSnapshotVersion` matches the server's current
+  version, carrying the refreshed freshness windows.
+
+**SDKs never rely on a bare HTTP `304` or on any freshness header.** Conditional
+`GET` with `If-None-Match` and `304` remains available server-side for non-SDK
+callers, and is a transport convenience rather than part of this contract: a
+`304` carries no body, so it cannot carry the refreshed `refreshAfter` and
+`validUntil`, and there are no header names in the frozen schemas to carry them
+instead. An SDK that took the `304` path would have to invent a freshness
+mechanism the contract does not define, and would have nowhere to put the
+negotiation.
+
 `billingCustomerId` on the request is a **hint**. The server derives the customer
 from the Customer Access Token and verifies the hint against it, refusing a
 mismatch. A caller can never select a customer by asserting an identifier; see
 [Customer Access Token Contract v1](customer-access-token-v1.md).
+
+### An absent Entitlement key is `unknown`
+
+**Normative.** An `entitlementKey` that does not appear in a snapshot's `entries`
+array reads as state **`unknown`**. It is never read as `inactive`. This holds
+whether or not `requestedEntitlementKeys` narrowed the response.
+
+Absence is not a statement. A key can be missing because the Project never
+defined it, because the projection could not evaluate it, because the request
+narrowed it away, or because the reader is asking about a key that belongs to a
+different Project entirely — and a snapshot gives a reader no way to tell those
+apart. Treating the silence as a denial is the same mistake as treating a
+rejected document as a denial, arrived at from the other direction.
+
+An `inactive` entry is the opposite of absence: it is Mosaic stating that it
+looked, found no qualifying source, and is confident. That statement is present
+in the document, with a `primaryExplanation` — usually `no_qualifying_source` —
+and a `sourceCount`.
+
+The narrowed case makes the difference concrete. Given
+`sync/sync-request-requested-keys.json`, which narrows to
+`["pro", "pro_lifetime"]`:
+
+| Reader asks about | Snapshot contains | Reads as |
+| --- | --- | --- |
+| `pro` | an entry with `state: "active"` | `active` |
+| `pro_lifetime` | an entry with `state: "inactive"`, `sourceCount: 0` | `inactive` |
+| `team_seats` | nothing — it was narrowed away | **`unknown`** |
+
+A reader that concluded `inactive` for `team_seats` would have converted its own
+request parameter into a revocation.
+
+The same rule applies to `entitlementCheckResult`, from the other side: the
+response contains one result per requested key, so a key the caller asked about
+that is missing from `results` is `unknown` rather than `inactive`. A named
+result carrying `state: "inactive"` is a real answer and is trusted as one; this
+is why `checks/check-result-active.json` reports `pro_lifetime` as `inactive`
+with `no_qualifying_source` rather than omitting it.
 
 `entitlementCheckResult` returns per-key `state`, `primaryExplanation`,
 `sourceCount`, `snapshotVersion`, and `asOf`. There is no bare boolean anywhere
@@ -385,8 +480,11 @@ reporting `validation_pending`.
 4. Apply the cache-acceptance order above.
 5. Evaluate freshness against the device clock with 60 s tolerance.
 6. On **any** rejection: report `accessState: unknown`, preserve the cache
-   (except on a binding mismatch, which clears it), and emit a diagnostic.
-7. Never report `inactive` except from a fully accepted snapshot that says so.
+   (except on a binding mismatch, which clears it and reports the cache state as
+   `differentCustomer`), and emit a diagnostic.
+7. For a key **absent** from an accepted snapshot's `entries`, report `unknown`.
+8. Never report `inactive` except from an entry, or a check result, that says so
+   in a document the reader fully accepted.
 
 ## What this contract is not
 
