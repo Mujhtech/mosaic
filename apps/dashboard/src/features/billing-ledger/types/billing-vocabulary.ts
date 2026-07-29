@@ -24,10 +24,12 @@ import type { QuarantineRecord, TransactionFact, ValidationAttempt } from "@/gen
  * access state will go looking for one somewhere else.
  *
  * The boundary it draws is now the honest one — recorded evidence here,
- * computed access there — and it names what computes it.
+ * computed access under Customers — and it names where to go, because the
+ * operator reading a ledger page is often there having failed to find the
+ * question they actually came with.
  */
 export const BILLING_BOUNDARY_NOTE =
-  "Mosaic Billing records store-confirmed transaction facts and their full validation history. Nothing on these ledger pages grants or revokes access: authoritative customer access is computed from these facts only by the Mosaic projection engine, whose state is reported under Projection health."
+  "Mosaic Billing records store-confirmed transaction facts and their full validation history. Nothing on these ledger pages grants or revokes access: authoritative customer access is computed from these facts only by the Mosaic projection engine, and is read under Customers."
 
 /** Billing is per-Project opt-in. No empty state may read like a dead end. */
 export const BILLING_OPTIONAL_NOTE =

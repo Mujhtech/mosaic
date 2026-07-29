@@ -9,7 +9,10 @@ import {
   LedgerPaging,
   StatusPill,
 } from "@/features/billing-ledger/components/billing-chrome"
-import { BILLING_OPTIONAL_NOTE, runStatusLabel } from "@/features/billing-ledger/types/billing-vocabulary"
+import {
+  BILLING_OPTIONAL_NOTE,
+  runStatusLabel,
+} from "@/features/billing-ledger/types/billing-vocabulary"
 import { billingHealthQueryOptions } from "@/features/billing-operations/queries/billing-health-queries"
 import { restoreJobsQueryOptions } from "@/features/billing-customers/queries/restore-queries"
 import { formatEntitlementInstant } from "@/features/billing-customers/types/entitlement-vocabulary"
@@ -189,7 +192,10 @@ function RestoreRow({
           {/* Two axes, never merged. The store's own result and Mosaic's are
               different questions, and a native restore that "succeeded" says
               nothing about whether anyone's access changed. */}
-          <StatusPill label={`Store: ${providerOutcomeLabel(job.providerOutcome)}`} tone="neutral" />
+          <StatusPill
+            label={`Store: ${providerOutcomeLabel(job.providerOutcome)}`}
+            tone="neutral"
+          />
           <StatusPill
             label={`Mosaic: ${restoreOutcomeLabel(job.outcome)}`}
             tone={restoreOutcomeTone(job.outcome)}

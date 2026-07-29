@@ -138,6 +138,31 @@ export function CloudWorkspaceShell() {
                   subItems: [
                     ...(billingEnabled
                       ? [
+                          // Customers leads the group. It answers the question
+                          // operators actually arrive with — "does this person
+                          // have access?" — which the ledger deliberately
+                          // cannot.
+                          {
+                            to: scope.environmentId
+                              ? `/organizations/${scope.organizationId}/projects/${scope.projectId}/billing/${scope.environmentId}/customers`
+                              : `/organizations/${scope.organizationId}/projects/${scope.projectId}`,
+                            title: "Customers",
+                            icon: <></>,
+                          },
+                          {
+                            to: scope.environmentId
+                              ? `/organizations/${scope.organizationId}/projects/${scope.projectId}/billing/${scope.environmentId}/identity-conflicts`
+                              : `/organizations/${scope.organizationId}/projects/${scope.projectId}`,
+                            title: "Identity conflicts",
+                            icon: <></>,
+                          },
+                          {
+                            to: scope.environmentId
+                              ? `/organizations/${scope.organizationId}/projects/${scope.projectId}/billing/${scope.environmentId}/restores`
+                              : `/organizations/${scope.organizationId}/projects/${scope.projectId}`,
+                            title: "Restores",
+                            icon: <></>,
+                          },
                           {
                             to: scope.environmentId
                               ? `/organizations/${scope.organizationId}/projects/${scope.projectId}/billing/${scope.environmentId}/transactions`
