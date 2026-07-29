@@ -40,6 +40,17 @@ enum class MosaicDiagnosticCode(val wireName: String) {
     TRANSACTION_OBSERVATION_REJECTED("transaction.observation.rejected"),
     TRANSACTION_OBSERVATION_DROPPED("transaction.observation.dropped"),
     TRANSACTION_OBSERVATION_REFERENCE_UNAVAILABLE("transaction.observation.referenceUnavailable"),
+
+    // Authoritative entitlements. Every code below describes Mosaic's ability to answer, never a
+    // customer's access: none of them may ever be read as "this person is not entitled".
+    CUSTOMER_ENTITLEMENTS_SNAPSHOT_REJECTED("customer.entitlements.snapshotRejected"),
+    CUSTOMER_ENTITLEMENTS_BINDING_MISMATCH("customer.entitlements.bindingMismatch"),
+    CUSTOMER_ENTITLEMENTS_CACHE_INVALID("customer.entitlements.cacheInvalid"),
+    CUSTOMER_ENTITLEMENTS_CLOCK_UNRELIABLE("customer.entitlements.clockUnreliable"),
+    CUSTOMER_ENTITLEMENTS_TOKEN_UNAVAILABLE("customer.entitlements.tokenUnavailable"),
+    CUSTOMER_ENTITLEMENTS_UNAUTHORIZED("customer.entitlements.unauthorized"),
+    CUSTOMER_ENTITLEMENTS_TRANSPORT_FAILED("customer.entitlements.transportFailed"),
+    CUSTOMER_ENTITLEMENTS_RESTORE_VALIDATION_PENDING("customer.entitlements.restoreValidationPending"),
 }
 
 data class MosaicDiagnostic(
