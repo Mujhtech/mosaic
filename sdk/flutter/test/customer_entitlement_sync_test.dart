@@ -4,8 +4,6 @@ import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mosaic_sdk/mosaic_sdk.dart';
-import 'package:mosaic_sdk/src/customer_authentication.dart';
-import 'package:mosaic_sdk/src/customer_entitlement_runtime.dart';
 
 import 'support/canonical_fixture.dart';
 
