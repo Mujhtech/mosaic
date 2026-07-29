@@ -322,6 +322,122 @@ filled by falling back to the active engine. See "Projection replay and rule ver
 why: a checksum produced by the wrong engine is indistinguishable from a genuine determinism
 result, which is the one thing a replay exists to prove.
 
+## From a validated fact to an owned Purchase Lineage (the 9A→9B seam)
+
+Phase 9A ends with a validated Transaction Fact in an append-only ledger. Phase 9B begins with
+a Purchase Lineage that a Billing Customer owns. This is the step between them, and it is where
+every entitlement in the system actually originates.
+
+### The two halves, and why they are in different places
+
+**The structural half runs inside the fact's own transaction.** `CompleteAttempt` writes the
+attempt, the Resolution Snapshot, the fact, the ledger entries — and now the Purchase Lineage
+and the Subscription or One-Time Purchase Instance it owns, plus the projection trigger. All of
+it lands or none of it does. The lineage is a deterministic function of the fact's own chain
+digest and decides nothing, so it belongs beside the fact; and the projection trigger written
+next to it is only as durable as the row it points at.
+
+Three rules are load-bearing in that write:
+
+- **The lineage is keyed on the chain root, not on the fact's own digest.** A Google plan change
+  hands the subscription a new purchase token and names the old one as `linkedPurchaseToken`, so
+  the successor's fact carries a different `purchase_chain_digest`. Keying on it would mint a
+  fresh lineage per plan change and fragment one subscription's history — and the projection
+  loader would not put it back together, because it walks supersession edges *forward from the
+  root*. The root is resolved by walking those edges backwards, bounded and cycle-safe.
+- **The digest domain is the fact's own** (`billing.AppleTransactionKey`, `billing.TokenDigest`).
+  Every fact-to-lineage join in the codebase compares `purchase_chain_digest` to
+  `lineage_key_digest`, so any other domain produces a lineage that can never join to the facts
+  it exists for.
+- **Neither write disturbs an existing row.** `ON CONFLICT DO NOTHING` on both: a lineage's
+  customer association and an instance's projection state have other writers, and a fact
+  arriving is not new information about either.
+
+**The identity half runs after the commit**, through `billing.LineageBinder`. Deciding *who owns*
+a lineage reads alias resolutions and prior evidence and can open an operator conflict; that is
+application logic, and holding the ledger's hot-path transaction open across it would put
+ingestion behind the identity module. It is idempotent — locating the lineage re-reads the row
+the transaction created, and an association already naming the same customer is a no-op — which
+is what makes it safe to run after the fact is already durable.
+
+The residue is deliberate and observable: if the process dies between the commit and the
+binding, the fact and its lineage exist and the lineage is unassociated, which is exactly what
+`unresolvedLineages` counts on the projection-health surface. The next fact on the same chain
+retries the decision.
+
+### The evidence ladder (OD-2)
+
+The resolver — not the seam — decides which rung wins; the seam only assembles the observations.
+Authority order is `billingcustomer.authorityRank`.
+
+| Rung | Evidence | Where it comes from |
+| --- | --- | --- |
+| 1 | `trusted_server_observation` | An SDK or backend submitted an observation for this transaction while holding a Customer Access Token. |
+| 2 | `app_account_token` / `obfuscated_external_account_id` | Provider correlators, matched against alias digests a backend already attached. |
+| 3 | `prior_lineage_association` | An association already accepted for this lineage. |
+| 4 | `purchase_anchor` | Nothing identified the purchase, so a customer was created to hold it. |
+
+**Rung 1 is the only thing that can attach a *first* purchase to an identified customer.** A
+store notification arrives out of band and names nobody, and the observation contract carries no
+customer member. So the submission carries a Customer Access Token in the
+`Mosaic-Customer-Token` header — a header rather than a body member because it is a credential,
+and the observation body is a ratified record Mosaic seals and can replay. A credential must
+never be a thing that gets stored and replayed. The token is trustworthy for this because only
+the application's own backend can mint one, which is why the evidence is recorded at
+trusted-server authority regardless of whether the request itself arrived on a public SDK key:
+the public key is not what proved the identity.
+
+The evidence is keyed on the **transaction reference**, not on a lineage, because at submission
+time no lineage exists — the purchase has not been validated yet. `EvidenceForReference` reads it
+back when the fact commits. More than one reference digest is searched: a client observation
+cannot state a Store Environment (a device can be made to say anything), so it is recorded under
+`unclassified` while the notification for the same purchase is recorded under the environment the
+store confirmed.
+
+**Rung 2 correlators never touch a fact.** Apple's `appAccountToken` and Google's
+`obfuscatedExternalAccountId` are read from the provider's *authoritative response* — the App
+Store Server API transaction, the Play purchase resource — rather than from the notification,
+because the response is the authority and the notification is only the trigger. They are hashed
+at the point they are parsed, inside the validator. No Transaction Fact column holds one, no log
+line, span attribute, or audit record ever sees the value or the digest, and Phase 9A's
+fact-shape exclusion is unchanged. The digest's home is `billing_association_evidence`.
+
+**Rung 4 is plan §5a rules 1 and 2.** An anonymous purchase must still reach a customer: the
+store confirmed a real transaction, and Mosaic has to answer for it on every surface whether or
+not anyone has said who bought it. The customer is anchored to the **lineage**, never to the
+device — the chain key survives reinstall, clear-data, and device change, so a reinstalling
+customer who restores resolves back to the same customer rather than accumulating one per
+install. That is the duplicate-customer trap §5a exists to avoid, and the reason an installation
+identifier is evidence and never an anchor.
+
+`purchase_anchor` is its own vocabulary entry (migration `00049`) rather than being folded into
+`prior_lineage_association`, because the two say different things: one is evidence *found*, the
+other records that none was and a customer was created. The dashboard's "identified" versus
+"purchase-anchored, not yet identified" distinction is exactly this row. It carries no correlator
+digest — the whole meaning is the absence of one — and the resolver is never offered it, so it
+can never become a route by which a guessable value reaches someone else's entitlements.
+
+When the person signs in later, `AttachApplicationUserAlias` appends the alias to that same
+customer. **Login attaches; it never merges** (§5a rule 3).
+
+### Conflicts and supersession
+
+Two equally authoritative claims on one lineage — two backends each presenting their own
+customer's token for the same transaction — conflict rather than one being picked: the lineage
+freezes, neither customer is granted anything, and an operator resolves it (OD-10(a)). A lineage
+already attached whose new evidence names someone else is a *reassignment*, which is never
+automatic, and is downgraded to a conflict before any evidence is written.
+
+A lineage-level supersession edge is recorded only when the fact's own chain digest already had
+a lineage of its own that is not the root — a link observed late, where the successor token
+arrived first and was materialized before anything said it superseded an earlier chain. A token
+handover inside one chain is not a lineage replacement and records no edge. Nothing is ever
+deleted: a superseded lineage stops granting access and stays fully visible in history.
+
+An association that establishes an owner enqueues a **customer-scoped** projection. Any job
+already queued for that lineage is lineage-scoped — it was queued when the lineage had no
+customer — and a lineage-scoped command deliberately mints no customer snapshot.
+
 ## Billing identity APIs and the conflict workflow
 
 The identity surface mounts under `/v1/billing/identity` rather than under `/billing/server`, so

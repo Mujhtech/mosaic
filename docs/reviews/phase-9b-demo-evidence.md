@@ -1130,7 +1130,7 @@ functions, and real PostgreSQL, twice, deterministically.
 
 | # | Demonstration | Verdict |
 | --- | --- | --- |
-| 1 | Initial subscription | PASS |
+| 1 | Initial subscription | PASS, through production wiring (was a bridge substitution, D-1) |
 | 2 | Renewal | PASS |
 | 3 | Cancellation without immediate revocation | PASS |
 | 4 | Expiration | PASS |
@@ -1176,7 +1176,7 @@ a run recorded here, and D-1 is reported as **not fixed** because it is not.
 
 | Defect | Severity | Disposition |
 | --- | --- | --- |
-| D-1 — the 9A→9B seam is not wired | critical | **Partially addressed.** The canonical lineage-key domain is corrected; the seam itself is **not wired**. See below. |
+| D-1 — the 9A→9B seam is not wired | critical | **Fixed and verified.** |
 | D-2 — restore-sync reads a column that does not exist | critical | **Fixed and verified.** |
 | D-3 — the router panics whenever billing is enabled | critical | **Fixed and verified.** |
 | D-4 — a fact on one lineage recomputes the aggregate from that lineage alone | critical | **Fixed and verified.** |
@@ -1267,46 +1267,91 @@ and the backend doc's known-gap section are updated.
 still describes conditional `GET` as a server-side option. That file is
 protocol-owned and was not edited here; it needs a one-line correction.
 
-### D-1 — not fixed
+### D-1 — the seam
 
-The canonical-domain half of the writeup is resolved:
-`billingcustomer.LineageKey` now digests in the fact's own domain
-(`billing.AppleTransactionKey` / `billing.TokenDigest`), so a lineage created
-through it can join to the facts it was created for. That function had no
-production caller, so the change is corrective and carries no migration.
+The canonical-domain half came first: `billingcustomer.LineageKey` now digests in the fact's own
+domain (`billing.AppleTransactionKey` / `billing.TokenDigest`), so a lineage created through it
+can join to the facts it was created for. That function had no production caller, so the change
+was corrective and carried no migration.
 
-The seam itself — creating the lineage, the instance rows, the association
-evidence, and the supersession edge when a validated fact commits — is **not
-wired**. The driver's `bridge()` substitution is still present and still prints
-`SUBSTITUTION bridge:` on every use. §2's classification of it stands unchanged,
-as does §9 D-1's evidence.
+The seam itself is now wired, in two halves.
 
-The blocking question found while designing it is worth recording, because it is
-not an implementation detail: **nothing in production can name the Billing
-Customer a store notification belongs to.** The observation contract carries no
-customer correlator, `appstorejws` deliberately does not parse `appAccountToken`
-(a Phase 9A scope decision), and no API attaches a lineage to a customer. The
-only evidence a deployed system could offer the resolver today is a prior
-association on the same lineage. Plan §5a rule 1 answers this — "a validated
-purchase fact needs somewhere to attach", and §5a's dashboard consequence
-distinguishes "identified" from "purchase-anchored, not yet identified" — so the
-seam must lazily create a purchase-anchored Billing Customer when no evidence
-resolves one. That needs a new `billing_association_evidence.evidence_type`
-value and therefore a migration, and it changes what the demonstration's
-identity flow looks like: demonstrations 1–12 currently create the customer
-first through the trusted identity API and expect purchases to land on it, which
-no production path makes happen. Both are decisions above this pass.
+**Structural half, inside the fact's own transaction.** `CompleteAttempt` materializes the
+Purchase Lineage and the Subscription or One-Time Purchase Instance it owns before it enqueues
+the projection, so the trigger is exactly as durable as the fact it points at. The lineage is
+keyed on the **chain root**, resolved by walking supersession edges backwards, because a Google
+plan change hands the chain a new token and keying on the fact's own digest would fragment one
+subscription's history into pieces the projection loader — which walks those edges *forward from
+the root* — would never reassemble.
+
+**Identity half, after the commit,** through `billing.LineageBinder`. It is the full OD-2 ladder,
+with the resolver deciding which rung wins:
+
+1. **Submission-context evidence.** An observation submitted while holding a Customer Access
+   Token (`Mosaic-Customer-Token`) records `trusted_server_observation` evidence keyed on the
+   transaction reference. This is the only thing in a deployed system that can attach a *first*
+   purchase to an identified customer: a store notification arrives out of band and names
+   nobody, and the observation contract carries no customer member. `EvidenceForReference` reads
+   it back when the fact commits — its production caller at last.
+2. **Provider correlators.** Apple's `appAccountToken` and Google's
+   `obfuscatedExternalAccountId`, read from the provider's *authoritative response* rather than
+   the notification, hashed inside the validator at the point they are parsed. No fact column
+   holds one; no log line, span attribute, or audit record sees the value or the digest. Phase
+   9A's fact-shape exclusion is unchanged and the digest's home is `billing_association_evidence`.
+3. **Prior lineage association**, contributed by `ResolveLineageCustomer` itself.
+4. **Lazy purchase-anchored creation** (plan §5a rules 1 and 2), recorded as the new
+   `purchase_anchor` evidence type from migration `00049`. It is written *after* the customer
+   exists and is never offered to the resolver, so it can never select a customer.
+
+`RecordSupersession` gains its production caller too: a lineage-level edge is recorded when a
+link is observed late — the successor token arrived first and was materialized before anything
+said it superseded an earlier chain. A token handover *inside* one chain is not a lineage
+replacement and correctly records no edge.
+
+An association that establishes an owner now also enqueues the **customer-scoped** projection.
+Any job already queued for that lineage is lineage-scoped, because it was queued when the
+lineage had no customer, and a lineage-scoped command deliberately mints no customer snapshot.
+
+**The driver's `bridge()` substitution is deleted, along with `materializeInstance`.** The
+demonstration now reports purchases the way an SDK does — a token-bound observation through the
+real public endpoint — and every lineage, instance, association, supersession edge, and
+projection trigger below is written by production code. `grep -c SUBSTITUTION` over the
+transcript returns **0**.
+
+Regressions: `TestValidatedFactBecomesACommittedEntitlementSnapshot` (submission evidence →
+validated fact → committed snapshot with an active entitlement, through production wiring only)
+and `TestPurchaseWithNoEvidenceAnchorsAndLaterIdentifies` (an anonymous purchase anchors, the
+reason is recorded as `purchase_anchor`, and identifying the person afterwards attaches the alias
+to that same customer rather than minting the duplicate the model exists to avoid).
+
+**Two observations from the re-run, both the fix working:**
+
+- Demonstration 12's diagnostic is now `multiple_customers_claim_lineage` rather than
+  `reassignment_requires_operator_resolution`. Both customers' backends present their own token
+  for the same transaction, which is two equally authoritative claims — so the resolver conflicts
+  before the reassignment downgrade is reached. The outcome an operator sees is identical: the
+  lineage freezes, nobody is granted anything, and the incumbent keeps the purchase.
+- Snapshot versions across the run are lower than in the original transcript. The original
+  double-projected every change — a wrong lineage-restricted aggregate followed by a correcting
+  direct one — and each minted a version. One correct projection now mints one.
+
+### Protocol note
+
+Observation submissions accept an optional `Mosaic-Customer-Token` request header. No ratified
+record schema changed: it is a credential, and a credential must not travel in a body Mosaic
+seals and can replay. **For the protocol owner:** the Billing Ingestion Contract's transport
+documentation should record the header alongside `Mosaic-SDK-Key`.
 
 ### Re-run results
 
 Driver run unchanged apart from the deleted substitutions, against
 `mosaic-9b-demo-pg`:
 
-| Run | Result |
-| --- | --- |
-| `-phase 9b` (first) | green, 1m25.7s |
-| `-phase 9b` (second, consecutive) | green |
-| `-phase oneminute` | green, 0.987s |
+| Run | Result | Substitutions remaining |
+| --- | --- | --- |
+| `-phase 9b` (first) | green, 1m16.5s | 0 |
+| `-phase 9b` (second, consecutive) | green, 1m15.1s | 0 |
+| `-phase oneminute` | green, 0.840s | 0 |
 
 The wall-clock is longer than the original 34–49 s because demonstration 13 now
 retries a delivery on its *second* attempt, whose backoff is one step further up
@@ -1314,7 +1359,7 @@ the schedule than the first attempt's was.
 
 | # | Demonstration | Verdict after the fixes |
 | --- | --- | --- |
-| 1 | Initial subscription | PASS |
+| 1 | Initial subscription | PASS, through production wiring (was a bridge substitution, D-1) |
 | 2 | Renewal | PASS |
 | 3 | Cancellation without immediate revocation | PASS |
 | 4 | Expiration | PASS |
@@ -1325,7 +1370,7 @@ the schedule than the first attempt's was.
 | 9 | Upgrade or downgrade | PASS |
 | 10 | Restore across devices | **PASS** (was FAIL, D-2) |
 | 11 | Offline cache (wire level) | **PASS** — the GET form is a documented full-snapshot read (was PARTIAL, D-5) |
-| 12 | Identity conflict | PASS, now on the standard composition (was on a second mux, D-3) |
+| 12 | Identity conflict | PASS, now on the standard composition (was on a second mux, D-3) and driven through the production observation surface (was a direct resolver call, D-1) |
 | 13 | Webhook retry | PASS, retrying a replayed delivery — see the note below |
 | 14 | Replay and rule versions | PASS |
 | — | One-minute demonstration | PASS |
@@ -1353,4 +1398,11 @@ them through a surface an operator actually uses.
 | Driver `-phase 9b`, twice | green |
 | Driver `-phase oneminute` | green |
 
-No migration changed in this pass, so no up→down→up cycle was required.
+| `go run ./cmd/migrate up` → `down --confirm` → `up` on migration `00049` | clean; `preflight` verdict `compatible` |
+
+The driver's own transcript is the strongest single check: `grep -c SUBSTITUTION` over a full
+`-phase 9b` run returns `0`. Every substitution §2 classified as such — the 9A→9B bridge, the
+second operator mux, the direct customer-scope reprojection — is gone, and what remains
+synthetic is only what §2 listed as unavoidable: the Apple signing chain, the provider stubs, the
+webhook destination and its trust anchor, the dashboard principal resolver, and the SDKs
+themselves.

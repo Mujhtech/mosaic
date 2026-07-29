@@ -531,9 +531,25 @@ func TestFactOnOneLineageDoesNotRevokeTheCustomersOthers(t *testing.T) {
 		"pjb_d4", f.project, f.production, "customer:"+f.customer,
 		`{"customerId":"`+f.customer+`"}`, f.now)
 
-	job, leased, err := repository.LeaseJob(f.ctx, "worker", f.now, f.now.Add(time.Minute))
-	if err != nil || !leased {
-		t.Fatalf("lease projection job: leased=%v err=%v", leased, err)
+	// Lease until this fixture's own job comes up. The queue is global, and
+	// other packages in the same database leave their own jobs behind; leasing
+	// blind would assert against whichever one happened to be oldest.
+	var job billingprojection.Job
+	for range 32 {
+		leased, ok, err := repository.LeaseJob(f.ctx, "worker", f.now, f.now.Add(time.Minute))
+		if err != nil {
+			t.Fatalf("lease projection job: %v", err)
+		}
+		if !ok {
+			t.Fatal("this fixture's projection job was never leased")
+		}
+		if leased.ProjectID == f.project {
+			job = leased
+			break
+		}
+	}
+	if job.ID == "" {
+		t.Fatal("this fixture's projection job was never leased")
 	}
 	if scope := job.Scope(); scope.LineageID != "" {
 		t.Fatalf("a customer-scoped job carried lineage %q; the aggregate would be "+
