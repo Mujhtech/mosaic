@@ -1,6 +1,6 @@
 package billingcustomer
 
-import "crypto/sha256"
+import "github.com/Mujhtech/mosaic/apps/api/internal/billing"
 
 // LineageKey is the digest that identifies one provider purchase chain inside
 // one Environment.
@@ -13,14 +13,22 @@ import "crypto/sha256"
 // through linkedPurchaseToken. Using the current token instead would mint a
 // new lineage on every plan change, and the subscription's whole history
 // would fragment into unconnected pieces.
+//
+// The digest domain is deliberately not this package's own (defect D-1). It
+// used to hash under `mosaic-billing-lineage-v1`, while every fact carries a
+// `purchase_chain_digest` computed by `billing.AppleTransactionKey` (domain
+// `mosaic-billing-apple-transaction-v1`) or `billing.TokenDigest` (plain
+// SHA-256) — and every fact-to-lineage join in the codebase compares those two
+// values. A lineage keyed with the package's own helper could therefore never
+// join to any fact it was created for: the read model was reachable only by
+// bypassing this function. The fact's digest domain is the canonical one
+// because the facts are the append-only record; the lineage is derived from
+// them.
 func LineageKey(provider, storeEnvironment string, rootValue string) []byte {
-	hasher := sha256.New()
-	hasher.Write([]byte("mosaic-billing-lineage-v1"))
-	for _, part := range []string{provider, storeEnvironment, rootValue} {
-		hasher.Write([]byte{0})
-		hasher.Write([]byte(part))
+	if provider == billing.ProviderGooglePlay {
+		return billing.TokenDigest(rootValue)
 	}
-	return hasher.Sum(nil)
+	return billing.AppleTransactionKey(storeEnvironment, rootValue)
 }
 
 // ChainLink is one observed supersession edge: a successor purchase chain
