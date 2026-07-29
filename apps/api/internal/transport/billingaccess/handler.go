@@ -293,18 +293,6 @@ func (h *Handler) syncEntitlements(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// If-None-Match is honoured on both verbs. The header and the body member
-	// mean the same thing; the header wins when both are present because it is
-	// the one HTTP intermediaries can also act on.
-	// A conditional request that states no version is still forwarded with its
-	// tag, and is still answered with a full snapshot: the service treats
-	// version equality as a precondition of `unchanged`, because a matching tag
-	// alone would confirm a cache without proving monotonicity. That check
-	// lives in the service rather than here, so both verbs get it.
-	if tag := strings.TrimSpace(r.Header.Get("If-None-Match")); tag != "" {
-		request.EntityTag = strings.Trim(tag, `"`)
-	}
-
 	result, err := h.service.Sync(r.Context(), authenticated, request)
 	if err != nil {
 		writeError(w, r, err)
@@ -313,32 +301,34 @@ func (h *Handler) syncEntitlements(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("ETag", `"`+result.EntityTag+`"`)
 	w.Header().Set("Cache-Control", "private, no-cache")
-	// The freshness window travels as headers as well as inside the record, so
-	// a 304 — which carries no body — still slides the caller's window. Without
-	// that, a device that keeps confirming the same version would expire while
-	// demonstrably in contact with the server.
+	// The freshness window travels as headers as well as inside the record.
+	// The record is where every SDK reads it; the headers exist so an
+	// intermediary and an operator can see the same window without parsing the
+	// body.
 	w.Header().Set("Mosaic-Refresh-After", billingaccess.ContractTimestamp(result.RefreshAfter))
 	w.Header().Set("Mosaic-Valid-Until", billingaccess.ContractTimestamp(result.ValidUntil))
 	w.Header().Set("Mosaic-Stale-Grace-Seconds", strconv.Itoa(int(result.StaleGrace/time.Second)))
 
-	// 304 belongs to the conditional GET and to nothing else.
+	// There is exactly one conditional mechanism on this surface, and it is the
+	// POST body's `knownSnapshotVersion` (defect D-5, ratified).
 	//
-	// POST is the ratified cross-SDK flow, and it always answers 200 with the
-	// canonical `snapshotUnchanged` record — even when If-None-Match is
-	// present. The record carries refreshAfter, validUntil, and
-	// staleGraceSeconds inside a frozen schema every SDK already validates,
-	// whereas a bare 304 carries no body and would force all three platforms to
-	// read freshness out of `Mosaic-…` header names that no schema defines.
-	// Freshness that only exists in undocumented headers is freshness the
-	// contract cannot guarantee, so the negotiated form never relies on it.
+	// The GET form is a plain full-snapshot read. It carries no way to state a
+	// snapshot version, and version equality is a precondition of `unchanged` —
+	// a matching entity tag alone would confirm a cache without proving
+	// monotonicity. The handler used to carry a 304 branch gated to GET plus
+	// If-None-Match; the precondition made it unreachable on every request that
+	// could ever take it, so it was dead code that advertised a bandwidth saving
+	// the surface did not provide. It is removed rather than made reachable:
+	// making it reachable would mean either dropping the monotonicity
+	// precondition for one verb or inventing an unratified query parameter.
 	//
-	// The conditional GET keeps 304 because that is HTTP's own form, where an
-	// empty body is the point and the headers are the only channel available.
-	if result.Unchanged && r.Method == http.MethodGet &&
-		strings.TrimSpace(r.Header.Get("If-None-Match")) != "" {
-		response.Representation(w, http.StatusNotModified, contractContentType, nil)
-		return
-	}
+	// POST answers 200 with the canonical `snapshotUnchanged` record even when
+	// the caller's version matches. That record carries refreshAfter,
+	// validUntil, and staleGraceSeconds inside a frozen schema every SDK already
+	// validates, whereas a bare 304 carries no body and would force all three
+	// platforms to read freshness out of `Mosaic-…` header names no schema
+	// defines. Freshness that only exists in undocumented headers is freshness
+	// the contract cannot guarantee.
 	response.Representation(w, http.StatusOK, contractContentType, result.Payload)
 }
 

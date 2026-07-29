@@ -27,8 +27,9 @@ import (
 //
 // The canonical `snapshotUnchanged` record carries refreshAfter, validUntil,
 // and staleGraceSeconds inside the schema every SDK already validates, so the
-// negotiated form always answers 200 with it. The conditional GET keeps 304,
-// because that is HTTP's own form where an empty body is the point.
+// negotiated form always answers 200 with it. The GET form is not conditional
+// at all (defect D-5): it has no way to state a snapshot version, so it always
+// answers 200 with the full snapshot.
 
 const (
 	testCustomerID = "bcu_sync_test"
@@ -221,21 +222,21 @@ func TestNegotiatedSyncAnswersUnchangedRecordRatherThanBare304(t *testing.T) {
 	}
 }
 
-// The GET form answers a full snapshot and carries the freshness headers.
+// The GET form is a plain full-snapshot read (defect D-5, ratified).
 //
-// It does NOT currently answer 304, and this test deliberately asserts the
-// behaviour that exists rather than the behaviour the OpenAPI describes. The
-// GET form has no way to state `knownSnapshotVersion` — only the POST body
-// carries it — and the service treats version equality as a precondition of
-// `unchanged`, because a matching entity tag alone would confirm a cache
-// without proving monotonicity. So the 304 branch is unreachable on GET today.
+// There is one conditional mechanism on this surface and it is the POST body's
+// `knownSnapshotVersion`. The GET form has no way to state a version, and
+// version equality is a precondition of `unchanged` because a matching entity
+// tag alone would confirm a cache without proving monotonicity — so the
+// handler's old 304 branch was unreachable on every request that could ever
+// have taken it. The branch is gone; this test pins what replaced it: a 200
+// with the full snapshot and the freshness headers, whatever the caller sends
+// in If-None-Match.
 //
-// That is pre-existing (the version was never read from the query string) and
-// is reported rather than papered over: inventing a query parameter here would
-// be new, unratified API surface. The 304 branch is kept in the handler, gated
-// to GET, so that if a version ever becomes statable on this form the
-// conditional answer is HTTP's own — and this test pins the freshness headers,
-// which are the only channel a bodyless 304 would have.
+// The If-None-Match header is still sent here deliberately. It is the header an
+// ordinary HTTP client sends without being asked, and the risk this test
+// protects against is a future edit reintroducing a bodyless answer to it on
+// the highest-QPS authenticated surface Mosaic serves.
 func TestConditionalGetAnswersFullSnapshotWithFreshnessHeaders(t *testing.T) {
 	handler := syncRouter()
 	tag := entityTag(t, handler)
@@ -248,7 +249,7 @@ func TestConditionalGetAnswersFullSnapshotWithFreshnessHeaders(t *testing.T) {
 	handler.ServeHTTP(recorder, request)
 
 	if recorder.Code != http.StatusOK {
-		t.Fatalf("conditional GET: status %d, want 200 (%s)", recorder.Code, recorder.Body.String())
+		t.Fatalf("GET with If-None-Match: status %d, want 200 (%s)", recorder.Code, recorder.Body.String())
 	}
 	var envelope struct {
 		RecordType string `json:"recordType"`
@@ -261,7 +262,7 @@ func TestConditionalGetAnswersFullSnapshotWithFreshnessHeaders(t *testing.T) {
 	}
 	for _, header := range []string{"ETag", "Mosaic-Refresh-After", "Mosaic-Valid-Until", "Mosaic-Stale-Grace-Seconds"} {
 		if recorder.Header().Get(header) == "" {
-			t.Fatalf("GET is missing %s; it is the only channel freshness has on a bodyless 304", header)
+			t.Fatalf("GET is missing %s; the freshness window must be visible without parsing the body", header)
 		}
 	}
 }
