@@ -91,8 +91,16 @@ void main() {
       File('${invalid.path}/rejection-layers.json').readAsStringSync(),
     ) as Map<String, Object?>)['layers']! as Map<String, Object?>;
 
+    // Classified producer-side: the semantic validator rejects it, and a
+    // reader that inferred intent from a value's shape would diverge from the
+    // other SDKs. Asserted separately below.
+    const producerSideOnly = <String>{
+      'snapshot-carries-signed-payload-value.json',
+    };
+
     for (final file in canonicalFixtureFiles(invalid)) {
       final name = file.uri.pathSegments.last;
+      if (producerSideOnly.contains(name)) continue;
       test('$name never yields access', () {
         final source = file.readAsStringSync();
         String? reasonCode;
@@ -180,14 +188,17 @@ void main() {
       );
     });
 
-    test('a signed provider payload is never carried as an identifier', () {
-      expect(
-        () => decoder.decode(
-          File('${invalid.path}/snapshot-carries-signed-payload-value.json')
-              .readAsStringSync(),
-        ),
-        throwsA(isA<MosaicCustomerEntitlementFormatException>()),
-      );
+    test('a signed-payload-shaped identifier is a producer-side rejection', () {
+      // Cross-SDK alignment: iOS, Android, and Flutter all accept this record
+      // as a reader. The shape of a correlation identifier is not something a
+      // reader is entitled to infer intent from, and the semantic validator is
+      // where the defect is caught.
+      expect(layers['snapshot-carries-signed-payload-value.json'], 'semantic');
+      final record = decoder.decode(
+        File('${invalid.path}/snapshot-carries-signed-payload-value.json')
+            .readAsStringSync(),
+      ) as MosaicCustomerSnapshotRecord;
+      expect(record.contentDigestValid, isTrue);
     });
   });
 

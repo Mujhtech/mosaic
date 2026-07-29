@@ -284,6 +284,10 @@ Bounded grace is the shipped policy, driven entirely by the server-issued
 | to `validUntil + staleGraceSeconds` | `staleWithinGrace` | Previously active Entitlements stay active and `isStale` is `true` — **surface it**. |
 | after that | `expired` | Report `unknown`. Never `inactive`. |
 
+The window moves only when the server sends the canonical `snapshotUnchanged`
+record, which carries the refreshed bounds. A bodyless `304` preserves the cache
+and re-anchors trusted time but does not extend it.
+
 Clock-skew tolerance is 60 seconds and is applied in the direction that favours
 the user. A device clock earlier than issuance by more than the tolerance is
 unreliable, which forces expired-equivalent behaviour rather than becoming a

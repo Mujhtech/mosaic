@@ -49,7 +49,6 @@ void main() {
   MosaicCustomerEntitlementSyncReceived received(String path) =>
       MosaicCustomerEntitlementSyncReceived(
         source: fixture(path),
-        freshness: const MosaicCustomerEntitlementFreshnessHeaders(),
       );
 
   MosaicCustomerEntitlementRuntime runtimeWith(
@@ -160,24 +159,19 @@ void main() {
     runtime.dispose();
   });
 
-  test('a 304 slides freshness without re-accepting anything', () async {
+  test('the canonical unchanged record is what slides the window', () async {
     final transport =
         _RecordingTransport(<MosaicCustomerEntitlementSyncResponse>[
       received('snapshots/active-subscription.json'),
-      MosaicCustomerEntitlementSyncNotModified(
-        freshness: MosaicCustomerEntitlementFreshnessHeaders(
-          refreshAfter: DateTime.utc(2026, 8, 3, 12),
-          validUntil: DateTime.utc(2026, 8, 10, 12),
-          staleGraceSeconds: 86400,
-        ),
-      ),
+      received('snapshots/snapshot-unchanged.json'),
     ]);
     final runtime = runtimeWith(transport);
 
     await runtime.refresh();
-    // Past the snapshot's own validUntil: without the slide, a device that is
-    // demonstrably in contact with the server would expire.
-    now = DateTime.utc(2026, 8, 5, 12);
+    // Past the accepted snapshot's own validUntil. The unchanged record's
+    // refreshed window is the only contract-pinned carrier, so a device that
+    // is demonstrably in contact with the server does not expire.
+    now = DateTime.utc(2026, 8, 4, 12, 20);
     final unchanged = await runtime.refresh();
 
     expect(unchanged, isA<MosaicCustomerEntitlementUnchanged>());
@@ -190,6 +184,105 @@ void main() {
     // The conditional request carried both the version and the validator.
     expect(transport.requests.last.knownSnapshotVersion, 4);
     expect(transport.requests.last.entityTag, 'cs-0001-v4');
+    runtime.dispose();
+  });
+
+  test('a bodyless 304 preserves the cache without sliding it', () async {
+    final transport =
+        _RecordingTransport(<MosaicCustomerEntitlementSyncResponse>[
+      received('snapshots/active-subscription.json'),
+      const MosaicCustomerEntitlementSyncNotModified(),
+    ]);
+    final runtime = runtimeWith(transport);
+    await runtime.refresh();
+
+    now = DateTime.utc(2026, 8, 4, 12, 20);
+    final unchanged = await runtime.refresh();
+
+    expect(unchanged, isA<MosaicCustomerEntitlementUnchanged>());
+    // Nothing in a bodyless response is a contract-pinned carrier of refreshed
+    // windows. Inferring one from an unpinned header would let anything on the
+    // network path extend offline access, so the window does not move.
+    expect(runtime.cacheState, MosaicEntitlementCacheState.expired);
+    expect(
+      runtime.checkCustomerEntitlement('pro').state,
+      MosaicCustomerAccessState.unknown,
+    );
+    runtime.dispose();
+  });
+
+  test('an unchanged record for another customer confirms nothing', () async {
+    final transport =
+        _RecordingTransport(<MosaicCustomerEntitlementSyncResponse>[
+      received('snapshots/active-subscription.json'),
+      MosaicCustomerEntitlementSyncReceived(
+        source: fixture('snapshots/snapshot-unchanged.json').replaceFirst(
+          'fixture-customer-0001',
+          'fixture-customer-0002',
+        ),
+      ),
+    ]);
+    final runtime = runtimeWith(transport);
+    await runtime.refresh();
+
+    final result = await runtime.refresh();
+
+    expect(
+      result,
+      isA<MosaicCustomerEntitlementRejected>().having(
+        (value) => value.cacheAction,
+        'cacheAction',
+        MosaicCustomerCacheAction.clear,
+      ),
+    );
+    expect(runtime.snapshot, isNull);
+    runtime.dispose();
+  });
+
+  test('the sync body never carries a customer identifier', () {
+    // The Customer Access Token is the sole customer selector. A hint could
+    // only narrow the answer or fail the request, so it is not sent at all.
+    final encoded = mosaicEncodeEntitlementSyncRequest(
+      MosaicCustomerEntitlementSyncRequest(
+        baseUrl: Uri.parse('https://api.mosaic.test'),
+        publicSdkKey: 'public_key',
+        customerToken: 'mcat_secret',
+        timeout: const Duration(seconds: 5),
+        correlationId: 'fixture-correlation-0001',
+      ),
+    );
+    final payload = encoded['payload']! as Map<String, Object?>;
+    expect(payload.containsKey('billingCustomerId'), isFalse);
+  });
+
+  test('an absent entitlement key reads unknown, never inactive', () async {
+    final transport =
+        _RecordingTransport(<MosaicCustomerEntitlementSyncResponse>[
+      received('snapshots/active-subscription.json'),
+    ]);
+    final runtime = runtimeWith(transport);
+    await runtime.refresh();
+
+    final check = runtime.checkCustomerEntitlement('enterprise');
+
+    // Absence is not a statement. Mosaic never said this key is inactive, and
+    // most often the response was simply narrowed to other keys.
+    expect(check.state, MosaicCustomerAccessState.unknown);
+    expect(check.reasonCode, 'entitlements.entry.absent');
+    expect(check.sourceCount, 0);
+    // Cross-platform spelling of the cache-state vocabulary.
+    expect(
+      MosaicEntitlementCacheState.values.map((value) => value.name),
+      containsAll(<String>[
+        'fresh',
+        'refreshRecommended',
+        'staleWithinGrace',
+        'expired',
+        'missing',
+        'invalid',
+        'differentCustomer',
+      ]),
+    );
     runtime.dispose();
   });
 
@@ -429,7 +522,6 @@ void main() {
       received('snapshots/active-subscription.json'),
       MosaicCustomerEntitlementSyncReceived(
         source: fixture('invalid/snapshot-entry-unknown-field.json'),
-        freshness: const MosaicCustomerEntitlementFreshnessHeaders(),
       ),
     ]);
     final runtime = runtimeWith(transport);

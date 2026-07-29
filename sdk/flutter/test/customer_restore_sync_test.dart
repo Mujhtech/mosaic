@@ -58,7 +58,6 @@ void main() {
   MosaicCustomerEntitlementSyncReceived received(String path) =>
       MosaicCustomerEntitlementSyncReceived(
         source: fixture(path),
-        freshness: const MosaicCustomerEntitlementFreshnessHeaders(),
       );
 
   MosaicCustomerEntitlementRuntime runtimeWith(
@@ -152,9 +151,7 @@ void main() {
     final transport = _ScriptedTransport(
       <MosaicCustomerEntitlementSyncResponse>[
         received('snapshots/active-subscription.json'),
-        const MosaicCustomerEntitlementSyncNotModified(
-          freshness: MosaicCustomerEntitlementFreshnessHeaders(),
-        ),
+        const MosaicCustomerEntitlementSyncNotModified(),
       ],
     );
     final runtime = runtimeWith(transport);
@@ -177,9 +174,7 @@ void main() {
       () async {
     final transport = _ScriptedTransport(
       <MosaicCustomerEntitlementSyncResponse>[
-        const MosaicCustomerEntitlementSyncNotModified(
-          freshness: MosaicCustomerEntitlementFreshnessHeaders(),
-        ),
+        const MosaicCustomerEntitlementSyncNotModified(),
       ],
     );
     final runtime = runtimeWith(transport);

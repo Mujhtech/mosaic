@@ -446,14 +446,10 @@ final class MosaicCustomerEntitlementRuntime extends ChangeNotifier
         _unavailable(diagnosticCode),
       MosaicCustomerEntitlementSyncUnauthorized() =>
         _unavailable('entitlements.sync.unauthorized'),
-      MosaicCustomerEntitlementSyncNotModified(:final freshness) =>
-        await _confirm(freshness),
-      MosaicCustomerEntitlementSyncReceived(
-        :final source,
-        :final freshness,
-        :final serverTime
-      ) =>
-        await _accept(source, freshness, serverTime),
+      MosaicCustomerEntitlementSyncNotModified(:final serverTime) =>
+        await _confirmNotModified(serverTime),
+      MosaicCustomerEntitlementSyncReceived(:final source, :final serverTime) =>
+        await _accept(source, serverTime),
     };
   }
 
@@ -476,19 +472,41 @@ final class MosaicCustomerEntitlementRuntime extends ChangeNotifier
   }
 
   /// A confirmed-current snapshot must not expire merely because it was
-  /// confirmed instead of resent.
-  Future<MosaicCustomerEntitlementRefreshResult> _confirm(
-    MosaicCustomerEntitlementFreshnessHeaders freshness,
+  /// confirmed instead of resent. The canonical `snapshotUnchanged` record is
+  /// the only carrier of refreshed windows, so it is the only thing that moves
+  /// them.
+  Future<MosaicCustomerEntitlementRefreshResult> _confirmFromRecord(
+    MosaicCustomerSnapshotUnchanged unchanged,
+    DateTime? serverTime,
   ) async {
     final record = _record;
     if (record == null) {
       return _unavailable('entitlements.sync.unchangedWithoutCache');
     }
+    final binding = MosaicCustomerBinding(
+      billingCustomerId: unchanged.billingCustomerId,
+      projectId: unchanged.projectId,
+      environmentId: unchanged.environmentId,
+    );
+    if (binding != record.binding ||
+        unchanged.snapshotVersion != record.snapshotVersion) {
+      // A confirmation for another customer, Environment, or version confirms
+      // nothing here. Sliding on it would extend one cache's life using
+      // another's evidence.
+      return _reject(
+        binding != record.binding
+            ? 'customer_mismatch'
+            : 'snapshot_version_not_newer',
+        binding != record.binding
+            ? MosaicCustomerCacheAction.clear
+            : MosaicCustomerCacheAction.preserve,
+      );
+    }
     final slid = record.slideFreshness(
-      refreshAfter: freshness.refreshAfter ?? record.refreshAfter,
-      validUntil: freshness.validUntil ?? record.validUntil,
-      staleGraceSeconds:
-          freshness.staleGraceSeconds ?? record.staleGraceSeconds,
+      refreshAfter: unchanged.refreshAfter,
+      validUntil: unchanged.validUntil,
+      staleGraceSeconds: unchanged.staleGraceSeconds,
+      trustedServerTime: serverTime,
       localReceiptTime: clock().toUtc(),
     );
     _record = slid;
@@ -501,11 +519,38 @@ final class MosaicCustomerEntitlementRuntime extends ChangeNotifier
     );
   }
 
+  /// A bodyless `304`. The cache is preserved and trusted time is re-anchored,
+  /// but the freshness window does not move: nothing in a bodyless response is
+  /// a contract-pinned carrier of refreshed windows, and treating an unpinned
+  /// header as one would let anything on the path extend offline access.
+  Future<MosaicCustomerEntitlementRefreshResult> _confirmNotModified(
+    DateTime? serverTime,
+  ) async {
+    final record = _record;
+    if (record == null) {
+      return _unavailable('entitlements.sync.unchangedWithoutCache');
+    }
+    final reanchored = record.slideFreshness(
+      refreshAfter: record.refreshAfter,
+      validUntil: record.validUntil,
+      staleGraceSeconds: record.staleGraceSeconds,
+      trustedServerTime: serverTime,
+      localReceiptTime: clock().toUtc(),
+    );
+    _record = reanchored;
+    _lastReasonCode = null;
+    _lastOutcomeUnavailable = false;
+    await _persist(reanchored);
+    notifyListeners();
+    return MosaicCustomerEntitlementUnchanged(
+      snapshotVersion: reanchored.snapshotVersion,
+    );
+  }
+
   /// The acceptance gate. Every check runs in the normative order, and a
   /// rejected snapshot never emits.
   Future<MosaicCustomerEntitlementRefreshResult> _accept(
     String source,
-    MosaicCustomerEntitlementFreshnessHeaders freshness,
     DateTime? serverTime,
   ) async {
     final MosaicCustomerSyncRecord decoded;
@@ -515,14 +560,9 @@ final class MosaicCustomerEntitlementRuntime extends ChangeNotifier
       return _reject(error.reasonCode, MosaicCustomerCacheAction.preserve);
     }
     if (decoded is MosaicCustomerUnchangedRecord) {
-      // A 200 carrying an unchanged record is the same statement as a 304.
-      return _confirm(
-        MosaicCustomerEntitlementFreshnessHeaders(
-          refreshAfter: decoded.unchanged.refreshAfter,
-          validUntil: decoded.unchanged.validUntil,
-          staleGraceSeconds: decoded.unchanged.staleGraceSeconds,
-        ),
-      );
+      // The contract-conformant unchanged answer, and the only thing that
+      // slides the freshness window.
+      return _confirmFromRecord(decoded.unchanged, serverTime);
     }
     final record = decoded as MosaicCustomerSnapshotRecord;
     final snapshot = record.snapshot;
@@ -554,10 +594,9 @@ final class MosaicCustomerEntitlementRuntime extends ChangeNotifier
       asOf: snapshot.asOf,
       entityTag: snapshot.entityTag,
       issuedAt: snapshot.issuedAt,
-      refreshAfter: freshness.refreshAfter ?? snapshot.refreshAfter,
-      validUntil: freshness.validUntil ?? snapshot.validUntil,
-      staleGraceSeconds:
-          freshness.staleGraceSeconds ?? snapshot.staleGraceSeconds,
+      refreshAfter: snapshot.refreshAfter,
+      validUntil: snapshot.validUntil,
+      staleGraceSeconds: snapshot.staleGraceSeconds,
       trustedServerTime: serverTime,
       localReceiptTime: now,
     );

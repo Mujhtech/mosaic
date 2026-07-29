@@ -1443,13 +1443,6 @@ final RegExp _diagnosticCodePattern = RegExp(
   r'^[a-z][a-zA-Z0-9]*(?:[._-][a-zA-Z0-9]+)+$',
 );
 
-/// Three dot-separated base64url segments — the shape of a signed provider
-/// payload. No Mosaic identifier looks like this, and a reader that persisted
-/// one would be caching a credential it was never meant to hold.
-final RegExp _signedPayloadPattern = RegExp(
-  r'^[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}$',
-);
-
 /// Reads one closed JSON object. Construction alone rejects an unknown member,
 /// which is what makes reading whole-document rather than best-effort.
 final class _Fields {
@@ -1569,11 +1562,14 @@ final class _Fields {
     return value;
   }
 
+  // A signed-payload-shaped identifier — three dot-separated base64url
+  // segments — is a producer defect the semantic validator rejects, not a
+  // reader obligation. Rejecting it here would diverge from iOS and Android
+  // and would make the reader guess at intent from a value's shape.
   static bool _isIdentifier(String value) =>
       value.isNotEmpty &&
       value.length <= 128 &&
-      _identifierPattern.hasMatch(value) &&
-      !_signedPayloadPattern.hasMatch(value);
+      _identifierPattern.hasMatch(value);
 
   String entitlementKey(String key) {
     final value = string(key);

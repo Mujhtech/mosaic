@@ -18,7 +18,6 @@ final class _FixtureEntitlementTransport
     calls += 1;
     return MosaicCustomerEntitlementSyncReceived(
       source: source,
-      freshness: const MosaicCustomerEntitlementFreshnessHeaders(),
     );
   }
 }

@@ -8,6 +8,10 @@
   continues to read provider-observed entitlements. `Mosaic.configure` gains
   `customerTokenProvider`, `customerEntitlementCache`,
   `customerEntitlementTransport`, `customerEntitlementSettings`, and `clock`.
+  The sync request is a `POST` carrying the canonical `entitlementSyncRequest`
+  record, which is where contract negotiation lives. It never carries a
+  `billingCustomerId`: the Customer Access Token is the sole customer selector,
+  so a hint could only narrow the answer or fail the request.
 - Mosaic Billing **requires an application backend**. There is no anonymous
   mode: your server mints the Customer Access Token, and a client-generated
   installation identifier can never create or select a Billing Customer.
@@ -27,9 +31,12 @@
   Dart cannot drift from Go, Swift, and Kotlin.
 - Bounded grace is the shipped offline policy, driven by the server-issued
   `refreshAfter`, `validUntil`, and `staleGraceSeconds` (strict is the same
-  fields with a zero grace window). A `304` slides the freshness window from the
-  response headers without re-accepting anything. Clock-skew tolerance is 60
-  seconds and a backwards device clock forces expired-equivalent behaviour.
+  fields with a zero grace window). The canonical `snapshotUnchanged` record is
+  the only thing that slides the freshness window; a bodyless `304` preserves
+  the cache and re-anchors trusted time but does not move the window, because
+  nothing in a bodyless response is a contract-pinned carrier of refreshed
+  windows. Clock-skew tolerance is 60 seconds and a backwards device clock
+  forces expired-equivalent behaviour.
 - Customer Access Tokens are held in memory only, never persisted, never parsed,
   and never present in a log or diagnostic — diagnostics carry `tokenId`. A
   `401` forces exactly one refresh and one retry per token generation; a token

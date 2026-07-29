@@ -12,14 +12,6 @@ import 'protocol.dart';
 /// and neither substitutes for the other.
 const String mosaicCustomerSdkKeyHeader = 'Mosaic-SDK-Key';
 
-/// Freshness headers. They travel alongside the record so a `304`, which
-/// carries no body, still slides the caller's window. Without them a device
-/// that keeps confirming the same version would expire while demonstrably in
-/// contact with the server.
-const String mosaicCustomerRefreshAfterHeader = 'Mosaic-Refresh-After';
-const String mosaicCustomerValidUntilHeader = 'Mosaic-Valid-Until';
-const String mosaicCustomerStaleGraceHeader = 'Mosaic-Stale-Grace-Seconds';
-
 final class MosaicCustomerEntitlementSyncRequest {
   const MosaicCustomerEntitlementSyncRequest({
     required this.baseUrl,
@@ -27,7 +19,6 @@ final class MosaicCustomerEntitlementSyncRequest {
     required this.customerToken,
     required this.timeout,
     required this.correlationId,
-    this.billingCustomerIdHint,
     this.knownSnapshotVersion,
     this.entityTag,
     this.requestedEntitlementKeys = const <String>[],
@@ -42,27 +33,11 @@ final class MosaicCustomerEntitlementSyncRequest {
   final Duration timeout;
   final String correlationId;
 
-  /// A hint only. The server derives the customer from the token and refuses a
-  /// mismatch, so this member can never widen access.
-  final String? billingCustomerIdHint;
   final int? knownSnapshotVersion;
 
   /// Contract form, without the HTTP quoting.
   final String? entityTag;
   final List<String> requestedEntitlementKeys;
-}
-
-/// Freshness bounds read from the response headers.
-final class MosaicCustomerEntitlementFreshnessHeaders {
-  const MosaicCustomerEntitlementFreshnessHeaders({
-    this.refreshAfter,
-    this.validUntil,
-    this.staleGraceSeconds,
-  });
-
-  final DateTime? refreshAfter;
-  final DateTime? validUntil;
-  final int? staleGraceSeconds;
 }
 
 sealed class MosaicCustomerEntitlementSyncResponse {
@@ -73,28 +48,29 @@ final class MosaicCustomerEntitlementSyncReceived
     extends MosaicCustomerEntitlementSyncResponse {
   const MosaicCustomerEntitlementSyncReceived({
     required this.source,
-    required this.freshness,
     this.entityTag,
     this.serverTime,
   });
 
   final String source;
-  final MosaicCustomerEntitlementFreshnessHeaders freshness;
   final String? entityTag;
   final DateTime? serverTime;
 }
 
-/// The cached snapshot is still current. The cache is preserved and only its
-/// freshness window moves.
+/// A bodyless `304`. The cache is preserved and trusted time may be
+/// re-anchored, but the freshness window does **not** move: no contract-pinned
+/// carrier for refreshed windows exists in a bodyless response, and inferring
+/// one from unpinned headers would let a proxy extend offline access.
+///
+/// The sliding mechanism is the `200` carrying the canonical `snapshotUnchanged`
+/// record, whose refreshed windows are part of the contract.
 final class MosaicCustomerEntitlementSyncNotModified
     extends MosaicCustomerEntitlementSyncResponse {
   const MosaicCustomerEntitlementSyncNotModified({
-    required this.freshness,
     this.entityTag,
     this.serverTime,
   });
 
-  final MosaicCustomerEntitlementFreshnessHeaders freshness;
   final String? entityTag;
   final DateTime? serverTime;
 }
@@ -143,8 +119,10 @@ Map<String, Object?> mosaicEncodeEntitlementSyncRequest(
           mosaicAuthoritativeEntitlementContractVersion,
       'recordType': 'entitlementSyncRequest',
       'payload': <String, Object?>{
-        if (request.billingCustomerIdHint != null)
-          'billingCustomerId': request.billingCustomerIdHint,
+        // billingCustomerId is deliberately never sent. The Customer Access
+        // Token is the sole customer selector; the hint could only narrow the
+        // answer or fail the request, so omitting it removes a way to be wrong
+        // without removing any way to be right.
         if (request.knownSnapshotVersion != null)
           'knownSnapshotVersion': request.knownSnapshotVersion,
         if (request.entityTag != null) 'entityTag': request.entityTag,
@@ -219,12 +197,10 @@ final class MosaicIoCustomerEntitlementTransport
       );
     }
     final serverTime = _serverTime(response);
-    final freshness = _freshness(response);
     final entityTag = _entityTag(response);
 
     if (response.statusCode == HttpStatus.notModified) {
       return MosaicCustomerEntitlementSyncNotModified(
-        freshness: freshness,
         entityTag: entityTag,
         serverTime: serverTime,
       );
@@ -271,7 +247,6 @@ final class MosaicIoCustomerEntitlementTransport
     }
     return MosaicCustomerEntitlementSyncReceived(
       source: source,
-      freshness: freshness,
       entityTag: entityTag,
       serverTime: serverTime,
     );
@@ -293,27 +268,6 @@ final class MosaicIoCustomerEntitlementTransport
       return null;
     }
     return value.substring(1, value.length - 1);
-  }
-
-  MosaicCustomerEntitlementFreshnessHeaders _freshness(
-    HttpClientResponse response,
-  ) =>
-      MosaicCustomerEntitlementFreshnessHeaders(
-        refreshAfter: _instant(response, mosaicCustomerRefreshAfterHeader),
-        validUntil: _instant(response, mosaicCustomerValidUntilHeader),
-        staleGraceSeconds: int.tryParse(
-          response.headers.value(mosaicCustomerStaleGraceHeader) ?? '',
-        ),
-      );
-
-  DateTime? _instant(HttpClientResponse response, String header) {
-    final value = response.headers.value(header);
-    if (value == null) return null;
-    try {
-      return DateTime.parse(value).toUtc();
-    } on FormatException {
-      return null;
-    }
   }
 }
 
