@@ -90,6 +90,7 @@ public struct Mosaic: Sendable {
   private let identityStore: MosaicIdentityStore
   private let analyticsRuntime: MosaicAnalyticsRuntime?
   private let transactionObservationRuntime: MosaicTransactionObservationRuntime?
+  private let entitlementClient: MosaicCustomerEntitlementClient?
 
   private init(
     configuration: MosaicConfiguration,
@@ -98,7 +99,8 @@ public struct Mosaic: Sendable {
     identityStore: MosaicIdentityStore = MosaicIdentityStore(
       persistence: MosaicMemoryIdentityPersistence()),
     analyticsRuntime: MosaicAnalyticsRuntime? = nil,
-    transactionObservationRuntime: MosaicTransactionObservationRuntime? = nil
+    transactionObservationRuntime: MosaicTransactionObservationRuntime? = nil,
+    entitlementClient: MosaicCustomerEntitlementClient? = nil
   ) {
     self.configuration = configuration
     self.purchaseProvider = purchaseProvider
@@ -106,6 +108,7 @@ public struct Mosaic: Sendable {
     self.identityStore = identityStore
     self.analyticsRuntime = analyticsRuntime
     self.transactionObservationRuntime = transactionObservationRuntime
+    self.entitlementClient = entitlementClient
   }
 
   public static func configure(
@@ -132,7 +135,8 @@ public struct Mosaic: Sendable {
     requestTimeout: TimeInterval = 5,
     bundledFallback: MosaicConfigurationBundledFallback = .packaged,
     transactionObservations: MosaicTransactionObservationMode = .disabled,
-    purchaseProvider: any MosaicPurchaseProvider
+    purchaseProvider: any MosaicPurchaseProvider,
+    customerTokenProvider: (any MosaicCustomerTokenProvider)? = nil
   ) async throws -> Mosaic {
     try await configureHosted(
       publicSDKKey: publicSDKKey,
@@ -142,6 +146,7 @@ public struct Mosaic: Sendable {
       bundledFallback: bundledFallback,
       transactionObservations: transactionObservations,
       purchaseProvider: purchaseProvider,
+      customerTokenProvider: customerTokenProvider,
       persistenceRoot: .applicationSupport
     )
   }
@@ -154,6 +159,7 @@ public struct Mosaic: Sendable {
     bundledFallback: MosaicConfigurationBundledFallback,
     transactionObservations: MosaicTransactionObservationMode = .disabled,
     purchaseProvider: any MosaicPurchaseProvider,
+    customerTokenProvider: (any MosaicCustomerTokenProvider)? = nil,
     persistenceRoot: MosaicPersistenceRoot
   ) async throws -> Mosaic {
     let configuration = try MosaicConfiguration(
@@ -218,6 +224,33 @@ public struct Mosaic: Sendable {
       if observations.degraded { degraded = true }
     }
 
+    // Authoritative entitlements are opt-in: with no customer token provider
+    // there is no client at all, so nothing is fetched, cached, or persisted.
+    // Mosaic Billing requires an application backend (OD-4).
+    var entitlementClient: MosaicCustomerEntitlementClient?
+    if let customerTokenProvider {
+      let identity = await identityStore.snapshot()
+      let bindingDigest = MosaicCustomerEntitlementFileCacheStore.bindingDigest(
+        userID: identity.userID)
+      entitlementClient = MosaicCustomerEntitlementClient(
+        publicSDKKey: key,
+        baseURL: baseURL,
+        requestTimeout: requestTimeout,
+        transport: MosaicURLSessionEntitlementSyncTransport(requestTimeout: requestTimeout),
+        tokenStore: MosaicCustomerTokenStore(provider: customerTokenProvider),
+        bindingDigest: bindingDigest,
+        cacheStoreFactory: { digest in
+          if let root,
+            let store = try? MosaicCustomerEntitlementFileCacheStore(
+              baseURL: baseURL, publicSDKKey: key, customerBindingDigest: digest,
+              rootDirectory: root)
+          {
+            return store
+          }
+          return MosaicCustomerEntitlementMemoryCacheStore()
+        })
+    }
+
     let client = MosaicConfigurationClient(
       publicSDKKey: key,
       baseURL: baseURL,
@@ -240,6 +273,15 @@ public struct Mosaic: Sendable {
     await MosaicAnalyticsLifecycleRegistry.install(
       runtime: analyticsRuntime,
       namespace: namespace)
+    if let entitlementClient {
+      // The cached snapshot is read so a launch has an answer immediately; the
+      // network refresh is detached so entitlements never delay the host's
+      // configure call.
+      await entitlementClient.bootstrap()
+      await MosaicCustomerEntitlementLifecycleRegistry.install(
+        client: entitlementClient, namespace: namespace)
+      Task.detached(priority: .utility) { _ = await entitlementClient.refresh() }
+    }
     if let observationRuntime {
       await MosaicTransactionObservationLifecycleRegistry.install(
         runtime: observationRuntime, namespace: namespace)
@@ -253,7 +295,8 @@ public struct Mosaic: Sendable {
       configurationClient: client,
       identityStore: identityStore,
       analyticsRuntime: analyticsRuntime,
-      transactionObservationRuntime: observationRuntime
+      transactionObservationRuntime: observationRuntime,
+      entitlementClient: entitlementClient
     )
   }
 
@@ -393,6 +436,14 @@ public struct Mosaic: Sendable {
     if before.userID != after.userID {
       await configurationClient?.identityChanged(user: true, installation: false)
       await analyticsRuntime?.identityChanged()
+      await entitlementClient?.identityChanged(
+        bindingDigest: MosaicCustomerEntitlementFileCacheStore.bindingDigest(
+          userID: after.userID),
+        signedOut: false)
+      // The new identity's entitlements are fetched off the caller's path.
+      if let entitlementClient {
+        Task.detached(priority: .utility) { _ = await entitlementClient.refresh() }
+      }
     }
   }
 
@@ -408,6 +459,11 @@ public struct Mosaic: Sendable {
     if before.userID != nil || !before.attributes.isEmpty {
       await configurationClient?.identityChanged(user: true, installation: false)
       await analyticsRuntime?.identityChanged()
+      // Logout semantics: the token is discarded and the cache cleared before
+      // any read can return the previous person's grants.
+      await entitlementClient?.identityChanged(
+        bindingDigest: MosaicCustomerEntitlementFileCacheStore.bindingDigest(userID: nil),
+        signedOut: true)
     }
   }
 
@@ -416,6 +472,9 @@ public struct Mosaic: Sendable {
     try await identityStore.resetInstallation()
     await configurationClient?.identityChanged(user: true, installation: true)
     await analyticsRuntime?.identityChanged()
+    await entitlementClient?.identityChanged(
+      bindingDigest: MosaicCustomerEntitlementFileCacheStore.bindingDigest(userID: nil),
+      signedOut: true)
   }
 
   /// Applies the Environment owner/admin collection setting and a host-app
@@ -529,6 +588,107 @@ public struct Mosaic: Sendable {
       return .init(persistedAssignmentCount: 0, exposedAssignmentCount: 0)
     }
     return values
+  }
+
+  // MARK: - Authoritative entitlements
+  //
+  // These read Mosaic's server-side projection of what a Billing Customer is
+  // entitled to. They are additive and independent of the provider-observed
+  // surface (`purchaseProvider.activeEntitlements()`, entitlement targeting),
+  // which is unchanged: provider-observed answers what this device's store
+  // account shows, authoritative answers what Mosaic has validated for this
+  // customer across their devices and platforms.
+  //
+  // All of it requires a `customerTokenProvider`, because Mosaic Billing
+  // requires an application backend: a public SDK key identifies an application
+  // and can never select a customer.
+
+  /// Answers one focused access question. Never a bare boolean, and never
+  /// `inactive` unless an accepted snapshot says so.
+  public func checkCustomerEntitlement(_ key: String) async -> MosaicCustomerEntitlementCheck {
+    guard let entitlementClient else {
+      return MosaicCustomerEntitlementCheck(
+        entitlementKey: key, state: .unavailable(reason: .notConfigured), cacheState: .missing)
+    }
+    return await entitlementClient.check(key: key)
+  }
+
+  /// The full accepted snapshot and how fresh it is, or `nil` when none has been
+  /// accepted for this customer.
+  public func customerEntitlementSnapshot() async -> MosaicCustomerEntitlementSnapshotUpdate? {
+    await entitlementClient?.snapshot()
+  }
+
+  /// A stream of accepted changes. Each subscriber gets its own stream and is
+  /// replayed the current state on subscription.
+  public func customerEntitlementUpdates() async
+    -> AsyncStream<MosaicCustomerEntitlementUpdate>
+  {
+    guard let entitlementClient else {
+      return AsyncStream { continuation in
+        continuation.yield(.unavailable(.notConfigured))
+        continuation.finish()
+      }
+    }
+    return await entitlementClient.updates()
+  }
+
+  @discardableResult
+  public func refreshCustomerEntitlements() async -> MosaicCustomerEntitlementRefreshResult {
+    guard let entitlementClient else {
+      return .unavailable(
+        reason: .notConfigured,
+        diagnostics: [
+          MosaicDiagnostic(code: "entitlement_not_configured", stage: .entitlementValidation)
+        ])
+    }
+    return await entitlementClient.refresh()
+  }
+
+  public func customerEntitlementDiagnostics() async -> MosaicCustomerEntitlementDiagnostics {
+    guard let entitlementClient else { return .notConfigured }
+    return await entitlementClient.diagnosticsSnapshot()
+  }
+
+  /// Runs a native restore and then waits, briefly and boundedly, for Mosaic to
+  /// project it.
+  ///
+  /// The result reports both axes separately. `authoritativeEntitlementsUpdated`
+  /// is true only when an accepted snapshot reflects the restore, so a host can
+  /// tell "the store found your purchase" apart from "Mosaic has confirmed it".
+  public func restoreAndSyncCustomerEntitlements() async -> MosaicRestoreAndSyncResult {
+    let providerRestore: @Sendable () async -> MosaicRestoreResult = { [purchaseProvider] in
+      await purchaseProvider.restore()
+    }
+    guard let entitlementClient else {
+      let result = await providerRestore()
+      return MosaicRestoreAndSyncResult(
+        outcome: .identityUnresolved,
+        stages: [.providerRestoreStarted, .providerRestoreFinished(result)],
+        providerResult: result,
+        authoritativeEntitlementsUpdated: false,
+        snapshotVersion: nil,
+        completedAt: Date())
+    }
+    return await MosaicCustomerRestoreCoordinator(client: entitlementClient)
+      .run(restore: providerRestore)
+  }
+
+  /// Discards the held customer token and deletes this customer's cached
+  /// snapshot. Installation identity is preserved.
+  public func clearCustomerState() async {
+    await entitlementClient?.clearCustomerState()
+  }
+
+  /// Refreshes authoritative entitlements after a purchase completes.
+  ///
+  /// Fire-and-forget by design: the refresh runs in a detached task so it is
+  /// never a suspension point on the purchase path. A purchase must never be
+  /// held open waiting for a projection, and a failed refresh must never change
+  /// a purchase result.
+  public func customerEntitlementsDidChangeAfterPurchase() {
+    guard let entitlementClient else { return }
+    Task.detached(priority: .utility) { _ = await entitlementClient.refresh() }
   }
 
   /// Returns the exact accepted Configuration Release association required to
