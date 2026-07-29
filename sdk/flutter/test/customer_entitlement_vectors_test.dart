@@ -73,7 +73,7 @@ void main() {
     });
 
     test('covers every published vector', () {
-      expect(vectors, hasLength(10));
+      expect(vectors, hasLength(11));
     });
   });
 

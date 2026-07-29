@@ -51,6 +51,31 @@ void main() {
         source: fixture(path),
       );
 
+  String firstProjectedSnapshot(int version) {
+    final envelope = jsonDecode(
+      fixture('snapshots/never-projected-placeholder.json'),
+    ) as Map<String, Object?>;
+    final payload = (envelope['payload']! as Map).cast<String, Object?>();
+    final projected = (jsonDecode(
+      fixture('snapshots/active-subscription.json'),
+    ) as Map<String, Object?>)['payload']! as Map<String, Object?>;
+    payload['snapshotVersion'] = version;
+    payload['entityTag'] = 'cs-0001-v$version';
+    payload.remove('previousSnapshotVersion');
+    payload['issuedAt'] = '2026-07-29T10:00:00.000Z';
+    payload['asOf'] = '2026-07-29T09:59:58.000Z';
+    payload['refreshAfter'] = '2026-07-29T11:00:00.000Z';
+    payload['validUntil'] = '2026-08-05T10:00:00.000Z';
+    payload['entries'] = projected['entries'];
+    payload['sources'] = projected['sources'];
+    payload['projectionStatus'] = <String, Object?>{
+      'state': 'current',
+      'lastProjectedAt': '2026-07-29T09:59:58.000Z',
+    };
+    payload['contentDigest'] = mosaicCustomerContentDigest(payload);
+    return jsonEncode(envelope);
+  }
+
   MosaicCustomerEntitlementRuntime runtimeWith(
     _RecordingTransport transport, {
     MosaicCustomerEntitlementCache? cache,
@@ -123,6 +148,61 @@ void main() {
     await pumpEventQueue();
     expect(updates, hasLength(1));
     runtime.dispose();
+  });
+
+  test('the never-projected placeholder is cached and replaced by version 1',
+      () async {
+    now = DateTime.utc(2026, 7, 29, 8, 30);
+    final transport =
+        _RecordingTransport(<MosaicCustomerEntitlementSyncResponse>[
+      MosaicCustomerEntitlementSyncReceived(
+        source: fixture('snapshots/never-projected-placeholder.json'),
+      ),
+      MosaicCustomerEntitlementSyncReceived(
+        source: firstProjectedSnapshot(1),
+      ),
+    ]);
+    final runtime = runtimeWith(transport);
+
+    final placeholder = await runtime.refresh();
+
+    expect(placeholder, isA<MosaicCustomerEntitlementUpdated>());
+    expect(runtime.snapshot?.snapshotVersion, 0);
+    expect(
+      runtime.checkCustomerEntitlement('pro').state,
+      MosaicCustomerAccessState.unknown,
+    );
+
+    now = DateTime.utc(2026, 7, 29, 10, 30);
+    final projected = await runtime.refresh();
+
+    expect(transport.requests.last.knownSnapshotVersion, 0);
+    final requestPayload = mosaicEncodeEntitlementSyncRequest(
+      transport.requests.last,
+    )['payload']! as Map<String, Object?>;
+    expect(requestPayload['knownSnapshotVersion'], 0);
+    expect(projected, isA<MosaicCustomerEntitlementUpdated>());
+    expect(runtime.snapshot?.snapshotVersion, 1);
+    expect(
+      runtime.checkCustomerEntitlement('pro').state,
+      MosaicCustomerAccessState.active,
+    );
+    runtime.dispose();
+  });
+
+  test('version zero cannot carry projected entitlement content', () {
+    expect(
+      () => const MosaicCustomerEntitlementDecoder().decode(
+        firstProjectedSnapshot(0),
+      ),
+      throwsA(
+        isA<MosaicCustomerEntitlementFormatException>().having(
+          (error) => error.reasonCode,
+          'reasonCode',
+          'semantic_invariant_violated',
+        ),
+      ),
+    );
   });
 
   test('an older snapshot never rolls accepted state backwards', () async {

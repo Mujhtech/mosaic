@@ -944,7 +944,7 @@ final class MosaicCustomerEntitlementDecoder {
       'correlationId',
       'diagnostics',
     });
-    final snapshotVersion = fields.integer('snapshotVersion', minimum: 1);
+    final snapshotVersion = fields.integer('snapshotVersion', minimum: 0);
     final previousSnapshotVersion =
         fields.optionalInteger('previousSnapshotVersion', minimum: 0);
     if (previousSnapshotVersion != null &&
@@ -981,6 +981,27 @@ final class MosaicCustomerEntitlementDecoder {
         .toList(growable: false);
     _validateGraph(entries, sources);
 
+    final projectionStatus =
+        _projectionStatus(fields.object('projectionStatus'));
+    final changeReason = fields.enumeration(
+      'changeReason',
+      MosaicCustomerChangeReason.values,
+      (value) => value.wireValue,
+    );
+    if (snapshotVersion == 0 &&
+        (previousSnapshotVersion != null ||
+            entries.isNotEmpty ||
+            sources.isNotEmpty ||
+            projectionStatus.state != MosaicCustomerProjectionState.pending ||
+            changeReason != MosaicCustomerChangeReason.initialProjection)) {
+      // Zero is the never-projected placeholder, not a snapshot of empty or
+      // projected state. Its strict content rules keep it fail-closed while
+      // allowing the ordinary monotonic gate to replace it with version 1.
+      throw const MosaicCustomerEntitlementFormatException(
+        'semantic_invariant_violated',
+      );
+    }
+
     final snapshot = MosaicCustomerEntitlementSnapshot(
       snapshotId: fields.identifier('snapshotId'),
       billingCustomerId: fields.identifier('billingCustomerId'),
@@ -999,12 +1020,8 @@ final class MosaicCustomerEntitlementDecoder {
       contentDigest: fields.digest('contentDigest'),
       entries: entries,
       sources: sources,
-      projectionStatus: _projectionStatus(fields.object('projectionStatus')),
-      changeReason: fields.enumeration(
-        'changeReason',
-        MosaicCustomerChangeReason.values,
-        (value) => value.wireValue,
-      ),
+      projectionStatus: projectionStatus,
+      changeReason: changeReason,
       correlationId: fields.identifier('correlationId'),
       diagnostics: fields
           .optionalList('diagnostics', maximum: 10)

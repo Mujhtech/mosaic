@@ -32,7 +32,7 @@ void main() {
             // failure here means Dart's canonical serialization has drifted
             // from the four other implementations.
             expect(contentDigestValid, isTrue);
-            expect(snapshot.snapshotVersion, greaterThan(0));
+            expect(snapshot.snapshotVersion, greaterThanOrEqualTo(0));
             expect(snapshot.correlationId, isNotEmpty);
           case MosaicCustomerUnchangedRecord(:final unchanged):
             expect(unchanged.snapshotVersion, greaterThan(0));
