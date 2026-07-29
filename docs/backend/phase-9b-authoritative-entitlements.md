@@ -121,11 +121,36 @@ Go's agreement with the other four implementations is pinned by
 
 ### Conditional requests and freshness
 
-A `304 Not Modified` is returned only when **both** the caller's stated snapshot version and its
+A snapshot is reported unchanged only when **both** the caller's stated snapshot version and its
 entity tag match. The entity tag is an opaque equality token with no ordering; confirming on it
-alone would confirm a cache whose monotonicity nobody checked.
+alone would confirm a cache whose monotonicity nobody checked. The version is stated in the
+`entitlementSyncRequest` body, so only the POST form can state one.
 
-A 304 carries no body, so the freshness window travels as headers on every response:
+**The negotiated POST form always answers `200` with the canonical `snapshotUnchanged` record —
+never a bare `304`, and not even when `If-None-Match` is present.** This is the ratified
+cross-SDK flow, and the reason is the contract rather than HTTP: a 304 carries no body, so the
+freshness window would have to travel in `Mosaic-…` headers that **no frozen schema defines**.
+Three SDKs each reading freshness out of undocumented header names is freshness the
+Authoritative Entitlement Contract cannot guarantee, and the first platform to mistype one
+silently expires a paying customer's cache while the device is demonstrably in contact with the
+server. The `snapshotUnchanged` record carries `refreshAfter`, `validUntil`, and
+`staleGraceSeconds` inside the schema every SDK already validates:
+
+```json
+{ "authoritativeEntitlementContractVersion": "1",
+  "recordType": "snapshotUnchanged",
+  "payload": { "snapshotVersion": 7, "entityTag": "ces.…",
+               "refreshAfter": "…", "validUntil": "…", "staleGraceSeconds": 86400,
+               "projectionStatus": { "state": "current", … } } }
+```
+
+Those three values are recomputed from the instant the request was answered, not echoed back
+from whatever the caller last held. That is what "confirming slides freshness" means: a device
+that keeps confirming the same version never expires while it is in contact with the server.
+
+The conditional `GET` form keeps `304`, because that is HTTP's own conditional form where an
+empty body is the point and intermediaries understand it. On that form alone the window travels
+as headers, which are also set on every response:
 
 | Header | Meaning |
 | --- | --- |
@@ -134,9 +159,12 @@ A 304 carries no body, so the freshness window travels as headers on every respo
 | `Mosaic-Valid-Until` | Hard end of authoritative validity. |
 | `Mosaic-Stale-Grace-Seconds` | Bounded window past `validUntil` in which previously active Entitlements may still be served, clearly marked stale. |
 
-This is what "304 slides freshness" means: a confirmed-current snapshot gets a fresh window, so
-a device that keeps confirming the same version never expires while it is demonstrably in
-contact with the server.
+> **Known gap.** The `GET` form has no way to state `knownSnapshotVersion` — only the POST body
+> carries it — so the version precondition is never satisfied and the conditional `GET` in
+> practice always answers `200` with a full snapshot. The `304` path is retained and gated to
+> `GET`, but it is unreachable until a version becomes statable on that form. SDKs use the POST
+> flow, which is unaffected. Tracked rather than papered over; adding a query parameter would be
+> new API surface and is not taken unilaterally.
 
 Defaults are one hour to refresh, seven days of validity, and twenty-four hours of bounded
 grace (OD-5), configurable per deployment. **The combined horizon — validity plus grace — is

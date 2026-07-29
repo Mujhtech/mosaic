@@ -1775,17 +1775,18 @@ paths:
         The response body is the contract's canonical serialization, byte for byte, because an
         SDK recomputes contentDigest over exactly the bytes it received.
 
-        Freshness travels as headers as well as inside the record, so a 304 — which carries no
-        body — still slides the caller's window. A confirmed-current snapshot therefore never
-        expires merely because it was confirmed instead of resent. The combined horizon
-        (validUntil minus issuedAt, plus staleGraceSeconds) never exceeds thirty days.
+        Freshness travels as headers as well as inside the record, so a confirmed-current
+        snapshot never expires merely because it was confirmed instead of resent. The negotiated
+        POST form carries the refreshed window in the snapshotUnchanged record body; the headers
+        are what a bodyless conditional GET would have. The combined horizon (validUntil minus
+        issuedAt, plus staleGraceSeconds) never exceeds thirty days.
 
         A customer with no committed projection in this Environment is answered with a valid
         snapshot carrying no entries and projectionStatus.state `pending`. That is `unknown`,
         never `inactive`: absence of evidence is not evidence of absence.
       parameters:
         - { in: header, name: Mosaic-SDK-Key, required: true, schema: { type: string }, description: Public SDK key identifying the Environment and Application. }
-        - { in: header, name: If-None-Match, required: false, schema: { type: string }, description: Strong entity tag from a previous response. Answered 304 only when the caller's snapshot version also matches. }
+        - { in: header, name: If-None-Match, required: false, schema: { type: string }, description: "Strong entity tag from a previous response. A 304 additionally requires the caller's snapshot version to match, and this form has no way to state one, so it currently always answers 200 with a full snapshot. Use the POST form for the conditional flow." }
       responses:
         "200":
           description: The current Customer Entitlement Snapshot.
@@ -1793,10 +1794,14 @@ paths:
             ETag: { schema: { type: string }, description: Opaque equality validator. It carries no ordering; snapshot monotonicity is decided by snapshotVersion alone. }
             Mosaic-Refresh-After: { schema: { type: string, format: date-time }, description: After this instant a reader should refresh. The snapshot stays fully valid. }
             Mosaic-Valid-Until: { schema: { type: string, format: date-time }, description: Hard end of authoritative validity. }
-            Mosaic-Stale-Grace-Seconds: { schema: { type: integer }, description: Bounded window past validUntil in which previously active Entitlements may still be served, clearly marked stale. Zero is a strict policy. }
+            Mosaic-Stale-Grace-Seconds: { schema: { type: integer }, description: "Bounded window past validUntil in which previously active Entitlements may still be served, clearly marked stale. Zero is a strict policy." }
           content: { application/json: { schema: { $ref: "#/components/schemas/CustomerEntitlementSnapshotRecord" } } }
         "304":
-          description: The cached snapshot is still current. No body; the freshness headers are refreshed.
+          description: |
+            The cached snapshot is still current. No body; the freshness headers are refreshed.
+            Presently unreachable: a 304 requires a stated knownSnapshotVersion and this form
+            carries no way to state one. Retained for the conditional GET semantics; SDKs use
+            the POST flow, which answers the snapshotUnchanged record instead.
           headers:
             ETag: { schema: { type: string } }
             Mosaic-Refresh-After: { schema: { type: string, format: date-time } }
@@ -1822,13 +1827,25 @@ paths:
 
         Narrowing removes both entries and the sources no remaining entry references, so a
         narrowed snapshot never carries an orphan source.
+
+        This is the ratified cross-SDK flow. A matching knownSnapshotVersion always answers 200
+        with the snapshotUnchanged record — regardless of If-None-Match — never a bare 304,
+        because the contract cannot guarantee freshness that lives only in undocumented headers.
       parameters:
         - { in: header, name: Mosaic-SDK-Key, required: true, schema: { type: string } }
         - { in: header, name: If-None-Match, required: false, schema: { type: string } }
       requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/EntitlementSyncRequestRecord" } } } }
       responses:
-        "200": { description: The current Customer Entitlement Snapshot., content: { application/json: { schema: { $ref: "#/components/schemas/CustomerEntitlementSnapshotRecord" } } } }
-        "304": { description: The cached snapshot is still current. }
+        "200":
+          description: |
+            The current Customer Entitlement Snapshot, or — when the stated knownSnapshotVersion
+            and entity tag both match — the canonical snapshotUnchanged record. This form never
+            answers 304: a bodyless response would force freshness into header names no frozen
+            schema defines, so the unchanged record carries refreshAfter, validUntil, and
+            staleGraceSeconds in the body instead, recomputed at the instant it was answered.
+          headers:
+            ETag: { schema: { type: string }, description: Opaque equality validator. Snapshot monotonicity is decided by snapshotVersion alone. }
+          content: { application/json: { schema: { $ref: "#/components/schemas/CustomerEntitlementSnapshotRecord" } } }
         "401": { $ref: "#/components/responses/Error" }
         "403": { $ref: "#/components/responses/Error" }
         "406": { $ref: "#/components/responses/Error" }

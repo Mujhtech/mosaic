@@ -296,15 +296,13 @@ func (h *Handler) syncEntitlements(w http.ResponseWriter, r *http.Request) {
 	// If-None-Match is honoured on both verbs. The header and the body member
 	// mean the same thing; the header wins when both are present because it is
 	// the one HTTP intermediaries can also act on.
+	// A conditional request that states no version is still forwarded with its
+	// tag, and is still answered with a full snapshot: the service treats
+	// version equality as a precondition of `unchanged`, because a matching tag
+	// alone would confirm a cache without proving monotonicity. That check
+	// lives in the service rather than here, so both verbs get it.
 	if tag := strings.TrimSpace(r.Header.Get("If-None-Match")); tag != "" {
 		request.EntityTag = strings.Trim(tag, `"`)
-		if request.KnownSnapshotVersion == 0 {
-			// A conditional request with no stated version cannot be answered
-			// as unchanged, because version equality is what makes the answer
-			// safe. The tag alone would confirm a cache without proving
-			// monotonicity.
-			request.EntityTag = strings.Trim(tag, `"`)
-		}
 	}
 
 	result, err := h.service.Sync(r.Context(), authenticated, request)
@@ -323,7 +321,21 @@ func (h *Handler) syncEntitlements(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Mosaic-Valid-Until", billingaccess.ContractTimestamp(result.ValidUntil))
 	w.Header().Set("Mosaic-Stale-Grace-Seconds", strconv.Itoa(int(result.StaleGrace/time.Second)))
 
-	if result.Unchanged && strings.TrimSpace(r.Header.Get("If-None-Match")) != "" {
+	// 304 belongs to the conditional GET and to nothing else.
+	//
+	// POST is the ratified cross-SDK flow, and it always answers 200 with the
+	// canonical `snapshotUnchanged` record — even when If-None-Match is
+	// present. The record carries refreshAfter, validUntil, and
+	// staleGraceSeconds inside a frozen schema every SDK already validates,
+	// whereas a bare 304 carries no body and would force all three platforms to
+	// read freshness out of `Mosaic-…` header names that no schema defines.
+	// Freshness that only exists in undocumented headers is freshness the
+	// contract cannot guarantee, so the negotiated form never relies on it.
+	//
+	// The conditional GET keeps 304 because that is HTTP's own form, where an
+	// empty body is the point and the headers are the only channel available.
+	if result.Unchanged && r.Method == http.MethodGet &&
+		strings.TrimSpace(r.Header.Get("If-None-Match")) != "" {
 		response.Representation(w, http.StatusNotModified, contractContentType, nil)
 		return
 	}
