@@ -1162,3 +1162,195 @@ then re-run this driver unchanged. It is written to be re-run, and every
 substitution it currently performs (`bridge()`, the second operator mux, the
 direct customer-scope reprojection) should be deletable once the corresponding
 defect is fixed — which makes the driver its own regression check for all five.
+
+---
+
+## 13. Fixes verified (Stage 4 defect pass, 2026-07-29)
+
+Everything above §12 is the original finding record and is left exactly as it
+was written. This section appends what changed and what a re-run of the same
+driver produced. The same honesty rule applies: every verdict below is backed by
+a run recorded here, and D-1 is reported as **not fixed** because it is not.
+
+### Disposition
+
+| Defect | Severity | Disposition |
+| --- | --- | --- |
+| D-1 — the 9A→9B seam is not wired | critical | **Partially addressed.** The canonical lineage-key domain is corrected; the seam itself is **not wired**. See below. |
+| D-2 — restore-sync reads a column that does not exist | critical | **Fixed and verified.** |
+| D-3 — the router panics whenever billing is enabled | critical | **Fixed and verified.** |
+| D-4 — a fact on one lineage recomputes the aggregate from that lineage alone | critical | **Fixed and verified.** |
+| D-5 — the conditional GET can never return 304 | medium | **Fixed by removal, verified.** |
+
+### D-3 — router composition
+
+Three modules opened their own `chi.Route()` on
+`/environments/{environmentId}/billing`. The subrouter is now created once by
+`httpserver.NewWithDependencies` and `billinghttp`, `billingoperatorhttp`, and
+`billingwebhookhttp` each register into it through a new
+`RegisterEnvironmentRoutes`. Every published URL is unchanged, so the
+dashboard's generated client paths and `docs/backend/openapi.yaml` are
+untouched. The `/v1` and Project subtree gates no longer depend on the Phase 9A
+ingestion module; they check every dashboard-facing billing module.
+
+The driver's second operator mux is deleted. Demonstration 12 now runs against
+the standard composition, on the same server as every other surface.
+
+Regression: `TestFullBillingCompositionMountsWithoutCollision` builds the full
+production dependency set and asserts no panic plus a reachable route from each
+colliding surface; `TestBillingOperatorRegistersWithoutPhase9AIngestion` asserts
+the operator surface registers alone.
+
+### D-2 — restore chain read
+
+The stage-3 join now uses `purchase_chain_digest ↔ lineage_key_digest`, scoped
+by Environment and provider. A `LoadChain` error is no longer absorbed as
+`(true, nil)`: it reaches the worker loop, and an attempt-exhausted job is
+completed as `failed` so `restoreFailedJobs` counts it.
+
+Demonstration 10 in the re-run, where the original run recorded
+`queued / validation_pending` forever:
+
+```text
+SQL: restore job state
+  status    | attempt_count | outcome                 | uncertainty_reason | baseline_snapshot_version
+  ----------+---------------+-------------------------+--------------------+--------------------------
+  completed | 2             | no_additional_purchases | none               | 9
+```
+
+And on the operator surface that reported the symptom in §7, `restoreBacklog` is
+now `0` rather than `1`.
+
+Regressions: `TestLoadChainResolvesTheCustomerThroughTheLineageDigest`
+(integration — the defect was a non-existent column, which only a real database
+catches) and `TestChainReadFailureSurfacesToTheWorker` (unit, both the retryable
+and the exhausted path).
+
+### D-4 — accidental revocation
+
+Ruling applied: a customer entitlement snapshot is only ever minted at customer
+scope from **all** of the customer's lineages. `enqueueProjectionForFact` writes
+either a customer scope with no lineage or a lineage scope with no customer, and
+`Job.Scope()` enforces the same rule for rows queued before the fix. A
+lineage-scoped command that finds its lineage has acquired a customer escalates
+by enqueueing customer scope rather than deriving an aggregate itself. The
+coalescing index keeps its meaning because `customer:…` and `lineage:…` keys can
+no longer stand for two different amounts of work.
+
+Demonstration 5 in the re-run, through the queued path alone and with the
+driver's direct-reprojection workaround deleted:
+
+```text
+snapshot_version 4 | pro | active | source_count 3 | explanation_code permanent_source_active
+  active_subscription     | inactive | subscription_expired    | T-3h  → T-1h
+  active_subscription     | inactive | subscription_expired    | T-30m → T-10m
+  one_time_non_consumable | active   | one_time_purchase_owned | T-20m → (none)
+```
+
+Three sources, `pro` active through the lifetime purchase, after the
+subscription expired — the state the original run could only reach by bypassing
+the queue.
+
+Regression: `TestFactOnOneLineageDoesNotRevokeTheCustomersOthers` is
+demonstration 5 reduced to its failing core, as an integration test. It was
+confirmed to fail against the pre-fix code before the fix was restored.
+
+### D-5 — conditional GET
+
+Removed rather than made reachable. The `GET` form is a plain `200`
+full-snapshot read with no `If-None-Match` parameter and no `304` response; the
+POST body's `knownSnapshotVersion` is the one conditional mechanism, and it is
+the one all three SDKs use. Handler, its pinning test, `docs/backend/openapi.yaml`,
+and the backend doc's known-gap section are updated.
+
+**For the protocol owner:** `docs/protocol/authoritative-entitlement-v1.md`
+still describes conditional `GET` as a server-side option. That file is
+protocol-owned and was not edited here; it needs a one-line correction.
+
+### D-1 — not fixed
+
+The canonical-domain half of the writeup is resolved:
+`billingcustomer.LineageKey` now digests in the fact's own domain
+(`billing.AppleTransactionKey` / `billing.TokenDigest`), so a lineage created
+through it can join to the facts it was created for. That function had no
+production caller, so the change is corrective and carries no migration.
+
+The seam itself — creating the lineage, the instance rows, the association
+evidence, and the supersession edge when a validated fact commits — is **not
+wired**. The driver's `bridge()` substitution is still present and still prints
+`SUBSTITUTION bridge:` on every use. §2's classification of it stands unchanged,
+as does §9 D-1's evidence.
+
+The blocking question found while designing it is worth recording, because it is
+not an implementation detail: **nothing in production can name the Billing
+Customer a store notification belongs to.** The observation contract carries no
+customer correlator, `appstorejws` deliberately does not parse `appAccountToken`
+(a Phase 9A scope decision), and no API attaches a lineage to a customer. The
+only evidence a deployed system could offer the resolver today is a prior
+association on the same lineage. Plan §5a rule 1 answers this — "a validated
+purchase fact needs somewhere to attach", and §5a's dashboard consequence
+distinguishes "identified" from "purchase-anchored, not yet identified" — so the
+seam must lazily create a purchase-anchored Billing Customer when no evidence
+resolves one. That needs a new `billing_association_evidence.evidence_type`
+value and therefore a migration, and it changes what the demonstration's
+identity flow looks like: demonstrations 1–12 currently create the customer
+first through the trusted identity API and expect purchases to land on it, which
+no production path makes happen. Both are decisions above this pass.
+
+### Re-run results
+
+Driver run unchanged apart from the deleted substitutions, against
+`mosaic-9b-demo-pg`:
+
+| Run | Result |
+| --- | --- |
+| `-phase 9b` (first) | green, 1m25.7s |
+| `-phase 9b` (second, consecutive) | green |
+| `-phase oneminute` | green, 0.987s |
+
+The wall-clock is longer than the original 34–49 s because demonstration 13 now
+retries a delivery on its *second* attempt, whose backoff is one step further up
+the schedule than the first attempt's was.
+
+| # | Demonstration | Verdict after the fixes |
+| --- | --- | --- |
+| 1 | Initial subscription | PASS |
+| 2 | Renewal | PASS |
+| 3 | Cancellation without immediate revocation | PASS |
+| 4 | Expiration | PASS |
+| 5 | Multiple sources | **PASS** through the queued path (was FAIL, D-4) |
+| 6 | Refund or revocation | PASS |
+| 7 | Grace and recovery | PASS |
+| 8 | Out-of-order fact | PASS |
+| 9 | Upgrade or downgrade | PASS |
+| 10 | Restore across devices | **PASS** (was FAIL, D-2) |
+| 11 | Offline cache (wire level) | **PASS** — the GET form is a documented full-snapshot read (was PARTIAL, D-5) |
+| 12 | Identity conflict | PASS, now on the standard composition (was on a second mux, D-3) |
+| 13 | Webhook retry | PASS, retrying a replayed delivery — see the note below |
+| 14 | Replay and rule versions | PASS |
+| — | One-minute demonstration | PASS |
+
+**Demonstration 13 changed shape, and the reason is D-4's fix.** It used to
+retry the delivery produced by a `REVOKE` on the conflict lineage. At that point
+in the scenario the customer holds several granting sources, so revoking one
+changes no Entitlement state — Mosaic correctly mints no snapshot and emits no
+event, and the event the demonstration used to retry existed only because the
+aggregate was being recomputed from a single lineage. The demonstration now
+re-queues an already-committed delivery through the operator replay API
+(`POST .../billing/webhook-deliveries/{deliveryId}/replay`), which preserves
+every property it asserts — a stable event id, a byte-identical body across
+attempts, a real jittered backoff, an append-only attempt history — and reaches
+them through a surface an operator actually uses.
+
+### Checks run
+
+| Check | Result |
+| --- | --- |
+| `gofmt -l apps/api` | clean |
+| `go build ./...` | clean |
+| `go vet ./...` and `go vet -tags billingdemo ./...` | clean |
+| `DATABASE_TEST_URL=… go test -p 1 -count=1 ./...` | pass |
+| Driver `-phase 9b`, twice | green |
+| Driver `-phase oneminute` | green |
+
+No migration changed in this pass, so no up→down→up cycle was required.

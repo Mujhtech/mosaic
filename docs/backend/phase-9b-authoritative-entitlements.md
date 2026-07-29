@@ -779,6 +779,25 @@ nothing is partitioned — so the trend has to start being recorded before it is
 come from planner statistics rather than `count(*)`, because an exact count of the whole 9B schema
 on every scrape is a self-inflicted load problem and the question being asked is a trend question.
 
+### Operational note: a systematic intake failure is hard to read from quarantine alone
+
+Phase 9A's quarantine surface records **one row per credential per reason per hour**, and the
+notification identifiers behind it are not recoverable from that row. That is the deliberate
+unbounded-growth control and it is the right trade — a store that starts rejecting every
+notification would otherwise write a row per delivery — but it has a diagnostic cost worth
+knowing before it is paid.
+
+The Phase 9B demonstration hit exactly that case (`docs/reviews/phase-9b-demo-evidence.md`,
+D-0): seven of eighteen notifications were accepted with `202`, produced no Raw Billing Input,
+and collapsed into a single `signature_invalid`/`intake_attribution_failed` row. Nothing was
+wrong with Mosaic — the payloads' signing chain had genuinely expired as of their `signedDate` —
+but from the quarantine surface alone the operator can see only that *something* in that hour
+failed signature verification, not which deliveries or how many.
+
+When intake starts failing systematically, read the ledger and the raw-input counts alongside
+quarantine rather than the quarantine surface on its own: the count of inputs accepted versus
+facts recorded over the same window is what makes the size of the problem visible.
+
 ## Observability
 
 Spans: `billing.token.issue`, `billing.token.revoke`, `billing.entitlement.sync`,
