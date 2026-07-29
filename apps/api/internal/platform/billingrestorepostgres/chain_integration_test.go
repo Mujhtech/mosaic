@@ -190,16 +190,19 @@ func seedRestoreTenant(t *testing.T, ctx context.Context, pool *pgxpool.Pool, su
 	return scope
 }
 
+// appendOnlyTables carry triggers that refuse UPDATE and DELETE. They are
+// disabled for the teardown of this test's own rows only; nothing in the
+// package's code path touches them.
+var appendOnlyTables = []string{
+	"restore_sync_job_inputs",
+	"billing_transaction_facts",
+	"billing_validation_attempts",
+	"billing_raw_inputs",
+}
+
 func cleanupRestoreTenant(ctx context.Context, pool *pgxpool.Pool, projectID string) {
-	// The fact and raw-input tables carry append-only triggers. They are
-	// disabled for teardown of this test's own rows only; nothing in the
-	// package's code path touches them.
-	for _, table := range []struct{ name, trigger string }{
-		{"billing_transaction_facts", "billing_transaction_facts_append_only"},
-		{"billing_validation_attempts", "billing_validation_attempts_append_only"},
-		{"billing_raw_inputs", "billing_raw_inputs_append_only"},
-	} {
-		_, _ = pool.Exec(ctx, `ALTER TABLE `+table.name+` DISABLE TRIGGER `+table.trigger)
+	for _, table := range appendOnlyTables {
+		_, _ = pool.Exec(ctx, `ALTER TABLE `+table+` DISABLE TRIGGER USER`)
 	}
 	for _, statement := range []string{
 		`DELETE FROM restore_sync_job_inputs WHERE project_id=$1`,
@@ -212,11 +215,7 @@ func cleanupRestoreTenant(ctx context.Context, pool *pgxpool.Pool, projectID str
 	} {
 		_, _ = pool.Exec(ctx, statement, projectID)
 	}
-	for _, table := range []struct{ name, trigger string }{
-		{"billing_transaction_facts", "billing_transaction_facts_append_only"},
-		{"billing_validation_attempts", "billing_validation_attempts_append_only"},
-		{"billing_raw_inputs", "billing_raw_inputs_append_only"},
-	} {
-		_, _ = pool.Exec(ctx, `ALTER TABLE `+table.name+` ENABLE TRIGGER `+table.trigger)
+	for _, table := range appendOnlyTables {
+		_, _ = pool.Exec(ctx, `ALTER TABLE `+table+` ENABLE TRIGGER USER`)
 	}
 }

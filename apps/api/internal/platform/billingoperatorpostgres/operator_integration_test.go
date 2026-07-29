@@ -243,6 +243,13 @@ func newSurface(t *testing.T, pool *pgxpool.Pool) *surface {
 	})))
 	router.Route("/v1/projects/{projectId}", func(project chi.Router) {
 		billingoperatorhttp.RegisterProjectRoutes(project, service)
+		// The Environment-scoped half is registered into a subrouter the
+		// composition owns, because three modules publish routes under that one
+		// path and chi refuses to Mount() twice on it (defect D-3). This mirrors
+		// what httpserver.NewWithDependencies does.
+		project.Route("/environments/{environmentId}/billing", func(environment chi.Router) {
+			billingoperatorhttp.RegisterEnvironmentRoutes(environment, service)
+		})
 	})
 	return &surface{handler: router, reprojector: reprojector, actorID: &actorID}
 }

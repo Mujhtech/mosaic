@@ -521,21 +521,13 @@ func (d *demo) demo5MultipleSources() error {
 	if err := d.bridge(d.customerA); err != nil {
 		return err
 	}
-	if err := d.projectQueued(d.customerA); err != nil {
+	if err := d.project(d.customerA); err != nil {
 		return err
 	}
-	d.note("DEFECT D-4 — the state below is what a deployed worker produces after the expiration.")
-	d.note("The lifetime source and the earlier subscription source have vanished from the customer")
-	d.note("aggregate, and `pro` reads inactive even though a valid, unrefunded lifetime purchase is")
-	d.note("recorded. Nothing revoked it: the projection job carried a lineage id alongside the")
-	d.note("customer id, so the aggregate was recomputed from one lineage.")
-	d.showCustomerSnapshot()
-	d.showSources()
-
-	d.step("The same command with no lineage restriction derives the correct answer")
-	if err := d.projectDirect(d.customerA); err != nil {
-		return err
-	}
+	d.note("Defect D-4 is fixed. The state below is what a deployed worker produces after the")
+	d.note("expiration, through the queued path alone: the lifetime source still grants `pro`, and")
+	d.note("both subscription sources remain in the aggregate. The projection job carries a customer")
+	d.note("id and no lineage id, so the aggregate is computed from every lineage the customer owns.")
 	d.showCustomerSnapshot()
 	d.showSources()
 	d.query("the job the worker actually ran, and what it was scoped to",
@@ -952,15 +944,19 @@ func (d *demo) demo10Restore() error {
 			time.Sleep(3 * time.Second)
 		}
 	}
-	d.step("Why the restore never settles: the chain read joins a column that does not exist")
+	d.step("The restore settles: the chain read resolves facts to lineages by chain digest")
+	d.note("Defect D-2 is fixed. The stage-3 identity read used to join")
+	d.note("billing_transaction_facts.purchase_lineage_id, a column no migration creates, so every")
+	d.note("restore failed with SQLSTATE 42703, burned its attempts, and reported validation_pending")
+	d.note("forever. The probe below runs the relationship the repository now uses.")
 	d.probe("billingrestorepostgres stage-3 identity chain read (repository.go)",
 		`SELECT count(*) FROM restore_sync_job_inputs i
 		 JOIN billing_transaction_facts f ON f.source_raw_input_id = i.raw_input_id
-		 JOIN purchase_lineages l ON l.id = f.purchase_lineage_id
+		 JOIN purchase_lineages l
+		   ON l.environment_id = f.environment_id
+		  AND l.provider = f.provider
+		  AND l.lineage_key_digest = f.purchase_chain_digest
 		 WHERE i.project_id = $1`, projectID9B)
-	d.probe("billing_transaction_facts has no such column",
-		`SELECT count(*) AS lineage_columns_on_facts FROM information_schema.columns
-		 WHERE table_name='billing_transaction_facts' AND column_name='purchase_lineage_id'`)
 	d.query("restore job state",
 		`SELECT status, attempt_count, COALESCE(outcome,'-') AS outcome,
 		        COALESCE(uncertainty_reason,'-') AS uncertainty_reason,
@@ -1012,19 +1008,20 @@ func (d *demo) demo11OfflineCache() error {
 	d.http("POST /v1/sdk/billing/entitlements (knownSnapshotVersion set)", status, body)
 	d.note("still 200 with a body: the negotiated SDK form never relies on freshness that lives only in headers")
 
-	d.step("The conditional GET")
+	d.step("The GET form: a plain full-snapshot read")
 	status, body, headers = d.sdkConditionalGet(d.tokenA, snapshot.Payload.EntityTag)
 	d.http("GET /v1/sdk/billing/entitlements (If-None-Match)", status, truncate(body, 400))
 	d.note("answered %d with refresh-after=%s valid-until=%s stale-grace-seconds=%s",
 		status, headers.Get("Mosaic-Refresh-After"), headers.Get("Mosaic-Valid-Until"),
 		headers.Get("Mosaic-Stale-Grace-Seconds"))
-	if status != http.StatusNotModified {
-		d.note("DEFECT D-5 — the documented 304 path is unreachable. billingaccess.Sync treats a")
-		d.note("matching snapshot version as a precondition of `unchanged`, and a GET has no body in")
-		d.note("which to carry `knownSnapshotVersion`, so `If-None-Match` alone can never satisfy it.")
-		d.note("Every conditional GET returns a full snapshot; the bandwidth saving the surface")
-		d.note("advertises does not exist on that verb. The POST form is unaffected.")
+	if status != http.StatusOK {
+		return fmt.Errorf("the GET form must answer 200 with a full snapshot; got %d", status)
 	}
+	d.note("Defect D-5 is fixed by removal: the GET form is a plain full-snapshot read. It carries no")
+	d.note("way to state a snapshot version, version equality is a precondition of `unchanged`, and")
+	d.note("the 304 branch was therefore dead on every request that could have taken it. The POST")
+	d.note("body's knownSnapshotVersion is the one conditional mechanism, and it is the one all")
+	d.note("three SDKs use.")
 
 	d.step("A stale known version is answered with the current snapshot, never with the older one")
 	status, body, _ = d.sdkSync(d.tokenA, 1, "", nil)
@@ -1166,25 +1163,30 @@ func (d *demo) demo13WebhookRetry() error {
 	d.step("Make the destination fail its next delivery")
 	d.destination.failNext(http.StatusServiceUnavailable, 1)
 
-	d.step("Commit an entitlement change: revoke the conflict lineage's subscription")
-	if err := d.deliverApple(appleEvent{
-		NotificationUUID: "9b000012-0000-4000-8000-000000000012",
-		NotificationType: "REVOKE", SignedAt: d.at(-30 * time.Second),
-		Transaction: transactionVector{
-			TransactionID: "3000000900000019", OriginalTransactionID: lineageConflict,
-			ProductID: appleMonthly9B, PurchaseDate: d.at(-9 * time.Minute),
-			ExpiresDate:    timePointer(d.at(30 * 24 * time.Hour)),
-			RevocationDate: timePointer(d.at(-30 * time.Second)), RevocationReason: intPointer(1),
-			SignedDate: d.at(-30 * time.Second),
-		},
-	}); err != nil {
-		return err
+	// The retried delivery is an already-committed entitlement change, re-queued
+	// through the operator replay surface.
+	//
+	// It used to be a REVOKE on the conflict lineage. That stopped producing an
+	// event once defect D-4 was fixed, and the reason is the fix working: the
+	// customer holds several granting sources at this point in the scenario, so
+	// revoking one changes no Entitlement state and Mosaic correctly mints no
+	// snapshot and emits no event. The event the demonstration used to retry was
+	// an artefact of the aggregate being recomputed from one lineage.
+	//
+	// Replaying a committed delivery keeps every property this demonstration is
+	// about — a stable event id, a byte-identical body across attempts, a real
+	// jittered backoff, an append-only attempt history — and reaches them
+	// through the operator API a person would actually use.
+	d.step("Re-queue a committed entitlement change through the operator replay surface")
+	deliveryID := d.lastDeliveryID()
+	if deliveryID == "" {
+		return fmt.Errorf("no committed webhook delivery to replay")
 	}
-	if err := d.bridge(d.customerA); err != nil {
-		return err
-	}
-	if err := d.project(d.customerA); err != nil {
-		return err
+	status, body := d.actor9B(http.MethodPost,
+		"/v1/projects/"+projectID9B+"/billing/webhook-deliveries/"+deliveryID+"/replay", nil)
+	d.http("POST .../billing/webhook-deliveries/{deliveryId}/replay", status, truncate(body, 240))
+	if status != http.StatusOK && status != http.StatusAccepted {
+		return fmt.Errorf("replay returned %d", status)
 	}
 
 	d.step("Attempt delivery: the destination is down")
@@ -1559,35 +1561,15 @@ func (d *demo) projectQueued(customerID string) error {
 	return d.drainProjection(12)
 }
 
-// projectDirect runs one customer-scoped projection command with no lineage
-// restriction, bypassing the job queue.
+// project drives one customer projection exactly as a deployed worker does:
+// enqueue through the real trigger, drain with the real job function.
 //
-// WORKAROUND for defect D-4, demonstrated in full in demonstration 5. The
-// queued path above cannot be relied on to recompute a customer aggregate:
-// `enqueueProjectionForFact` writes a job whose detail carries both a customer
-// id and the one lineage the fact belonged to, `Job.Scope()` restores both,
-// and `loadLineages` then filters to that single lineage while `Compute` still
-// mints a full customer snapshot — silently dropping every other Entitlement
-// Source the customer holds. The scope-key coalescer makes it worse: a
-// correct customer-wide trigger is absorbed by the lineage-restricted job
-// already queued under the same scope key.
-//
-// Every demonstration after 5 therefore finishes with this direct command, so
-// the state the later demonstrations reason about is the state the projection
-// engine actually derives. The engine is not being worked around; the job
-// scoping is.
-func (d *demo) projectDirect(customerID string) error {
-	_, err := d.projection.Project(d.ctx, billingprojection.Scope{
-		ProjectID: projectID9B, EnvironmentID: environmentID9B, CustomerID: customerID,
-	}, "")
-	return err
-}
-
+// The direct customer-scoped `Project` call this used to end with was the
+// workaround for defect D-4, which is fixed: the queued path now carries a
+// customer id and no lineage id, so it recomputes the aggregate from every
+// lineage the customer holds.
 func (d *demo) project(customerID string) error {
-	if err := d.projectQueued(customerID); err != nil {
-		return err
-	}
-	return d.projectDirect(customerID)
+	return d.projectQueued(customerID)
 }
 
 func (d *demo) drainProjection(limit int) error {

@@ -428,3 +428,14 @@ func (d *demo) probe(label, sql string, args ...any) {
 		fmt.Printf("      FAILED: %v\n", err)
 	}
 }
+
+// lastDeliveryID names the most recently succeeded webhook delivery, which is
+// what demonstration 13 re-queues through the operator replay surface.
+func (d *demo) lastDeliveryID() string {
+	var id string
+	_ = d.pool.QueryRow(d.ctx,
+		`SELECT id FROM webhook_deliveries
+		 WHERE project_id=$1 AND status='succeeded'
+		 ORDER BY updated_at DESC LIMIT 1`, projectID9B).Scan(&id)
+	return id
+}
