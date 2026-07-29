@@ -1406,3 +1406,47 @@ second operator mux, the direct customer-scope reprojection — is gone, and wha
 synthetic is only what §2 listed as unavoidable: the Apple signing chain, the provider stubs, the
 webhook destination and its trust anchor, the dashboard principal resolver, and the SDKs
 themselves.
+
+## Stage 5 final verification (2026-07-29)
+
+This section is append-only and supersedes two authority details in the earlier Stage 4
+transcript. A Customer Access Token presented with a **public SDK key** now records
+`token_bound_submission`, below an established lineage association; it may attach an unattached
+lineage but cannot move or freeze an attached one. Only the trusted-server observation endpoint,
+authenticated by the Project's secret server key, records `trusted_server_observation`.
+Demonstration 12 therefore opens its intentional conflict when Customer B's trusted backend
+reports the lineage's next renewal transaction and the provider notification validates it. The
+result is `reassignment_requires_operator_resolution`, the incumbent remains attached, the
+lineage freezes, and the normal audited operator workflow resolves it.
+
+The Stage 5 review fixes also establish a strict, cross-platform version-0 placeholder for a
+customer that has never projected. It is `pending`, empty, carries no prior version, and may be
+used as `knownSnapshotVersion: 0`; the first ordinary committed snapshot replaces it at version
+1. The canonical fixture and generated cache-decision vector are consumed by Flutter, iOS, and
+Android.
+
+### Final demonstration results
+
+| Run | Result | Notes |
+| --- | --- | --- |
+| `go run -tags billingdemo ./cmd/billingdemo -phase 9b` | PASS, 1m4.724s | all 14 demonstrations; no substitutions; trusted-server identity conflict and stable-event retry green |
+| `go run -tags billingdemo ./cmd/billingdemo -phase oneminute` | PASS, 0.946s | purchase, cancellation, lifetime source, expiration, SDK wire, and signed webhook |
+
+### Final conformance results
+
+| Check | Result |
+| --- | --- |
+| migration `up -> down --confirm -> up` through `00050` | PASS |
+| `go run ./cmd/migrate preflight` | PASS: version 50, no pending migrations, not dirty, compatible |
+| `GOCACHE=... go test ./...` | PASS |
+| PostgreSQL `DATABASE_TEST_URL=... go test -p 1 ./...` | PASS on a disposable PostgreSQL 17 database |
+| dashboard `npm run check` | PASS: format, lint, typecheck, 592 Vitest tests, 7 relay tests, production build |
+| protocol `npm run check` | PASS: canonical validation and 184 tests |
+| Flutter `flutter test`; `flutter analyze`; format check | PASS: 355 tests, 2 existing skips; no analyzer or format findings |
+| iOS `swift test` | PASS: 203 tests, 1 existing skip |
+| Android `./gradlew :mosaic:testDebugUnitTest` | PASS |
+| `git diff --check` | PASS |
+
+The full driver uses local provider API/signing stubs and a local TLS webhook destination. Live
+Apple sandbox and Google Play test verification remains the owner-approved blocking
+pre-production follow-up; no live-provider result is claimed here.

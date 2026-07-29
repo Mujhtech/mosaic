@@ -1,6 +1,8 @@
 # Phase 9B Plan: Subscription State and Authoritative Entitlements
 
-Status: **Stage 2 in progress.** All 19 owner decisions in §2 approved
+Status: **Stage 5 complete; Phase 9B accepted with tracked follow-ups.** Stages
+2 and 3 are implemented, Stage 4 demonstrations pass after their recorded
+defect pass, and the Stage 5 reviews and fix round are complete. All 19 owner decisions in §2 approved
 as recommended by the owner on 2026-07-28 ("approve all
 recommendations"), including the OD-14 opaque-token deviation from the
 orchestration prompt's "signed" wording. Every recommendation column in
@@ -110,10 +112,11 @@ Implementation of gated sections must not begin until each is decided.
   snapshot-poll bound 3 attempts / ~6 s before `validation_pending`.
 - **Snapshot versioning**: `snapshotVersion` is a per-customer(-per-
   environment) monotonic integer and the sole cache-monotonicity key;
-  ETag is an opaque HTTP validator only; a no-change projection does
-  not advance the version (`lastProjectedAt` in projection status
-  does). `304` responses carry refreshed `refresh_after`/`valid_until`
-  as headers so a confirmed-current snapshot does not expire.
+  ETag is an opaque equality validator only; a no-change projection does
+  not advance the version (`lastProjectedAt` in projection status does).
+  The conditional POST answers `200` with `snapshotUnchanged`, including
+  refreshed freshness windows in its contract body. GET is unconditional and
+  never answers `304`.
 - **Entitlement entry shape**: `mosaicProductId` /
   `subscriptionInstanceId` live on source summaries, not duplicated on
   entries (deliberate deviation from the prompt's entry field list, to
@@ -174,7 +177,7 @@ As specified in the backend Stage 1A report Part 2 (adopted with the
 scoping amendment of OD-3(b)):
 
 - `billing_customers` (Project-scoped identity; `status` incl.
-  `frozen`/`anonymized`; diagnostics; audit).
+  `frozen`/`anonymized`/`absorbed`; diagnostics; audit).
 - `billing_customer_aliases` (typed; SHA-256 digest values with
   domain separation, never raw; partial-unique one active resolution
   per `(project, type, digest)`; end-dated history).
@@ -377,9 +380,11 @@ request is untouched.
   (state + explanation + version, never bare boolean), subscription
   list/snapshot/timeline, conflicts, restore/sync jobs, replay,
   `GET customer/{id}` direct.
-- SDK: `GET /v1/sdk/billing/entitlements` — customer token bearer,
-  ETag/`If-None-Match`/304, Access Decision Snapshot response, rate
-  limited. Public SDK key alone can never select a customer.
+- SDK: unconditional `GET /v1/sdk/billing/entitlements` plus conditional
+  `POST` sync — customer token bearer, opaque ETag equality, `200`
+  `snapshotUnchanged` when the posted known version is current, Access
+  Decision Snapshot response, rate limited. Public SDK key alone can never
+  select a customer.
 - Tokens per OD-14: opaque digests, ≤1h default, Environment- and
   customer-bound, revocable, issuance audited, second consumer of
   `secret_server` auth.
@@ -411,7 +416,7 @@ Shared design per the three Stage 1B reports, reconciled:
 - Acceptance gate: contract version, customer binding (mismatch ⇒
   clear cache + high-severity diagnostic), monotonic version, `as_of`
   regression, checksum, required fields. Rejected snapshots never
-  emit. 304 preserves cache and slides freshness.
+  emit. `snapshotUnchanged` preserves cache and slides freshness.
 - Observation: Flutter broadcast stream + `ChangeNotifier`; iOS
   `AsyncStream` fan-out with current-value replay; Android
   `StateFlow`. Explicit `Cleared`/`SignedOut`/`Loading` states so
@@ -499,7 +504,7 @@ grant selection determinism), identity (token cannot cross
 project/environment/customer; conflict ⇒ no double grant; logout/
 identity-change leak tests on all SDKs), concurrency (advisory-lock
 serialization; atomic pointer commit; idempotent retry), SDK cache
-(older/malformed/wrong-customer rejection; 304; offline expiry;
+(older/malformed/wrong-customer rejection; `snapshotUnchanged`; offline expiry;
 backup-exclusion regression guards), webhooks (signature vectors;
 stable event ID on retry; failure never rolls back state; SSRF), and
 the four 9A-defect regression tests named in the quality report
