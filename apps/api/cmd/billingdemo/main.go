@@ -44,6 +44,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"flag"
 	"fmt"
 	"io"
 	"net/http"
@@ -52,18 +53,37 @@ import (
 	"strings"
 	"time"
 
+	"github.com/go-chi/chi/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/rs/zerolog"
 
 	"github.com/Mujhtech/mosaic/apps/api/internal/billing"
+	"github.com/Mujhtech/mosaic/apps/api/internal/billingaccess"
+	"github.com/Mujhtech/mosaic/apps/api/internal/billingcustomer"
+	"github.com/Mujhtech/mosaic/apps/api/internal/billingdiagnostics"
+	"github.com/Mujhtech/mosaic/apps/api/internal/billinggrant"
+	"github.com/Mujhtech/mosaic/apps/api/internal/billingoperator"
+	"github.com/Mujhtech/mosaic/apps/api/internal/billingprojection"
+	"github.com/Mujhtech/mosaic/apps/api/internal/billingrestore"
+	"github.com/Mujhtech/mosaic/apps/api/internal/billingwebhook"
 	"github.com/Mujhtech/mosaic/apps/api/internal/platform/appstorejws"
 	"github.com/Mujhtech/mosaic/apps/api/internal/platform/appstoreserver"
 	"github.com/Mujhtech/mosaic/apps/api/internal/platform/authn"
+	"github.com/Mujhtech/mosaic/apps/api/internal/platform/billingaccesspostgres"
+	"github.com/Mujhtech/mosaic/apps/api/internal/platform/billingcustomerpostgres"
+	"github.com/Mujhtech/mosaic/apps/api/internal/platform/billingdiagnosticspostgres"
+	"github.com/Mujhtech/mosaic/apps/api/internal/platform/billinggrantpostgres"
+	"github.com/Mujhtech/mosaic/apps/api/internal/platform/billingkeys"
+	"github.com/Mujhtech/mosaic/apps/api/internal/platform/billingoperatorpostgres"
 	"github.com/Mujhtech/mosaic/apps/api/internal/platform/billingpostgres"
+	"github.com/Mujhtech/mosaic/apps/api/internal/platform/billingprojectionpostgres"
+	"github.com/Mujhtech/mosaic/apps/api/internal/platform/billingrestorepostgres"
+	"github.com/Mujhtech/mosaic/apps/api/internal/platform/billingwebhookpostgres"
 	"github.com/Mujhtech/mosaic/apps/api/internal/platform/googleplay"
 	"github.com/Mujhtech/mosaic/apps/api/internal/platform/httpserver"
 	"github.com/Mujhtech/mosaic/apps/api/internal/platform/ratelimit"
 	"github.com/Mujhtech/mosaic/apps/api/internal/providercredential"
+	billingoperatorhttp "github.com/Mujhtech/mosaic/apps/api/internal/transport/billingoperator"
 )
 
 func main() {
@@ -78,6 +98,8 @@ type demo struct {
 	pool    *pgxpool.Pool
 	service *billing.Service
 	server  *httptest.Server
+	// operatorServer carries the Phase 9B operator surface. See wire().
+	operatorServer *httptest.Server
 
 	apple  *appleStub
 	play   *playStub
@@ -94,14 +116,44 @@ type demo struct {
 
 	stepNumber int
 	started    time.Time
+
+	// Phase 9B services. They are the same constructions cmd/api and cmd/worker
+	// perform; only the two substitutions named in wire() differ.
+	projection  *billingprojection.Service
+	identity    *billingcustomer.Service
+	access      *billingaccess.Service
+	grants      *billinggrant.Service
+	webhooks    *billingwebhook.Service
+	restores    *billingrestore.Service
+	diagnostics *billingdiagnostics.Service
+	operator    *billingoperator.Service
+
+	tlsMaterial demoTLS
+	destination *destinationStub
+
+	// Phase 9B tenant credentials and run state.
+	publicKey9B      apiKey
+	serverKey9B      apiKey
+	intakePath9B     string
+	credentialID9B   string
+	customerA        string
+	customerB        string
+	tokenA           string
+	destinationID    string
+	demoNumber       int
+	oneMinute        bool
+	scenarioBaseline time.Time
 }
 
 func run() error {
+	phase := flag.String("phase", "9b", "which demonstration to run: 9a, 9b, all, or oneminute")
+	flag.Parse()
+
 	databaseURL := strings.TrimSpace(os.Getenv("DATABASE_URL"))
 	if databaseURL == "" {
 		return errors.New("DATABASE_URL is required")
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Minute)
 	defer cancel()
 
 	pool, err := pgxpool.New(ctx, databaseURL)
@@ -115,8 +167,34 @@ func run() error {
 		return err
 	}
 	defer d.server.Close()
+	defer d.operatorServer.Close()
+	defer d.destination.close()
 
-	for _, stage := range []func() error{
+	stages := []func() error(nil)
+	switch *phase {
+	case "9a":
+		stages = d.stages9A()
+	case "9b":
+		stages = d.stages9B()
+	case "all":
+		stages = append(d.stages9A(), d.stages9B()...)
+	case "oneminute":
+		d.oneMinute = true
+		stages = []func() error{d.stageOneMinute}
+	default:
+		return fmt.Errorf("unknown -phase %q", *phase)
+	}
+	for _, stage := range stages {
+		if err := stage(); err != nil {
+			return err
+		}
+	}
+	fmt.Printf("\n=== demonstration complete in %s ===\n", time.Since(d.started).Round(time.Millisecond))
+	return nil
+}
+
+func (d *demo) stages9A() []func() error {
+	return []func() error{
 		d.stageSetup,
 		d.stageApple,
 		d.stageGoogle,
@@ -125,13 +203,7 @@ func run() error {
 		d.stageReconciliation,
 		d.stageReplay,
 		d.stageNoAccessState,
-	} {
-		if err := stage(); err != nil {
-			return err
-		}
 	}
-	fmt.Printf("\n=== demonstration complete in %s ===\n", time.Since(d.started).Round(time.Millisecond))
-	return nil
 }
 
 // wire builds the real composition root with three deliberate substitutions,
@@ -191,6 +263,33 @@ func (d *demo) wire() error {
 		billing.WithProviders(appleClient, googleClient),
 		billing.WithNotificationBaseURL(demoNotificationOrigin))
 
+	// Phase 9B composition, identical to cmd/api's except that the webhook
+	// policy is constructed with the self-hosted allowlist so a loopback
+	// destination is permitted. HTTPS, certificate verification, redirect
+	// refusal, resolve-and-pin, and the reserved-address screen are all
+	// unchanged.
+	if d.tlsMaterial, err = newDemoTLS(); err != nil {
+		return err
+	}
+	d.destination = newDestinationStub(d.tlsMaterial)
+
+	projectionRepository := billingprojectionpostgres.New(d.pool)
+	d.projection = billingprojection.NewService(projectionRepository)
+	keys := billingkeys.New(billingpostgres.New(d.pool))
+	d.identity = billingcustomer.NewService(billingcustomerpostgres.New(d.pool), keys.Identity(), d.projection)
+	d.access = billingaccess.NewService(
+		billingaccesspostgres.New(d.pool),
+		billingaccesspostgres.NewKeyAuthenticator(billingpostgres.New(d.pool)),
+		billingaccess.WithIssuer("mosaic-billing-demo"))
+	d.grants = billinggrant.NewService(billinggrantpostgres.New(d.pool))
+	d.webhooks = billingwebhook.NewService(billingwebhookpostgres.New(d.pool), cipher,
+		billingwebhook.NewPolicy(billingwebhook.WithSelfHostedAllowlist(true)))
+	d.restores = billingrestore.NewService(billingrestorepostgres.New(d.pool), keys.Restore())
+	d.diagnostics = billingdiagnostics.NewService(billingdiagnosticspostgres.New(d.pool),
+		billingdiagnostics.WithReplay(d.projection, projectionRepository))
+	d.operator = billingoperator.NewService(billingoperatorpostgres.New(d.pool),
+		billingaccesspostgres.New(d.pool), d.identity)
+
 	logger := zerolog.New(io.Discard)
 	// SUBSTITUTION 3: the dashboard principal resolver returns a fixed actor
 	// rather than validating a browser session cookie. Authorization is NOT
@@ -209,12 +308,45 @@ func (d *demo) wire() error {
 	}, logger, httpserver.Dependencies{
 		PrincipalResolver: resolver,
 		Billing:           d.service,
-		BillingIPLimiter:  ratelimit.New(600, 600, 1024),
-		BillingKeyLimiter: ratelimit.New(600, 600, 1024),
-		APILimiter:        ratelimit.New(600, 600, 1024),
-		ExportLimiter:     ratelimit.New(600, 600, 1024),
+		BillingAccess:     d.access,
+		BillingCustomer:   d.identity,
+		BillingGrant:      d.grants,
+		// BillingOperator is deliberately absent from this router. Registering it
+		// beside Billing panics: internal/transport/billing/handler.go:87 and
+		// internal/transport/billingoperator/handler.go:67 both call
+		// router.Route("/environments/{environmentId}/billing", …) on the same
+		// Project subrouter, and chi refuses to Mount twice on one path. cmd/api
+		// passes both whenever MOSAIC_BILLING_ENABLED is set, so this is a
+		// startup panic in the deployed composition, not a demo-only problem.
+		// See docs/reviews/phase-9b-demo-evidence.md, defect D-3.
+		BillingRestore:         d.restores,
+		BillingWebhook:         d.webhooks,
+		BillingDiagnostics:     d.diagnostics,
+		BillingIPLimiter:       ratelimit.New(6000, 6000, 4096),
+		BillingKeyLimiter:      ratelimit.New(6000, 6000, 4096),
+		EntitlementSyncLimiter: ratelimit.New(6000, 6000, 4096),
+		APILimiter:             ratelimit.New(6000, 6000, 4096),
+		ExportLimiter:          ratelimit.New(6000, 6000, 4096),
 	})
 	d.server = httptest.NewServer(handler)
+
+	// The operator surface gets its own minimal mux for the reason recorded
+	// above. httpserver.NewWithDependencies cannot register BillingOperator at
+	// all: the `/v1` subtree and the Project subtree it lives under are both
+	// gated on Billing being non-nil, and Billing is exactly what it collides
+	// with. Its handler, its ozzo validation, its application service, its
+	// repository, and its authorization checks are all the real ones here; only
+	// the mux and the middleware stack are the demo's.
+	operatorRouter := chi.NewRouter()
+	operatorRouter.Route("/v1", func(versioned chi.Router) {
+		versioned.Group(func(authenticated chi.Router) {
+			authenticated.Use(authn.Middleware(resolver))
+			authenticated.Route("/projects/{projectId}", func(project chi.Router) {
+				billingoperatorhttp.RegisterProjectRoutes(project, d.operator)
+			})
+		})
+	})
+	d.operatorServer = httptest.NewServer(operatorRouter)
 	return nil
 }
 
