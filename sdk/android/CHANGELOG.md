@@ -45,10 +45,11 @@
 - Transaction Observation submissions now carry the current Customer Access Token
   in a `Mosaic-Customer-Token` header when one is available, so a validated
   purchase can be bound to an identified Billing Customer instead of anchoring
-  anonymously. The token is read at send time rather than enqueue time, is never
-  persisted with the queue, and is never logged; when it is absent the header is
-  omitted and the anonymous submission stays valid. Billing Ingestion Contract 1
-  observation records are unchanged.
+  anonymously. The token is read at send time rather than enqueue time, is read
+  from the already-held token only and never mints one, is never persisted with
+  the queue, and is never logged; when it is absent the header is omitted and the
+  anonymous submission stays valid. Billing Ingestion Contract 1 observation
+  records are unchanged.
 - No new Gradle dependency.
 
 ## Unreleased (Phase 9A: transaction ingestion and validation)

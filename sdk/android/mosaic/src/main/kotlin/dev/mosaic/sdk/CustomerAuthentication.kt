@@ -114,6 +114,17 @@ internal class MosaicCustomerTokenSession(
 
     suspend fun currentCustomerId(): String? = mutex.withLock { cachedCustomerId }
 
+    /**
+     * The token already held, or null. **Never** calls the provider.
+     *
+     * This is the read for opportunistic, fire-and-forget work — attributing a queued Transaction
+     * Observation, for instance — where the token is a bonus rather than a requirement. Minting one
+     * there would make a background flush initiate network work against the host's backend on a
+     * path nothing is waiting for, and on a cold start it would do so before the app has any reason
+     * to believe a customer is even signed in. Work that genuinely needs a token calls [token].
+     */
+    suspend fun heldToken(): MosaicCustomerAccessToken? = mutex.withLock { cached }
+
     suspend fun token(forceRefresh: Boolean = false): MosaicCustomerAccessTokenResult {
         // Bounded: each iteration either returns or joins an attempt, and a joined attempt clears
         // itself, so the loop cannot spin against a live provider.

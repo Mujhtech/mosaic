@@ -118,12 +118,11 @@ class Mosaic private constructor(
         // Customer the host has already authenticated. The observation record itself is unchanged —
         // this is a transport header, not a contract field.
         if (customerTokenSession != null && observations != null) {
-            observations.bindCustomerTokenSource {
-                // Never forced: this path must not trigger a token refresh, and an absent, expired,
-                // or signed-out token simply omits the header.
-                (customerTokenSession.token(forceRefresh = false) as? MosaicCustomerAccessTokenResult.Issued)
-                    ?.token
-            }
+            // Cached-only, and never a mint. Attribution is a bonus on a fire-and-forget path, so a
+            // background flush must not initiate network work against the host's backend — least of
+            // all on a cold start, before the app has any reason to believe anyone is signed in. If
+            // no token is already held, the submission goes out anonymously.
+            observations.bindCustomerTokenSource { customerTokenSession.heldToken() }
         }
         return MosaicHostedConfigurationClient(
             transport = MosaicHTTPConfigurationTransport(configuration),

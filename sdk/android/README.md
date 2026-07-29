@@ -244,8 +244,10 @@ Behaviour:
   validates but anchors only to its store lineage. The token is read when the
   request is built, never when the observation is queued — an observation can sit
   in the durable queue across a sign-in — and it is never written beside the
-  queued record. The 9A observation record itself is unchanged: this is a
-  transport header, not a contract field, and a missing token simply omits it.
+  queued record. The submission path reads an **already-held** token only and
+  never mints one, so a background flush initiates no work against the host's
+  backend. The 9A observation record itself is unchanged: this is a transport
+  header, not a contract field, and a missing token simply omits it.
 
 ## Authoritative entitlements (optional, off by default)
 

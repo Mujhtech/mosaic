@@ -3,6 +3,7 @@ package dev.mosaic.sdk
 import com.google.gson.JsonParser
 import java.nio.file.Files
 import java.time.Instant
+import java.util.concurrent.atomic.AtomicInteger
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.test.runTest
@@ -402,10 +403,14 @@ class TransactionObservationQueueTest {
         val queue = MosaicTransactionObservationQueue(MemoryObservationStore()) { NOW }
         val transport = AttributingTransport()
         val runtime = runtimeWith(queue, transport)
+        val calls = AtomicInteger()
         val session = MosaicCustomerTokenSession({
+            calls.incrementAndGet()
             MosaicCustomerAccessTokenResult.Issued(MosaicCustomerAccessToken(CUSTOMER_TOKEN))
         })
-        runtime.bindCustomerTokenSource { session.token().let { (it as? MosaicCustomerAccessTokenResult.Issued)?.token } }
+        runtime.bindCustomerTokenSource { session.heldToken() }
+        // The entitlement path has already minted a token; the observation path only reuses it.
+        session.token()
 
         // Enqueued directly so the assertion is about the send-time binding rather than about when
         // the fire-and-forget observe coroutine happens to run.
@@ -414,6 +419,37 @@ class TransactionObservationQueueTest {
 
         assertTrue(transport.headersPerSubmission.isNotEmpty())
         assertEquals(CUSTOMER_TOKEN, transport.headersPerSubmission.last()[MOSAIC_CUSTOMER_TOKEN_HEADER])
+        // Reused, not re-minted: the flush added no provider call of its own.
+        assertEquals(1, calls.get())
+        runtime.close()
+    }
+
+    /**
+     * A cold-start flush never mints a token.
+     *
+     * The observation path is fire and forget and nothing waits on it, so it must not initiate
+     * network work against the host's backend — least of all at launch, before the app has any
+     * reason to believe a customer is signed in. An empty session yields no token, the submission
+     * goes out anonymously, and the provider is never called.
+     */
+    @Test
+    fun `a cold-start flush never initiates a token mint`() = runTest {
+        val queue = MosaicTransactionObservationQueue(MemoryObservationStore()) { NOW }
+        val transport = AttributingTransport()
+        val runtime = runtimeWith(queue, transport)
+        val calls = AtomicInteger()
+        val session = MosaicCustomerTokenSession({
+            calls.incrementAndGet()
+            MosaicCustomerAccessTokenResult.Issued(MosaicCustomerAccessToken(CUSTOMER_TOKEN))
+        })
+        runtime.bindCustomerTokenSource { session.heldToken() }
+
+        queue.enqueue(observation())
+        runtime.flush()
+
+        assertEquals(0, calls.get())
+        assertEquals(0, session.providerCallCount)
+        assertFalse(transport.headersPerSubmission.last().containsKey(MOSAIC_CUSTOMER_TOKEN_HEADER))
         runtime.close()
     }
 
@@ -429,7 +465,7 @@ class TransactionObservationQueueTest {
         val transport = AttributingTransport()
         val runtime = runtimeWith(queue, transport)
         val session = MosaicCustomerTokenSession({ MosaicCustomerAccessTokenResult.SignedOut })
-        runtime.bindCustomerTokenSource { session.token().let { (it as? MosaicCustomerAccessTokenResult.Issued)?.token } }
+        runtime.bindCustomerTokenSource { session.heldToken() }
 
         queue.enqueue(observation())
         runtime.flush()
