@@ -839,9 +839,17 @@ func (d *demo) demo10Restore() error {
 		return err
 	}
 	d.apple.addTransaction("3000000900000017", signed)
-	status, body := d.public(http.MethodPost, "/v1/sdk/billing/observations", d.publicKey9B.raw,
-		observation9B("obs_demo9b_device_a", "sub_demo9b_device_a", "3000000900000017"))
+	// Device A is a signed-in user, so its SDK carries the customer's token. That
+	// is what makes the restored purchase resolve to Customer A rather than to a
+	// purchase-anchored customer of its own.
+	status, body := d.raw(http.MethodPost, "/v1/sdk/billing/observations",
+		encode(observation9B("obs_demo9b_device_a", "sub_demo9b_device_a", "3000000900000017")),
+		map[string]string{
+			"Authorization":                 "Bearer " + d.publicKey9B.raw,
+			billinghttp.CustomerTokenHeader: d.tokenA,
+		})
 	d.http("POST /v1/sdk/billing/observations (device A)", status, body)
+	d.boundLineages[lineageRestore] = true
 	if err := d.drainValidation(6); err != nil {
 		return err
 	}
