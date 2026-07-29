@@ -2,6 +2,51 @@
 
 ## Unreleased
 
+- Add authoritative entitlements (Authoritative Entitlement Contract v1 and
+  Customer Access Token Contract v1) under a purely additive `MosaicCustomer…`
+  namespace. No provider-observed symbol changed, and Placement targeting
+  continues to read provider-observed entitlements. `Mosaic.configure` gains
+  `customerTokenProvider`, `customerEntitlementCache`,
+  `customerEntitlementTransport`, `customerEntitlementSettings`, and `clock`.
+- Mosaic Billing **requires an application backend**. There is no anonymous
+  mode: your server mints the Customer Access Token, and a client-generated
+  installation identifier can never create or select a Billing Customer.
+  Without a token provider the subsystem is never constructed and every
+  authoritative read reports `unavailable`, never `inactive`.
+- Reading is closed and whole-document. Any unknown contract version, record
+  type, field, or enumeration member rejects the entire record; the one
+  exception is an unrecognized `entitlementKey`, which is Project data and is
+  carried. Every rejection yields `unknown` and preserves the cache, except a
+  customer, Project, or Environment binding mismatch, which clears it and emits
+  a high-severity diagnostic.
+- Cache acceptance follows the normative order — contract version, customer
+  binding, content digest, snapshot-version monotonicity, `asOf` regression —
+  and is atomic: a reader never keeps the entries it understood from a document
+  it rejected. The cache-decision, freshness, and snapshot-digest reference
+  vectors in `packages/test-fixtures` are executed as conformance tables so
+  Dart cannot drift from Go, Swift, and Kotlin.
+- Bounded grace is the shipped offline policy, driven by the server-issued
+  `refreshAfter`, `validUntil`, and `staleGraceSeconds` (strict is the same
+  fields with a zero grace window). A `304` slides the freshness window from the
+  response headers without re-accepting anything. Clock-skew tolerance is 60
+  seconds and a backwards device clock forces expired-equivalent behaviour.
+- Customer Access Tokens are held in memory only, never persisted, never parsed,
+  and never present in a log or diagnostic — diagnostics carry `tokenId`. A
+  `401` forces exactly one refresh and one retry per token generation; a token
+  provider failure enters a 30-second cooldown and reports `unavailable`.
+- The snapshot cache lives in the application **cache** directory, never the
+  support directory, so it cannot travel in a device backup. It is keyed per
+  customer in the path, written atomically, checksummed, decoded with strict
+  closed keys, and degrades to memory with an
+  `entitlements.cache_unavailable` diagnostic when no cache directory exists.
+  An identity change deletes sibling records.
+- Add `restorePurchasesAndSync()`, which reports the native provider outcome and
+  Mosaic's authoritative outcome separately. `restored` requires an accepted
+  snapshot at a higher version; otherwise it is `validationPending` within a
+  bound of 3 attempts over roughly 6 seconds. Purchase and restore paths are
+  never blocked: the authoritative refresh they trigger is unawaited and never
+  alters a presentation result.
+
 - Add the opt-in Transaction Observation handoff (Billing Ingestion Contract
   v1). The SDK submits and persists the canonical `clientTransactionObservation`
   record — envelope, `sourceAuthority: client_observation`, typed
