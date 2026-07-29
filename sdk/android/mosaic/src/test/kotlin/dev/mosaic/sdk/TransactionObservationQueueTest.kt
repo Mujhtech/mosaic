@@ -366,6 +366,160 @@ class TransactionObservationQueueTest {
             MosaicTransactionObservationTransportResult.Retryable("service_temporarily_unavailable")
     }
 
+    // ------------------------------------------------------------------------------------------
+    // Customer attribution
+    // ------------------------------------------------------------------------------------------
+
+    /**
+     * Records the token the transport saw at send time, so the binding can be asserted without a
+     * live socket. It answers retryably, which keeps the observation queued and lets one test flush
+     * the same entry twice under different sign-in states.
+     */
+    private class AttributingTransport : MosaicTransactionObservationTransport {
+        private var source: MosaicCustomerTokenSource? = null
+        val headersPerSubmission = mutableListOf<Map<String, String>>()
+
+        override fun bindCustomerTokenSource(source: MosaicCustomerTokenSource) {
+            this.source = source
+        }
+
+        override suspend fun submit(observation: MosaicTransactionObservation):
+            MosaicTransactionObservationTransportResult {
+            headersPerSubmission += mosaicObservationHeaders("mosaic_sdk_key", source?.currentCustomerToken())
+            return MosaicTransactionObservationTransportResult.Retryable("service_temporarily_unavailable")
+        }
+    }
+
+    /**
+     * An identified user's purchase is bound to their Billing Customer.
+     *
+     * Without the header the submission still validates, but it anchors only to the store lineage —
+     * so a purchase a signed-in person just made cannot be attributed to the customer the host has
+     * already authenticated.
+     */
+    @Test
+    fun `a submission carries the customer token when one is available at send time`() = runTest {
+        val queue = MosaicTransactionObservationQueue(MemoryObservationStore()) { NOW }
+        val transport = AttributingTransport()
+        val runtime = runtimeWith(queue, transport)
+        val session = MosaicCustomerTokenSession({
+            MosaicCustomerAccessTokenResult.Issued(MosaicCustomerAccessToken(CUSTOMER_TOKEN))
+        })
+        runtime.bindCustomerTokenSource { session.token().let { (it as? MosaicCustomerAccessTokenResult.Issued)?.token } }
+
+        // Enqueued directly so the assertion is about the send-time binding rather than about when
+        // the fire-and-forget observe coroutine happens to run.
+        queue.enqueue(observation())
+        runtime.flush()
+
+        assertTrue(transport.headersPerSubmission.isNotEmpty())
+        assertEquals(CUSTOMER_TOKEN, transport.headersPerSubmission.last()[MOSAIC_CUSTOMER_TOKEN_HEADER])
+        runtime.close()
+    }
+
+    /**
+     * A signed-out submission is anonymous, not blocked.
+     *
+     * The observation is still worth sending: it starts server-side validation, which is the whole
+     * point of the handoff, and attribution can only ever be a bonus on top of that.
+     */
+    @Test
+    fun `a submission omits the customer token when the user is signed out`() = runTest {
+        val queue = MosaicTransactionObservationQueue(MemoryObservationStore()) { NOW }
+        val transport = AttributingTransport()
+        val runtime = runtimeWith(queue, transport)
+        val session = MosaicCustomerTokenSession({ MosaicCustomerAccessTokenResult.SignedOut })
+        runtime.bindCustomerTokenSource { session.token().let { (it as? MosaicCustomerAccessTokenResult.Issued)?.token } }
+
+        queue.enqueue(observation())
+        runtime.flush()
+
+        val headers = transport.headersPerSubmission.last()
+        assertFalse(headers.containsKey(MOSAIC_CUSTOMER_TOKEN_HEADER))
+        // The submission itself is unaffected: the public SDK key still identifies the build.
+        assertEquals("Bearer mosaic_sdk_key", headers["Authorization"])
+        runtime.close()
+    }
+
+    /**
+     * The token is read at send time, not at enqueue time.
+     *
+     * A purchase very often completes before the user signs in, and an observation can sit in the
+     * durable queue across restarts and days offline. Capturing the token when the purchase happened
+     * would attribute nothing in exactly the case attribution is most wanted.
+     */
+    @Test
+    fun `a token that arrives between enqueue and flush is used`() = runTest {
+        var clock = NOW
+        val queue = MosaicTransactionObservationQueue(MemoryObservationStore()) { clock }
+        val transport = AttributingTransport()
+        val runtime = MosaicTransactionObservationRuntime(
+            queue = queue,
+            transport = transport,
+            enabled = true,
+            now = { clock },
+            identity = { OBSERVATION_ID },
+        )
+        var signedIn = false
+        runtime.bindCustomerTokenSource {
+            if (signedIn) MosaicCustomerAccessToken(CUSTOMER_TOKEN) else null
+        }
+
+        // Enqueued and flushed while signed out; the entry stays queued because the fake retries.
+        queue.enqueue(observation())
+        runtime.flush()
+        assertFalse(transport.headersPerSubmission.first().containsKey(MOSAIC_CUSTOMER_TOKEN_HEADER))
+
+        // The user signs in, and the delivery is retried later — the ordinary sequence when a
+        // purchase completes before sign-in, or when the first attempt was offline.
+        signedIn = true
+        clock += 60 * 60 * 1000
+        runtime.flush()
+
+        assertEquals(2, transport.headersPerSubmission.size)
+        assertEquals(CUSTOMER_TOKEN, transport.headersPerSubmission.last()[MOSAIC_CUSTOMER_TOKEN_HEADER])
+        runtime.close()
+    }
+
+    /**
+     * The credential never comes to rest.
+     *
+     * The queue is a durable file that outlives the process; a token written beside an observation
+     * would be a bearer credential sitting on disk long after it expired, which is precisely what
+     * holding tokens in memory only is meant to prevent.
+     */
+    @Test
+    fun `the customer token never reaches the persisted queue or the diagnostics`() = runTest {
+        val directory = Files.createTempDirectory("mosaic-observations").toFile()
+        val store = MosaicFileTransactionObservationStore(directory, "namespace")
+        val queue = MosaicTransactionObservationQueue(store) { NOW }
+        val transport = AttributingTransport()
+        val runtime = runtimeWith(queue, transport)
+        runtime.bindCustomerTokenSource { MosaicCustomerAccessToken(CUSTOMER_TOKEN) }
+
+        queue.enqueue(observation())
+        val diagnostics = runtime.flush()
+
+        assertEquals(CUSTOMER_TOKEN, transport.headersPerSubmission.last()[MOSAIC_CUSTOMER_TOKEN_HEADER])
+        val persisted = directory.walkTopDown().filter { it.isFile }.joinToString("\n") { it.readText() }
+        assertTrue(persisted.isNotBlank())
+        assertFalse(persisted.contains(CUSTOMER_TOKEN))
+        assertFalse(diagnostics.toString().contains(CUSTOMER_TOKEN))
+        runtime.close()
+        directory.deleteRecursively()
+    }
+
+    private fun runtimeWith(
+        queue: MosaicTransactionObservationQueue,
+        transport: MosaicTransactionObservationTransport,
+    ) = MosaicTransactionObservationRuntime(
+        queue = queue,
+        transport = transport,
+        enabled = true,
+        now = { NOW },
+        identity = { OBSERVATION_ID },
+    )
+
     private fun observation(
         observationId: String = OBSERVATION_ID,
         submissionId: String = "google_${DIGEST}_purchased",
@@ -394,6 +548,7 @@ class TransactionObservationQueueTest {
     private companion object {
         val NOW: Long = Instant.parse("2026-07-27T12:00:00.000Z").toEpochMilli()
         const val OBSERVATION_ID = "observation_0f2b6c1a"
+        const val CUSTOMER_TOKEN = "mosaic-customer-token-attribution"
 
         /**
          * The canonical Google reference, read from the shared cross-SDK vectors rather than pinned

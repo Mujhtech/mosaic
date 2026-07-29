@@ -93,11 +93,15 @@ class Mosaic private constructor(
         // reference is resolved lazily because the trusted time anchor the freshness policy measures
         // against lives on the accepted configuration, which the client below owns.
         val clientReference = java.util.concurrent.atomic.AtomicReference<MosaicHostedConfigurationClient?>()
-        val customerEntitlements = configuration.customerAccessTokenProvider?.let { provider ->
+        // One session for both consumers. Sharing it is what makes an observation's attribution
+        // consistent with the entitlement state the same app is reading, and it keeps a single
+        // single-flight boundary in front of the host's token backend rather than two competing ones.
+        val customerTokenSession = configuration.customerAccessTokenProvider?.let(::MosaicCustomerTokenSession)
+        val customerEntitlements = customerTokenSession?.let { session ->
             MosaicCustomerEntitlementRuntime(
                 transport = MosaicHTTPCustomerEntitlementTransport(configuration),
                 cache = MosaicCustomerEntitlementCache(context, namespace),
-                session = MosaicCustomerTokenSession(provider),
+                session = session,
                 trustedTime = {
                     clientReference.get()?.acceptedConfiguration?.trustedTimeAnchor?.nowEpochMillis()
                 },
@@ -107,6 +111,18 @@ class Mosaic private constructor(
         val customerPurchaseRefresh = customerEntitlements?.let { runtime ->
             commerceUpdates?.let { updates ->
                 MosaicCustomerPurchaseRefresh(runtime).also { it.collect(updates) }
+            }
+        }
+        // Attribution for the optional observation handoff. Without it a validated purchase anchors
+        // anonymously to its store lineage; with it, Mosaic can bind the purchase to the Billing
+        // Customer the host has already authenticated. The observation record itself is unchanged —
+        // this is a transport header, not a contract field.
+        if (customerTokenSession != null && observations != null) {
+            observations.bindCustomerTokenSource {
+                // Never forced: this path must not trigger a token refresh, and an absent, expired,
+                // or signed-out token simply omits the header.
+                (customerTokenSession.token(forceRefresh = false) as? MosaicCustomerAccessTokenResult.Issued)
+                    ?.token
             }
         }
         return MosaicHostedConfigurationClient(

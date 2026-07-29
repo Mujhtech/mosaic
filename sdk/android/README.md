@@ -238,6 +238,14 @@ Behaviour:
   `retryAfterSeconds` inside the record takes precedence over a `Retry-After`
   header.
 - No store credential exists in any Mosaic SDK.
+- When a Customer Access Token is available, a submission carries it in a
+  `Mosaic-Customer-Token` header so Mosaic can bind the purchase to the Billing
+  Customer the host already authenticated. Without it the purchase still
+  validates but anchors only to its store lineage. The token is read when the
+  request is built, never when the observation is queued — an observation can sit
+  in the durable queue across a sign-in — and it is never written beside the
+  queued record. The 9A observation record itself is unchanged: this is a
+  transport header, not a contract field, and a missing token simply omits it.
 
 ## Authoritative entitlements (optional, off by default)
 
