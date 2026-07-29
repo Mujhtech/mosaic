@@ -60,7 +60,7 @@ class CustomerEntitlementCodecTest {
             path.fileName.toString() to
                 MosaicCustomerEntitlementCodec.decodeRecord(Files.readAllBytes(path).toString(Charsets.UTF_8))
         }
-        assertEquals(14, decoded.size)
+        assertEquals(15, decoded.size)
         decoded.forEach { (name, record) ->
             when (name) {
                 "snapshot-unchanged.json" -> assertTrue(name, record is MosaicCustomerRecordDecoding.Unchanged)
@@ -70,6 +70,39 @@ class CustomerEntitlementCodecTest {
                 }
             }
         }
+    }
+
+    /** Version zero is the constrained pending placeholder and can be stated on the next sync. */
+    @Test
+    fun neverProjectedPlaceholderIsAcceptedAndSentAsKnownVersion() {
+        val decoded = MosaicCustomerEntitlementCodec.decodeRecord(
+            fixture("snapshots/never-projected-placeholder.json"),
+        ) as MosaicCustomerRecordDecoding.Snapshot
+
+        assertEquals(0L, decoded.snapshot.snapshotVersion)
+        assertTrue(decoded.snapshot.entries.isEmpty())
+        assertEquals(MosaicCustomerProjectionState.PENDING, decoded.snapshot.projectionStatus.state)
+
+        val request = JsonParser.parseString(
+            MosaicCustomerEntitlementCodec.encodeSyncRequest(
+                correlationId = "fixture-correlation-placeholder-sync",
+                knownSnapshotVersion = decoded.snapshot.snapshotVersion,
+                entityTag = decoded.snapshot.entityTag,
+                requestedEntitlementKeys = emptyList(),
+            ),
+        ).asJsonObject.getAsJsonObject("payload")
+        assertEquals(0L, request.get("knownSnapshotVersion").asLong)
+    }
+
+    @Test
+    fun versionZeroCannotCarryProjectedEntitlementState() {
+        val record = JsonParser.parseString(fixture("snapshots/active-subscription.json")).asJsonObject
+        record.getAsJsonObject("payload").addProperty("snapshotVersion", 0)
+
+        assertTrue(
+            MosaicCustomerEntitlementCodec.decodeRecord(record.toString()) is
+                MosaicCustomerRecordDecoding.Unreadable,
+        )
     }
 
     /**

@@ -141,7 +141,7 @@ internal object MosaicCustomerEntitlementAcceptance {
             )
         }
 
-        // 4. Equal is not newer. A 304 is the correct way to confirm a current snapshot; it slides
+        // 4. Equal is not newer. A snapshotUnchanged record confirms the current snapshot and slides
         //    freshness without re-accepting anything, so "accepted" always means the state advanced.
         if (incoming.snapshotVersion <= cached.snapshotVersion) {
             return reject(

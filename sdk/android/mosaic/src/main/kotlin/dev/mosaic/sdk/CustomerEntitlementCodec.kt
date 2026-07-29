@@ -115,7 +115,7 @@ internal object MosaicCustomerEntitlementCodec {
         requestedEntitlementKeys: List<String>,
     ): String {
         val payload = JsonObject().apply {
-            knownSnapshotVersion?.takeIf { it > 0 }?.let { addProperty("knownSnapshotVersion", it) }
+            knownSnapshotVersion?.takeIf { it >= 0 }?.let { addProperty("knownSnapshotVersion", it) }
             entityTag?.let { addProperty("entityTag", it) }
             add(
                 "supportedAuthoritativeEntitlementContracts",
@@ -267,7 +267,7 @@ internal object MosaicCustomerEntitlementCodec {
             billingCustomerId = identifier(payload, "billingCustomerId"),
             projectId = identifier(payload, "projectId"),
             environmentId = identifier(payload, "environmentId"),
-            snapshotVersion = boundedLong(payload, "snapshotVersion", 1, 999_999_999_999),
+            snapshotVersion = boundedLong(payload, "snapshotVersion", 0, 999_999_999_999),
             previousSnapshotVersion = payload.get("previousSnapshotVersion")
                 ?.let { boundedLong(payload, "previousSnapshotVersion", 0, 999_999_999_999) },
             projectionRuleVersion = boundedInt(payload, "projectionRuleVersion", 1, 1_000_000),
@@ -287,6 +287,14 @@ internal object MosaicCustomerEntitlementCodec {
                 ?.map { decodeDiagnostic(it.asJsonObject) }
                 .orEmpty(),
         )
+        if (snapshot.snapshotVersion == 0L) {
+            require(snapshot.previousSnapshotVersion == null)
+            require(snapshot.entries.isEmpty() && snapshot.sources.isEmpty())
+            require(snapshot.projectionStatus.state == MosaicCustomerProjectionState.PENDING)
+            require(snapshot.projectionStatus.pendingFactCount != null)
+            require(snapshot.projectionStatus.lastProjectedAt == snapshot.asOf)
+            require(snapshot.changeReason == MosaicCustomerSnapshotChangeReason.INITIAL_PROJECTION)
+        }
         validateEntitlementGraph(snapshot)
         return MosaicCustomerRecordDecoding.Snapshot(snapshot, contentDigestValid = declaredDigest == recomputed)
     }

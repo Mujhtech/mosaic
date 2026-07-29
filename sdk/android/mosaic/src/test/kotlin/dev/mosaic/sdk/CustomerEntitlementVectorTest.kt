@@ -56,7 +56,7 @@ class CustomerEntitlementVectorTest {
             if (!decision.accepted) assertNotNull(id, decision.rejection)
             rows += 1
         }
-        assertEquals(10, rows)
+        assertEquals(11, rows)
     }
 
     /** Every freshness row, including both clock-manipulation directions. */
