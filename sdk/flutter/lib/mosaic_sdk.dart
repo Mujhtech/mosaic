@@ -16,6 +16,7 @@ export 'src/customer_authentication.dart'
         MosaicCustomerTokenDiagnostics,
         MosaicCustomerTokenProvider,
         MosaicCustomerTokenRequest;
+export 'src/customer_entitlement_cache.dart';
 export 'src/customer_entitlements.dart';
 export 'src/experiment_analytics.dart';
 export 'src/experiment_assignment.dart';
