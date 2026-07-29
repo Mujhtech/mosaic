@@ -99,15 +99,22 @@ internal object MosaicCustomerEntitlementCodec {
         }
     }
 
+    /**
+     * Builds the sync request.
+     *
+     * `billingCustomerId` is deliberately **not** emitted, even though the contract permits it as a
+     * hint. The Customer Access Token is the sole customer selector; a caller cannot widen access by
+     * asserting an identifier, and omitting the field entirely means there is no second place where
+     * a stale or wrong customer identity could be introduced. The parameter does not exist here so
+     * that no future call site can reintroduce it by mistake.
+     */
     fun encodeSyncRequest(
         correlationId: String,
-        billingCustomerId: String?,
         knownSnapshotVersion: Long?,
         entityTag: String?,
         requestedEntitlementKeys: List<String>,
     ): String {
         val payload = JsonObject().apply {
-            billingCustomerId?.let { addProperty("billingCustomerId", it) }
             knownSnapshotVersion?.takeIf { it > 0 }?.let { addProperty("knownSnapshotVersion", it) }
             entityTag?.let { addProperty("entityTag", it) }
             add(
@@ -549,22 +556,18 @@ internal object MosaicCustomerEntitlementCodec {
     private fun identifier(value: JsonObject, name: String): String =
         value.get(name).asString.also(::requireIdentifier)
 
+    /**
+     * Identifiers are validated against the contract pattern and nothing more.
+     *
+     * A JWS-shaped value in an identifier field — a signed provider payload smuggled into, say, a
+     * `correlationId` — is a **producer-side** defect, caught by the semantic validator that guards
+     * what Mosaic emits. It is deliberately not a reader rejection: the reader's job is to refuse
+     * documents it cannot interpret, and this one is fully interpretable. Rejecting it here would
+     * mean a customer loses access because a server put an odd-looking string in a field the SDK
+     * only ever passes through, which is a worse outcome than carrying it.
+     */
     private fun requireIdentifier(value: String) {
         require(identifierPattern.matches(value)) { "Invalid Mosaic identifier." }
-        // Identifier fields are Mosaic's own opaque keys. A signed provider payload appearing in one
-        // is either a producer defect or an attempt to smuggle a credential through a read model,
-        // and this contract is explicitly never a bearer credential.
-        require(!looksLikeSignedPayload(value)) { "A signed payload value is never a Mosaic identifier." }
-    }
-
-    private fun looksLikeSignedPayload(value: String): Boolean {
-        val segments = value.split('.')
-        if (segments.size != 3) return false
-        if (segments.any { it.isEmpty() }) return false
-        // A JWS header always begins `{"`, which base64url-encodes to a leading "eyJ".
-        return segments[0].startsWith("eyJ") && segments.all { segment ->
-            segment.all { it.isLetterOrDigit() || it == '-' || it == '_' }
-        }
     }
 
     private fun timestamp(value: JsonObject, name: String): String =

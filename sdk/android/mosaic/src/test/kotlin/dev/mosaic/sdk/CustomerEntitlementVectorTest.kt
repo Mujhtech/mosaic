@@ -86,7 +86,17 @@ class CustomerEntitlementVectorTest {
                 window,
                 mosaicContractInstantMillis(vector.get("deviceNow").asString),
             )
-            assertEquals(id, vector.get("state").asString, evaluation.state.wireName)
+            // The vector table names states in the protocol's snake_case; the SDK vocabulary is the
+            // ratified cross-platform camelCase. The mapping is written out rather than derived so
+            // a renamed member fails here instead of being silently transliterated.
+            val expected = when (vector.get("state").asString) {
+                "fresh" -> MosaicCustomerEntitlementCacheState.FRESH
+                "refresh_recommended" -> MosaicCustomerEntitlementCacheState.REFRESH_RECOMMENDED
+                "stale_within_grace" -> MosaicCustomerEntitlementCacheState.STALE_WITHIN_GRACE
+                "expired" -> MosaicCustomerEntitlementCacheState.EXPIRED
+                else -> error("Unknown freshness state in vector $id.")
+            }
+            assertEquals(id, expected, evaluation.state)
             // Clock unreliability is a diagnostic that forces expired-equivalent behaviour; it is
             // deliberately not a fifth cache state, so it is asserted separately from the state.
             assertEquals(id, id == "backwards-clock-before-issued-at", evaluation.clockUnreliable)
@@ -101,10 +111,11 @@ class CustomerEntitlementVectorTest {
         assertFalse(
             MosaicCustomerEntitlementCacheState.entries.any { it.wireName.contains("clock") },
         )
+        // The seven ratified members, in order, identical on all three SDKs.
         assertEquals(
             listOf(
-                "fresh", "refresh_recommended", "stale_within_grace",
-                "expired", "missing", "invalid", "different_customer",
+                "fresh", "refreshRecommended", "staleWithinGrace",
+                "expired", "missing", "invalid", "differentCustomer",
             ),
             MosaicCustomerEntitlementCacheState.entries.map { it.wireName },
         )

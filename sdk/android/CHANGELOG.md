@@ -19,7 +19,13 @@
   `restoreAndSyncCustomerEntitlements`, and `customerEntitlementDiagnostics`.
   There is no boolean convenience API anywhere: `unknown` and `unavailable` are
   real answers a `Boolean` cannot carry.
-- `inactive` is produced only from a snapshot the SDK fully accepted. Every
+- Sync is a `POST` carrying an `entitlementSyncRequest` record; conditional
+  revalidation travels in that body and the unchanged answer is a `200`
+  `snapshotUnchanged` record carrying its own refreshed window. The request never
+  asserts a `billingCustomerId` — the Customer Access Token is the sole customer
+  selector — and a bare `304` preserves the cache without sliding freshness.
+- `inactive` is produced only from an accepted snapshot that carries an entry
+  saying so; an Entitlement key the snapshot does not carry reads `unknown`. Every
   failure path — transport, token, digest mismatch, unsupported contract version,
   rejected record, expired cache, unreliable device clock — produces `unknown`
   and preserves the cache, except a customer/Project/Environment binding

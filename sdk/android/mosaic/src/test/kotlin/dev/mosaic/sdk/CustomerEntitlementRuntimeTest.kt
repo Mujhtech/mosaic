@@ -41,7 +41,6 @@ class CustomerEntitlementRuntimeTest {
     private fun record(name: String) = MosaicCustomerEntitlementTransportResult.Record(
         body = fixture(name),
         entityTag = entityTag(fixture(name)),
-        freshness = null,
     )
 
     private fun runtime(
@@ -66,7 +65,7 @@ class CustomerEntitlementRuntimeTest {
     @Test
     fun anOlderSnapshotIsRejectedAndThePreviousOneKeepsServing() = runTest {
         val responses = ArrayDeque(listOf(record("newer-snapshot"), record("bounded-offline-cache")))
-        val runtime = runtime({ _, _, _ -> responses.removeFirst() })
+        val runtime = runtime({ _, _ -> responses.removeFirst() })
         // Inside the newer snapshot's own window, so freshness is not what this row is testing.
         deviceNow = mosaicContractInstantMillis("2026-07-28T14:01:00.000Z")
 
@@ -85,8 +84,8 @@ class CustomerEntitlementRuntimeTest {
     /** A snapshot whose HTTP validator does not identify it is refused rather than trusted. */
     @Test
     fun aSnapshotWithoutAStrongMatchingEntityTagIsRejected() = runTest {
-        val runtime = runtime({ _, _, _ ->
-            MosaicCustomerEntitlementTransportResult.Record(fixture("active-subscription"), null, null)
+        val runtime = runtime({ _, _ ->
+            MosaicCustomerEntitlementTransportResult.Record(fixture("active-subscription"), null)
         })
         val result = runtime.refreshCustomerEntitlements()
         assertEquals(
@@ -108,7 +107,7 @@ class CustomerEntitlementRuntimeTest {
         val observed = mutableListOf<MosaicCustomerEntitlementSnapshotState>()
         val responses = ArrayDeque(listOf(record("bounded-offline-cache"), record("test-source-sandbox-grant")))
         val diagnostics = mutableListOf<MosaicDiagnostic>()
-        val runtime = runtime({ _, _, _ -> responses.removeFirst() }, diagnostics = { diagnostics += it })
+        val runtime = runtime({ _, _ -> responses.removeFirst() }, diagnostics = { diagnostics += it })
 
         runtime.refreshCustomerEntitlements()
         observed += runtime.customerEntitlements.value
@@ -140,7 +139,7 @@ class CustomerEntitlementRuntimeTest {
     /** Inside the grace window access continues, and every active entry is marked stale. */
     @Test
     fun aGraceWindowKeepsAccessAndMarksItStale() = runTest {
-        val runtime = runtime({ _, _, _ -> record("bounded-offline-cache") })
+        val runtime = runtime({ _, _ -> record("bounded-offline-cache") })
         runtime.refreshCustomerEntitlements()
 
         // validUntil + 5 minutes: inside the 24-hour bounded-grace band.
@@ -160,7 +159,7 @@ class CustomerEntitlementRuntimeTest {
      */
     @Test
     fun anExpiredCacheAndAnUnreadableClockBothYieldUnknownNeverInactive() = runTest {
-        val runtime = runtime({ _, _, _ -> record("bounded-offline-cache") })
+        val runtime = runtime({ _, _ -> record("bounded-offline-cache") })
         runtime.refreshCustomerEntitlements()
 
         deviceNow = mosaicContractInstantMillis("2026-08-06T12:05:00.000Z")
@@ -187,7 +186,7 @@ class CustomerEntitlementRuntimeTest {
      */
     @Test
     fun aBackdatedClockDoesNotExtendAccess() = runTest {
-        val runtime = runtime({ _, _, _ -> record("bounded-offline-cache") })
+        val runtime = runtime({ _, _ -> record("bounded-offline-cache") })
         runtime.refreshCustomerEntitlements()
         assertTrue(runtime.customerEntitlements.value is MosaicCustomerEntitlementSnapshotState.Available)
 
@@ -204,7 +203,7 @@ class CustomerEntitlementRuntimeTest {
     /** An unknown entry stays unknown; only an accepted snapshot can produce inactive. */
     @Test
     fun anUnknownEntryIsNeverReportedAsInactive() = runTest {
-        val runtime = runtime({ _, _, _ -> record("unknown-state-identity-unresolved") })
+        val runtime = runtime({ _, _ -> record("unknown-state-identity-unresolved") })
         runtime.refreshCustomerEntitlements()
 
         val check = runtime.checkCustomerEntitlement("pro")
@@ -220,7 +219,7 @@ class CustomerEntitlementRuntimeTest {
      */
     @Test
     fun anAcceptedSnapshotCanReportInactive() = runTest {
-        val runtime = runtime({ _, _, _ -> record("billing-retry-access-withheld") })
+        val runtime = runtime({ _, _ -> record("billing-retry-access-withheld") })
         runtime.refreshCustomerEntitlements()
 
         val check = runtime.checkCustomerEntitlement("pro")
@@ -236,7 +235,7 @@ class CustomerEntitlementRuntimeTest {
                 MosaicCustomerEntitlementTransportResult.Unavailable("customer.entitlements.serviceUnavailable"),
             ),
         )
-        val runtime = runtime({ _, _, _ -> responses.removeFirst() })
+        val runtime = runtime({ _, _ -> responses.removeFirst() })
         runtime.refreshCustomerEntitlements()
 
         val result = runtime.refreshCustomerEntitlements()
@@ -246,31 +245,53 @@ class CustomerEntitlementRuntimeTest {
     }
 
     // ------------------------------------------------------------------------------------------
-    // Conditional requests
+    // The unchanged record
     // ------------------------------------------------------------------------------------------
 
     /**
-     * A 304 preserves the snapshot, slides its window, and accepts nothing new.
+     * Builds a `snapshotUnchanged` record from the canonical fixture, retargeted at a given cached
+     * snapshot and window. The shape stays the fixture's; only the identity and freshness move.
+     */
+    private fun unchangedRecord(
+        entityTag: String,
+        snapshotVersion: Long,
+        refreshAfter: String,
+        validUntil: String,
+        billingCustomerId: String = "fixture-customer-0001",
+    ): MosaicCustomerEntitlementTransportResult.Record {
+        val root = JsonParser.parseString(fixture("snapshot-unchanged")).asJsonObject
+        val payload = root.getAsJsonObject("payload")
+        payload.addProperty("billingCustomerId", billingCustomerId)
+        payload.addProperty("entityTag", entityTag)
+        payload.addProperty("snapshotVersion", snapshotVersion)
+        payload.addProperty("refreshAfter", refreshAfter)
+        payload.addProperty("validUntil", validUntil)
+        payload.addProperty("staleGraceSeconds", 86_400)
+        return MosaicCustomerEntitlementTransportResult.Record(root.toString(), entityTag)
+    }
+
+    /**
+     * The unchanged answer is a contract record over `200`, not an HTTP status.
      *
-     * Without the slide, a device that keeps confirming the same version expires while demonstrably
-     * in contact with the server — the one failure mode conditional requests are supposed to remove.
+     * It preserves the snapshot, slides its window, and accepts nothing new. Without the slide a
+     * device that keeps confirming the same version expires while demonstrably in contact with the
+     * server — the failure conditional revalidation exists to remove. Carrying the confirmation in
+     * the record rather than in headers means a proxy cannot rewrite how long a cache lives.
      */
     @Test
-    fun notModifiedPreservesTheSnapshotAndSlidesFreshness() = runTest {
-        val responses = ArrayDeque<MosaicCustomerEntitlementTransportResult>(
+    fun anUnchangedRecordPreservesTheSnapshotAndSlidesFreshness() = runTest {
+        val responses = ArrayDeque(
             listOf(
                 record("bounded-offline-cache"),
-                MosaicCustomerEntitlementTransportResult.NotModified(
+                unchangedRecord(
                     entityTag = "cs-0011-v13",
-                    freshness = MosaicCustomerFreshnessHeaders(
-                        refreshAfter = "2026-08-05T13:00:00.000Z",
-                        validUntil = "2026-08-11T12:00:00.000Z",
-                        staleGraceSeconds = 86_400,
-                    ),
+                    snapshotVersion = 13,
+                    refreshAfter = "2026-08-05T13:00:00.000Z",
+                    validUntil = "2026-08-11T12:00:00.000Z",
                 ),
             ),
         )
-        val runtime = runtime({ _, _, _ -> responses.removeFirst() })
+        val runtime = runtime({ _, _ -> responses.removeFirst() })
         runtime.refreshCustomerEntitlements()
 
         // Past the original validUntil, so without the slide this would be expired.
@@ -285,6 +306,103 @@ class CustomerEntitlementRuntimeTest {
         assertFalse((check.state as MosaicCustomerEntitlementState.Active).isStale)
     }
 
+    /**
+     * A confirmation that does not identify the cached snapshot slides nothing.
+     *
+     * Otherwise an unchanged record about another customer — or about a version this device never
+     * held — would extend offline access on the strength of a statement about somebody else.
+     */
+    @Test
+    fun anUnchangedRecordForAnotherSnapshotDoesNotSlideFreshness() = runTest {
+        val responses = ArrayDeque(
+            listOf(
+                record("bounded-offline-cache"),
+                unchangedRecord(
+                    entityTag = "cs-9999-v99",
+                    snapshotVersion = 99,
+                    refreshAfter = "2026-08-05T13:00:00.000Z",
+                    validUntil = "2026-08-11T12:00:00.000Z",
+                    billingCustomerId = "fixture-customer-0002",
+                ),
+            ),
+        )
+        val runtime = runtime({ _, _ -> responses.removeFirst() })
+        runtime.refreshCustomerEntitlements()
+
+        // Past the cached snapshot's own grace window, but well inside the window the rejected
+        // record claimed — so this instant separates "slid" from "not slid".
+        deviceNow = mosaicContractInstantMillis("2026-08-06T12:00:00.000Z")
+        val result = runtime.refreshCustomerEntitlements()
+
+        assertTrue(result is MosaicCustomerEntitlementSyncResult.Rejected)
+        // The window was not extended, so the cache is past its own validity and reads unknown.
+        val check = runtime.checkCustomerEntitlement("pro")
+        assertTrue(check.state is MosaicCustomerEntitlementState.Unknown)
+    }
+
+    /**
+     * A bare `304` preserves the cache but slides nothing.
+     *
+     * Nothing in the SDK asks for one, so it comes from an intermediary. Honouring it as a freshness
+     * extension would let a caching proxy grant unconfirmed offline access indefinitely; honouring
+     * it as a revocation would be worse. It keeps the cache and lets it run out its own clock.
+     */
+    @Test
+    fun aBare304PreservesTheCacheWithoutSlidingFreshness() = runTest {
+        val responses = ArrayDeque(
+            listOf(
+                record("bounded-offline-cache"),
+                MosaicCustomerEntitlementTransportResult.NotModified,
+            ),
+        )
+        val runtime = runtime({ _, _ -> responses.removeFirst() })
+        runtime.refreshCustomerEntitlements()
+
+        // Inside the original grace band, so the cache is preserved and marked stale...
+        deviceNow = mosaicContractInstantMillis("2026-08-04T12:05:00.000Z")
+        val result = runtime.refreshCustomerEntitlements()
+        assertEquals(
+            MosaicCustomerEntitlementCacheState.STALE_WITHIN_GRACE,
+            (result as MosaicCustomerEntitlementSyncResult.Unchanged).cacheState,
+        )
+
+        // ...and it still expires on its original schedule rather than an extended one.
+        deviceNow = mosaicContractInstantMillis("2026-08-06T12:05:00.000Z")
+        assertTrue(runtime.checkCustomerEntitlement("pro").state is MosaicCustomerEntitlementState.Unknown)
+    }
+
+    /** The token is the sole customer selector, so no identifier is ever asserted in the request. */
+    @Test
+    fun theSyncRequestNeverAssertsACustomerIdentifier() = runTest {
+        val bodies = mutableListOf<String>()
+        val runtime = runtime({ _, body ->
+            bodies += body
+            record("bounded-offline-cache")
+        })
+        runtime.identifyCustomer("fixture-customer-0001")
+        runtime.refreshCustomerEntitlements()
+
+        assertTrue(bodies.isNotEmpty())
+        // Even after identifyCustomer supplied one, it never reaches the wire: a caller that could
+        // assert a customer identifier is a caller that could try to read somebody else's access.
+        assertTrue(bodies.none { it.contains("billingCustomerId") })
+        assertTrue(bodies.none { it.contains("fixture-customer-0001") })
+    }
+
+    /** An absent entitlement key is not a decision, so it reads unknown rather than inactive. */
+    @Test
+    fun anAbsentEntitlementKeyReadsUnknown() = runTest {
+        val runtime = runtime({ _, _ -> record("bounded-offline-cache") })
+        runtime.refreshCustomerEntitlements()
+
+        val check = runtime.checkCustomerEntitlement("pro_lifetime")
+
+        assertTrue(check.state is MosaicCustomerEntitlementState.Unknown)
+        assertEquals(0, check.sourceCount)
+        // The snapshot that could not answer is still identified, so a host can explain itself.
+        assertEquals(13L, check.snapshotVersion)
+    }
+
     // ------------------------------------------------------------------------------------------
     // Concurrency and authorization
     // ------------------------------------------------------------------------------------------
@@ -296,7 +414,7 @@ class CustomerEntitlementRuntimeTest {
         val calls = AtomicInteger()
         val tokenCalls = AtomicInteger()
         val runtime = runtime(
-            transport = { _, _, _ ->
+            transport = { _, _ ->
                 calls.incrementAndGet()
                 gate.await()
                 record("bounded-offline-cache")
@@ -327,7 +445,7 @@ class CustomerEntitlementRuntimeTest {
         val transportCalls = AtomicInteger()
         val forced = mutableListOf<Boolean>()
         val runtime = runtime(
-            transport = { _, _, _ ->
+            transport = { _, _ ->
                 if (transportCalls.incrementAndGet() == 1) {
                     MosaicCustomerEntitlementTransportResult.Unauthorized
                 } else {
@@ -354,7 +472,7 @@ class CustomerEntitlementRuntimeTest {
     fun aSecondRefusalReportsUnauthorizedWithoutSwitchingCustomer() = runTest {
         val transportCalls = AtomicInteger()
         val runtime = runtime(
-            transport = { _, _, _ ->
+            transport = { _, _ ->
                 transportCalls.incrementAndGet()
                 MosaicCustomerEntitlementTransportResult.Unauthorized
             },
@@ -383,7 +501,7 @@ class CustomerEntitlementRuntimeTest {
      */
     @Test
     fun signingOutClearsEverythingObservableAndPersisted() = runTest {
-        val runtime = runtime({ _, _, _ -> record("bounded-offline-cache") })
+        val runtime = runtime({ _, _ -> record("bounded-offline-cache") })
         runtime.refreshCustomerEntitlements()
         assertTrue(folder.root.walkTopDown().any { it.name == "snapshot.json" })
 
@@ -410,7 +528,7 @@ class CustomerEntitlementRuntimeTest {
         val gate = CompletableDeferred<Unit>()
         val reached = CompletableDeferred<Unit>()
         val responses = ArrayDeque(listOf(record("bounded-offline-cache"), record("test-source-sandbox-grant")))
-        val runtime = runtime({ _, _, _ ->
+        val runtime = runtime({ _, _ ->
             val next = responses.removeFirst()
             if (responses.isEmpty()) {
                 reached.complete(Unit)
@@ -438,7 +556,7 @@ class CustomerEntitlementRuntimeTest {
     fun aResponseArrivingAfterSignOutIsDiscarded() = runTest {
         val gate = CompletableDeferred<Unit>()
         val reached = CompletableDeferred<Unit>()
-        val runtime = runtime({ _, _, _ ->
+        val runtime = runtime({ _, _ ->
             reached.complete(Unit)
             gate.await()
             record("bounded-offline-cache")
@@ -462,13 +580,13 @@ class CustomerEntitlementRuntimeTest {
     /** A tampered cache file is discarded whole, and the result is unknown rather than inactive. */
     @Test
     fun aTamperedCacheIsDiscardedWholeAndReportsUnknown() = runTest {
-        val runtime = runtime({ _, _, _ -> record("bounded-offline-cache") })
+        val runtime = runtime({ _, _ -> record("bounded-offline-cache") })
         runtime.refreshCustomerEntitlements()
 
         val stored = folder.root.walkTopDown().first { it.name == "snapshot.json" }
         stored.writeText(stored.readText().replace("\"snapshotVersion\":13", "\"snapshotVersion\":99"))
 
-        val reopened = runtime({ _, _, _ -> error("A cold start must read the cache before syncing.") })
+        val reopened = runtime({ _, _ -> error("A cold start must read the cache before syncing.") })
         val check = reopened.checkCustomerEntitlement("pro")
 
         assertTrue(check.state is MosaicCustomerEntitlementState.Unknown)
@@ -478,9 +596,9 @@ class CustomerEntitlementRuntimeTest {
     /** A cold start serves the persisted snapshot without any network at all. */
     @Test
     fun aColdStartServesThePersistedSnapshot() = runTest {
-        runtime({ _, _, _ -> record("bounded-offline-cache") }).refreshCustomerEntitlements()
+        runtime({ _, _ -> record("bounded-offline-cache") }).refreshCustomerEntitlements()
 
-        val reopened = runtime({ _, _, _ -> error("A cold start must read the cache before syncing.") })
+        val reopened = runtime({ _, _ -> error("A cold start must read the cache before syncing.") })
         val check = reopened.checkCustomerEntitlement("pro")
 
         assertTrue(check.state is MosaicCustomerEntitlementState.Active)

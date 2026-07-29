@@ -346,12 +346,12 @@ internal data class MosaicCustomerSnapshotUnchanged(
  */
 enum class MosaicCustomerEntitlementCacheState(val wireName: String) {
     FRESH("fresh"),
-    REFRESH_RECOMMENDED("refresh_recommended"),
-    STALE_WITHIN_GRACE("stale_within_grace"),
+    REFRESH_RECOMMENDED("refreshRecommended"),
+    STALE_WITHIN_GRACE("staleWithinGrace"),
     EXPIRED("expired"),
     MISSING("missing"),
     INVALID("invalid"),
-    DIFFERENT_CUSTOMER("different_customer"),
+    DIFFERENT_CUSTOMER("differentCustomer"),
 }
 
 /** Why the authoritative surface cannot state a customer's access. Never "inactive". */

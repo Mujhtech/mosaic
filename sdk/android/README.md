@@ -298,11 +298,33 @@ retry.
 
 `unknown` and `unavailable` are real answers and a `Boolean` has nowhere to put
 them. `inactive` means Mosaic looked, found no qualifying source, and is
-confident; it is produced only from a snapshot the SDK fully accepted. A network
+confident; it is produced only from an accepted snapshot that carries an entry
+saying so. An Entitlement key the snapshot does not carry reads `unknown`, not
+`inactive` — the sync may have been narrowed, the Entitlement may be newer than
+the snapshot, or the key may simply be misspelled, and none of those is Mosaic
+saying the customer lacks access. A network
 failure, a timeout, an expired cache, a digest mismatch, an unsupported version,
 a rejected document, and an unreadable device clock all produce `unknown`. A
 reader that collapses "I could not find out" into "you do not have it" turns
 every Mosaic outage into a mass revocation experienced by paying customers.
+
+### The sync flow
+
+Every sync is a `POST` carrying an `entitlementSyncRequest` record. Conditional
+revalidation lives **in that body** — `knownSnapshotVersion` and `entityTag` —
+rather than in `If-None-Match`, and the unchanged answer is a `200` carrying a
+`snapshotUnchanged` record. One path decodes one document, and the refreshed
+freshness window arrives inside the record the schema and content digest already
+cover, so a proxy that rewrites or strips a header cannot change how long a
+device believes its cache is valid.
+
+The request never asserts a `billingCustomerId`. The Customer Access Token is the
+sole customer selector, so there is no field through which a client could try to
+read another customer's access.
+
+A bare `304`, which only an intermediary can produce here, preserves the cache
+and slides **nothing**: the cache runs out its own clock. Extending offline
+validity requires an answer Mosaic actually produced.
 
 ### Caching, bounded grace, and the device clock
 

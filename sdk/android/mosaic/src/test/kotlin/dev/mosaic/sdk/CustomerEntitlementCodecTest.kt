@@ -111,10 +111,14 @@ class CustomerEntitlementCodecTest {
             "older-snapshot-version-rejected.json" to MosaicCustomerSnapshotRejection.SNAPSHOT_VERSION_NOT_NEWER,
             "different-customer-rejected.json" to MosaicCustomerSnapshotRejection.CONTENT_DIGEST_MISMATCH,
         )
+        // Classified producer-side: the semantic validator guards what Mosaic emits, and the reader
+        // accepts it because the document is fully interpretable. See the fixture assertion below.
+        val producerSideOnly = setOf("snapshot-carries-signed-payload-value.json")
         var documentRejections = 0
         fixtures("invalid").forEach { path ->
             val name = path.fileName.toString()
             if (name == "rejection-layers.json") return@forEach
+            if (name in producerSideOnly) return@forEach
             val source = Files.readAllBytes(path).toString(Charsets.UTF_8)
             val recordType = JsonParser.parseString(source).asJsonObject.get("recordType")?.asString
             // The SDK reads only the two sync-surface record types; subscription snapshots, check
@@ -156,7 +160,28 @@ class CustomerEntitlementCodecTest {
             )
             assertEquals(name, expectedCacheRejection, decision.rejection)
         }
-        assertEquals(16, documentRejections)
+        assertEquals(15, documentRejections)
+    }
+
+    /**
+     * The JWS-shaped `correlationId` fixture is accepted by the reader, on purpose.
+     *
+     * It is classified as a **producer-side** rejection: the semantic validator stops Mosaic from
+     * emitting it. A reader that refused it would drop a customer to `unknown` because a server put
+     * an odd-looking string into a field the SDK only passes through — a strictly worse outcome than
+     * carrying the value. The document is fully interpretable, and interpretability is what reader
+     * rejection is for.
+     */
+    @Test
+    fun aSignedPayloadValueInAnIdentifierIsAProducerConcernNotAReaderRejection() {
+        val decoded = MosaicCustomerEntitlementCodec.decodeRecord(
+            fixture("invalid/snapshot-carries-signed-payload-value.json"),
+        )
+        val snapshot = (decoded as MosaicCustomerRecordDecoding.Snapshot).snapshot
+        assertTrue(snapshot.correlationId.startsWith("eyJ"))
+        // It is carried, never interpreted: the SDK does not parse it and never treats it as proof
+        // of anything. This contract is not a bearer credential in any of its fields.
+        assertEquals("fixture-customer-0001", snapshot.billingCustomerId)
     }
 
     /** The cache record survives a round trip and refuses truncation and tampering. */

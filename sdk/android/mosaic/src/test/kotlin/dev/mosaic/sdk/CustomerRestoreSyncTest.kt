@@ -33,7 +33,6 @@ class CustomerRestoreSyncTest {
         body = fixture(name),
         entityTag = JsonParser.parseString(fixture(name))
             .asJsonObject.getAsJsonObject("payload").get("entityTag").asString,
-        freshness = null,
     )
 
     private fun runtime(transport: MosaicCustomerEntitlementTransport) = MosaicCustomerEntitlementRuntime(
@@ -75,7 +74,7 @@ class CustomerRestoreSyncTest {
     @Test
     fun anUnvalidatedRecoveryReportsValidationPending() = runTest {
         val syncs = AtomicInteger()
-        val runtime = runtime({ _, _, _ ->
+        val runtime = runtime({ _, _ ->
             syncs.incrementAndGet()
             record("bounded-offline-cache")
         })
@@ -97,7 +96,7 @@ class CustomerRestoreSyncTest {
     @Test
     fun anAcceptedNewerSnapshotReportsAuthoritativeUpdate() = runTest {
         val responses = ArrayDeque(listOf(record("bounded-offline-cache"), record("newer-snapshot")))
-        val runtime = runtime({ _, _, _ -> responses.removeFirst() })
+        val runtime = runtime({ _, _ -> responses.removeFirst() })
         runtime.refreshCustomerEntitlements()
         deviceNow = mosaicContractInstantMillis("2026-07-28T14:01:00.000Z")
 
@@ -114,7 +113,7 @@ class CustomerRestoreSyncTest {
     /** A cancelled restore neither syncs nor reports anything about entitlement. */
     @Test
     fun aCancelledRestoreDoesNotSync() = runTest {
-        val runtime = runtime({ _, _, _ -> error("A cancelled restore must not reach the network.") })
+        val runtime = runtime({ _, _ -> error("A cancelled restore must not reach the network.") })
         val result = mosaicRestoreAndSyncCustomerEntitlements(
             runtime,
             restoringProvider(detailedRestore(MosaicCommerceRecoveryOutcome.CANCELLED)),
@@ -126,7 +125,7 @@ class CustomerRestoreSyncTest {
     @Test
     fun nothingToRestoreStillSynchronizesOnce() = runTest {
         val syncs = AtomicInteger()
-        val runtime = runtime({ _, _, _ ->
+        val runtime = runtime({ _, _ ->
             syncs.incrementAndGet()
             record("bounded-offline-cache")
         })
@@ -152,7 +151,7 @@ class CustomerRestoreSyncTest {
     fun aHungTransportNeverBlocksPurchaseUpdates() = runTest {
         val hang = CompletableDeferred<Unit>()
         val scope = TestScope(UnconfinedTestDispatcher(testScheduler))
-        val runtime = runtime({ _, _, _ ->
+        val runtime = runtime({ _, _ ->
             hang.await()
             record("bounded-offline-cache")
         })

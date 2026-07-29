@@ -2,7 +2,7 @@ package dev.mosaic.sdk
 
 import com.google.gson.GsonBuilder
 import com.google.gson.JsonParser
-import java.time.format.DateTimeParseException
+import java.text.ParseException
 import java.util.UUID
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -35,9 +35,12 @@ internal fun mosaicContractInstantMillis(value: String): Long {
     require(MOSAIC_CONTRACT_TIMESTAMP.matches(value)) {
         "A Mosaic contract timestamp must have exactly three fractional digits and a literal Z."
     }
+    // Parsed with the same `SimpleDateFormat` the rest of the SDK uses rather than `java.time`,
+    // which needs API 26 or desugaring; Mosaic supports API 24 without either. The shape is already
+    // fixed by the pattern above, so this call only has to reject impossible dates.
     return try {
-        java.time.Instant.parse(value).toEpochMilli()
-    } catch (cause: DateTimeParseException) {
+        mosaicAnalyticsTimestampMillis(value)
+    } catch (cause: ParseException) {
         throw IllegalArgumentException("A Mosaic contract timestamp must be a valid UTC instant.", cause)
     }
 }
@@ -362,21 +365,19 @@ class MosaicCustomerEntitlementRuntime internal constructor(
         val cached = stateMutex.withLock { accepted }
         val body = MosaicCustomerEntitlementCodec.encodeSyncRequest(
             correlationId = correlationId(),
-            billingCustomerId = session.currentCustomerId(),
             knownSnapshotVersion = cached?.snapshot?.snapshotVersion,
             entityTag = cached?.snapshot?.entityTag,
             requestedEntitlementKeys = emptyList(),
         )
 
-        var response = transport.sync(issued.token, cached?.snapshot?.entityTag, body)
+        var response = transport.sync(issued.token, body)
         if (response is MosaicCustomerEntitlementTransportResult.Unauthorized) {
             // Exactly one retry per attempt, after a forced refresh. More would turn a revoked
             // token into a retry storm against the host's backend; fewer would make every ordinary
             // token expiry look like a sign-out.
             session.invalidate(issued.token)
             response = when (val refreshed = session.token(forceRefresh = true)) {
-                is MosaicCustomerAccessTokenResult.Issued ->
-                    transport.sync(refreshed.token, cached?.snapshot?.entityTag, body)
+                is MosaicCustomerAccessTokenResult.Issued -> transport.sync(refreshed.token, body)
                 MosaicCustomerAccessTokenResult.SignedOut -> return signedOut(generation)
                 is MosaicCustomerAccessTokenResult.Unavailable -> return unavailable(
                     generation,
@@ -402,8 +403,8 @@ class MosaicCustomerEntitlementRuntime internal constructor(
 
         return when (response) {
             is MosaicCustomerEntitlementTransportResult.Record -> acceptRecord(generation, response)
-            is MosaicCustomerEntitlementTransportResult.NotModified ->
-                confirmCache(generation, response.freshness)
+            // Preserve, slide nothing. The cache keeps running out its own clock.
+            is MosaicCustomerEntitlementTransportResult.NotModified -> preserveCache(generation)
             is MosaicCustomerEntitlementTransportResult.Unauthorized -> unavailable(
                 generation,
                 MosaicCustomerEntitlementUnavailableReason.UNAUTHORIZED,
@@ -424,14 +425,10 @@ class MosaicCustomerEntitlementRuntime internal constructor(
     ): MosaicCustomerEntitlementSyncResult {
         when (val decoded = MosaicCustomerEntitlementCodec.decodeRecord(response.body)) {
             is MosaicCustomerRecordDecoding.Unreadable -> return reject(generation, decoded.rejection)
-            is MosaicCustomerRecordDecoding.Unchanged -> return confirmCache(
-                generation,
-                MosaicCustomerFreshnessHeaders(
-                    decoded.unchanged.freshness.refreshAfter,
-                    decoded.unchanged.freshness.validUntil,
-                    decoded.unchanged.freshness.staleGraceSeconds,
-                ),
-            )
+            // The unchanged answer is a contract record, not an HTTP status. It carries its own
+            // refreshed window, so the confirmation and the freshness it grants are one document
+            // that the content digest and the schema both cover.
+            is MosaicCustomerRecordDecoding.Unchanged -> return confirmCache(generation, decoded.unchanged)
             is MosaicCustomerRecordDecoding.Snapshot -> {
                 val snapshot = decoded.snapshot
                 // The HTTP validator must identify the record it accompanies. A weak validator is
@@ -457,17 +454,7 @@ class MosaicCustomerEntitlementRuntime internal constructor(
                     return reject(generation, decision.rejection ?: MosaicCustomerSnapshotRejection.MALFORMED_RECORD)
                 }
 
-                val window = response.freshness
-                    ?.let {
-                        MosaicCustomerEntitlementFreshnessWindow(
-                            issuedAt = snapshot.freshness.issuedAt,
-                            refreshAfter = it.refreshAfter,
-                            validUntil = it.validUntil,
-                            staleGraceSeconds = it.staleGraceSeconds,
-                        )
-                    }
-                    ?: snapshot.freshness
-                val entry = MosaicCachedCustomerEntitlements(snapshot, window)
+                val entry = MosaicCachedCustomerEntitlements(snapshot, snapshot.freshness)
                 return stateMutex.withLock {
                     // A snapshot that arrived for the identity we were signed in as when the request
                     // started is discarded after a logout or an identity change: it is not this
@@ -489,10 +476,40 @@ class MosaicCustomerEntitlementRuntime internal constructor(
         }
     }
 
-    /** A confirmed-current snapshot: freshness slides, nothing is re-accepted, nothing is emitted new. */
+    /**
+     * Keeps the cache exactly as it is.
+     *
+     * The window is untouched, so a device answered only by intermediaries still expires on
+     * schedule: staying offline-valid requires an answer Mosaic actually produced.
+     */
+    private suspend fun preserveCache(generation: Int): MosaicCustomerEntitlementSyncResult =
+        stateMutex.withLock {
+            if (generation != identityGeneration) {
+                return@withLock MosaicCustomerEntitlementSyncResult.Rejected(
+                    MosaicCustomerSnapshotRejection.CUSTOMER_MISMATCH,
+                    null,
+                )
+            }
+            val cached = accepted ?: return@withLock unavailableLocked(
+                MosaicCustomerEntitlementUnavailableReason.NEVER_SYNCHRONIZED,
+                MosaicDiagnosticCode.CUSTOMER_ENTITLEMENTS_TRANSPORT_FAILED,
+            )
+            val evaluation = evaluate(cached)
+            publish(cached, evaluation)
+            MosaicCustomerEntitlementSyncResult.Unchanged(cached.snapshot, evaluation.state)
+        }
+
+    /**
+     * A confirmed-current snapshot: freshness slides, nothing is re-accepted, nothing new is emitted.
+     *
+     * The confirmation is checked against the cache it claims to confirm. An unchanged record for a
+     * different customer, Project, Environment, or version is not a confirmation of anything this
+     * device holds, and sliding a window on its say-so would extend offline access on the strength
+     * of a record about somebody else.
+     */
     private suspend fun confirmCache(
         generation: Int,
-        freshness: MosaicCustomerFreshnessHeaders?,
+        unchanged: MosaicCustomerSnapshotUnchanged,
     ): MosaicCustomerEntitlementSyncResult = stateMutex.withLock {
         if (generation != identityGeneration) {
             return@withLock MosaicCustomerEntitlementSyncResult.Rejected(
@@ -507,17 +524,37 @@ class MosaicCustomerEntitlementRuntime internal constructor(
                 MosaicCustomerEntitlementUnavailableReason.NEVER_SYNCHRONIZED,
                 MosaicDiagnosticCode.CUSTOMER_ENTITLEMENTS_TRANSPORT_FAILED,
             )
-        val slid = freshness?.let {
-            MosaicCachedCustomerEntitlements(
-                cached.snapshot,
-                MosaicCustomerEntitlementFreshnessWindow(
-                    issuedAt = cached.window.issuedAt,
-                    refreshAfter = it.refreshAfter,
-                    validUntil = it.validUntil,
-                    staleGraceSeconds = it.staleGraceSeconds,
+        val confirmsCache = unchanged.billingCustomerId == cached.snapshot.billingCustomerId &&
+            unchanged.projectId == cached.snapshot.projectId &&
+            unchanged.environmentId == cached.snapshot.environmentId &&
+            unchanged.snapshotVersion == cached.snapshot.snapshotVersion &&
+            unchanged.entityTag == cached.snapshot.entityTag
+        if (!confirmsCache) {
+            rejectedCount += 1
+            lastRejection = MosaicCustomerSnapshotRejection.CUSTOMER_MISMATCH
+            diagnostics.record(
+                MosaicDiagnostic(
+                    MosaicDiagnosticCode.CUSTOMER_ENTITLEMENTS_SNAPSHOT_REJECTED,
+                    "An unchanged record did not identify the cached snapshot; freshness was not slid.",
                 ),
             )
-        } ?: cached
+            publish(cached, evaluate(cached))
+            return@withLock MosaicCustomerEntitlementSyncResult.Rejected(
+                MosaicCustomerSnapshotRejection.CUSTOMER_MISMATCH,
+                cached.snapshot,
+            )
+        }
+        val slid = MosaicCachedCustomerEntitlements(
+            cached.snapshot,
+            MosaicCustomerEntitlementFreshnessWindow(
+                // Issuance stays the cached snapshot's own: the confirmation extends how long the
+                // snapshot may be served, it does not restate when the snapshot was produced.
+                issuedAt = cached.window.issuedAt,
+                refreshAfter = unchanged.freshness.refreshAfter,
+                validUntil = unchanged.freshness.validUntil,
+                staleGraceSeconds = unchanged.freshness.staleGraceSeconds,
+            ),
+        )
         accepted = slid
         persist(slid, null)
         val evaluation = evaluate(slid)
@@ -835,14 +872,18 @@ class MosaicCustomerEntitlementRuntime internal constructor(
                 val entry = current.snapshot.entry(entitlementKey)
                 MosaicCustomerEntitlementCheck(
                     entitlementKey = entitlementKey,
-                    state = entry?.state
-                        // Mosaic answered, and this Entitlement had no qualifying source. That is
-                        // the one path on which `inactive` is admissible at all.
-                        ?: MosaicCustomerEntitlementState.Inactive(
-                            MosaicCustomerEntitlementExplanation(
-                                MosaicCustomerEntitlementExplanationCode.NO_QUALIFYING_SOURCE,
-                            ),
+                    // An absent entry is not a decision. A sync may have been narrowed with
+                    // `requestedEntitlementKeys`, an Entitlement may have been defined after this
+                    // snapshot was projected, or the key may simply be misspelled — and none of
+                    // those is Mosaic saying the customer does not have it. `inactive` is reported
+                    // only when a snapshot carries an entry that says so, so that a typo in a key
+                    // can never silently revoke a paying customer's access.
+                    state = entry?.state ?: MosaicCustomerEntitlementState.Unknown(
+                        MosaicCustomerEntitlementExplanation(
+                            MosaicCustomerEntitlementExplanationCode.NO_QUALIFYING_SOURCE,
                         ),
+                        MosaicCustomerUncertainty(MosaicCustomerUncertaintyReason.MISSING_FACT).definite(),
+                    ),
                     sourceCount = entry?.sourceCount ?: 0,
                     snapshotVersion = current.snapshot.snapshotVersion,
                     asOf = current.snapshot.asOf,
