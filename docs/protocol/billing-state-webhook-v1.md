@@ -98,6 +98,17 @@ reported without pretending the customer was previously `inactive`.
 `lifecycleState`, `renewalIntent`, `billingState`, `uncertainty` — as a safe
 summary for routing and logging. The authoritative answer is still the snapshot.
 
+**`accessState` here is narrower than the read-time one: `active`, `inactive`,
+`unknown`, and never `unavailable`.** `unavailable` means Mosaic could not answer
+a read, and an event is not a read — an event exists only because a projection
+committed a new snapshot, so the projection did answer. The worst an event can
+honestly say about an axis is `unknown`, with the `uncertainty` that explains
+why; a schema-level `if`/`then` requires a non-`none` reason in that case.
+Admitting `unavailable` would put a service-delivery state on a record that is
+not authoritative to begin with, and a consumer told to be tolerant would have no
+reason to distrust it. A validator guard fails the build if the enumeration is
+ever re-widened.
+
 **An event must report a change.** A no-change projection creates no snapshot and
 emits no webhook, so an event whose entitlement states are all unchanged is a
 producer defect — unless `sourceReason` is `subscription_period_changed`,

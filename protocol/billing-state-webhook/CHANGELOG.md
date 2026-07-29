@@ -71,6 +71,24 @@ also recorded in `docs/protocol/compatibility-policy.md`.
   names; here that vocabulary is legitimate and banning it would ban the
   contract.
 
+### Stage 5 narrowing, 2026-07-29
+
+Draft narrowing, no version bump, permitted while the contract is `draft` per
+[the breaking-change process](../../docs/protocol/breaking-change-process.md).
+
+- **`stateSummary.accessState` no longer admits `unavailable`.** The axis is now
+  `active`, `inactive`, `unknown`. `unavailable` describes Mosaic's ability to
+  answer a *read*, and an event is not a read: an event exists only because a
+  projection committed a new snapshot, so the projection did answer. The worst an
+  event can honestly say about an axis is `unknown`, carrying a non-`none`
+  `uncertainty` — which the schema already required for `unknown`, and the
+  `if`/`then` narrowed with the enumeration. Admitting `unavailable` would have
+  placed a service-delivery state on a record that is not authoritative in the
+  first place, in front of a consumer this contract explicitly instructs to be
+  tolerant. No fixture carried the value, so no fixture changed. The narrowing is
+  machine-guarded: `validateSummaryAccessVocabulary` fails the build if the
+  enumeration is ever re-widened.
+
 ### Fixtures and vectors
 
 13 canonical fixtures and 8 invalid ones.

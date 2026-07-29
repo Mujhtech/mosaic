@@ -7,10 +7,11 @@
  *
  * The semantic layer covers what JSON Schema cannot: time ordering, snapshot
  * monotonicity, retry arithmetic, response-code agreement, and the rule that an
- * event must actually report a change. It also carries two guards on the
+ * event must actually report a change. It also carries three guards on the
  * contract itself rather than on any document -- no event type may name a
- * provider, and the emitted set must be a subset of the declared vocabulary --
- * plus the forbidden-value walk ported from Billing Ingestion. Only the *values*
+ * provider, the emitted set must be a subset of the declared vocabulary, and a
+ * summarized access state may never be `unavailable` -- plus the
+ * forbidden-value walk ported from Billing Ingestion. Only the *values*
  * are ported: Billing Ingestion also bans entitlement and subscription field
  * names, which here would ban the entire contract.
  */
@@ -317,6 +318,36 @@ function validateEventTypeVocabulary(artifacts) {
   return errors;
 }
 
+/**
+ * Guards the contract itself: an event's summarized access state may never be
+ * `unavailable`.
+ *
+ * `unavailable` says Mosaic could not answer a read. An event is not a read --
+ * it exists only because a projection committed a new snapshot, so the
+ * projection did answer. The worst an event can honestly say about an axis is
+ * `unknown`, carrying the uncertainty that explains why. Admitting
+ * `unavailable` here would put a service-delivery state on a record that is not
+ * authoritative in the first place, and a tolerant consumer would have no reason
+ * to distrust it.
+ */
+function validateSummaryAccessVocabulary(artifacts) {
+  const errors = [];
+  const members = artifacts.eventSchema.$defs.accessState.enum;
+  if (members.includes("unavailable")) {
+    errors.push(
+      "Webhook stateSummary.accessState may never include unavailable: an event is not a read, so Mosaic's ability to answer is not one of its states",
+    );
+  }
+  for (const required of ["active", "inactive", "unknown"]) {
+    if (!members.includes(required)) {
+      errors.push(
+        `Webhook stateSummary.accessState must include ${required}, or a committed projection has nowhere honest to land`,
+      );
+    }
+  }
+  return errors;
+}
+
 function validateCompatibility(artifacts) {
   const compiled = validators(artifacts);
   if (!compiled.manifest(artifacts.compatibilityManifest)) {
@@ -399,6 +430,7 @@ export function validateBillingStateWebhookV1Artifacts(artifacts) {
   const compiled = validators(artifacts);
   const errors = [
     ...validateEventTypeVocabulary(artifacts),
+    ...validateSummaryAccessVocabulary(artifacts),
     ...validateCompatibility(artifacts),
   ];
 

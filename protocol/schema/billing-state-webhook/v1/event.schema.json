@@ -79,11 +79,11 @@
       ]
     },
     "accessState": {
+      "description": "Access under accepted policy, as summarized on an event. unavailable is deliberately ABSENT, unlike the read-time accessState of Authoritative Entitlement 1: unavailable means Mosaic could not answer a read, and an event is not a read. An event exists only because a projection committed a new snapshot, so the projection did answer; the worst it can say about an axis is unknown, with the uncertainty that explains why. Emitting unavailable here would let a consumer read a service-delivery state as a customer state on a record that is not even authoritative.",
       "enum": [
         "active",
         "inactive",
-        "unknown",
-        "unavailable"
+        "unknown"
       ]
     },
     "entitlementState": {
@@ -313,10 +313,7 @@
       "if": {
         "properties": {
           "accessState": {
-            "enum": [
-              "unknown",
-              "unavailable"
-            ]
+            "const": "unknown"
           }
         },
         "required": [

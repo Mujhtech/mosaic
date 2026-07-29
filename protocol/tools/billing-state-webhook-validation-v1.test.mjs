@@ -156,6 +156,43 @@ test("an unknown transition is reported as unknown, never as a deactivation", ()
   assert.notEqual(document.payload.stateSummary.uncertainty.reason, "none");
 });
 
+test("an event's access state is never unavailable", () => {
+  // unavailable says Mosaic could not answer a read. An event is not a read: it
+  // exists because a projection committed a snapshot, so the projection did
+  // answer. The worst it can say is unknown, with an uncertainty attached.
+  assert.deepEqual(artifacts.eventSchema.$defs.accessState.enum, [
+    "active",
+    "inactive",
+    "unknown",
+  ]);
+
+  const document = fixture("events/unknown-state-transition.json");
+  document.payload.stateSummary.accessState = "unavailable";
+  assert.notDeepEqual(
+    validateBillingStateWebhookV1Record(document, artifacts),
+    [],
+  );
+
+  for (const summary of artifacts.validFixtures
+    .filter((candidate) => candidate.recordType === "billingStateEvent")
+    .map((candidate) => candidate.payload.stateSummary)) {
+    assert.notEqual(summary.accessState, "unavailable");
+  }
+});
+
+test("the contract guard rejects an accessState vocabulary that admits unavailable", () => {
+  // Exercised by breaking it: the narrowing has to be defended, not merely
+  // performed, or a later edit re-widens it without anything noticing.
+  const broken = structuredClone(artifacts);
+  broken.eventSchema = structuredClone(artifacts.eventSchema);
+  broken.eventSchema.$defs.accessState.enum.push("unavailable");
+  const errors = validateBillingStateWebhookV1Artifacts(broken);
+  assert.ok(
+    errors.some((error) => error.includes("may never include unavailable")),
+    `expected an unavailable-vocabulary error, got: ${errors.join("; ")}`,
+  );
+});
+
 test("no fixture carries a signed-payload-shaped value", () => {
   const jws = /^[A-Za-z0-9_-]{16,}\.[A-Za-z0-9_-]{16,}\.[A-Za-z0-9_-]{8,}$/;
   const strings = (value) =>
