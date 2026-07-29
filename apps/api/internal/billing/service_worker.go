@@ -22,6 +22,10 @@ import (
 // validationLease bounds how long one worker may hold a validation job.
 const validationLease = 2 * time.Minute
 
+// identityBindingLease is short because binding performs only PostgreSQL-backed
+// identity decisions and no store-provider call.
+const identityBindingLease = 60 * time.Second
+
 // ProcessNextValidation leases and runs one validation job. It matches the
 // (processed, error) contract every other Mosaic job family uses so the worker
 // loop treats billing exactly like analytics and Experiment scheduling.
@@ -61,55 +65,47 @@ func (s *Service) ProcessNextValidation(ctx context.Context, workerID string) (b
 	if err := s.repository.CompleteAttempt(ctx, job, outcome, s.now()); err != nil {
 		return true, safeFailure(err, "billing_attempt_write_failed")
 	}
-	if err := s.bindFactIdentity(ctx, outcome); err != nil {
-		// The fact and its lineage are committed; only the identity decision
-		// failed. The job is still `processed` — re-leasing it would re-run the
-		// provider call and re-record an attempt for work that succeeded — but
-		// the error is reported so the worker's failure signal and its metrics
-		// see it. The lineage is left unassociated, which is exactly what
-		// `unresolvedLineages` on the projection-health surface counts, and the
-		// next fact on the same chain retries the decision.
-		return true, safeFailure(err, "billing_lineage_bind_failed")
-	}
 	return true, nil
 }
 
-// bindFactIdentity runs the identity half of the Phase 9A→9B seam.
-//
-// It is outside CompleteAttempt's transaction on purpose. The structural half —
-// the lineage row and its projection instance — is written inside that
-// transaction because it is a deterministic function of the fact and must be
-// exactly as durable as it. Deciding *who owns* the lineage reads alias
-// resolutions and prior evidence and can open an operator conflict, which is
-// application logic rather than a write, and holding the fact's transaction open
-// across it would put the ledger's hot path behind the identity module.
-func (s *Service) bindFactIdentity(ctx context.Context, outcome AttemptOutcome) error {
-	if s.lineages == nil || outcome.Fact == nil || len(outcome.Fact.PurchaseChainDigest) == 0 {
-		return nil
-	}
-	fact := *outcome.Fact
-	root, err := s.repository.ChainRootDigest(ctx, fact)
+// ProcessNextIdentityBinding runs the durable identity half of the Phase
+// 9A→9B seam. Validation has already committed; failures requeue this job and
+// never repeat the provider request, validation attempt, or Transaction Fact.
+func (s *Service) ProcessNextIdentityBinding(ctx context.Context, workerID string) (bool, error) {
+	now := s.now()
+	job, leased, err := s.repository.LeaseIdentityBindingJob(ctx, workerID, now, now.Add(identityBindingLease))
 	if err != nil {
-		return err
+		return false, safeFailure(err, "billing_identity_binding_lease_failed")
 	}
-	if len(root) == 0 {
-		root = fact.PurchaseChainDigest
+	if !leased {
+		return false, nil
 	}
-	acquiredAt := fact.OccurredAt
-	if fact.PeriodStartAt != nil && fact.PeriodStartAt.Before(acquiredAt) {
-		acquiredAt = *fact.PeriodStartAt
-	}
-	return s.lineages.BindFact(ctx, FactBinding{
-		ProjectID:        fact.ProjectID,
-		EnvironmentID:    fact.EnvironmentID,
-		Provider:         fact.Provider,
-		LineageKeyDigest: root,
-		FactChainDigest:  fact.PurchaseChainDigest,
-		RawInputID:       fact.SourceRawInputID,
-		ReferenceDigests: outcome.ReferenceDigests,
-		Correlators:      outcome.Correlators,
-		AcquiredAt:       acquiredAt,
+	jobtelemetry.Annotate(ctx, jobtelemetry.Identity{
+		JobID: job.ID, JobKind: "billing_identity_binding",
+		ProjectID: job.ProjectID, EnvironmentID: job.EnvironmentID, ResourceID: job.Binding.RawInputID,
 	})
+	if s.lineages == nil {
+		return true, s.repository.ParkIdentityBindingJob(ctx, job, "identity_binding_unavailable", s.now())
+	}
+	if !s.billingEnabled(ctx, job.ProjectID) {
+		return true, s.repository.ParkIdentityBindingJob(ctx, job, "billing_disabled", s.now())
+	}
+
+	ctx, span := s.tracer.Start(ctx, "billing.identity.bind")
+	defer span.End()
+	if err := s.lineages.BindFact(ctx, job.Binding); err != nil {
+		completed := s.now()
+		delay := time.Duration(1<<min(job.AttemptCount-1, 6)) * time.Second
+		if retryErr := s.repository.RetryIdentityBindingJob(ctx, job, "identity_binding_failed",
+			completed.Add(delay), completed); retryErr != nil {
+			return true, safeFailure(errors.Join(err, retryErr), "billing_identity_binding_retry_failed")
+		}
+		return true, safeFailure(err, "billing_lineage_bind_failed")
+	}
+	if err := s.repository.CompleteIdentityBindingJob(ctx, job, s.now()); err != nil {
+		return true, safeFailure(err, "billing_identity_binding_complete_failed")
+	}
+	return true, nil
 }
 
 // runValidation performs one attempt and assembles everything it produced. It

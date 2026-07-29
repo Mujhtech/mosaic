@@ -12,6 +12,13 @@ import (
 // rather than of the caller remembering to check, because a read surface that
 // depends on the caller checking eventually meets a caller that did not.
 type Repository interface {
+	// AuthorizeProject requires organization membership with the owner or admin
+	// role. A non-member is reported as ErrNotFound so Project existence is not
+	// exposed across tenant boundaries.
+	AuthorizeProject(ctx context.Context, actor Actor, projectID string) error
+	// AuthorizeEnvironment applies the same role check and verifies that the
+	// Environment belongs to the Project named by the caller.
+	AuthorizeEnvironment(ctx context.Context, actor Actor, projectID, environmentID string) error
 	// BillingEnabled reports the Project's billing setting. It fails closed:
 	// the service treats an unreadable setting as disabled.
 	BillingEnabled(ctx context.Context, projectID string) (bool, error)

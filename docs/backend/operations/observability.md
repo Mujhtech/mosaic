@@ -102,8 +102,9 @@ rate spike can be attributed to a specific cause.
 
 Families: `analytics` (queues `aggregate`, `export`, `deletion`, `retention`),
 `experiment` (queue `schedule`), and — when `MOSAIC_BILLING_ENABLED` is set —
-`billing` (queues `validation`, `reconciliation`, `replay`). Each executed job
-logs one line with `job_family`, `worker_id`, `duration`, and `failed`.
+`billing` (queues `validation`, `identity_binding`, `reconciliation`, `replay`).
+Each executed job logs one line with `job_family`, `worker_id`, `duration`, and
+`failed`.
 
 The worker additionally schedules `billing_rtdn` and `billing_retention`, which
 are polling loops rather than queues and so publish no depth.

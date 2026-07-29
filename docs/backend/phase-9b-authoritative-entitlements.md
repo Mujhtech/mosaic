@@ -446,6 +446,14 @@ An association that establishes an owner enqueues a **customer-scoped** projecti
 already queued for that lineage is lineage-scoped — it was queued when the lineage had no
 customer — and a lineage-scoped command deliberately mints no customer snapshot.
 
+The fact-to-identity seam is durable as of migration `00051`. Completing any fact-producing
+Validation Attempt atomically enqueues a digest-only identity-binding job, including when a
+revalidation deduplicates to an existing Transaction Fact but carries new association evidence.
+The worker processes validation, identity binding, and projection as separate bounded steps.
+Binding failures retry without repeating provider validation or rewriting the fact. Jobs are
+serialized per Environment, provider, and lineage digest; expired leases are reclaimed, and an
+expired final attempt is marked failed so it cannot block later evidence for the same lineage.
+
 Pointer moves and conflict freezes are retry-safe across queue failures. Before a pointer changes,
 the service persists prior-lineage evidence naming the old customer. If enqueueing either affected
 aggregate fails, an identical association request reads that evidence and re-enqueues both the old

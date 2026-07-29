@@ -116,6 +116,7 @@ func cleanup(t *testing.T, ctx context.Context, pool *pgxpool.Pool, projectID st
 		`DELETE FROM billing_quarantine_records WHERE project_id=$1`,
 		`DELETE FROM billing_transaction_facts WHERE project_id=$1`,
 		`DELETE FROM billing_product_resolutions WHERE project_id=$1`,
+		`DELETE FROM billing_identity_binding_jobs WHERE project_id=$1`,
 		`DELETE FROM billing_validation_jobs WHERE project_id=$1`,
 		`DELETE FROM billing_validation_attempts WHERE project_id=$1`,
 		`DELETE FROM billing_raw_inputs WHERE project_id=$1`,

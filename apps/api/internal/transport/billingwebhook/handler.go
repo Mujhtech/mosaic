@@ -383,6 +383,8 @@ func writeError(w http.ResponseWriter, r *http.Request, err error) {
 	switch {
 	case errors.Is(err, billingwebhook.ErrUnauthenticated):
 		status, code, message = http.StatusUnauthorized, "unauthenticated", "Authentication is required."
+	case errors.Is(err, billingwebhook.ErrForbidden):
+		status, code, message = http.StatusForbidden, "forbidden", "You do not have permission to perform this action."
 	case errors.Is(err, billingwebhook.ErrNotFound):
 		status, code, message = http.StatusNotFound, "not_found", "The requested resource was not found."
 	case errors.Is(err, billingwebhook.ErrDestinationRefused):

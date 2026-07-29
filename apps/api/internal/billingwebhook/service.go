@@ -110,8 +110,8 @@ func (s *Service) CreateDestination(ctx context.Context, actor Actor, input Dest
 	ctx, span := s.tracer.Start(ctx, "billing.webhook.destination.create")
 	defer span.End()
 
-	if actor.ID == "" {
-		return DestinationWithSecret{}, ErrUnauthenticated
+	if err := s.repository.AuthorizeEnvironment(ctx, actor, input.ProjectID, input.EnvironmentID); err != nil {
+		return DestinationWithSecret{}, err
 	}
 	if err := s.requireEnabled(ctx, input.ProjectID); err != nil {
 		return DestinationWithSecret{}, err
@@ -166,15 +166,15 @@ func (s *Service) CreateDestination(ctx context.Context, actor Actor, input Dest
 }
 
 func (s *Service) ListDestinations(ctx context.Context, actor Actor, projectID, environmentID string) ([]Destination, error) {
-	if actor.ID == "" {
-		return nil, ErrUnauthenticated
+	if err := s.repository.AuthorizeEnvironment(ctx, actor, projectID, environmentID); err != nil {
+		return nil, err
 	}
 	return s.repository.ListDestinations(ctx, projectID, environmentID)
 }
 
 func (s *Service) Destination(ctx context.Context, actor Actor, projectID, destinationID string) (Destination, error) {
-	if actor.ID == "" {
-		return Destination{}, ErrUnauthenticated
+	if err := s.repository.AuthorizeProject(ctx, actor, projectID); err != nil {
+		return Destination{}, err
 	}
 	return s.repository.Destination(ctx, projectID, destinationID)
 }
@@ -182,8 +182,8 @@ func (s *Service) Destination(ctx context.Context, actor Actor, projectID, desti
 // UpdateDestination changes the URL, subscribed event types, or description. A
 // changed URL is screened before it is stored, exactly as a new one is.
 func (s *Service) UpdateDestination(ctx context.Context, actor Actor, projectID, destinationID string, update DestinationUpdate) (Destination, error) {
-	if actor.ID == "" {
-		return Destination{}, ErrUnauthenticated
+	if err := s.repository.AuthorizeProject(ctx, actor, projectID); err != nil {
+		return Destination{}, err
 	}
 	if err := s.requireEnabled(ctx, projectID); err != nil {
 		return Destination{}, err
@@ -210,8 +210,8 @@ func (s *Service) UpdateDestination(ctx context.Context, actor Actor, projectID,
 // Resuming clears the auto-disable state, which is what makes an automatic
 // disable recoverable by an operator rather than permanent.
 func (s *Service) SetStatus(ctx context.Context, actor Actor, projectID, destinationID, status, reason string) (Destination, error) {
-	if actor.ID == "" {
-		return Destination{}, ErrUnauthenticated
+	if err := s.repository.AuthorizeProject(ctx, actor, projectID); err != nil {
+		return Destination{}, err
 	}
 	switch status {
 	case DestinationActive, DestinationPaused, DestinationDisabled:
@@ -229,8 +229,8 @@ func (s *Service) SetStatus(ctx context.Context, actor Actor, projectID, destina
 // is the record of what a tenant's backend was told, and the destination is
 // what identifies it.
 func (s *Service) DeleteDestination(ctx context.Context, actor Actor, projectID, destinationID string) error {
-	if actor.ID == "" {
-		return ErrUnauthenticated
+	if err := s.repository.AuthorizeProject(ctx, actor, projectID); err != nil {
+		return err
 	}
 	return s.repository.DeleteDestination(ctx, projectID, destinationID, actor.ID, s.now())
 }
@@ -251,8 +251,8 @@ func (s *Service) RotateSecret(ctx context.Context, actor Actor, projectID, dest
 	ctx, span := s.tracer.Start(ctx, "billing.webhook.secret.rotate")
 	defer span.End()
 
-	if actor.ID == "" {
-		return DestinationWithSecret{}, ErrUnauthenticated
+	if err := s.repository.AuthorizeProject(ctx, actor, projectID); err != nil {
+		return DestinationWithSecret{}, err
 	}
 	if err := s.requireEnabled(ctx, projectID); err != nil {
 		return DestinationWithSecret{}, err
@@ -296,15 +296,15 @@ func (s *Service) RotateSecret(ctx context.Context, actor Actor, projectID, dest
 // suspected compromise: the secret stops signing on the next delivery rather
 // than when its window would have lapsed.
 func (s *Service) RetireSecret(ctx context.Context, actor Actor, projectID, destinationID, secretID string) (SecretMetadata, error) {
-	if actor.ID == "" {
-		return SecretMetadata{}, ErrUnauthenticated
+	if err := s.repository.AuthorizeProject(ctx, actor, projectID); err != nil {
+		return SecretMetadata{}, err
 	}
 	return s.repository.RetireSecret(ctx, projectID, destinationID, secretID, actor.ID, s.now())
 }
 
 func (s *Service) ListSecrets(ctx context.Context, actor Actor, projectID, destinationID string) ([]SecretMetadata, error) {
-	if actor.ID == "" {
-		return nil, ErrUnauthenticated
+	if err := s.repository.AuthorizeProject(ctx, actor, projectID); err != nil {
+		return nil, err
 	}
 	return s.repository.ListSecrets(ctx, projectID, destinationID)
 }
@@ -314,22 +314,26 @@ func (s *Service) ListSecrets(ctx context.Context, actor Actor, projectID, desti
 // ---------------------------------------------------------------------------
 
 func (s *Service) ListDeliveries(ctx context.Context, actor Actor, projectID string, filter DeliveryFilter) ([]Delivery, error) {
-	if actor.ID == "" {
-		return nil, ErrUnauthenticated
+	if filter.EnvironmentID != "" {
+		if err := s.repository.AuthorizeEnvironment(ctx, actor, projectID, filter.EnvironmentID); err != nil {
+			return nil, err
+		}
+	} else if err := s.repository.AuthorizeProject(ctx, actor, projectID); err != nil {
+		return nil, err
 	}
 	return s.repository.ListDeliveries(ctx, projectID, filter.Bounded())
 }
 
 func (s *Service) Delivery(ctx context.Context, actor Actor, projectID, deliveryID string) (Delivery, error) {
-	if actor.ID == "" {
-		return Delivery{}, ErrUnauthenticated
+	if err := s.repository.AuthorizeProject(ctx, actor, projectID); err != nil {
+		return Delivery{}, err
 	}
 	return s.repository.Delivery(ctx, projectID, deliveryID)
 }
 
 func (s *Service) ListAttempts(ctx context.Context, actor Actor, projectID, deliveryID string) ([]Attempt, error) {
-	if actor.ID == "" {
-		return nil, ErrUnauthenticated
+	if err := s.repository.AuthorizeProject(ctx, actor, projectID); err != nil {
+		return nil, err
 	}
 	return s.repository.ListAttempts(ctx, projectID, deliveryID)
 }
@@ -340,8 +344,8 @@ func (s *Service) ListAttempts(ctx context.Context, actor Actor, projectID, deli
 // new logical event, so a receiver deduplicating on the event id sees the
 // change exactly once however many times an operator replays it.
 func (s *Service) ReplayDelivery(ctx context.Context, actor Actor, projectID, deliveryID string) (Delivery, error) {
-	if actor.ID == "" {
-		return Delivery{}, ErrUnauthenticated
+	if err := s.repository.AuthorizeProject(ctx, actor, projectID); err != nil {
+		return Delivery{}, err
 	}
 	if err := s.requireEnabled(ctx, projectID); err != nil {
 		return Delivery{}, err

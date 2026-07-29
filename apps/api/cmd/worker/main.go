@@ -277,6 +277,7 @@ func run() (runErr error) {
 		// latencies are one user-visible number.
 		families = append(families,
 			jobFamily{"billing_validation", billingService.ProcessNextValidation},
+			jobFamily{"billing_identity_binding", billingService.ProcessNextIdentityBinding},
 			jobFamily{"billing_projection", projectionService.ProcessNextProjection},
 			// A restore's outcome is only knowable once validation and
 			// projection have moved, so it runs immediately after them: any

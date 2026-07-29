@@ -32,6 +32,51 @@ func New(pool *pgxpool.Pool) *Repository { return &Repository{pool: pool} }
 
 var _ billingwebhook.Repository = (*Repository)(nil)
 
+// AuthorizeProject is the single operator authorization boundary for billing
+// webhook management. Billing webhooks carry authoritative entitlement state,
+// so they use the same owner/admin role bar as the billing ledger and customer
+// operator surfaces.
+func (r *Repository) AuthorizeProject(ctx context.Context, actor billingwebhook.Actor, projectID string) error {
+	actorID := strings.TrimSpace(actor.ID)
+	if actorID == "" || strings.TrimSpace(projectID) == "" {
+		return billingwebhook.ErrUnauthenticated
+	}
+	var role string
+	err := r.pool.QueryRow(ctx,
+		`SELECT m.role FROM projects p
+		 JOIN organization_members m ON m.organization_id = p.organization_id
+		 WHERE p.id = $1 AND m.actor_id = $2`, projectID, actorID).Scan(&role)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return billingwebhook.ErrNotFound
+	}
+	if err != nil {
+		return fmt.Errorf("resolve billing webhook operator role: %w", err)
+	}
+	switch role {
+	case "owner", "admin":
+		return nil
+	default:
+		return billingwebhook.ErrForbidden
+	}
+}
+
+func (r *Repository) AuthorizeEnvironment(ctx context.Context, actor billingwebhook.Actor, projectID, environmentID string) error {
+	if err := r.AuthorizeProject(ctx, actor, projectID); err != nil {
+		return err
+	}
+	var exists bool
+	err := r.pool.QueryRow(ctx,
+		`SELECT true FROM environments WHERE id = $1 AND project_id = $2`, environmentID, projectID).
+		Scan(&exists)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return billingwebhook.ErrNotFound
+	}
+	if err != nil {
+		return fmt.Errorf("resolve billing webhook environment: %w", err)
+	}
+	return nil
+}
+
 // destinationColumns is the single projection every destination read uses, so
 // a column added to one read cannot be forgotten by another.
 const destinationColumns = `id, project_id, environment_id, url, status, event_types, description,

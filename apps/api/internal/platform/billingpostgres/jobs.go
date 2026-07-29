@@ -156,6 +156,130 @@ func (r *Repository) ParkValidationJob(ctx context.Context, job billing.Validati
 	return nil
 }
 
+// LeaseIdentityBindingJob claims one digest-only identity decision. Expired
+// leases are recoverable, so a worker exit after BindFact but before completion
+// safely repeats the idempotent identity operation.
+func (r *Repository) LeaseIdentityBindingJob(ctx context.Context, workerID string, now, leaseUntil time.Time) (billing.IdentityBindingJob, bool, error) {
+	tx, err := r.pool.Begin(ctx)
+	if err != nil {
+		return billing.IdentityBindingJob{}, false, fmt.Errorf("begin identity-binding lease: %w", err)
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+
+	// A worker can exit while holding its final permitted attempt. Such a row is
+	// no longer claimable, but while it remains `leased` it still occupies the
+	// partial unique lineage slot and would block every queued sibling forever.
+	// Terminalize a bounded batch in this transaction before selecting work, so
+	// clearing the slot and claiming the next eligible job are one atomic action.
+	if _, err := tx.Exec(ctx,
+		`WITH exhausted AS (
+			SELECT id FROM billing_identity_binding_jobs
+			WHERE status='leased' AND lease_expires_at <= $1 AND attempt_count >= max_attempts
+			ORDER BY lease_expires_at, id
+			FOR UPDATE SKIP LOCKED LIMIT 100
+		)
+		UPDATE billing_identity_binding_jobs jobs
+		SET status='failed', lease_owner=NULL, lease_expires_at=NULL,
+		    last_error_code=COALESCE(last_error_code,'identity_binding_lease_expired_exhausted'),
+		    updated_at=$1
+		FROM exhausted WHERE jobs.id=exhausted.id`, now); err != nil {
+		return billing.IdentityBindingJob{}, false, fmt.Errorf("terminalize exhausted identity-binding leases: %w", err)
+	}
+
+	var job billing.IdentityBindingJob
+	var correlators []byte
+	err = tx.QueryRow(ctx,
+		`SELECT id, project_id, environment_id, validation_attempt_id, raw_input_id, provider,
+		        lineage_key_digest, fact_chain_digest, reference_digests, correlators,
+		        acquired_at, attempt_count, max_attempts
+		 FROM billing_identity_binding_jobs candidate
+		 WHERE (candidate.status='queued' OR (candidate.status='leased' AND candidate.lease_expires_at <= $1))
+		   AND candidate.available_at <= $1 AND candidate.attempt_count < candidate.max_attempts
+		   AND NOT EXISTS (
+		       SELECT 1 FROM billing_identity_binding_jobs leased
+		       WHERE leased.status='leased' AND leased.id <> candidate.id
+		         AND leased.environment_id=candidate.environment_id AND leased.provider=candidate.provider
+		         AND leased.lineage_key_digest=candidate.lineage_key_digest
+		   )
+		 ORDER BY candidate.available_at, candidate.created_at, candidate.id
+		 FOR UPDATE SKIP LOCKED LIMIT 1`, now).Scan(
+		&job.ID, &job.ProjectID, &job.EnvironmentID, &job.ValidationAttemptID,
+		&job.Binding.RawInputID, &job.Binding.Provider, &job.Binding.LineageKeyDigest,
+		&job.Binding.FactChainDigest, &job.Binding.ReferenceDigests, &correlators,
+		&job.Binding.AcquiredAt, &job.AttemptCount, &job.MaxAttempts)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return billing.IdentityBindingJob{}, false, nil
+	}
+	if err != nil {
+		return billing.IdentityBindingJob{}, false, fmt.Errorf("select identity-binding job: %w", err)
+	}
+	if err := json.Unmarshal(correlators, &job.Binding.Correlators); err != nil {
+		return billing.IdentityBindingJob{}, false, fmt.Errorf("decode identity-binding correlators: %w", err)
+	}
+	job.Binding.ProjectID = job.ProjectID
+	job.Binding.EnvironmentID = job.EnvironmentID
+	job.LeaseOwner = workerID
+	if _, err := tx.Exec(ctx,
+		`UPDATE billing_identity_binding_jobs
+		 SET status='leased', lease_owner=$2, lease_expires_at=$3,
+		     attempt_count=attempt_count+1, updated_at=$4
+		 WHERE id=$1`, job.ID, workerID, leaseUntil, now); err != nil {
+		return billing.IdentityBindingJob{}, false, fmt.Errorf("lease identity-binding job: %w", err)
+	}
+	job.AttemptCount++
+	if err := tx.Commit(ctx); err != nil {
+		return billing.IdentityBindingJob{}, false, fmt.Errorf("commit identity-binding lease: %w", err)
+	}
+	return job, true, nil
+}
+
+func (r *Repository) CompleteIdentityBindingJob(ctx context.Context, job billing.IdentityBindingJob, now time.Time) error {
+	tag, err := r.pool.Exec(ctx,
+		`UPDATE billing_identity_binding_jobs
+		 SET status='completed', lease_owner=NULL, lease_expires_at=NULL,
+		     last_error_code=NULL, available_at=$2, updated_at=$2
+		 WHERE id=$1 AND status='leased' AND lease_owner=$3`, job.ID, now, job.LeaseOwner)
+	if err != nil {
+		return fmt.Errorf("complete identity-binding job: %w", err)
+	}
+	if tag.RowsAffected() != 1 {
+		return fmt.Errorf("complete identity-binding job: lease lost")
+	}
+	return nil
+}
+
+func (r *Repository) ParkIdentityBindingJob(ctx context.Context, job billing.IdentityBindingJob, reason string, now time.Time) error {
+	tag, err := r.pool.Exec(ctx,
+		`UPDATE billing_identity_binding_jobs
+		 SET status='queued', attempt_count=GREATEST(attempt_count-1,0), available_at=$2,
+		     lease_owner=NULL, lease_expires_at=NULL, last_error_code=NULLIF($3,''), updated_at=$4
+		 WHERE id=$1 AND status='leased' AND lease_owner=$5`,
+		job.ID, now.Add(parkedRetryDelay), reason, now, job.LeaseOwner)
+	if err != nil {
+		return fmt.Errorf("park identity-binding job: %w", err)
+	}
+	if tag.RowsAffected() != 1 {
+		return fmt.Errorf("park identity-binding job: lease lost")
+	}
+	return nil
+}
+
+func (r *Repository) RetryIdentityBindingJob(ctx context.Context, job billing.IdentityBindingJob, reason string, availableAt, now time.Time) error {
+	tag, err := r.pool.Exec(ctx,
+		`UPDATE billing_identity_binding_jobs
+		 SET status=CASE WHEN attempt_count >= max_attempts THEN 'failed' ELSE 'queued' END,
+		     available_at=$2, lease_owner=NULL, lease_expires_at=NULL,
+		     last_error_code=NULLIF($3,''), updated_at=$4
+		 WHERE id=$1 AND status='leased' AND lease_owner=$5`, job.ID, availableAt, reason, now, job.LeaseOwner)
+	if err != nil {
+		return fmt.Errorf("retry identity-binding job: %w", err)
+	}
+	if tag.RowsAffected() != 1 {
+		return fmt.Errorf("retry identity-binding job: lease lost")
+	}
+	return nil
+}
+
 // parkedRetryDelay keeps a parked job from spinning the worker loop.
 const parkedRetryDelay = 5 * time.Minute
 
@@ -310,12 +434,29 @@ func (r *Repository) CompleteAttempt(ctx context.Context, job billing.Validation
 	// purchase (defect D-1). Both writes are deterministic functions of the
 	// fact's own chain digest, decide nothing, and must be exactly as durable as
 	// the fact, because the trigger they enable is written here too.
+	var lineage materializedLineage
 	if factRecorded && outcome.Fact != nil {
-		lineage, err := materializeLineage(ctx, tx, *outcome.Fact, now)
+		lineage, err = materializeLineage(ctx, tx, *outcome.Fact, now)
 		if err != nil {
 			return err
 		}
 		if err := enqueueProjectionForFact(ctx, tx, *outcome.Fact, lineage, now); err != nil {
+			return err
+		}
+	}
+
+	// Every fact-producing attempt gets its own durable identity job, including
+	// a revalidation whose fact was deduplicated. The latter can carry new
+	// correlator or submission evidence even though fact identity is unchanged.
+	if outcome.Fact != nil && len(outcome.Fact.PurchaseChainDigest) > 0 {
+		if len(lineage.RootDigest) == 0 {
+			lineage.RootDigest, err = chainRootDigest(ctx, tx, *outcome.Fact)
+			if err != nil {
+				return err
+			}
+		}
+		if err := enqueueIdentityBinding(ctx, tx, attempt.ID, *outcome.Fact, outcome,
+			lineage.RootDigest, now); err != nil {
 			return err
 		}
 	}
@@ -338,6 +479,40 @@ func (r *Repository) CompleteAttempt(ctx context.Context, job billing.Validation
 
 	if err := tx.Commit(ctx); err != nil {
 		return fmt.Errorf("commit attempt: %w", err)
+	}
+	return nil
+}
+
+func enqueueIdentityBinding(ctx context.Context, tx pgx.Tx, attemptID string,
+	fact billing.TransactionFact, outcome billing.AttemptOutcome, rootDigest []byte, now time.Time) error {
+
+	correlatorInput := outcome.Correlators
+	if correlatorInput == nil {
+		correlatorInput = []billing.AssociationCorrelator{}
+	}
+	referenceDigests := outcome.ReferenceDigests
+	if referenceDigests == nil {
+		referenceDigests = [][]byte{}
+	}
+	correlators, err := json.Marshal(correlatorInput)
+	if err != nil {
+		return fmt.Errorf("encode identity-binding correlators: %w", err)
+	}
+	acquiredAt := fact.OccurredAt
+	if fact.PeriodStartAt != nil && fact.PeriodStartAt.Before(acquiredAt) {
+		acquiredAt = *fact.PeriodStartAt
+	}
+	if _, err := tx.Exec(ctx,
+		`INSERT INTO billing_identity_binding_jobs(
+			id, project_id, environment_id, validation_attempt_id, raw_input_id, provider,
+			lineage_key_digest, fact_chain_digest, reference_digests, correlators, acquired_at,
+			status, attempt_count, max_attempts, available_at, created_at, updated_at)
+		 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,'queued',0,8,$12,$12,$12)
+		 ON CONFLICT (validation_attempt_id) DO NOTHING`,
+		"bib_"+hashID(attemptID, "identity_binding", ""), fact.ProjectID, fact.EnvironmentID,
+		attemptID, fact.SourceRawInputID, fact.Provider, rootDigest, fact.PurchaseChainDigest,
+		referenceDigests, correlators, acquiredAt, now); err != nil {
+		return fmt.Errorf("enqueue identity binding: %w", err)
 	}
 	return nil
 }
@@ -690,25 +865,4 @@ func (r *Repository) ExpireRawInputBodies(ctx context.Context, now time.Time, li
 		return 0, fmt.Errorf("expire raw billing input bodies: %w", err)
 	}
 	return tag.RowsAffected(), nil
-}
-
-// ChainRootDigest resolves the root of the purchase chain a fact belongs to.
-//
-// It is the same walk the fact-commit transaction performs, exposed as a read so
-// the seam can name the lineage that transaction created without the transaction
-// having to hand its identifiers back through the CompleteAttempt contract.
-func (r *Repository) ChainRootDigest(ctx context.Context, fact billing.TransactionFact) ([]byte, error) {
-	if len(fact.PurchaseChainDigest) == 0 {
-		return nil, nil
-	}
-	tx, err := r.pool.Begin(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("begin chain root read: %w", err)
-	}
-	defer func() { _ = tx.Rollback(ctx) }()
-	root, err := chainRootDigest(ctx, tx, fact)
-	if err != nil {
-		return nil, err
-	}
-	return root, tx.Commit(ctx)
 }

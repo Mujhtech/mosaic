@@ -4,16 +4,23 @@ import (
 	"bytes"
 	"context"
 	"database/sql"
+	"encoding/json"
+	"net/http"
+	"net/http/httptest"
 	"os"
+	"strings"
 	"sync"
 	"testing"
 	"time"
 
+	"github.com/go-chi/chi/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	_ "github.com/jackc/pgx/v5/stdlib"
 	"github.com/pressly/goose/v3"
 
 	"github.com/Mujhtech/mosaic/apps/api/internal/billingwebhook"
+	"github.com/Mujhtech/mosaic/apps/api/internal/platform/authn"
+	billingwebhookhttp "github.com/Mujhtech/mosaic/apps/api/internal/transport/billingwebhook"
 	"github.com/Mujhtech/mosaic/apps/api/migrations"
 )
 
@@ -65,6 +72,9 @@ type fixture struct {
 	destinationID string
 	eventID       string
 	payload       string
+	ownerActor    string
+	adminActor    string
+	memberActor   string
 }
 
 func seedWebhookFixture(t *testing.T, ctx context.Context, pool *pgxpool.Pool, suffix string) fixture {
@@ -76,6 +86,9 @@ func seedWebhookFixture(t *testing.T, ctx context.Context, pool *pgxpool.Pool, s
 		destinationID: "whd_" + suffix,
 		eventID:       "whe_" + suffix,
 		payload:       `{"eventId": "whe_` + suffix + `", "eventType": "customer.entitlements.changed"}`,
+		ownerActor:    "actor_whd_owner_" + suffix,
+		adminActor:    "actor_whd_admin_" + suffix,
+		memberActor:   "actor_whd_member_" + suffix,
 	}
 	organizationID := "org_whd_" + suffix
 	customerID := "bcus_whd_" + suffix
@@ -91,6 +104,9 @@ func seedWebhookFixture(t *testing.T, ctx context.Context, pool *pgxpool.Pool, s
 		{`INSERT INTO projects(id,organization_id,key,name,status,created_at,updated_at)
 		  VALUES ($1,$2,$3,'Webhook','active',$4,$4) ON CONFLICT (id) DO NOTHING`,
 			[]any{f.projectID, organizationID, "webhook-" + suffix, now}},
+		{`INSERT INTO organization_members(organization_id,actor_id,role,created_at,updated_at)
+		  VALUES ($1,$2,'owner',$5,$5),($1,$3,'admin',$5,$5),($1,$4,'member',$5,$5)`,
+			[]any{organizationID, f.ownerActor, f.adminActor, f.memberActor, now}},
 		{`INSERT INTO environments(id,project_id,key,name,mode,created_at,updated_at)
 		  VALUES ($1,$2,'production','Production','production',$3,$3) ON CONFLICT (id) DO NOTHING`,
 			[]any{f.environmentID, f.projectID, now}},
@@ -153,6 +169,7 @@ func cleanupWebhookFixture(ctx context.Context, pool *pgxpool.Pool, f fixture, o
 	} {
 		_, _ = pool.Exec(ctx, statement, f.projectID)
 	}
+	_, _ = pool.Exec(ctx, `DELETE FROM organization_members WHERE organization_id=$1`, organizationID)
 	_, _ = pool.Exec(ctx, `DELETE FROM organizations WHERE id=$1`, organizationID)
 	for _, statement := range []string{
 		`ALTER TABLE webhook_events ENABLE TRIGGER webhook_events_append_only`,
@@ -160,6 +177,143 @@ func cleanupWebhookFixture(ctx context.Context, pool *pgxpool.Pool, f fixture, o
 		`ALTER TABLE customer_entitlement_snapshots ENABLE TRIGGER customer_entitlement_snapshots_append_only`,
 	} {
 		_, _ = pool.Exec(ctx, statement)
+	}
+}
+
+type authorizationSurface struct {
+	handler http.Handler
+	actorID *string
+}
+
+func newAuthorizationSurface(pool *pgxpool.Pool) *authorizationSurface {
+	service := billingwebhook.NewService(New(pool), nil, nil)
+	actorID := ""
+	router := chi.NewRouter()
+	router.Use(authn.Middleware(authn.ResolverFunc(func(*http.Request) (authn.Principal, error) {
+		if actorID == "" {
+			return authn.Principal{}, authn.ErrUnauthenticated
+		}
+		return authn.Principal{ActorID: actorID, Method: "browser_session"}, nil
+	})))
+	router.Route("/v1/projects/{projectId}", func(project chi.Router) {
+		billingwebhookhttp.RegisterProjectRoutes(project, service)
+		project.Route("/environments/{environmentId}/billing", func(environment chi.Router) {
+			billingwebhookhttp.RegisterEnvironmentRoutes(environment, service)
+		})
+	})
+	return &authorizationSurface{handler: router, actorID: &actorID}
+}
+
+func (s *authorizationSurface) as(actorID string) *authorizationSurface {
+	*s.actorID = actorID
+	return s
+}
+
+func (s *authorizationSurface) do(t *testing.T, method, path, body string) (int, map[string]any) {
+	t.Helper()
+	request := httptest.NewRequest(method, path, strings.NewReader(body))
+	if body != "" {
+		request.Header.Set("Content-Type", "application/json")
+	}
+	recorder := httptest.NewRecorder()
+	s.handler.ServeHTTP(recorder, request)
+	payload := map[string]any{}
+	if recorder.Body.Len() > 0 {
+		if err := json.Unmarshal(recorder.Body.Bytes(), &payload); err != nil {
+			t.Fatalf("decode %s %s response: %v (%s)", method, path, err, recorder.Body.String())
+		}
+	}
+	return recorder.Code, payload
+}
+
+// Billing webhook destinations and delivery history carry authoritative
+// entitlement state. This integration test proves the shipped HTTP surface
+// reaches the PostgreSQL membership boundary on every management family: an
+// authenticated member cannot read or mutate them, a missing session is 401,
+// and owner/admin sessions still reach the data.
+func TestManagementSurfaceRequiresOwnerOrAdmin(t *testing.T) {
+	pool, ctx := testPool(t)
+	f := seedWebhookFixture(t, ctx, pool, "authz")
+	repository := New(pool)
+	if _, err := repository.FanOut(ctx, time.Now().UTC(), 10); err != nil {
+		t.Fatal(err)
+	}
+	var deliveryID string
+	if err := pool.QueryRow(ctx,
+		`SELECT id FROM webhook_deliveries WHERE project_id=$1 AND webhook_destination_id=$2`,
+		f.projectID, f.destinationID).Scan(&deliveryID); err != nil {
+		t.Fatal(err)
+	}
+
+	surface := newAuthorizationSurface(pool)
+	base := "/v1/projects/" + f.projectID
+	environment := base + "/environments/" + f.environmentID + "/billing"
+	routes := []struct{ method, path, body string }{
+		{http.MethodGet, environment + "/webhook-destinations/", ""},
+		{http.MethodPost, environment + "/webhook-destinations/", `{"url":"https://receiver.example.com/second"}`},
+		{http.MethodGet, base + "/billing/webhook-destinations/" + f.destinationID + "/", ""},
+		{http.MethodPatch, base + "/billing/webhook-destinations/" + f.destinationID + "/", `{"description":"changed"}`},
+		{http.MethodPost, base + "/billing/webhook-destinations/" + f.destinationID + "/status", `{"status":"paused"}`},
+		{http.MethodDelete, base + "/billing/webhook-destinations/" + f.destinationID + "/", ""},
+		{http.MethodGet, base + "/billing/webhook-destinations/" + f.destinationID + "/secrets", ""},
+		{http.MethodPost, base + "/billing/webhook-destinations/" + f.destinationID + "/secrets/rotate", ""},
+		{http.MethodPost, base + "/billing/webhook-destinations/" + f.destinationID + "/secrets/secret/retire", ""},
+		{http.MethodGet, base + "/billing/webhook-deliveries/", ""},
+		{http.MethodGet, base + "/billing/webhook-deliveries/" + deliveryID, ""},
+		{http.MethodGet, base + "/billing/webhook-deliveries/" + deliveryID + "/attempts", ""},
+		{http.MethodPost, base + "/billing/webhook-deliveries/" + deliveryID + "/replay", ""},
+	}
+	for _, route := range routes {
+		status, payload := surface.as(f.memberActor).do(t, route.method, route.path, route.body)
+		if status != http.StatusForbidden {
+			t.Fatalf("%s %s as member: status %d payload %v, want 403", route.method, route.path, status, payload)
+		}
+		status, payload = surface.as("").do(t, route.method, route.path, route.body)
+		if status != http.StatusUnauthorized {
+			t.Fatalf("%s %s unauthenticated: status %d payload %v, want 401", route.method, route.path, status, payload)
+		}
+	}
+
+	if status, _ := surface.as(f.ownerActor).do(t, http.MethodGet,
+		environment+"/webhook-destinations/", ""); status != http.StatusOK {
+		t.Fatalf("owner destination list: status %d, want 200", status)
+	}
+	if status, _ := surface.as(f.adminActor).do(t, http.MethodGet,
+		base+"/billing/webhook-deliveries/"+deliveryID, ""); status != http.StatusOK {
+		t.Fatalf("admin delivery read: status %d, want 200", status)
+	}
+}
+
+// Cross-tenant failures are deliberately 404, not 403, and an Environment
+// cannot be paired with a different Project. These checks catch both the
+// existence-oracle regression and the environment-filter bug where a foreign
+// Environment previously produced a misleading successful empty list.
+func TestManagementSurfaceDoesNotCrossProjectOrEnvironment(t *testing.T) {
+	pool, ctx := testPool(t)
+	first := seedWebhookFixture(t, ctx, pool, "scope_a")
+	second := seedWebhookFixture(t, ctx, pool, "scope_b")
+	repository := New(pool)
+	if _, err := repository.FanOut(ctx, time.Now().UTC(), 20); err != nil {
+		t.Fatal(err)
+	}
+	var secondDeliveryID string
+	if err := pool.QueryRow(ctx, `SELECT id FROM webhook_deliveries WHERE project_id=$1`, second.projectID).
+		Scan(&secondDeliveryID); err != nil {
+		t.Fatal(err)
+	}
+
+	surface := newAuthorizationSurface(pool).as(first.ownerActor)
+	checks := []string{
+		"/v1/projects/" + second.projectID + "/billing/webhook-destinations/" + second.destinationID + "/",
+		"/v1/projects/" + second.projectID + "/billing/webhook-deliveries/" + secondDeliveryID,
+		"/v1/projects/" + first.projectID + "/environments/" + second.environmentID + "/billing/webhook-destinations/",
+		"/v1/projects/" + first.projectID + "/billing/webhook-deliveries/?environmentId=" + second.environmentID,
+	}
+	for _, path := range checks {
+		status, payload := surface.do(t, http.MethodGet, path, "")
+		if status != http.StatusNotFound {
+			t.Fatalf("cross-scope GET %s: status %d payload %v, want 404", path, status, payload)
+		}
 	}
 }
 
