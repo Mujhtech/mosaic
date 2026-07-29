@@ -2,6 +2,7 @@ package billingrestore
 
 import (
 	"context"
+	"errors"
 	"testing"
 	"time"
 )
@@ -23,9 +24,10 @@ import (
 // implements no chain logic: the point is to observe the decision, not to
 // re-simulate the database.
 type fakeRepository struct {
-	enabled bool
-	job     Job
-	chain   ChainState
+	enabled  bool
+	job      Job
+	chain    ChainState
+	chainErr error
 
 	completed   *Decision
 	completedAs ChainState
@@ -51,7 +53,7 @@ func (f *fakeRepository) LeaseJob(context.Context, string, time.Time, time.Time)
 }
 
 func (f *fakeRepository) LoadChain(context.Context, Job) (ChainState, error) {
-	return f.chain, nil
+	return f.chain, f.chainErr
 }
 
 func (f *fakeRepository) AdoptBaseline(_ context.Context, _ Job, customerID string, baseline int64, _ time.Time) error {
@@ -333,4 +335,70 @@ func TestChainStateOutcomeTable(t *testing.T) {
 			}
 		})
 	}
+}
+
+// TestChainReadFailureSurfacesToTheWorker is the regression for defect D-2's
+// aggravating factor.
+//
+// A LoadChain error used to be absorbed: the job was rescheduled and the method
+// returned (true, nil), which is the shape of healthy work. The stage-3 read
+// referenced a column that does not exist, so every restore in the Environment
+// was failing permanently while the worker's (processed, error) contract said
+// nothing was wrong, `restoreFailedJobs` stayed at zero, and only the backlog
+// rose. A failure nothing can observe is a failure nobody is paged for.
+//
+// Two properties are asserted: the error reaches the caller while attempts
+// remain, and an exhausted job becomes terminally `failed` — which is the row
+// state `restoreFailedJobs` counts — rather than being rescheduled forever.
+func TestChainReadFailureSurfacesToTheWorker(t *testing.T) {
+	base := Job{
+		ID: "rst_chain", ProjectID: "prj", EnvironmentID: "env",
+		StorePlatform: StoreApple, ProviderOutcome: ProviderOutcomeCompleted,
+		MaxAttempts: DefaultMaxAttempts, RequestedAt: time.Unix(1700000000, 0).UTC(),
+	}
+	readFailure := errors.New("read restore identity chain")
+
+	t.Run("a retryable read failure is rescheduled and still reported", func(t *testing.T) {
+		repository := &fakeRepository{enabled: true, job: base, chainErr: readFailure}
+		repository.job.AttemptCount = 1
+		service := NewService(repository, nil)
+
+		processed, err := service.ProcessNextRestoreSync(context.Background(), "worker")
+		if !processed {
+			t.Fatal("the job was leased, so the worker must be told work was processed")
+		}
+		if !errors.Is(err, readFailure) {
+			t.Fatalf("error = %v, want the chain read failure to reach the worker loop", err)
+		}
+		if repository.rescheduled != 1 {
+			t.Fatalf("rescheduled %d times, want 1", repository.rescheduled)
+		}
+		if repository.completed != nil {
+			t.Fatal("a transient read failure must not write a terminal outcome")
+		}
+	})
+
+	t.Run("an exhausted read failure becomes a counted failed job", func(t *testing.T) {
+		repository := &fakeRepository{enabled: true, job: base, chainErr: readFailure}
+		repository.job.AttemptCount = DefaultMaxAttempts
+		service := NewService(repository, nil)
+
+		processed, err := service.ProcessNextRestoreSync(context.Background(), "worker")
+		if !processed {
+			t.Fatal("the job was leased, so the worker must be told work was processed")
+		}
+		if !errors.Is(err, readFailure) {
+			t.Fatalf("error = %v, want the chain read failure to reach the worker loop", err)
+		}
+		if repository.completed == nil {
+			t.Fatal("an exhausted restore that could never be read must reach a terminal outcome")
+		}
+		if repository.completed.Outcome != OutcomeFailed {
+			t.Fatalf("outcome = %q, want %q so restoreFailedJobs counts it",
+				repository.completed.Outcome, OutcomeFailed)
+		}
+		if repository.rescheduled != 0 {
+			t.Fatal("an exhausted job was rescheduled instead of failed")
+		}
+	})
 }

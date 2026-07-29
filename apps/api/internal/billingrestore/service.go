@@ -4,6 +4,7 @@ import (
 	"context"
 	cryptorand "crypto/rand"
 	"encoding/base64"
+	"errors"
 	"fmt"
 	"io"
 	mathrand "math/rand/v2"
@@ -296,12 +297,47 @@ func (s *Service) ProcessNextRestoreSync(ctx context.Context, workerID string) (
 
 	chain, err := s.repository.LoadChain(ctx, job)
 	if err != nil {
-		// The chain could not be read at all. That is Mosaic's own transient
-		// failure, not an answer about the restore, so nothing is written to
-		// the outcome column and the job simply comes back.
+		// The chain could not be read at all. That is Mosaic's own failure, not
+		// an answer about the restore, so nothing is written to the outcome
+		// column while attempts remain.
+		//
+		// The error is returned rather than absorbed (defect D-2). It used to be
+		// logged and swallowed as (true, nil), which meant a permanently broken
+		// read — the stage-3 query referenced a column that does not exist —
+		// looked identical to healthy work to the worker loop and to every
+		// metric derived from it. Every restore in the Environment was failing
+		// while `restoreFailedJobs` stayed at zero and only `restoreBacklog`
+		// rose. A failure the (processed, error) contract cannot see is a
+		// failure nobody is paged for.
 		completed := s.now()
-		return true, s.repository.RescheduleJob(ctx, job, Decision{}, ChainState{},
-			s.nextAttemptAt(completed, job.AttemptCount), completed)
+		if job.AttemptCount >= job.MaxAttempts {
+			// Out of attempts. The job becomes terminally failed so it stops
+			// consuming lease capacity and starts being counted by
+			// `restoreFailedJobs` on the projection-health surface. `failed`
+			// with an explanation is the honest terminal state for a restore
+			// Mosaic could never evaluate; the schema requires an outcome
+			// beside the status, and inventing a definite one here would be a
+			// claim about purchases nobody read.
+			decision := Decision{
+				Outcome:           OutcomeFailed,
+				UncertaintyReason: ReasonProjectionFailed,
+				Terminal:          true,
+			}
+			if completeErr := s.repository.CompleteJob(ctx, job, decision, ChainState{}, completed); completeErr != nil {
+				return true, errors.Join(err, completeErr)
+			}
+			s.outcomes.Add(ctx, 1, metric.WithAttributes(
+				attribute.String("outcome", decision.Outcome),
+				attribute.String("provider_outcome", job.ProviderOutcome),
+				attribute.String("uncertainty_reason", decision.UncertaintyReason),
+				attribute.Bool("attempts_exhausted", true)))
+			return true, fmt.Errorf("load restore chain: %w", err)
+		}
+		if rescheduleErr := s.repository.RescheduleJob(ctx, job, Decision{}, ChainState{},
+			s.nextAttemptAt(completed, job.AttemptCount), completed); rescheduleErr != nil {
+			return true, errors.Join(err, rescheduleErr)
+		}
+		return true, fmt.Errorf("load restore chain: %w", err)
 	}
 
 	// The baseline is adopted the first time identity resolves, and never

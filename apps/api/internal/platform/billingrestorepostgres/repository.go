@@ -303,7 +303,19 @@ func (r *Repository) LoadChain(ctx context.Context, job billingrestore.Job) (bil
 			COALESCE(array_agg(DISTINCT 'lineage:' || l.id), ARRAY[]::text[])
 		 FROM restore_sync_job_inputs i
 		 JOIN billing_transaction_facts f ON f.source_raw_input_id = i.raw_input_id
-		 JOIN purchase_lineages l ON l.id = f.purchase_lineage_id
+		 -- A fact names its lineage by the provider chain digest, not by a
+		 -- foreign key: billing_transaction_facts has no purchase_lineage_id
+		 -- column and no migration adds one. This join used to read that
+		 -- non-existent column, so every restore that reached this stage failed
+		 -- with SQLSTATE 42703, burned its attempts, and reported
+		 -- validation_pending forever (defect D-2). The predicate below is the
+		 -- same fact-to-lineage relationship every other join in the codebase
+		 -- uses, scoped by Environment and provider because Apple's chain digest
+		 -- is only unique per (store environment, original transaction id).
+		 JOIN purchase_lineages l
+		   ON l.environment_id = f.environment_id
+		  AND l.provider = f.provider
+		  AND l.lineage_key_digest = f.purchase_chain_digest
 		 WHERE i.restore_sync_job_id = $1`, job.ID).
 		Scan(&resolved, &distinct, &frozen, &lineageProductUnresolved, &lineageKeys)
 	if err != nil {
