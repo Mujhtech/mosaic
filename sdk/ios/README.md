@@ -532,6 +532,14 @@ Behaviour worth knowing before enabling it:
 accepted, duplicate, permanently rejected, retry, and dropped counters plus the
 last safe code. `flushTransactionObservations()` attempts delivery now.
 
+When a `customerTokenProvider` is configured, a submission also carries the
+current Customer Access Token in a `Mosaic-Customer-Token` header, which binds
+the purchase to that Billing Customer server-side. The token is read at **send**
+time, not enqueue time, so a purchase queued before sign-in is still bound
+correctly once the user signs in. It is never written to the queue and never
+logged. Without a token the submission still succeeds — it just anchors
+anonymously and has to be associated later by other evidence.
+
 ## Authoritative customer entitlements
 
 Two different questions, two different answers, both available:

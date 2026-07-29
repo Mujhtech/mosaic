@@ -213,6 +213,13 @@ public struct Mosaic: Sendable {
     let analyticsRuntime = analytics.runtime
     if analytics.degraded { degraded = true }
 
+    // Built before the observation runtime so an observation submission can
+    // carry the customer token that binds a purchase to its Billing Customer.
+    // Memory-only, so constructing it costs nothing and persists nothing.
+    let customerTokenStore = customerTokenProvider.map {
+      MosaicCustomerTokenStore(provider: $0)
+    }
+
     // Opt-in. When observations are disabled no runtime exists, so nothing is
     // built, queued, persisted, or sent.
     var observationRuntime: MosaicTransactionObservationRuntime?
@@ -222,13 +229,16 @@ public struct Mosaic: Sendable {
         applicationVersion: configuration.applicationVersion, rootDirectory: root)
       observationRuntime = observations.runtime
       if observations.degraded { degraded = true }
+      // Without this an identified user's purchase anchors anonymously and has
+      // to be associated later by other evidence.
+      await observationRuntime?.attachCustomerTokenSource(customerTokenStore)
     }
 
     // Authoritative entitlements are opt-in: with no customer token provider
     // there is no client at all, so nothing is fetched, cached, or persisted.
     // Mosaic Billing requires an application backend (OD-4).
     var entitlementClient: MosaicCustomerEntitlementClient?
-    if let customerTokenProvider {
+    if let customerTokenStore {
       let identity = await identityStore.snapshot()
       let bindingDigest = MosaicCustomerEntitlementFileCacheStore.bindingDigest(
         userID: identity.userID)
@@ -237,7 +247,7 @@ public struct Mosaic: Sendable {
         baseURL: baseURL,
         requestTimeout: requestTimeout,
         transport: MosaicURLSessionEntitlementSyncTransport(requestTimeout: requestTimeout),
-        tokenStore: MosaicCustomerTokenStore(provider: customerTokenProvider),
+        tokenStore: customerTokenStore,
         bindingDigest: bindingDigest,
         cacheStoreFactory: { digest in
           if let root,

@@ -46,6 +46,12 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
   (including the 304 path) and analytics ingestion.
 - `healthcheck` probe binary, so the distroless image can answer container
   healthchecks.
+- iOS: transaction-observation submissions now carry the current Customer Access
+  Token in a `Mosaic-Customer-Token` header when one is held, binding an
+  identified user's purchase to their Billing Customer server-side. The token is
+  read at send time, never persisted with the queue, and never logged; without
+  one a submission still succeeds and anchors anonymously. The 9A observation
+  record is unchanged — this is transport-level only.
 - iOS: `MosaicDiagnosticStage` gains `entitlementTransport`,
   `entitlementValidation`, `entitlementCache`, `entitlementAuthentication`, and
   `entitlementRestore`. This is source-breaking for a host that switches

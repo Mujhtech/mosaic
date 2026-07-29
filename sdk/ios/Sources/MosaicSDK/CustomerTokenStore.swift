@@ -10,6 +10,16 @@ struct MosaicCustomerTokenLease: Sendable, Equatable {
   let generation: UInt64
 }
 
+/// Reads whatever Customer Access Token is currently held, without causing one
+/// to be fetched.
+///
+/// Deliberately narrow. A caller on a delivery path must be able to attach a
+/// token when one happens to exist without ever making the absence of one into a
+/// network call, a suspension, or a failure.
+protocol MosaicCustomerTokenSource: Sendable {
+  func heldCustomerToken() async -> MosaicCustomerAccessToken?
+}
+
 enum MosaicCustomerTokenOutcome: Sendable, Equatable {
   case lease(MosaicCustomerTokenLease)
   case signedOut
@@ -22,7 +32,7 @@ enum MosaicCustomerTokenOutcome: Sendable, Equatable {
 /// never logged. A token is short-lived by contract and the host backend can
 /// always mint another, so persisting one would add a durable secret to the
 /// device in exchange for nothing.
-actor MosaicCustomerTokenStore {
+actor MosaicCustomerTokenStore: MosaicCustomerTokenSource {
   private let provider: (any MosaicCustomerTokenProvider)?
   private let clock: @Sendable () -> Date
   /// A provider that just failed is not asked again immediately: a backend
@@ -51,6 +61,12 @@ actor MosaicCustomerTokenStore {
 
   var isConfigured: Bool { provider != nil }
   var hasToken: Bool { cached != nil }
+
+  /// The token already held, or `nil`. Never fetches and never refreshes: a
+  /// caller using this must treat absence as "carry on without it".
+  func heldCustomerToken() -> MosaicCustomerAccessToken? {
+    signedOut ? nil : cached
+  }
   var currentGeneration: UInt64 { generation }
 
   /// The token to attach to a sync request, fetching one if none is held.
