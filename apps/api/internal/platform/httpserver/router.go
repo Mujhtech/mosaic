@@ -184,13 +184,13 @@ func NewWithDependencies(cfg Config, logger zerolog.Logger, dependencies Depende
 	// Compatibility aliases retained for existing probes while documented callers migrate.
 	router.Mount("/health", health.LiveRoutes())
 	router.Mount("/ready", readinessRoutes(dependencies))
-	if dependencies.BrowserAuth != nil || dependencies.CloudWorkspace != nil || dependencies.HostedPublishing != nil || dependencies.PlacementDecision != nil || dependencies.Analytics != nil || dependencies.Billing != nil || dependencies.BillingAccess != nil {
+	if dependencies.BrowserAuth != nil || dependencies.CloudWorkspace != nil || dependencies.HostedPublishing != nil || dependencies.PlacementDecision != nil || dependencies.Analytics != nil || dependencies.BillingAccess != nil || hasBillingSurface(dependencies) {
 		router.Route("/v1", func(versioned chi.Router) {
 			versioned.Use(trustedMutationOrigins(cfg.AllowedOrigins))
 			if dependencies.BrowserAuth != nil {
 				browserauthhttp.RegisterRoutes(versioned, dependencies.BrowserAuth, dependencies.BrowserAuthConfig)
 			}
-			if dependencies.CloudWorkspace != nil || dependencies.HostedPublishing != nil || dependencies.Analytics != nil || dependencies.Billing != nil {
+			if dependencies.CloudWorkspace != nil || dependencies.HostedPublishing != nil || dependencies.Analytics != nil || hasBillingSurface(dependencies) {
 				versioned.Group(func(authenticated chi.Router) {
 					authenticated.Use(authn.Middleware(dependencies.PrincipalResolver))
 					// Authenticated dashboard APIs had no limit at all before
@@ -263,6 +263,31 @@ func NewWithDependencies(cfg Config, logger zerolog.Logger, dependencies Depende
 							billingwebhookhttp.RegisterProjectRoutes(project, dependencies.BillingWebhook,
 								httpmiddleware.RateLimit("export", dependencies.ExportLimiter, principalKey))
 						}
+						// The Environment-scoped billing subtree is created once,
+						// here, and every module that publishes under it registers
+						// into it. Three modules do, and each of them used to open
+						// its own chi Route() on the identical pattern — which chi
+						// refuses, so the deployed composition panicked during
+						// router construction whenever billing was enabled (defect
+						// D-3). Creating the subrouter at the composition is what
+						// makes a fourth module structurally unable to reintroduce
+						// the collision. No URL changed.
+						if hasEnvironmentBillingSurface(dependencies) {
+							project.Route("/environments/{environmentId}/billing", func(environment chi.Router) {
+								if dependencies.Billing != nil {
+									billinghttp.RegisterEnvironmentRoutes(environment, dependencies.Billing,
+										httpmiddleware.RateLimit("export", dependencies.ExportLimiter, principalKey))
+								}
+								if dependencies.BillingOperator != nil {
+									billingoperatorhttp.RegisterEnvironmentRoutes(environment, dependencies.BillingOperator,
+										httpmiddleware.RateLimit("export", dependencies.ExportLimiter, principalKey))
+								}
+								if dependencies.BillingWebhook != nil {
+									billingwebhookhttp.RegisterEnvironmentRoutes(environment, dependencies.BillingWebhook,
+										httpmiddleware.RateLimit("export", dependencies.ExportLimiter, principalKey))
+								}
+							})
+						}
 						if dependencies.Experiment != nil {
 							project.Group(func(decision chi.Router) {
 								decision.Use(httpmiddleware.RateLimit("decision", dependencies.DecisionLimiter, principalKey))
@@ -332,6 +357,30 @@ func NewWithDependencies(cfg Config, logger zerolog.Logger, dependencies Depende
 	})
 
 	return router
+}
+
+// hasBillingSurface reports whether any dashboard-facing billing module is
+// wired.
+//
+// The `/v1` subtree and the authenticated Project subtree used to be gated on
+// `Billing != nil` alone, which silently made every other billing module a
+// dependent of the Phase 9A ingestion module. That was never a real
+// requirement — the 9B operator, grant, diagnostics, and webhook surfaces read
+// and write their own tables and hold their own services — and its effect was
+// that the entire Phase 9B operator surface was unreachable in every
+// composition that did not also enable 9A ingestion, while the composition that
+// did enable both panicked on the route collision (defect D-3).
+func hasBillingSurface(dependencies Dependencies) bool {
+	return dependencies.Billing != nil || dependencies.BillingOperator != nil ||
+		dependencies.BillingGrant != nil || dependencies.BillingDiagnostics != nil ||
+		dependencies.BillingWebhook != nil
+}
+
+// hasEnvironmentBillingSurface reports whether any module publishes routes
+// under the shared `/environments/{environmentId}/billing` subrouter.
+func hasEnvironmentBillingSurface(dependencies Dependencies) bool {
+	return dependencies.Billing != nil || dependencies.BillingOperator != nil ||
+		dependencies.BillingWebhook != nil
 }
 
 func readinessRoutes(dependencies Dependencies) http.Handler {

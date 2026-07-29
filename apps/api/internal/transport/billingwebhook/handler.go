@@ -44,14 +44,25 @@ type Handler struct {
 // covers the two actions that do real work per call: creating or re-pointing a
 // destination performs a DNS resolution against an operator-supplied host, and
 // a replay re-queues delivery work.
+// RegisterEnvironmentRoutes mounts destination creation and listing on the
+// shared `/environments/{environmentId}/billing` subrouter. The subrouter is
+// created once by the composition because three modules publish routes beneath
+// it, and chi refuses to Mount() two handlers on one path (defect D-3). The
+// resulting URLs are unchanged.
+func RegisterEnvironmentRoutes(environment chi.Router, service *billingwebhook.Service, expensive ...func(http.Handler) http.Handler) {
+	h := &Handler{service: service}
+	guarded := nonNil(expensive)
+
+	environment.Route("/webhook-destinations", func(destinations chi.Router) {
+		destinations.Get("/", h.listDestinations)
+		destinations.With(guarded...).Post("/", h.createDestination)
+	})
+}
+
 func RegisterProjectRoutes(router chi.Router, service *billingwebhook.Service, expensive ...func(http.Handler) http.Handler) {
 	h := &Handler{service: service}
 	guarded := nonNil(expensive)
 
-	router.Route("/environments/{environmentId}/billing/webhook-destinations", func(destinations chi.Router) {
-		destinations.Get("/", h.listDestinations)
-		destinations.With(guarded...).Post("/", h.createDestination)
-	})
 	router.Route("/billing/webhook-destinations/{destinationId}", func(destination chi.Router) {
 		destination.Get("/", h.getDestination)
 		destination.With(guarded...).Patch("/", h.updateDestination)

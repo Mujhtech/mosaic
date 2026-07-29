@@ -16,6 +16,10 @@ import (
 
 	"github.com/Mujhtech/mosaic/apps/api/internal/analytics"
 	"github.com/Mujhtech/mosaic/apps/api/internal/billing"
+	"github.com/Mujhtech/mosaic/apps/api/internal/billingdiagnostics"
+	"github.com/Mujhtech/mosaic/apps/api/internal/billinggrant"
+	"github.com/Mujhtech/mosaic/apps/api/internal/billingoperator"
+	"github.com/Mujhtech/mosaic/apps/api/internal/billingwebhook"
 	"github.com/Mujhtech/mosaic/apps/api/internal/cloudworkspace"
 	"github.com/Mujhtech/mosaic/apps/api/internal/hostedpublishing"
 	"github.com/Mujhtech/mosaic/apps/api/internal/platform/authn"
@@ -432,5 +436,88 @@ func TestStoreNotificationIntakeAcceptsOriginlessPostsAndIsNotRateLimited(t *tes
 	handler.ServeHTTP(forgedRecorder, forged)
 	if forgedRecorder.Code != http.StatusForbidden {
 		t.Fatalf("a cross-origin browser POST to the intake route returned %d, want 403", forgedRecorder.Code)
+	}
+}
+
+// TestFullBillingCompositionMountsWithoutCollision is the regression for defect
+// D-3.
+//
+// Three modules publish routes under `/environments/{environmentId}/billing`,
+// and each of them used to open its own chi Route() on that identical pattern.
+// chi refuses to Mount() twice on one path, so `cmd/api` panicked during router
+// construction whenever billing was enabled and never served a request. Nothing
+// caught it because no test ever constructed the combination the deployed
+// composition uses.
+//
+// This test constructs exactly that combination — every billing module wired
+// together, as cmd/api wires them — and asserts two things: the router builds
+// without panicking, and a route from each of the colliding surfaces is
+// reachable rather than shadowed by whichever module registered first.
+func TestFullBillingCompositionMountsWithoutCollision(t *testing.T) {
+	limiter := &exhaustedLimiter{}
+	handler := NewWithDependencies(Config{
+		ServiceName: "mosaic-api-test", AllowedOrigins: []string{"https://studio.example"},
+		RequestTimeout: time.Second,
+	}, zerolog.Nop(), Dependencies{
+		Billing:            billing.NewService(nil, nil, nil),
+		BillingOperator:    billingoperator.NewService(nil, nil, nil),
+		BillingWebhook:     billingwebhook.NewService(nil, nil, nil),
+		BillingGrant:       billinggrant.NewService(nil),
+		BillingDiagnostics: billingdiagnostics.NewService(nil),
+		PrincipalResolver: authn.ResolverFunc(func(*http.Request) (authn.Principal, error) {
+			return authn.Principal{ActorID: "actor-owner", Method: "test"}, nil
+		}),
+		APILimiter:    limiter,
+		ExportLimiter: limiter,
+	})
+
+	// One route from each module that shares the Environment-scoped subtree. A
+	// shadowed route answers 404 from the router itself; a reachable one gets
+	// as far as its handler, which fails on the nil repository instead.
+	for _, path := range []string{
+		"/v1/projects/prj_test/environments/env_test/billing/facts",
+		"/v1/projects/prj_test/environments/env_test/billing/customers",
+		"/v1/projects/prj_test/environments/env_test/billing/webhook-destinations",
+	} {
+		func() {
+			defer func() {
+				if recovered := recover(); recovered != nil {
+					t.Fatalf("%s panicked in the handler chain: %v", path, recovered)
+				}
+			}()
+			request := httptest.NewRequest(http.MethodGet, path, nil)
+			recorder := httptest.NewRecorder()
+			handler.ServeHTTP(recorder, request)
+			if recorder.Code == http.StatusNotFound {
+				t.Fatalf("%s was not routed; a module's routes were shadowed by another's", path)
+			}
+		}()
+	}
+}
+
+// TestBillingOperatorRegistersWithoutPhase9AIngestion is the second half of
+// defect D-3: the `/v1` subtree and the authenticated Project subtree were
+// gated on the Phase 9A ingestion module alone, so the entire Phase 9B operator
+// surface was unreachable in any composition that did not also enable 9A. The
+// dependency was never real.
+func TestBillingOperatorRegistersWithoutPhase9AIngestion(t *testing.T) {
+	limiter := &exhaustedLimiter{}
+	handler := NewWithDependencies(Config{
+		ServiceName: "mosaic-api-test", AllowedOrigins: []string{"https://studio.example"},
+		RequestTimeout: time.Second,
+	}, zerolog.Nop(), Dependencies{
+		BillingOperator: billingoperator.NewService(nil, nil, nil),
+		PrincipalResolver: authn.ResolverFunc(func(*http.Request) (authn.Principal, error) {
+			return authn.Principal{ActorID: "actor-owner", Method: "test"}, nil
+		}),
+		APILimiter:    limiter,
+		ExportLimiter: limiter,
+	})
+
+	request := httptest.NewRequest(http.MethodGet, "/v1/projects/prj_test/billing/identity-conflicts", nil)
+	recorder := httptest.NewRecorder()
+	handler.ServeHTTP(recorder, request)
+	if recorder.Code == http.StatusNotFound {
+		t.Fatal("the operator surface was not registered without the 9A ingestion module")
 	}
 }

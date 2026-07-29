@@ -42,42 +42,49 @@ type Handler struct {
 	service *billingoperator.Service
 }
 
-// RegisterProjectRoutes mounts the operator surface under the project-scoped
-// dashboard subtree, following exactly the shape the Phase 9A billing operator
-// pages already use: Environment-scoped state under
-// `/environments/{environmentId}/billing/...`, Project-scoped state under
-// `/billing/...`.
+// RegisterEnvironmentRoutes mounts the Environment-scoped half of the operator
+// surface on the shared `/environments/{environmentId}/billing` subrouter,
+// following exactly the shape the Phase 9A billing operator pages already use.
+//
+// The subrouter is created once by the composition rather than here. Three
+// modules publish routes under that path, and each of them used to call chi's
+// Route() with the same pattern; chi refuses to Mount() twice on one path, so
+// the deployed composition panicked during router construction whenever billing
+// was enabled (defect D-3). Registering into a shared subrouter makes that
+// collision impossible instead of latent, and every path below is unchanged.
 //
 // `guarded` is the export-class rate limit. Two routes take it. The lookup is
 // bounded because it is the one surface that accepts an attacker-chosen
 // identifier and reports whether it matched, and an unbounded one is an
 // enumeration oracle over a Project's users even though it returns nothing on a
 // miss. The sync request is bounded because it enqueues projection work.
+func RegisterEnvironmentRoutes(environment chi.Router, service *billingoperator.Service,
+	guarded ...func(http.Handler) http.Handler) {
+
+	h := &Handler{service: service}
+	limited := nonNil(guarded)
+
+	environment.Get("/customers", h.listCustomers)
+	environment.With(limited...).Post("/customer-lookups", h.lookupCustomer)
+	environment.Get("/customers/{customerId}", h.customer)
+	environment.Get("/customers/{customerId}/entitlements", h.snapshot)
+	environment.Get("/customers/{customerId}/subscriptions", h.subscriptions)
+	environment.With(limited...).Post("/customers/{customerId}/sync-requests", h.requestSync)
+
+	environment.Get("/subscriptions/{instanceId}", h.subscription)
+	environment.Get("/subscriptions/{instanceId}/timeline", h.timeline)
+
+	environment.Get("/restore-jobs", h.listRestoreJobs)
+	environment.Get("/restore-jobs/{restoreId}", h.restoreJob)
+}
+
+// RegisterProjectRoutes mounts the Project-scoped half of the operator surface.
+// The Environment-scoped half is RegisterEnvironmentRoutes.
 func RegisterProjectRoutes(router chi.Router, service *billingoperator.Service,
 	guarded ...func(http.Handler) http.Handler) {
 
 	h := &Handler{service: service}
-	limited := make([]func(http.Handler) http.Handler, 0, len(guarded))
-	for _, middleware := range guarded {
-		if middleware != nil {
-			limited = append(limited, middleware)
-		}
-	}
-
-	router.Route("/environments/{environmentId}/billing", func(environment chi.Router) {
-		environment.Get("/customers", h.listCustomers)
-		environment.With(limited...).Post("/customer-lookups", h.lookupCustomer)
-		environment.Get("/customers/{customerId}", h.customer)
-		environment.Get("/customers/{customerId}/entitlements", h.snapshot)
-		environment.Get("/customers/{customerId}/subscriptions", h.subscriptions)
-		environment.With(limited...).Post("/customers/{customerId}/sync-requests", h.requestSync)
-
-		environment.Get("/subscriptions/{instanceId}", h.subscription)
-		environment.Get("/subscriptions/{instanceId}/timeline", h.timeline)
-
-		environment.Get("/restore-jobs", h.listRestoreJobs)
-		environment.Get("/restore-jobs/{restoreId}", h.restoreJob)
-	})
+	limited := nonNil(guarded)
 
 	// Identity conflicts are Project-scoped, and the route says so. A conflict
 	// is a dispute about who a person is, and identity in Mosaic belongs to the
@@ -88,6 +95,16 @@ func RegisterProjectRoutes(router chi.Router, service *billingoperator.Service,
 		conflicts.Get("/{conflictId}", h.conflict)
 		conflicts.With(limited...).Post("/{conflictId}/resolution", h.resolveConflict)
 	})
+}
+
+func nonNil(middleware []func(http.Handler) http.Handler) []func(http.Handler) http.Handler {
+	result := make([]func(http.Handler) http.Handler, 0, len(middleware))
+	for _, item := range middleware {
+		if item != nil {
+			result = append(result, item)
+		}
+	}
+	return result
 }
 
 // ---------------------------------------------------------------------------

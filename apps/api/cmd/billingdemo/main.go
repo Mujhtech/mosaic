@@ -53,7 +53,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/go-chi/chi/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/rs/zerolog"
 
@@ -83,7 +82,6 @@ import (
 	"github.com/Mujhtech/mosaic/apps/api/internal/platform/httpserver"
 	"github.com/Mujhtech/mosaic/apps/api/internal/platform/ratelimit"
 	"github.com/Mujhtech/mosaic/apps/api/internal/providercredential"
-	billingoperatorhttp "github.com/Mujhtech/mosaic/apps/api/internal/transport/billingoperator"
 )
 
 func main() {
@@ -98,7 +96,9 @@ type demo struct {
 	pool    *pgxpool.Pool
 	service *billing.Service
 	server  *httptest.Server
-	// operatorServer carries the Phase 9B operator surface. See wire().
+	// operatorServer carries the Phase 9B operator surface. Since defect D-3
+	// was fixed it is the same server as `server`; the field is kept so the
+	// operator HTTP helpers keep naming the surface they exercise.
 	operatorServer *httptest.Server
 
 	apple  *appleStub
@@ -167,7 +167,6 @@ func run() error {
 		return err
 	}
 	defer d.server.Close()
-	defer d.operatorServer.Close()
 	defer d.destination.close()
 
 	stages := []func() error(nil)
@@ -311,14 +310,10 @@ func (d *demo) wire() error {
 		BillingAccess:     d.access,
 		BillingCustomer:   d.identity,
 		BillingGrant:      d.grants,
-		// BillingOperator is deliberately absent from this router. Registering it
-		// beside Billing panics: internal/transport/billing/handler.go:87 and
-		// internal/transport/billingoperator/handler.go:67 both call
-		// router.Route("/environments/{environmentId}/billing", …) on the same
-		// Project subrouter, and chi refuses to Mount twice on one path. cmd/api
-		// passes both whenever MOSAIC_BILLING_ENABLED is set, so this is a
-		// startup panic in the deployed composition, not a demo-only problem.
-		// See docs/reviews/phase-9b-demo-evidence.md, defect D-3.
+		// Defect D-3 is fixed: BillingOperator now mounts beside Billing in the
+		// standard composition, exactly as cmd/api wires it. The demo's second
+		// operator mux is gone with it.
+		BillingOperator:        d.operator,
 		BillingRestore:         d.restores,
 		BillingWebhook:         d.webhooks,
 		BillingDiagnostics:     d.diagnostics,
@@ -329,24 +324,9 @@ func (d *demo) wire() error {
 		ExportLimiter:          ratelimit.New(6000, 6000, 4096),
 	})
 	d.server = httptest.NewServer(handler)
-
-	// The operator surface gets its own minimal mux for the reason recorded
-	// above. httpserver.NewWithDependencies cannot register BillingOperator at
-	// all: the `/v1` subtree and the Project subtree it lives under are both
-	// gated on Billing being non-nil, and Billing is exactly what it collides
-	// with. Its handler, its ozzo validation, its application service, its
-	// repository, and its authorization checks are all the real ones here; only
-	// the mux and the middleware stack are the demo's.
-	operatorRouter := chi.NewRouter()
-	operatorRouter.Route("/v1", func(versioned chi.Router) {
-		versioned.Group(func(authenticated chi.Router) {
-			authenticated.Use(authn.Middleware(resolver))
-			authenticated.Route("/projects/{projectId}", func(project chi.Router) {
-				billingoperatorhttp.RegisterProjectRoutes(project, d.operator)
-			})
-		})
-	})
-	d.operatorServer = httptest.NewServer(operatorRouter)
+	// The operator surface is served by the same router as everything else.
+	// The field is kept so the operator HTTP helpers need no change.
+	d.operatorServer = d.server
 	return nil
 }
 
