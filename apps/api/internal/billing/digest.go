@@ -80,6 +80,50 @@ func TokenDigest(token string) []byte {
 	return sum[:]
 }
 
+// Alias types for correlator digests. They are duplicated from the billing
+// identity module's vocabulary because the values are a persisted digest domain
+// rather than a Go constant: changing either copy without the other silently
+// stops two records of the same person from matching.
+const (
+	AliasAppleAppAccountToken = "apple_app_account_token"
+	AliasGoogleObfuscatedID   = "google_obfuscated_account_id"
+)
+
+// Association evidence types this module produces. They are the same duplicated
+// vocabulary as the alias types above and exist for the same reason: the value
+// is persisted, so it is not free to differ between the two modules.
+const (
+	EvidenceAppAccountToken   = "app_account_token"
+	EvidenceObfuscatedAccount = "obfuscated_external_account_id"
+)
+
+// AliasDigest is the one-way representation of a customer correlator, and the
+// only form of one this package ever produces.
+//
+// It lives here rather than only in the identity module because the validator is
+// where a provider correlator is first seen — Apple's `appAccountToken` on the
+// verified transaction, Google's `obfuscatedExternalAccountId` on the
+// authoritative purchase — and the raw value must not travel any further than
+// the function that hashes it. Nothing downstream of validation receives one:
+// not a Transaction Fact, not a log line, not a metric attribute, not an audit
+// event. Phase 9A's fact-shape exclusion is unchanged; the digest's home is the
+// 9B association-evidence table.
+//
+// The domain separation matters more than usual. An application user id and an
+// Apple app-account token are both opaque strings chosen by someone else;
+// without the domain prefix and the alias type, a value that happened to be
+// identical across two alias types would collapse into one active resolution and
+// silently join two people.
+func AliasDigest(aliasType, value string) []byte {
+	hasher := sha256.New()
+	hasher.Write([]byte("mosaic-billing-alias-v1"))
+	hasher.Write([]byte{0})
+	hasher.Write([]byte(aliasType))
+	hasher.Write([]byte{0})
+	hasher.Write([]byte(value))
+	return hasher.Sum(nil)
+}
+
 // ContentDigest canonicalizes a JSON body before hashing so that two deliveries
 // differing only in key order or whitespace compare equal. A body that is not
 // JSON is hashed as received.

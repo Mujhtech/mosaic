@@ -543,7 +543,8 @@ func (h *Handler) clientObservation(w http.ResponseWriter, r *http.Request) {
 		writeSubmission(w, billing.Reject(submissionID, h.now(), code))
 		return
 	}
-	result, err := h.service.SubmitClientObservation(r.Context(), bearer(r), envelope.Payload.toObservation(), correlationID(r))
+	result, err := h.service.SubmitClientObservationAs(r.Context(), bearer(r), customerToken(r),
+		envelope.Payload.toObservation(), correlationID(r))
 	if err != nil {
 		h.writeSubmissionError(w, r, submissionID, err)
 		return
@@ -567,7 +568,8 @@ func (h *Handler) serverObservation(w http.ResponseWriter, r *http.Request) {
 		writeSubmission(w, billing.Reject(submissionID, h.now(), code))
 		return
 	}
-	result, err := h.service.SubmitServerObservation(r.Context(), bearer(r), envelope.Payload.toObservation(), correlationID(r))
+	result, err := h.service.SubmitServerObservationAs(r.Context(), bearer(r), customerToken(r),
+		envelope.Payload.toObservation(), correlationID(r))
 	if err != nil {
 		h.writeSubmissionError(w, r, submissionID, err)
 		return
@@ -1203,6 +1205,31 @@ func bearer(r *http.Request) string {
 		return strings.TrimSpace(value[7:])
 	}
 	return ""
+}
+
+// CustomerTokenHeader carries an optional Customer Access Token alongside an
+// observation submission.
+//
+// It is a header rather than a body member because it is a credential, and the
+// observation body is a ratified contract record that Mosaic seals and can
+// replay — a credential must never be a thing that gets stored and replayed.
+// `Authorization` is already taken on this surface by the API key that
+// establishes the tenant, so the token needs its own name, exactly as the
+// entitlement sync surface gives the SDK key its own.
+//
+// It is optional everywhere. An observation without one is the ordinary
+// anonymous purchase and behaves exactly as it did before.
+const CustomerTokenHeader = "Mosaic-Customer-Token"
+
+// customerToken reads the optional Customer Access Token. The value is passed
+// straight to the application service and is never logged: writeError below
+// deliberately never populates a cause on this surface for the same reason.
+func customerToken(r *http.Request) billing.CustomerToken {
+	value := strings.TrimSpace(r.Header.Get(CustomerTokenHeader))
+	if value == "" {
+		return ""
+	}
+	return billing.CustomerToken(value)
 }
 
 // writeError maps billing errors onto HTTP.

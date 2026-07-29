@@ -220,6 +220,55 @@ type AuthenticatedToken struct {
 	SDKKey KeyScope
 }
 
+// AuthenticateCustomerTokenForTenant validates a presented token against a
+// tenant the caller has already authenticated by some other credential.
+//
+// It exists for the observation intake surfaces, where the accompanying
+// credential is an API key that the ingestion module has already resolved to a
+// Project and Environment — a public SDK key on the client endpoint, a secret
+// server key on the trusted one. Routing those through
+// AuthenticateCustomerToken would mean re-authenticating a key that is already
+// authenticated, and would refuse the trusted endpoint outright, because a
+// secret server key is not an SDK key.
+//
+// Every other check is the same one and for the same reason: expiry,
+// revocation, and audience are re-validated on every presentation because the
+// token is opaque and has no cached claim to go stale, and a token whose scope
+// disagrees with the caller's is refused rather than answered, because that is
+// either a misconfiguration or an attempt to write across the isolation
+// boundary.
+func (s *Service) AuthenticateCustomerTokenForTenant(ctx context.Context, rawToken, projectID, environmentID string) (Token, error) {
+	if !validTokenShape(rawToken) {
+		s.tokenFailures.Add(ctx, 1, metric.WithAttributes(attribute.String("stage", "shape")))
+		return Token{}, ErrUnauthenticated
+	}
+	sum := sha256.Sum256([]byte(rawToken))
+	token, err := s.repository.TokenByDigest(ctx, sum[:])
+	if err != nil {
+		s.tokenFailures.Add(ctx, 1, metric.WithAttributes(attribute.String("stage", "lookup")))
+		return Token{}, ErrUnauthenticated
+	}
+	now := s.now()
+	switch {
+	case token.Status(now) != TokenActive:
+		s.tokenFailures.Add(ctx, 1, metric.WithAttributes(
+			attribute.String("stage", "status"), attribute.String("status", token.Status(now))))
+		return Token{}, ErrUnauthenticated
+	case token.Audience != AudienceSDKSync:
+		s.tokenFailures.Add(ctx, 1, metric.WithAttributes(attribute.String("stage", "audience")))
+		return Token{}, ErrUnauthenticated
+	case token.ProjectID != projectID || token.EnvironmentID != environmentID:
+		s.tokenFailures.Add(ctx, 1, metric.WithAttributes(attribute.String("stage", "tenant_mismatch")))
+		zerolog.Ctx(ctx).Warn().
+			Str("billing_token_id", token.ID).
+			Str("token_environment_id", token.EnvironmentID).
+			Str("key_environment_id", environmentID).
+			Msg("customer access token presented with a key from another Environment")
+		return Token{}, ErrForbidden
+	}
+	return token, nil
+}
+
 // AuthenticateCustomerToken validates a presented token against the public SDK
 // key that accompanies it.
 //

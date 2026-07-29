@@ -325,6 +325,21 @@ func (s *Service) ResolveLineageCustomer(ctx context.Context, projectID, lineage
 		_ = s.repository.RecordAudit(ctx, Actor{}, projectID, "billing.lineage.customer_attached",
 			"purchase_lineage", lineageID, map[string]string{"billingCustomerId": resolution.CustomerID}, now)
 
+		// An association that establishes who owns a purchase has to reach the
+		// customer aggregate, or the customer holds a lineage their committed
+		// snapshot does not mention. Any projection already queued for this
+		// lineage is lineage-scoped — it was queued when the lineage had no
+		// customer — and a lineage-scoped command deliberately mints no customer
+		// snapshot (defect D-4). This is the trigger that does.
+		//
+		// The error is returned rather than swallowed: attaching is idempotent,
+		// so a caller's retry re-reaches this point, whereas dropping the trigger
+		// leaves the grant unmade until some unrelated event happens to enqueue a
+		// projection.
+		if err := s.scheduleReprojection(ctx, projectID, lineage.EnvironmentID, resolution.CustomerID); err != nil {
+			return Resolution{}, err
+		}
+
 	case OutcomeConflicting:
 		conflictID, idErr := s.newID("bic")
 		if idErr != nil {

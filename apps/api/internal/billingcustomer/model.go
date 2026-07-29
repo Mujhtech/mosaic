@@ -54,6 +54,12 @@ const (
 	EvidenceRestoreLink       = "restore_link"
 	EvidenceOperatorRepair    = "operator_repair"
 	EvidenceInstallation      = "installation_observation"
+	// EvidencePurchaseAnchor records that no evidence resolved a customer and
+	// one was created to hold the purchase (plan §5a rules 1 and 2). It is
+	// written *after* the customer exists and is never offered to the resolver,
+	// so it can never select a customer — which is what keeps it from becoming a
+	// route to someone else's entitlements.
+	EvidencePurchaseAnchor = "purchase_anchor"
 )
 
 // Association outcomes.

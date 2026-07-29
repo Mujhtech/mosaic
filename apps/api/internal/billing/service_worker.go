@@ -61,7 +61,55 @@ func (s *Service) ProcessNextValidation(ctx context.Context, workerID string) (b
 	if err := s.repository.CompleteAttempt(ctx, job, outcome, s.now()); err != nil {
 		return true, safeFailure(err, "billing_attempt_write_failed")
 	}
+	if err := s.bindFactIdentity(ctx, outcome); err != nil {
+		// The fact and its lineage are committed; only the identity decision
+		// failed. The job is still `processed` — re-leasing it would re-run the
+		// provider call and re-record an attempt for work that succeeded — but
+		// the error is reported so the worker's failure signal and its metrics
+		// see it. The lineage is left unassociated, which is exactly what
+		// `unresolvedLineages` on the projection-health surface counts, and the
+		// next fact on the same chain retries the decision.
+		return true, safeFailure(err, "billing_lineage_bind_failed")
+	}
 	return true, nil
+}
+
+// bindFactIdentity runs the identity half of the Phase 9A→9B seam.
+//
+// It is outside CompleteAttempt's transaction on purpose. The structural half —
+// the lineage row and its projection instance — is written inside that
+// transaction because it is a deterministic function of the fact and must be
+// exactly as durable as it. Deciding *who owns* the lineage reads alias
+// resolutions and prior evidence and can open an operator conflict, which is
+// application logic rather than a write, and holding the fact's transaction open
+// across it would put the ledger's hot path behind the identity module.
+func (s *Service) bindFactIdentity(ctx context.Context, outcome AttemptOutcome) error {
+	if s.lineages == nil || outcome.Fact == nil || len(outcome.Fact.PurchaseChainDigest) == 0 {
+		return nil
+	}
+	fact := *outcome.Fact
+	root, err := s.repository.ChainRootDigest(ctx, fact)
+	if err != nil {
+		return err
+	}
+	if len(root) == 0 {
+		root = fact.PurchaseChainDigest
+	}
+	acquiredAt := fact.OccurredAt
+	if fact.PeriodStartAt != nil && fact.PeriodStartAt.Before(acquiredAt) {
+		acquiredAt = *fact.PeriodStartAt
+	}
+	return s.lineages.BindFact(ctx, FactBinding{
+		ProjectID:        fact.ProjectID,
+		EnvironmentID:    fact.EnvironmentID,
+		Provider:         fact.Provider,
+		LineageKeyDigest: root,
+		FactChainDigest:  fact.PurchaseChainDigest,
+		RawInputID:       fact.SourceRawInputID,
+		ReferenceDigests: outcome.ReferenceDigests,
+		Correlators:      outcome.Correlators,
+		AcquiredAt:       acquiredAt,
+	})
 }
 
 // runValidation performs one attempt and assembles everything it produced. It
@@ -261,7 +309,33 @@ func (s *Service) validateApple(ctx context.Context, job ValidationJob, input Ra
 			Permanent(CategoryInvalid, "no_provider_timestamp"), QuarantineMissingProviderTimestamp, "error")
 	}
 
-	return s.resolveAndBuild(ctx, job, input, fact, platform, attemptID, attemptNumber, started, storeEnvironment)
+	outcome := s.resolveAndBuild(ctx, job, input, fact, platform, attemptID, attemptNumber, started, storeEnvironment)
+	// The correlator is read from the App Store Server API's own verified
+	// transaction rather than from the notification body, because that response
+	// is the authority and the notification is only the trigger. It is hashed
+	// here and the raw value goes no further.
+	// Every reference an observation for this transaction could have been
+	// submitted under. A client observation cannot classify the Store
+	// Environment, so it lands under `unclassified`; a restore names the
+	// original transaction rather than the renewal.
+	outcome.ReferenceDigests = appendDigest(outcome.ReferenceDigests, input.TransactionReferenceDigest)
+	for _, reference := range []string{transaction.TransactionID, transaction.OriginalTransactionID} {
+		if reference == "" {
+			continue
+		}
+		for _, environment := range []string{storeEnvironment, StoreUnclassified} {
+			outcome.ReferenceDigests = appendDigest(outcome.ReferenceDigests,
+				AppleTransactionKey(environment, reference))
+		}
+	}
+	if token := strings.TrimSpace(transaction.AppAccountToken); token != "" {
+		outcome.Correlators = append(outcome.Correlators, AssociationCorrelator{
+			EvidenceType: EvidenceAppAccountToken,
+			AliasType:    AliasAppleAppAccountToken,
+			Digest:       AliasDigest(AliasAppleAppAccountToken, token),
+		})
+	}
+	return outcome
 }
 
 // applyAppleTransaction populates the transaction-derived fields of an Apple
@@ -595,6 +669,7 @@ func (s *Service) validateGoogle(ctx context.Context, job ValidationJob, input R
 	}
 
 	linkedPurchaseToken := ""
+	obfuscatedAccountID := ""
 	if subscription {
 		purchase, err := s.google.GetSubscription(ctx, account, packageName, purchaseToken)
 		s.providerRequests.Add(ctx, 1, metric.WithAttributes(
@@ -609,6 +684,9 @@ func (s *Service) validateGoogle(ctx context.Context, job ValidationJob, input R
 				Permanent(CategoryInvalid, "subscription_has_no_line_items"), QuarantineMalformedReference, "error")
 		}
 		applyGoogleSubscription(&fact, purchase)
+		if purchase.ExternalAccountIdentifiers != nil {
+			obfuscatedAccountID = purchase.ExternalAccountIdentifiers.ObfuscatedExternalAccountID
+		}
 		if !applyGoogleVoid(&fact, work, input.ProviderOccurredAt) {
 			return s.quarantineAttempt(job, input, attemptID, attemptNumber, started,
 				Permanent(CategoryInvalid, "void_event_time_unavailable"), QuarantineMissingProviderTimestamp, "error")
@@ -683,6 +761,7 @@ func (s *Service) validateGoogle(ctx context.Context, job ValidationJob, input R
 		// must become a fact on receipt — so it produces a refund fact even
 		// though the re-queried state alone says only "not purchased".
 		applyGoogleOneTime(&fact, purchase)
+		obfuscatedAccountID = purchase.ObfuscatedExternalAccountID
 		if !applyGoogleVoid(&fact, work, input.ProviderOccurredAt) {
 			return s.quarantineAttempt(job, input, attemptID, attemptNumber, started,
 				Permanent(CategoryInvalid, "void_event_time_unavailable"), QuarantineMissingProviderTimestamp, "error")
@@ -707,6 +786,17 @@ func (s *Service) validateGoogle(ctx context.Context, job ValidationJob, input R
 			Permanent(CategoryInvalid, "no_provider_timestamp"), QuarantineMissingProviderTimestamp, "error")
 	}
 	outcome := s.resolveAndBuild(ctx, job, input, fact, platform, attemptID, attemptNumber, started, fact.StoreEnvironment)
+	// Same treatment as Apple's appAccountToken: read from the authoritative
+	// purchase resource, hashed here, raw value goes no further.
+	outcome.ReferenceDigests = appendDigest(outcome.ReferenceDigests, input.TransactionReferenceDigest)
+	outcome.ReferenceDigests = appendDigest(outcome.ReferenceDigests, fact.PurchaseChainDigest)
+	if account := strings.TrimSpace(obfuscatedAccountID); account != "" {
+		outcome.Correlators = append(outcome.Correlators, AssociationCorrelator{
+			EvidenceType: EvidenceObfuscatedAccount,
+			AliasType:    AliasGoogleObfuscatedID,
+			Digest:       AliasDigest(AliasGoogleObfuscatedID, account),
+		})
+	}
 	if linkedPurchaseToken != "" && outcome.Fact != nil {
 		// 9A correction (B1): the linked purchase token is a persistent attribute
 		// of the successor subscription, present on every re-query for its whole
@@ -1440,3 +1530,17 @@ func zero(value []byte) {
 }
 
 var _ = errors.Is
+
+// appendDigest adds one digest to a set, ignoring empties and duplicates. The
+// set is small and unordered, so a linear scan is the whole implementation.
+func appendDigest(digests [][]byte, digest []byte) [][]byte {
+	if len(digest) == 0 {
+		return digests
+	}
+	for _, existing := range digests {
+		if string(existing) == string(digest) {
+			return digests
+		}
+	}
+	return append(digests, digest)
+}

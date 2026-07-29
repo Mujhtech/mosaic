@@ -77,6 +77,7 @@ import (
 	"github.com/Mujhtech/mosaic/apps/api/internal/platform/billingpostgres"
 	"github.com/Mujhtech/mosaic/apps/api/internal/platform/billingprojectionpostgres"
 	"github.com/Mujhtech/mosaic/apps/api/internal/platform/billingrestorepostgres"
+	"github.com/Mujhtech/mosaic/apps/api/internal/platform/billingseam"
 	"github.com/Mujhtech/mosaic/apps/api/internal/platform/billingwebhookpostgres"
 	"github.com/Mujhtech/mosaic/apps/api/internal/platform/googleplay"
 	"github.com/Mujhtech/mosaic/apps/api/internal/platform/httpserver"
@@ -132,13 +133,23 @@ type demo struct {
 	destination *destinationStub
 
 	// Phase 9B tenant credentials and run state.
-	publicKey9B      apiKey
-	serverKey9B      apiKey
-	intakePath9B     string
-	credentialID9B   string
-	customerA        string
-	customerB        string
-	tokenA           string
+	publicKey9B    apiKey
+	serverKey9B    apiKey
+	intakePath9B   string
+	credentialID9B string
+	customerA      string
+	customerB      string
+	tokenA         string
+	tokenB         string
+	// bindToken is the Customer Access Token the simulated SDK presents when it
+	// reports a purchase. It is what attaches a lineage to an identified
+	// customer through production wiring; the first Stage 4 run had to stand in
+	// for this with a bridge() substitution (defect D-1).
+	bindToken string
+	// boundLineages remembers which purchase chains the SDK has already
+	// reported, so a renewal does not re-report a purchase a real SDK observed
+	// once.
+	boundLineages    map[string]bool
 	destinationID    string
 	demoNumber       int
 	oneMinute        bool
@@ -162,7 +173,7 @@ func run() error {
 	}
 	defer pool.Close()
 
-	d := &demo{ctx: ctx, pool: pool, started: time.Now()}
+	d := &demo{ctx: ctx, pool: pool, started: time.Now(), boundLineages: map[string]bool{}}
 	if err := d.wire(); err != nil {
 		return err
 	}
@@ -258,10 +269,6 @@ func (d *demo) wire() error {
 		return err
 	}
 
-	d.service = billing.NewService(billingpostgres.New(d.pool), cipher, verifier,
-		billing.WithProviders(appleClient, googleClient),
-		billing.WithNotificationBaseURL(demoNotificationOrigin))
-
 	// Phase 9B composition, identical to cmd/api's except that the webhook
 	// policy is constructed with the self-hosted allowlist so a loopback
 	// destination is permitted. HTTPS, certificate verification, redirect
@@ -288,6 +295,16 @@ func (d *demo) wire() error {
 		billingdiagnostics.WithReplay(d.projection, projectionRepository))
 	d.operator = billingoperator.NewService(billingoperatorpostgres.New(d.pool),
 		billingaccesspostgres.New(d.pool), d.identity)
+
+	// The ingestion service is constructed last because the Phase 9A→9B seam
+	// makes it depend on the identity and access services, exactly as cmd/api
+	// and cmd/worker now wire it. This is what the driver's bridge()
+	// substitution used to stand in for (defect D-1).
+	seam := billingseam.New(d.identity, d.access)
+	d.service = billing.NewService(billingpostgres.New(d.pool), cipher, verifier,
+		billing.WithProviders(appleClient, googleClient),
+		billing.WithNotificationBaseURL(demoNotificationOrigin),
+		billing.WithSeam(seam, seam))
 
 	logger := zerolog.New(io.Discard)
 	// SUBSTITUTION 3: the dashboard principal resolver returns a fixed actor

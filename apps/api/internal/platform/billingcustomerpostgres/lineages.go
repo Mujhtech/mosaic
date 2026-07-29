@@ -104,6 +104,29 @@ func (r *Repository) LocateLineage(ctx context.Context, lineage billingcustomer.
 	return billingcustomer.Lineage{}, false, billingcustomer.ErrUnavailable
 }
 
+// LineageByKey reads the lineage for one provider chain key.
+//
+// It is scoped by Environment and provider rather than by Project because that
+// triple is the UNIQUE constraint the schema declares, and because Apple's chain
+// digest is unique only per (store environment, original transaction id): two
+// sandbox Environments in one Project can legitimately hold the same digest.
+func (r *Repository) LineageByKey(ctx context.Context, environmentID, provider string, keyDigest []byte) (billingcustomer.Lineage, error) {
+	if len(keyDigest) == 0 {
+		return billingcustomer.Lineage{}, billingcustomer.ErrNotFound
+	}
+	lineage, err := scanLineage(r.pool.QueryRow(ctx,
+		`SELECT `+lineageColumns+` FROM purchase_lineages
+		 WHERE environment_id=$1 AND provider=$2 AND lineage_key_digest=$3`,
+		environmentID, provider, keyDigest))
+	if errors.Is(err, pgx.ErrNoRows) {
+		return billingcustomer.Lineage{}, billingcustomer.ErrNotFound
+	}
+	if err != nil {
+		return billingcustomer.Lineage{}, fmt.Errorf("read purchase lineage by key: %w", err)
+	}
+	return lineage, nil
+}
+
 func (r *Repository) Lineage(ctx context.Context, projectID, lineageID string) (billingcustomer.Lineage, error) {
 	lineage, err := scanLineage(r.pool.QueryRow(ctx,
 		`SELECT `+lineageColumns+` FROM purchase_lineages WHERE id=$1 AND project_id=$2`,

@@ -44,6 +44,11 @@ type Repository interface {
 	// LocateLineage finds or creates the lineage for a provider chain key.
 	LocateLineage(ctx context.Context, lineage Lineage) (Lineage, bool, error)
 	Lineage(ctx context.Context, projectID, lineageID string) (Lineage, error)
+	// LineageByKey reads the lineage for one provider chain key. The seam needs
+	// it because the fact-commit transaction created the row and knows only the
+	// key it used; asking LocateLineage instead would mean reconstructing every
+	// column of a row that already exists just to be told it exists.
+	LineageByKey(ctx context.Context, environmentID, provider string, keyDigest []byte) (Lineage, error)
 	AttachLineageCustomer(ctx context.Context, projectID, lineageID, customerID string, now time.Time) error
 	SetLineageSupersededBy(ctx context.Context, projectID, lineageID, supersededBy string, now time.Time) error
 	SetLineageFrozen(ctx context.Context, projectID, lineageID string, frozen bool, diagnostic string, now time.Time) error

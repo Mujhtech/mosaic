@@ -120,6 +120,10 @@ func (s *stubRepository) Lineage(context.Context, string, string) (Lineage, erro
 	return s.lineage, nil
 }
 
+func (s *stubRepository) LineageByKey(context.Context, string, string, []byte) (Lineage, error) {
+	return s.lineage, nil
+}
+
 func (s *stubRepository) AttachLineageCustomer(_ context.Context, _, lineageID, customerID string, _ time.Time) error {
 	s.lineageAttachments = append(s.lineageAttachments, lineageID+"->"+customerID)
 	return nil

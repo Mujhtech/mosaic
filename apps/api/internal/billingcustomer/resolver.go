@@ -1,8 +1,9 @@
 package billingcustomer
 
 import (
-	"crypto/sha256"
 	"sort"
+
+	"github.com/Mujhtech/mosaic/apps/api/internal/billing"
 )
 
 // AliasDigest is the one-way representation of an alias value.
@@ -12,14 +13,12 @@ import (
 // else; without a domain prefix, a value that happened to be identical across
 // two alias types would collapse into one active resolution and silently join
 // two people. The alias type is folded in for the same reason.
+// It delegates to the billing module's implementation rather than repeating the
+// hash. The validator has to produce the identical digest for a provider
+// correlator it parses, and two copies of a persisted digest domain is one edit
+// away from two records of the same person that no longer match.
 func AliasDigest(aliasType, value string) []byte {
-	hasher := sha256.New()
-	hasher.Write([]byte("mosaic-billing-alias-v1"))
-	hasher.Write([]byte{0})
-	hasher.Write([]byte(aliasType))
-	hasher.Write([]byte{0})
-	hasher.Write([]byte(value))
-	return hasher.Sum(nil)
+	return billing.AliasDigest(aliasType, value)
 }
 
 // Observation is one piece of evidence offered to the resolver.

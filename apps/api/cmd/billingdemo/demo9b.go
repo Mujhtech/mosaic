@@ -16,8 +16,8 @@ import (
 	"time"
 
 	"github.com/Mujhtech/mosaic/apps/api/internal/billing"
-	"github.com/Mujhtech/mosaic/apps/api/internal/billingcustomer"
 	"github.com/Mujhtech/mosaic/apps/api/internal/billingprojection"
+	billinghttp "github.com/Mujhtech/mosaic/apps/api/internal/transport/billing"
 )
 
 func (d *demo) stages9B() []func() error {
@@ -234,6 +234,7 @@ func (d *demo) demo1InitialSubscription() error {
 		return err
 	}
 	d.tokenA = token
+	d.bindToken = token
 	d.query("the token is stored as a digest, never as a value",
 		`SELECT audience, scopes, octet_length(token_digest) AS digest_bytes,
 		        (expires_at > issued_at) AS bounded, (revoked_at IS NULL) AS live,
@@ -262,9 +263,6 @@ func (d *demo) demo1InitialSubscription() error {
 		 FROM billing_transaction_facts WHERE project_id=$1 ORDER BY recorded_at`, projectID9B)
 
 	d.step("Associate the purchase lineage with the Billing Customer (submission-context evidence)")
-	if err := d.bridge(d.customerA); err != nil {
-		return err
-	}
 	d.query("purchase lineage and its association evidence",
 		`SELECT l.provider, l.lineage_type, l.projection_frozen, l.diagnostic_status,
 		        (l.billing_customer_id = $2) AS attached_to_customer,
@@ -330,9 +328,6 @@ func (d *demo) demo2Renewal() error {
 	}); err != nil {
 		return err
 	}
-	if err := d.bridge(d.customerA); err != nil {
-		return err
-	}
 	if err := d.project(d.customerA); err != nil {
 		return err
 	}
@@ -390,9 +385,6 @@ func (d *demo) demo3Cancellation() error {
 	}); err != nil {
 		return err
 	}
-	if err := d.bridge(d.customerA); err != nil {
-		return err
-	}
 	if err := d.project(d.customerA); err != nil {
 		return err
 	}
@@ -434,9 +426,6 @@ func (d *demo) demo4Expiration() error {
 		Renewal: &renewalVector{OriginalTransactionID: lineageSubscription, AutoRenewStatus: 0,
 			AutoRenewProductID: appleMonthly9B, ProductID: appleMonthly9B, SignedAt: d.at(-time.Hour)},
 	}); err != nil {
-		return err
-	}
-	if err := d.bridge(d.customerA); err != nil {
 		return err
 	}
 	if err := d.project(d.customerA); err != nil {
@@ -494,9 +483,6 @@ func (d *demo) demo5MultipleSources() error {
 	}); err != nil {
 		return err
 	}
-	if err := d.bridge(d.customerA); err != nil {
-		return err
-	}
 	if err := d.project(d.customerA); err != nil {
 		return err
 	}
@@ -516,9 +502,6 @@ func (d *demo) demo5MultipleSources() error {
 		Renewal: &renewalVector{OriginalTransactionID: lineageResubscribe, AutoRenewStatus: 0,
 			AutoRenewProductID: appleMonthly9B, ProductID: appleMonthly9B, SignedAt: d.at(-10 * time.Minute)},
 	}); err != nil {
-		return err
-	}
-	if err := d.bridge(d.customerA); err != nil {
 		return err
 	}
 	if err := d.project(d.customerA); err != nil {
@@ -566,9 +549,6 @@ func (d *demo) demo6Refund() error {
 			SignedDate: d.at(-5 * time.Minute),
 		},
 	}); err != nil {
-		return err
-	}
-	if err := d.bridge(d.customerA); err != nil {
 		return err
 	}
 	if err := d.project(d.customerA); err != nil {
@@ -642,9 +622,6 @@ func (d *demo) demo7GraceAndRecovery() error {
 	}); err != nil {
 		return err
 	}
-	if err := d.bridge(d.customerA); err != nil {
-		return err
-	}
 	if err := d.project(d.customerA); err != nil {
 		return err
 	}
@@ -669,9 +646,6 @@ func (d *demo) demo7GraceAndRecovery() error {
 		Renewal: &renewalVector{OriginalTransactionID: lineageGrace, AutoRenewStatus: 1,
 			AutoRenewProductID: appleMonthly9B, ProductID: appleMonthly9B, SignedAt: d.at(-2 * time.Minute)},
 	}); err != nil {
-		return err
-	}
-	if err := d.bridge(d.customerA); err != nil {
 		return err
 	}
 	if err := d.project(d.customerA); err != nil {
@@ -724,9 +698,6 @@ func (d *demo) demo8OutOfOrder() error {
 			return fmt.Errorf("event %d: %w", index, err)
 		}
 	}
-	if err := d.bridge(d.customerA); err != nil {
-		return err
-	}
 	if err := d.project(d.customerA); err != nil {
 		return err
 	}
@@ -751,9 +722,6 @@ func (d *demo) demo8OutOfOrder() error {
 		Renewal: &renewalVector{OriginalTransactionID: lineageOutOfOrder, AutoRenewStatus: 1,
 			AutoRenewProductID: appleMonthly9B, ProductID: appleMonthly9B, SignedAt: d.at(-45 * 24 * time.Hour)},
 	}); err != nil {
-		return err
-	}
-	if err := d.bridge(d.customerA); err != nil {
 		return err
 	}
 	if err := d.project(d.customerA); err != nil {
@@ -803,9 +771,6 @@ func (d *demo) demo9UpgradeDowngrade() error {
 	}); err != nil {
 		return err
 	}
-	if err := d.bridge(d.customerA); err != nil {
-		return err
-	}
 	if err := d.project(d.customerA); err != nil {
 		return err
 	}
@@ -829,9 +794,6 @@ func (d *demo) demo9UpgradeDowngrade() error {
 		Renewal: &renewalVector{OriginalTransactionID: lineageUpgrade, AutoRenewStatus: 1,
 			AutoRenewProductID: appleYearly9B, ProductID: appleYearly9B, SignedAt: d.at(-time.Minute)},
 	}); err != nil {
-		return err
-	}
-	if err := d.bridge(d.customerA); err != nil {
 		return err
 	}
 	if err := d.project(d.customerA); err != nil {
@@ -881,9 +843,6 @@ func (d *demo) demo10Restore() error {
 		observation9B("obs_demo9b_device_a", "sub_demo9b_device_a", "3000000900000017"))
 	d.http("POST /v1/sdk/billing/observations (device A)", status, body)
 	if err := d.drainValidation(6); err != nil {
-		return err
-	}
-	if err := d.bridge(d.customerA); err != nil {
 		return err
 	}
 	if err := d.project(d.customerA); err != nil {
@@ -1049,6 +1008,11 @@ func (d *demo) demo12IdentityConflict() error {
 		return err
 	}
 	d.customerB = customer.Data.BillingCustomerID
+	tokenB, err := d.issueToken(d.customerB, "demo-9b-token-b")
+	if err != nil {
+		return err
+	}
+	d.tokenB = tokenB
 
 	d.step("A purchase lineage is associated with Customer A")
 	if err := d.deliverApple(appleEvent{
@@ -1064,9 +1028,6 @@ func (d *demo) demo12IdentityConflict() error {
 	}); err != nil {
 		return err
 	}
-	if err := d.bridge(d.customerA); err != nil {
-		return err
-	}
 	if err := d.project(d.customerA); err != nil {
 		return err
 	}
@@ -1076,22 +1037,17 @@ func (d *demo) demo12IdentityConflict() error {
 	}
 	versionABefore, versionBBefore := d.snapshotVersion(d.customerA), d.snapshotVersion(d.customerB)
 
+	// Customer B's backend now claims the same purchase, through exactly the
+	// surface Customer A's did: a token-bound observation. Nothing here is a
+	// substitution — the resolver runs because a fact for that transaction was
+	// re-validated, and it sees an accepted association naming A alongside
+	// submission evidence naming B.
 	d.step("Conflicting trusted identity evidence arrives naming Customer B")
-	rawInputID, err := d.latestRawInput()
-	if err != nil {
+	delete(d.boundLineages, lineageConflict)
+	if err := d.bindPurchase(d.tokenB, lineageConflict, "3000000900000018", "b_"); err != nil {
 		return err
 	}
-	resolution, err := d.identity.ResolveLineageCustomer(d.ctx, projectID9B, conflictLineage,
-		[]billingcustomer.Observation{{
-			EvidenceType: billingcustomer.EvidenceTrustedServer,
-			CustomerID:   d.customerB,
-			RawInputID:   rawInputID,
-		}})
-	if err != nil {
-		return err
-	}
-	d.note("resolver outcome=%s customer=%s conflictWith=%s diagnostic=%s",
-		resolution.Outcome, resolution.CustomerID, resolution.ConflictWith, resolution.DiagnosticCode)
+	d.note("both customers' backends have now claimed transaction 3000000900000018")
 	d.query("the conflict is open, the lineage is frozen, and nothing was reassigned",
 		`SELECT c.conflict_scope, c.status, c.detail->>'diagnosticCode' AS diagnostic_code,
 		        (c.first_customer_id=$2) AS first_is_a, (c.second_customer_id=$3) AS second_is_b,
@@ -1306,6 +1262,7 @@ func (d *demo) stageOneMinute() error {
 		return err
 	}
 	d.tokenA = token
+	d.bindToken = token
 
 	if err := d.deliverApple(appleEvent{
 		NotificationUUID: "9b0000f1-0000-4000-8000-0000000000f1",
@@ -1318,9 +1275,6 @@ func (d *demo) stageOneMinute() error {
 		Renewal: &renewalVector{OriginalTransactionID: lineageOneMinuteSub, AutoRenewStatus: 1,
 			AutoRenewProductID: appleMonthly9B, ProductID: appleMonthly9B, SignedAt: d.at(-time.Hour)},
 	}); err != nil {
-		return err
-	}
-	if err := d.bridge(d.customerA); err != nil {
 		return err
 	}
 	if err := d.project(d.customerA); err != nil {
@@ -1342,9 +1296,6 @@ func (d *demo) stageOneMinute() error {
 	}); err != nil {
 		return err
 	}
-	if err := d.bridge(d.customerA); err != nil {
-		return err
-	}
 	if err := d.project(d.customerA); err != nil {
 		return err
 	}
@@ -1360,9 +1311,6 @@ func (d *demo) stageOneMinute() error {
 			ProductID: appleLifetime9B, ProductType: "Non-Consumable", PurchaseDate: d.at(-20 * time.Minute),
 		},
 	}); err != nil {
-		return err
-	}
-	if err := d.bridge(d.customerA); err != nil {
 		return err
 	}
 	if err := d.project(d.customerA); err != nil {
@@ -1381,9 +1329,6 @@ func (d *demo) stageOneMinute() error {
 		Renewal: &renewalVector{OriginalTransactionID: lineageOneMinuteSub, AutoRenewStatus: 0,
 			AutoRenewProductID: appleMonthly9B, ProductID: appleMonthly9B, SignedAt: d.at(-10 * time.Minute)},
 	}); err != nil {
-		return err
-	}
-	if err := d.bridge(d.customerA); err != nil {
 		return err
 	}
 	if err := d.project(d.customerA); err != nil {
@@ -1417,6 +1362,13 @@ func (d *demo) deliverApple(event appleEvent) error {
 		return err
 	}
 	d.apple.addTransaction(event.Transaction.TransactionID, signedTransaction)
+	// A real SDK reports the purchase it just made, carrying the customer's
+	// token. That submission is what lets the store's own notification — which
+	// names nobody — reach an identified customer.
+	if err := d.bindPurchase(d.bindToken, event.Transaction.OriginalTransactionID,
+		event.Transaction.TransactionID, "a_"); err != nil {
+		return err
+	}
 	status, response := d.raw(http.MethodPost, d.intakePath9B, body, nil)
 	d.note("intake %s/%s → %d %s", event.NotificationType, orDash(event.Subtype), status, truncate(response, 160))
 	if status != http.StatusAccepted && status != http.StatusOK {
@@ -1425,128 +1377,44 @@ func (d *demo) deliverApple(event appleEvent) error {
 	return d.drainValidation(6)
 }
 
-// bridge stands in for production wiring that does not exist.
+// bindPurchase submits a Customer Access Token-bound observation for one
+// transaction, which is how a purchase reaches an identified Billing Customer in
+// production.
 //
-// SUBSTITUTION — and the most important thing in this transcript. Nothing in
-// cmd/api or cmd/worker creates a `purchase_lineages` row, a
-// `subscription_instances` row, a `one_time_purchase_instances` row, or an
-// association between a lineage and a Billing Customer. `LocateLineage`,
-// `ResolveLineageCustomer`, and `RecordSupersession` have no production caller,
-// and `enqueueProjectionForFact` (billingpostgres/jobs.go) treats a missing
-// lineage as silence. A validated fact therefore reaches no projection in a
-// deployed system.
+// This replaces the `bridge()` substitution the first Stage 4 run had to
+// perform. Nothing is stood in for any more: the observation goes through the
+// real public SDK endpoint with the real token, Mosaic records the
+// submission-context association evidence itself, and when the notification's
+// fact commits the seam reads that evidence back and attaches the lineage. The
+// lineage row, both instance rows, the association, the supersession edge, and
+// the projection trigger are all written by production code.
 //
-// This function performs, explicitly and in the open, what the missing worker
-// step would perform: it locates the lineage for every validated fact chain
-// through the real `billingcustomer.Service.LocateLineage`, materializes the
-// instance row the projection loader joins to, and runs the real association
-// resolver with a trusted-server observation. Everything downstream of it —
-// ordering, projection, grants, entitlement snapshots, webhooks — is real.
-func (d *demo) bridge(customerID string) error {
-	rows, err := d.pool.Query(d.ctx,
-		`SELECT DISTINCT f.purchase_chain_digest, f.transaction_type, f.provider, f.store_environment,
-		        f.application_id, f.environment_mode, min(f.occurred_at) AS acquired_at,
-		        min(f.source_raw_input_id) AS raw_input_id
-		 FROM billing_transaction_facts f
-		 WHERE f.project_id=$1 AND f.environment_id=$2 AND f.purchase_chain_digest IS NOT NULL
-		 GROUP BY 1,2,3,4,5,6`, projectID9B, environmentID9B)
-	if err != nil {
-		return err
+// One observation per purchase chain is enough. After the first fact the lineage
+// carries an accepted association, and a prior association is itself the
+// evidence that a renewal does not have to re-prove identity — which is exactly
+// what a real SDK does: it reports the purchase once, and the store's
+// notifications carry the rest of the lifecycle.
+func (d *demo) bindPurchase(token, lineage, transactionID, label string) error {
+	if token == "" || d.boundLineages[lineage] {
+		return nil
 	}
-	type chain struct {
-		digest           []byte
-		transactionType  string
-		provider         string
-		storeEnvironment string
-		applicationID    string
-		environmentMode  string
-		acquiredAt       time.Time
-		rawInputID       string
-	}
-	chains := []chain{}
-	for rows.Next() {
-		var item chain
-		if err := rows.Scan(&item.digest, &item.transactionType, &item.provider, &item.storeEnvironment,
-			&item.applicationID, &item.environmentMode, &item.acquiredAt, &item.rawInputID); err != nil {
-			rows.Close()
-			return err
-		}
-		chains = append(chains, item)
-	}
-	rows.Close()
-	if err := rows.Err(); err != nil {
-		return err
-	}
-
-	created := 0
-	for _, item := range chains {
-		lineageType := "subscription"
-		if item.transactionType == "non_consumable" {
-			lineageType = "one_time"
-		}
-		located, err := d.identity.LocateLineage(d.ctx, billingcustomer.Lineage{
-			ProjectID: projectID9B, EnvironmentID: environmentID9B, EnvironmentMode: item.environmentMode,
-			ApplicationID: item.applicationID, Provider: item.provider,
-			StoreEnvironment: item.storeEnvironment, LineageKeyDigest: item.digest,
-			LineageType: lineageType,
+	d.boundLineages[lineage] = true
+	// The submission id is per (transaction, reporter). Two backends reporting
+	// the same purchase are two submissions, not a duplicate of one, and the
+	// second has to become its own Raw Billing Input or the claim it carries is
+	// never validated and never reaches the resolver.
+	status, body := d.raw(http.MethodPost, "/v1/sdk/billing/observations",
+		encode(observation9B("obs_bind_"+label+transactionID, "sub_bind_"+label+transactionID, transactionID)),
+		map[string]string{
+			"Authorization":                 "Bearer " + d.publicKey9B.raw,
+			billinghttp.CustomerTokenHeader: token,
 		})
-		if err != nil {
-			return fmt.Errorf("locate lineage: %w", err)
-		}
-		if err := d.materializeInstance(located, lineageType, item.acquiredAt); err != nil {
-			return err
-		}
-		var attached string
-		if err := d.pool.QueryRow(d.ctx,
-			`SELECT COALESCE(billing_customer_id,'') FROM purchase_lineages WHERE id=$1`, located.ID).
-			Scan(&attached); err != nil {
-			return err
-		}
-		if attached != "" {
-			continue
-		}
-		resolution, err := d.identity.ResolveLineageCustomer(d.ctx, projectID9B, located.ID,
-			[]billingcustomer.Observation{{
-				EvidenceType: billingcustomer.EvidenceTrustedServer,
-				CustomerID:   customerID,
-				RawInputID:   item.rawInputID,
-			}})
-		if err != nil {
-			return fmt.Errorf("resolve lineage customer: %w", err)
-		}
-		created++
-		d.note("SUBSTITUTION bridge: lineage %s (%s) → %s (%s)", located.ID, lineageType,
-			resolution.CustomerID, resolution.Outcome)
+	if status != http.StatusAccepted && status != http.StatusOK {
+		return fmt.Errorf("token-bound observation for %s returned %d: %s", transactionID, status, body)
 	}
-	if created == 0 {
-		d.note("SUBSTITUTION bridge: no new lineage needed; %d chain(s) already associated", len(chains))
-	}
-	return nil
-}
-
-// materializeInstance creates the Subscription Instance or One-Time Purchase
-// Instance the projection loader joins to. Nothing in production creates one;
-// see bridge().
-func (d *demo) materializeInstance(lineage billingcustomer.Lineage, lineageType string, acquiredAt time.Time) error {
-	now := time.Now().UTC()
-	if lineageType == "one_time" {
-		_, err := d.pool.Exec(d.ctx,
-			`INSERT INTO one_time_purchase_instances(
-				id, project_id, environment_id, application_id, purchase_lineage_id, provider,
-				acquired_at, validity_state, created_at, updated_at)
-			 VALUES ('otp_'||substr(md5($1),1,24),$2,$3,$4,$1,$5,$6,'owned',$7,$7)
-			 ON CONFLICT (purchase_lineage_id) DO NOTHING`,
-			lineage.ID, projectID9B, environmentID9B, lineage.ApplicationID, lineage.Provider, acquiredAt, now)
-		return err
-	}
-	_, err := d.pool.Exec(d.ctx,
-		`INSERT INTO subscription_instances(
-			id, project_id, environment_id, application_id, purchase_lineage_id, provider,
-			created_at, updated_at)
-		 VALUES ('sbi_'||substr(md5($1),1,24),$2,$3,$4,$1,$5,$6,$6)
-		 ON CONFLICT (purchase_lineage_id) DO NOTHING`,
-		lineage.ID, projectID9B, environmentID9B, lineage.ApplicationID, lineage.Provider, now)
-	return err
+	d.note("SDK observed transaction %s under a Customer Access Token; Mosaic recorded the association",
+		transactionID)
+	return d.drainValidation(6)
 }
 
 // projectQueued enqueues a customer-scoped projection through the real trigger

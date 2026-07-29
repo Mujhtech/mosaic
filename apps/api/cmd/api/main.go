@@ -42,6 +42,7 @@ import (
 	"github.com/Mujhtech/mosaic/apps/api/internal/platform/billingpostgres"
 	"github.com/Mujhtech/mosaic/apps/api/internal/platform/billingprojectionpostgres"
 	"github.com/Mujhtech/mosaic/apps/api/internal/platform/billingrestorepostgres"
+	"github.com/Mujhtech/mosaic/apps/api/internal/platform/billingseam"
 	"github.com/Mujhtech/mosaic/apps/api/internal/platform/billingwebhookpostgres"
 	"github.com/Mujhtech/mosaic/apps/api/internal/platform/browserauthpostgres"
 	"github.com/Mujhtech/mosaic/apps/api/internal/platform/buildinfo"
@@ -312,10 +313,6 @@ func run() (runErr error) {
 		if err != nil {
 			return fmt.Errorf("configure Google Play client: %w", err)
 		}
-		billingService = billing.NewService(billingpostgres.New(databasePool), billingCipher, verifier,
-			billing.WithProviders(appleClient, googleClient),
-			billing.WithRetention(cfg.Billing.RawRetention()),
-			billing.WithNotificationBaseURL(cfg.Billing.NotificationBaseURL))
 		billingIPLimiter = ratelimit.New(cfg.Billing.ObservationsPerMinute, cfg.Billing.ObservationBurst, cfg.Billing.LimiterEntries)
 		billingKeyLimiter = ratelimit.New(cfg.Billing.ObservationsPerMinute, cfg.Billing.ObservationBurst, cfg.Billing.LimiterEntries)
 		billingAccessService = billingaccess.NewService(
@@ -343,6 +340,18 @@ func run() (runErr error) {
 			billingrestorepostgres.New(databasePool), billingKeys.Restore())
 		billingCustomerService = billingcustomer.NewService(
 			billingcustomerpostgres.New(databasePool), billingKeys.Identity(), billingProjectionService)
+		// The Phase 9A→9B seam. The ingestion service is constructed last
+		// because it depends on it: an observation submitted with a Customer
+		// Access Token records the association that lets a first purchase reach
+		// an identified customer, and a committed fact hands its lineage to the
+		// identity service. Without this the 9B read model is unreachable from a
+		// purchase, which was defect D-1.
+		billingService = billing.NewService(billingpostgres.New(databasePool), billingCipher, verifier,
+			billing.WithProviders(appleClient, googleClient),
+			billing.WithRetention(cfg.Billing.RawRetention()),
+			billing.WithNotificationBaseURL(cfg.Billing.NotificationBaseURL),
+			billing.WithSeam(billingseam.New(billingCustomerService, billingAccessService),
+				billingseam.New(billingCustomerService, billingAccessService)))
 		billingGrantService = billinggrant.NewService(billinggrantpostgres.New(databasePool))
 		// The operator surface reads through the same repositories the trusted
 		// APIs read through, so the dashboard and an application backend see one

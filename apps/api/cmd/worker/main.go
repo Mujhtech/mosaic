@@ -22,6 +22,8 @@ import (
 
 	"github.com/Mujhtech/mosaic/apps/api/internal/analytics"
 	"github.com/Mujhtech/mosaic/apps/api/internal/billing"
+	"github.com/Mujhtech/mosaic/apps/api/internal/billingaccess"
+	"github.com/Mujhtech/mosaic/apps/api/internal/billingcustomer"
 	"github.com/Mujhtech/mosaic/apps/api/internal/billingprojection"
 	"github.com/Mujhtech/mosaic/apps/api/internal/billingrestore"
 	"github.com/Mujhtech/mosaic/apps/api/internal/billingwebhook"
@@ -30,11 +32,14 @@ import (
 	"github.com/Mujhtech/mosaic/apps/api/internal/platform/analyticspostgres"
 	"github.com/Mujhtech/mosaic/apps/api/internal/platform/appstorejws"
 	"github.com/Mujhtech/mosaic/apps/api/internal/platform/appstoreserver"
+	"github.com/Mujhtech/mosaic/apps/api/internal/platform/billingaccesspostgres"
+	"github.com/Mujhtech/mosaic/apps/api/internal/platform/billingcustomerpostgres"
 	"github.com/Mujhtech/mosaic/apps/api/internal/platform/billingdiagnosticspostgres"
 	"github.com/Mujhtech/mosaic/apps/api/internal/platform/billingkeys"
 	"github.com/Mujhtech/mosaic/apps/api/internal/platform/billingpostgres"
 	"github.com/Mujhtech/mosaic/apps/api/internal/platform/billingprojectionpostgres"
 	"github.com/Mujhtech/mosaic/apps/api/internal/platform/billingrestorepostgres"
+	"github.com/Mujhtech/mosaic/apps/api/internal/platform/billingseam"
 	"github.com/Mujhtech/mosaic/apps/api/internal/platform/billingwebhookpostgres"
 	"github.com/Mujhtech/mosaic/apps/api/internal/platform/buildinfo"
 	"github.com/Mujhtech/mosaic/apps/api/internal/platform/cloudworkspacepostgres"
@@ -188,10 +193,23 @@ func run() (runErr error) {
 			return fmt.Errorf("configure Google Play client: %w", err)
 		}
 		billingRepository = billingpostgres.New(pool)
+		projectionService = billingprojection.NewService(billingprojectionpostgres.New(pool))
+		// The worker is where the Phase 9A→9B seam matters most: it runs the
+		// validation job, so it is where a committed fact has to reach a Purchase
+		// Lineage and a Billing Customer. The identity and access services are
+		// constructed here for that reason alone — the worker serves no HTTP and
+		// exposes neither.
+		billingKeys := billingkeys.New(billingRepository)
+		customerService := billingcustomer.NewService(
+			billingcustomerpostgres.New(pool), billingKeys.Identity(), projectionService)
+		accessService := billingaccess.NewService(
+			billingaccesspostgres.New(pool),
+			billingaccesspostgres.NewKeyAuthenticator(billingRepository))
+		seam := billingseam.New(customerService, accessService)
 		billingService = billing.NewService(billingRepository, billingCipher, verifier,
 			billing.WithProviders(appleClient, googleClient),
-			billing.WithRetention(cfg.Billing.RawRetention()))
-		projectionService = billingprojection.NewService(billingprojectionpostgres.New(pool))
+			billing.WithRetention(cfg.Billing.RawRetention()),
+			billing.WithSeam(seam, seam))
 		restoreRepository = billingrestorepostgres.New(pool)
 		restoreService = billingrestore.NewService(restoreRepository,
 			billingkeys.New(billingRepository).Restore())
