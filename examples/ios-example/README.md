@@ -45,6 +45,34 @@ The footer shows the latest normalized paywall interaction or terminal result.
 The example uses `MosaicImageResolver.missing` intentionally so the fixture's
 declared same-geometry image placeholder demonstrates asset fallback.
 
+## Authoritative customer entitlements (Phase 9B)
+
+The hosted tab has an **Authoritative entitlements** panel that exercises the
+Phase 9B surface without needing a real backend.
+
+The customer picker drives a mock token provider (`ExampleCustomerTokenProvider`)
+with four states, chosen to cover the cases that are easy to get wrong:
+
+| Selection | What the SDK sees | What to look for |
+| --- | --- | --- |
+| Signed out | `.signedOut` from the provider | `signedOut`, not "no access" |
+| Customer A / B | a fake token per customer | switching clears the previous customer's cache before any read |
+| Backend failing | `.unavailable` from the provider | `unavailable · tokenProviderFailed` — **never** `inactive` |
+
+The readout shows the accepted snapshot version, the cache state (including
+`STALE within grace`, which a real UI must surface), and the `pro` entry state.
+**Restore & sync** lists each stage so the two axes of a restore are visible:
+what StoreKit did, and whether an accepted snapshot actually reflects it.
+
+In a real app the token provider calls your own authenticated backend, which
+mints a Customer Access Token with your Mosaic `secret_server` key. Mosaic
+Billing has no anonymous mode.
+
+Simulator note: StoreKit Testing in Xcode produces transactions with no App
+Store record, so the SDK deliberately never observes them. Restore stages will
+show the provider result and then `validation pending` against a local API,
+which is the correct behaviour rather than a failure.
+
 ## Local endpoint configuration
 
 The simulator defaults to:

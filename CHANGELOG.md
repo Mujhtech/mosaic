@@ -10,6 +10,20 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ### Added
 
+- **iOS SDK: authoritative customer entitlements** (Authoritative Entitlement
+  Contract v1, draft). `Mosaic.configure` gains an optional
+  `customerTokenProvider`; a new `MosaicCustomer…` surface reports what Mosaic
+  has validated for a Billing Customer, alongside — never replacing — the
+  existing provider-observed entitlement surface, which is unchanged.
+  `checkCustomerEntitlement(_:)`, `customerEntitlementSnapshot()`,
+  `customerEntitlementUpdates()`, `refreshCustomerEntitlements()`,
+  `customerEntitlementDiagnostics()`, `restoreAndSyncCustomerEntitlements()`,
+  and `clearCustomerState()`. Requires an application backend to mint Customer
+  Access Tokens; there is no anonymous mode. Tokens are memory-only, never
+  logged, never parsed. Bounded-grace offline policy with server-issued windows,
+  a per-customer backup-excluded cache, and the normative rule that any
+  rejection yields `unknown` and never `inactive`.
+
 - Protocol schemas are embedded in the API binary (`go:embed`), so a released
   image can no longer be built without them. Filesystem overrides still work for
   operators pinning a schema; a drift test fails the build if an embedded copy
@@ -32,6 +46,19 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
   (including the 304 path) and analytics ingestion.
 - `healthcheck` probe binary, so the distroless image can answer container
   healthchecks.
+- iOS: `MosaicDiagnosticStage` gains `entitlementTransport`,
+  `entitlementValidation`, `entitlementCache`, `entitlementAuthentication`, and
+  `entitlementRestore`. This is source-breaking for a host that switches
+  exhaustively over the enumeration, which is accepted at `0.1.0-dev`.
+- iOS: the StoreKit adapter now emits transaction observations on the **restore**
+  path from `Transaction.currentEntitlements`, not only on purchase. A
+  fresh-device restore previously submitted nothing, so a restored purchase was
+  never associated with a Billing Customer. Idempotent through the existing
+  acceptance store and submission-identifier de-duplication.
+- iOS: the StoreKit acceptance store and the identity store are now excluded from
+  backup. Restoring either onto a second device corrupted behaviour that is
+  supposed to be per-install: duplicate-delivery suppression and installation
+  identity.
 - Trusted-proxy middleware: `X-Forwarded-For`/`X-Real-IP` are honoured only from
   a peer inside `MOSAIC_TRUSTED_PROXY_CIDRS` (default: none).
 - Baseline rate limits for authenticated dashboard APIs and for Placement and

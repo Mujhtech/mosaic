@@ -532,6 +532,156 @@ Behaviour worth knowing before enabling it:
 accepted, duplicate, permanently rejected, retry, and dropped counters plus the
 last safe code. `flushTransactionObservations()` attempts delivery now.
 
+## Authoritative customer entitlements
+
+Two different questions, two different answers, both available:
+
+| | Provider-observed | Authoritative |
+| --- | --- | --- |
+| Asks | what this device's store account shows | what Mosaic has validated for this Billing Customer |
+| Source | StoreKit / RevenueCat on device | Mosaic's server-side projection of provider facts |
+| API | `activeEntitlements()`, entitlement targeting | `checkCustomerEntitlement(_:)` and friends |
+| Spans devices and platforms | no | yes |
+| Needs an app backend | no | **yes** |
+
+The provider-observed surface is unchanged. The authoritative surface is
+additive: nothing that already worked behaves differently.
+
+### Mosaic Billing requires an application backend
+
+A public SDK key identifies an *application*; it can never select a *customer*.
+An application user ID is guessable, so it cannot either. Reading someone's
+billing state therefore needs a **Customer Access Token**, which only your
+backend can mint:
+
+```text
+your app → your backend (authenticates your user)
+         → Mosaic, with your secret_server key
+         → token, returned once
+         → back to the app
+         → SDK attaches it to every entitlement sync
+```
+
+There is no anonymous mode. Allowing a client-generated installation identifier
+to select a Billing Customer would let anyone read someone else's entitlements
+by guess or replay.
+
+```swift
+let mosaic = try await Mosaic.configure(
+  publicSDKKey: key,
+  baseURL: baseURL,
+  purchaseProvider: provider,
+  customerTokenProvider: MosaicClosureCustomerTokenProvider { forceRefresh in
+    guard let user = await MyAuth.currentUser else { return .signedOut }
+    do {
+      return .token(MosaicCustomerAccessToken(try await MyBackend.mosaicToken(for: user)))
+    } catch {
+      // Never `.signedOut` for a backend failure: a backend that cannot mint a
+      // token has not revoked anyone's subscription.
+      return .unavailable
+    }
+  })
+```
+
+Tokens are held **in memory only** — never the keychain, never a file — and are
+never logged or parsed. On a refusal the SDK forces exactly one token refresh
+per generation; a second refusal is a real failure, not something to retry.
+
+### Reading access
+
+```swift
+let check = await mosaic.checkCustomerEntitlement("pro")
+switch check.state {
+case .active:                 unlock(stale: check.isStale)
+case .inactive:               showPaywall()
+case .unknown(let reason):    // Mosaic could not determine this
+case .unavailable(let reason): // Mosaic could not answer at all
+}
+```
+
+There is no boolean convenience API anywhere, deliberately. `unknown` and
+`unavailable` are not `inactive`, and an API that collapsed them would make
+that mistake easy to write and impossible to see.
+
+> **The one rule.** A rejected response, a network failure, an expired cache, an
+> unknown field, a digest mismatch, a token your backend could not mint — every
+> one of those is `unknown` or `unavailable`. `inactive` is a claim about a
+> person and only ever comes from a snapshot Mosaic issued and the SDK fully
+> accepted. A reader that collapsed the two would turn every Mosaic outage into
+> a mass revocation experienced by paying customers.
+
+Observe changes with a stream that replays current state to each new subscriber:
+
+```swift
+for await update in await mosaic.customerEntitlementUpdates() {
+  switch update {
+  case .snapshot(let value): apply(value.snapshot, stale: value.cacheState.isStale)
+  case .signedOut, .cleared: lockEverything()
+  case .unavailable(let reason): keepCurrentUIAndRetry(reason)
+  case .loading: break
+  }
+}
+```
+
+### Offline behaviour: bounded grace
+
+The shipped policy is bounded grace, uniform across iOS, Android, and Flutter.
+Windows are server-issued per Environment:
+
+| Window | Cache state | Behaviour |
+| --- | --- | --- |
+| before `refreshAfter` (default 1 h) | `fresh` | serve; do not refresh |
+| until `validUntil` (default 7 d) | `refreshRecommended` | fully valid |
+| + `staleGraceSeconds` (default 24 h) | `staleWithinGrace` | previously active access continues and **must be shown as stale** |
+| after that | `expired` | `unknown` — never `inactive` |
+
+Clock skew tolerance is 60 seconds. A device clock set earlier than issuance is
+treated as unreliable and takes the expired path, because a cache whose age
+cannot be measured cannot be trusted to be young. A strict policy is the same
+fields with a grace window of zero.
+
+The cache is per-customer (the binding digest is in the file name), excluded
+from backup, atomic, and checksummed for corruption detection. It supports UI
+continuity and feature gating — **it is not a credential**, and your backend
+must never accept one from a client as proof of access. Protected resources are
+authorized by your own server.
+
+### Restore
+
+```swift
+let result = await mosaic.restoreAndSyncCustomerEntitlements()
+result.providerResult                      // what StoreKit did, verbatim
+result.outcome                             // what Mosaic can say
+result.authoritativeEntitlementsUpdated    // true only with an accepted snapshot
+result.stages                              // render as progress
+```
+
+A restore is two operations, so the result reports two axes. A successful native
+restore whose facts Mosaic has not yet validated is `validationPending`, not
+`restored`: the accepted snapshot is the evidence that makes the outcome
+authoritative rather than hopeful. The validation poll is bounded at 3 attempts
+over roughly 6 seconds.
+
+The StoreKit adapter now submits observations on the restore path as well as the
+purchase path, so a fresh-device restore actually reaches Mosaic. Both
+de-duplication layers make repeated restores idempotent.
+
+### Refresh timing
+
+Refreshes happen at `configure`, on foreground, and whenever you ask. **There is
+no background refresh**: no `BGTaskScheduler`, no silent push. A device that has
+been offline for days is exactly what the grace window and the `expired` state
+describe. After a purchase, call `customerEntitlementsDidChangeAfterPurchase()`;
+it is fire-and-forget and never a suspension point on the purchase path.
+
+### Identity
+
+`identify(userID:)`, `resetIdentity()`, and `resetInstallationIdentity()` all
+fan out to the entitlement client: the token generation is bumped, in-flight
+requests are cancelled, and the cache is cleared **before any read can return
+the previous person's grants**. Installation identity is preserved.
+`clearCustomerState()` does the same on request.
+
 ## Bundled fallback and direct rendering
 
 The preview screen takes a valid bundled `MosaicPaywallDocument` and an

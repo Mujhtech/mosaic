@@ -51,13 +51,14 @@ public struct MosaicRestoreAndSyncResult: Sendable, Equatable {
 struct MosaicCustomerRestoreCoordinator: Sendable {
   let client: MosaicCustomerEntitlementClient
   let clock: @Sendable () -> Date
-  let sleep: @Sendable (Duration) async -> Void
+  /// Seconds. `Duration` would raise the package's iOS 15 deployment target.
+  let sleep: @Sendable (TimeInterval) async -> Void
 
   init(
     client: MosaicCustomerEntitlementClient,
     clock: @escaping @Sendable () -> Date = Date.init,
-    sleep: @escaping @Sendable (Duration) async -> Void = {
-      try? await Task.sleep(for: $0)
+    sleep: @escaping @Sendable (TimeInterval) async -> Void = { seconds in
+      try? await Task.sleep(nanoseconds: UInt64(max(0, seconds) * 1_000_000_000))
     }
   ) {
     self.client = client
@@ -94,9 +95,9 @@ struct MosaicCustomerRestoreCoordinator: Sendable {
     // either returning a stale answer or spinning indefinitely.
     var attempts = 0
     var lastUnavailable: MosaicCustomerUnavailableReason?
-    let interval = Duration.milliseconds(
-      Int(MosaicCustomerEntitlementPolicy.restorePollBudgetSeconds * 1000)
-        / max(MosaicCustomerEntitlementPolicy.restorePollAttempts, 1))
+    let interval =
+      MosaicCustomerEntitlementPolicy.restorePollBudgetSeconds
+      / Double(max(MosaicCustomerEntitlementPolicy.restorePollAttempts, 1))
 
     while attempts < MosaicCustomerEntitlementPolicy.restorePollAttempts {
       attempts += 1
