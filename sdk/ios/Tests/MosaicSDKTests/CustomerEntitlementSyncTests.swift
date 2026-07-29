@@ -107,6 +107,98 @@ final class CustomerEntitlementSyncTests: XCTestCase {
     XCTAssertFalse(request.url.absoluteString.contains("mcat_"))
   }
 
+  // Risk: contract negotiation lives in the request body, so all three SDKs POST
+  // the canonical `entitlementSyncRequest` envelope. A bodyless GET would ship a
+  // version-negotiating client that never states which versions it can read.
+  func testRequestBodyIsTheCanonicalSyncRequestEnvelope() async throws {
+    let transport = StubSyncTransport([ok(try snapshotData("active-subscription.json"))])
+    let (client, _) = makeClient(transport: transport)
+
+    _ = await client.refresh()
+
+    let requests = await transport.requests
+    let request = try XCTUnwrap(requests.first)
+    XCTAssertEqual(request.headers["Content-Type"], "application/json")
+    let envelope = try XCTUnwrap(
+      JSONSerialization.jsonObject(with: request.body) as? [String: Any])
+    XCTAssertEqual(envelope["authoritativeEntitlementContractVersion"] as? String, "1")
+    XCTAssertEqual(envelope["recordType"] as? String, "entitlementSyncRequest")
+    let payload = try XCTUnwrap(envelope["payload"] as? [String: Any])
+    XCTAssertEqual(
+      payload["supportedAuthoritativeEntitlementContracts"] as? [String], ["1"])
+    XCTAssertNotNil(payload["correlationId"] as? String)
+    // Nothing already known on a first sync, so neither conditional member is sent.
+    XCTAssertNil(payload["knownSnapshotVersion"])
+    XCTAssertNil(payload["entityTag"])
+    // The customer is selected by the token alone. Asserting an identifier could
+    // only narrow or fail the request, so it is never sent.
+    XCTAssertNil(payload["billingCustomerId"])
+  }
+
+  // Risk: without these the server can never answer `snapshotUnchanged`, and
+  // every refresh re-sends a snapshot the device already holds.
+  func testConditionalRequestBodyCarriesTheKnownVersionAndEntityTag() async throws {
+    let transport = StubSyncTransport([
+      ok(try snapshotData("active-subscription.json")),
+      ok(try snapshotData("newer-snapshot.json")),
+    ])
+    let (client, _) = makeClient(transport: transport)
+    _ = await client.refresh()
+    _ = await client.refresh()
+
+    let requests = await transport.requests
+    let envelope = try XCTUnwrap(
+      JSONSerialization.jsonObject(with: requests[1].body) as? [String: Any])
+    let payload = try XCTUnwrap(envelope["payload"] as? [String: Any])
+    XCTAssertEqual(payload["knownSnapshotVersion"] as? Int, 4)
+    XCTAssertEqual(payload["entityTag"] as? String, "cs-0001-v4")
+  }
+
+  // Risk: the contract-pinned unchanged path. A `snapshotUnchanged` record slides
+  // the freshness window so a confirmed-current snapshot does not expire merely
+  // because it was confirmed instead of resent.
+  func testSnapshotUnchangedRecordSlidesFreshness() async throws {
+    let transport = StubSyncTransport([
+      ok(try snapshotData("active-subscription.json")),
+      ok(try snapshotData("snapshot-unchanged.json")),
+    ])
+    // Past the original refreshAfter of 13:00Z but inside validity.
+    let later = try contractTimestamp("2026-07-28T13:30:00.000Z")
+    let (client, _) = makeClient(transport: transport, now: later)
+
+    _ = await client.refresh()
+    let before = await client.cacheState()
+    XCTAssertEqual(before, .refreshRecommended)
+
+    let result = await client.refresh()
+    XCTAssertEqual(result, .unchanged(snapshotVersion: 4))
+    // The confirmation carries refreshAfter 13:45Z, which is now in the future.
+    let after = await client.cacheState()
+    XCTAssertEqual(after, .fresh)
+    let check = await client.check(key: "pro")
+    XCTAssertEqual(check.state, .active)
+  }
+
+  // Risk: a bare 304 has no body, so there is no contract-pinned carrier for a
+  // refreshed window. It must preserve the cache without silently extending the
+  // offline horizon on wire names no contract owns.
+  func testBare304PreservesTheCacheWithoutSlidingFreshness() async throws {
+    let transport = StubSyncTransport([
+      ok(try snapshotData("active-subscription.json")),
+      .init(statusCode: 304),
+    ])
+    let later = try contractTimestamp("2026-07-28T13:30:00.000Z")
+    let (client, _) = makeClient(transport: transport, now: later)
+    _ = await client.refresh()
+
+    let result = await client.refresh()
+    XCTAssertEqual(result, .unchanged(snapshotVersion: 4))
+    let state = await client.cacheState()
+    XCTAssertEqual(state, .refreshRecommended, "a bare 304 must not extend the window")
+    let check = await client.check(key: "pro")
+    XCTAssertEqual(check.state, .active, "but the cache still stands")
+  }
+
   func testConditionalRequestSendsTheCachedEntityTag() async throws {
     let transport = StubSyncTransport([
       ok(try snapshotData("active-subscription.json")),
@@ -207,7 +299,7 @@ final class CustomerEntitlementSyncTests: XCTestCase {
     let cleared = await cache.clearCount
     XCTAssertGreaterThanOrEqual(cleared, 1, "a binding mismatch must clear the cache")
     let state = await client.cacheState()
-    XCTAssertEqual(state, .customerMismatch)
+    XCTAssertEqual(state, .differentCustomer)
 
     let check = await client.check(key: "pro")
     if case .unavailable = check.state {} else {
@@ -246,55 +338,6 @@ final class CustomerEntitlementSyncTests: XCTestCase {
   }
 
   // MARK: 304
-
-  // Risk: a confirmed-current snapshot must not expire merely because it was
-  // confirmed instead of resent. Without sliding, a stable subscriber's cache
-  // ages out and they lose access while perfectly online.
-  func testNotModifiedPreservesTheCacheAndSlidesFreshness() async throws {
-    let slidRefresh = try contractTimestamp("2026-08-04T11:00:00.000Z")
-    let slidValid = try contractTimestamp("2026-08-11T12:00:00.000Z")
-    let transport = StubSyncTransport([
-      ok(try snapshotData("active-subscription.json")),
-      .init(
-        statusCode: 304, refreshAfter: slidRefresh, validUntil: slidValid,
-        staleGraceSeconds: 86_400),
-    ])
-    // A device sitting past the original refreshAfter but inside validity.
-    let later = try contractTimestamp("2026-08-04T10:00:00.000Z")
-    let (client, _) = makeClient(transport: transport, now: later)
-
-    _ = await client.refresh()
-    let beforeConfirmation = await client.cacheState()
-    XCTAssertEqual(beforeConfirmation, .refreshRecommended)
-
-    let confirmation = await client.refresh()
-    XCTAssertEqual(confirmation, .unchanged(snapshotVersion: 4))
-    let afterConfirmation = await client.cacheState()
-    XCTAssertEqual(
-      afterConfirmation, .fresh,
-      "the confirmation must slide the window rather than leave it expiring")
-    let check = await client.check(key: "pro")
-    XCTAssertEqual(check.state, .active)
-  }
-
-  // Risk: sliding without bound would let a device serve unconfirmed access
-  // indefinitely by being told "unchanged" forever.
-  func testSlidWindowCannotExceedTheCombinedHorizon() async throws {
-    let transport = StubSyncTransport([
-      ok(try snapshotData("active-subscription.json")),
-      .init(
-        statusCode: 304,
-        validUntil: try contractTimestamp("2026-09-30T12:00:00.000Z"),
-        staleGraceSeconds: 2_592_000),
-    ])
-    let (client, _) = makeClient(transport: transport)
-    _ = await client.refresh()
-
-    guard case .preserved(_, let diagnostic) = await client.refresh() else {
-      return XCTFail("an over-long slid window must be refused")
-    }
-    XCTAssertEqual(diagnostic.code, "entitlement_cache_horizon_exceeds_maximum")
-  }
 
   // MARK: Failure behaviour
 

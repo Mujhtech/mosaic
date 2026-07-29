@@ -8,6 +8,12 @@ struct MosaicEntitlementSyncHTTPRequest: Sendable, Equatable {
   let url: URL
   /// Never logged and never printed: this dictionary carries the bearer token.
   let headers: [String: String]
+  /// The canonical `entitlementSyncRequest` envelope.
+  ///
+  /// The sync surface is a POST even though it is a read, because contract
+  /// negotiation lives in the request record and a GET cannot carry it.
+  /// Conditional revalidation still rides on `If-None-Match`.
+  let body: Data
   let timeout: TimeInterval
 }
 
@@ -18,26 +24,16 @@ struct MosaicEntitlementSyncHTTPResponse: Sendable, Equatable {
   /// The `Date` header, used to anchor trusted time. A device clock is
   /// attacker-controlled; a server instant is not.
   let serverDate: Date?
-  /// Freshness slid by a bare `304`. When the server answers `200` with a
-  /// `snapshotUnchanged` record instead, these come from the body, which is the
-  /// preferred form because the body shape is contract-pinned.
-  let refreshAfter: Date?
-  let validUntil: Date?
-  let staleGraceSeconds: Int?
   let retryAfterSeconds: Int?
 
   init(
     statusCode: Int, data: Data = Data(), etag: String? = nil, serverDate: Date? = nil,
-    refreshAfter: Date? = nil, validUntil: Date? = nil, staleGraceSeconds: Int? = nil,
     retryAfterSeconds: Int? = nil
   ) {
     self.statusCode = statusCode
     self.data = data
     self.etag = etag
     self.serverDate = serverDate
-    self.refreshAfter = refreshAfter
-    self.validUntil = validUntil
-    self.staleGraceSeconds = staleGraceSeconds
     self.retryAfterSeconds = retryAfterSeconds
   }
 }
@@ -57,9 +53,43 @@ enum MosaicEntitlementSyncHeader {
   static let authorization = "Authorization"
   static let sdkKey = "Mosaic-SDK-Key"
   static let ifNoneMatch = "If-None-Match"
-  static let refreshAfter = "Mosaic-Entitlement-Refresh-After"
-  static let validUntil = "Mosaic-Entitlement-Valid-Until"
-  static let staleGraceSeconds = "Mosaic-Entitlement-Stale-Grace-Seconds"
+}
+
+/// Builds the canonical `entitlementSyncRequest` envelope.
+///
+/// `billingCustomerId` is deliberately never sent. It is a hint the server
+/// verifies against the Customer Access Token and refuses on mismatch, so it can
+/// only narrow the answer or fail the request — it can never widen access, and
+/// omitting it removes a value that would otherwise have to be kept in step with
+/// the token.
+enum MosaicEntitlementSyncRequestBody {
+  static func encode(
+    knownSnapshotVersion: Int64?,
+    entityTag: String?,
+    correlationID: String
+  ) throws -> Data {
+    var payload: [String: Any] = [
+      "supportedAuthoritativeEntitlementContracts": [
+        mosaicAuthoritativeEntitlementContractVersion
+      ],
+      "correlationId": correlationID,
+    ]
+    // Together these let the server answer `snapshotUnchanged` instead of
+    // resending a snapshot the device already holds.
+    if let knownSnapshotVersion { payload["knownSnapshotVersion"] = knownSnapshotVersion }
+    if let entityTag { payload["entityTag"] = entityTag }
+    return try MosaicCustomerCanonicalJSON.data([
+      "authoritativeEntitlementContractVersion": mosaicAuthoritativeEntitlementContractVersion,
+      "recordType": "entitlementSyncRequest",
+      "payload": payload,
+    ])
+  }
+
+  /// A per-request identifier satisfying the contract's identifier pattern. It is
+  /// random per request and derived from nothing about the user or the device.
+  static func correlationID() -> String {
+    "ios_" + UUID().uuidString.replacingOccurrences(of: "-", with: "").lowercased()
+  }
 }
 
 struct MosaicURLSessionEntitlementSyncTransport: MosaicEntitlementSyncTransport {
@@ -80,7 +110,8 @@ struct MosaicURLSessionEntitlementSyncTransport: MosaicEntitlementSyncTransport 
     -> MosaicEntitlementSyncHTTPResponse
   {
     var urlRequest = URLRequest(url: request.url, timeoutInterval: request.timeout)
-    urlRequest.httpMethod = "GET"
+    urlRequest.httpMethod = "POST"
+    urlRequest.httpBody = request.body
     for (name, value) in request.headers { urlRequest.setValue(value, forHTTPHeaderField: name) }
     let (data, response) = try await session.data(for: urlRequest)
     guard let http = response as? HTTPURLResponse else { throw URLError(.badServerResponse) }
@@ -89,12 +120,6 @@ struct MosaicURLSessionEntitlementSyncTransport: MosaicEntitlementSyncTransport 
       data: data,
       etag: http.value(forHTTPHeaderField: "ETag"),
       serverDate: http.value(forHTTPHeaderField: "Date").flatMap(Self.httpDate),
-      refreshAfter: http.value(forHTTPHeaderField: MosaicEntitlementSyncHeader.refreshAfter)
-        .flatMap(Self.contractTimestamp),
-      validUntil: http.value(forHTTPHeaderField: MosaicEntitlementSyncHeader.validUntil)
-        .flatMap(Self.contractTimestamp),
-      staleGraceSeconds: http.value(
-        forHTTPHeaderField: MosaicEntitlementSyncHeader.staleGraceSeconds).flatMap(Int.init),
       retryAfterSeconds: http.value(forHTTPHeaderField: "Retry-After").flatMap(Int.init))
   }
 
@@ -106,9 +131,4 @@ struct MosaicURLSessionEntitlementSyncTransport: MosaicEntitlementSyncTransport 
     return formatter.date(from: value)
   }
 
-  private static func contractTimestamp(_ value: String) -> Date? {
-    let formatter = ISO8601DateFormatter()
-    formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-    return formatter.date(from: value)
-  }
 }

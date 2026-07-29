@@ -79,6 +79,39 @@ final class CustomerEntitlementCodecTests: XCTestCase {
     XCTAssertTrue(snapshot.check(key: key, cacheState: .fresh).isTestSource)
   }
 
+  // Risk: absence is not a statement Mosaic made. A snapshot can omit a key
+  // because the Project does not define it, because the projection could not
+  // resolve it, or because the request narrowed the response with
+  // `requestedEntitlementKeys`. Reading any of those as `inactive` would deny
+  // access Mosaic never denied — and would do it silently, because the snapshot
+  // itself looks perfectly healthy.
+  func testEntitlementKeyAbsentFromASnapshotReadsUnknownNeverInactive() throws {
+    let snapshot = try snapshotFixture("active-subscription.json")
+    XCTAssertNil(snapshot.entry(forKey: "pro_lifetime"), "the fixture carries only `pro`")
+
+    let check = snapshot.check(key: "pro_lifetime", cacheState: .fresh)
+
+    guard case .unknown(let uncertainty) = check.state else {
+      return XCTFail("an absent key must read unknown, got \(check.state)")
+    }
+    XCTAssertNotEqual(check.state, .inactive)
+    XCTAssertNotEqual(
+      uncertainty.reason, .none, "an unknown state must stay explainable")
+    // A present key on the same snapshot still answers definitely, so this is not
+    // a blanket downgrade of every answer.
+    XCTAssertEqual(snapshot.check(key: "pro", cacheState: .fresh).state, .active)
+  }
+
+  // Risk: an entry that *is* present and says inactive is the one case where
+  // inactive is legitimate — Mosaic looked, found no qualifying source, and is
+  // confident. Losing this would make the state unreachable and every paywall
+  // decision fall back to unknown.
+  func testPresentInactiveEntryStillReadsInactive() throws {
+    let snapshot = try snapshotFixture("inactive-expired-subscription.json")
+    let key = try XCTUnwrap(snapshot.entries.first?.entitlementKey)
+    XCTAssertEqual(snapshot.check(key: key, cacheState: .fresh).state, .inactive)
+  }
+
   // Risk: the whole point of a closed reader. Each invalid fixture is a shape
   // the SDK must refuse; accepting one means acting on a document the contract
   // says is meaningless.

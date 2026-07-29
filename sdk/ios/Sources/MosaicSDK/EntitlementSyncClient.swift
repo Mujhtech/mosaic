@@ -265,6 +265,7 @@ actor MosaicCustomerEntitlementClient {
       MosaicEntitlementSyncHeader.authorization: "Bearer \(lease.token.value)",
       MosaicEntitlementSyncHeader.sdkKey: publicSDKKey,
       "Accept": "application/json",
+      "Content-Type": "application/json",
       "Mosaic-SDK-Platform": "ios",
       "Mosaic-SDK-Version": mosaicSDKVersion,
     ]
@@ -272,11 +273,23 @@ actor MosaicCustomerEntitlementClient {
       headers[MosaicEntitlementSyncHeader.ifNoneMatch] = "\"\(entityTag)\""
     }
 
+    let body: Data
+    do {
+      body = try MosaicEntitlementSyncRequestBody.encode(
+        knownSnapshotVersion: accepted?.snapshot.snapshotVersion,
+        entityTag: accepted?.entityTag,
+        correlationID: MosaicEntitlementSyncRequestBody.correlationID())
+    } catch {
+      return await preserveOrUnavailable(
+        code: "entitlement_request_encoding_failed", stage: .entitlementValidation,
+        reason: .serviceUnavailable)
+    }
+
     let response: MosaicEntitlementSyncHTTPResponse
     do {
       response = try await transport.fetch(
         MosaicEntitlementSyncHTTPRequest(
-          url: endpointURL, headers: headers, timeout: requestTimeout))
+          url: endpointURL, headers: headers, body: body, timeout: requestTimeout))
     } catch {
       // A network failure has not revoked anyone's subscription.
       return await preserveOrUnavailable(
@@ -386,10 +399,10 @@ actor MosaicCustomerEntitlementClient {
         // exists to prevent, so it is also the one that earns an error-severity
         // diagnostic rather than a warning.
         accepted = nil
-        cacheStateOverride = .customerMismatch
+        cacheStateOverride = .differentCustomer
         try? await cacheStore.clear()
         record(code: reason.diagnosticCode, stage: .entitlementValidation)
-        await broadcaster.emit(.cleared(.customerMismatch))
+        await broadcaster.emit(.cleared(.differentCustomer))
         return .unavailable(reason: .noSnapshot, diagnostics: diagnostics)
       }
       return await preserveOrUnavailable(
@@ -420,23 +433,28 @@ actor MosaicCustomerEntitlementClient {
     return .updated(snapshotVersion: snapshot.snapshotVersion)
   }
 
+  /// A bare `304`.
+  ///
+  /// The cache is preserved but its freshness window is **not** slid. Sliding
+  /// requires server-issued `refreshAfter`/`validUntil`, and the only
+  /// contract-pinned carrier for those is a `snapshotUnchanged` record, which a
+  /// `304` has no body to hold. Inventing headers to carry them would put the
+  /// offline-access horizon on wire names no contract owns.
   private func confirmUnchanged(_ response: MosaicEntitlementSyncHTTPResponse) async
     -> MosaicCustomerEntitlementRefreshResult
   {
-    guard let current = accepted else {
+    guard var current = accepted else {
       // Nothing to confirm. A 304 against no cache is a server or proxy defect.
       return await preserveOrUnavailable(
         code: "entitlement_unexpected_not_modified", stage: .entitlementTransport,
         reason: .noSnapshot)
     }
-    return await confirm(
-      snapshotVersion: current.snapshot.snapshotVersion,
-      binding: nil,
-      refreshAfter: response.refreshAfter,
-      validUntil: response.validUntil,
-      issuedAt: response.serverDate,
-      staleGraceSeconds: response.staleGraceSeconds,
-      serverDate: response.serverDate)
+    if let serverDate = response.serverDate {
+      current.trustedTime = MosaicTrustedTimeAnchor.remote(
+        serverTime: serverDate, localReceiptTime: clock())
+      accepted = current
+    }
+    return .unchanged(snapshotVersion: current.snapshot.snapshotVersion)
   }
 
   /// A confirmed-current snapshot must not expire merely because it was
@@ -465,12 +483,12 @@ actor MosaicCustomerEntitlementClient {
         rejectedCount &+= 1
         lastRejectionReason = MosaicCustomerSnapshotRejectionReason.customerMismatch.rawValue
         accepted = nil
-        cacheStateOverride = .customerMismatch
+        cacheStateOverride = .differentCustomer
         try? await cacheStore.clear()
         record(
           code: MosaicCustomerSnapshotRejectionReason.customerMismatch.diagnosticCode,
           stage: .entitlementValidation)
-        await broadcaster.emit(.cleared(.customerMismatch))
+        await broadcaster.emit(.cleared(.differentCustomer))
         return .unavailable(reason: .noSnapshot, diagnostics: diagnostics)
       }
       guard binding.snapshotVersion == current.snapshot.snapshotVersion else {

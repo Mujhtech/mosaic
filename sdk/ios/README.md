@@ -583,6 +583,12 @@ let mosaic = try await Mosaic.configure(
   })
 ```
 
+The sync surface is a `POST` to `/v1/sdk/billing/entitlements` carrying the
+canonical `entitlementSyncRequest` envelope, because contract negotiation lives
+in the request body. Conditional revalidation rides on `If-None-Match`, and the
+server confirms a current snapshot with a `snapshotUnchanged` record that also
+slides the freshness window.
+
 Tokens are held **in memory only** — never the keychain, never a file — and are
 never logged or parsed. On a refusal the SDK forces exactly one token refresh
 per generation; a second refusal is a real failure, not something to retry.
@@ -602,6 +608,11 @@ case .unavailable(let reason): // Mosaic could not answer at all
 There is no boolean convenience API anywhere, deliberately. `unknown` and
 `unavailable` are not `inactive`, and an API that collapsed them would make
 that mistake easy to write and impossible to see.
+
+An entitlement key the snapshot does not carry reads `unknown`, **not**
+`inactive`. Absence is not a statement Mosaic made: the key may be undefined for
+the Project, unresolved by the projection, or simply outside a narrowed request.
+`inactive` requires an entry that says so.
 
 > **The one rule.** A rejected response, a network failure, an expired cache, an
 > unknown field, a digest mismatch, a token your backend could not mint — every

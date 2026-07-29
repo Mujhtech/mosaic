@@ -331,12 +331,12 @@ public enum MosaicCustomerEntitlementCacheState: Sendable, Equatable {
   /// The cached bytes could not be read or no longer satisfy the contract.
   case invalid
   /// The cache belongs to another Billing Customer, Project, or Environment.
-  case customerMismatch
+  case differentCustomer
 
   public var servesAccess: Bool {
     switch self {
     case .fresh, .refreshRecommended, .staleWithinGrace: true
-    case .expired, .missing, .invalid, .customerMismatch: false
+    case .expired, .missing, .invalid, .differentCustomer: false
     }
   }
 
@@ -398,7 +398,7 @@ public struct MosaicCustomerEntitlementSnapshotUpdate: Sendable, Equatable {
 
 public enum MosaicCustomerEntitlementClearReason: String, Sendable, Equatable {
   case identityChanged
-  case customerMismatch
+  case differentCustomer
   case hostRequested
 }
 
@@ -620,13 +620,14 @@ extension MosaicCustomerEntitlementSnapshot {
         cacheState: cacheState)
     }
     guard let entry = entry(forKey: key) else {
-      // A key the snapshot does not carry is not a grant Mosaic withheld: the
-      // snapshot simply says nothing about it. That is `inactive` only because
-      // an accepted snapshot is a complete statement of this customer's access.
+      // Absence is not a statement Mosaic made. A snapshot can omit a key
+      // because the Project does not define it, because the projection could
+      // not resolve it, or because the request narrowed the response with
+      // `requestedEntitlementKeys` — and none of those is Mosaic saying the
+      // customer does not have it. `inactive` requires an entry that says so.
       return MosaicCustomerEntitlementCheck(
         entitlementKey: key,
-        state: .inactive,
-        explanation: MosaicCustomerExplanation(code: .noQualifyingSource),
+        state: .unknown(reason: MosaicCustomerUncertainty(reason: .missingFact, since: asOf)),
         snapshotVersion: snapshotVersion,
         asOf: asOf,
         cacheState: cacheState)

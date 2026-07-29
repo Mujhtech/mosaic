@@ -111,7 +111,7 @@ final class CustomerEntitlementVectorTests: XCTestCase {
     case .expired: "expired"
     case .missing: "missing"
     case .invalid: "invalid"
-    case .customerMismatch: "customer_mismatch"
+    case .differentCustomer: "different_customer"
     }
   }
 }

@@ -453,7 +453,7 @@ final class HostedConfigurationModel: ObservableObject {
     case .expired: "expired"
     case .missing: "no cache"
     case .invalid: "cache invalid"
-    case .customerMismatch: "different customer"
+    case .differentCustomer: "different customer"
     }
   }
 
