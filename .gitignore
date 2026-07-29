@@ -2,3 +2,7 @@
 .env
 xcuserdata/
 *.xcuserstate
+
+# compiled binaries
+apps/api/worker
+apps/api/api
