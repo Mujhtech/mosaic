@@ -223,6 +223,45 @@ func authoritativeEntitlementFixtureNames(in subdirectory: String) throws -> [St
   throw CanonicalFixtureLookupError.notFound
 }
 
+/// Builds an iOS-local, contract-valid snapshot variant without adding or
+/// modifying a canonical shared fixture. The content digest is recomputed after
+/// the mutation so sync tests exercise the acceptance gate rather than the
+/// corruption path.
+func authoritativeEntitlementSnapshotVariant(
+  _ fixtureName: String = "active-subscription.json",
+  mutation: (inout [String: Any]) -> Void
+) throws -> Data {
+  guard
+    var root = try JSONSerialization.jsonObject(
+      with: authoritativeEntitlementFixtureData("snapshots/\(fixtureName)")) as? [String: Any],
+    var payload = root["payload"] as? [String: Any]
+  else { throw CanonicalFixtureLookupError.invalidShape }
+
+  mutation(&payload)
+  var digestInput = payload
+  digestInput.removeValue(forKey: "contentDigest")
+  payload["contentDigest"] = try MosaicCustomerCanonicalJSON.digest(digestInput)
+  root["payload"] = payload
+  return try MosaicCustomerCanonicalJSON.data(root)
+}
+
+func neverProjectedEntitlementPlaceholderData() throws -> Data {
+  try authoritativeEntitlementSnapshotVariant { payload in
+    payload["snapshotId"] = "pending.fixture-customer-0001"
+    payload["snapshotVersion"] = 0
+    payload.removeValue(forKey: "previousSnapshotVersion")
+    payload["entries"] = []
+    payload["sources"] = []
+    payload["projectionStatus"] = [
+      "state": "pending",
+      "lastProjectedAt": "2026-07-28T11:00:00.000Z",
+      "pendingFactCount": 0,
+    ]
+    payload["changeReason"] = "initial_projection"
+    payload["entityTag"] = "pending-cs-0001-v0"
+  }
+}
+
 /// Parses a contract timestamp in a test without going through the decoder
 /// under test.
 func contractTimestamp(_ value: String) throws -> Date {

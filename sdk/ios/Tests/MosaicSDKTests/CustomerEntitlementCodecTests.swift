@@ -45,6 +45,50 @@ final class CustomerEntitlementCodecTests: XCTestCase {
     }
   }
 
+  // Risk: the never-projected answer is version zero, but it is not a snapshot
+  // of inactive access. Rejecting it leaves a newly identified customer with no
+  // cache; accepting any non-empty version-zero shape would let projected state
+  // masquerade as the placeholder reserved by the contract.
+  func testVersionZeroIsAcceptedOnlyAsTheNeverProjectedPlaceholder() throws {
+    let decoded = try MosaicCustomerEntitlementCodec.decode(
+      neverProjectedEntitlementPlaceholderData())
+    guard case .snapshot(let snapshot) = decoded.record else {
+      return XCTFail("expected a snapshot")
+    }
+    XCTAssertTrue(decoded.contentDigestValid)
+    XCTAssertEqual(snapshot.snapshotVersion, 0)
+    XCTAssertEqual(snapshot.projectionStatus.state, .pending)
+    XCTAssertTrue(snapshot.entries.isEmpty)
+    XCTAssertTrue(snapshot.sources.isEmpty)
+    XCTAssertNil(snapshot.previousSnapshotVersion)
+
+    let invalid = try authoritativeEntitlementSnapshotVariant { payload in
+      payload["snapshotVersion"] = 0
+    }
+    XCTAssertThrowsError(try MosaicCustomerEntitlementCodec.decode(invalid)) { error in
+      XCTAssertEqual(
+        (error as? MosaicCustomerEntitlementDecodingError)?.diagnosticCode,
+        "entitlement_invalid_never_projected_placeholder")
+    }
+  }
+
+  // Risk: version zero is admitted only on the full snapshot record where its
+  // pending/empty constraints can be checked. A zero-valued confirmation would
+  // slide freshness for a placeholder the contract says must be re-issued.
+  func testSnapshotUnchangedStillRejectsVersionZero() throws {
+    guard
+      var root = try JSONSerialization.jsonObject(
+        with: authoritativeEntitlementFixtureData("snapshots/snapshot-unchanged.json"))
+        as? [String: Any],
+      var payload = root["payload"] as? [String: Any]
+    else { throw CanonicalFixtureLookupError.invalidShape }
+    payload["snapshotVersion"] = 0
+    root["payload"] = payload
+
+    XCTAssertThrowsError(
+      try MosaicCustomerEntitlementCodec.decode(JSONSerialization.data(withJSONObject: root)))
+  }
+
   // Risk: the three behavioural fixtures encode product decisions that are easy
   // to get wrong and expensive when wrong: telling a lifetime purchaser their
   // access expires, and treating billing retry as if it granted access.
@@ -153,7 +197,8 @@ final class CustomerEntitlementCodecTests: XCTestCase {
         XCTAssertNoThrow(try MosaicCustomerEntitlementCodec.decode(data), name)
         continue
       }
-      if name == "different-customer-rejected.json" || name == "older-snapshot-version-rejected.json"
+      if name == "different-customer-rejected.json"
+        || name == "older-snapshot-version-rejected.json"
       {
         // Both are semantic rejections that the *acceptance gate* owns, not the
         // decoder: one is a digest computed over a different customer, the other

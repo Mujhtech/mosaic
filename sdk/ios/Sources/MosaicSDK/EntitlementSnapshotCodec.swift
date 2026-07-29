@@ -169,7 +169,8 @@ enum MosaicCustomerEntitlementCodec {
       path: "$")
     // Exact-match reading. A "2" document is as unreadable to a "1" reader as a
     // "9.9" document; numeric ordering never implies support.
-    guard root["authoritativeEntitlementContractVersion"] as? String
+    guard
+      root["authoritativeEntitlementContractVersion"] as? String
         == mosaicAuthoritativeEntitlementContractVersion
     else { throw MosaicCustomerEntitlementDecodingError.unsupportedContractVersion }
 
@@ -201,9 +202,11 @@ enum MosaicCustomerEntitlementCodec {
     let asOf = try Value.timestamp(payload["asOf"], path: "payload.asOf")
     let refreshAfter = try Value.timestamp(payload["refreshAfter"], path: "payload.refreshAfter")
     let validUntil = try Value.timestamp(payload["validUntil"], path: "payload.validUntil")
-    let staleGraceSeconds = try Value.optionalInt(
-      payload["staleGraceSeconds"], range: 0...MosaicCustomerEntitlementPolicy.maxStaleGraceSeconds,
-      path: "payload.staleGraceSeconds") ?? 0
+    let staleGraceSeconds =
+      try Value.optionalInt(
+        payload["staleGraceSeconds"],
+        range: 0...MosaicCustomerEntitlementPolicy.maxStaleGraceSeconds,
+        path: "payload.staleGraceSeconds") ?? 0
 
     guard refreshAfter <= validUntil else {
       throw MosaicCustomerEntitlementDecodingError.invalidSemantics(
@@ -225,17 +228,37 @@ enum MosaicCustomerEntitlementCodec {
 
     try validateGraph(entries: entries, sources: sources)
 
+    let snapshotVersion = try Value.snapshotVersionOrPlaceholder(
+      payload["snapshotVersion"], path: "payload.snapshotVersion")
+    let previousSnapshotVersion = try Value.optionalInt64(
+      payload["previousSnapshotVersion"], range: 0...999_999_999_999,
+      path: "payload.previousSnapshotVersion")
+    let projectionStatus = try decodeProjectionStatus(
+      Value.object(payload["projectionStatus"], path: "payload.projectionStatus"))
+    let changeReason = try Value.member(
+      MosaicCustomerChangeReason.self, payload["changeReason"], path: "payload.changeReason")
+
+    // Version zero is not projected state. It is the never-projected
+    // placeholder and is admissible only in the exact pending/empty shape the
+    // contract defines. Keeping this check beside the ordinary snapshot decoder
+    // preserves fail-closed behaviour without teaching the cache a sentinel.
+    if snapshotVersion == 0 {
+      guard projectionStatus.state == .pending, entries.isEmpty, sources.isEmpty,
+        changeReason == .initialProjection, previousSnapshotVersion == nil
+      else {
+        throw MosaicCustomerEntitlementDecodingError.invalidSemantics(
+          code: "invalid_never_projected_placeholder")
+      }
+    }
+
     let snapshot = MosaicCustomerEntitlementSnapshot(
       snapshotID: try Value.identifier(payload["snapshotId"], path: "payload.snapshotId"),
       billingCustomerID: try Value.identifier(
         payload["billingCustomerId"], path: "payload.billingCustomerId"),
       projectID: try Value.identifier(payload["projectId"], path: "payload.projectId"),
       environmentID: try Value.identifier(payload["environmentId"], path: "payload.environmentId"),
-      snapshotVersion: try Value.snapshotVersion(
-        payload["snapshotVersion"], path: "payload.snapshotVersion"),
-      previousSnapshotVersion: try Value.optionalInt64(
-        payload["previousSnapshotVersion"], range: 0...999_999_999_999,
-        path: "payload.previousSnapshotVersion"),
+      snapshotVersion: snapshotVersion,
+      previousSnapshotVersion: previousSnapshotVersion,
       projectionRuleVersion: try Value.int(
         payload["projectionRuleVersion"], range: 1...1_000_000,
         path: "payload.projectionRuleVersion"),
@@ -248,10 +271,8 @@ enum MosaicCustomerEntitlementCodec {
       contentDigest: try Value.digest(payload["contentDigest"], path: "payload.contentDigest"),
       entries: entries,
       sources: sources,
-      projectionStatus: try decodeProjectionStatus(
-        Value.object(payload["projectionStatus"], path: "payload.projectionStatus")),
-      changeReason: try Value.member(
-        MosaicCustomerChangeReason.self, payload["changeReason"], path: "payload.changeReason"),
+      projectionStatus: projectionStatus,
+      changeReason: changeReason,
       correlationID: try Value.identifier(
         payload["correlationId"], path: "payload.correlationId"),
       diagnostics: try decodeDiagnostics(payload["diagnostics"]))
@@ -471,9 +492,11 @@ enum MosaicCustomerEntitlementCodec {
     let issuedAt = try Value.timestamp(payload["issuedAt"], path: "payload.issuedAt")
     let validUntil = try Value.timestamp(payload["validUntil"], path: "payload.validUntil")
     let refreshAfter = try Value.timestamp(payload["refreshAfter"], path: "payload.refreshAfter")
-    let staleGraceSeconds = try Value.optionalInt(
-      payload["staleGraceSeconds"], range: 0...MosaicCustomerEntitlementPolicy.maxStaleGraceSeconds,
-      path: "payload.staleGraceSeconds") ?? 0
+    let staleGraceSeconds =
+      try Value.optionalInt(
+        payload["staleGraceSeconds"],
+        range: 0...MosaicCustomerEntitlementPolicy.maxStaleGraceSeconds,
+        path: "payload.staleGraceSeconds") ?? 0
     guard refreshAfter <= validUntil else {
       throw MosaicCustomerEntitlementDecodingError.invalidSemantics(
         code: "refresh_after_later_than_valid_until")
@@ -597,7 +620,8 @@ enum MosaicCustomerEntitlementCodec {
 
   private static func decodeDiagnostics(_ value: Any?) throws -> [MosaicCustomerRecordDiagnostic] {
     guard let value else { return [] }
-    return try Value.array(value, count: 0...10, path: "diagnostics").enumerated().map { index, raw in
+    return try Value.array(value, count: 0...10, path: "diagnostics").enumerated().map {
+      index, raw in
       let object = try Value.object(raw, path: "diagnostics[\(index)]")
       try Value.keys(
         object, required: ["code", "safeMessage", "severity", "retryable", "correlationId"],
@@ -787,6 +811,12 @@ private enum Value {
   static func snapshotVersion(_ value: Any?, path: String) throws -> Int64 {
     let number = try integer(value, path: path)
     guard (1...999_999_999_999).contains(number) else { throw shape(path, "integer_out_of_bounds") }
+    return number
+  }
+
+  static func snapshotVersionOrPlaceholder(_ value: Any?, path: String) throws -> Int64 {
+    let number = try integer(value, path: path)
+    guard (0...999_999_999_999).contains(number) else { throw shape(path, "integer_out_of_bounds") }
     return number
   }
 

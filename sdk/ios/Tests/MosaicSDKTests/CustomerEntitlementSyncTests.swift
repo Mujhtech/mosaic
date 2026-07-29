@@ -51,8 +51,9 @@ final class CustomerEntitlementSyncTests: XCTestCase {
   private func mutatedSnapshotPayload(
     _ name: String, _ mutation: (inout [String: Any]) -> Void
   ) throws -> Data {
-    guard var root = try JSONSerialization.jsonObject(with: try snapshotData(name))
-      as? [String: Any], var payload = root["payload"] as? [String: Any]
+    guard
+      var root = try JSONSerialization.jsonObject(with: try snapshotData(name))
+        as? [String: Any], var payload = root["payload"] as? [String: Any]
     else { throw CanonicalFixtureLookupError.invalidShape }
     mutation(&payload)
     root["payload"] = payload
@@ -103,7 +104,8 @@ final class CustomerEntitlementSyncTests: XCTestCase {
     let request = try XCTUnwrap(requests.first)
     XCTAssertEqual(request.headers["Authorization"], "Bearer mcat_test")
     XCTAssertEqual(request.headers["Mosaic-SDK-Key"], "pk_test")
-    XCTAssertEqual(request.url.absoluteString, "https://api.example.com/v1/sdk/billing/entitlements")
+    XCTAssertEqual(
+      request.url.absoluteString, "https://api.example.com/v1/sdk/billing/entitlements")
     XCTAssertFalse(request.url.absoluteString.contains("mcat_"))
   }
 
@@ -152,6 +154,45 @@ final class CustomerEntitlementSyncTests: XCTestCase {
     let payload = try XCTUnwrap(envelope["payload"] as? [String: Any])
     XCTAssertEqual(payload["knownSnapshotVersion"] as? Int, 4)
     XCTAssertEqual(payload["entityTag"] as? String, "cs-0001-v4")
+  }
+
+  // Risk: a customer whose first projection has not run must still get a
+  // validated, cacheable unknown answer. Treating zero as "no cache" omits it
+  // from the next request and can strand the client on the placeholder; treating
+  // it as invalid prevents the ordinary 1 > 0 monotonic replacement.
+  func testNeverProjectedPlaceholderIsCachedSentAndReplacedByVersionOne() async throws {
+    let placeholder = try neverProjectedEntitlementPlaceholderData()
+    let firstProjection = try authoritativeEntitlementSnapshotVariant { payload in
+      payload["snapshotVersion"] = 1
+      payload["previousSnapshotVersion"] = 0
+      payload["entityTag"] = "cs-0001-v1"
+    }
+    let transport = StubSyncTransport([ok(placeholder), ok(firstProjection)])
+    let (client, cache) = makeClient(transport: transport)
+
+    let placeholderRefresh = await client.refresh()
+    let cachedPlaceholder = await client.snapshot()
+    let placeholderSaveCount = await cache.saveCount
+    XCTAssertEqual(placeholderRefresh, .updated(snapshotVersion: 0))
+    XCTAssertEqual(cachedPlaceholder?.snapshot.snapshotVersion, 0)
+    XCTAssertEqual(placeholderSaveCount, 1, "the placeholder is an ordinary cached snapshot")
+    let placeholderCheck = await client.check(key: "pro")
+    XCTAssertNotEqual(placeholderCheck.state, .inactive)
+
+    let firstProjectionRefresh = await client.refresh()
+    XCTAssertEqual(firstProjectionRefresh, .updated(snapshotVersion: 1))
+    let requests = await transport.requests
+    let envelope = try XCTUnwrap(
+      JSONSerialization.jsonObject(with: requests[1].body) as? [String: Any])
+    let payload = try XCTUnwrap(envelope["payload"] as? [String: Any])
+    XCTAssertEqual(payload["knownSnapshotVersion"] as? Int, 0)
+    XCTAssertEqual(payload["entityTag"] as? String, "pending-cs-0001-v0")
+    let current = await client.snapshot()
+    let projectedCheck = await client.check(key: "pro")
+    let replacementSaveCount = await cache.saveCount
+    XCTAssertEqual(current?.snapshot.snapshotVersion, 1)
+    XCTAssertEqual(projectedCheck.state, .active)
+    XCTAssertEqual(replacementSaveCount, 2, "version one replaces the placeholder atomically")
   }
 
   // Risk: the contract-pinned unchanged path. A `snapshotUnchanged` record slides
@@ -302,7 +343,8 @@ final class CustomerEntitlementSyncTests: XCTestCase {
     XCTAssertEqual(state, .differentCustomer)
 
     let check = await client.check(key: "pro")
-    if case .unavailable = check.state {} else {
+    if case .unavailable = check.state {
+    } else {
       XCTFail("a cleared cache must not keep answering active")
     }
     XCTAssertNotEqual(check.state, .inactive, "never inactive")
@@ -313,8 +355,9 @@ final class CustomerEntitlementSyncTests: XCTestCase {
   // from a document it rejected.
   func testDigestMismatchPreservesTheCacheAndNeverEmits() async throws {
     let broadcaster = MosaicCustomerEntitlementBroadcaster()
-    var mutated = try JSONSerialization.jsonObject(
-      with: try snapshotData("newer-snapshot.json")) as! [String: Any]
+    var mutated =
+      try JSONSerialization.jsonObject(
+        with: try snapshotData("newer-snapshot.json")) as! [String: Any]
     var payload = mutated["payload"] as! [String: Any]
     var entries = payload["entries"] as! [[String: Any]]
     entries[0]["state"] = "inactive"
@@ -329,7 +372,8 @@ final class CustomerEntitlementSyncTests: XCTestCase {
     _ = await client.refresh()
 
     let result = await client.refresh()
-    if case .preserved = result {} else {
+    if case .preserved = result {
+    } else {
       XCTFail("a tampered payload must preserve the previously accepted snapshot")
     }
     let check = await client.check(key: "pro")
