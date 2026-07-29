@@ -1,4 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
+import { useState } from "react"
 
 import { Button } from "@/components/ui/button"
 import { HostedResourceBoundary } from "@/features/auth/components/hosted-resource-boundary"
@@ -6,14 +7,21 @@ import { resolveHostedQueryState } from "@/features/auth/types/hosted-query-stat
 import {
   DefinitionRow,
   EnvironmentBadges,
+  LedgerPaging,
   StatusPill,
 } from "@/features/billing-ledger/components/billing-chrome"
+import {
+  cappedListHeading,
+  pagedListHeading,
+} from "@/features/billing-ledger/types/billing-list-headings"
 import { providerLabel } from "@/features/billing-ledger/types/billing-vocabulary"
 import { EntitlementExplanationPanel } from "@/features/billing-customers/components/entitlement-explanation-panel"
 import { requestCustomerSyncMutationOptions } from "@/features/billing-customers/mutations/customer-mutations"
 import {
   billingCustomerQueryOptions,
   customerEntitlementSnapshotQueryOptions,
+  customerSubscriptionsQueryOptions,
+  projectionRefetchInterval,
 } from "@/features/billing-customers/queries/customer-queries"
 import {
   aliasTypeLabel,
@@ -52,7 +60,9 @@ import {
   billingRestoresHref,
   billingSubscriptionHref,
   catalogProductHref,
+  type WorkspaceScope,
 } from "@/lib/routing/workspace-hrefs"
+import type { BillingSubscriptionSnapshot } from "@/generated/api"
 
 interface CustomerDetailPageProps {
   customerId: string
@@ -79,17 +89,26 @@ export function CustomerDetailPage({
   const access = useOrganizationAccess(organizationId)
   const queryClient = useQueryClient()
   const environments = useQuery({ ...environmentsQueryOptions(projectId), enabled: scopeReady })
-  const detail = useQuery({
-    ...billingCustomerQueryOptions(projectId, environmentId, customerId),
-    enabled: scopeReady,
-  })
-  const snapshot = useQuery({
-    ...customerEntitlementSnapshotQueryOptions(projectId, environmentId, customerId),
-    enabled: scopeReady,
-  })
   const sync = useMutation(
     requestCustomerSyncMutationOptions(projectId, environmentId, customerId, queryClient),
   )
+  // A queued recomputation is the one moment the page is expected to change
+  // without the operator doing anything, so both authoritative reads poll until
+  // the projection reports `current` and then stop.
+  const recomputeQueued = sync.isSuccess
+  const detail = useQuery({
+    ...billingCustomerQueryOptions(projectId, environmentId, customerId, recomputeQueued),
+    enabled: scopeReady,
+  })
+  const snapshot = useQuery({
+    ...customerEntitlementSnapshotQueryOptions(
+      projectId,
+      environmentId,
+      customerId,
+      recomputeQueued,
+    ),
+    enabled: scopeReady,
+  })
 
   const environmentName =
     environments.data?.items.find((item) => item.id === environmentId)?.name ?? environmentId
@@ -217,6 +236,12 @@ export function CustomerDetailPage({
             <p className="text-muted-foreground mt-1 text-sm leading-6">
               {projectionStatus.pendingFactCount} fact(s) recorded but not yet projected. Until they
               are, entries derived from them read undetermined rather than inactive.
+            </p>
+          ) : null}
+          {projectionRefetchInterval(projectionStatus?.state, recomputeQueued) ? (
+            <p className="text-muted-foreground mt-1 text-sm leading-6" role="status">
+              Watching for the projection to commit. This page re-reads every few seconds and stops
+              on its own once the projection reports current.
             </p>
           ) : null}
 
@@ -370,35 +395,15 @@ export function CustomerDetailPage({
           )}
         </WorkflowPanel>
 
-        <WorkflowPanel
-          description="Five separate state axes per subscription. They are never merged into one status, because a cancelled subscription that still has access cannot be stated by a single word."
-          title="Subscriptions"
-        >
-          {(detail.data?.subscriptions ?? []).length === 0 ? (
-            <p className="text-sm leading-6">
-              No Subscription Instance is projected for this customer in this Mosaic Environment.
-            </p>
-          ) : (
-            <ul className="space-y-3">
-              {(detail.data?.subscriptions ?? []).map((subscription) => (
-                <li className="rounded border p-4" key={subscription.subscriptionInstanceId}>
-                  <a
-                    className="text-primary font-mono text-sm font-semibold break-all"
-                    href={
-                      billingSubscriptionHref(scope, subscription.subscriptionInstanceId ?? "") ??
-                      "#"
-                    }
-                  >
-                    {subscription.subscriptionInstanceId}
-                  </a>
-                  <div className="mt-2">
-                    <SubscriptionStateAxes subscription={subscription} />
-                  </div>
-                </li>
-              ))}
-            </ul>
-          )}
-        </WorkflowPanel>
+        <CustomerSubscriptionsPanel
+          customerId={customerId}
+          embedded={detail.data?.subscriptions ?? []}
+          environmentId={environmentId}
+          projectId={projectId}
+          scope={scope}
+          scopeReady={scopeReady}
+          totalCount={embeddedSubscriptionTotal(detail.data)}
+        />
 
         <WorkflowPanel
           description="Non-consumable purchases. A permanent source has no finite end Mosaic can state, which is not the same as having expired."
@@ -438,5 +443,153 @@ export function CustomerDetailPage({
         </WorkflowPanel>
       </HostedResourceBoundary>
     </WorkspacePage>
+  )
+}
+
+/**
+ * The customer detail read embeds a bounded first slice of subscriptions so the
+ * page is one request. This is the bound, and it must match the API's own —
+ * disclosing a cap that is not the real cap is worse than disclosing none.
+ */
+const EMBEDDED_SUBSCRIPTION_CAP = 50
+
+/**
+ * The detail response's own count of this customer's subscriptions, when it
+ * states one.
+ *
+ * Read tolerantly and off the generated shape on purpose: the field is being
+ * added to the contract, and the disclosure below is keyed on its presence so
+ * this surface tells the truth both before and after it lands. Without it the
+ * cap is still disclosed the moment the slice is exactly as long as the cap,
+ * which is the case where saying nothing is most likely to mislead.
+ */
+function embeddedSubscriptionTotal(detail: unknown): number | undefined {
+  if (!detail || typeof detail !== "object") return undefined
+  const record = detail as Record<string, unknown>
+  const value = record.subscriptionTotalCount ?? record.totalCount
+  return typeof value === "number" && Number.isFinite(value) ? value : undefined
+}
+
+/**
+ * Subscriptions for one customer, with the cap stated rather than implied.
+ *
+ * A customer with sixty subscription instances is unusual but entirely real —
+ * years of resubscribing, a family plan, a migrated product line. Rendering
+ * fifty of them under the heading "Subscriptions" tells an operator they have
+ * seen all of them, and the support answer that follows ("you have no
+ * subscription for that product") is then wrong for a reason nothing on screen
+ * could reveal. So the heading states the cap, and the paged list is one click
+ * away instead of being unreachable.
+ */
+function CustomerSubscriptionsPanel({
+  customerId,
+  embedded,
+  environmentId,
+  projectId,
+  scope,
+  scopeReady,
+  totalCount,
+}: {
+  customerId: string
+  embedded: readonly BillingSubscriptionSnapshot[]
+  environmentId: string
+  projectId: string
+  scope: WorkspaceScope
+  scopeReady: boolean
+  totalCount: number | undefined
+}) {
+  const [expanded, setExpanded] = useState(false)
+  const [cursor, setCursor] = useState<string | undefined>(undefined)
+
+  const paged = useQuery({
+    ...customerSubscriptionsQueryOptions(projectId, environmentId, customerId, cursor),
+    enabled: scopeReady && expanded,
+  })
+
+  const capped =
+    totalCount !== undefined
+      ? totalCount > embedded.length
+      : embedded.length >= EMBEDDED_SUBSCRIPTION_CAP
+  const items = expanded ? (paged.data?.items ?? []) : embedded
+
+  return (
+    <WorkflowPanel
+      description="Five separate state axes per subscription. They are never merged into one status, because a cancelled subscription that still has access cannot be stated by a single word."
+      title={
+        expanded
+          ? pagedListHeading({
+              count: items.length,
+              cursor,
+              nextCursor: paged.data?.nextCursor,
+              noun: "Subscription Instance(s)",
+            })
+          : cappedListHeading({
+              cap: EMBEDDED_SUBSCRIPTION_CAP,
+              count: embedded.length,
+              noun: "Subscription Instance(s)",
+              totalCount,
+            })
+      }
+    >
+      {!expanded && capped ? (
+        <p className="text-muted-foreground mb-3 text-sm leading-6">
+          This panel carries the first {EMBEDDED_SUBSCRIPTION_CAP} the detail read returns
+          {totalCount === undefined ? " and there may be more" : ""}. Open the full list to page
+          through every Subscription Instance Mosaic holds for this customer.{" "}
+          <button
+            className="text-primary font-semibold"
+            onClick={() => setExpanded(true)}
+            type="button"
+          >
+            See all subscriptions
+          </button>
+        </p>
+      ) : null}
+
+      {expanded && paged.error ? (
+        <p className="text-destructive text-sm" role="alert">
+          {paged.error.message}
+        </p>
+      ) : null}
+
+      {expanded && paged.isPending ? (
+        <p className="text-sm leading-6" role="status">
+          Loading every Subscription Instance for this customer.
+        </p>
+      ) : items.length === 0 ? (
+        <p className="text-sm leading-6">
+          {cursor
+            ? "No Subscription Instance is on this page. Return to the first page to read from the newest."
+            : "No Subscription Instance is projected for this customer in this Mosaic Environment."}
+        </p>
+      ) : (
+        <ul className="space-y-3">
+          {items.map((subscription) => (
+            <li className="rounded border p-4" key={subscription.subscriptionInstanceId}>
+              <a
+                className="text-primary font-mono text-sm font-semibold break-all"
+                href={
+                  billingSubscriptionHref(scope, subscription.subscriptionInstanceId ?? "") ?? "#"
+                }
+              >
+                {subscription.subscriptionInstanceId}
+              </a>
+              <div className="mt-2">
+                <SubscriptionStateAxes subscription={subscription} />
+              </div>
+            </li>
+          ))}
+        </ul>
+      )}
+
+      {expanded ? (
+        <LedgerPaging
+          cursor={cursor}
+          endLabel="End of this customer's Subscription Instances."
+          nextCursor={paged.data?.nextCursor}
+          onCursorChange={setCursor}
+        />
+      ) : null}
+    </WorkflowPanel>
   )
 }

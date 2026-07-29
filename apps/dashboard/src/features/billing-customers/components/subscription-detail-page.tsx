@@ -2,7 +2,12 @@ import { useQuery } from "@tanstack/react-query"
 
 import { HostedResourceBoundary } from "@/features/auth/components/hosted-resource-boundary"
 import { resolveHostedQueryState } from "@/features/auth/types/hosted-query-state"
-import { DefinitionRow, StatusPill } from "@/features/billing-ledger/components/billing-chrome"
+import {
+  DefinitionRow,
+  LedgerPaging,
+  StatusPill,
+} from "@/features/billing-ledger/components/billing-chrome"
+import { pagedListHeading } from "@/features/billing-ledger/types/billing-list-headings"
 import { providerLabel } from "@/features/billing-ledger/types/billing-vocabulary"
 import { SubscriptionStateAxes } from "@/features/billing-customers/components/subscription-state-axes"
 import {
@@ -27,8 +32,10 @@ import {
 import type { BillingSubscriptionSnapshot } from "@/generated/api"
 
 interface SubscriptionDetailPageProps {
+  cursor?: string
   environmentId: string
   instanceId: string
+  onCursorChange: (cursor: string | undefined) => void
   organizationId: string
   projectId: string
 }
@@ -36,14 +43,22 @@ interface SubscriptionDetailPageProps {
 /**
  * One Subscription Instance and the append-only history that explains it.
  *
- * The timeline is newest-first and never trimmed. A superseded entry is still
- * part of why the current state is what it is, and removing it would leave an
- * operator with a conclusion and no derivation — which on a billing surface is
- * indistinguishable from Mosaic having made it up.
+ * The timeline is newest-first and nothing is ever removed from it: a
+ * superseded entry is still part of why the current state is what it is, and
+ * dropping it would leave an operator with a conclusion and no derivation —
+ * which on a billing surface is indistinguishable from Mosaic having made it
+ * up.
+ *
+ * That promise is about the record, not about one response. A subscription that
+ * has renewed monthly for two years has more entries than any single page
+ * carries, so the page is paged and says so. Claiming completeness while
+ * silently trimming would break the same promise from the other direction.
  */
 export function SubscriptionDetailPage({
+  cursor,
   environmentId,
   instanceId,
+  onCursorChange,
   organizationId,
   projectId,
 }: SubscriptionDetailPageProps) {
@@ -53,9 +68,10 @@ export function SubscriptionDetailPage({
     enabled: scopeReady,
   })
   const timeline = useQuery({
-    ...subscriptionTimelineQueryOptions(projectId, environmentId, instanceId),
+    ...subscriptionTimelineQueryOptions(projectId, environmentId, instanceId, cursor),
     enabled: scopeReady,
   })
+  const timelineEntries = timeline.data?.items ?? []
 
   const error = project.error ?? subscription.error
   const state = resolveHostedQueryState({
@@ -202,16 +218,35 @@ export function SubscriptionDetailPage({
         </WorkflowPanel>
 
         <WorkflowPanel
-          description="Append-only and newest first. Entries restate what a store said and when it took effect; they pass the same safety guard as the 9A ledger, so no store payload fragment can appear here."
-          title="Timeline"
+          description="Append-only and newest first. Nothing is ever removed from this history, but one page is not the whole of it — page forward to reach older entries. Entries restate what a store said and when it took effect; they pass the same safety guard as the 9A ledger, so no store payload fragment can appear here."
+          title={
+            timelineEntries.length === 0
+              ? "Timeline"
+              : pagedListHeading({
+                  count: timelineEntries.length,
+                  cursor,
+                  nextCursor: timeline.data?.nextCursor,
+                  noun: "timeline entr(y/ies)",
+                })
+          }
         >
-          {(timeline.data ?? []).length === 0 ? (
-            <p className="text-sm leading-6">
-              No timeline entry is recorded for this Subscription Instance yet.
-            </p>
+          {timelineEntries.length === 0 ? (
+            <>
+              <p className="text-sm leading-6">
+                {cursor
+                  ? "No timeline entry is on this page. Return to the first page to read this Subscription Instance's history from the newest entry."
+                  : "No timeline entry is recorded for this Subscription Instance yet."}
+              </p>
+              <LedgerPaging
+                cursor={cursor}
+                endLabel="End of the timeline — this is the oldest recorded entry."
+                nextCursor={timeline.data?.nextCursor}
+                onCursorChange={onCursorChange}
+              />
+            </>
           ) : (
             <ol className="space-y-3">
-              {(timeline.data ?? []).map((entry) => (
+              {timelineEntries.map((entry) => (
                 <li className="rounded border p-4" key={entry.timelineEntryId}>
                   <div className="flex flex-wrap items-center justify-between gap-2">
                     <span className="text-sm font-semibold">
@@ -260,6 +295,14 @@ export function SubscriptionDetailPage({
               ))}
             </ol>
           )}
+          {timelineEntries.length > 0 ? (
+            <LedgerPaging
+              cursor={cursor}
+              endLabel="End of the timeline — this is the oldest recorded entry."
+              nextCursor={timeline.data?.nextCursor}
+              onCursorChange={onCursorChange}
+            />
+          ) : null}
         </WorkflowPanel>
       </HostedResourceBoundary>
     </WorkspacePage>

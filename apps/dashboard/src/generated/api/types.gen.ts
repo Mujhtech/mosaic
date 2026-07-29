@@ -860,7 +860,7 @@ export type SubscriptionTimelineEntry = {
 export type BillingCustomer = {
     billingCustomerId?: string;
     projectId?: string;
-    status?: 'active' | 'frozen' | 'anonymized';
+    status?: 'active' | 'frozen' | 'anonymized' | 'absorbed';
     diagnosticsStatus?: 'none' | 'identity_conflict' | 'projection_stale' | 'projection_failed';
     currentProjectionVersion?: number;
     lastProjectedAt?: string;
@@ -918,7 +918,7 @@ export type AttachBillingCustomerAliasRequest = {
 export type BillingIdentityCustomer = {
     billingCustomerId?: string;
     projectId?: string;
-    status?: 'active' | 'frozen' | 'anonymized';
+    status?: 'active' | 'frozen' | 'anonymized' | 'absorbed';
     diagnosticsStatus?: string;
     currentProjectionVersion?: number;
     createdAt?: string;
@@ -1331,7 +1331,7 @@ export type BillingCustomerSummary = {
     billingCustomerId?: string;
     projectId?: string;
     environmentId?: string;
-    status?: 'active' | 'frozen' | 'anonymized';
+    status?: 'active' | 'frozen' | 'anonymized' | 'absorbed';
     diagnosticsStatus?: 'none' | 'identity_conflict' | 'projection_stale' | 'projection_failed';
     /**
      * An active application-user alias exists - a person is attached.
@@ -1444,7 +1444,7 @@ export type BillingEntitlementSnapshotEntry = {
 
 /**
  * One reason the customer holds, or may hold, an Entitlement. Source identity is
- * (purchase lineage, product, grant version) and never a fact id, so multiple facts
+ * (purchase lineage, Mosaic Product, grant version) and never a fact id, so multiple facts
  * describing one purchase cannot double-grant.
  *
  */
@@ -8797,6 +8797,12 @@ export type ReceiveAppleStoreNotificationResponse = ReceiveAppleStoreNotificatio
 
 export type SubmitTransactionObservationData = {
     body: ClientTransactionObservationRecord;
+    headers?: {
+        /**
+         * Optional Customer Access Token binding the observation to its customer as token-bound public-client evidence. It can attach an unowned lineage but cannot reassign or freeze an attached lineage.
+         */
+        'Mosaic-Customer-Token'?: string;
+    };
     path?: never;
     query?: never;
     url: '/v1/sdk/billing/observations';
@@ -8838,6 +8844,12 @@ export type SubmitTransactionObservationResponse = SubmitTransactionObservationR
 
 export type SubmitServerTransactionObservationData = {
     body: ServerTransactionObservationRecord;
+    headers?: {
+        /**
+         * Optional Customer Access Token naming the customer. Because this request is authenticated by the secret server key
+         */
+        'Mosaic-Customer-Token'?: string;
+    };
     path?: never;
     query?: never;
     url: '/v1/billing/server/observations';
@@ -8884,10 +8896,6 @@ export type SyncCustomerEntitlementsData = {
          * Public SDK key identifying the Environment and Application.
          */
         'Mosaic-SDK-Key': string;
-        /**
-         * Strong entity tag from a previous response. Answered 304 only when the caller's snapshot version also matches.
-         */
-        'If-None-Match'?: string;
     };
     path?: never;
     query?: never;
@@ -8928,7 +8936,6 @@ export type SyncCustomerEntitlementsWithNegotiationData = {
     body: EntitlementSyncRequestRecord;
     headers: {
         'Mosaic-SDK-Key': string;
-        'If-None-Match'?: string;
     };
     path?: never;
     query?: never;
@@ -8966,7 +8973,12 @@ export type SyncCustomerEntitlementsWithNegotiationError = SyncCustomerEntitleme
 
 export type SyncCustomerEntitlementsWithNegotiationResponses = {
     /**
-     * The current Customer Entitlement Snapshot.
+     * The current Customer Entitlement Snapshot, or — when the stated knownSnapshotVersion
+     * and entity tag both match — the canonical snapshotUnchanged record. This form never
+     * answers 304: a bodyless response would force freshness into header names no frozen
+     * schema defines, so the unchanged record carries refreshAfter, validUntil, and
+     * staleGraceSeconds in the body instead, recomputed at the instant it was answered.
+     *
      */
     200: CustomerEntitlementSnapshotRecord;
 };
@@ -10374,7 +10386,7 @@ export type ListBillingCustomersData = {
         environmentId: string;
     };
     query?: {
-        status?: 'active' | 'frozen' | 'anonymized';
+        status?: 'active' | 'frozen' | 'anonymized' | 'absorbed';
         /**
          * Restrict to identified or to purchase-anchored-only customers.
          */

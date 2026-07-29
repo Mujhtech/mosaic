@@ -559,6 +559,7 @@ export function customerIdentityExplanation(customer: {
 }
 
 const CUSTOMER_STATUS_LABELS: Record<string, string> = {
+  absorbed: "Absorbed purchase anchor",
   active: "Active",
   anonymized: "Anonymized",
   frozen: "Frozen",

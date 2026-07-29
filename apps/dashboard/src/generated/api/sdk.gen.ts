@@ -2085,10 +2085,11 @@ export const submitServerTransactionObservation = <ThrowOnError extends boolean 
  * The response body is the contract's canonical serialization, byte for byte, because an
  * SDK recomputes contentDigest over exactly the bytes it received.
  *
- * Freshness travels as headers as well as inside the record, so a 304 — which carries no
- * body — still slides the caller's window. A confirmed-current snapshot therefore never
- * expires merely because it was confirmed instead of resent. The combined horizon
- * (validUntil minus issuedAt, plus staleGraceSeconds) never exceeds thirty days.
+ * Freshness travels as headers as well as inside the record, so a confirmed-current
+ * snapshot never expires merely because it was confirmed instead of resent. The negotiated
+ * POST form carries the refreshed window in the snapshotUnchanged record body; the headers
+ * are what a bodyless conditional GET would have. The combined horizon (validUntil minus
+ * issuedAt, plus staleGraceSeconds) never exceeds thirty days.
  *
  * A customer with no committed projection in this Environment is answered with a valid
  * snapshot carrying no entries and projectionStatus.state `pending`. That is `unknown`,
@@ -2117,6 +2118,11 @@ export const syncCustomerEntitlements = <ThrowOnError extends boolean = false>(o
  *
  * Narrowing removes both entries and the sources no remaining entry references, so a
  * narrowed snapshot never carries an orphan source.
+ *
+ * This is the ratified cross-SDK flow, and knownSnapshotVersion is the only conditional
+ * mechanism this surface has. A matching knownSnapshotVersion always answers 200 with the
+ * snapshotUnchanged record, never a bare 304, because the contract cannot guarantee
+ * freshness that lives only in undocumented headers.
  *
  */
 export const syncCustomerEntitlementsWithNegotiation = <ThrowOnError extends boolean = false>(options: Options<SyncCustomerEntitlementsWithNegotiationData, ThrowOnError>): RequestResult<SyncCustomerEntitlementsWithNegotiationResponses, SyncCustomerEntitlementsWithNegotiationErrors, ThrowOnError> => (options.client ?? client).post<SyncCustomerEntitlementsWithNegotiationResponses, SyncCustomerEntitlementsWithNegotiationErrors, ThrowOnError>({

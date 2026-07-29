@@ -53,4 +53,17 @@ describe("hosted workspace route scope", () => {
     expect(isEnvironmentSurface(route)).toBe(true)
     expect(isProjectWideSurface(route)).toBe(false)
   })
+
+  it("keeps Billing Environment identity URL-owned", () => {
+    const route =
+      "/organizations/org_one/projects/project_one/billing/env_production/projection-health"
+
+    expect(readWorkspaceScope(route)).toEqual({
+      environmentId: "env_production",
+      organizationId: "org_one",
+      projectId: "project_one",
+    })
+    expect(isEnvironmentSurface(route)).toBe(true)
+    expect(isProjectWideSurface(route)).toBe(false)
+  })
 })

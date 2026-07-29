@@ -34,6 +34,13 @@ function BillingCustomersRoute() {
       {...(conflictedOnly ? { conflictedOnly } : {})}
       {...(cursor ? { cursor } : {})}
       environmentId={environmentId}
+      onCustomerFound={(customerId) => {
+        void navigate({
+          params: { customerId, environmentId, organizationId, projectId },
+          search: {},
+          to: "/organizations/$organizationId/projects/$projectId/billing/$environmentId/customers/$customerId",
+        })
+      }}
       onFiltersChange={(filters) => {
         void navigate({
           replace: true,

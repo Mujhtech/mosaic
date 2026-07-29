@@ -21,7 +21,9 @@ import { useValidatedProjectScope } from "@/features/projects/hooks/use-validate
 import { useOrganizationAccess } from "@/hooks/use-organization-access"
 import {
   billingHealthHref,
+  billingIdentityConflictsHref,
   billingQuarantineHref,
+  billingRestoresHref,
   storeConnectionsHref,
 } from "@/lib/routing/workspace-hrefs"
 
@@ -274,6 +276,23 @@ export function ProjectionHealthPage({
               </a>{" "}
               — inputs that could not safely proceed. Unresolved Products here become undetermined
               Entitlements above.
+            </li>
+            <li>
+              <a
+                className="text-primary font-semibold"
+                href={billingIdentityConflictsHref(scope) ?? "#"}
+              >
+                Identity conflicts
+              </a>{" "}
+              — inspect disputed customer claims and the Purchase Lineages frozen until an operator
+              resolves them.
+            </li>
+            <li>
+              <a className="text-primary font-semibold" href={billingRestoresHref(scope) ?? "#"}>
+                Restore jobs
+              </a>{" "}
+              — inspect validation-pending and failed restore work without treating restore as an
+              immediate access decision.
             </li>
           </ul>
         </WorkflowPanel>

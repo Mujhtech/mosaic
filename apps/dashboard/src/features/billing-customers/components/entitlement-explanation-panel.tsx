@@ -72,10 +72,18 @@ export function EntitlementExplanationPanel({ scope, snapshot }: EntitlementExpl
             entry={entry}
             key={entry.entitlementId}
             scope={scope}
+            // `sourceIds` is authoritative and is the only membership test.
+            //
+            // This used to also accept any source carrying the same
+            // `entitlementId`, which quietly widened every row: a source the
+            // snapshot did not attribute to this entry — a different grant
+            // version, a lineage the projection excluded — appeared underneath
+            // it as a contributing reason. On the surface whose promise is
+            // "this is why", inventing a reason is the worst available failure,
+            // and it also made the rendered list disagree with the
+            // `sourceCount` printed directly above it.
             sources={sources.filter(
-              (source) =>
-                entry.sourceIds?.includes(source.sourceId ?? "") ||
-                source.entitlementId === entry.entitlementId,
+              (source) => source.sourceId && entry.sourceIds?.includes(source.sourceId),
             )}
           />
         ))}
@@ -145,6 +153,19 @@ function EntitlementRow({
           value={String(entry.sourceCount ?? sources.length)}
         />
       </dl>
+
+      {/* A count that disagrees with the sources actually named is a defect in
+          the snapshot, not a rendering detail to smooth over. Saying so is the
+          honest option: quietly showing whichever number is smaller would hide
+          a source an operator is entitled to see, and quietly padding the list
+          would invent one. */}
+      {entry.sourceCount !== undefined && entry.sourceCount !== sources.length ? (
+        <p className="text-muted-foreground mt-2 text-xs leading-5">
+          The snapshot reports {entry.sourceCount} contributing source(s) but names {sources.length}
+          . Mosaic renders only the sources the snapshot attributes to this entry; the difference is
+          a data problem worth reporting rather than a display limit.
+        </p>
+      ) : null}
 
       <button
         aria-controls={contentId}
