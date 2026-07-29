@@ -70,6 +70,18 @@ type Input struct {
 	// CurrentSnapshotVersion is the monotonic per-(customer, environment)
 	// version the next snapshot increments.
 	CurrentSnapshotVersion int64
+	// EscalateToCustomerID is set only on a lineage-scoped load, and only when
+	// the lineage turns out to have an accepted customer association.
+	//
+	// A lineage scope exists for lineages that have no customer yet. One can
+	// acquire a customer between the job being queued and the job being run —
+	// the association resolver attaching it, or an operator resolving a
+	// conflict. When that has happened the subscription state is still worth
+	// advancing, but the customer aggregate is the only thing that can mint a
+	// snapshot, and no lineage-scoped command may ever mint one (defect D-4). So
+	// the command escalates: it enqueues customer scope, which coalesces onto
+	// any customer job already waiting.
+	EscalateToCustomerID string
 	// UnresolvedLineages and FrozenLineages carry the identity state that
 	// keeps an Entitlement at `unknown` rather than `inactive`.
 	UnresolvedLineages int
@@ -221,10 +233,23 @@ type Job struct {
 }
 
 // Scope reconstructs the projection scope a job names.
+//
+// A customer scope never carries a lineage (defect D-4). A customer snapshot is
+// computed from every lineage the customer holds, so a customer-scoped command
+// that also named one lineage would recompute the whole aggregate from a single
+// source and silently drop the rest. The rule is enforced here as well as at
+// every enqueue site, because this is the one place every queued job — including
+// rows written before the fix — passes through.
 func (j Job) Scope() Scope {
+	if j.CustomerID != "" {
+		return Scope{
+			ProjectID: j.ProjectID, EnvironmentID: j.EnvironmentID,
+			CustomerID: j.CustomerID,
+		}
+	}
 	return Scope{
 		ProjectID: j.ProjectID, EnvironmentID: j.EnvironmentID,
-		CustomerID: j.CustomerID, LineageID: j.LineageID,
+		LineageID: j.LineageID,
 	}
 }
 

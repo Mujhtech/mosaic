@@ -194,7 +194,7 @@ func loadCustomerSnapshot(ctx context.Context, tx pgx.Tx, scope billingprojectio
 func loadLineages(ctx context.Context, tx pgx.Tx, scope billingprojection.Scope, input *billingprojection.Input) error {
 	rows, err := tx.Query(ctx,
 		`SELECT l.id, l.lineage_type, l.lineage_key_digest, l.projection_frozen,
-		        l.billing_customer_id IS NOT NULL,
+		        l.billing_customer_id IS NOT NULL, COALESCE(l.billing_customer_id, ''),
 		        l.superseded_by_lineage_id IS NOT NULL,
 		        COALESCE(si.id, oi.id, ''), COALESCE(si.current_snapshot_id, ''),
 		        COALESCE(c.high_watermark, ''), c.checksum, COALESCE(c.facts_projected, 0)
@@ -221,13 +221,21 @@ func loadLineages(ctx context.Context, tx pgx.Tx, scope billingprojection.Scope,
 	for rows.Next() {
 		var item pending
 		var checkpointChecksum []byte
+		var customerID string
 		if err := rows.Scan(&item.lineage.LineageID, &item.lineage.Type, &item.digest,
-			&item.lineage.Frozen, &item.lineage.CustomerResolved, &item.lineage.SupersededByLineage,
+			&item.lineage.Frozen, &item.lineage.CustomerResolved, &customerID,
+			&item.lineage.SupersededByLineage,
 			&item.lineage.InstanceID, &item.lineage.SnapshotID, &item.lineage.Checkpoint,
 			&checkpointChecksum, &item.lineage.CheckpointFacts); err != nil {
 			return fmt.Errorf("scan purchase lineage: %w", err)
 		}
 		item.lineage.CheckpointChecksum = checkpointChecksum
+		// A lineage-scoped command whose lineage has acquired a customer since
+		// the job was queued escalates to customer scope rather than minting
+		// anything at customer level itself (defect D-4).
+		if scope.CustomerID == "" && customerID != "" && input.EscalateToCustomerID == "" {
+			input.EscalateToCustomerID = customerID
+		}
 		pendings = append(pendings, item)
 	}
 	if err := rows.Err(); err != nil {

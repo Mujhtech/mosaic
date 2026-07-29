@@ -180,6 +180,21 @@ func (s *Service) ProjectUnder(ctx context.Context, scope Scope, jobID string, r
 	if commitErr != nil {
 		return output, commitErr
 	}
+	// A lineage-scoped command never mints a customer snapshot (defect D-4). If
+	// the lineage has acquired a customer, the aggregate that *can* mint one is
+	// enqueued instead of being derived here from a single lineage. The failure
+	// is returned rather than logged: the projection itself is idempotent, so a
+	// retry costs a no-change pass, whereas a dropped escalation leaves the
+	// customer's committed snapshot missing a purchase they hold.
+	if scope.CustomerID == "" && input.EscalateToCustomerID != "" {
+		escalated := Scope{
+			ProjectID: scope.ProjectID, EnvironmentID: scope.EnvironmentID,
+			CustomerID: input.EscalateToCustomerID,
+		}
+		if err := s.repository.Enqueue(ctx, escalated, KindAssociationEstablished, s.now()); err != nil {
+			return output, fmt.Errorf("escalate lineage projection to customer scope: %w", err)
+		}
+	}
 	span.SetAttributes(
 		attribute.String("mosaic.billing.projection.outcome", output.Outcome),
 		attribute.Bool("mosaic.billing.projection.changed", output.CustomerSnapshot != nil))

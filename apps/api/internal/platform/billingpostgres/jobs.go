@@ -352,11 +352,32 @@ func enqueueProjectionForFact(ctx context.Context, tx pgx.Tx, fact billing.Trans
 		return fmt.Errorf("locate lineage for projection trigger: %w", err)
 	}
 
+	// A customer snapshot may only ever be minted from *all* of the customer's
+	// lineages, so a job that names a customer must never also name a lineage
+	// (defect D-4).
+	//
+	// The detail used to carry both. `loadLineages` filters on the lineage when
+	// one is present, while `Compute` branches on the customer being present and
+	// mints a full customer aggregate — so committing a fact on one of a
+	// customer's lineages rewrote their authoritative snapshot from that lineage
+	// alone. Every other Entitlement Source vanished and any Entitlement that
+	// depended on one flipped to inactive: no refund, no revocation, no expiry,
+	// just sources that were never loaded. A customer holding a subscription and
+	// a lifetime purchase lost the lifetime purchase on the subscription's next
+	// renewal.
+	//
+	// The two scopes are now disjoint. A resolved lineage enqueues customer
+	// scope and nothing else; an unresolved one enqueues lineage scope, which
+	// advances the subscription state and mints no customer snapshot at all.
+	// That also restores the coalescing index's meaning: `customer:…` and
+	// `lineage:…` keys can no longer stand for two different amounts of work.
 	scopeKey := "lineage:" + lineageID
+	detail := map[string]string{"lineageId": lineageID}
 	if customerID != "" {
 		scopeKey = "customer:" + customerID
+		detail = map[string]string{"customerId": customerID}
 	}
-	detail, err := json.Marshal(map[string]string{"customerId": customerID, "lineageId": lineageID})
+	encodedDetail, err := json.Marshal(detail)
 	if err != nil {
 		return fmt.Errorf("encode projection job detail: %w", err)
 	}
@@ -370,7 +391,7 @@ func enqueueProjectionForFact(ctx context.Context, tx pgx.Tx, fact billing.Trans
 		 VALUES ($1,$2,$3,$4,'fact_committed',$5,'queued',0,8,$6,$6,$6)
 		 ON CONFLICT DO NOTHING`,
 		"pjb_"+hashID(scopeKey, "fact_committed", fact.ID), fact.ProjectID, fact.EnvironmentID,
-		scopeKey, detail, now); err != nil {
+		scopeKey, encodedDetail, now); err != nil {
 		return fmt.Errorf("enqueue projection for committed fact: %w", err)
 	}
 	return nil

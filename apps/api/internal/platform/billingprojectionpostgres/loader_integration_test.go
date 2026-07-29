@@ -441,3 +441,131 @@ func TestConcurrentCustomerProjectionsSerialize(t *testing.T) {
 		}
 	}
 }
+
+// oneTimeLineage seeds a non-consumable lineage and its instance.
+func (f fixture) oneTimeLineage(t *testing.T, id, environmentID, mode, storeEnvironment, chainKey string) string {
+	t.Helper()
+	f.exec(t, `INSERT INTO purchase_lineages(
+	               id, project_id, environment_id, environment_mode, application_id, provider,
+	               store_environment, lineage_key_digest, lineage_type, billing_customer_id,
+	               created_at, updated_at)
+	           VALUES ($1,$2,$3,$4,$5,'app_store',$6,$7,'one_time',$8,$9,$9)`,
+		id, f.project, environmentID, mode, f.application, storeEnvironment,
+		digestOf(chainKey), f.customer, f.now)
+	instanceID := "otp_" + id
+	f.exec(t, `INSERT INTO one_time_purchase_instances(
+	               id, project_id, environment_id, application_id, purchase_lineage_id,
+	               billing_customer_id, provider, acquired_at, validity_state, created_at, updated_at)
+	           VALUES ($1,$2,$3,$4,$5,$6,'app_store',$7,'owned',$8,$8)`,
+		instanceID, f.project, environmentID, f.application, id, f.customer,
+		f.now.Add(-24*time.Hour), f.now)
+	return instanceID
+}
+
+// oneTimeFact seeds one validated non-consumable purchase fact.
+func (f fixture) oneTimeFact(t *testing.T, id, environmentID, mode, storeEnvironment, chainKey string, acquired time.Time) {
+	t.Helper()
+	inputID, attemptID := "bri_"+id, "bva_"+id
+	f.exec(t, `INSERT INTO billing_raw_inputs(
+	               id, project_id, organization_id, environment_id, environment_mode, provider,
+	               source, source_authority, idempotency_key, content_digest, body_state,
+	               authentication_result, store_environment, ingestion_status, correlation_id,
+	               received_at, expires_at)
+	           VALUES ($1,$2,$3,$4,$5,'app_store','apple_notification','store_notification',
+	               $6,$7,'not_retained','verified_signature',$8,'accepted','loader',$9,$10)`,
+		inputID, f.project, f.organization, environmentID, mode,
+		digestOf("idem-"+id), digestOf("content-"+id), storeEnvironment, f.now, f.now.Add(time.Hour))
+	f.exec(t, `INSERT INTO billing_validation_attempts(
+	               id, project_id, environment_id, raw_input_id, attempt_number, validator_version,
+	               started_at, completed_at, outcome, retryable, store_environment, latency_ms, correlation_id)
+	           VALUES ($1,$2,$3,$4,1,2,$5,$5,'validated',false,$6,1,'loader')`,
+		attemptID, f.project, environmentID, inputID, f.now, storeEnvironment)
+	f.exec(t, `INSERT INTO billing_transaction_facts(
+	               id, project_id, environment_id, environment_mode, application_id, provider,
+	               store_environment, provider_transaction_id, purchase_chain_digest,
+	               transaction_type, fact_kind, occurred_at, period_start_at,
+	               provider_product_identifier, resolution_state, mosaic_product_id,
+	               provider_product_mapping_id, resolved_mapping_version, validator_version,
+	               source_raw_input_id, validation_attempt_id, fact_digest, recorded_at)
+	           VALUES ($1,$2,$3,$4,$5,'app_store',$6,$7,$8,'non_consumable','one_time_purchase',$9,$9,
+	               'com.mosaic.lifetime','active_mapping',$10,$11,1,2,$12,$13,$14,$9)`,
+		id, f.project, environmentID, mode, f.application, storeEnvironment, id,
+		digestOf(chainKey), acquired, f.product, f.mapping, inputID, attemptID, digestOf("fact-"+id))
+}
+
+// A fact on one of a customer's lineages must never revoke the others.
+//
+// This is demonstration 5 of the Phase 9B integrated demonstration, reduced to
+// its failing core (defect D-4). A customer holds a subscription and a lifetime
+// non-consumable, both granting the same Entitlement. A fact commits on the
+// subscription lineage. The job that trigger writes used to name *both* the
+// customer and that one lineage: `loadLineages` filtered to the lineage while
+// `Compute` still minted a full customer aggregate, so the lifetime purchase
+// disappeared from the snapshot and the Entitlement read `inactive` while an
+// unrefunded lifetime purchase sat in the database still marked `owned`.
+//
+// Nothing about that failure is loud. No error is raised, no constraint is
+// violated, and the customer simply loses access they paid for — which is why
+// this test asserts the source set and the entitlement state rather than the
+// absence of an error.
+func TestFactOnOneLineageDoesNotRevokeTheCustomersOthers(t *testing.T) {
+	f := newFixture(t, "d4revoke")
+	repository := New(f.pool)
+	service := billingprojection.NewService(repository)
+
+	subscription := "bpl_d4_sub"
+	lifetime := "bpl_d4_life"
+	f.lineage(t, subscription, f.production, "production", "production", "chain-sub")
+	f.oneTimeLineage(t, lifetime, f.production, "production", "production", "chain-life")
+	f.fact(t, "btf_d4_sub", f.production, "production", "production", "chain-sub", "",
+		"initial_purchase", f.now.Add(-30*24*time.Hour), f.now.Add(30*24*time.Hour))
+	f.oneTimeFact(t, "btf_d4_life", f.production, "production", "production", "chain-life",
+		f.now.Add(-20*24*time.Hour))
+
+	// The job exactly as the fact-commit trigger writes it: customer scope, and
+	// no lineage in the detail.
+	f.exec(t, `INSERT INTO projection_jobs(
+	               id, project_id, environment_id, scope_key, kind, detail, status,
+	               attempt_count, max_attempts, available_at, created_at, updated_at)
+	           VALUES ($1,$2,$3,$4,'fact_committed',$5,'queued',0,8,$6,$6,$6)`,
+		"pjb_d4", f.project, f.production, "customer:"+f.customer,
+		`{"customerId":"`+f.customer+`"}`, f.now)
+
+	job, leased, err := repository.LeaseJob(f.ctx, "worker", f.now, f.now.Add(time.Minute))
+	if err != nil || !leased {
+		t.Fatalf("lease projection job: leased=%v err=%v", leased, err)
+	}
+	if scope := job.Scope(); scope.LineageID != "" {
+		t.Fatalf("a customer-scoped job carried lineage %q; the aggregate would be "+
+			"recomputed from one source and the rest silently revoked", scope.LineageID)
+	}
+
+	if _, err := service.Project(f.ctx, job.Scope(), job.ID); err != nil {
+		t.Fatalf("project: %v", err)
+	}
+
+	var sources int
+	var state string
+	if err := f.pool.QueryRow(f.ctx,
+		`SELECT count(*) FROM entitlement_sources s
+		   JOIN customer_entitlement_pointers p
+		     ON p.current_snapshot_id = s.customer_entitlement_snapshot_id
+		  WHERE p.billing_customer_id=$1 AND p.environment_id=$2`,
+		f.customer, f.production).Scan(&sources); err != nil {
+		t.Fatalf("read entitlement sources: %v", err)
+	}
+	if err := f.pool.QueryRow(f.ctx,
+		`SELECT e.state FROM customer_entitlement_snapshot_entries e
+		   JOIN customer_entitlement_pointers p
+		     ON p.current_snapshot_id = e.customer_entitlement_snapshot_id
+		  WHERE p.billing_customer_id=$1 AND p.environment_id=$2`,
+		f.customer, f.production).Scan(&state); err != nil {
+		t.Fatalf("read entitlement entry: %v", err)
+	}
+	if sources != 2 {
+		t.Fatalf("entitlement sources = %d, want 2 (the subscription and the lifetime purchase)", sources)
+	}
+	if state != "active" {
+		t.Fatalf("entitlement state = %q, want active", state)
+	}
+}
