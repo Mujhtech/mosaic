@@ -5,7 +5,10 @@ import { buttonVariants } from "@/components/ui/button-variants"
 import { EmptyState } from "@/components/feedback/empty-state"
 import { HostedResourceBoundary } from "@/features/auth/components/hosted-resource-boundary"
 import { resolveHostedQueryState } from "@/features/auth/types/hosted-query-state"
-import { BillingBoundaryNote } from "@/features/billing-ledger/components/billing-chrome"
+import {
+  BillingBoundaryNote,
+  LedgerPaging,
+} from "@/features/billing-ledger/components/billing-chrome"
 import { TransactionLedgerFilters } from "@/features/billing-ledger/components/transaction-ledger-filters"
 import { TransactionLedgerTable } from "@/features/billing-ledger/components/transaction-ledger-table"
 import { transactionFactsQueryOptions } from "@/features/billing-ledger/queries/transaction-queries"
@@ -132,6 +135,7 @@ export function TransactionLedgerPage({
             />
             <LedgerPaging
               cursor={filters.cursor}
+              endLabel="End of the ledger for these filters."
               nextCursor={facts.data?.nextCursor}
               onCursorChange={(cursor) => onFiltersChange({ ...filters, cursor })}
             />
@@ -153,6 +157,7 @@ export function TransactionLedgerPage({
                 exit. */}
             <LedgerPaging
               cursor={filters.cursor}
+              endLabel="End of the ledger for these filters."
               nextCursor={facts.data?.nextCursor}
               onCursorChange={(cursor) => onFiltersChange({ ...filters, cursor })}
             />
@@ -172,6 +177,7 @@ export function TransactionLedgerPage({
             />
             <LedgerPaging
               cursor={filters.cursor}
+              endLabel="End of the ledger for these filters."
               nextCursor={facts.data?.nextCursor}
               onCursorChange={(cursor) => onFiltersChange({ ...filters, cursor })}
             />
@@ -179,46 +185,5 @@ export function TransactionLedgerPage({
         )}
       </HostedResourceBoundary>
     </WorkspacePage>
-  )
-}
-
-/**
- * Forward paging over the ledger.
- *
- * Rendered beside every branch, including the filtered-empty one: several
- * filters are applied to the loaded page only, so "nothing matched here" must
- * still offer a way to look at the next page.
- */
-function LedgerPaging({
-  cursor,
-  nextCursor,
-  onCursorChange,
-}: {
-  cursor: string | undefined
-  nextCursor: string | undefined
-  onCursorChange: (cursor: string | undefined) => void
-}) {
-  if (!cursor && !nextCursor) return null
-
-  return (
-    <div className="mt-4 flex flex-wrap items-center gap-2">
-      {cursor ? (
-        <Button onClick={() => onCursorChange(undefined)} size="sm" type="button" variant="outline">
-          First page
-        </Button>
-      ) : null}
-      {nextCursor ? (
-        <Button
-          onClick={() => onCursorChange(nextCursor)}
-          size="sm"
-          type="button"
-          variant="outline"
-        >
-          Next page
-        </Button>
-      ) : (
-        <p className="text-muted-foreground text-xs">End of the ledger for these filters.</p>
-      )}
-    </div>
   )
 }

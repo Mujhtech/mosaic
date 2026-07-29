@@ -462,6 +462,177 @@ export function formatEntitlementInstant(value: string | undefined) {
 export const AUTHORITATIVE_TIMESTAMP_NOTE =
   "As of is the instant the projection reasoned about. Last projected is when the projection run committed. They are never the same clock."
 
+// ---------------------------------------------------------------------------
+// Customer, alias, and lineage vocabulary
+// ---------------------------------------------------------------------------
+
+/**
+ * Aliases are rendered as *types and protected representations only*.
+ *
+ * There is no value field and no digest field on this surface, and that is not
+ * an omission to be worked around: a digest is still a stable per-person
+ * identifier, so rendering one would recreate exactly the tracking key the
+ * digest-only storage design exists to avoid. What an operator gets is what
+ * kind of identity this is, who asserted it, and whether it is still active —
+ * enough to reason about an attribution, not enough to identify a person.
+ */
+const ALIAS_TYPE_LABELS: Record<string, string> = {
+  apple_app_account_token: "Apple app account token",
+  application_user_id: "Application user ID",
+  google_obfuscated_account_id: "Google obfuscated account ID",
+  installation_id: "Installation ID",
+}
+
+const ALIAS_TYPE_NOTES: Record<string, string> = {
+  apple_app_account_token:
+    "Parsed server-side from Apple's signed payload. Evidence of who made the purchase.",
+  application_user_id:
+    "Your own user identifier, asserted by your backend. This is the alias that makes a customer identified.",
+  google_obfuscated_account_id:
+    "Parsed server-side from Google's payload. Evidence of who made the purchase.",
+  installation_id:
+    "A device-local identifier. Evidence and attribution only — it can never create or select a customer, because a guessed installation ID would otherwise read someone else's entitlements.",
+}
+
+export function aliasTypeLabel(value: string | undefined) {
+  if (!value) return "Unclassified alias"
+  return ALIAS_TYPE_LABELS[value] ?? humanize(value)
+}
+
+export function aliasTypeNote(value: string | undefined) {
+  if (!value) return undefined
+  return ALIAS_TYPE_NOTES[value]
+}
+
+const SOURCE_AUTHORITY_LABELS: Record<string, string> = {
+  operator: "Recorded by an operator",
+  provider_payload: "Parsed from a store payload",
+  restore: "Established by a restore",
+  sdk_installation: "Asserted by an SDK installation",
+  trusted_server: "Asserted by your backend",
+}
+
+export function sourceAuthorityLabel(value: string | undefined) {
+  if (!value) return "Unknown authority"
+  return SOURCE_AUTHORITY_LABELS[value] ?? humanize(value)
+}
+
+const VERIFICATION_STATUS_LABELS: Record<string, string> = {
+  asserted: "Asserted",
+  verified: "Verified",
+}
+
+export function verificationStatusLabel(value: string | undefined) {
+  if (!value) return "Unclassified"
+  return VERIFICATION_STATUS_LABELS[value] ?? humanize(value)
+}
+
+/**
+ * The distinction an operator needs first when a customer list looks larger
+ * than the user base.
+ *
+ * A purchase-anchored customer is not a defect or a duplicate: it is revenue
+ * whose owner has not been named yet, which is the correct resting state for an
+ * anonymous purchase. Labelling it as "unknown" or "orphaned" invites someone
+ * to clean it up, and deleting it would strand a real purchase.
+ */
+export function customerIdentityLabel(customer: {
+  identified?: boolean
+  purchaseAnchored?: boolean
+}) {
+  if (customer.identified) return "Identified"
+  if (customer.purchaseAnchored) return "Purchase-anchored · not yet identified"
+  return "No identity or purchase recorded"
+}
+
+export function customerIdentityExplanation(customer: {
+  identified?: boolean
+  purchaseAnchored?: boolean
+}) {
+  if (customer.identified) {
+    return "An application-user alias is active, so a person your backend named is attached to this customer."
+  }
+  if (customer.purchaseAnchored) {
+    return "A validated purchase is attached but no application-user alias is. This is the correct resting state for an anonymous purchase: the revenue is anchored to the store's own purchase chain, which survives reinstall and device changes, and identifying the user later attaches rather than merges."
+  }
+  return "Neither an application-user alias nor a purchase lineage is recorded in this Mosaic Environment."
+}
+
+const CUSTOMER_STATUS_LABELS: Record<string, string> = {
+  active: "Active",
+  anonymized: "Anonymized",
+  frozen: "Frozen",
+}
+
+export function customerStatusLabel(value: string | undefined) {
+  if (!value) return "Unclassified"
+  return CUSTOMER_STATUS_LABELS[value] ?? humanize(value)
+}
+
+export function customerStatusTone(value: string | undefined): AccessTone {
+  if (value === "active") return "positive"
+  if (value === "frozen") return "attention"
+  return "neutral"
+}
+
+const CUSTOMER_DIAGNOSTICS_LABELS: Record<string, string> = {
+  identity_conflict: "Identity conflict",
+  none: "None",
+  projection_failed: "Projection failed",
+  projection_stale: "Projection stale",
+}
+
+export function customerDiagnosticsLabel(value: string | undefined) {
+  if (!value || value === "none") return "None"
+  return CUSTOMER_DIAGNOSTICS_LABELS[value] ?? humanize(value)
+}
+
+const LINEAGE_DIAGNOSTIC_LABELS: Record<string, string> = {
+  identity_conflict: "Identity conflict",
+  identity_unresolved: "Identity unresolved",
+  none: "None",
+  product_unresolved: "Product unresolved",
+}
+
+export function lineageDiagnosticLabel(value: string | undefined) {
+  if (!value || value === "none") return "None"
+  return LINEAGE_DIAGNOSTIC_LABELS[value] ?? humanize(value)
+}
+
+/**
+ * The safety state an operator must not misread as a fault to be cleared.
+ *
+ * A frozen lineage is Mosaic refusing to guess. Access is granted to neither
+ * candidate and the last committed state is preserved, which is deliberately
+ * the conservative outcome: automatically picking a winner would hand one
+ * person another person's purchases.
+ */
+export const PROJECTION_FROZEN_NOTE =
+  "Projection is frozen for this Purchase Lineage while an identity conflict is open. The projector skips it and the last committed state is preserved, so nothing changes and neither candidate is granted anything. This is a safety state, not a failure."
+
+const ONE_TIME_VALIDITY_LABELS: Record<string, string> = {
+  owned: "Owned",
+  refunded: "Refunded",
+  revoked: "Revoked",
+  unknown: "Validity undetermined",
+}
+
+export function oneTimeValidityLabel(value: string | undefined) {
+  if (!value) return "Validity undetermined"
+  return ONE_TIME_VALIDITY_LABELS[value] ?? humanize(value)
+}
+
+export function oneTimeValidityTone(value: string | undefined): AccessTone {
+  if (value === "owned") return "positive"
+  if (value === "revoked") return "negative"
+  if (value === "refunded") return "neutral"
+  return "attention"
+}
+
+export function timelineEntryTypeLabel(value: string | undefined) {
+  return value ? humanize(value) : "Unclassified entry"
+}
+
 /**
  * Rendered wherever an authoritative access answer appears. It is the sentence
  * the 9A boundary note now defers to.

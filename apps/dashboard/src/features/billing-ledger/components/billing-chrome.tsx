@@ -1,6 +1,8 @@
 import { InfoIcon } from "@phosphor-icons/react/dist/ssr/Info"
 import type { ReactNode } from "react"
 
+import { Button } from "@/components/ui/button"
+
 import { ScopeBadge } from "@/features/organizations/components/workspace-page"
 import {
   BILLING_BOUNDARY_NOTE,
@@ -104,6 +106,54 @@ export function DualTimestamps({
         <span className="text-muted-foreground">Recorded at </span>
         {formatBillingTimestamp(recordedAt)}
       </p>
+    </div>
+  )
+}
+
+/**
+ * Forward paging over a keyset-paged billing list.
+ *
+ * Extracted from the 9A transaction ledger, where it was rendered beside every
+ * branch including the filtered-empty one. That placement is the point: several
+ * filters narrow the loaded page only, so "nothing matched here" must still
+ * offer a way to look at the next page rather than making the operator discard
+ * their filter to escape.
+ *
+ * The customer, conflict, and restore lists page the same way, so the control
+ * lives in billing chrome rather than being reimplemented per feature.
+ */
+export function LedgerPaging({
+  cursor,
+  endLabel = "End of the list for these filters.",
+  nextCursor,
+  onCursorChange,
+}: {
+  cursor: string | undefined
+  endLabel?: string
+  nextCursor: string | undefined
+  onCursorChange: (cursor: string | undefined) => void
+}) {
+  if (!cursor && !nextCursor) return null
+
+  return (
+    <div className="mt-4 flex flex-wrap items-center gap-2">
+      {cursor ? (
+        <Button onClick={() => onCursorChange(undefined)} size="sm" type="button" variant="outline">
+          First page
+        </Button>
+      ) : null}
+      {nextCursor ? (
+        <Button
+          onClick={() => onCursorChange(nextCursor)}
+          size="sm"
+          type="button"
+          variant="outline"
+        >
+          Next page
+        </Button>
+      ) : (
+        <p className="text-muted-foreground text-xs">{endLabel}</p>
+      )}
     </div>
   )
 }

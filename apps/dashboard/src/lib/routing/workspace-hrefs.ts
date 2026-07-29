@@ -58,6 +58,11 @@ export function catalogProductsHref(scope: WorkspaceScope) {
   return base ? `${base}/catalog/products` : undefined
 }
 
+export function catalogProductHref(scope: WorkspaceScope, productId: string) {
+  const base = catalogProductsHref(scope)
+  return base ? `${base}/${encodeURIComponent(productId)}` : undefined
+}
+
 export function providersHref(scope: WorkspaceScope) {
   const base = projectBase(scope)
   return base ? `${base}/catalog/providers` : undefined
@@ -110,6 +115,50 @@ export function billingReconciliationHref(scope: WorkspaceScope) {
 export function billingHealthHref(scope: WorkspaceScope) {
   const base = billingEnvironmentBase(scope)
   return base ? `${base}/health` : undefined
+}
+
+/**
+ * Authoritative customer access.
+ *
+ * Environment-scoped like every other billing destination, even though a
+ * Billing Customer's *identity* is Project-scoped: everything Mosaic computes
+ * about their access — snapshots, subscriptions, entitlements — belongs to one
+ * Environment, and the customer header states the Project scope explicitly so
+ * the two are not confused.
+ */
+export function billingCustomersHref(scope: WorkspaceScope) {
+  const base = billingEnvironmentBase(scope)
+  return base ? `${base}/customers` : undefined
+}
+
+export function billingCustomerHref(scope: WorkspaceScope, customerId: string) {
+  const base = billingCustomersHref(scope)
+  return base ? `${base}/${encodeURIComponent(customerId)}` : undefined
+}
+
+export function billingSubscriptionHref(scope: WorkspaceScope, instanceId: string) {
+  const base = billingEnvironmentBase(scope)
+  return base ? `${base}/subscriptions/${encodeURIComponent(instanceId)}` : undefined
+}
+
+export function billingRestoresHref(scope: WorkspaceScope) {
+  const base = billingEnvironmentBase(scope)
+  return base ? `${base}/restores` : undefined
+}
+
+/**
+ * Identity conflicts are Project-scoped data reached through an
+ * Environment-scoped route, for consistency with the rest of the Billing nav.
+ * The page itself says so rather than pretending to be filtered.
+ */
+export function billingIdentityConflictsHref(scope: WorkspaceScope) {
+  const base = billingEnvironmentBase(scope)
+  return base ? `${base}/identity-conflicts` : undefined
+}
+
+export function billingIdentityConflictHref(scope: WorkspaceScope, conflictId: string) {
+  const base = billingIdentityConflictsHref(scope)
+  return base ? `${base}/${encodeURIComponent(conflictId)}` : undefined
 }
 
 /**
