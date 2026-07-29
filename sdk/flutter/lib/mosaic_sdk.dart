@@ -10,6 +10,12 @@ export 'src/configuration_cache.dart';
 export 'src/configuration_client.dart';
 export 'src/configuration_delivery.dart';
 export 'src/configuration_transport.dart';
+export 'src/customer_authentication.dart'
+    show
+        MosaicCustomerToken,
+        MosaicCustomerTokenDiagnostics,
+        MosaicCustomerTokenProvider,
+        MosaicCustomerTokenRequest;
 export 'src/customer_entitlements.dart';
 export 'src/experiment_analytics.dart';
 export 'src/experiment_assignment.dart';
