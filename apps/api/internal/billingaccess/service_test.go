@@ -405,7 +405,9 @@ func TestNeverProjectedCustomerSyncsWithoutClaimingLossOfAccess(t *testing.T) {
 	var envelope struct {
 		RecordType string `json:"recordType"`
 		Payload    struct {
-			Entries          []any `json:"entries"`
+			SnapshotID       string `json:"snapshotId"`
+			SnapshotVersion  int64  `json:"snapshotVersion"`
+			Entries          []any  `json:"entries"`
 			ProjectionStatus struct {
 				State string `json:"state"`
 			} `json:"projectionStatus"`
@@ -422,5 +424,50 @@ func TestNeverProjectedCustomerSyncsWithoutClaimingLossOfAccess(t *testing.T) {
 	}
 	if envelope.Payload.ProjectionStatus.State != ProjectionPending {
 		t.Fatalf("projection status %q, want pending", envelope.Payload.ProjectionStatus.State)
+	}
+	// Version 0 is the "nothing has ever been committed" sentinel. Numbering the
+	// placeholder 1 would collide with the first genuine projection, which is
+	// also 1.
+	if envelope.Payload.SnapshotVersion != 0 {
+		t.Fatalf("the placeholder snapshot claimed version %d, want 0",
+			envelope.Payload.SnapshotVersion)
+	}
+	if envelope.Payload.SnapshotID != "pending.bcu_1" {
+		t.Fatalf("placeholder snapshot id %q", envelope.Payload.SnapshotID)
+	}
+
+	// Cross-step: once the customer is projected for the first time, the real
+	// snapshot must be strictly newer than the placeholder the device cached.
+	// A device comparing versions only advances when this holds.
+	repository.snapshots["env_1/bcu_1"] = SnapshotView{
+		SnapshotID: "ces_first", ProjectID: "proj_1", EnvironmentID: "env_1", CustomerID: "bcu_1",
+		SnapshotVersion: 1, RuleVersion: 1,
+		ComputedAt:      instant("2026-07-28T11:59:59Z"),
+		AsOf:            instant("2026-07-28T11:59:59Z"),
+		ChangeReason:    "initial_projection",
+		Projection:      ProjectionStatus{State: ProjectionCurrent, LastProjectedAt: instant("2026-07-28T11:59:59Z")},
+	}
+	projected, err := service.Sync(context.Background(), authenticated, SyncRequest{
+		KnownSnapshotVersion: envelope.Payload.SnapshotVersion,
+		EntityTag:            result.EntityTag,
+		CorrelationID:        "corr-1",
+	})
+	if err != nil {
+		t.Fatalf("the first real projection failed to sync: %v", err)
+	}
+	if projected.Unchanged {
+		t.Fatal("the first real snapshot was answered as unchanged against the placeholder")
+	}
+	var after struct {
+		Payload struct {
+			SnapshotVersion int64 `json:"snapshotVersion"`
+		} `json:"payload"`
+	}
+	if err := json.Unmarshal(projected.Payload, &after); err != nil {
+		t.Fatal(err)
+	}
+	if after.Payload.SnapshotVersion <= envelope.Payload.SnapshotVersion {
+		t.Fatalf("the first real snapshot is version %d, not strictly newer than the placeholder's %d",
+			after.Payload.SnapshotVersion, envelope.Payload.SnapshotVersion)
 	}
 }

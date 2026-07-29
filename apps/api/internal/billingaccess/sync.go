@@ -144,16 +144,21 @@ func (s *Service) Sync(ctx context.Context, authenticated AuthenticatedToken, re
 }
 
 // emptyView is the representation of a customer with no committed projection in
-// an Environment. Version 1 with no entries is deliberate: the snapshot is
-// structurally valid, carries a pending projection status, and says nothing
-// about access — which is exactly the truth.
+// an Environment. Version 0 with no entries is deliberate: version 0 is the
+// "no snapshot has ever been committed" sentinel, and real snapshots start at 1
+// (writeCustomerSnapshot increments from 0). Numbering the placeholder 1 would
+// make the first genuine projection collide with it, so a device that cached
+// the placeholder would treat the first real snapshot as not newer and keep an
+// empty entitlement set. The snapshot is still structurally valid, carries a
+// pending projection status, and says nothing about access — which is exactly
+// the truth.
 func emptyView(token Token, at time.Time) SnapshotView {
 	return SnapshotView{
 		SnapshotID:      "pending." + token.CustomerID,
 		ProjectID:       token.ProjectID,
 		EnvironmentID:   token.EnvironmentID,
 		CustomerID:      token.CustomerID,
-		SnapshotVersion: 1,
+		SnapshotVersion: 0,
 		RuleVersion:     1,
 		ComputedAt:      at,
 		AsOf:            at,

@@ -183,7 +183,7 @@ reports `unknown`, never `inactive`.
 
 | Condition | Answer |
 | --- | --- |
-| Customer never projected in this Environment | A valid snapshot with no entries and `projectionStatus.state: pending`. Not an error, not `inactive`. |
+| Customer never projected in this Environment | A valid snapshot with no entries, `snapshotId: pending.<customerId>`, `snapshotVersion: 0`, and `projectionStatus.state: pending`. Not an error, not `inactive`. Version 0 is the sentinel for "nothing committed"; committed snapshots start at 1, so the first real projection is always strictly newer than the placeholder a device cached. |
 | Billing disabled for the Project | `unavailable` with `uncertainty.reason: provider_unavailable` and explanation `billing_disabled`. |
 | Identity conflict open (OD-10) | Entitlements report `unknown` with `identity_unresolved`; neither candidate customer is granted anything. |
 | Product mapping missing | `unknown` with `product_unresolved`. |
