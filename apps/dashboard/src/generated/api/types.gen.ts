@@ -4,6 +4,1126 @@ export type ClientOptions = {
     baseUrl: `${string}://${string}` | (string & {});
 };
 
+export type BillingMigrationScopeItem = {
+    applicationId: string;
+    platform: 'ios' | 'android';
+};
+
+export type BillingMigrationScope = {
+    projectId: string;
+    environmentId: string;
+    applications: Array<BillingMigrationScopeItem>;
+};
+
+export type CreateBillingMigrationProgramRequest = {
+    environmentId: string;
+    applications: Array<BillingMigrationScopeItem>;
+    /**
+     * Preserved opaque RevenueCat project identifier.
+     */
+    revenueCatProjectId: string;
+    stabilizationDays?: number;
+    rollbackWindowDays?: number;
+};
+
+export type BillingMigrationProgram = {
+    programId: string;
+    stateVersion: number;
+    state: 'draft' | 'assessing' | 'mapping' | 'importing' | 'dry_run' | 'shadowing' | 'ready' | 'cutover_pending' | 'stabilizing' | 'completed' | 'rolled_back' | 'failed' | 'cancelled';
+    scope: BillingMigrationScope;
+    source: {
+        adapter: 'revenuecat';
+        adapterVersion: string;
+        /**
+         * Opaque encrypted credential row reference
+         */
+        credentialReference: string;
+    };
+    authorityEpochBefore: number;
+    authorityEpochAfter?: number;
+    stabilizationDays: number;
+    rollbackWindowDays: number;
+};
+
+export type BillingMigrationProgramRecord = {
+    billingMigrationOperationsContractVersion: '1';
+    recordType: 'migrationProgram';
+    payload: BillingMigrationProgramDetail;
+};
+
+export type BillingMigrationProgramDetail = {
+    program: BillingMigrationProgram;
+    sourceCapabilityAssessment?: {
+        programId: string;
+        stateVersion: number;
+        adapter: string;
+        providerApiVersion: string;
+        capabilities: Array<string>;
+        assessedAt: Timestamp;
+    };
+    operatorCapabilities: Array<'view' | 'manage-source' | 'manage-mappings' | 'run-import' | 'assess-readiness' | 'propose-cutover' | 'approve-cutover' | 'execute-cutover' | 'execute-rollback' | 'resolve-cases' | 'execute-repair' | 'delete-source' | 'remove-credential' | 'manage-legal-hold' | 'complete-migration'>;
+};
+
+export type BillingMigrationProgramEnvelope = {
+    data: BillingMigrationProgramRecord;
+};
+
+export type BillingMigrationProgramListEnvelope = {
+    data: {
+        items: Array<BillingMigrationProgramRecord>;
+    };
+};
+
+export type BillingMigrationStateVersionRequest = {
+    expectedStateVersion: number;
+};
+
+export type BillingMigrationOperationEnvelope = {
+    data: {
+        billingMigrationOperationsContractVersion: '1';
+        recordType: string;
+        payload: {
+            [key: string]: unknown;
+        };
+    };
+};
+
+export type BillingMigrationCase = {
+    caseId: string;
+    programId: string;
+    classification: 'critical' | 'blocking' | 'warning' | 'informational';
+    status: 'open' | 'in_progress' | 'resolved' | 'dismissed';
+    reason: string;
+    stateVersion: number;
+    caseDigest: BillingMigrationDigest;
+    linkedDivergenceId?: string;
+    linkedSourceRecordId?: string;
+    openedAt: Timestamp;
+    updatedAt: Timestamp;
+    resolvedAt?: Timestamp;
+};
+
+export type BillingMigrationCaseAction = {
+    actionId: string;
+    caseId: string;
+    programId: string;
+    actorId: string;
+    action: string;
+    beforeDigest: BillingMigrationDigest;
+    afterDigest: BillingMigrationDigest;
+    createdAt: Timestamp;
+};
+
+export type BillingMigrationRepairPreview = {
+    previewId: string;
+    caseId: string;
+    programId: string;
+    repairKind: 'provider_revalidate' | 'projection_replay' | 'attach_proven_alias' | 'replace_mapping_set' | 'retry_quarantined_record';
+    scopeKind: string;
+    reason: string;
+    scopeReferences: Array<string>;
+    affectedCount: number;
+    stateVersion: number;
+    beforeDigest: BillingMigrationDigest;
+    afterDigest: BillingMigrationDigest;
+    previewDigest: BillingMigrationDigest;
+    caseDigest: BillingMigrationDigest;
+    policyDigest: BillingMigrationDigest;
+    scopeDigest: BillingMigrationDigest;
+    createdByActorId: string;
+    createdAt: Timestamp;
+    expiresAt: Timestamp;
+};
+
+export type BillingMigrationRepairPreviewCommand = {
+    previewId: string;
+    caseId: string;
+    programId: string;
+    repairKind: 'provider_revalidate' | 'projection_replay' | 'attach_proven_alias' | 'replace_mapping_set' | 'retry_quarantined_record';
+    scopeKind: string;
+    reason: string;
+    scopeReferences: Array<string>;
+    affectedCount: number;
+    stateVersion: number;
+    beforeDigest: BillingMigrationDigest;
+    afterDigest: BillingMigrationDigest;
+    previewDigest: BillingMigrationDigest;
+    caseDigest: BillingMigrationDigest;
+    policyDigest: BillingMigrationDigest;
+    scopeDigest: BillingMigrationDigest;
+    createdAt: Timestamp;
+    expiresAt: Timestamp;
+};
+
+export type BillingMigrationRepairPreviewCommandEnvelope = {
+    data: {
+        billingMigrationOperationsContractVersion: '1';
+        recordType: 'repairPreview';
+        payload: BillingMigrationRepairPreviewCommand;
+    };
+};
+
+export type BillingMigrationRepairExecution = BillingMigrationRepairExecutionPending | BillingMigrationRepairExecutionTerminal;
+
+export type BillingMigrationRepairExecutionPending = {
+    executionId: string;
+    previewId: string;
+    programId: string;
+    executionStatus: 'pending';
+    beforeDigest: BillingMigrationDigest;
+    attemptNumber: number;
+    executedByActorId: string;
+    reservedAt: Timestamp;
+};
+
+export type BillingMigrationRepairExecutionTerminal = {
+    executionId: string;
+    previewId: string;
+    programId: string;
+    executionStatus: 'completed';
+    result: 'succeeded' | 'failed' | 'no_change';
+    errorCode?: string;
+    beforeDigest: BillingMigrationDigest;
+    afterDigest: BillingMigrationDigest;
+    resultDigest: BillingMigrationDigest;
+    attemptNumber: number;
+    executedByActorId: string;
+    reservedAt: Timestamp;
+    executedAt: Timestamp;
+};
+
+export type BillingMigrationRepairExecutionCommandPending = {
+    executionId: string;
+    previewId: string;
+    programId: string;
+    executionStatus: 'pending';
+    beforeDigest: BillingMigrationDigest;
+    attemptNumber: number;
+    executedAt: Timestamp;
+};
+
+export type BillingMigrationRepairExecutionCommandTerminal = {
+    executionId: string;
+    previewId: string;
+    programId: string;
+    executionStatus: 'completed';
+    result: 'succeeded' | 'failed' | 'no_change';
+    errorCode?: string;
+    beforeDigest: BillingMigrationDigest;
+    afterDigest: BillingMigrationDigest;
+    resultDigest: BillingMigrationDigest;
+    attemptNumber: number;
+    executedAt: Timestamp;
+};
+
+export type BillingMigrationRepairExecutionCommandPendingEnvelope = {
+    data: {
+        billingMigrationOperationsContractVersion: '1';
+        recordType: 'repairExecution';
+        payload: BillingMigrationRepairExecutionCommandPending;
+    };
+};
+
+export type BillingMigrationRepairExecutionCommandTerminalEnvelope = {
+    data: {
+        billingMigrationOperationsContractVersion: '1';
+        recordType: 'repairExecution';
+        payload: BillingMigrationRepairExecutionCommandTerminal;
+    };
+};
+
+export type BillingMigrationWebhookRedelivery = {
+    redeliveryId: string;
+    programId: string;
+    eventId: string;
+    destinationId: string;
+    deliveryId: string;
+    reason: string;
+    actorId: string;
+    stateVersion: number;
+    expectedEventDigest: BillingMigrationDigest;
+    createdAt: Timestamp;
+};
+
+export type BillingMigrationCredentialRemoval = {
+    removalId: string;
+    programId: string;
+    credentialId: string;
+    reason: string;
+    actorId: string;
+    removalDigest: BillingMigrationDigest;
+    stateVersion: number;
+    early: boolean;
+    removedAt: Timestamp;
+};
+
+export type BillingMigrationLegalHoldProposal = {
+    proposalId: string;
+    programId: string;
+    command: 'set' | 'release';
+    reason: string;
+    externalComplianceReference: string;
+    proposerActorId: string;
+    expectedPreviousCommandDigest?: BillingMigrationDigest;
+    proposalDigest: BillingMigrationDigest;
+    status: 'pending' | 'approved' | 'expired' | 'invalidated';
+    proposedAt: Timestamp;
+    expiresAt: Timestamp;
+};
+
+export type BillingMigrationLegalHold = {
+    holdId: string;
+    proposalId: string;
+    programId: string;
+    command: 'set' | 'release';
+    reason: string;
+    externalComplianceReference: string;
+    proposerActorId: string;
+    approverActorId: string;
+    previousCommandId?: string;
+    commandDigest: BillingMigrationDigest;
+    production: boolean;
+    commandedAt: Timestamp;
+};
+
+export type BillingMigrationCompletionReport = {
+    reportId: string;
+    programId: string;
+    stateVersion: number;
+    completionDigest: BillingMigrationDigest;
+    authorityDigest: BillingMigrationDigest;
+    stabilityEvidenceDigest: BillingMigrationDigest;
+    policyDigest: BillingMigrationDigest;
+    completedByActorId: string;
+    completedAt: Timestamp;
+    stabilizationEndedAt: Timestamp;
+    rollbackWindowEndedAt: Timestamp;
+    credentialRemovedAt: Timestamp;
+    legalHold: boolean;
+    sourceObjectsDeleteAt?: Timestamp;
+};
+
+export type BillingMigrationCompletionPrerequisites = {
+    programId: string;
+    state: string;
+    policyDigest: BillingMigrationDigest;
+    authorityDigest: BillingMigrationDigest;
+    stabilityEvidenceDigest: BillingMigrationDigest;
+    stateVersion: number;
+    stabilizationEndsAt: Timestamp;
+    rollbackWindowEndsAt: Timestamp;
+    credentialRemoved: boolean;
+    unresolvedCriticalBlocking: number;
+    authorityStable: boolean;
+    webhookReady: boolean;
+    eligible: boolean;
+};
+
+export type BillingMigrationStabilizationPolicy = {
+    policyId: string;
+    programId: string;
+    policyDigest: BillingMigrationDigest;
+    frozenByActorId: string;
+    stateVersion: number;
+    thresholds: BillingMigrationStabilizationThresholds;
+    frozenAt: Timestamp;
+};
+
+export type BillingMigrationStabilizationMetrics = {
+    authorityMismatches: number;
+    accessApiErrors: number;
+    sdkSyncFailures: number;
+    divergences: number;
+    validationBacklog: number;
+    sourceDeltaLagSeconds: number;
+    webhookFailures: number;
+    webhookAgeSeconds: number;
+    quarantinedRecords: number;
+    supportCases: number;
+    oldAppVersions: number;
+    unhealthyWorkers: number;
+};
+
+export type BillingMigrationStabilizationObservation = {
+    observationId: string;
+    programId: string;
+    policyId: string;
+    policyDigest: BillingMigrationDigest;
+    evidenceDigest: BillingMigrationDigest;
+    stateVersion: number;
+    authorityEpoch: number;
+    metrics: BillingMigrationStabilizationMetrics;
+    sourceWatermark: Timestamp;
+    webhookLastSuccessAt: Timestamp;
+    observedAt: Timestamp;
+    breachCodes: Array<string>;
+    healthy: boolean;
+};
+
+export type BillingMigrationRollbackReadinessAssessment = {
+    assessmentId: string;
+    programId: string;
+    observationId: string;
+    latestDeltaId: string;
+    readinessDigest: BillingMigrationDigest;
+    stateVersion: number;
+    sourceSupportAvailable: boolean;
+    sourceHealthy: boolean;
+    sourceHealthDigest: BillingMigrationDigest;
+    sourceCurrentAccessDigest: BillingMigrationDigest;
+    sourceCurrentAccessAt: Timestamp;
+    latestDeltaDigest: BillingMigrationDigest;
+    customerImpactCount: number;
+    customerImpactDigest: BillingMigrationDigest;
+    applicationCompatible: boolean;
+    applicationCompatibilityDigest: BillingMigrationDigest;
+    limitationsBlocking: boolean;
+    limitationReportDigest: BillingMigrationDigest;
+    auditDigest: BillingMigrationDigest;
+    stabilizationHealthy: boolean;
+    ready: boolean;
+    assessedByActorId: string;
+    assessedAt: Timestamp;
+};
+
+export type BillingMigrationRollbackReadinessCheckpoint = {
+    checkpointId: string;
+    programId: string;
+    assessmentId: string;
+    authorityDigest: BillingMigrationDigest;
+    policyDigest: BillingMigrationDigest;
+    evidenceDigest: BillingMigrationDigest;
+    readinessDigest: BillingMigrationDigest;
+    checkpointDigest: BillingMigrationDigest;
+    stateVersion: number;
+    authorityEpoch: number;
+    createdByActorId: string;
+    createdAt: Timestamp;
+};
+
+export type BillingMigrationSourcePull = {
+    sourcePullId: string;
+    programId: string;
+    intent: 'snapshot' | 'delta' | 'final_delta';
+    status: string;
+    startingCursor?: string;
+    startingWatermark?: string;
+    predecessorPullJobId?: string;
+    resultSourceObjectId?: string;
+    resultManifestId?: string;
+    resultImportBatchId?: string;
+    resultFinalDeltaJobId?: string;
+    resultImportStatus?: string;
+    failureCode?: string;
+    stateVersion: number;
+    attemptCount: number;
+    maxAttempts: number;
+    createdAt: Timestamp;
+    updatedAt: Timestamp;
+    startedAt?: Timestamp;
+    completedAt?: Timestamp;
+    failedAt?: Timestamp;
+};
+
+export type BillingMigrationProposal = {
+    proposalId: string;
+    programId: string;
+    stateVersion: number;
+    command: 'cutover' | 'rollback';
+    proposerActorId: string;
+    reason: string;
+    proposalDigest: BillingMigrationDigest;
+    status: string;
+    proposedAt: Timestamp;
+    expiresAt: Timestamp;
+};
+
+export type BillingMigrationApproval = {
+    approvalId: string;
+    programId: string;
+    stateVersion: number;
+    command: 'cutover' | 'rollback';
+    proposerActorId: string;
+    approverActorId: string;
+    approvalDigest: BillingMigrationDigest;
+    approvedAt: Timestamp;
+    expiresAt: Timestamp;
+};
+
+export type BillingMigrationCheckpoint = {
+    checkpointId: string;
+    programId: string;
+    stateVersion: number;
+    scope: BillingMigrationScope;
+    authorityEpoch: number;
+    sourceWatermark: Timestamp;
+    providerWatermark: Timestamp;
+    shadowWatermark: Timestamp;
+    manifestDigest: BillingMigrationDigest;
+    mappingDigest: BillingMigrationDigest;
+    policyDigest: BillingMigrationDigest;
+    readinessDigest: BillingMigrationDigest;
+    checkpointDigest: BillingMigrationDigest;
+    cohortDigest: BillingMigrationDigest;
+    createdAt: Timestamp;
+};
+
+export type BillingMigrationAuthorityExecution = {
+    executionId: string;
+    programId: string;
+    command: 'cutover' | 'rollback';
+    state: string;
+    stateVersion: number;
+    authorityEpoch: number;
+    transitionIds: Array<string>;
+    executedAt: Timestamp;
+};
+
+export type BillingMigrationSourcePullPageEnvelope = {
+    data: {
+        items: Array<BillingMigrationSourcePull>;
+        nextCursor?: string;
+    };
+};
+
+export type BillingMigrationProposalPageEnvelope = {
+    data: {
+        items: Array<BillingMigrationProposal>;
+        nextCursor?: string;
+    };
+};
+
+export type BillingMigrationApprovalPageEnvelope = {
+    data: {
+        items: Array<BillingMigrationApproval>;
+        nextCursor?: string;
+    };
+};
+
+export type BillingMigrationCheckpointPageEnvelope = {
+    data: {
+        items: Array<BillingMigrationCheckpoint>;
+        nextCursor?: string;
+    };
+};
+
+export type BillingMigrationAuthorityExecutionPageEnvelope = {
+    data: {
+        items: Array<BillingMigrationAuthorityExecution>;
+        nextCursor?: string;
+    };
+};
+
+export type BillingMigrationCasePageEnvelope = {
+    data: {
+        items: Array<BillingMigrationCase>;
+        nextCursor?: string;
+    };
+};
+
+export type BillingMigrationCaseActionPageEnvelope = {
+    data: {
+        items: Array<BillingMigrationCaseAction>;
+        nextCursor?: string;
+    };
+};
+
+export type BillingMigrationRepairPreviewPageEnvelope = {
+    data: {
+        items: Array<BillingMigrationRepairPreview>;
+        nextCursor?: string;
+    };
+};
+
+export type BillingMigrationRepairExecutionPageEnvelope = {
+    data: {
+        items: Array<BillingMigrationRepairExecution>;
+        nextCursor?: string;
+    };
+};
+
+export type BillingMigrationWebhookRedeliveryPageEnvelope = {
+    data: {
+        items: Array<BillingMigrationWebhookRedelivery>;
+        nextCursor?: string;
+    };
+};
+
+export type BillingMigrationCredentialRemovalPageEnvelope = {
+    data: {
+        items: Array<BillingMigrationCredentialRemoval>;
+        nextCursor?: string;
+    };
+};
+
+export type BillingMigrationLegalHoldProposalPageEnvelope = {
+    data: {
+        items: Array<BillingMigrationLegalHoldProposal>;
+        nextCursor?: string;
+    };
+};
+
+export type BillingMigrationLegalHoldPageEnvelope = {
+    data: {
+        items: Array<BillingMigrationLegalHold>;
+        nextCursor?: string;
+    };
+};
+
+export type BillingMigrationCompletionReportPageEnvelope = {
+    data: {
+        items: Array<BillingMigrationCompletionReport>;
+        nextCursor?: string;
+    };
+};
+
+export type BillingMigrationStabilizationObservationPageEnvelope = {
+    data: {
+        items: Array<BillingMigrationStabilizationObservation>;
+        nextCursor?: string;
+    };
+};
+
+export type BillingMigrationRollbackReadinessAssessmentPageEnvelope = {
+    data: {
+        items: Array<BillingMigrationRollbackReadinessAssessment>;
+        nextCursor?: string;
+    };
+};
+
+export type BillingMigrationSourcePullEnvelope = BillingMigrationSourcePullRecord;
+
+export type BillingMigrationProposalEnvelope = BillingMigrationProposalRecord;
+
+export type BillingMigrationApprovalEnvelope = BillingMigrationApprovalRecord;
+
+export type BillingMigrationCheckpointEnvelope = BillingMigrationCheckpointRecord;
+
+export type BillingMigrationAuthorityExecutionEnvelope = BillingMigrationAuthorityExecutionRecord;
+
+export type BillingMigrationCaseEnvelope = BillingMigrationCaseRecord;
+
+export type BillingMigrationRepairPreviewEnvelope = BillingMigrationRepairPreviewRecord;
+
+export type BillingMigrationRepairExecutionEnvelope = BillingMigrationRepairExecutionRecord;
+
+export type BillingMigrationWebhookRedeliveryEnvelope = BillingMigrationWebhookRedeliveryRecord;
+
+export type BillingMigrationCredentialRemovalEnvelope = BillingMigrationCredentialRemovalRecord;
+
+export type BillingMigrationLegalHoldProposalEnvelope = BillingMigrationLegalHoldProposalRecord;
+
+export type BillingMigrationLegalHoldEnvelope = BillingMigrationLegalHoldRecord;
+
+export type BillingMigrationCompletionReportEnvelope = BillingMigrationCompletionReportRecord;
+
+export type BillingMigrationCompletionPrerequisitesEnvelope = BillingMigrationCompletionPrerequisitesRecord;
+
+export type BillingMigrationStabilizationPolicyEnvelope = BillingMigrationStabilizationPolicyRecord;
+
+export type BillingMigrationStabilizationObservationEnvelope = BillingMigrationStabilizationObservationRecord;
+
+export type BillingMigrationRollbackReadinessAssessmentEnvelope = BillingMigrationRollbackReadinessAssessmentRecord;
+
+export type BillingMigrationRollbackReadinessCheckpointEnvelope = BillingMigrationRollbackReadinessCheckpointRecord;
+
+export type BillingMigrationSourcePullRecord = {
+    data: {
+        billingMigrationOperationsContractVersion: '1';
+        recordType: 'sourcePullJob';
+        payload: BillingMigrationSourcePull;
+    };
+};
+
+export type BillingMigrationProposalRecord = {
+    data: {
+        billingMigrationOperationsContractVersion: '1';
+        recordType: 'migrationProposal';
+        payload: BillingMigrationProposal;
+    };
+};
+
+export type BillingMigrationApprovalRecord = {
+    data: {
+        billingMigrationOperationsContractVersion: '1';
+        recordType: 'migrationApproval';
+        payload: BillingMigrationApproval;
+    };
+};
+
+export type BillingMigrationCheckpointRecord = {
+    data: {
+        billingMigrationOperationsContractVersion: '1';
+        recordType: 'migrationCheckpoint';
+        payload: BillingMigrationCheckpoint;
+    };
+};
+
+export type BillingMigrationAuthorityExecutionRecord = {
+    data: {
+        billingMigrationOperationsContractVersion: '1';
+        recordType: 'authorityExecution';
+        payload: BillingMigrationAuthorityExecution;
+    };
+};
+
+export type BillingMigrationCaseRecord = {
+    data: {
+        billingMigrationOperationsContractVersion: '1';
+        recordType: 'migrationCase';
+        payload: BillingMigrationCase;
+    };
+};
+
+export type BillingMigrationRepairPreviewRecord = {
+    data: {
+        billingMigrationOperationsContractVersion: '1';
+        recordType: 'repairPreview';
+        payload: BillingMigrationRepairPreview;
+    };
+};
+
+export type BillingMigrationRepairExecutionRecord = {
+    data: {
+        billingMigrationOperationsContractVersion: '1';
+        recordType: 'repairExecution';
+        payload: BillingMigrationRepairExecution;
+    };
+};
+
+export type BillingMigrationWebhookRedeliveryRecord = {
+    data: {
+        billingMigrationOperationsContractVersion: '1';
+        recordType: 'webhookRedelivery';
+        payload: BillingMigrationWebhookRedelivery;
+    };
+};
+
+export type BillingMigrationCredentialRemovalRecord = {
+    data: {
+        billingMigrationOperationsContractVersion: '1';
+        recordType: 'credentialRemoval';
+        payload: BillingMigrationCredentialRemoval;
+    };
+};
+
+export type BillingMigrationLegalHoldProposalRecord = {
+    data: {
+        billingMigrationOperationsContractVersion: '1';
+        recordType: 'legalHoldProposal';
+        payload: BillingMigrationLegalHoldProposal;
+    };
+};
+
+export type BillingMigrationLegalHoldRecord = {
+    data: {
+        billingMigrationOperationsContractVersion: '1';
+        recordType: 'legalHold';
+        payload: BillingMigrationLegalHold;
+    };
+};
+
+export type BillingMigrationCompletionReportRecord = {
+    data: {
+        billingMigrationOperationsContractVersion: '1';
+        recordType: 'completionReport';
+        payload: BillingMigrationCompletionReport;
+    };
+};
+
+export type BillingMigrationCompletionPrerequisitesRecord = {
+    data: {
+        billingMigrationOperationsContractVersion: '1';
+        recordType: 'completionPrerequisites';
+        payload: BillingMigrationCompletionPrerequisites;
+    };
+};
+
+export type BillingMigrationStabilizationPolicyRecord = {
+    data: {
+        billingMigrationOperationsContractVersion: '1';
+        recordType: 'stabilizationPolicy';
+        payload: BillingMigrationStabilizationPolicy;
+    };
+};
+
+export type BillingMigrationStabilizationObservationRecord = {
+    data: {
+        billingMigrationOperationsContractVersion: '1';
+        recordType: 'stabilizationObservation';
+        payload: BillingMigrationStabilizationObservation;
+    };
+};
+
+export type BillingMigrationRollbackReadinessAssessmentRecord = {
+    data: {
+        billingMigrationOperationsContractVersion: '1';
+        recordType: 'rollbackReadinessAssessment';
+        payload: BillingMigrationRollbackReadinessAssessment;
+    };
+};
+
+export type BillingMigrationRollbackReadinessCheckpointRecord = {
+    data: {
+        billingMigrationOperationsContractVersion: '1';
+        recordType: 'rollbackReadinessCheckpoint';
+        payload: BillingMigrationRollbackReadinessCheckpoint;
+    };
+};
+
+export type BillingMigrationStabilizationThresholds = {
+    authorityMismatchMax: number;
+    accessApiErrorMax: number;
+    sdkSyncFailureMax: number;
+    divergenceMax: number;
+    validationBacklogMax: number;
+    sourceDeltaLagMaxSeconds: number;
+    webhookFailureMax: number;
+    webhookFreshnessMaxSeconds: number;
+    quarantineMax: number;
+    supportCaseMax: number;
+    oldAppVersionMax: number;
+    workerUnhealthyMax: number;
+};
+
+export type BillingMigrationFreezeStabilizationPolicyRequest = {
+    expectedStateVersion: number;
+    thresholds: BillingMigrationStabilizationThresholds;
+};
+
+export type BillingMigrationObserveStabilizationRequest = {
+    expectedStateVersion: number;
+    expectedAuthorityEpoch: number;
+    expectedPolicyDigest: BillingMigrationDigest;
+};
+
+export type BillingMigrationAssessRollbackReadinessRequest = {
+    observationId: string;
+    expectedStateVersion: number;
+    expectedAuthorityEpoch: number;
+    expectedObservationDigest: BillingMigrationDigest;
+};
+
+export type BillingMigrationDigestSet = {
+    scope: BillingMigrationDigest;
+    manifest: BillingMigrationDigest;
+    mapping: BillingMigrationDigest;
+    policy: BillingMigrationDigest;
+    evidence: BillingMigrationDigest;
+    readiness: BillingMigrationDigest;
+    finalWatermark: BillingMigrationDigest;
+    applicationVersion: BillingMigrationDigest;
+};
+
+export type BillingMigrationSourcePullRequest = {
+    intent: 'snapshot' | 'delta' | 'final_delta';
+    startingCursor?: string;
+    startingWatermark?: string;
+    startingWatermarkDigest?: BillingMigrationDigest;
+    expectedStateVersion: number;
+};
+
+export type BillingMigrationCutoverProposalRequest = {
+    expectedStateVersion: number;
+    expectedDigests: BillingMigrationDigestSet;
+    reason: string;
+    expiresAt: Timestamp;
+};
+
+export type BillingMigrationRollbackProposalRequest = {
+    checkpointId: string;
+    expectedStateVersion: number;
+    expectedCheckpointDigest: BillingMigrationDigest;
+    expectedAuthorityDigest: BillingMigrationDigest;
+    expectedRollbackPrerequisitesDigest: BillingMigrationDigest;
+    reason: string;
+    expiresAt: Timestamp;
+};
+
+export type BillingMigrationCheckpointRequest = {
+    approvalId: string;
+    expectedStateVersion: number;
+    expectedDigests: BillingMigrationDigestSet;
+    approvalDigest: BillingMigrationDigest;
+    cohortDigest: BillingMigrationDigest;
+};
+
+export type BillingMigrationExecutionScope = {
+    environmentId: string;
+    applications: Array<BillingMigrationScopeItem>;
+};
+
+export type BillingMigrationCutoverExecutionRequest = {
+    expectedStateVersion: number;
+    expectedDigests: BillingMigrationDigestSet;
+    approvalDigest: BillingMigrationDigest;
+    reason: string;
+    scope: BillingMigrationExecutionScope;
+    checkpointId: string;
+    approvalId: string;
+    expectedAuthorityEpoch: number;
+};
+
+export type BillingMigrationRollbackExecutionRequest = {
+    expectedStateVersion: number;
+    expectedCheckpointDigest: BillingMigrationDigest;
+    expectedAuthorityDigest: BillingMigrationDigest;
+    expectedRollbackPrerequisitesDigest: BillingMigrationDigest;
+    expectedApprovalDigest: BillingMigrationDigest;
+    reason: string;
+    scope: BillingMigrationExecutionScope;
+    checkpointId: string;
+    approvalId: string;
+    expectedAuthorityEpoch: number;
+};
+
+export type BillingMigrationCaseRequest = {
+    expectedStateVersion: number;
+    classification: 'critical' | 'blocking' | 'warning';
+    reason: string;
+    linkedDivergenceId?: string;
+    linkedSourceRecordId?: string;
+};
+
+export type BillingMigrationCaseTransitionRequest = {
+    expectedStateVersion: number;
+    expectedCaseDigest: BillingMigrationDigest;
+    status: 'in_progress' | 'resolved' | 'dismissed';
+    reason: string;
+};
+
+export type BillingMigrationRepairPreviewRequest = {
+    caseId: string;
+    repairKind: 'provider_revalidate' | 'projection_replay' | 'attach_proven_alias' | 'replace_mapping_set' | 'retry_quarantined_record';
+    scopeKind: string;
+    scopeReferences: Array<string>;
+    expectedStateVersion: number;
+    expectedCaseDigest: BillingMigrationDigest;
+    expectedPolicyDigest: BillingMigrationDigest;
+    expectedScopeDigest: BillingMigrationDigest;
+    reason: string;
+    expiresAt: Timestamp;
+};
+
+export type BillingMigrationRepairExecutionRequest = {
+    previewId: string;
+    expectedStateVersion: number;
+    expectedPreviewDigest: BillingMigrationDigest;
+    expectedCaseDigest: BillingMigrationDigest;
+    expectedPolicyDigest: BillingMigrationDigest;
+    expectedScopeDigest: BillingMigrationDigest;
+};
+
+export type BillingMigrationRedeliveryRequest = {
+    eventId: string;
+    destinationId: string;
+    expectedEventDigest: BillingMigrationDigest;
+    expectedStateVersion: number;
+    reason: string;
+};
+
+export type BillingMigrationCredentialRemovalRequest = {
+    expectedStateVersion: number;
+    reason: string;
+    irreversibleAcknowledged: true;
+};
+
+export type BillingMigrationLegalHoldProposalRequest = {
+    command: 'set' | 'release';
+    reason: string;
+    externalComplianceReference: string;
+    expectedPreviousCommandDigest?: BillingMigrationDigest;
+    expiresAt: Timestamp;
+};
+
+export type BillingMigrationLegalHoldApprovalRequest = {
+    expectedProposalDigest: BillingMigrationDigest;
+};
+
+export type BillingMigrationCompletionRequest = {
+    expectedStateVersion: number;
+    expectedPolicyDigest: BillingMigrationDigest;
+    expectedAuthorityDigest: BillingMigrationDigest;
+    expectedStabilityEvidenceDigest: BillingMigrationDigest;
+};
+
+export type BillingMigrationDigest = string;
+
+export type BillingMigrationSourceManifest = {
+    programId: string;
+    stateVersion: number;
+    manifestId: string;
+    adapterVersion: string;
+    providerApiVersion: string;
+    schemaVersion: string;
+    recordCount: number;
+    currentAccessRecordCount: number;
+    objectChecksum: BillingMigrationDigest;
+    manifestDigest: BillingMigrationDigest;
+    capturedAt: Timestamp;
+};
+
+export type BillingMigrationSourceManifestListEnvelope = {
+    data: {
+        items: Array<{
+            billingMigrationOperationsContractVersion: '1';
+            recordType: 'sourceManifest';
+            payload: BillingMigrationSourceManifest;
+        }>;
+    };
+};
+
+export type BillingMigrationMappingSet = {
+    programId: string;
+    stateVersion: number;
+    mappingSetId: string;
+    version: number;
+    status: 'draft' | 'frozen';
+    entries: Array<BillingMigrationMappingEntry>;
+    mappingDigest: BillingMigrationDigest;
+};
+
+export type BillingMigrationMappingEntry = {
+    sourceKind: 'customer_id' | 'original_customer_id' | 'audited_alias' | 'product' | 'entitlement';
+    sourceIdentifier: string;
+    targetId: string;
+    matchKind: 'exact' | 'audited_alias';
+};
+
+export type BillingMigrationMappingSetEnvelope = {
+    data: {
+        billingMigrationOperationsContractVersion: '1';
+        recordType: 'mappingSet';
+        payload: BillingMigrationMappingSet;
+    };
+};
+
+export type BillingMigrationMappingSetListEnvelope = {
+    data: {
+        items: Array<{
+            billingMigrationOperationsContractVersion: '1';
+            recordType: 'mappingSet';
+            payload: BillingMigrationMappingSet;
+        }>;
+    };
+};
+
+export type BillingMigrationReadiness = {
+    programId: string;
+    stateVersion: number;
+    ready: boolean;
+    currentAccessMappingPercent: number;
+    /**
+     * Counts only provider-signed/provider-validated evidence or a future explicitly persisted scoped exception.
+     */
+    currentAccessEvidencePercent: number;
+    unresolved: {
+        critical: number;
+        blocking: number;
+        warning: number;
+        informational: number;
+    };
+    finalDeltaCompleted: boolean;
+    watermarksFresh: boolean;
+    supportedVersionsAuthorityAware: boolean;
+    readinessDigest: BillingMigrationDigest;
+};
+
+export type BillingMigrationReadinessEnvelope = {
+    data: {
+        billingMigrationOperationsContractVersion: '1';
+        recordType: 'readinessAssessment';
+        payload: BillingMigrationReadiness;
+    };
+};
+
+export type BillingMigrationImportBatch = {
+    programId: string;
+    stateVersion: number;
+    batchId: string;
+    idempotencyKey: string;
+    status: 'pending' | 'running' | 'completed' | 'failed';
+    recordCount: number;
+    validatedCount: number;
+    quarantinedCount: number;
+};
+
+export type BillingMigrationImportBatchRecord = {
+    billingMigrationOperationsContractVersion: '1';
+    recordType: 'importBatch';
+    payload: BillingMigrationImportBatch;
+};
+
+export type BillingMigrationImportBatchEnvelope = {
+    data: BillingMigrationImportBatchRecord;
+};
+
+export type BillingMigrationImportBatchListEnvelope = {
+    data: {
+        items: Array<BillingMigrationImportBatchRecord>;
+    };
+};
+
+export type BillingMigrationRunJob = {
+    programId: string;
+    stateVersion: number;
+    runJobId: string;
+    runKind: 'dry_run' | 'shadow';
+    status: 'pending' | 'running' | 'completed' | 'failed';
+    resultRunId?: string;
+};
+
+export type BillingMigrationRunJobEnvelope = {
+    data: BillingMigrationRunJob;
+};
+
+export type BillingMigrationDivergence = {
+    programId: string;
+    stateVersion: number;
+    divergenceId: string;
+    classification: 'critical' | 'blocking' | 'warning' | 'informational';
+    reason: string;
+    observedAt: Timestamp;
+    classificationRuleVersion: string;
+};
+
+export type BillingMigrationDivergenceRecord = {
+    billingMigrationOperationsContractVersion: '1';
+    recordType: 'divergence';
+    payload: BillingMigrationDivergence;
+};
+
+export type BillingMigrationDivergenceListEnvelope = {
+    data: {
+        items: Array<BillingMigrationDivergenceRecord>;
+    };
+};
+
+export type CreateBillingMigrationMappingSetRequest = {
+    expectedStateVersion: number;
+    version: number;
+    entries: Array<{
+        sourceKind: 'customer_id' | 'original_customer_id' | 'audited_alias' | 'product' | 'entitlement';
+        sourceIdentifier: string;
+        targetId: string;
+        matchKind: 'exact' | 'audited_alias';
+    }>;
+};
+
+export type CreateBillingMigrationImportBatchRequest = {
+    expectedStateVersion: number;
+    manifestId: string;
+    mappingSetId: string;
+    recordCount: number;
+    cursorBefore: string;
+};
+
+export type QueueBillingMigrationRunRequest = {
+    expectedStateVersion: number;
+    manifestDigest: BillingMigrationDigest;
+    mappingDigest: BillingMigrationDigest;
+};
+
 /**
  * The provider reference a validation is performed against. Raw receipts, signed payloads,
  * JWS representations, purchase tokens, and service-account material are structurally
@@ -553,6 +1673,127 @@ export type EntitlementSyncRequestRecord = {
         correlationId: string;
     };
 };
+
+export type AuthorityEntitlementSyncRequestRecord = {
+    authoritativeEntitlementContractVersion: '2';
+    recordType: 'entitlementSyncRequest';
+    payload: {
+        knownAuthorityEpoch?: number;
+        knownSnapshotVersion?: number;
+        knownSnapshotAuthorityDigest?: string;
+        request: {
+            applicationId: string;
+            platform: 'ios' | 'android';
+            appVersion: string;
+            sdkVersion: string;
+            supportedContractVersions: Array<'1' | '2'>;
+            capabilities: Array<'authority_epoch' | 'authority_scope' | 'urgent_authority_sync' | 'mosaic_authoritative_targeting'>;
+        };
+    };
+};
+
+export type EntitlementSyncRequestUnion = ({
+    authoritativeEntitlementContractVersion: '1';
+} & EntitlementSyncRequestRecord) | ({
+    authoritativeEntitlementContractVersion: '2';
+} & AuthorityEntitlementSyncRequestRecord);
+
+export type BillingAuthorityScope = {
+    projectId: string;
+    environmentId: string;
+    applicationId: string;
+    platform: 'ios' | 'android';
+};
+
+export type BillingAuthority = {
+    authorityEpoch: number;
+    authorityKind: 'source' | 'mosaic' | 'source_rollback';
+    scope: BillingAuthorityScope;
+    transitionState: 'stable' | 'cutover_pending' | 'stabilizing' | 'rolled_back';
+    cutoverAt?: string;
+};
+
+export type BillingAuthorityMinimumSupport = {
+    minimumContractVersion: '2';
+    minimumSdkVersion: string;
+    supportedAppVersionWindow: {
+        minimumInclusive: string;
+        maximumInclusive?: string;
+    };
+    requiredCapabilities: Array<'authority_epoch' | 'authority_scope' | 'urgent_authority_sync' | 'mosaic_authoritative_targeting'>;
+};
+
+export type AuthoritySnapshotPayloadV1 = {
+    snapshotId: string;
+    billingCustomerId: string;
+    projectId: string;
+    environmentId: string;
+    snapshotVersion: number;
+    previousSnapshotVersion?: number;
+    projectionRuleVersion: number;
+    issuedAt: string;
+    asOf: string;
+    refreshAfter: string;
+    validUntil: string;
+    staleGraceSeconds?: number;
+    entityTag: string;
+    contentDigest: string;
+    entries: Array<EntitlementEntry>;
+    sources: Array<EntitlementSourceSummary>;
+    projectionStatus: ProjectionStatus;
+    changeReason: string;
+    correlationId: string;
+};
+
+export type AuthorityUnchangedPayloadV1 = {
+    billingCustomerId: string;
+    projectId: string;
+    environmentId: string;
+    snapshotVersion: number;
+    entityTag: string;
+    issuedAt: string;
+    asOf: string;
+    refreshAfter: string;
+    validUntil: string;
+    staleGraceSeconds?: number;
+    projectionStatus: ProjectionStatus;
+    correlationId: string;
+};
+
+export type AuthorityCustomerEntitlementSnapshotRecord = {
+    authoritativeEntitlementContractVersion: '2';
+    recordType: 'customerEntitlementSnapshot';
+    payload: {
+        authority: BillingAuthority;
+        snapshot: AuthoritySnapshotPayloadV1;
+        snapshotAuthorityDigest: string;
+        minimumSupport: BillingAuthorityMinimumSupport;
+    };
+};
+
+export type AuthoritySnapshotUnchangedRecord = {
+    authoritativeEntitlementContractVersion: '2';
+    recordType: 'snapshotUnchanged';
+    payload: {
+        authority: BillingAuthority;
+        unchanged: AuthorityUnchangedPayloadV1;
+        snapshotAuthorityDigest: string;
+        minimumSupport: BillingAuthorityMinimumSupport;
+    };
+};
+
+export type AuthorityUnavailableRecord = {
+    authoritativeEntitlementContractVersion: '2';
+    recordType: 'authorityUnavailable';
+    payload: unknown & {
+        scope: BillingAuthorityScope;
+        result: 'unavailable';
+        reason: 'authority_unknown' | 'unsupported_contract' | 'unsupported_app_version' | 'scope_mismatch' | 'policy_unavailable';
+        minimumSupport?: BillingAuthorityMinimumSupport;
+    };
+};
+
+export type AuthoritativeEntitlementSyncResponse = CustomerEntitlementSnapshotRecord | AuthorityCustomerEntitlementSnapshotRecord | AuthoritySnapshotUnchangedRecord | AuthorityUnavailableRecord;
 
 /**
  * The Authoritative Entitlement Contract v1 restoreRequest envelope. The normative shape is
@@ -3570,6 +4811,49 @@ export type AuditEventList = {
     };
 };
 
+export type BootstrapOrganization = {
+    organization: Organization;
+    role: Role;
+    /**
+     * Active Projects only, ordered by id, capped at 25.
+     */
+    projects: Array<Project>;
+    /**
+     * Active Projects in the Organization
+     */
+    projectCount: number;
+    /**
+     * True when projects holds fewer entries than projectCount.
+     */
+    projectsTruncated: boolean;
+};
+
+export type WorkspaceBootstrap = {
+    /**
+     * Organizations the caller belongs to, ordered by id. Empty when the caller belongs to none.
+     */
+    organizations: Array<BootstrapOrganization>;
+};
+
+export type WorkspaceBootstrapEnvelope = {
+    data: WorkspaceBootstrap;
+};
+
+export type CreateBillingMigrationProgramRequestWritable = {
+    environmentId: string;
+    applications: Array<BillingMigrationScopeItem>;
+    /**
+     * Preserved opaque RevenueCat project identifier.
+     */
+    revenueCatProjectId: string;
+    /**
+     * Separately consented least-privilege migration key; never returned or logged.
+     */
+    revenueCatApiKey: string;
+    stabilizationDays?: number;
+    rollbackWindowDays?: number;
+};
+
 export type ExperimentQaOverrideCreatedWritable = {
     override: ExperimentQaOverride;
 };
@@ -3709,6 +4993,10 @@ export type AssetId = string;
 export type ReleaseId = string;
 
 export type IdempotencyKey = string;
+
+export type BillingMigrationProgramId = string;
+
+export type BillingMigrationIdempotencyKey = string;
 
 export type IfMatch = string;
 
@@ -8933,7 +10221,7 @@ export type SyncCustomerEntitlementsResponses = {
 export type SyncCustomerEntitlementsResponse = SyncCustomerEntitlementsResponses[keyof SyncCustomerEntitlementsResponses];
 
 export type SyncCustomerEntitlementsWithNegotiationData = {
-    body: EntitlementSyncRequestRecord;
+    body: EntitlementSyncRequestUnion;
     headers: {
         'Mosaic-SDK-Key': string;
     };
@@ -8973,14 +10261,13 @@ export type SyncCustomerEntitlementsWithNegotiationError = SyncCustomerEntitleme
 
 export type SyncCustomerEntitlementsWithNegotiationResponses = {
     /**
-     * The current Customer Entitlement Snapshot, or — when the stated knownSnapshotVersion
-     * and entity tag both match — the canonical snapshotUnchanged record. This form never
-     * answers 304: a bodyless response would force freshness into header names no frozen
-     * schema defines, so the unchanged record carries refreshAfter, validUntil, and
-     * staleGraceSeconds in the body instead, recomputed at the instant it was answered.
+     * The current Customer Entitlement Snapshot; the canonical snapshotUnchanged record
+     * when the v1 known version and entity tag match or the v2 epoch, version, and previously
+     * observed authority digest all match; or a v2 authorityUnavailable record. This form
+     * never answers 304: the unchanged record keeps freshness inside the versioned body.
      *
      */
-    200: CustomerEntitlementSnapshotRecord;
+    200: AuthoritativeEntitlementSyncResponse;
 };
 
 export type SyncCustomerEntitlementsWithNegotiationResponse = SyncCustomerEntitlementsWithNegotiationResponses[keyof SyncCustomerEntitlementsWithNegotiationResponses];
@@ -12014,3 +13301,2414 @@ export type CloseQuarantineRecordSupersededResponses = {
 };
 
 export type CloseQuarantineRecordSupersededResponse = CloseQuarantineRecordSupersededResponses[keyof CloseQuarantineRecordSupersededResponses];
+
+export type ListBillingMigrationProgramsData = {
+    body?: never;
+    path: {
+        projectId: string;
+    };
+    query?: {
+        limit?: number;
+    };
+    url: '/v1/projects/{projectId}/billing/migration-programs';
+};
+
+export type ListBillingMigrationProgramsErrors = {
+    /**
+     * Stable machine-readable failure.
+     */
+    401: ErrorEnvelope;
+    /**
+     * Stable machine-readable failure.
+     */
+    404: ErrorEnvelope;
+};
+
+export type ListBillingMigrationProgramsError = ListBillingMigrationProgramsErrors[keyof ListBillingMigrationProgramsErrors];
+
+export type ListBillingMigrationProgramsResponses = {
+    /**
+     * Migration programs.
+     */
+    200: BillingMigrationProgramListEnvelope;
+};
+
+export type ListBillingMigrationProgramsResponse = ListBillingMigrationProgramsResponses[keyof ListBillingMigrationProgramsResponses];
+
+export type CreateBillingMigrationProgramData = {
+    body: CreateBillingMigrationProgramRequestWritable;
+    headers: {
+        'Idempotency-Key': string;
+    };
+    path: {
+        projectId: string;
+    };
+    query?: never;
+    url: '/v1/projects/{projectId}/billing/migration-programs';
+};
+
+export type CreateBillingMigrationProgramErrors = {
+    /**
+     * Stable machine-readable failure.
+     */
+    401: ErrorEnvelope;
+    /**
+     * Stable machine-readable failure.
+     */
+    403: ErrorEnvelope;
+    /**
+     * Stable machine-readable failure.
+     */
+    404: ErrorEnvelope;
+    /**
+     * Stable machine-readable failure.
+     */
+    409: ErrorEnvelope;
+    /**
+     * Stable machine-readable failure.
+     */
+    422: ErrorEnvelope;
+    /**
+     * Stable machine-readable failure.
+     */
+    503: ErrorEnvelope;
+};
+
+export type CreateBillingMigrationProgramError = CreateBillingMigrationProgramErrors[keyof CreateBillingMigrationProgramErrors];
+
+export type CreateBillingMigrationProgramResponses = {
+    /**
+     * Original program returned for an identical idempotent replay.
+     */
+    200: BillingMigrationProgramEnvelope;
+    /**
+     * Migration program created.
+     */
+    201: BillingMigrationProgramEnvelope;
+};
+
+export type CreateBillingMigrationProgramResponse = CreateBillingMigrationProgramResponses[keyof CreateBillingMigrationProgramResponses];
+
+export type GetBillingMigrationProgramData = {
+    body?: never;
+    path: {
+        projectId: string;
+        programId: string;
+    };
+    query?: never;
+    url: '/v1/projects/{projectId}/billing/migration-programs/{programId}';
+};
+
+export type GetBillingMigrationProgramErrors = {
+    /**
+     * Stable machine-readable failure.
+     */
+    401: ErrorEnvelope;
+    /**
+     * Stable machine-readable failure.
+     */
+    404: ErrorEnvelope;
+};
+
+export type GetBillingMigrationProgramError = GetBillingMigrationProgramErrors[keyof GetBillingMigrationProgramErrors];
+
+export type GetBillingMigrationProgramResponses = {
+    /**
+     * Migration program.
+     */
+    200: BillingMigrationProgramEnvelope;
+};
+
+export type GetBillingMigrationProgramResponse = GetBillingMigrationProgramResponses[keyof GetBillingMigrationProgramResponses];
+
+export type ListBillingMigrationSourceManifestsData = {
+    body?: never;
+    path: {
+        projectId: string;
+        programId: string;
+    };
+    query?: {
+        limit?: number;
+    };
+    url: '/v1/projects/{projectId}/billing/migration-programs/{programId}/manifests';
+};
+
+export type ListBillingMigrationSourceManifestsErrors = {
+    /**
+     * Stable machine-readable failure.
+     */
+    401: ErrorEnvelope;
+    /**
+     * Stable machine-readable failure.
+     */
+    404: ErrorEnvelope;
+};
+
+export type ListBillingMigrationSourceManifestsError = ListBillingMigrationSourceManifestsErrors[keyof ListBillingMigrationSourceManifestsErrors];
+
+export type ListBillingMigrationSourceManifestsResponses = {
+    /**
+     * Strict Billing Migration Operations v1 sourceManifest records.
+     */
+    200: BillingMigrationSourceManifestListEnvelope;
+};
+
+export type ListBillingMigrationSourceManifestsResponse = ListBillingMigrationSourceManifestsResponses[keyof ListBillingMigrationSourceManifestsResponses];
+
+export type ListBillingMigrationMappingSetsData = {
+    body?: never;
+    path: {
+        projectId: string;
+        programId: string;
+    };
+    query?: {
+        limit?: number;
+    };
+    url: '/v1/projects/{projectId}/billing/migration-programs/{programId}/mapping-sets';
+};
+
+export type ListBillingMigrationMappingSetsErrors = {
+    /**
+     * Stable machine-readable failure.
+     */
+    401: ErrorEnvelope;
+    /**
+     * Stable machine-readable failure.
+     */
+    404: ErrorEnvelope;
+};
+
+export type ListBillingMigrationMappingSetsError = ListBillingMigrationMappingSetsErrors[keyof ListBillingMigrationMappingSetsErrors];
+
+export type ListBillingMigrationMappingSetsResponses = {
+    /**
+     * Versioned mapping sets.
+     */
+    200: BillingMigrationMappingSetListEnvelope;
+};
+
+export type ListBillingMigrationMappingSetsResponse = ListBillingMigrationMappingSetsResponses[keyof ListBillingMigrationMappingSetsResponses];
+
+export type CreateBillingMigrationMappingSetData = {
+    body: CreateBillingMigrationMappingSetRequest;
+    path: {
+        projectId: string;
+        programId: string;
+    };
+    query?: never;
+    url: '/v1/projects/{projectId}/billing/migration-programs/{programId}/mapping-sets';
+};
+
+export type CreateBillingMigrationMappingSetErrors = {
+    /**
+     * Stable machine-readable failure.
+     */
+    403: ErrorEnvelope;
+    /**
+     * Stable machine-readable failure.
+     */
+    409: ErrorEnvelope;
+    /**
+     * Stable machine-readable failure.
+     */
+    422: ErrorEnvelope;
+};
+
+export type CreateBillingMigrationMappingSetError = CreateBillingMigrationMappingSetErrors[keyof CreateBillingMigrationMappingSetErrors];
+
+export type CreateBillingMigrationMappingSetResponses = {
+    /**
+     * Draft mapping set created.
+     */
+    201: BillingMigrationMappingSetEnvelope;
+};
+
+export type CreateBillingMigrationMappingSetResponse = CreateBillingMigrationMappingSetResponses[keyof CreateBillingMigrationMappingSetResponses];
+
+export type FreezeBillingMigrationMappingSetData = {
+    body: BillingMigrationStateVersionRequest;
+    path: {
+        projectId: string;
+        programId: string;
+        mappingSetId: string;
+    };
+    query?: never;
+    url: '/v1/projects/{projectId}/billing/migration-programs/{programId}/mapping-sets/{mappingSetId}/freeze';
+};
+
+export type FreezeBillingMigrationMappingSetErrors = {
+    /**
+     * Stable machine-readable failure.
+     */
+    403: ErrorEnvelope;
+    /**
+     * Stable machine-readable failure.
+     */
+    409: ErrorEnvelope;
+};
+
+export type FreezeBillingMigrationMappingSetError = FreezeBillingMigrationMappingSetErrors[keyof FreezeBillingMigrationMappingSetErrors];
+
+export type FreezeBillingMigrationMappingSetResponses = {
+    /**
+     * Mapping set frozen.
+     */
+    200: unknown;
+};
+
+export type ListBillingMigrationImportBatchesData = {
+    body?: never;
+    path: {
+        projectId: string;
+        programId: string;
+    };
+    query?: {
+        limit?: number;
+    };
+    url: '/v1/projects/{projectId}/billing/migration-programs/{programId}/import-batches';
+};
+
+export type ListBillingMigrationImportBatchesErrors = {
+    /**
+     * Stable machine-readable failure.
+     */
+    401: ErrorEnvelope;
+};
+
+export type ListBillingMigrationImportBatchesError = ListBillingMigrationImportBatchesErrors[keyof ListBillingMigrationImportBatchesErrors];
+
+export type ListBillingMigrationImportBatchesResponses = {
+    /**
+     * Bounded import batches.
+     */
+    200: BillingMigrationImportBatchListEnvelope;
+};
+
+export type ListBillingMigrationImportBatchesResponse = ListBillingMigrationImportBatchesResponses[keyof ListBillingMigrationImportBatchesResponses];
+
+export type CreateBillingMigrationImportBatchData = {
+    body: CreateBillingMigrationImportBatchRequest;
+    headers: {
+        'Idempotency-Key': string;
+    };
+    path: {
+        projectId: string;
+        programId: string;
+    };
+    query?: never;
+    url: '/v1/projects/{projectId}/billing/migration-programs/{programId}/import-batches';
+};
+
+export type CreateBillingMigrationImportBatchErrors = {
+    /**
+     * Stable machine-readable failure.
+     */
+    403: ErrorEnvelope;
+    /**
+     * Stable machine-readable failure.
+     */
+    409: ErrorEnvelope;
+    /**
+     * Stable machine-readable failure.
+     */
+    422: ErrorEnvelope;
+};
+
+export type CreateBillingMigrationImportBatchError = CreateBillingMigrationImportBatchErrors[keyof CreateBillingMigrationImportBatchErrors];
+
+export type CreateBillingMigrationImportBatchResponses = {
+    /**
+     * Original batch returned for an identical replay.
+     */
+    200: BillingMigrationImportBatchEnvelope;
+    /**
+     * Import batch queued.
+     */
+    202: BillingMigrationImportBatchEnvelope;
+};
+
+export type CreateBillingMigrationImportBatchResponse = CreateBillingMigrationImportBatchResponses[keyof CreateBillingMigrationImportBatchResponses];
+
+export type GetBillingMigrationImportBatchData = {
+    body?: never;
+    path: {
+        projectId: string;
+        programId: string;
+        batchId: string;
+    };
+    query?: never;
+    url: '/v1/projects/{projectId}/billing/migration-programs/{programId}/import-batches/{batchId}';
+};
+
+export type GetBillingMigrationImportBatchErrors = {
+    /**
+     * Stable machine-readable failure.
+     */
+    404: ErrorEnvelope;
+};
+
+export type GetBillingMigrationImportBatchError = GetBillingMigrationImportBatchErrors[keyof GetBillingMigrationImportBatchErrors];
+
+export type GetBillingMigrationImportBatchResponses = {
+    /**
+     * Import batch.
+     */
+    200: BillingMigrationImportBatchEnvelope;
+};
+
+export type GetBillingMigrationImportBatchResponse = GetBillingMigrationImportBatchResponses[keyof GetBillingMigrationImportBatchResponses];
+
+export type QueueBillingMigrationDryRunData = {
+    body: QueueBillingMigrationRunRequest;
+    headers: {
+        'Idempotency-Key': string;
+    };
+    path: {
+        projectId: string;
+        programId: string;
+    };
+    query?: never;
+    url: '/v1/projects/{projectId}/billing/migration-programs/{programId}/dry-runs';
+};
+
+export type QueueBillingMigrationDryRunErrors = {
+    /**
+     * Stable machine-readable failure.
+     */
+    409: ErrorEnvelope;
+};
+
+export type QueueBillingMigrationDryRunError = QueueBillingMigrationDryRunErrors[keyof QueueBillingMigrationDryRunErrors];
+
+export type QueueBillingMigrationDryRunResponses = {
+    /**
+     * Original job returned for an identical replay.
+     */
+    200: BillingMigrationRunJobEnvelope;
+    /**
+     * Dry-run job queued.
+     */
+    202: BillingMigrationRunJobEnvelope;
+};
+
+export type QueueBillingMigrationDryRunResponse = QueueBillingMigrationDryRunResponses[keyof QueueBillingMigrationDryRunResponses];
+
+export type QueueBillingMigrationShadowRunData = {
+    body: QueueBillingMigrationRunRequest;
+    headers: {
+        'Idempotency-Key': string;
+    };
+    path: {
+        projectId: string;
+        programId: string;
+    };
+    query?: never;
+    url: '/v1/projects/{projectId}/billing/migration-programs/{programId}/shadow-runs';
+};
+
+export type QueueBillingMigrationShadowRunErrors = {
+    /**
+     * Stable machine-readable failure.
+     */
+    409: ErrorEnvelope;
+};
+
+export type QueueBillingMigrationShadowRunError = QueueBillingMigrationShadowRunErrors[keyof QueueBillingMigrationShadowRunErrors];
+
+export type QueueBillingMigrationShadowRunResponses = {
+    /**
+     * Original job returned for an identical replay.
+     */
+    200: BillingMigrationRunJobEnvelope;
+    /**
+     * Shadow-run job queued.
+     */
+    202: BillingMigrationRunJobEnvelope;
+};
+
+export type QueueBillingMigrationShadowRunResponse = QueueBillingMigrationShadowRunResponses[keyof QueueBillingMigrationShadowRunResponses];
+
+export type GetBillingMigrationRunJobData = {
+    body?: never;
+    path: {
+        projectId: string;
+        programId: string;
+        runJobId: string;
+    };
+    query?: never;
+    url: '/v1/projects/{projectId}/billing/migration-programs/{programId}/runs/{runJobId}';
+};
+
+export type GetBillingMigrationRunJobErrors = {
+    /**
+     * Stable machine-readable failure.
+     */
+    404: ErrorEnvelope;
+};
+
+export type GetBillingMigrationRunJobError = GetBillingMigrationRunJobErrors[keyof GetBillingMigrationRunJobErrors];
+
+export type GetBillingMigrationRunJobResponses = {
+    /**
+     * Durable run-job status.
+     */
+    200: BillingMigrationRunJobEnvelope;
+};
+
+export type GetBillingMigrationRunJobResponse = GetBillingMigrationRunJobResponses[keyof GetBillingMigrationRunJobResponses];
+
+export type ListBillingMigrationDivergencesData = {
+    body?: never;
+    path: {
+        projectId: string;
+        programId: string;
+    };
+    query?: {
+        limit?: number;
+    };
+    url: '/v1/projects/{projectId}/billing/migration-programs/{programId}/divergences';
+};
+
+export type ListBillingMigrationDivergencesErrors = {
+    /**
+     * Stable machine-readable failure.
+     */
+    404: ErrorEnvelope;
+};
+
+export type ListBillingMigrationDivergencesError = ListBillingMigrationDivergencesErrors[keyof ListBillingMigrationDivergencesErrors];
+
+export type ListBillingMigrationDivergencesResponses = {
+    /**
+     * Immutable divergence records.
+     */
+    200: BillingMigrationDivergenceListEnvelope;
+};
+
+export type ListBillingMigrationDivergencesResponse = ListBillingMigrationDivergencesResponses[keyof ListBillingMigrationDivergencesResponses];
+
+export type AssessBillingMigrationReadinessData = {
+    body: BillingMigrationStateVersionRequest;
+    path: {
+        projectId: string;
+        programId: string;
+    };
+    query?: never;
+    url: '/v1/projects/{projectId}/billing/migration-programs/{programId}/readiness-assessments';
+};
+
+export type AssessBillingMigrationReadinessErrors = {
+    /**
+     * Stable machine-readable failure.
+     */
+    403: ErrorEnvelope;
+    /**
+     * Stable machine-readable failure.
+     */
+    409: ErrorEnvelope;
+};
+
+export type AssessBillingMigrationReadinessError = AssessBillingMigrationReadinessErrors[keyof AssessBillingMigrationReadinessErrors];
+
+export type AssessBillingMigrationReadinessResponses = {
+    /**
+     * Immutable readiness assessment.
+     */
+    201: BillingMigrationReadinessEnvelope;
+};
+
+export type AssessBillingMigrationReadinessResponse = AssessBillingMigrationReadinessResponses[keyof AssessBillingMigrationReadinessResponses];
+
+export type GetLatestBillingMigrationReadinessData = {
+    body?: never;
+    path: {
+        projectId: string;
+        programId: string;
+    };
+    query?: never;
+    url: '/v1/projects/{projectId}/billing/migration-programs/{programId}/readiness-assessments/latest';
+};
+
+export type GetLatestBillingMigrationReadinessErrors = {
+    /**
+     * Stable machine-readable failure.
+     */
+    404: ErrorEnvelope;
+};
+
+export type GetLatestBillingMigrationReadinessError = GetLatestBillingMigrationReadinessErrors[keyof GetLatestBillingMigrationReadinessErrors];
+
+export type GetLatestBillingMigrationReadinessResponses = {
+    /**
+     * Latest immutable readiness assessment.
+     */
+    200: BillingMigrationReadinessEnvelope;
+};
+
+export type GetLatestBillingMigrationReadinessResponse = GetLatestBillingMigrationReadinessResponses[keyof GetLatestBillingMigrationReadinessResponses];
+
+export type ListBillingMigrationSourcePullsData = {
+    body?: never;
+    path: {
+        projectId: string;
+        programId: string;
+    };
+    query?: {
+        /**
+         * Opaque cursor from the immediately preceding list response. Malformed or stale values return validation_failed.
+         */
+        cursor?: string;
+        limit?: number;
+    };
+    url: '/v1/projects/{projectId}/billing/migration-programs/{programId}/source-pulls';
+};
+
+export type ListBillingMigrationSourcePullsErrors = {
+    /**
+     * Stable machine-readable failure.
+     */
+    403: ErrorEnvelope;
+};
+
+export type ListBillingMigrationSourcePullsError = ListBillingMigrationSourcePullsErrors[keyof ListBillingMigrationSourcePullsErrors];
+
+export type ListBillingMigrationSourcePullsResponses = {
+    /**
+     * Source-pull jobs.
+     */
+    200: BillingMigrationSourcePullPageEnvelope;
+};
+
+export type ListBillingMigrationSourcePullsResponse = ListBillingMigrationSourcePullsResponses[keyof ListBillingMigrationSourcePullsResponses];
+
+export type QueueBillingMigrationSourcePullData = {
+    body: BillingMigrationSourcePullRequest;
+    headers: {
+        'Idempotency-Key': string;
+    };
+    path: {
+        projectId: string;
+        programId: string;
+    };
+    query?: never;
+    url: '/v1/projects/{projectId}/billing/migration-programs/{programId}/source-pulls';
+};
+
+export type QueueBillingMigrationSourcePullErrors = {
+    /**
+     * Stable machine-readable failure.
+     */
+    403: ErrorEnvelope;
+    /**
+     * Stable machine-readable failure.
+     */
+    409: ErrorEnvelope;
+    /**
+     * Stable machine-readable failure.
+     */
+    422: ErrorEnvelope;
+    /**
+     * Stable machine-readable failure.
+     */
+    503: ErrorEnvelope;
+};
+
+export type QueueBillingMigrationSourcePullError = QueueBillingMigrationSourcePullErrors[keyof QueueBillingMigrationSourcePullErrors];
+
+export type QueueBillingMigrationSourcePullResponses = {
+    /**
+     * Original source-pull job returned for an identical replay.
+     */
+    200: BillingMigrationOperationEnvelope;
+    /**
+     * Billing migration operation result.
+     */
+    202: BillingMigrationOperationEnvelope;
+};
+
+export type QueueBillingMigrationSourcePullResponse = QueueBillingMigrationSourcePullResponses[keyof QueueBillingMigrationSourcePullResponses];
+
+export type GetBillingMigrationSourcePullData = {
+    body?: never;
+    path: {
+        projectId: string;
+        programId: string;
+        sourcePullId: string;
+    };
+    query?: never;
+    url: '/v1/projects/{projectId}/billing/migration-programs/{programId}/source-pulls/{sourcePullId}';
+};
+
+export type GetBillingMigrationSourcePullErrors = {
+    /**
+     * Stable machine-readable failure.
+     */
+    403: ErrorEnvelope;
+    /**
+     * Stable machine-readable failure.
+     */
+    404: ErrorEnvelope;
+};
+
+export type GetBillingMigrationSourcePullError = GetBillingMigrationSourcePullErrors[keyof GetBillingMigrationSourcePullErrors];
+
+export type GetBillingMigrationSourcePullResponses = {
+    /**
+     * Source-pull job.
+     */
+    200: BillingMigrationSourcePullRecord;
+};
+
+export type GetBillingMigrationSourcePullResponse = GetBillingMigrationSourcePullResponses[keyof GetBillingMigrationSourcePullResponses];
+
+export type PromoteBillingMigrationReadyData = {
+    body: BillingMigrationStateVersionRequest;
+    path: {
+        projectId: string;
+        programId: string;
+    };
+    query?: never;
+    url: '/v1/projects/{projectId}/billing/migration-programs/{programId}/promote-ready';
+};
+
+export type PromoteBillingMigrationReadyErrors = {
+    /**
+     * Stable machine-readable failure.
+     */
+    403: ErrorEnvelope;
+    /**
+     * Stable machine-readable failure.
+     */
+    409: ErrorEnvelope;
+    /**
+     * Stable machine-readable failure.
+     */
+    422: ErrorEnvelope;
+};
+
+export type PromoteBillingMigrationReadyError = PromoteBillingMigrationReadyErrors[keyof PromoteBillingMigrationReadyErrors];
+
+export type PromoteBillingMigrationReadyResponses = {
+    /**
+     * Billing migration operation result.
+     */
+    200: BillingMigrationOperationEnvelope;
+};
+
+export type PromoteBillingMigrationReadyResponse = PromoteBillingMigrationReadyResponses[keyof PromoteBillingMigrationReadyResponses];
+
+export type ProposeBillingMigrationCutoverData = {
+    body: BillingMigrationCutoverProposalRequest;
+    headers: {
+        'Idempotency-Key': string;
+    };
+    path: {
+        projectId: string;
+        programId: string;
+    };
+    query?: never;
+    url: '/v1/projects/{projectId}/billing/migration-programs/{programId}/cutover-proposals';
+};
+
+export type ProposeBillingMigrationCutoverErrors = {
+    /**
+     * Stable machine-readable failure.
+     */
+    403: ErrorEnvelope;
+    /**
+     * Stable machine-readable failure.
+     */
+    409: ErrorEnvelope;
+    /**
+     * Stable machine-readable failure.
+     */
+    422: ErrorEnvelope;
+};
+
+export type ProposeBillingMigrationCutoverError = ProposeBillingMigrationCutoverErrors[keyof ProposeBillingMigrationCutoverErrors];
+
+export type ProposeBillingMigrationCutoverResponses = {
+    /**
+     * Original result returned for an identical idempotent replay.
+     */
+    200: BillingMigrationOperationEnvelope;
+    /**
+     * Billing migration operation result.
+     */
+    201: BillingMigrationOperationEnvelope;
+};
+
+export type ProposeBillingMigrationCutoverResponse = ProposeBillingMigrationCutoverResponses[keyof ProposeBillingMigrationCutoverResponses];
+
+export type ProposeBillingMigrationRollbackData = {
+    body: BillingMigrationRollbackProposalRequest;
+    headers: {
+        'Idempotency-Key': string;
+    };
+    path: {
+        projectId: string;
+        programId: string;
+    };
+    query?: never;
+    url: '/v1/projects/{projectId}/billing/migration-programs/{programId}/rollback-proposals';
+};
+
+export type ProposeBillingMigrationRollbackErrors = {
+    /**
+     * Stable machine-readable failure.
+     */
+    403: ErrorEnvelope;
+    /**
+     * Stable machine-readable failure.
+     */
+    409: ErrorEnvelope;
+    /**
+     * Stable machine-readable failure.
+     */
+    422: ErrorEnvelope;
+};
+
+export type ProposeBillingMigrationRollbackError = ProposeBillingMigrationRollbackErrors[keyof ProposeBillingMigrationRollbackErrors];
+
+export type ProposeBillingMigrationRollbackResponses = {
+    /**
+     * Original result returned for an identical idempotent replay.
+     */
+    200: BillingMigrationOperationEnvelope;
+    /**
+     * Billing migration operation result.
+     */
+    201: BillingMigrationOperationEnvelope;
+};
+
+export type ProposeBillingMigrationRollbackResponse = ProposeBillingMigrationRollbackResponses[keyof ProposeBillingMigrationRollbackResponses];
+
+export type ApproveBillingMigrationProposalData = {
+    body: BillingMigrationStateVersionRequest;
+    headers: {
+        'Idempotency-Key': string;
+    };
+    path: {
+        projectId: string;
+        programId: string;
+        proposalId: string;
+    };
+    query?: never;
+    url: '/v1/projects/{projectId}/billing/migration-programs/{programId}/proposals/{proposalId}/approvals';
+};
+
+export type ApproveBillingMigrationProposalErrors = {
+    /**
+     * Stable machine-readable failure.
+     */
+    403: ErrorEnvelope;
+    /**
+     * Stable machine-readable failure.
+     */
+    409: ErrorEnvelope;
+    /**
+     * Stable machine-readable failure.
+     */
+    422: ErrorEnvelope;
+};
+
+export type ApproveBillingMigrationProposalError = ApproveBillingMigrationProposalErrors[keyof ApproveBillingMigrationProposalErrors];
+
+export type ApproveBillingMigrationProposalResponses = {
+    /**
+     * Original result returned for an identical idempotent replay.
+     */
+    200: BillingMigrationOperationEnvelope;
+    /**
+     * Billing migration operation result.
+     */
+    201: BillingMigrationOperationEnvelope;
+};
+
+export type ApproveBillingMigrationProposalResponse = ApproveBillingMigrationProposalResponses[keyof ApproveBillingMigrationProposalResponses];
+
+export type ListBillingMigrationCheckpointsData = {
+    body?: never;
+    path: {
+        projectId: string;
+        programId: string;
+    };
+    query?: {
+        /**
+         * Opaque cursor from the immediately preceding list response. Malformed or stale values return validation_failed.
+         */
+        cursor?: string;
+    };
+    url: '/v1/projects/{projectId}/billing/migration-programs/{programId}/checkpoints';
+};
+
+export type ListBillingMigrationCheckpointsResponses = {
+    /**
+     * Authority checkpoints.
+     */
+    200: BillingMigrationCheckpointPageEnvelope;
+};
+
+export type ListBillingMigrationCheckpointsResponse = ListBillingMigrationCheckpointsResponses[keyof ListBillingMigrationCheckpointsResponses];
+
+export type CreateBillingMigrationCheckpointData = {
+    body: BillingMigrationCheckpointRequest;
+    headers: {
+        'Idempotency-Key': string;
+    };
+    path: {
+        projectId: string;
+        programId: string;
+    };
+    query?: never;
+    url: '/v1/projects/{projectId}/billing/migration-programs/{programId}/checkpoints';
+};
+
+export type CreateBillingMigrationCheckpointErrors = {
+    /**
+     * Stable machine-readable failure.
+     */
+    403: ErrorEnvelope;
+    /**
+     * Stable machine-readable failure.
+     */
+    409: ErrorEnvelope;
+    /**
+     * Stable machine-readable failure.
+     */
+    422: ErrorEnvelope;
+};
+
+export type CreateBillingMigrationCheckpointError = CreateBillingMigrationCheckpointErrors[keyof CreateBillingMigrationCheckpointErrors];
+
+export type CreateBillingMigrationCheckpointResponses = {
+    /**
+     * Original result returned for an identical idempotent replay.
+     */
+    200: BillingMigrationOperationEnvelope;
+    /**
+     * Billing migration operation result.
+     */
+    201: BillingMigrationOperationEnvelope;
+};
+
+export type CreateBillingMigrationCheckpointResponse = CreateBillingMigrationCheckpointResponses[keyof CreateBillingMigrationCheckpointResponses];
+
+export type ExecuteBillingMigrationCutoverData = {
+    body: BillingMigrationCutoverExecutionRequest;
+    headers: {
+        'Idempotency-Key': string;
+    };
+    path: {
+        projectId: string;
+        programId: string;
+    };
+    query?: never;
+    url: '/v1/projects/{projectId}/billing/migration-programs/{programId}/cutover-executions';
+};
+
+export type ExecuteBillingMigrationCutoverErrors = {
+    /**
+     * Stable machine-readable failure.
+     */
+    403: ErrorEnvelope;
+    /**
+     * Stable machine-readable failure.
+     */
+    409: ErrorEnvelope;
+    /**
+     * Stable machine-readable failure.
+     */
+    422: ErrorEnvelope;
+};
+
+export type ExecuteBillingMigrationCutoverError = ExecuteBillingMigrationCutoverErrors[keyof ExecuteBillingMigrationCutoverErrors];
+
+export type ExecuteBillingMigrationCutoverResponses = {
+    /**
+     * Original result returned for an identical idempotent replay.
+     */
+    200: BillingMigrationOperationEnvelope;
+    /**
+     * Billing migration operation result.
+     */
+    201: BillingMigrationOperationEnvelope;
+};
+
+export type ExecuteBillingMigrationCutoverResponse = ExecuteBillingMigrationCutoverResponses[keyof ExecuteBillingMigrationCutoverResponses];
+
+export type ExecuteBillingMigrationRollbackData = {
+    body: BillingMigrationRollbackExecutionRequest;
+    headers: {
+        'Idempotency-Key': string;
+    };
+    path: {
+        projectId: string;
+        programId: string;
+    };
+    query?: never;
+    url: '/v1/projects/{projectId}/billing/migration-programs/{programId}/rollback-executions';
+};
+
+export type ExecuteBillingMigrationRollbackErrors = {
+    /**
+     * Stable machine-readable failure.
+     */
+    403: ErrorEnvelope;
+    /**
+     * Stable machine-readable failure.
+     */
+    409: ErrorEnvelope;
+    /**
+     * Stable machine-readable failure.
+     */
+    422: ErrorEnvelope;
+};
+
+export type ExecuteBillingMigrationRollbackError = ExecuteBillingMigrationRollbackErrors[keyof ExecuteBillingMigrationRollbackErrors];
+
+export type ExecuteBillingMigrationRollbackResponses = {
+    /**
+     * Original result returned for an identical idempotent replay.
+     */
+    200: BillingMigrationOperationEnvelope;
+    /**
+     * Billing migration operation result.
+     */
+    201: BillingMigrationOperationEnvelope;
+};
+
+export type ExecuteBillingMigrationRollbackResponse = ExecuteBillingMigrationRollbackResponses[keyof ExecuteBillingMigrationRollbackResponses];
+
+export type ListBillingMigrationCasesData = {
+    body?: never;
+    path: {
+        projectId: string;
+        programId: string;
+    };
+    query?: {
+        /**
+         * Opaque cursor from the immediately preceding list response. Malformed or stale values return validation_failed.
+         */
+        cursor?: string;
+    };
+    url: '/v1/projects/{projectId}/billing/migration-programs/{programId}/cases';
+};
+
+export type ListBillingMigrationCasesResponses = {
+    /**
+     * Migration cases.
+     */
+    200: BillingMigrationCasePageEnvelope;
+};
+
+export type ListBillingMigrationCasesResponse = ListBillingMigrationCasesResponses[keyof ListBillingMigrationCasesResponses];
+
+export type CreateBillingMigrationCaseData = {
+    body: BillingMigrationCaseRequest;
+    headers: {
+        'Idempotency-Key': string;
+    };
+    path: {
+        projectId: string;
+        programId: string;
+    };
+    query?: never;
+    url: '/v1/projects/{projectId}/billing/migration-programs/{programId}/cases';
+};
+
+export type CreateBillingMigrationCaseErrors = {
+    /**
+     * Stable machine-readable failure.
+     */
+    403: ErrorEnvelope;
+    /**
+     * Stable machine-readable failure.
+     */
+    409: ErrorEnvelope;
+    /**
+     * Stable machine-readable failure.
+     */
+    422: ErrorEnvelope;
+};
+
+export type CreateBillingMigrationCaseError = CreateBillingMigrationCaseErrors[keyof CreateBillingMigrationCaseErrors];
+
+export type CreateBillingMigrationCaseResponses = {
+    /**
+     * Original result returned for an identical idempotent replay.
+     */
+    200: BillingMigrationOperationEnvelope;
+    /**
+     * Billing migration operation result.
+     */
+    201: BillingMigrationOperationEnvelope;
+};
+
+export type CreateBillingMigrationCaseResponse = CreateBillingMigrationCaseResponses[keyof CreateBillingMigrationCaseResponses];
+
+export type TransitionBillingMigrationCaseData = {
+    body: BillingMigrationCaseTransitionRequest;
+    path: {
+        projectId: string;
+        programId: string;
+        caseId: string;
+    };
+    query?: never;
+    url: '/v1/projects/{projectId}/billing/migration-programs/{programId}/cases/{caseId}/transitions';
+};
+
+export type TransitionBillingMigrationCaseErrors = {
+    /**
+     * Stable machine-readable failure.
+     */
+    403: ErrorEnvelope;
+    /**
+     * Stable machine-readable failure.
+     */
+    409: ErrorEnvelope;
+    /**
+     * Stable machine-readable failure.
+     */
+    422: ErrorEnvelope;
+};
+
+export type TransitionBillingMigrationCaseError = TransitionBillingMigrationCaseErrors[keyof TransitionBillingMigrationCaseErrors];
+
+export type TransitionBillingMigrationCaseResponses = {
+    /**
+     * Billing migration operation result.
+     */
+    200: BillingMigrationOperationEnvelope;
+};
+
+export type TransitionBillingMigrationCaseResponse = TransitionBillingMigrationCaseResponses[keyof TransitionBillingMigrationCaseResponses];
+
+export type ListBillingMigrationRepairPreviewsData = {
+    body?: never;
+    path: {
+        projectId: string;
+        programId: string;
+    };
+    query?: {
+        /**
+         * Opaque cursor from the immediately preceding list response. Malformed or stale values return validation_failed.
+         */
+        cursor?: string;
+    };
+    url: '/v1/projects/{projectId}/billing/migration-programs/{programId}/repair-previews';
+};
+
+export type ListBillingMigrationRepairPreviewsResponses = {
+    /**
+     * Repair previews.
+     */
+    200: BillingMigrationRepairPreviewPageEnvelope;
+};
+
+export type ListBillingMigrationRepairPreviewsResponse = ListBillingMigrationRepairPreviewsResponses[keyof ListBillingMigrationRepairPreviewsResponses];
+
+export type PreviewBillingMigrationRepairData = {
+    body: BillingMigrationRepairPreviewRequest;
+    headers: {
+        'Idempotency-Key': string;
+    };
+    path: {
+        projectId: string;
+        programId: string;
+    };
+    query?: never;
+    url: '/v1/projects/{projectId}/billing/migration-programs/{programId}/repair-previews';
+};
+
+export type PreviewBillingMigrationRepairErrors = {
+    /**
+     * Stable machine-readable failure.
+     */
+    422: ErrorEnvelope;
+    /**
+     * Stable machine-readable failure.
+     */
+    503: ErrorEnvelope;
+};
+
+export type PreviewBillingMigrationRepairError = PreviewBillingMigrationRepairErrors[keyof PreviewBillingMigrationRepairErrors];
+
+export type PreviewBillingMigrationRepairResponses = {
+    /**
+     * Existing preview returned for an identical idempotent replay.
+     */
+    200: BillingMigrationRepairPreviewCommandEnvelope;
+    /**
+     * Newly created bounded repair preview.
+     */
+    201: BillingMigrationRepairPreviewCommandEnvelope;
+};
+
+export type PreviewBillingMigrationRepairResponse = PreviewBillingMigrationRepairResponses[keyof PreviewBillingMigrationRepairResponses];
+
+export type ListBillingMigrationRepairExecutionsData = {
+    body?: never;
+    path: {
+        projectId: string;
+        programId: string;
+    };
+    query?: {
+        /**
+         * Opaque cursor from the immediately preceding list response. Malformed or stale values return validation_failed.
+         */
+        cursor?: string;
+    };
+    url: '/v1/projects/{projectId}/billing/migration-programs/{programId}/repair-executions';
+};
+
+export type ListBillingMigrationRepairExecutionsResponses = {
+    /**
+     * Repair executions.
+     */
+    200: BillingMigrationRepairExecutionPageEnvelope;
+};
+
+export type ListBillingMigrationRepairExecutionsResponse = ListBillingMigrationRepairExecutionsResponses[keyof ListBillingMigrationRepairExecutionsResponses];
+
+export type ExecuteBillingMigrationRepairData = {
+    body: BillingMigrationRepairExecutionRequest;
+    headers: {
+        'Idempotency-Key': string;
+    };
+    path: {
+        projectId: string;
+        programId: string;
+    };
+    query?: never;
+    url: '/v1/projects/{projectId}/billing/migration-programs/{programId}/repair-executions';
+};
+
+export type ExecuteBillingMigrationRepairErrors = {
+    /**
+     * Stable machine-readable failure.
+     */
+    422: ErrorEnvelope;
+    /**
+     * Stable machine-readable failure.
+     */
+    503: ErrorEnvelope;
+};
+
+export type ExecuteBillingMigrationRepairError = ExecuteBillingMigrationRepairErrors[keyof ExecuteBillingMigrationRepairErrors];
+
+export type ExecuteBillingMigrationRepairResponses = {
+    /**
+     * Settled terminal execution returned for an identical replay.
+     */
+    200: BillingMigrationRepairExecutionCommandTerminalEnvelope;
+    /**
+     * Newly completed repair execution.
+     */
+    201: BillingMigrationRepairExecutionCommandTerminalEnvelope;
+    /**
+     * New or replayed execution remains pending.
+     */
+    202: BillingMigrationRepairExecutionCommandPendingEnvelope;
+};
+
+export type ExecuteBillingMigrationRepairResponse = ExecuteBillingMigrationRepairResponses[keyof ExecuteBillingMigrationRepairResponses];
+
+export type ListBillingMigrationWebhookRedeliveriesData = {
+    body?: never;
+    path: {
+        projectId: string;
+        programId: string;
+    };
+    query?: {
+        /**
+         * Opaque cursor from the immediately preceding list response. Malformed or stale values return validation_failed.
+         */
+        cursor?: string;
+    };
+    url: '/v1/projects/{projectId}/billing/migration-programs/{programId}/webhook-redeliveries';
+};
+
+export type ListBillingMigrationWebhookRedeliveriesResponses = {
+    /**
+     * Webhook redeliveries.
+     */
+    200: BillingMigrationWebhookRedeliveryPageEnvelope;
+};
+
+export type ListBillingMigrationWebhookRedeliveriesResponse = ListBillingMigrationWebhookRedeliveriesResponses[keyof ListBillingMigrationWebhookRedeliveriesResponses];
+
+export type RedeliverBillingMigrationWebhookData = {
+    body: BillingMigrationRedeliveryRequest;
+    headers: {
+        'Idempotency-Key': string;
+    };
+    path: {
+        projectId: string;
+        programId: string;
+    };
+    query?: never;
+    url: '/v1/projects/{projectId}/billing/migration-programs/{programId}/webhook-redeliveries';
+};
+
+export type RedeliverBillingMigrationWebhookErrors = {
+    /**
+     * Stable machine-readable failure.
+     */
+    403: ErrorEnvelope;
+    /**
+     * Stable machine-readable failure.
+     */
+    409: ErrorEnvelope;
+    /**
+     * Stable machine-readable failure.
+     */
+    422: ErrorEnvelope;
+};
+
+export type RedeliverBillingMigrationWebhookError = RedeliverBillingMigrationWebhookErrors[keyof RedeliverBillingMigrationWebhookErrors];
+
+export type RedeliverBillingMigrationWebhookResponses = {
+    /**
+     * Original result returned for an identical idempotent replay.
+     */
+    200: BillingMigrationOperationEnvelope;
+    /**
+     * Billing migration operation result.
+     */
+    202: BillingMigrationOperationEnvelope;
+};
+
+export type RedeliverBillingMigrationWebhookResponse = RedeliverBillingMigrationWebhookResponses[keyof RedeliverBillingMigrationWebhookResponses];
+
+export type ListBillingMigrationCredentialRemovalsData = {
+    body?: never;
+    path: {
+        projectId: string;
+        programId: string;
+    };
+    query?: {
+        /**
+         * Opaque cursor from the immediately preceding list response. Malformed or stale values return validation_failed.
+         */
+        cursor?: string;
+    };
+    url: '/v1/projects/{projectId}/billing/migration-programs/{programId}/credential-removals';
+};
+
+export type ListBillingMigrationCredentialRemovalsResponses = {
+    /**
+     * Credential removals.
+     */
+    200: BillingMigrationCredentialRemovalPageEnvelope;
+};
+
+export type ListBillingMigrationCredentialRemovalsResponse = ListBillingMigrationCredentialRemovalsResponses[keyof ListBillingMigrationCredentialRemovalsResponses];
+
+export type RemoveBillingMigrationCredentialData = {
+    body: BillingMigrationCredentialRemovalRequest;
+    headers: {
+        'Idempotency-Key': string;
+    };
+    path: {
+        projectId: string;
+        programId: string;
+    };
+    query?: never;
+    url: '/v1/projects/{projectId}/billing/migration-programs/{programId}/credential-removals';
+};
+
+export type RemoveBillingMigrationCredentialErrors = {
+    /**
+     * Stable machine-readable failure.
+     */
+    403: ErrorEnvelope;
+    /**
+     * Stable machine-readable failure.
+     */
+    409: ErrorEnvelope;
+    /**
+     * Stable machine-readable failure.
+     */
+    422: ErrorEnvelope;
+};
+
+export type RemoveBillingMigrationCredentialError = RemoveBillingMigrationCredentialErrors[keyof RemoveBillingMigrationCredentialErrors];
+
+export type RemoveBillingMigrationCredentialResponses = {
+    /**
+     * Original result returned for an identical idempotent replay.
+     */
+    200: BillingMigrationOperationEnvelope;
+    /**
+     * Billing migration operation result.
+     */
+    201: BillingMigrationOperationEnvelope;
+};
+
+export type RemoveBillingMigrationCredentialResponse = RemoveBillingMigrationCredentialResponses[keyof RemoveBillingMigrationCredentialResponses];
+
+export type ListBillingMigrationLegalHoldProposalsData = {
+    body?: never;
+    path: {
+        projectId: string;
+        programId: string;
+    };
+    query?: {
+        /**
+         * Opaque cursor from the immediately preceding list response. Malformed or stale values return validation_failed.
+         */
+        cursor?: string;
+    };
+    url: '/v1/projects/{projectId}/billing/migration-programs/{programId}/legal-hold-proposals';
+};
+
+export type ListBillingMigrationLegalHoldProposalsResponses = {
+    /**
+     * Legal-hold proposals.
+     */
+    200: BillingMigrationLegalHoldProposalPageEnvelope;
+};
+
+export type ListBillingMigrationLegalHoldProposalsResponse = ListBillingMigrationLegalHoldProposalsResponses[keyof ListBillingMigrationLegalHoldProposalsResponses];
+
+export type ProposeBillingMigrationLegalHoldData = {
+    body: BillingMigrationLegalHoldProposalRequest;
+    headers: {
+        'Idempotency-Key': string;
+    };
+    path: {
+        projectId: string;
+        programId: string;
+    };
+    query?: never;
+    url: '/v1/projects/{projectId}/billing/migration-programs/{programId}/legal-hold-proposals';
+};
+
+export type ProposeBillingMigrationLegalHoldErrors = {
+    /**
+     * Stable machine-readable failure.
+     */
+    403: ErrorEnvelope;
+    /**
+     * Stable machine-readable failure.
+     */
+    409: ErrorEnvelope;
+    /**
+     * Stable machine-readable failure.
+     */
+    422: ErrorEnvelope;
+};
+
+export type ProposeBillingMigrationLegalHoldError = ProposeBillingMigrationLegalHoldErrors[keyof ProposeBillingMigrationLegalHoldErrors];
+
+export type ProposeBillingMigrationLegalHoldResponses = {
+    /**
+     * Original result returned for an identical idempotent replay.
+     */
+    200: BillingMigrationOperationEnvelope;
+    /**
+     * Billing migration operation result.
+     */
+    201: BillingMigrationOperationEnvelope;
+};
+
+export type ProposeBillingMigrationLegalHoldResponse = ProposeBillingMigrationLegalHoldResponses[keyof ProposeBillingMigrationLegalHoldResponses];
+
+export type ApproveBillingMigrationLegalHoldData = {
+    body: BillingMigrationLegalHoldApprovalRequest;
+    headers: {
+        'Idempotency-Key': string;
+    };
+    path: {
+        projectId: string;
+        programId: string;
+        proposalId: string;
+    };
+    query?: never;
+    url: '/v1/projects/{projectId}/billing/migration-programs/{programId}/legal-hold-proposals/{proposalId}/approvals';
+};
+
+export type ApproveBillingMigrationLegalHoldErrors = {
+    /**
+     * Stable machine-readable failure.
+     */
+    403: ErrorEnvelope;
+    /**
+     * Stable machine-readable failure.
+     */
+    409: ErrorEnvelope;
+    /**
+     * Stable machine-readable failure.
+     */
+    422: ErrorEnvelope;
+};
+
+export type ApproveBillingMigrationLegalHoldError = ApproveBillingMigrationLegalHoldErrors[keyof ApproveBillingMigrationLegalHoldErrors];
+
+export type ApproveBillingMigrationLegalHoldResponses = {
+    /**
+     * Original result returned for an identical idempotent replay.
+     */
+    200: BillingMigrationOperationEnvelope;
+    /**
+     * Billing migration operation result.
+     */
+    201: BillingMigrationOperationEnvelope;
+};
+
+export type ApproveBillingMigrationLegalHoldResponse = ApproveBillingMigrationLegalHoldResponses[keyof ApproveBillingMigrationLegalHoldResponses];
+
+export type InspectBillingMigrationCompletionData = {
+    body?: never;
+    path: {
+        projectId: string;
+        programId: string;
+    };
+    query?: never;
+    url: '/v1/projects/{projectId}/billing/migration-programs/{programId}/completion';
+};
+
+export type InspectBillingMigrationCompletionErrors = {
+    /**
+     * Stable machine-readable failure.
+     */
+    403: ErrorEnvelope;
+    /**
+     * Stable machine-readable failure.
+     */
+    404: ErrorEnvelope;
+};
+
+export type InspectBillingMigrationCompletionError = InspectBillingMigrationCompletionErrors[keyof InspectBillingMigrationCompletionErrors];
+
+export type InspectBillingMigrationCompletionResponses = {
+    /**
+     * Server-derived completion prerequisites.
+     */
+    200: BillingMigrationCompletionPrerequisitesRecord;
+};
+
+export type InspectBillingMigrationCompletionResponse = InspectBillingMigrationCompletionResponses[keyof InspectBillingMigrationCompletionResponses];
+
+export type CompleteBillingMigrationData = {
+    body: BillingMigrationCompletionRequest;
+    headers: {
+        'Idempotency-Key': string;
+    };
+    path: {
+        projectId: string;
+        programId: string;
+    };
+    query?: never;
+    url: '/v1/projects/{projectId}/billing/migration-programs/{programId}/completion';
+};
+
+export type CompleteBillingMigrationErrors = {
+    /**
+     * Stable machine-readable failure.
+     */
+    403: ErrorEnvelope;
+    /**
+     * Stable machine-readable failure.
+     */
+    409: ErrorEnvelope;
+    /**
+     * Stable machine-readable failure.
+     */
+    422: ErrorEnvelope;
+};
+
+export type CompleteBillingMigrationError = CompleteBillingMigrationErrors[keyof CompleteBillingMigrationErrors];
+
+export type CompleteBillingMigrationResponses = {
+    /**
+     * Original result returned for an identical idempotent replay.
+     */
+    200: BillingMigrationOperationEnvelope;
+    /**
+     * Billing migration operation result.
+     */
+    201: BillingMigrationOperationEnvelope;
+};
+
+export type CompleteBillingMigrationResponse = CompleteBillingMigrationResponses[keyof CompleteBillingMigrationResponses];
+
+export type ListBillingMigrationProposalsData = {
+    body?: never;
+    path: {
+        projectId: string;
+        programId: string;
+    };
+    query?: {
+        /**
+         * Opaque cursor from the immediately preceding list response. Malformed or stale values return validation_failed.
+         */
+        cursor?: string;
+    };
+    url: '/v1/projects/{projectId}/billing/migration-programs/{programId}/proposals';
+};
+
+export type ListBillingMigrationProposalsResponses = {
+    /**
+     * Cutover and rollback proposals.
+     */
+    200: BillingMigrationProposalPageEnvelope;
+};
+
+export type ListBillingMigrationProposalsResponse = ListBillingMigrationProposalsResponses[keyof ListBillingMigrationProposalsResponses];
+
+export type GetBillingMigrationProposalData = {
+    body?: never;
+    path: {
+        projectId: string;
+        programId: string;
+        proposalId: string;
+    };
+    query?: never;
+    url: '/v1/projects/{projectId}/billing/migration-programs/{programId}/proposals/{proposalId}';
+};
+
+export type GetBillingMigrationProposalErrors = {
+    /**
+     * Stable machine-readable failure.
+     */
+    404: ErrorEnvelope;
+};
+
+export type GetBillingMigrationProposalError = GetBillingMigrationProposalErrors[keyof GetBillingMigrationProposalErrors];
+
+export type GetBillingMigrationProposalResponses = {
+    /**
+     * Migration proposal.
+     */
+    200: BillingMigrationProposalRecord;
+};
+
+export type GetBillingMigrationProposalResponse = GetBillingMigrationProposalResponses[keyof GetBillingMigrationProposalResponses];
+
+export type ListBillingMigrationApprovalsData = {
+    body?: never;
+    path: {
+        projectId: string;
+        programId: string;
+    };
+    query?: {
+        /**
+         * Opaque cursor from the immediately preceding list response. Malformed or stale values return validation_failed.
+         */
+        cursor?: string;
+    };
+    url: '/v1/projects/{projectId}/billing/migration-programs/{programId}/approvals';
+};
+
+export type ListBillingMigrationApprovalsResponses = {
+    /**
+     * Migration approvals.
+     */
+    200: BillingMigrationApprovalPageEnvelope;
+};
+
+export type ListBillingMigrationApprovalsResponse = ListBillingMigrationApprovalsResponses[keyof ListBillingMigrationApprovalsResponses];
+
+export type GetBillingMigrationApprovalData = {
+    body?: never;
+    path: {
+        projectId: string;
+        programId: string;
+        approvalId: string;
+    };
+    query?: never;
+    url: '/v1/projects/{projectId}/billing/migration-programs/{programId}/approvals/{approvalId}';
+};
+
+export type GetBillingMigrationApprovalErrors = {
+    /**
+     * Stable machine-readable failure.
+     */
+    404: ErrorEnvelope;
+};
+
+export type GetBillingMigrationApprovalError = GetBillingMigrationApprovalErrors[keyof GetBillingMigrationApprovalErrors];
+
+export type GetBillingMigrationApprovalResponses = {
+    /**
+     * Migration approval.
+     */
+    200: BillingMigrationApprovalRecord;
+};
+
+export type GetBillingMigrationApprovalResponse = GetBillingMigrationApprovalResponses[keyof GetBillingMigrationApprovalResponses];
+
+export type GetLatestBillingMigrationCheckpointData = {
+    body?: never;
+    path: {
+        projectId: string;
+        programId: string;
+    };
+    query?: never;
+    url: '/v1/projects/{projectId}/billing/migration-programs/{programId}/checkpoints/latest';
+};
+
+export type GetLatestBillingMigrationCheckpointErrors = {
+    /**
+     * Stable machine-readable failure.
+     */
+    404: ErrorEnvelope;
+};
+
+export type GetLatestBillingMigrationCheckpointError = GetLatestBillingMigrationCheckpointErrors[keyof GetLatestBillingMigrationCheckpointErrors];
+
+export type GetLatestBillingMigrationCheckpointResponses = {
+    /**
+     * Migration checkpoint.
+     */
+    200: BillingMigrationCheckpointRecord;
+};
+
+export type GetLatestBillingMigrationCheckpointResponse = GetLatestBillingMigrationCheckpointResponses[keyof GetLatestBillingMigrationCheckpointResponses];
+
+export type GetBillingMigrationCheckpointData = {
+    body?: never;
+    path: {
+        projectId: string;
+        programId: string;
+        checkpointId: string;
+    };
+    query?: never;
+    url: '/v1/projects/{projectId}/billing/migration-programs/{programId}/checkpoints/{checkpointId}';
+};
+
+export type GetBillingMigrationCheckpointErrors = {
+    /**
+     * Stable machine-readable failure.
+     */
+    404: ErrorEnvelope;
+};
+
+export type GetBillingMigrationCheckpointError = GetBillingMigrationCheckpointErrors[keyof GetBillingMigrationCheckpointErrors];
+
+export type GetBillingMigrationCheckpointResponses = {
+    /**
+     * Migration checkpoint.
+     */
+    200: BillingMigrationCheckpointRecord;
+};
+
+export type GetBillingMigrationCheckpointResponse = GetBillingMigrationCheckpointResponses[keyof GetBillingMigrationCheckpointResponses];
+
+export type ListBillingMigrationAuthorityExecutionsData = {
+    body?: never;
+    path: {
+        projectId: string;
+        programId: string;
+    };
+    query?: {
+        /**
+         * Opaque cursor from the immediately preceding list response. Malformed or stale values return validation_failed.
+         */
+        cursor?: string;
+    };
+    url: '/v1/projects/{projectId}/billing/migration-programs/{programId}/authority-executions';
+};
+
+export type ListBillingMigrationAuthorityExecutionsResponses = {
+    /**
+     * Authority executions.
+     */
+    200: BillingMigrationAuthorityExecutionPageEnvelope;
+};
+
+export type ListBillingMigrationAuthorityExecutionsResponse = ListBillingMigrationAuthorityExecutionsResponses[keyof ListBillingMigrationAuthorityExecutionsResponses];
+
+export type GetBillingMigrationAuthorityExecutionData = {
+    body?: never;
+    path: {
+        projectId: string;
+        programId: string;
+        executionId: string;
+    };
+    query?: never;
+    url: '/v1/projects/{projectId}/billing/migration-programs/{programId}/authority-executions/{executionId}';
+};
+
+export type GetBillingMigrationAuthorityExecutionErrors = {
+    /**
+     * Stable machine-readable failure.
+     */
+    404: ErrorEnvelope;
+};
+
+export type GetBillingMigrationAuthorityExecutionError = GetBillingMigrationAuthorityExecutionErrors[keyof GetBillingMigrationAuthorityExecutionErrors];
+
+export type GetBillingMigrationAuthorityExecutionResponses = {
+    /**
+     * Authority execution.
+     */
+    200: BillingMigrationAuthorityExecutionRecord;
+};
+
+export type GetBillingMigrationAuthorityExecutionResponse = GetBillingMigrationAuthorityExecutionResponses[keyof GetBillingMigrationAuthorityExecutionResponses];
+
+export type GetBillingMigrationCaseData = {
+    body?: never;
+    path: {
+        projectId: string;
+        programId: string;
+        caseId: string;
+    };
+    query?: never;
+    url: '/v1/projects/{projectId}/billing/migration-programs/{programId}/cases/{caseId}';
+};
+
+export type GetBillingMigrationCaseErrors = {
+    /**
+     * Stable machine-readable failure.
+     */
+    404: ErrorEnvelope;
+};
+
+export type GetBillingMigrationCaseError = GetBillingMigrationCaseErrors[keyof GetBillingMigrationCaseErrors];
+
+export type GetBillingMigrationCaseResponses = {
+    /**
+     * Migration case.
+     */
+    200: BillingMigrationCaseRecord;
+};
+
+export type GetBillingMigrationCaseResponse = GetBillingMigrationCaseResponses[keyof GetBillingMigrationCaseResponses];
+
+export type ListBillingMigrationCaseActionsData = {
+    body?: never;
+    path: {
+        projectId: string;
+        programId: string;
+        caseId: string;
+    };
+    query?: {
+        /**
+         * Opaque cursor from the immediately preceding list response. Malformed or stale values return validation_failed.
+         */
+        cursor?: string;
+    };
+    url: '/v1/projects/{projectId}/billing/migration-programs/{programId}/cases/{caseId}/actions';
+};
+
+export type ListBillingMigrationCaseActionsResponses = {
+    /**
+     * Immutable case actions.
+     */
+    200: BillingMigrationCaseActionPageEnvelope;
+};
+
+export type ListBillingMigrationCaseActionsResponse = ListBillingMigrationCaseActionsResponses[keyof ListBillingMigrationCaseActionsResponses];
+
+export type GetBillingMigrationRepairPreviewData = {
+    body?: never;
+    path: {
+        projectId: string;
+        programId: string;
+        previewId: string;
+    };
+    query?: never;
+    url: '/v1/projects/{projectId}/billing/migration-programs/{programId}/repair-previews/{previewId}';
+};
+
+export type GetBillingMigrationRepairPreviewErrors = {
+    /**
+     * Stable machine-readable failure.
+     */
+    404: ErrorEnvelope;
+};
+
+export type GetBillingMigrationRepairPreviewError = GetBillingMigrationRepairPreviewErrors[keyof GetBillingMigrationRepairPreviewErrors];
+
+export type GetBillingMigrationRepairPreviewResponses = {
+    /**
+     * Repair preview.
+     */
+    200: BillingMigrationRepairPreviewRecord;
+};
+
+export type GetBillingMigrationRepairPreviewResponse = GetBillingMigrationRepairPreviewResponses[keyof GetBillingMigrationRepairPreviewResponses];
+
+export type GetBillingMigrationRepairExecutionData = {
+    body?: never;
+    path: {
+        projectId: string;
+        programId: string;
+        executionId: string;
+    };
+    query?: never;
+    url: '/v1/projects/{projectId}/billing/migration-programs/{programId}/repair-executions/{executionId}';
+};
+
+export type GetBillingMigrationRepairExecutionErrors = {
+    /**
+     * Stable machine-readable failure.
+     */
+    404: ErrorEnvelope;
+};
+
+export type GetBillingMigrationRepairExecutionError = GetBillingMigrationRepairExecutionErrors[keyof GetBillingMigrationRepairExecutionErrors];
+
+export type GetBillingMigrationRepairExecutionResponses = {
+    /**
+     * Repair execution.
+     */
+    200: BillingMigrationRepairExecutionRecord;
+};
+
+export type GetBillingMigrationRepairExecutionResponse = GetBillingMigrationRepairExecutionResponses[keyof GetBillingMigrationRepairExecutionResponses];
+
+export type GetBillingMigrationWebhookRedeliveryData = {
+    body?: never;
+    path: {
+        projectId: string;
+        programId: string;
+        redeliveryId: string;
+    };
+    query?: never;
+    url: '/v1/projects/{projectId}/billing/migration-programs/{programId}/webhook-redeliveries/{redeliveryId}';
+};
+
+export type GetBillingMigrationWebhookRedeliveryErrors = {
+    /**
+     * Stable machine-readable failure.
+     */
+    404: ErrorEnvelope;
+};
+
+export type GetBillingMigrationWebhookRedeliveryError = GetBillingMigrationWebhookRedeliveryErrors[keyof GetBillingMigrationWebhookRedeliveryErrors];
+
+export type GetBillingMigrationWebhookRedeliveryResponses = {
+    /**
+     * Webhook redelivery.
+     */
+    200: BillingMigrationWebhookRedeliveryRecord;
+};
+
+export type GetBillingMigrationWebhookRedeliveryResponse = GetBillingMigrationWebhookRedeliveryResponses[keyof GetBillingMigrationWebhookRedeliveryResponses];
+
+export type GetCurrentBillingMigrationCredentialRemovalData = {
+    body?: never;
+    path: {
+        projectId: string;
+        programId: string;
+    };
+    query?: never;
+    url: '/v1/projects/{projectId}/billing/migration-programs/{programId}/credential-removals/current';
+};
+
+export type GetCurrentBillingMigrationCredentialRemovalErrors = {
+    /**
+     * Stable machine-readable failure.
+     */
+    404: ErrorEnvelope;
+};
+
+export type GetCurrentBillingMigrationCredentialRemovalError = GetCurrentBillingMigrationCredentialRemovalErrors[keyof GetCurrentBillingMigrationCredentialRemovalErrors];
+
+export type GetCurrentBillingMigrationCredentialRemovalResponses = {
+    /**
+     * Credential removal.
+     */
+    200: BillingMigrationCredentialRemovalRecord;
+};
+
+export type GetCurrentBillingMigrationCredentialRemovalResponse = GetCurrentBillingMigrationCredentialRemovalResponses[keyof GetCurrentBillingMigrationCredentialRemovalResponses];
+
+export type GetBillingMigrationCredentialRemovalData = {
+    body?: never;
+    path: {
+        projectId: string;
+        programId: string;
+        removalId: string;
+    };
+    query?: never;
+    url: '/v1/projects/{projectId}/billing/migration-programs/{programId}/credential-removals/{removalId}';
+};
+
+export type GetBillingMigrationCredentialRemovalErrors = {
+    /**
+     * Stable machine-readable failure.
+     */
+    404: ErrorEnvelope;
+};
+
+export type GetBillingMigrationCredentialRemovalError = GetBillingMigrationCredentialRemovalErrors[keyof GetBillingMigrationCredentialRemovalErrors];
+
+export type GetBillingMigrationCredentialRemovalResponses = {
+    /**
+     * Credential removal.
+     */
+    200: BillingMigrationCredentialRemovalRecord;
+};
+
+export type GetBillingMigrationCredentialRemovalResponse = GetBillingMigrationCredentialRemovalResponses[keyof GetBillingMigrationCredentialRemovalResponses];
+
+export type GetBillingMigrationLegalHoldProposalData = {
+    body?: never;
+    path: {
+        projectId: string;
+        programId: string;
+        proposalId: string;
+    };
+    query?: never;
+    url: '/v1/projects/{projectId}/billing/migration-programs/{programId}/legal-hold-proposals/{proposalId}';
+};
+
+export type GetBillingMigrationLegalHoldProposalErrors = {
+    /**
+     * Stable machine-readable failure.
+     */
+    404: ErrorEnvelope;
+};
+
+export type GetBillingMigrationLegalHoldProposalError = GetBillingMigrationLegalHoldProposalErrors[keyof GetBillingMigrationLegalHoldProposalErrors];
+
+export type GetBillingMigrationLegalHoldProposalResponses = {
+    /**
+     * Legal-hold proposal.
+     */
+    200: BillingMigrationLegalHoldProposalRecord;
+};
+
+export type GetBillingMigrationLegalHoldProposalResponse = GetBillingMigrationLegalHoldProposalResponses[keyof GetBillingMigrationLegalHoldProposalResponses];
+
+export type ListBillingMigrationLegalHoldsData = {
+    body?: never;
+    path: {
+        projectId: string;
+        programId: string;
+    };
+    query?: {
+        /**
+         * Opaque cursor from the immediately preceding list response. Malformed or stale values return validation_failed.
+         */
+        cursor?: string;
+    };
+    url: '/v1/projects/{projectId}/billing/migration-programs/{programId}/legal-holds';
+};
+
+export type ListBillingMigrationLegalHoldsResponses = {
+    /**
+     * Legal-hold commands.
+     */
+    200: BillingMigrationLegalHoldPageEnvelope;
+};
+
+export type ListBillingMigrationLegalHoldsResponse = ListBillingMigrationLegalHoldsResponses[keyof ListBillingMigrationLegalHoldsResponses];
+
+export type GetCurrentBillingMigrationLegalHoldData = {
+    body?: never;
+    path: {
+        projectId: string;
+        programId: string;
+    };
+    query?: never;
+    url: '/v1/projects/{projectId}/billing/migration-programs/{programId}/legal-holds/current';
+};
+
+export type GetCurrentBillingMigrationLegalHoldErrors = {
+    /**
+     * Stable machine-readable failure.
+     */
+    404: ErrorEnvelope;
+};
+
+export type GetCurrentBillingMigrationLegalHoldError = GetCurrentBillingMigrationLegalHoldErrors[keyof GetCurrentBillingMigrationLegalHoldErrors];
+
+export type GetCurrentBillingMigrationLegalHoldResponses = {
+    /**
+     * Legal-hold command.
+     */
+    200: BillingMigrationLegalHoldRecord;
+};
+
+export type GetCurrentBillingMigrationLegalHoldResponse = GetCurrentBillingMigrationLegalHoldResponses[keyof GetCurrentBillingMigrationLegalHoldResponses];
+
+export type GetBillingMigrationLegalHoldData = {
+    body?: never;
+    path: {
+        projectId: string;
+        programId: string;
+        holdId: string;
+    };
+    query?: never;
+    url: '/v1/projects/{projectId}/billing/migration-programs/{programId}/legal-holds/{holdId}';
+};
+
+export type GetBillingMigrationLegalHoldErrors = {
+    /**
+     * Stable machine-readable failure.
+     */
+    404: ErrorEnvelope;
+};
+
+export type GetBillingMigrationLegalHoldError = GetBillingMigrationLegalHoldErrors[keyof GetBillingMigrationLegalHoldErrors];
+
+export type GetBillingMigrationLegalHoldResponses = {
+    /**
+     * Legal-hold command.
+     */
+    200: BillingMigrationLegalHoldRecord;
+};
+
+export type GetBillingMigrationLegalHoldResponse = GetBillingMigrationLegalHoldResponses[keyof GetBillingMigrationLegalHoldResponses];
+
+export type ListBillingMigrationCompletionHistoryData = {
+    body?: never;
+    path: {
+        projectId: string;
+        programId: string;
+    };
+    query?: {
+        /**
+         * Opaque cursor from the immediately preceding list response. Malformed or stale values return validation_failed.
+         */
+        cursor?: string;
+    };
+    url: '/v1/projects/{projectId}/billing/migration-programs/{programId}/completion-history';
+};
+
+export type ListBillingMigrationCompletionHistoryResponses = {
+    /**
+     * Completion reports.
+     */
+    200: BillingMigrationCompletionReportPageEnvelope;
+};
+
+export type ListBillingMigrationCompletionHistoryResponse = ListBillingMigrationCompletionHistoryResponses[keyof ListBillingMigrationCompletionHistoryResponses];
+
+export type GetBillingMigrationCompletionReportData = {
+    body?: never;
+    path: {
+        projectId: string;
+        programId: string;
+        reportId: string;
+    };
+    query?: never;
+    url: '/v1/projects/{projectId}/billing/migration-programs/{programId}/completion-history/{reportId}';
+};
+
+export type GetBillingMigrationCompletionReportErrors = {
+    /**
+     * Stable machine-readable failure.
+     */
+    404: ErrorEnvelope;
+};
+
+export type GetBillingMigrationCompletionReportError = GetBillingMigrationCompletionReportErrors[keyof GetBillingMigrationCompletionReportErrors];
+
+export type GetBillingMigrationCompletionReportResponses = {
+    /**
+     * Completion report.
+     */
+    200: BillingMigrationCompletionReportRecord;
+};
+
+export type GetBillingMigrationCompletionReportResponse = GetBillingMigrationCompletionReportResponses[keyof GetBillingMigrationCompletionReportResponses];
+
+export type FreezeBillingMigrationStabilizationPolicyData = {
+    body: BillingMigrationFreezeStabilizationPolicyRequest;
+    headers: {
+        'Idempotency-Key': string;
+    };
+    path: {
+        projectId: string;
+        programId: string;
+    };
+    query?: never;
+    url: '/v1/projects/{projectId}/billing/migration-programs/{programId}/stabilization-policy';
+};
+
+export type FreezeBillingMigrationStabilizationPolicyErrors = {
+    /**
+     * Stable machine-readable failure.
+     */
+    409: ErrorEnvelope;
+    /**
+     * Stable machine-readable failure.
+     */
+    422: ErrorEnvelope;
+};
+
+export type FreezeBillingMigrationStabilizationPolicyError = FreezeBillingMigrationStabilizationPolicyErrors[keyof FreezeBillingMigrationStabilizationPolicyErrors];
+
+export type FreezeBillingMigrationStabilizationPolicyResponses = {
+    /**
+     * Original result returned for an identical idempotent replay.
+     */
+    200: BillingMigrationOperationEnvelope;
+    /**
+     * Billing migration operation result.
+     */
+    201: BillingMigrationOperationEnvelope;
+};
+
+export type FreezeBillingMigrationStabilizationPolicyResponse = FreezeBillingMigrationStabilizationPolicyResponses[keyof FreezeBillingMigrationStabilizationPolicyResponses];
+
+export type GetCurrentBillingMigrationStabilizationPolicyData = {
+    body?: never;
+    path: {
+        projectId: string;
+        programId: string;
+    };
+    query?: never;
+    url: '/v1/projects/{projectId}/billing/migration-programs/{programId}/stabilization-policy/current';
+};
+
+export type GetCurrentBillingMigrationStabilizationPolicyErrors = {
+    /**
+     * Stable machine-readable failure.
+     */
+    404: ErrorEnvelope;
+};
+
+export type GetCurrentBillingMigrationStabilizationPolicyError = GetCurrentBillingMigrationStabilizationPolicyErrors[keyof GetCurrentBillingMigrationStabilizationPolicyErrors];
+
+export type GetCurrentBillingMigrationStabilizationPolicyResponses = {
+    /**
+     * Stabilization policy.
+     */
+    200: BillingMigrationStabilizationPolicyRecord;
+};
+
+export type GetCurrentBillingMigrationStabilizationPolicyResponse = GetCurrentBillingMigrationStabilizationPolicyResponses[keyof GetCurrentBillingMigrationStabilizationPolicyResponses];
+
+export type ListBillingMigrationStabilizationObservationsData = {
+    body?: never;
+    path: {
+        projectId: string;
+        programId: string;
+    };
+    query?: {
+        /**
+         * Opaque cursor from the immediately preceding list response. Malformed or stale values return validation_failed.
+         */
+        cursor?: string;
+    };
+    url: '/v1/projects/{projectId}/billing/migration-programs/{programId}/stabilization-observations';
+};
+
+export type ListBillingMigrationStabilizationObservationsResponses = {
+    /**
+     * Stabilization observations.
+     */
+    200: BillingMigrationStabilizationObservationPageEnvelope;
+};
+
+export type ListBillingMigrationStabilizationObservationsResponse = ListBillingMigrationStabilizationObservationsResponses[keyof ListBillingMigrationStabilizationObservationsResponses];
+
+export type ObserveBillingMigrationStabilizationData = {
+    body: BillingMigrationObserveStabilizationRequest;
+    headers: {
+        'Idempotency-Key': string;
+    };
+    path: {
+        projectId: string;
+        programId: string;
+    };
+    query?: never;
+    url: '/v1/projects/{projectId}/billing/migration-programs/{programId}/stabilization-observations';
+};
+
+export type ObserveBillingMigrationStabilizationErrors = {
+    /**
+     * Stable machine-readable failure.
+     */
+    409: ErrorEnvelope;
+    /**
+     * Stable machine-readable failure.
+     */
+    422: ErrorEnvelope;
+};
+
+export type ObserveBillingMigrationStabilizationError = ObserveBillingMigrationStabilizationErrors[keyof ObserveBillingMigrationStabilizationErrors];
+
+export type ObserveBillingMigrationStabilizationResponses = {
+    /**
+     * Original result returned for an identical idempotent replay.
+     */
+    200: BillingMigrationOperationEnvelope;
+    /**
+     * Billing migration operation result.
+     */
+    201: BillingMigrationOperationEnvelope;
+};
+
+export type ObserveBillingMigrationStabilizationResponse = ObserveBillingMigrationStabilizationResponses[keyof ObserveBillingMigrationStabilizationResponses];
+
+export type GetLatestBillingMigrationStabilizationObservationData = {
+    body?: never;
+    path: {
+        projectId: string;
+        programId: string;
+    };
+    query?: never;
+    url: '/v1/projects/{projectId}/billing/migration-programs/{programId}/stabilization-observations/latest';
+};
+
+export type GetLatestBillingMigrationStabilizationObservationErrors = {
+    /**
+     * Stable machine-readable failure.
+     */
+    404: ErrorEnvelope;
+};
+
+export type GetLatestBillingMigrationStabilizationObservationError = GetLatestBillingMigrationStabilizationObservationErrors[keyof GetLatestBillingMigrationStabilizationObservationErrors];
+
+export type GetLatestBillingMigrationStabilizationObservationResponses = {
+    /**
+     * Stabilization observation.
+     */
+    200: BillingMigrationStabilizationObservationRecord;
+};
+
+export type GetLatestBillingMigrationStabilizationObservationResponse = GetLatestBillingMigrationStabilizationObservationResponses[keyof GetLatestBillingMigrationStabilizationObservationResponses];
+
+export type ListBillingMigrationRollbackReadinessAssessmentsData = {
+    body?: never;
+    path: {
+        projectId: string;
+        programId: string;
+    };
+    query?: {
+        /**
+         * Opaque cursor from the immediately preceding list response. Malformed or stale values return validation_failed.
+         */
+        cursor?: string;
+    };
+    url: '/v1/projects/{projectId}/billing/migration-programs/{programId}/rollback-readiness-assessments';
+};
+
+export type ListBillingMigrationRollbackReadinessAssessmentsResponses = {
+    /**
+     * Rollback-readiness assessments.
+     */
+    200: BillingMigrationRollbackReadinessAssessmentPageEnvelope;
+};
+
+export type ListBillingMigrationRollbackReadinessAssessmentsResponse = ListBillingMigrationRollbackReadinessAssessmentsResponses[keyof ListBillingMigrationRollbackReadinessAssessmentsResponses];
+
+export type AssessBillingMigrationRollbackReadinessData = {
+    body: BillingMigrationAssessRollbackReadinessRequest;
+    headers: {
+        'Idempotency-Key': string;
+    };
+    path: {
+        projectId: string;
+        programId: string;
+    };
+    query?: never;
+    url: '/v1/projects/{projectId}/billing/migration-programs/{programId}/rollback-readiness-assessments';
+};
+
+export type AssessBillingMigrationRollbackReadinessErrors = {
+    /**
+     * Stable machine-readable failure.
+     */
+    409: ErrorEnvelope;
+    /**
+     * Stable machine-readable failure.
+     */
+    422: ErrorEnvelope;
+};
+
+export type AssessBillingMigrationRollbackReadinessError = AssessBillingMigrationRollbackReadinessErrors[keyof AssessBillingMigrationRollbackReadinessErrors];
+
+export type AssessBillingMigrationRollbackReadinessResponses = {
+    /**
+     * Original result returned for an identical idempotent replay.
+     */
+    200: BillingMigrationOperationEnvelope;
+    /**
+     * Billing migration operation result.
+     */
+    201: BillingMigrationOperationEnvelope;
+};
+
+export type AssessBillingMigrationRollbackReadinessResponse = AssessBillingMigrationRollbackReadinessResponses[keyof AssessBillingMigrationRollbackReadinessResponses];
+
+export type GetLatestBillingMigrationRollbackReadinessAssessmentData = {
+    body?: never;
+    path: {
+        projectId: string;
+        programId: string;
+    };
+    query?: never;
+    url: '/v1/projects/{projectId}/billing/migration-programs/{programId}/rollback-readiness-assessments/latest';
+};
+
+export type GetLatestBillingMigrationRollbackReadinessAssessmentErrors = {
+    /**
+     * Stable machine-readable failure.
+     */
+    404: ErrorEnvelope;
+};
+
+export type GetLatestBillingMigrationRollbackReadinessAssessmentError = GetLatestBillingMigrationRollbackReadinessAssessmentErrors[keyof GetLatestBillingMigrationRollbackReadinessAssessmentErrors];
+
+export type GetLatestBillingMigrationRollbackReadinessAssessmentResponses = {
+    /**
+     * Rollback-readiness assessment.
+     */
+    200: BillingMigrationRollbackReadinessAssessmentRecord;
+};
+
+export type GetLatestBillingMigrationRollbackReadinessAssessmentResponse = GetLatestBillingMigrationRollbackReadinessAssessmentResponses[keyof GetLatestBillingMigrationRollbackReadinessAssessmentResponses];
+
+export type GetLatestBillingMigrationRollbackReadinessCheckpointData = {
+    body?: never;
+    path: {
+        projectId: string;
+        programId: string;
+    };
+    query?: never;
+    url: '/v1/projects/{projectId}/billing/migration-programs/{programId}/rollback-readiness-checkpoints/latest';
+};
+
+export type GetLatestBillingMigrationRollbackReadinessCheckpointErrors = {
+    /**
+     * Stable machine-readable failure.
+     */
+    404: ErrorEnvelope;
+};
+
+export type GetLatestBillingMigrationRollbackReadinessCheckpointError = GetLatestBillingMigrationRollbackReadinessCheckpointErrors[keyof GetLatestBillingMigrationRollbackReadinessCheckpointErrors];
+
+export type GetLatestBillingMigrationRollbackReadinessCheckpointResponses = {
+    /**
+     * Rollback-readiness checkpoint.
+     */
+    200: BillingMigrationRollbackReadinessCheckpointRecord;
+};
+
+export type GetLatestBillingMigrationRollbackReadinessCheckpointResponse = GetLatestBillingMigrationRollbackReadinessCheckpointResponses[keyof GetLatestBillingMigrationRollbackReadinessCheckpointResponses];
+
+export type GetWorkspaceBootstrapData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/v1/workspace/bootstrap';
+};
+
+export type GetWorkspaceBootstrapErrors = {
+    /**
+     * Stable machine-readable failure.
+     */
+    401: ErrorEnvelope;
+};
+
+export type GetWorkspaceBootstrapError = GetWorkspaceBootstrapErrors[keyof GetWorkspaceBootstrapErrors];
+
+export type GetWorkspaceBootstrapResponses = {
+    /**
+     * Workspace entry snapshot
+     */
+    200: WorkspaceBootstrapEnvelope;
+};
+
+export type GetWorkspaceBootstrapResponse = GetWorkspaceBootstrapResponses[keyof GetWorkspaceBootstrapResponses];
