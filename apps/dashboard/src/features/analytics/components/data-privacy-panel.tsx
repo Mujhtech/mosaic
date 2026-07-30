@@ -4,7 +4,7 @@ import { useState } from "react"
 
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { WorkflowPanel } from "@/features/organizations/components/workspace-page"
+import { WorkflowPanel } from "@/features/orgs/components/workspace-page"
 import type { AnalyticsAdapter } from "../api/analytics-adapter"
 import { analyticsKeys, jobQueryOptions, settingsQueryOptions } from "../queries/analytics-queries"
 import type {

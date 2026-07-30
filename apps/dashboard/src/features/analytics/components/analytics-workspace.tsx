@@ -5,7 +5,7 @@ import { Link, useNavigate } from "@tanstack/react-router"
 import { HostedResourceBoundary } from "@/features/auth/components/hosted-resource-boundary"
 import { resolveHostedQueryState } from "@/features/auth/types/hosted-query-state"
 import { environmentsQueryOptions } from "@/features/environments/queries/environments-query"
-import { WorkspacePage, WorkflowPanel } from "@/features/organizations/components/workspace-page"
+import { WorkspacePage, WorkflowPanel } from "@/features/orgs/components/workspace-page"
 import { projectQueryOptions } from "@/features/projects/queries/projects-query"
 import { cn } from "@/lib/utils"
 import { restAnalyticsAdapter } from "../api/rest-analytics-adapter"
@@ -74,33 +74,8 @@ export function AnalyticsWorkspace({
     >
       <HostedResourceBoundary state={state}>
         <div className="border-border bg-muted/20 rounded border p-3">
+          {/* The Environment is chosen once, in the sidebar switcher. */}
           <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-            <label className="flex items-center gap-3 text-sm font-medium">
-              Environment
-              <select
-                aria-label="Analytics Environment"
-                className="border-input bg-background focus-visible:ring-ring h-9 min-w-48 rounded border px-3 focus-visible:ring-2"
-                onChange={(event) =>
-                  void navigate({
-                    params: {
-                      environmentId: event.target.value,
-                      organizationId,
-                      projectId,
-                      surface,
-                    },
-                    search: filters,
-                    to: "/organizations/$organizationId/projects/$projectId/analytics/$environmentId/$surface",
-                  })
-                }
-                value={environmentId}
-              >
-                {environments.data?.items.map((item) => (
-                  <option key={item.id} value={item.id}>
-                    {item.name}
-                  </option>
-                ))}
-              </select>
-            </label>
             <span className="text-muted-foreground flex items-center gap-2 text-xs">
               <ChartLineUpIcon aria-hidden size={16} /> Single-Environment reporting · event-count
               basis
@@ -116,9 +91,9 @@ export function AnalyticsWorkspace({
                     : "text-muted-foreground hover:bg-muted hover:text-foreground",
                 )}
                 key={tab.surface}
-                params={{ environmentId, organizationId, projectId, surface: tab.surface }}
+                params={(prev) => ({ ...prev, surface: tab.surface })}
                 search={filters}
-                to="/organizations/$organizationId/projects/$projectId/analytics/$environmentId/$surface"
+                to="/orgs/$organizationId/projects/$projectId/env/$environmentKey/analytics/$surface"
               >
                 {tab.label}
               </Link>
@@ -130,10 +105,10 @@ export function AnalyticsWorkspace({
             filters={filters}
             onChange={(next) =>
               void navigate({
-                params: { environmentId, organizationId, projectId, surface },
+                params: (prev) => ({ ...prev, surface }),
                 replace: true,
                 search: next,
-                to: "/organizations/$organizationId/projects/$projectId/analytics/$environmentId/$surface",
+                to: "/orgs/$organizationId/projects/$projectId/env/$environmentKey/analytics/$surface",
               })
             }
           />

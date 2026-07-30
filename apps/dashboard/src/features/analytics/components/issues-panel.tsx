@@ -63,10 +63,10 @@ export function IssuesPanel({
 function IssueTableRow({ issue, scope }: { issue: IssueRow; scope: AnalyticsScope }) {
   const href =
     issue.kind === "provider"
-      ? `/organizations/${scope.organizationId}/projects/${scope.projectId}/catalog/providers?environmentId=${scope.environmentId}`
+      ? `/orgs/${scope.organizationId}/projects/${scope.projectId}/catalog/providers?environmentId=${scope.environmentId}`
       : issue.kind === "product"
-        ? `/organizations/${scope.organizationId}/projects/${scope.projectId}/catalog/products`
-        : `/organizations/${scope.organizationId}/projects/${scope.projectId}/monetization/${scope.environmentId}/placements${issue.recoveryId ? `/${issue.recoveryId}` : ""}`
+        ? `/orgs/${scope.organizationId}/projects/${scope.projectId}/catalog/products`
+        : `/orgs/${scope.organizationId}/projects/${scope.projectId}/monetization/${scope.environmentId}/placements${issue.recoveryId ? `/${issue.recoveryId}` : ""}`
   return (
     <tr>
       <th className="px-4 py-4 font-medium" scope="row">

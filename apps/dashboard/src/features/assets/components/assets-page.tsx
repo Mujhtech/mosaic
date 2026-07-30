@@ -18,7 +18,7 @@ import { assetsQueryOptions, assetUsageQueryOptions } from "@/features/assets/qu
 import { HostedResourceBoundary } from "@/features/auth/components/hosted-resource-boundary"
 import { resolveHostedQueryState } from "@/features/auth/types/hosted-query-state"
 import { MonetizationWorkspace } from "@/features/environments/components/monetization-workspace"
-import { WorkflowPanel } from "@/features/organizations/components/workspace-page"
+import { WorkflowPanel } from "@/features/orgs/components/workspace-page"
 import type { HostedAsset } from "@/features/publishing/api/hosted-publishing-adapter"
 
 function formatBytes(bytes: number) {
@@ -193,8 +193,8 @@ export function AssetsPage({
     permissionAction: (
       <Link
         className={buttonVariants({ variant: "outline" })}
-        params={{ environmentId, organizationId, projectId }}
-        to="/organizations/$organizationId/projects/$projectId/monetization/$environmentId/paywalls"
+        params={(prev) => prev}
+        to="/orgs/$organizationId/projects/$projectId/env/$environmentKey/monetization/paywalls"
       >
         Return to Paywalls
       </Link>

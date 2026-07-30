@@ -27,8 +27,8 @@ import {
 } from "@/features/api-keys/mutations/api-key-secret-cache"
 import { apiKeysQueryOptions } from "@/features/api-keys/queries/api-keys-query"
 import { environmentsQueryOptions } from "@/features/environments/queries/environments-query"
-import { WorkspacePage, WorkflowPanel } from "@/features/organizations/components/workspace-page"
-import { ScopeMismatchRecovery } from "@/features/organizations/components/scope-mismatch-recovery"
+import { WorkspacePage, WorkflowPanel } from "@/features/orgs/components/workspace-page"
+import { ScopeMismatchRecovery } from "@/features/orgs/components/scope-mismatch-recovery"
 import { useValidatedProjectScope } from "@/features/projects/hooks/use-validated-project-scope"
 import { applicationsQueryOptions } from "@/features/projects/queries/projects-query"
 import type { ApiKey, ApiKeySecretResult } from "@/generated/api"
@@ -137,9 +137,9 @@ export function ApiKeysPage({ environmentId, organizationId, projectId }: ApiKey
               dismissSecret()
               setPendingAction(null)
               void navigate({
-                params: { organizationId, projectId },
+                params: (prev) => prev,
                 search: { environmentId: event.target.value },
-                to: "/organizations/$organizationId/projects/$projectId/settings/api-keys",
+                to: "/orgs/$organizationId/projects/$projectId/env/$environmentKey/settings/api-keys",
               })
             }}
             value={selectedEnvironment?.id ?? ""}
