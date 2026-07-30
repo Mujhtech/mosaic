@@ -169,6 +169,190 @@ func TestLoadRejectsInsecureHostedAuthenticationAndAssetDefaults(t *testing.T) {
 	}
 }
 
+func TestTelemetryProtocolAcceptsSupportedTransports(t *testing.T) {
+	for name, test := range map[string]struct {
+		value     string
+		wantError bool
+	}{
+		"unset defaults to http":  {value: ""},
+		"http/protobuf":           {value: "http/protobuf"},
+		"grpc":                    {value: "grpc"},
+		"mixed case is tolerated": {value: "GRPC"},
+		"unsupported transport":   {value: "thrift", wantError: true},
+	} {
+		t.Run(name, func(t *testing.T) {
+			values := map[string]string{"OTEL_EXPORTER_OTLP_ENDPOINT": "http://collector.internal:4317"}
+			if test.value != "" {
+				values["OTEL_EXPORTER_OTLP_PROTOCOL"] = test.value
+			}
+			cfg, err := loadTestConfig(t, values)
+			if test.wantError {
+				if err == nil {
+					t.Fatal("load succeeded with unsupported OTLP protocol")
+				}
+				if !strings.Contains(err.Error(), "OTEL_EXPORTER_OTLP_PROTOCOL") {
+					t.Fatalf("error = %v, want it to name the offending variable", err)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("load telemetry protocol %q: %v", test.value, err)
+			}
+			if want := strings.ToLower(test.value); cfg.Telemetry.OTLPProtocol != want {
+				t.Fatalf("protocol = %q, want %q", cfg.Telemetry.OTLPProtocol, want)
+			}
+		})
+	}
+}
+
+// Log export follows the collector: on by default so logs sit beside the traces
+// they belong to, off when there is nowhere to send them or an operator says so.
+func TestLogExportFollowsCollectorAndOptOut(t *testing.T) {
+	for name, test := range map[string]struct {
+		values map[string]string
+		want   bool
+	}{
+		"no collector configured": {values: map[string]string{}},
+		"collector configured": {
+			values: map[string]string{"OTEL_EXPORTER_OTLP_ENDPOINT": "http://localhost:4318"},
+			want:   true,
+		},
+		"logs disabled with a collector": {
+			values: map[string]string{
+				"OTEL_EXPORTER_OTLP_ENDPOINT": "http://localhost:4318",
+				"MOSAIC_OTEL_LOGS_ENABLED":    "false",
+			},
+		},
+		"logs enabled without a collector": {
+			values: map[string]string{"MOSAIC_OTEL_LOGS_ENABLED": "true"},
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			cfg, err := loadTestConfig(t, test.values)
+			if err != nil {
+				t.Fatalf("load configuration: %v", err)
+			}
+			if cfg.Telemetry.ExportLogs() != test.want {
+				t.Fatalf("export logs = %t, want %t", cfg.Telemetry.ExportLogs(), test.want)
+			}
+		})
+	}
+}
+
+func TestTelemetryExportSecurityIsValidated(t *testing.T) {
+	secretHeader := "authorization=Bearer%20collector-super-secret"
+	for name, test := range map[string]struct {
+		values    map[string]string
+		wantError bool
+	}{
+		"plaintext collector in development": {
+			values: map[string]string{"OTEL_EXPORTER_OTLP_ENDPOINT": "http://localhost:4318"},
+		},
+		"authenticated https collector": {
+			values: map[string]string{
+				"OTEL_EXPORTER_OTLP_ENDPOINT": "https://collector.example:4318",
+				"OTEL_EXPORTER_OTLP_HEADERS":  secretHeader,
+			},
+		},
+		"malformed headers": {
+			values: map[string]string{
+				"OTEL_EXPORTER_OTLP_ENDPOINT": "https://collector.example:4318",
+				"OTEL_EXPORTER_OTLP_HEADERS":  "authorization Bearer collector-super-secret",
+			},
+			wantError: true,
+		},
+		"endpoint embedding credentials": {
+			values:    map[string]string{"OTEL_EXPORTER_OTLP_ENDPOINT": "https://user:collector-super-secret@collector.example:4318"},
+			wantError: true,
+		},
+		"skip verify on a plaintext endpoint": {
+			values: map[string]string{
+				"OTEL_EXPORTER_OTLP_ENDPOINT":          "http://localhost:4318",
+				"MOSAIC_OTEL_EXPORTER_TLS_SKIP_VERIFY": "true",
+			},
+			wantError: true,
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			_, err := loadTestConfig(t, test.values)
+			assertTelemetryValidation(t, err, test.wantError)
+		})
+	}
+}
+
+func TestProductionTelemetryRequiresVerifiedCollectorOrAcknowledgement(t *testing.T) {
+	for name, test := range map[string]struct {
+		overrides map[string]string
+		wantError bool
+	}{
+		"verified https collector": {
+			overrides: map[string]string{"OTEL_EXPORTER_OTLP_ENDPOINT": "https://collector.example:4318"},
+		},
+		"plaintext collector": {
+			overrides: map[string]string{"OTEL_EXPORTER_OTLP_ENDPOINT": "http://collector.example:4318"},
+			wantError: true,
+		},
+		"plaintext collector on a trusted network": {
+			overrides: map[string]string{
+				"OTEL_EXPORTER_OTLP_ENDPOINT":         "http://collector.internal:4318",
+				"MOSAIC_OTEL_EXPORTER_ALLOW_INSECURE": "true",
+			},
+		},
+		"unverified certificate": {
+			overrides: map[string]string{
+				"OTEL_EXPORTER_OTLP_ENDPOINT":          "https://collector.example:4318",
+				"MOSAIC_OTEL_EXPORTER_TLS_SKIP_VERIFY": "true",
+			},
+			wantError: true,
+		},
+		"unverified certificate acknowledged": {
+			overrides: map[string]string{
+				"OTEL_EXPORTER_OTLP_ENDPOINT":          "https://collector.example:4318",
+				"MOSAIC_OTEL_EXPORTER_TLS_SKIP_VERIFY": "true",
+				"MOSAIC_OTEL_EXPORTER_ALLOW_INSECURE":  "true",
+			},
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			values := productionConfigValues()
+			values["OTEL_EXPORTER_OTLP_HEADERS"] = "authorization=Bearer%20collector-super-secret"
+			for key, value := range test.overrides {
+				values[key] = value
+			}
+			_, err := loadTestConfig(t, values)
+			assertTelemetryValidation(t, err, test.wantError)
+		})
+	}
+}
+
+// productionConfigValues is a deployment that passes every production guard, so
+// a test that overrides one variable is asserting about that variable alone.
+func productionConfigValues() map[string]string {
+	return map[string]string{
+		"MOSAIC_ENVIRONMENT":               "production",
+		"MOSAIC_CORS_ALLOWED_ORIGINS":      "https://studio.example",
+		"MOSAIC_SESSION_COOKIE_SECURE":     "true",
+		"MOSAIC_PUBLIC_ASSET_BASE_URL":     "https://assets.example/v1/sdk/assets",
+		"MOSAIC_OBJECT_STORAGE_ACCESS_KEY": "production-access",
+		"MOSAIC_OBJECT_STORAGE_SECRET_KEY": "production-secret",
+		"MOSAIC_OBJECT_STORAGE_TLS":        "true",
+		"DATABASE_URL":                     "postgres://mosaic:secret-password@db.example:5432/mosaic?sslmode=verify-full",
+	}
+}
+
+func assertTelemetryValidation(t *testing.T, err error, wantError bool) {
+	t.Helper()
+	if err != nil && strings.Contains(err.Error(), "collector-super-secret") {
+		t.Fatalf("startup error leaked a collector credential: %v", err)
+	}
+	switch {
+	case wantError && err == nil:
+		t.Fatal("load succeeded with an unsafe telemetry export configuration")
+	case !wantError && err != nil:
+		t.Fatalf("load telemetry export configuration: %v", err)
+	}
+}
+
 func TestLoadReadsDotEnvBeforeDecoding(t *testing.T) {
 	clearConfigEnvironment(t)
 	temporaryDirectory := t.TempDir()
@@ -213,6 +397,9 @@ func clearConfigEnvironment(t *testing.T) {
 		"MOSAIC_HTTP_READ_TIMEOUT", "MOSAIC_HTTP_WRITE_TIMEOUT", "MOSAIC_HTTP_IDLE_TIMEOUT",
 		"MOSAIC_HTTP_HANDLER_TIMEOUT", "MOSAIC_HTTP_SHUTDOWN_TIMEOUT", "MOSAIC_CORS_ALLOWED_ORIGINS",
 		"MOSAIC_LOG_LEVEL", "MOSAIC_LOG_FORMAT", "OTEL_SERVICE_NAME", "OTEL_EXPORTER_OTLP_ENDPOINT",
+		"OTEL_EXPORTER_OTLP_PROTOCOL", "OTEL_EXPORTER_OTLP_HEADERS",
+		"MOSAIC_OTEL_EXPORTER_TLS_SKIP_VERIFY", "MOSAIC_OTEL_EXPORTER_ALLOW_INSECURE",
+		"MOSAIC_OTEL_LOGS_ENABLED",
 		"DATABASE_URL", "DATABASE_MAX_CONNECTIONS", "DATABASE_MIN_CONNECTIONS", "DATABASE_CONNECT_TIMEOUT",
 		"MOSAIC_SESSION_LIFETIME", "MOSAIC_SESSION_COOKIE_SECURE", "MOSAIC_SESSION_COOKIE_DOMAIN",
 		"MOSAIC_AUTH_REQUESTS_PER_MINUTE", "MOSAIC_AUTH_BURST", "MOSAIC_AUTH_LIMITER_ENTRIES",
@@ -263,16 +450,7 @@ func clearConfigEnvironment(t *testing.T) {
 // requests from any origin. Each case asserts one guard fires and that the
 // error names the variable without echoing its value.
 func TestProductionConfigurationGuards(t *testing.T) {
-	secureProduction := map[string]string{
-		"MOSAIC_ENVIRONMENT":               "production",
-		"MOSAIC_CORS_ALLOWED_ORIGINS":      "https://studio.example",
-		"MOSAIC_SESSION_COOKIE_SECURE":     "true",
-		"MOSAIC_PUBLIC_ASSET_BASE_URL":     "https://assets.example/v1/sdk/assets",
-		"MOSAIC_OBJECT_STORAGE_ACCESS_KEY": "production-access",
-		"MOSAIC_OBJECT_STORAGE_SECRET_KEY": "production-secret",
-		"MOSAIC_OBJECT_STORAGE_TLS":        "true",
-		"DATABASE_URL":                     "postgres://mosaic:secret-password@db.example:5432/mosaic?sslmode=verify-full",
-	}
+	secureProduction := productionConfigValues()
 
 	for name, test := range map[string]struct {
 		overrides map[string]string

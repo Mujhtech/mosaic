@@ -12,6 +12,7 @@ import (
 	"github.com/joho/godotenv"
 	"github.com/kelseyhightower/envconfig"
 
+	"github.com/Mujhtech/mosaic/apps/api/internal/platform/telemetry"
 	"github.com/Mujhtech/mosaic/apps/api/internal/providercredential"
 )
 
@@ -260,6 +261,31 @@ type LogConfig struct {
 type TelemetryConfig struct {
 	ServiceName  string `envconfig:"OTEL_SERVICE_NAME" default:"mosaic-api"`
 	OTLPEndpoint string `envconfig:"OTEL_EXPORTER_OTLP_ENDPOINT"`
+	// OTLPProtocol selects the OTLP transport. Empty means the telemetry
+	// package default (http/protobuf); "grpc" switches both the trace and the
+	// metric exporter to OTLP/gRPC.
+	OTLPProtocol string `envconfig:"OTEL_EXPORTER_OTLP_PROTOCOL"`
+	// OTLPHeaders holds export headers as "key1=value1,key2=value2". Collector
+	// authentication lives here, so it is a secret: it is never logged and
+	// never echoed in a validation problem.
+	OTLPHeaders string `envconfig:"OTEL_EXPORTER_OTLP_HEADERS"`
+	// TLSSkipVerify disables collector certificate verification. It only
+	// applies to an https:// endpoint.
+	TLSSkipVerify bool `envconfig:"MOSAIC_OTEL_EXPORTER_TLS_SKIP_VERIFY" default:"false"`
+	// AllowInsecure acknowledges an unauthenticated-collector connection —
+	// plaintext export or unverified TLS — outside development and test.
+	AllowInsecure bool `envconfig:"MOSAIC_OTEL_EXPORTER_ALLOW_INSECURE" default:"false"`
+	// LogsEnabled ships log records to the collector alongside traces and
+	// metrics. It defaults on so logs are readable next to the traces they
+	// belong to; turn it off when log volume is the cost that matters. Local
+	// stdout logging is never affected.
+	LogsEnabled bool `envconfig:"MOSAIC_OTEL_LOGS_ENABLED" default:"true"`
+}
+
+// ExportLogs reports whether log records should be shipped to the collector,
+// which needs both a collector to ship to and the signal left enabled.
+func (t TelemetryConfig) ExportLogs() bool {
+	return t.OTLPEndpoint != "" && t.LogsEnabled
 }
 
 // ValidationError aggregates every configuration problem found at startup so an
@@ -293,6 +319,8 @@ func load() (Config, error) {
 	cfg.Log.Format = strings.ToLower(strings.TrimSpace(cfg.Log.Format))
 	cfg.Telemetry.ServiceName = strings.TrimSpace(cfg.Telemetry.ServiceName)
 	cfg.Telemetry.OTLPEndpoint = strings.TrimSpace(cfg.Telemetry.OTLPEndpoint)
+	cfg.Telemetry.OTLPProtocol = strings.ToLower(strings.TrimSpace(cfg.Telemetry.OTLPProtocol))
+	cfg.Telemetry.OTLPHeaders = strings.TrimSpace(cfg.Telemetry.OTLPHeaders)
 	cfg.BrowserAuth.CookieDomain = strings.TrimSpace(cfg.BrowserAuth.CookieDomain)
 	cfg.Protocol.V02SchemaPath = strings.TrimSpace(cfg.Protocol.V02SchemaPath)
 	cfg.Protocol.CommerceProviderSchemaPath = strings.TrimSpace(cfg.Protocol.CommerceProviderSchemaPath)
@@ -399,9 +427,7 @@ func (cfg Config) validate() error {
 	cfg.validateBilling(report, productionLike)
 	cfg.validateWorker(report)
 
-	if strings.TrimSpace(cfg.Telemetry.ServiceName) == "" {
-		report.add("OTEL_SERVICE_NAME must not be empty")
-	}
+	cfg.validateTelemetry(report, productionLike)
 	if cfg.BrowserAuth.SessionLifetime <= 0 {
 		report.add("MOSAIC_SESSION_LIFETIME must be greater than zero")
 	}
@@ -542,6 +568,61 @@ func databaseSSLMode(raw string) string {
 		}
 	}
 	return ""
+}
+
+// validateTelemetry rejects an export setup that cannot work, and one that
+// would put collector credentials on a connection nothing authenticates. No
+// problem it reports contains a header value.
+func (cfg Config) validateTelemetry(report *problems, productionLike bool) {
+	if strings.TrimSpace(cfg.Telemetry.ServiceName) == "" {
+		report.add("OTEL_SERVICE_NAME must not be empty")
+	}
+	if _, err := telemetry.NormalizeProtocol(cfg.Telemetry.OTLPProtocol); err != nil {
+		report.add(`OTEL_EXPORTER_OTLP_PROTOCOL must be "http/protobuf" or "grpc"`)
+	}
+	if _, err := telemetry.ParseHeaders(cfg.Telemetry.OTLPHeaders); err != nil {
+		report.add(
+			"OTEL_EXPORTER_OTLP_HEADERS must be a comma-separated list of key=value pairs " +
+				"with percent-encoded values",
+		)
+	}
+
+	// Everything below describes how Mosaic reaches the collector, which only
+	// matters once there is one to reach.
+	if cfg.Telemetry.OTLPEndpoint == "" {
+		return
+	}
+	endpoint, err := url.Parse(cfg.Telemetry.OTLPEndpoint)
+	if err != nil || endpoint.Host == "" || (endpoint.Scheme != "http" && endpoint.Scheme != "https") {
+		report.add("OTEL_EXPORTER_OTLP_ENDPOINT must be an absolute http:// or https:// URL")
+		return
+	}
+	if endpoint.User != nil {
+		report.add("OTEL_EXPORTER_OTLP_ENDPOINT must not embed credentials; use OTEL_EXPORTER_OTLP_HEADERS")
+	}
+	if cfg.Telemetry.TLSSkipVerify && endpoint.Scheme != "https" {
+		report.add(
+			"MOSAIC_OTEL_EXPORTER_TLS_SKIP_VERIFY has no effect on a plaintext OTEL_EXPORTER_OTLP_ENDPOINT; " +
+				"use an https:// endpoint or unset it",
+		)
+	}
+	if !productionLike || cfg.Telemetry.AllowInsecure {
+		return
+	}
+	// Outside development, an export connection that is neither encrypted nor
+	// verified is a credential-disclosure risk whenever headers are set, and a
+	// telemetry-tampering risk even when they are not.
+	if endpoint.Scheme != "https" {
+		report.add(
+			"OTEL_EXPORTER_OTLP_ENDPOINT must use https outside development and test; set " +
+				"MOSAIC_OTEL_EXPORTER_ALLOW_INSECURE=true only when the collector is reached over a trusted private network",
+		)
+	} else if cfg.Telemetry.TLSSkipVerify {
+		report.add(
+			"MOSAIC_OTEL_EXPORTER_TLS_SKIP_VERIFY must be false outside development and test; set " +
+				"MOSAIC_OTEL_EXPORTER_ALLOW_INSECURE=true to accept an unverified collector certificate",
+		)
+	}
 }
 
 func (cfg Config) validateObjectStore(report *problems, productionLike bool) {

@@ -148,7 +148,12 @@ variables take precedence because `.env` loading does not overwrite them.
 | `MOSAIC_LOG_LEVEL`                | `info`                               | Zerolog level such as `debug`, `info`, or `warn`.                                                           |
 | `MOSAIC_LOG_FORMAT`               | `json`                               | `json` or developer-friendly `console`.                                                                     |
 | `OTEL_SERVICE_NAME`               | `mosaic-api`                         | OpenTelemetry service name.                                                                                 |
-| `OTEL_EXPORTER_OTLP_ENDPOINT`     | empty                                | Optional OTLP/HTTP trace endpoint. With no endpoint, trace context still exists but spans are not exported. |
+| `OTEL_EXPORTER_OTLP_ENDPOINT`     | empty                                | Optional OTLP endpoint. With no endpoint, trace context still exists but spans are not exported.            |
+| `OTEL_EXPORTER_OTLP_PROTOCOL`     | `http/protobuf`                      | OTLP transport for that endpoint: `http/protobuf` (port 4318) or `grpc` (port 4317). Ignored when unset.    |
+| `OTEL_EXPORTER_OTLP_HEADERS`      | empty                                | Export headers as `key=value,key=value`, values percent-encoded. Collector authentication; treated as a secret. |
+| `MOSAIC_OTEL_EXPORTER_TLS_SKIP_VERIFY` | `false`                         | Skip collector certificate verification. `https://` endpoints only.                                         |
+| `MOSAIC_OTEL_EXPORTER_ALLOW_INSECURE`  | `false`                         | Acknowledges a plaintext or unverified collector connection outside development and test.                   |
+| `MOSAIC_OTEL_LOGS_ENABLED`        | `true`                               | Ships log records to the collector as well as stdout. Stdout logging is never affected.                     |
 | `DATABASE_URL`                    | none; required                       | PostgreSQL connection URL. It is parsed but never logged.                                                   |
 | `DATABASE_MAX_CONNECTIONS`        | `10`                                 | Maximum pgx pool connections.                                                                               |
 | `DATABASE_MIN_CONNECTIONS`        | `2`                                  | Minimum pgx pool connections; cannot exceed the maximum.                                                    |

@@ -119,11 +119,16 @@ func run() (runErr error) {
 		return fmt.Errorf("configure logging: %w", err)
 	}
 	build := buildinfo.Current()
-	logger = logger.With().
-		Str("service", cfg.Telemetry.ServiceName).
-		Str("environment", cfg.Environment).
-		Str("version", build.Version).
-		Logger()
+	// Applied to whichever logger ends up in use, so the local stream and the
+	// exported records carry the same service identity.
+	withServiceContext := func(base zerolog.Logger) zerolog.Logger {
+		return base.With().
+			Str("service", cfg.Telemetry.ServiceName).
+			Str("environment", cfg.Environment).
+			Str("version", build.Version).
+			Logger()
+	}
+	logger = withServiceContext(logger)
 
 	runContext, stop := signal.NotifyContext(
 		context.Background(),
@@ -136,10 +141,29 @@ func run() (runErr error) {
 		ServiceName:  cfg.Telemetry.ServiceName,
 		Environment:  cfg.Environment,
 		OTLPEndpoint: cfg.Telemetry.OTLPEndpoint,
-		Logger:       logger,
+		OTLPProtocol: cfg.Telemetry.OTLPProtocol,
+		OTLPHeaders:  cfg.Telemetry.OTLPHeaders,
+		// Startup validation has already refused an unverified collector in a
+		// production-like environment unless it was explicitly acknowledged.
+		OTLPTLSSkipVerify: cfg.Telemetry.TLSSkipVerify,
+		DisableLogExport:  !cfg.Telemetry.ExportLogs(),
+		// Telemetry keeps the local-only logger: routing its own export failures
+		// through the exporting logger would feed the failing exporter.
+		Logger: logger,
 	})
 	if err != nil {
 		return fmt.Errorf("configure telemetry: %w", err)
+	}
+	if cfg.Telemetry.ExportLogs() {
+		// Swapped in only once the logger provider exists, so every record this
+		// logger writes locally also reaches the collector.
+		exportingLogger, err := logging.NewExporting(
+			cfg.Log.Level, cfg.Log.Format, os.Stdout, cfg.Telemetry.ServiceName,
+		)
+		if err != nil {
+			return fmt.Errorf("configure log export: %w", err)
+		}
+		logger = withServiceContext(exportingLogger)
 	}
 	defer func() {
 		// Telemetry flush has its own budget so a slow collector cannot consume

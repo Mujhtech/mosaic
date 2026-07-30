@@ -49,7 +49,7 @@ Include:
 - **Migration state**: `migrate status` and `migrate preflight` report the
   current and pending schema state.
 - **Observability**: with `OTEL_EXPORTER_OTLP_ENDPOINT` set, the API and
-  worker export traces and metrics; see
+  worker export traces, metrics, and logs (logs also stay on stdout); see
   [docs/backend/operations/observability.md](backend/operations/observability.md).
 
 ## Known limitations
