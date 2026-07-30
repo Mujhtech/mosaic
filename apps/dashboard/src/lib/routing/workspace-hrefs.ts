@@ -29,7 +29,7 @@ export function appendSearch(href: string, values: Record<string, string | undef
 
 function projectBase(scope: WorkspaceScope) {
   if (!scope.organizationId || !scope.projectId) return undefined
-  return `/organizations/${encodeURIComponent(scope.organizationId)}/projects/${encodeURIComponent(scope.projectId)}`
+  return `/orgs/${encodeURIComponent(scope.organizationId)}/projects/${encodeURIComponent(scope.projectId)}`
 }
 
 function monetizationBase(scope: WorkspaceScope) {
@@ -203,6 +203,6 @@ export function describeReturnDestination(href: string | undefined) {
   }
   if (href.includes("/billing/")) return "Return to Mosaic Billing"
   if (href.includes("/catalog/grant-versions")) return "Return to grant versions"
-  if (href.includes("/studio-hosted/")) return "Return to Publish review"
+  if (href.includes("/studio/")) return "Return to Publish review"
   return "Return to where you started"
 }
