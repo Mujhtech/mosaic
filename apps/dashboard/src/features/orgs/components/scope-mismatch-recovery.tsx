@@ -1,7 +1,7 @@
 import { Link } from "@tanstack/react-router"
 
 import { buttonVariants } from "@/components/ui/button-variants"
-import type { NestedScopeMismatch } from "@/features/organizations/types/nested-scope"
+import type { NestedScopeMismatch } from "@/features/orgs/types/nested-scope"
 
 interface ScopeMismatchRecoveryProps {
   mismatch: Exclude<NestedScopeMismatch, null>
@@ -34,8 +34,8 @@ export function ScopeMismatchRecovery({
         {mismatch === "resource" ? (
           <Link
             className={buttonVariants()}
-            params={{ organizationId, projectId }}
-            to="/organizations/$organizationId/projects/$projectId"
+            params={(prev) => prev}
+            to="/orgs/$organizationId/projects/$projectId/env/$environmentKey"
           >
             Return to Project
           </Link>
@@ -43,7 +43,7 @@ export function ScopeMismatchRecovery({
           <Link
             className={buttonVariants()}
             params={{ organizationId }}
-            to="/organizations/$organizationId"
+            to="/orgs/$organizationId"
           >
             Return to Organization
           </Link>

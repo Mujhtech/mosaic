@@ -4,8 +4,8 @@ import { Link } from "@tanstack/react-router"
 import { buttonVariants } from "@/components/ui/button-variants"
 import { HostedResourceBoundary } from "@/features/auth/components/hosted-resource-boundary"
 import { resolveHostedQueryState } from "@/features/auth/types/hosted-query-state"
-import { organizationQueryOptions } from "@/features/organizations/queries/organizations-query"
-import { WorkspacePage, WorkflowPanel } from "@/features/organizations/components/workspace-page"
+import { organizationQueryOptions } from "@/features/orgs/queries/organizations-query"
+import { WorkspacePage, WorkflowPanel } from "@/features/orgs/components/workspace-page"
 import { projectsQueryOptions } from "@/features/projects/queries/projects-query"
 
 interface OrganizationOverviewPageProps {
@@ -29,7 +29,7 @@ export function OrganizationOverviewPage({
         <Link
           className={buttonVariants()}
           params={{ organizationId }}
-          to="/organizations/$organizationId/projects/new"
+          to="/orgs/$organizationId/projects/new"
         >
           Create project
         </Link>
@@ -57,14 +57,14 @@ export function OrganizationOverviewPage({
           <Link
             className={buttonVariants({ variant: "outline" })}
             params={{ organizationId }}
-            to="/organizations/$organizationId/members"
+            to="/orgs/$organizationId/members"
           >
             Members
           </Link>
           <Link
             className={buttonVariants()}
             params={{ organizationId }}
-            to="/organizations/$organizationId/projects/new"
+            to="/orgs/$organizationId/projects/new"
           >
             New project
           </Link>
@@ -104,8 +104,8 @@ export function OrganizationOverviewPage({
                 <p className="text-muted-foreground mt-1 font-mono text-xs">{project.key}</p>
                 <Link
                   className="text-primary mt-5 inline-flex text-sm font-medium hover:underline"
-                  params={{ organizationId, projectId: project.id }}
-                  to="/organizations/$organizationId/projects/$projectId"
+                  params={(prev) => prev}
+                  to="/orgs/$organizationId/projects/$projectId/env/$environmentKey"
                 >
                   Open project
                 </Link>

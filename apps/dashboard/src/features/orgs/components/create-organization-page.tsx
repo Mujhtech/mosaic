@@ -6,8 +6,8 @@ import { Button } from "@/components/ui/button"
 import { Field, FieldDescription, FieldError, FieldLabel } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
 import { HostedAccessBanner } from "@/features/auth/components/hosted-access-banner"
-import { createOrganizationMutationOptions } from "@/features/organizations/mutations/organization-mutations"
-import { WorkspacePage, WorkflowPanel } from "@/features/organizations/components/workspace-page"
+import { createOrganizationMutationOptions } from "@/features/orgs/mutations/organization-mutations"
+import { WorkspacePage, WorkflowPanel } from "@/features/orgs/components/workspace-page"
 import { ApiError } from "@/lib/api/errors"
 
 export function CreateOrganizationPage() {
@@ -20,7 +20,7 @@ export function CreateOrganizationPage() {
       const organization = await mutation.mutateAsync({ name: value.name.trim() })
       await navigate({
         params: { organizationId: organization.id },
-        to: "/organizations/$organizationId",
+        to: "/orgs/$organizationId",
       })
     },
   })

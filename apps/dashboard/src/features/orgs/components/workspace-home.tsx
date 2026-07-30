@@ -6,15 +6,15 @@ import { Link } from "@tanstack/react-router"
 import { buttonVariants } from "@/components/ui/button-variants"
 import { HostedResourceBoundary } from "@/features/auth/components/hosted-resource-boundary"
 import { resolveHostedQueryState } from "@/features/auth/types/hosted-query-state"
-import { organizationsQueryOptions } from "@/features/organizations/queries/organizations-query"
-import { WorkspacePage, WorkflowPanel } from "@/features/organizations/components/workspace-page"
+import { organizationsQueryOptions } from "@/features/orgs/queries/organizations-query"
+import { WorkspacePage, WorkflowPanel } from "@/features/orgs/components/workspace-page"
 
 export function WorkspaceHome() {
   const organizations = useQuery(organizationsQueryOptions())
   const items = organizations.data?.items ?? []
   const state = resolveHostedQueryState({
     emptyAction: (
-      <Link className={buttonVariants()} to="/organizations/new">
+      <Link className={buttonVariants()} to="/orgs/new">
         Create organization
       </Link>
     ),
@@ -31,7 +31,7 @@ export function WorkspaceHome() {
   return (
     <WorkspacePage
       actions={
-        <Link className={buttonVariants()} to="/organizations/new">
+        <Link className={buttonVariants()} to="/orgs/new">
           <PlusIcon aria-hidden size={16} />
           New organization
         </Link>
@@ -50,7 +50,7 @@ export function WorkspaceHome() {
                 <Link
                   className="hover:bg-muted/45 focus-visible:ring-ring flex items-center justify-between gap-4 rounded px-3 py-4 focus-visible:ring-2 focus-visible:outline-none"
                   params={{ organizationId: organization.id }}
-                  to="/organizations/$organizationId"
+                  to="/orgs/$organizationId"
                 >
                   <span>
                     <span className="block text-sm font-semibold">{organization.name}</span>

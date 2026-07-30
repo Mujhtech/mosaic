@@ -1,7 +1,7 @@
 import { mutationOptions, type QueryClient } from "@tanstack/react-query"
 
 import { createOrganization, type CreateOrganizationRequest } from "@/generated/api"
-import { organizationKeys } from "@/features/organizations/queries/organizations-query"
+import { organizationKeys } from "@/features/orgs/queries/organizations-query"
 import { generatedDashboardClient } from "@/lib/api/generated-dashboard-client"
 
 export function createOrganizationMutationOptions(queryClient: QueryClient) {

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest"
 
-import { detectNestedScopeMismatch } from "@/features/organizations/types/nested-scope"
+import { detectNestedScopeMismatch } from "@/features/orgs/types/nested-scope"
 
 describe("nested hosted-route scope", () => {
   it("enables a project-scoped list only when the Project belongs to the routed Organization", () => {

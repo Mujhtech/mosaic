@@ -4,11 +4,11 @@ import {
   isEnvironmentSurface,
   isProjectWideSurface,
   readWorkspaceScope,
-} from "@/features/organizations/types/workspace-navigation"
+} from "@/features/orgs/types/workspace-navigation"
 
 describe("hosted workspace route scope", () => {
   it("derives organization and project identity from the URL without a client store", () => {
-    const productRoute = "/organizations/org_one/projects/project_one/catalog/products/product_one"
+    const productRoute = "/orgs/org_one/projects/project_one/catalog/products/product_one"
 
     expect(readWorkspaceScope(productRoute)).toEqual({
       environmentId: undefined,
@@ -20,18 +20,18 @@ describe("hosted workspace route scope", () => {
   })
 
   it("does not treat creation sentinels as selected scope", () => {
-    expect(readWorkspaceScope("/organizations/new")).toEqual({
+    expect(readWorkspaceScope("/orgs/new")).toEqual({
       environmentId: undefined,
       organizationId: undefined,
       projectId: undefined,
     })
     expect(
-      isEnvironmentSurface("/organizations/org_one/projects/project_one/settings/api-keys"),
+      isEnvironmentSurface("/orgs/org_one/projects/project_one/settings/api-keys"),
     ).toBe(true)
   })
 
   it("keeps monetization Environment identity URL-owned", () => {
-    const route = "/organizations/org_one/projects/project_one/monetization/env_staging/paywalls"
+    const route = "/orgs/org_one/projects/project_one/monetization/env_staging/paywalls"
 
     expect(readWorkspaceScope(route)).toEqual({
       environmentId: "env_staging",
@@ -43,7 +43,7 @@ describe("hosted workspace route scope", () => {
   })
 
   it("keeps Analytics Environment identity URL-owned", () => {
-    const route = "/organizations/org_one/projects/project_one/analytics/env_production/paywalls"
+    const route = "/orgs/org_one/projects/project_one/analytics/env_production/paywalls"
 
     expect(readWorkspaceScope(route)).toEqual({
       environmentId: "env_production",
@@ -56,7 +56,7 @@ describe("hosted workspace route scope", () => {
 
   it("keeps Billing Environment identity URL-owned", () => {
     const route =
-      "/organizations/org_one/projects/project_one/billing/env_production/projection-health"
+      "/orgs/org_one/projects/project_one/billing/env_production/projection-health"
 
     expect(readWorkspaceScope(route)).toEqual({
       environmentId: "env_production",
