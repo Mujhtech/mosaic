@@ -4,11 +4,13 @@ import { RoutePendingState } from "@/components/feedback/route-feedback"
 
 import { TransactionFactDetailPage } from "@/features/billing-ledger/components/transaction-fact-detail-page"
 import { useRouteEnvironment } from "@/features/environments/hooks/use-route-environment"
+import { routeHead } from "@/lib/routing/route-head"
 
 export const Route = createFileRoute(
   "/_hosted/orgs/$organizationId/projects/$projectId/env/$environmentKey/billing/transactions/$factId",
 )({
   component: BillingTransactionFactRoute,
+  head: () => routeHead({ title: "Transaction" }),
   pendingComponent: RoutePendingState,
 })
 

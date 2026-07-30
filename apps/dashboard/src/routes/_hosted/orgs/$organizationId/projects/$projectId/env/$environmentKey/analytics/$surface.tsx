@@ -5,10 +5,12 @@ import { RoutePendingState } from "@/components/feedback/route-feedback"
 import { AnalyticsWorkspace } from "@/features/analytics/components/analytics-workspace"
 import { analyticsSurfaces, type AnalyticsSurface } from "@/features/analytics/types/analytics"
 import { parseAnalyticsFilters } from "@/features/analytics/types/analytics-filters"
+import { routeHead } from "@/lib/routing/route-head"
 
 export const Route = createFileRoute(
   "/_hosted/orgs/$organizationId/projects/$projectId/env/$environmentKey/analytics/$surface",
 )({
+  head: () => routeHead({ title: "Analytics" }),
   validateSearch: parseAnalyticsFilters,
   component: RouteComponent,
   pendingComponent: RoutePendingState,

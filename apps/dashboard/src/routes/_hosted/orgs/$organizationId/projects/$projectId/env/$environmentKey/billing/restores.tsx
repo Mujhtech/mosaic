@@ -4,6 +4,7 @@ import { RoutePendingState } from "@/components/feedback/route-feedback"
 
 import { RestoreJobsPage } from "@/features/billing-customers/components/restore-jobs-page"
 import { useRouteEnvironment } from "@/features/environments/hooks/use-route-environment"
+import { routeHead } from "@/lib/routing/route-head"
 
 interface RestoresSearch {
   cursor?: string
@@ -13,6 +14,7 @@ export const Route = createFileRoute(
   "/_hosted/orgs/$organizationId/projects/$projectId/env/$environmentKey/billing/restores",
 )({
   component: RestoreJobsRoute,
+  head: () => routeHead({ title: "Restore jobs" }),
   pendingComponent: RoutePendingState,
   validateSearch: (search: Record<string, unknown>): RestoresSearch => ({
     cursor:
@@ -28,7 +30,6 @@ function RestoreJobsRoute() {
   const { cursor } = Route.useSearch()
   const navigate = Route.useNavigate()
   if (!environmentId) return fallback
-
 
   return (
     <RestoreJobsPage

@@ -2,6 +2,7 @@ import { createFileRoute } from "@tanstack/react-router"
 
 import { ProductDetailPage } from "@/features/catalog/components/product-detail-page"
 import { safeInternalReturnTo } from "@/features/auth/types/hosted-access"
+import { routeHead } from "@/lib/routing/route-head"
 
 interface ProductReadinessSearch {
   applicationId?: string
@@ -13,6 +14,7 @@ export const Route = createFileRoute(
   "/_hosted/orgs/$organizationId/projects/$projectId/env/$environmentKey/catalog/products/$productId",
 )({
   component: CatalogProductRoute,
+  head: () => routeHead({ title: "Product" }),
   validateSearch: (search: Record<string, unknown>): ProductReadinessSearch => {
     const returnTo = safeInternalReturnTo(search.returnTo, "")
     return {

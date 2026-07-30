@@ -5,6 +5,7 @@ import { RoutePendingState } from "@/components/feedback/route-feedback"
 import { safeInternalReturnTo } from "@/features/auth/types/hosted-access"
 import { ProductsPage } from "@/features/catalog/components/products-page"
 import type { ProductFilters } from "@/features/catalog/queries/catalog-query"
+import { routeHead } from "@/lib/routing/route-head"
 
 const productStatuses = ["draft", "connected", "attention_required", "archived"] as const
 const productTypes = ["subscription", "one_time_non_consumable"] as const
@@ -25,6 +26,7 @@ export const Route = createFileRoute(
   "/_hosted/orgs/$organizationId/projects/$projectId/env/$environmentKey/catalog/products/",
 )({
   component: CatalogProductsRoute,
+  head: () => routeHead({ title: "Products" }),
   pendingComponent: RoutePendingState,
   validateSearch: (search: Record<string, unknown>): ProductsSearch => {
     // Bounded to same-origin paths, so a recovery round trip can never be

@@ -2,6 +2,7 @@ import { createFileRoute, useNavigate } from "@tanstack/react-router"
 
 import { RoutePendingState } from "@/components/feedback/route-feedback"
 import { MigrationProgramDetailPage } from "@/features/billing-migrations/components/migration-program-detail-page"
+import { routeHead } from "@/lib/routing/route-head"
 
 const tabs = [
   "overview",
@@ -25,6 +26,7 @@ export const Route = createFileRoute(
   "/_hosted/orgs/$organizationId/projects/$projectId/env/$environmentKey/billing/migrations/$programId",
 )({
   component: MigrationProgramRoute,
+  head: () => routeHead({ title: "Migration program" }),
   pendingComponent: RoutePendingState,
   validateSearch: (search: Record<string, unknown>): MigrationSearch => ({
     batchId: typeof search.batchId === "string" ? search.batchId : undefined,

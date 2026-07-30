@@ -4,6 +4,7 @@ import { RoutePendingState } from "@/components/feedback/route-feedback"
 
 import { BillingCustomersPage } from "@/features/billing-customers/components/billing-customers-page"
 import { useRouteEnvironment } from "@/features/environments/hooks/use-route-environment"
+import { routeHead } from "@/lib/routing/route-head"
 
 interface CustomersSearch {
   conflictedOnly?: boolean
@@ -14,6 +15,7 @@ export const Route = createFileRoute(
   "/_hosted/orgs/$organizationId/projects/$projectId/env/$environmentKey/billing/customers/",
 )({
   component: BillingCustomersRoute,
+  head: () => routeHead({ title: "Customers" }),
   pendingComponent: RoutePendingState,
   validateSearch: (search: Record<string, unknown>): CustomersSearch => ({
     conflictedOnly:
@@ -31,7 +33,6 @@ function BillingCustomersRoute() {
   const { conflictedOnly, cursor } = Route.useSearch()
   const navigate = Route.useNavigate()
   if (!environmentId) return fallback
-
 
   return (
     <BillingCustomersPage

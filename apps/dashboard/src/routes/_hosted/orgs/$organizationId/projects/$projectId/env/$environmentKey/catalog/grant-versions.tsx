@@ -3,6 +3,7 @@ import { createFileRoute } from "@tanstack/react-router"
 import { RoutePendingState } from "@/components/feedback/route-feedback"
 
 import { GrantVersionsPage } from "@/features/entitlement-grants/components/grant-versions-page"
+import { routeHead } from "@/lib/routing/route-head"
 
 interface GrantVersionsSearch {
   entitlementId?: string
@@ -17,6 +18,7 @@ export const Route = createFileRoute(
   "/_hosted/orgs/$organizationId/projects/$projectId/env/$environmentKey/catalog/grant-versions",
 )({
   component: GrantVersionsRoute,
+  head: () => routeHead({ title: "Grant versions" }),
   pendingComponent: RoutePendingState,
   validateSearch: (search: Record<string, unknown>): GrantVersionsSearch => ({
     entitlementId: readIdentifier(search.entitlementId),

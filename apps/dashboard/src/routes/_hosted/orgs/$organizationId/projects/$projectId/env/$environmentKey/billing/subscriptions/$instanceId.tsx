@@ -4,6 +4,7 @@ import { RoutePendingState } from "@/components/feedback/route-feedback"
 
 import { SubscriptionDetailPage } from "@/features/billing-customers/components/subscription-detail-page"
 import { useRouteEnvironment } from "@/features/environments/hooks/use-route-environment"
+import { routeHead } from "@/lib/routing/route-head"
 
 interface SubscriptionSearch {
   cursor?: string
@@ -13,6 +14,7 @@ export const Route = createFileRoute(
   "/_hosted/orgs/$organizationId/projects/$projectId/env/$environmentKey/billing/subscriptions/$instanceId",
 )({
   component: SubscriptionDetailRoute,
+  head: () => routeHead({ title: "Subscription" }),
   pendingComponent: RoutePendingState,
   validateSearch: (search: Record<string, unknown>): SubscriptionSearch => ({
     cursor:
@@ -28,7 +30,6 @@ function SubscriptionDetailRoute() {
   const { cursor } = Route.useSearch()
   const navigate = Route.useNavigate()
   if (!environmentId) return fallback
-
 
   return (
     <SubscriptionDetailPage

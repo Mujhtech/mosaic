@@ -1,5 +1,7 @@
 import { createFileRoute, lazyRouteComponent } from "@tanstack/react-router"
 
+import { routeHead } from "@/lib/routing/route-head"
+
 interface HostedStudioSearch {
   review?: "publish"
 }
@@ -13,6 +15,7 @@ export const Route = createFileRoute(
   "/_studio_layout/studio/$organizationId/$projectId/$environmentId/$paywallId/$draftId",
 )({
   component: RouteComponent,
+  head: () => routeHead({ title: "Paywall editor" }),
   validateSearch: (search: Record<string, unknown>): HostedStudioSearch => ({
     review: search.review === "publish" ? "publish" : undefined,
   }),
