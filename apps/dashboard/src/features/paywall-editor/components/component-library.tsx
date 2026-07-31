@@ -294,7 +294,7 @@ export function ComponentLibrary() {
             className="text-muted-foreground pointer-events-none absolute top-1/2 left-2.5 -translate-y-1/2"
           />
           <input
-            className="border-input bg-background focus-visible:ring-ring w-full rounded-md border py-2 pr-3 pl-8 text-sm focus-visible:ring-2 focus-visible:outline-none"
+            className="border-input bg-background focus-visible:ring-ring w-full rounded border py-2 pr-3 pl-8 text-sm focus-visible:ring-2 focus-visible:outline-none"
             id="component-search"
             onChange={(event) => setQuery(event.target.value)}
             placeholder="Text, Button, Icon…"
@@ -351,7 +351,7 @@ export function ComponentLibrary() {
                         aria-describedby={`component-description-${entry.type}`}
                         aria-label={entry.label}
                         aria-pressed={selected}
-                        className={`focus-visible:ring-ring flex w-full items-start gap-2 rounded-lg border p-2.5 text-left focus-visible:ring-2 focus-visible:outline-none ${
+                        className={`focus-visible:ring-ring flex w-full items-start gap-2 rounded border p-2.5 text-left focus-visible:ring-2 focus-visible:outline-none ${
                           selected
                             ? "border-primary bg-primary/5"
                             : "border-border bg-background hover:bg-muted/60"
@@ -365,7 +365,7 @@ export function ComponentLibrary() {
                         onKeyDown={(event) => handleCardKeyDown(event, entry)}
                         type="button"
                       >
-                        <span className="bg-muted text-foreground grid size-8 shrink-0 place-items-center rounded-md">
+                        <span className="bg-muted text-foreground grid size-8 shrink-0 place-items-center rounded">
                           <CatalogIcon type={entry.type} />
                         </span>
                         <span className="min-w-0">
@@ -386,7 +386,7 @@ export function ComponentLibrary() {
           ))}
         </div>
       ) : (
-        <div className="border-border rounded-lg border border-dashed p-4 text-center">
+        <div className="border-border rounded border border-dashed p-4 text-center">
           <p className="text-sm font-medium">No supported components match</p>
           <p className="text-muted-foreground mt-1 text-xs">
             Try a protocol type such as Text or Button.
@@ -394,7 +394,7 @@ export function ComponentLibrary() {
         </div>
       )}
 
-      <div className="border-border bg-muted/35 rounded-lg border p-3">
+      <div className="border-border bg-muted/35 rounded border p-3">
         <p className="text-xs font-semibold">Insertion target</p>
         <p className="text-muted-foreground mt-1 text-xs leading-4">
           {insertionPreview(document, selectedComponentId, layerMetadata.labels)}
@@ -411,7 +411,7 @@ export function ComponentLibrary() {
           </label>
           <input
             aria-describedby="countdown-insertion-deadline-description"
-            className="border-input bg-background focus-visible:ring-ring w-full rounded-md border px-2 py-2 text-sm focus-visible:ring-2 focus-visible:outline-none"
+            className="border-input bg-background focus-visible:ring-ring w-full rounded border px-2 py-2 text-sm focus-visible:ring-2 focus-visible:outline-none"
             id="countdown-insertion-deadline"
             onChange={(event) => {
               setCountdownDeadlineInput(event.target.value)
@@ -433,7 +433,7 @@ export function ComponentLibrary() {
 
       {notice ? (
         <StatusMessage
-          className={`rounded-lg border p-3 text-xs ${
+          className={`rounded border p-3 text-xs ${
             notice.tone === "danger"
               ? "border-destructive/25 bg-destructive/5"
               : "border-primary/20 bg-primary/5"

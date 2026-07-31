@@ -85,7 +85,7 @@ export function TemplateSelection({
 
         {importError ? (
           <div
-            className="border-destructive/30 bg-destructive/5 mb-6 rounded-xl border p-4 text-sm"
+            className="border-destructive/30 bg-destructive/5 mb-6 rounded border p-4 text-sm"
             role="alert"
           >
             <p className="font-semibold">Import was not applied</p>
@@ -101,11 +101,11 @@ export function TemplateSelection({
               className="border-border bg-card hover:border-primary/45 focus-visible:ring-ring group rounded-2xl border p-6 text-left shadow-sm transition focus-visible:ring-2 focus-visible:outline-none"
               onClick={() => onSelectTemplate(template.id)}
             >
-              <span className="bg-muted mb-5 block h-36 rounded-xl p-5" aria-hidden>
-                <span className="bg-card mx-auto block h-full max-w-40 rounded-lg border shadow-sm">
+              <span className="bg-muted mb-5 block h-36 rounded p-5" aria-hidden>
+                <span className="bg-card mx-auto block h-full max-w-40 rounded border shadow-sm">
                   <span className="bg-foreground/15 mx-auto mt-6 block h-2 w-24 rounded-full" />
                   <span className="bg-foreground/8 mx-auto mt-3 block h-1.5 w-28 rounded-full" />
-                  <span className="bg-primary/35 mx-4 mt-7 block h-9 rounded-md" />
+                  <span className="bg-primary/35 mx-4 mt-7 block h-9 rounded" />
                 </span>
               </span>
               <span className="group-hover:text-primary block font-semibold">{template.name}</span>

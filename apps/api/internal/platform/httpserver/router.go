@@ -2,6 +2,7 @@ package httpserver
 
 import (
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -10,12 +11,16 @@ import (
 	"github.com/riandyrn/otelchi"
 	"github.com/rs/zerolog"
 
+	"github.com/Mujhtech/mosaic/apps/api/internal/browserauth"
 	"github.com/Mujhtech/mosaic/apps/api/internal/cloudworkspace"
+	"github.com/Mujhtech/mosaic/apps/api/internal/hostedpublishing"
 	"github.com/Mujhtech/mosaic/apps/api/internal/platform/authn"
 	"github.com/Mujhtech/mosaic/apps/api/internal/platform/httpserver/httpmiddleware"
 	"github.com/Mujhtech/mosaic/apps/api/internal/platform/httpserver/response"
+	browserauthhttp "github.com/Mujhtech/mosaic/apps/api/internal/transport/browserauth"
 	cloudworkspacehttp "github.com/Mujhtech/mosaic/apps/api/internal/transport/cloudworkspace"
 	"github.com/Mujhtech/mosaic/apps/api/internal/transport/health"
+	hostedpublishinghttp "github.com/Mujhtech/mosaic/apps/api/internal/transport/hostedpublishing"
 )
 
 const (
@@ -48,7 +53,12 @@ type Config struct {
 
 type Dependencies struct {
 	CloudWorkspace    *cloudworkspace.Service
+	HostedPublishing  *hostedpublishing.Service
 	PrincipalResolver authn.Resolver
+	ReadinessChecker  health.Checker
+	BrowserAuth       *browserauth.Service
+	BrowserAuthConfig browserauthhttp.Config
+	DeliveryLimiter   hostedpublishinghttp.DeliveryRateLimiter
 }
 
 func New(cfg Config, logger zerolog.Logger) http.Handler {
@@ -67,13 +77,39 @@ func NewWithDependencies(cfg Config, logger zerolog.Logger, dependencies Depende
 	router.Use(corsMiddleware(cfg.AllowedOrigins))
 	router.Use(httpmiddleware.Timeout(cfg.RequestTimeout))
 
-	router.Mount("/health", health.Routes())
-	router.Mount("/ready", health.Routes())
-	if dependencies.CloudWorkspace != nil {
-		router.Mount("/v1", cloudworkspacehttp.Routes(
-			dependencies.CloudWorkspace,
-			dependencies.PrincipalResolver,
-		))
+	router.Mount("/health/live", health.LiveRoutes())
+	router.Mount("/health/ready", health.ReadyRoutes(dependencies.ReadinessChecker))
+	// Compatibility aliases retained for existing probes while documented callers migrate.
+	router.Mount("/health", health.LiveRoutes())
+	router.Mount("/ready", health.ReadyRoutes(dependencies.ReadinessChecker))
+	if dependencies.BrowserAuth != nil || dependencies.CloudWorkspace != nil || dependencies.HostedPublishing != nil {
+		router.Route("/v1", func(versioned chi.Router) {
+			versioned.Use(trustedMutationOrigins(cfg.AllowedOrigins))
+			if dependencies.BrowserAuth != nil {
+				browserauthhttp.RegisterRoutes(versioned, dependencies.BrowserAuth, dependencies.BrowserAuthConfig)
+			}
+			if dependencies.CloudWorkspace != nil || dependencies.HostedPublishing != nil {
+				versioned.Group(func(authenticated chi.Router) {
+					authenticated.Use(authn.Middleware(dependencies.PrincipalResolver))
+					if dependencies.CloudWorkspace != nil {
+						cloudworkspacehttp.RegisterWorkspaceRoutes(authenticated, dependencies.CloudWorkspace)
+					}
+					// Project-scoped domain routes share one Chi subrouter so that
+					// registering another module cannot shadow an existing handler.
+					authenticated.Route("/projects/{projectId}", func(project chi.Router) {
+						if dependencies.CloudWorkspace != nil {
+							cloudworkspacehttp.RegisterProjectRoutes(project, dependencies.CloudWorkspace)
+						}
+						if dependencies.HostedPublishing != nil {
+							hostedpublishinghttp.RegisterProjectRoutes(project, dependencies.HostedPublishing)
+						}
+					})
+				})
+			}
+			if dependencies.HostedPublishing != nil {
+				hostedpublishinghttp.RegisterPublicRoutes(versioned, dependencies.HostedPublishing, dependencies.DeliveryLimiter)
+			}
+		})
 	}
 	router.NotFound(func(w http.ResponseWriter, r *http.Request) {
 		response.Error(w, r, response.NewAPIError(
@@ -91,6 +127,31 @@ func NewWithDependencies(cfg Config, logger zerolog.Logger, dependencies Depende
 	})
 
 	return router
+}
+
+func trustedMutationOrigins(allowedOrigins []string) func(http.Handler) http.Handler {
+	allowed := make(map[string]struct{}, len(allowedOrigins))
+	for _, origin := range allowedOrigins {
+		allowed[strings.TrimSpace(origin)] = struct{}{}
+	}
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if r.Method == http.MethodGet || r.Method == http.MethodHead || r.Method == http.MethodOptions {
+				next.ServeHTTP(w, r)
+				return
+			}
+			origin := strings.TrimSpace(r.Header.Get("Origin"))
+			if origin == "" {
+				next.ServeHTTP(w, r)
+				return
+			}
+			if _, ok := allowed[origin]; ok {
+				next.ServeHTTP(w, r)
+				return
+			}
+			response.Error(w, r, response.NewAPIError(http.StatusForbidden, "origin_not_allowed", "The request origin is not allowed."))
+		})
+	}
 }
 
 func corsMiddleware(allowedOrigins []string) func(http.Handler) http.Handler {
@@ -115,9 +176,11 @@ func corsMiddleware(allowedOrigins []string) func(http.Handler) http.Handler {
 			"Authorization",
 			"Content-Type",
 			response.RequestIDHeader,
+			"Idempotency-Key",
+			"If-Match",
 		},
-		ExposedHeaders:   []string{response.RequestIDHeader},
-		AllowCredentials: false,
+		ExposedHeaders:   []string{response.RequestIDHeader, "ETag"},
+		AllowCredentials: true,
 		MaxAge:           300,
 	})
 }

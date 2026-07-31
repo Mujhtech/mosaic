@@ -192,7 +192,10 @@ Accessibility behaviour is part of feature acceptance.
 
 ## Testing
 
-Add tests appropriate to the assigned phase.
+- Read and follow `docs/architecture/conventions/testing.md`.
+- Add only the minimum sufficient tests justified by concrete risk.
+- Do not create a new test suite or test dependency without orchestrator approval.
+- In the final report, explain the purpose of every test added.
 
 Expected categories include:
 

@@ -179,6 +179,13 @@ type ProductEntitlementGrant struct {
 	CreatedAt     time.Time `json:"createdAt"`
 }
 
+type ProductReplacementHistory struct {
+	ProjectID            string    `json:"projectId"`
+	ProductID            string    `json:"productId"`
+	ReplacementProductID string    `json:"replacementProductId"`
+	ChangedAt            time.Time `json:"changedAt"`
+}
+
 type ProviderKind string
 
 const (

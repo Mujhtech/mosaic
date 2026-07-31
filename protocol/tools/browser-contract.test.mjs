@@ -14,30 +14,32 @@ import {
   validatePreviewMessage,
 } from "../browser/index.js";
 import { validateBrowserContractGeneration } from "./browser-contract-validation.mjs";
-import { loadPreviewArtifacts } from "./preview-validation.mjs";
+import { loadPreviewV02Artifacts } from "./preview-validation-v0.2.mjs";
 import {
-  loadProtocolArtifacts,
-  validateProtocol,
-  walkDocumentNodes,
-} from "./validation.mjs";
+  loadProtocolV02Artifacts,
+  validateProtocolV02,
+  walkV02DocumentNodes,
+} from "./validation-v0.2.mjs";
 
 function previewArtifacts() {
-  return structuredClone(loadPreviewArtifacts());
+  return structuredClone(loadPreviewV02Artifacts());
 }
 
 function paywallArtifacts() {
-  return structuredClone(loadProtocolArtifacts());
+  return structuredClone(loadProtocolV02Artifacts());
 }
 
 function node(document, id) {
-  const result = walkDocumentNodes(document).find((entry) => entry.id === id);
+  const result = walkV02DocumentNodes(document).find(
+    ({ node: candidate }) => candidate.id === id,
+  );
   assert.ok(result, `expected canonical node ${id}`);
-  return result;
+  return result.node;
 }
 
 function nodeValidatorAccepts(document, input) {
   return (
-    validateProtocol({
+    validateProtocolV02({
       document,
       manifest: input.manifest,
       manifestSchema: input.manifestSchema,
@@ -53,8 +55,8 @@ test("the browser contract declarations are generated from canonical schemas", (
 test("browser constants are derived from the frozen Local Preview schemas", () => {
   const input = previewArtifacts();
 
-  assert.equal(localPreviewContractVersion, "0.1");
-  assert.equal(localPreviewWebSocketProtocol, "mosaic.local-preview.v0.1");
+  assert.equal(localPreviewContractVersion, "0.2");
+  assert.equal(localPreviewWebSocketProtocol, "mosaic.local-preview.v0.2");
   assert.deepEqual(
     previewMessageTypes,
     input.previewMessageSchema.properties.type.enum,
@@ -129,9 +131,9 @@ test("the intentionally invalid fixture draft reports its product binding", () =
       (entry) =>
         entry.code === "semantic.invalidReference" &&
         entry.location.documentPath ===
-          "/layout/content/children/5/productReferenceIds/0" &&
-        entry.location.componentId === "plans" &&
-        entry.location.property === "productReferenceIds" &&
+          "/screens/0/layout/content/children/10/cards/0/productReferenceId" &&
+        entry.location.componentId === "plans-monthly-plan-card" &&
+        entry.location.property === "productReferenceId" &&
         entry.recovery.action === "bindProduct",
     ),
   );
@@ -195,14 +197,14 @@ test("browser and Node validators agree on schema and semantic mutations", () =>
     {
       name: "unknown product reference",
       mutate(document) {
-        node(document, "plans").productReferenceIds[0] = "missing-plan";
+        node(document, "plans-monthly-plan-card").productReferenceId =
+          "missing-plan";
       },
     },
     {
       name: "invalid initial product selection",
       mutate(document) {
-        node(document, "plans").initiallySelectedProductReferenceId =
-          "missing-plan";
+        node(document, "plans").initialProductCardId = "missing-card";
       },
     },
     {
@@ -223,10 +225,10 @@ test("browser and Node validators agree on schema and semantic mutations", () =>
     {
       name: "unused supported capabilities",
       mutate(document) {
-        document.layout.content.children =
-          document.layout.content.children.filter(
-            (child) => child.id !== "close-actions",
-          );
+        const root = node(document, "paywall-content");
+        root.children = root.children.filter(
+          (child) => child.id !== "close-actions",
+        );
         for (const locale of Object.values(document.localization.locales)) {
           delete locale.strings["paywall.close"];
         }
@@ -272,17 +274,21 @@ test("browser and Node validators agree on schema and semantic mutations", () =>
 
 test("browser diagnostics are structured, safe, and editor-addressable", () => {
   const input = paywallArtifacts();
-  node(input.document, "plans").productReferenceIds[0] = "missing-plan";
+  node(input.document, "plans-monthly-plan-card").productReferenceId =
+    "missing-plan";
 
   const result = validatePaywallDocument(input.document);
   assert.equal(result.ok, false);
   const binding = result.diagnostics.find(
     (entry) =>
-      entry.location.componentId === "plans" &&
-      entry.location.property === "productReferenceIds",
+      entry.location.componentId === "plans-monthly-plan-card" &&
+      entry.location.property === "productReferenceId",
   );
   assert.ok(binding);
-  assert.equal(binding.location.documentPath.endsWith("/0"), true);
+  assert.equal(
+    binding.location.documentPath.endsWith("/productReferenceId"),
+    true,
+  );
   assert.equal(binding.recovery.action, "bindProduct");
   for (const entry of result.diagnostics) {
     assert.equal(entry.message.includes("\n"), false);
@@ -363,7 +369,8 @@ test("portable export is canonical and refuses invalid documents", () => {
   assert.equal(valid.ok, true);
   assert.equal(valid.value, `${JSON.stringify(input.document, null, 2)}\n`);
 
-  node(input.document, "plans").productReferenceIds[0] = "missing-plan";
+  node(input.document, "plans-monthly-plan-card").productReferenceId =
+    "missing-plan";
   const invalid = serializePortablePaywallJson(input.document);
   assert.equal(invalid.ok, false);
   assert.equal(invalid.value, null);

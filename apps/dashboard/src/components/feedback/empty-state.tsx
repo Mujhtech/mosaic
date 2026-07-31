@@ -21,7 +21,7 @@ export function EmptyState({ action, className, description, title }: EmptyState
     >
       <span
         aria-hidden="true"
-        className="border-border bg-background mb-5 grid size-10 place-items-center rounded-xl border shadow-xs"
+        className="border-border bg-background mb-5 grid size-10 place-items-center rounded border shadow-xs"
       >
         <span className="bg-primary size-2 rounded-full" />
       </span>

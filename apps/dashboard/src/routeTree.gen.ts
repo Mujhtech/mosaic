@@ -11,26 +11,31 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as SignupRouteImport } from './routes/signup'
 import { Route as LoginRouteImport } from './routes/login'
-import { Route as FoundationRouteImport } from './routes/foundation'
 import { Route as Studio_layoutRouteImport } from './routes/_studio_layout'
 import { Route as HostedRouteImport } from './routes/_hosted'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as Studio_layoutStudioRouteImport } from './routes/_studio_layout/studio'
 import { Route as HostedWorkspaceRouteImport } from './routes/_hosted/workspace'
 import { Route as HostedOrganizationsNewRouteImport } from './routes/_hosted/organizations/new'
-import { Route as HostedOrganizationsOrganizationIdRouteImport } from './routes/_hosted/organizations/$organizationId'
+import { Route as HostedOrganizationsOrganizationIdIndexRouteImport } from './routes/_hosted/organizations/$organizationId/index'
 import { Route as HostedOrganizationsOrganizationIdMembersRouteImport } from './routes/_hosted/organizations/$organizationId/members'
 import { Route as HostedOrganizationsOrganizationIdProjectsNewRouteImport } from './routes/_hosted/organizations/$organizationId/projects/new'
-import { Route as HostedOrganizationsOrganizationIdProjectsProjectIdRouteImport } from './routes/_hosted/organizations/$organizationId/projects/$projectId'
+import { Route as HostedOrganizationsOrganizationIdProjectsProjectIdIndexRouteImport } from './routes/_hosted/organizations/$organizationId/projects/$projectId/index'
 import { Route as HostedOrganizationsOrganizationIdProjectsProjectIdAppsRouteImport } from './routes/_hosted/organizations/$organizationId/projects/$projectId/apps'
+import { Route as Studio_layoutStudioHostedOrganizationIdProjectIdEnvironmentIdPaywallIdDraftIdRouteImport } from './routes/_studio_layout/studio-hosted/$organizationId/$projectId/$environmentId/$paywallId/$draftId'
 import { Route as HostedOrganizationsOrganizationIdProjectsProjectIdSettingsEnvironmentsRouteImport } from './routes/_hosted/organizations/$organizationId/projects/$projectId/settings/environments'
 import { Route as HostedOrganizationsOrganizationIdProjectsProjectIdSettingsApiKeysRouteImport } from './routes/_hosted/organizations/$organizationId/projects/$projectId/settings/api-keys'
-import { Route as HostedOrganizationsOrganizationIdProjectsProjectIdCatalogProductsRouteImport } from './routes/_hosted/organizations/$organizationId/projects/$projectId/catalog/products'
-import { Route as HostedOrganizationsOrganizationIdProjectsProjectIdCatalogPlansRouteImport } from './routes/_hosted/organizations/$organizationId/projects/$projectId/catalog/plans'
-import { Route as HostedOrganizationsOrganizationIdProjectsProjectIdCatalogEntitlementsRouteImport } from './routes/_hosted/organizations/$organizationId/projects/$projectId/catalog/entitlements'
+import { Route as HostedOrganizationsOrganizationIdProjectsProjectIdCatalogProductsIndexRouteImport } from './routes/_hosted/organizations/$organizationId/projects/$projectId/catalog/products/index'
+import { Route as HostedOrganizationsOrganizationIdProjectsProjectIdCatalogPlansIndexRouteImport } from './routes/_hosted/organizations/$organizationId/projects/$projectId/catalog/plans/index'
+import { Route as HostedOrganizationsOrganizationIdProjectsProjectIdCatalogEntitlementsIndexRouteImport } from './routes/_hosted/organizations/$organizationId/projects/$projectId/catalog/entitlements/index'
+import { Route as HostedOrganizationsOrganizationIdProjectsProjectIdMonetizationEnvironmentIdReleasesRouteImport } from './routes/_hosted/organizations/$organizationId/projects/$projectId/monetization/$environmentId/releases'
+import { Route as HostedOrganizationsOrganizationIdProjectsProjectIdMonetizationEnvironmentIdPlacementsRouteImport } from './routes/_hosted/organizations/$organizationId/projects/$projectId/monetization/$environmentId/placements'
+import { Route as HostedOrganizationsOrganizationIdProjectsProjectIdMonetizationEnvironmentIdPaywallsRouteImport } from './routes/_hosted/organizations/$organizationId/projects/$projectId/monetization/$environmentId/paywalls'
+import { Route as HostedOrganizationsOrganizationIdProjectsProjectIdMonetizationEnvironmentIdAssetsRouteImport } from './routes/_hosted/organizations/$organizationId/projects/$projectId/monetization/$environmentId/assets'
 import { Route as HostedOrganizationsOrganizationIdProjectsProjectIdCatalogProductsProductIdRouteImport } from './routes/_hosted/organizations/$organizationId/projects/$projectId/catalog/products/$productId'
 import { Route as HostedOrganizationsOrganizationIdProjectsProjectIdCatalogPlansPlanIdRouteImport } from './routes/_hosted/organizations/$organizationId/projects/$projectId/catalog/plans/$planId'
 import { Route as HostedOrganizationsOrganizationIdProjectsProjectIdCatalogEntitlementsEntitlementIdRouteImport } from './routes/_hosted/organizations/$organizationId/projects/$projectId/catalog/entitlements/$entitlementId'
+import { Route as HostedOrganizationsOrganizationIdProjectsProjectIdMonetizationEnvironmentIdPaywallsPaywallIdRouteImport } from './routes/_hosted/organizations/$organizationId/projects/$projectId/monetization/$environmentId/paywalls/$paywallId'
 
 const SignupRoute = SignupRouteImport.update({
   id: '/signup',
@@ -40,11 +45,6 @@ const SignupRoute = SignupRouteImport.update({
 const LoginRoute = LoginRouteImport.update({
   id: '/login',
   path: '/login',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const FoundationRoute = FoundationRouteImport.update({
-  id: '/foundation',
-  path: '/foundation',
   getParentRoute: () => rootRouteImport,
 } as any)
 const Studio_layoutRoute = Studio_layoutRouteImport.update({
@@ -75,255 +75,324 @@ const HostedOrganizationsNewRoute = HostedOrganizationsNewRouteImport.update({
   path: '/organizations/new',
   getParentRoute: () => HostedRoute,
 } as any)
-const HostedOrganizationsOrganizationIdRoute =
-  HostedOrganizationsOrganizationIdRouteImport.update({
-    id: '/organizations/$organizationId',
-    path: '/organizations/$organizationId',
+const HostedOrganizationsOrganizationIdIndexRoute =
+  HostedOrganizationsOrganizationIdIndexRouteImport.update({
+    id: '/organizations/$organizationId/',
+    path: '/organizations/$organizationId/',
     getParentRoute: () => HostedRoute,
   } as any)
 const HostedOrganizationsOrganizationIdMembersRoute =
   HostedOrganizationsOrganizationIdMembersRouteImport.update({
-    id: '/members',
-    path: '/members',
-    getParentRoute: () => HostedOrganizationsOrganizationIdRoute,
+    id: '/organizations/$organizationId/members',
+    path: '/organizations/$organizationId/members',
+    getParentRoute: () => HostedRoute,
   } as any)
 const HostedOrganizationsOrganizationIdProjectsNewRoute =
   HostedOrganizationsOrganizationIdProjectsNewRouteImport.update({
-    id: '/projects/new',
-    path: '/projects/new',
-    getParentRoute: () => HostedOrganizationsOrganizationIdRoute,
+    id: '/organizations/$organizationId/projects/new',
+    path: '/organizations/$organizationId/projects/new',
+    getParentRoute: () => HostedRoute,
   } as any)
-const HostedOrganizationsOrganizationIdProjectsProjectIdRoute =
-  HostedOrganizationsOrganizationIdProjectsProjectIdRouteImport.update({
-    id: '/projects/$projectId',
-    path: '/projects/$projectId',
-    getParentRoute: () => HostedOrganizationsOrganizationIdRoute,
+const HostedOrganizationsOrganizationIdProjectsProjectIdIndexRoute =
+  HostedOrganizationsOrganizationIdProjectsProjectIdIndexRouteImport.update({
+    id: '/organizations/$organizationId/projects/$projectId/',
+    path: '/organizations/$organizationId/projects/$projectId/',
+    getParentRoute: () => HostedRoute,
   } as any)
 const HostedOrganizationsOrganizationIdProjectsProjectIdAppsRoute =
   HostedOrganizationsOrganizationIdProjectsProjectIdAppsRouteImport.update({
-    id: '/apps',
-    path: '/apps',
-    getParentRoute: () =>
-      HostedOrganizationsOrganizationIdProjectsProjectIdRoute,
+    id: '/organizations/$organizationId/projects/$projectId/apps',
+    path: '/organizations/$organizationId/projects/$projectId/apps',
+    getParentRoute: () => HostedRoute,
   } as any)
+const Studio_layoutStudioHostedOrganizationIdProjectIdEnvironmentIdPaywallIdDraftIdRoute =
+  Studio_layoutStudioHostedOrganizationIdProjectIdEnvironmentIdPaywallIdDraftIdRouteImport.update(
+    {
+      id: '/studio-hosted/$organizationId/$projectId/$environmentId/$paywallId/$draftId',
+      path: '/studio-hosted/$organizationId/$projectId/$environmentId/$paywallId/$draftId',
+      getParentRoute: () => Studio_layoutRoute,
+    } as any,
+  )
 const HostedOrganizationsOrganizationIdProjectsProjectIdSettingsEnvironmentsRoute =
   HostedOrganizationsOrganizationIdProjectsProjectIdSettingsEnvironmentsRouteImport.update(
     {
-      id: '/settings/environments',
-      path: '/settings/environments',
-      getParentRoute: () =>
-        HostedOrganizationsOrganizationIdProjectsProjectIdRoute,
+      id: '/organizations/$organizationId/projects/$projectId/settings/environments',
+      path: '/organizations/$organizationId/projects/$projectId/settings/environments',
+      getParentRoute: () => HostedRoute,
     } as any,
   )
 const HostedOrganizationsOrganizationIdProjectsProjectIdSettingsApiKeysRoute =
   HostedOrganizationsOrganizationIdProjectsProjectIdSettingsApiKeysRouteImport.update(
     {
-      id: '/settings/api-keys',
-      path: '/settings/api-keys',
-      getParentRoute: () =>
-        HostedOrganizationsOrganizationIdProjectsProjectIdRoute,
+      id: '/organizations/$organizationId/projects/$projectId/settings/api-keys',
+      path: '/organizations/$organizationId/projects/$projectId/settings/api-keys',
+      getParentRoute: () => HostedRoute,
     } as any,
   )
-const HostedOrganizationsOrganizationIdProjectsProjectIdCatalogProductsRoute =
-  HostedOrganizationsOrganizationIdProjectsProjectIdCatalogProductsRouteImport.update(
+const HostedOrganizationsOrganizationIdProjectsProjectIdCatalogProductsIndexRoute =
+  HostedOrganizationsOrganizationIdProjectsProjectIdCatalogProductsIndexRouteImport.update(
     {
-      id: '/catalog/products',
-      path: '/catalog/products',
-      getParentRoute: () =>
-        HostedOrganizationsOrganizationIdProjectsProjectIdRoute,
+      id: '/organizations/$organizationId/projects/$projectId/catalog/products/',
+      path: '/organizations/$organizationId/projects/$projectId/catalog/products/',
+      getParentRoute: () => HostedRoute,
     } as any,
   )
-const HostedOrganizationsOrganizationIdProjectsProjectIdCatalogPlansRoute =
-  HostedOrganizationsOrganizationIdProjectsProjectIdCatalogPlansRouteImport.update(
+const HostedOrganizationsOrganizationIdProjectsProjectIdCatalogPlansIndexRoute =
+  HostedOrganizationsOrganizationIdProjectsProjectIdCatalogPlansIndexRouteImport.update(
     {
-      id: '/catalog/plans',
-      path: '/catalog/plans',
-      getParentRoute: () =>
-        HostedOrganizationsOrganizationIdProjectsProjectIdRoute,
+      id: '/organizations/$organizationId/projects/$projectId/catalog/plans/',
+      path: '/organizations/$organizationId/projects/$projectId/catalog/plans/',
+      getParentRoute: () => HostedRoute,
     } as any,
   )
-const HostedOrganizationsOrganizationIdProjectsProjectIdCatalogEntitlementsRoute =
-  HostedOrganizationsOrganizationIdProjectsProjectIdCatalogEntitlementsRouteImport.update(
+const HostedOrganizationsOrganizationIdProjectsProjectIdCatalogEntitlementsIndexRoute =
+  HostedOrganizationsOrganizationIdProjectsProjectIdCatalogEntitlementsIndexRouteImport.update(
     {
-      id: '/catalog/entitlements',
-      path: '/catalog/entitlements',
-      getParentRoute: () =>
-        HostedOrganizationsOrganizationIdProjectsProjectIdRoute,
+      id: '/organizations/$organizationId/projects/$projectId/catalog/entitlements/',
+      path: '/organizations/$organizationId/projects/$projectId/catalog/entitlements/',
+      getParentRoute: () => HostedRoute,
+    } as any,
+  )
+const HostedOrganizationsOrganizationIdProjectsProjectIdMonetizationEnvironmentIdReleasesRoute =
+  HostedOrganizationsOrganizationIdProjectsProjectIdMonetizationEnvironmentIdReleasesRouteImport.update(
+    {
+      id: '/organizations/$organizationId/projects/$projectId/monetization/$environmentId/releases',
+      path: '/organizations/$organizationId/projects/$projectId/monetization/$environmentId/releases',
+      getParentRoute: () => HostedRoute,
+    } as any,
+  )
+const HostedOrganizationsOrganizationIdProjectsProjectIdMonetizationEnvironmentIdPlacementsRoute =
+  HostedOrganizationsOrganizationIdProjectsProjectIdMonetizationEnvironmentIdPlacementsRouteImport.update(
+    {
+      id: '/organizations/$organizationId/projects/$projectId/monetization/$environmentId/placements',
+      path: '/organizations/$organizationId/projects/$projectId/monetization/$environmentId/placements',
+      getParentRoute: () => HostedRoute,
+    } as any,
+  )
+const HostedOrganizationsOrganizationIdProjectsProjectIdMonetizationEnvironmentIdPaywallsRoute =
+  HostedOrganizationsOrganizationIdProjectsProjectIdMonetizationEnvironmentIdPaywallsRouteImport.update(
+    {
+      id: '/organizations/$organizationId/projects/$projectId/monetization/$environmentId/paywalls',
+      path: '/organizations/$organizationId/projects/$projectId/monetization/$environmentId/paywalls',
+      getParentRoute: () => HostedRoute,
+    } as any,
+  )
+const HostedOrganizationsOrganizationIdProjectsProjectIdMonetizationEnvironmentIdAssetsRoute =
+  HostedOrganizationsOrganizationIdProjectsProjectIdMonetizationEnvironmentIdAssetsRouteImport.update(
+    {
+      id: '/organizations/$organizationId/projects/$projectId/monetization/$environmentId/assets',
+      path: '/organizations/$organizationId/projects/$projectId/monetization/$environmentId/assets',
+      getParentRoute: () => HostedRoute,
     } as any,
   )
 const HostedOrganizationsOrganizationIdProjectsProjectIdCatalogProductsProductIdRoute =
   HostedOrganizationsOrganizationIdProjectsProjectIdCatalogProductsProductIdRouteImport.update(
     {
-      id: '/$productId',
-      path: '/$productId',
-      getParentRoute: () =>
-        HostedOrganizationsOrganizationIdProjectsProjectIdCatalogProductsRoute,
+      id: '/organizations/$organizationId/projects/$projectId/catalog/products/$productId',
+      path: '/organizations/$organizationId/projects/$projectId/catalog/products/$productId',
+      getParentRoute: () => HostedRoute,
     } as any,
   )
 const HostedOrganizationsOrganizationIdProjectsProjectIdCatalogPlansPlanIdRoute =
   HostedOrganizationsOrganizationIdProjectsProjectIdCatalogPlansPlanIdRouteImport.update(
     {
-      id: '/$planId',
-      path: '/$planId',
-      getParentRoute: () =>
-        HostedOrganizationsOrganizationIdProjectsProjectIdCatalogPlansRoute,
+      id: '/organizations/$organizationId/projects/$projectId/catalog/plans/$planId',
+      path: '/organizations/$organizationId/projects/$projectId/catalog/plans/$planId',
+      getParentRoute: () => HostedRoute,
     } as any,
   )
 const HostedOrganizationsOrganizationIdProjectsProjectIdCatalogEntitlementsEntitlementIdRoute =
   HostedOrganizationsOrganizationIdProjectsProjectIdCatalogEntitlementsEntitlementIdRouteImport.update(
     {
-      id: '/$entitlementId',
-      path: '/$entitlementId',
+      id: '/organizations/$organizationId/projects/$projectId/catalog/entitlements/$entitlementId',
+      path: '/organizations/$organizationId/projects/$projectId/catalog/entitlements/$entitlementId',
+      getParentRoute: () => HostedRoute,
+    } as any,
+  )
+const HostedOrganizationsOrganizationIdProjectsProjectIdMonetizationEnvironmentIdPaywallsPaywallIdRoute =
+  HostedOrganizationsOrganizationIdProjectsProjectIdMonetizationEnvironmentIdPaywallsPaywallIdRouteImport.update(
+    {
+      id: '/$paywallId',
+      path: '/$paywallId',
       getParentRoute: () =>
-        HostedOrganizationsOrganizationIdProjectsProjectIdCatalogEntitlementsRoute,
+        HostedOrganizationsOrganizationIdProjectsProjectIdMonetizationEnvironmentIdPaywallsRoute,
     } as any,
   )
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
-  '/foundation': typeof FoundationRoute
   '/login': typeof LoginRoute
   '/signup': typeof SignupRoute
   '/workspace': typeof HostedWorkspaceRoute
   '/studio': typeof Studio_layoutStudioRoute
-  '/organizations/$organizationId': typeof HostedOrganizationsOrganizationIdRouteWithChildren
   '/organizations/new': typeof HostedOrganizationsNewRoute
   '/organizations/$organizationId/members': typeof HostedOrganizationsOrganizationIdMembersRoute
-  '/organizations/$organizationId/projects/$projectId': typeof HostedOrganizationsOrganizationIdProjectsProjectIdRouteWithChildren
+  '/organizations/$organizationId/': typeof HostedOrganizationsOrganizationIdIndexRoute
   '/organizations/$organizationId/projects/new': typeof HostedOrganizationsOrganizationIdProjectsNewRoute
   '/organizations/$organizationId/projects/$projectId/apps': typeof HostedOrganizationsOrganizationIdProjectsProjectIdAppsRoute
-  '/organizations/$organizationId/projects/$projectId/catalog/entitlements': typeof HostedOrganizationsOrganizationIdProjectsProjectIdCatalogEntitlementsRouteWithChildren
-  '/organizations/$organizationId/projects/$projectId/catalog/plans': typeof HostedOrganizationsOrganizationIdProjectsProjectIdCatalogPlansRouteWithChildren
-  '/organizations/$organizationId/projects/$projectId/catalog/products': typeof HostedOrganizationsOrganizationIdProjectsProjectIdCatalogProductsRouteWithChildren
+  '/organizations/$organizationId/projects/$projectId/': typeof HostedOrganizationsOrganizationIdProjectsProjectIdIndexRoute
   '/organizations/$organizationId/projects/$projectId/settings/api-keys': typeof HostedOrganizationsOrganizationIdProjectsProjectIdSettingsApiKeysRoute
   '/organizations/$organizationId/projects/$projectId/settings/environments': typeof HostedOrganizationsOrganizationIdProjectsProjectIdSettingsEnvironmentsRoute
+  '/studio-hosted/$organizationId/$projectId/$environmentId/$paywallId/$draftId': typeof Studio_layoutStudioHostedOrganizationIdProjectIdEnvironmentIdPaywallIdDraftIdRoute
   '/organizations/$organizationId/projects/$projectId/catalog/entitlements/$entitlementId': typeof HostedOrganizationsOrganizationIdProjectsProjectIdCatalogEntitlementsEntitlementIdRoute
   '/organizations/$organizationId/projects/$projectId/catalog/plans/$planId': typeof HostedOrganizationsOrganizationIdProjectsProjectIdCatalogPlansPlanIdRoute
   '/organizations/$organizationId/projects/$projectId/catalog/products/$productId': typeof HostedOrganizationsOrganizationIdProjectsProjectIdCatalogProductsProductIdRoute
+  '/organizations/$organizationId/projects/$projectId/monetization/$environmentId/assets': typeof HostedOrganizationsOrganizationIdProjectsProjectIdMonetizationEnvironmentIdAssetsRoute
+  '/organizations/$organizationId/projects/$projectId/monetization/$environmentId/paywalls': typeof HostedOrganizationsOrganizationIdProjectsProjectIdMonetizationEnvironmentIdPaywallsRouteWithChildren
+  '/organizations/$organizationId/projects/$projectId/monetization/$environmentId/placements': typeof HostedOrganizationsOrganizationIdProjectsProjectIdMonetizationEnvironmentIdPlacementsRoute
+  '/organizations/$organizationId/projects/$projectId/monetization/$environmentId/releases': typeof HostedOrganizationsOrganizationIdProjectsProjectIdMonetizationEnvironmentIdReleasesRoute
+  '/organizations/$organizationId/projects/$projectId/catalog/entitlements/': typeof HostedOrganizationsOrganizationIdProjectsProjectIdCatalogEntitlementsIndexRoute
+  '/organizations/$organizationId/projects/$projectId/catalog/plans/': typeof HostedOrganizationsOrganizationIdProjectsProjectIdCatalogPlansIndexRoute
+  '/organizations/$organizationId/projects/$projectId/catalog/products/': typeof HostedOrganizationsOrganizationIdProjectsProjectIdCatalogProductsIndexRoute
+  '/organizations/$organizationId/projects/$projectId/monetization/$environmentId/paywalls/$paywallId': typeof HostedOrganizationsOrganizationIdProjectsProjectIdMonetizationEnvironmentIdPaywallsPaywallIdRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
-  '/foundation': typeof FoundationRoute
   '/login': typeof LoginRoute
   '/signup': typeof SignupRoute
   '/workspace': typeof HostedWorkspaceRoute
   '/studio': typeof Studio_layoutStudioRoute
-  '/organizations/$organizationId': typeof HostedOrganizationsOrganizationIdRouteWithChildren
   '/organizations/new': typeof HostedOrganizationsNewRoute
   '/organizations/$organizationId/members': typeof HostedOrganizationsOrganizationIdMembersRoute
-  '/organizations/$organizationId/projects/$projectId': typeof HostedOrganizationsOrganizationIdProjectsProjectIdRouteWithChildren
+  '/organizations/$organizationId': typeof HostedOrganizationsOrganizationIdIndexRoute
   '/organizations/$organizationId/projects/new': typeof HostedOrganizationsOrganizationIdProjectsNewRoute
   '/organizations/$organizationId/projects/$projectId/apps': typeof HostedOrganizationsOrganizationIdProjectsProjectIdAppsRoute
-  '/organizations/$organizationId/projects/$projectId/catalog/entitlements': typeof HostedOrganizationsOrganizationIdProjectsProjectIdCatalogEntitlementsRouteWithChildren
-  '/organizations/$organizationId/projects/$projectId/catalog/plans': typeof HostedOrganizationsOrganizationIdProjectsProjectIdCatalogPlansRouteWithChildren
-  '/organizations/$organizationId/projects/$projectId/catalog/products': typeof HostedOrganizationsOrganizationIdProjectsProjectIdCatalogProductsRouteWithChildren
+  '/organizations/$organizationId/projects/$projectId': typeof HostedOrganizationsOrganizationIdProjectsProjectIdIndexRoute
   '/organizations/$organizationId/projects/$projectId/settings/api-keys': typeof HostedOrganizationsOrganizationIdProjectsProjectIdSettingsApiKeysRoute
   '/organizations/$organizationId/projects/$projectId/settings/environments': typeof HostedOrganizationsOrganizationIdProjectsProjectIdSettingsEnvironmentsRoute
+  '/studio-hosted/$organizationId/$projectId/$environmentId/$paywallId/$draftId': typeof Studio_layoutStudioHostedOrganizationIdProjectIdEnvironmentIdPaywallIdDraftIdRoute
   '/organizations/$organizationId/projects/$projectId/catalog/entitlements/$entitlementId': typeof HostedOrganizationsOrganizationIdProjectsProjectIdCatalogEntitlementsEntitlementIdRoute
   '/organizations/$organizationId/projects/$projectId/catalog/plans/$planId': typeof HostedOrganizationsOrganizationIdProjectsProjectIdCatalogPlansPlanIdRoute
   '/organizations/$organizationId/projects/$projectId/catalog/products/$productId': typeof HostedOrganizationsOrganizationIdProjectsProjectIdCatalogProductsProductIdRoute
+  '/organizations/$organizationId/projects/$projectId/monetization/$environmentId/assets': typeof HostedOrganizationsOrganizationIdProjectsProjectIdMonetizationEnvironmentIdAssetsRoute
+  '/organizations/$organizationId/projects/$projectId/monetization/$environmentId/paywalls': typeof HostedOrganizationsOrganizationIdProjectsProjectIdMonetizationEnvironmentIdPaywallsRouteWithChildren
+  '/organizations/$organizationId/projects/$projectId/monetization/$environmentId/placements': typeof HostedOrganizationsOrganizationIdProjectsProjectIdMonetizationEnvironmentIdPlacementsRoute
+  '/organizations/$organizationId/projects/$projectId/monetization/$environmentId/releases': typeof HostedOrganizationsOrganizationIdProjectsProjectIdMonetizationEnvironmentIdReleasesRoute
+  '/organizations/$organizationId/projects/$projectId/catalog/entitlements': typeof HostedOrganizationsOrganizationIdProjectsProjectIdCatalogEntitlementsIndexRoute
+  '/organizations/$organizationId/projects/$projectId/catalog/plans': typeof HostedOrganizationsOrganizationIdProjectsProjectIdCatalogPlansIndexRoute
+  '/organizations/$organizationId/projects/$projectId/catalog/products': typeof HostedOrganizationsOrganizationIdProjectsProjectIdCatalogProductsIndexRoute
+  '/organizations/$organizationId/projects/$projectId/monetization/$environmentId/paywalls/$paywallId': typeof HostedOrganizationsOrganizationIdProjectsProjectIdMonetizationEnvironmentIdPaywallsPaywallIdRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/_hosted': typeof HostedRouteWithChildren
   '/_studio_layout': typeof Studio_layoutRouteWithChildren
-  '/foundation': typeof FoundationRoute
   '/login': typeof LoginRoute
   '/signup': typeof SignupRoute
   '/_hosted/workspace': typeof HostedWorkspaceRoute
   '/_studio_layout/studio': typeof Studio_layoutStudioRoute
-  '/_hosted/organizations/$organizationId': typeof HostedOrganizationsOrganizationIdRouteWithChildren
   '/_hosted/organizations/new': typeof HostedOrganizationsNewRoute
   '/_hosted/organizations/$organizationId/members': typeof HostedOrganizationsOrganizationIdMembersRoute
-  '/_hosted/organizations/$organizationId/projects/$projectId': typeof HostedOrganizationsOrganizationIdProjectsProjectIdRouteWithChildren
+  '/_hosted/organizations/$organizationId/': typeof HostedOrganizationsOrganizationIdIndexRoute
   '/_hosted/organizations/$organizationId/projects/new': typeof HostedOrganizationsOrganizationIdProjectsNewRoute
   '/_hosted/organizations/$organizationId/projects/$projectId/apps': typeof HostedOrganizationsOrganizationIdProjectsProjectIdAppsRoute
-  '/_hosted/organizations/$organizationId/projects/$projectId/catalog/entitlements': typeof HostedOrganizationsOrganizationIdProjectsProjectIdCatalogEntitlementsRouteWithChildren
-  '/_hosted/organizations/$organizationId/projects/$projectId/catalog/plans': typeof HostedOrganizationsOrganizationIdProjectsProjectIdCatalogPlansRouteWithChildren
-  '/_hosted/organizations/$organizationId/projects/$projectId/catalog/products': typeof HostedOrganizationsOrganizationIdProjectsProjectIdCatalogProductsRouteWithChildren
+  '/_hosted/organizations/$organizationId/projects/$projectId/': typeof HostedOrganizationsOrganizationIdProjectsProjectIdIndexRoute
   '/_hosted/organizations/$organizationId/projects/$projectId/settings/api-keys': typeof HostedOrganizationsOrganizationIdProjectsProjectIdSettingsApiKeysRoute
   '/_hosted/organizations/$organizationId/projects/$projectId/settings/environments': typeof HostedOrganizationsOrganizationIdProjectsProjectIdSettingsEnvironmentsRoute
+  '/_studio_layout/studio-hosted/$organizationId/$projectId/$environmentId/$paywallId/$draftId': typeof Studio_layoutStudioHostedOrganizationIdProjectIdEnvironmentIdPaywallIdDraftIdRoute
   '/_hosted/organizations/$organizationId/projects/$projectId/catalog/entitlements/$entitlementId': typeof HostedOrganizationsOrganizationIdProjectsProjectIdCatalogEntitlementsEntitlementIdRoute
   '/_hosted/organizations/$organizationId/projects/$projectId/catalog/plans/$planId': typeof HostedOrganizationsOrganizationIdProjectsProjectIdCatalogPlansPlanIdRoute
   '/_hosted/organizations/$organizationId/projects/$projectId/catalog/products/$productId': typeof HostedOrganizationsOrganizationIdProjectsProjectIdCatalogProductsProductIdRoute
+  '/_hosted/organizations/$organizationId/projects/$projectId/monetization/$environmentId/assets': typeof HostedOrganizationsOrganizationIdProjectsProjectIdMonetizationEnvironmentIdAssetsRoute
+  '/_hosted/organizations/$organizationId/projects/$projectId/monetization/$environmentId/paywalls': typeof HostedOrganizationsOrganizationIdProjectsProjectIdMonetizationEnvironmentIdPaywallsRouteWithChildren
+  '/_hosted/organizations/$organizationId/projects/$projectId/monetization/$environmentId/placements': typeof HostedOrganizationsOrganizationIdProjectsProjectIdMonetizationEnvironmentIdPlacementsRoute
+  '/_hosted/organizations/$organizationId/projects/$projectId/monetization/$environmentId/releases': typeof HostedOrganizationsOrganizationIdProjectsProjectIdMonetizationEnvironmentIdReleasesRoute
+  '/_hosted/organizations/$organizationId/projects/$projectId/catalog/entitlements/': typeof HostedOrganizationsOrganizationIdProjectsProjectIdCatalogEntitlementsIndexRoute
+  '/_hosted/organizations/$organizationId/projects/$projectId/catalog/plans/': typeof HostedOrganizationsOrganizationIdProjectsProjectIdCatalogPlansIndexRoute
+  '/_hosted/organizations/$organizationId/projects/$projectId/catalog/products/': typeof HostedOrganizationsOrganizationIdProjectsProjectIdCatalogProductsIndexRoute
+  '/_hosted/organizations/$organizationId/projects/$projectId/monetization/$environmentId/paywalls/$paywallId': typeof HostedOrganizationsOrganizationIdProjectsProjectIdMonetizationEnvironmentIdPaywallsPaywallIdRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/'
-    | '/foundation'
     | '/login'
     | '/signup'
     | '/workspace'
     | '/studio'
-    | '/organizations/$organizationId'
     | '/organizations/new'
     | '/organizations/$organizationId/members'
-    | '/organizations/$organizationId/projects/$projectId'
+    | '/organizations/$organizationId/'
     | '/organizations/$organizationId/projects/new'
     | '/organizations/$organizationId/projects/$projectId/apps'
-    | '/organizations/$organizationId/projects/$projectId/catalog/entitlements'
-    | '/organizations/$organizationId/projects/$projectId/catalog/plans'
-    | '/organizations/$organizationId/projects/$projectId/catalog/products'
+    | '/organizations/$organizationId/projects/$projectId/'
     | '/organizations/$organizationId/projects/$projectId/settings/api-keys'
     | '/organizations/$organizationId/projects/$projectId/settings/environments'
+    | '/studio-hosted/$organizationId/$projectId/$environmentId/$paywallId/$draftId'
     | '/organizations/$organizationId/projects/$projectId/catalog/entitlements/$entitlementId'
     | '/organizations/$organizationId/projects/$projectId/catalog/plans/$planId'
     | '/organizations/$organizationId/projects/$projectId/catalog/products/$productId'
+    | '/organizations/$organizationId/projects/$projectId/monetization/$environmentId/assets'
+    | '/organizations/$organizationId/projects/$projectId/monetization/$environmentId/paywalls'
+    | '/organizations/$organizationId/projects/$projectId/monetization/$environmentId/placements'
+    | '/organizations/$organizationId/projects/$projectId/monetization/$environmentId/releases'
+    | '/organizations/$organizationId/projects/$projectId/catalog/entitlements/'
+    | '/organizations/$organizationId/projects/$projectId/catalog/plans/'
+    | '/organizations/$organizationId/projects/$projectId/catalog/products/'
+    | '/organizations/$organizationId/projects/$projectId/monetization/$environmentId/paywalls/$paywallId'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
-    | '/foundation'
     | '/login'
     | '/signup'
     | '/workspace'
     | '/studio'
-    | '/organizations/$organizationId'
     | '/organizations/new'
     | '/organizations/$organizationId/members'
-    | '/organizations/$organizationId/projects/$projectId'
+    | '/organizations/$organizationId'
     | '/organizations/$organizationId/projects/new'
     | '/organizations/$organizationId/projects/$projectId/apps'
-    | '/organizations/$organizationId/projects/$projectId/catalog/entitlements'
-    | '/organizations/$organizationId/projects/$projectId/catalog/plans'
-    | '/organizations/$organizationId/projects/$projectId/catalog/products'
+    | '/organizations/$organizationId/projects/$projectId'
     | '/organizations/$organizationId/projects/$projectId/settings/api-keys'
     | '/organizations/$organizationId/projects/$projectId/settings/environments'
+    | '/studio-hosted/$organizationId/$projectId/$environmentId/$paywallId/$draftId'
     | '/organizations/$organizationId/projects/$projectId/catalog/entitlements/$entitlementId'
     | '/organizations/$organizationId/projects/$projectId/catalog/plans/$planId'
     | '/organizations/$organizationId/projects/$projectId/catalog/products/$productId'
+    | '/organizations/$organizationId/projects/$projectId/monetization/$environmentId/assets'
+    | '/organizations/$organizationId/projects/$projectId/monetization/$environmentId/paywalls'
+    | '/organizations/$organizationId/projects/$projectId/monetization/$environmentId/placements'
+    | '/organizations/$organizationId/projects/$projectId/monetization/$environmentId/releases'
+    | '/organizations/$organizationId/projects/$projectId/catalog/entitlements'
+    | '/organizations/$organizationId/projects/$projectId/catalog/plans'
+    | '/organizations/$organizationId/projects/$projectId/catalog/products'
+    | '/organizations/$organizationId/projects/$projectId/monetization/$environmentId/paywalls/$paywallId'
   id:
     | '__root__'
     | '/'
     | '/_hosted'
     | '/_studio_layout'
-    | '/foundation'
     | '/login'
     | '/signup'
     | '/_hosted/workspace'
     | '/_studio_layout/studio'
-    | '/_hosted/organizations/$organizationId'
     | '/_hosted/organizations/new'
     | '/_hosted/organizations/$organizationId/members'
-    | '/_hosted/organizations/$organizationId/projects/$projectId'
+    | '/_hosted/organizations/$organizationId/'
     | '/_hosted/organizations/$organizationId/projects/new'
     | '/_hosted/organizations/$organizationId/projects/$projectId/apps'
-    | '/_hosted/organizations/$organizationId/projects/$projectId/catalog/entitlements'
-    | '/_hosted/organizations/$organizationId/projects/$projectId/catalog/plans'
-    | '/_hosted/organizations/$organizationId/projects/$projectId/catalog/products'
+    | '/_hosted/organizations/$organizationId/projects/$projectId/'
     | '/_hosted/organizations/$organizationId/projects/$projectId/settings/api-keys'
     | '/_hosted/organizations/$organizationId/projects/$projectId/settings/environments'
+    | '/_studio_layout/studio-hosted/$organizationId/$projectId/$environmentId/$paywallId/$draftId'
     | '/_hosted/organizations/$organizationId/projects/$projectId/catalog/entitlements/$entitlementId'
     | '/_hosted/organizations/$organizationId/projects/$projectId/catalog/plans/$planId'
     | '/_hosted/organizations/$organizationId/projects/$projectId/catalog/products/$productId'
+    | '/_hosted/organizations/$organizationId/projects/$projectId/monetization/$environmentId/assets'
+    | '/_hosted/organizations/$organizationId/projects/$projectId/monetization/$environmentId/paywalls'
+    | '/_hosted/organizations/$organizationId/projects/$projectId/monetization/$environmentId/placements'
+    | '/_hosted/organizations/$organizationId/projects/$projectId/monetization/$environmentId/releases'
+    | '/_hosted/organizations/$organizationId/projects/$projectId/catalog/entitlements/'
+    | '/_hosted/organizations/$organizationId/projects/$projectId/catalog/plans/'
+    | '/_hosted/organizations/$organizationId/projects/$projectId/catalog/products/'
+    | '/_hosted/organizations/$organizationId/projects/$projectId/monetization/$environmentId/paywalls/$paywallId'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   HostedRoute: typeof HostedRouteWithChildren
   Studio_layoutRoute: typeof Studio_layoutRouteWithChildren
-  FoundationRoute: typeof FoundationRoute
   LoginRoute: typeof LoginRoute
   SignupRoute: typeof SignupRoute
 }
@@ -342,13 +411,6 @@ declare module '@tanstack/react-router' {
       path: '/login'
       fullPath: '/login'
       preLoaderRoute: typeof LoginRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/foundation': {
-      id: '/foundation'
-      path: '/foundation'
-      fullPath: '/foundation'
-      preLoaderRoute: typeof FoundationRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/_studio_layout': {
@@ -393,207 +455,216 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof HostedOrganizationsNewRouteImport
       parentRoute: typeof HostedRoute
     }
-    '/_hosted/organizations/$organizationId': {
-      id: '/_hosted/organizations/$organizationId'
+    '/_hosted/organizations/$organizationId/': {
+      id: '/_hosted/organizations/$organizationId/'
       path: '/organizations/$organizationId'
-      fullPath: '/organizations/$organizationId'
-      preLoaderRoute: typeof HostedOrganizationsOrganizationIdRouteImport
+      fullPath: '/organizations/$organizationId/'
+      preLoaderRoute: typeof HostedOrganizationsOrganizationIdIndexRouteImport
       parentRoute: typeof HostedRoute
     }
     '/_hosted/organizations/$organizationId/members': {
       id: '/_hosted/organizations/$organizationId/members'
-      path: '/members'
+      path: '/organizations/$organizationId/members'
       fullPath: '/organizations/$organizationId/members'
       preLoaderRoute: typeof HostedOrganizationsOrganizationIdMembersRouteImport
-      parentRoute: typeof HostedOrganizationsOrganizationIdRoute
+      parentRoute: typeof HostedRoute
     }
     '/_hosted/organizations/$organizationId/projects/new': {
       id: '/_hosted/organizations/$organizationId/projects/new'
-      path: '/projects/new'
+      path: '/organizations/$organizationId/projects/new'
       fullPath: '/organizations/$organizationId/projects/new'
       preLoaderRoute: typeof HostedOrganizationsOrganizationIdProjectsNewRouteImport
-      parentRoute: typeof HostedOrganizationsOrganizationIdRoute
+      parentRoute: typeof HostedRoute
     }
-    '/_hosted/organizations/$organizationId/projects/$projectId': {
-      id: '/_hosted/organizations/$organizationId/projects/$projectId'
-      path: '/projects/$projectId'
-      fullPath: '/organizations/$organizationId/projects/$projectId'
-      preLoaderRoute: typeof HostedOrganizationsOrganizationIdProjectsProjectIdRouteImport
-      parentRoute: typeof HostedOrganizationsOrganizationIdRoute
+    '/_hosted/organizations/$organizationId/projects/$projectId/': {
+      id: '/_hosted/organizations/$organizationId/projects/$projectId/'
+      path: '/organizations/$organizationId/projects/$projectId'
+      fullPath: '/organizations/$organizationId/projects/$projectId/'
+      preLoaderRoute: typeof HostedOrganizationsOrganizationIdProjectsProjectIdIndexRouteImport
+      parentRoute: typeof HostedRoute
     }
     '/_hosted/organizations/$organizationId/projects/$projectId/apps': {
       id: '/_hosted/organizations/$organizationId/projects/$projectId/apps'
-      path: '/apps'
+      path: '/organizations/$organizationId/projects/$projectId/apps'
       fullPath: '/organizations/$organizationId/projects/$projectId/apps'
       preLoaderRoute: typeof HostedOrganizationsOrganizationIdProjectsProjectIdAppsRouteImport
-      parentRoute: typeof HostedOrganizationsOrganizationIdProjectsProjectIdRoute
+      parentRoute: typeof HostedRoute
+    }
+    '/_studio_layout/studio-hosted/$organizationId/$projectId/$environmentId/$paywallId/$draftId': {
+      id: '/_studio_layout/studio-hosted/$organizationId/$projectId/$environmentId/$paywallId/$draftId'
+      path: '/studio-hosted/$organizationId/$projectId/$environmentId/$paywallId/$draftId'
+      fullPath: '/studio-hosted/$organizationId/$projectId/$environmentId/$paywallId/$draftId'
+      preLoaderRoute: typeof Studio_layoutStudioHostedOrganizationIdProjectIdEnvironmentIdPaywallIdDraftIdRouteImport
+      parentRoute: typeof Studio_layoutRoute
     }
     '/_hosted/organizations/$organizationId/projects/$projectId/settings/environments': {
       id: '/_hosted/organizations/$organizationId/projects/$projectId/settings/environments'
-      path: '/settings/environments'
+      path: '/organizations/$organizationId/projects/$projectId/settings/environments'
       fullPath: '/organizations/$organizationId/projects/$projectId/settings/environments'
       preLoaderRoute: typeof HostedOrganizationsOrganizationIdProjectsProjectIdSettingsEnvironmentsRouteImport
-      parentRoute: typeof HostedOrganizationsOrganizationIdProjectsProjectIdRoute
+      parentRoute: typeof HostedRoute
     }
     '/_hosted/organizations/$organizationId/projects/$projectId/settings/api-keys': {
       id: '/_hosted/organizations/$organizationId/projects/$projectId/settings/api-keys'
-      path: '/settings/api-keys'
+      path: '/organizations/$organizationId/projects/$projectId/settings/api-keys'
       fullPath: '/organizations/$organizationId/projects/$projectId/settings/api-keys'
       preLoaderRoute: typeof HostedOrganizationsOrganizationIdProjectsProjectIdSettingsApiKeysRouteImport
-      parentRoute: typeof HostedOrganizationsOrganizationIdProjectsProjectIdRoute
+      parentRoute: typeof HostedRoute
     }
-    '/_hosted/organizations/$organizationId/projects/$projectId/catalog/products': {
-      id: '/_hosted/organizations/$organizationId/projects/$projectId/catalog/products'
-      path: '/catalog/products'
-      fullPath: '/organizations/$organizationId/projects/$projectId/catalog/products'
-      preLoaderRoute: typeof HostedOrganizationsOrganizationIdProjectsProjectIdCatalogProductsRouteImport
-      parentRoute: typeof HostedOrganizationsOrganizationIdProjectsProjectIdRoute
+    '/_hosted/organizations/$organizationId/projects/$projectId/catalog/products/': {
+      id: '/_hosted/organizations/$organizationId/projects/$projectId/catalog/products/'
+      path: '/organizations/$organizationId/projects/$projectId/catalog/products'
+      fullPath: '/organizations/$organizationId/projects/$projectId/catalog/products/'
+      preLoaderRoute: typeof HostedOrganizationsOrganizationIdProjectsProjectIdCatalogProductsIndexRouteImport
+      parentRoute: typeof HostedRoute
     }
-    '/_hosted/organizations/$organizationId/projects/$projectId/catalog/plans': {
-      id: '/_hosted/organizations/$organizationId/projects/$projectId/catalog/plans'
-      path: '/catalog/plans'
-      fullPath: '/organizations/$organizationId/projects/$projectId/catalog/plans'
-      preLoaderRoute: typeof HostedOrganizationsOrganizationIdProjectsProjectIdCatalogPlansRouteImport
-      parentRoute: typeof HostedOrganizationsOrganizationIdProjectsProjectIdRoute
+    '/_hosted/organizations/$organizationId/projects/$projectId/catalog/plans/': {
+      id: '/_hosted/organizations/$organizationId/projects/$projectId/catalog/plans/'
+      path: '/organizations/$organizationId/projects/$projectId/catalog/plans'
+      fullPath: '/organizations/$organizationId/projects/$projectId/catalog/plans/'
+      preLoaderRoute: typeof HostedOrganizationsOrganizationIdProjectsProjectIdCatalogPlansIndexRouteImport
+      parentRoute: typeof HostedRoute
     }
-    '/_hosted/organizations/$organizationId/projects/$projectId/catalog/entitlements': {
-      id: '/_hosted/organizations/$organizationId/projects/$projectId/catalog/entitlements'
-      path: '/catalog/entitlements'
-      fullPath: '/organizations/$organizationId/projects/$projectId/catalog/entitlements'
-      preLoaderRoute: typeof HostedOrganizationsOrganizationIdProjectsProjectIdCatalogEntitlementsRouteImport
-      parentRoute: typeof HostedOrganizationsOrganizationIdProjectsProjectIdRoute
+    '/_hosted/organizations/$organizationId/projects/$projectId/catalog/entitlements/': {
+      id: '/_hosted/organizations/$organizationId/projects/$projectId/catalog/entitlements/'
+      path: '/organizations/$organizationId/projects/$projectId/catalog/entitlements'
+      fullPath: '/organizations/$organizationId/projects/$projectId/catalog/entitlements/'
+      preLoaderRoute: typeof HostedOrganizationsOrganizationIdProjectsProjectIdCatalogEntitlementsIndexRouteImport
+      parentRoute: typeof HostedRoute
+    }
+    '/_hosted/organizations/$organizationId/projects/$projectId/monetization/$environmentId/releases': {
+      id: '/_hosted/organizations/$organizationId/projects/$projectId/monetization/$environmentId/releases'
+      path: '/organizations/$organizationId/projects/$projectId/monetization/$environmentId/releases'
+      fullPath: '/organizations/$organizationId/projects/$projectId/monetization/$environmentId/releases'
+      preLoaderRoute: typeof HostedOrganizationsOrganizationIdProjectsProjectIdMonetizationEnvironmentIdReleasesRouteImport
+      parentRoute: typeof HostedRoute
+    }
+    '/_hosted/organizations/$organizationId/projects/$projectId/monetization/$environmentId/placements': {
+      id: '/_hosted/organizations/$organizationId/projects/$projectId/monetization/$environmentId/placements'
+      path: '/organizations/$organizationId/projects/$projectId/monetization/$environmentId/placements'
+      fullPath: '/organizations/$organizationId/projects/$projectId/monetization/$environmentId/placements'
+      preLoaderRoute: typeof HostedOrganizationsOrganizationIdProjectsProjectIdMonetizationEnvironmentIdPlacementsRouteImport
+      parentRoute: typeof HostedRoute
+    }
+    '/_hosted/organizations/$organizationId/projects/$projectId/monetization/$environmentId/paywalls': {
+      id: '/_hosted/organizations/$organizationId/projects/$projectId/monetization/$environmentId/paywalls'
+      path: '/organizations/$organizationId/projects/$projectId/monetization/$environmentId/paywalls'
+      fullPath: '/organizations/$organizationId/projects/$projectId/monetization/$environmentId/paywalls'
+      preLoaderRoute: typeof HostedOrganizationsOrganizationIdProjectsProjectIdMonetizationEnvironmentIdPaywallsRouteImport
+      parentRoute: typeof HostedRoute
+    }
+    '/_hosted/organizations/$organizationId/projects/$projectId/monetization/$environmentId/assets': {
+      id: '/_hosted/organizations/$organizationId/projects/$projectId/monetization/$environmentId/assets'
+      path: '/organizations/$organizationId/projects/$projectId/monetization/$environmentId/assets'
+      fullPath: '/organizations/$organizationId/projects/$projectId/monetization/$environmentId/assets'
+      preLoaderRoute: typeof HostedOrganizationsOrganizationIdProjectsProjectIdMonetizationEnvironmentIdAssetsRouteImport
+      parentRoute: typeof HostedRoute
     }
     '/_hosted/organizations/$organizationId/projects/$projectId/catalog/products/$productId': {
       id: '/_hosted/organizations/$organizationId/projects/$projectId/catalog/products/$productId'
-      path: '/$productId'
+      path: '/organizations/$organizationId/projects/$projectId/catalog/products/$productId'
       fullPath: '/organizations/$organizationId/projects/$projectId/catalog/products/$productId'
       preLoaderRoute: typeof HostedOrganizationsOrganizationIdProjectsProjectIdCatalogProductsProductIdRouteImport
-      parentRoute: typeof HostedOrganizationsOrganizationIdProjectsProjectIdCatalogProductsRoute
+      parentRoute: typeof HostedRoute
     }
     '/_hosted/organizations/$organizationId/projects/$projectId/catalog/plans/$planId': {
       id: '/_hosted/organizations/$organizationId/projects/$projectId/catalog/plans/$planId'
-      path: '/$planId'
+      path: '/organizations/$organizationId/projects/$projectId/catalog/plans/$planId'
       fullPath: '/organizations/$organizationId/projects/$projectId/catalog/plans/$planId'
       preLoaderRoute: typeof HostedOrganizationsOrganizationIdProjectsProjectIdCatalogPlansPlanIdRouteImport
-      parentRoute: typeof HostedOrganizationsOrganizationIdProjectsProjectIdCatalogPlansRoute
+      parentRoute: typeof HostedRoute
     }
     '/_hosted/organizations/$organizationId/projects/$projectId/catalog/entitlements/$entitlementId': {
       id: '/_hosted/organizations/$organizationId/projects/$projectId/catalog/entitlements/$entitlementId'
-      path: '/$entitlementId'
+      path: '/organizations/$organizationId/projects/$projectId/catalog/entitlements/$entitlementId'
       fullPath: '/organizations/$organizationId/projects/$projectId/catalog/entitlements/$entitlementId'
       preLoaderRoute: typeof HostedOrganizationsOrganizationIdProjectsProjectIdCatalogEntitlementsEntitlementIdRouteImport
-      parentRoute: typeof HostedOrganizationsOrganizationIdProjectsProjectIdCatalogEntitlementsRoute
+      parentRoute: typeof HostedRoute
+    }
+    '/_hosted/organizations/$organizationId/projects/$projectId/monetization/$environmentId/paywalls/$paywallId': {
+      id: '/_hosted/organizations/$organizationId/projects/$projectId/monetization/$environmentId/paywalls/$paywallId'
+      path: '/$paywallId'
+      fullPath: '/organizations/$organizationId/projects/$projectId/monetization/$environmentId/paywalls/$paywallId'
+      preLoaderRoute: typeof HostedOrganizationsOrganizationIdProjectsProjectIdMonetizationEnvironmentIdPaywallsPaywallIdRouteImport
+      parentRoute: typeof HostedOrganizationsOrganizationIdProjectsProjectIdMonetizationEnvironmentIdPaywallsRoute
     }
   }
 }
 
-interface HostedOrganizationsOrganizationIdProjectsProjectIdCatalogEntitlementsRouteChildren {
-  HostedOrganizationsOrganizationIdProjectsProjectIdCatalogEntitlementsEntitlementIdRoute: typeof HostedOrganizationsOrganizationIdProjectsProjectIdCatalogEntitlementsEntitlementIdRoute
+interface HostedOrganizationsOrganizationIdProjectsProjectIdMonetizationEnvironmentIdPaywallsRouteChildren {
+  HostedOrganizationsOrganizationIdProjectsProjectIdMonetizationEnvironmentIdPaywallsPaywallIdRoute: typeof HostedOrganizationsOrganizationIdProjectsProjectIdMonetizationEnvironmentIdPaywallsPaywallIdRoute
 }
 
-const HostedOrganizationsOrganizationIdProjectsProjectIdCatalogEntitlementsRouteChildren: HostedOrganizationsOrganizationIdProjectsProjectIdCatalogEntitlementsRouteChildren =
+const HostedOrganizationsOrganizationIdProjectsProjectIdMonetizationEnvironmentIdPaywallsRouteChildren: HostedOrganizationsOrganizationIdProjectsProjectIdMonetizationEnvironmentIdPaywallsRouteChildren =
   {
-    HostedOrganizationsOrganizationIdProjectsProjectIdCatalogEntitlementsEntitlementIdRoute:
-      HostedOrganizationsOrganizationIdProjectsProjectIdCatalogEntitlementsEntitlementIdRoute,
+    HostedOrganizationsOrganizationIdProjectsProjectIdMonetizationEnvironmentIdPaywallsPaywallIdRoute:
+      HostedOrganizationsOrganizationIdProjectsProjectIdMonetizationEnvironmentIdPaywallsPaywallIdRoute,
   }
 
-const HostedOrganizationsOrganizationIdProjectsProjectIdCatalogEntitlementsRouteWithChildren =
-  HostedOrganizationsOrganizationIdProjectsProjectIdCatalogEntitlementsRoute._addFileChildren(
-    HostedOrganizationsOrganizationIdProjectsProjectIdCatalogEntitlementsRouteChildren,
-  )
-
-interface HostedOrganizationsOrganizationIdProjectsProjectIdCatalogPlansRouteChildren {
-  HostedOrganizationsOrganizationIdProjectsProjectIdCatalogPlansPlanIdRoute: typeof HostedOrganizationsOrganizationIdProjectsProjectIdCatalogPlansPlanIdRoute
-}
-
-const HostedOrganizationsOrganizationIdProjectsProjectIdCatalogPlansRouteChildren: HostedOrganizationsOrganizationIdProjectsProjectIdCatalogPlansRouteChildren =
-  {
-    HostedOrganizationsOrganizationIdProjectsProjectIdCatalogPlansPlanIdRoute:
-      HostedOrganizationsOrganizationIdProjectsProjectIdCatalogPlansPlanIdRoute,
-  }
-
-const HostedOrganizationsOrganizationIdProjectsProjectIdCatalogPlansRouteWithChildren =
-  HostedOrganizationsOrganizationIdProjectsProjectIdCatalogPlansRoute._addFileChildren(
-    HostedOrganizationsOrganizationIdProjectsProjectIdCatalogPlansRouteChildren,
-  )
-
-interface HostedOrganizationsOrganizationIdProjectsProjectIdCatalogProductsRouteChildren {
-  HostedOrganizationsOrganizationIdProjectsProjectIdCatalogProductsProductIdRoute: typeof HostedOrganizationsOrganizationIdProjectsProjectIdCatalogProductsProductIdRoute
-}
-
-const HostedOrganizationsOrganizationIdProjectsProjectIdCatalogProductsRouteChildren: HostedOrganizationsOrganizationIdProjectsProjectIdCatalogProductsRouteChildren =
-  {
-    HostedOrganizationsOrganizationIdProjectsProjectIdCatalogProductsProductIdRoute:
-      HostedOrganizationsOrganizationIdProjectsProjectIdCatalogProductsProductIdRoute,
-  }
-
-const HostedOrganizationsOrganizationIdProjectsProjectIdCatalogProductsRouteWithChildren =
-  HostedOrganizationsOrganizationIdProjectsProjectIdCatalogProductsRoute._addFileChildren(
-    HostedOrganizationsOrganizationIdProjectsProjectIdCatalogProductsRouteChildren,
-  )
-
-interface HostedOrganizationsOrganizationIdProjectsProjectIdRouteChildren {
-  HostedOrganizationsOrganizationIdProjectsProjectIdAppsRoute: typeof HostedOrganizationsOrganizationIdProjectsProjectIdAppsRoute
-  HostedOrganizationsOrganizationIdProjectsProjectIdCatalogEntitlementsRoute: typeof HostedOrganizationsOrganizationIdProjectsProjectIdCatalogEntitlementsRouteWithChildren
-  HostedOrganizationsOrganizationIdProjectsProjectIdCatalogPlansRoute: typeof HostedOrganizationsOrganizationIdProjectsProjectIdCatalogPlansRouteWithChildren
-  HostedOrganizationsOrganizationIdProjectsProjectIdCatalogProductsRoute: typeof HostedOrganizationsOrganizationIdProjectsProjectIdCatalogProductsRouteWithChildren
-  HostedOrganizationsOrganizationIdProjectsProjectIdSettingsApiKeysRoute: typeof HostedOrganizationsOrganizationIdProjectsProjectIdSettingsApiKeysRoute
-  HostedOrganizationsOrganizationIdProjectsProjectIdSettingsEnvironmentsRoute: typeof HostedOrganizationsOrganizationIdProjectsProjectIdSettingsEnvironmentsRoute
-}
-
-const HostedOrganizationsOrganizationIdProjectsProjectIdRouteChildren: HostedOrganizationsOrganizationIdProjectsProjectIdRouteChildren =
-  {
-    HostedOrganizationsOrganizationIdProjectsProjectIdAppsRoute:
-      HostedOrganizationsOrganizationIdProjectsProjectIdAppsRoute,
-    HostedOrganizationsOrganizationIdProjectsProjectIdCatalogEntitlementsRoute:
-      HostedOrganizationsOrganizationIdProjectsProjectIdCatalogEntitlementsRouteWithChildren,
-    HostedOrganizationsOrganizationIdProjectsProjectIdCatalogPlansRoute:
-      HostedOrganizationsOrganizationIdProjectsProjectIdCatalogPlansRouteWithChildren,
-    HostedOrganizationsOrganizationIdProjectsProjectIdCatalogProductsRoute:
-      HostedOrganizationsOrganizationIdProjectsProjectIdCatalogProductsRouteWithChildren,
-    HostedOrganizationsOrganizationIdProjectsProjectIdSettingsApiKeysRoute:
-      HostedOrganizationsOrganizationIdProjectsProjectIdSettingsApiKeysRoute,
-    HostedOrganizationsOrganizationIdProjectsProjectIdSettingsEnvironmentsRoute:
-      HostedOrganizationsOrganizationIdProjectsProjectIdSettingsEnvironmentsRoute,
-  }
-
-const HostedOrganizationsOrganizationIdProjectsProjectIdRouteWithChildren =
-  HostedOrganizationsOrganizationIdProjectsProjectIdRoute._addFileChildren(
-    HostedOrganizationsOrganizationIdProjectsProjectIdRouteChildren,
-  )
-
-interface HostedOrganizationsOrganizationIdRouteChildren {
-  HostedOrganizationsOrganizationIdMembersRoute: typeof HostedOrganizationsOrganizationIdMembersRoute
-  HostedOrganizationsOrganizationIdProjectsProjectIdRoute: typeof HostedOrganizationsOrganizationIdProjectsProjectIdRouteWithChildren
-  HostedOrganizationsOrganizationIdProjectsNewRoute: typeof HostedOrganizationsOrganizationIdProjectsNewRoute
-}
-
-const HostedOrganizationsOrganizationIdRouteChildren: HostedOrganizationsOrganizationIdRouteChildren =
-  {
-    HostedOrganizationsOrganizationIdMembersRoute:
-      HostedOrganizationsOrganizationIdMembersRoute,
-    HostedOrganizationsOrganizationIdProjectsProjectIdRoute:
-      HostedOrganizationsOrganizationIdProjectsProjectIdRouteWithChildren,
-    HostedOrganizationsOrganizationIdProjectsNewRoute:
-      HostedOrganizationsOrganizationIdProjectsNewRoute,
-  }
-
-const HostedOrganizationsOrganizationIdRouteWithChildren =
-  HostedOrganizationsOrganizationIdRoute._addFileChildren(
-    HostedOrganizationsOrganizationIdRouteChildren,
+const HostedOrganizationsOrganizationIdProjectsProjectIdMonetizationEnvironmentIdPaywallsRouteWithChildren =
+  HostedOrganizationsOrganizationIdProjectsProjectIdMonetizationEnvironmentIdPaywallsRoute._addFileChildren(
+    HostedOrganizationsOrganizationIdProjectsProjectIdMonetizationEnvironmentIdPaywallsRouteChildren,
   )
 
 interface HostedRouteChildren {
   HostedWorkspaceRoute: typeof HostedWorkspaceRoute
-  HostedOrganizationsOrganizationIdRoute: typeof HostedOrganizationsOrganizationIdRouteWithChildren
   HostedOrganizationsNewRoute: typeof HostedOrganizationsNewRoute
+  HostedOrganizationsOrganizationIdMembersRoute: typeof HostedOrganizationsOrganizationIdMembersRoute
+  HostedOrganizationsOrganizationIdIndexRoute: typeof HostedOrganizationsOrganizationIdIndexRoute
+  HostedOrganizationsOrganizationIdProjectsNewRoute: typeof HostedOrganizationsOrganizationIdProjectsNewRoute
+  HostedOrganizationsOrganizationIdProjectsProjectIdAppsRoute: typeof HostedOrganizationsOrganizationIdProjectsProjectIdAppsRoute
+  HostedOrganizationsOrganizationIdProjectsProjectIdIndexRoute: typeof HostedOrganizationsOrganizationIdProjectsProjectIdIndexRoute
+  HostedOrganizationsOrganizationIdProjectsProjectIdSettingsApiKeysRoute: typeof HostedOrganizationsOrganizationIdProjectsProjectIdSettingsApiKeysRoute
+  HostedOrganizationsOrganizationIdProjectsProjectIdSettingsEnvironmentsRoute: typeof HostedOrganizationsOrganizationIdProjectsProjectIdSettingsEnvironmentsRoute
+  HostedOrganizationsOrganizationIdProjectsProjectIdCatalogEntitlementsEntitlementIdRoute: typeof HostedOrganizationsOrganizationIdProjectsProjectIdCatalogEntitlementsEntitlementIdRoute
+  HostedOrganizationsOrganizationIdProjectsProjectIdCatalogPlansPlanIdRoute: typeof HostedOrganizationsOrganizationIdProjectsProjectIdCatalogPlansPlanIdRoute
+  HostedOrganizationsOrganizationIdProjectsProjectIdCatalogProductsProductIdRoute: typeof HostedOrganizationsOrganizationIdProjectsProjectIdCatalogProductsProductIdRoute
+  HostedOrganizationsOrganizationIdProjectsProjectIdMonetizationEnvironmentIdAssetsRoute: typeof HostedOrganizationsOrganizationIdProjectsProjectIdMonetizationEnvironmentIdAssetsRoute
+  HostedOrganizationsOrganizationIdProjectsProjectIdMonetizationEnvironmentIdPaywallsRoute: typeof HostedOrganizationsOrganizationIdProjectsProjectIdMonetizationEnvironmentIdPaywallsRouteWithChildren
+  HostedOrganizationsOrganizationIdProjectsProjectIdMonetizationEnvironmentIdPlacementsRoute: typeof HostedOrganizationsOrganizationIdProjectsProjectIdMonetizationEnvironmentIdPlacementsRoute
+  HostedOrganizationsOrganizationIdProjectsProjectIdMonetizationEnvironmentIdReleasesRoute: typeof HostedOrganizationsOrganizationIdProjectsProjectIdMonetizationEnvironmentIdReleasesRoute
+  HostedOrganizationsOrganizationIdProjectsProjectIdCatalogEntitlementsIndexRoute: typeof HostedOrganizationsOrganizationIdProjectsProjectIdCatalogEntitlementsIndexRoute
+  HostedOrganizationsOrganizationIdProjectsProjectIdCatalogPlansIndexRoute: typeof HostedOrganizationsOrganizationIdProjectsProjectIdCatalogPlansIndexRoute
+  HostedOrganizationsOrganizationIdProjectsProjectIdCatalogProductsIndexRoute: typeof HostedOrganizationsOrganizationIdProjectsProjectIdCatalogProductsIndexRoute
 }
 
 const HostedRouteChildren: HostedRouteChildren = {
   HostedWorkspaceRoute: HostedWorkspaceRoute,
-  HostedOrganizationsOrganizationIdRoute:
-    HostedOrganizationsOrganizationIdRouteWithChildren,
   HostedOrganizationsNewRoute: HostedOrganizationsNewRoute,
+  HostedOrganizationsOrganizationIdMembersRoute:
+    HostedOrganizationsOrganizationIdMembersRoute,
+  HostedOrganizationsOrganizationIdIndexRoute:
+    HostedOrganizationsOrganizationIdIndexRoute,
+  HostedOrganizationsOrganizationIdProjectsNewRoute:
+    HostedOrganizationsOrganizationIdProjectsNewRoute,
+  HostedOrganizationsOrganizationIdProjectsProjectIdAppsRoute:
+    HostedOrganizationsOrganizationIdProjectsProjectIdAppsRoute,
+  HostedOrganizationsOrganizationIdProjectsProjectIdIndexRoute:
+    HostedOrganizationsOrganizationIdProjectsProjectIdIndexRoute,
+  HostedOrganizationsOrganizationIdProjectsProjectIdSettingsApiKeysRoute:
+    HostedOrganizationsOrganizationIdProjectsProjectIdSettingsApiKeysRoute,
+  HostedOrganizationsOrganizationIdProjectsProjectIdSettingsEnvironmentsRoute:
+    HostedOrganizationsOrganizationIdProjectsProjectIdSettingsEnvironmentsRoute,
+  HostedOrganizationsOrganizationIdProjectsProjectIdCatalogEntitlementsEntitlementIdRoute:
+    HostedOrganizationsOrganizationIdProjectsProjectIdCatalogEntitlementsEntitlementIdRoute,
+  HostedOrganizationsOrganizationIdProjectsProjectIdCatalogPlansPlanIdRoute:
+    HostedOrganizationsOrganizationIdProjectsProjectIdCatalogPlansPlanIdRoute,
+  HostedOrganizationsOrganizationIdProjectsProjectIdCatalogProductsProductIdRoute:
+    HostedOrganizationsOrganizationIdProjectsProjectIdCatalogProductsProductIdRoute,
+  HostedOrganizationsOrganizationIdProjectsProjectIdMonetizationEnvironmentIdAssetsRoute:
+    HostedOrganizationsOrganizationIdProjectsProjectIdMonetizationEnvironmentIdAssetsRoute,
+  HostedOrganizationsOrganizationIdProjectsProjectIdMonetizationEnvironmentIdPaywallsRoute:
+    HostedOrganizationsOrganizationIdProjectsProjectIdMonetizationEnvironmentIdPaywallsRouteWithChildren,
+  HostedOrganizationsOrganizationIdProjectsProjectIdMonetizationEnvironmentIdPlacementsRoute:
+    HostedOrganizationsOrganizationIdProjectsProjectIdMonetizationEnvironmentIdPlacementsRoute,
+  HostedOrganizationsOrganizationIdProjectsProjectIdMonetizationEnvironmentIdReleasesRoute:
+    HostedOrganizationsOrganizationIdProjectsProjectIdMonetizationEnvironmentIdReleasesRoute,
+  HostedOrganizationsOrganizationIdProjectsProjectIdCatalogEntitlementsIndexRoute:
+    HostedOrganizationsOrganizationIdProjectsProjectIdCatalogEntitlementsIndexRoute,
+  HostedOrganizationsOrganizationIdProjectsProjectIdCatalogPlansIndexRoute:
+    HostedOrganizationsOrganizationIdProjectsProjectIdCatalogPlansIndexRoute,
+  HostedOrganizationsOrganizationIdProjectsProjectIdCatalogProductsIndexRoute:
+    HostedOrganizationsOrganizationIdProjectsProjectIdCatalogProductsIndexRoute,
 }
 
 const HostedRouteWithChildren =
@@ -601,10 +672,13 @@ const HostedRouteWithChildren =
 
 interface Studio_layoutRouteChildren {
   Studio_layoutStudioRoute: typeof Studio_layoutStudioRoute
+  Studio_layoutStudioHostedOrganizationIdProjectIdEnvironmentIdPaywallIdDraftIdRoute: typeof Studio_layoutStudioHostedOrganizationIdProjectIdEnvironmentIdPaywallIdDraftIdRoute
 }
 
 const Studio_layoutRouteChildren: Studio_layoutRouteChildren = {
   Studio_layoutStudioRoute: Studio_layoutStudioRoute,
+  Studio_layoutStudioHostedOrganizationIdProjectIdEnvironmentIdPaywallIdDraftIdRoute:
+    Studio_layoutStudioHostedOrganizationIdProjectIdEnvironmentIdPaywallIdDraftIdRoute,
 }
 
 const Studio_layoutRouteWithChildren = Studio_layoutRoute._addFileChildren(
@@ -615,7 +689,6 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   HostedRoute: HostedRouteWithChildren,
   Studio_layoutRoute: Studio_layoutRouteWithChildren,
-  FoundationRoute: FoundationRoute,
   LoginRoute: LoginRoute,
   SignupRoute: SignupRoute,
 }

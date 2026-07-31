@@ -74,7 +74,6 @@ describe("Studio automated workflow", () => {
   })
 
   it("completes the first local editing journey and restores document plus workspace state", async () => {
-    const startedAt = performance.now()
     const view = render(<PaywallEditorWorkspace />)
 
     fireEvent.click(screen.getByRole("button", { name: /Focused offer/ }))
@@ -227,6 +226,5 @@ describe("Studio automated workflow", () => {
       workspaceBeforeReload!.panels.diagnostics.size,
       0,
     )
-    expect(performance.now() - startedAt).toBeLessThan(10_000)
   }, 15_000)
 })

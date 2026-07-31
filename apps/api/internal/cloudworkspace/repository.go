@@ -30,12 +30,14 @@ type Reader interface {
 	Entitlements(string) []Entitlement
 	PlanProducts(string) []PlanProduct
 	ProductGrants(string) []ProductEntitlementGrant
+	ProductReplacementHistory(string) []ProductReplacementHistory
 	ProviderMappings(string) []ProviderProductMapping
 	AuditEvents(string) []AuditEvent
 }
 
 type Transaction interface {
 	Reader
+	LockScope(string)
 	NextID(string) string
 	SaveOrganization(Organization)
 	SaveMembership(Membership)
@@ -51,6 +53,7 @@ type Transaction interface {
 	SavePlanProduct(PlanProduct)
 	DeletePlanProduct(string, string)
 	SaveProductGrant(ProductEntitlementGrant)
+	SaveProductReplacement(ProductReplacementHistory)
 	DeleteProductGrant(string, string)
 	SaveProviderMapping(ProviderProductMapping)
 	SaveAuditEvent(AuditEvent)

@@ -64,8 +64,8 @@ class LocalPreviewEngineTest {
 
         val validation = responses.filterIsInstance<MosaicPreviewValidationErrorPayload>().single()
         val rejection = responses.filterIsInstance<MosaicPreviewDraftRejectedPayload>().single()
-        assertEquals("plans", validation.errors.single().location.componentId)
-        assertEquals("productReferenceIds", validation.errors.single().location.property)
+        assertEquals("plans-monthly-plan-card", validation.errors.single().location.componentId)
+        assertEquals("productReferenceId", validation.errors.single().location.property)
         assertEquals(MosaicPreviewDraftRejectionReason.VALIDATION_FAILED, rejection.reason)
         assertEquals(2, engine.state.value.render?.revision?.sequence)
         assertEquals(MosaicPreviewProblemKind.INVALID_DOCUMENT, engine.state.value.diagnostic?.kind)
@@ -239,7 +239,7 @@ class LocalPreviewEngineTest {
 
     private fun canonicalPreviewFlow(): JsonArray = JsonParser.parseString(
         Files.readAllBytes(
-            repositoryFile("protocol/fixtures/local-preview/v0.1/session-flow.messages.json"),
+            repositoryFile("protocol/fixtures/local-preview/v0.2/session-flow.messages.json"),
         ).toString(Charsets.UTF_8),
     ).asJsonArray
 }

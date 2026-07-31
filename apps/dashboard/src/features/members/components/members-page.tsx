@@ -86,7 +86,7 @@ export function MembersPage({ organizationId }: { organizationId: string }) {
                 <Field>
                   <FieldLabel htmlFor="member-role">Role</FieldLabel>
                   <select
-                    className="border-input bg-background h-9 rounded-md border px-3 text-sm"
+                    className="border-input bg-background h-9 rounded border px-3 text-sm"
                     id="member-role"
                     onChange={(event) =>
                       field.handleChange(event.target.value as "admin" | "member")

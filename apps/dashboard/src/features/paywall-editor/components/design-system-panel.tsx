@@ -317,7 +317,7 @@ export function DesignSystemPanel() {
 
       {pendingDelete ? (
         <StatusMessage
-          className="border-warning/30 bg-warning/5 space-y-2 rounded-lg border p-3 text-xs"
+          className="border-warning/30 bg-warning/5 space-y-2 rounded border p-3 text-xs"
           tone="warning"
         >
           <p className="font-medium">This style is in use.</p>
@@ -359,13 +359,13 @@ export function DesignSystemPanel() {
       <section className="border-border space-y-3 border-t pt-4">
         <SectionHeading count={designSystem.colors.length} label="Colours" onAdd={addColor} />
         {designSystem.colors.length === 0 ? (
-          <p className="text-muted-foreground rounded-lg border border-dashed p-3 text-xs">
+          <p className="text-muted-foreground rounded border border-dashed p-3 text-xs">
             Add colours to make them available at the top of every colour picker.
           </p>
         ) : (
           <ul className="space-y-2">
             {designSystem.colors.map((token, index) => (
-              <li className="border-border rounded-lg border p-1" key={token.id}>
+              <li className="border-border rounded border p-1" key={token.id}>
                 <div className="flex items-center gap-1">
                   <TokenSummary
                     editorId={`design-colour-editor-${token.id}`}
@@ -426,13 +426,13 @@ export function DesignSystemPanel() {
           onAdd={addBackground}
         />
         {designSystem.backgrounds.length === 0 ? (
-          <p className="text-muted-foreground rounded-lg border border-dashed p-3 text-xs">
+          <p className="text-muted-foreground rounded border border-dashed p-3 text-xs">
             Add a reusable colour, gradient, image, or video background.
           </p>
         ) : (
           <ul className="space-y-2">
             {designSystem.backgrounds.map((token, index) => (
-              <li className="border-border rounded-lg border p-1" key={token.id}>
+              <li className="border-border rounded border p-1" key={token.id}>
                 <div className="flex items-center gap-1">
                   <TokenSummary
                     editorId={`design-background-editor-${token.id}`}
@@ -487,13 +487,13 @@ export function DesignSystemPanel() {
       <section className="border-border space-y-3 border-t pt-4">
         <SectionHeading count={designSystem.shadows.length} label="Shadows" onAdd={addShadow} />
         {designSystem.shadows.length === 0 ? (
-          <p className="text-muted-foreground rounded-lg border border-dashed p-3 text-xs">
+          <p className="text-muted-foreground rounded border border-dashed p-3 text-xs">
             Add a reusable native shadow effect.
           </p>
         ) : (
           <ul className="space-y-2">
             {designSystem.shadows.map((token, index) => (
-              <li className="border-border rounded-lg border p-1" key={token.id}>
+              <li className="border-border rounded border p-1" key={token.id}>
                 <div className="flex items-center gap-1">
                   <TokenSummary
                     editorId={`design-shadow-editor-${token.id}`}

@@ -1,6 +1,7 @@
 import { SquaresFourIcon } from "@phosphor-icons/react/dist/ssr/SquaresFour"
 import { useForm } from "@tanstack/react-form"
-import { Link } from "@tanstack/react-router"
+import { useMutation, useQueryClient } from "@tanstack/react-query"
+import { Link, useNavigate } from "@tanstack/react-router"
 
 import { Button } from "@/components/ui/button"
 import { buttonVariants } from "@/components/ui/button-variants"
@@ -13,9 +14,13 @@ import {
   FieldSeparator,
 } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
+import { authenticateMutationOptions } from "@/features/auth/mutations/auth-mutations"
+import { validatePassword } from "@/features/auth/types/credential-validation"
+import { safeInternalReturnTo } from "@/features/auth/types/hosted-access"
 
 interface HostedCredentialFormProps {
   mode: "login" | "signup"
+  returnTo?: string
 }
 
 function validateEmail(value: string) {
@@ -25,26 +30,36 @@ function validateEmail(value: string) {
   return undefined
 }
 
-export function HostedCredentialForm({ mode }: HostedCredentialFormProps) {
+export function HostedCredentialForm({ mode, returnTo }: HostedCredentialFormProps) {
   const isSignup = mode === "signup"
+  const navigate = useNavigate()
+  const queryClient = useQueryClient()
+  const authenticate = useMutation(authenticateMutationOptions(mode, queryClient))
   const form = useForm({
-    defaultValues: { email: "" },
-    onSubmit: async () => undefined,
+    defaultValues: { email: "", name: "", password: "" },
+    onSubmit: async ({ value }) => {
+      await authenticate.mutateAsync({
+        email: value.email.trim(),
+        name: value.name.trim(),
+        password: value.password,
+      })
+      await navigate({ href: safeInternalReturnTo(returnTo), replace: true })
+    },
   })
 
   return (
     <div className="flex flex-col gap-6">
       <form
-        aria-describedby="hosted-auth-decision"
         onSubmit={(event) => {
           event.preventDefault()
           event.stopPropagation()
+          void form.handleSubmit()
         }}
       >
         <FieldGroup>
           <div className="flex flex-col items-center gap-2 text-center">
             <Link className="flex flex-col items-center gap-2 font-medium" to="/studio">
-              <span className="bg-primary text-primary-foreground grid size-9 place-items-center rounded-lg">
+              <span className="bg-primary text-primary-foreground grid size-9 place-items-center rounded">
                 <SquaresFourIcon aria-hidden weight="fill" />
               </span>
               <span className="sr-only">Mosaic Studio</span>
@@ -54,13 +69,47 @@ export function HostedCredentialForm({ mode }: HostedCredentialFormProps) {
             </h1>
             <FieldDescription>
               {isSignup ? "Already have an account? " : "Need an account? "}
-              <Link to={isSignup ? "/login" : "/signup"}>
-                {isSignup ? "View sign in" : "View sign up"}
+              <Link
+                search={returnTo ? { returnTo: safeInternalReturnTo(returnTo) } : undefined}
+                to={isSignup ? "/login" : "/signup"}
+              >
+                {isSignup ? "Sign in" : "Create one"}
               </Link>
             </FieldDescription>
           </div>
 
-          <form.Field name="email" validators={{ onBlur: ({ value }) => validateEmail(value) }}>
+          {isSignup ? (
+            <form.Field
+              name="name"
+              validators={{
+                onBlur: ({ value }) => (value.trim() ? undefined : "Enter your name."),
+                onSubmit: ({ value }) => (value.trim() ? undefined : "Enter your name."),
+              }}
+            >
+              {(field) => (
+                <Field data-invalid={field.state.meta.errors.length > 0 || undefined}>
+                  <FieldLabel htmlFor="signup-name">Name</FieldLabel>
+                  <Input
+                    aria-invalid={field.state.meta.errors.length > 0 || undefined}
+                    autoComplete="name"
+                    id="signup-name"
+                    onBlur={field.handleBlur}
+                    onChange={(event) => field.handleChange(event.currentTarget.value)}
+                    value={field.state.value}
+                  />
+                  <FieldError errors={field.state.meta.errors.map((message) => ({ message }))} />
+                </Field>
+              )}
+            </form.Field>
+          ) : null}
+
+          <form.Field
+            name="email"
+            validators={{
+              onBlur: ({ value }) => validateEmail(value),
+              onSubmit: ({ value }) => validateEmail(value),
+            }}
+          >
             {(field) => (
               <Field data-invalid={field.state.meta.errors.length > 0 || undefined}>
                 <FieldLabel htmlFor={`${mode}-email`}>Email</FieldLabel>
@@ -69,7 +118,7 @@ export function HostedCredentialForm({ mode }: HostedCredentialFormProps) {
                   autoComplete="email"
                   id={`${mode}-email`}
                   onBlur={field.handleBlur}
-                  onChange={(event) => field.handleChange(event.target.value)}
+                  onChange={(event) => field.handleChange(event.currentTarget.value)}
                   placeholder="developer@example.com"
                   type="email"
                   value={field.state.value}
@@ -79,12 +128,76 @@ export function HostedCredentialForm({ mode }: HostedCredentialFormProps) {
             )}
           </form.Field>
 
+          <form.Field
+            name="password"
+            validators={{
+              onBlur: ({ value }) => validatePassword(value, isSignup),
+              onSubmit: ({ value }) => validatePassword(value, isSignup),
+            }}
+          >
+            {(field) => (
+              <Field data-invalid={field.state.meta.errors.length > 0 || undefined}>
+                <FieldLabel htmlFor={`${mode}-password`}>Password</FieldLabel>
+                <Input
+                  aria-invalid={field.state.meta.errors.length > 0 || undefined}
+                  autoComplete={isSignup ? "new-password" : "current-password"}
+                  id={`${mode}-password`}
+                  onBlur={field.handleBlur}
+                  onChange={(event) => field.handleChange(event.currentTarget.value)}
+                  type="password"
+                  value={field.state.value}
+                />
+                <FieldDescription>
+                  {isSignup ? "Use at least 12 characters." : "Enter your account password."}
+                </FieldDescription>
+                <FieldError errors={field.state.meta.errors.map((message) => ({ message }))} />
+              </Field>
+            )}
+          </form.Field>
+
+          {authenticate.error ? (
+            <p className="text-destructive text-sm" role="alert">
+              {authenticate.error.message}
+            </p>
+          ) : null}
+
           <Field>
-            <Button aria-describedby="hosted-auth-decision" disabled type="submit">
-              {isSignup ? "Create account" : "Continue with email"}
-            </Button>
+            <form.Subscribe selector={(state) => [state.canSubmit, state.isSubmitting]}>
+              {([canSubmit, isSubmitting]) => (
+                <Button
+                  disabled={!canSubmit || isSubmitting || authenticate.isPending}
+                  type="submit"
+                >
+                  {authenticate.isPending
+                    ? isSignup
+                      ? "Creating account…"
+                      : "Signing in…"
+                    : isSignup
+                      ? "Create account"
+                      : "Sign in"}
+                </Button>
+              )}
+            </form.Subscribe>
           </Field>
-          <FieldSeparator>Local development</FieldSeparator>
+          {/* <FieldSeparator>Local development</FieldSeparator> */}
+          {/* <div
+            data-slot="field-separator"
+            data-content="true"
+            className="relative -my-2 h-5 text-sm group-data-[variant=outline]/field-group:-mb-2"
+          >
+            <div
+              data-orientation="horizontal"
+              role="none"
+              data-slot="separator"
+              className="bg-border absolute inset-0 top-1/2 shrink-0 data-[orientation=horizontal]:h-px data-[orientation=horizontal]:w-full data-[orientation=vertical]:h-full data-[orientation=vertical]:w-px"
+            ></div>
+            <span
+              className="bg-background text-muted-foreground relative mx-auto block w-fit px-2"
+              data-slot="field-separator-content"
+            >
+              Local development
+            </span>
+          </div> */}
           <Field>
             <Link className={buttonVariants({ variant: "outline" })} to="/studio">
               Continue without an account
@@ -92,17 +205,6 @@ export function HostedCredentialForm({ mode }: HostedCredentialFormProps) {
           </Field>
         </FieldGroup>
       </form>
-      <div
-        className="border-border bg-muted/40 rounded-lg border p-4 text-sm leading-6"
-        id="hosted-auth-decision"
-        role="status"
-      >
-        <p className="font-medium">Hosted authentication is awaiting an owner decision.</p>
-        <p className="text-muted-foreground mt-1">
-          No identity provider, credential scheme, or browser session mechanism has been selected.
-          This form validates locally but cannot create a session. Local Studio remains available.
-        </p>
-      </div>
     </div>
   )
 }

@@ -61,7 +61,7 @@ final class LocalPreviewCodecTests: XCTestCase {
     }
 
     XCTAssertEqual(update.stateRevision.sequence, 1)
-    XCTAssertEqual(update.state.products.count, 2)
+    XCTAssertEqual(update.state.products.count, 3)
     XCTAssertEqual(update.state.purchaseOutcome, .purchased)
     XCTAssertEqual(update.state.restoreOutcome, .restored)
     XCTAssertEqual(update.state.entitlement, .none)
@@ -91,7 +91,7 @@ final class LocalPreviewCodecTests: XCTestCase {
     }
 
     var unsupportedVersion = try localPreviewFlowObjects()[3]
-    unsupportedVersion["previewProtocolVersion"] = "0.2"
+    unsupportedVersion["previewProtocolVersion"] = "9.9"
     XCTAssertThrowsError(try decode(unsupportedVersion)) { error in
       XCTAssertEqual(error as? MosaicPreviewProtocolError, .unsupportedVersion)
     }

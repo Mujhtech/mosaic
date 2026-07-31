@@ -1,16 +1,17 @@
 openapi: 3.1.0
 info:
   title: Mosaic API
-  version: 0.3.0-phase3a
+  version: 0.5.0-phase3b
   description: |
-    Phase 3A cloud-workspace and provider-neutral Catalog API. Hosted endpoints
-    require an authenticated Principal, but the credential and browser-session
-    mechanism is intentionally not selected by this contract.
+    Hosted workspace, publishing, Asset, browser-session, and SDK-delivery API.
 servers:
   - url: /
+security:
+  - BrowserSession: []
 paths:
-  /health:
+  /health/live:
     get:
+      security: []
       operationId: getHealth
       tags: [Lifecycle]
       responses:
@@ -20,17 +21,57 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HealthEnvelope"
-  /ready:
+  /health/ready:
     get:
+      security: []
       operationId: getReadiness
       tags: [Lifecycle]
       responses:
         "200":
-          description: The configured in-memory service is ready.
+          description: PostgreSQL is reachable and the API is ready to serve traffic.
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/HealthEnvelope"
+        "503":
+          description: PostgreSQL is unavailable.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+  /v1/auth/signup:
+    post:
+      security: []
+      operationId: signUp
+      tags: [Authentication]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/SignUpRequest" } } } }
+      responses:
+        "201": { $ref: "#/components/responses/UserSession" }
+        "409": { $ref: "#/components/responses/Error" }
+        "422": { $ref: "#/components/responses/Error" }
+  /v1/auth/login:
+    post:
+      security: []
+      operationId: login
+      tags: [Authentication]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/LoginRequest" } } } }
+      responses:
+        "200": { $ref: "#/components/responses/UserSession" }
+        "401": { $ref: "#/components/responses/Error" }
+        "422": { $ref: "#/components/responses/Error" }
+  /v1/auth/logout:
+    post:
+      operationId: logout
+      tags: [Authentication]
+      responses:
+        "204": { description: Session revoked and cookie cleared. }
+  /v1/auth/session:
+    get:
+      operationId: getSession
+      tags: [Authentication]
+      responses:
+        "200": { $ref: "#/components/responses/UserSession" }
+        "401": { $ref: "#/components/responses/Error" }
   /v1/organizations:
     get:
       operationId: listOrganizations
@@ -607,7 +648,331 @@ paths:
       responses:
         "204": { description: Entitlement grant removed. }
         default: { $ref: "#/components/responses/Error" }
+  /v1/projects/{projectId}/assets:
+    parameters: [{ $ref: "#/components/parameters/ProjectID" }]
+    get:
+      operationId: listAssets
+      tags: [Assets]
+      responses:
+        "200": { $ref: "#/components/responses/AssetList" }
+        default: { $ref: "#/components/responses/Error" }
+    post:
+      operationId: uploadAsset
+      tags: [Assets]
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [file]
+              properties:
+                file: { type: string, format: binary }
+      responses:
+        "201": { $ref: "#/components/responses/Asset" }
+        "413": { $ref: "#/components/responses/Error" }
+        "422": { $ref: "#/components/responses/Error" }
+        default: { $ref: "#/components/responses/Error" }
+  /v1/projects/{projectId}/assets/{assetId}:
+    parameters:
+      - { $ref: "#/components/parameters/ProjectID" }
+      - { $ref: "#/components/parameters/AssetID" }
+    get:
+      operationId: getAsset
+      tags: [Assets]
+      responses:
+        "200": { $ref: "#/components/responses/Asset" }
+        default: { $ref: "#/components/responses/Error" }
+    delete:
+      operationId: archiveAsset
+      tags: [Assets]
+      description: Archives authoring use while retaining immutable bytes for historical releases.
+      responses:
+        "200": { $ref: "#/components/responses/Asset" }
+        default: { $ref: "#/components/responses/Error" }
+  /v1/projects/{projectId}/assets/{assetId}/usage:
+    parameters:
+      - { $ref: "#/components/parameters/ProjectID" }
+      - { $ref: "#/components/parameters/AssetID" }
+    get:
+      operationId: getAssetUsage
+      tags: [Assets]
+      responses:
+        "200": { $ref: "#/components/responses/AssetUsage" }
+        default: { $ref: "#/components/responses/Error" }
+  /v1/projects/{projectId}/paywalls:
+    parameters: [{ $ref: "#/components/parameters/ProjectID" }]
+    get:
+      operationId: listPaywalls
+      tags: [Paywalls]
+      responses:
+        "200": { $ref: "#/components/responses/PaywallList" }
+        default: { $ref: "#/components/responses/Error" }
+    post:
+      operationId: createPaywall
+      tags: [Paywalls]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/CreatePaywallRequest" } } } }
+      responses:
+        "201": { $ref: "#/components/responses/Paywall" }
+        default: { $ref: "#/components/responses/Error" }
+  /v1/projects/{projectId}/paywalls/{paywallId}:
+    parameters:
+      - { $ref: "#/components/parameters/ProjectID" }
+      - { $ref: "#/components/parameters/PaywallID" }
+    get:
+      operationId: getPaywall
+      tags: [Paywalls]
+      responses:
+        "200": { $ref: "#/components/responses/Paywall" }
+        default: { $ref: "#/components/responses/Error" }
+    patch:
+      operationId: updatePaywall
+      tags: [Paywalls]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/UpdatePaywallRequest" } } } }
+      responses:
+        "200": { $ref: "#/components/responses/Paywall" }
+        default: { $ref: "#/components/responses/Error" }
+  /v1/projects/{projectId}/paywalls/{paywallId}/drafts:
+    parameters:
+      - { $ref: "#/components/parameters/ProjectID" }
+      - { $ref: "#/components/parameters/PaywallID" }
+    post:
+      operationId: createPaywallDraft
+      tags: [Paywall Drafts]
+      parameters: [{ $ref: "#/components/parameters/IdempotencyKey" }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/CreateDraftRequest" } } } }
+      responses:
+        "201": { $ref: "#/components/responses/Draft" }
+        default: { $ref: "#/components/responses/Error" }
+  /v1/projects/{projectId}/paywalls/{paywallId}/drafts/active:
+    parameters:
+      - { $ref: "#/components/parameters/ProjectID" }
+      - { $ref: "#/components/parameters/PaywallID" }
+      - { in: query, name: environmentId, required: true, schema: { type: string } }
+    get:
+      operationId: getActivePaywallDraft
+      description: Returns the active Draft for this Paywall and Environment so Studio can recover hosted work after reload.
+      tags: [Paywall Drafts]
+      responses:
+        "200": { $ref: "#/components/responses/Draft" }
+        "404": { $ref: "#/components/responses/Error" }
+        default: { $ref: "#/components/responses/Error" }
+  /v1/projects/{projectId}/paywalls/{paywallId}/drafts/{draftId}:
+    parameters:
+      - { $ref: "#/components/parameters/ProjectID" }
+      - { $ref: "#/components/parameters/PaywallID" }
+      - { $ref: "#/components/parameters/DraftID" }
+    get:
+      operationId: getPaywallDraft
+      tags: [Paywall Drafts]
+      responses:
+        "200": { $ref: "#/components/responses/Draft" }
+        default: { $ref: "#/components/responses/Error" }
+    put:
+      operationId: updatePaywallDraft
+      tags: [Paywall Drafts]
+      parameters:
+        - { $ref: "#/components/parameters/IfMatch" }
+        - { $ref: "#/components/parameters/IdempotencyKey" }
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/UpdateDraftRequest" } } } }
+      responses:
+        "200": { $ref: "#/components/responses/Draft" }
+        "412": { $ref: "#/components/responses/Error" }
+        "428": { $ref: "#/components/responses/Error" }
+        default: { $ref: "#/components/responses/Error" }
+  /v1/projects/{projectId}/paywalls/{paywallId}/drafts/{draftId}/validate:
+    parameters:
+      - { $ref: "#/components/parameters/ProjectID" }
+      - { $ref: "#/components/parameters/PaywallID" }
+      - { $ref: "#/components/parameters/DraftID" }
+    post:
+      operationId: validatePaywallDraft
+      tags: [Paywall Drafts]
+      responses:
+        "200": { $ref: "#/components/responses/ValidationSummary" }
+        default: { $ref: "#/components/responses/Error" }
+  /v1/projects/{projectId}/paywalls/{paywallId}/versions:
+    parameters:
+      - { $ref: "#/components/parameters/ProjectID" }
+      - { $ref: "#/components/parameters/PaywallID" }
+    get:
+      operationId: listPaywallVersions
+      tags: [Paywall Versions]
+      responses:
+        "200": { $ref: "#/components/responses/PaywallVersionList" }
+        default: { $ref: "#/components/responses/Error" }
+  /v1/projects/{projectId}/paywalls/{paywallId}/versions/{versionId}:
+    parameters:
+      - { $ref: "#/components/parameters/ProjectID" }
+      - { $ref: "#/components/parameters/PaywallID" }
+      - { $ref: "#/components/parameters/VersionID" }
+    get:
+      operationId: getPaywallVersion
+      tags: [Paywall Versions]
+      responses:
+        "200": { $ref: "#/components/responses/PaywallVersion" }
+        default: { $ref: "#/components/responses/Error" }
+  /v1/projects/{projectId}/paywalls/{paywallId}/versions/{versionId}/drafts:
+    parameters:
+      - { $ref: "#/components/parameters/ProjectID" }
+      - { $ref: "#/components/parameters/PaywallID" }
+      - { $ref: "#/components/parameters/VersionID" }
+    post:
+      operationId: clonePaywallVersionToDraft
+      tags: [Paywall Versions]
+      parameters: [{ $ref: "#/components/parameters/IdempotencyKey" }]
+      responses:
+        "201": { $ref: "#/components/responses/Draft" }
+        default: { $ref: "#/components/responses/Error" }
+  /v1/projects/{projectId}/placements:
+    parameters: [{ $ref: "#/components/parameters/ProjectID" }]
+    get:
+      operationId: listPlacements
+      tags: [Placements]
+      responses:
+        "200": { $ref: "#/components/responses/PlacementList" }
+        default: { $ref: "#/components/responses/Error" }
+    post:
+      operationId: createPlacement
+      tags: [Placements]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/CreatePlacementRequest" } } } }
+      responses:
+        "201": { $ref: "#/components/responses/Placement" }
+        default: { $ref: "#/components/responses/Error" }
+  /v1/projects/{projectId}/placements/{placementId}:
+    parameters:
+      - { $ref: "#/components/parameters/ProjectID" }
+      - { $ref: "#/components/parameters/PlacementID" }
+    patch:
+      operationId: updatePlacement
+      tags: [Placements]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/UpdatePlacementRequest" } } } }
+      responses:
+        "200": { $ref: "#/components/responses/Placement" }
+        default: { $ref: "#/components/responses/Error" }
+  /v1/projects/{projectId}/environments/{environmentId}/placements/{placementId}/binding:
+    parameters:
+      - { $ref: "#/components/parameters/ProjectID" }
+      - { $ref: "#/components/parameters/EnvironmentID" }
+      - { $ref: "#/components/parameters/PlacementID" }
+    get:
+      operationId: getPlacementBinding
+      tags: [Placements]
+      responses:
+        "200": { $ref: "#/components/responses/PlacementBinding" }
+        "404": { $ref: "#/components/responses/Error" }
+        default: { $ref: "#/components/responses/Error" }
+    put:
+      operationId: bindPlacement
+      tags: [Placements]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/BindPlacementRequest" } } } }
+      responses:
+        "200": { $ref: "#/components/responses/PlacementBinding" }
+        default: { $ref: "#/components/responses/Error" }
+  /v1/projects/{projectId}/environments/{environmentId}/publish:
+    parameters:
+      - { $ref: "#/components/parameters/ProjectID" }
+      - { $ref: "#/components/parameters/EnvironmentID" }
+      - { $ref: "#/components/parameters/IdempotencyKey" }
+    post:
+      operationId: publishConfiguration
+      tags: [Publishing]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/PublishRequest" } } } }
+      responses:
+        "201": { $ref: "#/components/responses/PublishResult" }
+        default: { $ref: "#/components/responses/Error" }
+  /v1/projects/{projectId}/environments/{environmentId}/releases:
+    parameters:
+      - { $ref: "#/components/parameters/ProjectID" }
+      - { $ref: "#/components/parameters/EnvironmentID" }
+    get:
+      operationId: listConfigurationReleases
+      tags: [Publishing]
+      responses:
+        "200": { $ref: "#/components/responses/ReleaseList" }
+        default: { $ref: "#/components/responses/Error" }
+  /v1/projects/{projectId}/environments/{environmentId}/releases/{releaseId}/rollback:
+    parameters:
+      - { $ref: "#/components/parameters/ProjectID" }
+      - { $ref: "#/components/parameters/EnvironmentID" }
+      - { $ref: "#/components/parameters/ReleaseID" }
+      - { $ref: "#/components/parameters/IdempotencyKey" }
+    post:
+      operationId: rollbackConfigurationRelease
+      tags: [Publishing]
+      responses:
+        "201": { $ref: "#/components/responses/Release" }
+        default: { $ref: "#/components/responses/Error" }
+  /v1/sdk/configuration:
+    get:
+      operationId: getSDKConfiguration
+      tags: [SDK Configuration]
+      security: [{ PublicSDKKey: [] }]
+      parameters:
+        - { in: header, name: Mosaic-SDK-Platform, required: true, schema: { type: string, enum: [flutter, ios, android] } }
+        - { in: header, name: Mosaic-SDK-Version, required: true, schema: { type: string, minLength: 1, maxLength: 64, pattern: "^[0-9]+\\.[0-9]+(?:\\.[0-9]+)?(?:[-+][A-Za-z0-9.-]+)?$" } }
+        - { in: header, name: Mosaic-Configuration-Versions, required: true, schema: { type: string, const: "1" } }
+        - { in: header, name: Mosaic-Paywall-Protocol-Versions, required: true, schema: { type: string, const: "0.2" } }
+        - in: header
+          name: Mosaic-Paywall-Capabilities
+          required: true
+          description: Comma-separated unique exact Protocol capability pairs (`name@0.2`), bounded to 128 pairs. The selected Release is returned only when every required pair is reported.
+          schema: { type: string, minLength: 1, maxLength: 16384, example: "component.text@0.2,layout.stack@0.2" }
+        - { in: header, name: Mosaic-App-Version, required: false, schema: { type: string, minLength: 1, maxLength: 64 } }
+        - { in: header, name: If-None-Match, required: false, schema: { type: string } }
+      responses:
+        "200":
+          description: Complete immutable Configuration Delivery v1 envelope.
+          headers:
+            ETag: { schema: { type: string } }
+            Cache-Control: { schema: { type: string } }
+            Vary: { schema: { type: string } }
+          content:
+            application/vnd.mosaic.configuration+json:
+              schema: { type: object, additionalProperties: true }
+        "304": { description: The current selected representation is unchanged. }
+        "401": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "406": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/Error" }
+  /v1/sdk/assets/{assetId}/{contentDigest}:
+    parameters:
+      - { $ref: "#/components/parameters/AssetID" }
+      - in: path
+        name: contentDigest
+        required: true
+        schema: { type: string, pattern: "^sha256:[0-9a-f]{64}$" }
+    get:
+      security: []
+      operationId: getAssetContent
+      tags: [Assets]
+      description: Public immutable Asset bytes. The URL contains no storage key or credential.
+      responses:
+        "200":
+          description: Immutable Asset content.
+          headers:
+            Cache-Control: { schema: { type: string, const: "public, max-age=31536000, immutable" } }
+            ETag: { schema: { type: string } }
+          content:
+            image/jpeg: { schema: { type: string, format: binary } }
+            image/png: { schema: { type: string, format: binary } }
+            image/webp: { schema: { type: string, format: binary } }
+            image/gif: { schema: { type: string, format: binary } }
+            video/mp4: { schema: { type: string, format: binary } }
+        "404": { $ref: "#/components/responses/Error" }
+        "503": { $ref: "#/components/responses/Error" }
 components:
+  securitySchemes:
+    BrowserSession:
+      type: apiKey
+      in: cookie
+      name: mosaic_session
+      description: Opaque HttpOnly SameSite=Lax browser session. Cross-origin dashboard requests use credentials mode include.
+    PublicSDKKey:
+      type: http
+      scheme: bearer
+      bearerFormat: Mosaic public SDK key
   parameters:
     Cursor:
       in: query
@@ -626,6 +991,14 @@ components:
     PlanID: { in: path, name: planId, required: true, schema: { type: string } }
     ProductID: { in: path, name: productId, required: true, schema: { type: string } }
     EntitlementID: { in: path, name: entitlementId, required: true, schema: { type: string } }
+    PaywallID: { in: path, name: paywallId, required: true, schema: { type: string } }
+    DraftID: { in: path, name: draftId, required: true, schema: { type: string } }
+    VersionID: { in: path, name: versionId, required: true, schema: { type: string } }
+    PlacementID: { in: path, name: placementId, required: true, schema: { type: string } }
+    AssetID: { in: path, name: assetId, required: true, schema: { type: string } }
+    ReleaseID: { in: path, name: releaseId, required: true, schema: { type: string } }
+    IdempotencyKey: { in: header, name: Idempotency-Key, required: true, schema: { type: string, minLength: 1, maxLength: 255 } }
+    IfMatch: { in: header, name: If-Match, required: true, schema: { type: string } }
   responses:
     Error:
       description: Stable machine-readable failure.
@@ -658,6 +1031,27 @@ components:
     EntitlementList: { description: Entitlement definitions, content: { application/json: { schema: { $ref: "#/components/schemas/EntitlementListEnvelope" } } } }
     ProductEntitlementGrant: { description: Product grant, content: { application/json: { schema: { $ref: "#/components/schemas/ProductEntitlementGrantEnvelope" } } } }
     AuditEventList: { description: Audit events, content: { application/json: { schema: { $ref: "#/components/schemas/AuditEventListEnvelope" } } } }
+    Paywall: { description: Paywall, content: { application/json: { schema: { $ref: "#/components/schemas/PaywallEnvelope" } } } }
+    PaywallList: { description: Paywalls, content: { application/json: { schema: { $ref: "#/components/schemas/PaywallListEnvelope" } } } }
+    Draft:
+      description: Hosted Draft and current immutable revision document.
+      headers: { ETag: { schema: { type: string } } }
+      content: { application/json: { schema: { $ref: "#/components/schemas/DraftEnvelope" } } }
+    ValidationSummary: { description: Draft validation, content: { application/json: { schema: { $ref: "#/components/schemas/ValidationSummaryEnvelope" } } } }
+    PaywallVersion: { description: Immutable Paywall Version, content: { application/json: { schema: { $ref: "#/components/schemas/PaywallVersionEnvelope" } } } }
+    PaywallVersionList: { description: Immutable Paywall Versions, content: { application/json: { schema: { $ref: "#/components/schemas/PaywallVersionListEnvelope" } } } }
+    Placement: { description: Placement, content: { application/json: { schema: { $ref: "#/components/schemas/PlacementEnvelope" } } } }
+    PlacementList: { description: Placements, content: { application/json: { schema: { $ref: "#/components/schemas/PlacementListEnvelope" } } } }
+    PlacementBinding: { description: Environment Placement binding, content: { application/json: { schema: { $ref: "#/components/schemas/PlacementBindingEnvelope" } } } }
+    Asset: { description: Hosted Asset metadata, content: { application/json: { schema: { $ref: "#/components/schemas/AssetEnvelope" } } } }
+    AssetList: { description: Hosted Assets, content: { application/json: { schema: { $ref: "#/components/schemas/AssetListEnvelope" } } } }
+    AssetUsage: { description: Hosted Asset reference counts, content: { application/json: { schema: { $ref: "#/components/schemas/AssetUsageEnvelope" } } } }
+    UserSession:
+      description: Authenticated browser user. Login and signup also set the session cookie.
+      content: { application/json: { schema: { $ref: "#/components/schemas/UserEnvelope" } } }
+    Release: { description: Immutable Configuration Release metadata, content: { application/json: { schema: { $ref: "#/components/schemas/ReleaseEnvelope" } } } }
+    ReleaseList: { description: Configuration Release history, content: { application/json: { schema: { $ref: "#/components/schemas/ReleaseListEnvelope" } } } }
+    PublishResult: { description: Publication result and nonblocking warnings, content: { application/json: { schema: { $ref: "#/components/schemas/PublishResultEnvelope" } } } }
   schemas:
     Timestamp: { type: string, format: date-time }
     Page:
@@ -673,6 +1067,72 @@ components:
     ProductStatus: { type: string, enum: [draft, connected, attention_required, archived] }
     MetadataSource: { type: string, enum: [mock, provider] }
     ProviderKind: { type: string, enum: [revenuecat, app_store, google_play, custom] }
+    SignUpRequest:
+      type: object
+      additionalProperties: false
+      required: [email, name, password]
+      properties:
+        email: { type: string, format: email, maxLength: 320 }
+        name: { type: string, minLength: 1, maxLength: 120 }
+        password: { type: string, format: password, minLength: 12, maxLength: 72 }
+    LoginRequest:
+      type: object
+      additionalProperties: false
+      required: [email, password]
+      properties:
+        email: { type: string, format: email, maxLength: 320 }
+        password: { type: string, format: password, minLength: 1, maxLength: 72 }
+    CreatePaywallRequest:
+      type: object
+      additionalProperties: false
+      required: [key, name]
+      properties: { key: { type: string, minLength: 2, maxLength: 63 }, name: { type: string, minLength: 1, maxLength: 120 } }
+    UpdatePaywallRequest:
+      type: object
+      additionalProperties: false
+      required: [name]
+      properties: { name: { type: string, minLength: 1, maxLength: 120 } }
+    CreateDraftRequest:
+      type: object
+      additionalProperties: false
+      required: [environmentId, document]
+      properties:
+        environmentId: { type: string }
+        sourceVersionId: { type: string }
+        document: { type: object, additionalProperties: true }
+    UpdateDraftRequest:
+      type: object
+      additionalProperties: false
+      required: [document]
+      properties: { document: { type: object, additionalProperties: true } }
+    CreatePlacementRequest:
+      type: object
+      additionalProperties: false
+      required: [key, name]
+      properties:
+        key: { type: string, minLength: 2, maxLength: 63 }
+        name: { type: string, minLength: 1, maxLength: 120 }
+        description: { type: string, maxLength: 1000 }
+    UpdatePlacementRequest:
+      type: object
+      additionalProperties: false
+      required: [name]
+      properties:
+        name: { type: string, minLength: 1, maxLength: 120 }
+        description: { type: string, maxLength: 1000 }
+    BindPlacementRequest:
+      type: object
+      additionalProperties: false
+      required: [paywallId]
+      properties: { paywallId: { type: string } }
+    PublishRequest:
+      type: object
+      additionalProperties: false
+      required: [draftId, expectedRevision, acknowledgeMockProducts]
+      properties:
+        draftId: { type: string }
+        expectedRevision: { type: integer, minimum: 1 }
+        acknowledgeMockProducts: { type: boolean }
     CreateOrganizationRequest:
       type: object
       additionalProperties: false
@@ -936,6 +1396,155 @@ components:
         resourceId: { type: string }
         metadata: { type: object, additionalProperties: { type: string } }
         createdAt: { $ref: "#/components/schemas/Timestamp" }
+    ValidationSummary:
+      type: object
+      additionalProperties: false
+      required: [errors, warnings]
+      properties:
+        errors: { type: array, items: { type: string } }
+        warnings: { type: array, items: { type: string } }
+    Paywall:
+      type: object
+      additionalProperties: false
+      required: [id, projectId, key, name, status, createdByActorId, createdAt, updatedAt]
+      properties:
+        id: { type: string }
+        projectId: { type: string }
+        key: { type: string }
+        name: { type: string }
+        status: { type: string, enum: [active, archived] }
+        archivedAt: { $ref: "#/components/schemas/Timestamp" }
+        createdByActorId: { type: string }
+        createdAt: { $ref: "#/components/schemas/Timestamp" }
+        updatedAt: { $ref: "#/components/schemas/Timestamp" }
+    Draft:
+      type: object
+      additionalProperties: false
+      required: [id, projectId, paywallId, environmentId, status, revision, protocolVersion, validationStatus, validation, createdByActorId, updatedByActorId, createdAt, updatedAt]
+      properties:
+        id: { type: string }
+        projectId: { type: string }
+        paywallId: { type: string }
+        environmentId: { type: string }
+        status: { type: string, enum: [active, published, archived] }
+        revision: { type: integer, minimum: 1 }
+        sourceVersionId: { type: string }
+        protocolVersion: { type: string, const: "0.2" }
+        validationStatus: { type: string, enum: [valid, invalid] }
+        validation: { $ref: "#/components/schemas/ValidationSummary" }
+        createdByActorId: { type: string }
+        updatedByActorId: { type: string }
+        createdAt: { $ref: "#/components/schemas/Timestamp" }
+        updatedAt: { $ref: "#/components/schemas/Timestamp" }
+    DraftResource:
+      type: object
+      additionalProperties: false
+      required: [draft, document]
+      properties:
+        draft: { $ref: "#/components/schemas/Draft" }
+        document: { type: object, additionalProperties: true }
+    PaywallVersion:
+      type: object
+      additionalProperties: false
+      required: [id, projectId, paywallId, environmentId, versionNumber, sourceDraftId, sourceRevision, protocolVersion, document, documentHash, validation, createdByActorId, createdAt, productIds]
+      properties:
+        id: { type: string }
+        projectId: { type: string }
+        paywallId: { type: string }
+        environmentId: { type: string }
+        versionNumber: { type: integer, minimum: 1 }
+        sourceDraftId: { type: string }
+        sourceRevision: { type: integer, minimum: 1 }
+        protocolVersion: { type: string, const: "0.2" }
+        document: { type: object, additionalProperties: true }
+        documentHash: { type: string, pattern: "^[0-9a-f]{64}$" }
+        validation: { $ref: "#/components/schemas/ValidationSummary" }
+        createdByActorId: { type: string }
+        createdAt: { $ref: "#/components/schemas/Timestamp" }
+        productIds: { type: array, items: { type: string } }
+    Placement:
+      type: object
+      additionalProperties: false
+      required: [id, projectId, key, name, status, createdByActorId, createdAt, updatedAt]
+      properties:
+        id: { type: string }
+        projectId: { type: string }
+        key: { type: string }
+        name: { type: string }
+        description: { type: string }
+        status: { type: string, enum: [active, archived] }
+        archivedAt: { $ref: "#/components/schemas/Timestamp" }
+        createdByActorId: { type: string }
+        createdAt: { $ref: "#/components/schemas/Timestamp" }
+        updatedAt: { $ref: "#/components/schemas/Timestamp" }
+    PlacementBinding:
+      type: object
+      additionalProperties: false
+      required: [projectId, environmentId, placementId, paywallId, updatedByActorId, updatedAt]
+      properties:
+        projectId: { type: string }
+        environmentId: { type: string }
+        placementId: { type: string }
+        paywallId: { type: string }
+        updatedByActorId: { type: string }
+        updatedAt: { $ref: "#/components/schemas/Timestamp" }
+    User:
+      type: object
+      additionalProperties: false
+      required: [id, email, name, createdAt]
+      properties:
+        id: { type: string }
+        email: { type: string, format: email }
+        name: { type: string }
+        createdAt: { $ref: "#/components/schemas/Timestamp" }
+    Asset:
+      type: object
+      additionalProperties: false
+      required: [id, projectId, kind, originalFilename, mediaType, byteLength, contentDigest, url, status, createdByActorId, createdAt, updatedAt]
+      properties:
+        id: { type: string }
+        projectId: { type: string }
+        kind: { type: string, enum: [image, video] }
+        originalFilename: { type: string }
+        mediaType: { type: string, enum: [image/jpeg, image/png, image/webp, image/gif, video/mp4] }
+        byteLength: { type: integer, minimum: 1 }
+        contentDigest: { type: string, pattern: "^sha256:[0-9a-f]{64}$" }
+        url: { type: string, format: uri, pattern: "^https://" }
+        status: { type: string, enum: [pending, ready, failed, archived, deleted] }
+        createdByActorId: { type: string }
+        archivedAt: { $ref: "#/components/schemas/Timestamp" }
+        createdAt: { $ref: "#/components/schemas/Timestamp" }
+        updatedAt: { $ref: "#/components/schemas/Timestamp" }
+    AssetUsage:
+      type: object
+      additionalProperties: false
+      required: [draftReferences, versionReferences, releaseReferences]
+      properties:
+        draftReferences: { type: integer, minimum: 0 }
+        versionReferences: { type: integer, minimum: 0 }
+        releaseReferences: { type: integer, minimum: 0 }
+    ConfigurationRelease:
+      type: object
+      additionalProperties: false
+      required: [id, projectId, environmentId, releaseNumber, deliveryContractVersion, contentHash, publishedByActorId, publishedAt]
+      properties:
+        id: { type: string }
+        projectId: { type: string }
+        environmentId: { type: string }
+        releaseNumber: { type: integer, minimum: 1 }
+        deliveryContractVersion: { type: string, const: "1" }
+        contentHash: { type: string, pattern: "^[0-9a-f]{64}$" }
+        sourceReleaseId: { type: string }
+        rollbackSourceReleaseId: { type: string }
+        publishedByActorId: { type: string }
+        publishedAt: { $ref: "#/components/schemas/Timestamp" }
+    PublishResult:
+      type: object
+      additionalProperties: false
+      required: [release, warnings]
+      properties:
+        release: { $ref: "#/components/schemas/ConfigurationRelease" }
+        warnings: { type: array, items: { type: string } }
     ErrorEnvelope:
       type: object
       additionalProperties: false
@@ -949,6 +1558,7 @@ components:
             code: { type: string }
             message: { type: string }
             fields: { type: object, additionalProperties: { type: array, items: { type: string } } }
+            details: { type: object, additionalProperties: true }
             requestId: { type: string }
     HealthEnvelope:
       type: object
@@ -986,6 +1596,22 @@ components:
     EntitlementListEnvelope: { $ref: "#/components/schemas/EntitlementList" }
     ProviderMappingListEnvelope: { $ref: "#/components/schemas/ProviderMappingList" }
     AuditEventListEnvelope: { $ref: "#/components/schemas/AuditEventList" }
+    PaywallEnvelope: { type: object, required: [data], properties: { data: { $ref: "#/components/schemas/Paywall" } } }
+    DraftEnvelope: { type: object, required: [data], properties: { data: { $ref: "#/components/schemas/DraftResource" } } }
+    ValidationSummaryEnvelope: { type: object, required: [data], properties: { data: { $ref: "#/components/schemas/ValidationSummary" } } }
+    PaywallVersionEnvelope: { type: object, required: [data], properties: { data: { $ref: "#/components/schemas/PaywallVersion" } } }
+    PlacementEnvelope: { type: object, required: [data], properties: { data: { $ref: "#/components/schemas/Placement" } } }
+    PlacementBindingEnvelope: { type: object, required: [data], properties: { data: { $ref: "#/components/schemas/PlacementBinding" } } }
+    AssetEnvelope: { type: object, required: [data], properties: { data: { $ref: "#/components/schemas/Asset" } } }
+    AssetUsageEnvelope: { type: object, required: [data], properties: { data: { $ref: "#/components/schemas/AssetUsage" } } }
+    AssetListEnvelope: { type: object, required: [data], properties: { data: { type: object, required: [items, page], properties: { items: { type: array, items: { $ref: "#/components/schemas/Asset" } }, page: { $ref: "#/components/schemas/Page" } } } } }
+    UserEnvelope: { type: object, required: [data], properties: { data: { $ref: "#/components/schemas/User" } } }
+    ReleaseEnvelope: { type: object, required: [data], properties: { data: { $ref: "#/components/schemas/ConfigurationRelease" } } }
+    PublishResultEnvelope: { type: object, required: [data], properties: { data: { $ref: "#/components/schemas/PublishResult" } } }
+    PaywallListEnvelope: { type: object, required: [data], properties: { data: { type: object, required: [items, page], properties: { items: { type: array, items: { $ref: "#/components/schemas/Paywall" } }, page: { $ref: "#/components/schemas/Page" } } } } }
+    PaywallVersionListEnvelope: { type: object, required: [data], properties: { data: { type: object, required: [items, page], properties: { items: { type: array, items: { $ref: "#/components/schemas/PaywallVersion" } }, page: { $ref: "#/components/schemas/Page" } } } } }
+    PlacementListEnvelope: { type: object, required: [data], properties: { data: { type: object, required: [items, page], properties: { items: { type: array, items: { $ref: "#/components/schemas/Placement" } }, page: { $ref: "#/components/schemas/Page" } } } } }
+    ReleaseListEnvelope: { type: object, required: [data], properties: { data: { type: object, required: [items, page], properties: { items: { type: array, items: { $ref: "#/components/schemas/ConfigurationRelease" } }, page: { $ref: "#/components/schemas/Page" } } } } }
     OrganizationList: { type: object, required: [data], properties: { data: { type: object, required: [items, page], properties: { items: { type: array, items: { $ref: "#/components/schemas/Organization" } }, page: { $ref: "#/components/schemas/Page" } } } } }
     MembershipList: { type: object, required: [data], properties: { data: { type: object, required: [items, page], properties: { items: { type: array, items: { $ref: "#/components/schemas/Membership" } }, page: { $ref: "#/components/schemas/Page" } } } } }
     ProjectList: { type: object, required: [data], properties: { data: { type: object, required: [items, page], properties: { items: { type: array, items: { $ref: "#/components/schemas/Project" } }, page: { $ref: "#/components/schemas/Page" } } } } }

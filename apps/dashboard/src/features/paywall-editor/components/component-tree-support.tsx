@@ -255,7 +255,7 @@ export function LayerActionItems({
 }
 
 export const contextMenuItemClass =
-  "focus:bg-accent focus:text-accent-foreground data-[disabled]:pointer-events-none data-[disabled]:opacity-50 relative flex cursor-default items-center gap-1.5 rounded-md px-1.5 py-1 text-sm outline-none select-none [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0"
+  "focus:bg-accent focus:text-accent-foreground data-[disabled]:pointer-events-none data-[disabled]:opacity-50 relative flex cursor-default items-center gap-1.5 rounded px-1.5 py-1 text-sm outline-none select-none [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0"
 
 export function ContextLayerActionItems(props: LayerActionItemsProps) {
   return (
@@ -327,7 +327,7 @@ export function LayerContextMenuContent({
     <ContextMenuPrimitive.Portal>
       <ContextMenuPrimitive.Positioner className="isolate z-50 outline-none" sideOffset={2}>
         <ContextMenuPrimitive.Popup
-          className="bg-popover text-popover-foreground ring-foreground/10 z-50 w-52 min-w-32 rounded-lg p-1 shadow-md ring-1 outline-none"
+          className="bg-popover text-popover-foreground ring-foreground/10 z-50 w-52 min-w-32 rounded p-1 shadow-md ring-1 outline-none"
           finalFocus={finalFocus}
         >
           <ContextLayerActionItems {...actions} />

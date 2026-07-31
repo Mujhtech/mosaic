@@ -59,7 +59,7 @@ final class LocalizationTests: XCTestCase {
       localization: document.localization,
       requestedLocale: "es-MX"
     )
-    let legal = try XCTUnwrap(legalText(in: document))
+    let legal = try XCTUnwrap(textComponent(id: "legal", in: document))
     let headline = try XCTUnwrap(textComponent(id: "headline", in: document))
 
     XCTAssertEqual(resolver.resolvedLocale.candidateLocales, ["fr", "en"])
@@ -85,7 +85,7 @@ final class LocalizationTests: XCTestCase {
       requestedLocale: "ar-EG"
     )
     let headline = try XCTUnwrap(textComponent(id: "headline", in: document))
-    let legal = try XCTUnwrap(legalText(in: document))
+    let legal = try XCTUnwrap(textComponent(id: "legal", in: document))
 
     XCTAssertEqual(resolver.resolvedLocale.effectiveLocale, "ar")
     XCTAssertEqual(resolver.resolvedLocale.direction, .rightToLeft)

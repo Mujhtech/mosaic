@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.2.0-dev.6
+
+- Add strict Configuration Delivery v1 validation for releases, embedded
+  Protocol 0.2 paywalls, digests, capabilities, Placements, products, and
+  remote asset bindings.
+- Add public SDK key/base URL configuration, injectable HTTP transport,
+  capability headers, bounded timeouts, strong ETag revalidation, and `304`
+  handling.
+- Add atomic persistent cache writes, cache/bundled fallback reconstruction,
+  coalesced manual refresh, safe last-known-valid retention, and diagnostics.
+- Add in-memory Placement resolution and native `MosaicPlacementHost`
+  presentation that never performs a remote fetch.
+
 ## 0.2.0-dev.5
 
 - Add strict frozen RC4 decoding for design-system colour/background/shadow tokens, gradient and decorative media backgrounds, remote/bundled image and video assets, two-axis Fit/Fill/Fixed sizing, and Screen/Sheet presentation.

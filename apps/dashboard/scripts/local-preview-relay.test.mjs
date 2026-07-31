@@ -5,15 +5,11 @@ import test from "node:test"
 
 import WebSocket from "ws"
 
-import {
-  createPreviewRelay,
-  LEGACY_PREVIEW_SUBPROTOCOL,
-  PREVIEW_SUBPROTOCOL,
-} from "./local-preview-relay.mjs"
+import { createPreviewRelay, PREVIEW_SUBPROTOCOL } from "./local-preview-relay.mjs"
 
 function heartbeat(sessionId, sequence = 1, clientId = "client_relay_test") {
   return {
-    previewProtocolVersion: "0.1",
+    previewProtocolVersion: "0.2",
     messageId: `msg_${sessionId}_${sequence}`,
     sessionId,
     sentAt: new Date().toISOString(),
@@ -22,7 +18,7 @@ function heartbeat(sessionId, sequence = 1, clientId = "client_relay_test") {
   }
 }
 
-async function connect(url, sessionId, receivedMessages, protocols = LEGACY_PREVIEW_SUBPROTOCOL) {
+async function connect(url, sessionId, receivedMessages, protocols = PREVIEW_SUBPROTOCOL) {
   const target = sessionId ? `${url}?role=studio&sessionId=${encodeURIComponent(sessionId)}` : url
   const socket = new WebSocket(target, protocols)
   if (receivedMessages) {
@@ -70,10 +66,7 @@ test("negotiates Local Preview 0.2 and relays a canonical Protocol 0.2 draft", a
   const studioMessages = []
   const clientMessages = []
   const studio = await connect(url, connected.sessionId, studioMessages, PREVIEW_SUBPROTOCOL)
-  const nativeClient = await connect(url, null, clientMessages, [
-    LEGACY_PREVIEW_SUBPROTOCOL,
-    PREVIEW_SUBPROTOCOL,
-  ])
+  const nativeClient = await connect(url, null, clientMessages, [PREVIEW_SUBPROTOCOL])
   nativeClient.send(JSON.stringify(connected))
   nativeClient.send(JSON.stringify(capability))
   await waitForMessages(studioMessages, 2)
@@ -89,63 +82,6 @@ test("negotiates Local Preview 0.2 and relays a canonical Protocol 0.2 draft", a
   await relay.close()
 })
 
-test("withholds a Protocol 0.2 draft from a 0.1-only client and reports recovery", async () => {
-  const relay = createPreviewRelay({ port: 0 })
-  await relay.ready
-  const url = relay.address()
-  assert.ok(url)
-  const legacyFixture = JSON.parse(
-    await readFile(
-      new URL(
-        "../../../protocol/fixtures/local-preview/v0.1/session-flow.messages.json",
-        import.meta.url,
-      ),
-      "utf8",
-    ),
-  )
-  const currentFixture = JSON.parse(
-    await readFile(
-      new URL(
-        "../../../protocol/fixtures/local-preview/v0.2/session-flow.messages.json",
-        import.meta.url,
-      ),
-      "utf8",
-    ),
-  )
-  const connected = legacyFixture.find((message) => message.type === "previewClientConnected")
-  const capability = legacyFixture.find((message) => message.type === "capabilityReport")
-  const draft = currentFixture.find((message) => message.type === "draftUpdated")
-  assert.ok(connected)
-  assert.ok(capability)
-  assert.ok(draft)
-
-  const studioMessages = []
-  const legacyMessages = []
-  const studio = await connect(url, connected.sessionId, studioMessages, PREVIEW_SUBPROTOCOL)
-  const legacyClient = await connect(url, null, legacyMessages, LEGACY_PREVIEW_SUBPROTOCOL)
-  legacyClient.send(JSON.stringify(connected))
-  legacyClient.send(JSON.stringify(capability))
-  await waitForMessages(studioMessages, 2)
-  assert.deepEqual(
-    studioMessages.map((message) => message.previewProtocolVersion),
-    ["0.2", "0.2"],
-  )
-  assert.deepEqual(studioMessages[1].payload.supportedSchemaVersions, ["0.1"])
-
-  studio.send(JSON.stringify({ ...draft, sessionId: connected.sessionId }))
-  await waitForMessages(studioMessages, 3)
-  assert.equal(studioMessages[2].type, "draftRejected")
-  assert.equal(studioMessages[2].payload.reason, "unsupportedSchemaVersion")
-  assert.equal(studioMessages[2].payload.diagnostics[0].code, "preview.incompatibleSchemaVersion")
-  assert.equal(studioMessages[2].payload.diagnostics[0].recovery.action, "updatePreviewClient")
-  await new Promise((resolve) => setTimeout(resolve, 20))
-  assert.equal(legacyMessages.length, 0)
-
-  studio.close()
-  legacyClient.close()
-  await relay.close()
-})
-
 test("relays canonical messages only within the same local preview session", async () => {
   const relay = createPreviewRelay({ port: 0 })
   await relay.ready
@@ -155,7 +91,7 @@ test("relays canonical messages only within the same local preview session", asy
   const fixture = JSON.parse(
     await readFile(
       new URL(
-        "../../../protocol/fixtures/local-preview/v0.1/session-flow.messages.json",
+        "../../../protocol/fixtures/local-preview/v0.2/session-flow.messages.json",
         import.meta.url,
       ),
       "utf8",
@@ -197,7 +133,7 @@ test("replays cached identity then capabilities when Studio joins after a native
   const fixture = JSON.parse(
     await readFile(
       new URL(
-        "../../../protocol/fixtures/local-preview/v0.1/session-flow.messages.json",
+        "../../../protocol/fixtures/local-preview/v0.2/session-flow.messages.json",
         import.meta.url,
       ),
       "utf8",
@@ -234,7 +170,7 @@ test("notifies Studio when a connected native client closes", async () => {
   const fixture = JSON.parse(
     await readFile(
       new URL(
-        "../../../protocol/fixtures/local-preview/v0.1/session-flow.messages.json",
+        "../../../protocol/fixtures/local-preview/v0.2/session-flow.messages.json",
         import.meta.url,
       ),
       "utf8",
@@ -275,6 +211,10 @@ test("rejects messages with unknown fields and requires the exact subprotocol", 
   const [error] = await once(noProtocol, "error")
   assert.ok(error)
 
+  const retiredProtocol = new WebSocket(url, "mosaic.local-preview.v0.1")
+  const [retiredError] = await once(retiredProtocol, "error")
+  assert.ok(retiredError)
+
   await relay.close()
 })
 
@@ -286,7 +226,7 @@ test("enforces client handshake order, message direction, and connected identity
   const fixture = JSON.parse(
     await readFile(
       new URL(
-        "../../../protocol/fixtures/local-preview/v0.1/session-flow.messages.json",
+        "../../../protocol/fixtures/local-preview/v0.2/session-flow.messages.json",
         import.meta.url,
       ),
       "utf8",
@@ -341,7 +281,7 @@ test("keeps the replacement socket active when a stable client identity reconnec
   const fixture = JSON.parse(
     await readFile(
       new URL(
-        "../../../protocol/fixtures/local-preview/v0.1/session-flow.messages.json",
+        "../../../protocol/fixtures/local-preview/v0.2/session-flow.messages.json",
         import.meta.url,
       ),
       "utf8",

@@ -47,7 +47,7 @@ import {
 } from "@/features/paywall-editor/utils/countdown"
 
 const CONTROL_CLASS =
-  "border-input bg-background focus-visible:ring-ring rounded-lg border px-2.5 py-2 text-xs focus-visible:ring-2 focus-visible:outline-none"
+  "border-input bg-background focus-visible:ring-ring rounded border px-2.5 py-2 text-xs focus-visible:ring-2 focus-visible:outline-none"
 const selectCanvasPreferences = (snapshot: StudioWorkspaceSnapshot) => snapshot.preferences.canvas
 
 function clampZoom(value: number) {
@@ -197,7 +197,7 @@ function SecondaryPreviewSettings({ toolbar }: { toolbar: boolean }) {
       <div className="space-y-1.5">
         <span className="text-muted-foreground block text-xs font-medium">Appearance</span>
         <div
-          className="bg-muted grid grid-cols-2 rounded-lg p-1"
+          className="bg-muted grid grid-cols-2 rounded p-1"
           role="group"
           aria-label="Preview appearance"
         >
@@ -222,7 +222,7 @@ function SecondaryPreviewSettings({ toolbar }: { toolbar: boolean }) {
         </div>
       </div>
 
-      <div className="border-border space-y-2 rounded-lg border p-2.5">
+      <div className="border-border space-y-2 rounded border p-2.5">
         <div>
           <label
             className="text-muted-foreground block text-xs font-medium"
@@ -291,7 +291,7 @@ function SecondaryPreviewSettings({ toolbar }: { toolbar: boolean }) {
       </div>
 
       <div className="grid gap-2 sm:grid-cols-2">
-        <label className="border-border bg-background flex min-h-9 items-center gap-2 rounded-lg border px-2.5 text-xs">
+        <label className="border-border bg-background flex min-h-9 items-center gap-2 rounded border px-2.5 text-xs">
           <input
             checked={canvas.forceRTL}
             onChange={(event) => setPreference("forceRTL", event.target.checked)}
@@ -299,7 +299,7 @@ function SecondaryPreviewSettings({ toolbar }: { toolbar: boolean }) {
           />
           Force RTL
         </label>
-        <label className="border-border bg-background flex min-h-9 items-center gap-2 rounded-lg border px-2.5 text-xs">
+        <label className="border-border bg-background flex min-h-9 items-center gap-2 rounded border px-2.5 text-xs">
           <input
             aria-label="Safe area"
             checked={canvas.safeArea}
@@ -340,7 +340,7 @@ export function CanvasPreviewToolbar() {
   return (
     <div
       aria-label="Canvas preview controls"
-      className="nodrag nopan nowheel border-border/80 bg-background/92 flex items-center gap-0.5 rounded-xl border p-1 shadow-[0_18px_44px_-18px_rgba(15,23,42,0.42)] backdrop-blur-xl"
+      className="nodrag nopan nowheel border-border/80 bg-background/92 flex items-center gap-0.5 rounded border p-1 shadow-[0_18px_44px_-18px_rgba(15,23,42,0.42)] backdrop-blur-xl"
       data-testid="canvas-preview-toolbar"
       role="toolbar"
     >

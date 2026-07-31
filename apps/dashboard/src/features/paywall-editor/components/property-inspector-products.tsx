@@ -276,7 +276,7 @@ export function ProductBadgeInspector({
           Badge content is made from child layers. Add, reorder, and edit Text, Icon, or Stack
           children in Layers; product variables work inside Text.
         </p>
-        <div className="border-border divide-border divide-y rounded-md border">
+        <div className="border-border divide-border divide-y rounded border">
           {node.children.map((child) => (
             <button
               aria-label={`Edit ${LAYER_TYPE_LABELS[child.type]} in Product Badge`}
@@ -322,7 +322,7 @@ export function ProductSelectorInspector({
           Product Cards are authored layers. Reorder the full card rows in Layers and edit each
           card&apos;s product, content, badge, and selected appearance separately.
         </p>
-        <div className="border-border divide-border divide-y rounded-md border">
+        <div className="border-border divide-border divide-y rounded border">
           {node.cards.map((card, index) => {
             const productName =
               document.products.find((product) => product.id === card.productReferenceId)?.label

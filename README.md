@@ -3,11 +3,13 @@
 Mosaic is an open-source, cross-platform app monetization platform built around
 one platform-neutral protocol, three native SDKs, and one Studio.
 
-Phase 0 and Phase 1 are accepted. Phase 2 adds an account-free, local-first
-Studio, the Local Preview `0.2` WebSocket contract, and live preview clients for
-Flutter, SwiftUI, and Jetpack Compose. The workflow remains local-only: no
-hosted projects, publishing, analytics, experiments, or real billing provider
-is required.
+The repository includes the account-free local Studio and Local Preview `0.2`
+workflow plus the Phase 3B hosted configuration-delivery private alpha. Hosted
+mode adds Projects and Environments, browser sessions, Drafts, Assets,
+Placements, immutable Paywall Versions, publishing, rollback, and Delivery v1
+clients for Flutter, SwiftUI, and Jetpack Compose. Commerce remains mock-only;
+provider billing, analytics, experiments, targeting, and authoritative
+Entitlement state are deliberately deferred.
 
 ## Repository map
 
@@ -16,9 +18,9 @@ apps/api/         Go API foundation
 apps/dashboard/   TanStack Start dashboard and local Studio
 apps/worker/      deferred worker-boundary documentation
 protocol/         Protocol 0.2 plus its Local Preview contract and fixtures
-sdk/flutter/      Flutter native renderer, fallback, mock commerce, and preview client
-sdk/ios/          SwiftUI native renderer, fallback, mock commerce, and preview client
-sdk/android/      Compose native renderer, fallback, mock commerce, and preview client
+sdk/flutter/      Flutter renderer, hosted delivery/cache, fallback, and preview client
+sdk/ios/          SwiftUI renderer, hosted delivery/cache, fallback, and preview client
+sdk/android/      Compose renderer, hosted delivery/cache, fallback, and preview client
 examples/         Flutter, iOS, and Android local-renderer and preview applications
 docs/             architecture and foundation documentation
 ```
@@ -30,6 +32,7 @@ docs/             architecture and foundation documentation
 - Flutter 3.19+ and Dart 3.3+
 - Swift 6+ and Xcode 16+
 - JDK 17 and Android SDK 36
+- Docker with Compose for the durable local PostgreSQL workflow
 
 The SDK platform minimums remain working baselines pending stable public SDK
 versioning.
@@ -94,7 +97,11 @@ cd sdk/android
   :mosaic:lintDebug :mosaic:assembleDebugAndroidTest
 ```
 
-Run the API with `go run ./cmd/api` from `apps/api`. To start the account-free
+Start the durable API stack with `cp .env.example .env && docker compose up --build`.
+The database uses the named `mosaic_postgres_data` volume. For a host-run API,
+start PostgreSQL, run `go run ./cmd/migrate up`, then `go run ./cmd/api` from
+`apps/api`; both commands load `apps/api/.env`, with existing process variables
+taking precedence. To start the account-free
 Studio and its loopback preview relay together, run:
 
 ```bash
@@ -106,6 +113,13 @@ Open `http://localhost:3000/studio`. Preview clients connect to
 `ws://127.0.0.1:4317/preview` using the local session documented by each example
 application. `npm run dev` remains available when only the dashboard is needed.
 
+Hosted Studio routes use the browser session APIs and remain separate from the
+account-free `/studio` route. The local stack includes PostgreSQL, MinIO, and a
+development HTTPS edge for immutable hosted Asset URLs. Trust the generated
+local development certificate only on test devices that must load those Asset
+URLs; production deployments must configure an externally reachable HTTPS
+`MOSAIC_PUBLIC_ASSET_BASE_URL`.
+
 ## Documentation
 
 - [Product roadmap](docs/product/roadmap.md)
@@ -116,9 +130,12 @@ application. `npm run dev` remains available when only the dashboard is needed.
 - [Phase 1 SDK renderers](docs/sdk/README.md)
 - [Phase 1 review](docs/reviews/phase-1-review.md)
 - [Phase 2 review](docs/reviews/phase-2.md)
+- [Phase 3B hosted publishing](docs/backend/phase-3b-hosted-publishing.md)
+- [Configuration Delivery v1](docs/protocol/configuration-delivery-v1.md)
+- [Phase 3B review](docs/reviews/phase-3b.md)
 
 There is intentionally no root package-manager workspace or shared Go module
-yet. Phase 2 remains local-only and does not add remote configuration,
-publishing, analytics, placements, experiments, accounts, or real billing
-providers. The roadmap's `mosaic dev` convenience command is deferred; Phase 2
-uses `npm run dev:studio` directly.
+yet. Hosted configuration is additive: `/studio` remains local-first and does
+not require an account or reachable backend. The roadmap's `mosaic dev`
+convenience command is deferred; local preview uses `npm run dev:studio`
+directly.

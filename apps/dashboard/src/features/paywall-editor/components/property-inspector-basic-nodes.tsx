@@ -476,7 +476,7 @@ export function FeatureListInspector({
       <InspectorSection defaultOpen title="Content">
         <div className="space-y-3">
           {node.items.map((item, index) => (
-            <div className="border-border bg-muted/30 rounded-md border p-2" key={item.id}>
+            <div className="border-border bg-muted/30 rounded border p-2" key={item.id}>
               <LocalizedField
                 address={`items.${item.id}.text`}
                 label={`Benefit ${index + 1}`}

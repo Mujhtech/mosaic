@@ -3,6 +3,17 @@
 All notable Mosaic protocol changes are recorded here. Versioned artifacts are
 not immutable until their review gate is approved.
 
+## Protocol 0.1 retirement test alignment - 2026-07-22
+
+Status: accepted by ADR-0016
+
+- Removed validation suites whose only subject was the retired Protocol and
+  Local Preview `0.1` schemas, fixtures, and migration path.
+- Re-anchored browser, Local Preview, component-semantic, and recovery tests to
+  the sole Protocol `0.2` and Local Preview `0.2` contracts.
+- Retained deterministic recovery coverage between the still-relevant `0.2`
+  release candidates and kept Configuration Delivery `1` validation unchanged.
+
 ## Protocol and Local Preview 0.2 RC4 - 2026-07-18
 
 Status: release candidate; SDK, Studio, quality, and product-owner approval pending

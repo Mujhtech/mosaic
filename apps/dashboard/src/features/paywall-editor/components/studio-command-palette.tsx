@@ -459,9 +459,9 @@ export function StudioCommandPalette({
     >
       <DialogPrimitive.Portal>
         <DialogPrimitive.Backdrop className="fixed inset-0 z-60 bg-black/20 backdrop-blur-[1px]" />
-        <DialogPrimitive.Popup className="bg-popover text-popover-foreground fixed top-[12vh] left-1/2 z-60 flex max-h-[min(72vh,680px)] w-[min(92vw,680px)] -translate-x-1/2 flex-col overflow-hidden rounded-xl border shadow-2xl outline-none">
+        <DialogPrimitive.Popup className="bg-popover text-popover-foreground fixed top-[12vh] left-1/2 z-60 flex max-h-[min(72vh,680px)] w-[min(92vw,680px)] -translate-x-1/2 flex-col overflow-hidden rounded border shadow-2xl outline-none">
           <div className="border-border flex items-start gap-3 border-b p-4">
-            <span className="bg-muted grid size-9 shrink-0 place-items-center rounded-lg">
+            <span className="bg-muted grid size-9 shrink-0 place-items-center rounded">
               <CommandIcon aria-hidden />
             </span>
             <div className="min-w-0 flex-1">
@@ -523,7 +523,7 @@ export function StudioCommandPalette({
                         aria-describedby={
                           command.disabled ? `studio-command-disabled-${command.id}` : undefined
                         }
-                        className="focus-visible:ring-ring hover:bg-muted flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left focus-visible:ring-2 focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50"
+                        className="focus-visible:ring-ring hover:bg-muted flex w-full items-center gap-3 rounded px-3 py-2 text-left focus-visible:ring-2 focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50"
                         data-studio-command
                         disabled={command.disabled}
                         key={command.id}

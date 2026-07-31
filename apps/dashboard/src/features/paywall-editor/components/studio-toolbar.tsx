@@ -2,8 +2,10 @@ import { ArrowLeftIcon } from "@phosphor-icons/react/dist/ssr/ArrowLeft"
 import { ArrowClockwiseIcon } from "@phosphor-icons/react/dist/ssr/ArrowClockwise"
 import { ArrowCounterClockwiseIcon } from "@phosphor-icons/react/dist/ssr/ArrowCounterClockwise"
 import { CheckCircleIcon } from "@phosphor-icons/react/dist/ssr/CheckCircle"
+import { CloudArrowUpIcon } from "@phosphor-icons/react/dist/ssr/CloudArrowUp"
 import { DownloadSimpleIcon } from "@phosphor-icons/react/dist/ssr/DownloadSimple"
 import { PlugsConnectedIcon } from "@phosphor-icons/react/dist/ssr/PlugsConnected"
+import { RocketLaunchIcon } from "@phosphor-icons/react/dist/ssr/RocketLaunch"
 import { UploadSimpleIcon } from "@phosphor-icons/react/dist/ssr/UploadSimple"
 import { WarningCircleIcon } from "@phosphor-icons/react/dist/ssr/WarningCircle"
 import { StatusMessage, ToolbarGroup } from "@mosaic/design-system"
@@ -24,15 +26,24 @@ function humanizeDocumentIdentity(identity: string) {
   return `${words.charAt(0).toUpperCase()}${words.slice(1)}`
 }
 
-function AutosaveStatus({ controller }: { controller: DraftAutosaveController }) {
-  if (controller.status === "failed") {
+function AutosaveStatus({
+  controller,
+  mode,
+}: {
+  controller: DraftAutosaveController
+  mode: "hosted" | "local"
+}) {
+  if (controller.status === "failed" || controller.status === "offline") {
+    const offline = controller.status === "offline"
     return (
       <StatusMessage
-        className="border-destructive/25 bg-destructive/5 flex h-7 items-center gap-1.5 rounded-lg border px-2 text-xs"
+        className="border-destructive/25 bg-destructive/5 flex h-7 items-center gap-1.5 rounded border px-2 text-xs"
         tone="danger"
       >
         <WarningCircleIcon aria-hidden weight="fill" />
-        <span>Autosave failed</span>
+        <span>
+          {offline ? "Offline · edits kept" : mode === "local" ? "Autosave failed" : "Save failed"}
+        </span>
         <Button
           className="ml-0.5 h-5 px-1.5 transition-none motion-reduce:transition-none"
           onClick={controller.retry}
@@ -40,18 +51,38 @@ function AutosaveStatus({ controller }: { controller: DraftAutosaveController })
           type="button"
           variant="outline"
         >
-          Retry
+          {offline ? "Try again" : "Retry"}
         </Button>
       </StatusMessage>
     )
   }
 
+  if (controller.status === "conflict") {
+    return (
+      <StatusMessage
+        className="border-destructive/25 bg-destructive/5 flex h-7 items-center gap-1.5 rounded border px-2 text-xs"
+        tone="danger"
+      >
+        <WarningCircleIcon aria-hidden weight="fill" />
+        <span>Save conflict · edits kept</span>
+      </StatusMessage>
+    )
+  }
+
   const label =
-    controller.status === "saving"
-      ? "Saving locally"
-      : controller.status === "saved"
-        ? "Saved locally"
-        : "Local draft"
+    mode === "local"
+      ? controller.status === "saving"
+        ? "Saving locally"
+        : controller.status === "saved"
+          ? "Saved locally"
+          : "Local draft"
+      : controller.status === "saving"
+        ? "Saving hosted Draft"
+        : controller.status === "saved"
+          ? "Hosted Draft saved"
+          : controller.status === "unsaved"
+            ? "Unsaved changes"
+            : "Hosted Draft"
 
   return (
     <StatusMessage
@@ -72,11 +103,19 @@ export interface StudioToolbarProps {
   readonly previewClientCount: number
   readonly previewSummary: string
   readonly onBack: () => boolean
+  readonly onConnectHosted?: () => boolean
   readonly onExport: () => void
   readonly onRequestImport: () => void
   readonly onOpenPreviewConnections: () => void
   readonly onRedo: () => void
   readonly onUndo: () => void
+  readonly mode?: "hosted" | "local"
+  readonly backHref?: string
+  readonly backLabel?: string
+  readonly environmentLabel?: string
+  readonly onPublish?: () => void
+  readonly publishDisabled?: boolean
+  readonly connectHostedHref?: string
 }
 
 const TOOLBAR_BUTTON_CLASS = "transition-none motion-reduce:transition-none"
@@ -89,26 +128,34 @@ export function StudioToolbar({
   previewClientCount,
   previewSummary,
   onBack,
+  onConnectHosted,
   onExport,
   onRequestImport,
   onOpenPreviewConnections,
   onRedo,
   onUndo,
+  mode = "local",
+  backHref = "/foundation",
+  backLabel = "Foundation",
+  environmentLabel,
+  onPublish,
+  publishDisabled = false,
+  connectHostedHref = "/workspace",
 }: StudioToolbarProps) {
   return (
     <header className="border-border bg-background flex min-h-12 shrink-0 items-center gap-2 border-b px-2 py-2 lg:px-3">
       <ToolbarGroup aria-label="Studio navigation" className="shrink-0">
         <a
-          aria-label="Back to Foundation"
+          aria-label={`Back to ${backLabel}`}
           className={cn(buttonVariants({ size: "sm", variant: "ghost" }), TOOLBAR_BUTTON_CLASS)}
-          href="/foundation"
+          href={backHref}
           onClick={(event) => {
             if (!onBack()) event.preventDefault()
           }}
-          title="Back to Foundation"
+          title={`Back to ${backLabel}`}
         >
           <ArrowLeftIcon aria-hidden />
-          <span className="hidden 2xl:inline">Foundation</span>
+          <span className="hidden 2xl:inline">{backLabel}</span>
         </a>
       </ToolbarGroup>
 
@@ -122,7 +169,12 @@ export function StudioToolbar({
       </div>
 
       <div className="ml-auto flex min-w-0 [scrollbar-width:none] items-center gap-1 overflow-x-auto">
-        <AutosaveStatus controller={autosave} />
+        {environmentLabel ? (
+          <span className="border-border bg-muted/55 text-muted-foreground hidden rounded-full border px-2.5 py-1 text-xs font-medium xl:inline-flex">
+            {environmentLabel}
+          </span>
+        ) : null}
+        <AutosaveStatus controller={autosave} mode={mode} />
 
         <ToolbarGroup aria-label="Edit history" className="flex shrink-0 items-center gap-0.5">
           <Button
@@ -170,7 +222,26 @@ export function StudioToolbar({
           </Button>
         </ToolbarGroup>
 
-        <ToolbarGroup aria-label="Local document" className="flex shrink-0 items-center gap-1">
+        <ToolbarGroup
+          aria-label={mode === "local" ? "Local document" : "Hosted Draft"}
+          className="flex shrink-0 items-center gap-1"
+        >
+          {mode === "local" && onConnectHosted ? (
+            <a
+              className={cn(
+                buttonVariants({ size: "sm", variant: "outline" }),
+                TOOLBAR_BUTTON_CLASS,
+              )}
+              href={connectHostedHref}
+              onClick={(event) => {
+                if (!onConnectHosted()) event.preventDefault()
+              }}
+              title="Save this local document and choose a hosted Project and Environment"
+            >
+              <CloudArrowUpIcon aria-hidden />
+              <span className="hidden 2xl:inline">Connect to hosted</span>
+            </a>
+          ) : null}
           <Button
             aria-label="Import Mosaic JSON"
             className={TOOLBAR_BUTTON_CLASS}
@@ -193,6 +264,19 @@ export function StudioToolbar({
             <DownloadSimpleIcon aria-hidden />
             Export
           </Button>
+          {mode === "hosted" && onPublish ? (
+            <Button
+              className={TOOLBAR_BUTTON_CLASS}
+              disabled={publishDisabled}
+              onClick={onPublish}
+              size="sm"
+              title="Review and publish this hosted Draft"
+              type="button"
+            >
+              <RocketLaunchIcon aria-hidden />
+              Publish
+            </Button>
+          ) : null}
         </ToolbarGroup>
       </div>
     </header>

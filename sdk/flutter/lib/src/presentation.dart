@@ -123,6 +123,7 @@ enum MosaicPresentationOutcome {
   dismissed('dismissed'),
   cancelled('cancelled'),
   productUnavailable('productUnavailable'),
+  placementUnavailable('placementUnavailable'),
   configurationUnavailable('configurationUnavailable'),
   purchaseFailed('purchaseFailed'),
   renderingFailed('renderingFailed');
@@ -214,6 +215,21 @@ final class MosaicConfigurationUnavailablePresentationResult
   @override
   MosaicPresentationOutcome get outcome =>
       MosaicPresentationOutcome.configurationUnavailable;
+}
+
+final class MosaicPlacementUnavailablePresentationResult
+    extends MosaicPresentationResult {
+  const MosaicPlacementUnavailablePresentationResult({
+    required this.placementKey,
+    required this.diagnosticCode,
+  });
+
+  final String placementKey;
+  final String diagnosticCode;
+
+  @override
+  MosaicPresentationOutcome get outcome =>
+      MosaicPresentationOutcome.placementUnavailable;
 }
 
 final class MosaicPurchaseFailedPresentationResult

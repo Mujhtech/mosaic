@@ -17,7 +17,7 @@ class PaywallStateTest {
 
         assertEquals("yearly-plan", state.selectorStates.getValue("plans").selectedProductReferenceId)
         assertEquals(
-            listOf("monthly-plan", "yearly-plan"),
+            listOf("monthly-plan", "yearly-plan", "lifetime-plan"),
             state.selectorStates.getValue("plans").options.map { it.reference.id },
         )
     }

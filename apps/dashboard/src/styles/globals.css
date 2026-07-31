@@ -78,8 +78,8 @@
 
 .app-root {
   isolation: isolate;
-  min-width: 100%;
-  min-height: 100%;
+  width: 100%;
+  height: 100%;
 }
 
 .react-flow__node-device-preview {

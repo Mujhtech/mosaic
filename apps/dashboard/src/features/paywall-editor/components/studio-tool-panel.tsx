@@ -3,8 +3,12 @@ import { PlusIcon } from "@phosphor-icons/react/dist/ssr/Plus"
 import { TrashIcon } from "@phosphor-icons/react/dist/ssr/Trash"
 import { useState } from "react"
 import type { RefObject } from "react"
+import { useQuery } from "@tanstack/react-query"
 
 import { Button } from "@/components/ui/button"
+import { buttonVariants } from "@/components/ui/button-variants"
+import { generatedAssetAdapter } from "@/features/assets/api/generated-asset-adapter"
+import { assetsQueryOptions } from "@/features/assets/queries/asset-queries"
 import { ComponentLibrary } from "@/features/paywall-editor/components/component-library"
 import { ComponentTree } from "@/features/paywall-editor/components/component-tree"
 import { DesignSystemPanel } from "@/features/paywall-editor/components/design-system-panel"
@@ -28,7 +32,10 @@ import type {
   PreviewClient,
 } from "@/features/paywall-editor/types/editor"
 import type { StudioTool } from "@/features/paywall-editor/types/studio-workspace"
+import type { StudioSource } from "@/features/paywall-editor/types/studio-source"
+import { hostedStudioHref } from "@/features/paywall-editor/types/studio-source"
 import { cloneValue } from "@/features/paywall-editor/utils/clone"
+import { useStudioSource } from "@/features/paywall-editor/stores/use-studio-source"
 
 const selectSelectedTool = (snapshot: StudioWorkspaceSnapshot) => snapshot.preferences.selectedTool
 const selectTemplateDocument = (state: EditorState) => state.document
@@ -85,7 +92,7 @@ function TemplatesPanel() {
       </StatusMessage>
       <ul aria-label="Bundled templates" className="space-y-2">
         {EDITOR_TEMPLATES.map((template) => (
-          <li className="border-border bg-background rounded-lg border p-3" key={template.id}>
+          <li className="border-border bg-background rounded border p-3" key={template.id}>
             <p className="text-sm font-medium">{template.name}</p>
             <p className="text-muted-foreground mt-1 text-xs leading-5">{template.description}</p>
             <Button
@@ -102,7 +109,7 @@ function TemplatesPanel() {
       </ul>
       {notice ? (
         <StatusMessage
-          className="border-primary/20 bg-primary/5 rounded-lg border p-3 text-xs"
+          className="border-primary/20 bg-primary/5 rounded border p-3 text-xs"
           tone="success"
         >
           {notice}
@@ -112,8 +119,92 @@ function TemplatesPanel() {
   )
 }
 
+function HostedManagedAssets({
+  assets,
+  source,
+  updateAsset,
+}: {
+  assets: readonly Asset[]
+  source: Extract<StudioSource, { kind: "hosted" }>
+  updateAsset: (id: string, updater: (asset: Asset) => Asset) => void
+}) {
+  const managedAssets = useQuery({
+    ...assetsQueryOptions(source.projectId, generatedAssetAdapter),
+  })
+  const readyManagedAssets = managedAssets.data?.filter((asset) => asset.status === "ready") ?? []
+  const assetsHref = `/organizations/${encodeURIComponent(source.organizationId)}/projects/${encodeURIComponent(source.projectId)}/monetization/${encodeURIComponent(source.environmentId)}/assets?returnTo=${encodeURIComponent(hostedStudioHref(source))}`
+
+  function selectedManagedAssetId(asset: Asset) {
+    if (asset.source.type !== "remote") return ""
+    const url = asset.source.url
+    return readyManagedAssets.find((candidate) => candidate.url === url)?.id ?? ""
+  }
+
+  return (
+    <div className="border-border bg-muted/35 space-y-3 rounded border p-3 text-xs">
+      {managedAssets.isPending ? (
+        <p className="text-muted-foreground">Loading managed Assets…</p>
+      ) : managedAssets.error ? (
+        <div role="alert">
+          <p className="text-destructive">{managedAssets.error.message}</p>
+          <Button
+            className="mt-2"
+            onClick={() => void managedAssets.refetch()}
+            size="sm"
+            type="button"
+            variant="outline"
+          >
+            Retry Assets
+          </Button>
+        </div>
+      ) : (
+        <p className="text-muted-foreground">
+          {readyManagedAssets.length} ready managed{" "}
+          {readyManagedAssets.length === 1 ? "Asset" : "Assets"}
+        </p>
+      )}
+      {readyManagedAssets.length > 0 && assets.length > 0 ? (
+        <div className="space-y-2">
+          {assets.map((asset) => (
+            <label className="grid gap-1 text-[11px]" key={asset.id}>
+              <span className="text-muted-foreground">Managed Asset for {asset.id}</span>
+              <select
+                className="border-input bg-background h-8 rounded border px-2 text-xs"
+                onChange={(event) => {
+                  const selected = readyManagedAssets.find(
+                    (candidate) => candidate.id === event.currentTarget.value,
+                  )
+                  if (!selected) return
+                  updateAsset(asset.id, (current) => ({
+                    ...current,
+                    source: { type: "remote", url: selected.url },
+                  }))
+                }}
+                value={selectedManagedAssetId(asset)}
+              >
+                <option value="">Choose a managed Asset</option>
+                {readyManagedAssets
+                  .filter((candidate) => candidate.kind === asset.type)
+                  .map((candidate) => (
+                    <option key={candidate.id} value={candidate.id}>
+                      {candidate.name}
+                    </option>
+                  ))}
+              </select>
+            </label>
+          ))}
+        </div>
+      ) : null}
+      <a className={buttonVariants({ size: "sm", variant: "outline" })} href={assetsHref}>
+        Manage uploads
+      </a>
+    </div>
+  )
+}
+
 function AssetsPanel({ assets }: { assets: readonly Asset[] }) {
   const editor = useEditorActions()
+  const source = useStudioSource()
 
   function uniqueId(prefix: string) {
     const used = new Set(assets.map((asset) => asset.id))
@@ -160,9 +251,14 @@ function AssetsPanel({ assets }: { assets: readonly Asset[] }) {
           Assets
         </h2>
         <p className="text-muted-foreground mt-0.5 text-xs leading-5">
-          Add image and video assets for content and media backgrounds. Remote assets require HTTPS.
+          {source.kind === "hosted"
+            ? "Select a ready managed Asset or add a bundled key. Only managed remote URLs can publish."
+            : "Add image and video assets for content and media backgrounds. Remote assets require HTTPS."}
         </p>
       </div>
+      {source.kind === "hosted" ? (
+        <HostedManagedAssets assets={assets} source={source} updateAsset={updateAsset} />
+      ) : null}
       <div className="grid grid-cols-2 gap-2">
         <Button onClick={() => addAsset("image")} size="sm" type="button" variant="outline">
           <PlusIcon aria-hidden /> Image
@@ -172,7 +268,7 @@ function AssetsPanel({ assets }: { assets: readonly Asset[] }) {
         </Button>
       </div>
       {assets.length === 0 ? (
-        <div className="border-border rounded-lg border border-dashed p-4 text-center">
+        <div className="border-border rounded border border-dashed p-4 text-center">
           <p className="text-sm font-medium">No assets</p>
           <p className="text-muted-foreground mt-1 text-xs leading-5">
             Add an image or video, then select it from a component or background field.
@@ -181,7 +277,7 @@ function AssetsPanel({ assets }: { assets: readonly Asset[] }) {
       ) : (
         <ul aria-label="Paywall assets" className="space-y-2">
           {assets.map((asset) => (
-            <li className="border-border space-y-2 rounded-lg border p-3" key={asset.id}>
+            <li className="border-border space-y-2 rounded border p-3" key={asset.id}>
               <div className="flex items-center gap-2">
                 <p className="min-w-0 flex-1 text-sm font-medium break-all">{asset.id}</p>
                 <span className="bg-muted rounded px-1.5 py-0.5 text-[10px] font-medium uppercase">
@@ -205,7 +301,7 @@ function AssetsPanel({ assets }: { assets: readonly Asset[] }) {
               <label className="grid gap-1 text-[11px]">
                 <span className="text-muted-foreground">Source</span>
                 <select
-                  className="border-input bg-background h-8 rounded-md border px-2 text-xs"
+                  className="border-input bg-background h-8 rounded border px-2 text-xs"
                   onChange={(event) =>
                     updateAsset(asset.id, (current) => ({
                       ...current,
@@ -232,7 +328,7 @@ function AssetsPanel({ assets }: { assets: readonly Asset[] }) {
                   {asset.source.type === "remote" ? "HTTPS URL" : "Bundle key"}
                 </span>
                 <input
-                  className="border-input bg-background h-8 min-w-0 rounded-md border px-2 font-mono text-xs"
+                  className="border-input bg-background h-8 min-w-0 rounded border px-2 font-mono text-xs"
                   onChange={(event) =>
                     updateAsset(asset.id, (current) => ({
                       ...current,
@@ -292,7 +388,7 @@ function SettingsPanel({
             Toggle properties
           </Button>
         ) : (
-          <StatusMessage className="bg-muted rounded-lg p-3 text-xs" tone="info">
+          <StatusMessage className="bg-muted rounded p-3 text-xs" tone="info">
             Use the Properties button on the canvas in compact mode.
           </StatusMessage>
         )}
@@ -315,7 +411,7 @@ function SettingsPanel({
           Reset workspace layout
         </Button>
       </div>
-      <div className="bg-muted rounded-lg p-3 text-xs leading-5">
+      <div className="bg-muted rounded p-3 text-xs leading-5">
         <h3 className="font-semibold">Keyboard commands</h3>
         <dl className="text-muted-foreground mt-2 grid grid-cols-[1fr_auto] gap-x-3 gap-y-1">
           <dt>Open commands</dt>

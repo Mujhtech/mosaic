@@ -1,9 +1,11 @@
-# Mosaic iOS Phase 2.5 Example
+# Mosaic iOS local preview and hosted delivery example
 
-This native SwiftUI application connects to local Mosaic Studio and renders
-Protocol 0.2 revisions immediately with the local `MosaicSDK` package. It
-needs no account, hosted project, cloud storage, remote publishing, analytics,
-or real billing provider.
+This native SwiftUI application has separate Local Studio and Hosted modes.
+Local Studio renders Protocol 0.2 revisions immediately without an account.
+Hosted mode fetches Configuration Delivery v1 with an Environment-scoped
+public SDK key, resolves a Placement, caches the last valid release, and falls
+back safely when delivery is unavailable. Both modes use the native SwiftUI
+renderer and deterministic mock commerce; no real billing provider is used.
 
 Open `MosaicExample.xcodeproj`, select the `MosaicExample` scheme, and run on an
 iOS 15-or-newer simulator. With Studio running at the default local endpoint,
@@ -22,6 +24,8 @@ the app:
   gradient/media backgrounds, shadows, two-axis sizing, a system-browser HTTPS
   action, and authored Product Cards with nested and overlay Product Badges
 - keeps the last accepted paywall visible when a later revision is unsafe
+- validates complete hosted releases before atomically replacing the cache
+- rejects stale or cross-Environment hosted releases
 
 The footer shows the latest normalized paywall interaction or terminal result.
 The example uses `MosaicImageResolver.missing` intentionally so the fixture's
@@ -41,6 +45,24 @@ when Studio uses a different local session. The Phase 2 Studio relay binds to
 loopback only, so the live Studio workflow is supported in the iOS Simulator.
 A physical device can run the bundled fallback but cannot connect to the
 current relay. The SDK rejects public hosts.
+
+## Hosted configuration
+
+Add these environment variables to the Xcode scheme, select Hosted in the
+example, and use Refresh:
+
+```text
+MOSAIC_PUBLIC_SDK_KEY=<environment public SDK key>
+MOSAIC_SDK_BASE_URL=http://127.0.0.1:8080
+MOSAIC_PLACEMENT=onboarding_complete
+```
+
+The base URL is the configuration API origin. Releases containing hosted
+Assets use the immutable HTTPS Asset origin configured by the API. Simulator
+or device testing against the local Compose edge therefore requires trusting
+its development certificate; production Asset URLs must use a publicly trusted
+HTTPS origin. Stop the API and restart the app to verify last-known-valid cache
+fallback. Clearing app data demonstrates the bundled Delivery v1 fallback.
 
 ## Canonical fixture ownership
 

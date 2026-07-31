@@ -109,7 +109,7 @@ function DiagnosticCard({
 }) {
   const componentId = diagnostic.componentId
   return (
-    <article className="border-border rounded-lg border p-2.5 text-xs">
+    <article className="border-border rounded border p-2.5 text-xs">
       <div className="flex items-start justify-between gap-2">
         <p className="font-medium">{diagnostic.message}</p>
         <span className="bg-muted shrink-0 rounded-full px-2 py-0.5 text-[10px] font-medium capitalize">
@@ -122,7 +122,7 @@ function DiagnosticCard({
       {componentId ? (
         <button
           type="button"
-          className="text-primary focus-visible:ring-ring mt-2 rounded-sm font-semibold outline-none hover:underline focus-visible:ring-2"
+          className="text-primary focus-visible:ring-ring mt-2 rounded font-semibold outline-none hover:underline focus-visible:ring-2"
           onClick={() => onInspect(componentId)}
         >
           Inspect affected content
@@ -195,7 +195,7 @@ export function PreviewConnectionPanel({
   return (
     <section
       id="connected-preview-panel"
-      className="focus-visible:ring-ring scroll-mt-3 space-y-4 rounded-lg outline-none focus-visible:ring-2 focus-visible:ring-offset-2"
+      className="focus-visible:ring-ring scroll-mt-3 space-y-4 rounded outline-none focus-visible:ring-2 focus-visible:ring-offset-2"
       aria-labelledby="native-preview-title"
       tabIndex={-1}
     >
@@ -214,7 +214,7 @@ export function PreviewConnectionPanel({
         </span>
       </div>
 
-      <div className="bg-muted/70 rounded-xl p-3 text-xs">
+      <div className="bg-muted/70 rounded p-3 text-xs">
         <div className="flex items-center justify-between gap-3">
           <p className="font-semibold">Connection instructions</p>
           <span className="text-muted-foreground">{statusLabel(status)}</span>
@@ -223,7 +223,7 @@ export function PreviewConnectionPanel({
           From the dashboard folder, start Studio and its relay. Then configure each example app
           with this endpoint and session.
         </p>
-        <code className="bg-background mt-2 block overflow-x-auto rounded-lg border p-2 leading-5">
+        <code className="bg-background mt-2 block overflow-x-auto rounded border p-2 leading-5">
           npm run dev:studio
           <br />
           {endpoint}
@@ -262,7 +262,7 @@ export function PreviewConnectionPanel({
               clients.filter((client) => client.platform === platform.id),
             )
             return (
-              <li key={platform.id} className="border-border min-w-0 rounded-lg border p-2">
+              <li key={platform.id} className="border-border min-w-0 rounded border p-2">
                 <div className="flex items-center gap-1.5">
                   <span
                     className={`size-1.5 shrink-0 rounded-full ${state.dotClassName}`}
@@ -284,7 +284,7 @@ export function PreviewConnectionPanel({
       </div>
 
       {clients.length === 0 ? (
-        <div className="border-border rounded-xl border border-dashed p-4 text-center">
+        <div className="border-border rounded border border-dashed p-4 text-center">
           <PlugsConnectedIcon className="text-muted-foreground mx-auto" aria-hidden size={24} />
           <p className="mt-2 text-sm font-medium">No example app connected</p>
           <p className="text-muted-foreground mt-1 text-xs">
@@ -307,7 +307,7 @@ export function PreviewConnectionPanel({
                   : undefined
               const hasCompatibilityWarning = compatibilityWarnings(document, [client]).length > 0
               return (
-                <li key={client.clientId} className="border-border rounded-xl border p-3">
+                <li key={client.clientId} className="border-border rounded border p-3">
                   <div className="flex items-center justify-between gap-2">
                     <div className="min-w-0">
                       <p className="truncate text-sm font-medium">{client.displayName}</p>
@@ -365,7 +365,7 @@ export function PreviewConnectionPanel({
             {clients.map((client) => (
               <li
                 key={client.clientId}
-                className="border-border rounded-lg border px-2.5 py-2 text-xs"
+                className="border-border rounded border px-2.5 py-2 text-xs"
               >
                 <details>
                   <summary className="cursor-pointer font-medium">
@@ -422,7 +422,7 @@ export function PreviewConnectionPanel({
             {warnings.map((warning) => (
               <li
                 key={warning}
-                className="flex gap-2 rounded-lg bg-amber-50 p-2 text-xs text-amber-950"
+                className="flex gap-2 rounded bg-amber-50 p-2 text-xs text-amber-950"
               >
                 <WarningCircleIcon className="mt-0.5 shrink-0" aria-hidden />
                 {warning}

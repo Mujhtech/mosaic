@@ -2,25 +2,28 @@
 
 ## Status
 
-**Rejected pending fixes**
+**Accepted**
 
-The isolated Phase 3A foundation is substantial and its confirmed implementation blockers were
-addressed within the allowed two bounded fix rounds. Gate 3A cannot be accepted because the
-repository has no
-owner-approved hosted authentication/session implementation or PostgreSQL access and migration
-tooling. The running API therefore uses an anonymous principal resolver and deterministic in-memory
-storage: hosted routes correctly reject unauthenticated requests, but data is not durable and the
-required authenticated, restart-safe demo cannot be performed.
+The persistence remediation is accepted: PostgreSQL is now the production system of record, pgx
+runtime wiring is fail-fast, Goose migrations are explicit and versioned, readiness checks the
+database, Compose uses a durable named volume, and focused real-PostgreSQL checks cover the critical
+data-integrity risks. Gate 3A as a whole remains rejected only because the separately owned hosted
+authentication/session design is unresolved. The production binary intentionally retains the
+anonymous resolver, so the authenticated Gate demo cannot yet be performed.
 
 Phase 3B has not started.
 
 ## Git Isolation
 
 - Base commit: `a1b32557e8c26b676b0f9a4cbe859cd172dffaf4`
-- Worktree: `/Users/muhideenmujeeb/Projects/mosaic-phase-3a`
-- Branch: `phase/3a-cloud-workspace`
-- The active Phase 2.5/user worktree at `/Users/muhideenmujeeb/Projects/mosaic` was not used for
-  implementation and its existing uncommitted changes were preserved.
+- Original isolated implementation worktree: `/Users/muhideenmujeeb/Projects/mosaic-phase-3a`.
+- Persistence remediation worktree: `/Users/muhideenmujeeb/Projects/mosaic`.
+- Current branch: `codex/phase-3a`.
+- Pre-existing user changes in the active worktree were preserved; the native iOS example and other
+  excluded Phase 2.5 surfaces were not modified by this remediation.
+- The already-dirty `.codex/agents/**`, `AGENTS.md`, convention documents, roadmap, Phase 3A plan,
+  and iOS example diffs predated persistence work. This remediation touched the Phase 3A plan only
+  where required to remove obsolete persistence-approval statements.
 - Intentionally excluded: Phase 2.5 review and implementation paths; the paywall editor and Studio
   workspace, canvas, Layers, inspector, preview controls, and Studio layout; design-system and
   design-token packages; `protocol/**`; all SDKs; and native example applications.
@@ -136,7 +139,9 @@ Phase 3B has not started.
   usage, audit/telemetry, validation/error mapping, cursors, and authentication middleware behavior.
 - Dashboard tests protect one-time reveal behavior and mutation-cache hygiene, Catalog-impact query
   invalidation, lifecycle decisions, hosted query states, workspace navigation, and nested scope.
-- No migration test was added because no migration system or database adapter was authorized.
+- A focused real-PostgreSQL integration test now protects empty-database migration, reconstruction
+  persistence, tenant constraints, Catalog relationships, replacement atomicity/history, and
+  API-key digest-only storage.
 
 ## Product Review
 
@@ -161,7 +166,6 @@ does not masquerade as fetched or validated provider state.
 ### Deferred work
 
 - Hosted authentication/session implementation and invitation delivery.
-- PostgreSQL adapter, schema migrations, restart durability, and production transaction behavior.
 - Hosted publishing, versions, releases, rollback, CDN/configuration delivery, and SDK networking.
 - Live provider connection, import, validation, synchronization, purchasing, and authoritative
   customer entitlement state.
@@ -172,13 +176,8 @@ does not masquerade as fetched or validated provider state.
 
 1. Select the hosted identity/session design: provider or self-hosted mechanism, browser cookie or
    token boundary, verification/recovery, TTL/rotation/revocation, CSRF, and credentialed CORS.
-2. Select PostgreSQL tooling and the backend sharing boundary: driver, SQL/query approach, migration
-   runner, ID generation, and application transaction API. The plan recommends a shared Go module,
-   `pgx`, explicit SQL or `sqlc`, and application-owned transactions, but does not treat that
-   recommendation as approval.
-
-Until both decisions are made and implemented, the Product review is **Owner decision required** and
-Gate 3A remains rejected.
+   The persistence tooling decision is closed by ADR-0013. Until the identity/session decision is made
+   and implemented, the Product review is **Owner decision required** and Gate 3A remains rejected.
 
 ## UX Review
 
@@ -209,8 +208,7 @@ Product lifecycle actions.
 - Mobile hosted navigation, clipboard-failure messaging, localized timestamps, and replacement of
   temporary implementation terminology remain tracked UX work.
 
-These issues are important follow-ups, but the authentication and persistence decisions are the
-current Gate blockers.
+These issues are important follow-ups, but authentication is the current Gate blocker.
 
 The targeted quality recheck after the first fix round found three additional dashboard blockers:
 secret data surviving in the active TanStack mutation observer, incomplete scope guards on
@@ -224,10 +222,12 @@ and production builds passed after those changes.
 
 ### Migrations and persistence
 
-No migrations, PostgreSQL adapter, ORM, query generator, or migration framework were introduced.
-This avoided silently choosing an architectural dependency, but means migration acceptance criteria
-and restart durability are unavailable. The in-memory repository provides deterministic behavior and
-an application transaction boundary only; it is not production persistence.
+ADR-0013 approved PostgreSQL, pgx/v5 with pgxpool, and Goose. `cmd/api` now requires `DATABASE_URL`,
+verifies connectivity, and constructs only the PostgreSQL adapter. SQL migrations cover every
+runtime Phase 3A entity and relationship, including replacement history and audit events, with
+composite foreign keys protecting tenant/project scope. Application-owned transactions make
+multi-record mutations and audit insertion atomic. The in-memory adapter remains only for focused
+unit and transport tests.
 
 ### Authorization and secret handling
 
@@ -263,8 +263,11 @@ and audit events without secret material.
 
 ### Unavailable checks and known defects
 
-- Migration and persistent restart checks are unavailable until PostgreSQL tooling is approved and
-  implemented.
+- Migration, reconstruction persistence, composite tenant constraints, replacement atomicity/history,
+  and API-key digest-only storage passed against PostgreSQL 17.
+- The bounded persistence recheck also passed captured-error precedence, stable unique-conflict
+  mapping, serialized last-owner mutations, serialized Product replacement/lifecycle/delete races,
+  and persistence-enforced monotonic API-key revocation.
 - The authenticated Gate demo is unavailable until the hosted identity/session decision is approved
   and implemented. With the current anonymous resolver, hosted endpoints intentionally return 401.
 - The full dashboard Vitest suite remains red in unchanged, excluded paywall-editor/preview files:
@@ -296,9 +299,24 @@ and audit events without secret material.
 
 ## Decision
 
+### Persistence remediation validation (2026-07-22)
+
+- `go test ./...` and `go vet ./...` passed in `apps/api`.
+- The PostgreSQL integration test passed against PostgreSQL 17 and reset/applied the migration on an
+  empty schema. Acceptance evidence used an explicit `DATABASE_TEST_URL`; skipped runs are not
+  treated as database evidence.
+- `cmd/migrate status`, `version`, `down`, and `up` all completed successfully.
+- The production API failed startup against an unavailable database without logging its password.
+- `/health/live` and `/health/ready` returned `200`; readiness returned `503` in the unavailable-
+  dependency test.
+- `docker compose build api migrate` passed. The migration service exited `0`, the API reached ready,
+  and an Organization row survived an API-container restart in the named PostgreSQL volume.
+- No ORM, alternate driver, alternate migration framework, automatic API migration, or runtime
+  in-memory fallback was introduced.
+
 **Gate 3A rejected pending fixes.**
 
-Obtain the hosted authentication/session and PostgreSQL/migration decisions, implement and validate
-those adapters and migrations, perform the authenticated persistent Gate 3A demo, integrate against
+Obtain the hosted authentication/session decision, implement that adapter, perform the authenticated
+persistent Gate 3A demo, integrate against
 the accepted Phase 2.5 baseline, and rerun the complete repository suite. Do not begin Gate 3B before
 a new Gate 3A review accepts that integrated result.

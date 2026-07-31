@@ -16,7 +16,7 @@ class ProtocolV02Test {
             screen.layout.content.walkDepthFirst().toList()
         }
 
-        assertEquals(MOSAIC_PROTOCOL_VERSION_V02, document.schemaVersion)
+        assertEquals(MOSAIC_PROTOCOL_VERSION, document.schemaVersion)
         assertEquals(MosaicStackDirection.VERTICAL, document.layout.content.direction)
         assertEquals(2, document.screens.size)
         assertEquals(MosaicScreenPresentation.SCREEN, document.screens.single { it.id == "offer" }.presentation)
@@ -85,17 +85,16 @@ class ProtocolV02Test {
     }
 
     @Test
-    fun `decodes all valid edge and migration fixtures and preserves Protocol 01`() {
+    fun `decodes all valid edge and migration fixtures as Protocol 02`() {
         listOf(
             "edge-cases.json",
             "expired-countdown.json",
             "hidden-purchase-target.json",
             "navigation-only.json",
-            "migrated-v0.1.json",
         ).forEach { fixture ->
             assertEquals("0.2", v02Document(fixture).schemaVersion)
         }
-        assertEquals("0.1", canonicalDocument().schemaVersion)
+        assertEquals(MOSAIC_PROTOCOL_VERSION, canonicalDocument().schemaVersion)
     }
 
     @Test
@@ -309,13 +308,13 @@ class ProtocolV02Test {
         flow.forEach { source ->
             val decoded = MosaicLocalPreviewCodec.decode(
                 source.toString(),
-                MOSAIC_LOCAL_PREVIEW_VERSION_V02,
+                MOSAIC_LOCAL_PREVIEW_VERSION,
             )
-            assertEquals(MOSAIC_LOCAL_PREVIEW_VERSION_V02, decoded.previewProtocolVersion)
-            MosaicLocalPreviewCodec.encode(decoded, MOSAIC_LOCAL_PREVIEW_VERSION_V02)
+            assertEquals(MOSAIC_LOCAL_PREVIEW_VERSION, decoded.previewProtocolVersion)
+            MosaicLocalPreviewCodec.encode(decoded, MOSAIC_LOCAL_PREVIEW_VERSION)
         }
         assertThrows(MosaicPreviewCodecException::class.java) {
-            MosaicLocalPreviewCodec.decode(flow.first().toString(), MOSAIC_LOCAL_PREVIEW_VERSION)
+            MosaicLocalPreviewCodec.decode(flow.first().toString(), "0.1")
         }
     }
 

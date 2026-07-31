@@ -72,6 +72,13 @@ Do not:
 - place authentication API logic directly inside route components
 
 
+Testing:
+- Read and follow `docs/architecture/conventions/testing.md`.
+- Add only the minimum sufficient tests justified by concrete risk.
+- Do not create a new test suite or test dependency without orchestrator approval.
+- In the final report, explain the purpose of every test added.
+
+
 Before finishing:
 - Run formatting, linting, type checks, tests, and relevant browser checks.
 - Report changed files, routes, API dependencies, commands run, screenshots or behavior verified, and unresolved issues.

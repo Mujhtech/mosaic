@@ -4,7 +4,6 @@ import { Link } from "@tanstack/react-router"
 import { buttonVariants } from "@/components/ui/button-variants"
 import { HostedResourceBoundary } from "@/features/auth/components/hosted-resource-boundary"
 import { resolveHostedQueryState } from "@/features/auth/types/hosted-query-state"
-import { CatalogTabs } from "@/features/catalog/components/catalog-tabs"
 import { entitlementQueryOptions } from "@/features/catalog/queries/catalog-query"
 import { WorkspacePage, WorkflowPanel } from "@/features/organizations/components/workspace-page"
 import { ScopeMismatchRecovery } from "@/features/organizations/components/scope-mismatch-recovery"
@@ -72,7 +71,6 @@ export function EntitlementDetailPage({
       eyebrow="Catalog · Entitlement definition"
       title={entitlement.data?.name ?? "Entitlement"}
     >
-      <CatalogTabs organizationId={organizationId} projectId={projectId} />
       <HostedResourceBoundary state={state}>
         <WorkflowPanel title="Definition">
           <dl className="grid gap-4 sm:grid-cols-2">
@@ -85,7 +83,7 @@ export function EntitlementDetailPage({
               <dd className="mt-1 font-mono text-sm">{entitlement.data?.id}</dd>
             </div>
           </dl>
-          <p className="border-border bg-muted/40 mt-5 rounded-lg border p-4 text-sm leading-6">
+          <p className="border-border bg-muted/40 mt-5 rounded border p-4 text-sm leading-6">
             This record defines access that Products can grant. It is not an authoritative customer
             Entitlement, receipt, subscription state, or entitlement check.
           </p>

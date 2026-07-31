@@ -82,6 +82,17 @@ func TestOrganizationListRejectsMalformedAndStaleCursors(t *testing.T) {
 	}
 }
 
+func TestGetProjectMatchesCanonicalPathWithoutTrailingSlash(t *testing.T) {
+	service := cloudworkspace.NewService(cloudworkspacememory.New())
+	handler := cloudworkspacehttp.Routes(service, authn.ResolverFunc(func(*http.Request) (authn.Principal, error) {
+		return authn.Principal{ActorID: "actor-owner", Method: "test"}, nil
+	}))
+
+	response := request(t, handler, http.MethodGet, "/projects/project_missing", "")
+
+	assertErrorCode(t, response, http.StatusNotFound, "not_found")
+}
+
 func request(t *testing.T, handler http.Handler, method, target, body string) *httptest.ResponseRecorder {
 	t.Helper()
 	request := httptest.NewRequest(method, target, bytes.NewBufferString(body))

@@ -124,7 +124,7 @@ public struct MosaicPreviewCapabilityReport: Sendable, Equatable {
     clientId: String,
     supportedSchemaVersions: [String] = [mosaicProtocolVersion],
     supportedCapabilities: [MosaicPreviewSupportedCapability] =
-      MosaicCapabilityName.allCases.map {
+      MosaicCapabilityCatalog.v02.map {
         MosaicPreviewSupportedCapability(name: $0.rawValue, version: mosaicProtocolVersion)
       },
     previewCapabilities: [MosaicPreviewCapability] =

@@ -17,7 +17,7 @@ export function ScopeMismatchRecovery({
   return (
     <section
       aria-labelledby="scope-mismatch-title"
-      className="border-destructive/25 bg-destructive/5 rounded-xl border p-6"
+      className="border-destructive/25 bg-destructive/5 rounded border p-6"
       role="alert"
     >
       <p className="text-destructive text-xs font-semibold tracking-wide uppercase">

@@ -1,6 +1,9 @@
-# Mosaic Flutter Phase 2 local preview
+# Mosaic Flutter local preview and hosted delivery
 
-This native Flutter example connects to the account-free local Studio relay,
+This native Flutter example has separate Local preview and Hosted tabs. Local
+preview connects to the account-free Studio relay. Hosted mode loads a valid
+cached or bundled Configuration Delivery v1 release immediately and refreshes
+the configured environment only when the refresh action is pressed.
 reports its Protocol 0.2 and Local Preview 0.2 capabilities, and rerenders an
 accepted draft without rebuilding the app. When Studio is disconnected or a
 revision fails, the last accepted document remains visible; before the first
@@ -76,6 +79,22 @@ flutter run \
 The relay remains loopback-only. This is local development configuration, not
 a hosted endpoint or authentication mechanism.
 
+## Run hosted configuration
+
+Start Mosaic's API with an environment containing the example public SDK key,
+then launch with explicit hosted settings:
+
+```bash
+flutter run \
+  --dart-define=MOSAIC_HOSTED_BASE_URL=http://127.0.0.1:8080 \
+  --dart-define=MOSAIC_PUBLIC_SDK_KEY=public_example_key
+```
+
+Open the Hosted tab and use the cloud refresh action. Stop the API and restart
+the app to verify the last-known-valid cache; clear app data to demonstrate the
+generated bundled release. Network or validation failures retain the current
+complete release and surface a safe diagnostic instead of a partial paywall.
+
 ## Verify
 
 ```bash
@@ -86,9 +105,10 @@ flutter test --no-pub
 flutter build bundle --no-pub
 ```
 
-The sync command copies
-`protocol/fixtures/v0.2/complete-paywall.json` byte-for-byte into ignored
-`assets/generated/` output. It is never maintained as a second canonical
+The sync command copies both
+`protocol/fixtures/v0.2/complete-paywall.json` and the canonical valid Delivery
+v1 release byte-for-byte into ignored `assets/generated/` output. Neither is a
+second canonical
 fixture. The current fallback therefore exercises the same Screens, Button
 children, Icons, navigation, external URL handoff, horizontal Product Selector,
 authored Product Cards/Product Badges, safe product templates, and Protocol 0.2

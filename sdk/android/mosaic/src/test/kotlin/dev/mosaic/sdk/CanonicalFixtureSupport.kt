@@ -56,7 +56,7 @@ internal fun findNode(root: JsonObject, id: String): JsonObject {
 }
 
 private fun canonicalFixture(): Path {
-    return repositoryFile("protocol/fixtures/v0.1/complete-paywall.json")
+    return repositoryFile("protocol/fixtures/v0.2/complete-paywall.json")
 }
 
 internal fun repositoryFile(relativePath: String): Path {

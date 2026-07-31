@@ -208,7 +208,7 @@ export function DocumentBackgroundEditor({
       <div className="grid grid-cols-[minmax(0,1fr)_2rem_2rem] items-center gap-1.5">
         <div
           aria-label={`${colorLabel} type`}
-          className="bg-muted grid h-8 min-w-0 grid-cols-3 rounded-md p-0.5"
+          className="bg-muted grid h-8 min-w-0 grid-cols-3 rounded p-0.5"
           role="group"
         >
           {(
@@ -272,7 +272,7 @@ export function DocumentBackgroundEditor({
         </Button>
       </div>
       {imageAssets.length === 0 || videoAssets.length === 0 || !selectedMediaExists ? (
-        <div className="border-border bg-muted/30 flex flex-wrap items-center gap-1.5 rounded-md border p-2">
+        <div className="border-border bg-muted/30 flex flex-wrap items-center gap-1.5 rounded border p-2">
           {!selectedMediaExists ? (
             <p className="text-muted-foreground w-full text-[11px] leading-4">
               The selected media asset is missing. Add a replacement to keep this background valid.

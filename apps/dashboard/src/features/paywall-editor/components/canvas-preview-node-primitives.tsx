@@ -294,7 +294,7 @@ export function NodeFrame({
   return (
     <div
       aria-disabled={locked || undefined}
-      className={`relative min-w-0 rounded-lg outline-none ${stateClass}`}
+      className={`relative min-w-0 rounded outline-none ${stateClass}`}
       data-component-id={node.id}
       data-preview-node-type={node.type}
       onClick={(event) => {

@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:mosaic_sdk/mosaic_sdk.dart';
 
 const String _previewEndpoint = String.fromEnvironment(
@@ -16,6 +17,14 @@ const String _previewClientId = String.fromEnvironment(
   'MOSAIC_PREVIEW_CLIENT_ID',
   defaultValue: 'client_flutter_example',
 );
+const String _hostedBaseUrl = String.fromEnvironment(
+  'MOSAIC_HOSTED_BASE_URL',
+  defaultValue: 'http://127.0.0.1:8080',
+);
+const String _publicSdkKey = String.fromEnvironment(
+  'MOSAIC_PUBLIC_SDK_KEY',
+  defaultValue: 'public_example_key',
+);
 
 void main() {
   runApp(const MosaicFlutterExample());
@@ -28,7 +37,7 @@ final class MosaicFlutterExample extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp(
       debugShowCheckedModeBanner: false,
-      title: 'Mosaic Flutter local preview',
+      title: 'Mosaic Flutter example',
       theme: ThemeData(
         useMaterial3: true,
         colorScheme: ColorScheme.fromSeed(
@@ -36,7 +45,47 @@ final class MosaicFlutterExample extends StatelessWidget {
         ).copyWith(primary: const Color(0xff007f73), surface: Colors.white),
         scaffoldBackgroundColor: Colors.white,
       ),
-      home: const PaywallPlayground(),
+      home: const MosaicExampleShell(),
+    );
+  }
+}
+
+final class MosaicExampleShell extends StatefulWidget {
+  const MosaicExampleShell({super.key});
+
+  @override
+  State<MosaicExampleShell> createState() => _MosaicExampleShellState();
+}
+
+final class _MosaicExampleShellState extends State<MosaicExampleShell> {
+  var _index = 0;
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      body: IndexedStack(
+        index: _index,
+        children: const <Widget>[
+          PaywallPlayground(),
+          HostedPaywallPlayground(),
+        ],
+      ),
+      bottomNavigationBar: NavigationBar(
+        selectedIndex: _index,
+        onDestinationSelected: (index) => setState(() => _index = index),
+        destinations: const <NavigationDestination>[
+          NavigationDestination(
+            icon: Icon(Icons.design_services_outlined),
+            selectedIcon: Icon(Icons.design_services),
+            label: 'Local preview',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.cloud_outlined),
+            selectedIcon: Icon(Icons.cloud),
+            label: 'Hosted',
+          ),
+        ],
+      ),
     );
   }
 }
@@ -48,6 +97,165 @@ final class PaywallPlayground extends StatefulWidget {
 
   @override
   State<PaywallPlayground> createState() => _PaywallPlaygroundState();
+}
+
+final class HostedPaywallPlayground extends StatefulWidget {
+  const HostedPaywallPlayground({this.mosaic, super.key});
+
+  final Mosaic? mosaic;
+
+  @override
+  State<HostedPaywallPlayground> createState() =>
+      _HostedPaywallPlaygroundState();
+}
+
+final class _HostedPaywallPlaygroundState
+    extends State<HostedPaywallPlayground> {
+  late final Mosaic _mosaic;
+  late final bool _ownsMosaic;
+  var _status = 'Loading cache or bundled release';
+  var _lastEvent = 'No presentation event';
+
+  @override
+  void initState() {
+    super.initState();
+    _ownsMosaic = widget.mosaic == null;
+    _mosaic = widget.mosaic ?? _createMosaic();
+    _mosaic.addListener(_configurationChanged);
+    unawaited(_load());
+  }
+
+  @override
+  void dispose() {
+    _mosaic.removeListener(_configurationChanged);
+    if (_ownsMosaic) _mosaic.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final accepted = _mosaic.acceptedConfiguration;
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Mosaic hosted configuration'),
+        actions: <Widget>[
+          IconButton(
+            tooltip: 'Refresh hosted configuration',
+            onPressed: () => unawaited(_refresh()),
+            icon: const Icon(Icons.cloud_sync_outlined),
+          ),
+        ],
+      ),
+      body: Column(
+        children: <Widget>[
+          Material(
+            color: Theme.of(context).colorScheme.surfaceContainerLow,
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(12, 8, 12, 10),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: <Widget>[
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: <Widget>[
+                      _StatusChip(
+                        icon: Icons.source_outlined,
+                        label: accepted == null
+                            ? 'Configuration unavailable'
+                            : 'Source: ${accepted.source.name}',
+                      ),
+                      _StatusChip(
+                        icon: Icons.publish_outlined,
+                        label: accepted == null
+                            ? 'Release: none'
+                            : 'Release ${accepted.envelope.release.number}',
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    _hostedBaseUrl,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: Theme.of(context).textTheme.bodySmall,
+                  ),
+                  Text(_status, key: const ValueKey('hosted-status')),
+                  Text(_lastEvent, key: const ValueKey('hosted-last-event')),
+                ],
+              ),
+            ),
+          ),
+          Expanded(
+            child: MosaicPlacementHost(
+              mosaic: _mosaic,
+              placementKey: 'onboarding_complete',
+              onResult: (result) =>
+                  _recordEvent('Presentation: ${result.outcome.wireValue}'),
+              onInteraction: (interaction) =>
+                  _recordEvent('Interaction: ${interaction.outcome.wireValue}'),
+              onDiagnostic: (diagnostic) =>
+                  _recordEvent('Diagnostic: ${diagnostic.code}'),
+              unavailableBuilder: (context, resolution) => Center(
+                child: Text(
+                  'Placement unavailable (${resolution.diagnosticCode})',
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Mosaic _createMosaic() => Mosaic.configure(
+    publicSdkKey: _publicSdkKey,
+    baseUrl: Uri.parse(_hostedBaseUrl),
+    applicationVersion: '0.2.0',
+    purchaseProvider: _fallbackPurchaseProvider(),
+    bundledFallbackLoader: () async =>
+        rootBundle.loadString('assets/generated/configuration-release.json'),
+    onDiagnostic: (diagnostic) {
+      if (mounted) _recordEvent('Configuration: ${diagnostic.code}');
+    },
+  );
+
+  Future<void> _load() async {
+    final result = await _mosaic.loadConfiguration();
+    if (!mounted) return;
+    setState(() {
+      _status = switch (result) {
+        MosaicConfigurationReady(:final configuration) =>
+          'Ready from ${configuration.source.name}',
+        MosaicConfigurationUnavailable(:final diagnosticCode) =>
+          'Unavailable: $diagnosticCode',
+      };
+    });
+  }
+
+  Future<void> _refresh() async {
+    if (mounted) setState(() => _status = 'Refreshing hosted release');
+    final result = await _mosaic.refreshConfiguration();
+    if (!mounted) return;
+    setState(() {
+      _status = switch (result) {
+        MosaicConfigurationUpdated() => 'Accepted hosted release',
+        MosaicConfigurationNotModified() => 'Hosted release not modified',
+        MosaicConfigurationRetained(:final diagnosticCode) =>
+          'Retained last valid release: $diagnosticCode',
+        MosaicConfigurationRefreshUnavailable(:final diagnosticCode) =>
+          'Unavailable: $diagnosticCode',
+      };
+    });
+  }
+
+  void _configurationChanged() {
+    if (mounted) setState(() {});
+  }
+
+  void _recordEvent(String value) {
+    if (mounted) setState(() => _lastEvent = value);
+  }
 }
 
 final class _PaywallPlaygroundState extends State<PaywallPlayground> {

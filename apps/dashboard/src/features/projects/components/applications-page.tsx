@@ -116,7 +116,7 @@ export function ApplicationsPage({ organizationId, projectId }: ApplicationsPage
                 <Field>
                   <FieldLabel htmlFor="app-platform">Platform</FieldLabel>
                   <select
-                    className="border-input bg-background h-9 rounded-md border px-3 text-sm"
+                    className="border-input bg-background h-9 rounded border px-3 text-sm"
                     id="app-platform"
                     onChange={(event) =>
                       field.handleChange(event.target.value as "android" | "ios")

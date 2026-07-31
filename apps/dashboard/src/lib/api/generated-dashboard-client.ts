@@ -40,7 +40,7 @@ function normalizeGeneratedError(
       cause: error,
       code: typeof envelope?.code === "string" ? envelope.code : "http_error",
       correlationId: requestId,
-      details: envelope?.fields,
+      details: envelope?.details ?? envelope?.fields,
       retryable: response.status === 429 || response.status >= 500,
       status: response.status,
     },
@@ -59,7 +59,7 @@ export function createGeneratedDashboardClient(
     if (!request.headers.has("X-Request-ID")) {
       request.headers.set("X-Request-ID", createRequestId())
     }
-    return request
+    return new Request(request, { credentials: "include" })
   })
   client.interceptors.error.use(normalizeGeneratedError)
 

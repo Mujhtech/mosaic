@@ -51,6 +51,7 @@ describe("StudioToolbar", () => {
     expect(screen.queryByRole("button", { name: "Toggle diagnostics" })).not.toBeInTheDocument()
     expect(screen.queryByRole("button", { name: /^save$/i })).not.toBeInTheDocument()
     expect(screen.queryByRole("button", { name: /^publish$/i })).not.toBeInTheDocument()
+    expect(screen.queryByRole("link", { name: "Connect to hosted" })).not.toBeInTheDocument()
 
     fireEvent.click(screen.getByRole("button", { name: "Undo" }))
     fireEvent.click(screen.getByRole("button", { name: "Open connected previews" }))
@@ -80,6 +81,18 @@ describe("StudioToolbar", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Import Mosaic JSON" }))
     expect(onRequestImport).toHaveBeenCalledOnce()
+  })
+
+  it("preserves local work before opening the optional hosted connection flow", () => {
+    const preserve = vi.fn(() => false)
+    render(<StudioToolbar {...toolbarProps({ onConnectHosted: preserve })} />)
+
+    const connect = screen.getByRole("link", { name: "Connect to hosted" })
+    expect(connect).toHaveAttribute("href", "/workspace")
+    const blockedEvent = new MouseEvent("click", { bubbles: true, cancelable: true })
+    fireEvent(connect, blockedEvent)
+    expect(preserve).toHaveBeenCalledOnce()
+    expect(blockedEvent.defaultPrevented).toBe(true)
   })
 
   it("allows Back only after a synchronous pending autosave flush succeeds", () => {

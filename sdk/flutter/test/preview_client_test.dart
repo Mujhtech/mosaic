@@ -156,7 +156,7 @@ void main() {
       client.draftIssue?.kind,
       MosaicPreviewDraftIssueKind.unsupportedComponent,
     );
-    expect(client.draftIssue?.location.componentId, 'headline');
+    expect(client.draftIssue?.location.componentId, 'close-label');
     final rejected =
         _sentObjects(socket).last['payload']! as Map<String, Object?>;
     expect(rejected['reason'], 'unsupportedCapability');
@@ -449,7 +449,7 @@ MosaicPreviewClientIdentity _identity() => MosaicPreviewClientIdentity(
 List<Map<String, Object?>> _canonicalFlow() {
   return (jsonDecode(
     repositoryFile(
-      'protocol/fixtures/local-preview/v0.1/session-flow.messages.json',
+      'protocol/fixtures/local-preview/v0.2/session-flow.messages.json',
     ).readAsStringSync(),
   ) as List<Object?>)
       .cast<Map<String, Object?>>();

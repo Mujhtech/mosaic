@@ -16,7 +16,7 @@ final class PaywallStateTests: XCTestCase {
     await model.prepare()
 
     let selector = try XCTUnwrap(document.productSelectors.single)
-    XCTAssertEqual(model.availableOptions(for: selector).map(\.id), ["monthly-plan"])
+    XCTAssertEqual(model.availableOptions(for: selector).map(\.id), ["plans-monthly-plan-card"])
     XCTAssertEqual(model.selectedProductReferenceID(for: selector.id), "monthly-plan")
     XCTAssertTrue(model.unavailableSelectorIDs.isEmpty)
 
@@ -43,7 +43,7 @@ final class PaywallStateTests: XCTestCase {
     XCTAssertTrue(model.availableOptions(for: selector).isEmpty)
     XCTAssertNil(model.selectedProductReferenceID(for: selector.id))
     XCTAssertTrue(model.unavailableSelectorIDs.contains(selector.id))
-    XCTAssertFalse(model.isPurchaseEnabled(purchase))
+    XCTAssertFalse(model.isButtonEnabled(purchase))
     XCTAssertEqual(
       recorder.interactions,
       [.productUnavailable(productReferenceID: "yearly-plan")]
@@ -125,7 +125,7 @@ final class PaywallStateTests: XCTestCase {
       onResult: recorder.record
     )
 
-    model.close(using: try closeButton(in: document))
+    model.performSynchronousAction(using: try closeButton(in: document))
 
     XCTAssertEqual(recorder.interactions, [.dismissed])
     XCTAssertEqual(recorder.results, [.dismissed])
@@ -151,34 +151,6 @@ final class PaywallStateTests: XCTestCase {
       model.diagnostics,
       [MosaicDiagnostic(code: "renderer_failed", stage: .rendering)]
     )
-  }
-
-  func testBusyStateDisablesTheActivePurchaseUntilProviderReturns() async throws {
-    let document = try canonicalDocument()
-    let provider = DeferredPurchaseProvider(products: [.phase1Monthly, .phase1Yearly])
-    let recorder = OutcomeRecorder()
-    let model = MosaicPaywallModel(
-      document: document,
-      purchaseProvider: provider,
-      onInteraction: recorder.record,
-      onResult: recorder.record
-    )
-    await model.prepare()
-    let button = try purchaseButton(in: document)
-
-    let operation = Task { await model.purchase(using: button) }
-    while model.busyPurchaseButtonID == nil {
-      await Task.yield()
-    }
-    XCTAssertEqual(model.busyPurchaseButtonID, button.id)
-    XCTAssertFalse(model.isPurchaseEnabled(button))
-
-    await provider.completePurchase(
-      with: .purchased(productID: "mosaic_pro_yearly", transactionID: "deferred")
-    )
-    await operation.value
-    XCTAssertNil(model.busyPurchaseButtonID)
-    XCTAssertEqual(recorder.results, [.purchased(productReferenceID: "yearly-plan")])
   }
 
   func testUnifiedButtonUsesProgressContentAndRejectsDuplicateAsyncActions() async throws {

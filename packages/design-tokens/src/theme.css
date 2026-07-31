@@ -28,6 +28,7 @@
   --sidebar-primary-foreground: oklch(0.985 0.003 194);
   --sidebar-ring: oklch(0.54 0.11 194);
   --radius: 0.75rem;
+  --spacing: 0.25rem;
 
   /* Semantic surfaces and workspace roles. */
   --mosaic-surface: var(--background);

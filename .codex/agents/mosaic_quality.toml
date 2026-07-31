@@ -21,6 +21,21 @@ Responsibilities:
 - Review test output and identify untested critical paths.
 - Return findings ordered by severity with exact file and symbol references.
 
+Testing review policy:
+
+- Follow `docs/architecture/conventions/testing.md`.
+- Do not request tests based only on uncovered files, line coverage, or code volume.
+- Do not require one test file for every source file.
+- Do not require every test category for every feature.
+- Do not request tests for third-party library behaviour unless Mosaic owns a meaningful integration risk.
+- Every missing-test finding must identify:
+  1. the uncovered behaviour
+  2. the realistic failure mode
+  3. the user, security, compatibility, or data-integrity risk
+  4. the smallest appropriate test layer
+- Prefer modifying an existing test over creating a new suite.
+- Treat unnecessary or duplicated tests as maintainability findings.
+
 Do not:
 - Make code changes.
 - Focus on superficial style issues.

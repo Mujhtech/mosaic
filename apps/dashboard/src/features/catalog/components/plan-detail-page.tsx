@@ -5,7 +5,6 @@ import { Button } from "@/components/ui/button"
 import { buttonVariants } from "@/components/ui/button-variants"
 import { HostedResourceBoundary } from "@/features/auth/components/hosted-resource-boundary"
 import { resolveHostedQueryState } from "@/features/auth/types/hosted-query-state"
-import { CatalogTabs } from "@/features/catalog/components/catalog-tabs"
 import {
   addPlanProductMutationOptions,
   removePlanProductMutationOptions,
@@ -92,7 +91,6 @@ export function PlanDetailPage({ organizationId, planId, projectId }: PlanDetail
       eyebrow="Catalog · Plan"
       title={plan.data?.name ?? "Plan"}
     >
-      <CatalogTabs organizationId={organizationId} projectId={projectId} />
       <HostedResourceBoundary state={state}>
         <WorkflowPanel title="Products in this Plan">
           <ul className="divide-y">

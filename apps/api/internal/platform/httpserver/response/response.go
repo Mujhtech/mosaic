@@ -28,6 +28,7 @@ type APIError struct {
 	Code    string
 	Message string
 	Fields  map[string][]string
+	Details map[string]any
 	Cause   error
 }
 
@@ -43,6 +44,7 @@ type errorPayload struct {
 	Code      string              `json:"code"`
 	Message   string              `json:"message"`
 	Fields    map[string][]string `json:"fields,omitempty"`
+	Details   map[string]any      `json:"details,omitempty"`
 	RequestID string              `json:"requestId,omitempty"`
 }
 
@@ -93,6 +95,16 @@ func NoContent(w http.ResponseWriter, r *http.Request) {
 	render.NoContent(w, r)
 }
 
+// Representation writes an already validated representation. It is used by
+// protocol endpoints whose wire contract is not the dashboard data envelope.
+func Representation(w http.ResponseWriter, status int, contentType string, body []byte) {
+	w.Header().Set("Content-Type", contentType)
+	w.WriteHeader(status)
+	if status != http.StatusNotModified {
+		_, _ = w.Write(body)
+	}
+}
+
 func Error(w http.ResponseWriter, r *http.Request, err error) {
 	status, payload := errorDetails(err)
 	payload.RequestID = chimiddleware.GetReqID(r.Context())
@@ -104,6 +116,12 @@ func RequestTimeout(w http.ResponseWriter, r *http.Request) {
 		Code:      requestTimeoutCode,
 		Message:   requestTimeoutMessage,
 		RequestID: chimiddleware.GetReqID(r.Context()),
+	}})
+}
+
+func ServiceUnavailable(w http.ResponseWriter, r *http.Request, code, message string) {
+	writeJSON(w, r, http.StatusServiceUnavailable, errorEnvelope{Error: errorPayload{
+		Code: code, Message: message, RequestID: chimiddleware.GetReqID(r.Context()),
 	}})
 }
 
@@ -133,6 +151,7 @@ func errorDetails(err error) (int, errorPayload) {
 		Code:    code,
 		Message: message,
 		Fields:  cloneFields(apiError.Fields),
+		Details: cloneDetails(apiError.Details),
 	}
 }
 
@@ -228,5 +247,16 @@ func cloneFields(fields map[string][]string) map[string][]string {
 		cloned[field] = append([]string(nil), messages...)
 	}
 
+	return cloned
+}
+
+func cloneDetails(details map[string]any) map[string]any {
+	if len(details) == 0 {
+		return nil
+	}
+	cloned := make(map[string]any, len(details))
+	for key, value := range details {
+		cloned[key] = value
+	}
 	return cloned
 }

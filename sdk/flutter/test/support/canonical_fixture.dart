@@ -5,7 +5,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:mosaic_sdk/mosaic_sdk.dart';
 
 File canonicalFixtureFile() {
-  return repositoryFile('protocol/fixtures/v0.1/complete-paywall.json');
+  return repositoryFile('protocol/fixtures/v0.2/complete-paywall.json');
 }
 
 File repositoryFile(String relativePath) {
@@ -38,8 +38,12 @@ Map<String, Object?> findNode(
   Map<String, Object?> document,
   String type,
 ) {
-  final layout = document['layout']! as Map<String, Object?>;
-  final result = _findNode(layout, type);
+  Map<String, Object?>? result;
+  for (final screen
+      in (document['screens']! as List<Object?>).cast<Map<String, Object?>>()) {
+    result = _findNode(screen['layout']! as Map<String, Object?>, type);
+    if (result != null) break;
+  }
   if (result == null) {
     fail('Canonical fixture has no $type node.');
   }
@@ -53,7 +57,7 @@ Map<String, Object?>? _findNode(Map<String, Object?> node, String type) {
   if (node['type'] == 'scrollContainer') {
     return _findNode(node['content']! as Map<String, Object?>, type);
   }
-  if (node['type'] == 'verticalStack') {
+  if (node.containsKey('children')) {
     for (final value in node['children']! as List<Object?>) {
       final result = _findNode(value! as Map<String, Object?>, type);
       if (result != null) {

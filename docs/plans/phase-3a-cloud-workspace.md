@@ -1,6 +1,6 @@
 # Phase 3A Cloud Workspace and Catalog Contract
 
-Status: frozen isolated implementation contract; authentication and PostgreSQL tooling remain owner decisions
+Status: Rejected pending fixes
 
 ## Authority and gate boundary
 
@@ -58,14 +58,11 @@ screens may remain honest scaffolding and hosted routes must not make `/studio` 
 
 ### PostgreSQL access and migrations
 
-PostgreSQL is accepted, but no driver, query generator, ORM, migration runner, transaction API, or
-API/worker sharing boundary is accepted. Phase 3A must not silently introduce one. Domain models,
-repository ports, application transaction boundaries, SQL-neutral constraints, OpenAPI contracts,
-and deterministic in-memory implementations may proceed. Production PostgreSQL adapters and an
-executable migration chain remain owner-decision dependent.
-
-Recommended decision for later approval: one shared backend Go module, `pgx`, explicit SQL or
-`sqlc`, and application-owned transactions. This recommendation is not an implementation grant.
+ADR-0013 accepts PostgreSQL, `pgx/v5` with `pgxpool`, explicit SQL, Goose migrations, and
+application-owned transactions. The production API requires PostgreSQL and has no in-memory
+fallback. In-memory persistence remains test-only. The API never auto-migrates; deployment or the
+explicit migration command owns schema changes. The API/worker sharing boundary remains deferred
+until a runnable worker needs it.
 
 ## Terminology and information architecture
 
@@ -135,8 +132,8 @@ not appear filtered by a hidden Environment.
 
 ## Database model and invariants
 
-The eventual PostgreSQL schema uses opaque stable IDs, UTC timestamps, foreign keys, and scoped
-unique constraints. Exact ID generation and SQL tooling await the persistence decision.
+The PostgreSQL schema uses opaque stable IDs, UTC timestamps, foreign keys, scoped unique
+constraints, monotonic API-key revocation, and application-visible Product replacement history.
 
 Required constraints:
 
@@ -196,17 +193,17 @@ search filters. Stable errors include `unauthenticated`, `forbidden`, `not_found
 
 Backend checks are mandatory even when controls are hidden.
 
-| Action | Owner | Admin | Member |
-| --- | --- | --- | --- |
-| Read Organization, membership, Project, Application, Environment, Catalog | Yes | Yes | Yes |
-| Update Organization or manage members | Yes | Yes, except owner role | No |
-| Remove/transfer final owner | No | No | No |
-| Create/archive/restore Project | Yes | Yes | No |
-| Register Application or manage Environment metadata | Yes | Yes | No |
-| Create/rotate/revoke public SDK key | Yes | Yes | No |
-| Create/rotate/revoke secret server key | Yes | Yes | No |
-| Mutate Plans, Products, Entitlements, mappings, lifecycle | Yes | Yes | No |
-| Read usage and audit-safe metadata | Yes | Yes | Yes |
+| Action                                                                    | Owner | Admin                  | Member |
+| ------------------------------------------------------------------------- | ----- | ---------------------- | ------ |
+| Read Organization, membership, Project, Application, Environment, Catalog | Yes   | Yes                    | Yes    |
+| Update Organization or manage members                                     | Yes   | Yes, except owner role | No     |
+| Remove/transfer final owner                                               | No    | No                     | No     |
+| Create/archive/restore Project                                            | Yes   | Yes                    | No     |
+| Register Application or manage Environment metadata                       | Yes   | Yes                    | No     |
+| Create/rotate/revoke public SDK key                                       | Yes   | Yes                    | No     |
+| Create/rotate/revoke secret server key                                    | Yes   | Yes                    | No     |
+| Mutate Plans, Products, Entitlements, mappings, lifecycle                 | Yes   | Yes                    | No     |
+| Read usage and audit-safe metadata                                        | Yes   | Yes                    | Yes    |
 
 All nested resource access proves Organization membership and same-Project/same-Environment
 relationships. A mismatched parent identifier is never accepted merely because the resource ID
@@ -262,8 +259,8 @@ connection arrives in Phase 4. Secret reveal warns that it cannot be shown again
 
 ## Feature ownership
 
-Backend owns `apps/api/**`, `apps/worker/**`, backend-specific docs, tests, OpenAPI source, and the
-eventual migrations. Dashboard owns only new `features/auth`, `organizations`, `members`,
+Backend owns `apps/api/**`, `apps/worker/**`, backend-specific docs, tests, OpenAPI source, and
+versioned migrations. Dashboard owns only new `features/auth`, `organizations`, `members`,
 `projects`, `environments`, `api-keys`, `catalog`, and new non-Studio routes/tests.
 
 Forbidden paths include Studio/paywall-editor files and routes, `components/ui`, design packages,
@@ -272,7 +269,7 @@ files are regenerated from sources and never manually edited.
 
 ## Migration sequence
 
-After the persistence tool is approved:
+The approved initial migration applies this dependency order:
 
 1. actors, organizations, memberships, audit events;
 2. projects, applications, environments;
@@ -290,7 +287,8 @@ be documented before Gate 3A acceptance.
 Tests are selected as risk controls. Backend service tests protect tenant/environment isolation,
 role enforcement, last-owner integrity, API-key non-disclosure/rotation/revocation, Catalog scoped
 relationships, lifecycle history, destructive-delete prevention, stable validation/error mapping,
-and audit emission. PostgreSQL integration and migration tests are required after tooling approval.
+and audit emission. The acceptance workflow runs the focused persistence suite against a disposable
+real PostgreSQL database with `DATABASE_TEST_URL`; an ordinary skipped test run is not DB evidence.
 
 Dashboard behavior tests protect scope switching, server-state boundaries, loading/empty/error/
 permission recovery, one-time secret handling, Product creation/usage/archive/replacement, Plan
@@ -298,7 +296,7 @@ membership, Entitlement grants, and absence of provider-specific top-level navig
 test infrastructure is extended; no new runner or redundant snapshot suite is introduced.
 
 Repository validation includes Go format/test/vet, OpenAPI validation where available, dashboard
-format/lint/typecheck/test/build, migration checks after tooling approval, forbidden-path/dependency
+format/lint/typecheck/test/build, explicit PostgreSQL migration/persistence checks, forbidden-path/dependency
 scans, `git diff --check`, and the Gate 3A demo where runtime dependencies permit it.
 
 ## Observable acceptance criteria
@@ -341,7 +339,7 @@ Create an Organization
 
 ## Stop conditions
 
-Do not begin Gate 3B. Do not implement an auth vendor, session mechanism, PostgreSQL/query/migration
-tool, provider synchronization, hosted publishing, configuration delivery, protocol or SDK changes
-without the corresponding owner decision. Gate 3A cannot be accepted while required persistence,
-session, migration, or demo evidence remains unavailable.
+Do not begin Gate 3B. Do not implement an auth vendor, session mechanism, provider synchronization,
+hosted publishing, configuration delivery, protocol or SDK changes without the corresponding owner
+decision. ADR-0013 already authorizes the implemented PostgreSQL/pgx/Goose boundary. Gate 3A cannot
+be accepted while the required hosted session and authenticated demo evidence remain unavailable.

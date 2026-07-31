@@ -3,16 +3,43 @@ import { CodeIcon } from "@phosphor-icons/react/dist/ssr/Code"
 import { GearSixIcon } from "@phosphor-icons/react/dist/ssr/GearSix"
 import { KeyIcon } from "@phosphor-icons/react/dist/ssr/Key"
 import { PackageIcon } from "@phosphor-icons/react/dist/ssr/Package"
+import { StorefrontIcon } from "@phosphor-icons/react/dist/ssr/Storefront"
 import { SquaresFourIcon } from "@phosphor-icons/react/dist/ssr/SquaresFour"
 import { UsersThreeIcon } from "@phosphor-icons/react/dist/ssr/UsersThree"
-import { Link, useRouterState } from "@tanstack/react-router"
+import { Link, useNavigate, useRouterState } from "@tanstack/react-router"
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import type { ReactNode } from "react"
 
 import { HostedAccessBanner } from "@/features/auth/components/hosted-access-banner"
+import { Button } from "@/components/ui/button"
+import { logoutMutationOptions } from "@/features/auth/mutations/auth-mutations"
+import { sessionQueryOptions } from "@/features/auth/queries/session-query"
 import {
+  isEnvironmentSurface,
   isProjectWideSurface,
   readWorkspaceScope,
 } from "@/features/organizations/types/workspace-navigation"
+import { environmentsQueryOptions } from "@/features/environments/queries/environments-query"
+import { organizationQueryOptions } from "@/features/organizations/queries/organizations-query"
+import { projectQueryOptions } from "@/features/projects/queries/projects-query"
+import { ApiError } from "@/lib/api/errors"
+
+import { NotePencilIcon } from "@phosphor-icons/react/dist/ssr/NotePencil"
+
+import type { ComponentProps } from "react"
+
+import { NavMain, type NavigationItem } from "@/components/navigation/nav-main"
+import {
+  Sidebar,
+  SidebarContent,
+  SidebarFooter,
+  SidebarHeader,
+  SidebarMenu,
+  SidebarMenuButton,
+  SidebarMenuItem,
+  SidebarRail,
+} from "@/components/ui/sidebar"
+import { OrganizationSwitcher } from "./organization-switcher"
 
 interface WorkspaceNavLinkProps {
   children: ReactNode
@@ -21,140 +48,115 @@ interface WorkspaceNavLinkProps {
   to: string
 }
 
-function WorkspaceNavLink({ children, icon, params, to }: WorkspaceNavLinkProps) {
-  return (
-    <Link
-      activeProps={{ className: "bg-sidebar-accent text-sidebar-accent-foreground" }}
-      className="text-sidebar-foreground/75 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:ring-sidebar-ring flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium focus-visible:ring-2 focus-visible:outline-none"
-      params={params}
-      to={to}
-    >
-      {icon}
-      <span>{children}</span>
-    </Link>
-  )
-}
-
-export function CloudWorkspaceShell({ children }: { children: ReactNode }) {
+export function CloudWorkspaceShell() {
+  const navigate = useNavigate()
+  const queryClient = useQueryClient()
   const pathname = useRouterState({ select: (state) => state.location.pathname })
   const scope = readWorkspaceScope(pathname)
   const showProjectNavigation = Boolean(scope.organizationId && scope.projectId)
+  const session = useQuery(sessionQueryOptions())
+  const signOut = useMutation({
+    ...logoutMutationOptions(queryClient),
+    onSuccess: async () => {
+      queryClient.clear()
+      await navigate({ to: "/login" })
+    },
+  })
+  // Scope metadata is independent and begins in parallel; shared page reads are query-deduplicated.
+  const organization = useQuery({
+    ...organizationQueryOptions(scope.organizationId ?? "unselected"),
+    enabled: Boolean(scope.organizationId),
+  })
+  const project = useQuery({
+    ...projectQueryOptions(scope.projectId ?? "unselected"),
+    enabled: Boolean(scope.projectId),
+  })
+  const environments = useQuery({
+    ...environmentsQueryOptions(scope.projectId ?? "unselected"),
+    enabled: Boolean(scope.projectId),
+  })
+  const environmentItems = environments.data?.items ?? []
+  const selectedEnvironment = environmentItems.find((item) => item.id === scope.environmentId)
+  const defaultEnvironment =
+    selectedEnvironment ??
+    environmentItems.find((item) => item.key === "staging") ??
+    environmentItems.find((item) => item.key === "development") ??
+    environmentItems[0]
 
   return (
-    <div className="bg-background flex h-svh min-h-0 overflow-hidden">
-      <a
-        className="bg-primary text-primary-foreground sr-only z-50 rounded-md px-3 py-2 focus:not-sr-only focus:fixed focus:top-3 focus:left-3"
-        href="#cloud-main"
-      >
-        Skip to cloud workspace
-      </a>
-      <aside className="bg-sidebar text-sidebar-foreground hidden w-64 shrink-0 border-r md:flex md:flex-col">
-        <div className="flex h-16 items-center gap-3 border-b px-5">
-          <span className="bg-sidebar-primary text-sidebar-primary-foreground grid size-9 place-items-center rounded-lg">
-            <SquaresFourIcon aria-hidden size={19} weight="fill" />
-          </span>
-          <span>
-            <span className="block text-sm font-semibold">Mosaic</span>
-            <span className="text-sidebar-foreground/65 block text-xs">Cloud workspace</span>
-          </span>
-        </div>
-        <nav aria-label="Cloud workspace" className="flex-1 space-y-5 overflow-y-auto p-3">
-          <div className="space-y-1">
-            <p className="text-sidebar-foreground/55 px-3 py-1 text-xs font-semibold tracking-wide uppercase">
-              Workspace
-            </p>
-            <WorkspaceNavLink icon={<BuildingsIcon aria-hidden size={18} />} to="/workspace">
-              Organizations
-            </WorkspaceNavLink>
-            {scope.organizationId ? (
-              <WorkspaceNavLink
-                icon={<UsersThreeIcon aria-hidden size={18} />}
-                params={{ organizationId: scope.organizationId }}
-                to="/organizations/$organizationId/members"
-              >
-                Members
-              </WorkspaceNavLink>
-            ) : null}
-          </div>
-          {showProjectNavigation ? (
-            <div className="space-y-1">
-              <p className="text-sidebar-foreground/55 px-3 py-1 text-xs font-semibold tracking-wide uppercase">
-                Project
-              </p>
-              <WorkspaceNavLink
-                icon={<SquaresFourIcon aria-hidden size={18} />}
-                params={{ organizationId: scope.organizationId!, projectId: scope.projectId! }}
-                to="/organizations/$organizationId/projects/$projectId"
-              >
-                Overview
-              </WorkspaceNavLink>
-              <WorkspaceNavLink
-                icon={<CodeIcon aria-hidden size={18} />}
-                params={{ organizationId: scope.organizationId!, projectId: scope.projectId! }}
-                to="/organizations/$organizationId/projects/$projectId/apps"
-              >
-                Apps
-              </WorkspaceNavLink>
-              <WorkspaceNavLink
-                icon={<PackageIcon aria-hidden size={18} />}
-                params={{ organizationId: scope.organizationId!, projectId: scope.projectId! }}
-                to="/organizations/$organizationId/projects/$projectId/catalog/plans"
-              >
-                Catalog
-              </WorkspaceNavLink>
-              <WorkspaceNavLink
-                icon={<GearSixIcon aria-hidden size={18} />}
-                params={{ organizationId: scope.organizationId!, projectId: scope.projectId! }}
-                to="/organizations/$organizationId/projects/$projectId/settings/environments"
-              >
-                Settings
-              </WorkspaceNavLink>
-              <WorkspaceNavLink
-                icon={<KeyIcon aria-hidden size={18} />}
-                params={{ organizationId: scope.organizationId!, projectId: scope.projectId! }}
-                to="/organizations/$organizationId/projects/$projectId/settings/api-keys"
-              >
-                API keys
-              </WorkspaceNavLink>
-            </div>
-          ) : null}
-        </nav>
-        <div className="border-t p-3">
-          <WorkspaceNavLink icon={<CodeIcon aria-hidden size={18} />} to="/studio">
-            Local Studio
-          </WorkspaceNavLink>
-        </div>
-      </aside>
-
-      <div className="flex min-w-0 flex-1 flex-col">
-        <header className="bg-background/95 flex min-h-16 flex-wrap items-center gap-3 border-b px-5 py-3 backdrop-blur sm:px-8">
-          <div className="min-w-0 flex-1">
-            <p className="truncate text-sm font-medium">
-              {scope.organizationId ? `Organization · ${scope.organizationId}` : "Organizations"}
-            </p>
-            <p className="text-muted-foreground truncate text-xs">
-              {scope.projectId ? `Project · ${scope.projectId}` : "Choose a project to continue"}
-            </p>
-          </div>
-          {isProjectWideSurface(pathname) ? (
-            <span className="border-border bg-muted/60 text-muted-foreground rounded-full border px-2.5 py-1 text-xs font-medium">
-              Project-wide
-            </span>
-          ) : null}
-          <Link
-            className="text-muted-foreground hover:text-foreground text-sm font-medium"
-            to="/login"
-          >
-            Sign in
-          </Link>
-        </header>
-        <div className="px-5 pt-5 sm:px-8">
-          <HostedAccessBanner compact />
-        </div>
-        <main className="min-h-0 flex-1 overflow-y-auto" id="cloud-main" tabIndex={-1}>
-          {children}
-        </main>
-      </div>
-    </div>
+    <Sidebar collapsible="icon">
+      <SidebarHeader>
+        <OrganizationSwitcher />
+      </SidebarHeader>
+      <SidebarContent>
+        {scope.projectId && (
+          <NavMain
+            label="Workspace"
+            items={[
+              {
+                to: `/organizations/${scope.organizationId}/projects/${scope.projectId}`,
+                icon: <SquaresFourIcon aria-hidden size={18} />,
+                title: "Overview",
+              },
+              {
+                to: `/organizations/${scope.organizationId}/projects/${scope.projectId}/monetization/${scope.environmentId}/paywalls`,
+                icon: <StorefrontIcon aria-hidden size={18} />,
+                title: "Monetization",
+              },
+              {
+                to: `/organizations/${scope.organizationId}/projects/${scope.projectId}/apps`,
+                icon: <CodeIcon aria-hidden size={18} />,
+                title: "Apps",
+              },
+              {
+                icon: <PackageIcon aria-hidden size={18} />,
+                title: "Catalog",
+                subItems: [
+                  {
+                    to: `/organizations/${scope.organizationId}/projects/${scope.projectId}/catalog/plans`,
+                    title: "Plans",
+                    icon: <></>,
+                  },
+                  {
+                    to: `/organizations/${scope.organizationId}/projects/${scope.projectId}/catalog/products`,
+                    title: "Products",
+                    icon: <></>,
+                  },
+                  {
+                    to: `/organizations/${scope.organizationId}/projects/${scope.projectId}/catalog/entitlements`,
+                    title: "Entitlements",
+                    icon: <></>,
+                  },
+                ],
+              },
+              {
+                to: `/organizations/${scope.organizationId}/projects/${scope.projectId}/settings/environments`,
+                icon: <GearSixIcon aria-hidden size={18} />,
+                title: "Settings",
+              },
+              {
+                to: `/organizations/${scope.organizationId}/projects/${scope.projectId}/settings/api-keys`,
+                icon: <KeyIcon aria-hidden size={18} />,
+                title: "API keys",
+              },
+            ]}
+          />
+        )}
+        {scope.organizationId && (
+          <NavMain
+            label="Organization"
+            items={[
+              {
+                to: `/organizations/${scope.organizationId}/members`,
+                icon: <UsersThreeIcon aria-hidden size={18} />,
+                title: "Members",
+              },
+            ]}
+          />
+        )}
+      </SidebarContent>
+      <SidebarFooter></SidebarFooter>
+      <SidebarRail />
+    </Sidebar>
   )
 }

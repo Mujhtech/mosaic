@@ -39,7 +39,7 @@ export function HostedResourceBoundary({ children, state }: HostedResourceBounda
       return (
         <section
           aria-labelledby="permission-title"
-          className="border-border bg-muted/30 rounded-xl border p-6"
+          className="border-border bg-muted/30 rounded border p-6"
         >
           <p className="text-muted-foreground text-xs font-semibold tracking-wide uppercase">
             Permission required
