@@ -2,6 +2,13 @@ import { useQueries, useQuery } from "@tanstack/react-query"
 import { useState } from "react"
 
 import { Button } from "@/components/ui/button"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
 import { buttonVariants } from "@/components/ui/button-variants"
 import { HostedAccessBanner } from "@/features/auth/components/hosted-access-banner"
 import {
@@ -36,6 +43,11 @@ import type { ProviderConnection } from "@/generated/api"
 
 const CONTROL_CLASS =
   "border-input bg-background focus-visible:ring-ring w-full rounded border px-2 py-2 text-sm focus-visible:ring-2 focus-visible:outline-none"
+
+const MOCK_AVAILABILITY_OPTIONS = [
+  { label: "Available", value: "available" },
+  { label: "Not configured", value: "unavailable" },
+]
 
 function availableMock(productReferenceId: string): MockProductDefinition {
   return {
@@ -75,14 +87,11 @@ function MockProductBinding({
       >
         Mock availability
       </label>
-      <select
-        id={availabilityId}
-        className={CONTROL_CLASS}
-        aria-label={`${label} mock availability`}
-        value={product.availability}
-        onChange={(event) => {
+      <Select
+        items={MOCK_AVAILABILITY_OPTIONS}
+        onValueChange={(value) => {
           onChange(
-            event.target.value === "available"
+            value === "available"
               ? availableMock(product.productReferenceId)
               : {
                   productReferenceId: product.productReferenceId,
@@ -91,10 +100,19 @@ function MockProductBinding({
                 },
           )
         }}
+        value={product.availability}
       >
-        <option value="available">Available</option>
-        <option value="unavailable">Not configured</option>
-      </select>
+        <SelectTrigger aria-label={`${label} mock availability`} id={availabilityId}>
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          {MOCK_AVAILABILITY_OPTIONS.map((option) => (
+            <SelectItem key={option.value} value={option.value}>
+              {option.label}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
       {product.availability === "available" ? (
         <div className="mt-3">
           <label className="text-muted-foreground mb-1 block text-xs font-medium" htmlFor={priceId}>
@@ -156,11 +174,29 @@ function HostedCatalogProductBindingsContent({
   const connections = useQuery(providerConnectionsQueryOptions(source.projectId))
   const [applicationId, setApplicationId] = useState("")
   const products = catalog.data?.items.filter((product) => product.status !== "archived") ?? []
+  const applicationOptions = [
+    { label: "Select Application", value: "" },
+    ...(applications.data?.items ?? []).map((application) => ({
+      label: `${application.name} · ${application.platform.toUpperCase()}`,
+      value: application.id,
+    })),
+  ]
+  const productBindingOptions = products.map((product) => ({
+    label: `${product.internalName} · ${product.status.replaceAll("_", " ")}`,
+    value: product.id,
+  }))
+  // A Draft can still cite a Product that is no longer in the Catalog. Keeping its
+  // raw ID as an option is what stops opening the panel from silently rebinding it.
+  function bindingOptions(productId: string, isKnown: boolean) {
+    return isKnown
+      ? productBindingOptions
+      : [{ label: `Current ID · ${productId}`, value: productId }, ...productBindingOptions]
+  }
   const selectedApplication = applications.data?.items.find(
     (application) => application.id === applicationId,
   )
   const selectedApplicationId = selectedApplication?.id ?? ""
-  const catalogHref = `/organizations/${encodeURIComponent(source.organizationId)}/projects/${encodeURIComponent(source.projectId)}/catalog/products`
+  const catalogHref = `/orgs/${encodeURIComponent(source.organizationId)}/projects/${encodeURIComponent(source.projectId)}/catalog/products`
   const returnTo = hostedStudioHref(source)
 
   if (catalog.error instanceof ApiError && catalog.error.status === 401) {
@@ -232,58 +268,65 @@ function HostedCatalogProductBindingsContent({
               <p className="font-medium">No registered Applications</p>
               <a
                 className="text-primary mt-2 inline-flex font-semibold"
-                href={`/organizations/${encodeURIComponent(source.organizationId)}/projects/${encodeURIComponent(source.projectId)}/apps`}
+                href={`/orgs/${encodeURIComponent(source.organizationId)}/projects/${encodeURIComponent(source.projectId)}/apps`}
               >
                 Register Application
               </a>
             </div>
           ) : null}
-          <label className="mb-3 block text-xs font-medium">
-            Provider preview Application
-            <select
-              aria-label="Provider preview Application"
-              className={`${CONTROL_CLASS} mt-1`}
-              disabled={
-                applications.isPending ||
-                Boolean(applications.error) ||
-                applications.data?.items.length === 0
-              }
-              onChange={(event) => setApplicationId(event.currentTarget.value)}
+          <div className="mb-3 block text-xs font-medium">
+            <label htmlFor="provider-preview-application">Provider preview Application</label>
+            <Select
+              items={applicationOptions}
+              onValueChange={(value) => setApplicationId(value)}
               value={selectedApplicationId}
             >
-              <option value="">Select Application</option>
-              {applications.data?.items.map((application) => (
-                <option key={application.id} value={application.id}>
-                  {application.name} · {application.platform.toUpperCase()}
-                </option>
-              ))}
-            </select>
+              <SelectTrigger
+                className="mt-1"
+                disabled={
+                  applications.isPending ||
+                  Boolean(applications.error) ||
+                  applications.data?.items.length === 0
+                }
+                id="provider-preview-application"
+              >
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {applicationOptions.map((option) => (
+                  <SelectItem key={option.value} value={option.value}>
+                    {option.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
             <span className="text-muted-foreground mt-1 block text-[11px] leading-5">
               Hosted Environment: {source.environmentName ?? source.environmentId}. Mosaic does not
               silently choose an Application or another platform for commerce readiness.
             </span>
-          </label>
+          </div>
           {document.products.map((reference) => {
             const selected = products.find((product) => product.id === reference.productId)
             const label = resolveLocalizedText(document, reference.label, currentLocale)
             return (
-              <label className="border-border grid gap-1 rounded border p-3" key={reference.id}>
+              <div className="border-border grid gap-1 rounded border p-3" key={reference.id}>
                 <span className="text-xs font-medium">{label}</span>
-                <select
-                  aria-label={`Catalog Product for ${label}`}
-                  className={CONTROL_CLASS}
-                  onChange={(event) => onBind(reference.id, event.currentTarget.value)}
+                <Select
+                  items={bindingOptions(reference.productId, Boolean(selected))}
+                  onValueChange={(value) => onBind(reference.id, value)}
                   value={reference.productId}
                 >
-                  {!selected ? (
-                    <option value={reference.productId}>Current ID · {reference.productId}</option>
-                  ) : null}
-                  {products.map((product) => (
-                    <option key={product.id} value={product.id}>
-                      {product.internalName} · {product.status.replaceAll("_", " ")}
-                    </option>
-                  ))}
-                </select>
+                  <SelectTrigger aria-label={`Catalog Product for ${label}`}>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {bindingOptions(reference.productId, Boolean(selected)).map((option) => (
+                      <SelectItem key={option.value} value={option.value}>
+                        {option.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
                 <span className="text-muted-foreground font-mono text-[10px] break-all">
                   {reference.productId}
                 </span>
@@ -304,7 +347,7 @@ function HostedCatalogProductBindingsContent({
                     Simulated preview remains active and is not store verification.
                   </span>
                 ) : null}
-              </label>
+              </div>
             )
           })}
         </div>
@@ -403,7 +446,7 @@ function ConnectedProductBindingContext({
             : `${providerLabel ?? "Provider"} · ${mapping.availability} · ${mapping.syncState.replaceAll("_", " ")} · readiness ${readiness.data?.state ?? "unavailable"}`
   const diagnosticsHref =
     source.kind === "hosted"
-      ? `/organizations/${encodeURIComponent(source.organizationId)}/projects/${encodeURIComponent(source.projectId)}/catalog/products/${encodeURIComponent(productId)}?environmentId=${encodeURIComponent(environmentId)}&applicationId=${encodeURIComponent(applicationId)}&returnTo=${encodeURIComponent(hostedStudioHref(source))}`
+      ? `/orgs/${encodeURIComponent(source.organizationId)}/projects/${encodeURIComponent(source.projectId)}/catalog/products/${encodeURIComponent(productId)}?environmentId=${encodeURIComponent(environmentId)}&applicationId=${encodeURIComponent(applicationId)}&returnTo=${encodeURIComponent(hostedStudioHref(source))}`
       : undefined
 
   return (
@@ -488,18 +531,22 @@ export function MockCommercePanel({
         >
           Preview state
         </label>
-        <select
-          id="mock-outcome"
-          className={CONTROL_CLASS}
+        <Select
+          items={MOCK_PURCHASE_STATES}
+          onValueChange={(value) => onPurchaseStateChange(value as MockPurchaseState)}
           value={mockPurchaseState}
-          onChange={(event) => onPurchaseStateChange(event.target.value as MockPurchaseState)}
         >
-          {MOCK_PURCHASE_STATES.map((state) => (
-            <option key={state.value} value={state.value}>
-              {state.label}
-            </option>
-          ))}
-        </select>
+          <SelectTrigger id="mock-outcome">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {MOCK_PURCHASE_STATES.map((state) => (
+              <SelectItem key={state.value} value={state.value}>
+                {state.label}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
       </div>
       <div>
         <h3 className="text-xs font-semibold">Mock product bindings</h3>

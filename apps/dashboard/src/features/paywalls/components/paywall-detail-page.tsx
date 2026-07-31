@@ -6,7 +6,7 @@ import { buttonVariants } from "@/components/ui/button-variants"
 import { HostedResourceBoundary } from "@/features/auth/components/hosted-resource-boundary"
 import { resolveHostedQueryState } from "@/features/auth/types/hosted-query-state"
 import { MonetizationWorkspace } from "@/features/environments/components/monetization-workspace"
-import { WorkflowPanel } from "@/features/organizations/components/workspace-page"
+import { WorkflowPanel } from "@/features/orgs/components/workspace-page"
 import { CreateDraftAction } from "@/features/paywalls/components/create-draft-action"
 import { EditPublishedVersionAction } from "@/features/paywalls/components/edit-published-version-action"
 import {
@@ -71,8 +71,8 @@ export function PaywallDetailPage({
     permissionAction: (
       <Link
         className={buttonVariants({ variant: "outline" })}
-        params={{ environmentId, organizationId, projectId }}
-        to="/organizations/$organizationId/projects/$projectId/monetization/$environmentId/paywalls"
+        params={(prev) => prev}
+        to="/orgs/$organizationId/projects/$projectId/env/$environmentKey/monetization/paywalls"
       >
         Return to Paywalls
       </Link>
@@ -86,8 +86,8 @@ export function PaywallDetailPage({
       actions={
         <Link
           className={buttonVariants({ variant: "outline" })}
-          params={{ environmentId, organizationId, projectId }}
-          to="/organizations/$organizationId/projects/$projectId/monetization/$environmentId/paywalls"
+          params={(prev) => prev}
+          to="/orgs/$organizationId/projects/$projectId/env/$environmentKey/monetization/paywalls"
         >
           Back to Paywalls
         </Link>
@@ -118,14 +118,8 @@ export function PaywallDetailPage({
                   </p>
                   <Link
                     className={buttonVariants()}
-                    params={{
-                      draftId: activeDraft.data.id,
-                      environmentId,
-                      organizationId,
-                      paywallId,
-                      projectId,
-                    }}
-                    to="/studio-hosted/$organizationId/$projectId/$environmentId/$paywallId/$draftId"
+                    params={(prev) => ({ ...prev, environmentId, draftId: activeDraft.data?.id ?? "", paywallId })}
+                    to="/studio/$organizationId/$projectId/$environmentId/$paywallId/$draftId"
                   >
                     Continue in Studio
                   </Link>
@@ -172,14 +166,8 @@ export function PaywallDetailPage({
                   <div className="flex flex-wrap gap-2">
                     <Link
                       className={buttonVariants({ size: "sm" })}
-                      params={{
-                        draftId: record.draftId,
-                        environmentId,
-                        organizationId,
-                        paywallId,
-                        projectId,
-                      }}
-                      to="/studio-hosted/$organizationId/$projectId/$environmentId/$paywallId/$draftId"
+                      params={(prev) => ({ ...prev, environmentId, draftId: record.draftId, paywallId })}
+                      to="/studio/$organizationId/$projectId/$environmentId/$paywallId/$draftId"
                     >
                       Open recovery in Studio
                     </Link>
@@ -224,14 +212,8 @@ export function PaywallDetailPage({
                     environmentId={environmentId}
                     onDraftCreated={(draft) =>
                       void navigate({
-                        params: {
-                          draftId: draft.id,
-                          environmentId,
-                          organizationId,
-                          paywallId,
-                          projectId,
-                        },
-                        to: "/studio-hosted/$organizationId/$projectId/$environmentId/$paywallId/$draftId",
+                        params: (prev) => ({ ...prev, draftId: draft.id, paywallId, environmentId }),
+                        to: "/studio/$organizationId/$projectId/$environmentId/$paywallId/$draftId",
                       })
                     }
                     paywallId={paywallId}

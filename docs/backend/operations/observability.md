@@ -1,8 +1,74 @@
 # Observability
 
-Mosaic exports traces and metrics over OTLP/HTTP when
+Mosaic exports traces, metrics, and logs over OTLP when
 `OTEL_EXPORTER_OTLP_ENDPOINT` is set. With no endpoint configured, Mosaic still
-records spans and metrics in-process and simply does not export them.
+records spans and metrics in-process and simply does not export them, and logs
+go to stdout only.
+
+`OTEL_EXPORTER_OTLP_PROTOCOL` selects the transport: `http/protobuf` (the
+default, conventionally port 4318) or `grpc` (conventionally port 4317). Both
+carry identical payloads, so the choice follows what the collector and the
+network path in front of it accept — HTTP survives proxies and ingress that do
+not speak HTTP/2, while gRPC is cheaper on a direct connection to a sidecar or
+in-cluster collector. All three signals use the same transport. The
+endpoint scheme still decides encryption: `https://` for TLS, `http://` for
+plaintext, under either protocol. An unsupported value is rejected at startup
+validation with every other configuration problem.
+
+## Logs
+
+Logs go to two places at once. Every record is written to stdout as JSON — the
+stream `docker logs` and `kubectl logs` show, and the record of truth when the
+collector is unreachable — and the same record is exported over OTLP, so logs
+are readable next to the traces and metrics they belong to without opening a
+terminal.
+
+`MOSAIC_OTEL_LOGS_ENABLED=false` turns off the export half. Stdout logging is
+never affected by it, and neither are traces or metrics: log volume is usually
+the expensive signal at a vendor, so it can be dropped without giving up
+tracing. Export is on by default and requires an endpoint — with no collector
+configured there is nothing to turn off.
+
+The exported record carries the full structured line, not just level and
+message: `MOSAIC_LOG_LEVEL` filtering applies first, the zerolog level becomes
+the OTLP severity, the message becomes the record body, and every remaining
+field becomes a typed attribute. Export is asynchronous and batched, so a slow
+or unreachable collector cannot slow down the request that produced the line;
+the batch is flushed at shutdown within `MOSAIC_TELEMETRY_SHUTDOWN_TIMEOUT`.
+
+OpenTelemetry's own SDK errors are deliberately logged to stdout only. Sending
+them through the exporting logger would feed export failures back into the
+exporter that produced them.
+
+## Collector Authentication And Transport Security
+
+`OTEL_EXPORTER_OTLP_HEADERS` carries per-request export headers in the
+OpenTelemetry format — `key1=value1,key2=value2`, values percent-encoded — and
+is where a hosted collector's API key or bearer token goes:
+
+```
+OTEL_EXPORTER_OTLP_HEADERS=authorization=Bearer%20<token>
+```
+
+The same headers go to every exporter. **Header values
+are secrets.** They are never logged and never echoed in a startup validation
+problem, which reports only the variable name. Credentials embedded in
+`OTEL_EXPORTER_OTLP_ENDPOINT` are rejected — they would reach logs through URL
+strings — so put them here instead.
+
+`MOSAIC_OTEL_EXPORTER_TLS_SKIP_VERIFY=true` accepts a collector certificate
+without verifying it, for a private CA or a self-signed certificate. It applies
+to `https://` endpoints only; on a plaintext endpoint it is rejected as a
+configuration mistake rather than silently ignored, because it usually means the
+operator believed the connection was encrypted.
+
+Outside development and test, Mosaic refuses at startup to export over a
+connection that is neither encrypted nor verified — a plaintext endpoint, or an
+unverified certificate. Both are credential-disclosure risks once headers are
+set, and telemetry-tampering risks even without them.
+`MOSAIC_OTEL_EXPORTER_ALLOW_INSECURE=true` is the explicit acknowledgement that
+lifts the refusal, for a collector reached over a trusted private network such
+as a sidecar or in-cluster daemonset.
 
 **Telemetry export failure never stops Mosaic.** A collector that is down or slow
 degrades observability, not availability. Telemetry flush at shutdown has its own
@@ -102,8 +168,9 @@ rate spike can be attributed to a specific cause.
 
 Families: `analytics` (queues `aggregate`, `export`, `deletion`, `retention`),
 `experiment` (queue `schedule`), and — when `MOSAIC_BILLING_ENABLED` is set —
-`billing` (queues `validation`, `reconciliation`, `replay`). Each executed job
-logs one line with `job_family`, `worker_id`, `duration`, and `failed`.
+`billing` (queues `validation`, `identity_binding`, `reconciliation`, `replay`).
+Each executed job logs one line with `job_family`, `worker_id`, `duration`, and
+`failed`.
 
 The worker additionally schedules `billing_rtdn` and `billing_retention`, which
 are polling loops rather than queues and so publish no depth.

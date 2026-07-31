@@ -6,6 +6,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:mosaic_sdk/mosaic_sdk.dart';
 
 import 'support/canonical_fixture.dart';
+import 'support/customer_authority_fixture.dart';
 
 /// Records what the runtime asked for and replays scripted answers.
 final class _RecordingTransport implements MosaicCustomerEntitlementTransport {
@@ -29,9 +30,84 @@ final class _RecordingTransport implements MosaicCustomerEntitlementTransport {
   }
 }
 
+final class _ControlledCache implements MosaicCustomerEntitlementCache {
+  MosaicCustomerEntitlementCacheRecord? record;
+  late Completer<void> writeStarted;
+  late Completer<void> writeGate;
+  var failWrite = false;
+
+  void controlNextWrite({required bool fail}) {
+    writeStarted = Completer<void>();
+    writeGate = Completer<void>();
+    failWrite = fail;
+  }
+
+  @override
+  Future<MosaicCustomerEntitlementCacheRecord?> read(String namespace) async =>
+      record;
+
+  @override
+  Future<void> write(
+    String namespace,
+    MosaicCustomerEntitlementCacheRecord candidate,
+  ) async {
+    writeStarted.complete();
+    await writeGate.future;
+    if (failWrite) throw StateError('scripted cache failure');
+    record = candidate;
+  }
+
+  @override
+  Future<void> clear(String namespace) async => record = null;
+
+  @override
+  Future<void> removeOtherRecords(String namespace) async {}
+}
+
+final class _PolicyInvalidationCache implements MosaicCustomerEntitlementCache {
+  MosaicCustomerEntitlementCacheRecord? record;
+  bool failTombstoneWrites = false;
+  bool failClear = true;
+  int tombstoneWriteAttempts = 0;
+  int clearAttempts = 0;
+  Completer<void>? tombstoneWriteGate;
+
+  @override
+  Future<MosaicCustomerEntitlementCacheRecord?> read(String namespace) async =>
+      record;
+
+  @override
+  Future<void> write(
+    String namespace,
+    MosaicCustomerEntitlementCacheRecord candidate,
+  ) async {
+    if (candidate.isInvalidationTombstone) {
+      tombstoneWriteAttempts += 1;
+      if (tombstoneWriteGate case final gate?) await gate.future;
+      if (failTombstoneWrites) {
+        throw StateError('scripted tombstone persistence failure');
+      }
+    }
+    record = candidate;
+  }
+
+  @override
+  Future<void> clear(String namespace) async {
+    clearAttempts += 1;
+    if (failClear) throw StateError('delete unavailable');
+    record = null;
+  }
+
+  @override
+  Future<void> removeOtherRecords(String namespace) async {}
+}
+
 void main() {
   final root = repositoryDirectory(
     'protocol/fixtures/authoritative-entitlement/v1',
+  );
+  final authorityRoot = repositoryDirectory(
+    'protocol/fixtures/authoritative-entitlement/v2',
   );
   String fixture(String path) => File('${root.path}/$path').readAsStringSync();
 
@@ -48,7 +124,12 @@ void main() {
 
   MosaicCustomerEntitlementSyncReceived received(String path) =>
       MosaicCustomerEntitlementSyncReceived(
-        source: fixture(path),
+        source: path.endsWith('snapshot-unchanged.json')
+            ? wrapCustomerUnchangedV2(
+                fixture(path),
+                fixture('snapshots/active-subscription.json'),
+              )
+            : wrapCustomerSnapshotV2(fixture(path)),
       );
 
   String firstProjectedSnapshot(int version) {
@@ -88,6 +169,9 @@ void main() {
         transport: transport,
         cache: cache ?? MosaicMemoryCustomerEntitlementCache(),
         tokenProvider: tokenProvider ?? (_) async => token(),
+        applicationId: fixtureAuthorityApplicationId,
+        platform: MosaicCustomerAuthorityPlatform.ios,
+        applicationVersion: '4.2.0',
         settings: const MosaicCustomerEntitlementSettings(
           refreshOnResume: false,
         ),
@@ -95,9 +179,36 @@ void main() {
         onDiagnostic: onDiagnostic,
       );
 
+  MosaicCustomerEntitlementCacheRecord replaceCachedBinding(
+    MosaicCustomerEntitlementCacheRecord record, {
+    MosaicCustomerBinding? binding,
+    MosaicCustomerAuthority? authority,
+    String? snapshotAuthorityDigest,
+  }) =>
+      MosaicCustomerEntitlementCacheRecord(
+        source: record.source,
+        binding: binding ?? record.binding,
+        authority: authority ?? record.authority,
+        snapshotAuthorityDigest:
+            snapshotAuthorityDigest ?? record.snapshotAuthorityDigest,
+        snapshotVersion: record.snapshotVersion,
+        asOf: record.asOf,
+        entityTag: record.entityTag,
+        issuedAt: record.issuedAt,
+        refreshAfter: record.refreshAfter,
+        validUntil: record.validUntil,
+        staleGraceSeconds: record.staleGraceSeconds,
+        trustedServerTime: record.trustedServerTime,
+        localReceiptTime: record.localReceiptTime,
+      );
+
   test('the sync request matches the canonical conditional fixture shape', () {
-    final canonical = jsonDecode(fixture('sync/sync-request-conditional.json'))
-        as Map<String, Object?>;
+    final canonicalRoot = repositoryDirectory(
+      'protocol/fixtures/authoritative-entitlement/v2',
+    );
+    final canonical = jsonDecode(
+      File('${canonicalRoot.path}/sync-request.json').readAsStringSync(),
+    ) as Map<String, Object?>;
     final encoded = mosaicEncodeEntitlementSyncRequest(
       MosaicCustomerEntitlementSyncRequest(
         baseUrl: Uri.parse('https://api.mosaic.test'),
@@ -105,7 +216,13 @@ void main() {
         customerToken: 'mcat_secret',
         timeout: const Duration(seconds: 5),
         correlationId: 'fixture-correlation-0001',
+        applicationId: fixtureAuthorityApplicationId,
+        platform: 'ios',
+        applicationVersion: '4.2.0',
+        knownAuthorityEpoch: 5,
         knownSnapshotVersion: 4,
+        knownSnapshotAuthorityDigest:
+            'sha256:b659fc1560544193b6599e1e4a82861a55cae857fcad73fa340b611abe877c34',
         entityTag: 'cs-0001-v4',
       ),
     );
@@ -120,12 +237,49 @@ void main() {
     // with one: a bodyless request cannot state which versions it can read,
     // and the server answers snapshotUnchanged only when told which version
     // the caller holds.
-    expect(
-        payload['supportedAuthoritativeEntitlementContracts'], <String>['1']);
+    final request = payload['request']! as Map<String, Object?>;
+    expect(request['supportedContractVersions'], <String>['1', '2']);
+    expect(payload['knownAuthorityEpoch'], 5);
     expect(payload['knownSnapshotVersion'], 4);
-    expect(payload['entityTag'], 'cs-0001-v4');
+    expect(
+      payload['knownSnapshotAuthorityDigest'],
+      (canonical['payload']!
+          as Map<String, Object?>)['knownSnapshotAuthorityDigest'],
+    );
+    expect(request.containsKey('projectId'), isFalse);
+    expect(request.containsKey('environmentId'), isFalse);
+    expect(request.containsKey('customerId'), isFalse);
     // No credential ever appears in the record.
     expect(jsonEncode(encoded), isNot(contains('mcat_')));
+  });
+
+  test('a request without a retained digest remains a full-sync request', () {
+    final encoded = mosaicEncodeEntitlementSyncRequest(
+      MosaicCustomerEntitlementSyncRequest(
+        baseUrl: Uri.parse('https://api.mosaic.test'),
+        publicSdkKey: 'public_key',
+        customerToken: 'mcat_secret',
+        timeout: const Duration(seconds: 5),
+        correlationId: 'fixture-correlation-0001',
+        applicationId: fixtureAuthorityApplicationId,
+        platform: 'ios',
+        applicationVersion: '4.2.0',
+        knownAuthorityEpoch: 4,
+        knownSnapshotVersion: 41,
+      ),
+    );
+    final canonical = jsonDecode(
+      File('${authorityRoot.path}/sync-request-without-known-digest.json')
+          .readAsStringSync(),
+    ) as Map<String, Object?>;
+    final payload = encoded['payload']! as Map<String, Object?>;
+    final canonicalPayload = canonical['payload']! as Map<String, Object?>;
+
+    expect(payload.containsKey('knownSnapshotAuthorityDigest'), isFalse);
+    expect(
+      payload.keys,
+      unorderedEquals(canonicalPayload.keys),
+    );
   });
 
   test('a newer snapshot is accepted and emitted once', () async {
@@ -146,7 +300,77 @@ void main() {
     expect(check.reasonCode, isNull);
     expect(check.sourceCount, 1);
     await pumpEventQueue();
-    expect(updates, hasLength(1));
+    expect(updates.whereType<MosaicCustomerAuthorityChanged>(), hasLength(1));
+    expect(
+      updates.whereType<MosaicCustomerEntitlementSnapshotAccepted>(),
+      hasLength(1),
+    );
+    runtime.dispose();
+  });
+
+  test('persistence commits before state and a failed replacement is invisible',
+      () async {
+    final active = fixture('snapshots/active-subscription.json');
+    final transport =
+        _RecordingTransport(<MosaicCustomerEntitlementSyncResponse>[
+      MosaicCustomerEntitlementSyncReceived(
+        source: wrapCustomerSnapshotV2(active, epoch: 5),
+      ),
+      MosaicCustomerEntitlementSyncReceived(
+        source: wrapCustomerSnapshotV2(active, epoch: 6),
+      ),
+    ]);
+    final cache = _ControlledCache()..controlNextWrite(fail: false);
+    final runtime = runtimeWith(transport, cache: cache);
+    final updates = <MosaicCustomerEntitlementUpdate>[];
+    runtime.updates.listen(updates.add);
+    var listenerCalls = 0;
+    runtime.addListener(() => listenerCalls += 1);
+
+    final first = runtime.refresh();
+    await cache.writeStarted.future;
+
+    expect(runtime.snapshot, isNull);
+    expect(runtime.authority, isNull);
+    expect(
+      runtime.checkCustomerEntitlement('pro').state,
+      MosaicCustomerAccessState.unavailable,
+    );
+    expect(updates, isEmpty);
+    expect(listenerCalls, 0);
+
+    cache.writeGate.complete();
+    expect(await first, isA<MosaicCustomerEntitlementUpdated>());
+    await pumpEventQueue();
+    final acceptedSnapshot = runtime.snapshot;
+    final acceptedUpdateCount = updates.length;
+    final acceptedListenerCalls = listenerCalls;
+    expect(acceptedSnapshot, isNotNull);
+    expect(runtime.authority?.epoch, 5);
+
+    cache.controlNextWrite(fail: true);
+    final replacement = runtime.refresh();
+    await cache.writeStarted.future;
+
+    expect(runtime.snapshot, same(acceptedSnapshot));
+    expect(runtime.authority?.epoch, 5);
+    expect(updates, hasLength(acceptedUpdateCount));
+    expect(listenerCalls, acceptedListenerCalls);
+
+    cache.writeGate.complete();
+    expect(
+      await replacement,
+      isA<MosaicCustomerEntitlementUnavailable>().having(
+        (value) => value.reasonCode,
+        'reasonCode',
+        mosaicCustomerEntitlementCacheUnavailableCode,
+      ),
+    );
+    await pumpEventQueue();
+    expect(runtime.snapshot, same(acceptedSnapshot));
+    expect(runtime.authority?.epoch, 5);
+    expect(updates, hasLength(acceptedUpdateCount));
+    expect(listenerCalls, acceptedListenerCalls);
     runtime.dispose();
   });
 
@@ -156,10 +380,12 @@ void main() {
     final transport =
         _RecordingTransport(<MosaicCustomerEntitlementSyncResponse>[
       MosaicCustomerEntitlementSyncReceived(
-        source: fixture('snapshots/never-projected-placeholder.json'),
+        source: wrapCustomerSnapshotV2(
+          fixture('snapshots/never-projected-placeholder.json'),
+        ),
       ),
       MosaicCustomerEntitlementSyncReceived(
-        source: firstProjectedSnapshot(1),
+        source: wrapCustomerSnapshotV2(firstProjectedSnapshot(1)),
       ),
     ]);
     final runtime = runtimeWith(transport);
@@ -239,6 +465,33 @@ void main() {
     runtime.dispose();
   });
 
+  test('a higher authority epoch replaces state without version inference',
+      () async {
+    final active = fixture('snapshots/active-subscription.json');
+    final transport =
+        _RecordingTransport(<MosaicCustomerEntitlementSyncResponse>[
+      MosaicCustomerEntitlementSyncReceived(
+        source: wrapCustomerSnapshotV2(active, epoch: 5),
+      ),
+      MosaicCustomerEntitlementSyncReceived(
+        source: wrapCustomerSnapshotV2(active, epoch: 6),
+      ),
+    ]);
+    final runtime = runtimeWith(transport);
+    final authorities = <MosaicCustomerAuthority>[];
+    runtime.authorityUpdates.listen(authorities.add);
+
+    await runtime.refresh();
+    final result = await runtime.refresh();
+
+    expect(result, isA<MosaicCustomerEntitlementUpdated>());
+    expect(runtime.authority?.epoch, 6);
+    expect(runtime.snapshot?.snapshotVersion, 4);
+    await pumpEventQueue();
+    expect(authorities.map((item) => item.epoch), <int>[5, 6]);
+    runtime.dispose();
+  });
+
   test('the canonical unchanged record is what slides the window', () async {
     final transport =
         _RecordingTransport(<MosaicCustomerEntitlementSyncResponse>[
@@ -263,9 +516,422 @@ void main() {
     );
     // The conditional request carried both the version and the validator.
     expect(transport.requests.last.knownSnapshotVersion, 4);
-    expect(transport.requests.last.entityTag, 'cs-0001-v4');
+    expect(transport.requests.last.knownAuthorityEpoch, 5);
+    final accepted = const MosaicCustomerAuthorityDecoder().decode(
+      wrapCustomerSnapshotV2(fixture('snapshots/active-subscription.json')),
+    ) as MosaicCustomerAuthoritySnapshotRecord;
+    expect(
+      transport.requests.last.knownSnapshotAuthorityDigest,
+      accepted.snapshotAuthorityDigest,
+    );
+    expect(transport.requests.last.entityTag, isNull);
     runtime.dispose();
   });
+
+  test('policy unavailable clears stale authority and later full sync recovers',
+      () async {
+    final cache = MosaicMemoryCustomerEntitlementCache();
+    final transport =
+        _RecordingTransport(<MosaicCustomerEntitlementSyncResponse>[
+      received('snapshots/active-subscription.json'),
+      MosaicCustomerEntitlementSyncReceived(
+        source: File(
+          '${authorityRoot.path}/authority-policy-unavailable.json',
+        ).readAsStringSync(),
+      ),
+    ]);
+    final runtime = runtimeWith(transport, cache: cache);
+    await runtime.refresh();
+
+    final result = await runtime.refresh();
+
+    expect(
+      result,
+      isA<MosaicCustomerEntitlementUnavailable>().having(
+        (value) => value.reasonCode,
+        'reasonCode',
+        'entitlements.authority.policy_unavailable',
+      ),
+    );
+    expect(runtime.snapshot, isNull);
+    expect(runtime.authority, isNull);
+    expect(runtime.diagnostics.minimumSupport, isNull);
+    expect(
+      runtime.checkCustomerEntitlement('pro').state,
+      MosaicCustomerAccessState.unavailable,
+    );
+    expect(
+      runtime.checkCustomerEntitlement('pro').state,
+      isNot(MosaicCustomerAccessState.inactive),
+    );
+    final namespace = mosaicCustomerEntitlementCacheNamespace(
+      Uri.parse('https://api.mosaic.test'),
+      'public_key',
+      '',
+      fixtureAuthorityApplicationId,
+      'ios',
+    );
+    expect((await cache.read(namespace))!.isInvalidationTombstone, isTrue);
+    runtime.dispose();
+
+    final restored = runtimeWith(
+      _RecordingTransport(<MosaicCustomerEntitlementSyncResponse>[
+        received('snapshots/active-subscription.json'),
+      ]),
+      cache: cache,
+    );
+    await restored.load();
+    expect(restored.snapshot, isNull);
+    expect(
+      restored.checkCustomerEntitlement('pro').state,
+      MosaicCustomerAccessState.unavailable,
+    );
+
+    final recovered = await restored.refresh();
+
+    expect(recovered, isA<MosaicCustomerEntitlementUpdated>());
+    expect(restored.snapshot?.snapshotVersion, 4);
+    expect(restored.checkCustomerEntitlement('pro').state,
+        MosaicCustomerAccessState.active);
+    expect(
+      restored.checkCustomerEntitlement('pro').state,
+      isNot(MosaicCustomerAccessState.inactive),
+    );
+    expect((await cache.read(namespace))!.isInvalidationTombstone, isFalse);
+    restored.dispose();
+  });
+
+  test('policy unavailable for another scope preserves accepted cache',
+      () async {
+    final cache = MosaicMemoryCustomerEntitlementCache();
+    final wrongScope = jsonDecode(File(
+      '${authorityRoot.path}/authority-policy-unavailable.json',
+    ).readAsStringSync()) as Map<String, Object?>;
+    final payload = wrongScope['payload']! as Map<String, Object?>;
+    final scope = payload['scope']! as Map<String, Object?>;
+    scope['environmentId'] = 'fixture-environment-staging';
+    final runtime = runtimeWith(
+      _RecordingTransport(<MosaicCustomerEntitlementSyncResponse>[
+        received('snapshots/active-subscription.json'),
+        MosaicCustomerEntitlementSyncReceived(source: jsonEncode(wrongScope)),
+      ]),
+      cache: cache,
+    );
+    await runtime.refresh();
+
+    final result = await runtime.refresh();
+
+    expect(
+      result,
+      isA<MosaicCustomerEntitlementRejected>()
+          .having((value) => value.reasonCode, 'reasonCode', 'scope_mismatch')
+          .having(
+            (value) => value.cacheAction,
+            'cacheAction',
+            MosaicCustomerCacheAction.preserve,
+          ),
+    );
+    expect(runtime.snapshot?.snapshotVersion, 4);
+    expect(
+      runtime.checkCustomerEntitlement('pro').state,
+      MosaicCustomerAccessState.active,
+    );
+    final namespace = mosaicCustomerEntitlementCacheNamespace(
+      Uri.parse('https://api.mosaic.test'),
+      'public_key',
+      '',
+      fixtureAuthorityApplicationId,
+      'ios',
+    );
+    expect((await cache.read(namespace))!.isInvalidationTombstone, isFalse);
+    runtime.dispose();
+  });
+
+  test('policy tombstone does not depend on best-effort cache deletion',
+      () async {
+    final cache = _PolicyInvalidationCache();
+    final transport =
+        _RecordingTransport(<MosaicCustomerEntitlementSyncResponse>[
+      received('snapshots/active-subscription.json'),
+      MosaicCustomerEntitlementSyncReceived(
+        source: File(
+          '${authorityRoot.path}/authority-policy-unavailable.json',
+        ).readAsStringSync(),
+      ),
+    ]);
+    final runtime = runtimeWith(transport, cache: cache);
+    await runtime.refresh();
+    cache.tombstoneWriteGate = Completer<void>();
+
+    final pending = runtime.refresh();
+    await pumpEventQueue();
+
+    expect(cache.tombstoneWriteAttempts, 1);
+    expect(runtime.snapshot?.snapshotVersion, 4);
+    expect(runtime.checkCustomerEntitlement('pro').state,
+        MosaicCustomerAccessState.active);
+
+    cache.tombstoneWriteGate!.complete();
+    final result = await pending;
+
+    expect(result, isA<MosaicCustomerEntitlementUnavailable>());
+    expect(cache.record!.isInvalidationTombstone, isTrue);
+    expect(cache.tombstoneWriteAttempts, 1);
+    expect(cache.clearAttempts, 0);
+    runtime.dispose();
+  });
+
+  test('failed tombstone persistence blocks bootstrap until retry succeeds',
+      () async {
+    final cache = _PolicyInvalidationCache();
+    final severeCodes = <String>[];
+    final transport =
+        _RecordingTransport(<MosaicCustomerEntitlementSyncResponse>[
+      received('snapshots/active-subscription.json'),
+      MosaicCustomerEntitlementSyncReceived(
+        source: File(
+          '${authorityRoot.path}/authority-policy-unavailable.json',
+        ).readAsStringSync(),
+      ),
+      received('snapshots/active-subscription.json'),
+    ]);
+    final runtime = runtimeWith(
+      transport,
+      cache: cache,
+      onDiagnostic: (code, {required bool severe}) {
+        if (severe) severeCodes.add(code);
+      },
+    );
+    await runtime.refresh();
+    cache.failTombstoneWrites = true;
+
+    final failed = await runtime.refresh();
+
+    expect(
+      failed,
+      isA<MosaicCustomerEntitlementUnavailable>().having(
+        (value) => value.reasonCode,
+        'reasonCode',
+        'entitlements.authority.policy_invalidation_persistence_failed',
+      ),
+    );
+    expect(runtime.snapshot, isNull);
+    expect(cache.record!.isInvalidationTombstone, isFalse);
+    expect(
+      severeCodes,
+      contains(
+        'entitlements.authority.policy_invalidation_persistence_failed',
+      ),
+    );
+
+    final blocked = await runtime.refresh();
+
+    expect(blocked, isA<MosaicCustomerEntitlementUnavailable>());
+    expect(transport.requests, hasLength(2));
+    expect(cache.tombstoneWriteAttempts, 2);
+
+    cache.failTombstoneWrites = false;
+    final recovered = await runtime.refresh();
+
+    expect(recovered, isA<MosaicCustomerEntitlementUpdated>());
+    expect(cache.tombstoneWriteAttempts, 3);
+    expect(cache.record!.isInvalidationTombstone, isFalse);
+    expect(runtime.checkCustomerEntitlement('pro').state,
+        MosaicCustomerAccessState.active);
+    runtime.dispose();
+  });
+
+  test('failed tombstone write clears durable cache before cold restart',
+      () async {
+    final cache = _PolicyInvalidationCache()
+      ..failTombstoneWrites = true
+      ..failClear = false;
+    final runtime = runtimeWith(
+      _RecordingTransport(<MosaicCustomerEntitlementSyncResponse>[
+        received('snapshots/active-subscription.json'),
+        MosaicCustomerEntitlementSyncReceived(
+          source: File(
+            '${authorityRoot.path}/authority-policy-unavailable.json',
+          ).readAsStringSync(),
+        ),
+      ]),
+      cache: cache,
+    );
+    await runtime.refresh();
+
+    final failed = await runtime.refresh();
+
+    expect(failed, isA<MosaicCustomerEntitlementUnavailable>());
+    expect(cache.record, isNull);
+    expect(cache.clearAttempts, 1);
+    runtime.dispose();
+
+    final restarted = runtimeWith(
+      _RecordingTransport(<MosaicCustomerEntitlementSyncResponse>[
+        received('snapshots/active-subscription.json'),
+      ]),
+      cache: cache,
+    );
+    await restarted.load();
+    expect(restarted.snapshot, isNull);
+    expect(
+      restarted.checkCustomerEntitlement('pro').state,
+      MosaicCustomerAccessState.unavailable,
+    );
+    restarted.dispose();
+  });
+
+  test('malformed policy-unavailable fixture tombstones instead of preserving',
+      () async {
+    final cache = MosaicMemoryCustomerEntitlementCache();
+    final transport =
+        _RecordingTransport(<MosaicCustomerEntitlementSyncResponse>[
+      received('snapshots/active-subscription.json'),
+      MosaicCustomerEntitlementSyncReceived(
+        source: File(
+          '${authorityRoot.path}/invalid/policy-unavailable-with-minimum-support.json',
+        ).readAsStringSync(),
+      ),
+    ]);
+    final runtime = runtimeWith(transport, cache: cache);
+    await runtime.refresh();
+
+    final result = await runtime.refresh();
+
+    expect(
+      result,
+      isA<MosaicCustomerEntitlementUnavailable>().having(
+        (value) => value.reasonCode,
+        'reasonCode',
+        'entitlements.authority.policy_unavailable',
+      ),
+    );
+    expect(runtime.snapshot, isNull);
+    final namespace = mosaicCustomerEntitlementCacheNamespace(
+      Uri.parse('https://api.mosaic.test'),
+      'public_key',
+      '',
+      fixtureAuthorityApplicationId,
+      'ios',
+    );
+    expect((await cache.read(namespace))!.isInvalidationTombstone, isTrue);
+    runtime.dispose();
+  });
+
+  test('unrelated malformed policy-like response preserves accepted cache',
+      () async {
+    final cache = MosaicMemoryCustomerEntitlementCache();
+    final malformed = jsonDecode(File(
+      '${authorityRoot.path}/invalid/policy-unavailable-with-minimum-support.json',
+    ).readAsStringSync()) as Map<String, Object?>;
+    malformed['unexpected'] = true;
+    final transport =
+        _RecordingTransport(<MosaicCustomerEntitlementSyncResponse>[
+      received('snapshots/active-subscription.json'),
+      MosaicCustomerEntitlementSyncReceived(source: jsonEncode(malformed)),
+    ]);
+    final runtime = runtimeWith(transport, cache: cache);
+    await runtime.refresh();
+
+    final rejected = await runtime.refresh();
+
+    expect(rejected, isA<MosaicCustomerEntitlementRejected>());
+    expect(runtime.snapshot?.snapshotVersion, 4);
+    expect(
+      runtime.checkCustomerEntitlement('pro').state,
+      MosaicCustomerAccessState.active,
+    );
+    final namespace = mosaicCustomerEntitlementCacheNamespace(
+      Uri.parse('https://api.mosaic.test'),
+      'public_key',
+      '',
+      fixtureAuthorityApplicationId,
+      'ios',
+    );
+    expect((await cache.read(namespace))!.isInvalidationTombstone, isFalse);
+    runtime.dispose();
+  });
+
+  for (final staleBinding in <String>['digest', 'epoch', 'scope', 'customer']) {
+    test('a stale $staleBinding cache binding never contributes a digest',
+        () async {
+      final cache = MosaicMemoryCustomerEntitlementCache();
+      final seedRuntime = runtimeWith(
+        _RecordingTransport(<MosaicCustomerEntitlementSyncResponse>[
+          received('snapshots/active-subscription.json'),
+        ]),
+        cache: cache,
+      );
+      await seedRuntime.refresh();
+      seedRuntime.dispose();
+      final namespace = mosaicCustomerEntitlementCacheNamespace(
+        Uri.parse('https://api.mosaic.test'),
+        'public_key',
+        '',
+        fixtureAuthorityApplicationId,
+        'ios',
+      );
+      final accepted = (await cache.read(namespace))!;
+      final stale = switch (staleBinding) {
+        'digest' => replaceCachedBinding(
+            accepted,
+            snapshotAuthorityDigest:
+                'sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff',
+          ),
+        'epoch' => replaceCachedBinding(
+            accepted,
+            authority: MosaicCustomerAuthority(
+              epoch: accepted.authority.epoch + 1,
+              kind: accepted.authority.kind,
+              scope: accepted.authority.scope,
+              transitionState: accepted.authority.transitionState,
+              cutoverAt: accepted.authority.cutoverAt,
+            ),
+          ),
+        'scope' => replaceCachedBinding(
+            accepted,
+            authority: MosaicCustomerAuthority(
+              epoch: accepted.authority.epoch,
+              kind: accepted.authority.kind,
+              scope: MosaicCustomerAuthorityScope(
+                projectId: accepted.authority.scope.projectId,
+                environmentId: accepted.authority.scope.environmentId,
+                applicationId: 'another-application',
+                platform: accepted.authority.scope.platform,
+              ),
+              transitionState: accepted.authority.transitionState,
+              cutoverAt: accepted.authority.cutoverAt,
+            ),
+          ),
+        'customer' => replaceCachedBinding(
+            accepted,
+            binding: MosaicCustomerBinding(
+              billingCustomerId: 'another-customer',
+              projectId: accepted.binding.projectId,
+              environmentId: accepted.binding.environmentId,
+            ),
+          ),
+        _ => throw StateError('unknown test case'),
+      };
+      await cache.write(namespace, stale);
+      final transport =
+          _RecordingTransport(<MosaicCustomerEntitlementSyncResponse>[
+        received('snapshots/active-subscription.json'),
+      ]);
+      final runtime = runtimeWith(transport, cache: cache);
+
+      await runtime.refresh();
+
+      expect(transport.requests, hasLength(1));
+      expect(transport.requests.single.knownAuthorityEpoch, isNull);
+      expect(transport.requests.single.knownSnapshotVersion, isNull);
+      expect(
+        transport.requests.single.knownSnapshotAuthorityDigest,
+        isNull,
+      );
+      runtime.dispose();
+    });
+  }
 
   test('a bodyless 304 preserves the cache without sliding it', () async {
     final transport =
@@ -296,9 +962,12 @@ void main() {
         _RecordingTransport(<MosaicCustomerEntitlementSyncResponse>[
       received('snapshots/active-subscription.json'),
       MosaicCustomerEntitlementSyncReceived(
-        source: fixture('snapshots/snapshot-unchanged.json').replaceFirst(
-          'fixture-customer-0001',
-          'fixture-customer-0002',
+        source: wrapCustomerUnchangedV2(
+          fixture('snapshots/snapshot-unchanged.json').replaceFirst(
+            'fixture-customer-0001',
+            'fixture-customer-0002',
+          ),
+          fixture('snapshots/active-subscription.json'),
         ),
       ),
     ]);
@@ -329,10 +998,16 @@ void main() {
         customerToken: 'mcat_secret',
         timeout: const Duration(seconds: 5),
         correlationId: 'fixture-correlation-0001',
+        applicationId: fixtureAuthorityApplicationId,
+        platform: 'ios',
+        applicationVersion: '4.2.0',
       ),
     );
     final payload = encoded['payload']! as Map<String, Object?>;
     expect(payload.containsKey('billingCustomerId'), isFalse);
+    final request = payload['request']! as Map<String, Object?>;
+    expect(request.containsKey('billingCustomerId'), isFalse);
+    expect(request.containsKey('customerId'), isFalse);
   });
 
   test('an absent entitlement key reads unknown, never inactive', () async {
@@ -588,7 +1263,7 @@ void main() {
     expect(runtime.snapshot, isNull);
     expect(
       runtime.checkCustomerEntitlement('pro').state,
-      MosaicCustomerAccessState.unknown,
+      MosaicCustomerAccessState.unavailable,
     );
     await pumpEventQueue();
     expect(updates.whereType<MosaicCustomerEntitlementCleared>(), isNotEmpty);
@@ -601,7 +1276,9 @@ void main() {
         _RecordingTransport(<MosaicCustomerEntitlementSyncResponse>[
       received('snapshots/active-subscription.json'),
       MosaicCustomerEntitlementSyncReceived(
-        source: fixture('invalid/snapshot-entry-unknown-field.json'),
+        source: wrapCustomerSnapshotV2(
+          fixture('invalid/snapshot-entry-unknown-field.json'),
+        ),
       ),
     ]);
     final runtime = runtimeWith(transport);

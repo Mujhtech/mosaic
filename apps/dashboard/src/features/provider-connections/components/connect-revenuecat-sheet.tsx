@@ -5,6 +5,13 @@ import { Button } from "@/components/ui/button"
 import { Field, FieldDescription, FieldError, FieldLabel } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
+import {
   Sheet,
   SheetContent,
   SheetDescription,
@@ -27,6 +34,11 @@ interface ConnectRevenueCatSheetProps {
   onConnect: (input: CreateRevenueCatConnectionInput) => Promise<void>
   providerBaseHref: string
 }
+
+const CONNECTION_MODE_OPTIONS = [
+  { label: "Sandbox", value: "sandbox" },
+  { label: "Production", value: "production" },
+]
 
 export function ConnectRevenueCatSheet({
   applications,
@@ -124,11 +136,10 @@ export function ConnectRevenueCatSheet({
               {(field) => (
                 <Field>
                   <FieldLabel htmlFor="revenuecat-connection-mode">Connection mode</FieldLabel>
-                  <select
-                    className="border-input bg-background focus-visible:border-ring focus-visible:ring-ring/40 h-9 rounded border px-3 text-sm outline-none focus-visible:ring-3"
-                    id="revenuecat-connection-mode"
-                    onChange={(event) => {
-                      const mode = event.currentTarget.value as "production" | "sandbox"
+                  <Select
+                    items={CONNECTION_MODE_OPTIONS}
+                    onValueChange={(value) => {
+                      const mode = value as "production" | "sandbox"
                       field.handleChange(mode)
                       form.setFieldValue(
                         "environmentIds",
@@ -142,9 +153,17 @@ export function ConnectRevenueCatSheet({
                     }}
                     value={field.state.value}
                   >
-                    <option value="sandbox">Sandbox</option>
-                    <option value="production">Production</option>
-                  </select>
+                    <SelectTrigger id="revenuecat-connection-mode">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {CONNECTION_MODE_OPTIONS.map((option) => (
+                        <SelectItem key={option.value} value={option.value}>
+                          {option.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                   <FieldDescription>
                     Sandbox and production connections remain separate and cannot silently replace
                     one another.

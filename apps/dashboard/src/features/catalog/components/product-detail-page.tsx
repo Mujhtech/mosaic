@@ -6,6 +6,13 @@ import { useState } from "react"
 
 import { Button } from "@/components/ui/button"
 import { buttonVariants } from "@/components/ui/button-variants"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
 import { HostedResourceBoundary } from "@/features/auth/components/hosted-resource-boundary"
 import { resolveHostedQueryState } from "@/features/auth/types/hosted-query-state"
 import { ProductReadinessPanel } from "@/features/catalog/components/product-readiness-panel"
@@ -41,9 +48,9 @@ import {
   readinessStateLabel,
 } from "@/features/catalog/types/connected-product-view"
 import { environmentsQueryOptions } from "@/features/environments/queries/environments-query"
-import { WorkspacePage, WorkflowPanel } from "@/features/organizations/components/workspace-page"
-import { ScopeMismatchRecovery } from "@/features/organizations/components/scope-mismatch-recovery"
-import { detectNestedScopeMismatch } from "@/features/organizations/types/nested-scope"
+import { WorkspacePage, WorkflowPanel } from "@/features/orgs/components/workspace-page"
+import { ScopeMismatchRecovery } from "@/features/orgs/components/scope-mismatch-recovery"
+import { detectNestedScopeMismatch } from "@/features/orgs/types/nested-scope"
 import { providerConnectionsQueryOptions } from "@/features/provider-connections/queries/provider-connection-queries"
 import {
   applicationsQueryOptions,
@@ -187,8 +194,8 @@ export function ProductDetailPage({
     permissionAction: (
       <Link
         className={buttonVariants({ variant: "outline" })}
-        params={{ organizationId, projectId }}
-        to="/organizations/$organizationId/projects/$projectId"
+        params={(prev) => prev}
+        to="/orgs/$organizationId/projects/$projectId/env/$environmentKey"
       >
         Return to Project
       </Link>
@@ -203,6 +210,24 @@ export function ProductDetailPage({
     productId,
     product.data?.type,
   )
+  const replacementSelectOptions = replacementOptions.map((item) => ({
+    label: item.internalName,
+    value: item.id,
+  }))
+  const readinessEnvironmentOptions = [
+    { label: "Select Environment", value: "" },
+    ...(environments.data?.items ?? []).map((environment) => ({
+      label: `${environment.name} · ${environment.mode}`,
+      value: environment.id,
+    })),
+  ]
+  const readinessApplicationOptions = [
+    { label: "Select Application", value: "" },
+    ...(applications.data?.items ?? []).map((application) => ({
+      label: `${application.name} · ${application.platform.toUpperCase()}`,
+      value: application.id,
+    })),
+  ]
   const effectiveReplacementId = selectedReplacementId ?? product.data?.replacementProductId
   const replacementNeedsSave = Boolean(
     selectedReplacementId && selectedReplacementId !== product.data?.replacementProductId,
@@ -230,7 +255,7 @@ export function ProductDetailPage({
           : undefined,
       }
     }) ?? []
-  const manageProvidersHref = `/organizations/${encodeURIComponent(organizationId)}/projects/${encodeURIComponent(projectId)}/catalog/providers`
+  const manageProvidersHref = `/orgs/${encodeURIComponent(organizationId)}/projects/${encodeURIComponent(projectId)}/catalog/providers`
 
   async function confirmArchive() {
     try {
@@ -320,46 +345,54 @@ export function ProductDetailPage({
           title="Readiness scope"
         >
           <div className="grid gap-3 sm:grid-cols-2">
-            <label className="text-sm font-medium">
-              Environment
-              <select
-                className="border-input bg-background mt-2 h-9 w-full rounded border px-3"
-                onChange={(event) =>
+            <div className="text-sm font-medium">
+              <label htmlFor="readiness-environment">Environment</label>
+              <Select
+                items={readinessEnvironmentOptions}
+                onValueChange={(value) =>
                   onReadinessScopeChange({
                     applicationId: selectedReadinessApplication?.id,
-                    environmentId: event.currentTarget.value || undefined,
+                    environmentId: value || undefined,
                   })
                 }
                 value={selectedReadinessEnvironment?.id ?? ""}
               >
-                <option value="">Select Environment</option>
-                {environments.data?.items.map((environment) => (
-                  <option key={environment.id} value={environment.id}>
-                    {environment.name} · {environment.mode}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label className="text-sm font-medium">
-              Application
-              <select
-                className="border-input bg-background mt-2 h-9 w-full rounded border px-3"
-                onChange={(event) =>
+                <SelectTrigger className="mt-2" id="readiness-environment">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {readinessEnvironmentOptions.map((option) => (
+                    <SelectItem key={option.value} value={option.value}>
+                      {option.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="text-sm font-medium">
+              <label htmlFor="readiness-application">Application</label>
+              <Select
+                items={readinessApplicationOptions}
+                onValueChange={(value) =>
                   onReadinessScopeChange({
-                    applicationId: event.currentTarget.value || undefined,
+                    applicationId: value || undefined,
                     environmentId: selectedReadinessEnvironment?.id,
                   })
                 }
                 value={selectedReadinessApplication?.id ?? ""}
               >
-                <option value="">Select Application</option>
-                {applications.data?.items.map((application) => (
-                  <option key={application.id} value={application.id}>
-                    {application.name} · {application.platform.toUpperCase()}
-                  </option>
-                ))}
-              </select>
-            </label>
+                <SelectTrigger className="mt-2" id="readiness-application">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {readinessApplicationOptions.map((option) => (
+                    <SelectItem key={option.value} value={option.value}>
+                      {option.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
           </div>
           {!hasExplicitReadinessScope ? (
             <p className="text-muted-foreground mt-3 text-xs">
@@ -385,7 +418,7 @@ export function ProductDetailPage({
         {connectedReadiness ? (
           <ProductReadinessPanel
             accessHref="#access-grants-title"
-            applicationsHref={`/organizations/${encodeURIComponent(organizationId)}/projects/${encodeURIComponent(projectId)}/apps`}
+            applicationsHref={`/orgs/${encodeURIComponent(organizationId)}/projects/${encodeURIComponent(projectId)}/apps`}
             manageProvidersHref={manageProvidersHref}
             readiness={connectedReadiness}
             scopeLabel={`${selectedReadinessEnvironment?.name ?? readiness.data?.environmentId} · ${selectedReadinessApplication?.name ?? readiness.data?.applicationId} · ${readiness.data?.platform.toUpperCase()}`}
@@ -470,7 +503,7 @@ export function ProductDetailPage({
           ) : (
             <a
               className="text-primary text-sm font-semibold"
-              href={`/organizations/${encodeURIComponent(organizationId)}/members`}
+              href={`/orgs/${encodeURIComponent(organizationId)}/members`}
             >
               Ask an Owner or Admin to change Access grants
             </a>
@@ -487,7 +520,7 @@ export function ProductDetailPage({
             queryClient.fetchQuery(providerMappingUsageQueryOptions(mappingId))
           }
           manageProvidersHref={manageProvidersHref}
-          membersHref={`/organizations/${encodeURIComponent(organizationId)}/members`}
+          membersHref={`/orgs/${encodeURIComponent(organizationId)}/members`}
           mappings={mappingViews}
           onArchive={async (mappingId) => {
             await archiveMapping.mutateAsync(mappingId)
@@ -535,7 +568,7 @@ export function ProductDetailPage({
           {!access.canManage ? (
             <a
               className="text-primary text-sm font-semibold"
-              href={`/organizations/${encodeURIComponent(organizationId)}/members`}
+              href={`/orgs/${encodeURIComponent(organizationId)}/members`}
             >
               Ask an Owner or Admin to change Product lifecycle
             </a>
@@ -564,23 +597,25 @@ export function ProductDetailPage({
                   : "This Product has no known usage and can be archived safely."}
               </p>
               {usageCount > 0 ? (
-                <label className="mt-3 flex max-w-md flex-col gap-2 text-sm font-medium">
-                  Replacement Product
-                  <select
-                    className="border-input bg-background h-9 rounded border px-3"
-                    onChange={(event) => setSelectedReplacementId(event.target.value || null)}
+                <div className="mt-3 flex max-w-md flex-col gap-2 text-sm font-medium">
+                  <label htmlFor="replacement-product">Replacement Product</label>
+                  <Select
+                    items={replacementSelectOptions}
+                    onValueChange={(value) => setSelectedReplacementId(value || null)}
                     value={effectiveReplacementId ?? ""}
                   >
-                    <option disabled value="">
-                      Choose an active Product
-                    </option>
-                    {replacementOptions.map((item) => (
-                      <option key={item.id} value={item.id}>
-                        {item.internalName}
-                      </option>
-                    ))}
-                  </select>
-                </label>
+                    <SelectTrigger id="replacement-product">
+                      <SelectValue placeholder="Choose an active Product" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {replacementSelectOptions.map((option) => (
+                        <SelectItem key={option.value} value={option.value}>
+                          {option.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
               ) : null}
               {usageCount > 0 && product.data?.replacementProductId ? (
                 <p className="text-muted-foreground mt-2 text-sm">
@@ -592,8 +627,8 @@ export function ProductDetailPage({
                 <div className="mt-4">
                   <Link
                     className={buttonVariants({ variant: "outline" })}
-                    params={{ organizationId, projectId }}
-                    to="/organizations/$organizationId/projects/$projectId/catalog/products"
+                    params={(prev) => prev}
+                    to="/orgs/$organizationId/projects/$projectId/env/$environmentKey/catalog/products"
                   >
                     Create Replacement Product
                   </Link>

@@ -5,12 +5,52 @@ import { useMutation } from "@tanstack/react-query"
 import { Button } from "@/components/ui/button"
 import { Field, FieldError, FieldLabel } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
 import type {
   DecisionScope,
   PlacementDecisionsAdapter,
 } from "@/features/placement-decisions/api/placement-decisions-adapter"
 import { simulateDecisionMutationOptions } from "@/features/placement-decisions/mutations/placement-decision-mutations"
 import type { AttributeDefinition } from "@/features/placement-decisions/types/placement-decision"
+
+const SIMULATOR_PLATFORM_OPTIONS = [
+  { label: "iOS", value: "ios" },
+  { label: "Android", value: "android" },
+]
+
+const ACCESS_STATE_OPTIONS = [
+  { label: "Active", value: "active" },
+  { label: "Inactive", value: "inactive" },
+  { label: "Unknown", value: "unknown" },
+  { label: "Provider unavailable", value: "provider_unavailable" },
+  { label: "Failed", value: "failed" },
+]
+
+const PRODUCT_AVAILABILITY_OPTIONS = [
+  { label: "Available", value: "available" },
+  { label: "Unavailable", value: "unavailable" },
+  { label: "Unknown", value: "unknown" },
+]
+
+const PRODUCT_READINESS_OPTIONS = [
+  { label: "Ready", value: "ready" },
+  { label: "Not ready", value: "not_ready" },
+  { label: "Unknown", value: "unknown" },
+]
+
+const PROVIDER_CAPABILITY_OPTIONS = [
+  { label: "None supplied", value: "" },
+  { label: "Product loading", value: "product_loading" },
+  { label: "Purchase", value: "purchase" },
+  { label: "Restore", value: "restore" },
+  { label: "Access lookup", value: "entitlement_lookup" },
+]
 
 export function DecisionSimulator({
   adapter,
@@ -97,17 +137,22 @@ export function DecisionSimulator({
             {(field) => (
               <Field>
                 <FieldLabel htmlFor="simulator-platform">Platform</FieldLabel>
-                <select
-                  id="simulator-platform"
-                  className="border-input bg-background h-9 rounded border px-3 text-sm"
-                  onChange={(event) =>
-                    field.handleChange(event.currentTarget.value as "ios" | "android")
-                  }
+                <Select
+                  items={SIMULATOR_PLATFORM_OPTIONS}
+                  onValueChange={(value) => field.handleChange(value as "ios" | "android")}
                   value={field.state.value}
                 >
-                  <option value="ios">iOS</option>
-                  <option value="android">Android</option>
-                </select>
+                  <SelectTrigger id="simulator-platform">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {SIMULATOR_PLATFORM_OPTIONS.map((option) => (
+                      <SelectItem key={option.value} value={option.value}>
+                        {option.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </Field>
             )}
           </form.Field>
@@ -186,20 +231,22 @@ export function DecisionSimulator({
             {(field) => (
               <Field>
                 <FieldLabel htmlFor="simulator-access-state">Access state</FieldLabel>
-                <select
-                  className="border-input bg-background h-9 rounded border px-3 text-sm"
-                  id="simulator-access-state"
-                  onChange={(event) =>
-                    field.handleChange(event.currentTarget.value as typeof field.state.value)
-                  }
+                <Select
+                  items={ACCESS_STATE_OPTIONS}
+                  onValueChange={(value) => field.handleChange(value as typeof field.state.value)}
                   value={field.state.value}
                 >
-                  <option value="active">Active</option>
-                  <option value="inactive">Inactive</option>
-                  <option value="unknown">Unknown</option>
-                  <option value="provider_unavailable">Provider unavailable</option>
-                  <option value="failed">Failed</option>
-                </select>
+                  <SelectTrigger id="simulator-access-state">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {ACCESS_STATE_OPTIONS.map((option) => (
+                      <SelectItem key={option.value} value={option.value}>
+                        {option.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </Field>
             )}
           </form.Field>
@@ -221,18 +268,22 @@ export function DecisionSimulator({
                 <FieldLabel htmlFor="simulator-product-availability">
                   Product availability
                 </FieldLabel>
-                <select
-                  className="border-input bg-background h-9 rounded border px-3 text-sm"
-                  id="simulator-product-availability"
-                  onChange={(event) =>
-                    field.handleChange(event.currentTarget.value as typeof field.state.value)
-                  }
+                <Select
+                  items={PRODUCT_AVAILABILITY_OPTIONS}
+                  onValueChange={(value) => field.handleChange(value as typeof field.state.value)}
                   value={field.state.value}
                 >
-                  <option value="available">Available</option>
-                  <option value="unavailable">Unavailable</option>
-                  <option value="unknown">Unknown</option>
-                </select>
+                  <SelectTrigger id="simulator-product-availability">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {PRODUCT_AVAILABILITY_OPTIONS.map((option) => (
+                      <SelectItem key={option.value} value={option.value}>
+                        {option.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </Field>
             )}
           </form.Field>
@@ -240,18 +291,22 @@ export function DecisionSimulator({
             {(field) => (
               <Field>
                 <FieldLabel htmlFor="simulator-product-readiness">Product readiness</FieldLabel>
-                <select
-                  className="border-input bg-background h-9 rounded border px-3 text-sm"
-                  id="simulator-product-readiness"
-                  onChange={(event) =>
-                    field.handleChange(event.currentTarget.value as typeof field.state.value)
-                  }
+                <Select
+                  items={PRODUCT_READINESS_OPTIONS}
+                  onValueChange={(value) => field.handleChange(value as typeof field.state.value)}
                   value={field.state.value}
                 >
-                  <option value="ready">Ready</option>
-                  <option value="not_ready">Not ready</option>
-                  <option value="unknown">Unknown</option>
-                </select>
+                  <SelectTrigger id="simulator-product-readiness">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {PRODUCT_READINESS_OPTIONS.map((option) => (
+                      <SelectItem key={option.value} value={option.value}>
+                        {option.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </Field>
             )}
           </form.Field>
@@ -259,18 +314,22 @@ export function DecisionSimulator({
             {(field) => (
               <Field>
                 <FieldLabel htmlFor="simulator-provider-capability">Provider capability</FieldLabel>
-                <select
-                  className="border-input bg-background h-9 rounded border px-3 text-sm"
-                  id="simulator-provider-capability"
-                  onChange={(event) => field.handleChange(event.currentTarget.value)}
+                <Select
+                  items={PROVIDER_CAPABILITY_OPTIONS}
+                  onValueChange={(value) => field.handleChange(value)}
                   value={field.state.value}
                 >
-                  <option value="">None supplied</option>
-                  <option value="product_loading">Product loading</option>
-                  <option value="purchase">Purchase</option>
-                  <option value="restore">Restore</option>
-                  <option value="entitlement_lookup">Access lookup</option>
-                </select>
+                  <SelectTrigger id="simulator-provider-capability">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {PROVIDER_CAPABILITY_OPTIONS.map((option) => (
+                      <SelectItem key={option.value} value={option.value}>
+                        {option.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </Field>
             )}
           </form.Field>

@@ -220,18 +220,29 @@ internal class MosaicCustomerPurchaseRefresh(
         }
     }
 
-    private fun observe(update: MosaicCommerceUpdate) {
-        if (update.outcome != MosaicCommerceUpdateOutcome.PURCHASED &&
-            update.outcome != MosaicCommerceUpdateOutcome.ENTITLEMENTS_CHANGED
-        ) {
-            return
+    fun collectPurchaseCompletions(updates: Flow<Unit>) {
+        scope.launch {
+            updates.buffer(capacity = 64, onBufferOverflow = BufferOverflow.DROP_OLDEST)
+                .collect { observePurchaseCompletion() }
         }
+    }
+
+    private fun observePurchaseCompletion() {
         if (!pending.compareAndSet(false, true)) return
         scope.launch {
             delay(debounceMillis)
             pending.set(false)
             runCatching { runtime.refreshCustomerEntitlements() }
         }
+    }
+
+    private fun observe(update: MosaicCommerceUpdate) {
+        if (update.outcome != MosaicCommerceUpdateOutcome.PURCHASED &&
+            update.outcome != MosaicCommerceUpdateOutcome.ENTITLEMENTS_CHANGED
+        ) {
+            return
+        }
+        observePurchaseCompletion()
     }
 
     fun close() {

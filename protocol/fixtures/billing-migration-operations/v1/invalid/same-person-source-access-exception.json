@@ -1,0 +1,29 @@
+{
+  "billingMigrationOperationsContractVersion": "1",
+  "recordType": "reconciliationCase",
+  "payload": {
+    "programId": "mig-001",
+    "stateVersion": 7,
+    "caseId": "case-exception-001",
+    "classification": "blocking",
+    "status": "resolved",
+    "reason": "Provider revalidation is impossible for a bounded legacy cohort",
+    "openedAt": "2026-07-29T09:00:00.000Z",
+    "resolvedAt": "2026-07-29T09:30:00.000Z",
+    "sourceAccessException": {
+      "exceptionId": "exception-001",
+      "scope": {
+        "applicationId": "app-ios",
+        "platform": "ios"
+      },
+      "reason": "Provider no longer exposes the legacy purchase reference",
+      "affectedCustomerCount": 12,
+      "rollbackTreatment": "Restore source-authoritative access for the same bounded cohort",
+      "identityAmbiguityCount": 0,
+      "proposerActorId": "actor-001",
+      "approverActorId": "actor-001",
+      "approvedAt": "2026-07-29T09:25:00.000Z",
+      "expiresAt": "2026-08-05T09:25:00.000Z"
+    }
+  }
+}

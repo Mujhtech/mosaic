@@ -33,14 +33,6 @@ export interface ActiveProviderScopeView {
   environment: Environment
 }
 
-export function explicitPurchaseSetupEnvironment(
-  environments: readonly Environment[],
-  environmentId?: string,
-) {
-  if (!environmentId) return undefined
-  return environments.find((environment) => environment.id === environmentId)
-}
-
 export function purchaseProviderChoices(
   application: Application,
   environment: Environment,

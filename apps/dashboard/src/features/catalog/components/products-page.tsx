@@ -1,19 +1,56 @@
+import { useState } from "react"
 import { useForm } from "@tanstack/react-form"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { Link } from "@tanstack/react-router"
 
 import { Button } from "@/components/ui/button"
 import { buttonVariants } from "@/components/ui/button-variants"
+import {
+  Dialog,
+  DialogClose,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog"
 import { Field, FieldDescription, FieldLabel } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
 import { HostedResourceBoundary } from "@/features/auth/components/hosted-resource-boundary"
 import { resolveHostedQueryState } from "@/features/auth/types/hosted-query-state"
 import { createProductMutationOptions } from "@/features/catalog/mutations/catalog-mutations"
 import { productsQueryOptions, type ProductFilters } from "@/features/catalog/queries/catalog-query"
-import { WorkspacePage, WorkflowPanel } from "@/features/organizations/components/workspace-page"
-import { ScopeMismatchRecovery } from "@/features/organizations/components/scope-mismatch-recovery"
+import { WorkspacePage, WorkflowPanel } from "@/features/orgs/components/workspace-page"
+import { ScopeMismatchRecovery } from "@/features/orgs/components/scope-mismatch-recovery"
 import { useValidatedProjectScope } from "@/features/projects/hooks/use-validated-project-scope"
 import { describeReturnDestination } from "@/lib/routing/workspace-hrefs"
+
+const PRODUCT_TYPE_OPTIONS = [
+  { label: "Subscription", value: "subscription" },
+  { label: "One-time non-consumable", value: "one_time_non_consumable" },
+]
+
+const STATUS_FILTER_OPTIONS = [
+  { label: "All statuses", value: "" },
+  { label: "Draft", value: "draft" },
+  { label: "Connected", value: "connected" },
+  { label: "Attention required", value: "attention_required" },
+  { label: "Archived", value: "archived" },
+]
+
+const TYPE_FILTER_OPTIONS = [
+  { label: "All types", value: "" },
+  { label: "Subscription", value: "subscription" },
+  { label: "One-time", value: "one_time_non_consumable" },
+]
 
 interface ProductsPageProps {
   filters: ProductFilters
@@ -40,6 +77,7 @@ export function ProductsPage({
   const products = useQuery({ ...productsQueryOptions(projectId, filters), enabled: scopeReady })
   const mutation = useMutation(createProductMutationOptions(projectId, queryClient))
   const items = products.data?.items ?? []
+  const [createOpen, setCreateOpen] = useState(false)
   const form = useForm({
     defaultValues: {
       description: "",
@@ -55,6 +93,7 @@ export function ProductsPage({
         type: value.type,
       })
       form.reset()
+      setCreateOpen(false)
     },
   })
   const state = resolveHostedQueryState({
@@ -90,125 +129,34 @@ export function ProductsPage({
     )
   }
 
-  return (
-    <WorkspacePage
-      description="Products are stable provider-neutral purchase options. Mock metadata remains explicit until a billing provider is connected."
-      eyebrow="Catalog · Project-wide"
-      title="Products"
+  const createDialog = (
+    <Dialog
+      onOpenChange={(open) => {
+        setCreateOpen(open)
+        if (!open) {
+          form.reset()
+          mutation.reset()
+        }
+      }}
+      open={createOpen}
     >
-      {returnTo ? (
-        <a className="text-primary inline-flex text-sm font-semibold" href={returnTo}>
-          {describeReturnDestination(returnTo)}
-        </a>
-      ) : null}
-      <WorkflowPanel
-        description="Import and synchronization begin from one explicit, tested Provider Connection."
-        title="Connected Catalog"
-      >
-        <div className="flex flex-wrap items-center gap-3">
-          <Link
-            className={buttonVariants({ variant: "outline" })}
-            params={{ organizationId, projectId }}
-            to="/organizations/$organizationId/projects/$projectId/catalog/providers"
-          >
-            Review Purchase setup
-          </Link>
-          <p className="text-muted-foreground text-xs">
-            Provider catalog IDs stay behind mappings; Paywalls continue referencing stable Mosaic
-            Product IDs.
-          </p>
-        </div>
-      </WorkflowPanel>
-      <WorkflowPanel title="Filters">
-        <div className="grid gap-3 sm:grid-cols-3">
-          <label className="text-sm font-medium">
-            Search
-            <Input
-              className="mt-2"
-              onChange={(event) =>
-                onFiltersChange({ ...filters, search: event.target.value || undefined })
-              }
-              placeholder="Search Products"
-              value={filters.search ?? ""}
-            />
-          </label>
-          <label className="text-sm font-medium">
-            Status
-            <select
-              className="border-input bg-background mt-2 h-9 w-full rounded border px-3"
-              onChange={(event) =>
-                onFiltersChange({
-                  ...filters,
-                  status: (event.target.value || undefined) as ProductFilters["status"],
-                })
-              }
-              value={filters.status ?? ""}
-            >
-              <option value="">All statuses</option>
-              <option value="draft">Draft</option>
-              <option value="connected">Connected</option>
-              <option value="attention_required">Attention required</option>
-              <option value="archived">Archived</option>
-            </select>
-          </label>
-          <label className="text-sm font-medium">
-            Type
-            <select
-              className="border-input bg-background mt-2 h-9 w-full rounded border px-3"
-              onChange={(event) =>
-                onFiltersChange({
-                  ...filters,
-                  type: (event.target.value || undefined) as ProductFilters["type"],
-                })
-              }
-              value={filters.type ?? ""}
-            >
-              <option value="">All types</option>
-              <option value="subscription">Subscription</option>
-              <option value="one_time_non_consumable">One-time</option>
-            </select>
-          </label>
-        </div>
-      </WorkflowPanel>
-      <HostedResourceBoundary state={state}>
-        <WorkflowPanel title="Products">
-          <ul className="divide-y">
-            {items.map((product) => (
-              <li className="flex items-center justify-between gap-4 py-4" key={product.id}>
-                <span>
-                  <span className="block text-sm font-semibold">{product.internalName}</span>
-                  <span className="text-muted-foreground mt-1 block text-xs">
-                    {product.type === "subscription" ? "Subscription" : "One-time"} ·{" "}
-                    {product.metadataSource === "mock" ? "Mock metadata" : "Provider metadata"} ·{" "}
-                    {product.status.replaceAll("_", " ")}
-                  </span>
-                </span>
-                <Link
-                  className="text-primary text-sm font-medium hover:underline"
-                  params={{ organizationId, productId: product.id, projectId }}
-                  search={returnTo ? { returnTo } : {}}
-                  to="/organizations/$organizationId/projects/$projectId/catalog/products/$productId"
-                >
-                  {returnTo ? "Open mappings" : "View usage"}
-                </Link>
-              </li>
-            ))}
-          </ul>
-        </WorkflowPanel>
-      </HostedResourceBoundary>
-      {canManageProducts ? (
-        <WorkflowPanel
-          description="Create a provider-neutral Product manually or import synchronized provider metadata from Purchase setup."
-          title="Create Product"
+      <DialogTrigger render={<Button size="sm" />}>Create Product</DialogTrigger>
+      <DialogContent>
+        <form
+          onSubmit={(event) => {
+            event.preventDefault()
+            event.stopPropagation()
+            void form.handleSubmit()
+          }}
         >
-          <form
-            className="grid gap-4 md:grid-cols-2"
-            onSubmit={(event) => {
-              event.preventDefault()
-              event.stopPropagation()
-              void form.handleSubmit()
-            }}
-          >
+          <DialogHeader>
+            <DialogTitle>Create Product</DialogTitle>
+            <DialogDescription>
+              Create a provider-neutral Product manually or import synchronized provider metadata
+              from Purchase setup.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-4 px-4">
             <form.Field name="internalName">
               {(field) => (
                 <Field>
@@ -239,19 +187,24 @@ export function ProductsPage({
               {(field) => (
                 <Field>
                   <FieldLabel htmlFor="product-type">Type</FieldLabel>
-                  <select
-                    className="border-input bg-background h-9 rounded border px-3"
-                    id="product-type"
-                    onChange={(event) =>
-                      field.handleChange(
-                        event.target.value as "one_time_non_consumable" | "subscription",
-                      )
+                  <Select
+                    items={PRODUCT_TYPE_OPTIONS}
+                    onValueChange={(value) =>
+                      field.handleChange(value as "one_time_non_consumable" | "subscription")
                     }
                     value={field.state.value}
                   >
-                    <option value="subscription">Subscription</option>
-                    <option value="one_time_non_consumable">One-time non-consumable</option>
-                  </select>
+                    <SelectTrigger id="product-type">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {PRODUCT_TYPE_OPTIONS.map((option) => (
+                        <SelectItem key={option.value} value={option.value}>
+                          {option.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </Field>
               )}
             </form.Field>
@@ -268,17 +221,142 @@ export function ProductsPage({
                 </Field>
               )}
             </form.Field>
-            <Button className="md:col-start-2" disabled={mutation.isPending} type="submit">
+            {mutation.error ? (
+              <p className="text-destructive text-sm" role="alert">
+                {mutation.error.message}
+              </p>
+            ) : null}
+          </div>
+          <DialogFooter>
+            <DialogClose render={<Button type="button" variant="outline" />}>Cancel</DialogClose>
+            <Button disabled={mutation.isPending} type="submit">
               {mutation.isPending ? "Creating…" : "Create Product"}
             </Button>
-          </form>
-          {mutation.error ? (
-            <p className="text-destructive mt-4 text-sm" role="alert">
-              {mutation.error.message}
-            </p>
-          ) : null}
-        </WorkflowPanel>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
+  )
+
+  return (
+    <WorkspacePage
+      actions={canManageProducts ? createDialog : null}
+      description="Products are stable provider-neutral purchase options. Mock metadata remains explicit until a billing provider is connected."
+      eyebrow="Catalog · Project-wide"
+      title="Products"
+    >
+      {returnTo ? (
+        <a className="text-primary inline-flex text-sm font-semibold" href={returnTo}>
+          {describeReturnDestination(returnTo)}
+        </a>
       ) : null}
+      <WorkflowPanel
+        description="Import and synchronization begin from one explicit, tested Provider Connection."
+        title="Connected Catalog"
+      >
+        <div className="flex flex-wrap items-center gap-3">
+          <Link
+            className={buttonVariants({ variant: "outline" })}
+            params={(prev) => prev}
+            to="/orgs/$organizationId/projects/$projectId/env/$environmentKey/catalog/providers"
+          >
+            Review Purchase setup
+          </Link>
+          <p className="text-muted-foreground text-xs">
+            Provider catalog IDs stay behind mappings; Paywalls continue referencing stable Mosaic
+            Product IDs.
+          </p>
+        </div>
+      </WorkflowPanel>
+      <WorkflowPanel title="Filters">
+        <div className="grid gap-3 sm:grid-cols-3">
+          <label className="text-sm font-medium">
+            Search
+            <Input
+              className="mt-2"
+              onChange={(event) =>
+                onFiltersChange({ ...filters, search: event.target.value || undefined })
+              }
+              placeholder="Search Products"
+              value={filters.search ?? ""}
+            />
+          </label>
+          <div className="text-sm font-medium">
+            <label htmlFor="product-status-filter">Status</label>
+            <Select
+              items={STATUS_FILTER_OPTIONS}
+              onValueChange={(value) =>
+                onFiltersChange({
+                  ...filters,
+                  status: (value || undefined) as ProductFilters["status"],
+                })
+              }
+              value={filters.status ?? ""}
+            >
+              <SelectTrigger className="mt-2" id="product-status-filter">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {STATUS_FILTER_OPTIONS.map((option) => (
+                  <SelectItem key={option.value} value={option.value}>
+                    {option.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="text-sm font-medium">
+            <label htmlFor="product-type-filter">Type</label>
+            <Select
+              items={TYPE_FILTER_OPTIONS}
+              onValueChange={(value) =>
+                onFiltersChange({
+                  ...filters,
+                  type: (value || undefined) as ProductFilters["type"],
+                })
+              }
+              value={filters.type ?? ""}
+            >
+              <SelectTrigger className="mt-2" id="product-type-filter">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {TYPE_FILTER_OPTIONS.map((option) => (
+                  <SelectItem key={option.value} value={option.value}>
+                    {option.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
+      </WorkflowPanel>
+      <HostedResourceBoundary state={state}>
+        <WorkflowPanel title="Products">
+          <ul className="divide-y">
+            {items.map((product) => (
+              <li className="flex items-center justify-between gap-4 py-4" key={product.id}>
+                <span>
+                  <span className="block text-sm font-semibold">{product.internalName}</span>
+                  <span className="text-muted-foreground mt-1 block text-xs">
+                    {product.type === "subscription" ? "Subscription" : "One-time"} ·{" "}
+                    {product.metadataSource === "mock" ? "Mock metadata" : "Provider metadata"} ·{" "}
+                    {product.status.replaceAll("_", " ")}
+                  </span>
+                </span>
+                <Link
+                  className="text-primary text-sm font-medium hover:underline"
+                  params={(prev) => ({ ...prev, productId: product.id })}
+                  search={returnTo ? { returnTo } : {}}
+                  to="/orgs/$organizationId/projects/$projectId/env/$environmentKey/catalog/products/$productId"
+                >
+                  {returnTo ? "Open mappings" : "View usage"}
+                </Link>
+              </li>
+            ))}
+          </ul>
+        </WorkflowPanel>
+      </HostedResourceBoundary>
     </WorkspacePage>
   )
 }

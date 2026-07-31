@@ -13,7 +13,6 @@ import { useHostedPublishingAdapter } from "@/features/publishing/api/use-hosted
 
 export function CreateDraftAction({
   environmentId,
-  organizationId,
   paywallId,
   projectId,
 }: {
@@ -34,8 +33,8 @@ export function CreateDraftAction({
   async function create(document: MosaicDocument) {
     const draft = await createDraft.mutateAsync(cloneValue(document))
     await navigate({
-      params: { draftId: draft.id, environmentId, organizationId, paywallId, projectId },
-      to: "/studio-hosted/$organizationId/$projectId/$environmentId/$paywallId/$draftId",
+      params: (prev) => ({ ...prev, environmentId, draftId: draft.id, paywallId }),
+      to: "/studio/$organizationId/$projectId/$environmentId/$paywallId/$draftId",
     })
   }
 

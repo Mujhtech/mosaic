@@ -5,9 +5,14 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/json"
+	"errors"
+	"os"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/dlclark/regexp2"
+	"github.com/santhosh-tekuri/jsonschema/v6"
 )
 
 // These tests cover the properties whose failure is a security or correctness
@@ -17,12 +22,36 @@ import (
 // access.
 
 type fakeRepository struct {
-	enabled   map[string]bool
-	tokens    map[string]Token
-	digests   map[string]string
-	customers map[string]CustomerView
-	snapshots map[string]SnapshotView
-	touched   int
+	enabled         map[string]bool
+	tokens          map[string]Token
+	digests         map[string]string
+	customers       map[string]CustomerView
+	snapshots       map[string]SnapshotView
+	touched         int
+	authority       *AuthoritySelection
+	minimum         MinimumSupport
+	observed        map[string]bool
+	observations    []SyncObservation
+	observationErr  error
+	legacyAuthority string
+}
+
+type accessSignal struct {
+	projectID, environmentID string
+	startedAt, endedAt       time.Time
+	failed                   bool
+}
+
+type fakeAccessSignalRecorder struct {
+	signals        []accessSignal
+	err            error
+	lastContextErr error
+}
+
+func (f *fakeAccessSignalRecorder) RecordAccessAPIResult(ctx context.Context, projectID, environmentID string, startedAt, endedAt time.Time, failed bool) error {
+	f.signals = append(f.signals, accessSignal{projectID: projectID, environmentID: environmentID, startedAt: startedAt, endedAt: endedAt, failed: failed})
+	f.lastContextErr = ctx.Err()
+	return f.err
 }
 
 func newFakeRepository() *fakeRepository {
@@ -32,11 +61,41 @@ func newFakeRepository() *fakeRepository {
 		digests:   map[string]string{},
 		customers: map[string]CustomerView{"bcu_1": {ID: "bcu_1", ProjectID: "proj_1"}},
 		snapshots: map[string]SnapshotView{},
+		observed:  map[string]bool{},
 	}
 }
 
 func (f *fakeRepository) BillingEnabled(_ context.Context, projectID string) (bool, error) {
 	return f.enabled[projectID], nil
+}
+func (f *fakeRepository) LegacyAuthority(context.Context, AuthorityScope) (string, error) {
+	if f.legacyAuthority == "" {
+		return "source", nil
+	}
+	return f.legacyAuthority, nil
+}
+func (f *fakeRepository) MinimumSupport(context.Context, AuthorityScope) (MinimumSupport, error) {
+	if f.minimum.MinimumSDKVersion == "" {
+		return MinimumSupport{}, ErrNotFound
+	}
+	return f.minimum, nil
+}
+func (f *fakeRepository) AuthoritySelection(context.Context, AuthorityScope, string, time.Time) (AuthoritySelection, error) {
+	if f.authority == nil {
+		return AuthoritySelection{}, ErrNotFound
+	}
+	return *f.authority, nil
+}
+func (f *fakeRepository) ObservedSnapshotDigest(_ context.Context, _ AuthoritySelection, digest []byte) (bool, error) {
+	return f.observed[string(digest)], nil
+}
+func (f *fakeRepository) AppendSyncObservation(_ context.Context, observation SyncObservation) error {
+	if f.observationErr != nil {
+		return f.observationErr
+	}
+	f.observations = append(f.observations, observation)
+	f.observed[string(observation.Digest)] = true
+	return nil
 }
 
 func (f *fakeRepository) CreateToken(_ context.Context, token Token, digest []byte, _ string) (Token, error) {
@@ -150,8 +209,8 @@ func testService(t *testing.T, repository *fakeRepository, now time.Time) *Servi
 			"sk.two": {APIKeyID: "key_2", ProjectID: "proj_2", EnvironmentID: "env_2"},
 		},
 		sdk: map[string]KeyScope{
-			"pk.one": {APIKeyID: "key_3", ProjectID: "proj_1", EnvironmentID: "env_1", ApplicationID: "app_1"},
-			"pk.two": {APIKeyID: "key_4", ProjectID: "proj_1", EnvironmentID: "env_2", ApplicationID: "app_2"},
+			"pk.one": {APIKeyID: "key_3", ProjectID: "proj_1", EnvironmentID: "env_1", ApplicationID: "app_1", Platform: "ios"},
+			"pk.two": {APIKeyID: "key_4", ProjectID: "proj_1", EnvironmentID: "env_2", ApplicationID: "app_2", Platform: "android"},
 		},
 	}
 	return NewService(repository, keys,
@@ -389,6 +448,51 @@ func TestBillingDisabledReportsUnavailableNotInactive(t *testing.T) {
 	}
 }
 
+// Stabilization evidence must capture both successful and failed authoritative
+// checks without carrying customer or entitlement data, and an evidence-store
+// outage must never change the access answer.
+func TestTrustedAccessCheckRecordsScopedOutcomeWithoutOwningAvailability(t *testing.T) {
+	repository := newFakeRepository()
+	seedSnapshot(repository)
+	now := instant("2026-07-28T12:00:00Z")
+	recorder := &fakeAccessSignalRecorder{}
+	service := NewService(repository, fakeKeys{server: map[string]KeyScope{
+		"sk.one": {APIKeyID: "key_1", ProjectID: "proj_1", EnvironmentID: "env_1"},
+	}}, WithClock(func() time.Time { return now }), WithAccessAPISignalRecorder(recorder))
+
+	cancelled, cancel := context.WithCancel(context.Background())
+	cancel()
+	if _, err := service.Check(cancelled, "sk.one", "env_1", CheckRequest{
+		CustomerID: "bcu_1", EntitlementKeys: []string{"pro"}, CorrelationID: "corr-1",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if len(recorder.signals) != 1 || recorder.signals[0].failed || recorder.signals[0].projectID != "proj_1" || recorder.signals[0].environmentID != "env_1" || recorder.lastContextErr != nil {
+		t.Fatalf("successful access signal=%+v", recorder.signals)
+	}
+
+	recorder.err = errors.New("evidence unavailable")
+	if _, err := service.Check(context.Background(), "sk.one", "env_other", CheckRequest{
+		CustomerID: "bcu_1", EntitlementKeys: []string{"pro"}, CorrelationID: "corr-2",
+	}); !errors.Is(err, ErrForbidden) {
+		t.Fatalf("access error=%v, want forbidden", err)
+	}
+	// Cross-environment attempts are refused before a trustworthy scope exists
+	// and therefore cannot author stabilization evidence.
+	if len(recorder.signals) != 1 {
+		t.Fatalf("untrusted scope authored evidence: %+v", recorder.signals)
+	}
+
+	if _, err := service.Check(context.Background(), "sk.one", "env_1", CheckRequest{
+		CustomerID: "missing", EntitlementKeys: []string{"pro"}, CorrelationID: "corr-3",
+	}); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("access error=%v, want not found", err)
+	}
+	if len(recorder.signals) != 2 || !recorder.signals[1].failed {
+		t.Fatalf("failed access signal=%+v", recorder.signals)
+	}
+}
+
 // A customer with no committed projection in an Environment is `unknown`, not
 // `inactive`, and the sync surface answers with a readable snapshot rather than
 // an error the SDK would have to interpret.
@@ -442,10 +546,10 @@ func TestNeverProjectedCustomerSyncsWithoutClaimingLossOfAccess(t *testing.T) {
 	repository.snapshots["env_1/bcu_1"] = SnapshotView{
 		SnapshotID: "ces_first", ProjectID: "proj_1", EnvironmentID: "env_1", CustomerID: "bcu_1",
 		SnapshotVersion: 1, RuleVersion: 1,
-		ComputedAt:      instant("2026-07-28T11:59:59Z"),
-		AsOf:            instant("2026-07-28T11:59:59Z"),
-		ChangeReason:    "initial_projection",
-		Projection:      ProjectionStatus{State: ProjectionCurrent, LastProjectedAt: instant("2026-07-28T11:59:59Z")},
+		ComputedAt:   instant("2026-07-28T11:59:59Z"),
+		AsOf:         instant("2026-07-28T11:59:59Z"),
+		ChangeReason: "initial_projection",
+		Projection:   ProjectionStatus{State: ProjectionCurrent, LastProjectedAt: instant("2026-07-28T11:59:59Z")},
 	}
 	projected, err := service.Sync(context.Background(), authenticated, SyncRequest{
 		KnownSnapshotVersion: envelope.Payload.SnapshotVersion,
@@ -469,5 +573,225 @@ func TestNeverProjectedCustomerSyncsWithoutClaimingLossOfAccess(t *testing.T) {
 	if after.Payload.SnapshotVersion <= envelope.Payload.SnapshotVersion {
 		t.Fatalf("the first real snapshot is version %d, not strictly newer than the placeholder's %d",
 			after.Payload.SnapshotVersion, envelope.Payload.SnapshotVersion)
+	}
+}
+
+func seedAuthority(repository *fakeRepository) {
+	support := MinimumSupport{MinimumSDKVersion: "2.0.0", MinimumAppVersion: "4.0.0",
+		MaximumAppVersion: "5.9.9", RequiredCapabilities: []string{"authority_epoch", "authority_scope"}}
+	repository.minimum = support
+	cutover := instant("2026-07-28T11:30:00Z")
+	repository.authority = &AuthoritySelection{
+		Scope:     AuthorityScope{ProjectID: "proj_1", EnvironmentID: "env_1", ApplicationID: "app_1", Platform: "ios"},
+		ProgramID: "bmp_1", AuthorityEpoch: 5, AuthorityKind: "mosaic", TransitionState: "stabilizing",
+		CutoverAt: &cutover, Snapshot: sampleView(), MinimumSupport: support,
+	}
+}
+
+func authorityRequest() AuthoritySyncRequest {
+	return AuthoritySyncRequest{ApplicationID: "app_1", Platform: "ios", AppVersion: "4.2.0", SDKVersion: "2.1.0",
+		SupportedContractVersions: []string{"1", "2"},
+		Capabilities:              []string{"authority_epoch", "authority_scope", "urgent_authority_sync"}}
+}
+
+func validateAuthorityV2Record(t *testing.T, payload []byte) {
+	t.Helper()
+	compiler := jsonschema.NewCompiler()
+	compiler.UseRegexpEngine(func(value string) (jsonschema.Regexp, error) {
+		compiled, err := regexp2.Compile(value, regexp2.ECMAScript)
+		return (*authorityTestRegexp)(compiled), err
+	})
+	for _, relative := range []string{
+		"../../../../protocol/schema/authoritative-entitlement/v1/snapshot.schema.json",
+		"../../../../protocol/schema/authoritative-entitlement/v2/contract.schema.json",
+	} {
+		file, err := os.Open(relative)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var document map[string]any
+		if err := json.NewDecoder(file).Decode(&document); err != nil {
+			_ = file.Close()
+			t.Fatal(err)
+		}
+		_ = file.Close()
+		id, _ := document["$id"].(string)
+		if err := compiler.AddResource(id, document); err != nil {
+			t.Fatal(err)
+		}
+	}
+	schema, err := compiler.Compile("urn:mosaic:protocol:schema:authoritative-entitlement:v2:contract")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var record any
+	if err := json.Unmarshal(payload, &record); err != nil {
+		t.Fatal(err)
+	}
+	if err := schema.Validate(record); err != nil {
+		t.Fatalf("v2 response violates canonical schema: %v\n%s", err, payload)
+	}
+}
+
+type authorityTestRegexp regexp2.Regexp
+
+func (expression *authorityTestRegexp) MatchString(value string) bool {
+	matched, err := (*regexp2.Regexp)(expression).MatchString(value)
+	return err == nil && matched
+}
+func (expression *authorityTestRegexp) String() string { return (*regexp2.Regexp)(expression).String() }
+
+// V2 conditional sync is keyed by the authority-bound digest, exact epoch and
+// exact snapshot version. A stale or merely well-shaped digest must get a full
+// snapshot; confirming it would replay access across an authority transition.
+func TestAuthorityV2FullThenExactDigestUnchanged(t *testing.T) {
+	repository := newFakeRepository()
+	seedAuthority(repository)
+	service := testService(t, repository, instant("2026-07-28T12:00:00Z"))
+	issued := issue(t, service, 0)
+	authenticated, _ := service.AuthenticateCustomerToken(context.Background(), issued.Value, "pk.one")
+
+	full, err := service.SyncAuthorityV2(context.Background(), authenticated, authorityRequest())
+	if err != nil {
+		t.Fatal(err)
+	}
+	validateAuthorityV2Record(t, full.Payload)
+	var fullRecord struct {
+		RecordType string `json:"recordType"`
+		Payload    struct {
+			Digest    string `json:"snapshotAuthorityDigest"`
+			Authority struct {
+				Epoch int64 `json:"authorityEpoch"`
+			} `json:"authority"`
+			Snapshot struct {
+				Version int64 `json:"snapshotVersion"`
+			} `json:"snapshot"`
+		} `json:"payload"`
+	}
+	if err := json.Unmarshal(full.Payload, &fullRecord); err != nil {
+		t.Fatal(err)
+	}
+	if fullRecord.RecordType != "customerEntitlementSnapshot" || fullRecord.Payload.Digest == "" {
+		t.Fatalf("unexpected v2 full record: %s", full.Payload)
+	}
+	var canonical struct {
+		Payload struct {
+			Authority map[string]any `json:"authority"`
+			Snapshot  map[string]any `json:"snapshot"`
+		} `json:"payload"`
+	}
+	if err := json.Unmarshal(full.Payload, &canonical); err != nil {
+		t.Fatal(err)
+	}
+	wantDigest, err := snapshotAuthorityDigest(canonical.Payload.Authority, canonical.Payload.Snapshot)
+	if err != nil || wantDigest != fullRecord.Payload.Digest {
+		t.Fatalf("authority digest %q, want %q (%v)", fullRecord.Payload.Digest, wantDigest, err)
+	}
+	if len(repository.observations) != 1 {
+		t.Fatalf("got %d observations after full response", len(repository.observations))
+	}
+	observationJSON, _ := json.Marshal(repository.observations[0])
+	if bytes.Contains(observationJSON, []byte("bcu_1")) || bytes.Contains(observationJSON, []byte(TokenPrefix)) {
+		t.Fatalf("observation contains customer or credential material: %s", observationJSON)
+	}
+
+	request := authorityRequest()
+	request.KnownAuthorityEpoch = &fullRecord.Payload.Authority.Epoch
+	request.KnownSnapshotVersion = &fullRecord.Payload.Snapshot.Version
+	request.KnownSnapshotAuthorityDigest = fullRecord.Payload.Digest
+	unchanged, err := service.SyncAuthorityV2(context.Background(), authenticated, request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !unchanged.Unchanged || !bytes.Contains(unchanged.Payload, []byte(`"recordType":"snapshotUnchanged"`)) {
+		t.Fatalf("exact retained digest was not confirmed: %s", unchanged.Payload)
+	}
+	validateAuthorityV2Record(t, unchanged.Payload)
+
+	request.KnownSnapshotAuthorityDigest = "sha256:" + strings.Repeat("f", 64)
+	stale, err := service.SyncAuthorityV2(context.Background(), authenticated, request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if stale.Unchanged || !bytes.Contains(stale.Payload, []byte(`"recordType":"customerEntitlementSnapshot"`)) {
+		t.Fatalf("unknown digest was confirmed instead of receiving full snapshot: %s", stale.Payload)
+	}
+	validateAuthorityV2Record(t, stale.Payload)
+}
+
+// Missing scoped state is authority unavailable, never a read from the legacy
+// global pointer and never an inactive snapshot.
+func TestAuthorityV2MissingPointerIsUnavailable(t *testing.T) {
+	repository := newFakeRepository()
+	repository.minimum = MinimumSupport{MinimumSDKVersion: "2.0.0", MinimumAppVersion: "4.0.0",
+		MaximumAppVersion: "5.9.9", RequiredCapabilities: []string{"authority_epoch"}}
+	service := testService(t, repository, instant("2026-07-28T12:00:00Z"))
+	issued := issue(t, service, 0)
+	authenticated, _ := service.AuthenticateCustomerToken(context.Background(), issued.Value, "pk.one")
+	result, err := service.SyncAuthorityV2(context.Background(), authenticated, authorityRequest())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Contains(result.Payload, []byte(`"recordType":"authorityUnavailable"`)) || bytes.Contains(result.Payload, []byte(`"state":"inactive"`)) {
+		t.Fatalf("missing authority state did not fail closed: %s", result.Payload)
+	}
+	validateAuthorityV2Record(t, result.Payload)
+}
+
+// A missing frozen serving policy has no truthful minimum versions to report.
+// The v2 contract therefore requires policy_unavailable and forbids inventing
+// a minimumSupport object for this one reason.
+func TestAuthorityV2MissingPolicyIsCanonicalUnavailable(t *testing.T) {
+	repository := newFakeRepository()
+	service := testService(t, repository, instant("2026-07-28T12:00:00Z"))
+	issued := issue(t, service, 0)
+	authenticated, _ := service.AuthenticateCustomerToken(context.Background(), issued.Value, "pk.one")
+	result, err := service.SyncAuthorityV2(context.Background(), authenticated, authorityRequest())
+	if err != nil {
+		t.Fatal(err)
+	}
+	var record struct {
+		RecordType string         `json:"recordType"`
+		Payload    map[string]any `json:"payload"`
+	}
+	if err := json.Unmarshal(result.Payload, &record); err != nil {
+		t.Fatal(err)
+	}
+	if record.RecordType != "authorityUnavailable" || record.Payload["reason"] != "policy_unavailable" {
+		t.Fatalf("unexpected policy response: %s", result.Payload)
+	}
+	if _, exists := record.Payload["minimumSupport"]; exists {
+		t.Fatalf("policy_unavailable invented minimum support: %s", result.Payload)
+	}
+	validateAuthorityV2Record(t, result.Payload)
+}
+
+// Observation evidence is operational only. Its storage failure may reduce
+// readiness evidence but cannot change a customer's entitlement response.
+func TestAuthorityV2ObservationFailureDoesNotBlockServing(t *testing.T) {
+	repository := newFakeRepository()
+	seedAuthority(repository)
+	repository.observationErr = errors.New("write unavailable")
+	service := testService(t, repository, instant("2026-07-28T12:00:00Z"))
+	issued := issue(t, service, 0)
+	authenticated, _ := service.AuthenticateCustomerToken(context.Background(), issued.Value, "pk.one")
+	result, err := service.SyncAuthorityV2(context.Background(), authenticated, authorityRequest())
+	if err != nil {
+		t.Fatalf("observation failure changed serving: %v", err)
+	}
+	if !bytes.Contains(result.Payload, []byte(`"recordType":"customerEntitlementSnapshot"`)) {
+		t.Fatalf("unexpected response: %s", result.Payload)
+	}
+}
+
+func TestLegacySyncFailsClosedAfterAuthorityCutover(t *testing.T) {
+	repository := newFakeRepository()
+	seedSnapshot(repository)
+	repository.legacyAuthority = "mosaic"
+	service := testService(t, repository, instant("2026-07-28T12:00:00Z"))
+	issued := issue(t, service, 0)
+	authenticated, _ := service.AuthenticateCustomerToken(context.Background(), issued.Value, "pk.one")
+	if _, err := service.Sync(context.Background(), authenticated, SyncRequest{}); err != ErrAuthorityUpgradeRequired {
+		t.Fatalf("v1 sync at Mosaic authority returned %v, want upgrade required", err)
 	}
 }

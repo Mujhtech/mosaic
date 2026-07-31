@@ -1,0 +1,34 @@
+{
+  "billingMigrationOperationsContractVersion": "1",
+  "recordType": "authorityCommand",
+  "payload": {
+    "programId": "mig-001",
+    "idempotencyKey": "cutover-invalid-missing",
+    "expectedStateVersion": 9,
+    "expectedDigests": {
+      "scopeDigest": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+      "manifestDigest": "sha256:2222222222222222222222222222222222222222222222222222222222222222",
+      "mappingDigest": "sha256:3333333333333333333333333333333333333333333333333333333333333333",
+      "policyDigest": "sha256:4444444444444444444444444444444444444444444444444444444444444444",
+      "readinessDigest": "sha256:6666666666666666666666666666666666666666666666666666666666666666",
+      "finalWatermarkDigest": "sha256:7777777777777777777777777777777777777777777777777777777777777777",
+      "applicationVersionDigest": "sha256:8888888888888888888888888888888888888888888888888888888888888888",
+      "approvalDigest": "sha256:9999999999999999999999999999999999999999999999999999999999999999"
+    },
+    "reason": "Invalid missing evidence digest",
+    "command": "cutover",
+    "scope": {
+      "projectId": "project-001",
+      "environmentId": "env-production",
+      "applications": [
+        {
+          "applicationId": "app-ios",
+          "platform": "ios"
+        }
+      ]
+    },
+    "checkpointId": "checkpoint-001",
+    "approvalId": "approval-001",
+    "expectedAuthorityEpoch": 4
+  }
+}

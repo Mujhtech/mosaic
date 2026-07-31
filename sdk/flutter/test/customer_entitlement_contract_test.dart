@@ -17,6 +17,52 @@ void main() {
     'protocol/fixtures/authoritative-entitlement/v1',
   );
 
+  group('canonical authority-aware v2 fixtures', () {
+    const authorityDecoder = MosaicCustomerAuthorityDecoder();
+    final v2Root = repositoryDirectory(
+      'protocol/fixtures/authoritative-entitlement/v2',
+    );
+    for (final name in const <String>[
+      'ios-full-snapshot.json',
+      'android-full-snapshot.json',
+      'source-snapshot.json',
+      'snapshot-unchanged.json',
+      'android-snapshot-unchanged.json',
+      'authority-unavailable.json',
+      'authority-policy-unavailable.json',
+    ]) {
+      test('$name decodes at the authority boundary', () {
+        final record = authorityDecoder.decode(
+          File('${v2Root.path}/$name').readAsStringSync(),
+        );
+        if (record case final MosaicCustomerAuthoritySnapshotRecord snapshot) {
+          expect(snapshot.snapshotRecord.contentDigestValid, isTrue);
+          expect(snapshot.snapshotAuthorityDigestValid, isTrue);
+        } else if (record
+            case final MosaicCustomerAuthorityUnavailableRecord unavailable) {
+          if (unavailable.reason ==
+              MosaicCustomerAuthorityUnavailableReason.policyUnavailable) {
+            expect(unavailable.minimumSupport, isNull);
+          } else {
+            expect(unavailable.minimumSupport, isNotNull);
+          }
+        }
+      });
+    }
+
+    for (final file in canonicalFixtureFiles(
+      Directory('${v2Root.path}/invalid'),
+    )) {
+      if (file.uri.pathSegments.last == 'rejection-layers.json') continue;
+      test('${file.uri.pathSegments.last} is rejected by the SDK reader', () {
+        expect(
+          () => authorityDecoder.decode(file.readAsStringSync()),
+          throwsA(isA<MosaicCustomerEntitlementFormatException>()),
+        );
+      });
+    }
+  });
+
   group('canonical snapshot fixtures', () {
     for (final file
         in canonicalFixtureFiles(Directory('${root.path}/snapshots'))) {

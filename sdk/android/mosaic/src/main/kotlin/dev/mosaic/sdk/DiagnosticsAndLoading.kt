@@ -46,6 +46,7 @@ enum class MosaicDiagnosticCode(val wireName: String) {
     CUSTOMER_ENTITLEMENTS_SNAPSHOT_REJECTED("customer.entitlements.snapshotRejected"),
     CUSTOMER_ENTITLEMENTS_BINDING_MISMATCH("customer.entitlements.bindingMismatch"),
     CUSTOMER_ENTITLEMENTS_CACHE_INVALID("customer.entitlements.cacheInvalid"),
+    CUSTOMER_ENTITLEMENTS_CACHE_WRITE_FAILED("customer.entitlements.cacheWriteFailed"),
     CUSTOMER_ENTITLEMENTS_CLOCK_UNRELIABLE("customer.entitlements.clockUnreliable"),
     CUSTOMER_ENTITLEMENTS_TOKEN_UNAVAILABLE("customer.entitlements.tokenUnavailable"),
     CUSTOMER_ENTITLEMENTS_UNAUTHORIZED("customer.entitlements.unauthorized"),

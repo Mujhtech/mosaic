@@ -1,0 +1,14 @@
+{
+  "billingMigrationOperationsContractVersion": "1",
+  "recordType": "operatorCapabilities",
+  "payload": {
+    "programId": "mig-001",
+    "stateVersion": 11,
+    "actorId": "operator-001",
+    "capabilities": [
+      "view",
+      "force-authority"
+    ],
+    "evaluatedAt": "2026-07-29T10:15:00.000Z"
+  }
+}

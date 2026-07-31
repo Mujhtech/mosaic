@@ -171,3 +171,22 @@ Tracked follow-ups:
 Final Stage 5 product, UX, protocol, and quality reviews were completed. The targeted quality
 rereview found no blocking defect and accepted closure with the live-provider and integration
 follow-ups above.
+
+## Post-Acceptance Remediation — 2026-07-29
+
+The Phase 9C entry inspection found and remediation closed two earlier-phase defects before any
+Phase 9C implementation began:
+
+- Billing webhook management now enforces PostgreSQL-backed owner/admin membership for every
+  destination, signing-secret, delivery-history, and replay operation. Project and Environment
+  mismatches return a non-enumerating not-found response; authenticated members without the
+  required role are forbidden. Focused HTTP/PostgreSQL tests cover all route families.
+- Migration `00051` makes fact-to-identity binding durable. A fact-producing Validation Attempt
+  and its digest-only binding job commit atomically; binding retries never repeat provider
+  validation or create another Transaction Fact. Attempt-keyed jobs preserve new evidence on a
+  deduplicated revalidation, serialize work per lineage, reclaim expired leases, and terminalize
+  exhausted leases without blocking later evidence.
+
+The fresh-database migration apply/down/up drill, migration preflight, full serial Go suite,
+`go vet ./...`, and independent quality/security rereview passed. No Phase 9C feature was included
+in this remediation. The live Apple/Google verification follow-up remains open.

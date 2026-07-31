@@ -8,6 +8,16 @@ import 'sha256.dart';
 /// as a `"9.9"` document; numeric ordering never implies support.
 const String mosaicAuthoritativeEntitlementContractVersion = '1';
 
+/// Authority-aware wrapper used for every Phase 9C SDK synchronization.
+const String mosaicAuthoritativeEntitlementContractVersionV2 = '2';
+
+const List<String> mosaicCustomerAuthorityCapabilities = <String>[
+  'authority_epoch',
+  'authority_scope',
+  'urgent_authority_sync',
+  'mosaic_authoritative_targeting',
+];
+
 /// Cross-platform clock-skew tolerance, applied in the direction that favours
 /// the user. Identical on Flutter, iOS, and Android.
 const int mosaicCustomerEntitlementClockSkewToleranceSeconds = 60;
@@ -198,6 +208,144 @@ enum MosaicEntitlementCacheState {
   missing,
   invalid,
   differentCustomer,
+}
+
+enum MosaicCustomerAuthorityKind {
+  source('source'),
+  mosaic('mosaic'),
+  sourceRollback('source_rollback');
+
+  const MosaicCustomerAuthorityKind(this.wireValue);
+  final String wireValue;
+}
+
+enum MosaicCustomerAuthorityTransitionState {
+  stable('stable'),
+  cutoverPending('cutover_pending'),
+  stabilizing('stabilizing'),
+  rolledBack('rolled_back');
+
+  const MosaicCustomerAuthorityTransitionState(this.wireValue);
+  final String wireValue;
+}
+
+enum MosaicCustomerAuthorityPlatform {
+  ios('ios'),
+  android('android');
+
+  const MosaicCustomerAuthorityPlatform(this.wireValue);
+  final String wireValue;
+}
+
+final class MosaicCustomerAuthorityScope {
+  const MosaicCustomerAuthorityScope({
+    required this.projectId,
+    required this.environmentId,
+    required this.applicationId,
+    required this.platform,
+  });
+
+  final String projectId;
+  final String environmentId;
+  final String applicationId;
+  final MosaicCustomerAuthorityPlatform platform;
+
+  @override
+  bool operator ==(Object other) =>
+      other is MosaicCustomerAuthorityScope &&
+      other.projectId == projectId &&
+      other.environmentId == environmentId &&
+      other.applicationId == applicationId &&
+      other.platform == platform;
+
+  @override
+  int get hashCode =>
+      Object.hash(projectId, environmentId, applicationId, platform);
+}
+
+final class MosaicCustomerAuthority {
+  const MosaicCustomerAuthority({
+    required this.epoch,
+    required this.kind,
+    required this.scope,
+    required this.transitionState,
+    this.cutoverAt,
+  });
+
+  final int epoch;
+  final MosaicCustomerAuthorityKind kind;
+  final MosaicCustomerAuthorityScope scope;
+  final MosaicCustomerAuthorityTransitionState transitionState;
+  final DateTime? cutoverAt;
+
+  bool get isMosaic => kind == MosaicCustomerAuthorityKind.mosaic;
+}
+
+final class MosaicCustomerSupportedAppVersionWindow {
+  const MosaicCustomerSupportedAppVersionWindow({
+    required this.minimumInclusive,
+    this.maximumInclusive,
+  });
+
+  final String minimumInclusive;
+  final String? maximumInclusive;
+}
+
+final class MosaicCustomerMinimumSupport {
+  MosaicCustomerMinimumSupport({
+    required this.minimumContractVersion,
+    required this.minimumSdkVersion,
+    required this.supportedAppVersionWindow,
+    required Iterable<String> requiredCapabilities,
+  }) : requiredCapabilities = List.unmodifiable(requiredCapabilities);
+
+  final String minimumContractVersion;
+  final String minimumSdkVersion;
+  final MosaicCustomerSupportedAppVersionWindow supportedAppVersionWindow;
+  final List<String> requiredCapabilities;
+}
+
+Map<String, Object?> mosaicCustomerAuthorityToJson(
+  MosaicCustomerAuthority authority,
+) =>
+    <String, Object?>{
+      'authorityEpoch': authority.epoch,
+      'authorityKind': authority.kind.wireValue,
+      'scope': <String, Object?>{
+        'projectId': authority.scope.projectId,
+        'environmentId': authority.scope.environmentId,
+        'applicationId': authority.scope.applicationId,
+        'platform': authority.scope.platform.wireValue,
+      },
+      'transitionState': authority.transitionState.wireValue,
+      if (authority.cutoverAt != null)
+        'cutoverAt': authority.cutoverAt!.toIso8601String(),
+    };
+
+Map<String, Object?> mosaicCustomerMinimumSupportToJson(
+  MosaicCustomerMinimumSupport support,
+) =>
+    <String, Object?>{
+      'minimumContractVersion': support.minimumContractVersion,
+      'minimumSdkVersion': support.minimumSdkVersion,
+      'supportedAppVersionWindow': <String, Object?>{
+        'minimumInclusive': support.supportedAppVersionWindow.minimumInclusive,
+        if (support.supportedAppVersionWindow.maximumInclusive != null)
+          'maximumInclusive':
+              support.supportedAppVersionWindow.maximumInclusive!,
+      },
+      'requiredCapabilities': support.requiredCapabilities,
+    };
+
+enum MosaicCustomerAuthorityUnavailableReason {
+  authorityUnknown('authority_unknown'),
+  unsupportedContract('unsupported_contract'),
+  unsupportedAppVersion('unsupported_app_version'),
+  scopeMismatch('scope_mismatch'),
+  policyUnavailable('policy_unavailable');
+
+  const MosaicCustomerAuthorityUnavailableReason(this.wireValue);
+  final String wireValue;
 }
 
 final class MosaicCustomerUncertainty {
@@ -707,6 +855,17 @@ final class MosaicCustomerEntitlementCleared
   const MosaicCustomerEntitlementCleared({required this.reasonCode});
 
   final String reasonCode;
+}
+
+final class MosaicCustomerAuthorityChanged
+    extends MosaicCustomerEntitlementUpdate {
+  const MosaicCustomerAuthorityChanged({
+    required this.current,
+    this.previous,
+  });
+
+  final MosaicCustomerAuthority? previous;
+  final MosaicCustomerAuthority current;
 }
 
 /// The outcome of one authoritative refresh.
@@ -1446,6 +1605,390 @@ final class MosaicCustomerEntitlementDecoder {
 }
 
 // ---------------------------------------------------------------------------
+// Authority-aware v2 wrapper
+// ---------------------------------------------------------------------------
+
+sealed class MosaicCustomerAuthoritySyncRecord {
+  const MosaicCustomerAuthoritySyncRecord();
+}
+
+final class MosaicCustomerAuthoritySnapshotRecord
+    extends MosaicCustomerAuthoritySyncRecord {
+  const MosaicCustomerAuthoritySnapshotRecord({
+    required this.authority,
+    required this.snapshotRecord,
+    required this.snapshotAuthorityDigest,
+    required this.snapshotAuthorityDigestValid,
+    required this.minimumSupport,
+    required this.rawSnapshot,
+  });
+
+  final MosaicCustomerAuthority authority;
+  final MosaicCustomerSnapshotRecord snapshotRecord;
+  final String snapshotAuthorityDigest;
+  final bool snapshotAuthorityDigestValid;
+  final MosaicCustomerMinimumSupport minimumSupport;
+  final Map<String, Object?> rawSnapshot;
+}
+
+final class MosaicCustomerAuthorityUnchangedRecord
+    extends MosaicCustomerAuthoritySyncRecord {
+  const MosaicCustomerAuthorityUnchangedRecord({
+    required this.authority,
+    required this.unchanged,
+    required this.snapshotAuthorityDigest,
+    required this.minimumSupport,
+  });
+
+  final MosaicCustomerAuthority authority;
+  final MosaicCustomerSnapshotUnchanged unchanged;
+  final String snapshotAuthorityDigest;
+  final MosaicCustomerMinimumSupport minimumSupport;
+}
+
+final class MosaicCustomerAuthorityUnavailableRecord
+    extends MosaicCustomerAuthoritySyncRecord {
+  const MosaicCustomerAuthorityUnavailableRecord({
+    required this.scope,
+    required this.reason,
+    required this.minimumSupport,
+  });
+
+  final MosaicCustomerAuthorityScope scope;
+  final MosaicCustomerAuthorityUnavailableReason reason;
+  final MosaicCustomerMinimumSupport? minimumSupport;
+}
+
+String mosaicCustomerSnapshotAuthorityDigest(
+  Map<String, Object?> authority,
+  Map<String, Object?> snapshot,
+) =>
+    'sha256:${mosaicSha256Hex(utf8.encode(mosaicCustomerCanonicalJson(
+      <String, Object?>{'authority': authority, 'snapshot': snapshot},
+    )))}';
+
+/// Strict reader for the v2 authority wrapper. The embedded snapshot continues
+/// to be decoded by the frozen v1 reader; v2 changes its authority, not its
+/// customer-access vocabulary.
+final class MosaicCustomerAuthorityDecoder {
+  const MosaicCustomerAuthorityDecoder();
+
+  /// Recognizes only the otherwise-valid policy-unavailable response made
+  /// contract-invalid by its one forbidden `minimumSupport` member.
+  ///
+  /// Arbitrary malformed, truncated, or extended responses return `null` and
+  /// must follow the normal cache-preserving rejection path.
+  MosaicCustomerAuthorityUnavailableRecord?
+      decodePolicyUnavailableWithForbiddenSupport(String source) {
+    try {
+      final decoded = jsonDecode(source);
+      if (decoded is! Map) return null;
+      final envelope = decoded.cast<String, Object?>();
+      const envelopeKeys = <String>{
+        'authoritativeEntitlementContractVersion',
+        'recordType',
+        'payload',
+      };
+      if (envelope.length != envelopeKeys.length ||
+          !envelopeKeys.every(envelope.containsKey) ||
+          envelope['authoritativeEntitlementContractVersion'] !=
+              mosaicAuthoritativeEntitlementContractVersionV2 ||
+          envelope['recordType'] != 'authorityUnavailable') {
+        return null;
+      }
+      final rawPayload = envelope['payload'];
+      if (rawPayload is! Map) return null;
+      final payload = rawPayload.cast<String, Object?>();
+      const payloadKeys = <String>{
+        'scope',
+        'result',
+        'reason',
+        'minimumSupport',
+      };
+      if (payload.length != payloadKeys.length ||
+          !payloadKeys.every(payload.containsKey) ||
+          payload['result'] != 'unavailable' ||
+          payload['reason'] != 'policy_unavailable') {
+        return null;
+      }
+      _minimumSupport(
+        (payload['minimumSupport'] as Map).cast<String, Object?>(),
+      );
+      return MosaicCustomerAuthorityUnavailableRecord(
+        scope: _scope((payload['scope'] as Map).cast<String, Object?>()),
+        reason: MosaicCustomerAuthorityUnavailableReason.policyUnavailable,
+        minimumSupport: null,
+      );
+    } on Object {
+      return null;
+    }
+  }
+
+  MosaicCustomerAuthoritySyncRecord decode(String source) {
+    if (utf8.encode(source).length >
+        mosaicCustomerEntitlementMaximumRecordBytes) {
+      throw const MosaicCustomerEntitlementFormatException('record_too_large');
+    }
+    final Object? decoded;
+    try {
+      decoded = jsonDecode(source);
+    } on FormatException {
+      throw const MosaicCustomerEntitlementFormatException('malformed_record');
+    }
+    if (decoded is! Map) {
+      throw const MosaicCustomerEntitlementFormatException('malformed_record');
+    }
+    final envelope = decoded.cast<String, Object?>();
+    final fields = _Fields(envelope, const <String>{
+      'authoritativeEntitlementContractVersion',
+      'recordType',
+      'payload',
+    });
+    if (fields.raw['authoritativeEntitlementContractVersion'] !=
+        mosaicAuthoritativeEntitlementContractVersionV2) {
+      throw const MosaicCustomerEntitlementFormatException(
+        'unsupported_contract_version',
+      );
+    }
+    final payload = fields.object('payload');
+    return switch (fields.raw['recordType']) {
+      'customerEntitlementSnapshot' => _snapshot(payload),
+      'snapshotUnchanged' => _unchanged(payload),
+      'authorityUnavailable' => _unavailable(payload),
+      'entitlementSyncRequest' =>
+        throw const MosaicCustomerEntitlementFormatException(
+          'unsupported_record_type',
+        ),
+      _ => throw const MosaicCustomerEntitlementFormatException(
+          'unknown_record_type',
+        ),
+    };
+  }
+
+  MosaicCustomerAuthoritySnapshotRecord _snapshot(
+    Map<String, Object?> payload,
+  ) {
+    final fields = _Fields(payload, const <String>{
+      'authority',
+      'snapshot',
+      'snapshotAuthorityDigest',
+      'minimumSupport',
+    });
+    final rawAuthority = fields.object('authority');
+    final rawSnapshot = fields.object('snapshot');
+    final digest = fields.digest('snapshotAuthorityDigest');
+    final v1Envelope = <String, Object?>{
+      'authoritativeEntitlementContractVersion':
+          mosaicAuthoritativeEntitlementContractVersion,
+      'recordType': 'customerEntitlementSnapshot',
+      'payload': rawSnapshot,
+    };
+    final decoded = const MosaicCustomerEntitlementDecoder()
+        .decodeObject(v1Envelope) as MosaicCustomerSnapshotRecord;
+    return MosaicCustomerAuthoritySnapshotRecord(
+      authority: _authority(rawAuthority),
+      snapshotRecord: decoded,
+      snapshotAuthorityDigest: digest,
+      snapshotAuthorityDigestValid:
+          mosaicCustomerSnapshotAuthorityDigest(rawAuthority, rawSnapshot) ==
+              digest,
+      minimumSupport: _minimumSupport(fields.object('minimumSupport')),
+      rawSnapshot: Map.unmodifiable(rawSnapshot),
+    );
+  }
+
+  MosaicCustomerAuthorityUnchangedRecord _unchanged(
+    Map<String, Object?> payload,
+  ) {
+    final fields = _Fields(payload, const <String>{
+      'authority',
+      'unchanged',
+      'snapshotAuthorityDigest',
+      'minimumSupport',
+    });
+    final v1Envelope = <String, Object?>{
+      'authoritativeEntitlementContractVersion':
+          mosaicAuthoritativeEntitlementContractVersion,
+      'recordType': 'snapshotUnchanged',
+      'payload': fields.object('unchanged'),
+    };
+    final decoded = const MosaicCustomerEntitlementDecoder()
+        .decodeObject(v1Envelope) as MosaicCustomerUnchangedRecord;
+    final authority = _authority(fields.object('authority'));
+    if (decoded.unchanged.projectId != authority.scope.projectId ||
+        decoded.unchanged.environmentId != authority.scope.environmentId) {
+      throw const MosaicCustomerEntitlementFormatException(
+        'semantic_invariant_violated',
+      );
+    }
+    return MosaicCustomerAuthorityUnchangedRecord(
+      authority: authority,
+      unchanged: decoded.unchanged,
+      snapshotAuthorityDigest: fields.digest('snapshotAuthorityDigest'),
+      minimumSupport: _minimumSupport(fields.object('minimumSupport')),
+    );
+  }
+
+  MosaicCustomerAuthorityUnavailableRecord _unavailable(
+    Map<String, Object?> payload,
+  ) {
+    final fields = _Fields(payload, const <String>{
+      'scope',
+      'result',
+      'reason',
+      'minimumSupport',
+    });
+    if (fields.string('result') != 'unavailable') {
+      throw const MosaicCustomerEntitlementFormatException(
+        'invalid_field_value',
+      );
+    }
+    final reason = fields.enumeration(
+      'reason',
+      MosaicCustomerAuthorityUnavailableReason.values,
+      (item) => item.wireValue,
+    );
+    final hasMinimumSupport = fields.raw.containsKey('minimumSupport');
+    if (reason == MosaicCustomerAuthorityUnavailableReason.policyUnavailable) {
+      if (hasMinimumSupport) {
+        throw const MosaicCustomerEntitlementFormatException(
+          'semantic_invariant_violated',
+        );
+      }
+    } else if (!hasMinimumSupport) {
+      throw const MosaicCustomerEntitlementFormatException('missing_field');
+    }
+    return MosaicCustomerAuthorityUnavailableRecord(
+      scope: _scope(fields.object('scope')),
+      reason: reason,
+      minimumSupport: hasMinimumSupport
+          ? _minimumSupport(fields.object('minimumSupport'))
+          : null,
+    );
+  }
+
+  MosaicCustomerAuthority _authority(Map<String, Object?> value) {
+    final fields = _Fields(value, const <String>{
+      'authorityEpoch',
+      'authorityKind',
+      'scope',
+      'transitionState',
+      'cutoverAt',
+    });
+    final kind = fields.enumeration(
+      'authorityKind',
+      MosaicCustomerAuthorityKind.values,
+      (item) => item.wireValue,
+    );
+    final transition = fields.enumeration(
+      'transitionState',
+      MosaicCustomerAuthorityTransitionState.values,
+      (item) => item.wireValue,
+    );
+    final cutoverAt = fields.optionalTimestamp('cutoverAt');
+    if (kind == MosaicCustomerAuthorityKind.source) {
+      if (cutoverAt != null ||
+          (transition != MosaicCustomerAuthorityTransitionState.stable &&
+              transition !=
+                  MosaicCustomerAuthorityTransitionState.cutoverPending)) {
+        throw const MosaicCustomerEntitlementFormatException(
+          'semantic_invariant_violated',
+        );
+      }
+    } else if (cutoverAt == null) {
+      throw const MosaicCustomerEntitlementFormatException(
+        'semantic_invariant_violated',
+      );
+    }
+    return MosaicCustomerAuthority(
+      epoch: fields.integer(
+        'authorityEpoch',
+        minimum: 0,
+        maximum: 999999999999,
+      ),
+      kind: kind,
+      scope: _scope(fields.object('scope')),
+      transitionState: transition,
+      cutoverAt: cutoverAt,
+    );
+  }
+
+  MosaicCustomerAuthorityScope _scope(Map<String, Object?> value) {
+    final fields = _Fields(value, const <String>{
+      'projectId',
+      'environmentId',
+      'applicationId',
+      'platform',
+    });
+    return MosaicCustomerAuthorityScope(
+      projectId: fields.identifier('projectId'),
+      environmentId: fields.identifier('environmentId'),
+      applicationId: fields.identifier('applicationId'),
+      platform: fields.enumeration(
+        'platform',
+        MosaicCustomerAuthorityPlatform.values,
+        (item) => item.wireValue,
+      ),
+    );
+  }
+
+  MosaicCustomerMinimumSupport _minimumSupport(Map<String, Object?> value) {
+    final fields = _Fields(value, const <String>{
+      'minimumContractVersion',
+      'minimumSdkVersion',
+      'supportedAppVersionWindow',
+      'requiredCapabilities',
+    });
+    if (fields.string('minimumContractVersion') != '2') {
+      throw const MosaicCustomerEntitlementFormatException(
+        'invalid_field_value',
+      );
+    }
+    final window = _Fields(
+      fields.object('supportedAppVersionWindow'),
+      const <String>{'minimumInclusive', 'maximumInclusive'},
+    );
+    final capabilities =
+        fields.identifierList('requiredCapabilities', maximum: 8);
+    if (capabilities.isEmpty ||
+        capabilities.toSet().length != capabilities.length ||
+        !capabilities.contains('authority_epoch') ||
+        capabilities.any(
+          (item) => !mosaicCustomerAuthorityCapabilities.contains(item),
+        )) {
+      throw const MosaicCustomerEntitlementFormatException(
+        'invalid_field_value',
+      );
+    }
+    final minimumSdkVersion = fields.string('minimumSdkVersion');
+    final minimumAppVersion = window.string('minimumInclusive');
+    final maximumAppVersion = window.raw.containsKey('maximumInclusive')
+        ? window.string('maximumInclusive')
+        : null;
+    for (final version in <String>[
+      minimumSdkVersion,
+      minimumAppVersion,
+      if (maximumAppVersion != null) maximumAppVersion,
+    ]) {
+      if (!_versionPatternV2.hasMatch(version)) {
+        throw const MosaicCustomerEntitlementFormatException(
+          'invalid_field_value',
+        );
+      }
+    }
+    return MosaicCustomerMinimumSupport(
+      minimumContractVersion: '2',
+      minimumSdkVersion: minimumSdkVersion,
+      supportedAppVersionWindow: MosaicCustomerSupportedAppVersionWindow(
+        minimumInclusive: minimumAppVersion,
+        maximumInclusive: maximumAppVersion,
+      ),
+      requiredCapabilities: capabilities,
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Closed-key field reading
 // ---------------------------------------------------------------------------
 
@@ -1459,6 +2002,7 @@ final RegExp _entityTagPattern = RegExp(r'^[A-Za-z0-9._-]+$');
 final RegExp _diagnosticCodePattern = RegExp(
   r'^[a-z][a-zA-Z0-9]*(?:[._-][a-zA-Z0-9]+)+$',
 );
+final RegExp _versionPatternV2 = RegExp(r'^[0-9A-Za-z][0-9A-Za-z.+_-]{0,63}$');
 
 /// Reads one closed JSON object. Construction alone rejects an unknown member,
 /// which is what makes reading whole-document rather than best-effort.

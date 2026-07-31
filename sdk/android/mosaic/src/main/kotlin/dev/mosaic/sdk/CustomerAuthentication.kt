@@ -99,6 +99,8 @@ internal class MosaicCustomerTokenSession(
     private val mutex = Mutex()
     private var cached: MosaicCustomerAccessToken? = null
     private var cachedCustomerId: String? = null
+    private var cachedAuthorityEpoch: Long? = null
+    private var rejectedAuthorityEpoch: Long? = null
     private var inFlight: Attempt? = null
     private var generation = 0
     private var unavailableUntil = 0L
@@ -125,16 +127,25 @@ internal class MosaicCustomerTokenSession(
      */
     suspend fun heldToken(): MosaicCustomerAccessToken? = mutex.withLock { cached }
 
-    suspend fun token(forceRefresh: Boolean = false): MosaicCustomerAccessTokenResult {
+    suspend fun token(
+        forceRefresh: Boolean = false,
+        authorityEpoch: Long? = null,
+    ): MosaicCustomerAccessTokenResult {
         // Bounded: each iteration either returns or joins an attempt, and a joined attempt clears
         // itself, so the loop cannot spin against a live provider.
         repeat(MAX_COLLAPSE_ROUNDS) {
             var owned: Attempt? = null
             val attempt: Attempt
             mutex.withLock {
+                if (authorityEpoch != null && rejectedAuthorityEpoch == authorityEpoch) {
+                    return MosaicCustomerAccessTokenResult.Unavailable("customer.token.authorityRejected")
+                }
                 if (!forceRefresh) {
                     if (signedOut) return MosaicCustomerAccessTokenResult.SignedOut
-                    cached?.let { return MosaicCustomerAccessTokenResult.Issued(it, cachedCustomerId) }
+                    cached?.takeIf { cachedAuthorityEpoch == authorityEpoch }?.let {
+                        return MosaicCustomerAccessTokenResult.Issued(it, cachedCustomerId)
+                    }
+                    if (cached != null && cachedAuthorityEpoch != authorityEpoch) cached = null
                     // A failing provider is not asked again immediately: a token backend that is
                     // down would otherwise be retried once per entitlement read.
                     if (now() < unavailableUntil) {
@@ -172,7 +183,7 @@ internal class MosaicCustomerTokenSession(
             mutex.withLock {
                 if (inFlight === own) inFlight = null
                 // A result minted for a previous identity is discarded, not cached.
-                if (own.generation == generation) apply(result)
+                if (own.generation == generation) apply(result, authorityEpoch)
             }
             own.deferred.complete(result)
             return result
@@ -190,13 +201,22 @@ internal class MosaicCustomerTokenSession(
     suspend fun invalidate(token: MosaicCustomerAccessToken) = mutex.withLock {
         if (cached == token) {
             cached = null
+            cachedAuthorityEpoch = null
         }
+    }
+
+    suspend fun rejectAuthorityEpoch(authorityEpoch: Long?) = mutex.withLock {
+        rejectedAuthorityEpoch = authorityEpoch
+        cached = null
+        cachedAuthorityEpoch = null
     }
 
     /** Logout. The generation bump orphans any in-flight provider call. */
     suspend fun clear() = mutex.withLock {
         generation += 1
         cached = null
+        cachedAuthorityEpoch = null
+        rejectedAuthorityEpoch = null
         cachedCustomerId = null
         inFlight = null
         unavailableUntil = 0
@@ -208,6 +228,8 @@ internal class MosaicCustomerTokenSession(
     suspend fun reset(billingCustomerId: String?) = mutex.withLock {
         generation += 1
         cached = null
+        cachedAuthorityEpoch = null
+        rejectedAuthorityEpoch = null
         cachedCustomerId = billingCustomerId
         inFlight = null
         unavailableUntil = 0
@@ -215,10 +237,11 @@ internal class MosaicCustomerTokenSession(
         signedOut = false
     }
 
-    private fun apply(result: MosaicCustomerAccessTokenResult) {
+    private fun apply(result: MosaicCustomerAccessTokenResult, authorityEpoch: Long?) {
         when (result) {
             is MosaicCustomerAccessTokenResult.Issued -> {
                 cached = result.token
+                cachedAuthorityEpoch = authorityEpoch
                 result.billingCustomerId?.let { cachedCustomerId = it }
                 signedOut = false
                 unavailableUntil = 0
@@ -226,12 +249,14 @@ internal class MosaicCustomerTokenSession(
             }
             is MosaicCustomerAccessTokenResult.Unavailable -> {
                 cached = null
+                cachedAuthorityEpoch = null
                 lastUnavailable = result
                 unavailableUntil = now() +
                     (result.retryAfterSeconds?.toLong()?.times(1_000) ?: cooldownMillis)
             }
             MosaicCustomerAccessTokenResult.SignedOut -> {
                 cached = null
+                cachedAuthorityEpoch = null
                 cachedCustomerId = null
                 signedOut = true
             }

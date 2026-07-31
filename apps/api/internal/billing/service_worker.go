@@ -22,6 +22,10 @@ import (
 // validationLease bounds how long one worker may hold a validation job.
 const validationLease = 2 * time.Minute
 
+// identityBindingLease is short because binding performs only PostgreSQL-backed
+// identity decisions and no store-provider call.
+const identityBindingLease = 60 * time.Second
+
 // ProcessNextValidation leases and runs one validation job. It matches the
 // (processed, error) contract every other Mosaic job family uses so the worker
 // loop treats billing exactly like analytics and Experiment scheduling.
@@ -61,55 +65,47 @@ func (s *Service) ProcessNextValidation(ctx context.Context, workerID string) (b
 	if err := s.repository.CompleteAttempt(ctx, job, outcome, s.now()); err != nil {
 		return true, safeFailure(err, "billing_attempt_write_failed")
 	}
-	if err := s.bindFactIdentity(ctx, outcome); err != nil {
-		// The fact and its lineage are committed; only the identity decision
-		// failed. The job is still `processed` — re-leasing it would re-run the
-		// provider call and re-record an attempt for work that succeeded — but
-		// the error is reported so the worker's failure signal and its metrics
-		// see it. The lineage is left unassociated, which is exactly what
-		// `unresolvedLineages` on the projection-health surface counts, and the
-		// next fact on the same chain retries the decision.
-		return true, safeFailure(err, "billing_lineage_bind_failed")
-	}
 	return true, nil
 }
 
-// bindFactIdentity runs the identity half of the Phase 9A→9B seam.
-//
-// It is outside CompleteAttempt's transaction on purpose. The structural half —
-// the lineage row and its projection instance — is written inside that
-// transaction because it is a deterministic function of the fact and must be
-// exactly as durable as it. Deciding *who owns* the lineage reads alias
-// resolutions and prior evidence and can open an operator conflict, which is
-// application logic rather than a write, and holding the fact's transaction open
-// across it would put the ledger's hot path behind the identity module.
-func (s *Service) bindFactIdentity(ctx context.Context, outcome AttemptOutcome) error {
-	if s.lineages == nil || outcome.Fact == nil || len(outcome.Fact.PurchaseChainDigest) == 0 {
-		return nil
-	}
-	fact := *outcome.Fact
-	root, err := s.repository.ChainRootDigest(ctx, fact)
+// ProcessNextIdentityBinding runs the durable identity half of the Phase
+// 9A→9B seam. Validation has already committed; failures requeue this job and
+// never repeat the provider request, validation attempt, or Transaction Fact.
+func (s *Service) ProcessNextIdentityBinding(ctx context.Context, workerID string) (bool, error) {
+	now := s.now()
+	job, leased, err := s.repository.LeaseIdentityBindingJob(ctx, workerID, now, now.Add(identityBindingLease))
 	if err != nil {
-		return err
+		return false, safeFailure(err, "billing_identity_binding_lease_failed")
 	}
-	if len(root) == 0 {
-		root = fact.PurchaseChainDigest
+	if !leased {
+		return false, nil
 	}
-	acquiredAt := fact.OccurredAt
-	if fact.PeriodStartAt != nil && fact.PeriodStartAt.Before(acquiredAt) {
-		acquiredAt = *fact.PeriodStartAt
-	}
-	return s.lineages.BindFact(ctx, FactBinding{
-		ProjectID:        fact.ProjectID,
-		EnvironmentID:    fact.EnvironmentID,
-		Provider:         fact.Provider,
-		LineageKeyDigest: root,
-		FactChainDigest:  fact.PurchaseChainDigest,
-		RawInputID:       fact.SourceRawInputID,
-		ReferenceDigests: outcome.ReferenceDigests,
-		Correlators:      outcome.Correlators,
-		AcquiredAt:       acquiredAt,
+	jobtelemetry.Annotate(ctx, jobtelemetry.Identity{
+		JobID: job.ID, JobKind: "billing_identity_binding",
+		ProjectID: job.ProjectID, EnvironmentID: job.EnvironmentID, ResourceID: job.Binding.RawInputID,
 	})
+	if s.lineages == nil {
+		return true, s.repository.ParkIdentityBindingJob(ctx, job, "identity_binding_unavailable", s.now())
+	}
+	if !s.billingEnabled(ctx, job.ProjectID) {
+		return true, s.repository.ParkIdentityBindingJob(ctx, job, "billing_disabled", s.now())
+	}
+
+	ctx, span := s.tracer.Start(ctx, "billing.identity.bind")
+	defer span.End()
+	if err := s.lineages.BindFact(ctx, job.Binding); err != nil {
+		completed := s.now()
+		delay := time.Duration(1<<min(job.AttemptCount-1, 6)) * time.Second
+		if retryErr := s.repository.RetryIdentityBindingJob(ctx, job, "identity_binding_failed",
+			completed.Add(delay), completed); retryErr != nil {
+			return true, safeFailure(errors.Join(err, retryErr), "billing_identity_binding_retry_failed")
+		}
+		return true, safeFailure(err, "billing_lineage_bind_failed")
+	}
+	if err := s.repository.CompleteIdentityBindingJob(ctx, job, s.now()); err != nil {
+		return true, safeFailure(err, "billing_identity_binding_complete_failed")
+	}
+	return true, nil
 }
 
 // runValidation performs one attempt and assembles everything it produced. It
@@ -262,10 +258,22 @@ func (s *Service) validateApple(ctx context.Context, job ValidationJob, input Ra
 		return s.quarantineAttempt(job, input, attemptID, attemptNumber, started,
 			Permanent(CategoryResolution, "bundle_not_in_credential_scope"), QuarantineApplicationMismatch, "error")
 	}
+	if diagnostic, reason := migrationApplicationMismatch(input.MigrationValidation, applicationID); diagnostic != "" {
+		return s.quarantineAttempt(job, input, attemptID, attemptNumber, started,
+			Permanent(CategoryResolution, diagnostic), reason, "error")
+	}
+	if diagnostic, reason := migrationProviderProductMismatch(input.MigrationValidation, transaction.ProductID); diagnostic != "" {
+		return s.quarantineAttempt(job, input, attemptID, attemptNumber, started,
+			Permanent(CategoryResolution, diagnostic), reason, "error")
+	}
 	storeEnvironment := normalizeAppleEnvironment(transaction.Environment)
 	if storeEnvironment == StoreUnclassified {
 		return s.quarantineAttempt(job, input, attemptID, attemptNumber, started,
 			Permanent(CategoryInvalid, "unclassified_store_environment"), QuarantineStoreEnvironmentMismatch, "error")
+	}
+	if diagnostic, reason := migrationStoreEnvironmentMismatch(input.MigrationValidation, storeEnvironment); diagnostic != "" {
+		return s.quarantineAttempt(job, input, attemptID, attemptNumber, started,
+			Permanent(CategoryResolution, diagnostic), reason, "error")
 	}
 	if !storeEnvironmentMatchesMode(storeEnvironment, input.EnvironmentMode) {
 		// A sandbox transaction in a production Environment (or the reverse) is
@@ -639,6 +647,10 @@ func (s *Service) validateGoogle(ctx context.Context, job ValidationJob, input R
 		return s.quarantineAttempt(job, input, attemptID, attemptNumber, started,
 			Permanent(CategoryResolution, "package_not_in_credential_scope"), QuarantineApplicationMismatch, "error")
 	}
+	if diagnostic, reason := migrationApplicationMismatch(input.MigrationValidation, applicationID); diagnostic != "" {
+		return s.quarantineAttempt(job, input, attemptID, attemptNumber, started,
+			Permanent(CategoryResolution, diagnostic), reason, "error")
+	}
 
 	fact := TransactionFact{
 		ProjectID:           input.ProjectID,
@@ -784,6 +796,14 @@ func (s *Service) validateGoogle(ctx context.Context, job ValidationJob, input R
 		// timestamp means no fact.
 		return s.quarantineAttempt(job, input, attemptID, attemptNumber, started,
 			Permanent(CategoryInvalid, "no_provider_timestamp"), QuarantineMissingProviderTimestamp, "error")
+	}
+	if diagnostic, reason := migrationProviderProductMismatch(input.MigrationValidation, fact.ProviderProductIdentifier); diagnostic != "" {
+		return s.quarantineAttempt(job, input, attemptID, attemptNumber, started,
+			Permanent(CategoryResolution, diagnostic), reason, "error")
+	}
+	if diagnostic, reason := migrationStoreEnvironmentMismatch(input.MigrationValidation, fact.StoreEnvironment); diagnostic != "" {
+		return s.quarantineAttempt(job, input, attemptID, attemptNumber, started,
+			Permanent(CategoryResolution, diagnostic), reason, "error")
 	}
 	outcome := s.resolveAndBuild(ctx, job, input, fact, platform, attemptID, attemptNumber, started, fact.StoreEnvironment)
 	// Same treatment as Apple's appAccountToken: read from the authoritative
@@ -1148,8 +1168,9 @@ func googleSubscriptionKind(state string) string {
 	}
 }
 
-// googleCredential returns the service account, the credential record, and the
-// package name of the credential's first scoped Application.
+// googleCredential returns the service account, the credential record, and a
+// package name from its scope. Migration validation replaces the legacy
+// observation fallback with the exact expected Application package.
 //
 // The package name is returned because an observation's body carries none — only
 // an RTDN does — and the Play API requires one on every call. Falling back to
@@ -1168,6 +1189,12 @@ func (s *Service) googleCredential(ctx context.Context, input RawInput) (*google
 	credential, envelope, class, organizationID, packageName, err := s.repository.CredentialSecretFor(ctx, input.ProjectID, input.CredentialID)
 	if err != nil || credential.Status != "active" {
 		return nil, StoreServerCredential{}, "", ErrCredentialUnusable
+	}
+	if input.MigrationValidation != nil {
+		packageName, err = s.repository.ProviderApplicationIdentifier(ctx, input.CredentialID, input.MigrationValidation.ExpectedApplicationID)
+		if err != nil || packageName == "" {
+			return nil, credential, "", ErrApplicationNotScoped
+		}
 	}
 	plaintext, err := s.cipher.DecryptSubject(providercredential.Envelope{
 		Version: envelope.Version, Algorithm: envelope.Algorithm, KeyID: envelope.KeyID,
@@ -1264,6 +1291,9 @@ func (s *Service) resolveAndBuild(ctx context.Context, job ValidationJob, input 
 	} else {
 		fact.ResolutionState = StateUnresolved
 	}
+	if outcome, quarantined := s.enforceMigrationResolution(job, input, resolution, attemptID, attemptNumber, started); quarantined {
+		return outcome
+	}
 
 	factID, _ := s.newID("btf")
 	fact.ID = factID
@@ -1300,6 +1330,58 @@ func (s *Service) resolveAndBuild(ctx context.Context, job ValidationJob, input 
 	}
 	outcome.Ledger = s.ledgerFor(input, outcome)
 	return outcome
+}
+
+func migrationApplicationMismatch(binding *MigrationValidationBinding, applicationID string) (string, string) {
+	if binding == nil {
+		return "", ""
+	}
+	if applicationID != binding.ExpectedApplicationID {
+		return DiagnosticMigrationApplicationMismatch, QuarantineApplicationMismatch
+	}
+	return "", ""
+}
+
+func migrationProviderProductMismatch(binding *MigrationValidationBinding, providerProductID string) (string, string) {
+	if binding == nil {
+		return "", ""
+	}
+	if providerProductID != binding.ExpectedStoreProductIdentifier {
+		return DiagnosticMigrationProviderProductMismatch, QuarantineProductUnknown
+	}
+	return "", ""
+}
+
+func migrationStoreEnvironmentMismatch(binding *MigrationValidationBinding, storeEnvironment string) (string, string) {
+	if binding == nil {
+		return "", ""
+	}
+	if storeEnvironment != binding.ExpectedStoreEnvironment || (storeEnvironment != StoreProduction && storeEnvironment != StoreSandbox) {
+		return DiagnosticMigrationStoreEnvironmentMismatch, QuarantineStoreEnvironmentMismatch
+	}
+	return "", ""
+}
+
+func migrationResolutionMismatch(binding *MigrationValidationBinding, resolution Resolution) (string, string) {
+	if binding == nil {
+		return "", ""
+	}
+	if resolution.Outcome != ResolutionResolved || resolution.MosaicProductID == "" {
+		return DiagnosticMigrationMosaicProductUnresolved, QuarantineProductUnknown
+	}
+	if resolution.MosaicProductID != binding.ExpectedMosaicProductID {
+		return DiagnosticMigrationMosaicProductMismatch, QuarantineProductAmbiguous
+	}
+	return "", ""
+}
+
+func (s *Service) enforceMigrationResolution(job ValidationJob, input RawInput, resolution Resolution, attemptID string, attemptNumber int, started time.Time) (AttemptOutcome, bool) {
+	diagnostic, reason := migrationResolutionMismatch(input.MigrationValidation, resolution)
+	if diagnostic == "" {
+		return AttemptOutcome{}, false
+	}
+	return s.quarantineAttempt(job, input, attemptID, attemptNumber, started,
+		Permanent(CategoryResolution, diagnostic), reason, "error"), true
 }
 
 func (s *Service) ledgerFor(input RawInput, outcome AttemptOutcome) []LedgerEntry {

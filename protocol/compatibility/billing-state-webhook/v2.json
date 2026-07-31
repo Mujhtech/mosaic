@@ -1,0 +1,55 @@
+{
+  "billingStateWebhookContractVersion": "2",
+  "status": "draft",
+  "schema": "../../schema/billing-state-webhook/v2/contract.schema.json",
+  "canonicalFixtures": [
+    "../../fixtures/billing-state-webhook/v2/events/cutover-completed.json",
+    "../../fixtures/billing-state-webhook/v2/events/cutover-pending.json",
+    "../../fixtures/billing-state-webhook/v2/events/entitlements-changed.json",
+    "../../fixtures/billing-state-webhook/v2/events/rollback-completed.json",
+    "../../fixtures/billing-state-webhook/v2/events/stabilization-completed.json",
+    "../../fixtures/billing-state-webhook/v2/deliveries/retry.json"
+  ],
+  "recordTypes": [
+    "billingStateEvent",
+    "webhookDeliveryAttempt"
+  ],
+  "eventTypes": [
+    "customer.entitlements.changed",
+    "authority.cutover.pending",
+    "authority.cutover.completed",
+    "authority.rollback.completed",
+    "authority.stabilization.completed"
+  ],
+  "authorityEventBindings": {
+    "authority.cutover.pending": {
+      "authorityKind": "source",
+      "transitionState": "cutover_pending"
+    },
+    "authority.cutover.completed": {
+      "authorityKind": "mosaic",
+      "transitionState": "stabilizing"
+    },
+    "authority.rollback.completed": {
+      "authorityKind": "source_rollback",
+      "transitionState": "rolled_back"
+    },
+    "authority.stabilization.completed": {
+      "authorityKind": "mosaic",
+      "transitionState": "stable"
+    }
+  },
+  "delivery": {
+    "semantics": "atLeastOnce",
+    "eventIdOnRetry": "stable",
+    "signing": "hmacSha256V1RawBodyUnchanged"
+  },
+  "consumerPolicy": {
+    "unknownField": "ignore",
+    "unknownEventType": "ignore",
+    "unknownEnumeration": "ignore",
+    "authoritativeState": "reReadAuthoritativeEntitlementV2",
+    "v1Destination": "receivesV1EventsOnly",
+    "readiness": "v1DestinationCannotSatisfyAuthorityAwareGate"
+  }
+}

@@ -1,0 +1,19 @@
+{
+  "billingMigrationOperationsContractVersion": "1",
+  "recordType": "migrationScope",
+  "payload": {
+    "programId": "mig-001",
+    "stateVersion": 2,
+    "scope": {
+      "projectId": "project-001",
+      "environmentId": "env-production",
+      "applications": [
+        {
+          "applicationId": "app-ios",
+          "platform": "ios"
+        }
+      ]
+    },
+    "scopeDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+  }
+}

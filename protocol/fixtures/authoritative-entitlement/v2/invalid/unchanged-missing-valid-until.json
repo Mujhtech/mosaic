@@ -1,0 +1,44 @@
+{
+  "authoritativeEntitlementContractVersion": "2",
+  "recordType": "snapshotUnchanged",
+  "payload": {
+    "authority": {
+      "authorityEpoch": 5,
+      "authorityKind": "mosaic",
+      "scope": {
+        "projectId": "fixture-project-mosaic",
+        "environmentId": "fixture-environment-production",
+        "applicationId": "fixture-application-ios",
+        "platform": "ios"
+      },
+      "transitionState": "stabilizing",
+      "cutoverAt": "2026-07-28T12:30:00.000Z"
+    },
+    "unchanged": {
+      "billingCustomerId": "fixture-customer-0001",
+      "projectId": "fixture-project-mosaic",
+      "environmentId": "fixture-environment-production",
+      "snapshotVersion": 4,
+      "entityTag": "cs-0001-v4",
+      "issuedAt": "2026-07-28T12:45:00.000Z",
+      "asOf": "2026-07-28T11:59:58.000Z",
+      "refreshAfter": "2026-07-28T13:45:00.000Z",
+      "projectionStatus": {
+        "state": "current",
+        "lastProjectedAt": "2026-07-28T11:59:58.000Z"
+      },
+      "correlationId": "fixture-invalid-unchanged"
+    },
+    "snapshotAuthorityDigest": "sha256:b659fc1560544193b6599e1e4a82861a55cae857fcad73fa340b611abe877c34",
+    "minimumSupport": {
+      "minimumContractVersion": "2",
+      "minimumSdkVersion": "2.0.0",
+      "supportedAppVersionWindow": {
+        "minimumInclusive": "4.0.0"
+      },
+      "requiredCapabilities": [
+        "authority_epoch"
+      ]
+    }
+  }
+}

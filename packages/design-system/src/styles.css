@@ -22,7 +22,6 @@
   width: fit-content;
   padding: var(--mosaic-space-1) var(--mosaic-space-2);
   border: 1px solid var(--mosaic-border);
-  border-radius: var(--mosaic-radius-full);
   background: var(--mosaic-surface-raised);
   color: var(--mosaic-text-muted);
   font-size: var(--mosaic-type-xs);

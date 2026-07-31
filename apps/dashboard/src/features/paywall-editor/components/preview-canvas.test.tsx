@@ -1,4 +1,5 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react"
+import { chooseSelectOption } from "@/test/select"
 import { useLayoutEffect } from "react"
 import { describe, expect, it } from "vitest"
 
@@ -413,22 +414,25 @@ describe("PreviewCanvas layer metadata", () => {
     expect(screen.getByTestId("device-status-bar")).toHaveTextContent("82")
     expect(screen.getByTestId("device-status-bar")).toHaveStyle({ paddingInline: "35px" })
 
-    fireEvent.change(screen.getByRole("combobox", { name: "Preview device" }), {
-      target: { value: "iphone-17-pro-max" },
-    })
+    await chooseSelectOption(
+      screen.getByRole("combobox", { name: "Preview device" }),
+      "iPhone 17 Pro Max",
+    )
     expect(screen.getByTestId("device-status-bar")).toHaveStyle({ paddingInline: "40px" })
-    fireEvent.change(screen.getByRole("combobox", { name: "Preview device" }), {
-      target: { value: "iphone-17-pro" },
-    })
+    await chooseSelectOption(
+      screen.getByRole("combobox", { name: "Preview device" }),
+      "iPhone 17 Pro",
+    )
 
     fireEvent.click(screen.getByRole("button", { name: "Use landscape orientation" }))
     device = region.querySelector<HTMLElement>("[data-device-width]")
     expect(device).toHaveAttribute("data-device-width", "874")
     expect(device).toHaveAttribute("data-device-height", "402")
 
-    fireEvent.change(screen.getByRole("combobox", { name: "Preview device" }), {
-      target: { value: "pixel-10-pro" },
-    })
+    await chooseSelectOption(
+      screen.getByRole("combobox", { name: "Preview device" }),
+      "Pixel 10 Pro",
+    )
     device = region.querySelector<HTMLElement>("[data-device-width]")
     expect(device).toHaveAttribute("data-device-width", "920")
     expect(device).toHaveAttribute("data-device-height", "412")
@@ -445,9 +449,7 @@ describe("PreviewCanvas layer metadata", () => {
     expect(device).toHaveAttribute("data-canvas-fit-mode", "fit")
 
     fireEvent.click(screen.getByRole("button", { name: "Open preview settings" }))
-    fireEvent.change(screen.getByRole("combobox", { name: "Preview locale" }), {
-      target: { value: "ar" },
-    })
+    await chooseSelectOption(screen.getByRole("combobox", { name: "Preview locale" }), /^ar · /)
     await waitFor(() => expect(screen.getByTestId("preview-locale")).toHaveTextContent("ar"))
     fireEvent.change(screen.getByRole("slider", { name: /Preview text scale/i }), {
       target: { value: "1.5" },

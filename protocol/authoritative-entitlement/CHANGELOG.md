@@ -1,5 +1,35 @@
 # Authoritative Entitlement Contract changelog
 
+## Version 2 - 2026-07-29
+
+Status: draft
+
+Adds the Phase 9C authority wrapper around the unchanged strict v1 snapshot
+body. Authority epoch precedes snapshot version in cache ordering; scope is
+explicit through Project, Environment, Application, and platform; legacy or
+unsupported authority is unavailable rather than inactive; and a second digest
+binds authority to the snapshot. Sync negotiation adds app, SDK, version, and
+authority-capability metadata. Provider and Mosaic access are never unioned.
+
+Stage 2D contract correction removes client-authored Project, Environment, and
+Billing Customer IDs from sync requests: CAT and SDK authentication derive
+those bindings. `snapshotUnchanged` now embeds the exact v1 unchanged payload
+and preserves its freshness-sliding semantics. Canonical iOS and Android
+request/full/unchanged triples bind authority scope and retained-cache digest on
+both native targets.
+
+Stage 2E adds optional `knownSnapshotAuthorityDigest` to v2 sync requests. An
+exact digest plus unchanged authenticated scope, authority epoch, and snapshot
+version permits `snapshotUnchanged`; an absent or mismatched digest requires a
+full snapshot. The value is verification input only and never selects or
+infers authority. The additive draft change does not alter v1.
+
+Stage 2E also adds the fail-closed `authorityUnavailable` reason
+`policy_unavailable`. Only this reason omits and forbids `minimumSupport` when
+the exact frozen support policy cannot be loaded or validated; all other
+unavailable reasons and every full/unchanged response still require it. The
+result remains unavailable, never inactive, and never infers authority.
+
 ## Version 1 - 2026-07-28
 
 Status: draft

@@ -9,13 +9,17 @@ Protocol `0.2`; Local Preview `0.2` (development-only); Configuration Delivery
 Earlier experimental contracts were retired before approval rather than carried
 as compatibility readers.
 
-Four contracts exist but are **not** in the approved set. Each is born
+Seven contract versions exist but are **not** in the approved set. Each is born
 `status: "draft"` and carries no compatibility guarantee until an explicit
 product-owner decision approves it: Billing Ingestion `1` (see
 [Billing Ingestion versioning](#billing-ingestion-versioning)) and the three
 Phase 9B contracts — Authoritative Entitlement `1`, Customer Access Token `1`,
 and Billing State Webhook `1` (see
 [Phase 9B contract versioning](#phase-9b-contract-versioning)).
+
+Phase 9C adds Billing Migration Operations `1`, Authoritative Entitlement `2`,
+and Billing State Webhook `2` as exact, parallel drafts. V1 entitlement and
+webhook readers never interpret v2 documents.
 
 These are independent versioned contracts. Their exact version values do not
 imply compatibility with one another and do not change the Paywall

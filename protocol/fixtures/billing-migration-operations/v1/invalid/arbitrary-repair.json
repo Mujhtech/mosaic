@@ -1,0 +1,17 @@
+{
+  "billingMigrationOperationsContractVersion": "1",
+  "recordType": "repairAction",
+  "payload": {
+    "programId": "mig-001",
+    "idempotencyKey": "repair-001",
+    "expectedStateVersion": 7,
+    "expectedDigests": {
+      "mappingDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    },
+    "reason": "Grant access directly",
+    "repairKind": "mark_active",
+    "caseId": "case-001",
+    "targetReference": "customer-001",
+    "beforeDigest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+  }
+}

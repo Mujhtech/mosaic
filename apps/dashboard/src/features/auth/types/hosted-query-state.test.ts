@@ -81,7 +81,7 @@ describe("hosted query recovery state", () => {
       expect(state).toMatchObject({
         kind: "error",
         recovery: {
-          href: "/organizations/org_01/projects/project_01/monetization/env_prod/placements",
+          href: "/orgs/org_01/projects/project_01/monetization/env_prod/placements",
           label: "Review Placements",
         },
       })
@@ -124,7 +124,7 @@ describe("hosted query recovery state", () => {
       expect(state).toMatchObject({
         kind: "error",
         recovery: {
-          href: "/organizations/org_01/projects/project_01/settings/environments",
+          href: "/orgs/org_01/projects/project_01/settings/environments",
           label: "Open Environment settings",
         },
       })

@@ -89,6 +89,11 @@ import {
 } from "./billing-state-webhook-validation-v1.mjs";
 import { validateAnalyticsMinimizationProjection } from "./generate-analytics-minimization.mjs";
 import { validateRejectionLayers } from "./generate-rejection-layers.mjs";
+import {
+  loadPhase9CArtifacts,
+  validatePhase9CArtifacts,
+  validatePhase9CJsonFormatting,
+} from "./phase9c-contract-validation.mjs";
 
 try {
   const artifactsV02 = loadProtocolV02Artifacts();
@@ -111,6 +116,15 @@ try {
     loadAuthoritativeEntitlementV1Artifacts();
   const customerAccessTokenArtifactsV1 = loadCustomerAccessTokenV1Artifacts();
   const billingStateWebhookArtifactsV1 = loadBillingStateWebhookV1Artifacts();
+  const authoritativeEntitlementArtifactsV2 = loadPhase9CArtifacts(
+    "authoritativeEntitlementV2",
+  );
+  const billingMigrationOperationsArtifactsV1 = loadPhase9CArtifacts(
+    "billingMigrationOperationsV1",
+  );
+  const billingStateWebhookArtifactsV2 = loadPhase9CArtifacts(
+    "billingStateWebhookV2",
+  );
   const errors = [
     ...validateBrowserContractGeneration(),
     ...validateProtocolV02(artifactsV02),
@@ -170,6 +184,10 @@ try {
     ...validateCustomerAccessTokenV1JsonFormatting(),
     ...validateBillingStateWebhookV1Artifacts(billingStateWebhookArtifactsV1),
     ...validateBillingStateWebhookV1JsonFormatting(),
+    ...validatePhase9CArtifacts(authoritativeEntitlementArtifactsV2),
+    ...validatePhase9CArtifacts(billingMigrationOperationsArtifactsV1),
+    ...validatePhase9CArtifacts(billingStateWebhookArtifactsV2),
+    ...validatePhase9CJsonFormatting(),
     ...validateAnalyticsMinimizationProjection(),
     ...validateRejectionLayers(),
   ];
@@ -188,7 +206,9 @@ try {
         "Placement Decision v1, Configuration Delivery v2, Analytics Event " +
         "v1/v2, Experiment Assignment v1, Configuration Delivery v3, Billing " +
         "Ingestion v1 (draft), Authoritative Entitlement v1 (draft), Customer " +
-        "Access Token v1 (draft), Billing State Webhook v1 (draft), and the " +
+        "Access Token v1 (draft), Billing State Webhook v1 (draft), Billing " +
+        "Migration Operations v1 (draft), Authoritative Entitlement v2 " +
+        "(draft), Billing State Webhook v2 (draft), and the " +
         "browser contract.",
     );
   }

@@ -13,12 +13,13 @@ var (
 	// ErrUnauthenticated covers a missing, malformed, expired, revoked, or
 	// wrong-audience credential. It is deliberately one error: distinguishing
 	// them on the wire would tell an attacker which half of a guess was right.
-	ErrUnauthenticated = errors.New("the request could not be authenticated")
-	ErrForbidden       = errors.New("the credential does not cover this resource")
-	ErrNotFound        = errors.New("the requested resource was not found")
-	ErrInvalid         = errors.New("the request is not valid")
-	ErrConflict        = errors.New("the resource is in a conflicting state")
-	ErrUnavailable     = errors.New("billing storage is unavailable")
+	ErrUnauthenticated          = errors.New("the request could not be authenticated")
+	ErrForbidden                = errors.New("the credential does not cover this resource")
+	ErrNotFound                 = errors.New("the requested resource was not found")
+	ErrInvalid                  = errors.New("the request is not valid")
+	ErrConflict                 = errors.New("the resource is in a conflicting state")
+	ErrUnavailable              = errors.New("billing storage is unavailable")
+	ErrAuthorityUpgradeRequired = errors.New("authority-aware entitlement sync is required for this scope")
 	// ErrDestinationRefused is an SSRF-policy refusal. It is returned to the
 	// operator configuring the destination, never to the destination.
 	ErrDestinationRefused = errors.New("the destination address is not allowed")

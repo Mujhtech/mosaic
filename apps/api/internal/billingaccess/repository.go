@@ -18,6 +18,14 @@ type KeyAuthenticator interface {
 	AuthenticateSDKKey(ctx context.Context, raw string) (KeyScope, error)
 }
 
+// AccessAPISignalRecorder is the internal, best-effort production seam for
+// stabilization evidence. It receives only tenant scope, timing, and outcome;
+// customer identifiers, entitlement keys, credentials, and request bodies are
+// deliberately absent from the boundary.
+type AccessAPISignalRecorder interface {
+	RecordAccessAPIResult(ctx context.Context, projectID, environmentID string, startedAt, endedAt time.Time, failed bool) error
+}
+
 // Repository is the persistence port for the access surfaces.
 //
 // Every read here is a read of committed state. There is no method that
@@ -26,6 +34,7 @@ type KeyAuthenticator interface {
 // answers would both be authoritative.
 type Repository interface {
 	BillingEnabled(ctx context.Context, projectID string) (bool, error)
+	LegacyAuthority(ctx context.Context, scope AuthorityScope) (string, error)
 
 	// --- Customer Access Tokens ---------------------------------------------
 
@@ -53,6 +62,18 @@ type Repository interface {
 	// ProjectionStatusFor reports projection health for one customer, including
 	// how many validated facts are waiting.
 	ProjectionStatusFor(ctx context.Context, projectID, environmentID, customerID string) (ProjectionStatus, error)
+	// AuthoritySelection reads v2 state only through the exact authenticated
+	// authority scope and CAT-bound customer. It must never fall back to the
+	// legacy pointer or another Application/platform scope.
+	AuthoritySelection(ctx context.Context, scope AuthorityScope, customerID string, at time.Time) (AuthoritySelection, error)
+	MinimumSupport(ctx context.Context, scope AuthorityScope) (MinimumSupport, error)
+	// ObservedSnapshotDigest reports whether this exact scope/epoch previously
+	// emitted the supplied authority-bound snapshot digest. It is verification
+	// only and never selects a scope, customer, pointer, or authority.
+	ObservedSnapshotDigest(ctx context.Context, selection AuthoritySelection, digest []byte) (bool, error)
+	// AppendSyncObservation is best effort at the service boundary. The record
+	// contains bounded version/capability metadata and digests only.
+	AppendSyncObservation(ctx context.Context, observation SyncObservation) error
 
 	Customer(ctx context.Context, projectID, customerID string) (CustomerView, error)
 	// CreateOrGetCustomerForApplicationUser is the trusted identify path,

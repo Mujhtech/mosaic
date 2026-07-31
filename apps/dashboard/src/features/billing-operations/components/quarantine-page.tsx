@@ -1,6 +1,13 @@
 import { useQuery } from "@tanstack/react-query"
 
 import { Button } from "@/components/ui/button"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
 import { buttonVariants } from "@/components/ui/button-variants"
 import { EmptyState } from "@/components/feedback/empty-state"
 import {
@@ -31,8 +38,8 @@ import {
   type QuarantineListFilters,
 } from "@/features/billing-operations/queries/quarantine-queries"
 import { environmentsQueryOptions } from "@/features/environments/queries/environments-query"
-import { ScopeMismatchRecovery } from "@/features/organizations/components/scope-mismatch-recovery"
-import { WorkspacePage, WorkflowPanel } from "@/features/organizations/components/workspace-page"
+import { ScopeMismatchRecovery } from "@/features/orgs/components/scope-mismatch-recovery"
+import { WorkspacePage, WorkflowPanel } from "@/features/orgs/components/workspace-page"
 import { useValidatedProjectScope } from "@/features/projects/hooks/use-validated-project-scope"
 
 const fieldClass =
@@ -45,6 +52,20 @@ interface QuarantinePageProps {
   organizationId: string
   projectId: string
 }
+
+const QUARANTINE_STATUS_OPTIONS = [
+  { label: "Any status", value: "" },
+  { label: "Open", value: "open" },
+  { label: "Retrying", value: "retrying" },
+  { label: "Closed after a successful attempt", value: "closed_after_success" },
+  { label: "Closed as superseded", value: "closed_superseded" },
+]
+
+const quarantineProviderOptions = [
+  { label: "Any store", value: "" },
+  { label: providerLabel("app_store"), value: "app_store" },
+  { label: providerLabel("google_play"), value: "google_play" },
+]
 
 export function QuarantinePage({
   environmentId,
@@ -103,7 +124,7 @@ export function QuarantinePage({
     )
   }
 
-  const base = `/organizations/${encodeURIComponent(organizationId)}/projects/${encodeURIComponent(projectId)}/billing/${encodeURIComponent(environmentId)}`
+  const base = `/orgs/${encodeURIComponent(organizationId)}/projects/${encodeURIComponent(projectId)}/billing/${encodeURIComponent(environmentId)}`
 
   return (
     <WorkspacePage
@@ -115,46 +136,52 @@ export function QuarantinePage({
 
       <WorkflowPanel title="Filters">
         <div className="flex flex-wrap gap-4">
-          <label className="space-y-1 text-sm font-medium">
-            Status
-            <select
-              className={`${fieldClass} block`}
-              onChange={(event) =>
+          <div className="space-y-1 text-sm font-medium">
+            <label htmlFor="quarantine-status">Status</label>
+            <Select
+              items={QUARANTINE_STATUS_OPTIONS}
+              onValueChange={(value) =>
                 updateFilters({
-                  status:
-                    event.currentTarget.value === ""
-                      ? undefined
-                      : (event.currentTarget.value as QuarantineListFilters["status"]),
+                  status: (value || undefined) as QuarantineListFilters["status"],
                 })
               }
               value={filters.status ?? ""}
             >
-              <option value="">Any status</option>
-              <option value="open">Open</option>
-              <option value="retrying">Retrying</option>
-              <option value="closed_after_success">Closed after a successful attempt</option>
-              <option value="closed_superseded">Closed as superseded</option>
-            </select>
-          </label>
-          <label className="space-y-1 text-sm font-medium">
-            Store
-            <select
-              className={`${fieldClass} block`}
-              onChange={(event) =>
+              <SelectTrigger id="quarantine-status">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {QUARANTINE_STATUS_OPTIONS.map((option) => (
+                  <SelectItem key={option.value} value={option.value}>
+                    {option.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="space-y-1 text-sm font-medium">
+            <label htmlFor="quarantine-store">Store</label>
+            <Select
+              items={quarantineProviderOptions}
+              onValueChange={(value) =>
                 updateFilters({
-                  provider:
-                    event.currentTarget.value === ""
-                      ? undefined
-                      : (event.currentTarget.value as QuarantineListFilters["provider"]),
+                  provider: (value || undefined) as QuarantineListFilters["provider"],
                 })
               }
               value={filters.provider ?? ""}
             >
-              <option value="">Any store</option>
-              <option value="app_store">{providerLabel("app_store")}</option>
-              <option value="google_play">{providerLabel("google_play")}</option>
-            </select>
-          </label>
+              <SelectTrigger id="quarantine-store">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {quarantineProviderOptions.map((option) => (
+                  <SelectItem key={option.value} value={option.value}>
+                    {option.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
           {/* A reason-code filter can arrive from a health or ledger recovery
               link. Without a visible control it would filter invisibly. */}
           {filters.reasonCode ? (

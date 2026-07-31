@@ -1,16 +1,27 @@
+import { useState } from "react"
 import { useForm } from "@tanstack/react-form"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { Link } from "@tanstack/react-router"
 
 import { Button } from "@/components/ui/button"
+import {
+  Dialog,
+  DialogClose,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog"
 import { Field, FieldDescription, FieldLabel } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
 import { HostedResourceBoundary } from "@/features/auth/components/hosted-resource-boundary"
 import { resolveHostedQueryState } from "@/features/auth/types/hosted-query-state"
 import { createEntitlementMutationOptions } from "@/features/catalog/mutations/catalog-mutations"
 import { entitlementsQueryOptions } from "@/features/catalog/queries/catalog-query"
-import { WorkspacePage, WorkflowPanel } from "@/features/organizations/components/workspace-page"
-import { ScopeMismatchRecovery } from "@/features/organizations/components/scope-mismatch-recovery"
+import { WorkspacePage, WorkflowPanel } from "@/features/orgs/components/workspace-page"
+import { ScopeMismatchRecovery } from "@/features/orgs/components/scope-mismatch-recovery"
 import { useValidatedProjectScope } from "@/features/projects/hooks/use-validated-project-scope"
 
 interface EntitlementsPageProps {
@@ -24,6 +35,7 @@ export function EntitlementsPage({ organizationId, projectId }: EntitlementsPage
   const entitlements = useQuery({ ...entitlementsQueryOptions(projectId), enabled: scopeReady })
   const mutation = useMutation(createEntitlementMutationOptions(projectId, queryClient))
   const items = entitlements.data?.items ?? []
+  const [createOpen, setCreateOpen] = useState(false)
   const form = useForm({
     defaultValues: { description: "", key: "", name: "" },
     onSubmit: async ({ value }) => {
@@ -33,6 +45,7 @@ export function EntitlementsPage({ organizationId, projectId }: EntitlementsPage
         name: value.name.trim(),
       })
       form.reset()
+      setCreateOpen(false)
     },
   })
   const state = resolveHostedQueryState({
@@ -64,45 +77,34 @@ export function EntitlementsPage({ organizationId, projectId }: EntitlementsPage
     )
   }
 
-  return (
-    <WorkspacePage
-      description="Access is defined by Entitlements: named capabilities that Products unlock. Mosaic does not calculate or assert customer subscription state here."
-      eyebrow="Catalog · Project-wide"
-      title="Access"
+  const createDialog = (
+    <Dialog
+      onOpenChange={(open) => {
+        setCreateOpen(open)
+        if (!open) {
+          form.reset()
+          mutation.reset()
+        }
+      }}
+      open={createOpen}
     >
-      <HostedResourceBoundary state={state}>
-        <WorkflowPanel title="Entitlement definitions">
-          <ul className="divide-y">
-            {items.map((entitlement) => (
-              <li className="flex items-center justify-between gap-4 py-4" key={entitlement.id}>
-                <span>
-                  <span className="block text-sm font-semibold">{entitlement.name}</span>
-                  <span className="text-muted-foreground mt-1 block font-mono text-xs">
-                    {entitlement.key}
-                  </span>
-                </span>
-                <Link
-                  className="text-primary text-sm font-medium hover:underline"
-                  params={{ entitlementId: entitlement.id, organizationId, projectId }}
-                  to="/organizations/$organizationId/projects/$projectId/catalog/entitlements/$entitlementId"
-                >
-                  View definition
-                </Link>
-              </li>
-            ))}
-          </ul>
-        </WorkflowPanel>
-      </HostedResourceBoundary>
-      {canManageEntitlements ? (
-        <WorkflowPanel title="Create Entitlement">
-          <form
-            className="grid gap-4 md:grid-cols-3"
-            onSubmit={(event) => {
-              event.preventDefault()
-              event.stopPropagation()
-              void form.handleSubmit()
-            }}
-          >
+      <DialogTrigger render={<Button size="sm" />}>Create Entitlement</DialogTrigger>
+      <DialogContent>
+        <form
+          onSubmit={(event) => {
+            event.preventDefault()
+            event.stopPropagation()
+            void form.handleSubmit()
+          }}
+        >
+          <DialogHeader>
+            <DialogTitle>Create Entitlement</DialogTitle>
+            <DialogDescription>
+              An Entitlement is a named capability that Products unlock. This defines it only; it
+              does not grant customer access.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-4 px-4">
             <form.Field name="name">
               {(field) => (
                 <Field>
@@ -142,17 +144,53 @@ export function EntitlementsPage({ organizationId, projectId }: EntitlementsPage
                 </Field>
               )}
             </form.Field>
-            <Button className="md:col-start-3" disabled={mutation.isPending} type="submit">
-              Create Entitlement
+            {mutation.error ? (
+              <p className="text-destructive text-sm" role="alert">
+                {mutation.error.message}
+              </p>
+            ) : null}
+          </div>
+          <DialogFooter>
+            <DialogClose render={<Button type="button" variant="outline" />}>Cancel</DialogClose>
+            <Button disabled={mutation.isPending} type="submit">
+              {mutation.isPending ? "Creating…" : "Create Entitlement"}
             </Button>
-          </form>
-          {mutation.error ? (
-            <p className="text-destructive mt-4 text-sm" role="alert">
-              {mutation.error.message}
-            </p>
-          ) : null}
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
+  )
+
+  return (
+    <WorkspacePage
+      actions={canManageEntitlements ? createDialog : null}
+      description="Access is defined by Entitlements: named capabilities that Products unlock. Mosaic does not calculate or assert customer subscription state here."
+      eyebrow="Catalog · Project-wide"
+      title="Access"
+    >
+      <HostedResourceBoundary state={state}>
+        <WorkflowPanel title="Entitlement definitions">
+          <ul className="divide-y">
+            {items.map((entitlement) => (
+              <li className="flex items-center justify-between gap-4 py-4" key={entitlement.id}>
+                <span>
+                  <span className="block text-sm font-semibold">{entitlement.name}</span>
+                  <span className="text-muted-foreground mt-1 block font-mono text-xs">
+                    {entitlement.key}
+                  </span>
+                </span>
+                <Link
+                  className="text-primary text-sm font-medium hover:underline"
+                  params={(prev) => ({ ...prev, entitlementId: entitlement.id })}
+                  to="/orgs/$organizationId/projects/$projectId/env/$environmentKey/catalog/entitlements/$entitlementId"
+                >
+                  View definition
+                </Link>
+              </li>
+            ))}
+          </ul>
         </WorkflowPanel>
-      ) : null}
+      </HostedResourceBoundary>
     </WorkspacePage>
   )
 }

@@ -38,11 +38,14 @@ internal sealed interface MosaicCustomerRecordDecoding {
 internal data class MosaicCachedCustomerEntitlements(
     val snapshot: MosaicCustomerEntitlementSnapshot,
     val window: MosaicCustomerEntitlementFreshnessWindow,
+    val authority: MosaicCustomerAuthority? = null,
+    val snapshotAuthorityDigest: String? = null,
+    val minimumSupport: MosaicCustomerAuthorityMinimumSupport? = null,
 )
 
 internal object MosaicCustomerEntitlementCodec {
     const val CONTRACT_VERSION: String = "1"
-    const val CACHE_FORMAT_VERSION: String = "1"
+    const val CACHE_FORMAT_VERSION: String = "2"
 
     /** `limits.maxRecordBytes` from the compatibility manifest. */
     const val MAX_RECORD_BYTES: Int = 64 * 1024
@@ -189,12 +192,38 @@ internal object MosaicCustomerEntitlementCodec {
         )
         requireBoundedHorizon(window)
 
-        val decoded = decodeRecord(gson.toJson(body.get("record")))
-        require(decoded is MosaicCustomerRecordDecoding.Snapshot)
-        // A cache entry whose own record fails its content digest is corrupt, not merely stale.
-        require(decoded.contentDigestValid)
-        MosaicCachedCustomerEntitlements(decoded.snapshot, window)
+        val record = gson.toJson(body.get("record"))
+        when (runCatching {
+            body.getAsJsonObject("record").get("authoritativeEntitlementContractVersion").asString
+        }.getOrNull()) {
+            CONTRACT_VERSION -> {
+                val decoded = decodeRecord(record)
+                require(decoded is MosaicCustomerRecordDecoding.Snapshot)
+                require(decoded.contentDigestValid)
+                // A v1 record is deliberately returned without authority. The runtime treats it as
+                // authority_unknown and never silently relabels it after an SDK upgrade.
+                MosaicCachedCustomerEntitlements(decoded.snapshot, window)
+            }
+            MosaicCustomerAuthorityCodec.CONTRACT_VERSION -> {
+                val decoded = MosaicCustomerAuthorityCodec.decode(record)
+                require(decoded is MosaicCustomerAuthorityDecoding.Snapshot)
+                require(decoded.snapshotContentDigestValid && decoded.snapshotAuthorityDigestValid)
+                MosaicCachedCustomerEntitlements(
+                    decoded.snapshot,
+                    window,
+                    decoded.authority,
+                    decoded.snapshotAuthorityDigest,
+                    decoded.minimumSupport,
+                )
+            }
+            else -> error("Unsupported cached entitlement contract.")
+        }
     }.getOrNull()
+
+    fun isLegacyCacheRecord(source: String): Boolean = runCatching {
+        val body = JsonParser.parseString(source).asJsonObject.getAsJsonObject("body")
+        body.get("cacheFormatVersion").asString == "1"
+    }.getOrDefault(false)
 
     // ------------------------------------------------------------------------------------------
     // Canonical serialization

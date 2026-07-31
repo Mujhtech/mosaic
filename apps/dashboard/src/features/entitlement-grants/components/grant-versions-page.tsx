@@ -2,6 +2,13 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 
 import { EmptyState } from "@/components/feedback/empty-state"
 import { buttonVariants } from "@/components/ui/button-variants"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
 import { HostedResourceBoundary } from "@/features/auth/components/hosted-resource-boundary"
 import { resolveHostedQueryState } from "@/features/auth/types/hosted-query-state"
 import { DefinitionRow, StatusPill } from "@/features/billing-ledger/components/billing-chrome"
@@ -20,8 +27,8 @@ import {
   grantPolicyFields,
   grantPolicyLabel,
 } from "@/features/entitlement-grants/types/grant-version-view"
-import { ScopeMismatchRecovery } from "@/features/organizations/components/scope-mismatch-recovery"
-import { WorkflowPanel, WorkspacePage } from "@/features/organizations/components/workspace-page"
+import { ScopeMismatchRecovery } from "@/features/orgs/components/scope-mismatch-recovery"
+import { WorkflowPanel, WorkspacePage } from "@/features/orgs/components/workspace-page"
 import { useValidatedProjectScope } from "@/features/projects/hooks/use-validated-project-scope"
 import { useOrganizationAccess } from "@/hooks/use-organization-access"
 import { catalogProductsHref } from "@/lib/routing/workspace-hrefs"
@@ -98,6 +105,17 @@ export function GrantVersionsPage({
   }
 
   const productsHref = catalogProductsHref({ organizationId, projectId }) ?? "#"
+  const productOptions = productItems.map((product) => ({
+    label: product.internalName,
+    value: product.id,
+  }))
+  const entitlementOptions = [
+    { label: "All Entitlements", value: "" },
+    ...(entitlements.data?.items ?? []).map((entitlement) => ({
+      label: entitlement.name,
+      value: entitlement.id,
+    })),
+  ]
   const grouped = groupByEntitlement(versions.data ?? [])
 
   return (
@@ -128,42 +146,59 @@ export function GrantVersionsPage({
           <>
             <WorkflowPanel title="Scope">
               <div className="grid gap-3 sm:grid-cols-2">
-                <label className="text-sm">
-                  <span className="text-muted-foreground block text-xs">Product</span>
-                  <select
-                    className="border-input bg-background mt-1 h-9 w-full rounded border px-3 text-sm"
-                    onChange={(event) =>
-                      onScopeChange({ entitlementId, productId: event.currentTarget.value })
-                    }
+                <div className="text-sm">
+                  <label
+                    className="text-muted-foreground block text-xs"
+                    htmlFor="grant-scope-product"
+                  >
+                    Product
+                  </label>
+                  <Select
+                    items={productOptions}
+                    onValueChange={(value) => onScopeChange({ entitlementId, productId: value })}
                     value={selectedProductId ?? ""}
                   >
-                    {productItems.map((product) => (
-                      <option key={product.id} value={product.id}>
-                        {product.internalName}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-                <label className="text-sm">
-                  <span className="text-muted-foreground block text-xs">Entitlement</span>
-                  <select
-                    className="border-input bg-background mt-1 h-9 w-full rounded border px-3 text-sm"
-                    onChange={(event) =>
+                    <SelectTrigger className="mt-1" id="grant-scope-product">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {productOptions.map((option) => (
+                        <SelectItem key={option.value} value={option.value}>
+                          {option.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="text-sm">
+                  <label
+                    className="text-muted-foreground block text-xs"
+                    htmlFor="grant-scope-entitlement"
+                  >
+                    Entitlement
+                  </label>
+                  <Select
+                    items={entitlementOptions}
+                    onValueChange={(value) =>
                       onScopeChange({
-                        entitlementId: event.currentTarget.value || undefined,
+                        entitlementId: value || undefined,
                         productId: selectedProductId,
                       })
                     }
                     value={entitlementId ?? ""}
                   >
-                    <option value="">All Entitlements</option>
-                    {(entitlements.data?.items ?? []).map((entitlement) => (
-                      <option key={entitlement.id} value={entitlement.id}>
-                        {entitlement.name}
-                      </option>
-                    ))}
-                  </select>
-                </label>
+                    <SelectTrigger className="mt-1" id="grant-scope-entitlement">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {entitlementOptions.map((option) => (
+                        <SelectItem key={option.value} value={option.value}>
+                          {option.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
               </div>
               <div className="mt-4">
                 <PublishGrantVersionWizard
@@ -180,7 +215,7 @@ export function GrantVersionsPage({
                 {!access.canManage ? (
                   <a
                     className="text-primary mt-2 inline-flex text-sm font-semibold"
-                    href={`/organizations/${encodeURIComponent(organizationId)}/members`}
+                    href={`/orgs/${encodeURIComponent(organizationId)}/members`}
                   >
                     Ask an Owner or Admin to change what this Product grants
                   </a>

@@ -1,0 +1,14 @@
+{
+  "billingStateWebhookContractVersion": "2",
+  "recordType": "billingStateEvent",
+  "payload": {
+    "eventId": "event-001",
+    "eventType": "authority.cutover.completed",
+    "billingCustomerId": "customer-001",
+    "snapshotVersion": 42,
+    "occurredAt": "2026-07-29T10:00:00.000Z",
+    "createdAt": "2026-07-29T10:00:01.000Z",
+    "correlationId": "correlation-001",
+    "changedEntitlements": []
+  }
+}

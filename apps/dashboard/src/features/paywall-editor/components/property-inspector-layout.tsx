@@ -1,4 +1,3 @@
-import { CaretDownIcon } from "@phosphor-icons/react/dist/ssr/CaretDown"
 import type { ReactNode } from "react"
 
 import { useEditorActions } from "@/features/paywall-editor/stores/editor-store-context"
@@ -28,6 +27,19 @@ import {
   NumberField,
   SelectField,
 } from "@/features/paywall-editor/components/property-inspector-fields"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
+
+const AXIS_MODE_OPTIONS = [
+  { label: "Fit", value: "fit" },
+  { label: "Fill", value: "fill" },
+  { label: "Fixed", value: "fixed" },
+]
 
 export function AppearanceSection({
   children,
@@ -283,22 +295,30 @@ export function SizingAxisField({
             className="border-input relative h-full w-8 shrink-0 border-s"
             title={`${axisLabel} behaviour`}
           >
-            <select
-              {...fieldProps}
-              aria-label={`${axisLabel} behaviour`}
-              className="absolute inset-0 size-full cursor-pointer appearance-none bg-transparent text-transparent outline-none disabled:cursor-not-allowed"
-              disabled={disabled}
-              onChange={(event) => onModeChange(event.target.value as "fill" | "fit" | "fixed")}
+            <Select
+              items={AXIS_MODE_OPTIONS}
+              onValueChange={(next) => onModeChange(next as "fill" | "fit" | "fixed")}
               value={mode}
             >
-              <option value="fit">Fit</option>
-              <option value="fill">Fill</option>
-              <option value="fixed">Fixed</option>
-            </select>
-            <CaretDownIcon
-              aria-hidden
-              className="text-muted-foreground pointer-events-none absolute start-1/2 top-1/2 size-3 -translate-x-1/2 -translate-y-1/2"
-            />
+              <SelectTrigger
+                {...fieldProps}
+                aria-label={`${axisLabel} behaviour`}
+                className="absolute inset-0 size-full cursor-pointer justify-center rounded-none border-0 bg-transparent px-0 disabled:cursor-not-allowed"
+                disabled={disabled}
+                size="sm"
+              >
+                {/* The caret alone is the affordance here: the chosen mode is
+                    already spelled out in the value beside this control. */}
+                <SelectValue className="sr-only" />
+              </SelectTrigger>
+              <SelectContent>
+                {AXIS_MODE_OPTIONS.map((option) => (
+                  <SelectItem key={option.value} value={option.value}>
+                    {option.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </span>
         </div>
       )}
@@ -354,10 +374,10 @@ export function TypographyFields({
           value={typography.style}
         >
           {["display", "title", "heading", "body", "label", "caption"].map((style) => (
-            <option key={style} value={style}>
+            <SelectItem key={style} value={style}>
               {style[0]?.toUpperCase()}
               {style.slice(1)}
-            </option>
+            </SelectItem>
           ))}
         </SelectField>
         <SelectField
@@ -367,10 +387,10 @@ export function TypographyFields({
           value={typography.weight}
         >
           {["regular", "medium", "semibold", "bold"].map((weight) => (
-            <option key={weight} value={weight}>
+            <SelectItem key={weight} value={weight}>
               {weight[0]?.toUpperCase()}
               {weight.slice(1)}
-            </option>
+            </SelectItem>
           ))}
         </SelectField>
       </TwoColumn>
@@ -408,9 +428,9 @@ export function TypographyFields({
           onChange={(alignment) => update({ ...typography, alignment } as TypographyValue)}
           value={typography.alignment}
         >
-          <option value="start">Start</option>
-          <option value="center">Centre</option>
-          <option value="end">End</option>
+          <SelectItem value="start">Start</SelectItem>
+          <SelectItem value="center">Centre</SelectItem>
+          <SelectItem value="end">End</SelectItem>
         </SelectField>
       </div>
       {supportsMaxLines ? (
@@ -449,8 +469,8 @@ export function TypographyFields({
                 }
                 value={extended.overflow ?? "ellipsis"}
               >
-                <option value="ellipsis">Ellipsis</option>
-                <option value="clip">Clip</option>
+                <SelectItem value="ellipsis">Ellipsis</SelectItem>
+                <SelectItem value="clip">Clip</SelectItem>
               </SelectField>
             </TwoColumn>
           ) : null}
@@ -523,11 +543,11 @@ export function VisibilitySection({ node }: { node: ProtocolNode }) {
         }}
         value={visibility.mode}
       >
-        <option value="always">Always visible</option>
-        <option value="hidden">Hidden</option>
-        <option disabled={switches.length === 0} value="switch">
+        <SelectItem value="always">Always visible</SelectItem>
+        <SelectItem value="hidden">Hidden</SelectItem>
+        <SelectItem disabled={switches.length === 0} value="switch">
           Controlled by switch
-        </option>
+        </SelectItem>
       </SelectField>
       {visibility.mode === "switch" ? (
         <>
@@ -538,13 +558,13 @@ export function VisibilitySection({ node }: { node: ProtocolNode }) {
             value={visibility.switchId}
           >
             {switches.map((candidate) => (
-              <option key={candidate.id} value={candidate.id}>
+              <SelectItem key={candidate.id} value={candidate.id}>
                 {resolveLocalizedText(
                   document,
                   candidate.label,
                   document.localization.defaultLocale,
                 )}
-              </option>
+              </SelectItem>
             ))}
           </SelectField>
           <CheckboxField

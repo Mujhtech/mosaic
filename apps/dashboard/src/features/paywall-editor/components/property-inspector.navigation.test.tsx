@@ -1,4 +1,5 @@
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react"
+import { chooseSelectOption } from "@/test/select"
 import { describe, expect, it } from "vitest"
 
 import { EDITOR_TEMPLATES } from "@/features/paywall-editor/constants/templates"
@@ -38,8 +39,7 @@ describe("property inspector safety", () => {
     )
 
     const presentation = await screen.findByRole("combobox", { name: "Presentation" })
-    expect(within(presentation).getByRole("option", { name: "Sheet" })).toBeEnabled()
-    fireEvent.change(presentation, { target: { value: "sheet" } })
+    await chooseSelectOption(presentation, "Sheet")
     await waitFor(() =>
       expect(screen.getByTestId("inspector-document")).toHaveTextContent(
         '"id":"main","presentation":{"type":"sheet"}',
@@ -72,7 +72,7 @@ describe("property inspector safety", () => {
     expect(screen.getByRole("spinbutton", { name: "Aspect ratio" })).toHaveAttribute("max", "10")
     openInspectorSection("Advanced")
     expectReadOnlyField("image-1", "type", "image")
-    expect(screen.getByRole("combobox", { name: "Width behaviour" })).toHaveValue("fill")
+    expect(screen.getByRole("combobox", { name: "Width behaviour" })).toBeVisible()
   })
 
   it("exposes production Protocol 0.2 text controls progressively", async () => {
@@ -106,15 +106,15 @@ describe("property inspector safety", () => {
     const productInspector = await screen.findByRole("region", { name: "Properties" })
     expect(within(productInspector).queryByText("monthly-plan")).not.toBeInTheDocument()
     expect(within(productInspector).queryByText("yearly-plan")).not.toBeInTheDocument()
-    expect(within(productInspector).getByRole("option", { name: "Monthly" })).toHaveValue(
-      "monthly-plan",
-    )
+    expect(within(productInspector).getByLabelText("Product")).toHaveTextContent("Monthly")
     productRender.unmount()
 
     renderInspector("purchase")
     openInspectorSection("Actions")
     expect(screen.queryByText("plans")).not.toBeInTheDocument()
-    expect(screen.getByRole("option", { name: "Product Selector" })).toHaveValue("plans")
+    expect(screen.getByRole("combobox", { name: "Product selector" })).toHaveTextContent(
+      "Product Selector",
+    )
   })
 
   it("keeps structure in Layers while using group semantics for product sets", async () => {

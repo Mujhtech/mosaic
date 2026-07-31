@@ -15,52 +15,54 @@ import { Route as DiagnosticsRouteImport } from './routes/diagnostics'
 import { Route as Studio_layoutRouteImport } from './routes/_studio_layout'
 import { Route as HostedRouteImport } from './routes/_hosted'
 import { Route as IndexRouteImport } from './routes/index'
-import { Route as Studio_layoutStudioRouteImport } from './routes/_studio_layout/studio'
 import { Route as HostedWorkspaceRouteImport } from './routes/_hosted/workspace'
-import { Route as HostedOrganizationsNewRouteImport } from './routes/_hosted/organizations/new'
-import { Route as HostedOrganizationsOrganizationIdIndexRouteImport } from './routes/_hosted/organizations/$organizationId/index'
-import { Route as HostedOrganizationsOrganizationIdMembersRouteImport } from './routes/_hosted/organizations/$organizationId/members'
-import { Route as HostedOrganizationsOrganizationIdProjectsNewRouteImport } from './routes/_hosted/organizations/$organizationId/projects/new'
-import { Route as HostedOrganizationsOrganizationIdProjectsProjectIdIndexRouteImport } from './routes/_hosted/organizations/$organizationId/projects/$projectId/index'
-import { Route as HostedOrganizationsOrganizationIdProjectsProjectIdAppsRouteImport } from './routes/_hosted/organizations/$organizationId/projects/$projectId/apps'
-import { Route as Studio_layoutStudioHostedOrganizationIdProjectIdEnvironmentIdPaywallIdDraftIdRouteImport } from './routes/_studio_layout/studio-hosted/$organizationId/$projectId/$environmentId/$paywallId/$draftId'
-import { Route as HostedOrganizationsOrganizationIdProjectsProjectIdSettingsEnvironmentsRouteImport } from './routes/_hosted/organizations/$organizationId/projects/$projectId/settings/environments'
-import { Route as HostedOrganizationsOrganizationIdProjectsProjectIdSettingsApiKeysRouteImport } from './routes/_hosted/organizations/$organizationId/projects/$projectId/settings/api-keys'
-import { Route as HostedOrganizationsOrganizationIdProjectsProjectIdCatalogProvidersRouteImport } from './routes/_hosted/organizations/$organizationId/projects/$projectId/catalog/providers'
-import { Route as HostedOrganizationsOrganizationIdProjectsProjectIdCatalogGrantVersionsRouteImport } from './routes/_hosted/organizations/$organizationId/projects/$projectId/catalog/grant-versions'
-import { Route as HostedOrganizationsOrganizationIdProjectsProjectIdCatalogProductsIndexRouteImport } from './routes/_hosted/organizations/$organizationId/projects/$projectId/catalog/products/index'
-import { Route as HostedOrganizationsOrganizationIdProjectsProjectIdCatalogPlansIndexRouteImport } from './routes/_hosted/organizations/$organizationId/projects/$projectId/catalog/plans/index'
-import { Route as HostedOrganizationsOrganizationIdProjectsProjectIdCatalogEntitlementsIndexRouteImport } from './routes/_hosted/organizations/$organizationId/projects/$projectId/catalog/entitlements/index'
-import { Route as HostedOrganizationsOrganizationIdProjectsProjectIdBillingConnectionsIndexRouteImport } from './routes/_hosted/organizations/$organizationId/projects/$projectId/billing/connections/index'
-import { Route as HostedOrganizationsOrganizationIdProjectsProjectIdMonetizationEnvironmentIdReleasesRouteImport } from './routes/_hosted/organizations/$organizationId/projects/$projectId/monetization/$environmentId/releases'
-import { Route as HostedOrganizationsOrganizationIdProjectsProjectIdMonetizationEnvironmentIdPlacementsRouteImport } from './routes/_hosted/organizations/$organizationId/projects/$projectId/monetization/$environmentId/placements'
-import { Route as HostedOrganizationsOrganizationIdProjectsProjectIdMonetizationEnvironmentIdPaywallsRouteImport } from './routes/_hosted/organizations/$organizationId/projects/$projectId/monetization/$environmentId/paywalls'
-import { Route as HostedOrganizationsOrganizationIdProjectsProjectIdMonetizationEnvironmentIdExperimentsRouteImport } from './routes/_hosted/organizations/$organizationId/projects/$projectId/monetization/$environmentId/experiments'
-import { Route as HostedOrganizationsOrganizationIdProjectsProjectIdMonetizationEnvironmentIdAssetsRouteImport } from './routes/_hosted/organizations/$organizationId/projects/$projectId/monetization/$environmentId/assets'
-import { Route as HostedOrganizationsOrganizationIdProjectsProjectIdCatalogProvidersConnectionIdRouteImport } from './routes/_hosted/organizations/$organizationId/projects/$projectId/catalog/providers/$connectionId'
-import { Route as HostedOrganizationsOrganizationIdProjectsProjectIdCatalogProductsProductIdRouteImport } from './routes/_hosted/organizations/$organizationId/projects/$projectId/catalog/products/$productId'
-import { Route as HostedOrganizationsOrganizationIdProjectsProjectIdCatalogPlansPlanIdRouteImport } from './routes/_hosted/organizations/$organizationId/projects/$projectId/catalog/plans/$planId'
-import { Route as HostedOrganizationsOrganizationIdProjectsProjectIdCatalogEntitlementsEntitlementIdRouteImport } from './routes/_hosted/organizations/$organizationId/projects/$projectId/catalog/entitlements/$entitlementId'
-import { Route as HostedOrganizationsOrganizationIdProjectsProjectIdBillingConnectionsCredentialIdRouteImport } from './routes/_hosted/organizations/$organizationId/projects/$projectId/billing/connections/$credentialId'
-import { Route as HostedOrganizationsOrganizationIdProjectsProjectIdBillingEnvironmentIdRestoresRouteImport } from './routes/_hosted/organizations/$organizationId/projects/$projectId/billing/$environmentId/restores'
-import { Route as HostedOrganizationsOrganizationIdProjectsProjectIdBillingEnvironmentIdProjectionHealthRouteImport } from './routes/_hosted/organizations/$organizationId/projects/$projectId/billing/$environmentId/projection-health'
-import { Route as HostedOrganizationsOrganizationIdProjectsProjectIdBillingEnvironmentIdHealthRouteImport } from './routes/_hosted/organizations/$organizationId/projects/$projectId/billing/$environmentId/health'
-import { Route as HostedOrganizationsOrganizationIdProjectsProjectIdAnalyticsEnvironmentIdSurfaceRouteImport } from './routes/_hosted/organizations/$organizationId/projects/$projectId/analytics/$environmentId/$surface'
-import { Route as HostedOrganizationsOrganizationIdProjectsProjectIdBillingEnvironmentIdTransactionsIndexRouteImport } from './routes/_hosted/organizations/$organizationId/projects/$projectId/billing/$environmentId/transactions/index'
-import { Route as HostedOrganizationsOrganizationIdProjectsProjectIdBillingEnvironmentIdReconciliationIndexRouteImport } from './routes/_hosted/organizations/$organizationId/projects/$projectId/billing/$environmentId/reconciliation/index'
-import { Route as HostedOrganizationsOrganizationIdProjectsProjectIdBillingEnvironmentIdQuarantineIndexRouteImport } from './routes/_hosted/organizations/$organizationId/projects/$projectId/billing/$environmentId/quarantine/index'
-import { Route as HostedOrganizationsOrganizationIdProjectsProjectIdBillingEnvironmentIdIdentityConflictsIndexRouteImport } from './routes/_hosted/organizations/$organizationId/projects/$projectId/billing/$environmentId/identity-conflicts/index'
-import { Route as HostedOrganizationsOrganizationIdProjectsProjectIdBillingEnvironmentIdCustomersIndexRouteImport } from './routes/_hosted/organizations/$organizationId/projects/$projectId/billing/$environmentId/customers/index'
-import { Route as HostedOrganizationsOrganizationIdProjectsProjectIdMonetizationEnvironmentIdPlacementsPlacementIdRouteImport } from './routes/_hosted/organizations/$organizationId/projects/$projectId/monetization/$environmentId/placements/$placementId'
-import { Route as HostedOrganizationsOrganizationIdProjectsProjectIdMonetizationEnvironmentIdPaywallsPaywallIdRouteImport } from './routes/_hosted/organizations/$organizationId/projects/$projectId/monetization/$environmentId/paywalls/$paywallId'
-import { Route as HostedOrganizationsOrganizationIdProjectsProjectIdMonetizationEnvironmentIdExperimentsNewRouteImport } from './routes/_hosted/organizations/$organizationId/projects/$projectId/monetization/$environmentId/experiments/new'
-import { Route as HostedOrganizationsOrganizationIdProjectsProjectIdMonetizationEnvironmentIdExperimentsExperimentIdRouteImport } from './routes/_hosted/organizations/$organizationId/projects/$projectId/monetization/$environmentId/experiments/$experimentId'
-import { Route as HostedOrganizationsOrganizationIdProjectsProjectIdBillingEnvironmentIdTransactionsFactIdRouteImport } from './routes/_hosted/organizations/$organizationId/projects/$projectId/billing/$environmentId/transactions/$factId'
-import { Route as HostedOrganizationsOrganizationIdProjectsProjectIdBillingEnvironmentIdSubscriptionsInstanceIdRouteImport } from './routes/_hosted/organizations/$organizationId/projects/$projectId/billing/$environmentId/subscriptions/$instanceId'
-import { Route as HostedOrganizationsOrganizationIdProjectsProjectIdBillingEnvironmentIdReconciliationRunIdRouteImport } from './routes/_hosted/organizations/$organizationId/projects/$projectId/billing/$environmentId/reconciliation/$runId'
-import { Route as HostedOrganizationsOrganizationIdProjectsProjectIdBillingEnvironmentIdQuarantineRecordIdRouteImport } from './routes/_hosted/organizations/$organizationId/projects/$projectId/billing/$environmentId/quarantine/$recordId'
-import { Route as HostedOrganizationsOrganizationIdProjectsProjectIdBillingEnvironmentIdIdentityConflictsConflictIdRouteImport } from './routes/_hosted/organizations/$organizationId/projects/$projectId/billing/$environmentId/identity-conflicts/$conflictId'
-import { Route as HostedOrganizationsOrganizationIdProjectsProjectIdBillingEnvironmentIdCustomersCustomerIdRouteImport } from './routes/_hosted/organizations/$organizationId/projects/$projectId/billing/$environmentId/customers/$customerId'
+import { Route as Studio_layoutStudioIndexRouteImport } from './routes/_studio_layout/studio/index'
+import { Route as HostedOrgsNewRouteImport } from './routes/_hosted/orgs/new'
+import { Route as HostedOrgsOrganizationIdIndexRouteImport } from './routes/_hosted/orgs/$organizationId/index'
+import { Route as HostedOrgsOrganizationIdMembersRouteImport } from './routes/_hosted/orgs/$organizationId/members'
+import { Route as HostedOrgsOrganizationIdProjectsNewRouteImport } from './routes/_hosted/orgs/$organizationId/projects/new'
+import { Route as Studio_layoutStudioOrganizationIdProjectIdEnvironmentIdPaywallIdDraftIdRouteImport } from './routes/_studio_layout/studio/$organizationId/$projectId/$environmentId/$paywallId/$draftId'
+import { Route as HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyIndexRouteImport } from './routes/_hosted/orgs/$organizationId/projects/$projectId/env/$environmentKey/index'
+import { Route as HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyAppsRouteImport } from './routes/_hosted/orgs/$organizationId/projects/$projectId/env/$environmentKey/apps'
+import { Route as HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeySettingsEnvironmentsRouteImport } from './routes/_hosted/orgs/$organizationId/projects/$projectId/env/$environmentKey/settings/environments'
+import { Route as HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeySettingsApiKeysRouteImport } from './routes/_hosted/orgs/$organizationId/projects/$projectId/env/$environmentKey/settings/api-keys'
+import { Route as HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyMonetizationReleasesRouteImport } from './routes/_hosted/orgs/$organizationId/projects/$projectId/env/$environmentKey/monetization/releases'
+import { Route as HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyMonetizationAssetsRouteImport } from './routes/_hosted/orgs/$organizationId/projects/$projectId/env/$environmentKey/monetization/assets'
+import { Route as HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyCatalogProvidersRouteImport } from './routes/_hosted/orgs/$organizationId/projects/$projectId/env/$environmentKey/catalog/providers'
+import { Route as HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyCatalogGrantVersionsRouteImport } from './routes/_hosted/orgs/$organizationId/projects/$projectId/env/$environmentKey/catalog/grant-versions'
+import { Route as HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyBillingRestoresRouteImport } from './routes/_hosted/orgs/$organizationId/projects/$projectId/env/$environmentKey/billing/restores'
+import { Route as HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyBillingProjectionHealthRouteImport } from './routes/_hosted/orgs/$organizationId/projects/$projectId/env/$environmentKey/billing/projection-health'
+import { Route as HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyBillingHealthRouteImport } from './routes/_hosted/orgs/$organizationId/projects/$projectId/env/$environmentKey/billing/health'
+import { Route as HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyAnalyticsSurfaceRouteImport } from './routes/_hosted/orgs/$organizationId/projects/$projectId/env/$environmentKey/analytics/$surface'
+import { Route as HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyMonetizationPlacementsIndexRouteImport } from './routes/_hosted/orgs/$organizationId/projects/$projectId/env/$environmentKey/monetization/placements/index'
+import { Route as HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyMonetizationPaywallsIndexRouteImport } from './routes/_hosted/orgs/$organizationId/projects/$projectId/env/$environmentKey/monetization/paywalls/index'
+import { Route as HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyMonetizationExperimentsIndexRouteImport } from './routes/_hosted/orgs/$organizationId/projects/$projectId/env/$environmentKey/monetization/experiments/index'
+import { Route as HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyCatalogProductsIndexRouteImport } from './routes/_hosted/orgs/$organizationId/projects/$projectId/env/$environmentKey/catalog/products/index'
+import { Route as HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyCatalogPlansIndexRouteImport } from './routes/_hosted/orgs/$organizationId/projects/$projectId/env/$environmentKey/catalog/plans/index'
+import { Route as HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyCatalogEntitlementsIndexRouteImport } from './routes/_hosted/orgs/$organizationId/projects/$projectId/env/$environmentKey/catalog/entitlements/index'
+import { Route as HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyBillingTransactionsIndexRouteImport } from './routes/_hosted/orgs/$organizationId/projects/$projectId/env/$environmentKey/billing/transactions/index'
+import { Route as HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyBillingReconciliationIndexRouteImport } from './routes/_hosted/orgs/$organizationId/projects/$projectId/env/$environmentKey/billing/reconciliation/index'
+import { Route as HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyBillingQuarantineIndexRouteImport } from './routes/_hosted/orgs/$organizationId/projects/$projectId/env/$environmentKey/billing/quarantine/index'
+import { Route as HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyBillingMigrationsIndexRouteImport } from './routes/_hosted/orgs/$organizationId/projects/$projectId/env/$environmentKey/billing/migrations/index'
+import { Route as HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyBillingIdentityConflictsIndexRouteImport } from './routes/_hosted/orgs/$organizationId/projects/$projectId/env/$environmentKey/billing/identity-conflicts/index'
+import { Route as HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyBillingCustomersIndexRouteImport } from './routes/_hosted/orgs/$organizationId/projects/$projectId/env/$environmentKey/billing/customers/index'
+import { Route as HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyBillingConnectionsIndexRouteImport } from './routes/_hosted/orgs/$organizationId/projects/$projectId/env/$environmentKey/billing/connections/index'
+import { Route as HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyMonetizationPlacementsPlacementIdRouteImport } from './routes/_hosted/orgs/$organizationId/projects/$projectId/env/$environmentKey/monetization/placements/$placementId'
+import { Route as HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyMonetizationPaywallsPaywallIdRouteImport } from './routes/_hosted/orgs/$organizationId/projects/$projectId/env/$environmentKey/monetization/paywalls/$paywallId'
+import { Route as HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyMonetizationExperimentsNewRouteImport } from './routes/_hosted/orgs/$organizationId/projects/$projectId/env/$environmentKey/monetization/experiments/new'
+import { Route as HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyMonetizationExperimentsExperimentIdRouteImport } from './routes/_hosted/orgs/$organizationId/projects/$projectId/env/$environmentKey/monetization/experiments/$experimentId'
+import { Route as HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyCatalogProvidersConnectionIdRouteImport } from './routes/_hosted/orgs/$organizationId/projects/$projectId/env/$environmentKey/catalog/providers/$connectionId'
+import { Route as HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyCatalogProductsProductIdRouteImport } from './routes/_hosted/orgs/$organizationId/projects/$projectId/env/$environmentKey/catalog/products/$productId'
+import { Route as HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyCatalogPlansPlanIdRouteImport } from './routes/_hosted/orgs/$organizationId/projects/$projectId/env/$environmentKey/catalog/plans/$planId'
+import { Route as HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyCatalogEntitlementsEntitlementIdRouteImport } from './routes/_hosted/orgs/$organizationId/projects/$projectId/env/$environmentKey/catalog/entitlements/$entitlementId'
+import { Route as HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyBillingTransactionsFactIdRouteImport } from './routes/_hosted/orgs/$organizationId/projects/$projectId/env/$environmentKey/billing/transactions/$factId'
+import { Route as HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyBillingSubscriptionsInstanceIdRouteImport } from './routes/_hosted/orgs/$organizationId/projects/$projectId/env/$environmentKey/billing/subscriptions/$instanceId'
+import { Route as HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyBillingReconciliationRunIdRouteImport } from './routes/_hosted/orgs/$organizationId/projects/$projectId/env/$environmentKey/billing/reconciliation/$runId'
+import { Route as HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyBillingQuarantineRecordIdRouteImport } from './routes/_hosted/orgs/$organizationId/projects/$projectId/env/$environmentKey/billing/quarantine/$recordId'
+import { Route as HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyBillingMigrationsProgramIdRouteImport } from './routes/_hosted/orgs/$organizationId/projects/$projectId/env/$environmentKey/billing/migrations/$programId'
+import { Route as HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyBillingIdentityConflictsConflictIdRouteImport } from './routes/_hosted/orgs/$organizationId/projects/$projectId/env/$environmentKey/billing/identity-conflicts/$conflictId'
+import { Route as HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyBillingCustomersCustomerIdRouteImport } from './routes/_hosted/orgs/$organizationId/projects/$projectId/env/$environmentKey/billing/customers/$customerId'
+import { Route as HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyBillingConnectionsCredentialIdRouteImport } from './routes/_hosted/orgs/$organizationId/projects/$projectId/env/$environmentKey/billing/connections/$credentialId'
 
 const SignupRoute = SignupRouteImport.update({
   id: '/signup',
@@ -90,357 +92,374 @@ const IndexRoute = IndexRouteImport.update({
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
-const Studio_layoutStudioRoute = Studio_layoutStudioRouteImport.update({
-  id: '/studio',
-  path: '/studio',
-  getParentRoute: () => Studio_layoutRoute,
-} as any)
 const HostedWorkspaceRoute = HostedWorkspaceRouteImport.update({
   id: '/workspace',
   path: '/workspace',
   getParentRoute: () => HostedRoute,
 } as any)
-const HostedOrganizationsNewRoute = HostedOrganizationsNewRouteImport.update({
-  id: '/organizations/new',
-  path: '/organizations/new',
+const Studio_layoutStudioIndexRoute =
+  Studio_layoutStudioIndexRouteImport.update({
+    id: '/studio/',
+    path: '/studio/',
+    getParentRoute: () => Studio_layoutRoute,
+  } as any)
+const HostedOrgsNewRoute = HostedOrgsNewRouteImport.update({
+  id: '/orgs/new',
+  path: '/orgs/new',
   getParentRoute: () => HostedRoute,
 } as any)
-const HostedOrganizationsOrganizationIdIndexRoute =
-  HostedOrganizationsOrganizationIdIndexRouteImport.update({
-    id: '/organizations/$organizationId/',
-    path: '/organizations/$organizationId/',
+const HostedOrgsOrganizationIdIndexRoute =
+  HostedOrgsOrganizationIdIndexRouteImport.update({
+    id: '/orgs/$organizationId/',
+    path: '/orgs/$organizationId/',
     getParentRoute: () => HostedRoute,
   } as any)
-const HostedOrganizationsOrganizationIdMembersRoute =
-  HostedOrganizationsOrganizationIdMembersRouteImport.update({
-    id: '/organizations/$organizationId/members',
-    path: '/organizations/$organizationId/members',
+const HostedOrgsOrganizationIdMembersRoute =
+  HostedOrgsOrganizationIdMembersRouteImport.update({
+    id: '/orgs/$organizationId/members',
+    path: '/orgs/$organizationId/members',
     getParentRoute: () => HostedRoute,
   } as any)
-const HostedOrganizationsOrganizationIdProjectsNewRoute =
-  HostedOrganizationsOrganizationIdProjectsNewRouteImport.update({
-    id: '/organizations/$organizationId/projects/new',
-    path: '/organizations/$organizationId/projects/new',
+const HostedOrgsOrganizationIdProjectsNewRoute =
+  HostedOrgsOrganizationIdProjectsNewRouteImport.update({
+    id: '/orgs/$organizationId/projects/new',
+    path: '/orgs/$organizationId/projects/new',
     getParentRoute: () => HostedRoute,
   } as any)
-const HostedOrganizationsOrganizationIdProjectsProjectIdIndexRoute =
-  HostedOrganizationsOrganizationIdProjectsProjectIdIndexRouteImport.update({
-    id: '/organizations/$organizationId/projects/$projectId/',
-    path: '/organizations/$organizationId/projects/$projectId/',
-    getParentRoute: () => HostedRoute,
-  } as any)
-const HostedOrganizationsOrganizationIdProjectsProjectIdAppsRoute =
-  HostedOrganizationsOrganizationIdProjectsProjectIdAppsRouteImport.update({
-    id: '/organizations/$organizationId/projects/$projectId/apps',
-    path: '/organizations/$organizationId/projects/$projectId/apps',
-    getParentRoute: () => HostedRoute,
-  } as any)
-const Studio_layoutStudioHostedOrganizationIdProjectIdEnvironmentIdPaywallIdDraftIdRoute =
-  Studio_layoutStudioHostedOrganizationIdProjectIdEnvironmentIdPaywallIdDraftIdRouteImport.update(
+const Studio_layoutStudioOrganizationIdProjectIdEnvironmentIdPaywallIdDraftIdRoute =
+  Studio_layoutStudioOrganizationIdProjectIdEnvironmentIdPaywallIdDraftIdRouteImport.update(
     {
-      id: '/studio-hosted/$organizationId/$projectId/$environmentId/$paywallId/$draftId',
-      path: '/studio-hosted/$organizationId/$projectId/$environmentId/$paywallId/$draftId',
+      id: '/studio/$organizationId/$projectId/$environmentId/$paywallId/$draftId',
+      path: '/studio/$organizationId/$projectId/$environmentId/$paywallId/$draftId',
       getParentRoute: () => Studio_layoutRoute,
     } as any,
   )
-const HostedOrganizationsOrganizationIdProjectsProjectIdSettingsEnvironmentsRoute =
-  HostedOrganizationsOrganizationIdProjectsProjectIdSettingsEnvironmentsRouteImport.update(
+const HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyIndexRoute =
+  HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyIndexRouteImport.update(
     {
-      id: '/organizations/$organizationId/projects/$projectId/settings/environments',
-      path: '/organizations/$organizationId/projects/$projectId/settings/environments',
+      id: '/orgs/$organizationId/projects/$projectId/env/$environmentKey/',
+      path: '/orgs/$organizationId/projects/$projectId/env/$environmentKey/',
       getParentRoute: () => HostedRoute,
     } as any,
   )
-const HostedOrganizationsOrganizationIdProjectsProjectIdSettingsApiKeysRoute =
-  HostedOrganizationsOrganizationIdProjectsProjectIdSettingsApiKeysRouteImport.update(
+const HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyAppsRoute =
+  HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyAppsRouteImport.update(
     {
-      id: '/organizations/$organizationId/projects/$projectId/settings/api-keys',
-      path: '/organizations/$organizationId/projects/$projectId/settings/api-keys',
+      id: '/orgs/$organizationId/projects/$projectId/env/$environmentKey/apps',
+      path: '/orgs/$organizationId/projects/$projectId/env/$environmentKey/apps',
       getParentRoute: () => HostedRoute,
     } as any,
   )
-const HostedOrganizationsOrganizationIdProjectsProjectIdCatalogProvidersRoute =
-  HostedOrganizationsOrganizationIdProjectsProjectIdCatalogProvidersRouteImport.update(
+const HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeySettingsEnvironmentsRoute =
+  HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeySettingsEnvironmentsRouteImport.update(
     {
-      id: '/organizations/$organizationId/projects/$projectId/catalog/providers',
-      path: '/organizations/$organizationId/projects/$projectId/catalog/providers',
+      id: '/orgs/$organizationId/projects/$projectId/env/$environmentKey/settings/environments',
+      path: '/orgs/$organizationId/projects/$projectId/env/$environmentKey/settings/environments',
       getParentRoute: () => HostedRoute,
     } as any,
   )
-const HostedOrganizationsOrganizationIdProjectsProjectIdCatalogGrantVersionsRoute =
-  HostedOrganizationsOrganizationIdProjectsProjectIdCatalogGrantVersionsRouteImport.update(
+const HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeySettingsApiKeysRoute =
+  HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeySettingsApiKeysRouteImport.update(
     {
-      id: '/organizations/$organizationId/projects/$projectId/catalog/grant-versions',
-      path: '/organizations/$organizationId/projects/$projectId/catalog/grant-versions',
+      id: '/orgs/$organizationId/projects/$projectId/env/$environmentKey/settings/api-keys',
+      path: '/orgs/$organizationId/projects/$projectId/env/$environmentKey/settings/api-keys',
       getParentRoute: () => HostedRoute,
     } as any,
   )
-const HostedOrganizationsOrganizationIdProjectsProjectIdCatalogProductsIndexRoute =
-  HostedOrganizationsOrganizationIdProjectsProjectIdCatalogProductsIndexRouteImport.update(
+const HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyMonetizationReleasesRoute =
+  HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyMonetizationReleasesRouteImport.update(
     {
-      id: '/organizations/$organizationId/projects/$projectId/catalog/products/',
-      path: '/organizations/$organizationId/projects/$projectId/catalog/products/',
+      id: '/orgs/$organizationId/projects/$projectId/env/$environmentKey/monetization/releases',
+      path: '/orgs/$organizationId/projects/$projectId/env/$environmentKey/monetization/releases',
       getParentRoute: () => HostedRoute,
     } as any,
   )
-const HostedOrganizationsOrganizationIdProjectsProjectIdCatalogPlansIndexRoute =
-  HostedOrganizationsOrganizationIdProjectsProjectIdCatalogPlansIndexRouteImport.update(
+const HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyMonetizationAssetsRoute =
+  HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyMonetizationAssetsRouteImport.update(
     {
-      id: '/organizations/$organizationId/projects/$projectId/catalog/plans/',
-      path: '/organizations/$organizationId/projects/$projectId/catalog/plans/',
+      id: '/orgs/$organizationId/projects/$projectId/env/$environmentKey/monetization/assets',
+      path: '/orgs/$organizationId/projects/$projectId/env/$environmentKey/monetization/assets',
       getParentRoute: () => HostedRoute,
     } as any,
   )
-const HostedOrganizationsOrganizationIdProjectsProjectIdCatalogEntitlementsIndexRoute =
-  HostedOrganizationsOrganizationIdProjectsProjectIdCatalogEntitlementsIndexRouteImport.update(
+const HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyCatalogProvidersRoute =
+  HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyCatalogProvidersRouteImport.update(
     {
-      id: '/organizations/$organizationId/projects/$projectId/catalog/entitlements/',
-      path: '/organizations/$organizationId/projects/$projectId/catalog/entitlements/',
+      id: '/orgs/$organizationId/projects/$projectId/env/$environmentKey/catalog/providers',
+      path: '/orgs/$organizationId/projects/$projectId/env/$environmentKey/catalog/providers',
       getParentRoute: () => HostedRoute,
     } as any,
   )
-const HostedOrganizationsOrganizationIdProjectsProjectIdBillingConnectionsIndexRoute =
-  HostedOrganizationsOrganizationIdProjectsProjectIdBillingConnectionsIndexRouteImport.update(
+const HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyCatalogGrantVersionsRoute =
+  HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyCatalogGrantVersionsRouteImport.update(
     {
-      id: '/organizations/$organizationId/projects/$projectId/billing/connections/',
-      path: '/organizations/$organizationId/projects/$projectId/billing/connections/',
+      id: '/orgs/$organizationId/projects/$projectId/env/$environmentKey/catalog/grant-versions',
+      path: '/orgs/$organizationId/projects/$projectId/env/$environmentKey/catalog/grant-versions',
       getParentRoute: () => HostedRoute,
     } as any,
   )
-const HostedOrganizationsOrganizationIdProjectsProjectIdMonetizationEnvironmentIdReleasesRoute =
-  HostedOrganizationsOrganizationIdProjectsProjectIdMonetizationEnvironmentIdReleasesRouteImport.update(
+const HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyBillingRestoresRoute =
+  HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyBillingRestoresRouteImport.update(
     {
-      id: '/organizations/$organizationId/projects/$projectId/monetization/$environmentId/releases',
-      path: '/organizations/$organizationId/projects/$projectId/monetization/$environmentId/releases',
+      id: '/orgs/$organizationId/projects/$projectId/env/$environmentKey/billing/restores',
+      path: '/orgs/$organizationId/projects/$projectId/env/$environmentKey/billing/restores',
       getParentRoute: () => HostedRoute,
     } as any,
   )
-const HostedOrganizationsOrganizationIdProjectsProjectIdMonetizationEnvironmentIdPlacementsRoute =
-  HostedOrganizationsOrganizationIdProjectsProjectIdMonetizationEnvironmentIdPlacementsRouteImport.update(
+const HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyBillingProjectionHealthRoute =
+  HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyBillingProjectionHealthRouteImport.update(
     {
-      id: '/organizations/$organizationId/projects/$projectId/monetization/$environmentId/placements',
-      path: '/organizations/$organizationId/projects/$projectId/monetization/$environmentId/placements',
+      id: '/orgs/$organizationId/projects/$projectId/env/$environmentKey/billing/projection-health',
+      path: '/orgs/$organizationId/projects/$projectId/env/$environmentKey/billing/projection-health',
       getParentRoute: () => HostedRoute,
     } as any,
   )
-const HostedOrganizationsOrganizationIdProjectsProjectIdMonetizationEnvironmentIdPaywallsRoute =
-  HostedOrganizationsOrganizationIdProjectsProjectIdMonetizationEnvironmentIdPaywallsRouteImport.update(
+const HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyBillingHealthRoute =
+  HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyBillingHealthRouteImport.update(
     {
-      id: '/organizations/$organizationId/projects/$projectId/monetization/$environmentId/paywalls',
-      path: '/organizations/$organizationId/projects/$projectId/monetization/$environmentId/paywalls',
+      id: '/orgs/$organizationId/projects/$projectId/env/$environmentKey/billing/health',
+      path: '/orgs/$organizationId/projects/$projectId/env/$environmentKey/billing/health',
       getParentRoute: () => HostedRoute,
     } as any,
   )
-const HostedOrganizationsOrganizationIdProjectsProjectIdMonetizationEnvironmentIdExperimentsRoute =
-  HostedOrganizationsOrganizationIdProjectsProjectIdMonetizationEnvironmentIdExperimentsRouteImport.update(
+const HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyAnalyticsSurfaceRoute =
+  HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyAnalyticsSurfaceRouteImport.update(
     {
-      id: '/organizations/$organizationId/projects/$projectId/monetization/$environmentId/experiments',
-      path: '/organizations/$organizationId/projects/$projectId/monetization/$environmentId/experiments',
+      id: '/orgs/$organizationId/projects/$projectId/env/$environmentKey/analytics/$surface',
+      path: '/orgs/$organizationId/projects/$projectId/env/$environmentKey/analytics/$surface',
       getParentRoute: () => HostedRoute,
     } as any,
   )
-const HostedOrganizationsOrganizationIdProjectsProjectIdMonetizationEnvironmentIdAssetsRoute =
-  HostedOrganizationsOrganizationIdProjectsProjectIdMonetizationEnvironmentIdAssetsRouteImport.update(
+const HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyMonetizationPlacementsIndexRoute =
+  HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyMonetizationPlacementsIndexRouteImport.update(
     {
-      id: '/organizations/$organizationId/projects/$projectId/monetization/$environmentId/assets',
-      path: '/organizations/$organizationId/projects/$projectId/monetization/$environmentId/assets',
+      id: '/orgs/$organizationId/projects/$projectId/env/$environmentKey/monetization/placements/',
+      path: '/orgs/$organizationId/projects/$projectId/env/$environmentKey/monetization/placements/',
       getParentRoute: () => HostedRoute,
     } as any,
   )
-const HostedOrganizationsOrganizationIdProjectsProjectIdCatalogProvidersConnectionIdRoute =
-  HostedOrganizationsOrganizationIdProjectsProjectIdCatalogProvidersConnectionIdRouteImport.update(
+const HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyMonetizationPaywallsIndexRoute =
+  HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyMonetizationPaywallsIndexRouteImport.update(
+    {
+      id: '/orgs/$organizationId/projects/$projectId/env/$environmentKey/monetization/paywalls/',
+      path: '/orgs/$organizationId/projects/$projectId/env/$environmentKey/monetization/paywalls/',
+      getParentRoute: () => HostedRoute,
+    } as any,
+  )
+const HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyMonetizationExperimentsIndexRoute =
+  HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyMonetizationExperimentsIndexRouteImport.update(
+    {
+      id: '/orgs/$organizationId/projects/$projectId/env/$environmentKey/monetization/experiments/',
+      path: '/orgs/$organizationId/projects/$projectId/env/$environmentKey/monetization/experiments/',
+      getParentRoute: () => HostedRoute,
+    } as any,
+  )
+const HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyCatalogProductsIndexRoute =
+  HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyCatalogProductsIndexRouteImport.update(
+    {
+      id: '/orgs/$organizationId/projects/$projectId/env/$environmentKey/catalog/products/',
+      path: '/orgs/$organizationId/projects/$projectId/env/$environmentKey/catalog/products/',
+      getParentRoute: () => HostedRoute,
+    } as any,
+  )
+const HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyCatalogPlansIndexRoute =
+  HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyCatalogPlansIndexRouteImport.update(
+    {
+      id: '/orgs/$organizationId/projects/$projectId/env/$environmentKey/catalog/plans/',
+      path: '/orgs/$organizationId/projects/$projectId/env/$environmentKey/catalog/plans/',
+      getParentRoute: () => HostedRoute,
+    } as any,
+  )
+const HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyCatalogEntitlementsIndexRoute =
+  HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyCatalogEntitlementsIndexRouteImport.update(
+    {
+      id: '/orgs/$organizationId/projects/$projectId/env/$environmentKey/catalog/entitlements/',
+      path: '/orgs/$organizationId/projects/$projectId/env/$environmentKey/catalog/entitlements/',
+      getParentRoute: () => HostedRoute,
+    } as any,
+  )
+const HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyBillingTransactionsIndexRoute =
+  HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyBillingTransactionsIndexRouteImport.update(
+    {
+      id: '/orgs/$organizationId/projects/$projectId/env/$environmentKey/billing/transactions/',
+      path: '/orgs/$organizationId/projects/$projectId/env/$environmentKey/billing/transactions/',
+      getParentRoute: () => HostedRoute,
+    } as any,
+  )
+const HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyBillingReconciliationIndexRoute =
+  HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyBillingReconciliationIndexRouteImport.update(
+    {
+      id: '/orgs/$organizationId/projects/$projectId/env/$environmentKey/billing/reconciliation/',
+      path: '/orgs/$organizationId/projects/$projectId/env/$environmentKey/billing/reconciliation/',
+      getParentRoute: () => HostedRoute,
+    } as any,
+  )
+const HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyBillingQuarantineIndexRoute =
+  HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyBillingQuarantineIndexRouteImport.update(
+    {
+      id: '/orgs/$organizationId/projects/$projectId/env/$environmentKey/billing/quarantine/',
+      path: '/orgs/$organizationId/projects/$projectId/env/$environmentKey/billing/quarantine/',
+      getParentRoute: () => HostedRoute,
+    } as any,
+  )
+const HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyBillingMigrationsIndexRoute =
+  HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyBillingMigrationsIndexRouteImport.update(
+    {
+      id: '/orgs/$organizationId/projects/$projectId/env/$environmentKey/billing/migrations/',
+      path: '/orgs/$organizationId/projects/$projectId/env/$environmentKey/billing/migrations/',
+      getParentRoute: () => HostedRoute,
+    } as any,
+  )
+const HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyBillingIdentityConflictsIndexRoute =
+  HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyBillingIdentityConflictsIndexRouteImport.update(
+    {
+      id: '/orgs/$organizationId/projects/$projectId/env/$environmentKey/billing/identity-conflicts/',
+      path: '/orgs/$organizationId/projects/$projectId/env/$environmentKey/billing/identity-conflicts/',
+      getParentRoute: () => HostedRoute,
+    } as any,
+  )
+const HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyBillingCustomersIndexRoute =
+  HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyBillingCustomersIndexRouteImport.update(
+    {
+      id: '/orgs/$organizationId/projects/$projectId/env/$environmentKey/billing/customers/',
+      path: '/orgs/$organizationId/projects/$projectId/env/$environmentKey/billing/customers/',
+      getParentRoute: () => HostedRoute,
+    } as any,
+  )
+const HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyBillingConnectionsIndexRoute =
+  HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyBillingConnectionsIndexRouteImport.update(
+    {
+      id: '/orgs/$organizationId/projects/$projectId/env/$environmentKey/billing/connections/',
+      path: '/orgs/$organizationId/projects/$projectId/env/$environmentKey/billing/connections/',
+      getParentRoute: () => HostedRoute,
+    } as any,
+  )
+const HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyMonetizationPlacementsPlacementIdRoute =
+  HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyMonetizationPlacementsPlacementIdRouteImport.update(
+    {
+      id: '/orgs/$organizationId/projects/$projectId/env/$environmentKey/monetization/placements/$placementId',
+      path: '/orgs/$organizationId/projects/$projectId/env/$environmentKey/monetization/placements/$placementId',
+      getParentRoute: () => HostedRoute,
+    } as any,
+  )
+const HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyMonetizationPaywallsPaywallIdRoute =
+  HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyMonetizationPaywallsPaywallIdRouteImport.update(
+    {
+      id: '/orgs/$organizationId/projects/$projectId/env/$environmentKey/monetization/paywalls/$paywallId',
+      path: '/orgs/$organizationId/projects/$projectId/env/$environmentKey/monetization/paywalls/$paywallId',
+      getParentRoute: () => HostedRoute,
+    } as any,
+  )
+const HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyMonetizationExperimentsNewRoute =
+  HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyMonetizationExperimentsNewRouteImport.update(
+    {
+      id: '/orgs/$organizationId/projects/$projectId/env/$environmentKey/monetization/experiments/new',
+      path: '/orgs/$organizationId/projects/$projectId/env/$environmentKey/monetization/experiments/new',
+      getParentRoute: () => HostedRoute,
+    } as any,
+  )
+const HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyMonetizationExperimentsExperimentIdRoute =
+  HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyMonetizationExperimentsExperimentIdRouteImport.update(
+    {
+      id: '/orgs/$organizationId/projects/$projectId/env/$environmentKey/monetization/experiments/$experimentId',
+      path: '/orgs/$organizationId/projects/$projectId/env/$environmentKey/monetization/experiments/$experimentId',
+      getParentRoute: () => HostedRoute,
+    } as any,
+  )
+const HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyCatalogProvidersConnectionIdRoute =
+  HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyCatalogProvidersConnectionIdRouteImport.update(
     {
       id: '/$connectionId',
       path: '/$connectionId',
       getParentRoute: () =>
-        HostedOrganizationsOrganizationIdProjectsProjectIdCatalogProvidersRoute,
+        HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyCatalogProvidersRoute,
     } as any,
   )
-const HostedOrganizationsOrganizationIdProjectsProjectIdCatalogProductsProductIdRoute =
-  HostedOrganizationsOrganizationIdProjectsProjectIdCatalogProductsProductIdRouteImport.update(
+const HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyCatalogProductsProductIdRoute =
+  HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyCatalogProductsProductIdRouteImport.update(
     {
-      id: '/organizations/$organizationId/projects/$projectId/catalog/products/$productId',
-      path: '/organizations/$organizationId/projects/$projectId/catalog/products/$productId',
+      id: '/orgs/$organizationId/projects/$projectId/env/$environmentKey/catalog/products/$productId',
+      path: '/orgs/$organizationId/projects/$projectId/env/$environmentKey/catalog/products/$productId',
       getParentRoute: () => HostedRoute,
     } as any,
   )
-const HostedOrganizationsOrganizationIdProjectsProjectIdCatalogPlansPlanIdRoute =
-  HostedOrganizationsOrganizationIdProjectsProjectIdCatalogPlansPlanIdRouteImport.update(
+const HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyCatalogPlansPlanIdRoute =
+  HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyCatalogPlansPlanIdRouteImport.update(
     {
-      id: '/organizations/$organizationId/projects/$projectId/catalog/plans/$planId',
-      path: '/organizations/$organizationId/projects/$projectId/catalog/plans/$planId',
+      id: '/orgs/$organizationId/projects/$projectId/env/$environmentKey/catalog/plans/$planId',
+      path: '/orgs/$organizationId/projects/$projectId/env/$environmentKey/catalog/plans/$planId',
       getParentRoute: () => HostedRoute,
     } as any,
   )
-const HostedOrganizationsOrganizationIdProjectsProjectIdCatalogEntitlementsEntitlementIdRoute =
-  HostedOrganizationsOrganizationIdProjectsProjectIdCatalogEntitlementsEntitlementIdRouteImport.update(
+const HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyCatalogEntitlementsEntitlementIdRoute =
+  HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyCatalogEntitlementsEntitlementIdRouteImport.update(
     {
-      id: '/organizations/$organizationId/projects/$projectId/catalog/entitlements/$entitlementId',
-      path: '/organizations/$organizationId/projects/$projectId/catalog/entitlements/$entitlementId',
+      id: '/orgs/$organizationId/projects/$projectId/env/$environmentKey/catalog/entitlements/$entitlementId',
+      path: '/orgs/$organizationId/projects/$projectId/env/$environmentKey/catalog/entitlements/$entitlementId',
       getParentRoute: () => HostedRoute,
     } as any,
   )
-const HostedOrganizationsOrganizationIdProjectsProjectIdBillingConnectionsCredentialIdRoute =
-  HostedOrganizationsOrganizationIdProjectsProjectIdBillingConnectionsCredentialIdRouteImport.update(
+const HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyBillingTransactionsFactIdRoute =
+  HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyBillingTransactionsFactIdRouteImport.update(
     {
-      id: '/organizations/$organizationId/projects/$projectId/billing/connections/$credentialId',
-      path: '/organizations/$organizationId/projects/$projectId/billing/connections/$credentialId',
+      id: '/orgs/$organizationId/projects/$projectId/env/$environmentKey/billing/transactions/$factId',
+      path: '/orgs/$organizationId/projects/$projectId/env/$environmentKey/billing/transactions/$factId',
       getParentRoute: () => HostedRoute,
     } as any,
   )
-const HostedOrganizationsOrganizationIdProjectsProjectIdBillingEnvironmentIdRestoresRoute =
-  HostedOrganizationsOrganizationIdProjectsProjectIdBillingEnvironmentIdRestoresRouteImport.update(
+const HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyBillingSubscriptionsInstanceIdRoute =
+  HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyBillingSubscriptionsInstanceIdRouteImport.update(
     {
-      id: '/organizations/$organizationId/projects/$projectId/billing/$environmentId/restores',
-      path: '/organizations/$organizationId/projects/$projectId/billing/$environmentId/restores',
+      id: '/orgs/$organizationId/projects/$projectId/env/$environmentKey/billing/subscriptions/$instanceId',
+      path: '/orgs/$organizationId/projects/$projectId/env/$environmentKey/billing/subscriptions/$instanceId',
       getParentRoute: () => HostedRoute,
     } as any,
   )
-const HostedOrganizationsOrganizationIdProjectsProjectIdBillingEnvironmentIdProjectionHealthRoute =
-  HostedOrganizationsOrganizationIdProjectsProjectIdBillingEnvironmentIdProjectionHealthRouteImport.update(
+const HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyBillingReconciliationRunIdRoute =
+  HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyBillingReconciliationRunIdRouteImport.update(
     {
-      id: '/organizations/$organizationId/projects/$projectId/billing/$environmentId/projection-health',
-      path: '/organizations/$organizationId/projects/$projectId/billing/$environmentId/projection-health',
+      id: '/orgs/$organizationId/projects/$projectId/env/$environmentKey/billing/reconciliation/$runId',
+      path: '/orgs/$organizationId/projects/$projectId/env/$environmentKey/billing/reconciliation/$runId',
       getParentRoute: () => HostedRoute,
     } as any,
   )
-const HostedOrganizationsOrganizationIdProjectsProjectIdBillingEnvironmentIdHealthRoute =
-  HostedOrganizationsOrganizationIdProjectsProjectIdBillingEnvironmentIdHealthRouteImport.update(
+const HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyBillingQuarantineRecordIdRoute =
+  HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyBillingQuarantineRecordIdRouteImport.update(
     {
-      id: '/organizations/$organizationId/projects/$projectId/billing/$environmentId/health',
-      path: '/organizations/$organizationId/projects/$projectId/billing/$environmentId/health',
+      id: '/orgs/$organizationId/projects/$projectId/env/$environmentKey/billing/quarantine/$recordId',
+      path: '/orgs/$organizationId/projects/$projectId/env/$environmentKey/billing/quarantine/$recordId',
       getParentRoute: () => HostedRoute,
     } as any,
   )
-const HostedOrganizationsOrganizationIdProjectsProjectIdAnalyticsEnvironmentIdSurfaceRoute =
-  HostedOrganizationsOrganizationIdProjectsProjectIdAnalyticsEnvironmentIdSurfaceRouteImport.update(
+const HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyBillingMigrationsProgramIdRoute =
+  HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyBillingMigrationsProgramIdRouteImport.update(
     {
-      id: '/organizations/$organizationId/projects/$projectId/analytics/$environmentId/$surface',
-      path: '/organizations/$organizationId/projects/$projectId/analytics/$environmentId/$surface',
+      id: '/orgs/$organizationId/projects/$projectId/env/$environmentKey/billing/migrations/$programId',
+      path: '/orgs/$organizationId/projects/$projectId/env/$environmentKey/billing/migrations/$programId',
       getParentRoute: () => HostedRoute,
     } as any,
   )
-const HostedOrganizationsOrganizationIdProjectsProjectIdBillingEnvironmentIdTransactionsIndexRoute =
-  HostedOrganizationsOrganizationIdProjectsProjectIdBillingEnvironmentIdTransactionsIndexRouteImport.update(
+const HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyBillingIdentityConflictsConflictIdRoute =
+  HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyBillingIdentityConflictsConflictIdRouteImport.update(
     {
-      id: '/organizations/$organizationId/projects/$projectId/billing/$environmentId/transactions/',
-      path: '/organizations/$organizationId/projects/$projectId/billing/$environmentId/transactions/',
+      id: '/orgs/$organizationId/projects/$projectId/env/$environmentKey/billing/identity-conflicts/$conflictId',
+      path: '/orgs/$organizationId/projects/$projectId/env/$environmentKey/billing/identity-conflicts/$conflictId',
       getParentRoute: () => HostedRoute,
     } as any,
   )
-const HostedOrganizationsOrganizationIdProjectsProjectIdBillingEnvironmentIdReconciliationIndexRoute =
-  HostedOrganizationsOrganizationIdProjectsProjectIdBillingEnvironmentIdReconciliationIndexRouteImport.update(
+const HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyBillingCustomersCustomerIdRoute =
+  HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyBillingCustomersCustomerIdRouteImport.update(
     {
-      id: '/organizations/$organizationId/projects/$projectId/billing/$environmentId/reconciliation/',
-      path: '/organizations/$organizationId/projects/$projectId/billing/$environmentId/reconciliation/',
+      id: '/orgs/$organizationId/projects/$projectId/env/$environmentKey/billing/customers/$customerId',
+      path: '/orgs/$organizationId/projects/$projectId/env/$environmentKey/billing/customers/$customerId',
       getParentRoute: () => HostedRoute,
     } as any,
   )
-const HostedOrganizationsOrganizationIdProjectsProjectIdBillingEnvironmentIdQuarantineIndexRoute =
-  HostedOrganizationsOrganizationIdProjectsProjectIdBillingEnvironmentIdQuarantineIndexRouteImport.update(
+const HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyBillingConnectionsCredentialIdRoute =
+  HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyBillingConnectionsCredentialIdRouteImport.update(
     {
-      id: '/organizations/$organizationId/projects/$projectId/billing/$environmentId/quarantine/',
-      path: '/organizations/$organizationId/projects/$projectId/billing/$environmentId/quarantine/',
-      getParentRoute: () => HostedRoute,
-    } as any,
-  )
-const HostedOrganizationsOrganizationIdProjectsProjectIdBillingEnvironmentIdIdentityConflictsIndexRoute =
-  HostedOrganizationsOrganizationIdProjectsProjectIdBillingEnvironmentIdIdentityConflictsIndexRouteImport.update(
-    {
-      id: '/organizations/$organizationId/projects/$projectId/billing/$environmentId/identity-conflicts/',
-      path: '/organizations/$organizationId/projects/$projectId/billing/$environmentId/identity-conflicts/',
-      getParentRoute: () => HostedRoute,
-    } as any,
-  )
-const HostedOrganizationsOrganizationIdProjectsProjectIdBillingEnvironmentIdCustomersIndexRoute =
-  HostedOrganizationsOrganizationIdProjectsProjectIdBillingEnvironmentIdCustomersIndexRouteImport.update(
-    {
-      id: '/organizations/$organizationId/projects/$projectId/billing/$environmentId/customers/',
-      path: '/organizations/$organizationId/projects/$projectId/billing/$environmentId/customers/',
-      getParentRoute: () => HostedRoute,
-    } as any,
-  )
-const HostedOrganizationsOrganizationIdProjectsProjectIdMonetizationEnvironmentIdPlacementsPlacementIdRoute =
-  HostedOrganizationsOrganizationIdProjectsProjectIdMonetizationEnvironmentIdPlacementsPlacementIdRouteImport.update(
-    {
-      id: '/$placementId',
-      path: '/$placementId',
-      getParentRoute: () =>
-        HostedOrganizationsOrganizationIdProjectsProjectIdMonetizationEnvironmentIdPlacementsRoute,
-    } as any,
-  )
-const HostedOrganizationsOrganizationIdProjectsProjectIdMonetizationEnvironmentIdPaywallsPaywallIdRoute =
-  HostedOrganizationsOrganizationIdProjectsProjectIdMonetizationEnvironmentIdPaywallsPaywallIdRouteImport.update(
-    {
-      id: '/$paywallId',
-      path: '/$paywallId',
-      getParentRoute: () =>
-        HostedOrganizationsOrganizationIdProjectsProjectIdMonetizationEnvironmentIdPaywallsRoute,
-    } as any,
-  )
-const HostedOrganizationsOrganizationIdProjectsProjectIdMonetizationEnvironmentIdExperimentsNewRoute =
-  HostedOrganizationsOrganizationIdProjectsProjectIdMonetizationEnvironmentIdExperimentsNewRouteImport.update(
-    {
-      id: '/new',
-      path: '/new',
-      getParentRoute: () =>
-        HostedOrganizationsOrganizationIdProjectsProjectIdMonetizationEnvironmentIdExperimentsRoute,
-    } as any,
-  )
-const HostedOrganizationsOrganizationIdProjectsProjectIdMonetizationEnvironmentIdExperimentsExperimentIdRoute =
-  HostedOrganizationsOrganizationIdProjectsProjectIdMonetizationEnvironmentIdExperimentsExperimentIdRouteImport.update(
-    {
-      id: '/$experimentId',
-      path: '/$experimentId',
-      getParentRoute: () =>
-        HostedOrganizationsOrganizationIdProjectsProjectIdMonetizationEnvironmentIdExperimentsRoute,
-    } as any,
-  )
-const HostedOrganizationsOrganizationIdProjectsProjectIdBillingEnvironmentIdTransactionsFactIdRoute =
-  HostedOrganizationsOrganizationIdProjectsProjectIdBillingEnvironmentIdTransactionsFactIdRouteImport.update(
-    {
-      id: '/organizations/$organizationId/projects/$projectId/billing/$environmentId/transactions/$factId',
-      path: '/organizations/$organizationId/projects/$projectId/billing/$environmentId/transactions/$factId',
-      getParentRoute: () => HostedRoute,
-    } as any,
-  )
-const HostedOrganizationsOrganizationIdProjectsProjectIdBillingEnvironmentIdSubscriptionsInstanceIdRoute =
-  HostedOrganizationsOrganizationIdProjectsProjectIdBillingEnvironmentIdSubscriptionsInstanceIdRouteImport.update(
-    {
-      id: '/organizations/$organizationId/projects/$projectId/billing/$environmentId/subscriptions/$instanceId',
-      path: '/organizations/$organizationId/projects/$projectId/billing/$environmentId/subscriptions/$instanceId',
-      getParentRoute: () => HostedRoute,
-    } as any,
-  )
-const HostedOrganizationsOrganizationIdProjectsProjectIdBillingEnvironmentIdReconciliationRunIdRoute =
-  HostedOrganizationsOrganizationIdProjectsProjectIdBillingEnvironmentIdReconciliationRunIdRouteImport.update(
-    {
-      id: '/organizations/$organizationId/projects/$projectId/billing/$environmentId/reconciliation/$runId',
-      path: '/organizations/$organizationId/projects/$projectId/billing/$environmentId/reconciliation/$runId',
-      getParentRoute: () => HostedRoute,
-    } as any,
-  )
-const HostedOrganizationsOrganizationIdProjectsProjectIdBillingEnvironmentIdQuarantineRecordIdRoute =
-  HostedOrganizationsOrganizationIdProjectsProjectIdBillingEnvironmentIdQuarantineRecordIdRouteImport.update(
-    {
-      id: '/organizations/$organizationId/projects/$projectId/billing/$environmentId/quarantine/$recordId',
-      path: '/organizations/$organizationId/projects/$projectId/billing/$environmentId/quarantine/$recordId',
-      getParentRoute: () => HostedRoute,
-    } as any,
-  )
-const HostedOrganizationsOrganizationIdProjectsProjectIdBillingEnvironmentIdIdentityConflictsConflictIdRoute =
-  HostedOrganizationsOrganizationIdProjectsProjectIdBillingEnvironmentIdIdentityConflictsConflictIdRouteImport.update(
-    {
-      id: '/organizations/$organizationId/projects/$projectId/billing/$environmentId/identity-conflicts/$conflictId',
-      path: '/organizations/$organizationId/projects/$projectId/billing/$environmentId/identity-conflicts/$conflictId',
-      getParentRoute: () => HostedRoute,
-    } as any,
-  )
-const HostedOrganizationsOrganizationIdProjectsProjectIdBillingEnvironmentIdCustomersCustomerIdRoute =
-  HostedOrganizationsOrganizationIdProjectsProjectIdBillingEnvironmentIdCustomersCustomerIdRouteImport.update(
-    {
-      id: '/organizations/$organizationId/projects/$projectId/billing/$environmentId/customers/$customerId',
-      path: '/organizations/$organizationId/projects/$projectId/billing/$environmentId/customers/$customerId',
+      id: '/orgs/$organizationId/projects/$projectId/env/$environmentKey/billing/connections/$credentialId',
+      path: '/orgs/$organizationId/projects/$projectId/env/$environmentKey/billing/connections/$credentialId',
       getParentRoute: () => HostedRoute,
     } as any,
   )
@@ -451,51 +470,53 @@ export interface FileRoutesByFullPath {
   '/login': typeof LoginRoute
   '/signup': typeof SignupRoute
   '/workspace': typeof HostedWorkspaceRoute
-  '/studio': typeof Studio_layoutStudioRoute
-  '/organizations/new': typeof HostedOrganizationsNewRoute
-  '/organizations/$organizationId/members': typeof HostedOrganizationsOrganizationIdMembersRoute
-  '/organizations/$organizationId/': typeof HostedOrganizationsOrganizationIdIndexRoute
-  '/organizations/$organizationId/projects/new': typeof HostedOrganizationsOrganizationIdProjectsNewRoute
-  '/organizations/$organizationId/projects/$projectId/apps': typeof HostedOrganizationsOrganizationIdProjectsProjectIdAppsRoute
-  '/organizations/$organizationId/projects/$projectId/': typeof HostedOrganizationsOrganizationIdProjectsProjectIdIndexRoute
-  '/organizations/$organizationId/projects/$projectId/catalog/grant-versions': typeof HostedOrganizationsOrganizationIdProjectsProjectIdCatalogGrantVersionsRoute
-  '/organizations/$organizationId/projects/$projectId/catalog/providers': typeof HostedOrganizationsOrganizationIdProjectsProjectIdCatalogProvidersRouteWithChildren
-  '/organizations/$organizationId/projects/$projectId/settings/api-keys': typeof HostedOrganizationsOrganizationIdProjectsProjectIdSettingsApiKeysRoute
-  '/organizations/$organizationId/projects/$projectId/settings/environments': typeof HostedOrganizationsOrganizationIdProjectsProjectIdSettingsEnvironmentsRoute
-  '/studio-hosted/$organizationId/$projectId/$environmentId/$paywallId/$draftId': typeof Studio_layoutStudioHostedOrganizationIdProjectIdEnvironmentIdPaywallIdDraftIdRoute
-  '/organizations/$organizationId/projects/$projectId/analytics/$environmentId/$surface': typeof HostedOrganizationsOrganizationIdProjectsProjectIdAnalyticsEnvironmentIdSurfaceRoute
-  '/organizations/$organizationId/projects/$projectId/billing/$environmentId/health': typeof HostedOrganizationsOrganizationIdProjectsProjectIdBillingEnvironmentIdHealthRoute
-  '/organizations/$organizationId/projects/$projectId/billing/$environmentId/projection-health': typeof HostedOrganizationsOrganizationIdProjectsProjectIdBillingEnvironmentIdProjectionHealthRoute
-  '/organizations/$organizationId/projects/$projectId/billing/$environmentId/restores': typeof HostedOrganizationsOrganizationIdProjectsProjectIdBillingEnvironmentIdRestoresRoute
-  '/organizations/$organizationId/projects/$projectId/billing/connections/$credentialId': typeof HostedOrganizationsOrganizationIdProjectsProjectIdBillingConnectionsCredentialIdRoute
-  '/organizations/$organizationId/projects/$projectId/catalog/entitlements/$entitlementId': typeof HostedOrganizationsOrganizationIdProjectsProjectIdCatalogEntitlementsEntitlementIdRoute
-  '/organizations/$organizationId/projects/$projectId/catalog/plans/$planId': typeof HostedOrganizationsOrganizationIdProjectsProjectIdCatalogPlansPlanIdRoute
-  '/organizations/$organizationId/projects/$projectId/catalog/products/$productId': typeof HostedOrganizationsOrganizationIdProjectsProjectIdCatalogProductsProductIdRoute
-  '/organizations/$organizationId/projects/$projectId/catalog/providers/$connectionId': typeof HostedOrganizationsOrganizationIdProjectsProjectIdCatalogProvidersConnectionIdRoute
-  '/organizations/$organizationId/projects/$projectId/monetization/$environmentId/assets': typeof HostedOrganizationsOrganizationIdProjectsProjectIdMonetizationEnvironmentIdAssetsRoute
-  '/organizations/$organizationId/projects/$projectId/monetization/$environmentId/experiments': typeof HostedOrganizationsOrganizationIdProjectsProjectIdMonetizationEnvironmentIdExperimentsRouteWithChildren
-  '/organizations/$organizationId/projects/$projectId/monetization/$environmentId/paywalls': typeof HostedOrganizationsOrganizationIdProjectsProjectIdMonetizationEnvironmentIdPaywallsRouteWithChildren
-  '/organizations/$organizationId/projects/$projectId/monetization/$environmentId/placements': typeof HostedOrganizationsOrganizationIdProjectsProjectIdMonetizationEnvironmentIdPlacementsRouteWithChildren
-  '/organizations/$organizationId/projects/$projectId/monetization/$environmentId/releases': typeof HostedOrganizationsOrganizationIdProjectsProjectIdMonetizationEnvironmentIdReleasesRoute
-  '/organizations/$organizationId/projects/$projectId/billing/connections/': typeof HostedOrganizationsOrganizationIdProjectsProjectIdBillingConnectionsIndexRoute
-  '/organizations/$organizationId/projects/$projectId/catalog/entitlements/': typeof HostedOrganizationsOrganizationIdProjectsProjectIdCatalogEntitlementsIndexRoute
-  '/organizations/$organizationId/projects/$projectId/catalog/plans/': typeof HostedOrganizationsOrganizationIdProjectsProjectIdCatalogPlansIndexRoute
-  '/organizations/$organizationId/projects/$projectId/catalog/products/': typeof HostedOrganizationsOrganizationIdProjectsProjectIdCatalogProductsIndexRoute
-  '/organizations/$organizationId/projects/$projectId/billing/$environmentId/customers/$customerId': typeof HostedOrganizationsOrganizationIdProjectsProjectIdBillingEnvironmentIdCustomersCustomerIdRoute
-  '/organizations/$organizationId/projects/$projectId/billing/$environmentId/identity-conflicts/$conflictId': typeof HostedOrganizationsOrganizationIdProjectsProjectIdBillingEnvironmentIdIdentityConflictsConflictIdRoute
-  '/organizations/$organizationId/projects/$projectId/billing/$environmentId/quarantine/$recordId': typeof HostedOrganizationsOrganizationIdProjectsProjectIdBillingEnvironmentIdQuarantineRecordIdRoute
-  '/organizations/$organizationId/projects/$projectId/billing/$environmentId/reconciliation/$runId': typeof HostedOrganizationsOrganizationIdProjectsProjectIdBillingEnvironmentIdReconciliationRunIdRoute
-  '/organizations/$organizationId/projects/$projectId/billing/$environmentId/subscriptions/$instanceId': typeof HostedOrganizationsOrganizationIdProjectsProjectIdBillingEnvironmentIdSubscriptionsInstanceIdRoute
-  '/organizations/$organizationId/projects/$projectId/billing/$environmentId/transactions/$factId': typeof HostedOrganizationsOrganizationIdProjectsProjectIdBillingEnvironmentIdTransactionsFactIdRoute
-  '/organizations/$organizationId/projects/$projectId/monetization/$environmentId/experiments/$experimentId': typeof HostedOrganizationsOrganizationIdProjectsProjectIdMonetizationEnvironmentIdExperimentsExperimentIdRoute
-  '/organizations/$organizationId/projects/$projectId/monetization/$environmentId/experiments/new': typeof HostedOrganizationsOrganizationIdProjectsProjectIdMonetizationEnvironmentIdExperimentsNewRoute
-  '/organizations/$organizationId/projects/$projectId/monetization/$environmentId/paywalls/$paywallId': typeof HostedOrganizationsOrganizationIdProjectsProjectIdMonetizationEnvironmentIdPaywallsPaywallIdRoute
-  '/organizations/$organizationId/projects/$projectId/monetization/$environmentId/placements/$placementId': typeof HostedOrganizationsOrganizationIdProjectsProjectIdMonetizationEnvironmentIdPlacementsPlacementIdRoute
-  '/organizations/$organizationId/projects/$projectId/billing/$environmentId/customers/': typeof HostedOrganizationsOrganizationIdProjectsProjectIdBillingEnvironmentIdCustomersIndexRoute
-  '/organizations/$organizationId/projects/$projectId/billing/$environmentId/identity-conflicts/': typeof HostedOrganizationsOrganizationIdProjectsProjectIdBillingEnvironmentIdIdentityConflictsIndexRoute
-  '/organizations/$organizationId/projects/$projectId/billing/$environmentId/quarantine/': typeof HostedOrganizationsOrganizationIdProjectsProjectIdBillingEnvironmentIdQuarantineIndexRoute
-  '/organizations/$organizationId/projects/$projectId/billing/$environmentId/reconciliation/': typeof HostedOrganizationsOrganizationIdProjectsProjectIdBillingEnvironmentIdReconciliationIndexRoute
-  '/organizations/$organizationId/projects/$projectId/billing/$environmentId/transactions/': typeof HostedOrganizationsOrganizationIdProjectsProjectIdBillingEnvironmentIdTransactionsIndexRoute
+  '/orgs/new': typeof HostedOrgsNewRoute
+  '/studio/': typeof Studio_layoutStudioIndexRoute
+  '/orgs/$organizationId/members': typeof HostedOrgsOrganizationIdMembersRoute
+  '/orgs/$organizationId/': typeof HostedOrgsOrganizationIdIndexRoute
+  '/orgs/$organizationId/projects/new': typeof HostedOrgsOrganizationIdProjectsNewRoute
+  '/studio/$organizationId/$projectId/$environmentId/$paywallId/$draftId': typeof Studio_layoutStudioOrganizationIdProjectIdEnvironmentIdPaywallIdDraftIdRoute
+  '/orgs/$organizationId/projects/$projectId/env/$environmentKey/apps': typeof HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyAppsRoute
+  '/orgs/$organizationId/projects/$projectId/env/$environmentKey/': typeof HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyIndexRoute
+  '/orgs/$organizationId/projects/$projectId/env/$environmentKey/analytics/$surface': typeof HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyAnalyticsSurfaceRoute
+  '/orgs/$organizationId/projects/$projectId/env/$environmentKey/billing/health': typeof HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyBillingHealthRoute
+  '/orgs/$organizationId/projects/$projectId/env/$environmentKey/billing/projection-health': typeof HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyBillingProjectionHealthRoute
+  '/orgs/$organizationId/projects/$projectId/env/$environmentKey/billing/restores': typeof HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyBillingRestoresRoute
+  '/orgs/$organizationId/projects/$projectId/env/$environmentKey/catalog/grant-versions': typeof HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyCatalogGrantVersionsRoute
+  '/orgs/$organizationId/projects/$projectId/env/$environmentKey/catalog/providers': typeof HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyCatalogProvidersRouteWithChildren
+  '/orgs/$organizationId/projects/$projectId/env/$environmentKey/monetization/assets': typeof HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyMonetizationAssetsRoute
+  '/orgs/$organizationId/projects/$projectId/env/$environmentKey/monetization/releases': typeof HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyMonetizationReleasesRoute
+  '/orgs/$organizationId/projects/$projectId/env/$environmentKey/settings/api-keys': typeof HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeySettingsApiKeysRoute
+  '/orgs/$organizationId/projects/$projectId/env/$environmentKey/settings/environments': typeof HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeySettingsEnvironmentsRoute
+  '/orgs/$organizationId/projects/$projectId/env/$environmentKey/billing/connections/$credentialId': typeof HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyBillingConnectionsCredentialIdRoute
+  '/orgs/$organizationId/projects/$projectId/env/$environmentKey/billing/customers/$customerId': typeof HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyBillingCustomersCustomerIdRoute
+  '/orgs/$organizationId/projects/$projectId/env/$environmentKey/billing/identity-conflicts/$conflictId': typeof HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyBillingIdentityConflictsConflictIdRoute
+  '/orgs/$organizationId/projects/$projectId/env/$environmentKey/billing/migrations/$programId': typeof HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyBillingMigrationsProgramIdRoute
+  '/orgs/$organizationId/projects/$projectId/env/$environmentKey/billing/quarantine/$recordId': typeof HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyBillingQuarantineRecordIdRoute
+  '/orgs/$organizationId/projects/$projectId/env/$environmentKey/billing/reconciliation/$runId': typeof HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyBillingReconciliationRunIdRoute
+  '/orgs/$organizationId/projects/$projectId/env/$environmentKey/billing/subscriptions/$instanceId': typeof HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyBillingSubscriptionsInstanceIdRoute
+  '/orgs/$organizationId/projects/$projectId/env/$environmentKey/billing/transactions/$factId': typeof HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyBillingTransactionsFactIdRoute
+  '/orgs/$organizationId/projects/$projectId/env/$environmentKey/catalog/entitlements/$entitlementId': typeof HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyCatalogEntitlementsEntitlementIdRoute
+  '/orgs/$organizationId/projects/$projectId/env/$environmentKey/catalog/plans/$planId': typeof HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyCatalogPlansPlanIdRoute
+  '/orgs/$organizationId/projects/$projectId/env/$environmentKey/catalog/products/$productId': typeof HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyCatalogProductsProductIdRoute
+  '/orgs/$organizationId/projects/$projectId/env/$environmentKey/catalog/providers/$connectionId': typeof HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyCatalogProvidersConnectionIdRoute
+  '/orgs/$organizationId/projects/$projectId/env/$environmentKey/monetization/experiments/$experimentId': typeof HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyMonetizationExperimentsExperimentIdRoute
+  '/orgs/$organizationId/projects/$projectId/env/$environmentKey/monetization/experiments/new': typeof HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyMonetizationExperimentsNewRoute
+  '/orgs/$organizationId/projects/$projectId/env/$environmentKey/monetization/paywalls/$paywallId': typeof HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyMonetizationPaywallsPaywallIdRoute
+  '/orgs/$organizationId/projects/$projectId/env/$environmentKey/monetization/placements/$placementId': typeof HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyMonetizationPlacementsPlacementIdRoute
+  '/orgs/$organizationId/projects/$projectId/env/$environmentKey/billing/connections/': typeof HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyBillingConnectionsIndexRoute
+  '/orgs/$organizationId/projects/$projectId/env/$environmentKey/billing/customers/': typeof HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyBillingCustomersIndexRoute
+  '/orgs/$organizationId/projects/$projectId/env/$environmentKey/billing/identity-conflicts/': typeof HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyBillingIdentityConflictsIndexRoute
+  '/orgs/$organizationId/projects/$projectId/env/$environmentKey/billing/migrations/': typeof HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyBillingMigrationsIndexRoute
+  '/orgs/$organizationId/projects/$projectId/env/$environmentKey/billing/quarantine/': typeof HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyBillingQuarantineIndexRoute
+  '/orgs/$organizationId/projects/$projectId/env/$environmentKey/billing/reconciliation/': typeof HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyBillingReconciliationIndexRoute
+  '/orgs/$organizationId/projects/$projectId/env/$environmentKey/billing/transactions/': typeof HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyBillingTransactionsIndexRoute
+  '/orgs/$organizationId/projects/$projectId/env/$environmentKey/catalog/entitlements/': typeof HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyCatalogEntitlementsIndexRoute
+  '/orgs/$organizationId/projects/$projectId/env/$environmentKey/catalog/plans/': typeof HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyCatalogPlansIndexRoute
+  '/orgs/$organizationId/projects/$projectId/env/$environmentKey/catalog/products/': typeof HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyCatalogProductsIndexRoute
+  '/orgs/$organizationId/projects/$projectId/env/$environmentKey/monetization/experiments/': typeof HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyMonetizationExperimentsIndexRoute
+  '/orgs/$organizationId/projects/$projectId/env/$environmentKey/monetization/paywalls/': typeof HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyMonetizationPaywallsIndexRoute
+  '/orgs/$organizationId/projects/$projectId/env/$environmentKey/monetization/placements/': typeof HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyMonetizationPlacementsIndexRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -503,51 +524,53 @@ export interface FileRoutesByTo {
   '/login': typeof LoginRoute
   '/signup': typeof SignupRoute
   '/workspace': typeof HostedWorkspaceRoute
-  '/studio': typeof Studio_layoutStudioRoute
-  '/organizations/new': typeof HostedOrganizationsNewRoute
-  '/organizations/$organizationId/members': typeof HostedOrganizationsOrganizationIdMembersRoute
-  '/organizations/$organizationId': typeof HostedOrganizationsOrganizationIdIndexRoute
-  '/organizations/$organizationId/projects/new': typeof HostedOrganizationsOrganizationIdProjectsNewRoute
-  '/organizations/$organizationId/projects/$projectId/apps': typeof HostedOrganizationsOrganizationIdProjectsProjectIdAppsRoute
-  '/organizations/$organizationId/projects/$projectId': typeof HostedOrganizationsOrganizationIdProjectsProjectIdIndexRoute
-  '/organizations/$organizationId/projects/$projectId/catalog/grant-versions': typeof HostedOrganizationsOrganizationIdProjectsProjectIdCatalogGrantVersionsRoute
-  '/organizations/$organizationId/projects/$projectId/catalog/providers': typeof HostedOrganizationsOrganizationIdProjectsProjectIdCatalogProvidersRouteWithChildren
-  '/organizations/$organizationId/projects/$projectId/settings/api-keys': typeof HostedOrganizationsOrganizationIdProjectsProjectIdSettingsApiKeysRoute
-  '/organizations/$organizationId/projects/$projectId/settings/environments': typeof HostedOrganizationsOrganizationIdProjectsProjectIdSettingsEnvironmentsRoute
-  '/studio-hosted/$organizationId/$projectId/$environmentId/$paywallId/$draftId': typeof Studio_layoutStudioHostedOrganizationIdProjectIdEnvironmentIdPaywallIdDraftIdRoute
-  '/organizations/$organizationId/projects/$projectId/analytics/$environmentId/$surface': typeof HostedOrganizationsOrganizationIdProjectsProjectIdAnalyticsEnvironmentIdSurfaceRoute
-  '/organizations/$organizationId/projects/$projectId/billing/$environmentId/health': typeof HostedOrganizationsOrganizationIdProjectsProjectIdBillingEnvironmentIdHealthRoute
-  '/organizations/$organizationId/projects/$projectId/billing/$environmentId/projection-health': typeof HostedOrganizationsOrganizationIdProjectsProjectIdBillingEnvironmentIdProjectionHealthRoute
-  '/organizations/$organizationId/projects/$projectId/billing/$environmentId/restores': typeof HostedOrganizationsOrganizationIdProjectsProjectIdBillingEnvironmentIdRestoresRoute
-  '/organizations/$organizationId/projects/$projectId/billing/connections/$credentialId': typeof HostedOrganizationsOrganizationIdProjectsProjectIdBillingConnectionsCredentialIdRoute
-  '/organizations/$organizationId/projects/$projectId/catalog/entitlements/$entitlementId': typeof HostedOrganizationsOrganizationIdProjectsProjectIdCatalogEntitlementsEntitlementIdRoute
-  '/organizations/$organizationId/projects/$projectId/catalog/plans/$planId': typeof HostedOrganizationsOrganizationIdProjectsProjectIdCatalogPlansPlanIdRoute
-  '/organizations/$organizationId/projects/$projectId/catalog/products/$productId': typeof HostedOrganizationsOrganizationIdProjectsProjectIdCatalogProductsProductIdRoute
-  '/organizations/$organizationId/projects/$projectId/catalog/providers/$connectionId': typeof HostedOrganizationsOrganizationIdProjectsProjectIdCatalogProvidersConnectionIdRoute
-  '/organizations/$organizationId/projects/$projectId/monetization/$environmentId/assets': typeof HostedOrganizationsOrganizationIdProjectsProjectIdMonetizationEnvironmentIdAssetsRoute
-  '/organizations/$organizationId/projects/$projectId/monetization/$environmentId/experiments': typeof HostedOrganizationsOrganizationIdProjectsProjectIdMonetizationEnvironmentIdExperimentsRouteWithChildren
-  '/organizations/$organizationId/projects/$projectId/monetization/$environmentId/paywalls': typeof HostedOrganizationsOrganizationIdProjectsProjectIdMonetizationEnvironmentIdPaywallsRouteWithChildren
-  '/organizations/$organizationId/projects/$projectId/monetization/$environmentId/placements': typeof HostedOrganizationsOrganizationIdProjectsProjectIdMonetizationEnvironmentIdPlacementsRouteWithChildren
-  '/organizations/$organizationId/projects/$projectId/monetization/$environmentId/releases': typeof HostedOrganizationsOrganizationIdProjectsProjectIdMonetizationEnvironmentIdReleasesRoute
-  '/organizations/$organizationId/projects/$projectId/billing/connections': typeof HostedOrganizationsOrganizationIdProjectsProjectIdBillingConnectionsIndexRoute
-  '/organizations/$organizationId/projects/$projectId/catalog/entitlements': typeof HostedOrganizationsOrganizationIdProjectsProjectIdCatalogEntitlementsIndexRoute
-  '/organizations/$organizationId/projects/$projectId/catalog/plans': typeof HostedOrganizationsOrganizationIdProjectsProjectIdCatalogPlansIndexRoute
-  '/organizations/$organizationId/projects/$projectId/catalog/products': typeof HostedOrganizationsOrganizationIdProjectsProjectIdCatalogProductsIndexRoute
-  '/organizations/$organizationId/projects/$projectId/billing/$environmentId/customers/$customerId': typeof HostedOrganizationsOrganizationIdProjectsProjectIdBillingEnvironmentIdCustomersCustomerIdRoute
-  '/organizations/$organizationId/projects/$projectId/billing/$environmentId/identity-conflicts/$conflictId': typeof HostedOrganizationsOrganizationIdProjectsProjectIdBillingEnvironmentIdIdentityConflictsConflictIdRoute
-  '/organizations/$organizationId/projects/$projectId/billing/$environmentId/quarantine/$recordId': typeof HostedOrganizationsOrganizationIdProjectsProjectIdBillingEnvironmentIdQuarantineRecordIdRoute
-  '/organizations/$organizationId/projects/$projectId/billing/$environmentId/reconciliation/$runId': typeof HostedOrganizationsOrganizationIdProjectsProjectIdBillingEnvironmentIdReconciliationRunIdRoute
-  '/organizations/$organizationId/projects/$projectId/billing/$environmentId/subscriptions/$instanceId': typeof HostedOrganizationsOrganizationIdProjectsProjectIdBillingEnvironmentIdSubscriptionsInstanceIdRoute
-  '/organizations/$organizationId/projects/$projectId/billing/$environmentId/transactions/$factId': typeof HostedOrganizationsOrganizationIdProjectsProjectIdBillingEnvironmentIdTransactionsFactIdRoute
-  '/organizations/$organizationId/projects/$projectId/monetization/$environmentId/experiments/$experimentId': typeof HostedOrganizationsOrganizationIdProjectsProjectIdMonetizationEnvironmentIdExperimentsExperimentIdRoute
-  '/organizations/$organizationId/projects/$projectId/monetization/$environmentId/experiments/new': typeof HostedOrganizationsOrganizationIdProjectsProjectIdMonetizationEnvironmentIdExperimentsNewRoute
-  '/organizations/$organizationId/projects/$projectId/monetization/$environmentId/paywalls/$paywallId': typeof HostedOrganizationsOrganizationIdProjectsProjectIdMonetizationEnvironmentIdPaywallsPaywallIdRoute
-  '/organizations/$organizationId/projects/$projectId/monetization/$environmentId/placements/$placementId': typeof HostedOrganizationsOrganizationIdProjectsProjectIdMonetizationEnvironmentIdPlacementsPlacementIdRoute
-  '/organizations/$organizationId/projects/$projectId/billing/$environmentId/customers': typeof HostedOrganizationsOrganizationIdProjectsProjectIdBillingEnvironmentIdCustomersIndexRoute
-  '/organizations/$organizationId/projects/$projectId/billing/$environmentId/identity-conflicts': typeof HostedOrganizationsOrganizationIdProjectsProjectIdBillingEnvironmentIdIdentityConflictsIndexRoute
-  '/organizations/$organizationId/projects/$projectId/billing/$environmentId/quarantine': typeof HostedOrganizationsOrganizationIdProjectsProjectIdBillingEnvironmentIdQuarantineIndexRoute
-  '/organizations/$organizationId/projects/$projectId/billing/$environmentId/reconciliation': typeof HostedOrganizationsOrganizationIdProjectsProjectIdBillingEnvironmentIdReconciliationIndexRoute
-  '/organizations/$organizationId/projects/$projectId/billing/$environmentId/transactions': typeof HostedOrganizationsOrganizationIdProjectsProjectIdBillingEnvironmentIdTransactionsIndexRoute
+  '/orgs/new': typeof HostedOrgsNewRoute
+  '/studio': typeof Studio_layoutStudioIndexRoute
+  '/orgs/$organizationId/members': typeof HostedOrgsOrganizationIdMembersRoute
+  '/orgs/$organizationId': typeof HostedOrgsOrganizationIdIndexRoute
+  '/orgs/$organizationId/projects/new': typeof HostedOrgsOrganizationIdProjectsNewRoute
+  '/studio/$organizationId/$projectId/$environmentId/$paywallId/$draftId': typeof Studio_layoutStudioOrganizationIdProjectIdEnvironmentIdPaywallIdDraftIdRoute
+  '/orgs/$organizationId/projects/$projectId/env/$environmentKey/apps': typeof HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyAppsRoute
+  '/orgs/$organizationId/projects/$projectId/env/$environmentKey': typeof HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyIndexRoute
+  '/orgs/$organizationId/projects/$projectId/env/$environmentKey/analytics/$surface': typeof HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyAnalyticsSurfaceRoute
+  '/orgs/$organizationId/projects/$projectId/env/$environmentKey/billing/health': typeof HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyBillingHealthRoute
+  '/orgs/$organizationId/projects/$projectId/env/$environmentKey/billing/projection-health': typeof HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyBillingProjectionHealthRoute
+  '/orgs/$organizationId/projects/$projectId/env/$environmentKey/billing/restores': typeof HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyBillingRestoresRoute
+  '/orgs/$organizationId/projects/$projectId/env/$environmentKey/catalog/grant-versions': typeof HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyCatalogGrantVersionsRoute
+  '/orgs/$organizationId/projects/$projectId/env/$environmentKey/catalog/providers': typeof HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyCatalogProvidersRouteWithChildren
+  '/orgs/$organizationId/projects/$projectId/env/$environmentKey/monetization/assets': typeof HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyMonetizationAssetsRoute
+  '/orgs/$organizationId/projects/$projectId/env/$environmentKey/monetization/releases': typeof HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyMonetizationReleasesRoute
+  '/orgs/$organizationId/projects/$projectId/env/$environmentKey/settings/api-keys': typeof HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeySettingsApiKeysRoute
+  '/orgs/$organizationId/projects/$projectId/env/$environmentKey/settings/environments': typeof HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeySettingsEnvironmentsRoute
+  '/orgs/$organizationId/projects/$projectId/env/$environmentKey/billing/connections/$credentialId': typeof HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyBillingConnectionsCredentialIdRoute
+  '/orgs/$organizationId/projects/$projectId/env/$environmentKey/billing/customers/$customerId': typeof HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyBillingCustomersCustomerIdRoute
+  '/orgs/$organizationId/projects/$projectId/env/$environmentKey/billing/identity-conflicts/$conflictId': typeof HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyBillingIdentityConflictsConflictIdRoute
+  '/orgs/$organizationId/projects/$projectId/env/$environmentKey/billing/migrations/$programId': typeof HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyBillingMigrationsProgramIdRoute
+  '/orgs/$organizationId/projects/$projectId/env/$environmentKey/billing/quarantine/$recordId': typeof HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyBillingQuarantineRecordIdRoute
+  '/orgs/$organizationId/projects/$projectId/env/$environmentKey/billing/reconciliation/$runId': typeof HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyBillingReconciliationRunIdRoute
+  '/orgs/$organizationId/projects/$projectId/env/$environmentKey/billing/subscriptions/$instanceId': typeof HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyBillingSubscriptionsInstanceIdRoute
+  '/orgs/$organizationId/projects/$projectId/env/$environmentKey/billing/transactions/$factId': typeof HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyBillingTransactionsFactIdRoute
+  '/orgs/$organizationId/projects/$projectId/env/$environmentKey/catalog/entitlements/$entitlementId': typeof HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyCatalogEntitlementsEntitlementIdRoute
+  '/orgs/$organizationId/projects/$projectId/env/$environmentKey/catalog/plans/$planId': typeof HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyCatalogPlansPlanIdRoute
+  '/orgs/$organizationId/projects/$projectId/env/$environmentKey/catalog/products/$productId': typeof HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyCatalogProductsProductIdRoute
+  '/orgs/$organizationId/projects/$projectId/env/$environmentKey/catalog/providers/$connectionId': typeof HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyCatalogProvidersConnectionIdRoute
+  '/orgs/$organizationId/projects/$projectId/env/$environmentKey/monetization/experiments/$experimentId': typeof HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyMonetizationExperimentsExperimentIdRoute
+  '/orgs/$organizationId/projects/$projectId/env/$environmentKey/monetization/experiments/new': typeof HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyMonetizationExperimentsNewRoute
+  '/orgs/$organizationId/projects/$projectId/env/$environmentKey/monetization/paywalls/$paywallId': typeof HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyMonetizationPaywallsPaywallIdRoute
+  '/orgs/$organizationId/projects/$projectId/env/$environmentKey/monetization/placements/$placementId': typeof HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyMonetizationPlacementsPlacementIdRoute
+  '/orgs/$organizationId/projects/$projectId/env/$environmentKey/billing/connections': typeof HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyBillingConnectionsIndexRoute
+  '/orgs/$organizationId/projects/$projectId/env/$environmentKey/billing/customers': typeof HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyBillingCustomersIndexRoute
+  '/orgs/$organizationId/projects/$projectId/env/$environmentKey/billing/identity-conflicts': typeof HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyBillingIdentityConflictsIndexRoute
+  '/orgs/$organizationId/projects/$projectId/env/$environmentKey/billing/migrations': typeof HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyBillingMigrationsIndexRoute
+  '/orgs/$organizationId/projects/$projectId/env/$environmentKey/billing/quarantine': typeof HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyBillingQuarantineIndexRoute
+  '/orgs/$organizationId/projects/$projectId/env/$environmentKey/billing/reconciliation': typeof HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyBillingReconciliationIndexRoute
+  '/orgs/$organizationId/projects/$projectId/env/$environmentKey/billing/transactions': typeof HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyBillingTransactionsIndexRoute
+  '/orgs/$organizationId/projects/$projectId/env/$environmentKey/catalog/entitlements': typeof HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyCatalogEntitlementsIndexRoute
+  '/orgs/$organizationId/projects/$projectId/env/$environmentKey/catalog/plans': typeof HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyCatalogPlansIndexRoute
+  '/orgs/$organizationId/projects/$projectId/env/$environmentKey/catalog/products': typeof HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyCatalogProductsIndexRoute
+  '/orgs/$organizationId/projects/$projectId/env/$environmentKey/monetization/experiments': typeof HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyMonetizationExperimentsIndexRoute
+  '/orgs/$organizationId/projects/$projectId/env/$environmentKey/monetization/paywalls': typeof HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyMonetizationPaywallsIndexRoute
+  '/orgs/$organizationId/projects/$projectId/env/$environmentKey/monetization/placements': typeof HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyMonetizationPlacementsIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -558,51 +581,53 @@ export interface FileRoutesById {
   '/login': typeof LoginRoute
   '/signup': typeof SignupRoute
   '/_hosted/workspace': typeof HostedWorkspaceRoute
-  '/_studio_layout/studio': typeof Studio_layoutStudioRoute
-  '/_hosted/organizations/new': typeof HostedOrganizationsNewRoute
-  '/_hosted/organizations/$organizationId/members': typeof HostedOrganizationsOrganizationIdMembersRoute
-  '/_hosted/organizations/$organizationId/': typeof HostedOrganizationsOrganizationIdIndexRoute
-  '/_hosted/organizations/$organizationId/projects/new': typeof HostedOrganizationsOrganizationIdProjectsNewRoute
-  '/_hosted/organizations/$organizationId/projects/$projectId/apps': typeof HostedOrganizationsOrganizationIdProjectsProjectIdAppsRoute
-  '/_hosted/organizations/$organizationId/projects/$projectId/': typeof HostedOrganizationsOrganizationIdProjectsProjectIdIndexRoute
-  '/_hosted/organizations/$organizationId/projects/$projectId/catalog/grant-versions': typeof HostedOrganizationsOrganizationIdProjectsProjectIdCatalogGrantVersionsRoute
-  '/_hosted/organizations/$organizationId/projects/$projectId/catalog/providers': typeof HostedOrganizationsOrganizationIdProjectsProjectIdCatalogProvidersRouteWithChildren
-  '/_hosted/organizations/$organizationId/projects/$projectId/settings/api-keys': typeof HostedOrganizationsOrganizationIdProjectsProjectIdSettingsApiKeysRoute
-  '/_hosted/organizations/$organizationId/projects/$projectId/settings/environments': typeof HostedOrganizationsOrganizationIdProjectsProjectIdSettingsEnvironmentsRoute
-  '/_studio_layout/studio-hosted/$organizationId/$projectId/$environmentId/$paywallId/$draftId': typeof Studio_layoutStudioHostedOrganizationIdProjectIdEnvironmentIdPaywallIdDraftIdRoute
-  '/_hosted/organizations/$organizationId/projects/$projectId/analytics/$environmentId/$surface': typeof HostedOrganizationsOrganizationIdProjectsProjectIdAnalyticsEnvironmentIdSurfaceRoute
-  '/_hosted/organizations/$organizationId/projects/$projectId/billing/$environmentId/health': typeof HostedOrganizationsOrganizationIdProjectsProjectIdBillingEnvironmentIdHealthRoute
-  '/_hosted/organizations/$organizationId/projects/$projectId/billing/$environmentId/projection-health': typeof HostedOrganizationsOrganizationIdProjectsProjectIdBillingEnvironmentIdProjectionHealthRoute
-  '/_hosted/organizations/$organizationId/projects/$projectId/billing/$environmentId/restores': typeof HostedOrganizationsOrganizationIdProjectsProjectIdBillingEnvironmentIdRestoresRoute
-  '/_hosted/organizations/$organizationId/projects/$projectId/billing/connections/$credentialId': typeof HostedOrganizationsOrganizationIdProjectsProjectIdBillingConnectionsCredentialIdRoute
-  '/_hosted/organizations/$organizationId/projects/$projectId/catalog/entitlements/$entitlementId': typeof HostedOrganizationsOrganizationIdProjectsProjectIdCatalogEntitlementsEntitlementIdRoute
-  '/_hosted/organizations/$organizationId/projects/$projectId/catalog/plans/$planId': typeof HostedOrganizationsOrganizationIdProjectsProjectIdCatalogPlansPlanIdRoute
-  '/_hosted/organizations/$organizationId/projects/$projectId/catalog/products/$productId': typeof HostedOrganizationsOrganizationIdProjectsProjectIdCatalogProductsProductIdRoute
-  '/_hosted/organizations/$organizationId/projects/$projectId/catalog/providers/$connectionId': typeof HostedOrganizationsOrganizationIdProjectsProjectIdCatalogProvidersConnectionIdRoute
-  '/_hosted/organizations/$organizationId/projects/$projectId/monetization/$environmentId/assets': typeof HostedOrganizationsOrganizationIdProjectsProjectIdMonetizationEnvironmentIdAssetsRoute
-  '/_hosted/organizations/$organizationId/projects/$projectId/monetization/$environmentId/experiments': typeof HostedOrganizationsOrganizationIdProjectsProjectIdMonetizationEnvironmentIdExperimentsRouteWithChildren
-  '/_hosted/organizations/$organizationId/projects/$projectId/monetization/$environmentId/paywalls': typeof HostedOrganizationsOrganizationIdProjectsProjectIdMonetizationEnvironmentIdPaywallsRouteWithChildren
-  '/_hosted/organizations/$organizationId/projects/$projectId/monetization/$environmentId/placements': typeof HostedOrganizationsOrganizationIdProjectsProjectIdMonetizationEnvironmentIdPlacementsRouteWithChildren
-  '/_hosted/organizations/$organizationId/projects/$projectId/monetization/$environmentId/releases': typeof HostedOrganizationsOrganizationIdProjectsProjectIdMonetizationEnvironmentIdReleasesRoute
-  '/_hosted/organizations/$organizationId/projects/$projectId/billing/connections/': typeof HostedOrganizationsOrganizationIdProjectsProjectIdBillingConnectionsIndexRoute
-  '/_hosted/organizations/$organizationId/projects/$projectId/catalog/entitlements/': typeof HostedOrganizationsOrganizationIdProjectsProjectIdCatalogEntitlementsIndexRoute
-  '/_hosted/organizations/$organizationId/projects/$projectId/catalog/plans/': typeof HostedOrganizationsOrganizationIdProjectsProjectIdCatalogPlansIndexRoute
-  '/_hosted/organizations/$organizationId/projects/$projectId/catalog/products/': typeof HostedOrganizationsOrganizationIdProjectsProjectIdCatalogProductsIndexRoute
-  '/_hosted/organizations/$organizationId/projects/$projectId/billing/$environmentId/customers/$customerId': typeof HostedOrganizationsOrganizationIdProjectsProjectIdBillingEnvironmentIdCustomersCustomerIdRoute
-  '/_hosted/organizations/$organizationId/projects/$projectId/billing/$environmentId/identity-conflicts/$conflictId': typeof HostedOrganizationsOrganizationIdProjectsProjectIdBillingEnvironmentIdIdentityConflictsConflictIdRoute
-  '/_hosted/organizations/$organizationId/projects/$projectId/billing/$environmentId/quarantine/$recordId': typeof HostedOrganizationsOrganizationIdProjectsProjectIdBillingEnvironmentIdQuarantineRecordIdRoute
-  '/_hosted/organizations/$organizationId/projects/$projectId/billing/$environmentId/reconciliation/$runId': typeof HostedOrganizationsOrganizationIdProjectsProjectIdBillingEnvironmentIdReconciliationRunIdRoute
-  '/_hosted/organizations/$organizationId/projects/$projectId/billing/$environmentId/subscriptions/$instanceId': typeof HostedOrganizationsOrganizationIdProjectsProjectIdBillingEnvironmentIdSubscriptionsInstanceIdRoute
-  '/_hosted/organizations/$organizationId/projects/$projectId/billing/$environmentId/transactions/$factId': typeof HostedOrganizationsOrganizationIdProjectsProjectIdBillingEnvironmentIdTransactionsFactIdRoute
-  '/_hosted/organizations/$organizationId/projects/$projectId/monetization/$environmentId/experiments/$experimentId': typeof HostedOrganizationsOrganizationIdProjectsProjectIdMonetizationEnvironmentIdExperimentsExperimentIdRoute
-  '/_hosted/organizations/$organizationId/projects/$projectId/monetization/$environmentId/experiments/new': typeof HostedOrganizationsOrganizationIdProjectsProjectIdMonetizationEnvironmentIdExperimentsNewRoute
-  '/_hosted/organizations/$organizationId/projects/$projectId/monetization/$environmentId/paywalls/$paywallId': typeof HostedOrganizationsOrganizationIdProjectsProjectIdMonetizationEnvironmentIdPaywallsPaywallIdRoute
-  '/_hosted/organizations/$organizationId/projects/$projectId/monetization/$environmentId/placements/$placementId': typeof HostedOrganizationsOrganizationIdProjectsProjectIdMonetizationEnvironmentIdPlacementsPlacementIdRoute
-  '/_hosted/organizations/$organizationId/projects/$projectId/billing/$environmentId/customers/': typeof HostedOrganizationsOrganizationIdProjectsProjectIdBillingEnvironmentIdCustomersIndexRoute
-  '/_hosted/organizations/$organizationId/projects/$projectId/billing/$environmentId/identity-conflicts/': typeof HostedOrganizationsOrganizationIdProjectsProjectIdBillingEnvironmentIdIdentityConflictsIndexRoute
-  '/_hosted/organizations/$organizationId/projects/$projectId/billing/$environmentId/quarantine/': typeof HostedOrganizationsOrganizationIdProjectsProjectIdBillingEnvironmentIdQuarantineIndexRoute
-  '/_hosted/organizations/$organizationId/projects/$projectId/billing/$environmentId/reconciliation/': typeof HostedOrganizationsOrganizationIdProjectsProjectIdBillingEnvironmentIdReconciliationIndexRoute
-  '/_hosted/organizations/$organizationId/projects/$projectId/billing/$environmentId/transactions/': typeof HostedOrganizationsOrganizationIdProjectsProjectIdBillingEnvironmentIdTransactionsIndexRoute
+  '/_hosted/orgs/new': typeof HostedOrgsNewRoute
+  '/_studio_layout/studio/': typeof Studio_layoutStudioIndexRoute
+  '/_hosted/orgs/$organizationId/members': typeof HostedOrgsOrganizationIdMembersRoute
+  '/_hosted/orgs/$organizationId/': typeof HostedOrgsOrganizationIdIndexRoute
+  '/_hosted/orgs/$organizationId/projects/new': typeof HostedOrgsOrganizationIdProjectsNewRoute
+  '/_studio_layout/studio/$organizationId/$projectId/$environmentId/$paywallId/$draftId': typeof Studio_layoutStudioOrganizationIdProjectIdEnvironmentIdPaywallIdDraftIdRoute
+  '/_hosted/orgs/$organizationId/projects/$projectId/env/$environmentKey/apps': typeof HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyAppsRoute
+  '/_hosted/orgs/$organizationId/projects/$projectId/env/$environmentKey/': typeof HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyIndexRoute
+  '/_hosted/orgs/$organizationId/projects/$projectId/env/$environmentKey/analytics/$surface': typeof HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyAnalyticsSurfaceRoute
+  '/_hosted/orgs/$organizationId/projects/$projectId/env/$environmentKey/billing/health': typeof HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyBillingHealthRoute
+  '/_hosted/orgs/$organizationId/projects/$projectId/env/$environmentKey/billing/projection-health': typeof HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyBillingProjectionHealthRoute
+  '/_hosted/orgs/$organizationId/projects/$projectId/env/$environmentKey/billing/restores': typeof HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyBillingRestoresRoute
+  '/_hosted/orgs/$organizationId/projects/$projectId/env/$environmentKey/catalog/grant-versions': typeof HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyCatalogGrantVersionsRoute
+  '/_hosted/orgs/$organizationId/projects/$projectId/env/$environmentKey/catalog/providers': typeof HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyCatalogProvidersRouteWithChildren
+  '/_hosted/orgs/$organizationId/projects/$projectId/env/$environmentKey/monetization/assets': typeof HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyMonetizationAssetsRoute
+  '/_hosted/orgs/$organizationId/projects/$projectId/env/$environmentKey/monetization/releases': typeof HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyMonetizationReleasesRoute
+  '/_hosted/orgs/$organizationId/projects/$projectId/env/$environmentKey/settings/api-keys': typeof HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeySettingsApiKeysRoute
+  '/_hosted/orgs/$organizationId/projects/$projectId/env/$environmentKey/settings/environments': typeof HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeySettingsEnvironmentsRoute
+  '/_hosted/orgs/$organizationId/projects/$projectId/env/$environmentKey/billing/connections/$credentialId': typeof HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyBillingConnectionsCredentialIdRoute
+  '/_hosted/orgs/$organizationId/projects/$projectId/env/$environmentKey/billing/customers/$customerId': typeof HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyBillingCustomersCustomerIdRoute
+  '/_hosted/orgs/$organizationId/projects/$projectId/env/$environmentKey/billing/identity-conflicts/$conflictId': typeof HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyBillingIdentityConflictsConflictIdRoute
+  '/_hosted/orgs/$organizationId/projects/$projectId/env/$environmentKey/billing/migrations/$programId': typeof HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyBillingMigrationsProgramIdRoute
+  '/_hosted/orgs/$organizationId/projects/$projectId/env/$environmentKey/billing/quarantine/$recordId': typeof HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyBillingQuarantineRecordIdRoute
+  '/_hosted/orgs/$organizationId/projects/$projectId/env/$environmentKey/billing/reconciliation/$runId': typeof HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyBillingReconciliationRunIdRoute
+  '/_hosted/orgs/$organizationId/projects/$projectId/env/$environmentKey/billing/subscriptions/$instanceId': typeof HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyBillingSubscriptionsInstanceIdRoute
+  '/_hosted/orgs/$organizationId/projects/$projectId/env/$environmentKey/billing/transactions/$factId': typeof HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyBillingTransactionsFactIdRoute
+  '/_hosted/orgs/$organizationId/projects/$projectId/env/$environmentKey/catalog/entitlements/$entitlementId': typeof HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyCatalogEntitlementsEntitlementIdRoute
+  '/_hosted/orgs/$organizationId/projects/$projectId/env/$environmentKey/catalog/plans/$planId': typeof HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyCatalogPlansPlanIdRoute
+  '/_hosted/orgs/$organizationId/projects/$projectId/env/$environmentKey/catalog/products/$productId': typeof HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyCatalogProductsProductIdRoute
+  '/_hosted/orgs/$organizationId/projects/$projectId/env/$environmentKey/catalog/providers/$connectionId': typeof HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyCatalogProvidersConnectionIdRoute
+  '/_hosted/orgs/$organizationId/projects/$projectId/env/$environmentKey/monetization/experiments/$experimentId': typeof HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyMonetizationExperimentsExperimentIdRoute
+  '/_hosted/orgs/$organizationId/projects/$projectId/env/$environmentKey/monetization/experiments/new': typeof HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyMonetizationExperimentsNewRoute
+  '/_hosted/orgs/$organizationId/projects/$projectId/env/$environmentKey/monetization/paywalls/$paywallId': typeof HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyMonetizationPaywallsPaywallIdRoute
+  '/_hosted/orgs/$organizationId/projects/$projectId/env/$environmentKey/monetization/placements/$placementId': typeof HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyMonetizationPlacementsPlacementIdRoute
+  '/_hosted/orgs/$organizationId/projects/$projectId/env/$environmentKey/billing/connections/': typeof HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyBillingConnectionsIndexRoute
+  '/_hosted/orgs/$organizationId/projects/$projectId/env/$environmentKey/billing/customers/': typeof HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyBillingCustomersIndexRoute
+  '/_hosted/orgs/$organizationId/projects/$projectId/env/$environmentKey/billing/identity-conflicts/': typeof HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyBillingIdentityConflictsIndexRoute
+  '/_hosted/orgs/$organizationId/projects/$projectId/env/$environmentKey/billing/migrations/': typeof HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyBillingMigrationsIndexRoute
+  '/_hosted/orgs/$organizationId/projects/$projectId/env/$environmentKey/billing/quarantine/': typeof HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyBillingQuarantineIndexRoute
+  '/_hosted/orgs/$organizationId/projects/$projectId/env/$environmentKey/billing/reconciliation/': typeof HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyBillingReconciliationIndexRoute
+  '/_hosted/orgs/$organizationId/projects/$projectId/env/$environmentKey/billing/transactions/': typeof HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyBillingTransactionsIndexRoute
+  '/_hosted/orgs/$organizationId/projects/$projectId/env/$environmentKey/catalog/entitlements/': typeof HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyCatalogEntitlementsIndexRoute
+  '/_hosted/orgs/$organizationId/projects/$projectId/env/$environmentKey/catalog/plans/': typeof HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyCatalogPlansIndexRoute
+  '/_hosted/orgs/$organizationId/projects/$projectId/env/$environmentKey/catalog/products/': typeof HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyCatalogProductsIndexRoute
+  '/_hosted/orgs/$organizationId/projects/$projectId/env/$environmentKey/monetization/experiments/': typeof HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyMonetizationExperimentsIndexRoute
+  '/_hosted/orgs/$organizationId/projects/$projectId/env/$environmentKey/monetization/paywalls/': typeof HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyMonetizationPaywallsIndexRoute
+  '/_hosted/orgs/$organizationId/projects/$projectId/env/$environmentKey/monetization/placements/': typeof HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyMonetizationPlacementsIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -612,51 +637,53 @@ export interface FileRouteTypes {
     | '/login'
     | '/signup'
     | '/workspace'
-    | '/studio'
-    | '/organizations/new'
-    | '/organizations/$organizationId/members'
-    | '/organizations/$organizationId/'
-    | '/organizations/$organizationId/projects/new'
-    | '/organizations/$organizationId/projects/$projectId/apps'
-    | '/organizations/$organizationId/projects/$projectId/'
-    | '/organizations/$organizationId/projects/$projectId/catalog/grant-versions'
-    | '/organizations/$organizationId/projects/$projectId/catalog/providers'
-    | '/organizations/$organizationId/projects/$projectId/settings/api-keys'
-    | '/organizations/$organizationId/projects/$projectId/settings/environments'
-    | '/studio-hosted/$organizationId/$projectId/$environmentId/$paywallId/$draftId'
-    | '/organizations/$organizationId/projects/$projectId/analytics/$environmentId/$surface'
-    | '/organizations/$organizationId/projects/$projectId/billing/$environmentId/health'
-    | '/organizations/$organizationId/projects/$projectId/billing/$environmentId/projection-health'
-    | '/organizations/$organizationId/projects/$projectId/billing/$environmentId/restores'
-    | '/organizations/$organizationId/projects/$projectId/billing/connections/$credentialId'
-    | '/organizations/$organizationId/projects/$projectId/catalog/entitlements/$entitlementId'
-    | '/organizations/$organizationId/projects/$projectId/catalog/plans/$planId'
-    | '/organizations/$organizationId/projects/$projectId/catalog/products/$productId'
-    | '/organizations/$organizationId/projects/$projectId/catalog/providers/$connectionId'
-    | '/organizations/$organizationId/projects/$projectId/monetization/$environmentId/assets'
-    | '/organizations/$organizationId/projects/$projectId/monetization/$environmentId/experiments'
-    | '/organizations/$organizationId/projects/$projectId/monetization/$environmentId/paywalls'
-    | '/organizations/$organizationId/projects/$projectId/monetization/$environmentId/placements'
-    | '/organizations/$organizationId/projects/$projectId/monetization/$environmentId/releases'
-    | '/organizations/$organizationId/projects/$projectId/billing/connections/'
-    | '/organizations/$organizationId/projects/$projectId/catalog/entitlements/'
-    | '/organizations/$organizationId/projects/$projectId/catalog/plans/'
-    | '/organizations/$organizationId/projects/$projectId/catalog/products/'
-    | '/organizations/$organizationId/projects/$projectId/billing/$environmentId/customers/$customerId'
-    | '/organizations/$organizationId/projects/$projectId/billing/$environmentId/identity-conflicts/$conflictId'
-    | '/organizations/$organizationId/projects/$projectId/billing/$environmentId/quarantine/$recordId'
-    | '/organizations/$organizationId/projects/$projectId/billing/$environmentId/reconciliation/$runId'
-    | '/organizations/$organizationId/projects/$projectId/billing/$environmentId/subscriptions/$instanceId'
-    | '/organizations/$organizationId/projects/$projectId/billing/$environmentId/transactions/$factId'
-    | '/organizations/$organizationId/projects/$projectId/monetization/$environmentId/experiments/$experimentId'
-    | '/organizations/$organizationId/projects/$projectId/monetization/$environmentId/experiments/new'
-    | '/organizations/$organizationId/projects/$projectId/monetization/$environmentId/paywalls/$paywallId'
-    | '/organizations/$organizationId/projects/$projectId/monetization/$environmentId/placements/$placementId'
-    | '/organizations/$organizationId/projects/$projectId/billing/$environmentId/customers/'
-    | '/organizations/$organizationId/projects/$projectId/billing/$environmentId/identity-conflicts/'
-    | '/organizations/$organizationId/projects/$projectId/billing/$environmentId/quarantine/'
-    | '/organizations/$organizationId/projects/$projectId/billing/$environmentId/reconciliation/'
-    | '/organizations/$organizationId/projects/$projectId/billing/$environmentId/transactions/'
+    | '/orgs/new'
+    | '/studio/'
+    | '/orgs/$organizationId/members'
+    | '/orgs/$organizationId/'
+    | '/orgs/$organizationId/projects/new'
+    | '/studio/$organizationId/$projectId/$environmentId/$paywallId/$draftId'
+    | '/orgs/$organizationId/projects/$projectId/env/$environmentKey/apps'
+    | '/orgs/$organizationId/projects/$projectId/env/$environmentKey/'
+    | '/orgs/$organizationId/projects/$projectId/env/$environmentKey/analytics/$surface'
+    | '/orgs/$organizationId/projects/$projectId/env/$environmentKey/billing/health'
+    | '/orgs/$organizationId/projects/$projectId/env/$environmentKey/billing/projection-health'
+    | '/orgs/$organizationId/projects/$projectId/env/$environmentKey/billing/restores'
+    | '/orgs/$organizationId/projects/$projectId/env/$environmentKey/catalog/grant-versions'
+    | '/orgs/$organizationId/projects/$projectId/env/$environmentKey/catalog/providers'
+    | '/orgs/$organizationId/projects/$projectId/env/$environmentKey/monetization/assets'
+    | '/orgs/$organizationId/projects/$projectId/env/$environmentKey/monetization/releases'
+    | '/orgs/$organizationId/projects/$projectId/env/$environmentKey/settings/api-keys'
+    | '/orgs/$organizationId/projects/$projectId/env/$environmentKey/settings/environments'
+    | '/orgs/$organizationId/projects/$projectId/env/$environmentKey/billing/connections/$credentialId'
+    | '/orgs/$organizationId/projects/$projectId/env/$environmentKey/billing/customers/$customerId'
+    | '/orgs/$organizationId/projects/$projectId/env/$environmentKey/billing/identity-conflicts/$conflictId'
+    | '/orgs/$organizationId/projects/$projectId/env/$environmentKey/billing/migrations/$programId'
+    | '/orgs/$organizationId/projects/$projectId/env/$environmentKey/billing/quarantine/$recordId'
+    | '/orgs/$organizationId/projects/$projectId/env/$environmentKey/billing/reconciliation/$runId'
+    | '/orgs/$organizationId/projects/$projectId/env/$environmentKey/billing/subscriptions/$instanceId'
+    | '/orgs/$organizationId/projects/$projectId/env/$environmentKey/billing/transactions/$factId'
+    | '/orgs/$organizationId/projects/$projectId/env/$environmentKey/catalog/entitlements/$entitlementId'
+    | '/orgs/$organizationId/projects/$projectId/env/$environmentKey/catalog/plans/$planId'
+    | '/orgs/$organizationId/projects/$projectId/env/$environmentKey/catalog/products/$productId'
+    | '/orgs/$organizationId/projects/$projectId/env/$environmentKey/catalog/providers/$connectionId'
+    | '/orgs/$organizationId/projects/$projectId/env/$environmentKey/monetization/experiments/$experimentId'
+    | '/orgs/$organizationId/projects/$projectId/env/$environmentKey/monetization/experiments/new'
+    | '/orgs/$organizationId/projects/$projectId/env/$environmentKey/monetization/paywalls/$paywallId'
+    | '/orgs/$organizationId/projects/$projectId/env/$environmentKey/monetization/placements/$placementId'
+    | '/orgs/$organizationId/projects/$projectId/env/$environmentKey/billing/connections/'
+    | '/orgs/$organizationId/projects/$projectId/env/$environmentKey/billing/customers/'
+    | '/orgs/$organizationId/projects/$projectId/env/$environmentKey/billing/identity-conflicts/'
+    | '/orgs/$organizationId/projects/$projectId/env/$environmentKey/billing/migrations/'
+    | '/orgs/$organizationId/projects/$projectId/env/$environmentKey/billing/quarantine/'
+    | '/orgs/$organizationId/projects/$projectId/env/$environmentKey/billing/reconciliation/'
+    | '/orgs/$organizationId/projects/$projectId/env/$environmentKey/billing/transactions/'
+    | '/orgs/$organizationId/projects/$projectId/env/$environmentKey/catalog/entitlements/'
+    | '/orgs/$organizationId/projects/$projectId/env/$environmentKey/catalog/plans/'
+    | '/orgs/$organizationId/projects/$projectId/env/$environmentKey/catalog/products/'
+    | '/orgs/$organizationId/projects/$projectId/env/$environmentKey/monetization/experiments/'
+    | '/orgs/$organizationId/projects/$projectId/env/$environmentKey/monetization/paywalls/'
+    | '/orgs/$organizationId/projects/$projectId/env/$environmentKey/monetization/placements/'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -664,51 +691,53 @@ export interface FileRouteTypes {
     | '/login'
     | '/signup'
     | '/workspace'
+    | '/orgs/new'
     | '/studio'
-    | '/organizations/new'
-    | '/organizations/$organizationId/members'
-    | '/organizations/$organizationId'
-    | '/organizations/$organizationId/projects/new'
-    | '/organizations/$organizationId/projects/$projectId/apps'
-    | '/organizations/$organizationId/projects/$projectId'
-    | '/organizations/$organizationId/projects/$projectId/catalog/grant-versions'
-    | '/organizations/$organizationId/projects/$projectId/catalog/providers'
-    | '/organizations/$organizationId/projects/$projectId/settings/api-keys'
-    | '/organizations/$organizationId/projects/$projectId/settings/environments'
-    | '/studio-hosted/$organizationId/$projectId/$environmentId/$paywallId/$draftId'
-    | '/organizations/$organizationId/projects/$projectId/analytics/$environmentId/$surface'
-    | '/organizations/$organizationId/projects/$projectId/billing/$environmentId/health'
-    | '/organizations/$organizationId/projects/$projectId/billing/$environmentId/projection-health'
-    | '/organizations/$organizationId/projects/$projectId/billing/$environmentId/restores'
-    | '/organizations/$organizationId/projects/$projectId/billing/connections/$credentialId'
-    | '/organizations/$organizationId/projects/$projectId/catalog/entitlements/$entitlementId'
-    | '/organizations/$organizationId/projects/$projectId/catalog/plans/$planId'
-    | '/organizations/$organizationId/projects/$projectId/catalog/products/$productId'
-    | '/organizations/$organizationId/projects/$projectId/catalog/providers/$connectionId'
-    | '/organizations/$organizationId/projects/$projectId/monetization/$environmentId/assets'
-    | '/organizations/$organizationId/projects/$projectId/monetization/$environmentId/experiments'
-    | '/organizations/$organizationId/projects/$projectId/monetization/$environmentId/paywalls'
-    | '/organizations/$organizationId/projects/$projectId/monetization/$environmentId/placements'
-    | '/organizations/$organizationId/projects/$projectId/monetization/$environmentId/releases'
-    | '/organizations/$organizationId/projects/$projectId/billing/connections'
-    | '/organizations/$organizationId/projects/$projectId/catalog/entitlements'
-    | '/organizations/$organizationId/projects/$projectId/catalog/plans'
-    | '/organizations/$organizationId/projects/$projectId/catalog/products'
-    | '/organizations/$organizationId/projects/$projectId/billing/$environmentId/customers/$customerId'
-    | '/organizations/$organizationId/projects/$projectId/billing/$environmentId/identity-conflicts/$conflictId'
-    | '/organizations/$organizationId/projects/$projectId/billing/$environmentId/quarantine/$recordId'
-    | '/organizations/$organizationId/projects/$projectId/billing/$environmentId/reconciliation/$runId'
-    | '/organizations/$organizationId/projects/$projectId/billing/$environmentId/subscriptions/$instanceId'
-    | '/organizations/$organizationId/projects/$projectId/billing/$environmentId/transactions/$factId'
-    | '/organizations/$organizationId/projects/$projectId/monetization/$environmentId/experiments/$experimentId'
-    | '/organizations/$organizationId/projects/$projectId/monetization/$environmentId/experiments/new'
-    | '/organizations/$organizationId/projects/$projectId/monetization/$environmentId/paywalls/$paywallId'
-    | '/organizations/$organizationId/projects/$projectId/monetization/$environmentId/placements/$placementId'
-    | '/organizations/$organizationId/projects/$projectId/billing/$environmentId/customers'
-    | '/organizations/$organizationId/projects/$projectId/billing/$environmentId/identity-conflicts'
-    | '/organizations/$organizationId/projects/$projectId/billing/$environmentId/quarantine'
-    | '/organizations/$organizationId/projects/$projectId/billing/$environmentId/reconciliation'
-    | '/organizations/$organizationId/projects/$projectId/billing/$environmentId/transactions'
+    | '/orgs/$organizationId/members'
+    | '/orgs/$organizationId'
+    | '/orgs/$organizationId/projects/new'
+    | '/studio/$organizationId/$projectId/$environmentId/$paywallId/$draftId'
+    | '/orgs/$organizationId/projects/$projectId/env/$environmentKey/apps'
+    | '/orgs/$organizationId/projects/$projectId/env/$environmentKey'
+    | '/orgs/$organizationId/projects/$projectId/env/$environmentKey/analytics/$surface'
+    | '/orgs/$organizationId/projects/$projectId/env/$environmentKey/billing/health'
+    | '/orgs/$organizationId/projects/$projectId/env/$environmentKey/billing/projection-health'
+    | '/orgs/$organizationId/projects/$projectId/env/$environmentKey/billing/restores'
+    | '/orgs/$organizationId/projects/$projectId/env/$environmentKey/catalog/grant-versions'
+    | '/orgs/$organizationId/projects/$projectId/env/$environmentKey/catalog/providers'
+    | '/orgs/$organizationId/projects/$projectId/env/$environmentKey/monetization/assets'
+    | '/orgs/$organizationId/projects/$projectId/env/$environmentKey/monetization/releases'
+    | '/orgs/$organizationId/projects/$projectId/env/$environmentKey/settings/api-keys'
+    | '/orgs/$organizationId/projects/$projectId/env/$environmentKey/settings/environments'
+    | '/orgs/$organizationId/projects/$projectId/env/$environmentKey/billing/connections/$credentialId'
+    | '/orgs/$organizationId/projects/$projectId/env/$environmentKey/billing/customers/$customerId'
+    | '/orgs/$organizationId/projects/$projectId/env/$environmentKey/billing/identity-conflicts/$conflictId'
+    | '/orgs/$organizationId/projects/$projectId/env/$environmentKey/billing/migrations/$programId'
+    | '/orgs/$organizationId/projects/$projectId/env/$environmentKey/billing/quarantine/$recordId'
+    | '/orgs/$organizationId/projects/$projectId/env/$environmentKey/billing/reconciliation/$runId'
+    | '/orgs/$organizationId/projects/$projectId/env/$environmentKey/billing/subscriptions/$instanceId'
+    | '/orgs/$organizationId/projects/$projectId/env/$environmentKey/billing/transactions/$factId'
+    | '/orgs/$organizationId/projects/$projectId/env/$environmentKey/catalog/entitlements/$entitlementId'
+    | '/orgs/$organizationId/projects/$projectId/env/$environmentKey/catalog/plans/$planId'
+    | '/orgs/$organizationId/projects/$projectId/env/$environmentKey/catalog/products/$productId'
+    | '/orgs/$organizationId/projects/$projectId/env/$environmentKey/catalog/providers/$connectionId'
+    | '/orgs/$organizationId/projects/$projectId/env/$environmentKey/monetization/experiments/$experimentId'
+    | '/orgs/$organizationId/projects/$projectId/env/$environmentKey/monetization/experiments/new'
+    | '/orgs/$organizationId/projects/$projectId/env/$environmentKey/monetization/paywalls/$paywallId'
+    | '/orgs/$organizationId/projects/$projectId/env/$environmentKey/monetization/placements/$placementId'
+    | '/orgs/$organizationId/projects/$projectId/env/$environmentKey/billing/connections'
+    | '/orgs/$organizationId/projects/$projectId/env/$environmentKey/billing/customers'
+    | '/orgs/$organizationId/projects/$projectId/env/$environmentKey/billing/identity-conflicts'
+    | '/orgs/$organizationId/projects/$projectId/env/$environmentKey/billing/migrations'
+    | '/orgs/$organizationId/projects/$projectId/env/$environmentKey/billing/quarantine'
+    | '/orgs/$organizationId/projects/$projectId/env/$environmentKey/billing/reconciliation'
+    | '/orgs/$organizationId/projects/$projectId/env/$environmentKey/billing/transactions'
+    | '/orgs/$organizationId/projects/$projectId/env/$environmentKey/catalog/entitlements'
+    | '/orgs/$organizationId/projects/$projectId/env/$environmentKey/catalog/plans'
+    | '/orgs/$organizationId/projects/$projectId/env/$environmentKey/catalog/products'
+    | '/orgs/$organizationId/projects/$projectId/env/$environmentKey/monetization/experiments'
+    | '/orgs/$organizationId/projects/$projectId/env/$environmentKey/monetization/paywalls'
+    | '/orgs/$organizationId/projects/$projectId/env/$environmentKey/monetization/placements'
   id:
     | '__root__'
     | '/'
@@ -718,51 +747,53 @@ export interface FileRouteTypes {
     | '/login'
     | '/signup'
     | '/_hosted/workspace'
-    | '/_studio_layout/studio'
-    | '/_hosted/organizations/new'
-    | '/_hosted/organizations/$organizationId/members'
-    | '/_hosted/organizations/$organizationId/'
-    | '/_hosted/organizations/$organizationId/projects/new'
-    | '/_hosted/organizations/$organizationId/projects/$projectId/apps'
-    | '/_hosted/organizations/$organizationId/projects/$projectId/'
-    | '/_hosted/organizations/$organizationId/projects/$projectId/catalog/grant-versions'
-    | '/_hosted/organizations/$organizationId/projects/$projectId/catalog/providers'
-    | '/_hosted/organizations/$organizationId/projects/$projectId/settings/api-keys'
-    | '/_hosted/organizations/$organizationId/projects/$projectId/settings/environments'
-    | '/_studio_layout/studio-hosted/$organizationId/$projectId/$environmentId/$paywallId/$draftId'
-    | '/_hosted/organizations/$organizationId/projects/$projectId/analytics/$environmentId/$surface'
-    | '/_hosted/organizations/$organizationId/projects/$projectId/billing/$environmentId/health'
-    | '/_hosted/organizations/$organizationId/projects/$projectId/billing/$environmentId/projection-health'
-    | '/_hosted/organizations/$organizationId/projects/$projectId/billing/$environmentId/restores'
-    | '/_hosted/organizations/$organizationId/projects/$projectId/billing/connections/$credentialId'
-    | '/_hosted/organizations/$organizationId/projects/$projectId/catalog/entitlements/$entitlementId'
-    | '/_hosted/organizations/$organizationId/projects/$projectId/catalog/plans/$planId'
-    | '/_hosted/organizations/$organizationId/projects/$projectId/catalog/products/$productId'
-    | '/_hosted/organizations/$organizationId/projects/$projectId/catalog/providers/$connectionId'
-    | '/_hosted/organizations/$organizationId/projects/$projectId/monetization/$environmentId/assets'
-    | '/_hosted/organizations/$organizationId/projects/$projectId/monetization/$environmentId/experiments'
-    | '/_hosted/organizations/$organizationId/projects/$projectId/monetization/$environmentId/paywalls'
-    | '/_hosted/organizations/$organizationId/projects/$projectId/monetization/$environmentId/placements'
-    | '/_hosted/organizations/$organizationId/projects/$projectId/monetization/$environmentId/releases'
-    | '/_hosted/organizations/$organizationId/projects/$projectId/billing/connections/'
-    | '/_hosted/organizations/$organizationId/projects/$projectId/catalog/entitlements/'
-    | '/_hosted/organizations/$organizationId/projects/$projectId/catalog/plans/'
-    | '/_hosted/organizations/$organizationId/projects/$projectId/catalog/products/'
-    | '/_hosted/organizations/$organizationId/projects/$projectId/billing/$environmentId/customers/$customerId'
-    | '/_hosted/organizations/$organizationId/projects/$projectId/billing/$environmentId/identity-conflicts/$conflictId'
-    | '/_hosted/organizations/$organizationId/projects/$projectId/billing/$environmentId/quarantine/$recordId'
-    | '/_hosted/organizations/$organizationId/projects/$projectId/billing/$environmentId/reconciliation/$runId'
-    | '/_hosted/organizations/$organizationId/projects/$projectId/billing/$environmentId/subscriptions/$instanceId'
-    | '/_hosted/organizations/$organizationId/projects/$projectId/billing/$environmentId/transactions/$factId'
-    | '/_hosted/organizations/$organizationId/projects/$projectId/monetization/$environmentId/experiments/$experimentId'
-    | '/_hosted/organizations/$organizationId/projects/$projectId/monetization/$environmentId/experiments/new'
-    | '/_hosted/organizations/$organizationId/projects/$projectId/monetization/$environmentId/paywalls/$paywallId'
-    | '/_hosted/organizations/$organizationId/projects/$projectId/monetization/$environmentId/placements/$placementId'
-    | '/_hosted/organizations/$organizationId/projects/$projectId/billing/$environmentId/customers/'
-    | '/_hosted/organizations/$organizationId/projects/$projectId/billing/$environmentId/identity-conflicts/'
-    | '/_hosted/organizations/$organizationId/projects/$projectId/billing/$environmentId/quarantine/'
-    | '/_hosted/organizations/$organizationId/projects/$projectId/billing/$environmentId/reconciliation/'
-    | '/_hosted/organizations/$organizationId/projects/$projectId/billing/$environmentId/transactions/'
+    | '/_hosted/orgs/new'
+    | '/_studio_layout/studio/'
+    | '/_hosted/orgs/$organizationId/members'
+    | '/_hosted/orgs/$organizationId/'
+    | '/_hosted/orgs/$organizationId/projects/new'
+    | '/_studio_layout/studio/$organizationId/$projectId/$environmentId/$paywallId/$draftId'
+    | '/_hosted/orgs/$organizationId/projects/$projectId/env/$environmentKey/apps'
+    | '/_hosted/orgs/$organizationId/projects/$projectId/env/$environmentKey/'
+    | '/_hosted/orgs/$organizationId/projects/$projectId/env/$environmentKey/analytics/$surface'
+    | '/_hosted/orgs/$organizationId/projects/$projectId/env/$environmentKey/billing/health'
+    | '/_hosted/orgs/$organizationId/projects/$projectId/env/$environmentKey/billing/projection-health'
+    | '/_hosted/orgs/$organizationId/projects/$projectId/env/$environmentKey/billing/restores'
+    | '/_hosted/orgs/$organizationId/projects/$projectId/env/$environmentKey/catalog/grant-versions'
+    | '/_hosted/orgs/$organizationId/projects/$projectId/env/$environmentKey/catalog/providers'
+    | '/_hosted/orgs/$organizationId/projects/$projectId/env/$environmentKey/monetization/assets'
+    | '/_hosted/orgs/$organizationId/projects/$projectId/env/$environmentKey/monetization/releases'
+    | '/_hosted/orgs/$organizationId/projects/$projectId/env/$environmentKey/settings/api-keys'
+    | '/_hosted/orgs/$organizationId/projects/$projectId/env/$environmentKey/settings/environments'
+    | '/_hosted/orgs/$organizationId/projects/$projectId/env/$environmentKey/billing/connections/$credentialId'
+    | '/_hosted/orgs/$organizationId/projects/$projectId/env/$environmentKey/billing/customers/$customerId'
+    | '/_hosted/orgs/$organizationId/projects/$projectId/env/$environmentKey/billing/identity-conflicts/$conflictId'
+    | '/_hosted/orgs/$organizationId/projects/$projectId/env/$environmentKey/billing/migrations/$programId'
+    | '/_hosted/orgs/$organizationId/projects/$projectId/env/$environmentKey/billing/quarantine/$recordId'
+    | '/_hosted/orgs/$organizationId/projects/$projectId/env/$environmentKey/billing/reconciliation/$runId'
+    | '/_hosted/orgs/$organizationId/projects/$projectId/env/$environmentKey/billing/subscriptions/$instanceId'
+    | '/_hosted/orgs/$organizationId/projects/$projectId/env/$environmentKey/billing/transactions/$factId'
+    | '/_hosted/orgs/$organizationId/projects/$projectId/env/$environmentKey/catalog/entitlements/$entitlementId'
+    | '/_hosted/orgs/$organizationId/projects/$projectId/env/$environmentKey/catalog/plans/$planId'
+    | '/_hosted/orgs/$organizationId/projects/$projectId/env/$environmentKey/catalog/products/$productId'
+    | '/_hosted/orgs/$organizationId/projects/$projectId/env/$environmentKey/catalog/providers/$connectionId'
+    | '/_hosted/orgs/$organizationId/projects/$projectId/env/$environmentKey/monetization/experiments/$experimentId'
+    | '/_hosted/orgs/$organizationId/projects/$projectId/env/$environmentKey/monetization/experiments/new'
+    | '/_hosted/orgs/$organizationId/projects/$projectId/env/$environmentKey/monetization/paywalls/$paywallId'
+    | '/_hosted/orgs/$organizationId/projects/$projectId/env/$environmentKey/monetization/placements/$placementId'
+    | '/_hosted/orgs/$organizationId/projects/$projectId/env/$environmentKey/billing/connections/'
+    | '/_hosted/orgs/$organizationId/projects/$projectId/env/$environmentKey/billing/customers/'
+    | '/_hosted/orgs/$organizationId/projects/$projectId/env/$environmentKey/billing/identity-conflicts/'
+    | '/_hosted/orgs/$organizationId/projects/$projectId/env/$environmentKey/billing/migrations/'
+    | '/_hosted/orgs/$organizationId/projects/$projectId/env/$environmentKey/billing/quarantine/'
+    | '/_hosted/orgs/$organizationId/projects/$projectId/env/$environmentKey/billing/reconciliation/'
+    | '/_hosted/orgs/$organizationId/projects/$projectId/env/$environmentKey/billing/transactions/'
+    | '/_hosted/orgs/$organizationId/projects/$projectId/env/$environmentKey/catalog/entitlements/'
+    | '/_hosted/orgs/$organizationId/projects/$projectId/env/$environmentKey/catalog/plans/'
+    | '/_hosted/orgs/$organizationId/projects/$projectId/env/$environmentKey/catalog/products/'
+    | '/_hosted/orgs/$organizationId/projects/$projectId/env/$environmentKey/monetization/experiments/'
+    | '/_hosted/orgs/$organizationId/projects/$projectId/env/$environmentKey/monetization/paywalls/'
+    | '/_hosted/orgs/$organizationId/projects/$projectId/env/$environmentKey/monetization/placements/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -818,13 +849,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/_studio_layout/studio': {
-      id: '/_studio_layout/studio'
-      path: '/studio'
-      fullPath: '/studio'
-      preLoaderRoute: typeof Studio_layoutStudioRouteImport
-      parentRoute: typeof Studio_layoutRoute
-    }
     '/_hosted/workspace': {
       id: '/_hosted/workspace'
       path: '/workspace'
@@ -832,513 +856,502 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof HostedWorkspaceRouteImport
       parentRoute: typeof HostedRoute
     }
-    '/_hosted/organizations/new': {
-      id: '/_hosted/organizations/new'
-      path: '/organizations/new'
-      fullPath: '/organizations/new'
-      preLoaderRoute: typeof HostedOrganizationsNewRouteImport
-      parentRoute: typeof HostedRoute
-    }
-    '/_hosted/organizations/$organizationId/': {
-      id: '/_hosted/organizations/$organizationId/'
-      path: '/organizations/$organizationId'
-      fullPath: '/organizations/$organizationId/'
-      preLoaderRoute: typeof HostedOrganizationsOrganizationIdIndexRouteImport
-      parentRoute: typeof HostedRoute
-    }
-    '/_hosted/organizations/$organizationId/members': {
-      id: '/_hosted/organizations/$organizationId/members'
-      path: '/organizations/$organizationId/members'
-      fullPath: '/organizations/$organizationId/members'
-      preLoaderRoute: typeof HostedOrganizationsOrganizationIdMembersRouteImport
-      parentRoute: typeof HostedRoute
-    }
-    '/_hosted/organizations/$organizationId/projects/new': {
-      id: '/_hosted/organizations/$organizationId/projects/new'
-      path: '/organizations/$organizationId/projects/new'
-      fullPath: '/organizations/$organizationId/projects/new'
-      preLoaderRoute: typeof HostedOrganizationsOrganizationIdProjectsNewRouteImport
-      parentRoute: typeof HostedRoute
-    }
-    '/_hosted/organizations/$organizationId/projects/$projectId/': {
-      id: '/_hosted/organizations/$organizationId/projects/$projectId/'
-      path: '/organizations/$organizationId/projects/$projectId'
-      fullPath: '/organizations/$organizationId/projects/$projectId/'
-      preLoaderRoute: typeof HostedOrganizationsOrganizationIdProjectsProjectIdIndexRouteImport
-      parentRoute: typeof HostedRoute
-    }
-    '/_hosted/organizations/$organizationId/projects/$projectId/apps': {
-      id: '/_hosted/organizations/$organizationId/projects/$projectId/apps'
-      path: '/organizations/$organizationId/projects/$projectId/apps'
-      fullPath: '/organizations/$organizationId/projects/$projectId/apps'
-      preLoaderRoute: typeof HostedOrganizationsOrganizationIdProjectsProjectIdAppsRouteImport
-      parentRoute: typeof HostedRoute
-    }
-    '/_studio_layout/studio-hosted/$organizationId/$projectId/$environmentId/$paywallId/$draftId': {
-      id: '/_studio_layout/studio-hosted/$organizationId/$projectId/$environmentId/$paywallId/$draftId'
-      path: '/studio-hosted/$organizationId/$projectId/$environmentId/$paywallId/$draftId'
-      fullPath: '/studio-hosted/$organizationId/$projectId/$environmentId/$paywallId/$draftId'
-      preLoaderRoute: typeof Studio_layoutStudioHostedOrganizationIdProjectIdEnvironmentIdPaywallIdDraftIdRouteImport
+    '/_studio_layout/studio/': {
+      id: '/_studio_layout/studio/'
+      path: '/studio'
+      fullPath: '/studio/'
+      preLoaderRoute: typeof Studio_layoutStudioIndexRouteImport
       parentRoute: typeof Studio_layoutRoute
     }
-    '/_hosted/organizations/$organizationId/projects/$projectId/settings/environments': {
-      id: '/_hosted/organizations/$organizationId/projects/$projectId/settings/environments'
-      path: '/organizations/$organizationId/projects/$projectId/settings/environments'
-      fullPath: '/organizations/$organizationId/projects/$projectId/settings/environments'
-      preLoaderRoute: typeof HostedOrganizationsOrganizationIdProjectsProjectIdSettingsEnvironmentsRouteImport
+    '/_hosted/orgs/new': {
+      id: '/_hosted/orgs/new'
+      path: '/orgs/new'
+      fullPath: '/orgs/new'
+      preLoaderRoute: typeof HostedOrgsNewRouteImport
       parentRoute: typeof HostedRoute
     }
-    '/_hosted/organizations/$organizationId/projects/$projectId/settings/api-keys': {
-      id: '/_hosted/organizations/$organizationId/projects/$projectId/settings/api-keys'
-      path: '/organizations/$organizationId/projects/$projectId/settings/api-keys'
-      fullPath: '/organizations/$organizationId/projects/$projectId/settings/api-keys'
-      preLoaderRoute: typeof HostedOrganizationsOrganizationIdProjectsProjectIdSettingsApiKeysRouteImport
+    '/_hosted/orgs/$organizationId/': {
+      id: '/_hosted/orgs/$organizationId/'
+      path: '/orgs/$organizationId'
+      fullPath: '/orgs/$organizationId/'
+      preLoaderRoute: typeof HostedOrgsOrganizationIdIndexRouteImport
       parentRoute: typeof HostedRoute
     }
-    '/_hosted/organizations/$organizationId/projects/$projectId/catalog/providers': {
-      id: '/_hosted/organizations/$organizationId/projects/$projectId/catalog/providers'
-      path: '/organizations/$organizationId/projects/$projectId/catalog/providers'
-      fullPath: '/organizations/$organizationId/projects/$projectId/catalog/providers'
-      preLoaderRoute: typeof HostedOrganizationsOrganizationIdProjectsProjectIdCatalogProvidersRouteImport
+    '/_hosted/orgs/$organizationId/members': {
+      id: '/_hosted/orgs/$organizationId/members'
+      path: '/orgs/$organizationId/members'
+      fullPath: '/orgs/$organizationId/members'
+      preLoaderRoute: typeof HostedOrgsOrganizationIdMembersRouteImport
       parentRoute: typeof HostedRoute
     }
-    '/_hosted/organizations/$organizationId/projects/$projectId/catalog/grant-versions': {
-      id: '/_hosted/organizations/$organizationId/projects/$projectId/catalog/grant-versions'
-      path: '/organizations/$organizationId/projects/$projectId/catalog/grant-versions'
-      fullPath: '/organizations/$organizationId/projects/$projectId/catalog/grant-versions'
-      preLoaderRoute: typeof HostedOrganizationsOrganizationIdProjectsProjectIdCatalogGrantVersionsRouteImport
+    '/_hosted/orgs/$organizationId/projects/new': {
+      id: '/_hosted/orgs/$organizationId/projects/new'
+      path: '/orgs/$organizationId/projects/new'
+      fullPath: '/orgs/$organizationId/projects/new'
+      preLoaderRoute: typeof HostedOrgsOrganizationIdProjectsNewRouteImport
       parentRoute: typeof HostedRoute
     }
-    '/_hosted/organizations/$organizationId/projects/$projectId/catalog/products/': {
-      id: '/_hosted/organizations/$organizationId/projects/$projectId/catalog/products/'
-      path: '/organizations/$organizationId/projects/$projectId/catalog/products'
-      fullPath: '/organizations/$organizationId/projects/$projectId/catalog/products/'
-      preLoaderRoute: typeof HostedOrganizationsOrganizationIdProjectsProjectIdCatalogProductsIndexRouteImport
+    '/_studio_layout/studio/$organizationId/$projectId/$environmentId/$paywallId/$draftId': {
+      id: '/_studio_layout/studio/$organizationId/$projectId/$environmentId/$paywallId/$draftId'
+      path: '/studio/$organizationId/$projectId/$environmentId/$paywallId/$draftId'
+      fullPath: '/studio/$organizationId/$projectId/$environmentId/$paywallId/$draftId'
+      preLoaderRoute: typeof Studio_layoutStudioOrganizationIdProjectIdEnvironmentIdPaywallIdDraftIdRouteImport
+      parentRoute: typeof Studio_layoutRoute
+    }
+    '/_hosted/orgs/$organizationId/projects/$projectId/env/$environmentKey/': {
+      id: '/_hosted/orgs/$organizationId/projects/$projectId/env/$environmentKey/'
+      path: '/orgs/$organizationId/projects/$projectId/env/$environmentKey'
+      fullPath: '/orgs/$organizationId/projects/$projectId/env/$environmentKey/'
+      preLoaderRoute: typeof HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyIndexRouteImport
       parentRoute: typeof HostedRoute
     }
-    '/_hosted/organizations/$organizationId/projects/$projectId/catalog/plans/': {
-      id: '/_hosted/organizations/$organizationId/projects/$projectId/catalog/plans/'
-      path: '/organizations/$organizationId/projects/$projectId/catalog/plans'
-      fullPath: '/organizations/$organizationId/projects/$projectId/catalog/plans/'
-      preLoaderRoute: typeof HostedOrganizationsOrganizationIdProjectsProjectIdCatalogPlansIndexRouteImport
+    '/_hosted/orgs/$organizationId/projects/$projectId/env/$environmentKey/apps': {
+      id: '/_hosted/orgs/$organizationId/projects/$projectId/env/$environmentKey/apps'
+      path: '/orgs/$organizationId/projects/$projectId/env/$environmentKey/apps'
+      fullPath: '/orgs/$organizationId/projects/$projectId/env/$environmentKey/apps'
+      preLoaderRoute: typeof HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyAppsRouteImport
       parentRoute: typeof HostedRoute
     }
-    '/_hosted/organizations/$organizationId/projects/$projectId/catalog/entitlements/': {
-      id: '/_hosted/organizations/$organizationId/projects/$projectId/catalog/entitlements/'
-      path: '/organizations/$organizationId/projects/$projectId/catalog/entitlements'
-      fullPath: '/organizations/$organizationId/projects/$projectId/catalog/entitlements/'
-      preLoaderRoute: typeof HostedOrganizationsOrganizationIdProjectsProjectIdCatalogEntitlementsIndexRouteImport
+    '/_hosted/orgs/$organizationId/projects/$projectId/env/$environmentKey/settings/environments': {
+      id: '/_hosted/orgs/$organizationId/projects/$projectId/env/$environmentKey/settings/environments'
+      path: '/orgs/$organizationId/projects/$projectId/env/$environmentKey/settings/environments'
+      fullPath: '/orgs/$organizationId/projects/$projectId/env/$environmentKey/settings/environments'
+      preLoaderRoute: typeof HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeySettingsEnvironmentsRouteImport
       parentRoute: typeof HostedRoute
     }
-    '/_hosted/organizations/$organizationId/projects/$projectId/billing/connections/': {
-      id: '/_hosted/organizations/$organizationId/projects/$projectId/billing/connections/'
-      path: '/organizations/$organizationId/projects/$projectId/billing/connections'
-      fullPath: '/organizations/$organizationId/projects/$projectId/billing/connections/'
-      preLoaderRoute: typeof HostedOrganizationsOrganizationIdProjectsProjectIdBillingConnectionsIndexRouteImport
+    '/_hosted/orgs/$organizationId/projects/$projectId/env/$environmentKey/settings/api-keys': {
+      id: '/_hosted/orgs/$organizationId/projects/$projectId/env/$environmentKey/settings/api-keys'
+      path: '/orgs/$organizationId/projects/$projectId/env/$environmentKey/settings/api-keys'
+      fullPath: '/orgs/$organizationId/projects/$projectId/env/$environmentKey/settings/api-keys'
+      preLoaderRoute: typeof HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeySettingsApiKeysRouteImport
       parentRoute: typeof HostedRoute
     }
-    '/_hosted/organizations/$organizationId/projects/$projectId/monetization/$environmentId/releases': {
-      id: '/_hosted/organizations/$organizationId/projects/$projectId/monetization/$environmentId/releases'
-      path: '/organizations/$organizationId/projects/$projectId/monetization/$environmentId/releases'
-      fullPath: '/organizations/$organizationId/projects/$projectId/monetization/$environmentId/releases'
-      preLoaderRoute: typeof HostedOrganizationsOrganizationIdProjectsProjectIdMonetizationEnvironmentIdReleasesRouteImport
+    '/_hosted/orgs/$organizationId/projects/$projectId/env/$environmentKey/monetization/releases': {
+      id: '/_hosted/orgs/$organizationId/projects/$projectId/env/$environmentKey/monetization/releases'
+      path: '/orgs/$organizationId/projects/$projectId/env/$environmentKey/monetization/releases'
+      fullPath: '/orgs/$organizationId/projects/$projectId/env/$environmentKey/monetization/releases'
+      preLoaderRoute: typeof HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyMonetizationReleasesRouteImport
       parentRoute: typeof HostedRoute
     }
-    '/_hosted/organizations/$organizationId/projects/$projectId/monetization/$environmentId/placements': {
-      id: '/_hosted/organizations/$organizationId/projects/$projectId/monetization/$environmentId/placements'
-      path: '/organizations/$organizationId/projects/$projectId/monetization/$environmentId/placements'
-      fullPath: '/organizations/$organizationId/projects/$projectId/monetization/$environmentId/placements'
-      preLoaderRoute: typeof HostedOrganizationsOrganizationIdProjectsProjectIdMonetizationEnvironmentIdPlacementsRouteImport
+    '/_hosted/orgs/$organizationId/projects/$projectId/env/$environmentKey/monetization/assets': {
+      id: '/_hosted/orgs/$organizationId/projects/$projectId/env/$environmentKey/monetization/assets'
+      path: '/orgs/$organizationId/projects/$projectId/env/$environmentKey/monetization/assets'
+      fullPath: '/orgs/$organizationId/projects/$projectId/env/$environmentKey/monetization/assets'
+      preLoaderRoute: typeof HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyMonetizationAssetsRouteImport
       parentRoute: typeof HostedRoute
     }
-    '/_hosted/organizations/$organizationId/projects/$projectId/monetization/$environmentId/paywalls': {
-      id: '/_hosted/organizations/$organizationId/projects/$projectId/monetization/$environmentId/paywalls'
-      path: '/organizations/$organizationId/projects/$projectId/monetization/$environmentId/paywalls'
-      fullPath: '/organizations/$organizationId/projects/$projectId/monetization/$environmentId/paywalls'
-      preLoaderRoute: typeof HostedOrganizationsOrganizationIdProjectsProjectIdMonetizationEnvironmentIdPaywallsRouteImport
+    '/_hosted/orgs/$organizationId/projects/$projectId/env/$environmentKey/catalog/providers': {
+      id: '/_hosted/orgs/$organizationId/projects/$projectId/env/$environmentKey/catalog/providers'
+      path: '/orgs/$organizationId/projects/$projectId/env/$environmentKey/catalog/providers'
+      fullPath: '/orgs/$organizationId/projects/$projectId/env/$environmentKey/catalog/providers'
+      preLoaderRoute: typeof HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyCatalogProvidersRouteImport
       parentRoute: typeof HostedRoute
     }
-    '/_hosted/organizations/$organizationId/projects/$projectId/monetization/$environmentId/experiments': {
-      id: '/_hosted/organizations/$organizationId/projects/$projectId/monetization/$environmentId/experiments'
-      path: '/organizations/$organizationId/projects/$projectId/monetization/$environmentId/experiments'
-      fullPath: '/organizations/$organizationId/projects/$projectId/monetization/$environmentId/experiments'
-      preLoaderRoute: typeof HostedOrganizationsOrganizationIdProjectsProjectIdMonetizationEnvironmentIdExperimentsRouteImport
+    '/_hosted/orgs/$organizationId/projects/$projectId/env/$environmentKey/catalog/grant-versions': {
+      id: '/_hosted/orgs/$organizationId/projects/$projectId/env/$environmentKey/catalog/grant-versions'
+      path: '/orgs/$organizationId/projects/$projectId/env/$environmentKey/catalog/grant-versions'
+      fullPath: '/orgs/$organizationId/projects/$projectId/env/$environmentKey/catalog/grant-versions'
+      preLoaderRoute: typeof HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyCatalogGrantVersionsRouteImport
       parentRoute: typeof HostedRoute
     }
-    '/_hosted/organizations/$organizationId/projects/$projectId/monetization/$environmentId/assets': {
-      id: '/_hosted/organizations/$organizationId/projects/$projectId/monetization/$environmentId/assets'
-      path: '/organizations/$organizationId/projects/$projectId/monetization/$environmentId/assets'
-      fullPath: '/organizations/$organizationId/projects/$projectId/monetization/$environmentId/assets'
-      preLoaderRoute: typeof HostedOrganizationsOrganizationIdProjectsProjectIdMonetizationEnvironmentIdAssetsRouteImport
+    '/_hosted/orgs/$organizationId/projects/$projectId/env/$environmentKey/billing/restores': {
+      id: '/_hosted/orgs/$organizationId/projects/$projectId/env/$environmentKey/billing/restores'
+      path: '/orgs/$organizationId/projects/$projectId/env/$environmentKey/billing/restores'
+      fullPath: '/orgs/$organizationId/projects/$projectId/env/$environmentKey/billing/restores'
+      preLoaderRoute: typeof HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyBillingRestoresRouteImport
       parentRoute: typeof HostedRoute
     }
-    '/_hosted/organizations/$organizationId/projects/$projectId/catalog/providers/$connectionId': {
-      id: '/_hosted/organizations/$organizationId/projects/$projectId/catalog/providers/$connectionId'
+    '/_hosted/orgs/$organizationId/projects/$projectId/env/$environmentKey/billing/projection-health': {
+      id: '/_hosted/orgs/$organizationId/projects/$projectId/env/$environmentKey/billing/projection-health'
+      path: '/orgs/$organizationId/projects/$projectId/env/$environmentKey/billing/projection-health'
+      fullPath: '/orgs/$organizationId/projects/$projectId/env/$environmentKey/billing/projection-health'
+      preLoaderRoute: typeof HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyBillingProjectionHealthRouteImport
+      parentRoute: typeof HostedRoute
+    }
+    '/_hosted/orgs/$organizationId/projects/$projectId/env/$environmentKey/billing/health': {
+      id: '/_hosted/orgs/$organizationId/projects/$projectId/env/$environmentKey/billing/health'
+      path: '/orgs/$organizationId/projects/$projectId/env/$environmentKey/billing/health'
+      fullPath: '/orgs/$organizationId/projects/$projectId/env/$environmentKey/billing/health'
+      preLoaderRoute: typeof HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyBillingHealthRouteImport
+      parentRoute: typeof HostedRoute
+    }
+    '/_hosted/orgs/$organizationId/projects/$projectId/env/$environmentKey/analytics/$surface': {
+      id: '/_hosted/orgs/$organizationId/projects/$projectId/env/$environmentKey/analytics/$surface'
+      path: '/orgs/$organizationId/projects/$projectId/env/$environmentKey/analytics/$surface'
+      fullPath: '/orgs/$organizationId/projects/$projectId/env/$environmentKey/analytics/$surface'
+      preLoaderRoute: typeof HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyAnalyticsSurfaceRouteImport
+      parentRoute: typeof HostedRoute
+    }
+    '/_hosted/orgs/$organizationId/projects/$projectId/env/$environmentKey/monetization/placements/': {
+      id: '/_hosted/orgs/$organizationId/projects/$projectId/env/$environmentKey/monetization/placements/'
+      path: '/orgs/$organizationId/projects/$projectId/env/$environmentKey/monetization/placements'
+      fullPath: '/orgs/$organizationId/projects/$projectId/env/$environmentKey/monetization/placements/'
+      preLoaderRoute: typeof HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyMonetizationPlacementsIndexRouteImport
+      parentRoute: typeof HostedRoute
+    }
+    '/_hosted/orgs/$organizationId/projects/$projectId/env/$environmentKey/monetization/paywalls/': {
+      id: '/_hosted/orgs/$organizationId/projects/$projectId/env/$environmentKey/monetization/paywalls/'
+      path: '/orgs/$organizationId/projects/$projectId/env/$environmentKey/monetization/paywalls'
+      fullPath: '/orgs/$organizationId/projects/$projectId/env/$environmentKey/monetization/paywalls/'
+      preLoaderRoute: typeof HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyMonetizationPaywallsIndexRouteImport
+      parentRoute: typeof HostedRoute
+    }
+    '/_hosted/orgs/$organizationId/projects/$projectId/env/$environmentKey/monetization/experiments/': {
+      id: '/_hosted/orgs/$organizationId/projects/$projectId/env/$environmentKey/monetization/experiments/'
+      path: '/orgs/$organizationId/projects/$projectId/env/$environmentKey/monetization/experiments'
+      fullPath: '/orgs/$organizationId/projects/$projectId/env/$environmentKey/monetization/experiments/'
+      preLoaderRoute: typeof HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyMonetizationExperimentsIndexRouteImport
+      parentRoute: typeof HostedRoute
+    }
+    '/_hosted/orgs/$organizationId/projects/$projectId/env/$environmentKey/catalog/products/': {
+      id: '/_hosted/orgs/$organizationId/projects/$projectId/env/$environmentKey/catalog/products/'
+      path: '/orgs/$organizationId/projects/$projectId/env/$environmentKey/catalog/products'
+      fullPath: '/orgs/$organizationId/projects/$projectId/env/$environmentKey/catalog/products/'
+      preLoaderRoute: typeof HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyCatalogProductsIndexRouteImport
+      parentRoute: typeof HostedRoute
+    }
+    '/_hosted/orgs/$organizationId/projects/$projectId/env/$environmentKey/catalog/plans/': {
+      id: '/_hosted/orgs/$organizationId/projects/$projectId/env/$environmentKey/catalog/plans/'
+      path: '/orgs/$organizationId/projects/$projectId/env/$environmentKey/catalog/plans'
+      fullPath: '/orgs/$organizationId/projects/$projectId/env/$environmentKey/catalog/plans/'
+      preLoaderRoute: typeof HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyCatalogPlansIndexRouteImport
+      parentRoute: typeof HostedRoute
+    }
+    '/_hosted/orgs/$organizationId/projects/$projectId/env/$environmentKey/catalog/entitlements/': {
+      id: '/_hosted/orgs/$organizationId/projects/$projectId/env/$environmentKey/catalog/entitlements/'
+      path: '/orgs/$organizationId/projects/$projectId/env/$environmentKey/catalog/entitlements'
+      fullPath: '/orgs/$organizationId/projects/$projectId/env/$environmentKey/catalog/entitlements/'
+      preLoaderRoute: typeof HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyCatalogEntitlementsIndexRouteImport
+      parentRoute: typeof HostedRoute
+    }
+    '/_hosted/orgs/$organizationId/projects/$projectId/env/$environmentKey/billing/transactions/': {
+      id: '/_hosted/orgs/$organizationId/projects/$projectId/env/$environmentKey/billing/transactions/'
+      path: '/orgs/$organizationId/projects/$projectId/env/$environmentKey/billing/transactions'
+      fullPath: '/orgs/$organizationId/projects/$projectId/env/$environmentKey/billing/transactions/'
+      preLoaderRoute: typeof HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyBillingTransactionsIndexRouteImport
+      parentRoute: typeof HostedRoute
+    }
+    '/_hosted/orgs/$organizationId/projects/$projectId/env/$environmentKey/billing/reconciliation/': {
+      id: '/_hosted/orgs/$organizationId/projects/$projectId/env/$environmentKey/billing/reconciliation/'
+      path: '/orgs/$organizationId/projects/$projectId/env/$environmentKey/billing/reconciliation'
+      fullPath: '/orgs/$organizationId/projects/$projectId/env/$environmentKey/billing/reconciliation/'
+      preLoaderRoute: typeof HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyBillingReconciliationIndexRouteImport
+      parentRoute: typeof HostedRoute
+    }
+    '/_hosted/orgs/$organizationId/projects/$projectId/env/$environmentKey/billing/quarantine/': {
+      id: '/_hosted/orgs/$organizationId/projects/$projectId/env/$environmentKey/billing/quarantine/'
+      path: '/orgs/$organizationId/projects/$projectId/env/$environmentKey/billing/quarantine'
+      fullPath: '/orgs/$organizationId/projects/$projectId/env/$environmentKey/billing/quarantine/'
+      preLoaderRoute: typeof HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyBillingQuarantineIndexRouteImport
+      parentRoute: typeof HostedRoute
+    }
+    '/_hosted/orgs/$organizationId/projects/$projectId/env/$environmentKey/billing/migrations/': {
+      id: '/_hosted/orgs/$organizationId/projects/$projectId/env/$environmentKey/billing/migrations/'
+      path: '/orgs/$organizationId/projects/$projectId/env/$environmentKey/billing/migrations'
+      fullPath: '/orgs/$organizationId/projects/$projectId/env/$environmentKey/billing/migrations/'
+      preLoaderRoute: typeof HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyBillingMigrationsIndexRouteImport
+      parentRoute: typeof HostedRoute
+    }
+    '/_hosted/orgs/$organizationId/projects/$projectId/env/$environmentKey/billing/identity-conflicts/': {
+      id: '/_hosted/orgs/$organizationId/projects/$projectId/env/$environmentKey/billing/identity-conflicts/'
+      path: '/orgs/$organizationId/projects/$projectId/env/$environmentKey/billing/identity-conflicts'
+      fullPath: '/orgs/$organizationId/projects/$projectId/env/$environmentKey/billing/identity-conflicts/'
+      preLoaderRoute: typeof HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyBillingIdentityConflictsIndexRouteImport
+      parentRoute: typeof HostedRoute
+    }
+    '/_hosted/orgs/$organizationId/projects/$projectId/env/$environmentKey/billing/customers/': {
+      id: '/_hosted/orgs/$organizationId/projects/$projectId/env/$environmentKey/billing/customers/'
+      path: '/orgs/$organizationId/projects/$projectId/env/$environmentKey/billing/customers'
+      fullPath: '/orgs/$organizationId/projects/$projectId/env/$environmentKey/billing/customers/'
+      preLoaderRoute: typeof HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyBillingCustomersIndexRouteImport
+      parentRoute: typeof HostedRoute
+    }
+    '/_hosted/orgs/$organizationId/projects/$projectId/env/$environmentKey/billing/connections/': {
+      id: '/_hosted/orgs/$organizationId/projects/$projectId/env/$environmentKey/billing/connections/'
+      path: '/orgs/$organizationId/projects/$projectId/env/$environmentKey/billing/connections'
+      fullPath: '/orgs/$organizationId/projects/$projectId/env/$environmentKey/billing/connections/'
+      preLoaderRoute: typeof HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyBillingConnectionsIndexRouteImport
+      parentRoute: typeof HostedRoute
+    }
+    '/_hosted/orgs/$organizationId/projects/$projectId/env/$environmentKey/monetization/placements/$placementId': {
+      id: '/_hosted/orgs/$organizationId/projects/$projectId/env/$environmentKey/monetization/placements/$placementId'
+      path: '/orgs/$organizationId/projects/$projectId/env/$environmentKey/monetization/placements/$placementId'
+      fullPath: '/orgs/$organizationId/projects/$projectId/env/$environmentKey/monetization/placements/$placementId'
+      preLoaderRoute: typeof HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyMonetizationPlacementsPlacementIdRouteImport
+      parentRoute: typeof HostedRoute
+    }
+    '/_hosted/orgs/$organizationId/projects/$projectId/env/$environmentKey/monetization/paywalls/$paywallId': {
+      id: '/_hosted/orgs/$organizationId/projects/$projectId/env/$environmentKey/monetization/paywalls/$paywallId'
+      path: '/orgs/$organizationId/projects/$projectId/env/$environmentKey/monetization/paywalls/$paywallId'
+      fullPath: '/orgs/$organizationId/projects/$projectId/env/$environmentKey/monetization/paywalls/$paywallId'
+      preLoaderRoute: typeof HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyMonetizationPaywallsPaywallIdRouteImport
+      parentRoute: typeof HostedRoute
+    }
+    '/_hosted/orgs/$organizationId/projects/$projectId/env/$environmentKey/monetization/experiments/new': {
+      id: '/_hosted/orgs/$organizationId/projects/$projectId/env/$environmentKey/monetization/experiments/new'
+      path: '/orgs/$organizationId/projects/$projectId/env/$environmentKey/monetization/experiments/new'
+      fullPath: '/orgs/$organizationId/projects/$projectId/env/$environmentKey/monetization/experiments/new'
+      preLoaderRoute: typeof HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyMonetizationExperimentsNewRouteImport
+      parentRoute: typeof HostedRoute
+    }
+    '/_hosted/orgs/$organizationId/projects/$projectId/env/$environmentKey/monetization/experiments/$experimentId': {
+      id: '/_hosted/orgs/$organizationId/projects/$projectId/env/$environmentKey/monetization/experiments/$experimentId'
+      path: '/orgs/$organizationId/projects/$projectId/env/$environmentKey/monetization/experiments/$experimentId'
+      fullPath: '/orgs/$organizationId/projects/$projectId/env/$environmentKey/monetization/experiments/$experimentId'
+      preLoaderRoute: typeof HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyMonetizationExperimentsExperimentIdRouteImport
+      parentRoute: typeof HostedRoute
+    }
+    '/_hosted/orgs/$organizationId/projects/$projectId/env/$environmentKey/catalog/providers/$connectionId': {
+      id: '/_hosted/orgs/$organizationId/projects/$projectId/env/$environmentKey/catalog/providers/$connectionId'
       path: '/$connectionId'
-      fullPath: '/organizations/$organizationId/projects/$projectId/catalog/providers/$connectionId'
-      preLoaderRoute: typeof HostedOrganizationsOrganizationIdProjectsProjectIdCatalogProvidersConnectionIdRouteImport
-      parentRoute: typeof HostedOrganizationsOrganizationIdProjectsProjectIdCatalogProvidersRoute
+      fullPath: '/orgs/$organizationId/projects/$projectId/env/$environmentKey/catalog/providers/$connectionId'
+      preLoaderRoute: typeof HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyCatalogProvidersConnectionIdRouteImport
+      parentRoute: typeof HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyCatalogProvidersRoute
     }
-    '/_hosted/organizations/$organizationId/projects/$projectId/catalog/products/$productId': {
-      id: '/_hosted/organizations/$organizationId/projects/$projectId/catalog/products/$productId'
-      path: '/organizations/$organizationId/projects/$projectId/catalog/products/$productId'
-      fullPath: '/organizations/$organizationId/projects/$projectId/catalog/products/$productId'
-      preLoaderRoute: typeof HostedOrganizationsOrganizationIdProjectsProjectIdCatalogProductsProductIdRouteImport
+    '/_hosted/orgs/$organizationId/projects/$projectId/env/$environmentKey/catalog/products/$productId': {
+      id: '/_hosted/orgs/$organizationId/projects/$projectId/env/$environmentKey/catalog/products/$productId'
+      path: '/orgs/$organizationId/projects/$projectId/env/$environmentKey/catalog/products/$productId'
+      fullPath: '/orgs/$organizationId/projects/$projectId/env/$environmentKey/catalog/products/$productId'
+      preLoaderRoute: typeof HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyCatalogProductsProductIdRouteImport
       parentRoute: typeof HostedRoute
     }
-    '/_hosted/organizations/$organizationId/projects/$projectId/catalog/plans/$planId': {
-      id: '/_hosted/organizations/$organizationId/projects/$projectId/catalog/plans/$planId'
-      path: '/organizations/$organizationId/projects/$projectId/catalog/plans/$planId'
-      fullPath: '/organizations/$organizationId/projects/$projectId/catalog/plans/$planId'
-      preLoaderRoute: typeof HostedOrganizationsOrganizationIdProjectsProjectIdCatalogPlansPlanIdRouteImport
+    '/_hosted/orgs/$organizationId/projects/$projectId/env/$environmentKey/catalog/plans/$planId': {
+      id: '/_hosted/orgs/$organizationId/projects/$projectId/env/$environmentKey/catalog/plans/$planId'
+      path: '/orgs/$organizationId/projects/$projectId/env/$environmentKey/catalog/plans/$planId'
+      fullPath: '/orgs/$organizationId/projects/$projectId/env/$environmentKey/catalog/plans/$planId'
+      preLoaderRoute: typeof HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyCatalogPlansPlanIdRouteImport
       parentRoute: typeof HostedRoute
     }
-    '/_hosted/organizations/$organizationId/projects/$projectId/catalog/entitlements/$entitlementId': {
-      id: '/_hosted/organizations/$organizationId/projects/$projectId/catalog/entitlements/$entitlementId'
-      path: '/organizations/$organizationId/projects/$projectId/catalog/entitlements/$entitlementId'
-      fullPath: '/organizations/$organizationId/projects/$projectId/catalog/entitlements/$entitlementId'
-      preLoaderRoute: typeof HostedOrganizationsOrganizationIdProjectsProjectIdCatalogEntitlementsEntitlementIdRouteImport
+    '/_hosted/orgs/$organizationId/projects/$projectId/env/$environmentKey/catalog/entitlements/$entitlementId': {
+      id: '/_hosted/orgs/$organizationId/projects/$projectId/env/$environmentKey/catalog/entitlements/$entitlementId'
+      path: '/orgs/$organizationId/projects/$projectId/env/$environmentKey/catalog/entitlements/$entitlementId'
+      fullPath: '/orgs/$organizationId/projects/$projectId/env/$environmentKey/catalog/entitlements/$entitlementId'
+      preLoaderRoute: typeof HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyCatalogEntitlementsEntitlementIdRouteImport
       parentRoute: typeof HostedRoute
     }
-    '/_hosted/organizations/$organizationId/projects/$projectId/billing/connections/$credentialId': {
-      id: '/_hosted/organizations/$organizationId/projects/$projectId/billing/connections/$credentialId'
-      path: '/organizations/$organizationId/projects/$projectId/billing/connections/$credentialId'
-      fullPath: '/organizations/$organizationId/projects/$projectId/billing/connections/$credentialId'
-      preLoaderRoute: typeof HostedOrganizationsOrganizationIdProjectsProjectIdBillingConnectionsCredentialIdRouteImport
+    '/_hosted/orgs/$organizationId/projects/$projectId/env/$environmentKey/billing/transactions/$factId': {
+      id: '/_hosted/orgs/$organizationId/projects/$projectId/env/$environmentKey/billing/transactions/$factId'
+      path: '/orgs/$organizationId/projects/$projectId/env/$environmentKey/billing/transactions/$factId'
+      fullPath: '/orgs/$organizationId/projects/$projectId/env/$environmentKey/billing/transactions/$factId'
+      preLoaderRoute: typeof HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyBillingTransactionsFactIdRouteImport
       parentRoute: typeof HostedRoute
     }
-    '/_hosted/organizations/$organizationId/projects/$projectId/billing/$environmentId/restores': {
-      id: '/_hosted/organizations/$organizationId/projects/$projectId/billing/$environmentId/restores'
-      path: '/organizations/$organizationId/projects/$projectId/billing/$environmentId/restores'
-      fullPath: '/organizations/$organizationId/projects/$projectId/billing/$environmentId/restores'
-      preLoaderRoute: typeof HostedOrganizationsOrganizationIdProjectsProjectIdBillingEnvironmentIdRestoresRouteImport
+    '/_hosted/orgs/$organizationId/projects/$projectId/env/$environmentKey/billing/subscriptions/$instanceId': {
+      id: '/_hosted/orgs/$organizationId/projects/$projectId/env/$environmentKey/billing/subscriptions/$instanceId'
+      path: '/orgs/$organizationId/projects/$projectId/env/$environmentKey/billing/subscriptions/$instanceId'
+      fullPath: '/orgs/$organizationId/projects/$projectId/env/$environmentKey/billing/subscriptions/$instanceId'
+      preLoaderRoute: typeof HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyBillingSubscriptionsInstanceIdRouteImport
       parentRoute: typeof HostedRoute
     }
-    '/_hosted/organizations/$organizationId/projects/$projectId/billing/$environmentId/projection-health': {
-      id: '/_hosted/organizations/$organizationId/projects/$projectId/billing/$environmentId/projection-health'
-      path: '/organizations/$organizationId/projects/$projectId/billing/$environmentId/projection-health'
-      fullPath: '/organizations/$organizationId/projects/$projectId/billing/$environmentId/projection-health'
-      preLoaderRoute: typeof HostedOrganizationsOrganizationIdProjectsProjectIdBillingEnvironmentIdProjectionHealthRouteImport
+    '/_hosted/orgs/$organizationId/projects/$projectId/env/$environmentKey/billing/reconciliation/$runId': {
+      id: '/_hosted/orgs/$organizationId/projects/$projectId/env/$environmentKey/billing/reconciliation/$runId'
+      path: '/orgs/$organizationId/projects/$projectId/env/$environmentKey/billing/reconciliation/$runId'
+      fullPath: '/orgs/$organizationId/projects/$projectId/env/$environmentKey/billing/reconciliation/$runId'
+      preLoaderRoute: typeof HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyBillingReconciliationRunIdRouteImport
       parentRoute: typeof HostedRoute
     }
-    '/_hosted/organizations/$organizationId/projects/$projectId/billing/$environmentId/health': {
-      id: '/_hosted/organizations/$organizationId/projects/$projectId/billing/$environmentId/health'
-      path: '/organizations/$organizationId/projects/$projectId/billing/$environmentId/health'
-      fullPath: '/organizations/$organizationId/projects/$projectId/billing/$environmentId/health'
-      preLoaderRoute: typeof HostedOrganizationsOrganizationIdProjectsProjectIdBillingEnvironmentIdHealthRouteImport
+    '/_hosted/orgs/$organizationId/projects/$projectId/env/$environmentKey/billing/quarantine/$recordId': {
+      id: '/_hosted/orgs/$organizationId/projects/$projectId/env/$environmentKey/billing/quarantine/$recordId'
+      path: '/orgs/$organizationId/projects/$projectId/env/$environmentKey/billing/quarantine/$recordId'
+      fullPath: '/orgs/$organizationId/projects/$projectId/env/$environmentKey/billing/quarantine/$recordId'
+      preLoaderRoute: typeof HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyBillingQuarantineRecordIdRouteImport
       parentRoute: typeof HostedRoute
     }
-    '/_hosted/organizations/$organizationId/projects/$projectId/analytics/$environmentId/$surface': {
-      id: '/_hosted/organizations/$organizationId/projects/$projectId/analytics/$environmentId/$surface'
-      path: '/organizations/$organizationId/projects/$projectId/analytics/$environmentId/$surface'
-      fullPath: '/organizations/$organizationId/projects/$projectId/analytics/$environmentId/$surface'
-      preLoaderRoute: typeof HostedOrganizationsOrganizationIdProjectsProjectIdAnalyticsEnvironmentIdSurfaceRouteImport
+    '/_hosted/orgs/$organizationId/projects/$projectId/env/$environmentKey/billing/migrations/$programId': {
+      id: '/_hosted/orgs/$organizationId/projects/$projectId/env/$environmentKey/billing/migrations/$programId'
+      path: '/orgs/$organizationId/projects/$projectId/env/$environmentKey/billing/migrations/$programId'
+      fullPath: '/orgs/$organizationId/projects/$projectId/env/$environmentKey/billing/migrations/$programId'
+      preLoaderRoute: typeof HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyBillingMigrationsProgramIdRouteImport
       parentRoute: typeof HostedRoute
     }
-    '/_hosted/organizations/$organizationId/projects/$projectId/billing/$environmentId/transactions/': {
-      id: '/_hosted/organizations/$organizationId/projects/$projectId/billing/$environmentId/transactions/'
-      path: '/organizations/$organizationId/projects/$projectId/billing/$environmentId/transactions'
-      fullPath: '/organizations/$organizationId/projects/$projectId/billing/$environmentId/transactions/'
-      preLoaderRoute: typeof HostedOrganizationsOrganizationIdProjectsProjectIdBillingEnvironmentIdTransactionsIndexRouteImport
+    '/_hosted/orgs/$organizationId/projects/$projectId/env/$environmentKey/billing/identity-conflicts/$conflictId': {
+      id: '/_hosted/orgs/$organizationId/projects/$projectId/env/$environmentKey/billing/identity-conflicts/$conflictId'
+      path: '/orgs/$organizationId/projects/$projectId/env/$environmentKey/billing/identity-conflicts/$conflictId'
+      fullPath: '/orgs/$organizationId/projects/$projectId/env/$environmentKey/billing/identity-conflicts/$conflictId'
+      preLoaderRoute: typeof HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyBillingIdentityConflictsConflictIdRouteImport
       parentRoute: typeof HostedRoute
     }
-    '/_hosted/organizations/$organizationId/projects/$projectId/billing/$environmentId/reconciliation/': {
-      id: '/_hosted/organizations/$organizationId/projects/$projectId/billing/$environmentId/reconciliation/'
-      path: '/organizations/$organizationId/projects/$projectId/billing/$environmentId/reconciliation'
-      fullPath: '/organizations/$organizationId/projects/$projectId/billing/$environmentId/reconciliation/'
-      preLoaderRoute: typeof HostedOrganizationsOrganizationIdProjectsProjectIdBillingEnvironmentIdReconciliationIndexRouteImport
+    '/_hosted/orgs/$organizationId/projects/$projectId/env/$environmentKey/billing/customers/$customerId': {
+      id: '/_hosted/orgs/$organizationId/projects/$projectId/env/$environmentKey/billing/customers/$customerId'
+      path: '/orgs/$organizationId/projects/$projectId/env/$environmentKey/billing/customers/$customerId'
+      fullPath: '/orgs/$organizationId/projects/$projectId/env/$environmentKey/billing/customers/$customerId'
+      preLoaderRoute: typeof HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyBillingCustomersCustomerIdRouteImport
       parentRoute: typeof HostedRoute
     }
-    '/_hosted/organizations/$organizationId/projects/$projectId/billing/$environmentId/quarantine/': {
-      id: '/_hosted/organizations/$organizationId/projects/$projectId/billing/$environmentId/quarantine/'
-      path: '/organizations/$organizationId/projects/$projectId/billing/$environmentId/quarantine'
-      fullPath: '/organizations/$organizationId/projects/$projectId/billing/$environmentId/quarantine/'
-      preLoaderRoute: typeof HostedOrganizationsOrganizationIdProjectsProjectIdBillingEnvironmentIdQuarantineIndexRouteImport
-      parentRoute: typeof HostedRoute
-    }
-    '/_hosted/organizations/$organizationId/projects/$projectId/billing/$environmentId/identity-conflicts/': {
-      id: '/_hosted/organizations/$organizationId/projects/$projectId/billing/$environmentId/identity-conflicts/'
-      path: '/organizations/$organizationId/projects/$projectId/billing/$environmentId/identity-conflicts'
-      fullPath: '/organizations/$organizationId/projects/$projectId/billing/$environmentId/identity-conflicts/'
-      preLoaderRoute: typeof HostedOrganizationsOrganizationIdProjectsProjectIdBillingEnvironmentIdIdentityConflictsIndexRouteImport
-      parentRoute: typeof HostedRoute
-    }
-    '/_hosted/organizations/$organizationId/projects/$projectId/billing/$environmentId/customers/': {
-      id: '/_hosted/organizations/$organizationId/projects/$projectId/billing/$environmentId/customers/'
-      path: '/organizations/$organizationId/projects/$projectId/billing/$environmentId/customers'
-      fullPath: '/organizations/$organizationId/projects/$projectId/billing/$environmentId/customers/'
-      preLoaderRoute: typeof HostedOrganizationsOrganizationIdProjectsProjectIdBillingEnvironmentIdCustomersIndexRouteImport
-      parentRoute: typeof HostedRoute
-    }
-    '/_hosted/organizations/$organizationId/projects/$projectId/monetization/$environmentId/placements/$placementId': {
-      id: '/_hosted/organizations/$organizationId/projects/$projectId/monetization/$environmentId/placements/$placementId'
-      path: '/$placementId'
-      fullPath: '/organizations/$organizationId/projects/$projectId/monetization/$environmentId/placements/$placementId'
-      preLoaderRoute: typeof HostedOrganizationsOrganizationIdProjectsProjectIdMonetizationEnvironmentIdPlacementsPlacementIdRouteImport
-      parentRoute: typeof HostedOrganizationsOrganizationIdProjectsProjectIdMonetizationEnvironmentIdPlacementsRoute
-    }
-    '/_hosted/organizations/$organizationId/projects/$projectId/monetization/$environmentId/paywalls/$paywallId': {
-      id: '/_hosted/organizations/$organizationId/projects/$projectId/monetization/$environmentId/paywalls/$paywallId'
-      path: '/$paywallId'
-      fullPath: '/organizations/$organizationId/projects/$projectId/monetization/$environmentId/paywalls/$paywallId'
-      preLoaderRoute: typeof HostedOrganizationsOrganizationIdProjectsProjectIdMonetizationEnvironmentIdPaywallsPaywallIdRouteImport
-      parentRoute: typeof HostedOrganizationsOrganizationIdProjectsProjectIdMonetizationEnvironmentIdPaywallsRoute
-    }
-    '/_hosted/organizations/$organizationId/projects/$projectId/monetization/$environmentId/experiments/new': {
-      id: '/_hosted/organizations/$organizationId/projects/$projectId/monetization/$environmentId/experiments/new'
-      path: '/new'
-      fullPath: '/organizations/$organizationId/projects/$projectId/monetization/$environmentId/experiments/new'
-      preLoaderRoute: typeof HostedOrganizationsOrganizationIdProjectsProjectIdMonetizationEnvironmentIdExperimentsNewRouteImport
-      parentRoute: typeof HostedOrganizationsOrganizationIdProjectsProjectIdMonetizationEnvironmentIdExperimentsRoute
-    }
-    '/_hosted/organizations/$organizationId/projects/$projectId/monetization/$environmentId/experiments/$experimentId': {
-      id: '/_hosted/organizations/$organizationId/projects/$projectId/monetization/$environmentId/experiments/$experimentId'
-      path: '/$experimentId'
-      fullPath: '/organizations/$organizationId/projects/$projectId/monetization/$environmentId/experiments/$experimentId'
-      preLoaderRoute: typeof HostedOrganizationsOrganizationIdProjectsProjectIdMonetizationEnvironmentIdExperimentsExperimentIdRouteImport
-      parentRoute: typeof HostedOrganizationsOrganizationIdProjectsProjectIdMonetizationEnvironmentIdExperimentsRoute
-    }
-    '/_hosted/organizations/$organizationId/projects/$projectId/billing/$environmentId/transactions/$factId': {
-      id: '/_hosted/organizations/$organizationId/projects/$projectId/billing/$environmentId/transactions/$factId'
-      path: '/organizations/$organizationId/projects/$projectId/billing/$environmentId/transactions/$factId'
-      fullPath: '/organizations/$organizationId/projects/$projectId/billing/$environmentId/transactions/$factId'
-      preLoaderRoute: typeof HostedOrganizationsOrganizationIdProjectsProjectIdBillingEnvironmentIdTransactionsFactIdRouteImport
-      parentRoute: typeof HostedRoute
-    }
-    '/_hosted/organizations/$organizationId/projects/$projectId/billing/$environmentId/subscriptions/$instanceId': {
-      id: '/_hosted/organizations/$organizationId/projects/$projectId/billing/$environmentId/subscriptions/$instanceId'
-      path: '/organizations/$organizationId/projects/$projectId/billing/$environmentId/subscriptions/$instanceId'
-      fullPath: '/organizations/$organizationId/projects/$projectId/billing/$environmentId/subscriptions/$instanceId'
-      preLoaderRoute: typeof HostedOrganizationsOrganizationIdProjectsProjectIdBillingEnvironmentIdSubscriptionsInstanceIdRouteImport
-      parentRoute: typeof HostedRoute
-    }
-    '/_hosted/organizations/$organizationId/projects/$projectId/billing/$environmentId/reconciliation/$runId': {
-      id: '/_hosted/organizations/$organizationId/projects/$projectId/billing/$environmentId/reconciliation/$runId'
-      path: '/organizations/$organizationId/projects/$projectId/billing/$environmentId/reconciliation/$runId'
-      fullPath: '/organizations/$organizationId/projects/$projectId/billing/$environmentId/reconciliation/$runId'
-      preLoaderRoute: typeof HostedOrganizationsOrganizationIdProjectsProjectIdBillingEnvironmentIdReconciliationRunIdRouteImport
-      parentRoute: typeof HostedRoute
-    }
-    '/_hosted/organizations/$organizationId/projects/$projectId/billing/$environmentId/quarantine/$recordId': {
-      id: '/_hosted/organizations/$organizationId/projects/$projectId/billing/$environmentId/quarantine/$recordId'
-      path: '/organizations/$organizationId/projects/$projectId/billing/$environmentId/quarantine/$recordId'
-      fullPath: '/organizations/$organizationId/projects/$projectId/billing/$environmentId/quarantine/$recordId'
-      preLoaderRoute: typeof HostedOrganizationsOrganizationIdProjectsProjectIdBillingEnvironmentIdQuarantineRecordIdRouteImport
-      parentRoute: typeof HostedRoute
-    }
-    '/_hosted/organizations/$organizationId/projects/$projectId/billing/$environmentId/identity-conflicts/$conflictId': {
-      id: '/_hosted/organizations/$organizationId/projects/$projectId/billing/$environmentId/identity-conflicts/$conflictId'
-      path: '/organizations/$organizationId/projects/$projectId/billing/$environmentId/identity-conflicts/$conflictId'
-      fullPath: '/organizations/$organizationId/projects/$projectId/billing/$environmentId/identity-conflicts/$conflictId'
-      preLoaderRoute: typeof HostedOrganizationsOrganizationIdProjectsProjectIdBillingEnvironmentIdIdentityConflictsConflictIdRouteImport
-      parentRoute: typeof HostedRoute
-    }
-    '/_hosted/organizations/$organizationId/projects/$projectId/billing/$environmentId/customers/$customerId': {
-      id: '/_hosted/organizations/$organizationId/projects/$projectId/billing/$environmentId/customers/$customerId'
-      path: '/organizations/$organizationId/projects/$projectId/billing/$environmentId/customers/$customerId'
-      fullPath: '/organizations/$organizationId/projects/$projectId/billing/$environmentId/customers/$customerId'
-      preLoaderRoute: typeof HostedOrganizationsOrganizationIdProjectsProjectIdBillingEnvironmentIdCustomersCustomerIdRouteImport
+    '/_hosted/orgs/$organizationId/projects/$projectId/env/$environmentKey/billing/connections/$credentialId': {
+      id: '/_hosted/orgs/$organizationId/projects/$projectId/env/$environmentKey/billing/connections/$credentialId'
+      path: '/orgs/$organizationId/projects/$projectId/env/$environmentKey/billing/connections/$credentialId'
+      fullPath: '/orgs/$organizationId/projects/$projectId/env/$environmentKey/billing/connections/$credentialId'
+      preLoaderRoute: typeof HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyBillingConnectionsCredentialIdRouteImport
       parentRoute: typeof HostedRoute
     }
   }
 }
 
-interface HostedOrganizationsOrganizationIdProjectsProjectIdCatalogProvidersRouteChildren {
-  HostedOrganizationsOrganizationIdProjectsProjectIdCatalogProvidersConnectionIdRoute: typeof HostedOrganizationsOrganizationIdProjectsProjectIdCatalogProvidersConnectionIdRoute
+interface HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyCatalogProvidersRouteChildren {
+  HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyCatalogProvidersConnectionIdRoute: typeof HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyCatalogProvidersConnectionIdRoute
 }
 
-const HostedOrganizationsOrganizationIdProjectsProjectIdCatalogProvidersRouteChildren: HostedOrganizationsOrganizationIdProjectsProjectIdCatalogProvidersRouteChildren =
+const HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyCatalogProvidersRouteChildren: HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyCatalogProvidersRouteChildren =
   {
-    HostedOrganizationsOrganizationIdProjectsProjectIdCatalogProvidersConnectionIdRoute:
-      HostedOrganizationsOrganizationIdProjectsProjectIdCatalogProvidersConnectionIdRoute,
+    HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyCatalogProvidersConnectionIdRoute:
+      HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyCatalogProvidersConnectionIdRoute,
   }
 
-const HostedOrganizationsOrganizationIdProjectsProjectIdCatalogProvidersRouteWithChildren =
-  HostedOrganizationsOrganizationIdProjectsProjectIdCatalogProvidersRoute._addFileChildren(
-    HostedOrganizationsOrganizationIdProjectsProjectIdCatalogProvidersRouteChildren,
-  )
-
-interface HostedOrganizationsOrganizationIdProjectsProjectIdMonetizationEnvironmentIdExperimentsRouteChildren {
-  HostedOrganizationsOrganizationIdProjectsProjectIdMonetizationEnvironmentIdExperimentsExperimentIdRoute: typeof HostedOrganizationsOrganizationIdProjectsProjectIdMonetizationEnvironmentIdExperimentsExperimentIdRoute
-  HostedOrganizationsOrganizationIdProjectsProjectIdMonetizationEnvironmentIdExperimentsNewRoute: typeof HostedOrganizationsOrganizationIdProjectsProjectIdMonetizationEnvironmentIdExperimentsNewRoute
-}
-
-const HostedOrganizationsOrganizationIdProjectsProjectIdMonetizationEnvironmentIdExperimentsRouteChildren: HostedOrganizationsOrganizationIdProjectsProjectIdMonetizationEnvironmentIdExperimentsRouteChildren =
-  {
-    HostedOrganizationsOrganizationIdProjectsProjectIdMonetizationEnvironmentIdExperimentsExperimentIdRoute:
-      HostedOrganizationsOrganizationIdProjectsProjectIdMonetizationEnvironmentIdExperimentsExperimentIdRoute,
-    HostedOrganizationsOrganizationIdProjectsProjectIdMonetizationEnvironmentIdExperimentsNewRoute:
-      HostedOrganizationsOrganizationIdProjectsProjectIdMonetizationEnvironmentIdExperimentsNewRoute,
-  }
-
-const HostedOrganizationsOrganizationIdProjectsProjectIdMonetizationEnvironmentIdExperimentsRouteWithChildren =
-  HostedOrganizationsOrganizationIdProjectsProjectIdMonetizationEnvironmentIdExperimentsRoute._addFileChildren(
-    HostedOrganizationsOrganizationIdProjectsProjectIdMonetizationEnvironmentIdExperimentsRouteChildren,
-  )
-
-interface HostedOrganizationsOrganizationIdProjectsProjectIdMonetizationEnvironmentIdPaywallsRouteChildren {
-  HostedOrganizationsOrganizationIdProjectsProjectIdMonetizationEnvironmentIdPaywallsPaywallIdRoute: typeof HostedOrganizationsOrganizationIdProjectsProjectIdMonetizationEnvironmentIdPaywallsPaywallIdRoute
-}
-
-const HostedOrganizationsOrganizationIdProjectsProjectIdMonetizationEnvironmentIdPaywallsRouteChildren: HostedOrganizationsOrganizationIdProjectsProjectIdMonetizationEnvironmentIdPaywallsRouteChildren =
-  {
-    HostedOrganizationsOrganizationIdProjectsProjectIdMonetizationEnvironmentIdPaywallsPaywallIdRoute:
-      HostedOrganizationsOrganizationIdProjectsProjectIdMonetizationEnvironmentIdPaywallsPaywallIdRoute,
-  }
-
-const HostedOrganizationsOrganizationIdProjectsProjectIdMonetizationEnvironmentIdPaywallsRouteWithChildren =
-  HostedOrganizationsOrganizationIdProjectsProjectIdMonetizationEnvironmentIdPaywallsRoute._addFileChildren(
-    HostedOrganizationsOrganizationIdProjectsProjectIdMonetizationEnvironmentIdPaywallsRouteChildren,
-  )
-
-interface HostedOrganizationsOrganizationIdProjectsProjectIdMonetizationEnvironmentIdPlacementsRouteChildren {
-  HostedOrganizationsOrganizationIdProjectsProjectIdMonetizationEnvironmentIdPlacementsPlacementIdRoute: typeof HostedOrganizationsOrganizationIdProjectsProjectIdMonetizationEnvironmentIdPlacementsPlacementIdRoute
-}
-
-const HostedOrganizationsOrganizationIdProjectsProjectIdMonetizationEnvironmentIdPlacementsRouteChildren: HostedOrganizationsOrganizationIdProjectsProjectIdMonetizationEnvironmentIdPlacementsRouteChildren =
-  {
-    HostedOrganizationsOrganizationIdProjectsProjectIdMonetizationEnvironmentIdPlacementsPlacementIdRoute:
-      HostedOrganizationsOrganizationIdProjectsProjectIdMonetizationEnvironmentIdPlacementsPlacementIdRoute,
-  }
-
-const HostedOrganizationsOrganizationIdProjectsProjectIdMonetizationEnvironmentIdPlacementsRouteWithChildren =
-  HostedOrganizationsOrganizationIdProjectsProjectIdMonetizationEnvironmentIdPlacementsRoute._addFileChildren(
-    HostedOrganizationsOrganizationIdProjectsProjectIdMonetizationEnvironmentIdPlacementsRouteChildren,
+const HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyCatalogProvidersRouteWithChildren =
+  HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyCatalogProvidersRoute._addFileChildren(
+    HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyCatalogProvidersRouteChildren,
   )
 
 interface HostedRouteChildren {
   HostedWorkspaceRoute: typeof HostedWorkspaceRoute
-  HostedOrganizationsNewRoute: typeof HostedOrganizationsNewRoute
-  HostedOrganizationsOrganizationIdMembersRoute: typeof HostedOrganizationsOrganizationIdMembersRoute
-  HostedOrganizationsOrganizationIdIndexRoute: typeof HostedOrganizationsOrganizationIdIndexRoute
-  HostedOrganizationsOrganizationIdProjectsNewRoute: typeof HostedOrganizationsOrganizationIdProjectsNewRoute
-  HostedOrganizationsOrganizationIdProjectsProjectIdAppsRoute: typeof HostedOrganizationsOrganizationIdProjectsProjectIdAppsRoute
-  HostedOrganizationsOrganizationIdProjectsProjectIdIndexRoute: typeof HostedOrganizationsOrganizationIdProjectsProjectIdIndexRoute
-  HostedOrganizationsOrganizationIdProjectsProjectIdCatalogGrantVersionsRoute: typeof HostedOrganizationsOrganizationIdProjectsProjectIdCatalogGrantVersionsRoute
-  HostedOrganizationsOrganizationIdProjectsProjectIdCatalogProvidersRoute: typeof HostedOrganizationsOrganizationIdProjectsProjectIdCatalogProvidersRouteWithChildren
-  HostedOrganizationsOrganizationIdProjectsProjectIdSettingsApiKeysRoute: typeof HostedOrganizationsOrganizationIdProjectsProjectIdSettingsApiKeysRoute
-  HostedOrganizationsOrganizationIdProjectsProjectIdSettingsEnvironmentsRoute: typeof HostedOrganizationsOrganizationIdProjectsProjectIdSettingsEnvironmentsRoute
-  HostedOrganizationsOrganizationIdProjectsProjectIdAnalyticsEnvironmentIdSurfaceRoute: typeof HostedOrganizationsOrganizationIdProjectsProjectIdAnalyticsEnvironmentIdSurfaceRoute
-  HostedOrganizationsOrganizationIdProjectsProjectIdBillingEnvironmentIdHealthRoute: typeof HostedOrganizationsOrganizationIdProjectsProjectIdBillingEnvironmentIdHealthRoute
-  HostedOrganizationsOrganizationIdProjectsProjectIdBillingEnvironmentIdProjectionHealthRoute: typeof HostedOrganizationsOrganizationIdProjectsProjectIdBillingEnvironmentIdProjectionHealthRoute
-  HostedOrganizationsOrganizationIdProjectsProjectIdBillingEnvironmentIdRestoresRoute: typeof HostedOrganizationsOrganizationIdProjectsProjectIdBillingEnvironmentIdRestoresRoute
-  HostedOrganizationsOrganizationIdProjectsProjectIdBillingConnectionsCredentialIdRoute: typeof HostedOrganizationsOrganizationIdProjectsProjectIdBillingConnectionsCredentialIdRoute
-  HostedOrganizationsOrganizationIdProjectsProjectIdCatalogEntitlementsEntitlementIdRoute: typeof HostedOrganizationsOrganizationIdProjectsProjectIdCatalogEntitlementsEntitlementIdRoute
-  HostedOrganizationsOrganizationIdProjectsProjectIdCatalogPlansPlanIdRoute: typeof HostedOrganizationsOrganizationIdProjectsProjectIdCatalogPlansPlanIdRoute
-  HostedOrganizationsOrganizationIdProjectsProjectIdCatalogProductsProductIdRoute: typeof HostedOrganizationsOrganizationIdProjectsProjectIdCatalogProductsProductIdRoute
-  HostedOrganizationsOrganizationIdProjectsProjectIdMonetizationEnvironmentIdAssetsRoute: typeof HostedOrganizationsOrganizationIdProjectsProjectIdMonetizationEnvironmentIdAssetsRoute
-  HostedOrganizationsOrganizationIdProjectsProjectIdMonetizationEnvironmentIdExperimentsRoute: typeof HostedOrganizationsOrganizationIdProjectsProjectIdMonetizationEnvironmentIdExperimentsRouteWithChildren
-  HostedOrganizationsOrganizationIdProjectsProjectIdMonetizationEnvironmentIdPaywallsRoute: typeof HostedOrganizationsOrganizationIdProjectsProjectIdMonetizationEnvironmentIdPaywallsRouteWithChildren
-  HostedOrganizationsOrganizationIdProjectsProjectIdMonetizationEnvironmentIdPlacementsRoute: typeof HostedOrganizationsOrganizationIdProjectsProjectIdMonetizationEnvironmentIdPlacementsRouteWithChildren
-  HostedOrganizationsOrganizationIdProjectsProjectIdMonetizationEnvironmentIdReleasesRoute: typeof HostedOrganizationsOrganizationIdProjectsProjectIdMonetizationEnvironmentIdReleasesRoute
-  HostedOrganizationsOrganizationIdProjectsProjectIdBillingConnectionsIndexRoute: typeof HostedOrganizationsOrganizationIdProjectsProjectIdBillingConnectionsIndexRoute
-  HostedOrganizationsOrganizationIdProjectsProjectIdCatalogEntitlementsIndexRoute: typeof HostedOrganizationsOrganizationIdProjectsProjectIdCatalogEntitlementsIndexRoute
-  HostedOrganizationsOrganizationIdProjectsProjectIdCatalogPlansIndexRoute: typeof HostedOrganizationsOrganizationIdProjectsProjectIdCatalogPlansIndexRoute
-  HostedOrganizationsOrganizationIdProjectsProjectIdCatalogProductsIndexRoute: typeof HostedOrganizationsOrganizationIdProjectsProjectIdCatalogProductsIndexRoute
-  HostedOrganizationsOrganizationIdProjectsProjectIdBillingEnvironmentIdCustomersCustomerIdRoute: typeof HostedOrganizationsOrganizationIdProjectsProjectIdBillingEnvironmentIdCustomersCustomerIdRoute
-  HostedOrganizationsOrganizationIdProjectsProjectIdBillingEnvironmentIdIdentityConflictsConflictIdRoute: typeof HostedOrganizationsOrganizationIdProjectsProjectIdBillingEnvironmentIdIdentityConflictsConflictIdRoute
-  HostedOrganizationsOrganizationIdProjectsProjectIdBillingEnvironmentIdQuarantineRecordIdRoute: typeof HostedOrganizationsOrganizationIdProjectsProjectIdBillingEnvironmentIdQuarantineRecordIdRoute
-  HostedOrganizationsOrganizationIdProjectsProjectIdBillingEnvironmentIdReconciliationRunIdRoute: typeof HostedOrganizationsOrganizationIdProjectsProjectIdBillingEnvironmentIdReconciliationRunIdRoute
-  HostedOrganizationsOrganizationIdProjectsProjectIdBillingEnvironmentIdSubscriptionsInstanceIdRoute: typeof HostedOrganizationsOrganizationIdProjectsProjectIdBillingEnvironmentIdSubscriptionsInstanceIdRoute
-  HostedOrganizationsOrganizationIdProjectsProjectIdBillingEnvironmentIdTransactionsFactIdRoute: typeof HostedOrganizationsOrganizationIdProjectsProjectIdBillingEnvironmentIdTransactionsFactIdRoute
-  HostedOrganizationsOrganizationIdProjectsProjectIdBillingEnvironmentIdCustomersIndexRoute: typeof HostedOrganizationsOrganizationIdProjectsProjectIdBillingEnvironmentIdCustomersIndexRoute
-  HostedOrganizationsOrganizationIdProjectsProjectIdBillingEnvironmentIdIdentityConflictsIndexRoute: typeof HostedOrganizationsOrganizationIdProjectsProjectIdBillingEnvironmentIdIdentityConflictsIndexRoute
-  HostedOrganizationsOrganizationIdProjectsProjectIdBillingEnvironmentIdQuarantineIndexRoute: typeof HostedOrganizationsOrganizationIdProjectsProjectIdBillingEnvironmentIdQuarantineIndexRoute
-  HostedOrganizationsOrganizationIdProjectsProjectIdBillingEnvironmentIdReconciliationIndexRoute: typeof HostedOrganizationsOrganizationIdProjectsProjectIdBillingEnvironmentIdReconciliationIndexRoute
-  HostedOrganizationsOrganizationIdProjectsProjectIdBillingEnvironmentIdTransactionsIndexRoute: typeof HostedOrganizationsOrganizationIdProjectsProjectIdBillingEnvironmentIdTransactionsIndexRoute
+  HostedOrgsNewRoute: typeof HostedOrgsNewRoute
+  HostedOrgsOrganizationIdMembersRoute: typeof HostedOrgsOrganizationIdMembersRoute
+  HostedOrgsOrganizationIdIndexRoute: typeof HostedOrgsOrganizationIdIndexRoute
+  HostedOrgsOrganizationIdProjectsNewRoute: typeof HostedOrgsOrganizationIdProjectsNewRoute
+  HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyAppsRoute: typeof HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyAppsRoute
+  HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyIndexRoute: typeof HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyIndexRoute
+  HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyAnalyticsSurfaceRoute: typeof HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyAnalyticsSurfaceRoute
+  HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyBillingHealthRoute: typeof HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyBillingHealthRoute
+  HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyBillingProjectionHealthRoute: typeof HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyBillingProjectionHealthRoute
+  HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyBillingRestoresRoute: typeof HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyBillingRestoresRoute
+  HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyCatalogGrantVersionsRoute: typeof HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyCatalogGrantVersionsRoute
+  HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyCatalogProvidersRoute: typeof HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyCatalogProvidersRouteWithChildren
+  HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyMonetizationAssetsRoute: typeof HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyMonetizationAssetsRoute
+  HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyMonetizationReleasesRoute: typeof HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyMonetizationReleasesRoute
+  HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeySettingsApiKeysRoute: typeof HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeySettingsApiKeysRoute
+  HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeySettingsEnvironmentsRoute: typeof HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeySettingsEnvironmentsRoute
+  HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyBillingConnectionsCredentialIdRoute: typeof HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyBillingConnectionsCredentialIdRoute
+  HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyBillingCustomersCustomerIdRoute: typeof HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyBillingCustomersCustomerIdRoute
+  HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyBillingIdentityConflictsConflictIdRoute: typeof HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyBillingIdentityConflictsConflictIdRoute
+  HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyBillingMigrationsProgramIdRoute: typeof HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyBillingMigrationsProgramIdRoute
+  HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyBillingQuarantineRecordIdRoute: typeof HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyBillingQuarantineRecordIdRoute
+  HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyBillingReconciliationRunIdRoute: typeof HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyBillingReconciliationRunIdRoute
+  HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyBillingSubscriptionsInstanceIdRoute: typeof HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyBillingSubscriptionsInstanceIdRoute
+  HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyBillingTransactionsFactIdRoute: typeof HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyBillingTransactionsFactIdRoute
+  HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyCatalogEntitlementsEntitlementIdRoute: typeof HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyCatalogEntitlementsEntitlementIdRoute
+  HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyCatalogPlansPlanIdRoute: typeof HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyCatalogPlansPlanIdRoute
+  HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyCatalogProductsProductIdRoute: typeof HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyCatalogProductsProductIdRoute
+  HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyMonetizationExperimentsExperimentIdRoute: typeof HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyMonetizationExperimentsExperimentIdRoute
+  HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyMonetizationExperimentsNewRoute: typeof HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyMonetizationExperimentsNewRoute
+  HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyMonetizationPaywallsPaywallIdRoute: typeof HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyMonetizationPaywallsPaywallIdRoute
+  HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyMonetizationPlacementsPlacementIdRoute: typeof HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyMonetizationPlacementsPlacementIdRoute
+  HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyBillingConnectionsIndexRoute: typeof HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyBillingConnectionsIndexRoute
+  HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyBillingCustomersIndexRoute: typeof HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyBillingCustomersIndexRoute
+  HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyBillingIdentityConflictsIndexRoute: typeof HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyBillingIdentityConflictsIndexRoute
+  HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyBillingMigrationsIndexRoute: typeof HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyBillingMigrationsIndexRoute
+  HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyBillingQuarantineIndexRoute: typeof HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyBillingQuarantineIndexRoute
+  HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyBillingReconciliationIndexRoute: typeof HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyBillingReconciliationIndexRoute
+  HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyBillingTransactionsIndexRoute: typeof HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyBillingTransactionsIndexRoute
+  HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyCatalogEntitlementsIndexRoute: typeof HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyCatalogEntitlementsIndexRoute
+  HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyCatalogPlansIndexRoute: typeof HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyCatalogPlansIndexRoute
+  HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyCatalogProductsIndexRoute: typeof HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyCatalogProductsIndexRoute
+  HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyMonetizationExperimentsIndexRoute: typeof HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyMonetizationExperimentsIndexRoute
+  HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyMonetizationPaywallsIndexRoute: typeof HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyMonetizationPaywallsIndexRoute
+  HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyMonetizationPlacementsIndexRoute: typeof HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyMonetizationPlacementsIndexRoute
 }
 
 const HostedRouteChildren: HostedRouteChildren = {
   HostedWorkspaceRoute: HostedWorkspaceRoute,
-  HostedOrganizationsNewRoute: HostedOrganizationsNewRoute,
-  HostedOrganizationsOrganizationIdMembersRoute:
-    HostedOrganizationsOrganizationIdMembersRoute,
-  HostedOrganizationsOrganizationIdIndexRoute:
-    HostedOrganizationsOrganizationIdIndexRoute,
-  HostedOrganizationsOrganizationIdProjectsNewRoute:
-    HostedOrganizationsOrganizationIdProjectsNewRoute,
-  HostedOrganizationsOrganizationIdProjectsProjectIdAppsRoute:
-    HostedOrganizationsOrganizationIdProjectsProjectIdAppsRoute,
-  HostedOrganizationsOrganizationIdProjectsProjectIdIndexRoute:
-    HostedOrganizationsOrganizationIdProjectsProjectIdIndexRoute,
-  HostedOrganizationsOrganizationIdProjectsProjectIdCatalogGrantVersionsRoute:
-    HostedOrganizationsOrganizationIdProjectsProjectIdCatalogGrantVersionsRoute,
-  HostedOrganizationsOrganizationIdProjectsProjectIdCatalogProvidersRoute:
-    HostedOrganizationsOrganizationIdProjectsProjectIdCatalogProvidersRouteWithChildren,
-  HostedOrganizationsOrganizationIdProjectsProjectIdSettingsApiKeysRoute:
-    HostedOrganizationsOrganizationIdProjectsProjectIdSettingsApiKeysRoute,
-  HostedOrganizationsOrganizationIdProjectsProjectIdSettingsEnvironmentsRoute:
-    HostedOrganizationsOrganizationIdProjectsProjectIdSettingsEnvironmentsRoute,
-  HostedOrganizationsOrganizationIdProjectsProjectIdAnalyticsEnvironmentIdSurfaceRoute:
-    HostedOrganizationsOrganizationIdProjectsProjectIdAnalyticsEnvironmentIdSurfaceRoute,
-  HostedOrganizationsOrganizationIdProjectsProjectIdBillingEnvironmentIdHealthRoute:
-    HostedOrganizationsOrganizationIdProjectsProjectIdBillingEnvironmentIdHealthRoute,
-  HostedOrganizationsOrganizationIdProjectsProjectIdBillingEnvironmentIdProjectionHealthRoute:
-    HostedOrganizationsOrganizationIdProjectsProjectIdBillingEnvironmentIdProjectionHealthRoute,
-  HostedOrganizationsOrganizationIdProjectsProjectIdBillingEnvironmentIdRestoresRoute:
-    HostedOrganizationsOrganizationIdProjectsProjectIdBillingEnvironmentIdRestoresRoute,
-  HostedOrganizationsOrganizationIdProjectsProjectIdBillingConnectionsCredentialIdRoute:
-    HostedOrganizationsOrganizationIdProjectsProjectIdBillingConnectionsCredentialIdRoute,
-  HostedOrganizationsOrganizationIdProjectsProjectIdCatalogEntitlementsEntitlementIdRoute:
-    HostedOrganizationsOrganizationIdProjectsProjectIdCatalogEntitlementsEntitlementIdRoute,
-  HostedOrganizationsOrganizationIdProjectsProjectIdCatalogPlansPlanIdRoute:
-    HostedOrganizationsOrganizationIdProjectsProjectIdCatalogPlansPlanIdRoute,
-  HostedOrganizationsOrganizationIdProjectsProjectIdCatalogProductsProductIdRoute:
-    HostedOrganizationsOrganizationIdProjectsProjectIdCatalogProductsProductIdRoute,
-  HostedOrganizationsOrganizationIdProjectsProjectIdMonetizationEnvironmentIdAssetsRoute:
-    HostedOrganizationsOrganizationIdProjectsProjectIdMonetizationEnvironmentIdAssetsRoute,
-  HostedOrganizationsOrganizationIdProjectsProjectIdMonetizationEnvironmentIdExperimentsRoute:
-    HostedOrganizationsOrganizationIdProjectsProjectIdMonetizationEnvironmentIdExperimentsRouteWithChildren,
-  HostedOrganizationsOrganizationIdProjectsProjectIdMonetizationEnvironmentIdPaywallsRoute:
-    HostedOrganizationsOrganizationIdProjectsProjectIdMonetizationEnvironmentIdPaywallsRouteWithChildren,
-  HostedOrganizationsOrganizationIdProjectsProjectIdMonetizationEnvironmentIdPlacementsRoute:
-    HostedOrganizationsOrganizationIdProjectsProjectIdMonetizationEnvironmentIdPlacementsRouteWithChildren,
-  HostedOrganizationsOrganizationIdProjectsProjectIdMonetizationEnvironmentIdReleasesRoute:
-    HostedOrganizationsOrganizationIdProjectsProjectIdMonetizationEnvironmentIdReleasesRoute,
-  HostedOrganizationsOrganizationIdProjectsProjectIdBillingConnectionsIndexRoute:
-    HostedOrganizationsOrganizationIdProjectsProjectIdBillingConnectionsIndexRoute,
-  HostedOrganizationsOrganizationIdProjectsProjectIdCatalogEntitlementsIndexRoute:
-    HostedOrganizationsOrganizationIdProjectsProjectIdCatalogEntitlementsIndexRoute,
-  HostedOrganizationsOrganizationIdProjectsProjectIdCatalogPlansIndexRoute:
-    HostedOrganizationsOrganizationIdProjectsProjectIdCatalogPlansIndexRoute,
-  HostedOrganizationsOrganizationIdProjectsProjectIdCatalogProductsIndexRoute:
-    HostedOrganizationsOrganizationIdProjectsProjectIdCatalogProductsIndexRoute,
-  HostedOrganizationsOrganizationIdProjectsProjectIdBillingEnvironmentIdCustomersCustomerIdRoute:
-    HostedOrganizationsOrganizationIdProjectsProjectIdBillingEnvironmentIdCustomersCustomerIdRoute,
-  HostedOrganizationsOrganizationIdProjectsProjectIdBillingEnvironmentIdIdentityConflictsConflictIdRoute:
-    HostedOrganizationsOrganizationIdProjectsProjectIdBillingEnvironmentIdIdentityConflictsConflictIdRoute,
-  HostedOrganizationsOrganizationIdProjectsProjectIdBillingEnvironmentIdQuarantineRecordIdRoute:
-    HostedOrganizationsOrganizationIdProjectsProjectIdBillingEnvironmentIdQuarantineRecordIdRoute,
-  HostedOrganizationsOrganizationIdProjectsProjectIdBillingEnvironmentIdReconciliationRunIdRoute:
-    HostedOrganizationsOrganizationIdProjectsProjectIdBillingEnvironmentIdReconciliationRunIdRoute,
-  HostedOrganizationsOrganizationIdProjectsProjectIdBillingEnvironmentIdSubscriptionsInstanceIdRoute:
-    HostedOrganizationsOrganizationIdProjectsProjectIdBillingEnvironmentIdSubscriptionsInstanceIdRoute,
-  HostedOrganizationsOrganizationIdProjectsProjectIdBillingEnvironmentIdTransactionsFactIdRoute:
-    HostedOrganizationsOrganizationIdProjectsProjectIdBillingEnvironmentIdTransactionsFactIdRoute,
-  HostedOrganizationsOrganizationIdProjectsProjectIdBillingEnvironmentIdCustomersIndexRoute:
-    HostedOrganizationsOrganizationIdProjectsProjectIdBillingEnvironmentIdCustomersIndexRoute,
-  HostedOrganizationsOrganizationIdProjectsProjectIdBillingEnvironmentIdIdentityConflictsIndexRoute:
-    HostedOrganizationsOrganizationIdProjectsProjectIdBillingEnvironmentIdIdentityConflictsIndexRoute,
-  HostedOrganizationsOrganizationIdProjectsProjectIdBillingEnvironmentIdQuarantineIndexRoute:
-    HostedOrganizationsOrganizationIdProjectsProjectIdBillingEnvironmentIdQuarantineIndexRoute,
-  HostedOrganizationsOrganizationIdProjectsProjectIdBillingEnvironmentIdReconciliationIndexRoute:
-    HostedOrganizationsOrganizationIdProjectsProjectIdBillingEnvironmentIdReconciliationIndexRoute,
-  HostedOrganizationsOrganizationIdProjectsProjectIdBillingEnvironmentIdTransactionsIndexRoute:
-    HostedOrganizationsOrganizationIdProjectsProjectIdBillingEnvironmentIdTransactionsIndexRoute,
+  HostedOrgsNewRoute: HostedOrgsNewRoute,
+  HostedOrgsOrganizationIdMembersRoute: HostedOrgsOrganizationIdMembersRoute,
+  HostedOrgsOrganizationIdIndexRoute: HostedOrgsOrganizationIdIndexRoute,
+  HostedOrgsOrganizationIdProjectsNewRoute:
+    HostedOrgsOrganizationIdProjectsNewRoute,
+  HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyAppsRoute:
+    HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyAppsRoute,
+  HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyIndexRoute:
+    HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyIndexRoute,
+  HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyAnalyticsSurfaceRoute:
+    HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyAnalyticsSurfaceRoute,
+  HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyBillingHealthRoute:
+    HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyBillingHealthRoute,
+  HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyBillingProjectionHealthRoute:
+    HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyBillingProjectionHealthRoute,
+  HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyBillingRestoresRoute:
+    HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyBillingRestoresRoute,
+  HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyCatalogGrantVersionsRoute:
+    HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyCatalogGrantVersionsRoute,
+  HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyCatalogProvidersRoute:
+    HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyCatalogProvidersRouteWithChildren,
+  HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyMonetizationAssetsRoute:
+    HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyMonetizationAssetsRoute,
+  HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyMonetizationReleasesRoute:
+    HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyMonetizationReleasesRoute,
+  HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeySettingsApiKeysRoute:
+    HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeySettingsApiKeysRoute,
+  HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeySettingsEnvironmentsRoute:
+    HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeySettingsEnvironmentsRoute,
+  HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyBillingConnectionsCredentialIdRoute:
+    HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyBillingConnectionsCredentialIdRoute,
+  HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyBillingCustomersCustomerIdRoute:
+    HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyBillingCustomersCustomerIdRoute,
+  HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyBillingIdentityConflictsConflictIdRoute:
+    HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyBillingIdentityConflictsConflictIdRoute,
+  HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyBillingMigrationsProgramIdRoute:
+    HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyBillingMigrationsProgramIdRoute,
+  HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyBillingQuarantineRecordIdRoute:
+    HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyBillingQuarantineRecordIdRoute,
+  HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyBillingReconciliationRunIdRoute:
+    HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyBillingReconciliationRunIdRoute,
+  HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyBillingSubscriptionsInstanceIdRoute:
+    HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyBillingSubscriptionsInstanceIdRoute,
+  HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyBillingTransactionsFactIdRoute:
+    HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyBillingTransactionsFactIdRoute,
+  HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyCatalogEntitlementsEntitlementIdRoute:
+    HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyCatalogEntitlementsEntitlementIdRoute,
+  HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyCatalogPlansPlanIdRoute:
+    HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyCatalogPlansPlanIdRoute,
+  HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyCatalogProductsProductIdRoute:
+    HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyCatalogProductsProductIdRoute,
+  HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyMonetizationExperimentsExperimentIdRoute:
+    HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyMonetizationExperimentsExperimentIdRoute,
+  HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyMonetizationExperimentsNewRoute:
+    HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyMonetizationExperimentsNewRoute,
+  HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyMonetizationPaywallsPaywallIdRoute:
+    HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyMonetizationPaywallsPaywallIdRoute,
+  HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyMonetizationPlacementsPlacementIdRoute:
+    HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyMonetizationPlacementsPlacementIdRoute,
+  HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyBillingConnectionsIndexRoute:
+    HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyBillingConnectionsIndexRoute,
+  HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyBillingCustomersIndexRoute:
+    HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyBillingCustomersIndexRoute,
+  HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyBillingIdentityConflictsIndexRoute:
+    HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyBillingIdentityConflictsIndexRoute,
+  HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyBillingMigrationsIndexRoute:
+    HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyBillingMigrationsIndexRoute,
+  HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyBillingQuarantineIndexRoute:
+    HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyBillingQuarantineIndexRoute,
+  HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyBillingReconciliationIndexRoute:
+    HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyBillingReconciliationIndexRoute,
+  HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyBillingTransactionsIndexRoute:
+    HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyBillingTransactionsIndexRoute,
+  HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyCatalogEntitlementsIndexRoute:
+    HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyCatalogEntitlementsIndexRoute,
+  HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyCatalogPlansIndexRoute:
+    HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyCatalogPlansIndexRoute,
+  HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyCatalogProductsIndexRoute:
+    HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyCatalogProductsIndexRoute,
+  HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyMonetizationExperimentsIndexRoute:
+    HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyMonetizationExperimentsIndexRoute,
+  HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyMonetizationPaywallsIndexRoute:
+    HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyMonetizationPaywallsIndexRoute,
+  HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyMonetizationPlacementsIndexRoute:
+    HostedOrgsOrganizationIdProjectsProjectIdEnvEnvironmentKeyMonetizationPlacementsIndexRoute,
 }
 
 const HostedRouteWithChildren =
   HostedRoute._addFileChildren(HostedRouteChildren)
 
 interface Studio_layoutRouteChildren {
-  Studio_layoutStudioRoute: typeof Studio_layoutStudioRoute
-  Studio_layoutStudioHostedOrganizationIdProjectIdEnvironmentIdPaywallIdDraftIdRoute: typeof Studio_layoutStudioHostedOrganizationIdProjectIdEnvironmentIdPaywallIdDraftIdRoute
+  Studio_layoutStudioIndexRoute: typeof Studio_layoutStudioIndexRoute
+  Studio_layoutStudioOrganizationIdProjectIdEnvironmentIdPaywallIdDraftIdRoute: typeof Studio_layoutStudioOrganizationIdProjectIdEnvironmentIdPaywallIdDraftIdRoute
 }
 
 const Studio_layoutRouteChildren: Studio_layoutRouteChildren = {
-  Studio_layoutStudioRoute: Studio_layoutStudioRoute,
-  Studio_layoutStudioHostedOrganizationIdProjectIdEnvironmentIdPaywallIdDraftIdRoute:
-    Studio_layoutStudioHostedOrganizationIdProjectIdEnvironmentIdPaywallIdDraftIdRoute,
+  Studio_layoutStudioIndexRoute: Studio_layoutStudioIndexRoute,
+  Studio_layoutStudioOrganizationIdProjectIdEnvironmentIdPaywallIdDraftIdRoute:
+    Studio_layoutStudioOrganizationIdProjectIdEnvironmentIdPaywallIdDraftIdRoute,
 }
 
 const Studio_layoutRouteWithChildren = Studio_layoutRoute._addFileChildren(

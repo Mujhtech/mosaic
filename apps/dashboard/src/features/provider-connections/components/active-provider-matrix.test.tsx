@@ -87,7 +87,7 @@ describe("ActiveProviderMatrix", () => {
           connections={[connection]}
           environment={environment}
           managementEnabled
-          membersHref="/organizations/org_01/members"
+          membersHref="/orgs/org_01/members"
           organizationId="org_01"
           projectId={environment.projectId}
         />
@@ -100,7 +100,7 @@ describe("ActiveProviderMatrix", () => {
     expect(screen.queryByRole("button", { name: "Confirm clear" })).not.toBeInTheDocument()
     expect(screen.getByRole("link", { name: "Ask an Owner or Admin" })).toHaveAttribute(
       "href",
-      "/organizations/org_01/members",
+      "/orgs/org_01/members",
     )
   })
 
@@ -108,7 +108,7 @@ describe("ActiveProviderMatrix", () => {
     render(
       <ActiveProviderMatrix
         applications={[]}
-        applicationsHref="/organizations/org_01/projects/project_01/apps"
+        applicationsHref="/orgs/org_01/projects/project_01/apps"
         assignments={[]}
         connections={[]}
         environment={environment}
@@ -117,7 +117,7 @@ describe("ActiveProviderMatrix", () => {
 
     expect(screen.getByRole("link", { name: "Register Application" })).toHaveAttribute(
       "href",
-      "/organizations/org_01/projects/project_01/apps",
+      "/orgs/org_01/projects/project_01/apps",
     )
   })
 
@@ -271,7 +271,7 @@ describe("ActiveProviderMatrix", () => {
     expect(screen.getByText("Paywalls: Upgrade")).toBeVisible()
     expect(screen.getByRole("link", { name: "Review affected Products" })).toHaveAttribute(
       "href",
-      "/organizations/organization_01/projects/project_01/catalog/products",
+      "/orgs/organization_01/projects/project_01/catalog/products",
     )
     expect(
       screen.getByText(/new publishing will fail readiness and SDK configuration cannot resolve/i),

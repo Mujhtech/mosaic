@@ -23,7 +23,7 @@ describe("connected Product panels", () => {
       <ProviderMappingsPanel
         canManage={false}
         manageProvidersHref="/catalog/providers"
-        membersHref="/organizations/org_01/members"
+        membersHref="/orgs/org_01/members"
         mappings={[
           {
             applicationLabel: "Example iOS",
@@ -51,7 +51,7 @@ describe("connected Product panels", () => {
     expect(screen.queryByRole("button", { name: "Replace mapping" })).not.toBeInTheDocument()
     expect(
       screen.getByRole("link", { name: "Ask an Owner or Admin to change this mapping" }),
-    ).toHaveAttribute("href", "/organizations/org_01/members")
+    ).toHaveAttribute("href", "/orgs/org_01/members")
   })
 
   it("uses provider- and Product-type-aware native replacement fields", () => {

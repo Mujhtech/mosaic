@@ -10,6 +10,7 @@ import 'commerce_configuration.dart';
 import 'configuration.dart';
 import 'configuration_client.dart';
 import 'configuration_delivery.dart';
+import 'customer_entitlements.dart';
 import 'experiment_analytics.dart';
 import 'experiment_assignment.dart';
 import 'placement_decision.dart';
@@ -217,35 +218,69 @@ extension MosaicPlacementClient on Mosaic {
     }
     final entitlements = <String, MosaicEntitlementDecisionState>{};
     if (release.entitlementReferences.isNotEmpty) {
-      try {
-        final observed = await purchaseProvider.activeEntitlements();
-        switch (observed) {
-          case MosaicActiveEntitlements():
-            final active = observed.entitlements.map((item) => item.id).toSet();
-            for (final reference in release.entitlementReferences.values) {
-              entitlements[reference.key] = active.contains(reference.key)
-                  ? MosaicEntitlementDecisionState.active
-                  : MosaicEntitlementDecisionState.inactive;
-            }
-          case MosaicEntitlementsProviderUnavailable():
-            for (final reference in release.entitlementReferences.values) {
-              entitlements[reference.key] =
-                  MosaicEntitlementDecisionState.providerUnavailable;
-            }
-          case MosaicEntitlementsFailed():
-            for (final reference in release.entitlementReferences.values) {
-              entitlements[reference.key] =
-                  MosaicEntitlementDecisionState.failed;
-            }
-          case MosaicEntitlementsUnknown():
-            for (final reference in release.entitlementReferences.values) {
-              entitlements[reference.key] =
-                  MosaicEntitlementDecisionState.unknown;
-            }
-        }
-      } on Object {
+      final authoritative = customerEntitlements;
+      final authority = authoritative?.authority;
+      final authorityScopeMatchesRelease = authority != null &&
+          release.projectId != null &&
+          authority.scope.projectId == release.projectId &&
+          authority.scope.environmentId == release.environment.id;
+      if (authoritative != null &&
+          (authority == null || !authorityScopeMatchesRelease)) {
+        // Once authority awareness is configured, absence of an accepted epoch
+        // is uncertainty. It must never silently infer source authority.
         for (final reference in release.entitlementReferences.values) {
-          entitlements[reference.key] = MosaicEntitlementDecisionState.failed;
+          entitlements[reference.key] = MosaicEntitlementDecisionState.unknown;
+        }
+      } else if (authoritative != null && authority!.isMosaic) {
+        // Mosaic authority is exclusive: provider-observed grants are not
+        // unioned into this decision input.
+        for (final reference in release.entitlementReferences.values) {
+          final check = authoritative.checkCustomerEntitlement(reference.key);
+          entitlements[reference.key] = switch (check.state) {
+            MosaicCustomerAccessState.active =>
+              MosaicEntitlementDecisionState.active,
+            MosaicCustomerAccessState.inactive =>
+              MosaicEntitlementDecisionState.inactive,
+            MosaicCustomerAccessState.unknown ||
+            MosaicCustomerAccessState.unavailable =>
+              MosaicEntitlementDecisionState.unknown,
+          };
+        }
+      } else {
+        // Source and source-rollback epochs deliberately continue to use the
+        // purchase Provider. The authority snapshot is transition evidence,
+        // never another entitlement set to merge.
+        try {
+          final observed = await purchaseProvider.activeEntitlements();
+          switch (observed) {
+            case MosaicActiveEntitlements():
+              final active =
+                  observed.entitlements.map((item) => item.id).toSet();
+              for (final reference in release.entitlementReferences.values) {
+                entitlements[reference.key] = active.contains(reference.key)
+                    ? MosaicEntitlementDecisionState.active
+                    : MosaicEntitlementDecisionState.inactive;
+              }
+            case MosaicEntitlementsProviderUnavailable():
+              for (final reference in release.entitlementReferences.values) {
+                entitlements[reference.key] =
+                    MosaicEntitlementDecisionState.providerUnavailable;
+              }
+            case MosaicEntitlementsFailed():
+              for (final reference in release.entitlementReferences.values) {
+                entitlements[reference.key] =
+                    MosaicEntitlementDecisionState.failed;
+              }
+            case MosaicEntitlementsUnknown():
+              for (final reference in release.entitlementReferences.values) {
+                entitlements[reference.key] =
+                    MosaicEntitlementDecisionState.unknown;
+              }
+          }
+        } on Object {
+          for (final reference in release.entitlementReferences.values) {
+            entitlements[reference.key] = MosaicEntitlementDecisionState.failed;
+          }
         }
       }
     }

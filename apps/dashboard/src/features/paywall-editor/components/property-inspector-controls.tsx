@@ -57,6 +57,7 @@ import {
   ProductCardInspector,
   ProductSelectorInspector,
 } from "@/features/paywall-editor/components/property-inspector-products"
+import { SelectItem } from "@/components/ui/select"
 
 export function ButtonInspector({ node }: { node: Extract<ProtocolNode, { type: "button" }> }) {
   const { disabled, document } = useInspectorContext()
@@ -154,16 +155,16 @@ export function ButtonInspector({ node }: { node: Extract<ProtocolNode, { type: 
           onChange={changeAction}
           value={node.action.type}
         >
-          <option disabled={selectors.length === 0} value="purchase">
+          <SelectItem disabled={selectors.length === 0} value="purchase">
             Purchase
-          </option>
-          <option value="restore">Restore purchases</option>
-          <option value="close">Close paywall</option>
-          <option disabled={destinationScreens.length === 0} value="navigateTo">
+          </SelectItem>
+          <SelectItem value="restore">Restore purchases</SelectItem>
+          <SelectItem value="close">Close paywall</SelectItem>
+          <SelectItem disabled={destinationScreens.length === 0} value="navigateTo">
             Navigate to screen
-          </option>
-          <option value="navigateBack">Navigate back</option>
-          <option value="openExternalUrl">Open external URL</option>
+          </SelectItem>
+          <SelectItem value="navigateBack">Navigate back</SelectItem>
+          <SelectItem value="openExternalUrl">Open external URL</SelectItem>
         </SelectField>
         {node.action.type === "purchase" ? (
           <SelectField
@@ -179,9 +180,9 @@ export function ButtonInspector({ node }: { node: Extract<ProtocolNode, { type: 
             value={node.action.productSelectorId}
           >
             {selectors.map((selector) => (
-              <option key={selector.id} value={selector.id}>
+              <SelectItem key={selector.id} value={selector.id}>
                 {layerDisplayLabel(document, selector.id, {})}
-              </option>
+              </SelectItem>
             ))}
           </SelectField>
         ) : null}
@@ -199,7 +200,7 @@ export function ButtonInspector({ node }: { node: Extract<ProtocolNode, { type: 
             value={node.action.screenId}
           >
             {destinationScreens.map((screen) => (
-              <option key={screen.id} value={screen.id}>
+              <SelectItem key={screen.id} value={screen.id}>
                 {screen.accessibilityLabel
                   ? resolveLocalizedText(
                       document,
@@ -207,7 +208,7 @@ export function ButtonInspector({ node }: { node: Extract<ProtocolNode, { type: 
                       document.localization.defaultLocale,
                     )
                   : screen.id}
-              </option>
+              </SelectItem>
             ))}
           </SelectField>
         ) : null}
@@ -291,9 +292,9 @@ export function CarouselInspector({ node }: { node: Extract<ProtocolNode, { type
             value={String(node.initialPageIndex)}
           >
             {node.pages.map((page, index) => (
-              <option key={page.id} value={index}>
+              <SelectItem key={page.id} value={index}>
                 Page {index + 1}
-              </option>
+              </SelectItem>
             ))}
           </SelectField>
         </>
@@ -405,9 +406,9 @@ export function CountdownInspector({
             value={node.largestUnit}
           >
             {["day", "hour", "minute", "second"].map((unit) => (
-              <option key={unit} value={unit}>
+              <SelectItem key={unit} value={unit}>
                 {unit}
-              </option>
+              </SelectItem>
             ))}
           </SelectField>
           <SelectField
@@ -423,9 +424,9 @@ export function CountdownInspector({
             value={node.smallestUnit}
           >
             {["day", "hour", "minute", "second"].map((unit) => (
-              <option key={unit} value={unit}>
+              <SelectItem key={unit} value={unit}>
                 {unit}
-              </option>
+              </SelectItem>
             ))}
           </SelectField>
         </TwoColumn>

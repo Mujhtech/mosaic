@@ -3,7 +3,7 @@ import { useState } from "react"
 import { Button } from "@/components/ui/button"
 import { StatusPill } from "@/features/billing-ledger/components/billing-chrome"
 import { BILLING_OPTIONAL_NOTE } from "@/features/billing-ledger/types/billing-vocabulary"
-import { WorkflowPanel } from "@/features/organizations/components/workspace-page"
+import { WorkflowPanel } from "@/features/orgs/components/workspace-page"
 import { ApiError } from "@/lib/api/errors"
 
 interface BillingEnablementPanelProps {

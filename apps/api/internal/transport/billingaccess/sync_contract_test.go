@@ -45,6 +45,24 @@ const (
 type stubRepository struct{}
 
 func (stubRepository) BillingEnabled(context.Context, string) (bool, error) { return true, nil }
+func (stubRepository) LegacyAuthority(context.Context, billingaccess.AuthorityScope) (string, error) {
+	return "source", nil
+}
+func (stubRepository) MinimumSupport(context.Context, billingaccess.AuthorityScope) (billingaccess.MinimumSupport, error) {
+	return billingaccess.MinimumSupport{ProgramID: "bmp_sync_test", MinimumSDKVersion: "2.0.0", MinimumAppVersion: "4.0.0", MaximumAppVersion: "5.9.9", RequiredCapabilities: []string{"authority_epoch"}}, nil
+}
+func (stubRepository) AuthoritySelection(ctx context.Context, scope billingaccess.AuthorityScope, customerID string, _ time.Time) (billingaccess.AuthoritySelection, error) {
+	view, _ := (stubRepository{}).CurrentSnapshot(ctx, scope.ProjectID, scope.EnvironmentID, customerID)
+	return billingaccess.AuthoritySelection{Scope: scope, ProgramID: "bmp_sync_test", AuthorityEpoch: 4,
+		AuthorityKind: "source", TransitionState: "stable", Snapshot: view,
+		MinimumSupport: billingaccess.MinimumSupport{ProgramID: "bmp_sync_test", MinimumSDKVersion: "2.0.0", MinimumAppVersion: "4.0.0", MaximumAppVersion: "5.9.9", RequiredCapabilities: []string{"authority_epoch"}}}, nil
+}
+func (stubRepository) ObservedSnapshotDigest(context.Context, billingaccess.AuthoritySelection, []byte) (bool, error) {
+	return false, nil
+}
+func (stubRepository) AppendSyncObservation(context.Context, billingaccess.SyncObservation) error {
+	return nil
+}
 
 func (stubRepository) CurrentSnapshot(_ context.Context, projectID, environmentID, customerID string) (billingaccess.SnapshotView, error) {
 	at := time.Date(2026, 7, 29, 12, 0, 0, 0, time.UTC)
@@ -114,7 +132,7 @@ func (stubKeys) AuthenticateSDKKey(_ context.Context, raw string) (billingaccess
 	if strings.TrimSpace(raw) != testSDKKey {
 		return billingaccess.KeyScope{}, billingaccess.ErrUnauthenticated
 	}
-	return billingaccess.KeyScope{ProjectID: testProjectID, EnvironmentID: testEnvID}, nil
+	return billingaccess.KeyScope{ProjectID: testProjectID, EnvironmentID: testEnvID, ApplicationID: "app_sync_test", Platform: "ios"}, nil
 }
 
 func syncRouter() http.Handler {
@@ -265,4 +283,41 @@ func TestConditionalGetAnswersFullSnapshotWithFreshnessHeaders(t *testing.T) {
 			t.Fatalf("GET is missing %s; the freshness window must be visible without parsing the body", header)
 		}
 	}
+}
+
+func TestPostStrictlyDiscriminatesAuthorityV2(t *testing.T) {
+	handler := syncRouter()
+	body := `{"authoritativeEntitlementContractVersion":"2","recordType":"entitlementSyncRequest","payload":{"request":{"applicationId":"app_sync_test","platform":"ios","appVersion":"4.2.0","sdkVersion":"2.0.0","supportedContractVersions":["1","2"],"capabilities":["authority_epoch"]}}}`
+	request := httptest.NewRequest(http.MethodPost, "/sdk/billing/entitlements", strings.NewReader(body))
+	request.Header.Set("Authorization", "Bearer "+testToken)
+	request.Header.Set(billingaccesshttp.SDKKeyHeader, testSDKKey)
+	request.Header.Set("Content-Type", "application/json")
+	recorder := httptest.NewRecorder()
+	handler.ServeHTTP(recorder, request)
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("v2 POST status %d: %s", recorder.Code, recorder.Body.String())
+	}
+	var record struct {
+		Version, RecordType string
+		Payload             map[string]any `json:"payload"`
+	}
+	var envelope map[string]any
+	if err := json.Unmarshal(recorder.Body.Bytes(), &envelope); err != nil {
+		t.Fatal(err)
+	}
+	if envelope["authoritativeEntitlementContractVersion"] != "2" || envelope["recordType"] != "customerEntitlementSnapshot" {
+		t.Fatalf("POST did not select v2: %s", recorder.Body.String())
+	}
+
+	unknown := strings.Replace(body, `"request":{`, `"unknown":true,"request":{`, 1)
+	request = httptest.NewRequest(http.MethodPost, "/sdk/billing/entitlements", strings.NewReader(unknown))
+	request.Header.Set("Authorization", "Bearer "+testToken)
+	request.Header.Set(billingaccesshttp.SDKKeyHeader, testSDKKey)
+	request.Header.Set("Content-Type", "application/json")
+	recorder = httptest.NewRecorder()
+	handler.ServeHTTP(recorder, request)
+	if recorder.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("v2 unknown field status %d, want 422: %s", recorder.Code, recorder.Body.String())
+	}
+	_ = record
 }

@@ -3,6 +3,13 @@ import { useState } from "react"
 
 import { Button } from "@/components/ui/button"
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
+import {
   useEditorActions,
   useEditorStore,
 } from "@/features/paywall-editor/stores/editor-store-context"
@@ -36,6 +43,25 @@ import {
   type DesignToken,
   type PendingDelete,
 } from "@/features/paywall-editor/components/design-system-controls"
+
+/**
+ * "Detach" plus every token that can safely stand in for the one being deleted.
+ * Unsafe replacements are omitted rather than disabled: offering a swap that
+ * would change what the Draft renders is the mistake this dialog exists to stop.
+ */
+function tokenReplacementOptions(
+  designSystem: PaywallDesignSystem,
+  pendingDelete: { category: DesignCategory; id: string },
+) {
+  return [
+    { label: "Detach current values", value: "detach" },
+    ...tokensFor(designSystem, pendingDelete.category)
+      .filter((token) =>
+        isSafeTokenReplacement(designSystem, pendingDelete.category, pendingDelete.id, token.id),
+      )
+      .map((token) => ({ label: `Replace usages with ${token.name}`, value: token.id })),
+  ]
+}
 
 export function DesignSystemPanel() {
   const { document } = useEditorStore()
@@ -321,30 +347,25 @@ export function DesignSystemPanel() {
           tone="warning"
         >
           <p className="font-medium">This style is in use.</p>
-          <label className="grid gap-1">
-            <span>Replace usages or detach their current values</span>
-            <select
-              className={FIELD_CLASS}
-              onChange={(event) => setReplacementId(event.target.value)}
+          <div className="grid gap-1">
+            <label htmlFor="token-replacement">Replace usages or detach their current values</label>
+            <Select
+              items={tokenReplacementOptions(designSystem, pendingDelete)}
+              onValueChange={(value) => setReplacementId(value)}
               value={replacementId}
             >
-              <option value="detach">Detach current values</option>
-              {tokensFor(designSystem, pendingDelete.category).flatMap((token) =>
-                isSafeTokenReplacement(
-                  designSystem,
-                  pendingDelete.category,
-                  pendingDelete.id,
-                  token.id,
-                ) ? (
-                  <option key={token.id} value={token.id}>
-                    Replace usages with {token.name}
-                  </option>
-                ) : (
-                  []
-                ),
-              )}
-            </select>
-          </label>
+              <SelectTrigger id="token-replacement" size="sm">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {tokenReplacementOptions(designSystem, pendingDelete).map((option) => (
+                  <SelectItem key={option.value} value={option.value}>
+                    {option.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
           <div className="flex justify-end gap-2">
             <Button onClick={() => setPendingDelete(null)} size="sm" type="button" variant="ghost">
               Cancel

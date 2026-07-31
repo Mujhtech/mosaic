@@ -4,6 +4,32 @@ All notable Mosaic protocol changes are recorded here. A contract's artifacts
 become immutable when its `status` reaches `approved`; before that, its review
 gate may still change them. Every Mosaic contract is `approved` as of v1 GA.
 
+## Phase 9C: durable source pulls and operator affordances - 2026-07-29
+
+Status: draft
+
+Billing Migration Operations `1` remains draft and gains two additive record
+types before approval:
+
+- `sourcePullJob` freezes the durable `sourcePull` command, snapshot/delta/final
+  delta intent, idempotency and expected-state preconditions, exact delta
+  cursor/watermark binding, closed lifecycle, and digest-bound result
+  references. Final-delta evaluation is automatically queued when its
+  provider-validation import completes; no separate public command exists.
+- `operatorCapabilities` returns the closed command-specific affordance set for
+  an actor and program state. Backend authorization remains authoritative.
+
+Canonical valid/invalid fixtures and source-pull compatibility vectors pin the
+conditional requirements and forbid unknown capability strings.
+
+The draft repair contract is also aligned with its execution semantics. Repair
+kinds use the canonical `provider_revalidate`, `projection_replay`,
+`attach_proven_alias`, `replace_mapping_set`, and
+`retry_quarantined_record` vocabulary. Execution status is closed to `pending`
+and `completed`; pending keeps the durable reservation unsettled and cannot
+claim a result or `afterDigest`, while completed execution carries exactly one
+of the terminal `succeeded`, `failed`, or `no_change` results.
+
 ## Phase 9B: three draft contracts for authoritative entitlements - 2026-07-28
 
 Status: draft

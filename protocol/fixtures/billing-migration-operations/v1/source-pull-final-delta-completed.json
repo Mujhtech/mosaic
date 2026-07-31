@@ -1,0 +1,40 @@
+{
+  "billingMigrationOperationsContractVersion": "1",
+  "recordType": "sourcePullJob",
+  "payload": {
+    "programId": "mig-001",
+    "sourcePullJobId": "pull-final-001",
+    "command": "sourcePull",
+    "intent": "final_delta",
+    "idempotencyKey": "pull-final-idem-001",
+    "expectedStateVersion": 11,
+    "startingPosition": {
+      "cursor": "rc-cursor-page-1200",
+      "watermark": "2026-07-29T10:00:00.000Z#rc-1200",
+      "watermarkDigest": "sha256:4444444444444444444444444444444444444444444444444444444444444444"
+    },
+    "status": "completed",
+    "requestedAt": "2026-07-29T10:05:00.000Z",
+    "startedAt": "2026-07-29T10:05:01.000Z",
+    "completedAt": "2026-07-29T10:10:00.000Z",
+    "result": {
+      "sourceObject": {
+        "reference": "source-object-final-001",
+        "digest": "sha256:5555555555555555555555555555555555555555555555555555555555555555"
+      },
+      "manifest": {
+        "reference": "manifest-final-001",
+        "digest": "sha256:6666666666666666666666666666666666666666666666666666666666666666"
+      },
+      "providerValidationImport": {
+        "reference": "import-final-001",
+        "digest": "sha256:7777777777777777777777777777777777777777777777777777777777777777",
+        "status": "completed"
+      },
+      "finalDeltaEvaluation": {
+        "reference": "evaluation-final-001",
+        "digest": "sha256:8888888888888888888888888888888888888888888888888888888888888888"
+      }
+    }
+  }
+}

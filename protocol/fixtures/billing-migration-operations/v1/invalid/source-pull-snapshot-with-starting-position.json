@@ -1,0 +1,19 @@
+{
+  "billingMigrationOperationsContractVersion": "1",
+  "recordType": "sourcePullJob",
+  "payload": {
+    "programId": "mig-001",
+    "sourcePullJobId": "pull-snapshot-invalid-001",
+    "command": "sourcePull",
+    "intent": "snapshot",
+    "idempotencyKey": "pull-snapshot-invalid-idem-001",
+    "expectedStateVersion": 3,
+    "startingPosition": {
+      "cursor": "snapshot-cursor-forbidden",
+      "watermark": "snapshot-watermark-forbidden",
+      "watermarkDigest": "sha256:4444444444444444444444444444444444444444444444444444444444444444"
+    },
+    "status": "pending",
+    "requestedAt": "2026-07-29T07:55:00.000Z"
+  }
+}

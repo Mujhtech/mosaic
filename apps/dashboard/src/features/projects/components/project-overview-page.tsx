@@ -11,9 +11,9 @@ import {
   RequestIdCopy,
 } from "@/features/auth/components/hosted-resource-boundary"
 import { resolveHostedQueryState } from "@/features/auth/types/hosted-query-state"
-import { WorkspacePage, WorkflowPanel } from "@/features/organizations/components/workspace-page"
-import { ScopeMismatchRecovery } from "@/features/organizations/components/scope-mismatch-recovery"
-import { detectNestedScopeMismatch } from "@/features/organizations/types/nested-scope"
+import { WorkspacePage, WorkflowPanel } from "@/features/orgs/components/workspace-page"
+import { ScopeMismatchRecovery } from "@/features/orgs/components/scope-mismatch-recovery"
+import { detectNestedScopeMismatch } from "@/features/orgs/types/nested-scope"
 import { projectLifecycleMutationOptions } from "@/features/projects/mutations/project-mutations"
 import { environmentsQueryOptions } from "@/features/environments/queries/environments-query"
 import {
@@ -64,7 +64,7 @@ export function ProjectOverviewPage({ organizationId, projectId }: ProjectOvervi
       <Link
         className={buttonVariants({ variant: "outline" })}
         params={{ organizationId }}
-        to="/organizations/$organizationId"
+        to="/orgs/$organizationId"
       >
         Return to Organization
       </Link>
@@ -120,11 +120,11 @@ export function ProjectOverviewPage({ organizationId, projectId }: ProjectOvervi
       title={project.data?.name ?? "Project"}
     >
       <HostedResourceBoundary state={state}>
-        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
           <Link
             className="hover:bg-muted/35 rounded border p-5"
-            params={{ organizationId, projectId }}
-            to="/organizations/$organizationId/projects/$projectId/apps"
+            params={(prev) => prev}
+            to="/orgs/$organizationId/projects/$projectId/env/$environmentKey/apps"
           >
             <span className="text-sm font-semibold">Applications</span>
             <span className="text-muted-foreground mt-2 block text-sm">
@@ -134,12 +134,8 @@ export function ProjectOverviewPage({ organizationId, projectId }: ProjectOvervi
           {monetizationEnvironment ? (
             <Link
               className="hover:bg-muted/35 rounded border p-5"
-              params={{
-                environmentId: monetizationEnvironment.id,
-                organizationId,
-                projectId,
-              }}
-              to="/organizations/$organizationId/projects/$projectId/monetization/$environmentId/paywalls"
+              params={(prev) => prev}
+              to="/orgs/$organizationId/projects/$projectId/env/$environmentKey/monetization/paywalls"
             >
               <span className="text-sm font-semibold">Monetization</span>
               <span className="text-muted-foreground mt-2 block text-sm">
@@ -149,8 +145,8 @@ export function ProjectOverviewPage({ organizationId, projectId }: ProjectOvervi
           ) : null}
           <Link
             className="hover:bg-muted/35 rounded border p-5"
-            params={{ organizationId, projectId }}
-            to="/organizations/$organizationId/projects/$projectId/catalog/plans"
+            params={(prev) => prev}
+            to="/orgs/$organizationId/projects/$projectId/env/$environmentKey/catalog/plans"
           >
             <span className="text-sm font-semibold">Catalog</span>
             <span className="text-muted-foreground mt-2 block text-sm">
@@ -159,8 +155,18 @@ export function ProjectOverviewPage({ organizationId, projectId }: ProjectOvervi
           </Link>
           <Link
             className="hover:bg-muted/35 rounded border p-5"
-            params={{ organizationId, projectId }}
-            to="/organizations/$organizationId/projects/$projectId/settings/environments"
+            params={(prev) => prev}
+            to="/orgs/$organizationId/projects/$projectId/env/$environmentKey/billing/migrations"
+          >
+            <span className="text-sm font-semibold">Migration Programs</span>
+            <span className="text-muted-foreground mt-2 block text-sm">
+              Move billing history through mapping, import, comparison, and readiness
+            </span>
+          </Link>
+          <Link
+            className="hover:bg-muted/35 rounded border p-5"
+            params={(prev) => prev}
+            to="/orgs/$organizationId/projects/$projectId/env/$environmentKey/settings/environments"
           >
             <span className="text-sm font-semibold">Environments</span>
             <span className="text-muted-foreground mt-2 block text-sm">

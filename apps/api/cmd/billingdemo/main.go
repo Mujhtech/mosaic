@@ -157,7 +157,7 @@ type demo struct {
 }
 
 func run() error {
-	phase := flag.String("phase", "9b", "which demonstration to run: 9a, 9b, all, or oneminute")
+	phase := flag.String("phase", "9b", "which demonstration to run: 9a, 9b, 9c, all, or oneminute")
 	flag.Parse()
 
 	databaseURL := strings.TrimSpace(os.Getenv("DATABASE_URL"))
@@ -186,6 +186,8 @@ func run() error {
 		stages = d.stages9A()
 	case "9b":
 		stages = d.stages9B()
+	case "9c":
+		stages = d.stages9C()
 	case "all":
 		stages = append(d.stages9A(), d.stages9B()...)
 	case "oneminute":

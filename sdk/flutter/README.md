@@ -104,6 +104,8 @@ never override a disabled Environment:
 final mosaic = Mosaic.configure(
   publicSdkKey: 'public_sdk_key',
   baseUrl: Uri.parse('https://mosaic.example.com'),
+  applicationId: 'app_ios',
+  applicationVersion: '4.2.0',
   purchaseProvider: provider,
   analyticsEnvironmentSettings: const MosaicAnalyticsEnvironmentSettings(
     collectionEnabled: true,
@@ -257,16 +259,43 @@ switch (pro.state) {
 
 ### Authoritative versus provider-observed
 
-The two coexist and answer different questions. Neither replaces the other, and
-no provider-observed symbol changed.
+The two coexist and answer different questions. The accepted v2 authority epoch
+chooses exactly one source for placement targeting; grants are never unioned.
+Before the first authority sync, targeting remains `unknown` rather than
+guessing a source.
 
 | | Provider-observed (`MosaicEntitlement`, `activeEntitlements()`) | Authoritative (`MosaicCustomer…`) |
 | --- | --- | --- |
 | Answers | What did the store just tell this device? | What has Mosaic validated, and why? |
 | Source | StoreKit, Play Billing, or RevenueCat, on this device | Mosaic's projection of validated provider facts |
 | Survives reinstall | Only after a native restore | Yes, it is server state |
-| Placement targeting | Yes — unchanged | No, deliberately (Phase 9B keeps targeting on provider-observed state) |
+| Placement targeting | Used for `source` and `source_rollback` authority | Used only for `mosaic` authority |
 | Result vocabulary | `MosaicEntitlement` set | Four access states plus an explanation |
+
+Observe `mosaic.customerAuthority` or the replaying
+`mosaic.customerAuthorityUpdates` stream to inspect the accepted epoch, scope,
+transition state, and `source`, `mosaic`, or `source_rollback` kind. Call
+`refreshCustomerAuthorityUrgently()` when the host needs to await the same
+single-flight sync explicitly. On application resume, Mosaic completes this
+authority sync before refreshing hosted configuration.
+
+An accepted v2 snapshot stores its authority, snapshot, and
+`snapshotAuthorityDigest` atomically. Later sync requests include that digest
+only while the retained customer, scope, and authority epoch still verify;
+missing or mismatched cache evidence requests a full snapshot. If the server
+reports `policy_unavailable`, Mosaic exposes safe `unavailable` without
+inventing minimum-support values or converting the result to `inactive`. It
+also invalidates the retained authority snapshot before reporting that result,
+so a restart cannot replay access under a support policy the server could not
+verify. The invalidation is an atomic durable tombstone, not a best-effort
+delete, and the next valid full response atomically replaces it. If storage
+cannot persist that tombstone, Mosaic clears current in-memory access, reports
+`entitlements.authority.policy_invalidation_persistence_failed`, and retries
+the tombstone before any later cache bootstrap or authority sync. It also
+attempts to delete the old durable snapshot through the cache abstraction so a
+cold restart remains fail-closed. If storage rejects both operations, the
+severe diagnostic and in-process request gate remain; the SDK does not claim
+durability while storage is unavailable.
 
 ### The rule that matters most
 
@@ -308,6 +337,9 @@ fifth state.
 - Never parsed. The token is opaque.
 - Refreshed proactively 60 seconds before expiry, once per generation on a
   `401`, and behind a single-flight so concurrent callers make one request.
+- Invalidated when the accepted authority epoch changes. The next mint request
+  carries only that epoch; it never carries Project, Environment, or customer
+  identifiers supplied by the client.
 - A provider failure enters a 30-second cooldown and reports `unavailable`. A
   backend that cannot mint a token has not revoked anyone's subscription.
 - Signing out discards the token **and** clears the entitlement cache.

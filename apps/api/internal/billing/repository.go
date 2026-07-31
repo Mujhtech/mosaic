@@ -136,6 +136,21 @@ type AssociationCorrelator struct {
 	Digest    []byte
 }
 
+// IdentityBindingJob is the durable, digest-only identity decision produced by
+// one fact-bearing validation attempt. Its unique validation-attempt identity
+// preserves new evidence from a deduplicated revalidation without repeating
+// the provider call or appending another Transaction Fact.
+type IdentityBindingJob struct {
+	ID                  string
+	ProjectID           string
+	EnvironmentID       string
+	ValidationAttemptID string
+	LeaseOwner          string
+	AttemptCount        int
+	MaxAttempts         int
+	Binding             FactBinding
+}
+
 // ResolutionRecord is the persisted Resolution Snapshot.
 type ResolutionRecord struct {
 	ID                         string
@@ -221,6 +236,8 @@ type Repository interface {
 	// Intake.
 	ResolveIntakeToken(ctx context.Context, tokenDigest []byte) (IntakeIdentity, error)
 	PersistRawInput(ctx context.Context, input RawInput, enqueue bool, now time.Time) (PersistResult, error)
+	PersistMigrationInput(ctx context.Context, input RawInput, binding MigrationValidationBinding, now time.Time) (MigrationValidationAcceptance, error)
+	MigrationValidationOutcome(ctx context.Context, projectID, programID, bindingID string) (MigrationValidationBinding, error)
 	RawInput(ctx context.Context, projectID, rawInputID string) (RawInput, error)
 	// ApplicationForIdentifier maps a verified bundle id or package name onto an
 	// Application inside the credential's scope.
@@ -244,11 +261,10 @@ type Repository interface {
 	// and no other worker can claim the job underneath it.
 	LeaseValidationJobFor(ctx context.Context, workerID string, input RawInput, now, leaseUntil time.Time) (ValidationJob, error)
 	CompleteAttempt(ctx context.Context, job ValidationJob, outcome AttemptOutcome, now time.Time) error
-	// ChainRootDigest resolves the root of the purchase chain a fact belongs to
-	// by walking supersession edges backwards. The seam needs it because the
-	// Purchase Lineage is keyed on the root, and a fact whose provider handed the
-	// chain a new token carries a digest that is not it.
-	ChainRootDigest(ctx context.Context, fact TransactionFact) ([]byte, error)
+	LeaseIdentityBindingJob(ctx context.Context, workerID string, now, leaseUntil time.Time) (IdentityBindingJob, bool, error)
+	CompleteIdentityBindingJob(ctx context.Context, job IdentityBindingJob, now time.Time) error
+	ParkIdentityBindingJob(ctx context.Context, job IdentityBindingJob, reason string, now time.Time) error
+	RetryIdentityBindingJob(ctx context.Context, job IdentityBindingJob, reason string, availableAt, now time.Time) error
 	// ParkValidationJob returns a job to the queue without consuming an attempt,
 	// for conditions that are expected to resolve without operator action.
 	ParkValidationJob(ctx context.Context, job ValidationJob, reason string, now time.Time) error

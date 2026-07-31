@@ -542,18 +542,29 @@ anonymously and has to be associated later by other evidence.
 
 ## Authoritative customer entitlements
 
-Two different questions, two different answers, both available:
+Purchase observation and access authority remain separate. The server-directed
+authority epoch decides which access snapshot is used; the configured purchase
+provider continues loading products, purchasing, and restoring across cutover.
 
 | | Provider-observed | Authoritative |
 | --- | --- | --- |
 | Asks | what this device's store account shows | what Mosaic has validated for this Billing Customer |
-| Source | StoreKit / RevenueCat on device | Mosaic's server-side projection of provider facts |
-| API | `activeEntitlements()`, entitlement targeting | `checkCustomerEntitlement(_:)` and friends |
+| Source | StoreKit / RevenueCat on device | Server-selected source or Mosaic projection, bound to an authority epoch |
+| API | `activeEntitlements()` for provider diagnostics | `checkCustomerEntitlement(_:)` and friends |
 | Spans devices and platforms | no | yes |
 | Needs an app backend | no | **yes** |
 
-The provider-observed surface is unchanged. The authoritative surface is
-additive: nothing that already worked behaves differently.
+StoreKit and RevenueCat remain installed when authority changes. Their observed
+Entitlements are never unioned with authoritative access. After the server says
+Mosaic is authoritative, Placement targeting reads only the accepted Mosaic
+snapshot; provider access remains diagnostic and commerce remains usable.
+Before any authority epoch is accepted, targeting reports requested
+Entitlements as unknown. Provider-observed targeting starts only after an
+accepted `source` or `source_rollback` authority epoch.
+Direct `checkCustomerEntitlement(_:)` calls answer from a snapshot only under
+accepted `mosaic` authority. Under `source` or `source_rollback`, they return an
+explicit unavailable result; provider delegation remains specific to Placement
+targeting.
 
 ### Mosaic Billing requires an application backend
 
@@ -578,6 +589,10 @@ by guess or replay.
 let mosaic = try await Mosaic.configure(
   publicSDKKey: key,
   baseURL: baseURL,
+  // Optional: defaults to Bundle.main.bundleIdentifier.
+  applicationID: "com.example.app",
+  // Optional: defaults to CFBundleShortVersionString.
+  applicationVersion: "4.2.0",
   purchaseProvider: provider,
   customerTokenProvider: MosaicClosureCustomerTokenProvider { forceRefresh in
     guard let user = await MyAuth.currentUser else { return .signedOut }
@@ -592,14 +607,67 @@ let mosaic = try await Mosaic.configure(
 ```
 
 The sync surface is a `POST` to `/v1/sdk/billing/entitlements` carrying the
-canonical `entitlementSyncRequest` envelope, because contract negotiation lives
-in the request body. Conditional revalidation rides on `If-None-Match`, and the
-server confirms a current snapshot with a `snapshotUnchanged` record that also
-slides the freshness window.
+canonical Authoritative Entitlement v2 `entitlementSyncRequest`. It reports the
+Application, platform, app/SDK versions, supported contract versions,
+capabilities. A known authority epoch, snapshot version, and snapshot-authority
+digest are sent together only for the exact retained
+customer/scope/epoch snapshot. They are omitted when that binding is absent or
+stale, forcing a full response. Customer, Project, and Environment binding are
+derived and verified server-side from the opaque
+Customer Access Token; they are not guessed into the request. A `200`
+`snapshotUnchanged` response carries the v1 confirmation body and slides the
+freshness window. The SDK does not use `If-None-Match` or bare `304` for v2.
 
 Tokens are held **in memory only** — never the keychain, never a file — and are
 never logged or parsed. On a refusal the SDK forces exactly one token refresh
-per generation; a second refusal is a real failure, not something to retry.
+per generation; a second refusal is a real failure, not something to retry. A
+new server authority epoch rebinds the local token generation and schedules one
+urgent, coalesced sync without retrying a purchase.
+
+An authority or snapshot candidate is published only after its cache record is
+saved atomically. If persistence fails, the SDK keeps the prior accepted state.
+An unchanged response may slide freshness only when its complete retained
+identity, authority digest, evaluation instant, and projection status match and
+its timestamps do not regress or exceed the v1 freshness horizon.
+
+### Authority transitions
+
+Authority is server-directed and evaluated before snapshot version. A newer
+epoch replaces an older epoch even when its snapshot version is lower; a late
+older epoch is rejected even when its snapshot version is higher. Cache format
+v2 atomically binds Billing Customer, Environment, Application, platform,
+authority epoch, and snapshot authority digest. A legacy v1 cache has
+`authority_unknown`, is cleared, and reports unavailable rather than inactive.
+An `authorityUnavailable` response with `policy_unavailable` deliberately has
+no minimum-support placeholder and also clears to unavailable, never inactive.
+The SDK first atomically replaces any accepted cache with a durable invalidation
+tombstone; restart cannot replay the previous active snapshot. A failed marker
+write clears process-local access and gates bootstrap and sync behind retrying
+that write. The SDK also tries to remove the old durable snapshot, making a
+cold restart fail closed when deletion remains available. If storage rejects
+both the marker and removal, Mosaic diagnoses the storage failure and keeps the
+in-process gate; it does not fabricate a durable invalidation. A later valid
+full snapshot atomically replaces the tombstone.
+
+Observe authority metadata independently of access gating:
+
+```swift
+for await update in await mosaic.customerAccessAuthorityUpdates() {
+  switch update {
+  case .authority(let authority, let minimumSupport):
+    print(authority.epoch, authority.kind, minimumSupport.minimumSDKVersion)
+  case .unavailable(let reason, _):
+    showMigrationDiagnostic(reason)
+  case .signedOut, .cleared:
+    break
+  }
+}
+```
+
+The stream is bounded and replays current state. `customerAccessAuthority()`
+returns that state once, while `customerEntitlementDiagnostics()` includes the
+safe authority, minimum-support, Application/version, cache digest, and urgent
+refresh metadata. Neither surface exposes the Customer Access Token.
 
 ### Reading access
 
@@ -687,8 +755,9 @@ de-duplication layers make repeated restores idempotent.
 
 ### Refresh timing
 
-Refreshes happen at `configure`, on foreground, and whenever you ask. **There is
-no background refresh**: no `BGTaskScheduler`, no silent push. A device that has
+Refreshes happen at `configure`, on foreground, and whenever you ask. Pending
+or stabilizing transitions refresh urgently before normal Configuration
+Delivery. **There is no background refresh**: no `BGTaskScheduler`, no silent push. A device that has
 been offline for days is exactly what the grace window and the `expired` state
 describe. After a purchase, call `customerEntitlementsDidChangeAfterPurchase()`;
 it is fire-and-forget and never a suspension point on the purchase path.

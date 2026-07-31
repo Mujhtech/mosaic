@@ -7,6 +7,10 @@ import "errors"
 var (
 	// ErrUnauthenticated is a missing operator identity.
 	ErrUnauthenticated = errors.New("the request could not be authenticated")
+	// ErrForbidden is an authenticated Project member whose role is too low for
+	// billing webhook management. Non-members remain ErrNotFound so this error
+	// cannot be used to enumerate Projects outside the actor's organization.
+	ErrForbidden = errors.New("the actor is not authorized to manage billing webhooks")
 	// ErrNotFound covers both a genuinely absent destination and one owned by
 	// another tenant. They are deliberately the same answer: distinguishing
 	// them would let a caller enumerate another Project's destinations.

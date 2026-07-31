@@ -32,17 +32,62 @@ func New(pool *pgxpool.Pool) *Repository { return &Repository{pool: pool} }
 
 var _ billingwebhook.Repository = (*Repository)(nil)
 
+// AuthorizeProject is the single operator authorization boundary for billing
+// webhook management. Billing webhooks carry authoritative entitlement state,
+// so they use the same owner/admin role bar as the billing ledger and customer
+// operator surfaces.
+func (r *Repository) AuthorizeProject(ctx context.Context, actor billingwebhook.Actor, projectID string) error {
+	actorID := strings.TrimSpace(actor.ID)
+	if actorID == "" || strings.TrimSpace(projectID) == "" {
+		return billingwebhook.ErrUnauthenticated
+	}
+	var role string
+	err := r.pool.QueryRow(ctx,
+		`SELECT m.role FROM projects p
+		 JOIN organization_members m ON m.organization_id = p.organization_id
+		 WHERE p.id = $1 AND m.actor_id = $2`, projectID, actorID).Scan(&role)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return billingwebhook.ErrNotFound
+	}
+	if err != nil {
+		return fmt.Errorf("resolve billing webhook operator role: %w", err)
+	}
+	switch role {
+	case "owner", "admin":
+		return nil
+	default:
+		return billingwebhook.ErrForbidden
+	}
+}
+
+func (r *Repository) AuthorizeEnvironment(ctx context.Context, actor billingwebhook.Actor, projectID, environmentID string) error {
+	if err := r.AuthorizeProject(ctx, actor, projectID); err != nil {
+		return err
+	}
+	var exists bool
+	err := r.pool.QueryRow(ctx,
+		`SELECT true FROM environments WHERE id = $1 AND project_id = $2`, environmentID, projectID).
+		Scan(&exists)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return billingwebhook.ErrNotFound
+	}
+	if err != nil {
+		return fmt.Errorf("resolve billing webhook environment: %w", err)
+	}
+	return nil
+}
+
 // destinationColumns is the single projection every destination read uses, so
 // a column added to one read cannot be forgotten by another.
 const destinationColumns = `id, project_id, environment_id, url, status, event_types, description,
-	created_at, updated_at, secret_last_rotated_at, coalesce(disabled_reason, ''),
+	contract_version, created_at, updated_at, secret_last_rotated_at, coalesce(disabled_reason, ''),
 	consecutive_failure_count, auto_disabled_at, coalesce(auto_disable_reason, '')`
 
 func scanDestination(row pgx.Row) (billingwebhook.Destination, error) {
 	var destination billingwebhook.Destination
 	err := row.Scan(&destination.ID, &destination.ProjectID, &destination.EnvironmentID,
 		&destination.URL, &destination.Status, &destination.EventTypes, &destination.Description,
-		&destination.CreatedAt, &destination.UpdatedAt, &destination.SecretLastRotatedAt,
+		&destination.ContractVersion, &destination.CreatedAt, &destination.UpdatedAt, &destination.SecretLastRotatedAt,
 		&destination.DisabledReason, &destination.ConsecutiveFailureCount,
 		&destination.AutoDisabledAt, &destination.AutoDisableReason)
 	return destination, err
@@ -86,11 +131,11 @@ func (r *Repository) CreateDestination(ctx context.Context, destination billingw
 
 	if _, err := tx.Exec(ctx,
 		`INSERT INTO webhook_destinations(
-			id, project_id, environment_id, url, status, event_types, description,
+			id, project_id, environment_id, url, status, event_types, description, contract_version,
 			created_at, updated_at, created_by_actor_id, secret_last_rotated_at)
-		 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$8,$9,$8)`,
+		 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$9,$10,$9)`,
 		destination.ID, destination.ProjectID, destination.EnvironmentID, destination.URL,
-		destination.Status, destination.EventTypes, destination.Description, now, actorID); err != nil {
+		destination.Status, destination.EventTypes, destination.Description, destination.ContractVersion, now, actorID); err != nil {
 		return billingwebhook.Destination{}, translate(err, "insert webhook destination")
 	}
 	if err := insertSecret(ctx, tx, destination.ProjectID, destination.ID, secret, now); err != nil {
@@ -178,9 +223,15 @@ func (r *Repository) UpdateDestination(ctx context.Context, projectID, destinati
 		 SET url = coalesce($3, url),
 		     event_types = coalesce($4, event_types),
 		     description = coalesce($5, description),
-		     updated_at = $6
+		     contract_version = coalesce($6, contract_version),
+		     last_successful_test_at = CASE
+		       WHEN ($3::text IS NOT NULL AND url IS DISTINCT FROM $3::text)
+		         OR ($4::text[] IS NOT NULL AND event_types IS DISTINCT FROM $4::text[])
+		         OR ($6::integer IS NOT NULL AND contract_version IS DISTINCT FROM $6::integer)
+		       THEN NULL ELSE last_successful_test_at END,
+		     updated_at = $7
 		 WHERE id = $1 AND project_id = $2`,
-		destinationID, projectID, update.URL, nullableArray(update.EventTypes), update.Description, now)
+		destinationID, projectID, update.URL, nullableArray(update.EventTypes), update.Description, update.ContractVersion, now)
 	if err != nil {
 		return billingwebhook.Destination{}, translate(err, "update webhook destination")
 	}
@@ -535,6 +586,7 @@ func (r *Repository) fanOutEvent(ctx context.Context, eventID, projectID string,
 		 FROM webhook_events e
 		 JOIN webhook_destinations d
 		   ON d.project_id = e.project_id AND d.environment_id = e.environment_id
+		  AND d.contract_version = e.contract_version
 		 WHERE e.id = $1
 		 ON CONFLICT (webhook_event_id, webhook_destination_id) DO NOTHING`,
 		eventID, now, billingwebhook.DefaultMaxAttempts); err != nil {
@@ -614,7 +666,8 @@ func (r *Repository) LeaseDelivery(ctx context.Context, workerID string, now, le
 	// destination that reliably kills workers from being retried forever.
 	if _, err := tx.Exec(ctx,
 		`UPDATE webhook_deliveries
-		 SET leased_by = $2, leased_until = $3, attempt_count = attempt_count + 1, updated_at = $4
+		 SET leased_by = $2, leased_until = $3, attempt_count = attempt_count + 1, updated_at = $4,
+		     leased_destination_config_digest = webhook_destination_config_digest(webhook_destination_id,project_id)
 		 WHERE id = $1`, delivery.ID, workerID, leaseUntil, now); err != nil {
 		return billingwebhook.LeasedDelivery{}, false, fmt.Errorf("lease webhook delivery: %w", err)
 	}
@@ -626,7 +679,7 @@ func (r *Repository) LeaseDelivery(ctx context.Context, workerID string, now, le
 
 	leased := billingwebhook.LeasedDelivery{Delivery: delivery}
 	if err := r.pool.QueryRow(ctx,
-		`SELECT e.event_type, e.payload::text, p.organization_id
+		`SELECT e.event_type, e.payload_bytes, p.organization_id
 		 FROM webhook_events e JOIN projects p ON p.id = e.project_id
 		 WHERE e.id = $1 AND e.project_id = $2`, delivery.EventID, delivery.ProjectID).
 		Scan(&leased.EventType, &leased.Body, &leased.OrganizationID); err != nil {
@@ -719,23 +772,56 @@ func (r *Repository) CompleteAttempt(ctx context.Context, result billingwebhook.
 	switch {
 	case result.ResetDestinationFailures:
 		if err := tx.QueryRow(ctx,
-			`UPDATE webhook_destinations SET consecutive_failure_count = 0, updated_at = $3
+			`UPDATE webhook_destinations SET consecutive_failure_count = 0
 			 WHERE id = $1 AND project_id = $2
 			 RETURNING consecutive_failure_count`,
-			result.Delivery.DestinationID, result.Delivery.ProjectID, settled).
+			result.Delivery.DestinationID, result.Delivery.ProjectID).
 			Scan(&failures); err != nil && !errors.Is(err, pgx.ErrNoRows) {
 			return 0, translate(err, "reset webhook destination failures")
 		}
 	case result.IncrementDestinationFailures:
 		if err := tx.QueryRow(ctx,
 			`UPDATE webhook_destinations
-			 SET consecutive_failure_count = consecutive_failure_count + 1, updated_at = $3
+			 SET consecutive_failure_count = consecutive_failure_count + 1
 			 WHERE id = $1 AND project_id = $2
 			 RETURNING consecutive_failure_count`,
-			result.Delivery.DestinationID, result.Delivery.ProjectID, settled).
+			result.Delivery.DestinationID, result.Delivery.ProjectID).
 			Scan(&failures); err != nil && !errors.Is(err, pgx.ErrNoRows) {
 			return 0, translate(err, "increment webhook destination failures")
 		}
+	}
+
+	// Promote receiver freshness only from the immutable attempt/event evidence
+	// written in this transaction and the exact destination configuration that
+	// was captured by PostgreSQL when the delivery was leased. AttemptedAt and
+	// RespondedAt remain audit fields; neither controls readiness time or config
+	// freshness. The proof timestamp comes from PostgreSQL's statement clock.
+	if _, err := tx.Exec(ctx, `UPDATE webhook_destinations destination
+		SET last_successful_test_at = GREATEST(
+			COALESCE(destination.last_successful_test_at, '-infinity'::timestamptz),
+			statement_timestamp())
+		FROM webhook_delivery_attempts attempt
+		JOIN webhook_events event
+		  ON event.id=attempt.webhook_event_id AND event.project_id=attempt.project_id
+		JOIN webhook_deliveries delivery
+		  ON delivery.id=attempt.webhook_delivery_id AND delivery.project_id=attempt.project_id
+		WHERE attempt.id=$1
+		  AND destination.id=attempt.webhook_destination_id
+		  AND destination.project_id=attempt.project_id
+		  AND destination.status='active'
+		  AND destination.contract_version=2
+		  AND event.contract_version=2
+		  AND event.event_type LIKE 'authority.%'
+		  AND event.event_type=ANY(destination.event_types)
+		  AND EXISTS(SELECT 1 FROM webhook_signing_secrets secret
+		      WHERE secret.webhook_destination_id=destination.id
+		        AND secret.project_id=destination.project_id
+		        AND secret.status='active')
+		  AND attempt.outcome='delivered'
+		  AND delivery.status='succeeded'
+		  AND delivery.leased_destination_config_digest IS NOT NULL
+		  AND delivery.leased_destination_config_digest=webhook_destination_config_digest(destination.id,destination.project_id)`, attemptID); err != nil {
+		return 0, translate(err, "promote webhook destination freshness evidence")
 	}
 	if err := tx.Commit(ctx); err != nil {
 		return 0, fmt.Errorf("commit webhook attempt completion: %w", err)

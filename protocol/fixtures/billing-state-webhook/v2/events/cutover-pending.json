@@ -1,0 +1,26 @@
+{
+  "billingStateWebhookContractVersion": "2",
+  "recordType": "billingStateEvent",
+  "payload": {
+    "eventId": "event-cutover-pending-001",
+    "eventType": "authority.cutover.pending",
+    "billingCustomerId": "customer-001",
+    "authority": {
+      "authorityEpoch": 4,
+      "authorityKind": "source",
+      "scope": {
+        "projectId": "project-001",
+        "environmentId": "env-production",
+        "applicationId": "app-ios",
+        "platform": "ios"
+      },
+      "transitionState": "cutover_pending",
+      "snapshotAuthorityDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    },
+    "snapshotVersion": 41,
+    "occurredAt": "2026-07-29T09:59:00.000Z",
+    "createdAt": "2026-07-29T09:59:01.000Z",
+    "correlationId": "correlation-cutover-pending-001",
+    "changedEntitlements": []
+  }
+}

@@ -60,6 +60,25 @@ void main() {
     expect(calls, 2);
   });
 
+  test('an accepted authority epoch invalidates the previous token', () async {
+    final requests = <MosaicCustomerTokenRequest>[];
+    final holder = MosaicCustomerTokenHolder(
+      provider: (request) async {
+        requests.add(request);
+        return token('token-${requests.length}');
+      },
+      clock: clock,
+    );
+
+    await holder.resolve();
+    holder.bindAuthorityEpoch(5);
+    await holder.resolve();
+
+    expect(requests, hasLength(2));
+    expect(requests.first.acceptedAuthorityEpoch, isNull);
+    expect(requests.last.acceptedAuthorityEpoch, 5);
+  });
+
   test('a token minted for a superseded identity is discarded', () async {
     final completer = Completer<MosaicCustomerToken?>();
     final holder = MosaicCustomerTokenHolder(

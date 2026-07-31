@@ -2,7 +2,7 @@ import { createFileRoute, Outlet, redirect, useRouterState } from "@tanstack/rea
 import { useQuery } from "@tanstack/react-query"
 
 import { RouteErrorState, RoutePendingState } from "@/components/feedback/route-feedback"
-import { CloudWorkspaceShell } from "@/features/organizations/components/cloud-workspace-shell"
+import { CloudWorkspaceShell } from "@/features/orgs/components/cloud-workspace-shell"
 import { HostedAccessBanner } from "@/features/auth/components/hosted-access-banner"
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar"
 import { safeInternalReturnTo } from "@/features/auth/types/hosted-access"

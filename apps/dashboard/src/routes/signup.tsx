@@ -3,6 +3,7 @@ import { createFileRoute } from "@tanstack/react-router"
 import { AuthPageShell } from "@/features/auth/components/auth-page-shell"
 import { SignupForm } from "@/features/auth/components/signup-form"
 import { safeInternalReturnTo } from "@/features/auth/types/hosted-access"
+import { routeHead } from "@/lib/routing/route-head"
 
 interface AuthRouteSearch {
   returnTo?: string
@@ -10,6 +11,11 @@ interface AuthRouteSearch {
 
 export const Route = createFileRoute("/signup")({
   component: SignupRoute,
+  head: () =>
+    routeHead({
+      description: "Create your Mosaic Studio account.",
+      title: "Sign up",
+    }),
   validateSearch: (search: Record<string, unknown>): AuthRouteSearch => {
     const returnTo = safeInternalReturnTo(search.returnTo, "")
     return returnTo ? { returnTo } : {}

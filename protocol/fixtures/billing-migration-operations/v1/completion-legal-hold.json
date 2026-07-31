@@ -1,0 +1,15 @@
+{
+  "billingMigrationOperationsContractVersion": "1",
+  "recordType": "completionReport",
+  "payload": {
+    "programId": "mig-legal-hold",
+    "stateVersion": 15,
+    "completedAt": "2026-08-05T10:00:00.000Z",
+    "stabilizationEndedAt": "2026-08-05T10:00:00.000Z",
+    "rollbackWindowEndedAt": "2026-08-05T10:00:00.000Z",
+    "legalHold": true,
+    "credentialRemoved": true,
+    "credentialRemovedAt": "2026-08-05T10:00:00.000Z",
+    "completionDigest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+  }
+}

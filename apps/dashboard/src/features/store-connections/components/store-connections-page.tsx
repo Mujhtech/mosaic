@@ -16,8 +16,8 @@ import {
   storeEnvironmentLabel,
 } from "@/features/billing-ledger/types/billing-vocabulary"
 import { environmentsQueryOptions } from "@/features/environments/queries/environments-query"
-import { ScopeMismatchRecovery } from "@/features/organizations/components/scope-mismatch-recovery"
-import { WorkspacePage, WorkflowPanel } from "@/features/organizations/components/workspace-page"
+import { ScopeMismatchRecovery } from "@/features/orgs/components/scope-mismatch-recovery"
+import { WorkspacePage, WorkflowPanel } from "@/features/orgs/components/workspace-page"
 import { useValidatedProjectScope } from "@/features/projects/hooks/use-validated-project-scope"
 import { applicationsQueryOptions } from "@/features/projects/queries/projects-query"
 import { BillingEnablementPanel } from "@/features/store-connections/components/billing-enablement-panel"
@@ -116,7 +116,7 @@ export function StoreConnectionsPage({ organizationId, projectId }: StoreConnect
     )
   }
 
-  const projectBase = `/organizations/${encodeURIComponent(organizationId)}/projects/${encodeURIComponent(projectId)}`
+  const projectBase = `/orgs/${encodeURIComponent(organizationId)}/projects/${encodeURIComponent(projectId)}`
 
   return (
     <WorkspacePage
@@ -152,7 +152,7 @@ export function StoreConnectionsPage({ organizationId, projectId }: StoreConnect
         error={updateSettings.error}
         isPending={billingSettings.isPending && probeEnvironmentId.length > 0}
         isSaving={updateSettings.isPending}
-        membersHref={`/organizations/${encodeURIComponent(organizationId)}/members`}
+        membersHref={`/orgs/${encodeURIComponent(organizationId)}/members`}
         onChange={(nextEnabled) => updateSettings.mutate({ billingEnabled: nextEnabled })}
       />
 

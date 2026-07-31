@@ -9,6 +9,14 @@ import (
 	"github.com/Mujhtech/mosaic/apps/api/internal/platform/httpserver/response"
 )
 
+func (h *Handler) getWorkspaceBootstrap(w http.ResponseWriter, r *http.Request) {
+	result, err := h.service.Bootstrap(r.Context(), actor(r))
+	if err != nil {
+		writeServiceError(w, r, err)
+		return
+	}
+	response.OK(w, r, result)
+}
 func (h *Handler) createOrganization(w http.ResponseWriter, r *http.Request) {
 	request := new(organizationRequest)
 	if !decodeAndValidate(w, r, request) {

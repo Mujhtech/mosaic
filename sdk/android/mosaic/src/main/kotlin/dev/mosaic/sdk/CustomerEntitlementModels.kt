@@ -365,6 +365,9 @@ enum class MosaicCustomerEntitlementUnavailableReason(val wireName: String) {
     CACHE_EXPIRED("customer.entitlements.cacheExpired"),
     CLOCK_UNRELIABLE("customer.entitlements.clockUnreliable"),
     NEVER_SYNCHRONIZED("customer.entitlements.neverSynchronized"),
+    AUTHORITY_UNKNOWN("customer.entitlements.authorityUnknown"),
+    UNSUPPORTED_APPLICATION_VERSION("customer.entitlements.unsupportedApplicationVersion"),
+    CACHE_WRITE_FAILED("customer.entitlements.cacheWriteFailed"),
 }
 
 /** The observable authoritative state. Identity transitions are visible without stale grants. */
@@ -396,11 +399,16 @@ enum class MosaicCustomerSnapshotRejection(val wireName: String) {
     AS_OF_REGRESSION("as_of_regression"),
     MALFORMED_RECORD("malformed_record"),
     WEAK_ENTITY_TAG("weak_entity_tag"),
+    AUTHORITY_EPOCH_REGRESSION("authority_epoch_regression"),
+    AUTHORITY_DIGEST_MISMATCH("authority_digest_mismatch"),
+    APPLICATION_MISMATCH("application_mismatch"),
+    PLATFORM_MISMATCH("platform_mismatch"),
     ;
 
     /** The one rejection that clears rather than preserves the cache. */
     val clearsCache: Boolean
-        get() = this == CUSTOMER_MISMATCH || this == PROJECT_MISMATCH || this == ENVIRONMENT_MISMATCH
+        get() = this == CUSTOMER_MISMATCH || this == PROJECT_MISMATCH ||
+            this == ENVIRONMENT_MISMATCH || this == APPLICATION_MISMATCH || this == PLATFORM_MISMATCH
 }
 
 /** The outcome of one authoritative sync attempt. */
@@ -454,4 +462,8 @@ data class MosaicCustomerEntitlementDiagnostics(
     val lastUnavailableReason: MosaicCustomerEntitlementUnavailableReason?,
     val acceptedSnapshotCount: Long,
     val rejectedSnapshotCount: Long,
+    /** Null until an Entitlement v2 record has established the scoped authority. */
+    val authorityEpoch: Long? = null,
+    val authorityKind: MosaicCustomerAuthorityKind? = null,
+    val authorityTransitionState: MosaicCustomerAuthorityTransitionState? = null,
 )

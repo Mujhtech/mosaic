@@ -1,0 +1,13 @@
+{
+  "billingMigrationOperationsContractVersion": "1",
+  "recordType": "divergence",
+  "payload": {
+    "programId": "mig-001",
+    "stateVersion": 7,
+    "divergenceId": "div-001",
+    "classification": "blocking",
+    "reason": "unsupported_application_version",
+    "observedAt": "2026-07-29T09:00:00.000Z",
+    "classificationRuleVersion": "rules-1"
+  }
+}

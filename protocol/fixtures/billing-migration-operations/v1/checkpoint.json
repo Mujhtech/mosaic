@@ -1,0 +1,30 @@
+{
+  "billingMigrationOperationsContractVersion": "1",
+  "recordType": "migrationCheckpoint",
+  "payload": {
+    "programId": "mig-001",
+    "stateVersion": 8,
+    "checkpointId": "checkpoint-001",
+    "scope": {
+      "projectId": "project-001",
+      "environmentId": "env-production",
+      "applications": [
+        {
+          "applicationId": "app-ios",
+          "platform": "ios"
+        }
+      ]
+    },
+    "authorityEpoch": 4,
+    "watermarks": {
+      "source": "2026-07-29T09:00:00.000Z",
+      "provider": "2026-07-29T09:00:00.000Z",
+      "shadow": "2026-07-29T09:00:00.000Z"
+    },
+    "manifestDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "mappingDigest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "policyDigest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+    "readinessDigest": "sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+    "createdAt": "2026-07-29T09:15:00.000Z"
+  }
+}

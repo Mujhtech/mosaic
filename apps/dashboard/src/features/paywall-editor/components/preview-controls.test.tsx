@@ -1,4 +1,5 @@
 import { fireEvent, render, screen } from "@testing-library/react"
+import { chooseSelectOption } from "@/test/select"
 import { useEffect } from "react"
 import { describe, expect, it } from "vitest"
 
@@ -57,7 +58,7 @@ describe("preview controls", () => {
     expect(screen.getByText("150%")).toBeInTheDocument()
   })
 
-  it("changes the portable default locale in one history step without corrupting defaults", () => {
+  it("changes the portable default locale in one history step without corrupting defaults", async () => {
     render(
       <StudioWorkspaceStoreProvider storage={null}>
         <EditorStoreProvider>
@@ -66,9 +67,7 @@ describe("preview controls", () => {
       </StudioWorkspaceStoreProvider>,
     )
 
-    fireEvent.change(screen.getByRole("combobox", { name: "Default locale" }), {
-      target: { value: "de" },
-    })
+    await chooseSelectOption(screen.getByRole("combobox", { name: "Default locale" }), "de")
     expect(screen.getByTestId("document-default-locale")).toHaveTextContent("de")
     expect(screen.getByTestId("headline-default")).toHaveTextContent(
       "Erstelle eine Bezahlschranke, die Menschen sofort verstehen",

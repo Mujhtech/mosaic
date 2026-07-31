@@ -1,0 +1,16 @@
+{
+  "billingStateWebhookContractVersion": "2",
+  "recordType": "webhookDeliveryAttempt",
+  "payload": {
+    "destinationId": "destination-001",
+    "maxAttempts": 8,
+    "deliveryId": "delivery-event-cutover-001-attempt-2",
+    "eventId": "event-cutover-001",
+    "attempt": 2,
+    "status": "failed",
+    "requestedAt": "2026-07-29T10:01:00.000Z",
+    "respondedAt": "2026-07-29T10:01:01.000Z",
+    "responseStatusCode": 503,
+    "nextAttemptAt": "2026-07-29T10:03:00.000Z"
+  }
+}

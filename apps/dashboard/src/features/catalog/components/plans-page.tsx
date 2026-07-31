@@ -1,16 +1,27 @@
+import { useState } from "react"
 import { useForm } from "@tanstack/react-form"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { Link } from "@tanstack/react-router"
 
 import { Button } from "@/components/ui/button"
+import {
+  Dialog,
+  DialogClose,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog"
 import { Field, FieldLabel } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
 import { HostedResourceBoundary } from "@/features/auth/components/hosted-resource-boundary"
 import { resolveHostedQueryState } from "@/features/auth/types/hosted-query-state"
 import { createPlanMutationOptions } from "@/features/catalog/mutations/catalog-mutations"
 import { plansQueryOptions } from "@/features/catalog/queries/catalog-query"
-import { WorkspacePage, WorkflowPanel } from "@/features/organizations/components/workspace-page"
-import { ScopeMismatchRecovery } from "@/features/organizations/components/scope-mismatch-recovery"
+import { WorkspacePage, WorkflowPanel } from "@/features/orgs/components/workspace-page"
+import { ScopeMismatchRecovery } from "@/features/orgs/components/scope-mismatch-recovery"
 import { useValidatedProjectScope } from "@/features/projects/hooks/use-validated-project-scope"
 
 interface PlansPageProps {
@@ -24,6 +35,7 @@ export function PlansPage({ organizationId, projectId }: PlansPageProps) {
   const plans = useQuery({ ...plansQueryOptions(projectId), enabled: scopeReady })
   const mutation = useMutation(createPlanMutationOptions(projectId, queryClient))
   const items = plans.data?.items ?? []
+  const [createOpen, setCreateOpen] = useState(false)
   const form = useForm({
     defaultValues: { description: "", key: "", name: "" },
     onSubmit: async ({ value }) => {
@@ -33,6 +45,7 @@ export function PlansPage({ organizationId, projectId }: PlansPageProps) {
         name: value.name.trim(),
       })
       form.reset()
+      setCreateOpen(false)
     },
   })
   const state = resolveHostedQueryState({
@@ -64,47 +77,34 @@ export function PlansPage({ organizationId, projectId }: PlansPageProps) {
     )
   }
 
-  return (
-    <WorkspacePage
-      description="Plans group the Products a customer can choose. The Catalog is project-wide."
-      eyebrow="Catalog · Project-wide"
-      title="Plans"
+  const createDialog = (
+    <Dialog
+      onOpenChange={(open) => {
+        setCreateOpen(open)
+        if (!open) {
+          form.reset()
+          mutation.reset()
+        }
+      }}
+      open={createOpen}
     >
-      <HostedResourceBoundary state={state}>
-        <WorkflowPanel title="Plans">
-          <ul className="grid gap-3 md:grid-cols-2">
-            {items.map((plan) => (
-              <li className="rounded border p-4" key={plan.id}>
-                <p className="font-semibold">{plan.name}</p>
-                <p className="text-muted-foreground mt-1 font-mono text-xs">{plan.key}</p>
-                <p className="text-muted-foreground mt-2 text-sm">
-                  {plan.description ?? "No description"}
-                </p>
-                <Link
-                  className="text-primary mt-4 inline-flex text-sm font-medium hover:underline"
-                  params={{ organizationId, planId: plan.id, projectId }}
-                  to="/organizations/$organizationId/projects/$projectId/catalog/plans/$planId"
-                >
-                  Manage Products
-                </Link>
-              </li>
-            ))}
-          </ul>
-        </WorkflowPanel>
-      </HostedResourceBoundary>
-      {canManagePlans ? (
-        <WorkflowPanel
-          description="A Plan is what you sell; Products are its monthly, yearly, or lifetime purchase options."
-          title="Create Plan"
+      <DialogTrigger render={<Button size="sm" />}>Create Plan</DialogTrigger>
+      <DialogContent>
+        <form
+          onSubmit={(event) => {
+            event.preventDefault()
+            event.stopPropagation()
+            void form.handleSubmit()
+          }}
         >
-          <form
-            className="grid gap-4 md:grid-cols-3"
-            onSubmit={(event) => {
-              event.preventDefault()
-              event.stopPropagation()
-              void form.handleSubmit()
-            }}
-          >
+          <DialogHeader>
+            <DialogTitle>Create Plan</DialogTitle>
+            <DialogDescription>
+              A Plan is what you sell; Products are its monthly, yearly, or lifetime purchase
+              options.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-4 px-4">
             <form.Field name="name">
               {(field) => (
                 <Field>
@@ -144,17 +144,52 @@ export function PlansPage({ organizationId, projectId }: PlansPageProps) {
                 </Field>
               )}
             </form.Field>
-            <Button className="md:col-start-3" disabled={mutation.isPending} type="submit">
+            {mutation.error ? (
+              <p className="text-destructive text-sm" role="alert">
+                {mutation.error.message}
+              </p>
+            ) : null}
+          </div>
+          <DialogFooter>
+            <DialogClose render={<Button type="button" variant="outline" />}>Cancel</DialogClose>
+            <Button disabled={mutation.isPending} type="submit">
               {mutation.isPending ? "Creating…" : "Create Plan"}
             </Button>
-          </form>
-          {mutation.error ? (
-            <p className="text-destructive mt-4 text-sm" role="alert">
-              {mutation.error.message}
-            </p>
-          ) : null}
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
+  )
+
+  return (
+    <WorkspacePage
+      actions={canManagePlans ? createDialog : null}
+      description="Plans group the Products a customer can choose. The Catalog is project-wide."
+      eyebrow="Catalog · Project-wide"
+      title="Plans"
+    >
+      <HostedResourceBoundary state={state}>
+        <WorkflowPanel title="Plans">
+          <ul className="grid gap-3 md:grid-cols-2">
+            {items.map((plan) => (
+              <li className="rounded border p-4" key={plan.id}>
+                <p className="font-semibold">{plan.name}</p>
+                <p className="text-muted-foreground mt-1 font-mono text-xs">{plan.key}</p>
+                <p className="text-muted-foreground mt-2 text-sm">
+                  {plan.description ?? "No description"}
+                </p>
+                <Link
+                  className="text-primary mt-4 inline-flex text-sm font-medium hover:underline"
+                  params={(prev) => ({ ...prev, planId: plan.id })}
+                  to="/orgs/$organizationId/projects/$projectId/env/$environmentKey/catalog/plans/$planId"
+                >
+                  Manage Products
+                </Link>
+              </li>
+            ))}
+          </ul>
         </WorkflowPanel>
-      ) : null}
+      </HostedResourceBoundary>
     </WorkspacePage>
   )
 }

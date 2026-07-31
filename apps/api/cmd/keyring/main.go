@@ -1,8 +1,10 @@
-// Command keyring operates on Mosaic's provider-credential keyring.
+// Command keyring operates on Mosaic's encrypted-storage keyrings.
 //
-//	keyring validate    check MOSAIC_PROVIDER_CREDENTIAL_KEYRING is usable
-//	keyring inspect     report envelope counts per key ID
-//	keyring rotate      re-encrypt every envelope under the active key
+//	keyring validate                              check MOSAIC_PROVIDER_CREDENTIAL_KEYRING is usable
+//	keyring inspect                               report provider envelope counts per key ID
+//	keyring rotate                                re-encrypt mutable provider envelopes under the active key
+//	keyring validate --category migration-source check MOSAIC_BILLING_MIGRATION_SOURCE_KEYRING is usable
+//	keyring inspect --category migration-source  report immutable source-object counts per key ID
 //
 // The command never prints key material, ciphertext, or decrypted credentials.
 // Rotation requires every key that currently seals an envelope to still be
@@ -21,11 +23,18 @@ import (
 	"time"
 
 	"github.com/Mujhtech/mosaic/apps/api/internal/cloudworkspace"
+	"github.com/Mujhtech/mosaic/apps/api/internal/platform/billingmigrationobject"
+	"github.com/Mujhtech/mosaic/apps/api/internal/platform/billingmigrationpostgres"
 	"github.com/Mujhtech/mosaic/apps/api/internal/platform/billingpostgres"
 	"github.com/Mujhtech/mosaic/apps/api/internal/platform/cloudworkspacepostgres"
 	"github.com/Mujhtech/mosaic/apps/api/internal/platform/config"
 	"github.com/Mujhtech/mosaic/apps/api/internal/platform/database"
 	"github.com/Mujhtech/mosaic/apps/api/internal/providercredential"
+)
+
+const (
+	categoryProviderCredentials = "provider"
+	categoryMigrationSource     = "migration-source"
 )
 
 func main() {
@@ -38,6 +47,7 @@ func main() {
 func run(args []string) error {
 	action, flagArguments := splitArguments(args)
 	flags := flag.NewFlagSet("keyring", flag.ContinueOnError)
+	category := flags.String("category", categoryProviderCredentials, "keyring category: provider or migration-source")
 	batchSize := flags.Int("batch-size", 100, "envelopes re-encrypted per transaction")
 	dryRun := flags.Bool("dry-run", false, "report what rotation would do without writing")
 	timeout := flags.Duration("timeout", 30*time.Minute, "maximum duration for the whole command")
@@ -45,15 +55,21 @@ func run(args []string) error {
 		return err
 	}
 	if action == "" || len(flags.Args()) != 0 {
-		return errors.New("usage: keyring <validate|inspect|rotate> [flags]")
+		return errors.New("usage: keyring <validate|inspect|rotate> [--category provider|migration-source] [flags]")
 	}
 	if *batchSize < 1 {
 		return errors.New("--batch-size must be at least 1")
+	}
+	if err := validateCategoryAction(*category, action); err != nil {
+		return err
 	}
 
 	cfg, err := config.Load()
 	if err != nil {
 		return fmt.Errorf("load configuration: %w", err)
+	}
+	if *category == categoryMigrationSource {
+		return runMigrationSourceKeyring(action, cfg, *timeout)
 	}
 	if cfg.Providers.CredentialKeyring == "" {
 		return errors.New("MOSAIC_PROVIDER_CREDENTIAL_KEYRING is not set")
@@ -97,6 +113,96 @@ func run(args []string) error {
 	default:
 		return fmt.Errorf("unsupported keyring action %q", action)
 	}
+}
+
+func validateCategoryAction(category, action string) error {
+	if action != "validate" && action != "inspect" && action != "rotate" {
+		return fmt.Errorf("unsupported keyring action %q", action)
+	}
+	switch category {
+	case categoryProviderCredentials:
+		return nil
+	case categoryMigrationSource:
+		if action == "rotate" {
+			return errors.New("migration source objects are immutable and cannot be resealed; add a new active key for new writes, retain old keys while objects exist, and delete retained objects before removing their keys")
+		}
+		return nil
+	default:
+		return fmt.Errorf("unsupported keyring category %q", category)
+	}
+}
+
+func runMigrationSourceKeyring(action string, cfg config.Config, timeout time.Duration) error {
+	if cfg.Migration.SourceObjectKeyring == "" {
+		return errors.New("MOSAIC_BILLING_MIGRATION_SOURCE_KEYRING is not set")
+	}
+	cipher, err := billingmigrationobject.NewKeyringCipher(cfg.Migration.SourceObjectKeyring, cfg.Migration.SourceObjectChunkBytes)
+	if err != nil {
+		return fmt.Errorf("the configured migration source-object keyring is not usable: %w", err)
+	}
+	if action == "validate" {
+		fmt.Printf("migration source-object keyring is valid\nactive key id: %s\nkey ids:       %v\n", cipher.ActiveKeyID(), cipher.KeyIDs())
+		return nil
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+	pool, err := database.Open(ctx, database.Config{
+		URL: cfg.Database.URL, MaxConnections: cfg.Database.MaxConnections,
+		MinConnections: cfg.Database.MinConnections, ConnectTimeout: cfg.Database.ConnectTimeout,
+		StatementTimeout: cfg.Database.StatementTimeout, LockTimeout: cfg.Database.LockTimeout,
+	})
+	if err != nil {
+		return fmt.Errorf("initialize database: %w", err)
+	}
+	defer pool.Close()
+	return inspectMigrationSourceObjects(ctx, billingmigrationpostgres.New(pool), cipher)
+}
+
+type sourceObjectKeyInventory interface {
+	SourceObjectEnvelopeCountsByKeyID(context.Context) (map[string]int64, error)
+}
+
+func inspectMigrationSourceObjects(ctx context.Context, inventory sourceObjectKeyInventory, cipher *billingmigrationobject.Cipher) error {
+	counts, err := inventory.SourceObjectEnvelopeCountsByKeyID(ctx)
+	if err != nil {
+		return err
+	}
+	known := make(map[string]struct{}, len(cipher.KeyIDs()))
+	for _, id := range cipher.KeyIDs() {
+		known[id] = struct{}{}
+	}
+	ids := make([]string, 0, len(counts))
+	for id := range counts {
+		ids = append(ids, id)
+	}
+	sort.Strings(ids)
+
+	fmt.Printf("active key id: %s\n\n", cipher.ActiveKeyID())
+	fmt.Printf("%-32s %-10s %s\n", "KEY ID", "OBJECTS", "STATUS")
+	missing := 0
+	for _, id := range ids {
+		status := "retired (still in keyring)"
+		switch {
+		case id == cipher.ActiveKeyID():
+			status = "active"
+		default:
+			if _, ok := known[id]; !ok {
+				status = "MISSING FROM KEYRING"
+				missing++
+			}
+		}
+		fmt.Printf("%-32s %-10d %s\n", id, counts[id], status)
+	}
+	for _, id := range cipher.KeyIDs() {
+		if _, ok := counts[id]; !ok {
+			fmt.Printf("%-32s %-10d %s\n", id, 0, "unused")
+		}
+	}
+	if missing > 0 {
+		return fmt.Errorf("%d key id(s) sealing retained migration source objects are absent from MOSAIC_BILLING_MIGRATION_SOURCE_KEYRING; those immutable objects cannot be decrypted", missing)
+	}
+	return nil
 }
 
 func inspect(ctx context.Context, repository *cloudworkspacepostgres.Repository, billingRepository *billingpostgres.Repository, cipher *providercredential.AESGCMCipher) error {

@@ -35,8 +35,9 @@ internal object MosaicForegroundRefreshRegistry {
             // it would produce two requests for one event.
             client.get()?.let { current ->
                 scope.launch {
+                    // Explicit refresh owns the authority-before-configuration ordering too, so
+                    // lifecycle recovery uses that single path and never double-syncs authority.
                     runCatching { current.refresh() }
-                    runCatching { current.refreshCustomerEntitlements() }
                 }
             }
         }

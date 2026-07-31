@@ -34,7 +34,7 @@ function renderPanel(overrides: Partial<Parameters<typeof BillingEnablementPanel
       error={null}
       isPending={false}
       isSaving={false}
-      membersHref="/organizations/org_1/members"
+      membersHref="/orgs/org_1/members"
       onChange={vi.fn()}
       {...overrides}
     />,

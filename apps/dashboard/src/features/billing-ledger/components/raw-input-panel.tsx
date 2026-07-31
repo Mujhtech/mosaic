@@ -3,7 +3,7 @@ import {
   formatBillingTimestamp,
   ledgerEntryTypeLabel,
 } from "@/features/billing-ledger/types/billing-vocabulary"
-import { WorkflowPanel } from "@/features/organizations/components/workspace-page"
+import { WorkflowPanel } from "@/features/orgs/components/workspace-page"
 import type { BillingLedgerEntry, TransactionFact } from "@/generated/api"
 
 /**

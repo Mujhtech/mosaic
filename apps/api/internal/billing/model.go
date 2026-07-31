@@ -351,6 +351,29 @@ type RawInput struct {
 	ProviderOccurredAt         *time.Time
 	ReceivedAt                 time.Time
 	ExpiresAt                  time.Time
+	MigrationValidation        *MigrationValidationBinding
+}
+
+// MigrationValidationBinding is the immutable Phase 9C expectation attached
+// to a known provider reference. It is validation context, never a Fact field.
+type MigrationValidationBinding struct {
+	ID, ProgramID, ProjectID, EnvironmentID, RawInputID                               string
+	Provider, ReferenceKind, ExpectedApplicationID                                    string
+	ExpectedStoreProductIdentifier, ExpectedMosaicProductID, ExpectedStoreEnvironment string
+	ReferenceDigest, EvidenceDigest                                                   []byte
+	Status, DiagnosticCode, ValidationAttemptID                                       string
+	ProviderWatermark, AcceptedAt, CompletedAt                                        time.Time
+}
+
+type MigrationValidationRequest struct {
+	ProgramID, ProjectID, EnvironmentID, ApplicationID      string
+	Provider, ReferenceKind, Reference                      string
+	ExpectedStoreProductIdentifier, ExpectedMosaicProductID string
+	ExpectedStoreEnvironment                                string
+}
+
+type MigrationValidationAcceptance struct {
+	BindingID, RawInputID, Status string
 }
 
 // ValidationAttempt is one append-only record of one validation try.

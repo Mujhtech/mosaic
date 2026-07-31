@@ -1808,9 +1808,11 @@ paths:
       operationId: syncCustomerEntitlementsWithNegotiation
       tags: [Authoritative Entitlements]
       description: |
-        The conditional and negotiated form of the sync. The body is the contract's
-        entitlementSyncRequest: supported contract versions, the snapshot version the caller
-        already holds, its entity tag, and optionally the Entitlement keys to narrow to.
+        Strictly discriminated Authoritative Entitlement v1 or v2 sync. V1 preserves the
+        existing legacy shape byte-for-byte while source authority remains active. V2 derives
+        Project, Environment and customer exclusively from SDK-key/CAT authentication, verifies
+        the request Application/platform copies, and selects authority and snapshot only through
+        the exact scoped authority and current-pointer rows.
 
         billingCustomerId in the body is a hint only. The server derives the customer from the
         token and verifies the hint against it; a mismatch is refused rather than ignored,
@@ -1820,24 +1822,23 @@ paths:
         Narrowing removes both entries and the sources no remaining entry references, so a
         narrowed snapshot never carries an orphan source.
 
-        This is the ratified cross-SDK flow, and knownSnapshotVersion is the only conditional
-        mechanism this surface has. A matching knownSnapshotVersion always answers 200 with the
-        snapshotUnchanged record, never a bare 304, because the contract cannot guarantee
-        freshness that lives only in undocumented headers.
+        V2 knownSnapshotAuthorityDigest is verification input only. Only an exact digest plus
+        unchanged authenticated scope, authority epoch and snapshot version yields
+        snapshotUnchanged; absence or mismatch returns a full snapshot. This form never answers
+        a bare 304.
       parameters:
         - { in: header, name: Mosaic-SDK-Key, required: true, schema: { type: string } }
-      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/EntitlementSyncRequestRecord" } } } }
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/EntitlementSyncRequestUnion" } } } }
       responses:
         "200":
           description: |
-            The current Customer Entitlement Snapshot, or — when the stated knownSnapshotVersion
-            and entity tag both match — the canonical snapshotUnchanged record. This form never
-            answers 304: a bodyless response would force freshness into header names no frozen
-            schema defines, so the unchanged record carries refreshAfter, validUntil, and
-            staleGraceSeconds in the body instead, recomputed at the instant it was answered.
+            The current Customer Entitlement Snapshot; the canonical snapshotUnchanged record
+            when the v1 known version and entity tag match or the v2 epoch, version, and previously
+            observed authority digest all match; or a v2 authorityUnavailable record. This form
+            never answers 304: the unchanged record keeps freshness inside the versioned body.
           headers:
             ETag: { schema: { type: string }, description: Opaque equality validator. Snapshot monotonicity is decided by snapshotVersion alone. }
-          content: { application/json: { schema: { $ref: "#/components/schemas/CustomerEntitlementSnapshotRecord" } } }
+          content: { application/json: { schema: { $ref: "#/components/schemas/AuthoritativeEntitlementSyncResponse" } } }
         "401": { $ref: "#/components/responses/Error" }
         "403": { $ref: "#/components/responses/Error" }
         "406": { $ref: "#/components/responses/Error" }
@@ -3166,6 +3167,548 @@ paths:
       parameters: [{ $ref: "#/components/parameters/ProjectID" }, { $ref: "#/components/parameters/QuarantineRecordID" }]
       requestBody: { required: true, content: { application/json: { schema: { type: object, additionalProperties: false, required: [supersededByRecordId], properties: { supersededByRecordId: { type: string } } } } } }
       responses: { "200": { $ref: "#/components/responses/QuarantineRecord" }, "403": { $ref: "#/components/responses/Error" }, "404": { $ref: "#/components/responses/Error" } }
+  /v1/projects/{projectId}/billing/migration-programs:
+    get:
+      operationId: listBillingMigrationPrograms
+      tags: [Billing Migration]
+      description: Lists Phase 9C migration programs visible to a Project member. Secrets are never returned.
+      parameters:
+        - { $ref: "#/components/parameters/ProjectID" }
+        - { in: query, name: limit, schema: { type: integer, minimum: 1, maximum: 100, default: 50 } }
+      responses:
+        "200": { description: Migration programs., content: { application/json: { schema: { $ref: "#/components/schemas/BillingMigrationProgramListEnvelope" } } } }
+        "401": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+    post:
+      operationId: createBillingMigrationProgram
+      tags: [Billing Migration]
+      description: |
+        Creates an immutable explicit migration scope and separately encrypted RevenueCat
+        migration credential. Mosaic performs a bounded read-only capability assessment before
+        opening the database transaction. Source records remain migration evidence and never
+        become Billing Transaction Facts through this operation. Owner only. Audited.
+      parameters:
+        - { $ref: "#/components/parameters/ProjectID" }
+        - { in: header, name: Idempotency-Key, required: true, schema: { type: string, minLength: 1, maxLength: 128 } }
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/CreateBillingMigrationProgramRequest" } } }
+      responses:
+        "201": { description: Migration program created., content: { application/json: { schema: { $ref: "#/components/schemas/BillingMigrationProgramEnvelope" } } } }
+        "200": { description: Original program returned for an identical idempotent replay., content: { application/json: { schema: { $ref: "#/components/schemas/BillingMigrationProgramEnvelope" } } } }
+        "401": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+        "422": { $ref: "#/components/responses/Error" }
+        "503": { $ref: "#/components/responses/Error" }
+  /v1/projects/{projectId}/billing/migration-programs/{programId}:
+    get:
+      operationId: getBillingMigrationProgram
+      tags: [Billing Migration]
+      description: Returns one strict Billing Migration Operations v1 migrationProgram record.
+      parameters:
+        - { $ref: "#/components/parameters/ProjectID" }
+        - { in: path, name: programId, required: true, schema: { type: string } }
+      responses:
+        "200": { description: Migration program., content: { application/json: { schema: { $ref: "#/components/schemas/BillingMigrationProgramEnvelope" } } } }
+        "401": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+  /v1/projects/{projectId}/billing/migration-programs/{programId}/manifests:
+    get:
+      operationId: listBillingMigrationSourceManifests
+      tags: [Billing Migration]
+      description: Lists immutable manifests created by the internal verified-object ingestion boundary. There is intentionally no operator manifest-create endpoint.
+      parameters:
+        - { $ref: "#/components/parameters/ProjectID" }
+        - { in: path, name: programId, required: true, schema: { type: string } }
+        - { in: query, name: limit, schema: { type: integer, minimum: 1, maximum: 100, default: 50 } }
+      responses:
+        "200": { description: Strict Billing Migration Operations v1 sourceManifest records., content: { application/json: { schema: { $ref: "#/components/schemas/BillingMigrationSourceManifestListEnvelope" } } } }
+        "401": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+  /v1/projects/{projectId}/billing/migration-programs/{programId}/mapping-sets:
+    get:
+      operationId: listBillingMigrationMappingSets
+      tags: [Billing Migration]
+      parameters: [{ $ref: "#/components/parameters/ProjectID" }, { in: path, name: programId, required: true, schema: { type: string } }, { in: query, name: limit, schema: { type: integer, minimum: 1, maximum: 100, default: 50 } }]
+      responses: { "200": { description: Versioned mapping sets., content: { application/json: { schema: { $ref: "#/components/schemas/BillingMigrationMappingSetListEnvelope" } } } }, "401": { $ref: "#/components/responses/Error" }, "404": { $ref: "#/components/responses/Error" } }
+    post:
+      operationId: createBillingMigrationMappingSet
+      tags: [Billing Migration]
+      description: Creates a new draft mapping version. Owner or admin only.
+      parameters: [{ $ref: "#/components/parameters/ProjectID" }, { in: path, name: programId, required: true, schema: { type: string } }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/CreateBillingMigrationMappingSetRequest" } } }
+      responses: { "201": { description: Draft mapping set created., content: { application/json: { schema: { $ref: "#/components/schemas/BillingMigrationMappingSetEnvelope" } } } }, "403": { $ref: "#/components/responses/Error" }, "409": { $ref: "#/components/responses/Error" }, "422": { $ref: "#/components/responses/Error" } }
+  /v1/projects/{projectId}/billing/migration-programs/{programId}/mapping-sets/{mappingSetId}/freeze:
+    post:
+      operationId: freezeBillingMigrationMappingSet
+      tags: [Billing Migration]
+      description: Performs the one-way draft-to-frozen transition. Owner or admin only.
+      parameters: [{ $ref: "#/components/parameters/ProjectID" }, { in: path, name: programId, required: true, schema: { type: string } }, { in: path, name: mappingSetId, required: true, schema: { type: string } }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/BillingMigrationStateVersionRequest" } } } }
+      responses: { "200": { description: Mapping set frozen. }, "403": { $ref: "#/components/responses/Error" }, "409": { $ref: "#/components/responses/Error" } }
+  /v1/projects/{projectId}/billing/migration-programs/{programId}/import-batches:
+    get:
+      operationId: listBillingMigrationImportBatches
+      tags: [Billing Migration]
+      parameters: [{ $ref: "#/components/parameters/ProjectID" }, { in: path, name: programId, required: true, schema: { type: string } }, { in: query, name: limit, schema: { type: integer, minimum: 1, maximum: 100, default: 50 } }]
+      responses: { "200": { description: Bounded import batches., content: { application/json: { schema: { $ref: "#/components/schemas/BillingMigrationImportBatchListEnvelope" } } } }, "401": { $ref: "#/components/responses/Error" } }
+    post:
+      operationId: createBillingMigrationImportBatch
+      tags: [Billing Migration]
+      description: Queues an idempotent import batch of at most 1,000 evidence records. It cannot create Billing Transaction Facts.
+      parameters: [{ $ref: "#/components/parameters/ProjectID" }, { in: path, name: programId, required: true, schema: { type: string } }, { in: header, name: Idempotency-Key, required: true, schema: { type: string, minLength: 1, maxLength: 128 } }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/CreateBillingMigrationImportBatchRequest" } } } }
+      responses: { "202": { description: Import batch queued., content: { application/json: { schema: { $ref: "#/components/schemas/BillingMigrationImportBatchEnvelope" } } } }, "200": { description: Original batch returned for an identical replay., content: { application/json: { schema: { $ref: "#/components/schemas/BillingMigrationImportBatchEnvelope" } } } }, "403": { $ref: "#/components/responses/Error" }, "409": { $ref: "#/components/responses/Error" }, "422": { $ref: "#/components/responses/Error" } }
+  /v1/projects/{projectId}/billing/migration-programs/{programId}/import-batches/{batchId}:
+    get:
+      operationId: getBillingMigrationImportBatch
+      tags: [Billing Migration]
+      parameters: [{ $ref: "#/components/parameters/ProjectID" }, { in: path, name: programId, required: true, schema: { type: string } }, { in: path, name: batchId, required: true, schema: { type: string } }]
+      responses: { "200": { description: Import batch., content: { application/json: { schema: { $ref: "#/components/schemas/BillingMigrationImportBatchEnvelope" } } } }, "404": { $ref: "#/components/responses/Error" } }
+  /v1/projects/{projectId}/billing/migration-programs/{programId}/dry-runs:
+    post:
+      operationId: queueBillingMigrationDryRun
+      tags: [Billing Migration]
+      description: Queues a durable dry-run job against verified immutable manifest and frozen mapping digests.
+      parameters: [{ $ref: "#/components/parameters/ProjectID" }, { in: path, name: programId, required: true, schema: { type: string } }, { in: header, name: Idempotency-Key, required: true, schema: { type: string, minLength: 1, maxLength: 128 } }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/QueueBillingMigrationRunRequest" } } } }
+      responses: { "202": { description: Dry-run job queued., content: { application/json: { schema: { $ref: "#/components/schemas/BillingMigrationRunJobEnvelope" } } } }, "200": { description: Original job returned for an identical replay., content: { application/json: { schema: { $ref: "#/components/schemas/BillingMigrationRunJobEnvelope" } } } }, "409": { $ref: "#/components/responses/Error" } }
+  /v1/projects/{projectId}/billing/migration-programs/{programId}/shadow-runs:
+    post:
+      operationId: queueBillingMigrationShadowRun
+      tags: [Billing Migration]
+      description: Queues a durable shadow comparison job; this does not change billing authority.
+      parameters: [{ $ref: "#/components/parameters/ProjectID" }, { in: path, name: programId, required: true, schema: { type: string } }, { in: header, name: Idempotency-Key, required: true, schema: { type: string, minLength: 1, maxLength: 128 } }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/QueueBillingMigrationRunRequest" } } } }
+      responses: { "202": { description: Shadow-run job queued., content: { application/json: { schema: { $ref: "#/components/schemas/BillingMigrationRunJobEnvelope" } } } }, "200": { description: Original job returned for an identical replay., content: { application/json: { schema: { $ref: "#/components/schemas/BillingMigrationRunJobEnvelope" } } } }, "409": { $ref: "#/components/responses/Error" } }
+  /v1/projects/{projectId}/billing/migration-programs/{programId}/runs/{runJobId}:
+    get:
+      operationId: getBillingMigrationRunJob
+      tags: [Billing Migration]
+      parameters: [{ $ref: "#/components/parameters/ProjectID" }, { in: path, name: programId, required: true, schema: { type: string } }, { in: path, name: runJobId, required: true, schema: { type: string } }]
+      responses: { "200": { description: Durable run-job status., content: { application/json: { schema: { $ref: "#/components/schemas/BillingMigrationRunJobEnvelope" } } } }, "404": { $ref: "#/components/responses/Error" } }
+  /v1/projects/{projectId}/billing/migration-programs/{programId}/divergences:
+    get:
+      operationId: listBillingMigrationDivergences
+      tags: [Billing Migration]
+      parameters: [{ $ref: "#/components/parameters/ProjectID" }, { in: path, name: programId, required: true, schema: { type: string } }, { in: query, name: limit, schema: { type: integer, minimum: 1, maximum: 100, default: 50 } }]
+      responses: { "200": { description: Immutable divergence records., content: { application/json: { schema: { $ref: "#/components/schemas/BillingMigrationDivergenceListEnvelope" } } } }, "404": { $ref: "#/components/responses/Error" } }
+  /v1/projects/{projectId}/billing/migration-programs/{programId}/readiness-assessments:
+    post:
+      operationId: assessBillingMigrationReadiness
+      tags: [Billing Migration]
+      description: Computes and persists readiness solely from stored evidence. Owner only; callers cannot submit metrics or gate values.
+      parameters: [{ $ref: "#/components/parameters/ProjectID" }, { in: path, name: programId, required: true, schema: { type: string } }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/BillingMigrationStateVersionRequest" } } } }
+      responses: { "201": { description: Immutable readiness assessment., content: { application/json: { schema: { $ref: "#/components/schemas/BillingMigrationReadinessEnvelope" } } } }, "403": { $ref: "#/components/responses/Error" }, "409": { $ref: "#/components/responses/Error" } }
+  /v1/projects/{projectId}/billing/migration-programs/{programId}/readiness-assessments/latest:
+    get:
+      operationId: getLatestBillingMigrationReadiness
+      tags: [Billing Migration]
+      parameters: [{ $ref: "#/components/parameters/ProjectID" }, { in: path, name: programId, required: true, schema: { type: string } }]
+      responses: { "200": { description: Latest immutable readiness assessment., content: { application/json: { schema: { $ref: "#/components/schemas/BillingMigrationReadinessEnvelope" } } } }, "404": { $ref: "#/components/responses/Error" } }
+  /v1/projects/{projectId}/billing/migration-programs/{programId}/source-pulls:
+    get:
+      operationId: listBillingMigrationSourcePulls
+      tags: [Billing Migration]
+      parameters: [{ $ref: "#/components/parameters/ProjectID" }, { $ref: "#/components/parameters/BillingMigrationProgramID" }, { $ref: "#/components/parameters/Cursor" }, { in: query, name: limit, schema: { type: integer, minimum: 1, maximum: 100, default: 50 } }]
+      responses: { "200": { $ref: "#/components/responses/BillingMigrationSourcePullPage" }, "403": { $ref: "#/components/responses/Error" } }
+    post:
+      operationId: queueBillingMigrationSourcePull
+      tags: [Billing Migration]
+      description: Queues a bounded, read-only RevenueCat source pull. Available only when migration source access is configured; source records remain evidence and never become Billing Transaction Facts directly.
+      parameters: [{ $ref: "#/components/parameters/ProjectID" }, { $ref: "#/components/parameters/BillingMigrationProgramID" }, { $ref: "#/components/parameters/BillingMigrationIdempotencyKey" }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/BillingMigrationSourcePullRequest" } } } }
+      responses: { "202": { $ref: "#/components/responses/BillingMigrationOperation" }, "200": { description: Original source-pull job returned for an identical replay., content: { application/json: { schema: { $ref: "#/components/schemas/BillingMigrationOperationEnvelope" } } } }, "403": { $ref: "#/components/responses/Error" }, "409": { $ref: "#/components/responses/Error" }, "422": { $ref: "#/components/responses/Error" }, "503": { $ref: "#/components/responses/Error" } }
+  /v1/projects/{projectId}/billing/migration-programs/{programId}/source-pulls/{sourcePullId}:
+    get:
+      operationId: getBillingMigrationSourcePull
+      tags: [Billing Migration]
+      parameters: [{ $ref: "#/components/parameters/ProjectID" }, { $ref: "#/components/parameters/BillingMigrationProgramID" }, { in: path, name: sourcePullId, required: true, schema: { type: string } }]
+      responses: { "200": { $ref: "#/components/responses/BillingMigrationSourcePullRead" }, "403": { $ref: "#/components/responses/Error" }, "404": { $ref: "#/components/responses/Error" } }
+  /v1/projects/{projectId}/billing/migration-programs/{programId}/promote-ready:
+    post:
+      operationId: promoteBillingMigrationReady
+      tags: [Billing Migration]
+      description: Promotes a program only from authoritative readiness evidence stored by Mosaic.
+      parameters: [{ $ref: "#/components/parameters/ProjectID" }, { $ref: "#/components/parameters/BillingMigrationProgramID" }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/BillingMigrationStateVersionRequest" } } } }
+      responses: { "200": { $ref: "#/components/responses/BillingMigrationOperation" }, "403": { $ref: "#/components/responses/Error" }, "409": { $ref: "#/components/responses/Error" }, "422": { $ref: "#/components/responses/Error" } }
+  /v1/projects/{projectId}/billing/migration-programs/{programId}/cutover-proposals:
+    post:
+      operationId: proposeBillingMigrationCutover
+      tags: [Billing Migration]
+      description: Creates an expiring cutover proposal bound to explicit state and evidence digests. It does not change authority.
+      parameters: [{ $ref: "#/components/parameters/ProjectID" }, { $ref: "#/components/parameters/BillingMigrationProgramID" }, { $ref: "#/components/parameters/BillingMigrationIdempotencyKey" }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/BillingMigrationCutoverProposalRequest" } } } }
+      responses: { "201": { $ref: "#/components/responses/BillingMigrationOperation" }, "200": { $ref: "#/components/responses/BillingMigrationReplay" }, "403": { $ref: "#/components/responses/Error" }, "409": { $ref: "#/components/responses/Error" }, "422": { $ref: "#/components/responses/Error" } }
+  /v1/projects/{projectId}/billing/migration-programs/{programId}/rollback-proposals:
+    post:
+      operationId: proposeBillingMigrationRollback
+      tags: [Billing Migration]
+      description: Creates an expiring rollback proposal bound to checkpoint, authority, prerequisite, and state versions. It does not change authority.
+      parameters: [{ $ref: "#/components/parameters/ProjectID" }, { $ref: "#/components/parameters/BillingMigrationProgramID" }, { $ref: "#/components/parameters/BillingMigrationIdempotencyKey" }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/BillingMigrationRollbackProposalRequest" } } } }
+      responses: { "201": { $ref: "#/components/responses/BillingMigrationOperation" }, "200": { $ref: "#/components/responses/BillingMigrationReplay" }, "403": { $ref: "#/components/responses/Error" }, "409": { $ref: "#/components/responses/Error" }, "422": { $ref: "#/components/responses/Error" } }
+  /v1/projects/{projectId}/billing/migration-programs/{programId}/proposals/{proposalId}/approvals:
+    post:
+      operationId: approveBillingMigrationProposal
+      tags: [Billing Migration]
+      description: Records a separate authorized approval for a cutover or rollback proposal; client role labels do not grant authority.
+      parameters: [{ $ref: "#/components/parameters/ProjectID" }, { $ref: "#/components/parameters/BillingMigrationProgramID" }, { in: path, name: proposalId, required: true, schema: { type: string } }, { $ref: "#/components/parameters/BillingMigrationIdempotencyKey" }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/BillingMigrationStateVersionRequest" } } } }
+      responses: { "201": { $ref: "#/components/responses/BillingMigrationOperation" }, "200": { $ref: "#/components/responses/BillingMigrationReplay" }, "403": { $ref: "#/components/responses/Error" }, "409": { $ref: "#/components/responses/Error" }, "422": { $ref: "#/components/responses/Error" } }
+  /v1/projects/{projectId}/billing/migration-programs/{programId}/checkpoints:
+    get:
+      operationId: listBillingMigrationCheckpoints
+      tags: [Billing Migration]
+      parameters: [{ $ref: "#/components/parameters/ProjectID" }, { $ref: "#/components/parameters/BillingMigrationProgramID" }, { $ref: "#/components/parameters/Cursor" }]
+      responses: { "200": { $ref: "#/components/responses/BillingMigrationCheckpointPage" } }
+    post:
+      operationId: createBillingMigrationCheckpoint
+      tags: [Billing Migration]
+      description: Creates an immutable authority checkpoint bound to the approved digest set and cohort.
+      parameters: [{ $ref: "#/components/parameters/ProjectID" }, { $ref: "#/components/parameters/BillingMigrationProgramID" }, { $ref: "#/components/parameters/BillingMigrationIdempotencyKey" }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/BillingMigrationCheckpointRequest" } } } }
+      responses: { "201": { $ref: "#/components/responses/BillingMigrationOperation" }, "200": { $ref: "#/components/responses/BillingMigrationReplay" }, "403": { $ref: "#/components/responses/Error" }, "409": { $ref: "#/components/responses/Error" }, "422": { $ref: "#/components/responses/Error" } }
+  /v1/projects/{projectId}/billing/migration-programs/{programId}/cutover-executions:
+    post:
+      operationId: executeBillingMigrationCutover
+      tags: [Billing Migration]
+      description: Executes an approved compare-and-swap authority transition using explicit scope, state, epoch, checkpoint, approval, and evidence digests.
+      parameters: [{ $ref: "#/components/parameters/ProjectID" }, { $ref: "#/components/parameters/BillingMigrationProgramID" }, { $ref: "#/components/parameters/BillingMigrationIdempotencyKey" }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/BillingMigrationCutoverExecutionRequest" } } } }
+      responses: { "201": { $ref: "#/components/responses/BillingMigrationOperation" }, "200": { $ref: "#/components/responses/BillingMigrationReplay" }, "403": { $ref: "#/components/responses/Error" }, "409": { $ref: "#/components/responses/Error" }, "422": { $ref: "#/components/responses/Error" } }
+  /v1/projects/{projectId}/billing/migration-programs/{programId}/rollback-executions:
+    post:
+      operationId: executeBillingMigrationRollback
+      tags: [Billing Migration]
+      description: Executes an approved compare-and-swap rollback using explicit checkpoint, authority, prerequisite, approval, state, epoch, and scope values.
+      parameters: [{ $ref: "#/components/parameters/ProjectID" }, { $ref: "#/components/parameters/BillingMigrationProgramID" }, { $ref: "#/components/parameters/BillingMigrationIdempotencyKey" }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/BillingMigrationRollbackExecutionRequest" } } } }
+      responses: { "201": { $ref: "#/components/responses/BillingMigrationOperation" }, "200": { $ref: "#/components/responses/BillingMigrationReplay" }, "403": { $ref: "#/components/responses/Error" }, "409": { $ref: "#/components/responses/Error" }, "422": { $ref: "#/components/responses/Error" } }
+  /v1/projects/{projectId}/billing/migration-programs/{programId}/cases:
+    get:
+      operationId: listBillingMigrationCases
+      tags: [Billing Migration]
+      parameters: [{ $ref: "#/components/parameters/ProjectID" }, { $ref: "#/components/parameters/BillingMigrationProgramID" }, { $ref: "#/components/parameters/Cursor" }]
+      responses: { "200": { $ref: "#/components/responses/BillingMigrationCasePage" } }
+    post:
+      operationId: createBillingMigrationCase
+      tags: [Billing Migration]
+      description: Creates an auditable operator case linked only by opaque evidence references.
+      parameters: [{ $ref: "#/components/parameters/ProjectID" }, { $ref: "#/components/parameters/BillingMigrationProgramID" }, { $ref: "#/components/parameters/BillingMigrationIdempotencyKey" }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/BillingMigrationCaseRequest" } } } }
+      responses: { "201": { $ref: "#/components/responses/BillingMigrationOperation" }, "200": { $ref: "#/components/responses/BillingMigrationReplay" }, "403": { $ref: "#/components/responses/Error" }, "409": { $ref: "#/components/responses/Error" }, "422": { $ref: "#/components/responses/Error" } }
+  /v1/projects/{projectId}/billing/migration-programs/{programId}/cases/{caseId}/transitions:
+    post:
+      operationId: transitionBillingMigrationCase
+      tags: [Billing Migration]
+      description: Performs an explicit case state transition bound to the current case digest and program state version.
+      parameters: [{ $ref: "#/components/parameters/ProjectID" }, { $ref: "#/components/parameters/BillingMigrationProgramID" }, { in: path, name: caseId, required: true, schema: { type: string } }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/BillingMigrationCaseTransitionRequest" } } } }
+      responses: { "200": { $ref: "#/components/responses/BillingMigrationOperation" }, "403": { $ref: "#/components/responses/Error" }, "409": { $ref: "#/components/responses/Error" }, "422": { $ref: "#/components/responses/Error" } }
+  /v1/projects/{projectId}/billing/migration-programs/{programId}/repair-previews:
+    get:
+      operationId: listBillingMigrationRepairPreviews
+      tags: [Billing Migration]
+      parameters: [{ $ref: "#/components/parameters/ProjectID" }, { $ref: "#/components/parameters/BillingMigrationProgramID" }, { $ref: "#/components/parameters/Cursor" }]
+      responses: { "200": { $ref: "#/components/responses/BillingMigrationRepairPreviewPage" } }
+    post:
+      operationId: previewBillingMigrationRepair
+      tags: [Billing Migration]
+      description: Creates a bounded repair preview only when the Phase 9C execution plane and concrete repair executor are enabled.
+      parameters: [{ $ref: "#/components/parameters/ProjectID" }, { $ref: "#/components/parameters/BillingMigrationProgramID" }, { $ref: "#/components/parameters/BillingMigrationIdempotencyKey" }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/BillingMigrationRepairPreviewRequest" } } } }
+      responses:
+        "201": { description: Newly created bounded repair preview., content: { application/json: { schema: { $ref: "#/components/schemas/BillingMigrationRepairPreviewCommandEnvelope" } } } }
+        "200": { description: Existing preview returned for an identical idempotent replay., content: { application/json: { schema: { $ref: "#/components/schemas/BillingMigrationRepairPreviewCommandEnvelope" } } } }
+        "422": { $ref: "#/components/responses/Error" }
+        "503": { $ref: "#/components/responses/Error" }
+  /v1/projects/{projectId}/billing/migration-programs/{programId}/repair-executions:
+    get:
+      operationId: listBillingMigrationRepairExecutions
+      tags: [Billing Migration]
+      parameters: [{ $ref: "#/components/parameters/ProjectID" }, { $ref: "#/components/parameters/BillingMigrationProgramID" }, { $ref: "#/components/parameters/Cursor" }]
+      responses: { "200": { $ref: "#/components/responses/BillingMigrationRepairExecutionPage" } }
+    post:
+      operationId: executeBillingMigrationRepair
+      tags: [Billing Migration]
+      description: Executes an unexpired repair preview only when the Phase 9C execution plane and concrete repair executor are enabled.
+      parameters: [{ $ref: "#/components/parameters/ProjectID" }, { $ref: "#/components/parameters/BillingMigrationProgramID" }, { $ref: "#/components/parameters/BillingMigrationIdempotencyKey" }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/BillingMigrationRepairExecutionRequest" } } } }
+      responses:
+        "202": { description: New or replayed execution remains pending., content: { application/json: { schema: { $ref: "#/components/schemas/BillingMigrationRepairExecutionCommandPendingEnvelope" } } } }
+        "201": { description: Newly completed repair execution., content: { application/json: { schema: { $ref: "#/components/schemas/BillingMigrationRepairExecutionCommandTerminalEnvelope" } } } }
+        "200": { description: Settled terminal execution returned for an identical replay., content: { application/json: { schema: { $ref: "#/components/schemas/BillingMigrationRepairExecutionCommandTerminalEnvelope" } } } }
+        "422": { $ref: "#/components/responses/Error" }
+        "503": { $ref: "#/components/responses/Error" }
+  /v1/projects/{projectId}/billing/migration-programs/{programId}/webhook-redeliveries:
+    get:
+      operationId: listBillingMigrationWebhookRedeliveries
+      tags: [Billing Migration]
+      parameters: [{ $ref: "#/components/parameters/ProjectID" }, { $ref: "#/components/parameters/BillingMigrationProgramID" }, { $ref: "#/components/parameters/Cursor" }]
+      responses: { "200": { $ref: "#/components/responses/BillingMigrationWebhookRedeliveryPage" } }
+    post:
+      operationId: redeliverBillingMigrationWebhook
+      tags: [Billing Migration]
+      description: Queues a bounded webhook redelivery from stored event data; raw payloads and destinations cannot be supplied by the caller.
+      parameters: [{ $ref: "#/components/parameters/ProjectID" }, { $ref: "#/components/parameters/BillingMigrationProgramID" }, { $ref: "#/components/parameters/BillingMigrationIdempotencyKey" }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/BillingMigrationRedeliveryRequest" } } } }
+      responses: { "202": { $ref: "#/components/responses/BillingMigrationOperation" }, "200": { $ref: "#/components/responses/BillingMigrationReplay" }, "403": { $ref: "#/components/responses/Error" }, "409": { $ref: "#/components/responses/Error" }, "422": { $ref: "#/components/responses/Error" } }
+  /v1/projects/{projectId}/billing/migration-programs/{programId}/credential-removals:
+    get:
+      operationId: listBillingMigrationCredentialRemovals
+      tags: [Billing Migration]
+      parameters: [{ $ref: "#/components/parameters/ProjectID" }, { $ref: "#/components/parameters/BillingMigrationProgramID" }, { $ref: "#/components/parameters/Cursor" }]
+      responses: { "200": { $ref: "#/components/responses/BillingMigrationCredentialRemovalPage" } }
+    post:
+      operationId: removeBillingMigrationCredential
+      tags: [Billing Migration]
+      description: Irreversibly removes the separately encrypted migration credential after an explicit acknowledgement.
+      parameters: [{ $ref: "#/components/parameters/ProjectID" }, { $ref: "#/components/parameters/BillingMigrationProgramID" }, { $ref: "#/components/parameters/BillingMigrationIdempotencyKey" }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/BillingMigrationCredentialRemovalRequest" } } } }
+      responses: { "201": { $ref: "#/components/responses/BillingMigrationOperation" }, "200": { $ref: "#/components/responses/BillingMigrationReplay" }, "403": { $ref: "#/components/responses/Error" }, "409": { $ref: "#/components/responses/Error" }, "422": { $ref: "#/components/responses/Error" } }
+  /v1/projects/{projectId}/billing/migration-programs/{programId}/legal-hold-proposals:
+    get:
+      operationId: listBillingMigrationLegalHoldProposals
+      tags: [Billing Migration]
+      parameters: [{ $ref: "#/components/parameters/ProjectID" }, { $ref: "#/components/parameters/BillingMigrationProgramID" }, { $ref: "#/components/parameters/Cursor" }]
+      responses: { "200": { $ref: "#/components/responses/BillingMigrationLegalHoldProposalPage" } }
+    post:
+      operationId: proposeBillingMigrationLegalHold
+      tags: [Billing Migration]
+      description: Proposes setting or releasing a legal hold; a separate authorized approval is required.
+      parameters: [{ $ref: "#/components/parameters/ProjectID" }, { $ref: "#/components/parameters/BillingMigrationProgramID" }, { $ref: "#/components/parameters/BillingMigrationIdempotencyKey" }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/BillingMigrationLegalHoldProposalRequest" } } } }
+      responses: { "201": { $ref: "#/components/responses/BillingMigrationOperation" }, "200": { $ref: "#/components/responses/BillingMigrationReplay" }, "403": { $ref: "#/components/responses/Error" }, "409": { $ref: "#/components/responses/Error" }, "422": { $ref: "#/components/responses/Error" } }
+  /v1/projects/{projectId}/billing/migration-programs/{programId}/legal-hold-proposals/{proposalId}/approvals:
+    post:
+      operationId: approveBillingMigrationLegalHold
+      tags: [Billing Migration]
+      description: Applies an approved legal-hold command bound to its immutable proposal digest.
+      parameters: [{ $ref: "#/components/parameters/ProjectID" }, { $ref: "#/components/parameters/BillingMigrationProgramID" }, { in: path, name: proposalId, required: true, schema: { type: string } }, { $ref: "#/components/parameters/BillingMigrationIdempotencyKey" }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/BillingMigrationLegalHoldApprovalRequest" } } } }
+      responses: { "201": { $ref: "#/components/responses/BillingMigrationOperation" }, "200": { $ref: "#/components/responses/BillingMigrationReplay" }, "403": { $ref: "#/components/responses/Error" }, "409": { $ref: "#/components/responses/Error" }, "422": { $ref: "#/components/responses/Error" } }
+  /v1/projects/{projectId}/billing/migration-programs/{programId}/completion:
+    get:
+      operationId: inspectBillingMigrationCompletion
+      tags: [Billing Migration]
+      description: Inspects server-derived completion prerequisites without changing migration state.
+      parameters: [{ $ref: "#/components/parameters/ProjectID" }, { $ref: "#/components/parameters/BillingMigrationProgramID" }]
+      responses: { "200": { $ref: "#/components/responses/BillingMigrationCompletionPrerequisitesRead" }, "403": { $ref: "#/components/responses/Error" }, "404": { $ref: "#/components/responses/Error" } }
+    post:
+      operationId: completeBillingMigration
+      tags: [Billing Migration]
+      description: Completes migration only when server-derived prerequisites match the supplied state, policy, authority, and stability evidence digests.
+      parameters: [{ $ref: "#/components/parameters/ProjectID" }, { $ref: "#/components/parameters/BillingMigrationProgramID" }, { $ref: "#/components/parameters/BillingMigrationIdempotencyKey" }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/BillingMigrationCompletionRequest" } } } }
+      responses: { "201": { $ref: "#/components/responses/BillingMigrationOperation" }, "200": { $ref: "#/components/responses/BillingMigrationReplay" }, "403": { $ref: "#/components/responses/Error" }, "409": { $ref: "#/components/responses/Error" }, "422": { $ref: "#/components/responses/Error" } }
+  /v1/projects/{projectId}/billing/migration-programs/{programId}/proposals:
+    get:
+      operationId: listBillingMigrationProposals
+      tags: [Billing Migration]
+      parameters: [{ $ref: "#/components/parameters/ProjectID" }, { $ref: "#/components/parameters/BillingMigrationProgramID" }, { $ref: "#/components/parameters/Cursor" }]
+      responses: { "200": { $ref: "#/components/responses/BillingMigrationProposalPage" } }
+  /v1/projects/{projectId}/billing/migration-programs/{programId}/proposals/{proposalId}:
+    get:
+      operationId: getBillingMigrationProposal
+      tags: [Billing Migration]
+      parameters: [{ $ref: "#/components/parameters/ProjectID" }, { $ref: "#/components/parameters/BillingMigrationProgramID" }, { in: path, name: proposalId, required: true, schema: { type: string } }]
+      responses: { "200": { $ref: "#/components/responses/BillingMigrationProposalRead" }, "404": { $ref: "#/components/responses/Error" } }
+  /v1/projects/{projectId}/billing/migration-programs/{programId}/approvals:
+    get:
+      operationId: listBillingMigrationApprovals
+      tags: [Billing Migration]
+      parameters: [{ $ref: "#/components/parameters/ProjectID" }, { $ref: "#/components/parameters/BillingMigrationProgramID" }, { $ref: "#/components/parameters/Cursor" }]
+      responses: { "200": { $ref: "#/components/responses/BillingMigrationApprovalPage" } }
+  /v1/projects/{projectId}/billing/migration-programs/{programId}/approvals/{approvalId}:
+    get:
+      operationId: getBillingMigrationApproval
+      tags: [Billing Migration]
+      parameters: [{ $ref: "#/components/parameters/ProjectID" }, { $ref: "#/components/parameters/BillingMigrationProgramID" }, { in: path, name: approvalId, required: true, schema: { type: string } }]
+      responses: { "200": { $ref: "#/components/responses/BillingMigrationApprovalRead" }, "404": { $ref: "#/components/responses/Error" } }
+  /v1/projects/{projectId}/billing/migration-programs/{programId}/checkpoints/latest:
+    get:
+      operationId: getLatestBillingMigrationCheckpoint
+      tags: [Billing Migration]
+      parameters: [{ $ref: "#/components/parameters/ProjectID" }, { $ref: "#/components/parameters/BillingMigrationProgramID" }]
+      responses: { "200": { $ref: "#/components/responses/BillingMigrationCheckpointRead" }, "404": { $ref: "#/components/responses/Error" } }
+  /v1/projects/{projectId}/billing/migration-programs/{programId}/checkpoints/{checkpointId}:
+    get:
+      operationId: getBillingMigrationCheckpoint
+      tags: [Billing Migration]
+      parameters: [{ $ref: "#/components/parameters/ProjectID" }, { $ref: "#/components/parameters/BillingMigrationProgramID" }, { in: path, name: checkpointId, required: true, schema: { type: string } }]
+      responses: { "200": { $ref: "#/components/responses/BillingMigrationCheckpointRead" }, "404": { $ref: "#/components/responses/Error" } }
+  /v1/projects/{projectId}/billing/migration-programs/{programId}/authority-executions:
+    get:
+      operationId: listBillingMigrationAuthorityExecutions
+      tags: [Billing Migration]
+      parameters: [{ $ref: "#/components/parameters/ProjectID" }, { $ref: "#/components/parameters/BillingMigrationProgramID" }, { $ref: "#/components/parameters/Cursor" }]
+      responses: { "200": { $ref: "#/components/responses/BillingMigrationAuthorityExecutionPage" } }
+  /v1/projects/{projectId}/billing/migration-programs/{programId}/authority-executions/{executionId}:
+    get:
+      operationId: getBillingMigrationAuthorityExecution
+      tags: [Billing Migration]
+      parameters: [{ $ref: "#/components/parameters/ProjectID" }, { $ref: "#/components/parameters/BillingMigrationProgramID" }, { in: path, name: executionId, required: true, schema: { type: string } }]
+      responses: { "200": { $ref: "#/components/responses/BillingMigrationAuthorityExecutionRead" }, "404": { $ref: "#/components/responses/Error" } }
+  /v1/projects/{projectId}/billing/migration-programs/{programId}/cases/{caseId}:
+    get:
+      operationId: getBillingMigrationCase
+      tags: [Billing Migration]
+      parameters: [{ $ref: "#/components/parameters/ProjectID" }, { $ref: "#/components/parameters/BillingMigrationProgramID" }, { in: path, name: caseId, required: true, schema: { type: string } }]
+      responses: { "200": { $ref: "#/components/responses/BillingMigrationCaseRead" }, "404": { $ref: "#/components/responses/Error" } }
+  /v1/projects/{projectId}/billing/migration-programs/{programId}/cases/{caseId}/actions:
+    get:
+      operationId: listBillingMigrationCaseActions
+      tags: [Billing Migration]
+      parameters: [{ $ref: "#/components/parameters/ProjectID" }, { $ref: "#/components/parameters/BillingMigrationProgramID" }, { in: path, name: caseId, required: true, schema: { type: string } }, { $ref: "#/components/parameters/Cursor" }]
+      responses: { "200": { $ref: "#/components/responses/BillingMigrationCaseActionPage" } }
+  /v1/projects/{projectId}/billing/migration-programs/{programId}/repair-previews/{previewId}:
+    get:
+      operationId: getBillingMigrationRepairPreview
+      tags: [Billing Migration]
+      parameters: [{ $ref: "#/components/parameters/ProjectID" }, { $ref: "#/components/parameters/BillingMigrationProgramID" }, { in: path, name: previewId, required: true, schema: { type: string } }]
+      responses: { "200": { $ref: "#/components/responses/BillingMigrationRepairPreviewRead" }, "404": { $ref: "#/components/responses/Error" } }
+  /v1/projects/{projectId}/billing/migration-programs/{programId}/repair-executions/{executionId}:
+    get:
+      operationId: getBillingMigrationRepairExecution
+      tags: [Billing Migration]
+      parameters: [{ $ref: "#/components/parameters/ProjectID" }, { $ref: "#/components/parameters/BillingMigrationProgramID" }, { in: path, name: executionId, required: true, schema: { type: string } }]
+      responses: { "200": { $ref: "#/components/responses/BillingMigrationRepairExecutionRead" }, "404": { $ref: "#/components/responses/Error" } }
+  /v1/projects/{projectId}/billing/migration-programs/{programId}/webhook-redeliveries/{redeliveryId}:
+    get:
+      operationId: getBillingMigrationWebhookRedelivery
+      tags: [Billing Migration]
+      parameters: [{ $ref: "#/components/parameters/ProjectID" }, { $ref: "#/components/parameters/BillingMigrationProgramID" }, { in: path, name: redeliveryId, required: true, schema: { type: string } }]
+      responses: { "200": { $ref: "#/components/responses/BillingMigrationWebhookRedeliveryRead" }, "404": { $ref: "#/components/responses/Error" } }
+  /v1/projects/{projectId}/billing/migration-programs/{programId}/credential-removals/current:
+    get:
+      operationId: getCurrentBillingMigrationCredentialRemoval
+      tags: [Billing Migration]
+      parameters: [{ $ref: "#/components/parameters/ProjectID" }, { $ref: "#/components/parameters/BillingMigrationProgramID" }]
+      responses: { "200": { $ref: "#/components/responses/BillingMigrationCredentialRemovalRead" }, "404": { $ref: "#/components/responses/Error" } }
+  /v1/projects/{projectId}/billing/migration-programs/{programId}/credential-removals/{removalId}:
+    get:
+      operationId: getBillingMigrationCredentialRemoval
+      tags: [Billing Migration]
+      parameters: [{ $ref: "#/components/parameters/ProjectID" }, { $ref: "#/components/parameters/BillingMigrationProgramID" }, { in: path, name: removalId, required: true, schema: { type: string } }]
+      responses: { "200": { $ref: "#/components/responses/BillingMigrationCredentialRemovalRead" }, "404": { $ref: "#/components/responses/Error" } }
+  /v1/projects/{projectId}/billing/migration-programs/{programId}/legal-hold-proposals/{proposalId}:
+    get:
+      operationId: getBillingMigrationLegalHoldProposal
+      tags: [Billing Migration]
+      parameters: [{ $ref: "#/components/parameters/ProjectID" }, { $ref: "#/components/parameters/BillingMigrationProgramID" }, { in: path, name: proposalId, required: true, schema: { type: string } }]
+      responses: { "200": { $ref: "#/components/responses/BillingMigrationLegalHoldProposalRead" }, "404": { $ref: "#/components/responses/Error" } }
+  /v1/projects/{projectId}/billing/migration-programs/{programId}/legal-holds:
+    get:
+      operationId: listBillingMigrationLegalHolds
+      tags: [Billing Migration]
+      parameters: [{ $ref: "#/components/parameters/ProjectID" }, { $ref: "#/components/parameters/BillingMigrationProgramID" }, { $ref: "#/components/parameters/Cursor" }]
+      responses: { "200": { $ref: "#/components/responses/BillingMigrationLegalHoldPage" } }
+  /v1/projects/{projectId}/billing/migration-programs/{programId}/legal-holds/current:
+    get:
+      operationId: getCurrentBillingMigrationLegalHold
+      tags: [Billing Migration]
+      parameters: [{ $ref: "#/components/parameters/ProjectID" }, { $ref: "#/components/parameters/BillingMigrationProgramID" }]
+      responses: { "200": { $ref: "#/components/responses/BillingMigrationLegalHoldRead" }, "404": { $ref: "#/components/responses/Error" } }
+  /v1/projects/{projectId}/billing/migration-programs/{programId}/legal-holds/{holdId}:
+    get:
+      operationId: getBillingMigrationLegalHold
+      tags: [Billing Migration]
+      parameters: [{ $ref: "#/components/parameters/ProjectID" }, { $ref: "#/components/parameters/BillingMigrationProgramID" }, { in: path, name: holdId, required: true, schema: { type: string } }]
+      responses: { "200": { $ref: "#/components/responses/BillingMigrationLegalHoldRead" }, "404": { $ref: "#/components/responses/Error" } }
+  /v1/projects/{projectId}/billing/migration-programs/{programId}/completion-history:
+    get:
+      operationId: listBillingMigrationCompletionHistory
+      tags: [Billing Migration]
+      parameters: [{ $ref: "#/components/parameters/ProjectID" }, { $ref: "#/components/parameters/BillingMigrationProgramID" }, { $ref: "#/components/parameters/Cursor" }]
+      responses: { "200": { $ref: "#/components/responses/BillingMigrationCompletionReportPage" } }
+  /v1/projects/{projectId}/billing/migration-programs/{programId}/completion-history/{reportId}:
+    get:
+      operationId: getBillingMigrationCompletionReport
+      tags: [Billing Migration]
+      parameters: [{ $ref: "#/components/parameters/ProjectID" }, { $ref: "#/components/parameters/BillingMigrationProgramID" }, { in: path, name: reportId, required: true, schema: { type: string } }]
+      responses: { "200": { $ref: "#/components/responses/BillingMigrationCompletionReportRead" }, "404": { $ref: "#/components/responses/Error" } }
+  /v1/projects/{projectId}/billing/migration-programs/{programId}/stabilization-policy:
+    post:
+      operationId: freezeBillingMigrationStabilizationPolicy
+      tags: [Billing Migration]
+      description: Freezes the operator-selected thresholds once. Runtime metrics are never accepted from this public endpoint.
+      parameters: [{ $ref: "#/components/parameters/ProjectID" }, { $ref: "#/components/parameters/BillingMigrationProgramID" }, { $ref: "#/components/parameters/BillingMigrationIdempotencyKey" }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/BillingMigrationFreezeStabilizationPolicyRequest" } } } }
+      responses: { "201": { $ref: "#/components/responses/BillingMigrationOperation" }, "200": { $ref: "#/components/responses/BillingMigrationReplay" }, "409": { $ref: "#/components/responses/Error" }, "422": { $ref: "#/components/responses/Error" } }
+  /v1/projects/{projectId}/billing/migration-programs/{programId}/stabilization-policy/current:
+    get:
+      operationId: getCurrentBillingMigrationStabilizationPolicy
+      tags: [Billing Migration]
+      parameters: [{ $ref: "#/components/parameters/ProjectID" }, { $ref: "#/components/parameters/BillingMigrationProgramID" }]
+      responses: { "200": { $ref: "#/components/responses/BillingMigrationStabilizationPolicyRead" }, "404": { $ref: "#/components/responses/Error" } }
+  /v1/projects/{projectId}/billing/migration-programs/{programId}/stabilization-observations:
+    get:
+      operationId: listBillingMigrationStabilizationObservations
+      tags: [Billing Migration]
+      parameters: [{ $ref: "#/components/parameters/ProjectID" }, { $ref: "#/components/parameters/BillingMigrationProgramID" }, { $ref: "#/components/parameters/Cursor" }]
+      responses: { "200": { $ref: "#/components/responses/BillingMigrationStabilizationObservationPage" } }
+    post:
+      operationId: observeBillingMigrationStabilization
+      tags: [Billing Migration]
+      description: Records a server-derived observation using stored trusted evidence. Callers provide only expected state, epoch, and policy digest—not metrics or health booleans.
+      parameters: [{ $ref: "#/components/parameters/ProjectID" }, { $ref: "#/components/parameters/BillingMigrationProgramID" }, { $ref: "#/components/parameters/BillingMigrationIdempotencyKey" }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/BillingMigrationObserveStabilizationRequest" } } } }
+      responses: { "201": { $ref: "#/components/responses/BillingMigrationOperation" }, "200": { $ref: "#/components/responses/BillingMigrationReplay" }, "409": { $ref: "#/components/responses/Error" }, "422": { $ref: "#/components/responses/Error" } }
+  /v1/projects/{projectId}/billing/migration-programs/{programId}/stabilization-observations/latest:
+    get:
+      operationId: getLatestBillingMigrationStabilizationObservation
+      tags: [Billing Migration]
+      parameters: [{ $ref: "#/components/parameters/ProjectID" }, { $ref: "#/components/parameters/BillingMigrationProgramID" }]
+      responses: { "200": { $ref: "#/components/responses/BillingMigrationStabilizationObservationRead" }, "404": { $ref: "#/components/responses/Error" } }
+  /v1/projects/{projectId}/billing/migration-programs/{programId}/rollback-readiness-assessments:
+    get:
+      operationId: listBillingMigrationRollbackReadinessAssessments
+      tags: [Billing Migration]
+      parameters: [{ $ref: "#/components/parameters/ProjectID" }, { $ref: "#/components/parameters/BillingMigrationProgramID" }, { $ref: "#/components/parameters/Cursor" }]
+      responses: { "200": { $ref: "#/components/responses/BillingMigrationRollbackReadinessAssessmentPage" } }
+    post:
+      operationId: assessBillingMigrationRollbackReadiness
+      tags: [Billing Migration]
+      description: Computes readiness from stored evidence. Callers provide only the observation ID and expected state, epoch, and observation digest.
+      parameters: [{ $ref: "#/components/parameters/ProjectID" }, { $ref: "#/components/parameters/BillingMigrationProgramID" }, { $ref: "#/components/parameters/BillingMigrationIdempotencyKey" }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/BillingMigrationAssessRollbackReadinessRequest" } } } }
+      responses: { "201": { $ref: "#/components/responses/BillingMigrationOperation" }, "200": { $ref: "#/components/responses/BillingMigrationReplay" }, "409": { $ref: "#/components/responses/Error" }, "422": { $ref: "#/components/responses/Error" } }
+  /v1/projects/{projectId}/billing/migration-programs/{programId}/rollback-readiness-assessments/latest:
+    get:
+      operationId: getLatestBillingMigrationRollbackReadinessAssessment
+      tags: [Billing Migration]
+      parameters: [{ $ref: "#/components/parameters/ProjectID" }, { $ref: "#/components/parameters/BillingMigrationProgramID" }]
+      responses: { "200": { $ref: "#/components/responses/BillingMigrationRollbackReadinessAssessmentRead" }, "404": { $ref: "#/components/responses/Error" } }
+  /v1/projects/{projectId}/billing/migration-programs/{programId}/rollback-readiness-checkpoints/latest:
+    get:
+      operationId: getLatestBillingMigrationRollbackReadinessCheckpoint
+      tags: [Billing Migration]
+      parameters: [{ $ref: "#/components/parameters/ProjectID" }, { $ref: "#/components/parameters/BillingMigrationProgramID" }]
+      responses: { "200": { $ref: "#/components/responses/BillingMigrationRollbackReadinessCheckpointRead" }, "404": { $ref: "#/components/responses/Error" } }
+  # Listed last on purpose: the TypeScript generator emits types in path order,
+  # so inserting a path above an existing one rewrites the whole client.
+  /v1/workspace/bootstrap:
+    get:
+      operationId: getWorkspaceBootstrap
+      tags: [Organizations]
+      description: |
+        Every Organization the caller belongs to, with the caller's role and that
+        Organization's active Projects, in one read. Workspace entry uses this to
+        resolve its destination without a request per Organization: no
+        Organizations means create one, an Organization without Projects means
+        create a Project, otherwise land in a Project. Projects are capped per
+        Organization; projectsTruncated reports when the list is partial and
+        projectCount carries the true total.
+      responses:
+        "200": { $ref: "#/components/responses/WorkspaceBootstrap" }
+        "401": { $ref: "#/components/responses/Error" }
 components:
   securitySchemes:
     BrowserSession:
@@ -3244,6 +3787,8 @@ components:
     AssetID: { in: path, name: assetId, required: true, schema: { type: string } }
     ReleaseID: { in: path, name: releaseId, required: true, schema: { type: string } }
     IdempotencyKey: { in: header, name: Idempotency-Key, required: true, schema: { type: string, minLength: 1, maxLength: 255 } }
+    BillingMigrationProgramID: { in: path, name: programId, required: true, schema: { type: string, minLength: 1, maxLength: 128 } }
+    BillingMigrationIdempotencyKey: { in: header, name: Idempotency-Key, required: true, schema: { type: string, minLength: 1, maxLength: 128 } }
     IfMatch: { in: header, name: If-Match, required: true, schema: { type: string } }
     AnalyticsFrom: { in: query, name: from, required: true, schema: { $ref: "#/components/schemas/Timestamp" } }
     AnalyticsTo: { in: query, name: to, required: true, schema: { $ref: "#/components/schemas/Timestamp" } }
@@ -3253,6 +3798,42 @@ components:
     AnalyticsLocale: { in: query, name: locale, schema: { type: string } }
     AnalyticsApplicationVersion: { in: query, name: applicationVersion, schema: { type: string } }
   responses:
+    BillingMigrationOperation: { description: Billing migration operation result., content: { application/json: { schema: { $ref: "#/components/schemas/BillingMigrationOperationEnvelope" } } } }
+    BillingMigrationReplay: { description: Original result returned for an identical idempotent replay., content: { application/json: { schema: { $ref: "#/components/schemas/BillingMigrationOperationEnvelope" } } } }
+    BillingMigrationSourcePullPage: { description: Source-pull jobs., content: { application/json: { schema: { $ref: "#/components/schemas/BillingMigrationSourcePullPageEnvelope" } } } }
+    BillingMigrationProposalPage: { description: Cutover and rollback proposals., content: { application/json: { schema: { $ref: "#/components/schemas/BillingMigrationProposalPageEnvelope" } } } }
+    BillingMigrationApprovalPage: { description: Migration approvals., content: { application/json: { schema: { $ref: "#/components/schemas/BillingMigrationApprovalPageEnvelope" } } } }
+    BillingMigrationCheckpointPage: { description: Authority checkpoints., content: { application/json: { schema: { $ref: "#/components/schemas/BillingMigrationCheckpointPageEnvelope" } } } }
+    BillingMigrationAuthorityExecutionPage: { description: Authority executions., content: { application/json: { schema: { $ref: "#/components/schemas/BillingMigrationAuthorityExecutionPageEnvelope" } } } }
+    BillingMigrationCasePage: { description: Migration cases., content: { application/json: { schema: { $ref: "#/components/schemas/BillingMigrationCasePageEnvelope" } } } }
+    BillingMigrationCaseActionPage: { description: Immutable case actions., content: { application/json: { schema: { $ref: "#/components/schemas/BillingMigrationCaseActionPageEnvelope" } } } }
+    BillingMigrationRepairPreviewPage: { description: Repair previews., content: { application/json: { schema: { $ref: "#/components/schemas/BillingMigrationRepairPreviewPageEnvelope" } } } }
+    BillingMigrationRepairExecutionPage: { description: Repair executions., content: { application/json: { schema: { $ref: "#/components/schemas/BillingMigrationRepairExecutionPageEnvelope" } } } }
+    BillingMigrationWebhookRedeliveryPage: { description: Webhook redeliveries., content: { application/json: { schema: { $ref: "#/components/schemas/BillingMigrationWebhookRedeliveryPageEnvelope" } } } }
+    BillingMigrationCredentialRemovalPage: { description: Credential removals., content: { application/json: { schema: { $ref: "#/components/schemas/BillingMigrationCredentialRemovalPageEnvelope" } } } }
+    BillingMigrationLegalHoldProposalPage: { description: Legal-hold proposals., content: { application/json: { schema: { $ref: "#/components/schemas/BillingMigrationLegalHoldProposalPageEnvelope" } } } }
+    BillingMigrationLegalHoldPage: { description: Legal-hold commands., content: { application/json: { schema: { $ref: "#/components/schemas/BillingMigrationLegalHoldPageEnvelope" } } } }
+    BillingMigrationCompletionReportPage: { description: Completion reports., content: { application/json: { schema: { $ref: "#/components/schemas/BillingMigrationCompletionReportPageEnvelope" } } } }
+    BillingMigrationStabilizationObservationPage: { description: Stabilization observations., content: { application/json: { schema: { $ref: "#/components/schemas/BillingMigrationStabilizationObservationPageEnvelope" } } } }
+    BillingMigrationRollbackReadinessAssessmentPage: { description: Rollback-readiness assessments., content: { application/json: { schema: { $ref: "#/components/schemas/BillingMigrationRollbackReadinessAssessmentPageEnvelope" } } } }
+    BillingMigrationSourcePullRead: { description: Source-pull job., content: { application/json: { schema: { $ref: "#/components/schemas/BillingMigrationSourcePullEnvelope" } } } }
+    BillingMigrationProposalRead: { description: Migration proposal., content: { application/json: { schema: { $ref: "#/components/schemas/BillingMigrationProposalEnvelope" } } } }
+    BillingMigrationApprovalRead: { description: Migration approval., content: { application/json: { schema: { $ref: "#/components/schemas/BillingMigrationApprovalEnvelope" } } } }
+    BillingMigrationCheckpointRead: { description: Migration checkpoint., content: { application/json: { schema: { $ref: "#/components/schemas/BillingMigrationCheckpointEnvelope" } } } }
+    BillingMigrationAuthorityExecutionRead: { description: Authority execution., content: { application/json: { schema: { $ref: "#/components/schemas/BillingMigrationAuthorityExecutionEnvelope" } } } }
+    BillingMigrationCaseRead: { description: Migration case., content: { application/json: { schema: { $ref: "#/components/schemas/BillingMigrationCaseEnvelope" } } } }
+    BillingMigrationRepairPreviewRead: { description: Repair preview., content: { application/json: { schema: { $ref: "#/components/schemas/BillingMigrationRepairPreviewEnvelope" } } } }
+    BillingMigrationRepairExecutionRead: { description: Repair execution., content: { application/json: { schema: { $ref: "#/components/schemas/BillingMigrationRepairExecutionEnvelope" } } } }
+    BillingMigrationWebhookRedeliveryRead: { description: Webhook redelivery., content: { application/json: { schema: { $ref: "#/components/schemas/BillingMigrationWebhookRedeliveryEnvelope" } } } }
+    BillingMigrationCredentialRemovalRead: { description: Credential removal., content: { application/json: { schema: { $ref: "#/components/schemas/BillingMigrationCredentialRemovalEnvelope" } } } }
+    BillingMigrationLegalHoldProposalRead: { description: Legal-hold proposal., content: { application/json: { schema: { $ref: "#/components/schemas/BillingMigrationLegalHoldProposalEnvelope" } } } }
+    BillingMigrationLegalHoldRead: { description: Legal-hold command., content: { application/json: { schema: { $ref: "#/components/schemas/BillingMigrationLegalHoldEnvelope" } } } }
+    BillingMigrationCompletionReportRead: { description: Completion report., content: { application/json: { schema: { $ref: "#/components/schemas/BillingMigrationCompletionReportEnvelope" } } } }
+    BillingMigrationCompletionPrerequisitesRead: { description: Server-derived completion prerequisites., content: { application/json: { schema: { $ref: "#/components/schemas/BillingMigrationCompletionPrerequisitesEnvelope" } } } }
+    BillingMigrationStabilizationPolicyRead: { description: Stabilization policy., content: { application/json: { schema: { $ref: "#/components/schemas/BillingMigrationStabilizationPolicyEnvelope" } } } }
+    BillingMigrationStabilizationObservationRead: { description: Stabilization observation., content: { application/json: { schema: { $ref: "#/components/schemas/BillingMigrationStabilizationObservationEnvelope" } } } }
+    BillingMigrationRollbackReadinessAssessmentRead: { description: Rollback-readiness assessment., content: { application/json: { schema: { $ref: "#/components/schemas/BillingMigrationRollbackReadinessAssessmentEnvelope" } } } }
+    BillingMigrationRollbackReadinessCheckpointRead: { description: Rollback-readiness checkpoint., content: { application/json: { schema: { $ref: "#/components/schemas/BillingMigrationRollbackReadinessCheckpointEnvelope" } } } }
     SubmissionAccepted: { description: "The observation is well formed and queued for validation. Nothing more: the store has not been consulted when this response is written.", content: { application/json: { schema: { $ref: "#/components/schemas/ObservationSubmissionResultRecord" } } } }
     SubmissionDuplicate: { description: "The submission was already recorded. A duplicate is idempotent, not an error.", content: { application/json: { schema: { $ref: "#/components/schemas/ObservationSubmissionResultRecord" } } } }
     SubmissionRejected: { description: "Resubmitting the identical document cannot succeed. The SDK queue should drop it.", content: { application/json: { schema: { $ref: "#/components/schemas/ObservationSubmissionResultRecord" } } } }
@@ -3382,7 +3963,725 @@ components:
     Release: { description: Immutable Configuration Release metadata, content: { application/json: { schema: { $ref: "#/components/schemas/ReleaseEnvelope" } } } }
     ReleaseList: { description: Configuration Release history, content: { application/json: { schema: { $ref: "#/components/schemas/ReleaseListEnvelope" } } } }
     PublishResult: { description: Publication result and nonblocking warnings, content: { application/json: { schema: { $ref: "#/components/schemas/PublishResultEnvelope" } } } }
+    # Listed last for the same reason as /v1/workspace/bootstrap: the generator
+    # emits types in declaration order, so a mid-map insertion rewrites the
+    # whole client.
+    WorkspaceBootstrap: { description: Workspace entry snapshot, content: { application/json: { schema: { $ref: "#/components/schemas/WorkspaceBootstrapEnvelope" } } } }
   schemas:
+    BillingMigrationScopeItem:
+      type: object
+      additionalProperties: false
+      required: [applicationId, platform]
+      properties:
+        applicationId: { type: string, minLength: 1, maxLength: 128 }
+        platform: { type: string, enum: [ios, android] }
+    BillingMigrationScope:
+      type: object
+      additionalProperties: false
+      required: [projectId, environmentId, applications]
+      properties:
+        projectId: { type: string }
+        environmentId: { type: string }
+        applications:
+          type: array
+          minItems: 1
+          maxItems: 100
+          items: { $ref: "#/components/schemas/BillingMigrationScopeItem" }
+    CreateBillingMigrationProgramRequest:
+      type: object
+      additionalProperties: false
+      required: [environmentId, applications, revenueCatProjectId, revenueCatApiKey]
+      properties:
+        environmentId: { type: string, minLength: 1, maxLength: 128 }
+        applications: { type: array, minItems: 1, maxItems: 100, items: { $ref: "#/components/schemas/BillingMigrationScopeItem" } }
+        revenueCatProjectId: { type: string, minLength: 1, maxLength: 256, description: Preserved opaque RevenueCat project identifier. }
+        revenueCatApiKey: { type: string, minLength: 1, maxLength: 4096, writeOnly: true, description: Separately consented least-privilege migration key; never returned or logged. }
+        stabilizationDays: { type: integer, minimum: 1, maximum: 30, default: 7 }
+        rollbackWindowDays: { type: integer, minimum: 1, maximum: 30, default: 7 }
+    BillingMigrationProgram:
+      type: object
+      additionalProperties: false
+      required: [programId, stateVersion, state, scope, source, authorityEpochBefore, stabilizationDays, rollbackWindowDays]
+      properties:
+        programId: { type: string }
+        stateVersion: { type: integer, minimum: 1 }
+        state: { type: string, enum: [draft, assessing, mapping, importing, dry_run, shadowing, ready, cutover_pending, stabilizing, completed, rolled_back, failed, cancelled] }
+        scope: { $ref: "#/components/schemas/BillingMigrationScope" }
+        source:
+          type: object
+          additionalProperties: false
+          required: [adapter, adapterVersion, credentialReference]
+          properties:
+            adapter: { type: string, const: revenuecat }
+            adapterVersion: { type: string }
+            credentialReference: { type: string, description: Opaque encrypted credential row reference, never secret material. }
+        authorityEpochBefore: { type: integer, minimum: 0 }
+        authorityEpochAfter: { type: integer, minimum: 1 }
+        stabilizationDays: { type: integer, minimum: 1, maximum: 30 }
+        rollbackWindowDays: { type: integer, minimum: 1, maximum: 30 }
+    BillingMigrationProgramRecord:
+      type: object
+      additionalProperties: false
+      required: [billingMigrationOperationsContractVersion, recordType, payload]
+      properties:
+        billingMigrationOperationsContractVersion: { type: string, const: "1" }
+        recordType: { type: string, const: migrationProgram }
+        payload: { $ref: "#/components/schemas/BillingMigrationProgramDetail" }
+    BillingMigrationProgramDetail:
+      type: object
+      additionalProperties: false
+      required: [program, operatorCapabilities]
+      properties:
+        program: { $ref: "#/components/schemas/BillingMigrationProgram" }
+        sourceCapabilityAssessment:
+          type: object
+          additionalProperties: false
+          required: [programId, stateVersion, adapter, providerApiVersion, capabilities, assessedAt]
+          properties:
+            programId: { type: string }
+            stateVersion: { type: integer, minimum: 1 }
+            adapter: { type: string }
+            providerApiVersion: { type: string }
+            capabilities: { type: array, items: { type: string } }
+            assessedAt: { $ref: "#/components/schemas/Timestamp" }
+        operatorCapabilities:
+          type: array
+          uniqueItems: true
+          items: { type: string, enum: [view, manage-source, manage-mappings, run-import, assess-readiness, propose-cutover, approve-cutover, execute-cutover, execute-rollback, resolve-cases, execute-repair, delete-source, remove-credential, manage-legal-hold, complete-migration] }
+    BillingMigrationProgramEnvelope:
+      type: object
+      additionalProperties: false
+      required: [data]
+      properties: { data: { $ref: "#/components/schemas/BillingMigrationProgramRecord" } }
+    BillingMigrationProgramListEnvelope:
+      type: object
+      additionalProperties: false
+      required: [data]
+      properties:
+        data:
+          type: object
+          additionalProperties: false
+          required: [items]
+          properties: { items: { type: array, items: { $ref: "#/components/schemas/BillingMigrationProgramRecord" } } }
+    BillingMigrationStateVersionRequest:
+      type: object
+      additionalProperties: false
+      required: [expectedStateVersion]
+      properties: { expectedStateVersion: { type: integer, minimum: 1 } }
+    BillingMigrationOperationEnvelope:
+      type: object
+      required: [data]
+      properties:
+        data:
+          type: object
+          required: [billingMigrationOperationsContractVersion, recordType, payload]
+          properties:
+            billingMigrationOperationsContractVersion: { type: string, const: "1" }
+            recordType: { type: string }
+            payload: { type: object, additionalProperties: true }
+    BillingMigrationCase:
+      type: object
+      additionalProperties: false
+      required: [caseId, programId, classification, status, reason, stateVersion, caseDigest, openedAt, updatedAt]
+      properties: { caseId: { type: string }, programId: { type: string }, classification: { type: string, enum: [critical, blocking, warning, informational] }, status: { type: string, enum: [open, in_progress, resolved, dismissed] }, reason: { type: string }, stateVersion: { type: integer, minimum: 1 }, caseDigest: { $ref: "#/components/schemas/BillingMigrationDigest" }, linkedDivergenceId: { type: string }, linkedSourceRecordId: { type: string }, openedAt: { $ref: "#/components/schemas/Timestamp" }, updatedAt: { $ref: "#/components/schemas/Timestamp" }, resolvedAt: { $ref: "#/components/schemas/Timestamp" } }
+    BillingMigrationCaseAction:
+      type: object
+      additionalProperties: false
+      required: [actionId, caseId, programId, actorId, action, beforeDigest, afterDigest, createdAt]
+      properties: { actionId: { type: string }, caseId: { type: string }, programId: { type: string }, actorId: { type: string }, action: { type: string }, beforeDigest: { $ref: "#/components/schemas/BillingMigrationDigest" }, afterDigest: { $ref: "#/components/schemas/BillingMigrationDigest" }, createdAt: { $ref: "#/components/schemas/Timestamp" } }
+    BillingMigrationRepairPreview:
+      type: object
+      additionalProperties: false
+      required: [previewId, caseId, programId, repairKind, scopeKind, reason, scopeReferences, affectedCount, stateVersion, beforeDigest, afterDigest, previewDigest, caseDigest, policyDigest, scopeDigest, createdByActorId, createdAt, expiresAt]
+      properties: { previewId: { type: string }, caseId: { type: string }, programId: { type: string }, repairKind: { type: string, enum: [provider_revalidate, projection_replay, attach_proven_alias, replace_mapping_set, retry_quarantined_record] }, scopeKind: { type: string }, reason: { type: string }, scopeReferences: { type: array, items: { type: string } }, affectedCount: { type: integer, minimum: 0 }, stateVersion: { type: integer, minimum: 1 }, beforeDigest: { $ref: "#/components/schemas/BillingMigrationDigest" }, afterDigest: { $ref: "#/components/schemas/BillingMigrationDigest" }, previewDigest: { $ref: "#/components/schemas/BillingMigrationDigest" }, caseDigest: { $ref: "#/components/schemas/BillingMigrationDigest" }, policyDigest: { $ref: "#/components/schemas/BillingMigrationDigest" }, scopeDigest: { $ref: "#/components/schemas/BillingMigrationDigest" }, createdByActorId: { type: string }, createdAt: { $ref: "#/components/schemas/Timestamp" }, expiresAt: { $ref: "#/components/schemas/Timestamp" } }
+    BillingMigrationRepairPreviewCommand:
+      type: object
+      additionalProperties: false
+      required: [previewId, caseId, programId, repairKind, scopeKind, reason, scopeReferences, affectedCount, stateVersion, beforeDigest, afterDigest, previewDigest, caseDigest, policyDigest, scopeDigest, createdAt, expiresAt]
+      properties: { previewId: { type: string }, caseId: { type: string }, programId: { type: string }, repairKind: { type: string, enum: [provider_revalidate, projection_replay, attach_proven_alias, replace_mapping_set, retry_quarantined_record] }, scopeKind: { type: string }, reason: { type: string }, scopeReferences: { type: array, items: { type: string } }, affectedCount: { type: integer, minimum: 0 }, stateVersion: { type: integer, minimum: 1 }, beforeDigest: { $ref: "#/components/schemas/BillingMigrationDigest" }, afterDigest: { $ref: "#/components/schemas/BillingMigrationDigest" }, previewDigest: { $ref: "#/components/schemas/BillingMigrationDigest" }, caseDigest: { $ref: "#/components/schemas/BillingMigrationDigest" }, policyDigest: { $ref: "#/components/schemas/BillingMigrationDigest" }, scopeDigest: { $ref: "#/components/schemas/BillingMigrationDigest" }, createdAt: { $ref: "#/components/schemas/Timestamp" }, expiresAt: { $ref: "#/components/schemas/Timestamp" } }
+    BillingMigrationRepairPreviewCommandEnvelope: { type: object, additionalProperties: false, required: [data], properties: { data: { type: object, additionalProperties: false, required: [billingMigrationOperationsContractVersion, recordType, payload], properties: { billingMigrationOperationsContractVersion: { type: string, const: "1" }, recordType: { type: string, const: repairPreview }, payload: { $ref: "#/components/schemas/BillingMigrationRepairPreviewCommand" } } } } }
+    BillingMigrationRepairExecution:
+      oneOf:
+        - { $ref: "#/components/schemas/BillingMigrationRepairExecutionPending" }
+        - { $ref: "#/components/schemas/BillingMigrationRepairExecutionTerminal" }
+    BillingMigrationRepairExecutionPending:
+      type: object
+      additionalProperties: false
+      required: [executionId, previewId, programId, executionStatus, beforeDigest, attemptNumber, executedByActorId, reservedAt]
+      properties: { executionId: { type: string }, previewId: { type: string }, programId: { type: string }, executionStatus: { type: string, const: pending }, beforeDigest: { $ref: "#/components/schemas/BillingMigrationDigest" }, attemptNumber: { type: integer, minimum: 1 }, executedByActorId: { type: string }, reservedAt: { $ref: "#/components/schemas/Timestamp" } }
+    BillingMigrationRepairExecutionTerminal:
+      type: object
+      additionalProperties: false
+      required: [executionId, previewId, programId, executionStatus, result, beforeDigest, afterDigest, resultDigest, attemptNumber, executedByActorId, reservedAt, executedAt]
+      properties: { executionId: { type: string }, previewId: { type: string }, programId: { type: string }, executionStatus: { type: string, const: completed }, result: { type: string, enum: [succeeded, failed, no_change] }, errorCode: { type: string }, beforeDigest: { $ref: "#/components/schemas/BillingMigrationDigest" }, afterDigest: { $ref: "#/components/schemas/BillingMigrationDigest" }, resultDigest: { $ref: "#/components/schemas/BillingMigrationDigest" }, attemptNumber: { type: integer, minimum: 1 }, executedByActorId: { type: string }, reservedAt: { $ref: "#/components/schemas/Timestamp" }, executedAt: { $ref: "#/components/schemas/Timestamp" } }
+    BillingMigrationRepairExecutionCommandPending:
+      type: object
+      additionalProperties: false
+      required: [executionId, previewId, programId, executionStatus, beforeDigest, attemptNumber, executedAt]
+      properties: { executionId: { type: string }, previewId: { type: string }, programId: { type: string }, executionStatus: { type: string, const: pending }, beforeDigest: { $ref: "#/components/schemas/BillingMigrationDigest" }, attemptNumber: { type: integer, minimum: 1 }, executedAt: { $ref: "#/components/schemas/Timestamp" } }
+    BillingMigrationRepairExecutionCommandTerminal:
+      type: object
+      additionalProperties: false
+      required: [executionId, previewId, programId, executionStatus, result, beforeDigest, afterDigest, resultDigest, attemptNumber, executedAt]
+      properties: { executionId: { type: string }, previewId: { type: string }, programId: { type: string }, executionStatus: { type: string, const: completed }, result: { type: string, enum: [succeeded, failed, no_change] }, errorCode: { type: string }, beforeDigest: { $ref: "#/components/schemas/BillingMigrationDigest" }, afterDigest: { $ref: "#/components/schemas/BillingMigrationDigest" }, resultDigest: { $ref: "#/components/schemas/BillingMigrationDigest" }, attemptNumber: { type: integer, minimum: 1 }, executedAt: { $ref: "#/components/schemas/Timestamp" } }
+    BillingMigrationRepairExecutionCommandPendingEnvelope: { type: object, additionalProperties: false, required: [data], properties: { data: { type: object, additionalProperties: false, required: [billingMigrationOperationsContractVersion, recordType, payload], properties: { billingMigrationOperationsContractVersion: { type: string, const: "1" }, recordType: { type: string, const: repairExecution }, payload: { $ref: "#/components/schemas/BillingMigrationRepairExecutionCommandPending" } } } } }
+    BillingMigrationRepairExecutionCommandTerminalEnvelope: { type: object, additionalProperties: false, required: [data], properties: { data: { type: object, additionalProperties: false, required: [billingMigrationOperationsContractVersion, recordType, payload], properties: { billingMigrationOperationsContractVersion: { type: string, const: "1" }, recordType: { type: string, const: repairExecution }, payload: { $ref: "#/components/schemas/BillingMigrationRepairExecutionCommandTerminal" } } } } }
+    BillingMigrationWebhookRedelivery:
+      type: object
+      additionalProperties: false
+      required: [redeliveryId, programId, eventId, destinationId, deliveryId, reason, actorId, stateVersion, expectedEventDigest, createdAt]
+      properties: { redeliveryId: { type: string }, programId: { type: string }, eventId: { type: string }, destinationId: { type: string }, deliveryId: { type: string }, reason: { type: string }, actorId: { type: string }, stateVersion: { type: integer, minimum: 1 }, expectedEventDigest: { $ref: "#/components/schemas/BillingMigrationDigest" }, createdAt: { $ref: "#/components/schemas/Timestamp" } }
+    BillingMigrationCredentialRemoval:
+      type: object
+      additionalProperties: false
+      required: [removalId, programId, credentialId, reason, actorId, removalDigest, stateVersion, early, removedAt]
+      properties: { removalId: { type: string }, programId: { type: string }, credentialId: { type: string }, reason: { type: string }, actorId: { type: string }, removalDigest: { $ref: "#/components/schemas/BillingMigrationDigest" }, stateVersion: { type: integer, minimum: 1 }, early: { type: boolean }, removedAt: { $ref: "#/components/schemas/Timestamp" } }
+    BillingMigrationLegalHoldProposal:
+      type: object
+      additionalProperties: false
+      required: [proposalId, programId, command, reason, externalComplianceReference, proposerActorId, proposalDigest, status, proposedAt, expiresAt]
+      properties: { proposalId: { type: string }, programId: { type: string }, command: { type: string, enum: [set, release] }, reason: { type: string }, externalComplianceReference: { type: string }, proposerActorId: { type: string }, expectedPreviousCommandDigest: { $ref: "#/components/schemas/BillingMigrationDigest" }, proposalDigest: { $ref: "#/components/schemas/BillingMigrationDigest" }, status: { type: string, enum: [pending, approved, expired, invalidated] }, proposedAt: { $ref: "#/components/schemas/Timestamp" }, expiresAt: { $ref: "#/components/schemas/Timestamp" } }
+    BillingMigrationLegalHold:
+      type: object
+      additionalProperties: false
+      required: [holdId, proposalId, programId, command, reason, externalComplianceReference, proposerActorId, approverActorId, commandDigest, production, commandedAt]
+      properties: { holdId: { type: string }, proposalId: { type: string }, programId: { type: string }, command: { type: string, enum: [set, release] }, reason: { type: string }, externalComplianceReference: { type: string }, proposerActorId: { type: string }, approverActorId: { type: string }, previousCommandId: { type: string }, commandDigest: { $ref: "#/components/schemas/BillingMigrationDigest" }, production: { type: boolean }, commandedAt: { $ref: "#/components/schemas/Timestamp" } }
+    BillingMigrationCompletionReport:
+      type: object
+      additionalProperties: false
+      required: [reportId, programId, stateVersion, completionDigest, authorityDigest, stabilityEvidenceDigest, policyDigest, completedByActorId, completedAt, stabilizationEndedAt, rollbackWindowEndedAt, credentialRemovedAt, legalHold]
+      properties: { reportId: { type: string }, programId: { type: string }, stateVersion: { type: integer, minimum: 1 }, completionDigest: { $ref: "#/components/schemas/BillingMigrationDigest" }, authorityDigest: { $ref: "#/components/schemas/BillingMigrationDigest" }, stabilityEvidenceDigest: { $ref: "#/components/schemas/BillingMigrationDigest" }, policyDigest: { $ref: "#/components/schemas/BillingMigrationDigest" }, completedByActorId: { type: string }, completedAt: { $ref: "#/components/schemas/Timestamp" }, stabilizationEndedAt: { $ref: "#/components/schemas/Timestamp" }, rollbackWindowEndedAt: { $ref: "#/components/schemas/Timestamp" }, credentialRemovedAt: { $ref: "#/components/schemas/Timestamp" }, legalHold: { type: boolean }, sourceObjectsDeleteAt: { $ref: "#/components/schemas/Timestamp" } }
+    BillingMigrationCompletionPrerequisites:
+      type: object
+      additionalProperties: false
+      required: [programId, state, policyDigest, authorityDigest, stabilityEvidenceDigest, stateVersion, stabilizationEndsAt, rollbackWindowEndsAt, credentialRemoved, unresolvedCriticalBlocking, authorityStable, webhookReady, eligible]
+      properties:
+        programId: { type: string }
+        state: { type: string }
+        policyDigest: { $ref: "#/components/schemas/BillingMigrationDigest" }
+        authorityDigest: { $ref: "#/components/schemas/BillingMigrationDigest" }
+        stabilityEvidenceDigest: { $ref: "#/components/schemas/BillingMigrationDigest" }
+        stateVersion: { type: integer, minimum: 1 }
+        stabilizationEndsAt: { $ref: "#/components/schemas/Timestamp" }
+        rollbackWindowEndsAt: { $ref: "#/components/schemas/Timestamp" }
+        credentialRemoved: { type: boolean }
+        unresolvedCriticalBlocking: { type: integer, minimum: 0 }
+        authorityStable: { type: boolean }
+        webhookReady: { type: boolean }
+        eligible: { type: boolean }
+    BillingMigrationStabilizationPolicy:
+      type: object
+      additionalProperties: false
+      required: [policyId, programId, policyDigest, frozenByActorId, stateVersion, thresholds, frozenAt]
+      properties: { policyId: { type: string }, programId: { type: string }, policyDigest: { $ref: "#/components/schemas/BillingMigrationDigest" }, frozenByActorId: { type: string }, stateVersion: { type: integer, minimum: 1 }, thresholds: { $ref: "#/components/schemas/BillingMigrationStabilizationThresholds" }, frozenAt: { $ref: "#/components/schemas/Timestamp" } }
+    BillingMigrationStabilizationMetrics:
+      type: object
+      additionalProperties: false
+      required: [authorityMismatches, accessApiErrors, sdkSyncFailures, divergences, validationBacklog, sourceDeltaLagSeconds, webhookFailures, webhookAgeSeconds, quarantinedRecords, supportCases, oldAppVersions, unhealthyWorkers]
+      properties: { authorityMismatches: { type: integer, minimum: 0 }, accessApiErrors: { type: integer, minimum: 0 }, sdkSyncFailures: { type: integer, minimum: 0 }, divergences: { type: integer, minimum: 0 }, validationBacklog: { type: integer, minimum: 0 }, sourceDeltaLagSeconds: { type: integer, minimum: 0 }, webhookFailures: { type: integer, minimum: 0 }, webhookAgeSeconds: { type: integer, minimum: 0 }, quarantinedRecords: { type: integer, minimum: 0 }, supportCases: { type: integer, minimum: 0 }, oldAppVersions: { type: integer, minimum: 0 }, unhealthyWorkers: { type: integer, minimum: 0 } }
+    BillingMigrationStabilizationObservation:
+      type: object
+      additionalProperties: false
+      required: [observationId, programId, policyId, policyDigest, evidenceDigest, stateVersion, authorityEpoch, metrics, sourceWatermark, webhookLastSuccessAt, observedAt, breachCodes, healthy]
+      properties: { observationId: { type: string }, programId: { type: string }, policyId: { type: string }, policyDigest: { $ref: "#/components/schemas/BillingMigrationDigest" }, evidenceDigest: { $ref: "#/components/schemas/BillingMigrationDigest" }, stateVersion: { type: integer, minimum: 1 }, authorityEpoch: { type: integer, minimum: 1 }, metrics: { $ref: "#/components/schemas/BillingMigrationStabilizationMetrics" }, sourceWatermark: { $ref: "#/components/schemas/Timestamp" }, webhookLastSuccessAt: { $ref: "#/components/schemas/Timestamp" }, observedAt: { $ref: "#/components/schemas/Timestamp" }, breachCodes: { type: array, items: { type: string } }, healthy: { type: boolean } }
+    BillingMigrationRollbackReadinessAssessment:
+      type: object
+      additionalProperties: false
+      required: [assessmentId, programId, observationId, latestDeltaId, readinessDigest, stateVersion, sourceSupportAvailable, sourceHealthy, sourceHealthDigest, sourceCurrentAccessDigest, sourceCurrentAccessAt, latestDeltaDigest, customerImpactCount, customerImpactDigest, applicationCompatible, applicationCompatibilityDigest, limitationsBlocking, limitationReportDigest, auditDigest, stabilizationHealthy, ready, assessedByActorId, assessedAt]
+      properties: { assessmentId: { type: string }, programId: { type: string }, observationId: { type: string }, latestDeltaId: { type: string }, readinessDigest: { $ref: "#/components/schemas/BillingMigrationDigest" }, stateVersion: { type: integer, minimum: 1 }, sourceSupportAvailable: { type: boolean }, sourceHealthy: { type: boolean }, sourceHealthDigest: { $ref: "#/components/schemas/BillingMigrationDigest" }, sourceCurrentAccessDigest: { $ref: "#/components/schemas/BillingMigrationDigest" }, sourceCurrentAccessAt: { $ref: "#/components/schemas/Timestamp" }, latestDeltaDigest: { $ref: "#/components/schemas/BillingMigrationDigest" }, customerImpactCount: { type: integer, minimum: 0 }, customerImpactDigest: { $ref: "#/components/schemas/BillingMigrationDigest" }, applicationCompatible: { type: boolean }, applicationCompatibilityDigest: { $ref: "#/components/schemas/BillingMigrationDigest" }, limitationsBlocking: { type: boolean }, limitationReportDigest: { $ref: "#/components/schemas/BillingMigrationDigest" }, auditDigest: { $ref: "#/components/schemas/BillingMigrationDigest" }, stabilizationHealthy: { type: boolean }, ready: { type: boolean }, assessedByActorId: { type: string }, assessedAt: { $ref: "#/components/schemas/Timestamp" } }
+    BillingMigrationRollbackReadinessCheckpoint:
+      type: object
+      additionalProperties: false
+      required: [checkpointId, programId, assessmentId, authorityDigest, policyDigest, evidenceDigest, readinessDigest, checkpointDigest, stateVersion, authorityEpoch, createdByActorId, createdAt]
+      properties: { checkpointId: { type: string }, programId: { type: string }, assessmentId: { type: string }, authorityDigest: { $ref: "#/components/schemas/BillingMigrationDigest" }, policyDigest: { $ref: "#/components/schemas/BillingMigrationDigest" }, evidenceDigest: { $ref: "#/components/schemas/BillingMigrationDigest" }, readinessDigest: { $ref: "#/components/schemas/BillingMigrationDigest" }, checkpointDigest: { $ref: "#/components/schemas/BillingMigrationDigest" }, stateVersion: { type: integer, minimum: 1 }, authorityEpoch: { type: integer, minimum: 1 }, createdByActorId: { type: string }, createdAt: { $ref: "#/components/schemas/Timestamp" } }
+    BillingMigrationSourcePull:
+      type: object
+      additionalProperties: false
+      required: [sourcePullId, programId, intent, status, stateVersion, attemptCount, maxAttempts, createdAt, updatedAt]
+      properties: { sourcePullId: { type: string }, programId: { type: string }, intent: { type: string, enum: [snapshot, delta, final_delta] }, status: { type: string }, startingCursor: { type: string }, startingWatermark: { type: string }, predecessorPullJobId: { type: string }, resultSourceObjectId: { type: string }, resultManifestId: { type: string }, resultImportBatchId: { type: string }, resultFinalDeltaJobId: { type: string }, resultImportStatus: { type: string }, failureCode: { type: string }, stateVersion: { type: integer, minimum: 1 }, attemptCount: { type: integer, minimum: 0 }, maxAttempts: { type: integer, minimum: 1 }, createdAt: { $ref: "#/components/schemas/Timestamp" }, updatedAt: { $ref: "#/components/schemas/Timestamp" }, startedAt: { $ref: "#/components/schemas/Timestamp" }, completedAt: { $ref: "#/components/schemas/Timestamp" }, failedAt: { $ref: "#/components/schemas/Timestamp" } }
+    BillingMigrationProposal:
+      type: object
+      additionalProperties: false
+      required: [proposalId, programId, stateVersion, command, proposerActorId, reason, proposalDigest, status, proposedAt, expiresAt]
+      properties: { proposalId: { type: string }, programId: { type: string }, stateVersion: { type: integer, minimum: 1 }, command: { type: string, enum: [cutover, rollback] }, proposerActorId: { type: string }, reason: { type: string }, proposalDigest: { $ref: "#/components/schemas/BillingMigrationDigest" }, status: { type: string }, proposedAt: { $ref: "#/components/schemas/Timestamp" }, expiresAt: { $ref: "#/components/schemas/Timestamp" } }
+    BillingMigrationApproval:
+      type: object
+      additionalProperties: false
+      required: [approvalId, programId, stateVersion, command, proposerActorId, approverActorId, approvalDigest, approvedAt, expiresAt]
+      properties: { approvalId: { type: string }, programId: { type: string }, stateVersion: { type: integer, minimum: 1 }, command: { type: string, enum: [cutover, rollback] }, proposerActorId: { type: string }, approverActorId: { type: string }, approvalDigest: { $ref: "#/components/schemas/BillingMigrationDigest" }, approvedAt: { $ref: "#/components/schemas/Timestamp" }, expiresAt: { $ref: "#/components/schemas/Timestamp" } }
+    BillingMigrationCheckpoint:
+      type: object
+      additionalProperties: false
+      required: [checkpointId, programId, stateVersion, scope, authorityEpoch, sourceWatermark, providerWatermark, shadowWatermark, manifestDigest, mappingDigest, policyDigest, readinessDigest, checkpointDigest, cohortDigest, createdAt]
+      properties:
+        checkpointId: { type: string }
+        programId: { type: string }
+        stateVersion: { type: integer, minimum: 1 }
+        scope: { $ref: "#/components/schemas/BillingMigrationScope" }
+        authorityEpoch: { type: integer, minimum: 1 }
+        sourceWatermark: { $ref: "#/components/schemas/Timestamp" }
+        providerWatermark: { $ref: "#/components/schemas/Timestamp" }
+        shadowWatermark: { $ref: "#/components/schemas/Timestamp" }
+        manifestDigest: { $ref: "#/components/schemas/BillingMigrationDigest" }
+        mappingDigest: { $ref: "#/components/schemas/BillingMigrationDigest" }
+        policyDigest: { $ref: "#/components/schemas/BillingMigrationDigest" }
+        readinessDigest: { $ref: "#/components/schemas/BillingMigrationDigest" }
+        checkpointDigest: { $ref: "#/components/schemas/BillingMigrationDigest" }
+        cohortDigest: { $ref: "#/components/schemas/BillingMigrationDigest" }
+        createdAt: { $ref: "#/components/schemas/Timestamp" }
+    BillingMigrationAuthorityExecution:
+      type: object
+      additionalProperties: false
+      required: [executionId, programId, command, state, stateVersion, authorityEpoch, transitionIds, executedAt]
+      properties: { executionId: { type: string }, programId: { type: string }, command: { type: string, enum: [cutover, rollback] }, state: { type: string }, stateVersion: { type: integer, minimum: 0 }, authorityEpoch: { type: integer, minimum: 0 }, transitionIds: { type: array, items: { type: string } }, executedAt: { $ref: "#/components/schemas/Timestamp" } }
+    BillingMigrationSourcePullPageEnvelope: { type: object, additionalProperties: false, required: [data], properties: { data: { type: object, additionalProperties: false, required: [items], properties: { items: { type: array, items: { $ref: "#/components/schemas/BillingMigrationSourcePull" } }, nextCursor: { type: string } } } } }
+    BillingMigrationProposalPageEnvelope: { type: object, additionalProperties: false, required: [data], properties: { data: { type: object, additionalProperties: false, required: [items], properties: { items: { type: array, items: { $ref: "#/components/schemas/BillingMigrationProposal" } }, nextCursor: { type: string } } } } }
+    BillingMigrationApprovalPageEnvelope: { type: object, additionalProperties: false, required: [data], properties: { data: { type: object, additionalProperties: false, required: [items], properties: { items: { type: array, items: { $ref: "#/components/schemas/BillingMigrationApproval" } }, nextCursor: { type: string } } } } }
+    BillingMigrationCheckpointPageEnvelope: { type: object, additionalProperties: false, required: [data], properties: { data: { type: object, additionalProperties: false, required: [items], properties: { items: { type: array, items: { $ref: "#/components/schemas/BillingMigrationCheckpoint" } }, nextCursor: { type: string } } } } }
+    BillingMigrationAuthorityExecutionPageEnvelope: { type: object, additionalProperties: false, required: [data], properties: { data: { type: object, additionalProperties: false, required: [items], properties: { items: { type: array, items: { $ref: "#/components/schemas/BillingMigrationAuthorityExecution" } }, nextCursor: { type: string } } } } }
+    BillingMigrationCasePageEnvelope: { type: object, additionalProperties: false, required: [data], properties: { data: { type: object, additionalProperties: false, required: [items], properties: { items: { type: array, items: { $ref: "#/components/schemas/BillingMigrationCase" } }, nextCursor: { type: string } } } } }
+    BillingMigrationCaseActionPageEnvelope: { type: object, additionalProperties: false, required: [data], properties: { data: { type: object, additionalProperties: false, required: [items], properties: { items: { type: array, items: { $ref: "#/components/schemas/BillingMigrationCaseAction" } }, nextCursor: { type: string } } } } }
+    BillingMigrationRepairPreviewPageEnvelope: { type: object, additionalProperties: false, required: [data], properties: { data: { type: object, additionalProperties: false, required: [items], properties: { items: { type: array, items: { $ref: "#/components/schemas/BillingMigrationRepairPreview" } }, nextCursor: { type: string } } } } }
+    BillingMigrationRepairExecutionPageEnvelope: { type: object, additionalProperties: false, required: [data], properties: { data: { type: object, additionalProperties: false, required: [items], properties: { items: { type: array, items: { $ref: "#/components/schemas/BillingMigrationRepairExecution" } }, nextCursor: { type: string } } } } }
+    BillingMigrationWebhookRedeliveryPageEnvelope: { type: object, additionalProperties: false, required: [data], properties: { data: { type: object, additionalProperties: false, required: [items], properties: { items: { type: array, items: { $ref: "#/components/schemas/BillingMigrationWebhookRedelivery" } }, nextCursor: { type: string } } } } }
+    BillingMigrationCredentialRemovalPageEnvelope: { type: object, additionalProperties: false, required: [data], properties: { data: { type: object, additionalProperties: false, required: [items], properties: { items: { type: array, items: { $ref: "#/components/schemas/BillingMigrationCredentialRemoval" } }, nextCursor: { type: string } } } } }
+    BillingMigrationLegalHoldProposalPageEnvelope: { type: object, additionalProperties: false, required: [data], properties: { data: { type: object, additionalProperties: false, required: [items], properties: { items: { type: array, items: { $ref: "#/components/schemas/BillingMigrationLegalHoldProposal" } }, nextCursor: { type: string } } } } }
+    BillingMigrationLegalHoldPageEnvelope: { type: object, additionalProperties: false, required: [data], properties: { data: { type: object, additionalProperties: false, required: [items], properties: { items: { type: array, items: { $ref: "#/components/schemas/BillingMigrationLegalHold" } }, nextCursor: { type: string } } } } }
+    BillingMigrationCompletionReportPageEnvelope: { type: object, additionalProperties: false, required: [data], properties: { data: { type: object, additionalProperties: false, required: [items], properties: { items: { type: array, items: { $ref: "#/components/schemas/BillingMigrationCompletionReport" } }, nextCursor: { type: string } } } } }
+    BillingMigrationStabilizationObservationPageEnvelope: { type: object, additionalProperties: false, required: [data], properties: { data: { type: object, additionalProperties: false, required: [items], properties: { items: { type: array, items: { $ref: "#/components/schemas/BillingMigrationStabilizationObservation" } }, nextCursor: { type: string } } } } }
+    BillingMigrationRollbackReadinessAssessmentPageEnvelope: { type: object, additionalProperties: false, required: [data], properties: { data: { type: object, additionalProperties: false, required: [items], properties: { items: { type: array, items: { $ref: "#/components/schemas/BillingMigrationRollbackReadinessAssessment" } }, nextCursor: { type: string } } } } }
+    BillingMigrationSourcePullEnvelope: { $ref: "#/components/schemas/BillingMigrationSourcePullRecord" }
+    BillingMigrationProposalEnvelope: { $ref: "#/components/schemas/BillingMigrationProposalRecord" }
+    BillingMigrationApprovalEnvelope: { $ref: "#/components/schemas/BillingMigrationApprovalRecord" }
+    BillingMigrationCheckpointEnvelope: { $ref: "#/components/schemas/BillingMigrationCheckpointRecord" }
+    BillingMigrationAuthorityExecutionEnvelope: { $ref: "#/components/schemas/BillingMigrationAuthorityExecutionRecord" }
+    BillingMigrationCaseEnvelope: { $ref: "#/components/schemas/BillingMigrationCaseRecord" }
+    BillingMigrationRepairPreviewEnvelope: { $ref: "#/components/schemas/BillingMigrationRepairPreviewRecord" }
+    BillingMigrationRepairExecutionEnvelope: { $ref: "#/components/schemas/BillingMigrationRepairExecutionRecord" }
+    BillingMigrationWebhookRedeliveryEnvelope: { $ref: "#/components/schemas/BillingMigrationWebhookRedeliveryRecord" }
+    BillingMigrationCredentialRemovalEnvelope: { $ref: "#/components/schemas/BillingMigrationCredentialRemovalRecord" }
+    BillingMigrationLegalHoldProposalEnvelope: { $ref: "#/components/schemas/BillingMigrationLegalHoldProposalRecord" }
+    BillingMigrationLegalHoldEnvelope: { $ref: "#/components/schemas/BillingMigrationLegalHoldRecord" }
+    BillingMigrationCompletionReportEnvelope: { $ref: "#/components/schemas/BillingMigrationCompletionReportRecord" }
+    BillingMigrationCompletionPrerequisitesEnvelope: { $ref: "#/components/schemas/BillingMigrationCompletionPrerequisitesRecord" }
+    BillingMigrationStabilizationPolicyEnvelope: { $ref: "#/components/schemas/BillingMigrationStabilizationPolicyRecord" }
+    BillingMigrationStabilizationObservationEnvelope: { $ref: "#/components/schemas/BillingMigrationStabilizationObservationRecord" }
+    BillingMigrationRollbackReadinessAssessmentEnvelope: { $ref: "#/components/schemas/BillingMigrationRollbackReadinessAssessmentRecord" }
+    BillingMigrationRollbackReadinessCheckpointEnvelope: { $ref: "#/components/schemas/BillingMigrationRollbackReadinessCheckpointRecord" }
+    BillingMigrationSourcePullRecord: { type: object, additionalProperties: false, required: [data], properties: { data: { type: object, additionalProperties: false, required: [billingMigrationOperationsContractVersion, recordType, payload], properties: { billingMigrationOperationsContractVersion: { type: string, const: "1" }, recordType: { type: string, const: sourcePullJob }, payload: { $ref: "#/components/schemas/BillingMigrationSourcePull" } } } } }
+    BillingMigrationProposalRecord: { type: object, additionalProperties: false, required: [data], properties: { data: { type: object, additionalProperties: false, required: [billingMigrationOperationsContractVersion, recordType, payload], properties: { billingMigrationOperationsContractVersion: { type: string, const: "1" }, recordType: { type: string, const: migrationProposal }, payload: { $ref: "#/components/schemas/BillingMigrationProposal" } } } } }
+    BillingMigrationApprovalRecord: { type: object, additionalProperties: false, required: [data], properties: { data: { type: object, additionalProperties: false, required: [billingMigrationOperationsContractVersion, recordType, payload], properties: { billingMigrationOperationsContractVersion: { type: string, const: "1" }, recordType: { type: string, const: migrationApproval }, payload: { $ref: "#/components/schemas/BillingMigrationApproval" } } } } }
+    BillingMigrationCheckpointRecord: { type: object, additionalProperties: false, required: [data], properties: { data: { type: object, additionalProperties: false, required: [billingMigrationOperationsContractVersion, recordType, payload], properties: { billingMigrationOperationsContractVersion: { type: string, const: "1" }, recordType: { type: string, const: migrationCheckpoint }, payload: { $ref: "#/components/schemas/BillingMigrationCheckpoint" } } } } }
+    BillingMigrationAuthorityExecutionRecord: { type: object, additionalProperties: false, required: [data], properties: { data: { type: object, additionalProperties: false, required: [billingMigrationOperationsContractVersion, recordType, payload], properties: { billingMigrationOperationsContractVersion: { type: string, const: "1" }, recordType: { type: string, const: authorityExecution }, payload: { $ref: "#/components/schemas/BillingMigrationAuthorityExecution" } } } } }
+    BillingMigrationCaseRecord: { type: object, additionalProperties: false, required: [data], properties: { data: { type: object, additionalProperties: false, required: [billingMigrationOperationsContractVersion, recordType, payload], properties: { billingMigrationOperationsContractVersion: { type: string, const: "1" }, recordType: { type: string, const: migrationCase }, payload: { $ref: "#/components/schemas/BillingMigrationCase" } } } } }
+    BillingMigrationRepairPreviewRecord: { type: object, additionalProperties: false, required: [data], properties: { data: { type: object, additionalProperties: false, required: [billingMigrationOperationsContractVersion, recordType, payload], properties: { billingMigrationOperationsContractVersion: { type: string, const: "1" }, recordType: { type: string, const: repairPreview }, payload: { $ref: "#/components/schemas/BillingMigrationRepairPreview" } } } } }
+    BillingMigrationRepairExecutionRecord: { type: object, additionalProperties: false, required: [data], properties: { data: { type: object, additionalProperties: false, required: [billingMigrationOperationsContractVersion, recordType, payload], properties: { billingMigrationOperationsContractVersion: { type: string, const: "1" }, recordType: { type: string, const: repairExecution }, payload: { $ref: "#/components/schemas/BillingMigrationRepairExecution" } } } } }
+    BillingMigrationWebhookRedeliveryRecord: { type: object, additionalProperties: false, required: [data], properties: { data: { type: object, additionalProperties: false, required: [billingMigrationOperationsContractVersion, recordType, payload], properties: { billingMigrationOperationsContractVersion: { type: string, const: "1" }, recordType: { type: string, const: webhookRedelivery }, payload: { $ref: "#/components/schemas/BillingMigrationWebhookRedelivery" } } } } }
+    BillingMigrationCredentialRemovalRecord: { type: object, additionalProperties: false, required: [data], properties: { data: { type: object, additionalProperties: false, required: [billingMigrationOperationsContractVersion, recordType, payload], properties: { billingMigrationOperationsContractVersion: { type: string, const: "1" }, recordType: { type: string, const: credentialRemoval }, payload: { $ref: "#/components/schemas/BillingMigrationCredentialRemoval" } } } } }
+    BillingMigrationLegalHoldProposalRecord: { type: object, additionalProperties: false, required: [data], properties: { data: { type: object, additionalProperties: false, required: [billingMigrationOperationsContractVersion, recordType, payload], properties: { billingMigrationOperationsContractVersion: { type: string, const: "1" }, recordType: { type: string, const: legalHoldProposal }, payload: { $ref: "#/components/schemas/BillingMigrationLegalHoldProposal" } } } } }
+    BillingMigrationLegalHoldRecord: { type: object, additionalProperties: false, required: [data], properties: { data: { type: object, additionalProperties: false, required: [billingMigrationOperationsContractVersion, recordType, payload], properties: { billingMigrationOperationsContractVersion: { type: string, const: "1" }, recordType: { type: string, const: legalHold }, payload: { $ref: "#/components/schemas/BillingMigrationLegalHold" } } } } }
+    BillingMigrationCompletionReportRecord: { type: object, additionalProperties: false, required: [data], properties: { data: { type: object, additionalProperties: false, required: [billingMigrationOperationsContractVersion, recordType, payload], properties: { billingMigrationOperationsContractVersion: { type: string, const: "1" }, recordType: { type: string, const: completionReport }, payload: { $ref: "#/components/schemas/BillingMigrationCompletionReport" } } } } }
+    BillingMigrationCompletionPrerequisitesRecord: { type: object, additionalProperties: false, required: [data], properties: { data: { type: object, additionalProperties: false, required: [billingMigrationOperationsContractVersion, recordType, payload], properties: { billingMigrationOperationsContractVersion: { type: string, const: "1" }, recordType: { type: string, const: completionPrerequisites }, payload: { $ref: "#/components/schemas/BillingMigrationCompletionPrerequisites" } } } } }
+    BillingMigrationStabilizationPolicyRecord: { type: object, additionalProperties: false, required: [data], properties: { data: { type: object, additionalProperties: false, required: [billingMigrationOperationsContractVersion, recordType, payload], properties: { billingMigrationOperationsContractVersion: { type: string, const: "1" }, recordType: { type: string, const: stabilizationPolicy }, payload: { $ref: "#/components/schemas/BillingMigrationStabilizationPolicy" } } } } }
+    BillingMigrationStabilizationObservationRecord: { type: object, additionalProperties: false, required: [data], properties: { data: { type: object, additionalProperties: false, required: [billingMigrationOperationsContractVersion, recordType, payload], properties: { billingMigrationOperationsContractVersion: { type: string, const: "1" }, recordType: { type: string, const: stabilizationObservation }, payload: { $ref: "#/components/schemas/BillingMigrationStabilizationObservation" } } } } }
+    BillingMigrationRollbackReadinessAssessmentRecord: { type: object, additionalProperties: false, required: [data], properties: { data: { type: object, additionalProperties: false, required: [billingMigrationOperationsContractVersion, recordType, payload], properties: { billingMigrationOperationsContractVersion: { type: string, const: "1" }, recordType: { type: string, const: rollbackReadinessAssessment }, payload: { $ref: "#/components/schemas/BillingMigrationRollbackReadinessAssessment" } } } } }
+    BillingMigrationRollbackReadinessCheckpointRecord: { type: object, additionalProperties: false, required: [data], properties: { data: { type: object, additionalProperties: false, required: [billingMigrationOperationsContractVersion, recordType, payload], properties: { billingMigrationOperationsContractVersion: { type: string, const: "1" }, recordType: { type: string, const: rollbackReadinessCheckpoint }, payload: { $ref: "#/components/schemas/BillingMigrationRollbackReadinessCheckpoint" } } } } }
+    BillingMigrationStabilizationThresholds:
+      type: object
+      additionalProperties: false
+      required: [authorityMismatchMax, accessApiErrorMax, sdkSyncFailureMax, divergenceMax, validationBacklogMax, sourceDeltaLagMaxSeconds, webhookFailureMax, webhookFreshnessMaxSeconds, quarantineMax, supportCaseMax, oldAppVersionMax, workerUnhealthyMax]
+      properties:
+        authorityMismatchMax: { type: integer, minimum: 0 }
+        accessApiErrorMax: { type: integer, minimum: 0 }
+        sdkSyncFailureMax: { type: integer, minimum: 0 }
+        divergenceMax: { type: integer, minimum: 0 }
+        validationBacklogMax: { type: integer, minimum: 0 }
+        sourceDeltaLagMaxSeconds: { type: integer, minimum: 1 }
+        webhookFailureMax: { type: integer, minimum: 0 }
+        webhookFreshnessMaxSeconds: { type: integer, minimum: 1 }
+        quarantineMax: { type: integer, minimum: 0 }
+        supportCaseMax: { type: integer, minimum: 0 }
+        oldAppVersionMax: { type: integer, minimum: 0 }
+        workerUnhealthyMax: { type: integer, minimum: 0 }
+    BillingMigrationFreezeStabilizationPolicyRequest:
+      type: object
+      additionalProperties: false
+      required: [expectedStateVersion, thresholds]
+      properties:
+        expectedStateVersion: { type: integer, minimum: 1 }
+        thresholds: { $ref: "#/components/schemas/BillingMigrationStabilizationThresholds" }
+    BillingMigrationObserveStabilizationRequest:
+      type: object
+      additionalProperties: false
+      required: [expectedStateVersion, expectedAuthorityEpoch, expectedPolicyDigest]
+      properties:
+        expectedStateVersion: { type: integer, minimum: 1 }
+        expectedAuthorityEpoch: { type: integer, minimum: 1 }
+        expectedPolicyDigest: { $ref: "#/components/schemas/BillingMigrationDigest" }
+    BillingMigrationAssessRollbackReadinessRequest:
+      type: object
+      additionalProperties: false
+      required: [observationId, expectedStateVersion, expectedAuthorityEpoch, expectedObservationDigest]
+      properties:
+        observationId: { type: string, minLength: 1, maxLength: 128 }
+        expectedStateVersion: { type: integer, minimum: 1 }
+        expectedAuthorityEpoch: { type: integer, minimum: 1 }
+        expectedObservationDigest: { $ref: "#/components/schemas/BillingMigrationDigest" }
+    BillingMigrationDigestSet:
+      type: object
+      additionalProperties: false
+      required: [scope, manifest, mapping, policy, evidence, readiness, finalWatermark, applicationVersion]
+      properties:
+        scope: { $ref: "#/components/schemas/BillingMigrationDigest" }
+        manifest: { $ref: "#/components/schemas/BillingMigrationDigest" }
+        mapping: { $ref: "#/components/schemas/BillingMigrationDigest" }
+        policy: { $ref: "#/components/schemas/BillingMigrationDigest" }
+        evidence: { $ref: "#/components/schemas/BillingMigrationDigest" }
+        readiness: { $ref: "#/components/schemas/BillingMigrationDigest" }
+        finalWatermark: { $ref: "#/components/schemas/BillingMigrationDigest" }
+        applicationVersion: { $ref: "#/components/schemas/BillingMigrationDigest" }
+    BillingMigrationSourcePullRequest:
+      type: object
+      additionalProperties: false
+      required: [intent, expectedStateVersion]
+      properties:
+        intent: { type: string, enum: [snapshot, delta, final_delta] }
+        startingCursor: { type: string, maxLength: 512 }
+        startingWatermark: { type: string, maxLength: 512 }
+        startingWatermarkDigest: { $ref: "#/components/schemas/BillingMigrationDigest" }
+        expectedStateVersion: { type: integer, minimum: 1 }
+    BillingMigrationCutoverProposalRequest:
+      type: object
+      additionalProperties: false
+      required: [expectedStateVersion, expectedDigests, reason, expiresAt]
+      properties:
+        expectedStateVersion: { type: integer, minimum: 1 }
+        expectedDigests: { $ref: "#/components/schemas/BillingMigrationDigestSet" }
+        reason: { type: string, minLength: 1, maxLength: 500 }
+        expiresAt: { $ref: "#/components/schemas/Timestamp" }
+    BillingMigrationRollbackProposalRequest:
+      type: object
+      additionalProperties: false
+      required: [checkpointId, expectedStateVersion, expectedCheckpointDigest, expectedAuthorityDigest, expectedRollbackPrerequisitesDigest, reason, expiresAt]
+      properties:
+        checkpointId: { type: string, minLength: 1, maxLength: 128 }
+        expectedStateVersion: { type: integer, minimum: 1 }
+        expectedCheckpointDigest: { $ref: "#/components/schemas/BillingMigrationDigest" }
+        expectedAuthorityDigest: { $ref: "#/components/schemas/BillingMigrationDigest" }
+        expectedRollbackPrerequisitesDigest: { $ref: "#/components/schemas/BillingMigrationDigest" }
+        reason: { type: string, minLength: 1, maxLength: 500 }
+        expiresAt: { $ref: "#/components/schemas/Timestamp" }
+    BillingMigrationCheckpointRequest:
+      type: object
+      additionalProperties: false
+      required: [approvalId, expectedStateVersion, expectedDigests, approvalDigest, cohortDigest]
+      properties:
+        approvalId: { type: string, minLength: 1, maxLength: 128 }
+        expectedStateVersion: { type: integer, minimum: 1 }
+        expectedDigests: { $ref: "#/components/schemas/BillingMigrationDigestSet" }
+        approvalDigest: { $ref: "#/components/schemas/BillingMigrationDigest" }
+        cohortDigest: { $ref: "#/components/schemas/BillingMigrationDigest" }
+    BillingMigrationExecutionScope:
+      type: object
+      additionalProperties: false
+      required: [environmentId, applications]
+      properties:
+        environmentId: { type: string, minLength: 1, maxLength: 128 }
+        applications: { type: array, minItems: 1, maxItems: 100, items: { $ref: "#/components/schemas/BillingMigrationScopeItem" } }
+    BillingMigrationCutoverExecutionRequest:
+      type: object
+      additionalProperties: false
+      required: [expectedStateVersion, expectedDigests, approvalDigest, reason, scope, checkpointId, approvalId, expectedAuthorityEpoch]
+      properties:
+        expectedStateVersion: { type: integer, minimum: 1 }
+        expectedDigests: { $ref: "#/components/schemas/BillingMigrationDigestSet" }
+        approvalDigest: { $ref: "#/components/schemas/BillingMigrationDigest" }
+        reason: { type: string, minLength: 1, maxLength: 500 }
+        scope: { $ref: "#/components/schemas/BillingMigrationExecutionScope" }
+        checkpointId: { type: string, minLength: 1, maxLength: 128 }
+        approvalId: { type: string, minLength: 1, maxLength: 128 }
+        expectedAuthorityEpoch: { type: integer, minimum: 0 }
+    BillingMigrationRollbackExecutionRequest:
+      type: object
+      additionalProperties: false
+      required: [expectedStateVersion, expectedCheckpointDigest, expectedAuthorityDigest, expectedRollbackPrerequisitesDigest, expectedApprovalDigest, reason, scope, checkpointId, approvalId, expectedAuthorityEpoch]
+      properties:
+        expectedStateVersion: { type: integer, minimum: 1 }
+        expectedCheckpointDigest: { $ref: "#/components/schemas/BillingMigrationDigest" }
+        expectedAuthorityDigest: { $ref: "#/components/schemas/BillingMigrationDigest" }
+        expectedRollbackPrerequisitesDigest: { $ref: "#/components/schemas/BillingMigrationDigest" }
+        expectedApprovalDigest: { $ref: "#/components/schemas/BillingMigrationDigest" }
+        reason: { type: string, minLength: 1, maxLength: 500 }
+        scope: { $ref: "#/components/schemas/BillingMigrationExecutionScope" }
+        checkpointId: { type: string, minLength: 1, maxLength: 128 }
+        approvalId: { type: string, minLength: 1, maxLength: 128 }
+        expectedAuthorityEpoch: { type: integer, minimum: 1 }
+    BillingMigrationCaseRequest:
+      type: object
+      additionalProperties: false
+      required: [expectedStateVersion, classification, reason]
+      properties:
+        expectedStateVersion: { type: integer, minimum: 1 }
+        classification: { type: string, enum: [critical, blocking, warning] }
+        reason: { type: string, minLength: 1, maxLength: 500 }
+        linkedDivergenceId: { type: string, maxLength: 128 }
+        linkedSourceRecordId: { type: string, maxLength: 128 }
+    BillingMigrationCaseTransitionRequest:
+      type: object
+      additionalProperties: false
+      required: [expectedStateVersion, expectedCaseDigest, status, reason]
+      properties:
+        expectedStateVersion: { type: integer, minimum: 1 }
+        expectedCaseDigest: { $ref: "#/components/schemas/BillingMigrationDigest" }
+        status: { type: string, enum: [in_progress, resolved, dismissed] }
+        reason: { type: string, minLength: 1, maxLength: 500 }
+    BillingMigrationRepairPreviewRequest:
+      type: object
+      additionalProperties: false
+      required: [caseId, repairKind, scopeKind, scopeReferences, expectedStateVersion, expectedCaseDigest, expectedPolicyDigest, expectedScopeDigest, reason, expiresAt]
+      properties:
+        caseId: { type: string, minLength: 1, maxLength: 128 }
+        repairKind: { type: string, enum: [provider_revalidate, projection_replay, attach_proven_alias, replace_mapping_set, retry_quarantined_record] }
+        scopeKind: { type: string, minLength: 1 }
+        scopeReferences: { type: array, minItems: 1, maxItems: 100, items: { type: string } }
+        expectedStateVersion: { type: integer, minimum: 1 }
+        expectedCaseDigest: { $ref: "#/components/schemas/BillingMigrationDigest" }
+        expectedPolicyDigest: { $ref: "#/components/schemas/BillingMigrationDigest" }
+        expectedScopeDigest: { $ref: "#/components/schemas/BillingMigrationDigest" }
+        reason: { type: string, minLength: 1, maxLength: 500 }
+        expiresAt: { $ref: "#/components/schemas/Timestamp" }
+    BillingMigrationRepairExecutionRequest:
+      type: object
+      additionalProperties: false
+      required: [previewId, expectedStateVersion, expectedPreviewDigest, expectedCaseDigest, expectedPolicyDigest, expectedScopeDigest]
+      properties:
+        previewId: { type: string, minLength: 1, maxLength: 128 }
+        expectedStateVersion: { type: integer, minimum: 1 }
+        expectedPreviewDigest: { $ref: "#/components/schemas/BillingMigrationDigest" }
+        expectedCaseDigest: { $ref: "#/components/schemas/BillingMigrationDigest" }
+        expectedPolicyDigest: { $ref: "#/components/schemas/BillingMigrationDigest" }
+        expectedScopeDigest: { $ref: "#/components/schemas/BillingMigrationDigest" }
+    BillingMigrationRedeliveryRequest:
+      type: object
+      additionalProperties: false
+      required: [eventId, destinationId, expectedEventDigest, expectedStateVersion, reason]
+      properties:
+        eventId: { type: string, minLength: 1, maxLength: 128 }
+        destinationId: { type: string, minLength: 1, maxLength: 128 }
+        expectedEventDigest: { $ref: "#/components/schemas/BillingMigrationDigest" }
+        expectedStateVersion: { type: integer, minimum: 1 }
+        reason: { type: string, minLength: 1, maxLength: 500 }
+    BillingMigrationCredentialRemovalRequest:
+      type: object
+      additionalProperties: false
+      required: [expectedStateVersion, reason, irreversibleAcknowledged]
+      properties:
+        expectedStateVersion: { type: integer, minimum: 1 }
+        reason: { type: string, minLength: 1, maxLength: 500 }
+        irreversibleAcknowledged: { type: boolean, const: true }
+    BillingMigrationLegalHoldProposalRequest:
+      type: object
+      additionalProperties: false
+      required: [command, reason, externalComplianceReference, expiresAt]
+      properties:
+        command: { type: string, enum: [set, release] }
+        reason: { type: string, minLength: 1, maxLength: 500 }
+        externalComplianceReference: { type: string, minLength: 1, maxLength: 256 }
+        expectedPreviousCommandDigest: { $ref: "#/components/schemas/BillingMigrationDigest" }
+        expiresAt: { $ref: "#/components/schemas/Timestamp" }
+    BillingMigrationLegalHoldApprovalRequest:
+      type: object
+      additionalProperties: false
+      required: [expectedProposalDigest]
+      properties: { expectedProposalDigest: { $ref: "#/components/schemas/BillingMigrationDigest" } }
+    BillingMigrationCompletionRequest:
+      type: object
+      additionalProperties: false
+      required: [expectedStateVersion, expectedPolicyDigest, expectedAuthorityDigest, expectedStabilityEvidenceDigest]
+      properties:
+        expectedStateVersion: { type: integer, minimum: 1 }
+        expectedPolicyDigest: { $ref: "#/components/schemas/BillingMigrationDigest" }
+        expectedAuthorityDigest: { $ref: "#/components/schemas/BillingMigrationDigest" }
+        expectedStabilityEvidenceDigest: { $ref: "#/components/schemas/BillingMigrationDigest" }
+    BillingMigrationDigest:
+      type: string
+      minLength: 71
+      maxLength: 71
+      pattern: "^sha256:[0-9a-f]{64}$"
+    BillingMigrationSourceManifest:
+      type: object
+      additionalProperties: false
+      required: [programId, stateVersion, manifestId, adapterVersion, providerApiVersion, schemaVersion, recordCount, currentAccessRecordCount, objectChecksum, manifestDigest, capturedAt]
+      properties:
+        programId: { type: string }
+        stateVersion: { type: integer, minimum: 1 }
+        manifestId: { type: string }
+        adapterVersion: { type: string }
+        providerApiVersion: { type: string }
+        schemaVersion: { type: string }
+        recordCount: { type: integer, minimum: 0 }
+        currentAccessRecordCount: { type: integer, minimum: 0 }
+        objectChecksum: { $ref: "#/components/schemas/BillingMigrationDigest" }
+        manifestDigest: { $ref: "#/components/schemas/BillingMigrationDigest" }
+        capturedAt: { $ref: "#/components/schemas/Timestamp" }
+    BillingMigrationSourceManifestListEnvelope:
+      type: object
+      required: [data]
+      properties: { data: { type: object, required: [items], properties: { items: { type: array, items: { type: object, required: [billingMigrationOperationsContractVersion, recordType, payload], properties: { billingMigrationOperationsContractVersion: { type: string, const: "1" }, recordType: { type: string, const: sourceManifest }, payload: { $ref: "#/components/schemas/BillingMigrationSourceManifest" } } } } } } }
+    BillingMigrationMappingSet:
+      type: object
+      additionalProperties: false
+      required: [programId, stateVersion, mappingSetId, version, status, entries, mappingDigest]
+      properties:
+        programId: { type: string }
+        stateVersion: { type: integer, minimum: 1 }
+        mappingSetId: { type: string }
+        version: { type: integer, minimum: 1 }
+        status: { type: string, enum: [draft, frozen] }
+        entries: { type: array, maxItems: 10000, items: { $ref: "#/components/schemas/BillingMigrationMappingEntry" } }
+        mappingDigest: { $ref: "#/components/schemas/BillingMigrationDigest" }
+    BillingMigrationMappingEntry:
+      type: object
+      additionalProperties: false
+      required: [sourceKind, sourceIdentifier, targetId, matchKind]
+      properties:
+        sourceKind: { type: string, enum: [customer_id, original_customer_id, audited_alias, product, entitlement] }
+        sourceIdentifier: { type: string, minLength: 1, maxLength: 512, pattern: '^[^\r\n\u0000-\u001F\u007F]+$' }
+        targetId: { type: string }
+        matchKind: { type: string, enum: [exact, audited_alias] }
+    BillingMigrationMappingSetEnvelope:
+      type: object
+      required: [data]
+      properties: { data: { type: object, required: [billingMigrationOperationsContractVersion, recordType, payload], properties: { billingMigrationOperationsContractVersion: { type: string, const: "1" }, recordType: { type: string, const: mappingSet }, payload: { $ref: "#/components/schemas/BillingMigrationMappingSet" } } } }
+    BillingMigrationMappingSetListEnvelope:
+      type: object
+      required: [data]
+      properties: { data: { type: object, required: [items], properties: { items: { type: array, items: { type: object, required: [billingMigrationOperationsContractVersion, recordType, payload], properties: { billingMigrationOperationsContractVersion: { type: string, const: "1" }, recordType: { type: string, const: mappingSet }, payload: { $ref: "#/components/schemas/BillingMigrationMappingSet" } } } } } } }
+    BillingMigrationReadiness:
+      type: object
+      additionalProperties: false
+      required: [programId, stateVersion, ready, currentAccessMappingPercent, currentAccessEvidencePercent, unresolved, finalDeltaCompleted, watermarksFresh, supportedVersionsAuthorityAware, readinessDigest]
+      properties:
+        programId: { type: string }
+        stateVersion: { type: integer, minimum: 1 }
+        ready: { type: boolean }
+        currentAccessMappingPercent: { type: number, minimum: 0, maximum: 100 }
+        currentAccessEvidencePercent: { type: number, minimum: 0, maximum: 100, description: Counts only provider-signed/provider-validated evidence or a future explicitly persisted scoped exception. }
+        unresolved: { type: object, required: [critical, blocking, warning, informational], properties: { critical: { type: integer, minimum: 0 }, blocking: { type: integer, minimum: 0 }, warning: { type: integer, minimum: 0 }, informational: { type: integer, minimum: 0 } } }
+        finalDeltaCompleted: { type: boolean }
+        watermarksFresh: { type: boolean }
+        supportedVersionsAuthorityAware: { type: boolean }
+        readinessDigest: { $ref: "#/components/schemas/BillingMigrationDigest" }
+    BillingMigrationReadinessEnvelope:
+      type: object
+      required: [data]
+      properties: { data: { type: object, required: [billingMigrationOperationsContractVersion, recordType, payload], properties: { billingMigrationOperationsContractVersion: { type: string, const: "1" }, recordType: { type: string, const: readinessAssessment }, payload: { $ref: "#/components/schemas/BillingMigrationReadiness" } } } }
+    BillingMigrationImportBatch:
+      type: object
+      additionalProperties: false
+      required: [programId, stateVersion, batchId, idempotencyKey, status, recordCount, validatedCount, quarantinedCount]
+      properties:
+        programId: { type: string }
+        stateVersion: { type: integer, minimum: 1 }
+        batchId: { type: string }
+        idempotencyKey: { type: string, minLength: 1, maxLength: 128 }
+        status: { type: string, enum: [pending, running, completed, failed] }
+        recordCount: { type: integer, minimum: 0, maximum: 1000 }
+        validatedCount: { type: integer, minimum: 0, maximum: 1000 }
+        quarantinedCount: { type: integer, minimum: 0, maximum: 1000 }
+    BillingMigrationImportBatchRecord:
+      type: object
+      additionalProperties: false
+      required: [billingMigrationOperationsContractVersion, recordType, payload]
+      properties:
+        billingMigrationOperationsContractVersion: { type: string, const: "1" }
+        recordType: { type: string, const: importBatch }
+        payload: { $ref: "#/components/schemas/BillingMigrationImportBatch" }
+    BillingMigrationImportBatchEnvelope:
+      type: object
+      required: [data]
+      properties: { data: { $ref: "#/components/schemas/BillingMigrationImportBatchRecord" } }
+    BillingMigrationImportBatchListEnvelope:
+      type: object
+      required: [data]
+      properties: { data: { type: object, required: [items], properties: { items: { type: array, items: { $ref: "#/components/schemas/BillingMigrationImportBatchRecord" } } } } }
+    BillingMigrationRunJob:
+      type: object
+      additionalProperties: false
+      required: [programId, stateVersion, runJobId, runKind, status]
+      properties:
+        programId: { type: string }
+        stateVersion: { type: integer, minimum: 1 }
+        runJobId: { type: string }
+        runKind: { type: string, enum: [dry_run, shadow] }
+        status: { type: string, enum: [pending, running, completed, failed] }
+        resultRunId: { type: string }
+    BillingMigrationRunJobEnvelope:
+      type: object
+      required: [data]
+      properties: { data: { $ref: "#/components/schemas/BillingMigrationRunJob" } }
+    BillingMigrationDivergence:
+      type: object
+      additionalProperties: false
+      required: [programId, stateVersion, divergenceId, classification, reason, observedAt, classificationRuleVersion]
+      properties:
+        programId: { type: string }
+        stateVersion: { type: integer, minimum: 1 }
+        divergenceId: { type: string }
+        classification: { type: string, enum: [critical, blocking, warning, informational] }
+        reason: { type: string }
+        observedAt: { $ref: "#/components/schemas/Timestamp" }
+        classificationRuleVersion: { type: string }
+    BillingMigrationDivergenceRecord:
+      type: object
+      additionalProperties: false
+      required: [billingMigrationOperationsContractVersion, recordType, payload]
+      properties:
+        billingMigrationOperationsContractVersion: { type: string, const: "1" }
+        recordType: { type: string, const: divergence }
+        payload: { $ref: "#/components/schemas/BillingMigrationDivergence" }
+    BillingMigrationDivergenceListEnvelope:
+      type: object
+      required: [data]
+      properties: { data: { type: object, required: [items], properties: { items: { type: array, items: { $ref: "#/components/schemas/BillingMigrationDivergenceRecord" } } } } }
+    CreateBillingMigrationMappingSetRequest:
+      type: object
+      additionalProperties: false
+      required: [expectedStateVersion, version, entries]
+      properties:
+        expectedStateVersion: { type: integer, minimum: 1 }
+        version: { type: integer, minimum: 1 }
+        entries:
+          type: array
+          minItems: 1
+          maxItems: 10000
+          items:
+            type: object
+            additionalProperties: false
+            required: [sourceKind, sourceIdentifier, targetId, matchKind]
+            properties:
+              sourceKind: { type: string, enum: [customer_id, original_customer_id, audited_alias, product, entitlement] }
+              sourceIdentifier: { type: string, minLength: 1, maxLength: 512, pattern: '^[^\r\n\u0000-\u001F\u007F]+$' }
+              targetId: { type: string }
+              matchKind: { type: string, enum: [exact, audited_alias] }
+    CreateBillingMigrationImportBatchRequest:
+      type: object
+      additionalProperties: false
+      required: [expectedStateVersion, manifestId, mappingSetId, recordCount, cursorBefore]
+      properties:
+        expectedStateVersion: { type: integer, minimum: 1 }
+        manifestId: { type: string }
+        mappingSetId: { type: string }
+        recordCount: { type: integer, minimum: 0, maximum: 1000 }
+        cursorBefore: { type: string, maxLength: 512 }
+    QueueBillingMigrationRunRequest:
+      type: object
+      additionalProperties: false
+      required: [expectedStateVersion, manifestDigest, mappingDigest]
+      properties:
+        expectedStateVersion: { type: integer, minimum: 1 }
+        manifestDigest: { $ref: "#/components/schemas/BillingMigrationDigest" }
+        mappingDigest: { $ref: "#/components/schemas/BillingMigrationDigest" }
     TransactionReference:
       type: object
       additionalProperties: false
@@ -3875,6 +5174,174 @@ components:
             supportedAuthoritativeEntitlementContracts: { type: array, minItems: 1, maxItems: 8, uniqueItems: true, items: { type: string, enum: ["1"] } }
             requestedEntitlementKeys: { type: array, minItems: 1, maxItems: 64, uniqueItems: true, items: { type: string, pattern: "^[a-z][a-z0-9_.-]*$" } }
             correlationId: { type: string, minLength: 1, maxLength: 128 }
+    AuthorityEntitlementSyncRequestRecord:
+      type: object
+      additionalProperties: false
+      required: [authoritativeEntitlementContractVersion, recordType, payload]
+      properties:
+        authoritativeEntitlementContractVersion: { type: string, const: "2" }
+        recordType: { type: string, const: entitlementSyncRequest }
+        payload:
+          type: object
+          additionalProperties: false
+          required: [request]
+          properties:
+            knownAuthorityEpoch: { type: integer, format: int64, minimum: 0 }
+            knownSnapshotVersion: { type: integer, format: int64, minimum: 0 }
+            knownSnapshotAuthorityDigest: { type: string, pattern: "^sha256:[a-f0-9]{64}$" }
+            request:
+              type: object
+              additionalProperties: false
+              required: [applicationId, platform, appVersion, sdkVersion, supportedContractVersions, capabilities]
+              properties:
+                applicationId: { type: string, minLength: 1, maxLength: 128 }
+                platform: { type: string, enum: [ios, android] }
+                appVersion: { type: string, minLength: 1, maxLength: 64 }
+                sdkVersion: { type: string, minLength: 1, maxLength: 64 }
+                supportedContractVersions: { type: array, minItems: 1, maxItems: 8, uniqueItems: true, contains: { const: "2" }, items: { type: string, enum: ["1", "2"] } }
+                capabilities: { type: array, minItems: 1, maxItems: 16, uniqueItems: true, contains: { const: authority_epoch }, items: { type: string, enum: [authority_epoch, authority_scope, urgent_authority_sync, mosaic_authoritative_targeting] } }
+    EntitlementSyncRequestUnion:
+      oneOf:
+        - { $ref: "#/components/schemas/EntitlementSyncRequestRecord" }
+        - { $ref: "#/components/schemas/AuthorityEntitlementSyncRequestRecord" }
+      discriminator:
+        propertyName: authoritativeEntitlementContractVersion
+        mapping:
+          "1": "#/components/schemas/EntitlementSyncRequestRecord"
+          "2": "#/components/schemas/AuthorityEntitlementSyncRequestRecord"
+    BillingAuthorityScope:
+      type: object
+      additionalProperties: false
+      required: [projectId, environmentId, applicationId, platform]
+      properties:
+        projectId: { type: string, minLength: 1, maxLength: 128 }
+        environmentId: { type: string, minLength: 1, maxLength: 128 }
+        applicationId: { type: string, minLength: 1, maxLength: 128 }
+        platform: { type: string, enum: [ios, android] }
+    BillingAuthority:
+      type: object
+      additionalProperties: false
+      required: [authorityEpoch, authorityKind, scope, transitionState]
+      properties:
+        authorityEpoch: { type: integer, format: int64, minimum: 0 }
+        authorityKind: { type: string, enum: [source, mosaic, source_rollback] }
+        scope: { $ref: "#/components/schemas/BillingAuthorityScope" }
+        transitionState: { type: string, enum: [stable, cutover_pending, stabilizing, rolled_back] }
+        cutoverAt: { type: string, format: date-time }
+    BillingAuthorityMinimumSupport:
+      type: object
+      additionalProperties: false
+      required: [minimumContractVersion, minimumSdkVersion, supportedAppVersionWindow, requiredCapabilities]
+      properties:
+        minimumContractVersion: { type: string, const: "2" }
+        minimumSdkVersion: { type: string, minLength: 1, maxLength: 64 }
+        supportedAppVersionWindow:
+          type: object
+          additionalProperties: false
+          required: [minimumInclusive]
+          properties:
+            minimumInclusive: { type: string, minLength: 1, maxLength: 64 }
+            maximumInclusive: { type: string, minLength: 1, maxLength: 64 }
+        requiredCapabilities: { type: array, minItems: 1, maxItems: 8, uniqueItems: true, contains: { const: authority_epoch }, items: { type: string, enum: [authority_epoch, authority_scope, urgent_authority_sync, mosaic_authoritative_targeting] } }
+    AuthoritySnapshotPayloadV1:
+      type: object
+      additionalProperties: false
+      required: [snapshotId, billingCustomerId, projectId, environmentId, snapshotVersion, projectionRuleVersion, issuedAt, asOf, refreshAfter, validUntil, entityTag, contentDigest, entries, sources, projectionStatus, changeReason, correlationId]
+      properties:
+        snapshotId: { type: string }
+        billingCustomerId: { type: string }
+        projectId: { type: string }
+        environmentId: { type: string }
+        snapshotVersion: { type: integer, format: int64, minimum: 0 }
+        previousSnapshotVersion: { type: integer, format: int64, minimum: 1 }
+        projectionRuleVersion: { type: integer, minimum: 1 }
+        issuedAt: { type: string, format: date-time }
+        asOf: { type: string, format: date-time }
+        refreshAfter: { type: string, format: date-time }
+        validUntil: { type: string, format: date-time }
+        staleGraceSeconds: { type: integer, minimum: 0, maximum: 2592000 }
+        entityTag: { type: string }
+        contentDigest: { type: string, pattern: "^sha256:[a-f0-9]{64}$" }
+        entries: { type: array, items: { $ref: "#/components/schemas/EntitlementEntry" } }
+        sources: { type: array, items: { $ref: "#/components/schemas/EntitlementSourceSummary" } }
+        projectionStatus: { $ref: "#/components/schemas/ProjectionStatus" }
+        changeReason: { type: string }
+        correlationId: { type: string }
+    AuthorityUnchangedPayloadV1:
+      type: object
+      additionalProperties: false
+      required: [billingCustomerId, projectId, environmentId, snapshotVersion, entityTag, issuedAt, asOf, refreshAfter, validUntil, projectionStatus, correlationId]
+      properties:
+        billingCustomerId: { type: string }
+        projectId: { type: string }
+        environmentId: { type: string }
+        snapshotVersion: { type: integer, format: int64, minimum: 1 }
+        entityTag: { type: string }
+        issuedAt: { type: string, format: date-time }
+        asOf: { type: string, format: date-time }
+        refreshAfter: { type: string, format: date-time }
+        validUntil: { type: string, format: date-time }
+        staleGraceSeconds: { type: integer, minimum: 0, maximum: 2592000 }
+        projectionStatus: { $ref: "#/components/schemas/ProjectionStatus" }
+        correlationId: { type: string }
+    AuthorityCustomerEntitlementSnapshotRecord:
+      type: object
+      additionalProperties: false
+      required: [authoritativeEntitlementContractVersion, recordType, payload]
+      properties:
+        authoritativeEntitlementContractVersion: { type: string, const: "2" }
+        recordType: { type: string, const: customerEntitlementSnapshot }
+        payload:
+          type: object
+          additionalProperties: false
+          required: [authority, snapshot, snapshotAuthorityDigest, minimumSupport]
+          properties:
+            authority: { $ref: "#/components/schemas/BillingAuthority" }
+            snapshot: { $ref: "#/components/schemas/AuthoritySnapshotPayloadV1" }
+            snapshotAuthorityDigest: { type: string, pattern: "^sha256:[a-f0-9]{64}$" }
+            minimumSupport: { $ref: "#/components/schemas/BillingAuthorityMinimumSupport" }
+    AuthoritySnapshotUnchangedRecord:
+      type: object
+      additionalProperties: false
+      required: [authoritativeEntitlementContractVersion, recordType, payload]
+      properties:
+        authoritativeEntitlementContractVersion: { type: string, const: "2" }
+        recordType: { type: string, const: snapshotUnchanged }
+        payload:
+          type: object
+          additionalProperties: false
+          required: [authority, unchanged, snapshotAuthorityDigest, minimumSupport]
+          properties:
+            authority: { $ref: "#/components/schemas/BillingAuthority" }
+            unchanged: { $ref: "#/components/schemas/AuthorityUnchangedPayloadV1" }
+            snapshotAuthorityDigest: { type: string, pattern: "^sha256:[a-f0-9]{64}$" }
+            minimumSupport: { $ref: "#/components/schemas/BillingAuthorityMinimumSupport" }
+    AuthorityUnavailableRecord:
+      type: object
+      additionalProperties: false
+      required: [authoritativeEntitlementContractVersion, recordType, payload]
+      properties:
+        authoritativeEntitlementContractVersion: { type: string, const: "2" }
+        recordType: { type: string, const: authorityUnavailable }
+        payload:
+          type: object
+          additionalProperties: false
+          required: [scope, result, reason]
+          properties:
+            scope: { $ref: "#/components/schemas/BillingAuthorityScope" }
+            result: { type: string, const: unavailable }
+            reason: { type: string, enum: [authority_unknown, unsupported_contract, unsupported_app_version, scope_mismatch, policy_unavailable] }
+            minimumSupport: { $ref: "#/components/schemas/BillingAuthorityMinimumSupport" }
+          allOf:
+            - if: { properties: { reason: { const: policy_unavailable } }, required: [reason] }
+              then: { not: { required: [minimumSupport] } }
+              else: { required: [minimumSupport] }
+    AuthoritativeEntitlementSyncResponse:
+      oneOf:
+        - { $ref: "#/components/schemas/CustomerEntitlementSnapshotRecord" }
+        - { $ref: "#/components/schemas/AuthorityCustomerEntitlementSnapshotRecord" }
+        - { $ref: "#/components/schemas/AuthoritySnapshotUnchangedRecord" }
+        - { $ref: "#/components/schemas/AuthorityUnavailableRecord" }
     RestoreRequestRecord:
       type: object
       additionalProperties: false
@@ -6309,3 +7776,29 @@ components:
     EntitlementList: { type: object, required: [data], properties: { data: { type: object, required: [items, page], properties: { items: { type: array, items: { $ref: "#/components/schemas/Entitlement" } }, page: { $ref: "#/components/schemas/Page" } } } } }
     ProviderMappingList: { type: object, required: [data], properties: { data: { type: object, required: [items, page], properties: { items: { type: array, items: { $ref: "#/components/schemas/ProviderProductMapping" } }, page: { $ref: "#/components/schemas/Page" } } } } }
     AuditEventList: { type: object, required: [data], properties: { data: { type: object, required: [items, page], properties: { items: { type: array, items: { $ref: "#/components/schemas/AuditEvent" } }, page: { $ref: "#/components/schemas/Page" } } } } }
+    # Listed last for the same reason as /v1/workspace/bootstrap: the generator
+    # emits types in declaration order, so a mid-map insertion rewrites the
+    # whole client.
+    BootstrapOrganization:
+      type: object
+      additionalProperties: false
+      required: [organization, role, projects, projectCount, projectsTruncated]
+      properties:
+        organization: { $ref: "#/components/schemas/Organization" }
+        role: { $ref: "#/components/schemas/Role" }
+        projects:
+          type: array
+          description: Active Projects only, ordered by id, capped at 25.
+          items: { $ref: "#/components/schemas/Project" }
+        projectCount: { type: integer, minimum: 0, description: Active Projects in the Organization, before the cap. }
+        projectsTruncated: { type: boolean, description: True when projects holds fewer entries than projectCount. }
+    WorkspaceBootstrap:
+      type: object
+      additionalProperties: false
+      required: [organizations]
+      properties:
+        organizations:
+          type: array
+          description: Organizations the caller belongs to, ordered by id. Empty when the caller belongs to none.
+          items: { $ref: "#/components/schemas/BootstrapOrganization" }
+    WorkspaceBootstrapEnvelope: { type: object, required: [data], properties: { data: { $ref: "#/components/schemas/WorkspaceBootstrap" } } }

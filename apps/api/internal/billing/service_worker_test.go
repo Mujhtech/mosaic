@@ -274,3 +274,36 @@ func TestVoidWithoutResolvableProductStillRecordsTheRefund(t *testing.T) {
 		t.Fatalf("undated void quarantine %+v, want missing_provider_timestamp", undated.Quarantine)
 	}
 }
+
+func TestMigrationBindingRejectsWrongApplicationProviderProductAndTargetProduct(t *testing.T) {
+	binding := &MigrationValidationBinding{ExpectedApplicationID: "app_expected", ExpectedStoreProductIdentifier: "store_expected", ExpectedMosaicProductID: "product_expected", ExpectedStoreEnvironment: StoreProduction}
+	if diagnostic, _ := migrationApplicationMismatch(binding, "app_other"); diagnostic != DiagnosticMigrationApplicationMismatch {
+		t.Fatalf("application diagnostic=%q", diagnostic)
+	}
+	for _, product := range []string{"", "store_other"} {
+		if diagnostic, _ := migrationProviderProductMismatch(binding, product); diagnostic != DiagnosticMigrationProviderProductMismatch {
+			t.Fatalf("provider Product %q diagnostic=%q", product, diagnostic)
+		}
+	}
+	if diagnostic, _ := migrationStoreEnvironmentMismatch(binding, ""); diagnostic != DiagnosticMigrationStoreEnvironmentMismatch {
+		t.Fatalf("empty environment diagnostic=%q", diagnostic)
+	}
+	if diagnostic, _ := migrationStoreEnvironmentMismatch(binding, StoreSandbox); diagnostic != DiagnosticMigrationStoreEnvironmentMismatch {
+		t.Fatalf("wrong environment diagnostic=%q", diagnostic)
+	}
+	if diagnostic, _ := migrationResolutionMismatch(binding, Resolution{Outcome: ResolutionResolved, MosaicProductID: "product_other"}); diagnostic != DiagnosticMigrationMosaicProductMismatch {
+		t.Fatalf("target diagnostic=%q", diagnostic)
+	}
+}
+
+func TestMigrationUnresolvedOrAmbiguousResolutionQuarantinesWithoutFact(t *testing.T) {
+	now := time.Date(2026, 7, 29, 12, 0, 0, 0, time.UTC)
+	service := testService(now)
+	input := RawInput{ID: "raw", ProjectID: "project", EnvironmentID: "environment", Provider: ProviderAppStore, CorrelationID: "binding", MigrationValidation: &MigrationValidationBinding{ExpectedMosaicProductID: "product_expected"}}
+	for _, resolution := range []Resolution{{Outcome: ResolutionUnknown}, {Outcome: ResolutionAmbiguous, CandidateCount: 2}} {
+		outcome, quarantined := service.enforceMigrationResolution(ValidationJob{}, input, resolution, "attempt", 1, now)
+		if !quarantined || outcome.Fact != nil || outcome.Quarantine == nil || outcome.Attempt.DiagnosticCode != DiagnosticMigrationMosaicProductUnresolved {
+			t.Fatalf("resolution=%+v outcome=%+v quarantined=%v", resolution, outcome, quarantined)
+		}
+	}
+}

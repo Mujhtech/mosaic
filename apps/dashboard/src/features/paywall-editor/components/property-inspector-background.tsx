@@ -38,6 +38,7 @@ import {
   NumberField,
   SelectField,
 } from "@/features/paywall-editor/components/property-inspector-fields"
+import { SelectItem } from "@/components/ui/select"
 
 export function updateAppearance(
   node: ProtocolNode,
@@ -308,9 +309,9 @@ export function DocumentBackgroundEditor({
           value={value.id}
         >
           {document.designSystem.backgrounds.map((token) => (
-            <option key={token.id} value={token.id}>
+            <SelectItem key={token.id} value={token.id}>
               {token.name}
-            </option>
+            </SelectItem>
           ))}
         </SelectField>
       ) : null}
@@ -443,9 +444,9 @@ export function DocumentBackgroundEditor({
             value={value.assetId}
           >
             {(value.type === "image" ? imageAssets : videoAssets).map((asset) => (
-              <option key={asset.id} value={asset.id}>
+              <SelectItem key={asset.id} value={asset.id}>
                 {asset.id}
-              </option>
+              </SelectItem>
             ))}
           </SelectField>
           <SelectField
@@ -456,8 +457,8 @@ export function DocumentBackgroundEditor({
             }
             value={value.contentMode}
           >
-            <option value="fit">Fit</option>
-            <option value="fill">Fill</option>
+            <SelectItem value="fit">Fit</SelectItem>
+            <SelectItem value="fill">Fill</SelectItem>
           </SelectField>
           {value.type === "video" ? (
             <SelectField
@@ -468,12 +469,12 @@ export function DocumentBackgroundEditor({
               }
               value={value.posterAssetId ?? ""}
             >
-              <option value="">No poster</option>
+              <SelectItem value="">No poster</SelectItem>
               {document.assets.flatMap((asset) =>
                 asset.type === "image" ? (
-                  <option key={asset.id} value={asset.id}>
+                  <SelectItem key={asset.id} value={asset.id}>
                     {asset.id}
-                  </option>
+                  </SelectItem>
                 ) : (
                   []
                 ),
@@ -558,11 +559,11 @@ export function ShadowSection({ node }: { node: ProtocolNode }) {
         }
         value={shadow?.type ?? "none"}
       >
-        <option value="none">None</option>
-        <option value="shadow">Custom</option>
-        <option disabled={document.designSystem.shadows.length === 0} value="shadowToken">
+        <SelectItem value="none">None</SelectItem>
+        <SelectItem value="shadow">Custom</SelectItem>
+        <SelectItem disabled={document.designSystem.shadows.length === 0} value="shadowToken">
           Design-system shadow
-        </option>
+        </SelectItem>
       </SelectField>
       {shadow?.type === "shadowToken" ? (
         <SelectField
@@ -572,9 +573,9 @@ export function ShadowSection({ node }: { node: ProtocolNode }) {
           value={shadow.id}
         >
           {document.designSystem.shadows.map((token) => (
-            <option key={token.id} value={token.id}>
+            <SelectItem key={token.id} value={token.id}>
               {token.name}
-            </option>
+            </SelectItem>
           ))}
         </SelectField>
       ) : null}

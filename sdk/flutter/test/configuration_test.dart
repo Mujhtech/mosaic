@@ -1,7 +1,9 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mosaic_sdk/mosaic_sdk.dart';
 
 import 'support/canonical_fixture.dart';
+import 'support/customer_authority_fixture.dart';
 
 /// Answers every sync with one scripted snapshot.
 final class _FixtureEntitlementTransport
@@ -51,10 +53,13 @@ void main() {
   });
 
   group('authoritative entitlements through the client', () {
-    final snapshot = repositoryFile(
+    final snapshot = wrapCustomerSnapshotV2(repositoryFile(
       'protocol/fixtures/authoritative-entitlement/v1/snapshots/'
       'active-subscription.json',
-    ).readAsStringSync();
+    ).readAsStringSync());
+
+    setUp(() => debugDefaultTargetPlatformOverride = TargetPlatform.iOS);
+    tearDown(() => debugDefaultTargetPlatformOverride = null);
 
     Mosaic configure({
       required MosaicCustomerEntitlementCache cache,
@@ -64,6 +69,8 @@ void main() {
         Mosaic.configure(
           publicSdkKey: 'public_test_key',
           baseUrl: Uri.parse('https://api.mosaic.test'),
+          applicationId: fixtureAuthorityApplicationId,
+          applicationVersion: '4.2.0',
           purchaseProvider: MockMosaicPurchaseProvider(),
           identityStorage: MosaicMemoryIdentityStorage(),
           customerEntitlementCache: cache,

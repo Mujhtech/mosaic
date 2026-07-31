@@ -2,15 +2,34 @@ import { useForm } from "@tanstack/react-form"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { Link } from "@tanstack/react-router"
 
+import { useState } from "react"
+
 import { Button } from "@/components/ui/button"
 import { EmptyState } from "@/components/feedback/empty-state"
 import { buttonVariants } from "@/components/ui/button-variants"
+import {
+  Dialog,
+  DialogClose,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog"
 import { Field, FieldError, FieldLabel } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
 import { HostedResourceBoundary } from "@/features/auth/components/hosted-resource-boundary"
 import { resolveHostedQueryState } from "@/features/auth/types/hosted-query-state"
 import { MonetizationWorkspace } from "@/features/environments/components/monetization-workspace"
-import { WorkflowPanel } from "@/features/organizations/components/workspace-page"
+import { WorkflowPanel } from "@/features/orgs/components/workspace-page"
 import { paywallsQueryOptions } from "@/features/paywalls/queries/paywall-queries"
 import {
   bindPlacementMutationOptions,
@@ -42,6 +61,7 @@ function BindPlacementAction({
   const mutation = useMutation(
     bindPlacementMutationOptions({ environmentId, placement, projectId }, adapter, queryClient),
   )
+  const paywallOptions = paywalls.map((paywall) => ({ label: paywall.name, value: paywall.id }))
   const form = useForm({
     defaultValues: { paywallId: placement.binding?.paywallId ?? paywalls[0]?.id ?? "" },
     onSubmit: async ({ value }) => {
@@ -61,21 +81,29 @@ function BindPlacementAction({
     >
       <form.Field name="paywallId">
         {(field) => (
-          <label className="grid gap-1 text-xs font-medium">
-            Bound paywall
-            <select
-              aria-label={`Paywall for ${placement.name}`}
-              className="border-input bg-background h-8 min-w-48 rounded border px-2 text-sm"
-              onChange={(event) => field.handleChange(event.currentTarget.value)}
+          <div className="grid gap-1 text-xs font-medium">
+            <span>Bound paywall</span>
+            <Select
+              items={paywallOptions}
+              onValueChange={(value) => field.handleChange(value)}
               value={field.state.value}
             >
-              {paywalls.map((paywall) => (
-                <option key={paywall.id} value={paywall.id}>
-                  {paywall.name}
-                </option>
-              ))}
-            </select>
-          </label>
+              <SelectTrigger
+                aria-label={`Paywall for ${placement.name}`}
+                className="min-w-48"
+                size="sm"
+              >
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {paywallOptions.map((option) => (
+                  <SelectItem key={option.value} value={option.value}>
+                    {option.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
         )}
       </form.Field>
       <Button disabled={mutation.isPending || paywalls.length === 0} size="sm" type="submit">
@@ -92,10 +120,12 @@ function BindPlacementAction({
 
 function CreatePlacementForm({
   environmentId,
+  onCreated,
   paywalls,
   projectId,
 }: {
   environmentId: string
+  onCreated: () => void
   paywalls: readonly HostedPaywallListItem[]
   projectId: string
 }) {
@@ -104,6 +134,10 @@ function CreatePlacementForm({
   const mutation = useMutation(
     createPlacementAndBindMutationOptions({ environmentId, projectId }, adapter, queryClient),
   )
+  const paywallOptions = [
+    { label: "No Paywall yet", value: "" },
+    ...paywalls.map((paywall) => ({ label: paywall.name, value: paywall.id })),
+  ]
   const form = useForm({
     defaultValues: { key: "", name: "", paywallId: paywalls[0]?.id ?? "" },
     onSubmit: async ({ value, formApi }) => {
@@ -118,6 +152,7 @@ function CreatePlacementForm({
           paywall,
         })
         formApi.reset()
+        onCreated()
       } catch {
         // The form keeps its values and exposes a safe retry for the missing binding below.
       }
@@ -126,98 +161,109 @@ function CreatePlacementForm({
 
   return (
     <form
-      className="grid gap-4 lg:grid-cols-[1fr_1fr_1fr_auto] lg:items-start"
       onSubmit={(event) => {
         event.preventDefault()
         event.stopPropagation()
         void form.handleSubmit()
       }}
     >
-      <form.Field
-        name="name"
-        validators={{
-          onBlur: ({ value }) => (value.trim() ? undefined : "Enter a Placement name."),
-          onSubmit: ({ value }) => (value.trim() ? undefined : "Enter a Placement name."),
-        }}
-      >
-        {(field) => (
-          <Field data-invalid={field.state.meta.errors.length > 0 || undefined}>
-            <FieldLabel htmlFor="placement-name">Placement name</FieldLabel>
-            <Input
-              id="placement-name"
-              onBlur={field.handleBlur}
-              onChange={(event) => field.handleChange(event.currentTarget.value)}
-              placeholder="Onboarding complete"
-              value={field.state.value}
-            />
-            <FieldError errors={field.state.meta.errors.map((message) => ({ message }))} />
-          </Field>
-        )}
-      </form.Field>
-      <form.Field
-        name="key"
-        validators={{
-          onBlur: ({ value }) =>
-            KEY_PATTERN.test(value.trim()) ? undefined : "Enter a valid Placement key.",
-          onSubmit: ({ value }) =>
-            KEY_PATTERN.test(value.trim()) ? undefined : "Enter a valid Placement key.",
-        }}
-      >
-        {(field) => (
-          <Field data-invalid={field.state.meta.errors.length > 0 || undefined}>
-            <FieldLabel htmlFor="placement-key">Placement key</FieldLabel>
-            <Input
-              id="placement-key"
-              onBlur={field.handleBlur}
-              onChange={(event) => field.handleChange(event.currentTarget.value.toLowerCase())}
-              placeholder="onboarding_complete"
-              value={field.state.value}
-            />
-            <FieldError errors={field.state.meta.errors.map((message) => ({ message }))} />
-          </Field>
-        )}
-      </form.Field>
-      <form.Field name="paywallId">
-        {(field) => (
-          <Field>
-            <FieldLabel htmlFor="placement-paywall">Default Paywall (optional)</FieldLabel>
-            <select
-              className="border-input bg-background h-8 rounded border px-2 text-sm"
-              id="placement-paywall"
-              onChange={(event) => field.handleChange(event.currentTarget.value)}
-              value={field.state.value}
-            >
-              <option value="">No Paywall yet</option>
-              {paywalls.map((paywall) => (
-                <option key={paywall.id} value={paywall.id}>
-                  {paywall.name}
-                </option>
-              ))}
-            </select>
-          </Field>
-        )}
-      </form.Field>
-      <Button className="lg:mt-6" disabled={mutation.isPending} type="submit">
-        {mutation.isPending
-          ? "Creating…"
-          : mutation.error instanceof PlacementCreatedWithoutBindingError
-            ? "Retry binding"
-            : "Create Placement"}
-      </Button>
-      {mutation.error ? (
-        <div
-          className="border-destructive/25 bg-destructive/5 rounded border p-3 lg:col-span-4"
-          role="alert"
+      <DialogHeader>
+        <DialogTitle>Create Placement</DialogTitle>
+        <DialogDescription>
+          This creates the stable key. An optional active Paywall preserves the simple default
+          binding.
+        </DialogDescription>
+      </DialogHeader>
+      <div className="grid gap-4 px-4">
+        <form.Field
+          name="name"
+          validators={{
+            onBlur: ({ value }) => (value.trim() ? undefined : "Enter a Placement name."),
+            onSubmit: ({ value }) => (value.trim() ? undefined : "Enter a Placement name."),
+          }}
         >
-          <p className="text-destructive text-sm">{mutation.error.message}</p>
-          {mutation.error instanceof PlacementCreatedWithoutBindingError ? (
-            <p className="text-muted-foreground mt-1 text-xs">
-              The Placement is safe and appears below after refresh. Submit again to retry only its
-              Environment binding.
-            </p>
-          ) : null}
-        </div>
-      ) : null}
+          {(field) => (
+            <Field data-invalid={field.state.meta.errors.length > 0 || undefined}>
+              <FieldLabel htmlFor="placement-name">Placement name</FieldLabel>
+              <Input
+                id="placement-name"
+                onBlur={field.handleBlur}
+                onChange={(event) => field.handleChange(event.currentTarget.value)}
+                placeholder="Onboarding complete"
+                value={field.state.value}
+              />
+              <FieldError errors={field.state.meta.errors.map((message) => ({ message }))} />
+            </Field>
+          )}
+        </form.Field>
+        <form.Field
+          name="key"
+          validators={{
+            onBlur: ({ value }) =>
+              KEY_PATTERN.test(value.trim()) ? undefined : "Enter a valid Placement key.",
+            onSubmit: ({ value }) =>
+              KEY_PATTERN.test(value.trim()) ? undefined : "Enter a valid Placement key.",
+          }}
+        >
+          {(field) => (
+            <Field data-invalid={field.state.meta.errors.length > 0 || undefined}>
+              <FieldLabel htmlFor="placement-key">Placement key</FieldLabel>
+              <Input
+                id="placement-key"
+                onBlur={field.handleBlur}
+                onChange={(event) => field.handleChange(event.currentTarget.value.toLowerCase())}
+                placeholder="onboarding_complete"
+                value={field.state.value}
+              />
+              <FieldError errors={field.state.meta.errors.map((message) => ({ message }))} />
+            </Field>
+          )}
+        </form.Field>
+        <form.Field name="paywallId">
+          {(field) => (
+            <Field>
+              <FieldLabel htmlFor="placement-paywall">Default Paywall (optional)</FieldLabel>
+              <Select
+                items={paywallOptions}
+                onValueChange={(value) => field.handleChange(value)}
+                value={field.state.value}
+              >
+                <SelectTrigger id="placement-paywall">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {paywallOptions.map((option) => (
+                    <SelectItem key={option.value} value={option.value}>
+                      {option.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </Field>
+          )}
+        </form.Field>
+        {mutation.error ? (
+          <div className="border-destructive/25 bg-destructive/5 rounded border p-3" role="alert">
+            <p className="text-destructive text-sm">{mutation.error.message}</p>
+            {mutation.error instanceof PlacementCreatedWithoutBindingError ? (
+              <p className="text-muted-foreground mt-1 text-xs">
+                The Placement is safe and appears in Environment bindings after refresh. Submit
+                again to retry only its Environment binding.
+              </p>
+            ) : null}
+          </div>
+        ) : null}
+      </div>
+      <DialogFooter>
+        <DialogClose render={<Button type="button" variant="outline" />}>Cancel</DialogClose>
+        <Button disabled={mutation.isPending} type="submit">
+          {mutation.isPending
+            ? "Creating…"
+            : mutation.error instanceof PlacementCreatedWithoutBindingError
+              ? "Retry binding"
+              : "Create Placement"}
+        </Button>
+      </DialogFooter>
     </form>
   )
 }
@@ -232,6 +278,7 @@ export function PlacementsPage({
   projectId: string
 }) {
   const adapter = useHostedPublishingAdapter()
+  const [createOpen, setCreateOpen] = useState(false)
   // These resources are independent and begin together; TanStack Query deduplicates shared reads.
   const placements = useQuery(placementsQueryOptions({ environmentId, projectId }, adapter))
   const paywalls = useQuery(paywallsQueryOptions(projectId, adapter))
@@ -252,8 +299,8 @@ export function PlacementsPage({
     permissionAction: (
       <Link
         className={buttonVariants({ variant: "outline" })}
-        params={{ environmentId, organizationId, projectId }}
-        to="/organizations/$organizationId/projects/$projectId/monetization/$environmentId/paywalls"
+        params={(prev) => prev}
+        to="/orgs/$organizationId/projects/$projectId/env/$environmentKey/monetization/paywalls"
       >
         Return to Paywalls
       </Link>
@@ -262,8 +309,23 @@ export function PlacementsPage({
     scope: { environmentId, organizationId, projectId },
   })
 
+  const createDialog = (
+    <Dialog onOpenChange={setCreateOpen} open={createOpen}>
+      <DialogTrigger render={<Button size="sm" />}>Create Placement</DialogTrigger>
+      <DialogContent className="max-h-[calc(100vh-4rem)] overflow-y-auto">
+        <CreatePlacementForm
+          environmentId={environmentId}
+          onCreated={() => setCreateOpen(false)}
+          paywalls={availablePaywalls}
+          projectId={projectId}
+        />
+      </DialogContent>
+    </Dialog>
+  )
+
   return (
     <MonetizationWorkspace
+      actions={createDialog}
       description="Use stable app intent keys with a compatible default decision, then add deterministic Rules when needed."
       environmentId={environmentId}
       organizationId={organizationId}
@@ -273,20 +335,10 @@ export function PlacementsPage({
     >
       <HostedResourceBoundary state={state}>
         <>
-          <WorkflowPanel
-            description="This creates the stable key. An optional active Paywall preserves the simple default binding."
-            title="Create Placement"
-          >
-            <CreatePlacementForm
-              environmentId={environmentId}
-              paywalls={availablePaywalls}
-              projectId={projectId}
-            />
-          </WorkflowPanel>
           <WorkflowPanel title="Environment bindings">
             {items.length === 0 ? (
               <EmptyState
-                description="Create the first app intent above to bind a Paywall to this Environment."
+                description="Create the first app intent from Create Placement to bind a Paywall to this Environment."
                 title="No Placements yet"
               />
             ) : (
@@ -320,13 +372,8 @@ export function PlacementsPage({
                         )}
                         <Link
                           className={buttonVariants({ size: "sm", variant: "outline" })}
-                          params={{
-                            environmentId,
-                            organizationId,
-                            placementId: placement.id,
-                            projectId,
-                          }}
-                          to="/organizations/$organizationId/projects/$projectId/monetization/$environmentId/placements/$placementId"
+                          params={(prev) => ({ ...prev, placementId: placement.id })}
+                          to="/orgs/$organizationId/projects/$projectId/env/$environmentKey/monetization/placements/$placementId"
                         >
                           Open decision
                         </Link>

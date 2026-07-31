@@ -129,6 +129,34 @@ class CustomerAuthenticationTest {
     }
 
     /**
+     * A CAT refused twice for one authority epoch is not minted repeatedly for that same epoch.
+     * A newer epoch is a different binding and may obtain a fresh in-memory credential.
+     */
+    @Test
+    fun rejectedAuthorityEpochStopsTokenLoopButDoesNotBlockANewerEpoch() = runTest {
+        val calls = AtomicInteger()
+        val session = MosaicCustomerTokenSession(
+            provider = { _ ->
+                MosaicCustomerAccessTokenResult.Issued(
+                    token("mosaic-customer-token-${calls.incrementAndGet()}"),
+                )
+            },
+        )
+
+        assertTrue(session.token(authorityEpoch = 5) is MosaicCustomerAccessTokenResult.Issued)
+        session.rejectAuthorityEpoch(5)
+        val refusedEpoch = session.token(authorityEpoch = 5)
+        assertEquals(
+            "customer.token.authorityRejected",
+            (refusedEpoch as MosaicCustomerAccessTokenResult.Unavailable).diagnosticCode,
+        )
+        assertEquals(1, calls.get())
+
+        assertTrue(session.token(authorityEpoch = 6) is MosaicCustomerAccessTokenResult.Issued)
+        assertEquals(2, calls.get())
+    }
+
+    /**
      * A token minted for the previous identity is discarded, not cached under the new one.
      *
      * This is the leak the generation counter exists for: the provider call was already in flight

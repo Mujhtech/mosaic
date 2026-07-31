@@ -1,30 +1,11 @@
 import { describe, expect, it } from "vitest"
 
 import {
-  explicitPurchaseSetupEnvironment,
   purchaseProviderChoices,
   providerCredentialActions,
 } from "@/features/provider-connections/types/provider-connection-view"
 
 describe("Purchase setup scope", () => {
-  it("does not silently default to Staging or the first Environment", () => {
-    const environments = [
-      {
-        createdAt: "2026-07-24T12:00:00Z",
-        id: "env_staging",
-        key: "staging",
-        mode: "staging",
-        name: "Staging",
-        projectId: "project_01",
-        updatedAt: "2026-07-24T12:00:00Z",
-      },
-    ] as const
-
-    expect(explicitPurchaseSetupEnvironment(environments)).toBeUndefined()
-    expect(explicitPurchaseSetupEnvironment(environments, "missing")).toBeUndefined()
-    expect(explicitPurchaseSetupEnvironment(environments, "env_staging")).toBe(environments[0])
-  })
-
   it("offers only the platform-compatible built-in provider without a Connection", () => {
     const environment = {
       createdAt: "2026-07-24T12:00:00Z",

@@ -20,6 +20,7 @@ import (
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/trace"
 
+	"github.com/Mujhtech/mosaic/apps/api/internal/billingmigration"
 	"github.com/Mujhtech/mosaic/apps/api/internal/platform/ratelimit"
 	"github.com/Mujhtech/mosaic/apps/api/internal/providercatalog"
 )
@@ -123,6 +124,86 @@ func New(config Config) (*Client, error) {
 type listResponse[T any] struct {
 	Items    []T    `json:"items"`
 	NextPage string `json:"next_page"`
+}
+
+// AssessMigration proves the separately consented key can perform the read-only
+// RevenueCat v2 operations migration needs. RevenueCat has no permission-
+// introspection endpoint, so capabilities are earned by successful
+// representative reads rather than by trusting a caller-supplied list.
+func (c *Client) AssessMigration(ctx context.Context, externalProjectID string, secret []byte) (billingmigration.CapabilityResult, error) {
+	if externalProjectID == "" || len(secret) == 0 {
+		return billingmigration.CapabilityResult{}, billingmigration.ErrInvalid
+	}
+	ctx, cancel := context.WithTimeout(ctx, c.operationTimeout)
+	defer cancel()
+	type assessmentCustomer struct {
+		ID string `json:"id"`
+	}
+	var response listResponse[assessmentCustomer]
+	budget := operationBudget{remainingPages: 4, remainingRetries: c.maxRetries}
+	projectID := url.PathEscape(externalProjectID)
+	customersPath := "/projects/" + projectID + "/customers"
+	query := url.Values{"limit": {"1"}}
+	err := c.get(ctx, &budget, secret, customersPath, query, &response)
+	if err != nil {
+		var providerError *providercatalog.Error
+		if errors.As(err, &providerError) && (providerError.Code == providercatalog.ErrorCredentialInvalid || providerError.Code == providercatalog.ErrorPermissionDenied) {
+			return billingmigration.CapabilityResult{}, billingmigration.ErrInvalid
+		}
+		return billingmigration.CapabilityResult{}, billingmigration.ErrUnavailable
+	}
+	capabilities := []string{"read_customers"}
+	if len(response.Items) > 0 {
+		customerID := response.Items[0].ID
+		if customerID == "" || invalidSourceID(customerID) {
+			return billingmigration.CapabilityResult{}, billingmigration.ErrUnavailable
+		}
+		if ok, err := c.assessReadProbe(ctx, &budget, secret, "/projects/"+projectID+"/customers/"+url.PathEscape(customerID)+"/subscriptions", nil); err != nil {
+			return billingmigration.CapabilityResult{}, err
+		} else if ok {
+			capabilities = append(capabilities, "read_subscriptions")
+		}
+		if ok, err := c.assessReadProbe(ctx, &budget, secret, "/projects/"+projectID+"/customers/"+url.PathEscape(customerID)+"/aliases", nil); err != nil {
+			return billingmigration.CapabilityResult{}, err
+		} else if ok {
+			capabilities = append(capabilities, "read_aliases")
+		}
+		cursor := customerID
+		if response.NextPage != "" {
+			next, err := opaqueCursor(response.NextPage)
+			if err != nil || next == "" {
+				return billingmigration.CapabilityResult{}, billingmigration.ErrUnavailable
+			}
+			cursor = next
+		}
+		deltaQuery := url.Values{"limit": {"1"}, "starting_after": {cursor}}
+		if ok, err := c.assessReadProbe(ctx, &budget, secret, customersPath, deltaQuery); err != nil {
+			return billingmigration.CapabilityResult{}, err
+		} else if ok {
+			capabilities = append(capabilities, "incremental_delta")
+		}
+	}
+	return billingmigration.CapabilityResult{
+		ProviderAPIVersion: billingmigration.ProviderAPIV2,
+		Capabilities:       capabilities,
+		AssessedAt:         c.now(),
+	}, nil
+}
+
+func (c *Client) assessReadProbe(ctx context.Context, budget *operationBudget, secret []byte, path string, query url.Values) (bool, error) {
+	var response listResponse[json.RawMessage]
+	probeQuery := cloneValues(query)
+	if probeQuery.Get("limit") == "" {
+		probeQuery.Set("limit", "1")
+	}
+	if err := c.get(ctx, budget, secret, path, probeQuery, &response); err != nil {
+		var providerError *providercatalog.Error
+		if errors.As(err, &providerError) && (providerError.Code == providercatalog.ErrorCredentialInvalid || providerError.Code == providercatalog.ErrorPermissionDenied) {
+			return false, nil
+		}
+		return false, billingmigration.ErrUnavailable
+	}
+	return true, nil
 }
 
 type appResponse struct {

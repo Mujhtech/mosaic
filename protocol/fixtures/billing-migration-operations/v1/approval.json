@@ -1,0 +1,15 @@
+{
+  "billingMigrationOperationsContractVersion": "1",
+  "recordType": "migrationApproval",
+  "payload": {
+    "programId": "mig-001",
+    "stateVersion": 9,
+    "approvalId": "approval-001",
+    "command": "cutover",
+    "proposerActorId": "actor-001",
+    "approverActorId": "actor-002",
+    "approvalDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "approvedAt": "2026-07-29T09:20:00.000Z",
+    "expiresAt": "2026-07-29T10:20:00.000Z"
+  }
+}

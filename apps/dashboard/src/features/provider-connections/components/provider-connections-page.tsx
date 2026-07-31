@@ -1,11 +1,11 @@
 import { useMutation, useQueries, useQuery, useQueryClient } from "@tanstack/react-query"
-import { useNavigate } from "@tanstack/react-router"
 
 import { HostedResourceBoundary } from "@/features/auth/components/hosted-resource-boundary"
 import { resolveHostedQueryState } from "@/features/auth/types/hosted-query-state"
 import { environmentsQueryOptions } from "@/features/environments/queries/environments-query"
-import { WorkspacePage, WorkflowPanel } from "@/features/organizations/components/workspace-page"
-import { ScopeMismatchRecovery } from "@/features/organizations/components/scope-mismatch-recovery"
+import { useActiveEnvironment } from "@/features/environments/hooks/use-active-environment"
+import { WorkspacePage, WorkflowPanel } from "@/features/orgs/components/workspace-page"
+import { ScopeMismatchRecovery } from "@/features/orgs/components/scope-mismatch-recovery"
 import { ActiveProviderMatrix } from "@/features/provider-connections/components/active-provider-matrix"
 import { ConnectRevenueCatSheet } from "@/features/provider-connections/components/connect-revenuecat-sheet"
 import { ProviderConnectionsList } from "@/features/provider-connections/components/provider-connections-list"
@@ -14,25 +14,22 @@ import {
   activeProviderAssignmentQueryOptions,
   providerConnectionsQueryOptions,
 } from "@/features/provider-connections/queries/provider-connection-queries"
-import { explicitPurchaseSetupEnvironment } from "@/features/provider-connections/types/provider-connection-view"
 import { useValidatedProjectScope } from "@/features/projects/hooks/use-validated-project-scope"
 import { applicationsQueryOptions } from "@/features/projects/queries/projects-query"
 import { useOrganizationAccess } from "@/hooks/use-organization-access"
 
 export function ProviderConnectionsPage({
-  environmentId,
   organizationId,
   projectId,
   returnTo,
 }: {
-  environmentId?: string
   organizationId: string
   projectId: string
   returnTo?: string
 }) {
-  const navigate = useNavigate()
   const queryClient = useQueryClient()
   const access = useOrganizationAccess(organizationId)
+  const { pathEnvironment } = useActiveEnvironment()
   const { project, scopeMismatch, scopeReady } = useValidatedProjectScope(organizationId, projectId)
   const applications = useQuery({
     ...applicationsQueryOptions(projectId),
@@ -51,7 +48,9 @@ export function ProviderConnectionsPage({
   )
   const applicationItems = applications.data?.items ?? []
   const environmentItems = environments.data?.items ?? []
-  const selectedEnvironment = explicitPurchaseSetupEnvironment(environmentItems, environmentId)
+  // Purchase setup acts only on the Environment the address names, so it reads the
+  // path Environment the workspace switcher moves rather than a page-local choice.
+  const selectedEnvironment = pathEnvironment
   const assignmentQueries = useQueries({
     queries: applicationItems.map((application) => ({
       ...activeProviderAssignmentQueryOptions(
@@ -122,56 +121,28 @@ export function ProviderConnectionsPage({
           </a>
         ) : null}
         <WorkflowPanel
-          description="Choose one Mosaic Environment before inspecting or changing provider resolution. Mosaic never assumes Staging or another Environment."
+          description="Provider resolution is scoped to the Environment in the address bar. Switch Environments from the workspace Environment switcher."
           title="Active provider by Application"
         >
-          <label className="flex max-w-sm flex-col gap-2 text-sm font-medium">
-            Environment
-            <select
-              aria-label="Purchase setup Environment"
-              className="border-input bg-background focus-visible:border-ring focus-visible:ring-ring/40 h-9 rounded border px-3 text-sm outline-none focus-visible:ring-3"
-              onChange={(event) =>
-                void navigate({
-                  params: { organizationId, projectId },
-                  replace: true,
-                  search: {
-                    environmentId: event.currentTarget.value || undefined,
-                    returnTo,
-                  },
-                  to: "/organizations/$organizationId/projects/$projectId/catalog/providers",
-                })
-              }
-              value={selectedEnvironment?.id ?? ""}
-            >
-              <option value="">Select Environment</option>
-              {environmentItems.map((environment) => (
-                <option key={environment.id} value={environment.id}>
-                  {environment.name} · {environment.mode}
-                </option>
-              ))}
-            </select>
-          </label>
           {selectedEnvironment ? (
-            <div className="mt-5">
-              <ActiveProviderMatrix
-                applicationsHref={`/organizations/${encodeURIComponent(organizationId)}/projects/${encodeURIComponent(projectId)}/apps`}
-                applications={applicationItems}
-                assignments={activeAssignments}
-                canManage={access.canManage}
-                connections={connections.data?.items ?? []}
-                environment={selectedEnvironment}
-                managementEnabled
-                membersHref={`/organizations/${encodeURIComponent(organizationId)}/members`}
-                organizationId={organizationId}
-                projectId={projectId}
-              />
-            </div>
+            <ActiveProviderMatrix
+              applicationsHref={`/orgs/${encodeURIComponent(organizationId)}/projects/${encodeURIComponent(projectId)}/apps`}
+              applications={applicationItems}
+              assignments={activeAssignments}
+              canManage={access.canManage}
+              connections={connections.data?.items ?? []}
+              environment={selectedEnvironment}
+              managementEnabled
+              membersHref={`/orgs/${encodeURIComponent(organizationId)}/members`}
+              organizationId={organizationId}
+              projectId={projectId}
+            />
           ) : (
-            <div className="border-border mt-5 rounded border border-dashed p-4">
-              <p className="text-sm font-semibold">Select an Environment</p>
+            <div className="border-border rounded border border-dashed p-4">
+              <p className="text-sm font-semibold">No Environment in this address</p>
               <p className="text-muted-foreground mt-1 text-sm leading-6">
-                Active providers are scoped to one Environment and one registered Application. No
-                provider assignment is loaded until you choose the Environment explicitly.
+                Active providers are scoped to one Environment and one registered Application. Pick
+                an Environment from the workspace Environment switcher to load provider assignments.
               </p>
             </div>
           )}
@@ -192,12 +163,12 @@ export function ProviderConnectionsPage({
                 onConnect={async (input) => {
                   await connectRevenueCat.mutateAsync(input)
                 }}
-                providerBaseHref={`/organizations/${encodeURIComponent(organizationId)}/projects/${encodeURIComponent(projectId)}/catalog/providers`}
+                providerBaseHref={`/orgs/${encodeURIComponent(organizationId)}/projects/${encodeURIComponent(projectId)}/catalog/providers`}
               />
             ) : (
               <a
                 className="text-primary text-sm font-semibold"
-                href={`/organizations/${encodeURIComponent(organizationId)}/members`}
+                href={`/orgs/${encodeURIComponent(organizationId)}/members`}
               >
                 Ask an Owner or Admin to connect a provider
               </a>

@@ -1,6 +1,7 @@
 package config
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io/fs"
@@ -12,6 +13,8 @@ import (
 	"github.com/joho/godotenv"
 	"github.com/kelseyhightower/envconfig"
 
+	"github.com/Mujhtech/mosaic/apps/api/internal/platform/billingmigrationobject"
+	"github.com/Mujhtech/mosaic/apps/api/internal/platform/telemetry"
 	"github.com/Mujhtech/mosaic/apps/api/internal/providercredential"
 )
 
@@ -48,7 +51,20 @@ type Config struct {
 	Analytics   AnalyticsConfig
 	Providers   ProviderConfig
 	Billing     BillingConfig
+	Migration   BillingMigrationConfig
 	Worker      WorkerConfig
+}
+
+// BillingMigrationConfig controls the opt-in execution plane for Phase 9C.
+// The separately encrypted source-object bucket/keyring are never reused for
+// public Assets or provider credentials.
+type BillingMigrationConfig struct {
+	Enabled                      bool          `envconfig:"MOSAIC_BILLING_MIGRATION_ENABLED" default:"false"`
+	SourceObjectKeyring          string        `envconfig:"MOSAIC_BILLING_MIGRATION_SOURCE_KEYRING"`
+	SourceObjectBucket           string        `envconfig:"MOSAIC_BILLING_MIGRATION_SOURCE_BUCKET" default:"mosaic-migration-private"`
+	SourceObjectChunkBytes       int           `envconfig:"MOSAIC_BILLING_MIGRATION_SOURCE_CHUNK_BYTES" default:"262144"`
+	SourceObjectOperationTimeout time.Duration `envconfig:"MOSAIC_BILLING_MIGRATION_SOURCE_OPERATION_TIMEOUT" default:"5m"`
+	WorkerPollInterval           time.Duration `envconfig:"MOSAIC_BILLING_MIGRATION_WORKER_POLL_INTERVAL" default:"1s"`
 }
 
 // BillingConfig holds Phase 9A's deployment-level settings. Mosaic Billing is
@@ -260,6 +276,31 @@ type LogConfig struct {
 type TelemetryConfig struct {
 	ServiceName  string `envconfig:"OTEL_SERVICE_NAME" default:"mosaic-api"`
 	OTLPEndpoint string `envconfig:"OTEL_EXPORTER_OTLP_ENDPOINT"`
+	// OTLPProtocol selects the OTLP transport. Empty means the telemetry
+	// package default (http/protobuf); "grpc" switches both the trace and the
+	// metric exporter to OTLP/gRPC.
+	OTLPProtocol string `envconfig:"OTEL_EXPORTER_OTLP_PROTOCOL"`
+	// OTLPHeaders holds export headers as "key1=value1,key2=value2". Collector
+	// authentication lives here, so it is a secret: it is never logged and
+	// never echoed in a validation problem.
+	OTLPHeaders string `envconfig:"OTEL_EXPORTER_OTLP_HEADERS"`
+	// TLSSkipVerify disables collector certificate verification. It only
+	// applies to an https:// endpoint.
+	TLSSkipVerify bool `envconfig:"MOSAIC_OTEL_EXPORTER_TLS_SKIP_VERIFY" default:"false"`
+	// AllowInsecure acknowledges an unauthenticated-collector connection —
+	// plaintext export or unverified TLS — outside development and test.
+	AllowInsecure bool `envconfig:"MOSAIC_OTEL_EXPORTER_ALLOW_INSECURE" default:"false"`
+	// LogsEnabled ships log records to the collector alongside traces and
+	// metrics. It defaults on so logs are readable next to the traces they
+	// belong to; turn it off when log volume is the cost that matters. Local
+	// stdout logging is never affected.
+	LogsEnabled bool `envconfig:"MOSAIC_OTEL_LOGS_ENABLED" default:"true"`
+}
+
+// ExportLogs reports whether log records should be shipped to the collector,
+// which needs both a collector to ship to and the signal left enabled.
+func (t TelemetryConfig) ExportLogs() bool {
+	return t.OTLPEndpoint != "" && t.LogsEnabled
 }
 
 // ValidationError aggregates every configuration problem found at startup so an
@@ -293,6 +334,8 @@ func load() (Config, error) {
 	cfg.Log.Format = strings.ToLower(strings.TrimSpace(cfg.Log.Format))
 	cfg.Telemetry.ServiceName = strings.TrimSpace(cfg.Telemetry.ServiceName)
 	cfg.Telemetry.OTLPEndpoint = strings.TrimSpace(cfg.Telemetry.OTLPEndpoint)
+	cfg.Telemetry.OTLPProtocol = strings.ToLower(strings.TrimSpace(cfg.Telemetry.OTLPProtocol))
+	cfg.Telemetry.OTLPHeaders = strings.TrimSpace(cfg.Telemetry.OTLPHeaders)
 	cfg.BrowserAuth.CookieDomain = strings.TrimSpace(cfg.BrowserAuth.CookieDomain)
 	cfg.Protocol.V02SchemaPath = strings.TrimSpace(cfg.Protocol.V02SchemaPath)
 	cfg.Protocol.CommerceProviderSchemaPath = strings.TrimSpace(cfg.Protocol.CommerceProviderSchemaPath)
@@ -302,6 +345,8 @@ func load() (Config, error) {
 	cfg.Analytics.EventSchemaPath = strings.TrimSpace(cfg.Analytics.EventSchemaPath)
 	cfg.Analytics.EventV2SchemaPath = strings.TrimSpace(cfg.Analytics.EventV2SchemaPath)
 	cfg.Providers.CredentialKeyring = strings.TrimSpace(cfg.Providers.CredentialKeyring)
+	cfg.Migration.SourceObjectKeyring = strings.TrimSpace(cfg.Migration.SourceObjectKeyring)
+	cfg.Migration.SourceObjectBucket = strings.TrimSpace(cfg.Migration.SourceObjectBucket)
 	cfg.Billing.NotificationBaseURL = strings.TrimSpace(cfg.Billing.NotificationBaseURL)
 	cfg.Billing.AppleProductionBaseURL = strings.TrimSpace(cfg.Billing.AppleProductionBaseURL)
 	cfg.Billing.AppleSandboxBaseURL = strings.TrimSpace(cfg.Billing.AppleSandboxBaseURL)
@@ -397,11 +442,10 @@ func (cfg Config) validate() error {
 	cfg.validateProviders(report, productionLike)
 	cfg.validateAnalytics(report)
 	cfg.validateBilling(report, productionLike)
+	cfg.validateBillingMigration(report)
 	cfg.validateWorker(report)
 
-	if strings.TrimSpace(cfg.Telemetry.ServiceName) == "" {
-		report.add("OTEL_SERVICE_NAME must not be empty")
-	}
+	cfg.validateTelemetry(report, productionLike)
 	if cfg.BrowserAuth.SessionLifetime <= 0 {
 		report.add("MOSAIC_SESSION_LIFETIME must be greater than zero")
 	}
@@ -429,6 +473,61 @@ func (cfg Config) validate() error {
 		return &ValidationError{Problems: report.list}
 	}
 	return nil
+}
+
+func (cfg Config) validateBillingMigration(report *problems) {
+	if cfg.Migration.Enabled && !cfg.Billing.Enabled {
+		report.add("MOSAIC_BILLING_ENABLED must be true when MOSAIC_BILLING_MIGRATION_ENABLED is true")
+	}
+	switch {
+	case cfg.Migration.Enabled && cfg.Migration.SourceObjectKeyring == "":
+		report.add("MOSAIC_BILLING_MIGRATION_SOURCE_KEYRING is required when billing migration execution is enabled")
+	case cfg.Migration.SourceObjectKeyring != "":
+		if err := billingmigrationobject.ValidateKeyring(cfg.Migration.SourceObjectKeyring); err != nil {
+			report.add("MOSAIC_BILLING_MIGRATION_SOURCE_KEYRING is not a valid version 1 AES-256 keyring")
+		}
+	}
+	if keyringMaterialOverlaps(cfg.Migration.SourceObjectKeyring, cfg.Providers.CredentialKeyring) {
+		report.add("MOSAIC_BILLING_MIGRATION_SOURCE_KEYRING must not reuse key material from MOSAIC_PROVIDER_CREDENTIAL_KEYRING")
+	}
+	if cfg.Migration.SourceObjectBucket == "" {
+		report.add("MOSAIC_BILLING_MIGRATION_SOURCE_BUCKET must not be empty")
+	} else if cfg.Migration.SourceObjectBucket == cfg.ObjectStore.Bucket {
+		report.add("MOSAIC_BILLING_MIGRATION_SOURCE_BUCKET must be distinct from MOSAIC_OBJECT_STORAGE_BUCKET")
+	}
+	if cfg.Migration.SourceObjectChunkBytes < 16*1024 || cfg.Migration.SourceObjectChunkBytes > 4*1024*1024 {
+		report.add("MOSAIC_BILLING_MIGRATION_SOURCE_CHUNK_BYTES must be between 16384 and 4194304")
+	}
+	report.requirePositive(map[string]time.Duration{
+		"MOSAIC_BILLING_MIGRATION_SOURCE_OPERATION_TIMEOUT": cfg.Migration.SourceObjectOperationTimeout,
+		"MOSAIC_BILLING_MIGRATION_WORKER_POLL_INTERVAL":     cfg.Migration.WorkerPollInterval,
+	})
+	if cfg.Migration.SourceObjectOperationTimeout > 15*time.Minute {
+		report.add("MOSAIC_BILLING_MIGRATION_SOURCE_OPERATION_TIMEOUT must not exceed 15m")
+	}
+}
+
+func keyringMaterialOverlaps(left, right string) bool {
+	if left == "" || right == "" {
+		return false
+	}
+	type keyring struct {
+		Keys map[string]string `json:"keys"`
+	}
+	var first, second keyring
+	if json.Unmarshal([]byte(left), &first) != nil || json.Unmarshal([]byte(right), &second) != nil {
+		return false
+	}
+	values := make(map[string]struct{}, len(first.Keys))
+	for _, value := range first.Keys {
+		values[value] = struct{}{}
+	}
+	for _, value := range second.Keys {
+		if _, exists := values[value]; exists {
+			return true
+		}
+	}
+	return false
 }
 
 func (cfg Config) validateHTTP(report *problems, productionLike bool) {
@@ -542,6 +641,61 @@ func databaseSSLMode(raw string) string {
 		}
 	}
 	return ""
+}
+
+// validateTelemetry rejects an export setup that cannot work, and one that
+// would put collector credentials on a connection nothing authenticates. No
+// problem it reports contains a header value.
+func (cfg Config) validateTelemetry(report *problems, productionLike bool) {
+	if strings.TrimSpace(cfg.Telemetry.ServiceName) == "" {
+		report.add("OTEL_SERVICE_NAME must not be empty")
+	}
+	if _, err := telemetry.NormalizeProtocol(cfg.Telemetry.OTLPProtocol); err != nil {
+		report.add(`OTEL_EXPORTER_OTLP_PROTOCOL must be "http/protobuf" or "grpc"`)
+	}
+	if _, err := telemetry.ParseHeaders(cfg.Telemetry.OTLPHeaders); err != nil {
+		report.add(
+			"OTEL_EXPORTER_OTLP_HEADERS must be a comma-separated list of key=value pairs " +
+				"with percent-encoded values",
+		)
+	}
+
+	// Everything below describes how Mosaic reaches the collector, which only
+	// matters once there is one to reach.
+	if cfg.Telemetry.OTLPEndpoint == "" {
+		return
+	}
+	endpoint, err := url.Parse(cfg.Telemetry.OTLPEndpoint)
+	if err != nil || endpoint.Host == "" || (endpoint.Scheme != "http" && endpoint.Scheme != "https") {
+		report.add("OTEL_EXPORTER_OTLP_ENDPOINT must be an absolute http:// or https:// URL")
+		return
+	}
+	if endpoint.User != nil {
+		report.add("OTEL_EXPORTER_OTLP_ENDPOINT must not embed credentials; use OTEL_EXPORTER_OTLP_HEADERS")
+	}
+	if cfg.Telemetry.TLSSkipVerify && endpoint.Scheme != "https" {
+		report.add(
+			"MOSAIC_OTEL_EXPORTER_TLS_SKIP_VERIFY has no effect on a plaintext OTEL_EXPORTER_OTLP_ENDPOINT; " +
+				"use an https:// endpoint or unset it",
+		)
+	}
+	if !productionLike || cfg.Telemetry.AllowInsecure {
+		return
+	}
+	// Outside development, an export connection that is neither encrypted nor
+	// verified is a credential-disclosure risk whenever headers are set, and a
+	// telemetry-tampering risk even when they are not.
+	if endpoint.Scheme != "https" {
+		report.add(
+			"OTEL_EXPORTER_OTLP_ENDPOINT must use https outside development and test; set " +
+				"MOSAIC_OTEL_EXPORTER_ALLOW_INSECURE=true only when the collector is reached over a trusted private network",
+		)
+	} else if cfg.Telemetry.TLSSkipVerify {
+		report.add(
+			"MOSAIC_OTEL_EXPORTER_TLS_SKIP_VERIFY must be false outside development and test; set " +
+				"MOSAIC_OTEL_EXPORTER_ALLOW_INSECURE=true to accept an unverified collector certificate",
+		)
+	}
 }
 
 func (cfg Config) validateObjectStore(report *problems, productionLike bool) {

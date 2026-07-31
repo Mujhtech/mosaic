@@ -2,6 +2,7 @@ package dev.mosaic.sdk
 
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.emptyFlow
+import kotlinx.coroutines.flow.MutableSharedFlow
 
 /** Runtime store data keyed by the stable Mosaic Product ID. */
 data class MosaicProduct(
@@ -292,6 +293,10 @@ class MosaicConfiguredPurchaseProvider(
     private var configuration: MosaicCommerceConfiguration? = null
     private var configurationGeneration: Long = 0
     private var loadedMappingIds: Set<String> = emptySet()
+    private val completedPurchases = MutableSharedFlow<Unit>(extraBufferCapacity = 16)
+
+    /** Provider-neutral signal used only to request a non-blocking authoritative refresh. */
+    internal val purchaseRefreshes: Flow<Unit> = completedPurchases
 
     /**
      * The adapter's asynchronous update stream, when it has one. Exposed internally so the optional
@@ -401,7 +406,11 @@ class MosaicConfiguredPurchaseProvider(
             }
             mapping to snapshot.entitlementMappings.values.toList()
         }
-        return adapter.purchase(resolved.first, resolved.second)
+        return adapter.purchase(resolved.first, resolved.second).also { result ->
+            if (result is MosaicPurchaseResult.Purchased || result is MosaicPurchaseResult.AlreadyEntitled) {
+                completedPurchases.tryEmit(Unit)
+            }
+        }
     }
 
     override suspend fun restore(): MosaicRestoreResult {

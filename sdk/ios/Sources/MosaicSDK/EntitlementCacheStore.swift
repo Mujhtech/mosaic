@@ -1,12 +1,21 @@
 import CryptoKit
 import Foundation
 
-/// One accepted snapshot at rest.
+enum MosaicCustomerEntitlementCacheInvalidationReason: String, Codable, Sendable, Equatable {
+  case policyUnavailable
+}
+
+struct MosaicCustomerEntitlementCacheInvalidation: Codable, Sendable, Equatable {
+  let reason: MosaicCustomerEntitlementCacheInvalidationReason
+  let scope: MosaicCustomerAccessAuthorityScope
+  let invalidatedAt: Date
+}
+
+/// One accepted snapshot or durable access-invalidation marker at rest.
 ///
-/// The raw record bytes are kept alongside the binding members so the cache can
-/// be compared and pruned without re-decoding, and re-decoded verbatim on load
-/// so the cached snapshot is the exact document Mosaic issued rather than a
-/// re-encoding of this SDK's understanding of it.
+/// Snapshot bytes are kept alongside binding members and re-decoded verbatim.
+/// A policy tombstone uses the same atomic record replacement so a restart can
+/// never replay the active snapshot that preceded the invalidation.
 struct MosaicCustomerEntitlementCacheRecord: Codable, Sendable, Equatable {
   var formatVersion = 1
   var recordData: Data
@@ -24,6 +33,12 @@ struct MosaicCustomerEntitlementCacheRecord: Codable, Sendable, Equatable {
   var serverTime: Date?
   var localReceiptTime: Date?
   var systemUptime: TimeInterval?
+  var applicationID: String? = nil
+  var platform: MosaicCustomerAccessPlatform? = nil
+  var authority: MosaicCustomerAccessAuthority? = nil
+  var snapshotAuthorityDigest: String? = nil
+  var minimumSupport: MosaicCustomerMinimumAccessSupport? = nil
+  var invalidation: MosaicCustomerEntitlementCacheInvalidation? = nil
   /// Corruption detection, **not** authentication. It catches a truncated
   /// write, a half-flushed page, or a file edited on a jailbroken device; it
   /// proves nothing about origin, because anyone can recompute it. The
@@ -32,13 +47,30 @@ struct MosaicCustomerEntitlementCacheRecord: Codable, Sendable, Equatable {
 
   static func checksum(
     recordData: Data, billingCustomerID: String, projectID: String, environmentID: String,
-    snapshotVersion: Int64
+    snapshotVersion: Int64,
+    applicationID: String? = nil,
+    platform: MosaicCustomerAccessPlatform? = nil,
+    authority: MosaicCustomerAccessAuthority? = nil,
+    snapshotAuthorityDigest: String? = nil,
+    invalidation: MosaicCustomerEntitlementCacheInvalidation? = nil
   ) -> String {
     var material = Data()
     material.append(recordData)
     material.append(
       Data(
         "\n\(billingCustomerID)\n\(projectID)\n\(environmentID)\n\(snapshotVersion)".utf8))
+    if let applicationID, let platform, let authority, let snapshotAuthorityDigest {
+      material.append(
+        Data(
+          "\n\(applicationID)\n\(platform.rawValue)\n\(authority.epoch)\n\(authority.kind.rawValue)\n\(authority.transitionState.rawValue)\n\(snapshotAuthorityDigest)"
+            .utf8))
+    }
+    if let invalidation {
+      material.append(
+        Data(
+          "\ninvalidated\n\(invalidation.reason.rawValue)\n\(invalidation.scope.projectID)\n\(invalidation.scope.environmentID)\n\(invalidation.scope.applicationID)\n\(invalidation.scope.platform.rawValue)\n\(invalidation.invalidatedAt.timeIntervalSinceReferenceDate)"
+            .utf8))
+    }
     return SHA256.hash(data: material).map { String(format: "%02x", $0) }.joined()
   }
 
@@ -46,12 +78,20 @@ struct MosaicCustomerEntitlementCacheRecord: Codable, Sendable, Equatable {
     checksum
       == Self.checksum(
         recordData: recordData, billingCustomerID: billingCustomerID, projectID: projectID,
-        environmentID: environmentID, snapshotVersion: snapshotVersion)
+        environmentID: environmentID, snapshotVersion: snapshotVersion,
+        applicationID: applicationID, platform: platform, authority: authority,
+        snapshotAuthorityDigest: snapshotAuthorityDigest, invalidation: invalidation)
+  }
+
+  var isPolicyUnavailableTombstone: Bool {
+    formatVersion == 3 && invalidation?.reason == .policyUnavailable
   }
 
   var binding: MosaicCustomerSnapshotBinding {
     MosaicCustomerSnapshotBinding(
-      contractVersion: mosaicAuthoritativeEntitlementContractVersion,
+      contractVersion: authority == nil
+        ? mosaicAuthoritativeEntitlementContractVersion
+        : mosaicAuthoritativeEntitlementAuthorityContractVersion,
       billingCustomerID: billingCustomerID, projectID: projectID, environmentID: environmentID,
       snapshotVersion: snapshotVersion, asOf: asOf, contentDigestValid: true)
   }
@@ -144,7 +184,29 @@ actor MosaicCustomerEntitlementFileCacheStore: MosaicCustomerEntitlementCacheSto
     let record = try JSONDecoder().decode(
       MosaicCustomerEntitlementCacheRecord.self,
       from: Data(contentsOf: fileURL, options: .mappedIfSafe))
-    guard record.formatVersion == 1 else { throw CocoaError(.fileReadCorruptFile) }
+    guard (1...3).contains(record.formatVersion) else {
+      throw CocoaError(.fileReadCorruptFile)
+    }
+    if record.formatVersion < 3, record.invalidation != nil {
+      throw CocoaError(.fileReadCorruptFile)
+    }
+    if record.formatVersion == 2 {
+      guard record.applicationID != nil, record.platform != nil, record.authority != nil,
+        record.snapshotAuthorityDigest != nil, record.minimumSupport != nil
+      else { throw CocoaError(.fileReadCorruptFile) }
+    }
+    if record.formatVersion == 3 {
+      guard let invalidation = record.invalidation,
+        invalidation.reason == .policyUnavailable,
+        record.applicationID == invalidation.scope.applicationID,
+        record.platform == invalidation.scope.platform,
+        record.projectID == invalidation.scope.projectID,
+        record.environmentID == invalidation.scope.environmentID,
+        record.authority == nil,
+        record.snapshotAuthorityDigest == nil,
+        record.minimumSupport == nil
+      else { throw CocoaError(.fileReadCorruptFile) }
+    }
     // A corrupt cache is not a customer state. It is discarded and reported as
     // `invalid`, which resolves to `unknown`, never `inactive`.
     guard record.isIntact else { throw CocoaError(.fileReadCorruptFile) }

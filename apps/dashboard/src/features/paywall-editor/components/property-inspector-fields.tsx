@@ -1,16 +1,22 @@
 /* eslint-disable react-refresh/only-export-components -- internal inspector modules colocate private controls with their supporting types and transforms. */
 import { ArrowsHorizontalIcon } from "@phosphor-icons/react/dist/ssr/ArrowsHorizontal"
 import { ArrowsVerticalIcon } from "@phosphor-icons/react/dist/ssr/ArrowsVertical"
-import { CaretDownIcon } from "@phosphor-icons/react/dist/ssr/CaretDown"
 import { ColumnsIcon } from "@phosphor-icons/react/dist/ssr/Columns"
 import { CornersOutIcon } from "@phosphor-icons/react/dist/ssr/CornersOut"
 import { LineSegmentIcon } from "@phosphor-icons/react/dist/ssr/LineSegment"
 import { PercentIcon } from "@phosphor-icons/react/dist/ssr/Percent"
 import { RowsIcon } from "@phosphor-icons/react/dist/ssr/Rows"
 import { TextTIcon } from "@phosphor-icons/react/dist/ssr/TextT"
-import type { ReactNode } from "react"
+import { Children, isValidElement, type ReactNode } from "react"
 
 import { Button } from "@/components/ui/button"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
 import { InspectorColorControl } from "@/features/paywall-editor/components/inspector-color-control"
 import type {
   LocalizedText,
@@ -169,7 +175,7 @@ export function ComponentTextField({
           {suggestions ? (
             <datalist id={`${fieldProps.id}-suggestions`}>
               {suggestions.map((suggestion) => (
-                <option key={suggestion} value={suggestion} />
+                <SelectItem key={suggestion} value={suggestion} />
               ))}
             </datalist>
           ) : null}
@@ -289,6 +295,28 @@ export function NumberField({
   )
 }
 
+/** Flattens an item's children into the plain string the trigger shows. */
+function optionText(node: ReactNode): string {
+  if (typeof node === "string" || typeof node === "number") return String(node)
+  if (Array.isArray(node)) return node.map(optionText).join("")
+  if (isValidElement<{ children?: ReactNode }>(node)) return optionText(node.props.children)
+  return ""
+}
+
+/**
+ * Base UI resolves the trigger's label from `items`, never from the rendered
+ * items themselves. The inspector has more than sixty of these fields, so the
+ * list is derived from the `SelectItem` children a caller already writes rather
+ * than asking every one of them to repeat itself.
+ */
+function optionsFromChildren(children: ReactNode) {
+  return Children.toArray(children).flatMap((child) =>
+    isValidElement<{ children?: ReactNode; value?: string }>(child) && child.props.value != null
+      ? [{ label: optionText(child.props.children), value: child.props.value }]
+      : [],
+  )
+}
+
 export function SelectField({
   address,
   children,
@@ -328,19 +356,21 @@ export function SelectField({
               {leadingIcon}
             </span>
           ) : null}
-          <select
-            {...fieldProps}
-            className={`${CONTROL_CLASS} appearance-none pe-7 ${leadingIcon ? "ps-7" : ""}`}
-            disabled={disabled}
-            onChange={(event) => onChange(event.target.value)}
+          <Select
+            items={optionsFromChildren(children)}
+            onValueChange={(next) => onChange(next)}
             value={value}
           >
-            {children}
-          </select>
-          <CaretDownIcon
-            aria-hidden
-            className="text-muted-foreground pointer-events-none absolute end-2 top-1/2 size-3 -translate-y-1/2"
-          />
+            <SelectTrigger
+              {...fieldProps}
+              className={leadingIcon ? "ps-7" : undefined}
+              disabled={disabled}
+              size="sm"
+            >
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>{children}</SelectContent>
+          </Select>
         </div>
       )}
     </Field>

@@ -21,8 +21,8 @@ import {
 import { billingHealthQueryOptions } from "@/features/billing-operations/queries/billing-health-queries"
 import { productsQueryOptions } from "@/features/catalog/queries/catalog-query"
 import { environmentsQueryOptions } from "@/features/environments/queries/environments-query"
-import { ScopeMismatchRecovery } from "@/features/organizations/components/scope-mismatch-recovery"
-import { WorkspacePage, WorkflowPanel } from "@/features/organizations/components/workspace-page"
+import { ScopeMismatchRecovery } from "@/features/orgs/components/scope-mismatch-recovery"
+import { WorkspacePage, WorkflowPanel } from "@/features/orgs/components/workspace-page"
 import { useValidatedProjectScope } from "@/features/projects/hooks/use-validated-project-scope"
 import { applicationsQueryOptions } from "@/features/projects/queries/projects-query"
 import { storeConnectionsHref } from "@/lib/routing/workspace-hrefs"
@@ -93,7 +93,7 @@ export function TransactionLedgerPage({
   }
 
   const connectionsHref = storeConnectionsHref({ organizationId, projectId }) ?? "#"
-  const base = `/organizations/${encodeURIComponent(organizationId)}/projects/${encodeURIComponent(projectId)}/billing/${encodeURIComponent(environmentId)}`
+  const base = `/orgs/${encodeURIComponent(organizationId)}/projects/${encodeURIComponent(projectId)}/billing/${encodeURIComponent(environmentId)}`
 
   return (
     <WorkspacePage

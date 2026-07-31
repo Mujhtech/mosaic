@@ -11,9 +11,16 @@ import { Button } from "@/components/ui/button"
 import { buttonVariants } from "@/components/ui/button-variants"
 import { Field, FieldLabel } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
 import { MonetizationWorkspace } from "@/features/environments/components/monetization-workspace"
 import { environmentsQueryOptions } from "@/features/environments/queries/environments-query"
-import { WorkflowPanel } from "@/features/organizations/components/workspace-page"
+import { WorkflowPanel } from "@/features/orgs/components/workspace-page"
 import { useOrganizationAccess } from "@/hooks/use-organization-access"
 import { cn } from "@/lib/utils"
 import { useExperimentAdapter } from "../api/use-experiment-adapter"
@@ -179,13 +186,8 @@ function ImmutableActiveDefinition({
                 </div>
                 <Link
                   className={buttonVariants({ className: "mt-3", size: "sm", variant: "outline" })}
-                  params={{
-                    environmentId,
-                    organizationId,
-                    paywallId: variant.paywallId,
-                    projectId,
-                  }}
-                  to="/organizations/$organizationId/projects/$projectId/monetization/$environmentId/paywalls/$paywallId"
+                  params={(prev) => ({ ...prev, paywallId: variant.paywallId })}
+                  to="/orgs/$organizationId/projects/$projectId/env/$environmentKey/monetization/paywalls/$paywallId"
                 >
                   Open Paywall
                 </Link>
@@ -222,8 +224,8 @@ function ImmutableActiveDefinition({
         </p>
         <Link
           className={buttonVariants({ className: "mt-3" })}
-          params={{ environmentId, organizationId, projectId }}
-          to="/organizations/$organizationId/projects/$projectId/monetization/$environmentId/experiments/new"
+          params={(prev) => prev}
+          to="/orgs/$organizationId/projects/$projectId/env/$environmentKey/monetization/experiments/new"
         >
           Create new Experiment
         </Link>
@@ -569,6 +571,11 @@ function HistoryPanel({
   )
 }
 
+const QA_IDENTITY_OPTIONS = [
+  { label: "Identified user", value: "identified_user" },
+  { label: "Installation", value: "installation" },
+]
+
 function QaPanel({
   activeVersionId,
   canManage,
@@ -606,6 +613,10 @@ function QaPanel({
       formApi.reset()
     },
   })
+  const variantOptions = variants.map((variant) => ({
+    label: variant.name,
+    value: variant.id ?? "",
+  }))
   if (qa.isPending) return <LoadingState title="Loading QA Overrides" />
   if (qa.error)
     return <ErrorState description={qa.error.message} onRetry={() => void qa.refetch()} />
@@ -646,18 +657,22 @@ function QaPanel({
               {(field) => (
                 <Field>
                   <FieldLabel htmlFor="qa-variant">Forced Variant</FieldLabel>
-                  <select
-                    className="border-input bg-background h-8 rounded border px-2 text-sm"
-                    id="qa-variant"
+                  <Select
+                    items={variantOptions}
+                    onValueChange={(value) => field.handleChange(value)}
                     value={field.state.value}
-                    onChange={(event) => field.handleChange(event.currentTarget.value)}
                   >
-                    {variants.map((variant) => (
-                      <option key={variant.id} value={variant.id}>
-                        {variant.name}
-                      </option>
-                    ))}
-                  </select>
+                    <SelectTrigger id="qa-variant" size="sm">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {variantOptions.map((option) => (
+                        <SelectItem key={option.value} value={option.value}>
+                          {option.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </Field>
               )}
             </form.Field>
@@ -665,17 +680,22 @@ function QaPanel({
               {(field) => (
                 <Field>
                   <FieldLabel htmlFor="qa-identity">Identity type</FieldLabel>
-                  <select
-                    className="border-input bg-background h-8 rounded border px-2 text-sm"
-                    id="qa-identity"
+                  <Select
+                    items={QA_IDENTITY_OPTIONS}
+                    onValueChange={(value) => field.handleChange(value as "identified_user")}
                     value={field.state.value}
-                    onChange={(event) =>
-                      field.handleChange(event.currentTarget.value as "identified_user")
-                    }
                   >
-                    <option value="identified_user">Identified user</option>
-                    <option value="installation">Installation</option>
-                  </select>
+                    <SelectTrigger id="qa-identity" size="sm">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {QA_IDENTITY_OPTIONS.map((option) => (
+                        <SelectItem key={option.value} value={option.value}>
+                          {option.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </Field>
               )}
             </form.Field>

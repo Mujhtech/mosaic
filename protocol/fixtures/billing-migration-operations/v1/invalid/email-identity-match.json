@@ -1,0 +1,20 @@
+{
+  "billingMigrationOperationsContractVersion": "1",
+  "recordType": "mappingSet",
+  "payload": {
+    "programId": "mig-001",
+    "stateVersion": 5,
+    "mappingSetId": "mapping-001",
+    "version": 2,
+    "status": "draft",
+    "entries": [
+      {
+        "sourceKind": "email",
+        "sourceIdentifier": "person@example.com",
+        "targetId": "customer-001",
+        "matchKind": "fuzzy"
+      }
+    ],
+    "mappingDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+  }
+}

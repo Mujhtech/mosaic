@@ -1,0 +1,25 @@
+{
+  "billingMigrationOperationsContractVersion": "1",
+  "recordType": "repairAction",
+  "payload": {
+    "programId": "mig-001",
+    "idempotencyKey": "repair-pending-001",
+    "expectedStateVersion": 7,
+    "expectedDigests": {
+      "caseDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "policyDigest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+    },
+    "reason": "Revalidate known provider reference after transient outage",
+    "repairKind": "provider_revalidate",
+    "caseId": "case-001",
+    "scope": {
+      "kind": "provider_reference",
+      "references": [
+        "$RCAnonymousID:8460f7dd8d3b4cf7a8f1154b113dccb8"
+      ]
+    },
+    "actorId": "actor-operator-001",
+    "beforeDigest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "executionStatus": "pending"
+  }
+}

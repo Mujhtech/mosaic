@@ -1,0 +1,19 @@
+{
+  "authoritativeEntitlementContractVersion": "2",
+  "recordType": "entitlementSyncRequest",
+  "payload": {
+    "projectId": "fixture-project-mosaic",
+    "request": {
+      "applicationId": "fixture-application-ios",
+      "platform": "ios",
+      "appVersion": "4.2.0",
+      "sdkVersion": "2.0.0",
+      "supportedContractVersions": [
+        "2"
+      ],
+      "capabilities": [
+        "authority_epoch"
+      ]
+    }
+  }
+}

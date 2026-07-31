@@ -12,12 +12,13 @@ import (
 
 const queueMetricTimeout = 5 * time.Second
 
-// billingQueues maps a metric queue label to its backing table. All three share
+// billingQueues maps a metric queue label to its backing table. All four share
 // the status/available_at/created_at job shape the rest of Mosaic uses.
 var billingQueues = map[string]string{
-	"validation":     "billing_validation_jobs",
-	"reconciliation": "billing_reconciliation_runs",
-	"replay":         "billing_replay_jobs",
+	"validation":       "billing_validation_jobs",
+	"identity_binding": "billing_identity_binding_jobs",
+	"reconciliation":   "billing_reconciliation_runs",
+	"replay":           "billing_replay_jobs",
 }
 
 // RegisterQueueMetrics publishes backlog depth, oldest-job age, and dead-letter

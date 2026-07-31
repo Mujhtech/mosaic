@@ -34,6 +34,20 @@ void main() {
           projectId: 'project-mosaic',
           environmentId: 'environment-production',
         ),
+        authority: MosaicCustomerAuthority(
+          epoch: 5,
+          kind: MosaicCustomerAuthorityKind.mosaic,
+          scope: const MosaicCustomerAuthorityScope(
+            projectId: 'project-mosaic',
+            environmentId: 'environment-production',
+            applicationId: 'application-ios',
+            platform: MosaicCustomerAuthorityPlatform.ios,
+          ),
+          transitionState: MosaicCustomerAuthorityTransitionState.stabilizing,
+          cutoverAt: DateTime.utc(2026, 7, 28, 12, 30),
+        ),
+        snapshotAuthorityDigest:
+            'sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
         snapshotVersion: version,
         asOf: DateTime.utc(2026, 7, 28, 11, 59, 58),
         entityTag: 'cs-0001-v$version',
@@ -80,9 +94,32 @@ void main() {
     expect(read, isNotNull);
     expect(read!.binding.billingCustomerId, 'customer-a');
     expect(read.snapshotVersion, 4);
+    expect(
+      read.snapshotAuthorityDigest,
+      'sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+    );
     expect(read.staleGraceSeconds, 86400);
     expect(read.trustedServerTime, DateTime.utc(2026, 7, 28, 12));
     expect(read.localReceiptTime, DateTime.utc(2026, 7, 28, 11, 59, 30));
+  });
+
+  test('an invalidation tombstone round-trips without replayable snapshot',
+      () async {
+    final cache = cacheIn(root);
+
+    await cache.write(
+      namespaceA,
+      MosaicCustomerEntitlementCacheRecord.invalidationTombstone(),
+    );
+    final read = await cache.read(namespaceA);
+
+    expect(read, isNotNull);
+    expect(read!.isInvalidationTombstone, isTrue);
+    final source = File('${root.path}/mosaic/entitlements-$namespaceA.json')
+        .readAsStringSync();
+    expect(source, contains('"invalidated":true'));
+    expect(source, isNot(contains('customer-a')));
+    expect(source, isNot(contains('customerEntitlementSnapshot')));
   });
 
   test('a tampered record is rejected rather than half-trusted', () async {

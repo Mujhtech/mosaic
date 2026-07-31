@@ -1,0 +1,121 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:mosaic:protocol:schema:authoritative-entitlement:v2:compatibility-manifest",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "authoritativeEntitlementContractVersion",
+    "status",
+    "schema",
+    "canonicalFixtures",
+    "recordTypes",
+    "conformancePlatforms",
+    "readerPolicy"
+  ],
+  "properties": {
+    "authoritativeEntitlementContractVersion": {
+      "const": "2"
+    },
+    "status": {
+      "enum": [
+        "draft",
+        "releaseCandidate",
+        "approved",
+        "deprecated",
+        "retired"
+      ]
+    },
+    "schema": {
+      "const": "../../schema/authoritative-entitlement/v2/contract.schema.json"
+    },
+    "canonicalFixtures": {
+      "type": "array",
+      "minItems": 4,
+      "maxItems": 32,
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "pattern": "^\\.\\./\\.\\./fixtures/authoritative-entitlement/v2/.*\\.json$"
+      }
+    },
+    "recordTypes": {
+      "type": "array",
+      "minItems": 4,
+      "maxItems": 4,
+      "uniqueItems": true,
+      "items": {
+        "$ref": "urn:mosaic:protocol:schema:authoritative-entitlement:v2:contract#/properties/recordType"
+      }
+    },
+    "conformancePlatforms": {
+      "const": [
+        "ios",
+        "android"
+      ]
+    },
+    "readerPolicy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "authorityPrecedence",
+        "olderAuthorityEpoch",
+        "sameEpochOlderSnapshot",
+        "legacyCache",
+        "authorityUnknown",
+        "policyUnavailable",
+        "scopeMismatch",
+        "providerUnion",
+        "transitionRefresh",
+        "cacheIntegrity",
+        "requestScopeAuthority",
+        "knownSnapshotAuthorityDigest",
+        "unchangedEligibility",
+        "unchangedResponse"
+      ],
+      "properties": {
+        "authorityPrecedence": {
+          "const": "authorityEpochBeforeSnapshotVersion"
+        },
+        "olderAuthorityEpoch": {
+          "const": "rejectPreserveNewerAuthorityCache"
+        },
+        "sameEpochOlderSnapshot": {
+          "const": "rejectPreserveCache"
+        },
+        "legacyCache": {
+          "const": "authority_unknown"
+        },
+        "authorityUnknown": {
+          "const": "unavailableNeverInactive"
+        },
+        "policyUnavailable": {
+          "const": "omitMinimumSupportFailClosedNeverInferAuthority"
+        },
+        "scopeMismatch": {
+          "const": "rejectClearCacheReportUnavailable"
+        },
+        "providerUnion": {
+          "const": "forbidden"
+        },
+        "transitionRefresh": {
+          "const": "urgentBeforeConfigurationRefresh"
+        },
+        "cacheIntegrity": {
+          "const": "bindCustomerEnvironmentApplicationPlatformEpoch"
+        },
+        "requestScopeAuthority": {
+          "const": "deriveFromOpaqueCATAndSdkAuthentication"
+        },
+        "knownSnapshotAuthorityDigest": {
+          "const": "optionalVerificationInputNeverSelector"
+        },
+        "unchangedEligibility": {
+          "const": "exactDigestScopeEpochAndSnapshotMatch"
+        },
+        "unchangedResponse": {
+          "const": "embedExactV1PayloadAndSlideFreshness"
+        }
+      }
+    }
+  }
+}

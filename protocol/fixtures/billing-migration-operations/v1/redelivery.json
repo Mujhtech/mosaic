@@ -1,0 +1,15 @@
+{
+  "billingMigrationOperationsContractVersion": "1",
+  "recordType": "webhookRedeliveryCommand",
+  "payload": {
+    "programId": "mig-001",
+    "idempotencyKey": "redelivery-001",
+    "expectedStateVersion": 15,
+    "expectedDigests": {
+      "eventDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    },
+    "reason": "Redeliver the existing signed authority transition event",
+    "eventId": "event-001",
+    "destinationId": "destination-001"
+  }
+}

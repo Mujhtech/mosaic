@@ -1,5 +1,34 @@
 # Changelog
 
+## Unreleased (Phase 9C: migration authority awareness)
+
+- Add strict Authoritative Entitlement v2 wrapper decoding, scoped monotonic authority epochs, a
+  replaying `customerAuthority` flow, authority-bound backup-excluded cache records, and safe
+  `authority_unknown` handling for legacy v1 cache entries.
+- Authority epoch is evaluated before snapshot version. Foreground recovery refreshes authority
+  before normal configuration, and Customer Access Token generations remain opaque, memory-only,
+  and bound to the accepted epoch.
+- Report Android application/SDK versions and migration capabilities. Placement targeting uses
+  only Mosaic access after Mosaic authority, never a union with provider-observed entitlements;
+  purchase providers remain unchanged.
+- Enforce v2 minimum-support metadata before accepting authority, keep targeting unknown until a
+  source or Mosaic epoch is accepted, and validate sliding unchanged records against the retained
+  evaluation, projection, and freshness state.
+- Publish authority snapshots and unchanged freshness only after durable cache commit. Failed
+  initial, replacement-epoch, or sliding writes preserve the prior observable/durable state, and
+  direct entitlement checks remain unknown under source or rollback authority.
+- Persist compatible `snapshotUnchanged` minimum-support metadata in the retained v2 wrapper so
+  restart/bootstrap enforcement uses the latest server requirements without rewriting snapshot or
+  authority digest inputs.
+- Send the optional `knownSnapshotAuthorityDigest` only with the complete retained
+  customer/scope/epoch/version verification tuple. Stale or mismatched cache bindings request a full
+  snapshot. Decode `policy_unavailable` without placeholder support metadata and fail closed for
+  malformed policy-unavailable records so retained Mosaic access is never republished as active.
+- Persist valid or exactly recognizable forbidden-support `policy_unavailable` as an atomic cache
+  tombstone before publishing unavailable. Restarts cannot replay the displaced active snapshot; a
+  failed tombstone stays pending in memory, emits a cache-write diagnostic, and is retried before
+  later synchronization. Unrelated malformed v2 records retain the ordinary preserve-cache policy.
+
 ## Unreleased (Phase 9B: subscription state and authoritative entitlements)
 
 - Add authoritative entitlements behind

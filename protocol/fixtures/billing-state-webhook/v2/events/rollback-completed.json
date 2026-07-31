@@ -1,0 +1,28 @@
+{
+  "billingStateWebhookContractVersion": "2",
+  "recordType": "billingStateEvent",
+  "payload": {
+    "eventId": "event-rollback-001",
+    "eventType": "authority.rollback.completed",
+    "billingCustomerId": "customer-001",
+    "authority": {
+      "authorityEpoch": 6,
+      "authorityKind": "source_rollback",
+      "scope": {
+        "projectId": "project-001",
+        "environmentId": "env-production",
+        "applicationId": "app-ios",
+        "platform": "ios"
+      },
+      "transitionState": "rolled_back",
+      "cutoverAt": "2026-07-30T10:00:00.000Z",
+      "snapshotAuthorityDigest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+    },
+    "snapshotVersion": 1,
+    "previousSnapshotVersion": 43,
+    "occurredAt": "2026-07-30T10:00:00.000Z",
+    "createdAt": "2026-07-30T10:00:01.000Z",
+    "correlationId": "correlation-rollback-001",
+    "changedEntitlements": []
+  }
+}

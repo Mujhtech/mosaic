@@ -18,6 +18,13 @@ import { Button } from "@/components/ui/button"
 import { Field, FieldLabel } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
+import {
   Sheet,
   SheetContent,
   SheetDescription,
@@ -57,6 +64,12 @@ import type { HostedPaywallListItem } from "@/features/publishing/api/hosted-pub
 import { useHostedPublishingAdapter } from "@/features/publishing/api/use-hosted-publishing-adapter"
 
 type DetailTab = "overview" | "rules" | "simulator" | "overrides"
+
+const ASSIGNMENT_POLICY_OPTIONS = [
+  { label: "Installation (default)", value: "installation" },
+  { label: "Identified user", value: "identified_user" },
+  { label: "Identified user, otherwise installation", value: "identified_user_or_installation" },
+]
 
 export function PlacementDecisionPage({
   environmentId,
@@ -439,22 +452,24 @@ function DecisionWorkspace({
                   />
                   <Field>
                     <FieldLabel htmlFor="assignment-policy">Rollout assignment identity</FieldLabel>
-                    <select
-                      className="border-input bg-background h-9 w-full rounded border px-3 text-sm"
-                      id="assignment-policy"
-                      onChange={(event) =>
-                        updateAssignmentPolicy(
-                          event.currentTarget.value as PlacementRuleSetDraft["assignmentPolicy"],
-                        )
+                    <Select
+                      items={ASSIGNMENT_POLICY_OPTIONS}
+                      onValueChange={(value) =>
+                        updateAssignmentPolicy(value as PlacementRuleSetDraft["assignmentPolicy"])
                       }
                       value={assignmentPolicy}
                     >
-                      <option value="installation">Installation (default)</option>
-                      <option value="identified_user">Identified user</option>
-                      <option value="identified_user_or_installation">
-                        Identified user, otherwise installation
-                      </option>
-                    </select>
+                      <SelectTrigger id="assignment-policy">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {ASSIGNMENT_POLICY_OPTIONS.map((option) => (
+                          <SelectItem key={option.value} value={option.value}>
+                            {option.label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
                     <p className="text-muted-foreground text-xs">
                       Identification can change rollout only when a user-based policy is selected.
                       Assignment values are never shown in traces.
@@ -582,12 +597,8 @@ function DecisionWorkspace({
             </Button>
             <Link
               className="text-primary ms-auto text-sm font-medium"
-              params={{
-                environmentId: scope.environmentId,
-                organizationId,
-                projectId: scope.projectId,
-              }}
-              to="/organizations/$organizationId/projects/$projectId/monetization/$environmentId/releases"
+              params={(prev) => prev}
+              to="/orgs/$organizationId/projects/$projectId/env/$environmentKey/monetization/releases"
             >
               Review release history
             </Link>

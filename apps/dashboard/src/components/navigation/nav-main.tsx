@@ -40,7 +40,11 @@ export function NavMain({ items, label }: NavMainProps) {
               <Collapsible
                 key={item.title}
                 // asChild
-                defaultOpen={item.subItems.some((subItem) => subItem.to === pathname)}
+                defaultOpen={item.subItems.some(
+                  (subItem) =>
+                    subItem.to === pathname ||
+                    (subItem.to ? pathname.startsWith(`${subItem.to}/`) : false),
+                )}
                 className="group/collapsible"
               >
                 <SidebarMenuItem>

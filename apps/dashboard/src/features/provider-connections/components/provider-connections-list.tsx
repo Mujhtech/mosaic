@@ -79,7 +79,7 @@ export function ProviderConnectionsList({
           ) : null}
           <a
             className="text-primary mt-3 inline-flex text-sm font-medium hover:underline"
-            href={`/organizations/${encodeURIComponent(organizationId)}/projects/${encodeURIComponent(projectId)}/catalog/providers/${encodeURIComponent(connection.id)}`}
+            href={`/orgs/${encodeURIComponent(organizationId)}/projects/${encodeURIComponent(projectId)}/catalog/providers/${encodeURIComponent(connection.id)}`}
           >
             Open connection details
           </a>

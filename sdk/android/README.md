@@ -251,6 +251,39 @@ Behaviour:
 
 ## Authoritative entitlements (optional, off by default)
 
+Phase 9C responses use Authoritative Entitlement Contract v2. The v1 snapshot is wrapped in a
+server-owned `(Project, Environment, Application, android)` authority scope and monotonic authority
+epoch. Observe `client.customerAuthority` for the replaying authority state. An epoch is evaluated
+before snapshot version, rollback creates a newer epoch, and an old v1 cache is reported as
+`authority_unknown` rather than silently relabelled. When Mosaic is authoritative, Placement
+targeting reads only Mosaic's accepted snapshot; it never unions provider-observed access.
+Before accepting authority, Android enforces the server's minimum contract and SDK versions,
+application-version window, and required capabilities. Unsupported builds expose unavailable
+authority and targeting remains unknown rather than falling back to provider observations.
+Direct authoritative entitlement checks answer from the Mosaic snapshot only while authority kind
+is `mosaic`; `source` and `source_rollback` keep those checks unknown while provider targeting
+remains available. Authority and sliding freshness are published only after the atomic cache commit
+succeeds.
+An accepted `snapshotUnchanged` also replaces the cached wrapper's outer `minimumSupport`, so the
+latest compatible bootstrap requirements are reported and enforced after process restart without
+changing the embedded v1 snapshot or its authority digest.
+Android sends `knownSnapshotAuthorityDigest` only when its atomically retained v2 record still
+matches the current Customer Access Token binding, Application/platform scope, authority epoch, and
+snapshot version. An absent, corrupt, or mismatched tuple requests a full snapshot. If the server
+cannot load the frozen support policy, `policy_unavailable` carries no fabricated minimum support;
+the SDK atomically replaces retained Mosaic access with a durable invalidation marker and reports
+authority unavailable, never inactive. The marker survives process restart and is replaced by a
+later valid full snapshot. If the marker cannot be committed, access still fails closed in memory,
+the SDK attempts to remove the old durable snapshot, the failure is diagnosed, and synchronization
+remains gated until the marker retry succeeds. If storage rejects both marker and removal, Mosaic
+does not claim durability; the severe diagnostic and in-process gate remain while storage is
+unavailable.
+
+The purchase provider remains independent. RevenueCat, Google Play Billing, or a custom provider
+may continue purchases and restore while Mosaic controls access. Foreground recovery refreshes
+authority before ordinary Configuration Delivery. No WorkManager dependency or guaranteed
+background execution is introduced.
+
 Two different questions have two different answers, and Mosaic keeps them apart:
 
 - **Provider-observed** — what the store told *this device* a moment ago.

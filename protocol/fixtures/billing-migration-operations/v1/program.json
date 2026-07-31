@@ -1,0 +1,31 @@
+{
+  "billingMigrationOperationsContractVersion": "1",
+  "recordType": "migrationProgram",
+  "payload": {
+    "programId": "mig-001",
+    "stateVersion": 7,
+    "state": "shadowing",
+    "scope": {
+      "projectId": "project-001",
+      "environmentId": "env-production",
+      "applications": [
+        {
+          "applicationId": "app-android",
+          "platform": "android"
+        },
+        {
+          "applicationId": "app-ios",
+          "platform": "ios"
+        }
+      ]
+    },
+    "source": {
+      "adapter": "revenuecat",
+      "adapterVersion": "v2-2026-07",
+      "credentialReference": "credential-migration-001"
+    },
+    "authorityEpochBefore": 4,
+    "stabilizationDays": 7,
+    "rollbackWindowDays": 7
+  }
+}
