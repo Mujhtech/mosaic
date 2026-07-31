@@ -236,9 +236,9 @@ export function ProductLayerStyleSection({ node }: { node: ProductLayerNode }) {
         <div className="space-y-2 rounded bg-muted/60 p-2 text-[11px] leading-4">
           <p>Selected values inherit from Default until you change them.</p>
           {activeOverrides.length > 0 ? (
-            <div
+            <fieldset
               aria-label="Selected appearance overrides"
-              className="flex flex-wrap gap-1"
+              className="flex min-w-0 flex-wrap gap-1"
             >
               {activeOverrides.map(({ label, path }) => (
                 <Button
@@ -254,7 +254,7 @@ export function ProductLayerStyleSection({ node }: { node: ProductLayerNode }) {
                   {label}
                 </Button>
               ))}
-            </div>
+            </fieldset>
           ) : (
             <p className="text-muted-foreground">No Selected overrides.</p>
           )}

@@ -479,6 +479,7 @@ export function ComponentTreeView({ model }: { model: ComponentTreeModel }) {
                       aria-label={`Drag ${label} to reorder`}
                       className="grid size-4 shrink-0 place-items-center text-muted-foreground opacity-45 transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100"
                       data-slot="layer-reorder-affordance"
+                      role="img"
                       title={`Drag ${label} to reorder`}
                     >
                       <DotsSixVerticalIcon

@@ -123,10 +123,8 @@ export function RuleBuilder({
               tabIndex={-1}
             >
               <div className="flex flex-wrap items-center gap-2 border-b bg-muted/30 p-3">
-                <span
-                  aria-label={`Priority ${rule.priority}`}
-                  className="rounded border bg-background px-2 py-1 font-mono text-xs"
-                >
+                <span className="rounded border bg-background px-2 py-1 font-mono text-xs">
+                  <span className="sr-only">Priority </span>
                   {rule.priority}
                 </span>
                 <input

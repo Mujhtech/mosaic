@@ -285,11 +285,11 @@ function SidebarTrigger({
   );
 }
 
-function SidebarRail({ className, ...props }: ComponentProps<"div">) {
+function SidebarRail({ className, ...props }: ComponentProps<"button">) {
   const { toggleSidebar } = useSidebar();
 
   return (
-    <div
+    <button
       aria-hidden="true"
       className={cn(
         "absolute inset-y-0 z-20 hidden w-4 transition-all ease-linear after:absolute after:inset-y-0 after:start-1/2 after:w-[2px] hover:after:bg-sidebar-border group-data-[side=left]:-right-4 group-data-[side=right]:left-0 sm:flex ltr:-translate-x-1/2 rtl:-translate-x-1/2",
@@ -303,6 +303,8 @@ function SidebarRail({ className, ...props }: ComponentProps<"div">) {
       data-sidebar="rail"
       data-slot="sidebar-rail"
       onClick={toggleSidebar}
+      tabIndex={-1}
+      type="button"
       {...props}
     />
   );

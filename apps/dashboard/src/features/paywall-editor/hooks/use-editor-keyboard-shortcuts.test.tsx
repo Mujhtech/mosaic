@@ -63,10 +63,11 @@ function ShortcutHarness({
         <option value="monthly">Monthly</option>
         <option value="yearly">Yearly</option>
       </select>
+      {/* biome-ignore lint/a11y/useSemanticElements: the fixture exercises contenteditable handling, which an input or textarea would not reproduce */}
+      {/* biome-ignore lint/a11y/useFocusableInteractive: contenteditable is focusable already; adding tabIndex would change what the fixture reproduces */}
       <div
         aria-label="Inline editor"
         contentEditable
-        // biome-ignore lint/a11y/useSemanticElements: the fixture exercises contenteditable handling, which an input or textarea would not reproduce
         role="textbox"
         suppressContentEditableWarning
       >

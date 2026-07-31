@@ -108,7 +108,7 @@ function DeviceSensor({
   if (preset.frame.sensor === "bezel-camera") {
     return (
       <span
-        aria-hidden
+        aria-hidden="true"
         className={`absolute z-50 size-[7px] rounded-full bg-black ring-1 ring-white/15 ${
           landscape
             ? "top-1/2 left-[6px] -translate-y-1/2"
@@ -122,7 +122,7 @@ function DeviceSensor({
   if (preset.frame.sensor === "dynamic-island") {
     return (
       <span
-        aria-hidden
+        aria-hidden="true"
         className={`pointer-events-none absolute z-[70] bg-black shadow-[inset_0_0_0_1px_rgba(255,255,255,0.04)] ${
           landscape
             ? "top-1/2 left-[15px] h-[104px] w-[32px] -translate-y-1/2 rounded-[17px]"
@@ -131,7 +131,7 @@ function DeviceSensor({
         data-device-sensor="dynamic-island"
       >
         <span
-          aria-hidden
+          aria-hidden="true"
           className={`absolute size-[7px] rounded-full bg-[#101923] shadow-[inset_0_0_0_1px_rgba(75,112,139,0.45)] ring-1 ring-[#273848] ${
             landscape
               ? "bottom-[10px] left-1/2 -translate-x-1/2"
@@ -145,7 +145,7 @@ function DeviceSensor({
 
   return (
     <span
-      aria-hidden
+      aria-hidden="true"
       className={`pointer-events-none absolute z-[70] size-[13px] rounded-full bg-black shadow-[0_0_0_2px_rgba(0,0,0,0.16)] ${
         landscape
           ? "top-1/2 left-[13px] -translate-y-1/2"
@@ -161,7 +161,7 @@ function DeviceSensor({
 function IosCellularSignal({ compact }: { compact: boolean }) {
   return (
     <svg
-      aria-hidden
+      aria-hidden="true"
       className={compact ? "h-[10px] w-[15px]" : "h-[13px] w-[19px]"}
       data-system-icon="ios-cellular"
       fill="currentColor"
@@ -178,7 +178,7 @@ function IosCellularSignal({ compact }: { compact: boolean }) {
 function IosWifiSignal({ compact }: { compact: boolean }) {
   return (
     <svg
-      aria-hidden
+      aria-hidden="true"
       className={compact ? "h-[10px] w-[14px]" : "h-[14px] w-[19px]"}
       data-system-icon="ios-wifi"
       fill="none"
@@ -204,7 +204,7 @@ function IosWifiSignal({ compact }: { compact: boolean }) {
 function IosBattery({ compact, dark }: { compact: boolean; dark: boolean }) {
   return (
     <svg
-      aria-hidden
+      aria-hidden="true"
       className={compact ? "h-[10px] w-[22px]" : "h-[14px] w-[29px]"}
       data-battery-percent="82"
       data-system-icon="ios-battery"
@@ -267,18 +267,18 @@ function AndroidStatusIndicators({ compact }: { compact: boolean }) {
   return (
     <span className="flex items-center gap-1.5">
       <CellSignalFullIcon
-        aria-hidden
+        aria-hidden="true"
         className={compact ? "size-3" : "size-[14px]"}
         weight="fill"
       />
       <WifiHighIcon
-        aria-hidden
+        aria-hidden="true"
         className={compact ? "size-3" : "size-[14px]"}
         weight="bold"
       />
       <span className={compact ? "text-[10px]" : "text-[11px]"}>82%</span>
       <BatteryHighIcon
-        aria-hidden
+        aria-hidden="true"
         className={compact ? "size-[14px]" : "size-4"}
         weight="fill"
       />
@@ -317,7 +317,7 @@ function SystemStatusBar({
 
   return (
     <div
-      aria-hidden
+      aria-hidden="true"
       className={`pointer-events-none absolute inset-x-0 top-0 z-[60] flex items-start justify-between font-semibold tracking-tight ${
         dark ? "text-white" : "text-slate-950"
       }`}
@@ -372,7 +372,7 @@ function SystemGestureBar({
 }) {
   return (
     <span
-      aria-hidden
+      aria-hidden="true"
       className={`pointer-events-none absolute bottom-[7px] left-1/2 z-[60] h-[5px] -translate-x-1/2 rounded-full ${
         appearance === "dark" ? "bg-white/80" : "bg-slate-950/80"
       } ${platform === "ios" ? "w-32" : "w-24"}`}
@@ -514,7 +514,7 @@ export function CanvasPreviewDevice({
           />
           {layoutBackground.video ? (
             <video
-              aria-hidden
+              aria-hidden="true"
               autoPlay
               className="pointer-events-none absolute inset-0 z-0 size-full"
               loop
@@ -528,12 +528,13 @@ export function CanvasPreviewDevice({
                     ? "cover"
                     : "contain",
               }}
+              tabIndex={-1}
             />
           ) : null}
 
           {canvas.safeArea ? (
             <div
-              aria-hidden
+              aria-hidden="true"
               className="pointer-events-none absolute z-40 border border-fuchsia-500/70 border-dashed"
               data-testid="canvas-safe-area"
               style={{
@@ -547,11 +548,12 @@ export function CanvasPreviewDevice({
 
           {presentation === "sheet" ? (
             <div
-              aria-hidden
+              aria-hidden="true"
               className="pointer-events-none absolute inset-0 z-[8] bg-slate-950/45"
             />
           ) : null}
 
+          {/* biome-ignore lint/a11y/noNoninteractiveElementInteractions: selecting the root is also reachable from the Layers tree; it cannot be a button because it contains the Paywall's own controls */}
           <fieldset
             // The Paywall root contains the entire interactive Paywall, so it
             // is a labelled group rather than a button.
@@ -608,11 +610,10 @@ export function CanvasPreviewDevice({
               paddingInlineEnd: root.padding.end + safeArea.right,
               paddingInlineStart: root.padding.start + safeArea.left,
             }}
-            tabIndex={0}
           >
             {rootBackground.video ? (
               <video
-                aria-hidden
+                aria-hidden="true"
                 autoPlay
                 className="pointer-events-none absolute inset-0 z-0 size-full rounded-[inherit]"
                 loop
@@ -626,6 +627,7 @@ export function CanvasPreviewDevice({
                       ? "cover"
                       : "contain",
                 }}
+                tabIndex={-1}
               />
             ) : null}
             {rootHidden ? (

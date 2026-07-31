@@ -735,6 +735,7 @@ export function PreviewCanvas({
   );
 
   return (
+    // biome-ignore lint/a11y/noNoninteractiveElementInteractions: drop target for the component library; the same insert is available from the library's keyboard action
     <section
       aria-label="Browser editing preview"
       className={`relative h-full min-h-0 min-w-[420px] overflow-hidden ${
@@ -743,12 +744,12 @@ export function PreviewCanvas({
       onDragOver={handleCatalogDragOver}
       onDrop={handleCatalogDrop}
     >
+      {/* biome-ignore lint/a11y/noNoninteractiveElementInteractions: the viewport handles keyboard itself via handleCanvasKeyboard below */}
       <section
         aria-label="Paywall canvas viewport"
         className="h-full w-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset"
         data-testid="canvas-viewport"
         onKeyDown={handleCanvasKeyboard}
-        tabIndex={0}
       >
         <ReactFlow<CanvasDeviceFlowNode>
           colorMode={canvas.appearance}

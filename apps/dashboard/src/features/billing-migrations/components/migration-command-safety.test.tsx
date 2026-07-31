@@ -26,7 +26,9 @@ function StaleHarness({ onStale }: { onStale: () => Promise<unknown> }) {
   );
   return (
     <>
-      <button onClick={handleClick}>Freeze</button>
+      <button onClick={handleClick} type="button">
+        Freeze
+      </button>
       {command.error ? <p role="alert">{command.error}</p> : null}
     </>
   );

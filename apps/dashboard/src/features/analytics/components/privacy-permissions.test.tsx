@@ -27,7 +27,7 @@ describe("privacy permissions and recovery", () => {
     });
     render(
       <QueryClientProvider client={queryClient}>
-        <DataPrivacyPanel adapter={adapter} role="member" scope={scope} />
+        <DataPrivacyPanel adapter={adapter} scope={scope} />
       </QueryClientProvider>
     );
     expect(

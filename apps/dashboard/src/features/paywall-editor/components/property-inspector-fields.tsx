@@ -105,9 +105,9 @@ export function LocalizedField({
             />
           )}
           {tokens?.length ? (
-            <div
+            <fieldset
               aria-label={`${label} variables`}
-              className="flex flex-wrap gap-1.5"
+              className="flex min-w-0 flex-wrap gap-1.5"
             >
               {tokens.map((token) => (
                 <Button
@@ -132,7 +132,7 @@ export function LocalizedField({
                   {token.label}
                 </Button>
               ))}
-            </div>
+            </fieldset>
           ) : null}
         </>
       )}

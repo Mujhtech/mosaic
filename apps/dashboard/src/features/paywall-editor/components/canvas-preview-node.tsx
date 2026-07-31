@@ -244,7 +244,7 @@ export function PreviewNode(props: PreviewNodeProps) {
           aria-hidden={node.accessibility.hidden || undefined}
           aria-label={imageLabel}
           className="flex w-full items-center justify-center overflow-hidden bg-linear-to-br from-cyan-100 to-teal-200 font-medium text-teal-900 text-xs"
-          role={node.accessibility.hidden ? undefined : "img"}
+          role="img"
           style={{
             ...appearanceStyle(document, node.appearance),
             aspectRatio: node.aspectRatio,
@@ -291,7 +291,7 @@ export function PreviewNode(props: PreviewNodeProps) {
               ? undefined
               : resolveLocalizedText(document, node.accessibility.label, locale)
           }
-          role={node.accessibility.hidden ? undefined : "img"}
+          role="img"
           style={{
             ...appearanceStyle(document, node.appearance),
             color: resolvedProtocolColor(document, node.color),
@@ -451,9 +451,11 @@ export function PreviewNode(props: PreviewNodeProps) {
           )
         : undefined;
       content = (
+        // biome-ignore lint/a11y/useSemanticElements: a product card is a labelled grouping per the ARIA authoring practices, and fieldset would put form semantics on preview content
         <div
           aria-label={accessibleLabel}
           className="relative flex h-full w-full cursor-pointer"
+          role="group"
           style={{
             ...appearanceStyle(document, style),
             ...(cardBackground.video ? cardBackground.style : {}),
@@ -644,7 +646,6 @@ export function PreviewNode(props: PreviewNodeProps) {
             onChange={(event) =>
               props.onSwitchChange(node.id, event.target.checked)
             }
-            role="switch"
             style={{
               accentColor: resolvedProtocolColor(document, node.onTrackColor),
             }}
@@ -662,6 +663,7 @@ export function PreviewNode(props: PreviewNodeProps) {
         <time
           aria-label={accessible}
           dateTime={node.endsAt}
+          role="timer"
           style={{
             ...appearanceStyle(document, node.appearance),
             ...typographyStyle(document, node.typography),
@@ -692,6 +694,7 @@ export function PreviewNode(props: PreviewNodeProps) {
         >
           <div className="grid">
             {node.pages.map((page, index) => (
+              // biome-ignore lint/a11y/useSemanticElements: a carousel slide is role="group" per the ARIA authoring practices
               <div
                 aria-hidden={index !== pageIndex}
                 aria-label={resolveLocalizedText(
@@ -699,8 +702,10 @@ export function PreviewNode(props: PreviewNodeProps) {
                   page.accessibilityLabel,
                   locale
                 )}
+                aria-roledescription="slide"
                 className="col-start-1 row-start-1 min-w-0"
                 key={page.id}
+                role="group"
                 style={{
                   pointerEvents: index === pageIndex ? undefined : "none",
                   visibility: index === pageIndex ? "visible" : "hidden",

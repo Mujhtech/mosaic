@@ -177,11 +177,11 @@ export function Field({
     [descriptionId, errorId].filter(Boolean).join(" ") || undefined;
 
   return (
-    <div
+    <fieldset
       aria-labelledby={labelId}
+      className="min-w-0"
       data-component-id={componentId}
       data-property-address={address}
-      role={group ? "group" : undefined}
     >
       {group ? (
         <p
@@ -230,7 +230,7 @@ export function Field({
           ))}
         </div>
       ) : null}
-    </div>
+    </fieldset>
   );
 }
 

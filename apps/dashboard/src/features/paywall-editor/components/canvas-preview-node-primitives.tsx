@@ -342,6 +342,7 @@ export function NodeFrame({
         ? "ring-primary/40 ring-1"
         : "hover:ring-primary/35 hover:ring-1";
   return (
+    // biome-ignore lint/a11y/noNoninteractiveElementInteractions: a direct-manipulation canvas surface; selection is also reachable from the Layers tree and the command palette
     <fieldset
       aria-current={selected ? "true" : undefined}
       aria-disabled={locked || undefined}
