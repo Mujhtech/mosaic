@@ -2,6 +2,7 @@ package telemetry
 
 import (
 	"context"
+	"crypto/tls"
 	"reflect"
 	"strings"
 	"testing"
@@ -76,11 +77,12 @@ func TestParseHeadersRejectsMalformedInputWithoutLeakingValues(t *testing.T) {
 // against a collector that is not serving it.
 func TestResolveExportAppliesSkipVerifyOnlyOverTLS(t *testing.T) {
 	for name, test := range map[string]struct {
-		endpoint string
-		wantTLS  bool
+		endpoint     string
+		wantTLS      bool
+		wantInsecure bool
 	}{
 		"https endpoint": {endpoint: "https://collector.invalid:4318", wantTLS: true},
-		"http endpoint":  {endpoint: "http://collector.invalid:4318"},
+		"http endpoint":  {endpoint: "http://collector.invalid:4318", wantInsecure: true},
 	} {
 		t.Run(name, func(t *testing.T) {
 			export, err := resolveExport(Config{OTLPEndpoint: test.endpoint, OTLPTLSSkipVerify: true})
@@ -93,7 +95,97 @@ func TestResolveExportAppliesSkipVerifyOnlyOverTLS(t *testing.T) {
 			if export.tlsConfig != nil && !export.tlsConfig.InsecureSkipVerify {
 				t.Fatal("tls config does not skip verification")
 			}
+			// A plaintext endpoint must be declared insecure to the exporter, not
+			// left for it to infer, so the two are never both set.
+			if export.insecure != test.wantInsecure {
+				t.Fatalf("insecure = %t, want %t", export.insecure, test.wantInsecure)
+			}
+			if export.insecure && export.tlsConfig != nil {
+				t.Fatal("plaintext export must not carry a TLS config")
+			}
 		})
+	}
+}
+
+// OTEL_EXPORTER_OTLP_ENDPOINT is a base endpoint: each signal hangs off it. A
+// base URL handed to the exporters verbatim posts every signal to the base
+// path, which a collector answers with 404 — the failure only the log exporter
+// surfaces, since the trace and metric exporters quietly fall back to their
+// default path.
+func TestSignalEndpointAppendsPerSignalPath(t *testing.T) {
+	for name, test := range map[string]struct {
+		endpoint string
+		want     map[string]string
+	}{
+		"base endpoint without a path": {
+			endpoint: "http://collector.example",
+			want: map[string]string{
+				tracesPath:  "http://collector.example/v1/traces",
+				metricsPath: "http://collector.example/v1/metrics",
+				logsPath:    "http://collector.example/v1/logs",
+			},
+		},
+		"base endpoint with a port and trailing slash": {
+			endpoint: "https://collector.example:4318/",
+			want: map[string]string{
+				tracesPath: "https://collector.example:4318/v1/traces",
+				logsPath:   "https://collector.example:4318/v1/logs",
+			},
+		},
+		"collector behind a path prefix": {
+			endpoint: "https://gateway.example/otlp",
+			want: map[string]string{
+				tracesPath: "https://gateway.example/otlp/v1/traces",
+				logsPath:   "https://gateway.example/otlp/v1/logs",
+			},
+		},
+		// Someone who already wrote the signal path must not get it twice.
+		"endpoint already naming the signal": {
+			endpoint: "https://collector.example/v1/logs",
+			want:     map[string]string{logsPath: "https://collector.example/v1/logs"},
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			export, err := resolveExport(Config{OTLPEndpoint: test.endpoint})
+			if err != nil {
+				t.Fatalf("resolve export: %v", err)
+			}
+			for signalPath, want := range test.want {
+				if got := export.signalEndpoint(signalPath); got != want {
+					t.Fatalf("endpoint for %s = %q, want %q", signalPath, got, want)
+				}
+			}
+		})
+	}
+}
+
+// The insecure option must reach every exporter, not just the one that was
+// checked by hand: exporterOptions is where that guarantee lives.
+func TestExporterOptionsDeclarePlaintextOnce(t *testing.T) {
+	type option string
+	endpoint := func(url string) option { return option("endpoint:" + url) }
+	insecure := func() option { return "insecure" }
+	headers := func(map[string]string) option { return "headers" }
+	tlsOption := func(*tls.Config) option { return "tls" }
+
+	plaintext, err := resolveExport(Config{OTLPEndpoint: "http://collector.invalid:4318"})
+	if err != nil {
+		t.Fatalf("resolve export: %v", err)
+	}
+	options := exporterOptions(plaintext, logsPath, endpoint, insecure, headers, tlsOption)
+	want := []option{"endpoint:http://collector.invalid:4318/v1/logs", "insecure"}
+	if !reflect.DeepEqual(options, want) {
+		t.Fatalf("options = %#v, want %#v", options, want)
+	}
+
+	secure, err := resolveExport(Config{OTLPEndpoint: "https://collector.invalid:4318", OTLPTLSSkipVerify: true})
+	if err != nil {
+		t.Fatalf("resolve export: %v", err)
+	}
+	secureOptions := exporterOptions(secure, tracesPath, endpoint, insecure, headers, tlsOption)
+	wantSecure := []option{"endpoint:https://collector.invalid:4318/v1/traces", "tls"}
+	if !reflect.DeepEqual(secureOptions, wantSecure) {
+		t.Fatalf("options = %#v, want %#v", secureOptions, wantSecure)
 	}
 }
 

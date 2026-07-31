@@ -207,16 +207,35 @@ func ParseHeaders(value string) (map[string]string, error) {
 	return headers, nil
 }
 
+// Per-signal OTLP paths. OTEL_EXPORTER_OTLP_ENDPOINT is a base endpoint and
+// each signal hangs off it, exactly as the OpenTelemetry specification defines
+// the variable.
+const (
+	tracesPath  = "/v1/traces"
+	metricsPath = "/v1/metrics"
+	logsPath    = "/v1/logs"
+)
+
 // exportSettings is the resolved, validated shape of the export configuration:
 // everything the exporter constructors need, already normalized.
 type exportSettings struct {
 	protocol string
-	endpoint string
+	scheme   string
+	host     string
+	// basePath is any path prefix the collector sits behind, without a trailing
+	// slash. It is usually empty; a gateway that mounts OTLP under a prefix
+	// (".../otlp") is why it exists.
+	basePath string
 	headers  map[string]string
 	// tlsConfig is nil unless certificate verification is being skipped on an
 	// https:// endpoint, which is the only case where the default client TLS
 	// behaviour needs overriding.
 	tlsConfig *tls.Config
+	// insecure means the endpoint is plaintext. It is stated to the exporter
+	// explicitly rather than left to be inferred from the endpoint, so the
+	// transport does not silently become TLS if the endpoint is ever passed as
+	// a bare host:port — the form that defaults to secure.
+	insecure bool
 }
 
 func resolveExport(cfg Config) (exportSettings, error) {
@@ -232,31 +251,61 @@ func resolveExport(cfg Config) (exportSettings, error) {
 	if err != nil || endpoint.Host == "" {
 		return exportSettings{}, errors.New("OTLP endpoint must be an absolute http:// or https:// URL")
 	}
-	settings := exportSettings{protocol: protocol, endpoint: cfg.OTLPEndpoint, headers: headers}
+	settings := exportSettings{
+		protocol: protocol,
+		scheme:   endpoint.Scheme,
+		host:     endpoint.Host,
+		basePath: strings.TrimSuffix(endpoint.Path, "/"),
+		headers:  headers,
+		insecure: endpoint.Scheme != "https",
+	}
 	// Skipping verification only means anything over TLS. Applying it to a
 	// plaintext endpoint would, for the gRPC exporter, quietly upgrade the
 	// connection to TLS against a collector that is not listening for it.
-	if cfg.OTLPTLSSkipVerify && endpoint.Scheme == "https" {
+	if cfg.OTLPTLSSkipVerify && !settings.insecure {
 		settings.tlsConfig = &tls.Config{InsecureSkipVerify: true} //nolint:gosec // opt-in, and rejected in production-like environments without an explicit acknowledgement
 	}
 	return settings, nil
 }
 
-// exporterOptions applies the export policy — always the endpoint, headers only
-// when there are any, TLS only when verification is being overridden — to one
-// exporter package's option type.
+// signalEndpoint returns the full URL one signal is posted to.
 //
-// Every OTLP exporter package exposes the same three options under the same
+// The exporters' WithEndpointURL option takes a signal-specific URL and uses
+// its path verbatim; OTEL_EXPORTER_OTLP_ENDPOINT is a base endpoint the SDK
+// appends the signal path to. Handing the base URL straight to WithEndpointURL
+// posts every signal to the base path, which a collector answers with 404 — for
+// logs silently, since only the older trace and metric exporters fall back to
+// their default path when it is empty.
+//
+// An operator who already wrote the signal path gets it left alone, so both
+// forms of endpoint work.
+func (e exportSettings) signalEndpoint(signalPath string) string {
+	if strings.HasSuffix(e.basePath, signalPath) {
+		return e.scheme + "://" + e.host + e.basePath
+	}
+	return e.scheme + "://" + e.host + e.basePath + signalPath
+}
+
+// exporterOptions applies the export policy — always the endpoint, plaintext
+// stated explicitly, headers only when there are any, TLS only when
+// verification is being overridden — to one exporter package's option type.
+//
+// Every OTLP exporter package exposes the same four options under the same
 // names but as unrelated types, so the alternative is this decision written out
 // once per signal per transport. Six copies of one policy is how the trace,
 // metric, and log exporters end up disagreeing about when a header is sent.
 func exporterOptions[O any](
 	export exportSettings,
+	signalPath string,
 	withEndpointURL func(string) O,
+	withInsecure func() O,
 	withHeaders func(map[string]string) O,
 	withTLS func(*tls.Config) O,
 ) []O {
-	options := []O{withEndpointURL(export.endpoint)}
+	options := []O{withEndpointURL(export.signalEndpoint(signalPath))}
+	if export.insecure {
+		options = append(options, withInsecure())
+	}
 	if len(export.headers) > 0 {
 		options = append(options, withHeaders(export.headers))
 	}
@@ -281,14 +330,18 @@ func newTraceExporter(ctx context.Context, export exportSettings) (sdktrace.Span
 	if export.protocol == ProtocolGRPC {
 		return otlptracegrpc.New(ctx, exporterOptions(
 			export,
+			tracesPath,
 			otlptracegrpc.WithEndpointURL,
+			otlptracegrpc.WithInsecure,
 			otlptracegrpc.WithHeaders,
 			grpcTLS(otlptracegrpc.WithTLSCredentials),
 		)...)
 	}
 	return otlptracehttp.New(ctx, exporterOptions(
 		export,
+		tracesPath,
 		otlptracehttp.WithEndpointURL,
+		otlptracehttp.WithInsecure,
 		otlptracehttp.WithHeaders,
 		otlptracehttp.WithTLSClientConfig,
 	)...)
@@ -298,14 +351,18 @@ func newMetricExporter(ctx context.Context, export exportSettings) (sdkmetric.Ex
 	if export.protocol == ProtocolGRPC {
 		return otlpmetricgrpc.New(ctx, exporterOptions(
 			export,
+			metricsPath,
 			otlpmetricgrpc.WithEndpointURL,
+			otlpmetricgrpc.WithInsecure,
 			otlpmetricgrpc.WithHeaders,
 			grpcTLS(otlpmetricgrpc.WithTLSCredentials),
 		)...)
 	}
 	return otlpmetrichttp.New(ctx, exporterOptions(
 		export,
+		metricsPath,
 		otlpmetrichttp.WithEndpointURL,
+		otlpmetrichttp.WithInsecure,
 		otlpmetrichttp.WithHeaders,
 		otlpmetrichttp.WithTLSClientConfig,
 	)...)
@@ -315,14 +372,18 @@ func newLogExporter(ctx context.Context, export exportSettings) (sdklog.Exporter
 	if export.protocol == ProtocolGRPC {
 		return otlploggrpc.New(ctx, exporterOptions(
 			export,
+			logsPath,
 			otlploggrpc.WithEndpointURL,
+			otlploggrpc.WithInsecure,
 			otlploggrpc.WithHeaders,
 			grpcTLS(otlploggrpc.WithTLSCredentials),
 		)...)
 	}
 	return otlploghttp.New(ctx, exporterOptions(
 		export,
+		logsPath,
 		otlploghttp.WithEndpointURL,
+		otlploghttp.WithInsecure,
 		otlploghttp.WithHeaders,
 		otlploghttp.WithTLSClientConfig,
 	)...)
