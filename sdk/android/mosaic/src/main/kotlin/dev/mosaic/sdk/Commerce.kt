@@ -135,6 +135,11 @@ interface MosaicPurchaseProvider {
     suspend fun activeEntitlements(): MosaicActiveEntitlementsResult
 }
 
+/** Optional truthful Experiment readiness declaration; absence means no capability is accepted. */
+interface MosaicExperimentCommerceCapabilityProvider {
+    val mosaicExperimentCapabilities: Set<String>
+}
+
 data class MosaicAnalyticsCommerceAttribution(
     val providerId: String,
     val providerProductMappingId: String?,
@@ -257,7 +262,16 @@ interface MosaicConfigurablePurchaseProvider : MosaicPurchaseProvider {
  */
 class MosaicConfiguredPurchaseProvider(
     private val adapter: MosaicCommerceProviderAdapter,
-) : MosaicConfigurablePurchaseProvider, MosaicAnalyticsCommerceProvider {
+) : MosaicConfigurablePurchaseProvider, MosaicAnalyticsCommerceProvider, MosaicExperimentCommerceCapabilityProvider {
+    override val mosaicExperimentCapabilities: Set<String>
+        get() = buildSet {
+            val accepted = adapter.capabilities.filter { it.support == "supported" }.mapTo(mutableSetOf()) { it.name }
+            if ("productLoading" in accepted) add("product_load")
+            if ("productLoading" in accepted && accepted.any { it in setOf("subscriptions", "oneTimeNonConsumables") }) add("purchase")
+            if ("restore" in accepted) add("restore")
+            if ("activeEntitlementLookup" in accepted) add("entitlement_lookup")
+            if (adapter is MosaicCommerceProviderAdapterV2) add("native_recovery")
+        }
     private val lock = Any()
     private var configuration: MosaicCommerceConfiguration? = null
     private var configurationGeneration: Long = 0

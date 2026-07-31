@@ -52,7 +52,10 @@ class MosaicAnalyticsRuntime internal constructor(
                     val context = journey.context ?: baseContext
                     val event = MosaicAnalyticsEvent(
                         eventId = mosaicAnalyticsId("event"),
-                        eventSchemaVersion = "1",
+                        eventSchemaVersion = if (
+                            payload.isExperimentV2() || journey.attribution.hasExperimentTuple() ||
+                            journey.context?.configurationDeliveryVersion == "3"
+                        ) "2" else "1",
                         eventName = payload.eventName,
                         occurredAt = mosaicAnalyticsTimestamp(occurredAtMillis),
                         queuedAt = mosaicAnalyticsTimestamp(queuedAt),
@@ -95,8 +98,10 @@ class MosaicAnalyticsRuntime internal constructor(
 
     suspend fun flush(): MosaicAnalyticsDiagnostics = flushLock.withLock {
         if (!isCollectionEnabled) return@withLock queue.diagnostics()
-        val sent = queue.ready(limit = 50, maxBytes = 500 * 1024)
-        if (sent.isEmpty()) return@withLock queue.diagnostics()
+        val ready = queue.ready(limit = 50, maxBytes = 500 * 1024)
+        if (ready.isEmpty()) return@withLock queue.diagnostics()
+        val firstVersion = MosaicAnalyticsCodec.decodeEvent(ready.first().encoded).eventSchemaVersion
+        val sent = ready.takeWhile { MosaicAnalyticsCodec.decodeEvent(it.encoded).eventSchemaVersion == firstVersion }
         val batch = MosaicAnalyticsBatch(
             batchId = mosaicAnalyticsId("batch"),
             sentAt = mosaicAnalyticsTimestamp(now()),

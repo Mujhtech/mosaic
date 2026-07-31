@@ -1,0 +1,104 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:mosaic:protocol:schema:experiment-assignment:v1:compatibility-manifest",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "experimentAssignmentVersion",
+    "status",
+    "assignmentSchema",
+    "canonicalFixture",
+    "conformanceFixture",
+    "features",
+    "algorithms",
+    "schedulePolicies",
+    "readerPolicy"
+  ],
+  "properties": {
+    "experimentAssignmentVersion": {
+      "const": "1"
+    },
+    "status": {
+      "enum": [
+        "draft",
+        "releaseCandidate",
+        "approved",
+        "deprecated"
+      ]
+    },
+    "assignmentSchema": {
+      "const": "../../schema/experiment-assignment/v1/assignment.schema.json"
+    },
+    "canonicalFixture": {
+      "const": "../../fixtures/experiment-assignment/v1/running-ab.json"
+    },
+    "conformanceFixture": {
+      "const": "../../fixtures/experiment-assignment/v1/assignment-vectors.json"
+    },
+    "features": {
+      "type": "array",
+      "minItems": 8,
+      "maxItems": 8,
+      "uniqueItems": true,
+      "items": {
+        "$ref": "urn:mosaic:protocol:schema:experiment-assignment:v1:assignment#/$defs/assignmentFeature"
+      }
+    },
+    "algorithms": {
+      "type": "array",
+      "minItems": 2,
+      "maxItems": 2,
+      "uniqueItems": true,
+      "items": {
+        "enum": [
+          "experiment_sha256_length_prefixed_v1",
+          "experiment_group_sha256_length_prefixed_v1"
+        ]
+      }
+    },
+    "schedulePolicies": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 1,
+      "items": {
+        "const": "trusted_server_time_v1"
+      }
+    },
+    "readerPolicy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "unknownVersion",
+        "unknownField",
+        "unsupportedFeature",
+        "unsupportedAlgorithm",
+        "malformedAllocation",
+        "ineligibleOrInactive",
+        "partialEvaluation"
+      ],
+      "properties": {
+        "unknownVersion": {
+          "const": "rejectCandidate"
+        },
+        "unknownField": {
+          "const": "rejectCandidate"
+        },
+        "unsupportedFeature": {
+          "const": "rejectCandidate"
+        },
+        "unsupportedAlgorithm": {
+          "const": "rejectCandidate"
+        },
+        "malformedAllocation": {
+          "const": "rejectCandidate"
+        },
+        "ineligibleOrInactive": {
+          "const": "normalPlacement"
+        },
+        "partialEvaluation": {
+          "const": "forbidden"
+        }
+      }
+    }
+  }
+}

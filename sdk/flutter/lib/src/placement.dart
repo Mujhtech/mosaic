@@ -10,6 +10,8 @@ import 'commerce_configuration.dart';
 import 'configuration.dart';
 import 'configuration_client.dart';
 import 'configuration_delivery.dart';
+import 'experiment_analytics.dart';
+import 'experiment_assignment.dart';
 import 'placement_decision.dart';
 import 'presentation.dart';
 import 'renderer.dart';
@@ -43,11 +45,17 @@ final class MosaicPlacementDecisionPaywall
     required this.paywallVersion,
     required this.configuration,
     required this.decision,
+    this.experiment,
+    this.experimentFallback,
+    this.experimentFallbackReason,
   });
   final String placementKey;
   final MosaicDeliveredPaywallVersion paywallVersion;
   final MosaicAcceptedConfiguration configuration;
   final MosaicPaywallSelected? decision;
+  final MosaicExperimentAssigned? experiment;
+  final MosaicExperimentAssigned? experimentFallback;
+  final String? experimentFallbackReason;
 }
 
 final class MosaicPlacementNoPaywall extends MosaicPlacementDecisionResolution {
@@ -336,7 +344,74 @@ extension MosaicPlacementClient on Mosaic {
       break;
     }
     if (decision is MosaicPaywallSelected) {
-      final version = release.paywallVersions[decision.paywallVersionId];
+      var version = release.paywallVersions[decision.paywallVersionId];
+      MosaicExperimentAssigned? experimentResult;
+      MosaicExperimentAssigned? experimentFallback;
+      String? experimentFallbackReason;
+      final experiments = release
+          .experimentsForPlacement(ruleSet.placementId)
+          .where((candidate) =>
+              version != null &&
+              version.id == candidate.controlPaywallVersionId);
+      for (final experiment in experiments) {
+        final evaluated = const MosaicExperimentAssignmentEngine().evaluate(
+            assignment: experiment,
+            identity: identity,
+            trustedNow: inputs.now,
+            qaTokens: inputs.qaOverrideTokens);
+        if (evaluated is MosaicExperimentAssigned) {
+          final assignmentValue =
+              evaluated.assignmentKeyType == 'identified_user'
+                  ? identity.userId!
+                  : identity.installationId;
+          final store = experimentAssignmentStore;
+          if (store != null) {
+            unawaited(store
+                .record(evaluated, assignmentValue)
+                .catchError((Object _) {}));
+          }
+          final candidate =
+              release.paywallVersions[evaluated.variant.paywallVersionId];
+          final requiredProductsReady = candidate != null &&
+              evaluated.variant.requiredProductIds.every((productId) =>
+                  candidate.productReferenceIds.contains(productId) &&
+                  release.productReferences[productId]?.readiness ==
+                      MosaicDeliveredProductReadiness.ready &&
+                  products[productId] == MosaicProductDecisionState.available);
+          final requiredProviderReady = evaluated
+              .variant.requiredProviderCapabilities
+              .every((capability) => switch (capability) {
+                    'product_load' => providerCapabilities['product_loading'] ==
+                        MosaicProviderCapabilityState.available,
+                    'purchase' => providerCapabilities['purchase'] ==
+                        MosaicProviderCapabilityState.available,
+                    'restore' => providerCapabilities['restore'] ==
+                        MosaicProviderCapabilityState.available,
+                    'entitlement_lookup' =>
+                      providerCapabilities['entitlement_lookup'] ==
+                          MosaicProviderCapabilityState.available,
+                    'native_recovery' => false,
+                    _ => false,
+                  });
+          if (candidate != null &&
+              requiredProductsReady &&
+              requiredProviderReady) {
+            version = candidate;
+            experimentResult = evaluated;
+          } else {
+            experimentFallback = evaluated;
+            experimentFallbackReason = candidate == null
+                ? 'configuration_incompatible'
+                : !requiredProductsReady
+                    ? 'product_unavailable'
+                    : 'provider_unavailable';
+          }
+          // Admission selected this Experiment. Product/provider/render
+          // failure falls back to the normal Placement and must not select a
+          // different member of the same mutual-exclusion group.
+          break;
+        }
+      }
       return version == null
           ? MosaicPlacementDecisionUnavailable(
               placementKey: key,
@@ -348,6 +423,9 @@ extension MosaicPlacementClient on Mosaic {
               paywallVersion: version,
               configuration: accepted,
               decision: decision,
+              experiment: experimentResult,
+              experimentFallback: experimentFallback,
+              experimentFallbackReason: experimentFallbackReason,
             );
     }
     return switch (decision) {
@@ -470,6 +548,7 @@ final class _MosaicPlacementHostState extends State<MosaicPlacementHost> {
           widget.placementKey,
           inputs: MosaicPlacementDecisionInputs(
             applicationLocale: widget.requestedLocale,
+            now: widget.mosaic.acceptedConfiguration?.trustedNow,
           ),
         );
         return FutureBuilder<MosaicPlacementDecisionResolution>(
@@ -567,6 +646,33 @@ final class _MosaicPlacementHostState extends State<MosaicPlacementHost> {
           'bucketingAlgorithm': mosaicRolloutAlgorithm,
       },
     );
+    final experiment = resolution.experiment;
+    final fallback = resolution.experimentFallback;
+    final assignedExperiment = experiment ?? fallback;
+    if (assignedExperiment != null &&
+        _analyticsEvents.add('experiment_assigned')) {
+      final sink = widget.mosaic.experimentAnalytics;
+      if (sink != null) {
+        unawaited(sink
+            .enqueue(mosaicExperimentAnalyticsEvent(
+              name: MosaicExperimentAnalyticsEventName.assigned,
+              assigned: assignedExperiment,
+              placementRequestId: _placementRequestId,
+              configurationReleaseId:
+                  resolution.configuration.envelope.release.id,
+              placementId: assignedExperiment.assignment.placementId,
+              payload: <String, Object?>{
+                'assignmentKeyType': assignedExperiment.assignmentKeyType,
+                'bucketingAlgorithm': mosaicExperimentBucketingAlgorithm,
+                'bucket': assignedExperiment.bucket,
+                'source': assignedExperiment.qaOverride
+                    ? 'qa_override'
+                    : 'deterministic',
+              },
+            ))
+            .catchError((Object _) {}));
+      }
+    }
     return MosaicPaywall(
       key: ValueKey<String>(
         '${resolution.configuration.envelope.release.id}:'
@@ -582,6 +688,71 @@ final class _MosaicPlacementHostState extends State<MosaicPlacementHost> {
       onDiagnostic: widget.onDiagnostic,
       analyticsRuntime: widget.mosaic.analytics,
       analyticsContext: analytics,
+      onPresented: experiment == null || experiment.qaOverride
+          ? fallback == null || fallback.qaOverride
+              ? null
+              : () {
+                  if (!_analyticsEvents.add('experiment_fallback_presented')) {
+                    return;
+                  }
+                  final sink = widget.mosaic.experimentAnalytics;
+                  if (sink == null) return;
+                  unawaited(sink
+                      .enqueue(mosaicExperimentAnalyticsEvent(
+                        name: MosaicExperimentAnalyticsEventName
+                            .fallbackPresented,
+                        assigned: fallback,
+                        placementRequestId: _placementRequestId,
+                        paywallPresentationId: _paywallPresentationId,
+                        configurationReleaseId:
+                            resolution.configuration.envelope.release.id,
+                        placementId: fallback.assignment.placementId,
+                        payload: <String, Object?>{
+                          'reason': resolution.experimentFallbackReason!,
+                          'presentedPaywallId':
+                              resolution.paywallVersion.paywallId,
+                          'presentedPaywallVersionId':
+                              resolution.paywallVersion.id,
+                        },
+                      ))
+                      .catchError((Object _) {}));
+                }
+          : () {
+              if (!_analyticsEvents.add('experiment_exposed')) return;
+              final store = widget.mosaic.experimentAssignmentStore;
+              if (store != null) {
+                unawaited(widget.mosaic.loadIdentity().then((identity) {
+                  final value =
+                      experiment.assignmentKeyType == 'identified_user'
+                          ? identity.userId
+                          : identity.installationId;
+                  if (value != null) {
+                    return store.markExposed(experiment, value);
+                  }
+                }).catchError((Object _) {}));
+              }
+              final sink = widget.mosaic.experimentAnalytics;
+              if (sink == null) return;
+              unawaited(sink
+                  .enqueue(mosaicExperimentAnalyticsEvent(
+                    name: MosaicExperimentAnalyticsEventName.exposed,
+                    assigned: experiment,
+                    placementRequestId: _placementRequestId,
+                    paywallPresentationId: _paywallPresentationId,
+                    configurationReleaseId:
+                        resolution.configuration.envelope.release.id,
+                    placementId: experiment.assignment.placementId,
+                    paywallId: experiment.variant.paywallId,
+                    paywallVersionId: experiment.variant.paywallVersionId,
+                    payload: <String, Object?>{
+                      'assignmentKeyType': experiment.assignmentKeyType,
+                      'bucketingAlgorithm': mosaicExperimentBucketingAlgorithm,
+                      'productReadiness': 'ready',
+                      'providerCapability': 'accepted',
+                    },
+                  ))
+                  .catchError((Object _) {}));
+            },
       externalUrlOpener: widget.externalUrlOpener,
     );
   }

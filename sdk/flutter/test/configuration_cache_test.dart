@@ -23,6 +23,8 @@ void main() {
       commerceConfigurationSource: '{"sidecar":"accepted-as-one-record"}',
       commerceConfigurationEtag:
           '"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"',
+      trustedServerTime: DateTime.utc(2026, 7, 26, 12),
+      localReceiptTime: DateTime.utc(2026, 7, 26, 12, 0, 1),
     );
     await cache.write(namespace, original);
 
@@ -37,6 +39,8 @@ void main() {
       reconstructed.commerceConfigurationEtag,
       original.commerceConfigurationEtag,
     );
+    expect(reconstructed.trustedServerTime, original.trustedServerTime);
+    expect(reconstructed.localReceiptTime, original.localReceiptTime);
 
     await expectLater(
       cache.write(

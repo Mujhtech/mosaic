@@ -1,8 +1,8 @@
 import CryptoKit
 import Foundation
 
-public let mosaicConfigurationDeliveryVersion = "2"
-public let mosaicSupportedConfigurationDeliveryVersions = ["2", "1"]
+public let mosaicConfigurationDeliveryVersion = "3"
+public let mosaicSupportedConfigurationDeliveryVersions = ["3", "2", "1"]
 
 public enum MosaicConfigurationDeliveryError: Error, Sendable, Equatable {
   case invalidJSON
@@ -13,6 +13,9 @@ public enum MosaicConfigurationDeliveryError: Error, Sendable, Equatable {
   case unsupportedDecisionContract(String)
   case unsupportedDecisionFeature(String)
   case unsupportedBucketingAlgorithm(String)
+  case unsupportedExperimentContract(String)
+  case unsupportedExperimentFeature(String)
+  case unsupportedExperimentSchedulePolicy(String)
   case invalidRelease(code: String)
 
   public var diagnosticCode: String {
@@ -25,6 +28,9 @@ public enum MosaicConfigurationDeliveryError: Error, Sendable, Equatable {
     case .unsupportedDecisionContract: "delivery_unsupported_decision_contract"
     case .unsupportedDecisionFeature: "delivery_unsupported_decision_feature"
     case .unsupportedBucketingAlgorithm: "delivery_unsupported_bucketing_algorithm"
+    case .unsupportedExperimentContract: "delivery_unsupported_experiment_contract"
+    case .unsupportedExperimentFeature: "delivery_unsupported_experiment_feature"
+    case .unsupportedExperimentSchedulePolicy: "delivery_unsupported_experiment_schedule_policy"
     case .invalidRelease(let code): code
     }
   }
@@ -113,6 +119,7 @@ public struct MosaicConfigurationRelease: Sendable, Equatable {
   public let productReferences: [MosaicConfigurationProductReference]
   public let entitlementReferences: [MosaicConfigurationEntitlementReference]
   public let assetReferences: [MosaicConfigurationAssetReference]
+  public let experimentAssignments: [MosaicExperimentAssignment]
 
   public func paywall(forPlacement key: String) -> MosaicConfigurationPaywallVersion? {
     guard let versionID = placements.first(where: { $0.key == key })?.paywallVersionID else {
@@ -140,6 +147,9 @@ public enum MosaicConfigurationDeliveryDecoder {
     )
     let version = try DeliveryValue.string(
       root["configurationDeliveryVersion"], path: "$.configurationDeliveryVersion")
+    if version == "3" {
+      return try MosaicConfigurationDeliveryV3Decoder.decode(root: root)
+    }
     if version == "2" {
       return try MosaicConfigurationDeliveryV2Decoder.decode(root: root)
     }
@@ -207,7 +217,8 @@ public enum MosaicConfigurationDeliveryDecoder {
       paywallVersions: paywalls,
       productReferences: products,
       entitlementReferences: [],
-      assetReferences: assets
+      assetReferences: assets,
+      experimentAssignments: []
     )
   }
 
@@ -546,7 +557,7 @@ enum DeliveryCanonicalJSON {
   }
 }
 
-private enum DeliveryValue {
+enum DeliveryValue {
   static func object(_ value: Any?, path: String) throws -> [String: Any] {
     guard let object = value as? [String: Any] else { throw shape(path, "expected_object") }
     return object

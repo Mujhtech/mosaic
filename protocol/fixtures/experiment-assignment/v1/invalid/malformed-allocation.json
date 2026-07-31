@@ -1,0 +1,65 @@
+{
+  "experimentAssignmentVersion": "1",
+  "assignment": {
+    "projectId": "project_alpha",
+    "environmentId": "environment_production",
+    "experimentId": "experiment_invalid",
+    "experimentVersionId": "experiment_version_invalid_1",
+    "placementId": "placement_checkout",
+    "controlPaywallVersionId": "paywall_version_control_7",
+    "allocationVersion": "allocation_invalid_1",
+    "variants": [
+      {
+        "id": "variant_control",
+        "name": "Control",
+        "role": "control",
+        "paywallId": "paywall_control",
+        "paywallVersionId": "paywall_version_control_7",
+        "rangeStart": 0,
+        "rangeEnd": 6000,
+        "compatibility": {
+          "requiredProductIds": [],
+          "requiredProviderCapabilities": []
+        }
+      },
+      {
+        "id": "variant_treatment",
+        "name": "Treatment",
+        "role": "treatment",
+        "paywallId": "paywall_treatment",
+        "paywallVersionId": "paywall_version_treatment_3",
+        "rangeStart": 5000,
+        "rangeEnd": 9000,
+        "compatibility": {
+          "requiredProductIds": [],
+          "requiredProviderCapabilities": []
+        }
+      }
+    ],
+    "assignmentKeyPolicy": "installation",
+    "bucketingAlgorithm": "experiment_sha256_length_prefixed_v1",
+    "lifecycle": "running",
+    "schedule": {
+      "startsAt": "2026-07-26T12:00:00.000Z",
+      "endsAt": "2026-08-26T12:00:00.000Z",
+      "timePolicy": "trusted_server_time_v1",
+      "unreliableTimeBehavior": "normal_placement"
+    },
+    "qaOverrides": [],
+    "fallback": "normal_placement",
+    "compatibility": {
+      "requiredFeatures": [
+        "allocation.ranges",
+        "assignment.installation",
+        "fallback.normal_placement",
+        "schedule.trusted_server_time"
+      ],
+      "bucketingAlgorithms": [
+        "experiment_sha256_length_prefixed_v1"
+      ],
+      "schedulePolicies": [
+        "trusted_server_time_v1"
+      ]
+    }
+  }
+}

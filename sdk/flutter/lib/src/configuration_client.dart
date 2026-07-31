@@ -21,14 +21,22 @@ typedef MosaicAcceptedConfigurationCallback = void Function(
 enum MosaicConfigurationSource { remote, cache, bundledFallback }
 
 final class MosaicAcceptedConfiguration {
-  const MosaicAcceptedConfiguration({
+  MosaicAcceptedConfiguration({
     required this.envelope,
     required this.source,
     this.etag,
     this.commerceEnvelope,
     this.commerceSource,
     this.commerceEtag,
-  });
+    this.trustedServerTime,
+    this.localReceiptTime,
+  })  : _trustedAtConstruction = trustedServerTime == null ||
+                localReceiptTime == null
+            ? null
+            : trustedServerTime.toUtc().add(
+                  DateTime.now().toUtc().difference(localReceiptTime.toUtc()),
+                ),
+        _trustedElapsed = Stopwatch()..start();
 
   final MosaicConfigurationDeliveryEnvelope envelope;
   final MosaicConfigurationSource source;
@@ -36,6 +44,24 @@ final class MosaicAcceptedConfiguration {
   final MosaicCommerceConfigurationEnvelope? commerceEnvelope;
   final String? commerceSource;
   final String? commerceEtag;
+  final DateTime? trustedServerTime;
+  final DateTime? localReceiptTime;
+  final DateTime? _trustedAtConstruction;
+  final Stopwatch _trustedElapsed;
+
+  /// Conservative in-process trusted time. Cached and bundled snapshots do
+  /// not manufacture a new server-time anchor after restart.
+  DateTime? get trustedNow {
+    final trusted = _trustedAtConstruction;
+    final received = localReceiptTime;
+    if (trusted == null ||
+        received == null ||
+        DateTime.now().toUtc().difference(received).isNegative ||
+        DateTime.now().toUtc().difference(received) > const Duration(days: 7)) {
+      return null;
+    }
+    return trusted.add(_trustedElapsed.elapsed);
+  }
 }
 
 sealed class MosaicConfigurationLoadResult {
@@ -102,6 +128,7 @@ final class MosaicConfigurationCapabilityRequest {
         'supportedConfigurationDeliveryVersions': const <String>[
           mosaicConfigurationDeliveryVersion,
           mosaicConfigurationDeliveryVersionV2,
+          mosaicConfigurationDeliveryVersionV3,
         ],
         'supportedPlacementDecisionContracts': const <String>[
           mosaicPlacementDecisionVersion,
@@ -109,6 +136,24 @@ final class MosaicConfigurationCapabilityRequest {
         'supportedDecisionFeatures': (mosaicDecisionFeatures.toList()..sort()),
         'supportedBucketingAlgorithms': const <String>[
           mosaicRolloutAlgorithm,
+        ],
+        'supportedExperimentAssignmentContracts': const <String>['1'],
+        'supportedExperimentFeatures': const <String>[
+          'allocation.ranges',
+          'assignment.installation',
+          'assignment.identified_user',
+          'assignment.identified_user_or_installation',
+          'fallback.normal_placement',
+          'group.mutual_exclusion',
+          'override.qa',
+          'schedule.trusted_server_time',
+        ],
+        'supportedExperimentBucketingAlgorithms': const <String>[
+          'experiment_sha256_length_prefixed_v1',
+          'experiment_group_sha256_length_prefixed_v1',
+        ],
+        'supportedExperimentSchedulePolicies': const <String>[
+          'trusted_server_time_v1',
         ],
         'supportedPaywallProtocols': <Map<String, Object?>>[
           <String, Object?>{
@@ -227,6 +272,8 @@ final class MosaicConfigurationClient {
           commerceEnvelope: commerceEnvelope,
           commerceSource: record.commerceConfigurationSource,
           commerceEtag: commerceEtag,
+          trustedServerTime: record.trustedServerTime,
+          localReceiptTime: record.localReceiptTime,
         );
         _accept(configuration);
         return MosaicConfigurationReady(configuration);
@@ -342,6 +389,9 @@ final class MosaicConfigurationClient {
       );
     }
     try {
+      final receivedAt = DateTime.now().toUtc();
+      final serverTime = response.serverTime ??
+          DateTime.parse(envelope.release.publishedAt).toUtc();
       await cache.write(
         cacheNamespace,
         MosaicConfigurationCacheEntry(
@@ -349,6 +399,8 @@ final class MosaicConfigurationClient {
           releaseSource: response.source,
           commerceConfigurationSource: commerceSource,
           commerceConfigurationEtag: commerceEtag,
+          trustedServerTime: serverTime,
+          localReceiptTime: receivedAt,
         ),
       );
     } on Object {
@@ -361,6 +413,9 @@ final class MosaicConfigurationClient {
       commerceEnvelope: commerceEnvelope,
       commerceSource: commerceSource,
       commerceEtag: commerceEtag,
+      trustedServerTime: response.serverTime ??
+          DateTime.parse(envelope.release.publishedAt).toUtc(),
+      localReceiptTime: DateTime.now().toUtc(),
     );
     _accept(configuration);
     return MosaicConfigurationUpdated(configuration);

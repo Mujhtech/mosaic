@@ -64,13 +64,15 @@ class ConfigurationDeliveryTest {
             .sorted()
         assertEquals(expected, actual)
         assertEquals(expected.size, actual.toSet().size)
-        assertEquals("2,1", observed.get().header("Mosaic-Configuration-Versions"))
+        assertEquals("3,2,1", observed.get().header("Mosaic-Configuration-Versions"))
         assertEquals("1", observed.get().header("Mosaic-Placement-Decision-Versions"))
         assertEquals(
             MosaicPlacementDecisionCapabilities.features,
             observed.get().header("Mosaic-Decision-Features")?.split(','),
         )
         assertEquals(MOSAIC_ROLLOUT_ALGORITHM, observed.get().header("Mosaic-Bucketing-Algorithms"))
+        assertEquals("1", observed.get().header("Mosaic-Experiment-Assignment-Versions"))
+        assertEquals(MosaicExperimentCapabilities.features, observed.get().header("Mosaic-Experiment-Features")?.split(','))
     }
 
     @Test(expected = MosaicConfigurationDeliveryException::class)

@@ -29,6 +29,8 @@ enum class MosaicDiagnosticCode(val wireName: String) {
     COMMERCE_CONFIGURATION_CACHE_WRITE_FAILED("commerce.configurationCacheWriteFailed"),
     COMMERCE_MAPPING_INVALID("commerce.mappingInvalid"),
     COMMERCE_PROVIDER_UNAVAILABLE("commerce.providerUnavailable"),
+    EXPERIMENT_TIME_UNRELIABLE("experiment.time_unreliable"),
+    EXPERIMENT_VARIANT_UNAVAILABLE("experiment.variant_unavailable"),
 }
 
 data class MosaicDiagnostic(

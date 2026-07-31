@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"sort"
+	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -448,6 +449,19 @@ func (r *Repository) CreateExport(ctx context.Context, actor analytics.Actor, pr
 	if kind != "events" {
 		allowed = []string{"owner"}
 	}
+	includeIdentity := false
+	experimentVersionID := ""
+	if kind == "experiment" {
+		parts := strings.Split(reference, "|")
+		if len(parts) != 2 || (parts[1] != "true" && parts[1] != "false") {
+			return analytics.Job{}, analytics.ErrInvalidBatch
+		}
+		includeIdentity = parts[1] == "true"
+		allowed = []string{"owner", "admin"}
+		if includeIdentity {
+			allowed = []string{"owner"}
+		}
+	}
 	org, err := requireRole(ctx, tx, actor, projectID, allowed...)
 	if err != nil {
 		return analytics.Job{}, err
@@ -458,15 +472,21 @@ func (r *Repository) CreateExport(ctx context.Context, actor analytics.Actor, pr
 			return analytics.Job{}, analytics.ErrNotFound
 		}
 	}
+	if kind == "experiment" {
+		experimentID := strings.Split(reference, "|")[0]
+		if err = tx.QueryRow(ctx, `SELECT active_version_id FROM experiments WHERE id=$1 AND project_id=$2 AND environment_id=$3 AND active_version_id IS NOT NULL`, experimentID, projectID, environmentID).Scan(&experimentVersionID); err != nil {
+			return analytics.Job{}, analytics.ErrNotFound
+		}
+	}
 	id, err := nextID(ctx, tx, "analytics_export")
 	if err != nil {
 		return analytics.Job{}, err
 	}
-	job := analytics.Job{ID: id, ProjectID: projectID, EnvironmentID: environmentID, Kind: kind, Status: "queued", Format: format, IdentityReferenceID: reference, RequestedByActorID: actor.ID, CreatedAt: now, UpdatedAt: now}
-	if kind != "events" {
+	job := analytics.Job{ID: id, ProjectID: projectID, EnvironmentID: environmentID, Kind: kind, Status: "queued", Format: format, IdentityReferenceID: reference, RequestedByActorID: actor.ID, ExperimentVersionID: experimentVersionID, IncludeIdentity: includeIdentity, CreatedAt: now, UpdatedAt: now}
+	if kind != "events" && kind != "experiment" {
 		job.IdentityDigest = identityHash(reference)
 	}
-	_, err = tx.Exec(ctx, `INSERT INTO analytics_export_jobs(id,organization_id,project_id,environment_id,kind,identity_digest,identity_reference_id,status,format,available_at,requested_by_actor_id,created_at,updated_at) VALUES($1,$2,$3,$4,$5,$6,$7,'queued',$8,$9,$10,$9,$9)`, id, org, projectID, nullable(environmentID), kind, digestOrNil(job.IdentityDigest, kind != "events"), reference, format, now, actor.ID)
+	_, err = tx.Exec(ctx, `INSERT INTO analytics_export_jobs(id,organization_id,project_id,environment_id,kind,identity_digest,identity_reference_id,status,format,available_at,requested_by_actor_id,created_at,updated_at,experiment_version_id,include_identity) VALUES($1,$2,$3,$4,$5,$6,$7,'queued',$8,$9,$10,$9,$9,$11,$12)`, id, org, projectID, nullable(environmentID), kind, digestOrNil(job.IdentityDigest, kind != "events" && kind != "experiment"), reference, format, now, actor.ID, nullable(experimentVersionID), includeIdentity)
 	if err != nil {
 		return job, err
 	}

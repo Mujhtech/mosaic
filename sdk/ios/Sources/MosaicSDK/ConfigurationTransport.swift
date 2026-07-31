@@ -11,6 +11,17 @@ struct MosaicConfigurationHTTPResponse: Sendable, Equatable {
   let data: Data
   let etag: String?
   let cacheControl: String?
+  let serverDate: Date?
+
+  init(
+    statusCode: Int, data: Data, etag: String?, cacheControl: String?, serverDate: Date? = nil
+  ) {
+    self.statusCode = statusCode
+    self.data = data
+    self.etag = etag
+    self.cacheControl = cacheControl
+    self.serverDate = serverDate
+  }
 }
 
 protocol MosaicConfigurationTransport: Sendable {
@@ -58,7 +69,17 @@ struct MosaicURLSessionConfigurationTransport: MosaicConfigurationTransport {
       statusCode: response.statusCode,
       data: data,
       etag: response.value(forHTTPHeaderField: "ETag"),
-      cacheControl: response.value(forHTTPHeaderField: "Cache-Control")
+      cacheControl: response.value(forHTTPHeaderField: "Cache-Control"),
+      serverDate: Self.httpDate(response.value(forHTTPHeaderField: "Date"))
     )
+  }
+
+  private static func httpDate(_ value: String?) -> Date? {
+    guard let value else { return nil }
+    let formatter = DateFormatter()
+    formatter.locale = Locale(identifier: "en_US_POSIX")
+    formatter.timeZone = TimeZone(secondsFromGMT: 0)
+    formatter.dateFormat = "EEE',' dd MMM yyyy HH':'mm':'ss z"
+    return formatter.date(from: value)
   }
 }

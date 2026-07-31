@@ -1,0 +1,321 @@
+{
+  "analyticsEventContractVersion": "2",
+  "status": "releaseCandidate",
+  "schemas": {
+    "event": "../../schema/analytics-event/v2/event.schema.json",
+    "batch": "../../schema/analytics-event/v2/batch.schema.json",
+    "ingestionResponse": "../../schema/analytics-event/v2/ingestion-response.schema.json"
+  },
+  "canonicalFixtures": [
+    "../../fixtures/analytics-event/v2/experiment-assigned.json",
+    "../../fixtures/analytics-event/v2/experiment-exposed.json",
+    "../../fixtures/analytics-event/v2/experiment-fallback-presented.json",
+    "../../fixtures/analytics-event/v2/experiment-assignment-failed.json",
+    "../../fixtures/analytics-event/v2/product-selection-attributed.json",
+    "../../fixtures/analytics-event/v2/purchase-started-attributed.json",
+    "../../fixtures/analytics-event/v2/batches/experiment-journey.json",
+    "../../fixtures/analytics-event/v2/responses/accepted-exposure.json"
+  ],
+  "eventSchemas": [
+    {
+      "eventName": "placement_requested",
+      "supportedVersions": [
+        "2"
+      ],
+      "acceptedAuthorities": [
+        "client_observed"
+      ]
+    },
+    {
+      "eventName": "placement_paywall_selected",
+      "supportedVersions": [
+        "2"
+      ],
+      "acceptedAuthorities": [
+        "client_observed"
+      ]
+    },
+    {
+      "eventName": "placement_no_paywall",
+      "supportedVersions": [
+        "2"
+      ],
+      "acceptedAuthorities": [
+        "client_observed"
+      ]
+    },
+    {
+      "eventName": "placement_fallback_used",
+      "supportedVersions": [
+        "2"
+      ],
+      "acceptedAuthorities": [
+        "client_observed"
+      ]
+    },
+    {
+      "eventName": "placement_unavailable",
+      "supportedVersions": [
+        "2"
+      ],
+      "acceptedAuthorities": [
+        "client_observed"
+      ]
+    },
+    {
+      "eventName": "placement_evaluation_failed",
+      "supportedVersions": [
+        "2"
+      ],
+      "acceptedAuthorities": [
+        "client_observed"
+      ]
+    },
+    {
+      "eventName": "paywall_presented",
+      "supportedVersions": [
+        "2"
+      ],
+      "acceptedAuthorities": [
+        "client_observed"
+      ]
+    },
+    {
+      "eventName": "paywall_dismissed",
+      "supportedVersions": [
+        "2"
+      ],
+      "acceptedAuthorities": [
+        "client_observed"
+      ]
+    },
+    {
+      "eventName": "paywall_action_selected",
+      "supportedVersions": [
+        "2"
+      ],
+      "acceptedAuthorities": [
+        "client_observed"
+      ]
+    },
+    {
+      "eventName": "paywall_render_failed",
+      "supportedVersions": [
+        "2"
+      ],
+      "acceptedAuthorities": [
+        "client_observed"
+      ]
+    },
+    {
+      "eventName": "product_load_started",
+      "supportedVersions": [
+        "2"
+      ],
+      "acceptedAuthorities": [
+        "client_observed"
+      ]
+    },
+    {
+      "eventName": "product_load_completed",
+      "supportedVersions": [
+        "2"
+      ],
+      "acceptedAuthorities": [
+        "client_observed"
+      ]
+    },
+    {
+      "eventName": "product_load_failed",
+      "supportedVersions": [
+        "2"
+      ],
+      "acceptedAuthorities": [
+        "client_observed"
+      ]
+    },
+    {
+      "eventName": "product_unavailable",
+      "supportedVersions": [
+        "2"
+      ],
+      "acceptedAuthorities": [
+        "client_observed"
+      ]
+    },
+    {
+      "eventName": "product_selected",
+      "supportedVersions": [
+        "2"
+      ],
+      "acceptedAuthorities": [
+        "client_observed"
+      ]
+    },
+    {
+      "eventName": "purchase_started",
+      "supportedVersions": [
+        "2"
+      ],
+      "acceptedAuthorities": [
+        "client_observed"
+      ]
+    },
+    {
+      "eventName": "purchase_completed_client",
+      "supportedVersions": [
+        "2"
+      ],
+      "acceptedAuthorities": [
+        "client_observed"
+      ]
+    },
+    {
+      "eventName": "purchase_completed_provider",
+      "supportedVersions": [
+        "2"
+      ],
+      "acceptedAuthorities": [
+        "trusted_server",
+        "provider_confirmed"
+      ]
+    },
+    {
+      "eventName": "purchase_pending",
+      "supportedVersions": [
+        "2"
+      ],
+      "acceptedAuthorities": [
+        "client_observed"
+      ]
+    },
+    {
+      "eventName": "purchase_deferred",
+      "supportedVersions": [
+        "2"
+      ],
+      "acceptedAuthorities": [
+        "client_observed"
+      ]
+    },
+    {
+      "eventName": "purchase_cancelled",
+      "supportedVersions": [
+        "2"
+      ],
+      "acceptedAuthorities": [
+        "client_observed"
+      ]
+    },
+    {
+      "eventName": "purchase_failed",
+      "supportedVersions": [
+        "2"
+      ],
+      "acceptedAuthorities": [
+        "client_observed"
+      ]
+    },
+    {
+      "eventName": "restore_started",
+      "supportedVersions": [
+        "2"
+      ],
+      "acceptedAuthorities": [
+        "client_observed"
+      ]
+    },
+    {
+      "eventName": "restore_completed",
+      "supportedVersions": [
+        "2"
+      ],
+      "acceptedAuthorities": [
+        "client_observed"
+      ]
+    },
+    {
+      "eventName": "restore_nothing_found",
+      "supportedVersions": [
+        "2"
+      ],
+      "acceptedAuthorities": [
+        "client_observed"
+      ]
+    },
+    {
+      "eventName": "restore_cancelled",
+      "supportedVersions": [
+        "2"
+      ],
+      "acceptedAuthorities": [
+        "client_observed"
+      ]
+    },
+    {
+      "eventName": "restore_failed",
+      "supportedVersions": [
+        "2"
+      ],
+      "acceptedAuthorities": [
+        "client_observed"
+      ]
+    },
+    {
+      "eventName": "experiment_assigned",
+      "supportedVersions": [
+        "2"
+      ],
+      "acceptedAuthorities": [
+        "client_observed"
+      ]
+    },
+    {
+      "eventName": "experiment_exposed",
+      "supportedVersions": [
+        "2"
+      ],
+      "acceptedAuthorities": [
+        "client_observed"
+      ]
+    },
+    {
+      "eventName": "experiment_fallback_presented",
+      "supportedVersions": [
+        "2"
+      ],
+      "acceptedAuthorities": [
+        "client_observed"
+      ]
+    },
+    {
+      "eventName": "experiment_assignment_failed",
+      "supportedVersions": [
+        "2"
+      ],
+      "acceptedAuthorities": [
+        "client_observed"
+      ]
+    }
+  ],
+  "limits": {
+    "maxEventsPerBatch": 100,
+    "sdkMaxEventsPerBatch": 50,
+    "maxEventBytes": 32768,
+    "maxBatchBytes": 524288,
+    "eventExpirySeconds": 604800,
+    "futureSkewSeconds": 300,
+    "attributionWindowSeconds": 86400
+  },
+  "readerPolicy": {
+    "unknownContractVersion": "rejectBatch",
+    "unknownEventSchema": "permanentlyRejectEvent",
+    "unknownEventName": "permanentlyRejectEvent",
+    "unknownField": "permanentlyRejectEvent",
+    "publicSdkAuthority": "clientObservedOnly",
+    "partialBatch": "oneResultPerEvent",
+    "tenantScope": "deriveFromAuthentication",
+    "customMetadata": "forbidden",
+    "olderContractVersion": "acceptAlongsideV2"
+  }
+}

@@ -32,6 +32,7 @@ import { Route as HostedOrganizationsOrganizationIdProjectsProjectIdCatalogEntit
 import { Route as HostedOrganizationsOrganizationIdProjectsProjectIdMonetizationEnvironmentIdReleasesRouteImport } from './routes/_hosted/organizations/$organizationId/projects/$projectId/monetization/$environmentId/releases'
 import { Route as HostedOrganizationsOrganizationIdProjectsProjectIdMonetizationEnvironmentIdPlacementsRouteImport } from './routes/_hosted/organizations/$organizationId/projects/$projectId/monetization/$environmentId/placements'
 import { Route as HostedOrganizationsOrganizationIdProjectsProjectIdMonetizationEnvironmentIdPaywallsRouteImport } from './routes/_hosted/organizations/$organizationId/projects/$projectId/monetization/$environmentId/paywalls'
+import { Route as HostedOrganizationsOrganizationIdProjectsProjectIdMonetizationEnvironmentIdExperimentsRouteImport } from './routes/_hosted/organizations/$organizationId/projects/$projectId/monetization/$environmentId/experiments'
 import { Route as HostedOrganizationsOrganizationIdProjectsProjectIdMonetizationEnvironmentIdAssetsRouteImport } from './routes/_hosted/organizations/$organizationId/projects/$projectId/monetization/$environmentId/assets'
 import { Route as HostedOrganizationsOrganizationIdProjectsProjectIdCatalogProvidersConnectionIdRouteImport } from './routes/_hosted/organizations/$organizationId/projects/$projectId/catalog/providers/$connectionId'
 import { Route as HostedOrganizationsOrganizationIdProjectsProjectIdCatalogProductsProductIdRouteImport } from './routes/_hosted/organizations/$organizationId/projects/$projectId/catalog/products/$productId'
@@ -40,6 +41,8 @@ import { Route as HostedOrganizationsOrganizationIdProjectsProjectIdCatalogEntit
 import { Route as HostedOrganizationsOrganizationIdProjectsProjectIdAnalyticsEnvironmentIdSurfaceRouteImport } from './routes/_hosted/organizations/$organizationId/projects/$projectId/analytics/$environmentId/$surface'
 import { Route as HostedOrganizationsOrganizationIdProjectsProjectIdMonetizationEnvironmentIdPlacementsPlacementIdRouteImport } from './routes/_hosted/organizations/$organizationId/projects/$projectId/monetization/$environmentId/placements/$placementId'
 import { Route as HostedOrganizationsOrganizationIdProjectsProjectIdMonetizationEnvironmentIdPaywallsPaywallIdRouteImport } from './routes/_hosted/organizations/$organizationId/projects/$projectId/monetization/$environmentId/paywalls/$paywallId'
+import { Route as HostedOrganizationsOrganizationIdProjectsProjectIdMonetizationEnvironmentIdExperimentsNewRouteImport } from './routes/_hosted/organizations/$organizationId/projects/$projectId/monetization/$environmentId/experiments/new'
+import { Route as HostedOrganizationsOrganizationIdProjectsProjectIdMonetizationEnvironmentIdExperimentsExperimentIdRouteImport } from './routes/_hosted/organizations/$organizationId/projects/$projectId/monetization/$environmentId/experiments/$experimentId'
 
 const SignupRoute = SignupRouteImport.update({
   id: '/signup',
@@ -189,6 +192,14 @@ const HostedOrganizationsOrganizationIdProjectsProjectIdMonetizationEnvironmentI
       getParentRoute: () => HostedRoute,
     } as any,
   )
+const HostedOrganizationsOrganizationIdProjectsProjectIdMonetizationEnvironmentIdExperimentsRoute =
+  HostedOrganizationsOrganizationIdProjectsProjectIdMonetizationEnvironmentIdExperimentsRouteImport.update(
+    {
+      id: '/organizations/$organizationId/projects/$projectId/monetization/$environmentId/experiments',
+      path: '/organizations/$organizationId/projects/$projectId/monetization/$environmentId/experiments',
+      getParentRoute: () => HostedRoute,
+    } as any,
+  )
 const HostedOrganizationsOrganizationIdProjectsProjectIdMonetizationEnvironmentIdAssetsRoute =
   HostedOrganizationsOrganizationIdProjectsProjectIdMonetizationEnvironmentIdAssetsRouteImport.update(
     {
@@ -256,6 +267,24 @@ const HostedOrganizationsOrganizationIdProjectsProjectIdMonetizationEnvironmentI
         HostedOrganizationsOrganizationIdProjectsProjectIdMonetizationEnvironmentIdPaywallsRoute,
     } as any,
   )
+const HostedOrganizationsOrganizationIdProjectsProjectIdMonetizationEnvironmentIdExperimentsNewRoute =
+  HostedOrganizationsOrganizationIdProjectsProjectIdMonetizationEnvironmentIdExperimentsNewRouteImport.update(
+    {
+      id: '/new',
+      path: '/new',
+      getParentRoute: () =>
+        HostedOrganizationsOrganizationIdProjectsProjectIdMonetizationEnvironmentIdExperimentsRoute,
+    } as any,
+  )
+const HostedOrganizationsOrganizationIdProjectsProjectIdMonetizationEnvironmentIdExperimentsExperimentIdRoute =
+  HostedOrganizationsOrganizationIdProjectsProjectIdMonetizationEnvironmentIdExperimentsExperimentIdRouteImport.update(
+    {
+      id: '/$experimentId',
+      path: '/$experimentId',
+      getParentRoute: () =>
+        HostedOrganizationsOrganizationIdProjectsProjectIdMonetizationEnvironmentIdExperimentsRoute,
+    } as any,
+  )
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -279,12 +308,15 @@ export interface FileRoutesByFullPath {
   '/organizations/$organizationId/projects/$projectId/catalog/products/$productId': typeof HostedOrganizationsOrganizationIdProjectsProjectIdCatalogProductsProductIdRoute
   '/organizations/$organizationId/projects/$projectId/catalog/providers/$connectionId': typeof HostedOrganizationsOrganizationIdProjectsProjectIdCatalogProvidersConnectionIdRoute
   '/organizations/$organizationId/projects/$projectId/monetization/$environmentId/assets': typeof HostedOrganizationsOrganizationIdProjectsProjectIdMonetizationEnvironmentIdAssetsRoute
+  '/organizations/$organizationId/projects/$projectId/monetization/$environmentId/experiments': typeof HostedOrganizationsOrganizationIdProjectsProjectIdMonetizationEnvironmentIdExperimentsRouteWithChildren
   '/organizations/$organizationId/projects/$projectId/monetization/$environmentId/paywalls': typeof HostedOrganizationsOrganizationIdProjectsProjectIdMonetizationEnvironmentIdPaywallsRouteWithChildren
   '/organizations/$organizationId/projects/$projectId/monetization/$environmentId/placements': typeof HostedOrganizationsOrganizationIdProjectsProjectIdMonetizationEnvironmentIdPlacementsRouteWithChildren
   '/organizations/$organizationId/projects/$projectId/monetization/$environmentId/releases': typeof HostedOrganizationsOrganizationIdProjectsProjectIdMonetizationEnvironmentIdReleasesRoute
   '/organizations/$organizationId/projects/$projectId/catalog/entitlements/': typeof HostedOrganizationsOrganizationIdProjectsProjectIdCatalogEntitlementsIndexRoute
   '/organizations/$organizationId/projects/$projectId/catalog/plans/': typeof HostedOrganizationsOrganizationIdProjectsProjectIdCatalogPlansIndexRoute
   '/organizations/$organizationId/projects/$projectId/catalog/products/': typeof HostedOrganizationsOrganizationIdProjectsProjectIdCatalogProductsIndexRoute
+  '/organizations/$organizationId/projects/$projectId/monetization/$environmentId/experiments/$experimentId': typeof HostedOrganizationsOrganizationIdProjectsProjectIdMonetizationEnvironmentIdExperimentsExperimentIdRoute
+  '/organizations/$organizationId/projects/$projectId/monetization/$environmentId/experiments/new': typeof HostedOrganizationsOrganizationIdProjectsProjectIdMonetizationEnvironmentIdExperimentsNewRoute
   '/organizations/$organizationId/projects/$projectId/monetization/$environmentId/paywalls/$paywallId': typeof HostedOrganizationsOrganizationIdProjectsProjectIdMonetizationEnvironmentIdPaywallsPaywallIdRoute
   '/organizations/$organizationId/projects/$projectId/monetization/$environmentId/placements/$placementId': typeof HostedOrganizationsOrganizationIdProjectsProjectIdMonetizationEnvironmentIdPlacementsPlacementIdRoute
 }
@@ -310,12 +342,15 @@ export interface FileRoutesByTo {
   '/organizations/$organizationId/projects/$projectId/catalog/products/$productId': typeof HostedOrganizationsOrganizationIdProjectsProjectIdCatalogProductsProductIdRoute
   '/organizations/$organizationId/projects/$projectId/catalog/providers/$connectionId': typeof HostedOrganizationsOrganizationIdProjectsProjectIdCatalogProvidersConnectionIdRoute
   '/organizations/$organizationId/projects/$projectId/monetization/$environmentId/assets': typeof HostedOrganizationsOrganizationIdProjectsProjectIdMonetizationEnvironmentIdAssetsRoute
+  '/organizations/$organizationId/projects/$projectId/monetization/$environmentId/experiments': typeof HostedOrganizationsOrganizationIdProjectsProjectIdMonetizationEnvironmentIdExperimentsRouteWithChildren
   '/organizations/$organizationId/projects/$projectId/monetization/$environmentId/paywalls': typeof HostedOrganizationsOrganizationIdProjectsProjectIdMonetizationEnvironmentIdPaywallsRouteWithChildren
   '/organizations/$organizationId/projects/$projectId/monetization/$environmentId/placements': typeof HostedOrganizationsOrganizationIdProjectsProjectIdMonetizationEnvironmentIdPlacementsRouteWithChildren
   '/organizations/$organizationId/projects/$projectId/monetization/$environmentId/releases': typeof HostedOrganizationsOrganizationIdProjectsProjectIdMonetizationEnvironmentIdReleasesRoute
   '/organizations/$organizationId/projects/$projectId/catalog/entitlements': typeof HostedOrganizationsOrganizationIdProjectsProjectIdCatalogEntitlementsIndexRoute
   '/organizations/$organizationId/projects/$projectId/catalog/plans': typeof HostedOrganizationsOrganizationIdProjectsProjectIdCatalogPlansIndexRoute
   '/organizations/$organizationId/projects/$projectId/catalog/products': typeof HostedOrganizationsOrganizationIdProjectsProjectIdCatalogProductsIndexRoute
+  '/organizations/$organizationId/projects/$projectId/monetization/$environmentId/experiments/$experimentId': typeof HostedOrganizationsOrganizationIdProjectsProjectIdMonetizationEnvironmentIdExperimentsExperimentIdRoute
+  '/organizations/$organizationId/projects/$projectId/monetization/$environmentId/experiments/new': typeof HostedOrganizationsOrganizationIdProjectsProjectIdMonetizationEnvironmentIdExperimentsNewRoute
   '/organizations/$organizationId/projects/$projectId/monetization/$environmentId/paywalls/$paywallId': typeof HostedOrganizationsOrganizationIdProjectsProjectIdMonetizationEnvironmentIdPaywallsPaywallIdRoute
   '/organizations/$organizationId/projects/$projectId/monetization/$environmentId/placements/$placementId': typeof HostedOrganizationsOrganizationIdProjectsProjectIdMonetizationEnvironmentIdPlacementsPlacementIdRoute
 }
@@ -344,12 +379,15 @@ export interface FileRoutesById {
   '/_hosted/organizations/$organizationId/projects/$projectId/catalog/products/$productId': typeof HostedOrganizationsOrganizationIdProjectsProjectIdCatalogProductsProductIdRoute
   '/_hosted/organizations/$organizationId/projects/$projectId/catalog/providers/$connectionId': typeof HostedOrganizationsOrganizationIdProjectsProjectIdCatalogProvidersConnectionIdRoute
   '/_hosted/organizations/$organizationId/projects/$projectId/monetization/$environmentId/assets': typeof HostedOrganizationsOrganizationIdProjectsProjectIdMonetizationEnvironmentIdAssetsRoute
+  '/_hosted/organizations/$organizationId/projects/$projectId/monetization/$environmentId/experiments': typeof HostedOrganizationsOrganizationIdProjectsProjectIdMonetizationEnvironmentIdExperimentsRouteWithChildren
   '/_hosted/organizations/$organizationId/projects/$projectId/monetization/$environmentId/paywalls': typeof HostedOrganizationsOrganizationIdProjectsProjectIdMonetizationEnvironmentIdPaywallsRouteWithChildren
   '/_hosted/organizations/$organizationId/projects/$projectId/monetization/$environmentId/placements': typeof HostedOrganizationsOrganizationIdProjectsProjectIdMonetizationEnvironmentIdPlacementsRouteWithChildren
   '/_hosted/organizations/$organizationId/projects/$projectId/monetization/$environmentId/releases': typeof HostedOrganizationsOrganizationIdProjectsProjectIdMonetizationEnvironmentIdReleasesRoute
   '/_hosted/organizations/$organizationId/projects/$projectId/catalog/entitlements/': typeof HostedOrganizationsOrganizationIdProjectsProjectIdCatalogEntitlementsIndexRoute
   '/_hosted/organizations/$organizationId/projects/$projectId/catalog/plans/': typeof HostedOrganizationsOrganizationIdProjectsProjectIdCatalogPlansIndexRoute
   '/_hosted/organizations/$organizationId/projects/$projectId/catalog/products/': typeof HostedOrganizationsOrganizationIdProjectsProjectIdCatalogProductsIndexRoute
+  '/_hosted/organizations/$organizationId/projects/$projectId/monetization/$environmentId/experiments/$experimentId': typeof HostedOrganizationsOrganizationIdProjectsProjectIdMonetizationEnvironmentIdExperimentsExperimentIdRoute
+  '/_hosted/organizations/$organizationId/projects/$projectId/monetization/$environmentId/experiments/new': typeof HostedOrganizationsOrganizationIdProjectsProjectIdMonetizationEnvironmentIdExperimentsNewRoute
   '/_hosted/organizations/$organizationId/projects/$projectId/monetization/$environmentId/paywalls/$paywallId': typeof HostedOrganizationsOrganizationIdProjectsProjectIdMonetizationEnvironmentIdPaywallsPaywallIdRoute
   '/_hosted/organizations/$organizationId/projects/$projectId/monetization/$environmentId/placements/$placementId': typeof HostedOrganizationsOrganizationIdProjectsProjectIdMonetizationEnvironmentIdPlacementsPlacementIdRoute
 }
@@ -377,12 +415,15 @@ export interface FileRouteTypes {
     | '/organizations/$organizationId/projects/$projectId/catalog/products/$productId'
     | '/organizations/$organizationId/projects/$projectId/catalog/providers/$connectionId'
     | '/organizations/$organizationId/projects/$projectId/monetization/$environmentId/assets'
+    | '/organizations/$organizationId/projects/$projectId/monetization/$environmentId/experiments'
     | '/organizations/$organizationId/projects/$projectId/monetization/$environmentId/paywalls'
     | '/organizations/$organizationId/projects/$projectId/monetization/$environmentId/placements'
     | '/organizations/$organizationId/projects/$projectId/monetization/$environmentId/releases'
     | '/organizations/$organizationId/projects/$projectId/catalog/entitlements/'
     | '/organizations/$organizationId/projects/$projectId/catalog/plans/'
     | '/organizations/$organizationId/projects/$projectId/catalog/products/'
+    | '/organizations/$organizationId/projects/$projectId/monetization/$environmentId/experiments/$experimentId'
+    | '/organizations/$organizationId/projects/$projectId/monetization/$environmentId/experiments/new'
     | '/organizations/$organizationId/projects/$projectId/monetization/$environmentId/paywalls/$paywallId'
     | '/organizations/$organizationId/projects/$projectId/monetization/$environmentId/placements/$placementId'
   fileRoutesByTo: FileRoutesByTo
@@ -408,12 +449,15 @@ export interface FileRouteTypes {
     | '/organizations/$organizationId/projects/$projectId/catalog/products/$productId'
     | '/organizations/$organizationId/projects/$projectId/catalog/providers/$connectionId'
     | '/organizations/$organizationId/projects/$projectId/monetization/$environmentId/assets'
+    | '/organizations/$organizationId/projects/$projectId/monetization/$environmentId/experiments'
     | '/organizations/$organizationId/projects/$projectId/monetization/$environmentId/paywalls'
     | '/organizations/$organizationId/projects/$projectId/monetization/$environmentId/placements'
     | '/organizations/$organizationId/projects/$projectId/monetization/$environmentId/releases'
     | '/organizations/$organizationId/projects/$projectId/catalog/entitlements'
     | '/organizations/$organizationId/projects/$projectId/catalog/plans'
     | '/organizations/$organizationId/projects/$projectId/catalog/products'
+    | '/organizations/$organizationId/projects/$projectId/monetization/$environmentId/experiments/$experimentId'
+    | '/organizations/$organizationId/projects/$projectId/monetization/$environmentId/experiments/new'
     | '/organizations/$organizationId/projects/$projectId/monetization/$environmentId/paywalls/$paywallId'
     | '/organizations/$organizationId/projects/$projectId/monetization/$environmentId/placements/$placementId'
   id:
@@ -441,12 +485,15 @@ export interface FileRouteTypes {
     | '/_hosted/organizations/$organizationId/projects/$projectId/catalog/products/$productId'
     | '/_hosted/organizations/$organizationId/projects/$projectId/catalog/providers/$connectionId'
     | '/_hosted/organizations/$organizationId/projects/$projectId/monetization/$environmentId/assets'
+    | '/_hosted/organizations/$organizationId/projects/$projectId/monetization/$environmentId/experiments'
     | '/_hosted/organizations/$organizationId/projects/$projectId/monetization/$environmentId/paywalls'
     | '/_hosted/organizations/$organizationId/projects/$projectId/monetization/$environmentId/placements'
     | '/_hosted/organizations/$organizationId/projects/$projectId/monetization/$environmentId/releases'
     | '/_hosted/organizations/$organizationId/projects/$projectId/catalog/entitlements/'
     | '/_hosted/organizations/$organizationId/projects/$projectId/catalog/plans/'
     | '/_hosted/organizations/$organizationId/projects/$projectId/catalog/products/'
+    | '/_hosted/organizations/$organizationId/projects/$projectId/monetization/$environmentId/experiments/$experimentId'
+    | '/_hosted/organizations/$organizationId/projects/$projectId/monetization/$environmentId/experiments/new'
     | '/_hosted/organizations/$organizationId/projects/$projectId/monetization/$environmentId/paywalls/$paywallId'
     | '/_hosted/organizations/$organizationId/projects/$projectId/monetization/$environmentId/placements/$placementId'
   fileRoutesById: FileRoutesById
@@ -622,6 +669,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof HostedOrganizationsOrganizationIdProjectsProjectIdMonetizationEnvironmentIdPaywallsRouteImport
       parentRoute: typeof HostedRoute
     }
+    '/_hosted/organizations/$organizationId/projects/$projectId/monetization/$environmentId/experiments': {
+      id: '/_hosted/organizations/$organizationId/projects/$projectId/monetization/$environmentId/experiments'
+      path: '/organizations/$organizationId/projects/$projectId/monetization/$environmentId/experiments'
+      fullPath: '/organizations/$organizationId/projects/$projectId/monetization/$environmentId/experiments'
+      preLoaderRoute: typeof HostedOrganizationsOrganizationIdProjectsProjectIdMonetizationEnvironmentIdExperimentsRouteImport
+      parentRoute: typeof HostedRoute
+    }
     '/_hosted/organizations/$organizationId/projects/$projectId/monetization/$environmentId/assets': {
       id: '/_hosted/organizations/$organizationId/projects/$projectId/monetization/$environmentId/assets'
       path: '/organizations/$organizationId/projects/$projectId/monetization/$environmentId/assets'
@@ -678,6 +732,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof HostedOrganizationsOrganizationIdProjectsProjectIdMonetizationEnvironmentIdPaywallsPaywallIdRouteImport
       parentRoute: typeof HostedOrganizationsOrganizationIdProjectsProjectIdMonetizationEnvironmentIdPaywallsRoute
     }
+    '/_hosted/organizations/$organizationId/projects/$projectId/monetization/$environmentId/experiments/new': {
+      id: '/_hosted/organizations/$organizationId/projects/$projectId/monetization/$environmentId/experiments/new'
+      path: '/new'
+      fullPath: '/organizations/$organizationId/projects/$projectId/monetization/$environmentId/experiments/new'
+      preLoaderRoute: typeof HostedOrganizationsOrganizationIdProjectsProjectIdMonetizationEnvironmentIdExperimentsNewRouteImport
+      parentRoute: typeof HostedOrganizationsOrganizationIdProjectsProjectIdMonetizationEnvironmentIdExperimentsRoute
+    }
+    '/_hosted/organizations/$organizationId/projects/$projectId/monetization/$environmentId/experiments/$experimentId': {
+      id: '/_hosted/organizations/$organizationId/projects/$projectId/monetization/$environmentId/experiments/$experimentId'
+      path: '/$experimentId'
+      fullPath: '/organizations/$organizationId/projects/$projectId/monetization/$environmentId/experiments/$experimentId'
+      preLoaderRoute: typeof HostedOrganizationsOrganizationIdProjectsProjectIdMonetizationEnvironmentIdExperimentsExperimentIdRouteImport
+      parentRoute: typeof HostedOrganizationsOrganizationIdProjectsProjectIdMonetizationEnvironmentIdExperimentsRoute
+    }
   }
 }
 
@@ -694,6 +762,24 @@ const HostedOrganizationsOrganizationIdProjectsProjectIdCatalogProvidersRouteChi
 const HostedOrganizationsOrganizationIdProjectsProjectIdCatalogProvidersRouteWithChildren =
   HostedOrganizationsOrganizationIdProjectsProjectIdCatalogProvidersRoute._addFileChildren(
     HostedOrganizationsOrganizationIdProjectsProjectIdCatalogProvidersRouteChildren,
+  )
+
+interface HostedOrganizationsOrganizationIdProjectsProjectIdMonetizationEnvironmentIdExperimentsRouteChildren {
+  HostedOrganizationsOrganizationIdProjectsProjectIdMonetizationEnvironmentIdExperimentsExperimentIdRoute: typeof HostedOrganizationsOrganizationIdProjectsProjectIdMonetizationEnvironmentIdExperimentsExperimentIdRoute
+  HostedOrganizationsOrganizationIdProjectsProjectIdMonetizationEnvironmentIdExperimentsNewRoute: typeof HostedOrganizationsOrganizationIdProjectsProjectIdMonetizationEnvironmentIdExperimentsNewRoute
+}
+
+const HostedOrganizationsOrganizationIdProjectsProjectIdMonetizationEnvironmentIdExperimentsRouteChildren: HostedOrganizationsOrganizationIdProjectsProjectIdMonetizationEnvironmentIdExperimentsRouteChildren =
+  {
+    HostedOrganizationsOrganizationIdProjectsProjectIdMonetizationEnvironmentIdExperimentsExperimentIdRoute:
+      HostedOrganizationsOrganizationIdProjectsProjectIdMonetizationEnvironmentIdExperimentsExperimentIdRoute,
+    HostedOrganizationsOrganizationIdProjectsProjectIdMonetizationEnvironmentIdExperimentsNewRoute:
+      HostedOrganizationsOrganizationIdProjectsProjectIdMonetizationEnvironmentIdExperimentsNewRoute,
+  }
+
+const HostedOrganizationsOrganizationIdProjectsProjectIdMonetizationEnvironmentIdExperimentsRouteWithChildren =
+  HostedOrganizationsOrganizationIdProjectsProjectIdMonetizationEnvironmentIdExperimentsRoute._addFileChildren(
+    HostedOrganizationsOrganizationIdProjectsProjectIdMonetizationEnvironmentIdExperimentsRouteChildren,
   )
 
 interface HostedOrganizationsOrganizationIdProjectsProjectIdMonetizationEnvironmentIdPaywallsRouteChildren {
@@ -742,6 +828,7 @@ interface HostedRouteChildren {
   HostedOrganizationsOrganizationIdProjectsProjectIdCatalogPlansPlanIdRoute: typeof HostedOrganizationsOrganizationIdProjectsProjectIdCatalogPlansPlanIdRoute
   HostedOrganizationsOrganizationIdProjectsProjectIdCatalogProductsProductIdRoute: typeof HostedOrganizationsOrganizationIdProjectsProjectIdCatalogProductsProductIdRoute
   HostedOrganizationsOrganizationIdProjectsProjectIdMonetizationEnvironmentIdAssetsRoute: typeof HostedOrganizationsOrganizationIdProjectsProjectIdMonetizationEnvironmentIdAssetsRoute
+  HostedOrganizationsOrganizationIdProjectsProjectIdMonetizationEnvironmentIdExperimentsRoute: typeof HostedOrganizationsOrganizationIdProjectsProjectIdMonetizationEnvironmentIdExperimentsRouteWithChildren
   HostedOrganizationsOrganizationIdProjectsProjectIdMonetizationEnvironmentIdPaywallsRoute: typeof HostedOrganizationsOrganizationIdProjectsProjectIdMonetizationEnvironmentIdPaywallsRouteWithChildren
   HostedOrganizationsOrganizationIdProjectsProjectIdMonetizationEnvironmentIdPlacementsRoute: typeof HostedOrganizationsOrganizationIdProjectsProjectIdMonetizationEnvironmentIdPlacementsRouteWithChildren
   HostedOrganizationsOrganizationIdProjectsProjectIdMonetizationEnvironmentIdReleasesRoute: typeof HostedOrganizationsOrganizationIdProjectsProjectIdMonetizationEnvironmentIdReleasesRoute
@@ -779,6 +866,8 @@ const HostedRouteChildren: HostedRouteChildren = {
     HostedOrganizationsOrganizationIdProjectsProjectIdCatalogProductsProductIdRoute,
   HostedOrganizationsOrganizationIdProjectsProjectIdMonetizationEnvironmentIdAssetsRoute:
     HostedOrganizationsOrganizationIdProjectsProjectIdMonetizationEnvironmentIdAssetsRoute,
+  HostedOrganizationsOrganizationIdProjectsProjectIdMonetizationEnvironmentIdExperimentsRoute:
+    HostedOrganizationsOrganizationIdProjectsProjectIdMonetizationEnvironmentIdExperimentsRouteWithChildren,
   HostedOrganizationsOrganizationIdProjectsProjectIdMonetizationEnvironmentIdPaywallsRoute:
     HostedOrganizationsOrganizationIdProjectsProjectIdMonetizationEnvironmentIdPaywallsRouteWithChildren,
   HostedOrganizationsOrganizationIdProjectsProjectIdMonetizationEnvironmentIdPlacementsRoute:

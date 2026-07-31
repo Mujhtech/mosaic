@@ -1,0 +1,93 @@
+{
+  "experimentAssignmentVersion": "1",
+  "assignment": {
+    "projectId": "project_alpha",
+    "environmentId": "environment_production",
+    "experimentId": "experiment_checkout",
+    "experimentVersionId": "experiment_version_checkout_1",
+    "placementId": "placement_checkout",
+    "controlPaywallVersionId": "paywall_version_control_7",
+    "allocationVersion": "allocation_checkout_1",
+    "variants": [
+      {
+        "id": "variant_control",
+        "name": "Control",
+        "role": "control",
+        "paywallId": "paywall_checkout_control",
+        "paywallVersionId": "paywall_version_control_7",
+        "rangeStart": 0,
+        "rangeEnd": 5000,
+        "compatibility": {
+          "requiredProductIds": [
+            "product_pro_yearly"
+          ],
+          "requiredProviderCapabilities": [
+            "product_load",
+            "purchase"
+          ]
+        }
+      },
+      {
+        "id": "variant_treatment_a",
+        "name": "Treatment A",
+        "role": "treatment",
+        "paywallId": "paywall_checkout_treatment",
+        "paywallVersionId": "paywall_version_treatment_3",
+        "rangeStart": 5000,
+        "rangeEnd": 10000,
+        "compatibility": {
+          "requiredProductIds": [
+            "product_pro_yearly"
+          ],
+          "requiredProviderCapabilities": [
+            "product_load",
+            "purchase"
+          ]
+        }
+      }
+    ],
+    "assignmentKeyPolicy": "identified_user_or_installation",
+    "bucketingAlgorithm": "experiment_sha256_length_prefixed_v1",
+    "lifecycle": "running",
+    "schedule": {
+      "startsAt": "2026-07-26T12:00:00.000Z",
+      "timePolicy": "trusted_server_time_v1",
+      "unreliableTimeBehavior": "normal_placement"
+    },
+    "mutualExclusionGroup": {
+      "id": "experiment_group_checkout",
+      "versionId": "experiment_group_version_checkout_1",
+      "members": [
+        {
+          "experimentId": "experiment_checkout",
+          "rangeStart": 0,
+          "rangeEnd": 5000
+        },
+        {
+          "experimentId": "experiment_upsell",
+          "rangeStart": 5000,
+          "rangeEnd": 10000
+        }
+      ],
+      "bucketingAlgorithm": "experiment_group_sha256_length_prefixed_v1"
+    },
+    "qaOverrides": [],
+    "fallback": "normal_placement",
+    "compatibility": {
+      "requiredFeatures": [
+        "allocation.ranges",
+        "assignment.identified_user_or_installation",
+        "fallback.normal_placement",
+        "group.mutual_exclusion",
+        "schedule.trusted_server_time"
+      ],
+      "bucketingAlgorithms": [
+        "experiment_sha256_length_prefixed_v1",
+        "experiment_group_sha256_length_prefixed_v1"
+      ],
+      "schedulePolicies": [
+        "trusted_server_time_v1"
+      ]
+    }
+  }
+}

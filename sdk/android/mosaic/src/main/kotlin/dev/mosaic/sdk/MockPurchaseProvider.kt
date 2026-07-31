@@ -23,7 +23,9 @@ class MockMosaicPurchaseProvider(
     private val purchaseScenario: MosaicMockPurchaseScenario = MosaicMockPurchaseScenario.SUCCESS,
     private val restoreScenario: MosaicMockRestoreScenario = MosaicMockRestoreScenario.AUTOMATIC,
     private val restoredEntitlements: Set<MosaicEntitlement> = setOf(MosaicEntitlement("mosaic-pro")),
-) : MosaicPurchaseProvider {
+) : MosaicPurchaseProvider, MosaicExperimentCommerceCapabilityProvider {
+    override val mosaicExperimentCapabilities: Set<String> =
+        setOf("product_load", "purchase", "restore", "entitlement_lookup")
     private val lock = Any()
     private val productsById = products.associateBy(MosaicProduct::id)
     private val entitlements = activeEntitlements.toMutableSet()

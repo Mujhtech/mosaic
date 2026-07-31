@@ -17,7 +17,9 @@ object MosaicAnalyticsCodec {
     }
 
     fun encodeBatch(batch: MosaicAnalyticsBatch): String = JsonObject().apply {
-        addProperty("analyticsEventContractVersion", MOSAIC_ANALYTICS_CONTRACT_VERSION)
+        val versions = batch.events.map { it.eventSchemaVersion }.toSet()
+        require(versions.size == 1 && versions.single() in setOf("1", "2"))
+        addProperty("analyticsEventContractVersion", versions.single())
         addProperty("batchId", batch.batchId)
         addProperty("sentAt", batch.sentAt)
         add("events", JsonArray().also { values -> batch.events.forEach { values.add(it.toJson()) } })
@@ -27,10 +29,10 @@ object MosaicAnalyticsCodec {
         require(source.toByteArray(Charsets.UTF_8).size <= 512 * 1024)
         val root = JsonParser.parseString(source).asJsonObject
         root.exact(setOf("analyticsEventContractVersion", "batchId", "sentAt", "events"))
-        require(root.string("analyticsEventContractVersion") == "1")
+        val contractVersion = root.string("analyticsEventContractVersion").also { require(it in setOf("1", "2")) }
         val events = root.getAsJsonArray("events").map {
             require(it.toString().toByteArray(Charsets.UTF_8).size <= MOSAIC_ANALYTICS_MAX_EVENT_BYTES)
-            parseEvent(it.asJsonObject)
+            parseEvent(it.asJsonObject).also { event -> require(event.eventSchemaVersion == contractVersion) }
         }
         require(events.size in 1..100 && events.map { it.eventId }.toSet().size == events.size)
         return MosaicAnalyticsBatch(root.identifier("batchId"), root.timestamp("sentAt"), events)
@@ -39,7 +41,7 @@ object MosaicAnalyticsCodec {
     fun decodeResponse(source: String): MosaicAnalyticsIngestionResponse {
         val root = JsonParser.parseString(source).asJsonObject
         root.exact(setOf("analyticsEventContractVersion", "batchId", "receivedAt", "results"))
-        require(root.string("analyticsEventContractVersion") == "1")
+        require(root.string("analyticsEventContractVersion") in setOf("1", "2"))
         val results = root.getAsJsonArray("results").map { element ->
             val item = element.asJsonObject
             val id = item.identifier("eventId")
@@ -67,7 +69,7 @@ object MosaicAnalyticsCodec {
             setOf("eventId", "eventSchemaVersion", "eventName", "occurredAt", "queuedAt", "authority", "correlation", "attribution", "payload"),
             setOf("identity", "sessionId", "context"),
         )
-        require(root.string("eventSchemaVersion") == "1")
+        val schemaVersion = root.string("eventSchemaVersion").also { require(it in setOf("1", "2")) }
         val eventName = root.string("eventName")
         val authority = root.string("authority")
         require(authority in setOf("client_observed", "trusted_server", "provider_confirmed"))
@@ -82,7 +84,7 @@ object MosaicAnalyticsCodec {
         val correlation = parseCorrelation(root.getAsJsonObject("correlation"))
         val attribution = parseAttribution(root.getAsJsonObject("attribution"))
         val event = MosaicAnalyticsEvent(
-            root.identifier("eventId"), "1", eventName, root.timestamp("occurredAt"), root.timestamp("queuedAt"), authority,
+            root.identifier("eventId"), schemaVersion, eventName, root.timestamp("occurredAt"), root.timestamp("queuedAt"), authority,
             identity, root.optionalIdentifier("sessionId"), context, correlation, attribution,
             parsePayload(eventName, root.getAsJsonObject("payload")),
         )
@@ -98,7 +100,7 @@ object MosaicAnalyticsCodec {
         val operatingSystemVersion = value.optionalString("operatingSystemVersion")?.also { require(OS_VERSION_PATTERN.matches(it) && it.length <= 64) }
         val applicationVersion = value.optionalString("applicationVersion")?.also { require(VERSION_PATTERN.matches(it) && it.length <= 64) }
         val locale = value.optionalString("locale")?.also { require(LOCALE_PATTERN.matches(it) && it.length <= 35) }
-        val delivery = value.optionalString("configurationDeliveryVersion")?.also { require(it in setOf("1", "2")) }
+        val delivery = value.optionalString("configurationDeliveryVersion")?.also { require(it in setOf("1", "2", "3")) }
         val commerce = value.optionalString("commerceProviderContractVersion")?.also { require(it in setOf("1", "2")) }
         return MosaicAnalyticsContext(platform, family, sdkVersion, operatingSystemVersion, applicationVersion, locale, delivery, commerce)
     }
@@ -109,8 +111,11 @@ object MosaicAnalyticsCodec {
     }
 
     private fun parseAttribution(value: JsonObject): MosaicAnalyticsAttribution {
-        value.exact(emptySet(), setOf("configurationReleaseId", "placementId", "placementRuleSetId", "placementRuleSetVersion", "winningRuleId", "paywallId", "paywallVersionId", "mosaicProductId", "planId", "providerId", "providerProductMappingId"))
-        return MosaicAnalyticsAttribution(value.optionalIdentifier("configurationReleaseId"), value.optionalIdentifier("placementId"), value.optionalIdentifier("placementRuleSetId"), value.optionalLong("placementRuleSetVersion")?.also { require(it in 1..MAX_SAFE_INTEGER) }, value.optionalIdentifier("winningRuleId"), value.optionalIdentifier("paywallId"), value.optionalIdentifier("paywallVersionId"), value.optionalIdentifier("mosaicProductId"), value.optionalIdentifier("planId"), value.optionalIdentifier("providerId"), value.optionalIdentifier("providerProductMappingId"))
+        value.exact(emptySet(), setOf("configurationReleaseId", "placementId", "placementRuleSetId", "placementRuleSetVersion", "winningRuleId", "paywallId", "paywallVersionId", "mosaicProductId", "planId", "providerId", "providerProductMappingId", "experimentId", "experimentVersionId", "experimentVariantId", "experimentAllocationVersion"))
+        val result = MosaicAnalyticsAttribution(value.optionalIdentifier("configurationReleaseId"), value.optionalIdentifier("placementId"), value.optionalIdentifier("placementRuleSetId"), value.optionalLong("placementRuleSetVersion")?.also { require(it in 1..MAX_SAFE_INTEGER) }, value.optionalIdentifier("winningRuleId"), value.optionalIdentifier("paywallId"), value.optionalIdentifier("paywallVersionId"), value.optionalIdentifier("mosaicProductId"), value.optionalIdentifier("planId"), value.optionalIdentifier("providerId"), value.optionalIdentifier("providerProductMappingId"), value.optionalIdentifier("experimentId"), value.optionalIdentifier("experimentVersionId"), value.optionalIdentifier("experimentVariantId"), value.optionalIdentifier("experimentAllocationVersion"))
+        val tuple = listOf(result.experimentId, result.experimentVersionId, result.experimentVariantId, result.experimentAllocationVersion)
+        require(tuple.all { it == null } || tuple.all { it != null })
+        return result
     }
 
     private fun parsePayload(name: String, value: JsonObject): MosaicAnalyticsPayload = when (name) {
@@ -136,6 +141,10 @@ object MosaicAnalyticsCodec {
         "restore_completed" -> { value.exact(setOf("providerId", "durationMs", "restoredProductIds", "observedEntitlementKeys")); MosaicAnalyticsPayload.RestoreCompleted(value.identifier("providerId"), value.get("durationMs").asLong, value.strings("restoredProductIds"), value.strings("observedEntitlementKeys")) }
         "restore_nothing_found", "restore_cancelled" -> { value.exact(setOf("providerId", "durationMs"), setOf("providerResultCode")); MosaicAnalyticsPayload.RestoreLifecycle(name, value.identifier("providerId"), value.get("durationMs").asLong, value.optionalString("providerResultCode")) }
         "restore_failed" -> { value.exact(setOf("providerId", "durationMs", "diagnosticCode", "retryable")); MosaicAnalyticsPayload.RestoreFailed(value.identifier("providerId"), value.get("durationMs").asLong, value.string("diagnosticCode"), value.get("retryable").asBoolean) }
+        "experiment_assigned" -> { value.exact(setOf("assignmentKeyType", "bucketingAlgorithm", "bucket", "source")); MosaicAnalyticsPayload.ExperimentAssigned(value.string("assignmentKeyType"), value.string("bucketingAlgorithm"), value.get("bucket").asInt, value.string("source")) }
+        "experiment_exposed" -> { value.exact(setOf("assignmentKeyType", "bucketingAlgorithm", "productReadiness", "providerCapability", "qaOverride")); MosaicAnalyticsPayload.ExperimentExposed(value.string("assignmentKeyType"), value.string("bucketingAlgorithm"), value.string("productReadiness"), value.string("providerCapability"), value.get("qaOverride").asBoolean) }
+        "experiment_fallback_presented" -> { value.exact(setOf("reason", "presentedPaywallId", "presentedPaywallVersionId", "diagnosticCode")); MosaicAnalyticsPayload.ExperimentFallbackPresented(value.string("reason"), value.identifier("presentedPaywallId"), value.identifier("presentedPaywallVersionId"), value.string("diagnosticCode")) }
+        "experiment_assignment_failed" -> { value.exact(setOf("diagnosticCode", "retryable")); MosaicAnalyticsPayload.ExperimentAssignmentFailed(value.string("diagnosticCode"), value.get("retryable").asBoolean) }
         else -> error("Unsupported analytics event name.")
     }
 
@@ -149,6 +158,13 @@ object MosaicAnalyticsCodec {
         }
         val correlation = event.correlation
         val attribution = event.attribution
+        if (event.context?.configurationDeliveryVersion == "3") require(event.eventSchemaVersion == "2")
+        val experimentEvent = event.payload.isExperimentV2()
+        val experimentAllowed = experimentEvent || event.eventName == "product_selected" ||
+            event.eventName.startsWith("purchase_")
+        require(!attribution.hasExperimentTuple() || (event.eventSchemaVersion == "2" && experimentAllowed))
+        require(!experimentEvent || (event.eventSchemaVersion == "2" && attribution.hasExperimentTuple()))
+        if (event.eventSchemaVersion == "2") validateV2FieldOwnership(event)
         fun requireCorrelation(vararg values: String?) = require(values.all { it != null })
         fun requireAttribution(vararg values: String?) = require(values.all { it != null })
         when (event.eventName) {
@@ -170,8 +186,47 @@ object MosaicAnalyticsCodec {
             "purchase_completed_provider" -> requireAttribution(attribution.mosaicProductId, attribution.providerId)
             "restore_started", "restore_completed", "restore_nothing_found", "restore_cancelled", "restore_failed" -> requireCorrelation(correlation.restoreAttemptId)
             "paywall_render_failed" -> Unit
+            "experiment_assigned" -> { requireCorrelation(correlation.placementRequestId); requireAttribution(attribution.placementId) }
+            "experiment_exposed" -> { requireCorrelation(correlation.placementRequestId, correlation.paywallPresentationId); requireAttribution(attribution.placementId, attribution.paywallId, attribution.paywallVersionId) }
+            "experiment_fallback_presented" -> { requireCorrelation(correlation.placementRequestId, correlation.paywallPresentationId); requireAttribution(attribution.placementId); require(attribution.paywallId == null && attribution.paywallVersionId == null) }
+            "experiment_assignment_failed" -> requireCorrelation(correlation.placementRequestId)
         }
         validatePayloadSemantics(event.eventName, event.payload)
+    }
+
+    private fun validateV2FieldOwnership(event: MosaicAnalyticsEvent) {
+        val placement = setOf("configurationReleaseId", "placementId", "placementRuleSetId", "placementRuleSetVersion", "winningRuleId")
+        val paywall = placement + setOf("paywallId", "paywallVersionId")
+        val product = paywall + setOf("mosaicProductId", "planId", "providerId", "providerProductMappingId")
+        val experiment = setOf("experimentId", "experimentVersionId", "experimentVariantId", "experimentAllocationVersion")
+        val allowed = when (event.eventName) {
+            "experiment_assigned", "experiment_fallback_presented", "experiment_assignment_failed" -> placement + experiment
+            "experiment_exposed" -> paywall + experiment
+            "product_selected", "purchase_started", "purchase_completed_client", "purchase_completed_provider",
+            "purchase_pending", "purchase_deferred", "purchase_cancelled", "purchase_failed" -> product + experiment
+            "placement_requested", "placement_evaluation_failed" -> placement - "winningRuleId"
+            "placement_paywall_selected", "placement_fallback_used", "paywall_presented", "paywall_dismissed",
+            "paywall_action_selected", "paywall_render_failed", "product_load_started", "product_load_completed", "product_load_failed" -> paywall
+            "placement_no_paywall", "placement_unavailable" -> placement
+            "product_unavailable" -> product
+            "restore_started", "restore_completed", "restore_nothing_found", "restore_cancelled", "restore_failed" -> setOf("configurationReleaseId")
+            else -> emptySet()
+        }
+        val present = buildSet {
+            fun field(name: String, value: Any?) { if (value != null) add(name) }
+            with(event.attribution) {
+                field("configurationReleaseId", configurationReleaseId); field("placementId", placementId)
+                field("placementRuleSetId", placementRuleSetId); field("placementRuleSetVersion", placementRuleSetVersion)
+                field("winningRuleId", winningRuleId); field("paywallId", paywallId); field("paywallVersionId", paywallVersionId)
+                field("mosaicProductId", mosaicProductId); field("planId", planId); field("providerId", providerId)
+                field("providerProductMappingId", providerProductMappingId); field("experimentId", experimentId)
+                field("experimentVersionId", experimentVersionId); field("experimentVariantId", experimentVariantId)
+                field("experimentAllocationVersion", experimentAllocationVersion)
+            }
+        }
+        require(present.all(allowed::contains))
+        require((event.attribution.placementRuleSetId == null) == (event.attribution.placementRuleSetVersion == null))
+        require(event.attribution.winningRuleId == null || event.attribution.placementRuleSetId != null)
     }
 
     private fun validatePayloadSemantics(name: String, payload: MosaicAnalyticsPayload) {
@@ -209,6 +264,10 @@ object MosaicAnalyticsCodec {
             is MosaicAnalyticsPayload.RestoreCompleted -> { requireIdentifier(payload.providerId); duration(payload.durationMs); validateIdentifiers(payload.restoredProductIds); validateIdentifiers(payload.observedEntitlementKeys) }
             is MosaicAnalyticsPayload.RestoreLifecycle -> { requireIdentifier(payload.providerId); duration(payload.durationMs); safe(payload.providerResultCode) }
             is MosaicAnalyticsPayload.RestoreFailed -> { requireIdentifier(payload.providerId); duration(payload.durationMs); safe(payload.diagnosticCode) }
+            is MosaicAnalyticsPayload.ExperimentAssigned -> { require(payload.assignmentKeyType in setOf("installation", "identified_user")); require(payload.bucketingAlgorithm == MOSAIC_EXPERIMENT_BUCKETING_ALGORITHM); require(payload.bucket in 0..9999); require(payload.source in setOf("deterministic", "qa_override")) }
+            is MosaicAnalyticsPayload.ExperimentExposed -> { require(payload.assignmentKeyType in setOf("installation", "identified_user")); require(payload.bucketingAlgorithm == MOSAIC_EXPERIMENT_BUCKETING_ALGORITHM); require(payload.productReadiness == "ready" && payload.providerCapability == "accepted" && !payload.qaOverride) }
+            is MosaicAnalyticsPayload.ExperimentFallbackPresented -> { require(payload.reason in setOf("product_unavailable", "provider_unavailable", "configuration_incompatible", "rendering_failed")); requireIdentifier(payload.presentedPaywallId); requireIdentifier(payload.presentedPaywallVersionId); safe(payload.diagnosticCode) }
+            is MosaicAnalyticsPayload.ExperimentAssignmentFailed -> safe(payload.diagnosticCode)
             MosaicAnalyticsPayload.Empty, is MosaicAnalyticsPayload.PaywallPresented, is MosaicAnalyticsPayload.PurchaseStarted -> Unit
         }
     }
@@ -229,7 +288,7 @@ private fun MosaicAnalyticsEvent.toJson(): JsonObject = JsonObject().apply {
 }
 
 private fun MosaicAnalyticsCorrelation.toJson() = JsonObject().apply { placementRequestId?.let { addProperty("placementRequestId", it) }; paywallPresentationId?.let { addProperty("paywallPresentationId", it) }; productLoadAttemptId?.let { addProperty("productLoadAttemptId", it) }; purchaseAttemptId?.let { addProperty("purchaseAttemptId", it) }; restoreAttemptId?.let { addProperty("restoreAttemptId", it) }; providerOperationId?.let { addProperty("providerOperationId", it) }; providerUpdateId?.let { addProperty("providerUpdateId", it) } }
-private fun MosaicAnalyticsAttribution.toJson() = JsonObject().apply { configurationReleaseId?.let { addProperty("configurationReleaseId", it) }; placementId?.let { addProperty("placementId", it) }; placementRuleSetId?.let { addProperty("placementRuleSetId", it) }; placementRuleSetVersion?.let { addProperty("placementRuleSetVersion", it) }; winningRuleId?.let { addProperty("winningRuleId", it) }; paywallId?.let { addProperty("paywallId", it) }; paywallVersionId?.let { addProperty("paywallVersionId", it) }; mosaicProductId?.let { addProperty("mosaicProductId", it) }; planId?.let { addProperty("planId", it) }; providerId?.let { addProperty("providerId", it) }; providerProductMappingId?.let { addProperty("providerProductMappingId", it) } }
+private fun MosaicAnalyticsAttribution.toJson() = JsonObject().apply { configurationReleaseId?.let { addProperty("configurationReleaseId", it) }; placementId?.let { addProperty("placementId", it) }; placementRuleSetId?.let { addProperty("placementRuleSetId", it) }; placementRuleSetVersion?.let { addProperty("placementRuleSetVersion", it) }; winningRuleId?.let { addProperty("winningRuleId", it) }; paywallId?.let { addProperty("paywallId", it) }; paywallVersionId?.let { addProperty("paywallVersionId", it) }; mosaicProductId?.let { addProperty("mosaicProductId", it) }; planId?.let { addProperty("planId", it) }; providerId?.let { addProperty("providerId", it) }; providerProductMappingId?.let { addProperty("providerProductMappingId", it) }; experimentId?.let { addProperty("experimentId", it) }; experimentVersionId?.let { addProperty("experimentVersionId", it) }; experimentVariantId?.let { addProperty("experimentVariantId", it) }; experimentAllocationVersion?.let { addProperty("experimentAllocationVersion", it) } }
 
 private fun MosaicAnalyticsPayload.toJson() = JsonObject().apply {
     when (val p = this@toJson) {
@@ -254,6 +313,10 @@ private fun MosaicAnalyticsPayload.toJson() = JsonObject().apply {
         is MosaicAnalyticsPayload.RestoreLifecycle -> { addProperty("providerId", p.providerId); addProperty("durationMs", p.durationMs); p.providerResultCode?.let { addProperty("providerResultCode", it) } }
         is MosaicAnalyticsPayload.RestoreFailed -> { addProperty("providerId", p.providerId); addProperty("durationMs", p.durationMs); addProperty("diagnosticCode", p.diagnosticCode); addProperty("retryable", p.retryable) }
         is MosaicAnalyticsPayload.ProviderCompleted -> { addProperty("confirmationSource", p.confirmationSource); add("activeEntitlementKeys", p.activeEntitlementKeys.toJsonArray()); p.linkedClientEventId?.let { addProperty("linkedClientEventId", it) } }
+        is MosaicAnalyticsPayload.ExperimentAssigned -> { addProperty("assignmentKeyType", p.assignmentKeyType); addProperty("bucketingAlgorithm", p.bucketingAlgorithm); addProperty("bucket", p.bucket); addProperty("source", p.source) }
+        is MosaicAnalyticsPayload.ExperimentExposed -> { addProperty("assignmentKeyType", p.assignmentKeyType); addProperty("bucketingAlgorithm", p.bucketingAlgorithm); addProperty("productReadiness", p.productReadiness); addProperty("providerCapability", p.providerCapability); addProperty("qaOverride", p.qaOverride) }
+        is MosaicAnalyticsPayload.ExperimentFallbackPresented -> { addProperty("reason", p.reason); addProperty("presentedPaywallId", p.presentedPaywallId); addProperty("presentedPaywallVersionId", p.presentedPaywallVersionId); addProperty("diagnosticCode", p.diagnosticCode) }
+        is MosaicAnalyticsPayload.ExperimentAssignmentFailed -> { addProperty("diagnosticCode", p.diagnosticCode); addProperty("retryable", p.retryable) }
     }
 }
 

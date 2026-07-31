@@ -15,6 +15,7 @@ import (
 	"github.com/Mujhtech/mosaic/apps/api/internal/analytics"
 	"github.com/Mujhtech/mosaic/apps/api/internal/browserauth"
 	"github.com/Mujhtech/mosaic/apps/api/internal/cloudworkspace"
+	"github.com/Mujhtech/mosaic/apps/api/internal/experiment"
 	"github.com/Mujhtech/mosaic/apps/api/internal/hostedpublishing"
 	"github.com/Mujhtech/mosaic/apps/api/internal/placementdecision"
 	"github.com/Mujhtech/mosaic/apps/api/internal/platform/analyticspostgres"
@@ -23,6 +24,7 @@ import (
 	"github.com/Mujhtech/mosaic/apps/api/internal/platform/cloudworkspacepostgres"
 	"github.com/Mujhtech/mosaic/apps/api/internal/platform/config"
 	"github.com/Mujhtech/mosaic/apps/api/internal/platform/database"
+	"github.com/Mujhtech/mosaic/apps/api/internal/platform/experimentpostgres"
 	"github.com/Mujhtech/mosaic/apps/api/internal/platform/hostedpublishingpostgres"
 	"github.com/Mujhtech/mosaic/apps/api/internal/platform/httpserver"
 	"github.com/Mujhtech/mosaic/apps/api/internal/platform/logging"
@@ -153,13 +155,22 @@ func run() (runErr error) {
 	if err != nil {
 		return fmt.Errorf("open canonical Analytics Event v1 schema: %w", err)
 	}
-	analyticsValidator, err := analytics.CompileSchemaValidator(analyticsSchema)
+	analyticsV2Schema, err := os.Open(cfg.Analytics.EventV2SchemaPath)
+	if err != nil {
+		_ = analyticsSchema.Close()
+		return fmt.Errorf("open canonical Analytics Event v2 schema: %w", err)
+	}
+	analyticsValidator, err := analytics.CompileSchemaValidators(analyticsSchema, analyticsV2Schema)
 	closeAnalyticsSchemaErr := analyticsSchema.Close()
+	closeAnalyticsV2SchemaErr := analyticsV2Schema.Close()
 	if err != nil {
 		return err
 	}
 	if closeAnalyticsSchemaErr != nil {
 		return fmt.Errorf("close canonical Analytics Event v1 schema: %w", closeAnalyticsSchemaErr)
+	}
+	if closeAnalyticsV2SchemaErr != nil {
+		return fmt.Errorf("close canonical Analytics Event v2 schema: %w", closeAnalyticsV2SchemaErr)
 	}
 
 	objectStore, err := objectstoreminio.New(objectstoreminio.Config{
@@ -205,6 +216,7 @@ func run() (runErr error) {
 	)
 	placementDecisionService := placementdecision.NewService(placementdecisionpostgres.New(databasePool))
 	analyticsService := analytics.NewService(analyticspostgres.New(databasePool), objectStore, analyticsValidator)
+	experimentService := experiment.NewService(experimentpostgres.New(databasePool))
 	deliveryLimiter := ratelimit.New(cfg.Delivery.RequestsPerMinute, cfg.Delivery.Burst, cfg.Delivery.LimiterEntries)
 	authenticationLimiter := ratelimit.New(cfg.BrowserAuth.RequestsPerMinute, cfg.BrowserAuth.Burst, cfg.BrowserAuth.LimiterEntries)
 	analyticsIPLimiter := ratelimit.New(cfg.Analytics.IPRequestsPerMinute, cfg.Analytics.IPBurst, cfg.Analytics.LimiterEntries)
@@ -226,6 +238,7 @@ func run() (runErr error) {
 		AnalyticsIPLimiter:    analyticsIPLimiter,
 		AnalyticsKeyLimiter:   analyticsKeyLimiter,
 		AnalyticsEventLimiter: analyticsEventLimiter,
+		Experiment:            experimentService,
 		ReadinessChecker:      database.HealthChecker{Pinger: databasePool},
 	})
 

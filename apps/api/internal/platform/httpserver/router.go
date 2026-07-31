@@ -14,6 +14,7 @@ import (
 	"github.com/Mujhtech/mosaic/apps/api/internal/analytics"
 	"github.com/Mujhtech/mosaic/apps/api/internal/browserauth"
 	"github.com/Mujhtech/mosaic/apps/api/internal/cloudworkspace"
+	"github.com/Mujhtech/mosaic/apps/api/internal/experiment"
 	"github.com/Mujhtech/mosaic/apps/api/internal/hostedpublishing"
 	"github.com/Mujhtech/mosaic/apps/api/internal/placementdecision"
 	"github.com/Mujhtech/mosaic/apps/api/internal/platform/authn"
@@ -22,6 +23,7 @@ import (
 	analyticshttp "github.com/Mujhtech/mosaic/apps/api/internal/transport/analytics"
 	browserauthhttp "github.com/Mujhtech/mosaic/apps/api/internal/transport/browserauth"
 	cloudworkspacehttp "github.com/Mujhtech/mosaic/apps/api/internal/transport/cloudworkspace"
+	experimenthttp "github.com/Mujhtech/mosaic/apps/api/internal/transport/experiment"
 	"github.com/Mujhtech/mosaic/apps/api/internal/transport/health"
 	hostedpublishinghttp "github.com/Mujhtech/mosaic/apps/api/internal/transport/hostedpublishing"
 	placementdecisionhttp "github.com/Mujhtech/mosaic/apps/api/internal/transport/placementdecision"
@@ -68,6 +70,7 @@ type Dependencies struct {
 	AnalyticsIPLimiter    analyticshttp.Limiter
 	AnalyticsKeyLimiter   analyticshttp.Limiter
 	AnalyticsEventLimiter analyticshttp.EventLimiter
+	Experiment            *experiment.Service
 }
 
 func New(cfg Config, logger zerolog.Logger) http.Handler {
@@ -117,6 +120,9 @@ func NewWithDependencies(cfg Config, logger zerolog.Logger, dependencies Depende
 						}
 						if dependencies.Analytics != nil {
 							analyticshttp.RegisterProjectRoutes(project, dependencies.Analytics)
+						}
+						if dependencies.Experiment != nil {
+							experimenthttp.RegisterProjectRoutes(project, dependencies.Experiment)
 						}
 					})
 				})

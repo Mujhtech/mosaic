@@ -298,6 +298,65 @@ void main() {
     expect((await runtime.diagnostics()).queuedEvents, 0);
   });
 
+  test('Analytics v2 Experiment queue survives reconstruction and flushes',
+      () async {
+    final storage = MosaicMemoryAnalyticsStorage();
+    final clock = _Clock(DateTime.utc(2026, 7, 26, 12));
+    final first = _runtime(
+      storage,
+      MosaicIdentityController(
+          storage: MosaicMemoryIdentityStorage(), namespace: 'identity-v2'),
+      clock,
+      _AcceptingTransport(),
+    );
+    await first.setCollection(
+      environment:
+          const MosaicAnalyticsEnvironmentSettings(collectionEnabled: true),
+    );
+    await first.enqueue(<String, Object?>{
+      'eventId': 'event_exposure_1',
+      'eventSchemaVersion': '2',
+      'eventName': 'experiment_exposed',
+      'occurredAt': '2026-07-26T12:00:00.000Z',
+      'queuedAt': '2026-07-26T12:00:00.000Z',
+      'authority': 'client_observed',
+      'correlation': <String, Object?>{
+        'placementRequestId': 'request_1',
+        'paywallPresentationId': 'presentation_1',
+      },
+      'attribution': <String, Object?>{
+        'experimentId': 'experiment_1',
+        'experimentVersionId': 'experiment_version_1',
+        'experimentVariantId': 'variant_1',
+        'experimentAllocationVersion': 'allocation_1',
+        'paywallId': 'paywall_1',
+        'paywallVersionId': 'paywall_version_1',
+      },
+      'payload': <String, Object?>{
+        'assignmentKeyType': 'identified_user',
+        'bucketingAlgorithm': 'experiment_sha256_length_prefixed_v1',
+        'productReadiness': 'ready',
+        'providerCapability': 'accepted',
+      },
+    });
+    expect(storage.source, contains('experiment_exposed'));
+
+    final reconstructed = _runtime(
+      storage,
+      MosaicIdentityController(
+          storage: MosaicMemoryIdentityStorage(), namespace: 'identity-v2'),
+      clock,
+      _AcceptingTransport(),
+    );
+    await reconstructed.setCollection(
+      environment:
+          const MosaicAnalyticsEnvironmentSettings(collectionEnabled: true),
+    );
+    expect((await reconstructed.diagnostics()).queuedEvents, 1);
+    expect(await reconstructed.flush(), isA<MosaicAnalyticsFlushCompleted>());
+    expect((await reconstructed.diagnostics()).queuedEvents, 0);
+  });
+
   test('priority overflow keeps purchase outcomes and never exceeds bounds',
       () async {
     final clock = _Clock(DateTime.utc(2026, 7, 26, 12));
@@ -401,7 +460,8 @@ final class _Clock {
   void advance(Duration duration) => value = value.add(duration);
 }
 
-final class _AcceptingTransport implements MosaicAnalyticsTransport {
+final class _AcceptingTransport
+    implements MosaicAnalyticsTransport, MosaicExperimentAnalyticsTransport {
   @override
   Future<MosaicAnalyticsIngestionResponse> send(
           MosaicAnalyticsBatch batch) async =>
@@ -411,6 +471,20 @@ final class _AcceptingTransport implements MosaicAnalyticsTransport {
         results: batch.events
             .map((event) => MosaicAnalyticsIngestionResult(
                   eventId: event.eventId,
+                  status: MosaicAnalyticsIngestionStatus.accepted,
+                ))
+            .toList(),
+      );
+
+  @override
+  Future<MosaicAnalyticsIngestionResponse> sendExperiment(
+          MosaicExperimentAnalyticsBatch batch) async =>
+      MosaicAnalyticsIngestionResponse(
+        batchId: batch.batchId,
+        receivedAt: batch.sentAt,
+        results: batch.events
+            .map((event) => MosaicAnalyticsIngestionResult(
+                  eventId: event['eventId']! as String,
                   status: MosaicAnalyticsIngestionStatus.accepted,
                 ))
             .toList(),

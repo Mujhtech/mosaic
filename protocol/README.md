@@ -68,6 +68,19 @@ events contain no tenant or Application IDs; ingestion derives that scope from
 an SDK key bound to one Application. It does not modify delivery, decision,
 Paywall, or commerce contracts.
 
+Experiment Assignment Contract `1` is a separate immutable, deterministic,
+offline Variant-selection contract. Configuration Delivery `3` retains the
+complete Delivery `2` snapshot and atomically adds Assignment v1 definitions
+with exact Experiment feature, algorithm, and trusted-time negotiation. SDKs
+without Experiment support receive unchanged normal Placement behavior through
+a safe Delivery `2` projection.
+
+Analytics Event Contract `2` is a backward-compatible separate revision that
+adds explicit Experiment assignment, successful-presentation exposure,
+fallback-presentation, and assignment-failure events plus immutable Experiment
+attribution on Product selection and purchase lifecycle observations. Event
+Contract `1` remains unchanged and accepted beside v2.
+
 Canonical Commerce artifacts live under:
 
 ```text
@@ -79,11 +92,17 @@ protocol/
 ├── schema/placement-decision/v1/
 ├── schema/configuration-delivery/v2/
 ├── schema/analytics-event/v1/
+├── schema/analytics-event/v2/
+├── schema/experiment-assignment/v1/
+├── schema/configuration-delivery/v3/
 ├── compatibility/commerce-configuration/v1.json
 ├── compatibility/commerce-configuration/v2.json
 ├── compatibility/commerce-provider/v1.json
 ├── compatibility/commerce-provider/v2.json
 ├── compatibility/analytics-event/v1.json
+├── compatibility/analytics-event/v2.json
+├── compatibility/experiment-assignment/v1.json
+├── compatibility/configuration-delivery/v3.json
 ├── fixtures/commerce-configuration/v1/
 ├── fixtures/commerce-configuration/v2/
 ├── fixtures/commerce-provider/v1/
@@ -91,10 +110,14 @@ protocol/
 ├── fixtures/placement-decision/v1/
 ├── fixtures/configuration-delivery/v2/
 ├── fixtures/analytics-event/v1/
+├── fixtures/analytics-event/v2/
+├── fixtures/experiment-assignment/v1/
+├── fixtures/configuration-delivery/v3/
 ├── commerce-configuration/CHANGELOG.md
 ├── commerce/CHANGELOG.md
 ├── placement-decision/CHANGELOG.md
-└── analytics/CHANGELOG.md
+├── analytics/CHANGELOG.md
+└── experiment/CHANGELOG.md
 ```
 
 ## Generate and validate
@@ -126,3 +149,6 @@ See:
 - `docs/protocol/placement-decision-v1.md`
 - `docs/protocol/configuration-delivery-v2.md`
 - `docs/protocol/analytics-event-v1.md`
+- `docs/protocol/experiment-assignment-v1.md`
+- `docs/protocol/configuration-delivery-v3.md`
+- `docs/protocol/analytics-event-v2.md`

@@ -68,7 +68,7 @@ example enables Android cleartext traffic solely for this local development
 connection.
 
 For the hosted path, pass an environment-scoped public SDK key. The
-app fetches Configuration Delivery v1 or v2, resolves the requested Placement,
+app fetches Configuration Delivery v1, v2, or v3, resolves the requested Placement,
 caches the last valid release, and renders with the same native Compose
 renderer. It uses deterministic app-owned commerce unless a RevenueCat public
 SDK key and Mosaic Application ID are also supplied:
@@ -82,8 +82,9 @@ adb shell am start -n dev.mosaic.example/.MainActivity \
   --es mosaic.placement onboarding_complete
 ```
 
-Omit `mosaic.sdk.endpoint` to use Mosaic's hosted API. The example does not add
-Experiments or authoritative entitlement state. Google Play remains optional.
+Omit `mosaic.sdk.endpoint` to use Mosaic's hosted API. A Delivery v3 release can
+assign and present an Experiment through the same `mosaic.placement` extra; no
+Experiment-specific application code or Paywall ID is required. Google Play remains optional.
 Hosted analytics is disabled by default; pass
 `--ez mosaic.analytics.enabled true` only after an owner enables analytics for
 the Environment. The on-screen status reports persistent queue depth.

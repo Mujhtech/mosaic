@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"crypto/subtle"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
@@ -138,6 +139,12 @@ func (r *Repository) UpdateSettings(ctx context.Context, actor analytics.Actor, 
 }
 
 func attributionExists(ctx context.Context, tx pgx.Tx, scope analytics.Scope, event analytics.Event) bool {
+	if event.Attribution.ExperimentID != "" {
+		var one int
+		if err := tx.QueryRow(ctx, `SELECT 1 FROM experiment_versions ev JOIN experiment_variants v ON v.experiment_version_id=ev.id WHERE ev.id=$1 AND ev.experiment_id=$2 AND ev.project_id=$3 AND ev.environment_id=$4 AND v.id=$5 AND ev.allocation_version=$6`, event.Attribution.ExperimentVersionID, event.Attribution.ExperimentID, scope.ProjectID, scope.EnvironmentID, event.Attribution.ExperimentVariantID, event.Attribution.ExperimentAllocationVersion).Scan(&one); err != nil {
+			return false
+		}
+	}
 	checks := []struct{ value, query string }{
 		{event.Attribution.ConfigurationReleaseID, `SELECT 1 FROM configuration_releases WHERE id=$1 AND environment_id=$2`},
 		{event.Attribution.PlacementID, `SELECT 1 FROM placements WHERE id=$1 AND project_id=$2`},
@@ -239,7 +246,15 @@ func (r *Repository) Ingest(ctx context.Context, scope analytics.Scope, batchID 
 			}
 			return nil, err
 		}
-		command, err := tx.Exec(ctx, `INSERT INTO analytics_events(event_id,project_id,environment_id,application_id,ingestion_batch_id,api_key_id,event_schema_version,event_name,authority,occurred_at,queued_at,sent_at,received_at,expires_at,installation_id,application_user_id,subject_id,session_id,identity_generation,platform,sdk_version,operating_system_version,application_version,locale,configuration_release_id,placement_id,placement_rule_set_id,placement_rule_set_version,winning_rule_id,paywall_id,paywall_version_id,product_id,plan_id,provider,provider_mapping_id,placement_request_id,paywall_presentation_id,product_load_attempt_id,purchase_attempt_id,restore_attempt_id,provider_operation_id,provider_update_id,payload,canonical_digest) VALUES($1,$2,$3,$4,$5,$6,$7,$8,'client_observed',$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29,$30,$31,$32,$33,$34,$35,$36,$37,$38,$39,$40,$41,$42,$43) ON CONFLICT(environment_id,event_id) DO NOTHING`, e.EventID, scope.ProjectID, scope.EnvironmentID, scope.ApplicationID, internalBatchID, scope.APIKeyID, e.EventSchemaVersion, e.EventName, candidate.OccurredAt, candidate.QueuedAt, candidate.SentAt, now, candidate.ExpiresAt, installationID, nullable(userID), subjectID, sessionID, e.Identity.Generation, e.Context.Platform, e.Context.SDKVersion, nullable(e.Context.OperatingSystemVersion), nullable(e.Context.ApplicationVersion), nullable(e.Context.Locale), nullable(e.Attribution.ConfigurationReleaseID), nullable(e.Attribution.PlacementID), nullable(e.Attribution.PlacementRuleSetID), nullableInt64(e.Attribution.PlacementRuleSetVersion), nullable(e.Attribution.WinningRuleID), nullable(e.Attribution.PaywallID), nullable(e.Attribution.PaywallVersionID), nullable(e.Attribution.ProductID), nullable(e.Attribution.PlanID), nullable(e.Attribution.Provider), nullable(e.Attribution.ProviderMappingID), nullable(e.Correlation.PlacementRequestID), nullable(e.Correlation.PaywallPresentationID), nullable(e.Correlation.ProductLoadAttemptID), nullable(e.Correlation.PurchaseAttemptID), nullable(e.Correlation.RestoreAttemptID), nullable(e.Correlation.ProviderOperationID), nullable(e.Correlation.ProviderUpdateID), e.Payload, candidate.Digest[:])
+		qaOverride := false
+		if e.EventName == "experiment_exposed" {
+			var payload struct {
+				QAOverride bool `json:"qaOverride"`
+			}
+			_ = json.Unmarshal(e.Payload, &payload)
+			qaOverride = payload.QAOverride
+		}
+		command, err := tx.Exec(ctx, `INSERT INTO analytics_events(event_id,project_id,environment_id,application_id,ingestion_batch_id,api_key_id,event_schema_version,event_name,authority,occurred_at,queued_at,sent_at,received_at,expires_at,installation_id,application_user_id,subject_id,session_id,identity_generation,platform,sdk_version,operating_system_version,application_version,locale,configuration_release_id,placement_id,placement_rule_set_id,placement_rule_set_version,winning_rule_id,paywall_id,paywall_version_id,product_id,plan_id,provider,provider_mapping_id,placement_request_id,paywall_presentation_id,product_load_attempt_id,purchase_attempt_id,restore_attempt_id,provider_operation_id,provider_update_id,experiment_id,experiment_version_id,experiment_variant_id,experiment_allocation_version,experiment_qa_override,payload,canonical_digest) VALUES($1,$2,$3,$4,$5,$6,$7,$8,'client_observed',$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29,$30,$31,$32,$33,$34,$35,$36,$37,$38,$39,$40,$41,$42,$43,$44,$45,$46,$47,$48) ON CONFLICT(environment_id,event_id) DO NOTHING`, e.EventID, scope.ProjectID, scope.EnvironmentID, scope.ApplicationID, internalBatchID, scope.APIKeyID, e.EventSchemaVersion, e.EventName, candidate.OccurredAt, candidate.QueuedAt, candidate.SentAt, now, candidate.ExpiresAt, installationID, nullable(userID), subjectID, sessionID, e.Identity.Generation, e.Context.Platform, e.Context.SDKVersion, nullable(e.Context.OperatingSystemVersion), nullable(e.Context.ApplicationVersion), nullable(e.Context.Locale), nullable(e.Attribution.ConfigurationReleaseID), nullable(e.Attribution.PlacementID), nullable(e.Attribution.PlacementRuleSetID), nullableInt64(e.Attribution.PlacementRuleSetVersion), nullable(e.Attribution.WinningRuleID), nullable(e.Attribution.PaywallID), nullable(e.Attribution.PaywallVersionID), nullable(e.Attribution.ProductID), nullable(e.Attribution.PlanID), nullable(e.Attribution.Provider), nullable(e.Attribution.ProviderMappingID), nullable(e.Correlation.PlacementRequestID), nullable(e.Correlation.PaywallPresentationID), nullable(e.Correlation.ProductLoadAttemptID), nullable(e.Correlation.PurchaseAttemptID), nullable(e.Correlation.RestoreAttemptID), nullable(e.Correlation.ProviderOperationID), nullable(e.Correlation.ProviderUpdateID), nullable(e.Attribution.ExperimentID), nullable(e.Attribution.ExperimentVersionID), nullable(e.Attribution.ExperimentVariantID), nullable(e.Attribution.ExperimentAllocationVersion), qaOverride, e.Payload, candidate.Digest[:])
 		if err != nil {
 			return nil, err
 		}
@@ -263,6 +278,12 @@ func (r *Repository) Ingest(ctx context.Context, scope analytics.Scope, batchID 
 		}
 		if err = enqueueBucket(ctx, tx, scope, bucket, reason, now); err != nil {
 			return nil, err
+		}
+		if e.Attribution.ExperimentVersionID != "" {
+			_, err = tx.Exec(ctx, `INSERT INTO experiment_analysis_rebuilds(environment_id,project_id,experiment_version_id,bucket_date,reason,marked_at) VALUES($1,$2,$3,$4,$5,$6) ON CONFLICT(environment_id,experiment_version_id,bucket_date) DO UPDATE SET reason=excluded.reason,marked_at=excluded.marked_at`, scope.EnvironmentID, scope.ProjectID, e.Attribution.ExperimentVersionID, bucket, reason, now)
+			if err != nil {
+				return nil, err
+			}
 		}
 		if affectsPriorCorrelationBucket(e.EventName) {
 			if err = enqueueBucket(ctx, tx, scope, bucket.Add(-24*time.Hour), "late_event", now); err != nil {

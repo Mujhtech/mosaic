@@ -1,0 +1,156 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:mosaic:protocol:schema:configuration-delivery:v3:capability-request",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "platform",
+    "sdkVersion",
+    "supportedConfigurationDeliveryVersions",
+    "supportedPaywallProtocols",
+    "supportedPlacementDecisionContracts",
+    "supportedDecisionFeatures",
+    "supportedBucketingAlgorithms",
+    "supportedExperimentAssignmentContracts",
+    "supportedExperimentFeatures",
+    "supportedExperimentBucketingAlgorithms",
+    "supportedExperimentSchedulePolicies"
+  ],
+  "properties": {
+    "platform": {
+      "enum": [
+        "flutter",
+        "ios",
+        "android"
+      ]
+    },
+    "sdkVersion": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 64
+    },
+    "supportedConfigurationDeliveryVersions": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 8,
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 16
+      }
+    },
+    "supportedPaywallProtocols": {
+      "type": "array",
+      "maxItems": 8,
+      "items": {
+        "$ref": "urn:mosaic:protocol:schema:configuration-delivery:v1:capability-request#/$defs/supportedPaywallProtocol"
+      }
+    },
+    "supportedPlacementDecisionContracts": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 8,
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 16
+      }
+    },
+    "supportedDecisionFeatures": {
+      "type": "array",
+      "maxItems": 128,
+      "uniqueItems": true,
+      "items": {
+        "enum": [
+          "condition.all",
+          "condition.any",
+          "condition.not",
+          "operator.contains_all",
+          "operator.contains_any",
+          "operator.does_not_exist",
+          "operator.equals",
+          "operator.exists",
+          "operator.greater_than",
+          "operator.greater_than_or_equal",
+          "operator.in",
+          "operator.less_than",
+          "operator.less_than_or_equal",
+          "operator.locale_matches",
+          "operator.not_equals",
+          "operator.not_in",
+          "outcome.fallback",
+          "outcome.no_paywall",
+          "outcome.paywall",
+          "outcome.unavailable",
+          "override.qa",
+          "source.application.locale",
+          "source.application.version",
+          "source.context.country",
+          "source.device.os_version",
+          "source.device.platform",
+          "source.entitlement_state",
+          "source.environment.id",
+          "source.environment.key",
+          "source.identity.user_present",
+          "source.product_availability",
+          "source.product_readiness",
+          "source.provider_capability",
+          "source.user_attribute"
+        ]
+      }
+    },
+    "supportedBucketingAlgorithms": {
+      "type": "array",
+      "maxItems": 8,
+      "uniqueItems": true,
+      "items": {
+        "const": "sha256_length_prefixed_v1"
+      }
+    },
+    "applicationVersion": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128
+    },
+    "supportedExperimentAssignmentContracts": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 8,
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 16
+      }
+    },
+    "supportedExperimentFeatures": {
+      "type": "array",
+      "maxItems": 16,
+      "uniqueItems": true,
+      "items": {
+        "$ref": "urn:mosaic:protocol:schema:experiment-assignment:v1:assignment#/$defs/assignmentFeature"
+      }
+    },
+    "supportedExperimentBucketingAlgorithms": {
+      "type": "array",
+      "maxItems": 8,
+      "uniqueItems": true,
+      "items": {
+        "enum": [
+          "experiment_sha256_length_prefixed_v1",
+          "experiment_group_sha256_length_prefixed_v1"
+        ]
+      }
+    },
+    "supportedExperimentSchedulePolicies": {
+      "type": "array",
+      "maxItems": 8,
+      "uniqueItems": true,
+      "items": {
+        "const": "trusted_server_time_v1"
+      }
+    }
+  }
+}

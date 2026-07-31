@@ -114,6 +114,8 @@ public struct Mosaic: Sendable {
       baseURL: baseURL,
       publicSDKKey: configuration.apiKey
     )
+    let experimentStore = try await MosaicExperimentAssignmentStoreRegistry.shared.store(
+      baseURL: baseURL, publicSDKKey: configuration.apiKey)
     let client = MosaicConfigurationClient(
       publicSDKKey: configuration.apiKey,
       baseURL: baseURL,
@@ -121,7 +123,8 @@ public struct Mosaic: Sendable {
       requestTimeout: configuration.requestTimeout,
       bundledFallback: bundledFallback,
       transport: MosaicURLSessionConfigurationTransport(requestTimeout: requestTimeout),
-      store: store
+      store: store,
+      experimentStore: experimentStore
     )
     await client.bootstrap()
     _ = await client.refresh()
@@ -253,8 +256,24 @@ public struct Mosaic: Sendable {
         "entitlement_lookup": .available,
       ]
     }
-    return await configurationClient.decideForPresentation(
+    let evaluation = await configurationClient.decideForPresentation(
       placement: placement, context: context, identity: identity)
+    guard let selection = evaluation.experimentSelection else { return evaluation }
+    let requiredProducts = selection.variant.compatibility.requiredProductIds
+    let productsReady: Bool
+    if requiredProducts.isEmpty {
+      productsReady = true
+    } else {
+      switch await purchaseProvider.loadProducts(identifiers: requiredProducts) {
+      case .loaded(let products):
+        productsReady = Set(products.map(\.id)) == Set(requiredProducts)
+      case .unavailable:
+        productsReady = false
+      }
+    }
+    return await configurationClient.finalizeExperiment(
+      evaluation, productsReady: productsReady,
+      providerCapabilities: await purchaseProvider.mosaicExperimentCapabilities)
   }
 
   public func identity() async -> MosaicIdentitySnapshot { await identityStore.snapshot() }
@@ -263,7 +282,10 @@ public struct Mosaic: Sendable {
     let before = await identityStore.snapshot()
     try await identityStore.identify(userID)
     let after = await identityStore.snapshot()
-    if before.userID != after.userID { await analyticsRuntime?.identityChanged() }
+    if before.userID != after.userID {
+      await configurationClient?.identityChanged(user: true, installation: false)
+      await analyticsRuntime?.identityChanged()
+    }
   }
 
   public func setUserAttributes(_ attributes: [String: MosaicTypedValue]) async throws {
@@ -276,6 +298,7 @@ public struct Mosaic: Sendable {
     let before = await identityStore.snapshot()
     try await identityStore.resetUser()
     if before.userID != nil || !before.attributes.isEmpty {
+      await configurationClient?.identityChanged(user: true, installation: false)
       await analyticsRuntime?.identityChanged()
     }
   }
@@ -283,6 +306,7 @@ public struct Mosaic: Sendable {
   /// Creates a new app-install identity and also clears user-bound state.
   public func resetInstallationIdentity() async throws {
     try await identityStore.resetInstallation()
+    await configurationClient?.identityChanged(user: true, installation: true)
     await analyticsRuntime?.identityChanged()
   }
 
@@ -298,7 +322,7 @@ public struct Mosaic: Sendable {
       hostEnabled: hostEnabled)
   }
 
-  /// Records one closed Analytics Event v1 client observation. Provider-confirmed
+  /// Records one closed Analytics Event v1/v2 client observation. Provider-confirmed
   /// events cannot be created by this public SDK path.
   @discardableResult
   public func recordAnalytics(
@@ -345,13 +369,34 @@ public struct Mosaic: Sendable {
   func analyticsPresentationInstrumentation(
     placementRequestID: String,
     presentationID: String,
-    attribution: MosaicAnalyticsAttribution
+    attribution: MosaicAnalyticsAttribution,
+    experimentAttribution: MosaicAnalyticsAttribution? = nil
   ) async -> MosaicAnalyticsPresentationInstrumentation? {
     guard let analyticsRuntime else { return nil }
     return MosaicAnalyticsPresentationInstrumentation(
       runtime: analyticsRuntime, placementRequestID: placementRequestID,
       presentationID: presentationID, attribution: attribution,
+      experimentAttribution: experimentAttribution,
       providerID: await purchaseProvider.mosaicAnalyticsProviderID)
+  }
+
+  func authorizeExperimentPresentation(
+    _ selection: MosaicExperimentSelection, releaseID: String
+  ) async -> Bool {
+    let identity = await identityStore.snapshot()
+    return await configurationClient?.authorizePresentation(
+      selection, releaseID: releaseID, identity: identity) ?? false
+  }
+
+  func markExperimentExposed(_ selection: MosaicExperimentSelection) async {
+    await configurationClient?.markExposed(selection)
+  }
+
+  public func experimentDiagnostics() async -> MosaicExperimentDiagnostics {
+    guard let values = await configurationClient?.experimentDiagnostics() else {
+      return .init(persistedAssignmentCount: 0, exposedAssignmentCount: 0)
+    }
+    return values
   }
 
   /// Returns the exact accepted Configuration Release association required to

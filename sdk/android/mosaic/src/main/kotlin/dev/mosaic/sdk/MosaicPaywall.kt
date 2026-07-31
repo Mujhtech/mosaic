@@ -55,6 +55,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.clipToBounds
@@ -219,9 +220,6 @@ fun MosaicPaywall(
         onInteraction(event.interaction)
         event.presentationResult?.let(onResult)
     }
-    LaunchedEffect(state) {
-        state.presented()
-    }
     LaunchedEffect(state, requestedLocale) {
         state.loadProducts(requestedLocale).forEach(dispatch)
     }
@@ -233,7 +231,7 @@ fun MosaicPaywall(
         videoResolver = videoResolver,
         diagnostics = diagnostics,
         onEvent = dispatch,
-        modifier = modifier,
+        modifier = modifier.onGloballyPositioned { state.presented() },
     )
 }
 

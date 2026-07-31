@@ -3,14 +3,49 @@
 The SDK strictly decodes Mosaic Protocol 0.2 and renders it with native
 SwiftUI, and can receive validated draft and mock-commerce revisions from a
 local Mosaic Studio session over WebSockets. It preserves the Phase 1 bundled
-fallback and adds hosted Configuration Delivery plus the provider-neutral
+fallback and adds hosted Configuration Delivery v1–v3 plus the provider-neutral
 Commerce Configuration v1/v2 boundary. The core package remains free of StoreKit
 and RevenueCat dependencies; the optional RevenueCat adapter is a separate
 package under `RevenueCat/`.
 
-## Analytics Event v1, identity, and privacy
+## Experiments and Analytics Event v2
 
-Hosted clients implement the closed Analytics Event v1 contract with immutable
+Configuration Delivery v3 atomically carries Experiment Assignment v1. The
+SDK strictly validates compatibility, schedules, allocation ranges,
+control/variant references, mutual-exclusion groups, and QA overrides before a
+release can replace the last-known-valid cache. Assignment and group bucketing
+use the canonical SHA-256 length-prefixed algorithms. A normal Placement
+decision is always evaluated first; an eligible treatment may replace only its
+exact control Paywall and falls back to that normal result when Products or
+provider capabilities are unavailable.
+
+Assignments use trusted server time and fail closed when a schedule cannot be
+evaluated safely. Backup-excluded replay records contain only one-way subject
+digests and bounded safe identifiers. They are capped at 256 records and expire
+within 180 days of completion. Identity resets clear only the corresponding
+user- or installation-bound records.
+
+```swift
+let capabilities = MosaicExperimentCapabilityReport.current
+let diagnostics = await mosaic.experimentDiagnostics()
+print(capabilities.assignmentContractVersions, diagnostics.activeAssignmentCount)
+```
+
+`MosaicPlacementPaywall` reauthorizes a selected experiment against the current
+release, identity generation, schedule, and group immediately before the view
+is acknowledged as presented. It refreshes on foreground activation, records a
+statistical exposure only after the selected Paywall is on screen, and never
+counts QA override presentations as statistical exposure.
+
+Hosted clients write Analytics Event v2 for experiment-aware releases while
+continuing to read persisted v1 queue entries. Experiment attribution is an
+all-or-none immutable tuple and is attached only to experiment lifecycle,
+Product selection, and purchase lifecycle events—not ordinary Placement or
+Paywall lifecycle events.
+
+## Analytics identity and privacy
+
+Hosted clients implement the closed Analytics Event v1/v2 contracts with immutable
 event-time identity, session, correlation, and attribution. Collection starts
 disabled. The Environment setting and host override must both permit it:
 
@@ -49,8 +84,10 @@ Placement decision.
 
 ## Advanced Placement decisions
 
-The hosted client advertises Delivery `2,1`, Placement Decision `1`, exact
-decision features, and `sha256_length_prefixed_v1`. A v2 candidate is accepted
+The hosted client advertises Delivery `3,2,1`, Placement Decision `1`,
+Experiment Assignment `1`, exact experiment and decision features, both
+canonical experiment bucketing algorithms, and the frozen schedule policy. A
+v2 candidate is accepted
 only when its digest, authoritative `development`/`staging`/`production`
 Environment mode, closed shape, exact derived compatibility, decision semantics,
 Paywall documents, and Product/Entitlement references all validate. Delivery v1

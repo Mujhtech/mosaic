@@ -7,7 +7,9 @@ import (
 
 const (
 	ContractVersion      = "1"
+	ContractVersionV2    = "2"
 	EventSchemaVersion   = "1"
+	EventSchemaVersionV2 = "2"
 	MaxBatchEvents       = 100
 	MaxBatchBytes        = 512 << 10
 	MaxEventBytes        = 32 << 10
@@ -74,17 +76,21 @@ type Correlation struct {
 }
 
 type Attribution struct {
-	ConfigurationReleaseID  string `json:"configurationReleaseId,omitempty"`
-	PlacementID             string `json:"placementId,omitempty"`
-	PlacementRuleSetID      string `json:"placementRuleSetId,omitempty"`
-	PlacementRuleSetVersion int64  `json:"placementRuleSetVersion,omitempty"`
-	WinningRuleID           string `json:"winningRuleId,omitempty"`
-	PaywallID               string `json:"paywallId,omitempty"`
-	PaywallVersionID        string `json:"paywallVersionId,omitempty"`
-	ProductID               string `json:"mosaicProductId,omitempty"`
-	PlanID                  string `json:"planId,omitempty"`
-	Provider                string `json:"providerId,omitempty"`
-	ProviderMappingID       string `json:"providerProductMappingId,omitempty"`
+	ConfigurationReleaseID      string `json:"configurationReleaseId,omitempty"`
+	PlacementID                 string `json:"placementId,omitempty"`
+	PlacementRuleSetID          string `json:"placementRuleSetId,omitempty"`
+	PlacementRuleSetVersion     int64  `json:"placementRuleSetVersion,omitempty"`
+	WinningRuleID               string `json:"winningRuleId,omitempty"`
+	PaywallID                   string `json:"paywallId,omitempty"`
+	PaywallVersionID            string `json:"paywallVersionId,omitempty"`
+	ProductID                   string `json:"mosaicProductId,omitempty"`
+	PlanID                      string `json:"planId,omitempty"`
+	Provider                    string `json:"providerId,omitempty"`
+	ProviderMappingID           string `json:"providerProductMappingId,omitempty"`
+	ExperimentID                string `json:"experimentId,omitempty"`
+	ExperimentVersionID         string `json:"experimentVersionId,omitempty"`
+	ExperimentVariantID         string `json:"experimentVariantId,omitempty"`
+	ExperimentAllocationVersion string `json:"experimentAllocationVersion,omitempty"`
 }
 
 type Scope struct {
@@ -167,6 +173,8 @@ type Job struct {
 	ObjectKey, MediaType, LastErrorCode                            string
 	ByteLength, RowCount, AffectedEventCount, AffectedSessionCount int64
 	RequestedByActorID, ConfirmedByActorID                         string
+	ExperimentVersionID                                            string
+	IncludeIdentity                                                bool
 	CreatedAt, UpdatedAt                                           time.Time
 	BucketDate                                                     time.Time
 	ExpiresAt, CompletedAt                                         *time.Time

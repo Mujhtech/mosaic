@@ -1,0 +1,32 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:mosaic:protocol:schema:analytics-event:v2:batch",
+  "title": "Mosaic Analytics Event Contract v2 batch",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "analyticsEventContractVersion",
+    "batchId",
+    "sentAt",
+    "events"
+  ],
+  "properties": {
+    "analyticsEventContractVersion": {
+      "const": "2"
+    },
+    "batchId": {
+      "$ref": "urn:mosaic:protocol:schema:analytics-event:v2:event#/$defs/identifier"
+    },
+    "sentAt": {
+      "$ref": "urn:mosaic:protocol:schema:analytics-event:v2:event#/$defs/utcTimestamp"
+    },
+    "events": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 100,
+      "items": {
+        "$ref": "urn:mosaic:protocol:schema:analytics-event:v2:event"
+      }
+    }
+  }
+}

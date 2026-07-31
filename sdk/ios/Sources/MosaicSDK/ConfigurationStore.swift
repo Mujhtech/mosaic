@@ -7,18 +7,27 @@ struct MosaicConfigurationCacheRecord: Codable, Sendable, Equatable {
   let releaseData: Data
   let storedAt: Date
   let refreshAfter: Date
+  let serverTime: Date?
+  let localReceiptTime: Date?
+  let systemUptime: TimeInterval?
 
   init(
     etag: String,
     releaseData: Data,
     storedAt: Date,
-    refreshAfter: Date
+    refreshAfter: Date,
+    serverTime: Date? = nil,
+    localReceiptTime: Date? = nil,
+    systemUptime: TimeInterval? = nil
   ) {
-    formatVersion = 1
+    formatVersion = 2
     self.etag = etag
     self.releaseData = releaseData
     self.storedAt = storedAt
     self.refreshAfter = refreshAfter
+    self.serverTime = serverTime
+    self.localReceiptTime = localReceiptTime
+    self.systemUptime = systemUptime
   }
 }
 
@@ -64,7 +73,9 @@ actor MosaicConfigurationFileStore: MosaicConfigurationCacheStore {
     guard fileManager.fileExists(atPath: fileURL.path) else { return nil }
     let data = try Data(contentsOf: fileURL, options: [.mappedIfSafe])
     let record = try JSONDecoder().decode(MosaicConfigurationCacheRecord.self, from: data)
-    guard record.formatVersion == 1 else { throw CocoaError(.fileReadCorruptFile) }
+    guard record.formatVersion == 1 || record.formatVersion == 2 else {
+      throw CocoaError(.fileReadCorruptFile)
+    }
     return record
   }
 

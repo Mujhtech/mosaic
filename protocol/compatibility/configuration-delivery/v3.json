@@ -1,0 +1,29 @@
+{
+  "configurationDeliveryVersion": "3",
+  "status": "releaseCandidate",
+  "releaseSchema": "../../schema/configuration-delivery/v3/release.schema.json",
+  "capabilityRequestSchema": "../../schema/configuration-delivery/v3/capability-request.schema.json",
+  "canonicalFixture": "../../fixtures/configuration-delivery/v3/experiment-release.json",
+  "legacyProjectionFixture": "../../fixtures/configuration-delivery/v3/legacy-v2-projection.json",
+  "supportedPlacementDecisionContracts": [
+    "1"
+  ],
+  "supportedExperimentAssignmentContracts": [
+    "1"
+  ],
+  "supportedPaywallProtocols": [
+    "0.2"
+  ],
+  "readerPolicy": {
+    "unknownDeliveryVersion": "rejectRelease",
+    "unsupportedExperimentContract": "rejectRelease",
+    "unsupportedExperimentFeature": "rejectRelease",
+    "unsupportedExperimentAlgorithm": "rejectRelease",
+    "unsupportedSchedulePolicy": "rejectRelease",
+    "invalidReference": "rejectRelease",
+    "invalidDigest": "rejectRelease",
+    "candidateRejected": "keepLastAcceptedRelease",
+    "partialAcceptance": "forbidden",
+    "legacyProjection": "unchangedNormalPlacementV2"
+  }
+}

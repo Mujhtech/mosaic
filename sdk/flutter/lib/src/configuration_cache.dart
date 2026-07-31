@@ -13,6 +13,8 @@ final class MosaicConfigurationCacheEntry {
     required this.releaseSource,
     this.commerceConfigurationSource,
     this.commerceConfigurationEtag,
+    this.trustedServerTime,
+    this.localReceiptTime,
   });
 
   final String etag;
@@ -23,6 +25,8 @@ final class MosaicConfigurationCacheEntry {
 
   /// Exact strong ETag validated against the sidecar content digest.
   final String? commerceConfigurationEtag;
+  final DateTime? trustedServerTime;
+  final DateTime? localReceiptTime;
 }
 
 abstract interface class MosaicConfigurationCache {
@@ -72,11 +76,15 @@ final class MosaicFileConfigurationCache implements MosaicConfigurationCache {
     final expectedKeys = switch (version) {
       1 => _cacheVersionOneKeys,
       2 => _cacheVersionTwoRequiredKeys,
-      _ => _cacheVersionThreeRequiredKeys,
+      3 => _cacheVersionThreeRequiredKeys,
+      _ => _cacheVersionFourRequiredKeys,
     };
-    final allowedKeys =
-        version == 3 ? _cacheVersionThreeKeys : _cacheVersionTwoKeys;
-    if (version != 1 && version != 2 && version != 3 ||
+    final allowedKeys = version == 4
+        ? _cacheVersionFourKeys
+        : version == 3
+            ? _cacheVersionThreeKeys
+            : _cacheVersionTwoKeys;
+    if (version != 1 && version != 2 && version != 3 && version != 4 ||
         keys.difference(allowedKeys).isNotEmpty ||
         !keys.containsAll(expectedKeys) ||
         version == 1 && keys.length != _cacheVersionOneKeys.length ||
@@ -88,6 +96,12 @@ final class MosaicFileConfigurationCache implements MosaicConfigurationCache {
             object['commerceConfigurationEtag'] is! String ||
         object.containsKey('commerceConfigurationEtag') &&
             !object.containsKey('commerceConfiguration') ||
+        object.containsKey('trustedServerTime') &&
+            object['trustedServerTime'] is! String ||
+        object.containsKey('localReceiptTime') &&
+            object['localReceiptTime'] is! String ||
+        object.containsKey('trustedServerTime') !=
+            object.containsKey('localReceiptTime') ||
         object['commerceConfigurationEtag'] is String &&
             !_isCommerceEtag(object['commerceConfigurationEtag']! as String) ||
         !_isStrongEtag(object['etag']! as String)) {
@@ -104,6 +118,12 @@ final class MosaicFileConfigurationCache implements MosaicConfigurationCache {
       releaseSource: object['release']! as String,
       commerceConfigurationSource: commerceSource,
       commerceConfigurationEtag: object['commerceConfigurationEtag'] as String?,
+      trustedServerTime: object['trustedServerTime'] == null
+          ? null
+          : DateTime.parse(object['trustedServerTime'] as String).toUtc(),
+      localReceiptTime: object['localReceiptTime'] == null
+          ? null
+          : DateTime.parse(object['localReceiptTime'] as String).toUtc(),
     );
   }
 
@@ -130,13 +150,19 @@ final class MosaicFileConfigurationCache implements MosaicConfigurationCache {
     try {
       await temporary.writeAsString(
         jsonEncode(<String, Object?>{
-          'cacheFormatVersion': 3,
+          'cacheFormatVersion': 4,
           'etag': entry.etag,
           'release': entry.releaseSource,
           if (entry.commerceConfigurationSource != null)
             'commerceConfiguration': entry.commerceConfigurationSource,
           if (entry.commerceConfigurationEtag != null)
             'commerceConfigurationEtag': entry.commerceConfigurationEtag,
+          if (entry.trustedServerTime != null)
+            'trustedServerTime':
+                entry.trustedServerTime!.toUtc().toIso8601String(),
+          if (entry.localReceiptTime != null)
+            'localReceiptTime':
+                entry.localReceiptTime!.toUtc().toIso8601String(),
         }),
         flush: true,
       );
@@ -200,6 +226,15 @@ const Set<String> _cacheVersionThreeRequiredKeys = _cacheVersionTwoRequiredKeys;
 const Set<String> _cacheVersionThreeKeys = <String>{
   ..._cacheVersionTwoKeys,
   'commerceConfigurationEtag',
+};
+
+const Set<String> _cacheVersionFourRequiredKeys =
+    _cacheVersionThreeRequiredKeys;
+
+const Set<String> _cacheVersionFourKeys = <String>{
+  ..._cacheVersionThreeKeys,
+  'trustedServerTime',
+  'localReceiptTime',
 };
 
 bool _isCommerceEtag(String value) =>

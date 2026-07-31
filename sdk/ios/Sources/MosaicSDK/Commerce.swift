@@ -107,6 +107,8 @@ public protocol MosaicPurchaseProvider: Sendable {
   /// Stable Mosaic-safe provider identifier used only for analytics attribution.
   /// Returning nil suppresses purchase/restore analytics rather than inventing attribution.
   var mosaicAnalyticsProviderID: String? { get async }
+  /// Exact Mosaic Experiment capabilities implemented by this adapter boundary.
+  var mosaicExperimentCapabilities: Set<MosaicExperimentProviderCapability> { get async }
   func loadProducts(identifiers: [String]) async -> MosaicProductLoadResult
   func purchase(productID: String) async -> MosaicPurchaseResult
   func restore() async -> MosaicRestoreResult
@@ -115,6 +117,9 @@ public protocol MosaicPurchaseProvider: Sendable {
 
 extension MosaicPurchaseProvider {
   public var mosaicAnalyticsProviderID: String? { get async { nil } }
+  public var mosaicExperimentCapabilities: Set<MosaicExperimentProviderCapability> {
+    get async { [.productLoad, .purchase, .restore, .entitlementLookup] }
+  }
 }
 
 public enum MosaicInteractionOutcomeName: String, Sendable, CaseIterable {

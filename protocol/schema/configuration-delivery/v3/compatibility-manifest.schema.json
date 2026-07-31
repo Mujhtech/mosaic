@@ -1,0 +1,115 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:mosaic:protocol:schema:configuration-delivery:v3:compatibility-manifest",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "configurationDeliveryVersion",
+    "status",
+    "releaseSchema",
+    "capabilityRequestSchema",
+    "canonicalFixture",
+    "legacyProjectionFixture",
+    "supportedPlacementDecisionContracts",
+    "supportedExperimentAssignmentContracts",
+    "supportedPaywallProtocols",
+    "readerPolicy"
+  ],
+  "properties": {
+    "configurationDeliveryVersion": {
+      "const": "3"
+    },
+    "status": {
+      "enum": [
+        "draft",
+        "releaseCandidate",
+        "approved",
+        "deprecated"
+      ]
+    },
+    "releaseSchema": {
+      "const": "../../schema/configuration-delivery/v3/release.schema.json"
+    },
+    "capabilityRequestSchema": {
+      "const": "../../schema/configuration-delivery/v3/capability-request.schema.json"
+    },
+    "canonicalFixture": {
+      "const": "../../fixtures/configuration-delivery/v3/experiment-release.json"
+    },
+    "legacyProjectionFixture": {
+      "const": "../../fixtures/configuration-delivery/v3/legacy-v2-projection.json"
+    },
+    "supportedPlacementDecisionContracts": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 1,
+      "items": {
+        "const": "1"
+      }
+    },
+    "supportedExperimentAssignmentContracts": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 1,
+      "items": {
+        "const": "1"
+      }
+    },
+    "supportedPaywallProtocols": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 1,
+      "items": {
+        "const": "0.2"
+      }
+    },
+    "readerPolicy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "unknownDeliveryVersion",
+        "unsupportedExperimentContract",
+        "unsupportedExperimentFeature",
+        "unsupportedExperimentAlgorithm",
+        "unsupportedSchedulePolicy",
+        "invalidReference",
+        "invalidDigest",
+        "candidateRejected",
+        "partialAcceptance",
+        "legacyProjection"
+      ],
+      "properties": {
+        "unknownDeliveryVersion": {
+          "const": "rejectRelease"
+        },
+        "unsupportedExperimentContract": {
+          "const": "rejectRelease"
+        },
+        "unsupportedExperimentFeature": {
+          "const": "rejectRelease"
+        },
+        "unsupportedExperimentAlgorithm": {
+          "const": "rejectRelease"
+        },
+        "unsupportedSchedulePolicy": {
+          "const": "rejectRelease"
+        },
+        "invalidReference": {
+          "const": "rejectRelease"
+        },
+        "invalidDigest": {
+          "const": "rejectRelease"
+        },
+        "candidateRejected": {
+          "const": "keepLastAcceptedRelease"
+        },
+        "partialAcceptance": {
+          "const": "forbidden"
+        },
+        "legacyProjection": {
+          "const": "unchangedNormalPlacementV2"
+        }
+      }
+    }
+  }
+}
