@@ -172,4 +172,32 @@ final class CustomerTokenStoreTests: XCTestCase {
     let outcome = await store.token()
     XCTAssertEqual(outcome, .unavailable(.notConfigured))
   }
+
+  // Risk: carrying a token generation across an authority cutover lets a token
+  // minted for the old epoch race the urgent post-cutover sync. The token stays
+  // opaque; only the local generation is rebound.
+  func testAuthorityEpochChangeRebindsOpaqueTokenGenerationOnce() async {
+    let provider = RecordingTokenProvider(results: [token("a"), token("b")])
+    let store = MosaicCustomerTokenStore(provider: provider)
+    guard case .lease(let initial) = await store.token() else {
+      return XCTFail("expected initial lease")
+    }
+    XCTAssertNil(initial.authorityEpoch)
+
+    await store.bind(toAuthorityEpoch: 7)
+    guard case .lease(let rebound) = await store.token() else {
+      return XCTFail("expected rebound lease")
+    }
+    XCTAssertEqual(rebound.authorityEpoch, 7)
+    XCTAssertGreaterThan(rebound.generation, initial.generation)
+
+    let generation = rebound.generation
+    await store.bind(toAuthorityEpoch: 7)
+    guard case .lease(let sameEpoch) = await store.token() else {
+      return XCTFail("expected retained lease")
+    }
+    XCTAssertEqual(sameEpoch.generation, generation)
+    let calls = await provider.callCount
+    XCTAssertEqual(calls, 2)
+  }
 }

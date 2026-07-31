@@ -199,6 +199,7 @@ final class HostedConfigurationModel: ObservableObject {
   @Published private(set) var isLoading = false
   @Published private(set) var releaseIdentity = "none"
   @Published private(set) var entitlementSummary = "No customer token provider configured."
+  @Published private(set) var authoritySummary = "Authority not established."
   @Published private(set) var restoreStages: [String] = []
   @Published var customerSelection: ExampleCustomerTokenProvider.State = .signedOut {
     didSet {
@@ -209,6 +210,7 @@ final class HostedConfigurationModel: ObservableObject {
   private(set) var mosaic: Mosaic?
   let customerTokenProvider = ExampleCustomerTokenProvider()
   private var entitlementObservation: Task<Void, Never>?
+  private var authorityObservation: Task<Void, Never>?
 
   let placement: String
   let setupMessage: String
@@ -278,6 +280,7 @@ final class HostedConfigurationModel: ObservableObject {
       let configured = try await Mosaic.configure(
         publicSDKKey: publicSDKKey,
         baseURL: baseURL,
+        applicationID: applicationID,
         applicationVersion: applicationVersion,
         transactionObservations: transactionObservationsEnabled ? .enabled : .disabled,
         purchaseProvider: purchaseProvider,
@@ -294,6 +297,7 @@ final class HostedConfigurationModel: ObservableObject {
       await refreshCommerce(for: configured)
       await updateStatus(for: configured)
       observeEntitlements(configured)
+      observeAuthority(configured)
     } catch {
       statusText = "Hosted SDK settings are invalid. Check the key and base URL."
     }
@@ -420,8 +424,36 @@ final class HostedConfigurationModel: ObservableObject {
     entitlementObservation = Task { [weak self] in
       for await update in await mosaic.customerEntitlementUpdates() {
         guard let self, !Task.isCancelled else { return }
-        await self.apply(update)
+        self.apply(update)
       }
+    }
+  }
+
+  private func observeAuthority(_ mosaic: Mosaic) {
+    authorityObservation?.cancel()
+    authorityObservation = Task { [weak self] in
+      for await update in await mosaic.customerAccessAuthorityUpdates() {
+        guard let self, !Task.isCancelled else { return }
+        self.apply(update)
+      }
+    }
+  }
+
+  private func apply(_ update: MosaicCustomerAccessAuthorityUpdate) {
+    switch update {
+    case .authority(let authority, let support):
+      authoritySummary =
+        "epoch \(authority.epoch) · \(authority.kind.rawValue) · "
+        + "\(authority.transitionState.rawValue) · min app "
+        + support.supportedAppVersionWindow.minimumInclusive
+    case .unavailable(let reason, let support):
+      authoritySummary =
+        "Unavailable · \(reason.rawValue)"
+        + (support.map { " · requires SDK \($0.minimumSDKVersion)+" } ?? "")
+    case .signedOut:
+      authoritySummary = "Signed out · authority unavailable"
+    case .cleared(let reason):
+      authoritySummary = "Cleared · \(reason.rawValue)"
     }
   }
 
@@ -454,6 +486,7 @@ final class HostedConfigurationModel: ObservableObject {
     case .missing: "no cache"
     case .invalid: "cache invalid"
     case .differentCustomer: "different customer"
+    case .authorityUnknown: "authority unknown"
     }
   }
 
@@ -652,6 +685,12 @@ struct CustomerEntitlementsPanel: View {
         .foregroundStyle(.secondary)
         .fixedSize(horizontal: false, vertical: true)
         .accessibilityLabel("Entitlement state: \(model.entitlementSummary)")
+
+      Text(model.authoritySummary)
+        .font(.caption.monospaced())
+        .foregroundStyle(.secondary)
+        .fixedSize(horizontal: false, vertical: true)
+        .accessibilityLabel("Access authority: \(model.authoritySummary)")
 
       if !model.restoreStages.isEmpty {
         VStack(alignment: .leading, spacing: 2) {

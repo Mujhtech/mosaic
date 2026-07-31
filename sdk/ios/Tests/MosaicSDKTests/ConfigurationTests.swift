@@ -25,6 +25,27 @@ final class ConfigurationTests: XCTestCase {
     )
   }
 
+  // Risk: migration readiness cannot exclude an incompatible app if iOS omits
+  // its application/version identity. Bundle defaults keep reporting automatic;
+  // explicit overrides keep tests, extensions, and self-hosted apps deterministic.
+  func testApplicationAndVersionReportingUseSafeDefaultsAndValidatedOverrides() throws {
+    let automatic = try MosaicConfiguration(apiKey: "pk_test")
+    XCTAssertFalse(automatic.applicationID.isEmpty)
+    XCTAssertFalse(automatic.applicationVersion?.isEmpty ?? true)
+
+    let overridden = try MosaicConfiguration(
+      apiKey: "pk_test",
+      applicationID: "com.example.mosaic",
+      applicationVersion: "4.2.0")
+    XCTAssertEqual(overridden.applicationID, "com.example.mosaic")
+    XCTAssertEqual(overridden.applicationVersion, "4.2.0")
+
+    XCTAssertThrowsError(
+      try MosaicConfiguration(apiKey: "pk_test", applicationID: "*"))
+    XCTAssertThrowsError(
+      try MosaicConfiguration(apiKey: "pk_test", applicationVersion: "bad version"))
+  }
+
   /// Unreachable local persistence must not fail the host application's
   /// launch. The SDK degrades to process-lifetime storage, still resolves the
   /// bundled fallback, and reports one safe diagnostic.

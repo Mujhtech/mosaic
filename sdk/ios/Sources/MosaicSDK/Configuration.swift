@@ -7,12 +7,14 @@ public struct MosaicConfiguration: Sendable, Equatable {
   ///
   /// Phase 0 deliberately does not select a hosted production URL.
   public let endpoint: URL?
+  public let applicationID: String
   public let applicationVersion: String?
   public let requestTimeout: TimeInterval
 
   public init(
     apiKey: String,
     endpoint: URL? = nil,
+    applicationID: String? = nil,
     applicationVersion: String? = nil,
     requestTimeout: TimeInterval = 5
   ) throws {
@@ -33,23 +35,27 @@ public struct MosaicConfiguration: Sendable, Equatable {
         throw MosaicConfigurationError.invalidEndpoint
       }
     }
-    let normalizedApplicationVersion = applicationVersion?.trimmingCharacters(
-      in: .whitespacesAndNewlines
-    )
-    if let normalizedApplicationVersion {
-      guard
-        !normalizedApplicationVersion.isEmpty,
-        normalizedApplicationVersion.count <= 64,
-        normalizedApplicationVersion.unicodeScalars.allSatisfy({ scalar in
-          scalar.value >= 0x20 && scalar.value != 0x7F
-        })
-      else { throw MosaicConfigurationError.invalidApplicationVersion }
-    }
+    let normalizedApplicationID =
+      (applicationID ?? Bundle.main.bundleIdentifier ?? "mosaic.ios.application")
+      .trimmingCharacters(in: .whitespacesAndNewlines)
+    guard (1...128).contains(normalizedApplicationID.count),
+      normalizedApplicationID.range(
+        of: "^[A-Za-z0-9][A-Za-z0-9._:-]*$", options: .regularExpression) != nil
+    else { throw MosaicConfigurationError.invalidApplicationID }
+    let bundledApplicationVersion =
+      Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String
+    let normalizedApplicationVersion = (applicationVersion ?? bundledApplicationVersion ?? "0.0.0")
+      .trimmingCharacters(in: .whitespacesAndNewlines)
+    guard (1...64).contains(normalizedApplicationVersion.count),
+      normalizedApplicationVersion.range(
+        of: "^[0-9A-Za-z][0-9A-Za-z.+_-]*$", options: .regularExpression) != nil
+    else { throw MosaicConfigurationError.invalidApplicationVersion }
     guard requestTimeout.isFinite, (1...30).contains(requestTimeout) else {
       throw MosaicConfigurationError.invalidRequestTimeout
     }
     self.apiKey = normalizedKey
     self.endpoint = endpoint
+    self.applicationID = normalizedApplicationID
     self.applicationVersion = normalizedApplicationVersion
     self.requestTimeout = requestTimeout
   }
@@ -78,6 +84,7 @@ enum MosaicPersistenceRoot: Sendable, Equatable {
 public enum MosaicConfigurationError: Error, Sendable, Equatable {
   case emptyAPIKey
   case invalidEndpoint
+  case invalidApplicationID
   case invalidApplicationVersion
   case invalidRequestTimeout
 }
@@ -92,7 +99,7 @@ public struct Mosaic: Sendable {
   private let transactionObservationRuntime: MosaicTransactionObservationRuntime?
   private let entitlementClient: MosaicCustomerEntitlementClient?
 
-  private init(
+  init(
     configuration: MosaicConfiguration,
     purchaseProvider: any MosaicPurchaseProvider,
     configurationClient: MosaicConfigurationClient? = nil,
@@ -131,6 +138,7 @@ public struct Mosaic: Sendable {
   public static func configure(
     publicSDKKey: String,
     baseURL: URL,
+    applicationID: String? = nil,
     applicationVersion: String? = nil,
     requestTimeout: TimeInterval = 5,
     bundledFallback: MosaicConfigurationBundledFallback = .packaged,
@@ -141,6 +149,7 @@ public struct Mosaic: Sendable {
     try await configureHosted(
       publicSDKKey: publicSDKKey,
       baseURL: baseURL,
+      applicationID: applicationID,
       applicationVersion: applicationVersion,
       requestTimeout: requestTimeout,
       bundledFallback: bundledFallback,
@@ -154,6 +163,7 @@ public struct Mosaic: Sendable {
   static func configureHosted(
     publicSDKKey: String,
     baseURL: URL,
+    applicationID: String? = nil,
     applicationVersion: String?,
     requestTimeout: TimeInterval,
     bundledFallback: MosaicConfigurationBundledFallback,
@@ -165,6 +175,7 @@ public struct Mosaic: Sendable {
     let configuration = try MosaicConfiguration(
       apiKey: publicSDKKey,
       endpoint: baseURL,
+      applicationID: applicationID,
       applicationVersion: applicationVersion,
       requestTimeout: requestTimeout
     )
@@ -258,7 +269,12 @@ public struct Mosaic: Sendable {
             return store
           }
           return MosaicCustomerEntitlementMemoryCacheStore()
-        })
+        },
+        applicationMetadata: MosaicEntitlementApplicationMetadata(
+          applicationID: configuration.applicationID,
+          appVersion: configuration.applicationVersion ?? "0.0.0",
+          sdkVersion: mosaicSDKVersion),
+        authorityAware: true)
     }
 
     let client = MosaicConfigurationClient(
@@ -277,6 +293,12 @@ public struct Mosaic: Sendable {
         ? [MosaicDiagnostic(code: "delivery_persistence_unavailable", stage: .cache)]
         : []
     )
+    if let entitlementClient {
+      // A cached pending/stabilizing authority is access-critical. Reconcile it
+      // before accepting a newer Configuration that could target on that state.
+      await entitlementClient.bootstrap()
+      await entitlementClient.refreshAuthorityBeforeConfigurationIfNeeded()
+    }
     await client.bootstrap()
     _ = await client.refresh()
     let namespace = baseURL.absoluteString + "\n" + key
@@ -284,10 +306,8 @@ public struct Mosaic: Sendable {
       runtime: analyticsRuntime,
       namespace: namespace)
     if let entitlementClient {
-      // The cached snapshot is read so a launch has an answer immediately; the
-      // network refresh is detached so entitlements never delay the host's
-      // configure call.
-      await entitlementClient.bootstrap()
+      // Outside an urgent transition, the network refresh remains detached so
+      // ordinary entitlement freshness never delays the host's configure call.
       await MosaicCustomerEntitlementLifecycleRegistry.install(
         client: entitlementClient, namespace: namespace)
       Task.detached(priority: .utility) { _ = await entitlementClient.refresh() }
@@ -327,6 +347,9 @@ public struct Mosaic: Sendable {
           MosaicDiagnostic(code: "delivery_not_configured", stage: .deliveryValidation)
         ])
     }
+    // An authority transition is access-critical and precedes ordinary
+    // Configuration Delivery refresh by contract.
+    await entitlementClient?.refreshAuthorityBeforeConfigurationIfNeeded()
     return await configurationClient.refresh()
   }
 
@@ -337,6 +360,7 @@ public struct Mosaic: Sendable {
           MosaicDiagnostic(code: "delivery_not_configured", stage: .deliveryValidation)
         ])
     }
+    await entitlementClient?.refreshAuthorityBeforeConfigurationIfNeeded()
     return await configurationClient.refreshIfNeeded()
   }
 
@@ -394,23 +418,8 @@ public struct Mosaic: Sendable {
         }
       }
       if !requirements.entitlementKeys.isEmpty {
-        switch await purchaseProvider.activeEntitlements() {
-        case .available(let active):
-          let activeKeys = Set(active.map(\.id))
-          context.entitlements = Dictionary(
-            uniqueKeysWithValues: requirements.entitlementKeys.map {
-              ($0, activeKeys.contains($0) ? .active : .inactive)
-            })
-        case .unknown:
-          context.entitlements = Dictionary(
-            uniqueKeysWithValues: requirements.entitlementKeys.map { ($0, .unknown) })
-        case .providerUnavailable:
-          context.entitlements = Dictionary(
-            uniqueKeysWithValues: requirements.entitlementKeys.map { ($0, .providerUnavailable) })
-        case .failed:
-          context.entitlements = Dictionary(
-            uniqueKeysWithValues: requirements.entitlementKeys.map { ($0, .failed) })
-        }
+        context.entitlements = await entitlementDecisionStates(
+          for: requirements.entitlementKeys)
       }
       context.providerCapabilities = [
         "product_loading": .available, "purchase": .available, "restore": .available,
@@ -435,6 +444,48 @@ public struct Mosaic: Sendable {
     return await configurationClient.finalizeExperiment(
       evaluation, productsReady: productsReady,
       providerCapabilities: await purchaseProvider.mosaicExperimentCapabilities)
+  }
+
+  /// One authority-aware decision-context seam. Keeping this outside the
+  /// evaluator makes "Mosaic only after Mosaic authority" independently
+  /// testable and prevents a future merge with provider-observed access.
+  func entitlementDecisionStates(for keys: [String]) async
+    -> [String: MosaicEntitlementDecisionState]
+  {
+    if let entitlementClient, await entitlementClient.isAuthorityAwareRuntime() {
+      guard let authorityKind = await entitlementClient.targetingAuthorityKind() else {
+        return Dictionary(uniqueKeysWithValues: keys.map { ($0, .unknown) })
+      }
+      if authorityKind == .mosaic {
+        var values: [String: MosaicEntitlementDecisionState] = [:]
+        for key in keys {
+          switch await entitlementClient.check(key: key).state {
+          case .active: values[key] = .active
+          case .inactive: values[key] = .inactive
+          case .unknown, .unavailable: values[key] = .unknown
+          }
+        }
+        return values
+      }
+      // Accepted source and rollback authority explicitly delegate access
+      // observation to the installed provider. Absence of authority above is
+      // unknown; it is never permission to infer provider authority.
+    }
+
+    switch await purchaseProvider.activeEntitlements() {
+    case .available(let active):
+      let activeKeys = Set(active.map(\.id))
+      return Dictionary(
+        uniqueKeysWithValues: keys.map {
+          ($0, activeKeys.contains($0) ? .active : .inactive)
+        })
+    case .unknown:
+      return Dictionary(uniqueKeysWithValues: keys.map { ($0, .unknown) })
+    case .providerUnavailable:
+      return Dictionary(uniqueKeysWithValues: keys.map { ($0, .providerUnavailable) })
+    case .failed:
+      return Dictionary(uniqueKeysWithValues: keys.map { ($0, .failed) })
+    }
   }
 
   public func identity() async -> MosaicIdentitySnapshot { await identityStore.snapshot() }
@@ -658,6 +709,25 @@ public struct Mosaic: Sendable {
   public func customerEntitlementDiagnostics() async -> MosaicCustomerEntitlementDiagnostics {
     guard let entitlementClient else { return .notConfigured }
     return await entitlementClient.diagnosticsSnapshot()
+  }
+
+  /// The current server-directed access-authority state, if one has been
+  /// established. This metadata never substitutes for the stable access API.
+  public func customerAccessAuthority() async -> MosaicCustomerAccessAuthorityUpdate? {
+    await entitlementClient?.authorityState()
+  }
+
+  /// Replaying, bounded authority metadata updates for cutover and rollback UI.
+  public func customerAccessAuthorityUpdates() async
+    -> AsyncStream<MosaicCustomerAccessAuthorityUpdate>
+  {
+    guard let entitlementClient else {
+      return AsyncStream { continuation in
+        continuation.yield(.unavailable(reason: .authorityUnknown, minimumSupport: nil))
+        continuation.finish()
+      }
+    }
+    return await entitlementClient.authorityUpdates()
   }
 
   /// Runs a native restore and then waits, briefly and boundedly, for Mosaic to

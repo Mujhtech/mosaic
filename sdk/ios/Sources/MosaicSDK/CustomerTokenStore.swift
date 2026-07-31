@@ -7,6 +7,9 @@ import Foundation
 /// identity change cannot consume the new identity's single retry.
 struct MosaicCustomerTokenLease: Sendable, Equatable {
   let token: MosaicCustomerAccessToken
+  /// The server-directed authority epoch this token generation was fetched for.
+  /// This is local request metadata, never parsed from the opaque token.
+  let authorityEpoch: Int64?
   let generation: UInt64
 }
 
@@ -40,6 +43,7 @@ actor MosaicCustomerTokenStore: MosaicCustomerTokenSource {
   private let failureCooldown: TimeInterval
 
   private var cached: MosaicCustomerAccessToken?
+  private var authorityEpoch: Int64?
   private var generation: UInt64 = 0
   /// The generation that was minted *by* a forced refresh. A 401 on a freshly
   /// minted token is a real failure, not something to retry.
@@ -73,7 +77,10 @@ actor MosaicCustomerTokenStore: MosaicCustomerTokenSource {
   func token() async -> MosaicCustomerTokenOutcome {
     guard provider != nil else { return .unavailable(.notConfigured) }
     if signedOut { return .signedOut }
-    if let cached { return .lease(.init(token: cached, generation: generation)) }
+    if let cached {
+      return .lease(
+        .init(token: cached, authorityEpoch: authorityEpoch, generation: generation))
+    }
     if let cooldownUntil, clock() < cooldownUntil {
       return .unavailable(.tokenProviderFailed)
     }
@@ -122,6 +129,15 @@ actor MosaicCustomerTokenStore: MosaicCustomerTokenSource {
     inFlight = nil
   }
 
+  /// Moves token acquisition to a server-directed authority epoch. A token
+  /// already held for another epoch is discarded; concurrent callers then
+  /// coalesce around one replacement fetch.
+  func bind(toAuthorityEpoch newEpoch: Int64) {
+    guard authorityEpoch != newEpoch else { return }
+    invalidate()
+    authorityEpoch = newEpoch
+  }
+
   /// Logout semantics: the token is discarded and every later read reports
   /// signed out until the host identifies someone.
   func signOut() {
@@ -164,7 +180,8 @@ actor MosaicCustomerTokenStore: MosaicCustomerTokenSource {
     case .token(let token):
       cached = token
       cooldownUntil = nil
-      return .lease(.init(token: token, generation: generation))
+      return .lease(
+        .init(token: token, authorityEpoch: authorityEpoch, generation: generation))
     case .signedOut:
       cached = nil
       signedOut = true

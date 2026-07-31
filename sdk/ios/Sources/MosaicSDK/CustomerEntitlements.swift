@@ -301,6 +301,12 @@ public enum MosaicCustomerUnavailableReason: String, Sendable, Equatable, CaseIt
   case cacheExpired
   /// No snapshot has ever been accepted for this customer.
   case noSnapshot
+  /// The SDK cannot establish the server-directed access-authority epoch.
+  case authorityUnknown
+  /// The host app is outside the server-directed supported version window.
+  case unsupportedAppVersion
+  /// The authority response did not match this app/customer scope.
+  case scopeMismatch
 }
 
 /// The state of one Entitlement as far as the SDK can honestly report it.
@@ -332,11 +338,14 @@ public enum MosaicCustomerEntitlementCacheState: Sendable, Equatable {
   case invalid
   /// The cache belongs to another Billing Customer, Project, or Environment.
   case differentCustomer
+  /// A legacy v1 cache has no authority epoch and therefore cannot grant access
+  /// to an authority-aware client.
+  case authorityUnknown
 
   public var servesAccess: Bool {
     switch self {
     case .fresh, .refreshRecommended, .staleWithinGrace: true
-    case .expired, .missing, .invalid, .differentCustomer: false
+    case .expired, .missing, .invalid, .differentCustomer, .authorityUnknown: false
     }
   }
 
@@ -394,6 +403,17 @@ public struct MosaicCustomerEntitlementCheck: Sendable, Equatable {
 public struct MosaicCustomerEntitlementSnapshotUpdate: Sendable, Equatable {
   public let snapshot: MosaicCustomerEntitlementSnapshot
   public let cacheState: MosaicCustomerEntitlementCacheState
+  public let authority: MosaicCustomerAccessAuthority?
+
+  init(
+    snapshot: MosaicCustomerEntitlementSnapshot,
+    cacheState: MosaicCustomerEntitlementCacheState,
+    authority: MosaicCustomerAccessAuthority? = nil
+  ) {
+    self.snapshot = snapshot
+    self.cacheState = cacheState
+    self.authority = authority
+  }
 }
 
 public enum MosaicCustomerEntitlementClearReason: String, Sendable, Equatable {
@@ -429,12 +449,22 @@ public struct MosaicCustomerEntitlementDiagnostics: Sendable, Equatable {
   public let lastRejectionReason: String?
   public let lastSafeCode: String?
   public let isRefreshInFlight: Bool
+  public let authority: MosaicCustomerAccessAuthority?
+  public let minimumSupport: MosaicCustomerMinimumAccessSupport?
+  public let snapshotAuthorityDigest: String?
+  public let applicationID: String?
+  public let appVersion: String?
+  public let supportedCapabilities: [MosaicCustomerAccessCapability]
+  public let urgentAuthorityRefreshPending: Bool
 
   static let notConfigured = MosaicCustomerEntitlementDiagnostics(
     isConfigured: false, hasCustomerToken: false, tokenGeneration: 0, cacheState: .missing,
     snapshotVersion: nil, billingCustomerID: nil, projectionState: nil, entryCount: 0,
     acceptedSnapshotCount: 0, rejectedSnapshotCount: 0, lastRejectionReason: nil,
-    lastSafeCode: "entitlement_not_configured", isRefreshInFlight: false)
+    lastSafeCode: "entitlement_not_configured", isRefreshInFlight: false,
+    authority: nil, minimumSupport: nil, snapshotAuthorityDigest: nil,
+    applicationID: nil, appVersion: nil, supportedCapabilities: [],
+    urgentAuthorityRefreshPending: false)
 }
 
 // MARK: - Cross-platform policy constants

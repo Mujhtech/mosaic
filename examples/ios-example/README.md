@@ -45,10 +45,13 @@ The footer shows the latest normalized paywall interaction or terminal result.
 The example uses `MosaicImageResolver.missing` intentionally so the fixture's
 declared same-geometry image placeholder demonstrates asset fallback.
 
-## Authoritative customer entitlements (Phase 9B)
+## Authoritative customer entitlements (Phase 9C)
 
 The hosted tab has an **Authoritative entitlements** panel that exercises the
-Phase 9B surface without needing a real backend.
+customer-access surface without needing a real backend. With a Phase 9C backend,
+the panel also shows the replayed server authority epoch, authority kind,
+transition state, and minimum supported app version. `authority unknown` is an
+explicit unavailable state, never an inactive Entitlement.
 
 The customer picker drives a mock token provider (`ExampleCustomerTokenProvider`)
 with four states, chosen to cover the cases that are easy to get wrong:
@@ -63,6 +66,13 @@ The readout shows the accepted snapshot version, the cache state (including
 `STALE within grace`, which a real UI must surface), and the `pro` entry state.
 **Restore & sync** lists each stage so the two axes of a restore are visible:
 what StoreKit did, and whether an accepted snapshot actually reflects it.
+
+Authority changes do not uninstall or replace the selected commerce provider.
+Once Mosaic is authoritative, hosted Placement targeting reads Mosaic access
+only; provider-observed Entitlements remain available for diagnostics and are
+not unioned into targeting. A pending or stabilizing authority transition gets
+one urgent, coalesced sync before normal hosted Configuration refresh. The
+example does not register background tasks or retry a purchase automatically.
 
 In a real app the token provider calls your own authenticated backend, which
 mints a Customer Access Token with your Mosaic `secret_server` key. Mosaic

@@ -2,6 +2,31 @@
 
 ## Unreleased
 
+- Add Authoritative Entitlement v2 support with automatic Application,
+  platform, app-version, SDK-version, and capability reporting. The SDK accepts
+  server-directed authority epochs before snapshot versions, atomically binds
+  v2 caches to authority scope and digest, rejects legacy authority-less caches
+  as `authority_unknown`, and exposes a bounded replaying authority stream.
+- Keep Customer Access Tokens opaque and memory-only while rebinding their
+  local generation to authority epochs. Pending and stabilizing transitions
+  schedule one coalesced urgent sync and refresh before Configuration Delivery;
+  there is no automatic purchase retry or background-execution integration.
+- Make Placement targeting read only the authoritative Mosaic snapshot after
+  Mosaic cutover. StoreKit and RevenueCat stay installed for Product loading,
+  purchasing, restoration, transaction observation, and provider diagnostics;
+  provider-observed access is never unioned into Mosaic-authoritative access.
+- Treat targeting authority as unknown until an epoch is accepted, strictly
+  validate unchanged snapshot confirmations, and publish accepted authority
+  state only after its atomic cache write succeeds.
+- Send the optional known snapshot-authority digest only with the exact retained
+  customer/scope/epoch cache binding, and fail closed on `policy_unavailable`
+  responses whose minimum-support policy is deliberately omitted.
+- Persist `policy_unavailable` as an atomic cache tombstone before publishing
+  unavailable state, including the exact canonical malformed form with its
+  forbidden support placeholder. Failed marker writes gate bootstrap and sync
+  until retry succeeds; valid full snapshots recover by replacing the marker.
+- Keep direct host Entitlement checks unavailable under accepted `source` and
+  `source_rollback` authority; only Placement targeting delegates to providers.
 - Add the optional Apple transaction-observation handoff, off by default
   (`Mosaic.configure(transactionObservations:)`). When enabled,
   `MosaicStoreKitProvider.attachTransactionObservationSink(_:)` hands each

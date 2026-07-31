@@ -207,6 +207,75 @@ func authoritativeEntitlementFixtureData(_ relativePath: String) throws -> Data 
   try phase5FixtureData("authoritative-entitlement/v1/\(relativePath)")
 }
 
+func authoritativeEntitlementV2FixtureData(_ relativePath: String) throws -> Data {
+  try phase5FixtureData("authoritative-entitlement/v2/\(relativePath)")
+}
+
+/// Builds an iOS-local v2 wrapper around a contract-valid v1 snapshot. The
+/// canonical authority digest is recomputed so transition tests exercise epoch
+/// ordering rather than corruption handling.
+func authoritativeEntitlementV2SnapshotVariant(
+  authorityEpoch: Int64,
+  authorityKind: MosaicCustomerAccessAuthorityKind,
+  transitionState: MosaicCustomerAccessTransitionState,
+  snapshotVersion: Int64,
+  applicationID: String = "fixture-application-ios",
+  minimumAppVersion: String = "4.0.0"
+) throws -> Data {
+  guard
+    let v1Root = try JSONSerialization.jsonObject(
+      with: authoritativeEntitlementFixtureData("snapshots/active-subscription.json"))
+      as? [String: Any],
+    var snapshot = v1Root["payload"] as? [String: Any]
+  else { throw CanonicalFixtureLookupError.invalidShape }
+  snapshot["snapshotVersion"] = snapshotVersion
+  if snapshotVersion == 0 {
+    snapshot.removeValue(forKey: "previousSnapshotVersion")
+  } else {
+    snapshot["previousSnapshotVersion"] = max(0, snapshotVersion - 1)
+  }
+  var snapshotDigestInput = snapshot
+  snapshotDigestInput.removeValue(forKey: "contentDigest")
+  snapshot["contentDigest"] = try MosaicCustomerCanonicalJSON.digest(snapshotDigestInput)
+
+  var authority: [String: Any] = [
+    "authorityEpoch": authorityEpoch,
+    "authorityKind": authorityKind.rawValue,
+    "scope": [
+      "projectId": "fixture-project-mosaic",
+      "environmentId": "fixture-environment-production",
+      "applicationId": applicationID,
+      "platform": "ios",
+    ],
+    "transitionState": transitionState.rawValue,
+  ]
+  if authorityKind != .source {
+    authority["cutoverAt"] = "2026-07-29T10:00:00.000Z"
+  }
+  let authorityDigest = try MosaicCustomerCanonicalJSON.digest([
+    "authority": authority,
+    "snapshot": snapshot,
+  ])
+  return try MosaicCustomerCanonicalJSON.data([
+    "authoritativeEntitlementContractVersion": "2",
+    "recordType": "customerEntitlementSnapshot",
+    "payload": [
+      "authority": authority,
+      "snapshot": snapshot,
+      "snapshotAuthorityDigest": authorityDigest,
+      "minimumSupport": [
+        "minimumContractVersion": "2",
+        "minimumSdkVersion": "2.0.0",
+        "supportedAppVersionWindow": ["minimumInclusive": minimumAppVersion],
+        "requiredCapabilities": [
+          "authority_epoch", "authority_scope", "urgent_authority_sync",
+          "mosaic_authoritative_targeting",
+        ],
+      ],
+    ],
+  ])
+}
+
 func authoritativeEntitlementFixtureNames(in subdirectory: String) throws -> [String] {
   let fileManager = FileManager.default
   var directory = URL(fileURLWithPath: #filePath).deletingLastPathComponent()

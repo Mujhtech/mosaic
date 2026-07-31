@@ -112,6 +112,7 @@ final class CustomerEntitlementVectorTests: XCTestCase {
     case .missing: "missing"
     case .invalid: "invalid"
     case .differentCustomer: "different_customer"
+    case .authorityUnknown: "authority_unknown"
     }
   }
 }

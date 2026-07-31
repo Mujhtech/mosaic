@@ -12,7 +12,9 @@ struct MosaicEntitlementSyncHTTPRequest: Sendable, Equatable {
   ///
   /// The sync surface is a POST even though it is a read, because contract
   /// negotiation lives in the request record and a GET cannot carry it.
-  /// Conditional revalidation still rides on `If-None-Match`.
+  /// Legacy v1 conditional revalidation rides on `If-None-Match`; v2 carries
+  /// its known authority epoch, snapshot version, and authority digest only in
+  /// this body.
   let body: Data
   let timeout: TimeInterval
 }
@@ -57,12 +59,42 @@ enum MosaicEntitlementSyncHeader {
 
 /// Builds the canonical `entitlementSyncRequest` envelope.
 ///
-/// `billingCustomerId` is deliberately never sent. It is a hint the server
-/// verifies against the Customer Access Token and refuses on mismatch, so it can
-/// only narrow the answer or fail the request — it can never widen access, and
-/// omitting it removes a value that would otherwise have to be kept in step with
-/// the token.
+/// Customer, Project, and Environment binding are deliberately never sent in
+/// v2. The server derives them from the opaque Customer Access Token, removing
+/// client-supplied scope hints that could drift from the token.
 enum MosaicEntitlementSyncRequestBody {
+  static func encodeAuthorityAware(
+    knownAuthorityEpoch: Int64?,
+    knownSnapshotVersion: Int64?,
+    knownSnapshotAuthorityDigest: String?,
+    application: MosaicEntitlementApplicationMetadata
+  ) throws -> Data {
+    var payload: [String: Any] = [
+      "request": [
+        "applicationId": application.applicationID,
+        "platform": MosaicCustomerAccessPlatform.ios.rawValue,
+        "appVersion": application.appVersion,
+        "sdkVersion": application.sdkVersion,
+        "supportedContractVersions": [
+          mosaicAuthoritativeEntitlementContractVersion,
+          mosaicAuthoritativeEntitlementAuthorityContractVersion,
+        ],
+        "capabilities": MosaicEntitlementApplicationMetadata.capabilities.map(\.rawValue),
+      ]
+    ]
+    if let knownAuthorityEpoch { payload["knownAuthorityEpoch"] = knownAuthorityEpoch }
+    if let knownSnapshotVersion { payload["knownSnapshotVersion"] = knownSnapshotVersion }
+    if let knownSnapshotAuthorityDigest {
+      payload["knownSnapshotAuthorityDigest"] = knownSnapshotAuthorityDigest
+    }
+    return try MosaicCustomerCanonicalJSON.data([
+      "authoritativeEntitlementContractVersion":
+        mosaicAuthoritativeEntitlementAuthorityContractVersion,
+      "recordType": "entitlementSyncRequest",
+      "payload": payload,
+    ])
+  }
+
   static func encode(
     knownSnapshotVersion: Int64?,
     entityTag: String?,

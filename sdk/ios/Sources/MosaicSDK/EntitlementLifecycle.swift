@@ -5,7 +5,7 @@ import Foundation
 
   /// Refreshes authoritative entitlements when the app comes to the foreground.
   ///
-  /// Deliberately limited. Phase 9B adds **no background execution**: no
+  /// Deliberately limited. Phase 9C adds **no background execution**: no
   /// `BGTaskScheduler`, no silent push, no timers. A refresh happens at
   /// `configure` and on foreground, and nothing guarantees one while the app is
   /// backgrounded or terminated. That is a documented property, not an
@@ -18,7 +18,7 @@ import Foundation
     private static var observers: [String: MosaicCustomerEntitlementLifecycleObserver] = [:]
 
     static func install(client: MosaicCustomerEntitlementClient, namespace: String) {
-      guard observers[namespace] == nil else { return }
+      observers[namespace]?.invalidate()
       observers[namespace] = MosaicCustomerEntitlementLifecycleObserver(client: client)
     }
   }
@@ -34,10 +34,19 @@ import Foundation
         NotificationCenter.default.addObserver(
           forName: UIApplication.willEnterForegroundNotification, object: nil, queue: .main
         ) { [client] _ in
-          // `refreshIfNeeded` and not `refresh`: a foreground while the snapshot
-          // is still fresh costs nothing and asks nothing of the network.
-          Task { _ = await client.refreshIfNeeded() }
+          Task {
+            // A pending authority transition is urgent even when the embedded
+            // snapshot is otherwise fresh. Ordinary foreground refresh remains
+            // freshness-gated and both paths coalesce in the client actor.
+            await client.refreshAuthorityBeforeConfigurationIfNeeded()
+            _ = await client.refreshIfNeeded()
+          }
         })
+    }
+
+    func invalidate() {
+      for token in tokens { NotificationCenter.default.removeObserver(token) }
+      tokens.removeAll()
     }
   }
 #else

@@ -57,6 +57,61 @@ final class CustomerEntitlementCacheStoreTests: XCTestCase {
     XCTAssertEqual(loaded, written)
   }
 
+  // Risk: policy invalidation is only durable if the production file decoder
+  // recognizes the marker written through the same atomic cache path. An
+  // in-memory-only test would miss Codable or format-version drift.
+  func testPolicyUnavailableTombstoneRoundTripsThroughFileStore() async throws {
+    let scope = MosaicCustomerAccessAuthorityScope(
+      projectID: "fixture-project-mosaic",
+      environmentID: "fixture-environment-production",
+      applicationID: "fixture-application-ios",
+      platform: .ios)
+    let invalidatedAt = Date(timeIntervalSince1970: 1_785_245_400)
+    let invalidation = MosaicCustomerEntitlementCacheInvalidation(
+      reason: .policyUnavailable, scope: scope, invalidatedAt: invalidatedAt)
+    let data = Data("mosaic.policy_unavailable.tombstone.v1".utf8)
+    var tombstone = MosaicCustomerEntitlementCacheRecord(
+      formatVersion: 3,
+      recordData: data,
+      billingCustomerID: "fixture-customer-0001",
+      projectID: scope.projectID,
+      environmentID: scope.environmentID,
+      snapshotVersion: 4,
+      issuedAt: invalidatedAt,
+      asOf: invalidatedAt,
+      refreshAfter: invalidatedAt,
+      validUntil: invalidatedAt,
+      staleGraceSeconds: 0,
+      entityTag: "",
+      storedAt: invalidatedAt,
+      serverTime: nil,
+      localReceiptTime: nil,
+      systemUptime: nil,
+      applicationID: scope.applicationID,
+      platform: scope.platform,
+      authority: nil,
+      snapshotAuthorityDigest: nil,
+      minimumSupport: nil,
+      invalidation: invalidation,
+      checksum: "")
+    tombstone.checksum = MosaicCustomerEntitlementCacheRecord.checksum(
+      recordData: data,
+      billingCustomerID: tombstone.billingCustomerID,
+      projectID: scope.projectID,
+      environmentID: scope.environmentID,
+      snapshotVersion: tombstone.snapshotVersion,
+      applicationID: scope.applicationID,
+      platform: scope.platform,
+      invalidation: invalidation)
+
+    let fileStore = try store(customer: "user-a")
+    try await fileStore.save(tombstone)
+    let loaded = try await fileStore.load()
+
+    XCTAssertEqual(loaded, tombstone)
+    XCTAssertTrue(loaded?.isPolicyUnavailableTombstone == true)
+  }
+
   // Risk: an entitlement cache restored onto a second device from an iCloud
   // backup carries one person's access into another device's session. Apple also
   // rejects apps that back up regenerable caches. Both the directory and the
