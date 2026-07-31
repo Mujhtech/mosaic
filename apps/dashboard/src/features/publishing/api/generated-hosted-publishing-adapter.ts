@@ -9,8 +9,10 @@ import {
   getPaywallDraft,
   getPlacementBinding,
   getProductReadiness,
+  listApplications,
   listAssets,
   listConfigurationReleases,
+  listEnvironments,
   listPaywalls,
   listPaywallVersions,
   listPlacements,
@@ -31,7 +33,6 @@ import type { MosaicDocument } from "@/features/paywall-editor/types/editor"
 import {
   HostedDraftConflictError,
   HostedDraftOfflineError,
-  MOCK_PRODUCT_ACKNOWLEDGEMENT_CODE,
   type HostedDraft,
   type HostedPaywallDetail,
   type HostedPaywallListItem,
@@ -131,6 +132,12 @@ function conflictFrom(error: unknown) {
     revision,
     typeof details?.updatedAt === "string" ? details.updatedAt : undefined,
   )
+}
+
+function recoveryActionLabel(recoveryAction: string) {
+  return recoveryAction
+    .replace(/([a-z0-9])([A-Z])/g, "$1 $2")
+    .replace(/^./, (character) => character.toUpperCase())
 }
 
 export function resolvePlacementReadiness(
@@ -441,7 +448,14 @@ export function createGeneratedHostedPublishingAdapter(
         paywallId: input.paywallId,
         projectId: input.projectId,
       }
-      const [validationResult, draftResult, placements, assetsResult] = await Promise.all([
+      const [
+        validationResult,
+        draftResult,
+        placements,
+        assetsResult,
+        applicationsResult,
+        environmentsResult,
+      ] = await Promise.all([
         validatePaywallDraft({ client, path, throwOnError: true }),
         getPaywallDraft({ client, path, throwOnError: true }),
         this.listPlacements({
@@ -453,33 +467,85 @@ export function createGeneratedHostedPublishingAdapter(
           path: { projectId: input.projectId },
           throwOnError: true,
         }),
+        listApplications({
+          client,
+          path: { projectId: input.projectId },
+          throwOnError: true,
+        }),
+        listEnvironments({
+          client,
+          path: { projectId: input.projectId },
+          throwOnError: true,
+        }),
       ])
       const document = hostedDocument(draftResult.data.data.document)
       const productIds = [...new Set(document.products.map((product) => product.productId))]
+      const environment = environmentsResult.data.data.items.find(
+        (item) => item.id === input.environmentId,
+      )
+      if (!environment) {
+        throw new Error("The selected Environment is unavailable in this Project.")
+      }
+      const applications = applicationsResult.data.data.items
       const products = await Promise.all(
         productIds.map(async (productId) => {
-          const result = await getProductReadiness({
-            client,
-            path: { productId },
-            throwOnError: true,
-          })
-          return { id: productId, name: productId, ...result.data.data }
+          const scopes = await Promise.all(
+            applications.map(async (application) => {
+              const result = await getProductReadiness({
+                client,
+                path: { productId },
+                query: {
+                  applicationId: application.id,
+                  environmentId: environment.id,
+                },
+                throwOnError: true,
+              })
+              return { application, readiness: result.data.data }
+            }),
+          )
+          return {
+            id: productId,
+            name: productId,
+            ready:
+              scopes.length > 0 &&
+              scopes.every(
+                ({ readiness }) =>
+                  readiness.state === "connected" && readiness.blockers.length === 0,
+              ),
+            scopes,
+          }
         }),
       )
-      const mockProductIssues = products
-        .filter((product) => product.metadataSource === "mock")
-        .map((product) => ({
-          code: MOCK_PRODUCT_ACKNOWLEDGEMENT_CODE,
-          message: `${product.name} uses mock product metadata. Confirm this is intentional before publishing.`,
-          severity: "warning" as const,
-        }))
-      const productBlockers = products
-        .filter((product) => !product.ready && product.metadataSource !== "mock")
-        .map((product) => ({
-          code: "product.not_ready",
-          message: `${product.name} is not ready: ${product.reasons.join(", ") || "review its Catalog setup"}.`,
-          severity: "error" as const,
-        }))
+      const productIssues = products.flatMap((product) =>
+        product.scopes.flatMap(({ application, readiness }) => [
+          ...readiness.blockers.map((issue) => ({
+            applicationId: readiness.applicationId,
+            code: issue.code,
+            connectionId: readiness.connectionId,
+            environmentId: readiness.environmentId,
+            message: `${product.name} for ${application.name} (${readiness.platform.toUpperCase()}) reports ${issue.code} on ${issue.resourceType} ${issue.resourceId}.`,
+            productId: product.id,
+            recoveryAction: issue.recoveryAction,
+            recoveryLabel: recoveryActionLabel(issue.recoveryAction),
+            resourceId: issue.resourceId,
+            resourceType: issue.resourceType,
+            severity: environment.mode === "production" ? ("error" as const) : ("warning" as const),
+          })),
+          ...readiness.warnings.map((issue) => ({
+            applicationId: readiness.applicationId,
+            code: issue.code,
+            connectionId: readiness.connectionId,
+            environmentId: readiness.environmentId,
+            message: `${product.name} for ${application.name} (${readiness.platform.toUpperCase()}) reports ${issue.code} on ${issue.resourceType} ${issue.resourceId}.`,
+            productId: product.id,
+            recoveryAction: issue.recoveryAction,
+            recoveryLabel: recoveryActionLabel(issue.recoveryAction),
+            resourceId: issue.resourceId,
+            resourceType: issue.resourceType,
+            severity: "warning" as const,
+          })),
+        ]),
+      )
       const managedAssetsByUrl = new Map(
         assetsResult.data.data.items.map((asset) => [asset.url, asset]),
       )
@@ -522,8 +588,7 @@ export function createGeneratedHostedPublishingAdapter(
             message,
             severity: "warning" as const,
           })),
-          ...mockProductIssues,
-          ...productBlockers,
+          ...productIssues,
           ...assetIssues,
           ...placementIssues,
         ],

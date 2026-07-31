@@ -7,6 +7,10 @@ const protocolRoot = resolve(toolsDirectory, "..");
 const generatedDirectory = resolve(protocolRoot, "browser/generated");
 
 const schemaPaths = Object.freeze({
+  commerceProviderV1: resolve(
+    protocolRoot,
+    "schema/commerce-provider/v1/contract.schema.json",
+  ),
   localProjectV02: resolve(
     protocolRoot,
     "schema/local-preview/v0.2/local-project.schema.json",
@@ -41,6 +45,9 @@ function definitionTypeName(context, definitionName) {
       ? `MosaicPreviewV02${name.slice("Preview".length)}`
       : `MosaicPreviewV02${name}`;
   }
+  if (context === "commerceProviderV1") {
+    return `MosaicCommerceProviderV1${name}`;
+  }
   throw new Error(`Unsupported declaration context ${context}`);
 }
 
@@ -72,6 +79,17 @@ function refType(ref, context) {
     "urn:mosaic:protocol:schema:local-preview:v0.2:local-project"
   ) {
     return "MosaicLocalProjectV02";
+  }
+  if (
+    schemaId ===
+    "urn:mosaic:protocol:schema:commerce-provider:v1:contract"
+  ) {
+    return fragment?.startsWith("/$defs/")
+      ? definitionTypeName(
+          "commerceProviderV1",
+          fragment.slice("/$defs/".length),
+        )
+      : "MosaicCommerceProviderV1Record";
   }
 
   throw new Error(`Unsupported schema reference ${ref}`);
@@ -217,7 +235,50 @@ function previewMessageSource(schema, context = "preview") {
   ].join("\n");
 }
 
+function commerceProviderRecordSource(schema) {
+  const context = "commerceProviderV1";
+  const commonProperties = Object.fromEntries(
+    Object.entries(schema.properties).filter(
+      ([name]) => name !== "recordType" && name !== "payload",
+    ),
+  );
+  const commonRequired = schema.required.filter(
+    (name) => name !== "recordType" && name !== "payload",
+  );
+  const common = schemaType(
+    {
+      type: "object",
+      additionalProperties: false,
+      required: commonRequired,
+      properties: commonProperties,
+    },
+    context,
+  );
+  const variants = schema.allOf.map((branch) => ({
+    payload: refType(branch.then.properties.payload.$ref, context),
+    recordType: branch.if.properties.recordType.const,
+  }));
+
+  return [
+    "export type MosaicCommerceProviderV1Envelope<",
+    "  TRecordType extends MosaicCommerceProviderV1RecordType,",
+    "  TPayload,",
+    `> = ${common} & {`,
+    "  \"recordType\": TRecordType;",
+    "  \"payload\": TPayload;",
+    "};",
+    "",
+    `export type MosaicCommerceProviderV1Record =\n${variants
+      .map(
+        (variant) =>
+          `  | MosaicCommerceProviderV1Envelope<${literal(variant.recordType)}, ${variant.payload}>`,
+      )
+      .join("\n")};`,
+  ].join("\n");
+}
+
 export function buildBrowserContractDeclarations() {
+  const commerceProviderV1 = readJson(schemaPaths.commerceProviderV1);
   const paywallV02 = readJson(schemaPaths.paywallV02);
   const previewV02 = readJson(schemaPaths.previewV02);
   const localProjectV02 = readJson(schemaPaths.localProjectV02);
@@ -235,6 +296,10 @@ export function buildBrowserContractDeclarations() {
     "",
     `export type MosaicLocalProjectV02 = ${schemaType(localProjectV02, "previewV02")};`,
     "",
+    definitionsSource(commerceProviderV1, "commerceProviderV1"),
+    "",
+    commerceProviderRecordSource(commerceProviderV1),
+    "",
     "export type MosaicPaywallDocument = MosaicPaywallV02Document;",
     "export type MosaicPreviewMessage = MosaicPreviewV02Message;",
     "export type MosaicLocalProject = MosaicLocalProjectV02;",
@@ -246,6 +311,7 @@ export function buildBrowserContractDeclarations() {
 
   const indexDeclaration = `// Generated public declarations for protocol/browser/index.js. Do not edit.
 import type {
+  MosaicCommerceProviderV1Record,
   MosaicLocalProject,
   MosaicLocalProjectV02,
   MosaicPaywallDocument,
@@ -276,6 +342,7 @@ export type MosaicContractDiagnostic = MosaicPreviewValidationDiagnostic;
 export type MosaicAnyPaywallDocument = MosaicPaywallV02Document;
 export type MosaicAnyPreviewMessage = MosaicPreviewV02Message;
 export type MosaicAnyLocalProject = MosaicLocalProjectV02;
+export type MosaicAnyCommerceProviderRecord = MosaicCommerceProviderV1Record;
 
 export type MosaicLocalPreviewNegotiationDiagnostic = {
   readonly code: "preview.noMutualVersion" | "preview.incompatibleSchemaVersion" | "preview.invalidNegotiation" | "preview.invalidCapabilityReport" | "preview.invalidDraft" | "preview.unsupportedPreviewCapability" | "preview.unsupportedCapability" | "preview.documentTooLarge";

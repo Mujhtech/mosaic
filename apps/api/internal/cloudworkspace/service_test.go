@@ -212,6 +212,131 @@ func TestProductTypeChangeCannotInvalidateReplacement(t *testing.T) {
 	}
 }
 
+func TestProviderFoundationEnforcesScopesModesLifecycleAndReadiness(t *testing.T) {
+	service, _ := newService()
+	actor := cloudworkspace.Actor{ID: "actor-owner"}
+	ctx := context.Background()
+	organization, _ := service.CreateOrganization(ctx, actor, "Acme")
+	project, _ := service.CreateProject(ctx, actor, organization.ID, "mobile", "Mobile")
+	otherProject, _ := service.CreateProject(ctx, actor, organization.ID, "other", "Other")
+	application, _ := service.CreateApplication(ctx, actor, project.ID, "iOS", cloudworkspace.PlatformIOS, "com.example.app")
+	environments, _ := service.ListEnvironments(ctx, actor, project.ID, cloudworkspace.ListOptions{})
+	otherEnvironments, _ := service.ListEnvironments(ctx, actor, otherProject.ID, cloudworkspace.ListOptions{})
+	var development, production cloudworkspace.Environment
+	for _, environment := range environments.Items {
+		switch environment.Mode {
+		case cloudworkspace.EnvironmentDevelopment:
+			development = environment
+		case cloudworkspace.EnvironmentProduction:
+			production = environment
+		}
+	}
+	if development.ID == "" || production.ID == "" {
+		t.Fatalf("default Environment modes are not explicit: %#v", environments.Items)
+	}
+
+	if _, err := service.CreateProviderConnection(ctx, actor, project.ID, cloudworkspace.CreateProviderConnectionInput{
+		Name: "Cross-project", Provider: cloudworkspace.ProviderRevenueCat,
+		IntegrationMode: cloudworkspace.ProviderServerConnected, Mode: cloudworkspace.ProviderSandbox,
+		EnvironmentIDs: []string{otherEnvironments.Items[0].ID}, ApplicationIDs: []string{application.ID},
+	}); !errors.Is(err, cloudworkspace.ErrScopeMismatch) {
+		t.Fatalf("cross-project connection scope error = %v, want scope mismatch", err)
+	}
+
+	connection, err := service.CreateProviderConnection(ctx, actor, project.ID, cloudworkspace.CreateProviderConnectionInput{
+		Name: "RevenueCat sandbox", Provider: cloudworkspace.ProviderRevenueCat,
+		IntegrationMode: cloudworkspace.ProviderServerConnected, Mode: cloudworkspace.ProviderSandbox,
+		ExternalProjectID: "rc-project-reference",
+		EnvironmentIDs:    []string{development.ID, production.ID},
+		ApplicationIDs:    []string{application.ID},
+	})
+	if err != nil {
+		t.Fatalf("create provider connection: %v", err)
+	}
+	if connection.Status != cloudworkspace.ProviderConnectionPending || connection.HealthStatus != cloudworkspace.ProviderHealthUntested {
+		t.Fatalf("new connection asserted provider health: %#v", connection)
+	}
+	if _, err := service.SetActiveProviderAssignment(ctx, actor, production.ID, application.ID, connection.ID, false); !errors.Is(err, cloudworkspace.ErrModeMismatch) {
+		t.Fatalf("sandbox production assignment error = %v, want mode mismatch", err)
+	}
+	assignment, err := service.SetActiveProviderAssignment(ctx, actor, development.ID, application.ID, connection.ID, false)
+	if err != nil {
+		t.Fatalf("set development assignment: %v", err)
+	}
+	if assignment.Platform != cloudworkspace.PlatformIOS {
+		t.Fatalf("assignment platform = %q, want ios", assignment.Platform)
+	}
+
+	product, _ := service.CreateProduct(ctx, actor, project.ID, "monthly", "Monthly", "", cloudworkspace.ProductSubscription)
+	entitlement, _ := service.CreateEntitlement(ctx, actor, project.ID, "pro", "Pro", "")
+	if _, err := service.AddProductEntitlement(ctx, actor, product.ID, entitlement.ID); err != nil {
+		t.Fatalf("grant entitlement: %v", err)
+	}
+	readiness, err := service.ProviderReadiness(ctx, actor, product.ID, development.ID, application.ID)
+	if err != nil {
+		t.Fatalf("evaluate readiness: %v", err)
+	}
+	if readiness.State != cloudworkspace.ProviderReadinessDraft ||
+		!providerIssuePresent(readiness.Blockers, cloudworkspace.ProviderErrorProviderUnavailable) ||
+		!providerIssuePresent(readiness.Blockers, cloudworkspace.ProviderErrorMappingMissing) ||
+		!providerIssuePresent(readiness.Blockers, cloudworkspace.ProviderErrorMetadataStale) {
+		t.Fatalf("pending connection readiness = %#v", readiness)
+	}
+
+	mapping, err := service.CreateProviderMappingDraft(ctx, actor, product.ID, cloudworkspace.CreateProviderMappingDraftInput{
+		ConnectionID: connection.ID, EnvironmentID: development.ID, ApplicationID: application.ID,
+		ProviderProductIdentifier: "monthly",
+	})
+	if err != nil {
+		t.Fatalf("create mapping draft: %v", err)
+	}
+	if mapping.Status != cloudworkspace.ProviderMappingDraft || mapping.SyncState != cloudworkspace.ProviderSyncNeverSynced {
+		t.Fatalf("mapping draft asserted provider state: %#v", mapping)
+	}
+	customConnection, err := service.CreateProviderConnection(ctx, actor, project.ID, cloudworkspace.CreateProviderConnectionInput{
+		Name: "Custom SDK", Provider: cloudworkspace.ProviderCustom,
+		IntegrationMode: cloudworkspace.ProviderSDKOnly, Mode: cloudworkspace.ProviderSandbox,
+		EnvironmentIDs: []string{development.ID}, ApplicationIDs: []string{application.ID},
+	})
+	if err != nil {
+		t.Fatalf("create custom connection: %v", err)
+	}
+	if _, err := service.CreateProviderMappingDraft(ctx, actor, product.ID, cloudworkspace.CreateProviderMappingDraftInput{
+		ConnectionID: customConnection.ID, EnvironmentID: development.ID, ApplicationID: application.ID,
+		ProviderProductIdentifier: "custom-monthly", ProviderPackageIdentifier: "monthly",
+		ProviderOfferingIdentifier: "default",
+	}); !errors.Is(err, cloudworkspace.ErrMappingTargetInvalid) {
+		t.Fatalf("custom provider RevenueCat metadata error = %v, want mapping target invalid", err)
+	}
+	if _, err := service.ReplaceProviderConnectionScopes(ctx, actor, connection.ID, cloudworkspace.ReplaceProviderConnectionScopesInput{
+		EnvironmentIDs: []string{production.ID}, ApplicationIDs: []string{application.ID},
+	}); !errors.Is(err, cloudworkspace.ErrScopeMismatch) {
+		t.Fatalf("scope removal used by assignment/mapping error = %v, want scope mismatch", err)
+	}
+
+	revoked, err := service.RevokeProviderConnection(ctx, actor, connection.ID)
+	if err != nil {
+		t.Fatalf("revoke connection: %v", err)
+	}
+	if revoked.Status != cloudworkspace.ProviderConnectionRevoked || revoked.RevokedAt == nil {
+		t.Fatalf("revoked connection = %#v", revoked)
+	}
+	readiness, _ = service.ProviderReadiness(ctx, actor, product.ID, development.ID, application.ID)
+	if readiness.State != cloudworkspace.ProviderReadinessUnavailable ||
+		!providerIssuePresent(readiness.Blockers, cloudworkspace.ProviderErrorConnectionRevoked) {
+		t.Fatalf("revoked connection readiness = %#v", readiness)
+	}
+}
+
+func providerIssuePresent(issues []cloudworkspace.ProviderReadinessIssue, code cloudworkspace.ProviderErrorCode) bool {
+	for _, issue := range issues {
+		if issue.Code == code {
+			return true
+		}
+	}
+	return false
+}
+
 func TestListRejectsMalformedAndStaleCursors(t *testing.T) {
 	service, _ := newService()
 	actor := cloudworkspace.Actor{ID: "actor-owner"}

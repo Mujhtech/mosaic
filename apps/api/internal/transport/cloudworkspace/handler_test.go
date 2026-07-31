@@ -93,6 +93,56 @@ func TestGetProjectMatchesCanonicalPathWithoutTrailingSlash(t *testing.T) {
 	assertErrorCode(t, response, http.StatusNotFound, "not_found")
 }
 
+func TestProviderConnectionEndpointRejectsCredentialSubmission(t *testing.T) {
+	service := cloudworkspace.NewService(cloudworkspacememory.New())
+	actor := cloudworkspace.Actor{ID: "actor-owner"}
+	organization, _ := service.CreateOrganization(t.Context(), actor, "Acme")
+	project, _ := service.CreateProject(t.Context(), actor, organization.ID, "mobile", "Mobile")
+	application, _ := service.CreateApplication(t.Context(), actor, project.ID, "iOS", cloudworkspace.PlatformIOS, "com.example.app")
+	environments, _ := service.ListEnvironments(t.Context(), actor, project.ID, cloudworkspace.ListOptions{})
+	handler := cloudworkspacehttp.Routes(service, authn.ResolverFunc(func(*http.Request) (authn.Principal, error) {
+		return authn.Principal{ActorID: actor.ID, Method: "test"}, nil
+	}))
+	body := `{
+		"name":"RevenueCat",
+		"provider":"revenuecat",
+		"integrationMode":"server_connected",
+		"mode":"sandbox",
+		"environmentIds":["` + environments.Items[0].ID + `"],
+		"applicationIds":["` + application.ID + `"],
+		"credential":"must-not-be-accepted"
+	}`
+	recorder := request(t, handler, http.MethodPost, "/projects/"+project.ID+"/provider-connections", body)
+	assertErrorCode(t, recorder, http.StatusUnprocessableEntity, "validation_failed")
+	connections, err := service.ListProviderConnections(t.Context(), actor, project.ID, cloudworkspace.ListOptions{})
+	if err != nil || len(connections.Items) != 0 {
+		t.Fatalf("rejected credential request persisted connection: %#v, %v", connections, err)
+	}
+}
+
+func TestReadinessRequiresExplicitScopeAndMappingTargetPair(t *testing.T) {
+	service := cloudworkspace.NewService(cloudworkspacememory.New())
+	actor := cloudworkspace.Actor{ID: "actor-owner"}
+	organization, _ := service.CreateOrganization(t.Context(), actor, "Acme")
+	project, _ := service.CreateProject(t.Context(), actor, organization.ID, "mobile", "Mobile")
+	product, _ := service.CreateProduct(t.Context(), actor, project.ID, "monthly", "Monthly", "", cloudworkspace.ProductSubscription)
+	handler := cloudworkspacehttp.Routes(service, authn.ResolverFunc(func(*http.Request) (authn.Principal, error) {
+		return authn.Principal{ActorID: actor.ID, Method: "test"}, nil
+	}))
+
+	readiness := request(t, handler, http.MethodGet, "/products/"+product.ID+"/readiness", "")
+	assertErrorCode(t, readiness, http.StatusUnprocessableEntity, "validation_failed")
+
+	mapping := request(t, handler, http.MethodPost, "/products/"+product.ID+"/provider-mapping-drafts", `{
+		"connectionId":"connection_1",
+		"environmentId":"environment_1",
+		"applicationId":"application_1",
+		"providerProductIdentifier":"monthly",
+		"providerPackageIdentifier":"monthly"
+	}`)
+	assertErrorCode(t, mapping, http.StatusUnprocessableEntity, "validation_failed")
+}
+
 func request(t *testing.T, handler http.Handler, method, target, body string) *httptest.ResponseRecorder {
 	t.Helper()
 	request := httptest.NewRequest(method, target, bytes.NewBufferString(body))

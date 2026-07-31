@@ -1,0 +1,14 @@
+{
+  "commerceProviderContractVersion": "1",
+  "recordType": "restoreOutcome",
+  "payload": {
+    "operationId": "restore_000001",
+    "providerId": "revenuecat",
+    "outcome": "restored",
+    "activeEntitlementKeys": [
+      "pro"
+    ],
+    "occurredAt": "2026-07-23T12:04:00Z",
+    "diagnostics": []
+  }
+}

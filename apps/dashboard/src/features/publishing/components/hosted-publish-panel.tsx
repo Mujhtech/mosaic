@@ -9,6 +9,10 @@ import { publishDraftMutationOptions } from "@/features/publishing/mutations/pub
 import { publishValidationQueryOptions } from "@/features/publishing/queries/publish-validation-query"
 import { useHostedDraftSession } from "@/features/paywalls/stores/use-hosted-draft-session"
 import { useHostedPublishingAdapter } from "@/features/publishing/api/use-hosted-publishing-adapter"
+import {
+  publishRecoveryHref,
+  publishRecoveryLabel,
+} from "@/features/publishing/types/publish-recovery"
 
 export function HostedPublishPanel({
   environmentId,
@@ -52,20 +56,22 @@ export function HostedPublishPanel({
   const assetsHref = `/organizations/${encodeURIComponent(organizationId)}/projects/${encodeURIComponent(projectId)}/monetization/${encodeURIComponent(environmentId)}/assets`
   const placementsHref = `/organizations/${encodeURIComponent(organizationId)}/projects/${encodeURIComponent(projectId)}/monetization/${encodeURIComponent(environmentId)}/placements`
   const catalogHref = `/organizations/${encodeURIComponent(organizationId)}/projects/${encodeURIComponent(projectId)}/catalog/products`
+  const providersHref = `/organizations/${encodeURIComponent(organizationId)}/projects/${encodeURIComponent(projectId)}/catalog/providers`
   const validationResult = validation.data
     ? {
         ...validation.data,
         issues: validation.data.issues.map((issue) => ({
           ...issue,
-          recoveryHref:
-            issue.recoveryHref ??
-            (issue.code.startsWith("asset.")
-              ? assetsHref
-              : issue.code.startsWith("placement.")
-                ? placementsHref
-                : issue.code.startsWith("product.")
-                  ? catalogHref
-                  : undefined),
+          recoveryHref: publishRecoveryHref(issue, {
+            assetsHref,
+            catalogHref,
+            environmentId,
+            organizationId,
+            placementsHref,
+            projectId,
+            providersHref,
+          }),
+          recoveryLabel: publishRecoveryLabel(issue),
         })),
       }
     : null

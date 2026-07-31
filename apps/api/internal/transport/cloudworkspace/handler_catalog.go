@@ -185,12 +185,7 @@ func (h *Handler) getProductUsage(w http.ResponseWriter, r *http.Request) {
 	response.OK(w, r, result)
 }
 func (h *Handler) getProductReadiness(w http.ResponseWriter, r *http.Request) {
-	result, err := h.service.ProductReadiness(r.Context(), actor(r), chi.URLParam(r, "productId"))
-	if err != nil {
-		writeServiceError(w, r, err)
-		return
-	}
-	response.OK(w, r, result)
+	h.getProviderReadiness(w, r)
 }
 func (h *Handler) createEntitlement(w http.ResponseWriter, r *http.Request) {
 	request := new(catalogResourceRequest)

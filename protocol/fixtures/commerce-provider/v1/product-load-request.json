@@ -1,0 +1,52 @@
+{
+  "commerceProviderContractVersion": "1",
+  "recordType": "productLoadRequest",
+  "payload": {
+    "requestId": "load_products_000001",
+    "providerId": "revenuecat",
+    "products": [
+      {
+        "product": {
+          "mosaicProductId": "product_pro_monthly",
+          "key": "pro_monthly",
+          "type": "subscription",
+          "entitlementKeys": [
+            "pro"
+          ]
+        },
+        "binding": {
+          "mappingId": "mapping_pro_monthly_ios",
+          "providerProductReference": "com.example.pro.monthly"
+        }
+      },
+      {
+        "product": {
+          "mosaicProductId": "product_pro_yearly",
+          "key": "pro_yearly",
+          "type": "subscription",
+          "entitlementKeys": [
+            "pro"
+          ]
+        },
+        "binding": {
+          "mappingId": "mapping_pro_yearly_ios",
+          "providerProductReference": "com.example.pro.yearly"
+        }
+      },
+      {
+        "product": {
+          "mosaicProductId": "product_pro_lifetime",
+          "key": "pro_lifetime",
+          "type": "one_time_non_consumable",
+          "entitlementKeys": [
+            "pro"
+          ]
+        },
+        "binding": {
+          "mappingId": "mapping_pro_lifetime_ios",
+          "providerProductReference": "com.example.pro.lifetime"
+        }
+      }
+    ]
+  }
+}

@@ -127,6 +127,11 @@ export function CloudWorkspaceShell() {
                     title: "Entitlements",
                     icon: <></>,
                   },
+                  {
+                    to: `/organizations/${scope.organizationId}/projects/${scope.projectId}/catalog/providers`,
+                    title: "Commerce providers",
+                    icon: <></>,
+                  },
                 ],
               },
               {

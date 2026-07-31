@@ -37,6 +37,22 @@ around accepted Protocol `0.2` documents. Its schemas, compatibility manifest,
 fixtures, atomic validation rules, and fallback behavior are documented in
 `docs/protocol/configuration-delivery-v1.md`.
 
+Commerce Provider Contract `1` is a separate provider-neutral contract for
+capabilities, verified Product resolution, localized commerce metadata,
+purchase and restore outcomes, active Entitlement lookup, freshness, and safe
+diagnostics. It does not add provider data to Paywall Protocol `0.2` or
+Configuration Delivery `1`.
+
+Canonical Commerce artifacts live under:
+
+```text
+protocol/
+├── schema/commerce-provider/v1/
+├── compatibility/commerce-provider/v1.json
+├── fixtures/commerce-provider/v1/
+└── commerce/CHANGELOG.md
+```
+
 ## Generate and validate
 
 From the repository root:
@@ -59,3 +75,4 @@ See:
 - `docs/protocol/local-preview-v0.2.md`
 - `docs/protocol/versioning.md`
 - `docs/protocol/configuration-delivery-v1.md`
+- `docs/protocol/commerce-provider-v1.md`

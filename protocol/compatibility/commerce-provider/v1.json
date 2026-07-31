@@ -1,0 +1,37 @@
+{
+  "commerceProviderContractVersion": "1",
+  "status": "releaseCandidate",
+  "schema": "../../schema/commerce-provider/v1/contract.schema.json",
+  "canonicalFixtures": [
+    "../../fixtures/commerce-provider/v1/provider-profile.json",
+    "../../fixtures/commerce-provider/v1/product-load-request.json",
+    "../../fixtures/commerce-provider/v1/product-load-available.json",
+    "../../fixtures/commerce-provider/v1/product-load-unavailable.json",
+    "../../fixtures/commerce-provider/v1/purchase-request.json",
+    "../../fixtures/commerce-provider/v1/purchase-cancelled.json",
+    "../../fixtures/commerce-provider/v1/purchase-pending.json",
+    "../../fixtures/commerce-provider/v1/restore-restored.json",
+    "../../fixtures/commerce-provider/v1/entitlement-provider-unavailable.json",
+    "../../fixtures/commerce-provider/v1/provider-diagnostics.json"
+  ],
+  "recordTypes": [
+    "providerProfile",
+    "productLoadRequest",
+    "productLoadResult",
+    "purchaseRequest",
+    "purchaseOutcome",
+    "restoreOutcome",
+    "activeEntitlementOutcome",
+    "providerDiagnostics"
+  ],
+  "readerPolicy": {
+    "unknownContractVersion": "rejectRecord",
+    "unknownRecordType": "rejectRecord",
+    "unknownField": "rejectRecord",
+    "unknownOutcome": "rejectRecord",
+    "unsupportedCapability": "reportUnsupportedWithoutProviderFailure",
+    "unavailableProduct": "usePaywallProductFallback",
+    "entitlementLookupFailure": "neverInferInactive",
+    "rawProviderError": "forbidden"
+  }
+}

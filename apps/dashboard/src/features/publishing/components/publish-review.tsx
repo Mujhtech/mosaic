@@ -102,7 +102,7 @@ export function PublishReview({
                     className="text-primary mt-1 inline-flex items-center gap-1 font-medium"
                     href={issue.recoveryHref}
                   >
-                    Resolve issue <ArrowSquareOutIcon aria-hidden />
+                    {issue.recoveryLabel ?? "Resolve issue"} <ArrowSquareOutIcon aria-hidden />
                   </a>
                 ) : null}
               </li>

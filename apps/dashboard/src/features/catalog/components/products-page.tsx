@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { Link } from "@tanstack/react-router"
 
 import { Button } from "@/components/ui/button"
+import { buttonVariants } from "@/components/ui/button-variants"
 import { Field, FieldDescription, FieldLabel } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
 import { HostedResourceBoundary } from "@/features/auth/components/hosted-resource-boundary"
@@ -86,6 +87,26 @@ export function ProductsPage({
       eyebrow="Catalog · Project-wide"
       title="Products"
     >
+      <WorkflowPanel
+        description="Import and synchronization begin from an explicit Provider Connection. RevenueCat authorization is still awaiting owner approval, so no credential is collected here."
+        title="Connected Catalog"
+      >
+        <div className="flex flex-wrap items-center gap-3">
+          <Link
+            className={buttonVariants({ variant: "outline" })}
+            params={{ organizationId, projectId }}
+            to="/organizations/$organizationId/projects/$projectId/catalog/providers"
+          >
+            Review Commerce providers
+          </Link>
+          <Button disabled type="button">
+            Import Products
+          </Button>
+          <p className="text-muted-foreground text-xs">
+            Import becomes available after an authorized, tested connection is active.
+          </p>
+        </div>
+      </WorkflowPanel>
       <WorkflowPanel title="Filters">
         <div className="grid gap-3 sm:grid-cols-3">
           <label className="text-sm font-medium">
@@ -113,6 +134,7 @@ export function ProductsPage({
             >
               <option value="">All statuses</option>
               <option value="draft">Draft</option>
+              <option value="connected">Connected</option>
               <option value="attention_required">Attention required</option>
               <option value="archived">Archived</option>
             </select>

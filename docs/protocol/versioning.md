@@ -6,6 +6,10 @@ Protocol `0.2` RC4 and Local Preview `0.2` are the only supported contracts
 while Mosaic is iterating before its first stable release. Earlier experimental
 contracts have been retired rather than carried as compatibility readers.
 
+Configuration Delivery `1` and Commerce Provider Contract `1` are independent
+versioned contracts. Their exact version `1` values do not imply compatibility
+with one another and do not change the Paywall `schemaVersion`.
+
 `schemaVersion`, Local Preview versions, and capability versions are exact
 identifiers. A reader declaring `0.2` accepts only `0.2`; it must not infer
 forward or backward support from numeric ordering.
@@ -55,3 +59,15 @@ Studio checks the client's capability report before sending a draft.
 The protocol remains platform-neutral. Framework convenience, native resource
 names, billing-provider models, and platform-only view behavior are not reasons
 to fork the shared schema.
+
+## Commerce Provider versioning
+
+Commerce Provider records require exact
+`commerceProviderContractVersion: "1"`. Readers reject unknown versions,
+record types, outcomes, and properties. Provider identities are opaque values,
+but capability names and normalized state machines are closed.
+
+An additive field, capability, record type, or outcome requires a reviewed
+compatibility decision and normally a later Commerce Provider contract version.
+Changing the Commerce Provider contract does not authorize a Paywall Protocol
+or Configuration Delivery change.

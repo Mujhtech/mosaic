@@ -1,6 +1,9 @@
 package cloudworkspace
 
-import "context"
+import (
+	"context"
+	"time"
+)
 
 // Repository is SQL-neutral. The approved PostgreSQL implementation can map
 // these explicit transaction boundaries to a real transaction later.
@@ -31,7 +34,15 @@ type Reader interface {
 	PlanProducts(string) []PlanProduct
 	ProductGrants(string) []ProductEntitlementGrant
 	ProductReplacementHistory(string) []ProductReplacementHistory
+	ProviderConnection(string) (ProviderConnection, bool)
+	ProviderConnections(string) []ProviderConnection
+	ProviderConnectionEnvironmentIDs(string) []string
+	ProviderConnectionApplicationIDs(string) []string
+	ActiveProviderAssignment(string, string) (ActiveProviderAssignment, bool)
+	ProviderAssignments(string) []ActiveProviderAssignment
+	ProviderMapping(string) (ProviderProductMapping, bool)
 	ProviderMappings(string) []ProviderProductMapping
+	ProviderMetadataSnapshot(string) (ProviderProductMetadataSnapshot, bool)
 	AuditEvents(string) []AuditEvent
 }
 
@@ -55,6 +66,11 @@ type Transaction interface {
 	SaveProductGrant(ProductEntitlementGrant)
 	SaveProductReplacement(ProductReplacementHistory)
 	DeleteProductGrant(string, string)
+	SaveProviderConnection(ProviderConnection)
+	ReplaceProviderConnectionScopes(string, string, []string, []string, time.Time)
+	SaveActiveProviderAssignment(ActiveProviderAssignment)
+	DeleteActiveProviderAssignment(string, string)
 	SaveProviderMapping(ProviderProductMapping)
+	SaveProviderMetadataSnapshot(ProviderProductMetadataSnapshot)
 	SaveAuditEvent(AuditEvent)
 }

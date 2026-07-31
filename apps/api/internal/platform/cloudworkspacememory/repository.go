@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"sort"
 	"sync"
+	"time"
 
 	"github.com/Mujhtech/mosaic/apps/api/internal/cloudworkspace"
 )
@@ -17,21 +18,26 @@ type Repository struct {
 }
 
 type state struct {
-	sequence      map[string]uint64
-	organizations map[string]cloudworkspace.Organization
-	memberships   map[string]cloudworkspace.Membership
-	projects      map[string]cloudworkspace.Project
-	applications  map[string]cloudworkspace.Application
-	environments  map[string]cloudworkspace.Environment
-	apiKeys       map[string]cloudworkspace.APIKeyRecord
-	plans         map[string]cloudworkspace.Plan
-	products      map[string]cloudworkspace.Product
-	entitlements  map[string]cloudworkspace.Entitlement
-	planProducts  map[string]cloudworkspace.PlanProduct
-	productGrants map[string]cloudworkspace.ProductEntitlementGrant
-	replacements  []cloudworkspace.ProductReplacementHistory
-	mappings      map[string]cloudworkspace.ProviderProductMapping
-	auditEvents   map[string]cloudworkspace.AuditEvent
+	sequence                    map[string]uint64
+	organizations               map[string]cloudworkspace.Organization
+	memberships                 map[string]cloudworkspace.Membership
+	projects                    map[string]cloudworkspace.Project
+	applications                map[string]cloudworkspace.Application
+	environments                map[string]cloudworkspace.Environment
+	apiKeys                     map[string]cloudworkspace.APIKeyRecord
+	plans                       map[string]cloudworkspace.Plan
+	products                    map[string]cloudworkspace.Product
+	entitlements                map[string]cloudworkspace.Entitlement
+	planProducts                map[string]cloudworkspace.PlanProduct
+	productGrants               map[string]cloudworkspace.ProductEntitlementGrant
+	replacements                []cloudworkspace.ProductReplacementHistory
+	connections                 map[string]cloudworkspace.ProviderConnection
+	connectionEnvironmentScopes map[string]map[string]struct{}
+	connectionApplicationScopes map[string]map[string]struct{}
+	assignments                 map[string]cloudworkspace.ActiveProviderAssignment
+	mappings                    map[string]cloudworkspace.ProviderProductMapping
+	metadataSnapshots           map[string]cloudworkspace.ProviderProductMetadataSnapshot
+	auditEvents                 map[string]cloudworkspace.AuditEvent
 }
 
 func New() *Repository {
@@ -40,20 +46,25 @@ func New() *Repository {
 
 func newState() *state {
 	return &state{
-		sequence:      make(map[string]uint64),
-		organizations: make(map[string]cloudworkspace.Organization),
-		memberships:   make(map[string]cloudworkspace.Membership),
-		projects:      make(map[string]cloudworkspace.Project),
-		applications:  make(map[string]cloudworkspace.Application),
-		environments:  make(map[string]cloudworkspace.Environment),
-		apiKeys:       make(map[string]cloudworkspace.APIKeyRecord),
-		plans:         make(map[string]cloudworkspace.Plan),
-		products:      make(map[string]cloudworkspace.Product),
-		entitlements:  make(map[string]cloudworkspace.Entitlement),
-		planProducts:  make(map[string]cloudworkspace.PlanProduct),
-		productGrants: make(map[string]cloudworkspace.ProductEntitlementGrant),
-		mappings:      make(map[string]cloudworkspace.ProviderProductMapping),
-		auditEvents:   make(map[string]cloudworkspace.AuditEvent),
+		sequence:                    make(map[string]uint64),
+		organizations:               make(map[string]cloudworkspace.Organization),
+		memberships:                 make(map[string]cloudworkspace.Membership),
+		projects:                    make(map[string]cloudworkspace.Project),
+		applications:                make(map[string]cloudworkspace.Application),
+		environments:                make(map[string]cloudworkspace.Environment),
+		apiKeys:                     make(map[string]cloudworkspace.APIKeyRecord),
+		plans:                       make(map[string]cloudworkspace.Plan),
+		products:                    make(map[string]cloudworkspace.Product),
+		entitlements:                make(map[string]cloudworkspace.Entitlement),
+		planProducts:                make(map[string]cloudworkspace.PlanProduct),
+		productGrants:               make(map[string]cloudworkspace.ProductEntitlementGrant),
+		connections:                 make(map[string]cloudworkspace.ProviderConnection),
+		connectionEnvironmentScopes: make(map[string]map[string]struct{}),
+		connectionApplicationScopes: make(map[string]map[string]struct{}),
+		assignments:                 make(map[string]cloudworkspace.ActiveProviderAssignment),
+		mappings:                    make(map[string]cloudworkspace.ProviderProductMapping),
+		metadataSnapshots:           make(map[string]cloudworkspace.ProviderProductMetadataSnapshot),
+		auditEvents:                 make(map[string]cloudworkspace.AuditEvent),
 	}
 }
 
@@ -99,12 +110,24 @@ func (s *state) clone() *state {
 	copyMap(cloned.planProducts, s.planProducts)
 	copyMap(cloned.productGrants, s.productGrants)
 	cloned.replacements = append(cloned.replacements, s.replacements...)
+	copyMap(cloned.connections, s.connections)
+	copySetMap(cloned.connectionEnvironmentScopes, s.connectionEnvironmentScopes)
+	copySetMap(cloned.connectionApplicationScopes, s.connectionApplicationScopes)
+	copyMap(cloned.assignments, s.assignments)
 	copyMap(cloned.mappings, s.mappings)
+	copyMap(cloned.metadataSnapshots, s.metadataSnapshots)
 	for key, event := range s.auditEvents {
 		event.Metadata = cloneMetadata(event.Metadata)
 		cloned.auditEvents[key] = event
 	}
 	return cloned
+}
+
+func copySetMap(destination, source map[string]map[string]struct{}) {
+	for key, values := range source {
+		destination[key] = make(map[string]struct{}, len(values))
+		copyMap(destination[key], values)
+	}
 }
 
 func copyMap[K comparable, V any](destination map[K]V, source map[K]V) {
@@ -206,8 +229,49 @@ func (r reader) ProductReplacementHistory(productID string) []cloudworkspace.Pro
 	}
 	return values
 }
+func (r reader) ProviderConnection(id string) (cloudworkspace.ProviderConnection, bool) {
+	value, ok := r.state.connections[id]
+	return value, ok
+}
+func (r reader) ProviderConnections(projectID string) []cloudworkspace.ProviderConnection {
+	return filteredSorted(r.state.connections, func(value cloudworkspace.ProviderConnection) bool { return value.ProjectID == projectID }, func(value cloudworkspace.ProviderConnection) string { return value.ID })
+}
+func sortedSet(values map[string]struct{}) []string {
+	result := make([]string, 0, len(values))
+	for value := range values {
+		result = append(result, value)
+	}
+	sort.Strings(result)
+	return result
+}
+func (r reader) ProviderConnectionEnvironmentIDs(connectionID string) []string {
+	return sortedSet(r.state.connectionEnvironmentScopes[connectionID])
+}
+func (r reader) ProviderConnectionApplicationIDs(connectionID string) []string {
+	return sortedSet(r.state.connectionApplicationScopes[connectionID])
+}
+func assignmentKey(environmentID, applicationID string) string {
+	return environmentID + "\x00" + applicationID
+}
+func (r reader) ActiveProviderAssignment(environmentID, applicationID string) (cloudworkspace.ActiveProviderAssignment, bool) {
+	value, ok := r.state.assignments[assignmentKey(environmentID, applicationID)]
+	return value, ok
+}
+func (r reader) ProviderAssignments(connectionID string) []cloudworkspace.ActiveProviderAssignment {
+	return filteredSorted(r.state.assignments, func(value cloudworkspace.ActiveProviderAssignment) bool { return value.ConnectionID == connectionID }, func(value cloudworkspace.ActiveProviderAssignment) string {
+		return value.EnvironmentID + "\x00" + value.ApplicationID
+	})
+}
+func (r reader) ProviderMapping(id string) (cloudworkspace.ProviderProductMapping, bool) {
+	value, ok := r.state.mappings[id]
+	return value, ok
+}
 func (r reader) ProviderMappings(productID string) []cloudworkspace.ProviderProductMapping {
 	return filteredSorted(r.state.mappings, func(value cloudworkspace.ProviderProductMapping) bool { return value.ProductID == productID }, func(value cloudworkspace.ProviderProductMapping) string { return value.ID })
+}
+func (r reader) ProviderMetadataSnapshot(id string) (cloudworkspace.ProviderProductMetadataSnapshot, bool) {
+	value, ok := r.state.metadataSnapshots[id]
+	return value, ok
 }
 func (r reader) AuditEvents(organizationID string) []cloudworkspace.AuditEvent {
 	values := filteredSorted(r.state.auditEvents, func(value cloudworkspace.AuditEvent) bool { return value.OrganizationID == organizationID }, func(value cloudworkspace.AuditEvent) string { return value.ID })
@@ -269,8 +333,34 @@ func (tx transaction) SaveProductReplacement(value cloudworkspace.ProductReplace
 func (tx transaction) DeleteProductGrant(productID, entitlementID string) {
 	delete(tx.state.productGrants, grantKey(productID, entitlementID))
 }
+func (tx transaction) SaveProviderConnection(value cloudworkspace.ProviderConnection) {
+	value.EnvironmentIDs = nil
+	value.ApplicationIDs = nil
+	tx.state.connections[value.ID] = value
+}
+func (tx transaction) ReplaceProviderConnectionScopes(connectionID, _ string, environmentIDs, applicationIDs []string, _ time.Time) {
+	environments := make(map[string]struct{}, len(environmentIDs))
+	for _, environmentID := range environmentIDs {
+		environments[environmentID] = struct{}{}
+	}
+	applications := make(map[string]struct{}, len(applicationIDs))
+	for _, applicationID := range applicationIDs {
+		applications[applicationID] = struct{}{}
+	}
+	tx.state.connectionEnvironmentScopes[connectionID] = environments
+	tx.state.connectionApplicationScopes[connectionID] = applications
+}
+func (tx transaction) SaveActiveProviderAssignment(value cloudworkspace.ActiveProviderAssignment) {
+	tx.state.assignments[assignmentKey(value.EnvironmentID, value.ApplicationID)] = value
+}
+func (tx transaction) DeleteActiveProviderAssignment(environmentID, applicationID string) {
+	delete(tx.state.assignments, assignmentKey(environmentID, applicationID))
+}
 func (tx transaction) SaveProviderMapping(value cloudworkspace.ProviderProductMapping) {
 	tx.state.mappings[value.ID] = value
+}
+func (tx transaction) SaveProviderMetadataSnapshot(value cloudworkspace.ProviderProductMetadataSnapshot) {
+	tx.state.metadataSnapshots[value.ID] = value
 }
 func (tx transaction) SaveAuditEvent(value cloudworkspace.AuditEvent) {
 	value.Metadata = cloneMetadata(value.Metadata)

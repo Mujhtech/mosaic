@@ -27,7 +27,8 @@ export const catalogKeys = {
   product: (productId: string) => ["catalog", "product", productId] as const,
   productEntitlements: (productId: string) =>
     ["catalog", "product", productId, "entitlements"] as const,
-  productReadiness: (productId: string) => ["catalog", "product", productId, "readiness"] as const,
+  productReadiness: (productId: string, environmentId: string, applicationId: string) =>
+    ["catalog", "product", productId, "readiness", environmentId, applicationId] as const,
   productUsage: (productId: string) => ["catalog", "product", productId, "usage"] as const,
   products: (projectId: string, filters: ProductFilters = {}) =>
     ["catalog", projectId, "products", filters] as const,
@@ -132,13 +133,18 @@ export function productUsageQueryOptions(productId: string) {
   })
 }
 
-export function productReadinessQueryOptions(productId: string) {
+export function productReadinessQueryOptions(
+  productId: string,
+  environmentId: string,
+  applicationId: string,
+) {
   return queryOptions({
-    queryKey: catalogKeys.productReadiness(productId),
+    queryKey: catalogKeys.productReadiness(productId, environmentId, applicationId),
     queryFn: async ({ signal }) => {
       const result = await getProductReadiness({
         client: generatedDashboardClient,
         path: { productId },
+        query: { applicationId, environmentId },
         signal,
         throwOnError: true,
       })
