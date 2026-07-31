@@ -20,15 +20,30 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/Mujhtech/mosaic/apps/api/internal/billingaccess"
+	"github.com/Mujhtech/mosaic/apps/api/internal/platform/billingmigrationpostgres"
 )
 
 type Repository struct {
-	pool *pgxpool.Pool
+	pool             *pgxpool.Pool
+	migrationSignals *billingmigrationpostgres.Repository
 }
 
-func New(pool *pgxpool.Pool) *Repository { return &Repository{pool: pool} }
+func New(pool *pgxpool.Pool) *Repository {
+	return &Repository{pool: pool, migrationSignals: billingmigrationpostgres.New(pool)}
+}
 
 var _ billingaccess.Repository = (*Repository)(nil)
+var _ billingaccess.AccessAPISignalRecorder = (*Repository)(nil)
+
+// RecordAccessAPIResult forwards only PII-free scope, timing, and outcome to
+// the Phase 9C immutable evidence repository. It intentionally has no customer,
+// entitlement, credential, or request-payload parameter.
+func (r *Repository) RecordAccessAPIResult(ctx context.Context, projectID, environmentID string, startedAt, endedAt time.Time, failed bool) error {
+	if r == nil || r.migrationSignals == nil {
+		return errors.New("billing migration access signal repository is unavailable")
+	}
+	return r.migrationSignals.RecordTrustedAccessAPIResult(ctx, projectID, environmentID, endedAt.Sub(startedAt), failed)
+}
 
 func (r *Repository) BillingEnabled(ctx context.Context, projectID string) (bool, error) {
 	var enabled bool

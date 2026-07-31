@@ -108,10 +108,21 @@ func loadCustomerSnapshot(ctx context.Context, tx pgx.Tx, scope billingprojectio
 		 WHERE billing_customer_id=$1 AND environment_id=$2`,
 		scope.CustomerID, scope.EnvironmentID).Scan(&snapshotID, &input.CurrentSnapshotVersion)
 	if errors.Is(err, pgx.ErrNoRows) {
-		return nil
+		// Migration evaluation may have appended immutable, non-live candidates.
+		// They share the snapshot sequence because prepared cutover pointers must
+		// satisfy the ordinary snapshot FK. Reserve past them so a later live
+		// projection cannot collide with a candidate version.
+		return tx.QueryRow(ctx, `SELECT COALESCE(max(snapshot_version),0) FROM customer_entitlement_snapshots
+			WHERE billing_customer_id=$1 AND environment_id=$2`, scope.CustomerID, scope.EnvironmentID).
+			Scan(&input.CurrentSnapshotVersion)
 	}
 	if err != nil {
 		return fmt.Errorf("read customer entitlement pointer: %w", err)
+	}
+	if err := tx.QueryRow(ctx, `SELECT COALESCE(max(snapshot_version),0) FROM customer_entitlement_snapshots
+		WHERE billing_customer_id=$1 AND environment_id=$2`, scope.CustomerID, scope.EnvironmentID).
+		Scan(&input.CurrentSnapshotVersion); err != nil {
+		return fmt.Errorf("read customer snapshot sequence: %w", err)
 	}
 
 	snapshot := billingprojection.CustomerSnapshot{}
@@ -668,6 +679,15 @@ func writeCustomerSnapshot(ctx context.Context, tx pgx.Tx, scope billingprojecti
 		return fmt.Errorf("update customer entitlement pointer: %w", err)
 	}
 
+	// Authority rows are the sole selector for scoped serving. Lock every exact
+	// Mosaic-authority scope in canonical order, then advance its pointer in the
+	// same transaction as the immutable snapshot and legacy pointer. Source and
+	// source_rollback scopes are deliberately absent from both the lock set and
+	// the writes; projection can never switch or union authority.
+	if err := advanceScopedMosaicPointers(ctx, tx, scope, snapshotID, now); err != nil {
+		return err
+	}
+
 	// The webhook event is created here, inside the same transaction as the
 	// state it announces, so an event can never exist for state that was not
 	// committed. Delivery happens elsewhere, outside this transaction.
@@ -691,6 +711,52 @@ func writeCustomerSnapshot(ctx context.Context, tx pgx.Tx, scope billingprojecti
 			billingprojection.EventTypeEntitlementsChanged, scope.CustomerID,
 			snapshotID, output.SnapshotVersion, payload, output.Event.OccurredAt, now); err != nil {
 			return fmt.Errorf("create webhook event: %w", err)
+		}
+	}
+	return nil
+}
+
+func advanceScopedMosaicPointers(ctx context.Context, tx pgx.Tx, scope billingprojection.Scope,
+	snapshotID string, now time.Time) error {
+	rows, err := tx.Query(ctx,
+		`SELECT application_id, platform, current_epoch
+		 FROM billing_migration_authority_scopes
+		 WHERE project_id=$1 AND environment_id=$2 AND current_authority='mosaic'
+		 ORDER BY application_id, platform
+		 FOR UPDATE`, scope.ProjectID, scope.EnvironmentID)
+	if err != nil {
+		return fmt.Errorf("lock Mosaic authority scopes for projection: %w", err)
+	}
+	type pointer struct {
+		applicationID, platform string
+		epoch                   int64
+	}
+	pointers := make([]pointer, 0, 2)
+	for rows.Next() {
+		var item pointer
+		if err := rows.Scan(&item.applicationID, &item.platform, &item.epoch); err != nil {
+			rows.Close()
+			return fmt.Errorf("scan Mosaic authority scope: %w", err)
+		}
+		pointers = append(pointers, item)
+	}
+	if err := rows.Err(); err != nil {
+		rows.Close()
+		return fmt.Errorf("read Mosaic authority scopes: %w", err)
+	}
+	rows.Close()
+	for _, item := range pointers {
+		if _, err := tx.Exec(ctx,
+			`INSERT INTO billing_migration_scope_current_pointers(
+			 project_id,environment_id,application_id,platform,billing_customer_id,
+			 current_snapshot_id,authority_epoch,updated_at)
+			 VALUES($1,$2,$3,$4,$5,$6,$7,$8)
+			 ON CONFLICT(project_id,environment_id,application_id,platform,billing_customer_id)
+			 DO UPDATE SET current_snapshot_id=EXCLUDED.current_snapshot_id,
+			               authority_epoch=EXCLUDED.authority_epoch,updated_at=EXCLUDED.updated_at`,
+			scope.ProjectID, scope.EnvironmentID, item.applicationID, item.platform,
+			scope.CustomerID, snapshotID, item.epoch, now); err != nil {
+			return fmt.Errorf("advance Mosaic scoped entitlement pointer: %w", err)
 		}
 	}
 	return nil

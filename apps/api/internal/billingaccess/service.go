@@ -21,13 +21,14 @@ import (
 // decision on the read surfaces, the token lifecycle, and the freshness policy
 // applied to a served snapshot. Handlers are thin wrappers over it.
 type Service struct {
-	repository Repository
-	keys       KeyAuthenticator
-	now        func() time.Time
-	random     io.Reader
-	tracer     trace.Tracer
-	issuer     string
-	freshness  Freshness
+	repository    Repository
+	keys          KeyAuthenticator
+	accessSignals AccessAPISignalRecorder
+	now           func() time.Time
+	random        io.Reader
+	tracer        trace.Tracer
+	issuer        string
+	freshness     Freshness
 
 	tokensIssued  metric.Int64Counter
 	tokenFailures metric.Int64Counter
@@ -68,6 +69,10 @@ func WithFreshness(freshness Freshness) Option {
 	return func(s *Service) { s.freshness = freshness.Bounded() }
 }
 
+func WithAccessAPISignalRecorder(recorder AccessAPISignalRecorder) Option {
+	return func(s *Service) { s.accessSignals = recorder }
+}
+
 func NewService(repository Repository, keys KeyAuthenticator, options ...Option) *Service {
 	meter := otel.Meter("mosaic/billingaccess")
 	service := &Service{
@@ -78,6 +83,12 @@ func NewService(repository Repository, keys KeyAuthenticator, options ...Option)
 		tracer:     otel.Tracer("github.com/Mujhtech/mosaic/apps/api/billingaccess"),
 		issuer:     "mosaic",
 		freshness:  DefaultFreshness(),
+	}
+	// The PostgreSQL access repository also owns the narrow Phase 9C signal
+	// adapter. Discovering it through the port keeps production recording on by
+	// default without adding a second, accidentally optional composition path.
+	if recorder, ok := repository.(AccessAPISignalRecorder); ok {
+		service.accessSignals = recorder
 	}
 	service.tokensIssued, _ = meter.Int64Counter("mosaic.billing.token.issued")
 	service.tokenFailures, _ = meter.Int64Counter("mosaic.billing.token.rejected")

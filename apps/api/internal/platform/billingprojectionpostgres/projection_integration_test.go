@@ -1,9 +1,11 @@
 package billingprojectionpostgres
 
 import (
+	"bytes"
 	"context"
 	"database/sql"
 	"os"
+	"strconv"
 	"testing"
 	"time"
 
@@ -183,6 +185,40 @@ func TestCustomerSnapshotsAreAppendOnly(t *testing.T) {
 	}
 }
 
+// Migration candidates consume the monotonic snapshot sequence so a future
+// live projection cannot collide with them, but current/prior selection remains
+// exclusively pointer-addressed. A highest-version candidate must never become
+// the live projection's prior snapshot merely because it is newest.
+func TestCandidateSnapshotReservesVersionWithoutBecomingCurrentOrPrior(t *testing.T) {
+	pool, ctx := testPool(t)
+	projectID, environmentID, customerID := seed(t, ctx, pool, "candidate_sequence")
+	now := time.Now().UTC()
+	liveChecksum := bytes.Repeat([]byte{0x41}, 32)
+	candidateChecksum := bytes.Repeat([]byte{0x51}, 32)
+	if _, err := pool.Exec(ctx, `INSERT INTO customer_entitlement_snapshots(id,project_id,environment_id,billing_customer_id,snapshot_version,rule_version,computed_at,as_of,checksum,change_reason,created_at) VALUES
+		('ces_live',$1,$2,$3,1,1,$4,$4,$5,'entitlements_changed',$4),
+		('ces_candidate',$1,$2,$3,5,1,$4,$4,$6,'migration_candidate',$4)`, projectID, environmentID, customerID, now, liveChecksum, candidateChecksum); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := pool.Exec(ctx, `INSERT INTO customer_entitlement_pointers(project_id,environment_id,billing_customer_id,current_snapshot_id,snapshot_version,updated_at) VALUES($1,$2,$3,'ces_live',1,$4)`, projectID, environmentID, customerID, now); err != nil {
+		t.Fatal(err)
+	}
+	input, err := New(pool).LoadInput(ctx, scopeFor(projectID, environmentID, customerID))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if input.CurrentSnapshotVersion != 5 {
+		t.Fatalf("next live allocation did not reserve past candidate: %d", input.CurrentSnapshotVersion)
+	}
+	if input.PriorCustomerSnapshot == nil || !bytes.Equal(input.PriorCustomerSnapshot.Checksum, liveChecksum) {
+		t.Fatal("newest candidate was selected instead of pointer-addressed live prior")
+	}
+	var current string
+	if err = pool.QueryRow(ctx, `SELECT current_snapshot_id FROM customer_entitlement_pointers WHERE billing_customer_id=$1 AND environment_id=$2`, customerID, environmentID).Scan(&current); err != nil || current != "ces_live" {
+		t.Fatalf("candidate changed live pointer current=%q err=%v", current, err)
+	}
+}
+
 // The current pointer is one per (customer, environment) — OD-3(b). A second
 // pointer for the same pair would mean two answers to "what does this customer
 // have right now", and an SDK would see whichever it read first.
@@ -232,6 +268,80 @@ func TestOnePointerPerCustomerPerEnvironment(t *testing.T) {
 	}
 	if count != 1 {
 		t.Fatalf("got %d pointers for one (customer, environment), want exactly one", count)
+	}
+}
+
+// A committed projection advances every exact Mosaic-authority Application
+// scope and no source-owned scope. The authority epoch is copied from the row
+// while it is locked, preventing a projection racing cutover/rollback from
+// publishing a pointer under the wrong epoch.
+func TestScopedPointersAdvanceOnlyForMosaicAuthority(t *testing.T) {
+	pool, ctx := testPool(t)
+	projectID, environmentID, customerID := seed(t, ctx, pool, "scoped_pointer")
+	now := time.Now().UTC()
+	applications := []struct {
+		id, platform, authority string
+		epoch                   int64
+	}{
+		{"app_scope_mosaic_ios", "ios", "mosaic", 5},
+		{"app_scope_source_android", "android", "source", 4},
+		{"app_scope_rollback_ios", "ios", "source_rollback", 6},
+	}
+	for _, app := range applications {
+		if _, err := pool.Exec(ctx, `INSERT INTO applications(id,project_id,name,platform,identifier,created_at,updated_at)
+		 VALUES($1,$2,$1,$3,$1,$4,$4)`, app.id, projectID, app.platform, now); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := pool.Exec(ctx, `INSERT INTO billing_migration_authority_scopes(
+		 id,project_id,environment_id,application_id,platform,current_authority,current_epoch,authority_digest,updated_at)
+		 VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9)`, "mas_"+app.id, projectID, environmentID,
+			app.id, app.platform, app.authority, app.epoch, make([]byte, 32), now); err != nil {
+			t.Fatal(err)
+		}
+	}
+	t.Cleanup(func() {
+		_, _ = pool.Exec(context.Background(), `DELETE FROM billing_migration_scope_current_pointers WHERE project_id=$1`, projectID)
+		_, _ = pool.Exec(context.Background(), `DELETE FROM billing_migration_authority_scopes WHERE project_id=$1`, projectID)
+		_, _ = pool.Exec(context.Background(), `DELETE FROM applications WHERE project_id=$1`, projectID)
+	})
+
+	checksum := make([]byte, 32)
+	if _, err := pool.Exec(ctx, `INSERT INTO customer_entitlement_snapshots(
+	 id,project_id,environment_id,billing_customer_id,snapshot_version,rule_version,computed_at,as_of,checksum,change_reason,created_at)
+	 VALUES('ces_scoped_pointer',$1,$2,$3,1,1,$4,$4,$5,'entitlements_changed',$4)`,
+		projectID, environmentID, customerID, now, checksum); err != nil {
+		t.Fatal(err)
+	}
+
+	tx, err := pool.Begin(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := advanceScopedMosaicPointers(ctx, tx, scopeFor(projectID, environmentID, customerID), "ces_scoped_pointer", now); err != nil {
+		_ = tx.Rollback(ctx)
+		t.Fatal(err)
+	}
+	if err := tx.Commit(ctx); err != nil {
+		t.Fatal(err)
+	}
+
+	rows, err := pool.Query(ctx, `SELECT application_id,authority_epoch FROM billing_migration_scope_current_pointers
+	 WHERE project_id=$1 AND billing_customer_id=$2 ORDER BY application_id`, projectID, customerID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer rows.Close()
+	var got []string
+	for rows.Next() {
+		var app string
+		var epoch int64
+		if err := rows.Scan(&app, &epoch); err != nil {
+			t.Fatal(err)
+		}
+		got = append(got, app+":"+strconv.FormatInt(epoch, 10))
+	}
+	if len(got) != 1 || got[0] != "app_scope_mosaic_ios:5" {
+		t.Fatalf("scoped pointers %v, want only Mosaic scope at epoch 5", got)
 	}
 }
 

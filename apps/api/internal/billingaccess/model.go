@@ -15,6 +15,11 @@ import "time"
 // speaks. It appears on every record this package serializes.
 const ContractVersion = "1"
 
+// AuthorityContractVersion is the authority-aware SDK sync contract. V1 stays
+// the default for trusted-server and GET surfaces; only the negotiated SDK POST
+// may select this version.
+const AuthorityContractVersion = "2"
+
 // TokenContractVersion is the Customer Access Token Contract version.
 const TokenContractVersion = "1"
 
@@ -144,6 +149,51 @@ type KeyScope struct {
 	EnvironmentID   string
 	EnvironmentMode string
 	ApplicationID   string
+	Platform        string
+}
+
+// AuthorityScope is the complete authenticated selector for v2 serving.
+// Customer identity deliberately is not included: it comes independently from
+// the Customer Access Token.
+type AuthorityScope struct {
+	ProjectID     string
+	EnvironmentID string
+	ApplicationID string
+	Platform      string
+}
+
+type MinimumSupport struct {
+	ProgramID            string
+	MinimumSDKVersion    string
+	MinimumAppVersion    string
+	MaximumAppVersion    string
+	RequiredCapabilities []string
+}
+
+// AuthoritySelection is a consistent read of the exact authority row, frozen
+// serving policy, scoped pointer, and immutable snapshot it selects.
+type AuthoritySelection struct {
+	Scope           AuthorityScope
+	ProgramID       string
+	AuthorityEpoch  int64
+	AuthorityKind   string
+	TransitionState string
+	CutoverAt       *time.Time
+	Snapshot        SnapshotView
+	MinimumSupport  MinimumSupport
+}
+
+type SyncObservation struct {
+	ProgramID                 string
+	Scope                     AuthorityScope
+	AppVersion                string
+	SDKVersion                string
+	SupportedContractVersions []string
+	Capabilities              []string
+	AuthorityEpoch            int64
+	Result                    string
+	Digest                    []byte
+	ObservedAt                time.Time
 }
 
 // Actor is the operator behind a trusted-server or dashboard call.

@@ -39,6 +39,7 @@ func (k KeyAuthenticator) AuthenticateServerKey(ctx context.Context, raw string)
 		EnvironmentID:   scope.EnvironmentID,
 		EnvironmentMode: scope.EnvironmentMode,
 		ApplicationID:   scope.ApplicationID,
+		Platform:        scope.Platform,
 	}, nil
 }
 
@@ -57,5 +58,6 @@ func (k KeyAuthenticator) AuthenticateSDKKey(ctx context.Context, raw string) (b
 		EnvironmentID:   scope.EnvironmentID,
 		EnvironmentMode: scope.EnvironmentMode,
 		ApplicationID:   scope.ApplicationID,
+		Platform:        scope.Platform,
 	}, nil
 }

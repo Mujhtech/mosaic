@@ -14,9 +14,12 @@
 package billingaccesshttp
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
+	"io"
 	"net/http"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -247,6 +250,12 @@ type syncEnvelope struct {
 	Payload                                 syncPayload `json:"payload"`
 }
 
+type syncDiscriminator struct {
+	AuthoritativeEntitlementContractVersion string          `json:"authoritativeEntitlementContractVersion"`
+	RecordType                              string          `json:"recordType"`
+	Payload                                 json.RawMessage `json:"payload"`
+}
+
 type syncPayload struct {
 	BillingCustomerID                          string   `json:"billingCustomerId,omitempty"`
 	KnownSnapshotVersion                       int64    `json:"knownSnapshotVersion,omitempty"`
@@ -254,6 +263,51 @@ type syncPayload struct {
 	SupportedAuthoritativeEntitlementContracts []string `json:"supportedAuthoritativeEntitlementContracts"`
 	RequestedEntitlementKeys                   []string `json:"requestedEntitlementKeys,omitempty"`
 	CorrelationID                              string   `json:"correlationId"`
+}
+
+type authoritySyncPayload struct {
+	KnownAuthorityEpoch          *int64                       `json:"knownAuthorityEpoch,omitempty"`
+	KnownSnapshotVersion         *int64                       `json:"knownSnapshotVersion,omitempty"`
+	KnownSnapshotAuthorityDigest string                       `json:"knownSnapshotAuthorityDigest,omitempty"`
+	Request                      authoritySyncRequestMetadata `json:"request"`
+}
+
+type authoritySyncRequestMetadata struct {
+	ApplicationID             string   `json:"applicationId"`
+	Platform                  string   `json:"platform"`
+	AppVersion                string   `json:"appVersion"`
+	SDKVersion                string   `json:"sdkVersion"`
+	SupportedContractVersions []string `json:"supportedContractVersions"`
+	Capabilities              []string `json:"capabilities"`
+}
+
+func (p authoritySyncPayload) Validate() error {
+	digestRule := validation.When(p.KnownSnapshotAuthorityDigest != "",
+		validation.Match(regexp.MustCompile(`^sha256:[a-f0-9]{64}$`)))
+	return validation.ValidateStruct(&p,
+		validation.Field(&p.KnownAuthorityEpoch, validation.NilOrNotEmpty, validation.Min(0)),
+		validation.Field(&p.KnownSnapshotVersion, validation.NilOrNotEmpty, validation.Min(0)),
+		validation.Field(&p.KnownSnapshotAuthorityDigest, digestRule),
+		validation.Field(&p.Request, validation.By(func(value any) error {
+			request := value.(authoritySyncRequestMetadata)
+			if err := validation.ValidateStruct(&request,
+				validation.Field(&request.ApplicationID, validation.Required, validation.Length(1, 128)),
+				validation.Field(&request.Platform, validation.Required, validation.In("ios", "android")),
+				validation.Field(&request.AppVersion, validation.Required, validation.Length(1, 64)),
+				validation.Field(&request.SDKVersion, validation.Required, validation.Length(1, 64)),
+				validation.Field(&request.SupportedContractVersions, validation.Required, validation.Length(1, 8), validation.Each(validation.In("1", "2"))),
+				validation.Field(&request.Capabilities, validation.Required, validation.Length(1, 16), validation.Each(validation.In(
+					"authority_epoch", "authority_scope", "urgent_authority_sync", "mosaic_authoritative_targeting"))),
+			); err != nil {
+				return err
+			}
+			if !uniqueStrings(request.SupportedContractVersions) || !uniqueStrings(request.Capabilities) ||
+				!containsString(request.SupportedContractVersions, "2") || !containsString(request.Capabilities, "authority_epoch") {
+				return errors.New("request negotiation values are not unique or omit required v2 support")
+			}
+			return nil
+		})),
+	)
 }
 
 func (h *Handler) syncEntitlements(w http.ResponseWriter, r *http.Request) {
@@ -265,70 +319,93 @@ func (h *Handler) syncEntitlements(w http.ResponseWriter, r *http.Request) {
 	}
 
 	request := billingaccess.SyncRequest{CorrelationID: correlationID(r)}
+	var authorityRequest *billingaccess.AuthoritySyncRequest
 	if r.Method == http.MethodPost {
-		var envelope syncEnvelope
+		var envelope syncDiscriminator
 		if !decode(w, r, &envelope) {
 			return
 		}
-		if envelope.AuthoritativeEntitlementContractVersion != billingaccess.ContractVersion ||
-			envelope.RecordType != "entitlementSyncRequest" {
+		if envelope.RecordType != "entitlementSyncRequest" {
 			writeValidation(w, r, map[string][]string{
-				"recordType": {"The record is not an Authoritative Entitlement Contract v1 sync request."}})
+				"recordType": {"The record is not an Authoritative Entitlement sync request."}})
 			return
 		}
-		if !supportsContract(envelope.Payload.SupportedAuthoritativeEntitlementContracts) {
-			// The caller cannot read anything Mosaic can produce. This is a
-			// negotiation failure, not an authentication or state problem.
-			response.Error(w, r, response.NewAPIError(http.StatusNotAcceptable,
-				"contract_version_unsupported",
-				"No supported Authoritative Entitlement Contract version was offered."))
+		switch envelope.AuthoritativeEntitlementContractVersion {
+		case billingaccess.ContractVersion:
+			var payload syncPayload
+			if !decodePayload(w, r, envelope.Payload, &payload) {
+				return
+			}
+			if !supportsContract(payload.SupportedAuthoritativeEntitlementContracts) {
+				// The caller cannot read anything Mosaic can produce. This is a
+				// negotiation failure, not an authentication or state problem.
+				response.Error(w, r, response.NewAPIError(http.StatusNotAcceptable,
+					"contract_version_unsupported",
+					"No supported Authoritative Entitlement Contract version was offered."))
+				return
+			}
+			request.CustomerIDHint = payload.BillingCustomerID
+			request.KnownSnapshotVersion = payload.KnownSnapshotVersion
+			request.EntityTag = payload.EntityTag
+			request.RequestedKeys = payload.RequestedEntitlementKeys
+			if payload.CorrelationID != "" {
+				request.CorrelationID = payload.CorrelationID
+			}
+		case billingaccess.AuthorityContractVersion:
+			var payload authoritySyncPayload
+			if !decodePayload(w, r, envelope.Payload, &payload) {
+				return
+			}
+			if err := payload.Validate(); err != nil {
+				writeValidation(w, r, validationFields(err))
+				return
+			}
+			authorityRequest = &billingaccess.AuthoritySyncRequest{
+				KnownAuthorityEpoch:          payload.KnownAuthorityEpoch,
+				KnownSnapshotVersion:         payload.KnownSnapshotVersion,
+				KnownSnapshotAuthorityDigest: payload.KnownSnapshotAuthorityDigest,
+				ApplicationID:                payload.Request.ApplicationID, Platform: payload.Request.Platform,
+				AppVersion: payload.Request.AppVersion, SDKVersion: payload.Request.SDKVersion,
+				SupportedContractVersions: payload.Request.SupportedContractVersions,
+				Capabilities:              payload.Request.Capabilities,
+			}
+		default:
+			writeValidation(w, r, map[string][]string{"authoritativeEntitlementContractVersion": {"Only exact contract versions 1 and 2 are supported."}})
 			return
-		}
-		request.CustomerIDHint = envelope.Payload.BillingCustomerID
-		request.KnownSnapshotVersion = envelope.Payload.KnownSnapshotVersion
-		request.EntityTag = envelope.Payload.EntityTag
-		request.RequestedKeys = envelope.Payload.RequestedEntitlementKeys
-		if envelope.Payload.CorrelationID != "" {
-			request.CorrelationID = envelope.Payload.CorrelationID
 		}
 	}
 
-	result, err := h.service.Sync(r.Context(), authenticated, request)
+	var result billingaccess.SyncResult
+	if authorityRequest != nil {
+		result, err = h.service.SyncAuthorityV2(r.Context(), authenticated, *authorityRequest)
+	} else {
+		// GET is deliberately and permanently v1-only.
+		result, err = h.service.Sync(r.Context(), authenticated, request)
+	}
 	if err != nil {
 		writeError(w, r, err)
 		return
 	}
 
-	w.Header().Set("ETag", `"`+result.EntityTag+`"`)
+	if result.EntityTag != "" {
+		w.Header().Set("ETag", `"`+result.EntityTag+`"`)
+	}
 	w.Header().Set("Cache-Control", "private, no-cache")
 	// The freshness window travels as headers as well as inside the record.
 	// The record is where every SDK reads it; the headers exist so an
 	// intermediary and an operator can see the same window without parsing the
 	// body.
-	w.Header().Set("Mosaic-Refresh-After", billingaccess.ContractTimestamp(result.RefreshAfter))
-	w.Header().Set("Mosaic-Valid-Until", billingaccess.ContractTimestamp(result.ValidUntil))
-	w.Header().Set("Mosaic-Stale-Grace-Seconds", strconv.Itoa(int(result.StaleGrace/time.Second)))
+	if !result.RefreshAfter.IsZero() {
+		w.Header().Set("Mosaic-Refresh-After", billingaccess.ContractTimestamp(result.RefreshAfter))
+		w.Header().Set("Mosaic-Valid-Until", billingaccess.ContractTimestamp(result.ValidUntil))
+		w.Header().Set("Mosaic-Stale-Grace-Seconds", strconv.Itoa(int(result.StaleGrace/time.Second)))
+	}
 
-	// There is exactly one conditional mechanism on this surface, and it is the
-	// POST body's `knownSnapshotVersion` (defect D-5, ratified).
-	//
-	// The GET form is a plain full-snapshot read. It carries no way to state a
-	// snapshot version, and version equality is a precondition of `unchanged` —
-	// a matching entity tag alone would confirm a cache without proving
-	// monotonicity. The handler used to carry a 304 branch gated to GET plus
-	// If-None-Match; the precondition made it unreachable on every request that
-	// could ever take it, so it was dead code that advertised a bandwidth saving
-	// the surface did not provide. It is removed rather than made reachable:
-	// making it reachable would mean either dropping the monotonicity
-	// precondition for one verb or inventing an unratified query parameter.
-	//
-	// POST answers 200 with the canonical `snapshotUnchanged` record even when
-	// the caller's version matches. That record carries refreshAfter,
-	// validUntil, and staleGraceSeconds inside a frozen schema every SDK already
-	// validates, whereas a bare 304 carries no body and would force all three
-	// platforms to read freshness out of `Mosaic-…` header names no schema
-	// defines. Freshness that only exists in undocumented headers is freshness
-	// the contract cannot guarantee.
+	// GET remains a plain v1 full-snapshot read. POST conditionals are explicit
+	// contract input: v1 requires the known version and entity tag, while v2
+	// requires the exact epoch, version, and previously observed authority
+	// digest. Both return the canonical snapshotUnchanged body rather than 304
+	// so freshness remains part of the versioned contract.
 	response.Representation(w, http.StatusOK, contractContentType, result.Payload)
 }
 
@@ -338,6 +415,26 @@ func supportsContract(offered []string) bool {
 	}
 	for _, version := range offered {
 		if version == billingaccess.ContractVersion {
+			return true
+		}
+	}
+	return false
+}
+
+func uniqueStrings(values []string) bool {
+	seen := make(map[string]struct{}, len(values))
+	for _, value := range values {
+		if _, exists := seen[value]; exists {
+			return false
+		}
+		seen[value] = struct{}{}
+	}
+	return true
+}
+
+func containsString(values []string, wanted string) bool {
+	for _, value := range values {
+		if value == wanted {
 			return true
 		}
 	}
@@ -547,6 +644,20 @@ func decode(w http.ResponseWriter, r *http.Request, target any) bool {
 	return true
 }
 
+func decodePayload(w http.ResponseWriter, r *http.Request, payload json.RawMessage, target any) bool {
+	decoder := json.NewDecoder(bytes.NewReader(payload))
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(target); err != nil {
+		writeValidation(w, r, map[string][]string{"payload": {"The request payload is malformed or contains unknown fields."}})
+		return false
+	}
+	if decoder.Decode(&struct{}{}) != io.EOF {
+		writeValidation(w, r, map[string][]string{"payload": {"The request payload must contain one JSON object."}})
+		return false
+	}
+	return true
+}
+
 func bearer(r *http.Request) string {
 	value := strings.TrimSpace(r.Header.Get("Authorization"))
 	if len(value) > 7 && strings.EqualFold(value[:7], "Bearer ") {
@@ -617,6 +728,9 @@ func writeError(w http.ResponseWriter, r *http.Request, err error) {
 	case errors.Is(err, billingaccess.ErrUnavailable):
 		status, code, message = http.StatusServiceUnavailable, "billing_storage_unavailable",
 			"Billing state could not be read."
+	case errors.Is(err, billingaccess.ErrAuthorityUpgradeRequired):
+		status, code, message = http.StatusUpgradeRequired, "authority_contract_upgrade_required",
+			"This Application scope requires Authoritative Entitlement Contract v2."
 	}
 	response.Error(w, r, response.NewAPIError(status, code, message))
 }

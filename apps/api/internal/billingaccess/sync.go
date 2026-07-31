@@ -5,9 +5,12 @@ import (
 	"errors"
 	"time"
 
+	"github.com/rs/zerolog"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/metric"
 )
+
+const accessAPISignalWriteTimeout = time.Second
 
 // SyncRequest is the negotiated body of an entitlement sync.
 type SyncRequest struct {
@@ -74,6 +77,16 @@ func (s *Service) Sync(ctx context.Context, authenticated AuthenticatedToken, re
 	if err := s.requireEnabled(ctx, token.ProjectID); err != nil {
 		s.syncResults.Add(ctx, 1, metric.WithAttributes(attribute.String("result", "unavailable")))
 		return SyncResult{}, err
+	}
+	legacyAuthority, err := s.repository.LegacyAuthority(ctx, AuthorityScope{
+		ProjectID: token.ProjectID, EnvironmentID: token.EnvironmentID,
+		ApplicationID: authenticated.SDKKey.ApplicationID, Platform: authenticated.SDKKey.Platform,
+	})
+	if err != nil && !errors.Is(err, ErrNotFound) {
+		return SyncResult{}, err
+	}
+	if legacyAuthority == "mosaic" || legacyAuthority == "source_rollback" {
+		return SyncResult{}, ErrAuthorityUpgradeRequired
 	}
 
 	view, err := s.repository.CurrentSnapshot(ctx, token.ProjectID, token.EnvironmentID, token.CustomerID)
@@ -177,6 +190,7 @@ func emptyView(token Token, at time.Time) SnapshotView {
 func (s *Service) Check(ctx context.Context, rawKey string, environmentID string, request CheckRequest) ([]byte, error) {
 	ctx, span := s.tracer.Start(ctx, "billing.entitlement.check")
 	defer span.End()
+	startedAt := s.now()
 
 	scope, err := s.keys.AuthenticateServerKey(ctx, rawKey)
 	if err != nil {
@@ -187,6 +201,26 @@ func (s *Service) Check(ctx context.Context, rawKey string, environmentID string
 	}
 	if environmentID != scope.EnvironmentID {
 		return nil, ErrForbidden
+	}
+	failed := true
+	if s.accessSignals != nil {
+		defer func() {
+			// A client disconnect after the access answer is computed must not
+			// erase its outcome, but shutdown also must not wait indefinitely for
+			// monitoring evidence. Preserve values/trace context and impose a
+			// strict request-local write budget.
+			signalCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), accessAPISignalWriteTimeout)
+			defer cancel()
+			if signalErr := s.accessSignals.RecordAccessAPIResult(signalCtx, scope.ProjectID, environmentID, startedAt, s.now(), failed); signalErr != nil {
+				// Evidence must never change the access answer. A persistence
+				// failure leaves no fresh window, so stabilization fails closed.
+				zerolog.Ctx(ctx).Warn().
+					Err(signalErr).
+					Str("project_id", scope.ProjectID).
+					Str("environment_id", environmentID).
+					Msg("billing access stabilization signal not recorded")
+			}
+		}()
 	}
 	if len(request.EntitlementKeys) == 0 || len(request.EntitlementKeys) > 64 {
 		return nil, ErrInvalid
@@ -200,7 +234,9 @@ func (s *Service) Check(ctx context.Context, rawKey string, environmentID string
 		record := CheckResultRecord(request.CustomerID, scope.ProjectID, environmentID, nil,
 			request.EntitlementKeys, issuedAt, request.CorrelationID,
 			"provider_unavailable", "billing_disabled")
-		return CanonicalJSON(Envelope("entitlementCheckResult", record))
+		payload, encodeErr := CanonicalJSON(Envelope("entitlementCheckResult", record))
+		failed = encodeErr != nil
+		return payload, encodeErr
 	}
 
 	if _, err := s.repository.Customer(ctx, scope.ProjectID, request.CustomerID); err != nil {
@@ -217,7 +253,9 @@ func (s *Service) Check(ctx context.Context, rawKey string, environmentID string
 		record := CheckResultRecord(request.CustomerID, scope.ProjectID, environmentID, nil,
 			request.EntitlementKeys, issuedAt, request.CorrelationID,
 			"missing_fact", "no_qualifying_source")
-		return CanonicalJSON(Envelope("entitlementCheckResult", record))
+		payload, encodeErr := CanonicalJSON(Envelope("entitlementCheckResult", record))
+		failed = encodeErr != nil
+		return payload, encodeErr
 	}
 	if status, statusErr := s.repository.ProjectionStatusFor(ctx, scope.ProjectID, environmentID, request.CustomerID); statusErr == nil {
 		view.Projection = status
@@ -226,7 +264,9 @@ func (s *Service) Check(ctx context.Context, rawKey string, environmentID string
 	span.SetAttributes(attribute.Int64("mosaic.billing.check.version", view.SnapshotVersion))
 	record := CheckResultRecord(request.CustomerID, scope.ProjectID, environmentID, &view,
 		request.EntitlementKeys, issuedAt, request.CorrelationID, "", "")
-	return CanonicalJSON(Envelope("entitlementCheckResult", record))
+	payload, encodeErr := CanonicalJSON(Envelope("entitlementCheckResult", record))
+	failed = encodeErr != nil
+	return payload, encodeErr
 }
 
 // Snapshot reads a customer's current snapshot for a trusted server. The read is
