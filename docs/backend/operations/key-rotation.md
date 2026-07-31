@@ -52,6 +52,10 @@ go run ./cmd/keyring inspect
 # Re-encrypt every envelope under the active key, in transactional batches.
 go run ./cmd/keyring rotate --dry-run
 go run ./cmd/keyring rotate
+
+# The separate immutable billing-migration source-object keyring.
+go run ./cmd/keyring validate --category migration-source
+go run ./cmd/keyring inspect --category migration-source
 ```
 
 In a Compose deployment the same binary is in the image:
@@ -69,6 +73,7 @@ docker compose run --rm --entrypoint /usr/local/bin/keyring api inspect
 | `provider_connection_credentials` | Provider Connection server secrets | Phase 4A |
 | `store_server_credentials` | Apple In-App Purchase keys and Google service-account keys | Phase 9A |
 | `billing_raw_inputs` | Retained Raw Billing Input bodies (signed payloads, purchase tokens) | Phase 9A |
+| `billing_migration_credentials` | Active RevenueCat migration API credentials | Phase 9C |
 
 The Phase 9A tables use a separate additional-authenticated-data domain (`v2`)
 addressed by a `(subject kind, subject id)` pair, so a Provider Connection
@@ -88,6 +93,33 @@ still seal revoked rows it does not count. That is intended, and it means a
 retired key can be removed while revoked envelopes still reference it; those
 envelopes become permanently undecryptable, which is the desired outcome for a
 revoked secret and an unrecoverable one for anything else.
+
+Cryptographically removed migration credentials have no nonce or ciphertext and
+are likewise excluded. Active migration credentials are sealed with the exact
+organization, Project, migration credential ID, and
+`revenuecat_migration_api_key` class under the
+`billing_migration_credential` subject domain. Rotation rebuilds that AAD from
+the credential row; a missing retired key fails closed before the affected
+credential can be resealed.
+
+## Migration source-object keys
+
+`MOSAIC_BILLING_MIGRATION_SOURCE_KEYRING` is a separate keyring for immutable,
+verified migration source objects. Its format matches the versioned shape above,
+but its key material must never be reused in
+`MOSAIC_PROVIDER_CREDENTIAL_KEYRING`.
+
+`keyring inspect --category migration-source` reports retained database object
+counts by key ID and exits non-zero when any referenced key is absent. It does
+not read object ciphertext or customer records. Deleted source-object ledger
+records are excluded because their object ciphertext has already been removed.
+
+Verified source objects cannot be re-encrypted in place: their envelope and
+ciphertext digest are immutable migration evidence. Consequently, `keyring
+rotate --category migration-source` is refused. Rotate this keyring by adding a
+new key and making it active for new writes while retaining every older key.
+Remove an old key only after retention or an approved deletion operation has
+deleted every source object counted under it and a final `inspect` reports zero.
 
 ## Rotation Procedure
 
