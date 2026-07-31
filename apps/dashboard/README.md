@@ -7,6 +7,15 @@ apps through the loopback preview relay.
 Local Studio does not use accounts, hosted projects, cloud storage, remote publishing, analytics,
 experiments, or real billing providers.
 
+The separate hosted subtree starts at `/workspace` and covers Organizations, Projects,
+Applications, Environments, environment-scoped API keys, memberships, and the project-wide
+Catalog. Hosted REST calls use the generated client under `src/generated/api`; regenerate it from
+the backend OpenAPI document after a contract change with `npm run generate:api`.
+
+Hosted authentication remains an explicit owner-decision gate. The login and signup forms validate
+locally with TanStack Form but do not create a browser session or simulate a signed-in user.
+`/studio` remains account-free.
+
 ## Requirements
 
 - Node.js 22.12 or newer
@@ -107,8 +116,9 @@ Layers, Components, Products, or Localization. `F` fits the canvas, `Shift+0` re
 diagnostics panel. Global shortcuts pause while an input, textarea, select, contenteditable, or
 command search owns focus.
 
-Set `VITE_API_BASE_URL` only for the existing REST-backed dashboard/authentication scaffolding. The
-default is `http://localhost:8080/api/v1/dashboard/`; Local Studio itself does not require the API.
+Set `VITE_API_BASE_URL` for the hosted REST workspace. The default is `http://localhost:8080`; the
+generated client supplies the versioned `/v1/...` paths. Local Studio itself does not require the
+API.
 
 ## Commands
 
@@ -116,6 +126,7 @@ default is `http://localhost:8080/api/v1/dashboard/`; Local Studio itself does n
 npm run dev           # start the local development server
 npm run dev:studio    # start Studio and the loopback preview relay
 npm run preview:relay # start only the loopback preview relay
+npm run generate:api  # regenerate the REST client from docs/backend/openapi.yaml
 npm run build         # create the production client and server bundles
 npm run start         # serve the production build
 npm run format        # format local files

@@ -10,8 +10,11 @@ import (
 	"github.com/riandyrn/otelchi"
 	"github.com/rs/zerolog"
 
+	"github.com/Mujhtech/mosaic/apps/api/internal/cloudworkspace"
+	"github.com/Mujhtech/mosaic/apps/api/internal/platform/authn"
 	"github.com/Mujhtech/mosaic/apps/api/internal/platform/httpserver/httpmiddleware"
 	"github.com/Mujhtech/mosaic/apps/api/internal/platform/httpserver/response"
+	cloudworkspacehttp "github.com/Mujhtech/mosaic/apps/api/internal/transport/cloudworkspace"
 	"github.com/Mujhtech/mosaic/apps/api/internal/transport/health"
 )
 
@@ -43,7 +46,16 @@ type Config struct {
 	RequestTimeout time.Duration
 }
 
+type Dependencies struct {
+	CloudWorkspace    *cloudworkspace.Service
+	PrincipalResolver authn.Resolver
+}
+
 func New(cfg Config, logger zerolog.Logger) http.Handler {
+	return NewWithDependencies(cfg, logger, Dependencies{})
+}
+
+func NewWithDependencies(cfg Config, logger zerolog.Logger, dependencies Dependencies) http.Handler {
 	router := chi.NewRouter()
 
 	router.Use(chimiddleware.RequestID)
@@ -56,6 +68,13 @@ func New(cfg Config, logger zerolog.Logger) http.Handler {
 	router.Use(httpmiddleware.Timeout(cfg.RequestTimeout))
 
 	router.Mount("/health", health.Routes())
+	router.Mount("/ready", health.Routes())
+	if dependencies.CloudWorkspace != nil {
+		router.Mount("/v1", cloudworkspacehttp.Routes(
+			dependencies.CloudWorkspace,
+			dependencies.PrincipalResolver,
+		))
+	}
 	router.NotFound(func(w http.ResponseWriter, r *http.Request) {
 		response.Error(w, r, response.NewAPIError(
 			http.StatusNotFound,

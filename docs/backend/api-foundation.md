@@ -1,8 +1,9 @@
 # Mosaic API foundation
 
-The Phase 0 API is a modular-monolith-ready Go shell. It contains platform and
-transport packages only; organizations, projects, paywalls, publishing, and all
-other product domains remain intentionally unimplemented.
+This document records the Phase 0 HTTP foundation. Phase 3A now adds the
+isolated cloud-workspace and Catalog slice documented in
+`docs/backend/phase-3a-cloud-workspace.md`; publishing and configuration
+delivery remain unimplemented.
 
 ## Run and verify
 
@@ -142,10 +143,11 @@ in-flight requests within the shutdown budget, then flushes telemetry.
 
 ## Deferred boundaries
 
-No migrations or deployment files are created in Phase 0 because the health
-shell has no database or infrastructure dependency.
+No migrations or deployment files exist. Phase 3A uses an explicit repository
+port and a concurrency-safe in-memory adapter because the PostgreSQL driver,
+query strategy, migration runner, and transaction implementation remain owner
+decisions.
 
-No runnable worker is created. A root/shared Go module decision is required
-before API and worker application/domain packages can be reused coherently.
-That decision belongs at the Phase 0 review gate, before the first background
-job—not in this foundation scaffold.
+No runnable worker is created because Phase 3A has no background job. A
+root/shared Go module decision is still required before API and worker
+application/domain packages can be reused coherently.

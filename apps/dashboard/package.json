@@ -14,6 +14,7 @@
     "dev:studio": "node scripts/dev-studio.mjs",
     "demo:live": "node scripts/live-preview-demo.mjs",
     "demo:studio-browser": "node scripts/studio-browser-demo.mjs",
+    "generate:api": "openapi-ts -i ../../docs/backend/openapi.yaml -o src/generated/api -c @hey-api/client-fetch",
     "preview:relay": "node scripts/local-preview-relay.mjs",
     "build": "vite build",
     "start": "srvx --prod -s ../client dist/server/server.js",
@@ -31,6 +32,7 @@
     "@mosaic/design-system": "file:../../packages/design-system",
     "@mosaic/design-tokens": "file:../../packages/design-tokens",
     "@phosphor-icons/react": "^2.1.10",
+    "@tanstack/react-form": "^1.33.2",
     "@tanstack/react-query": "^5.101.2",
     "@tanstack/react-router": "^1.170.18",
     "@tanstack/react-router-ssr-query": "^1.167.1",
@@ -48,6 +50,7 @@
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
+    "@hey-api/openapi-ts": "0.99.0",
     "@tailwindcss/vite": "^4.3.3",
     "@tanstack/eslint-plugin-query": "^5.101.2",
     "@testing-library/dom": "^10.4.1",

@@ -1,8 +1,14 @@
 import viteReact from "@vitejs/plugin-react"
+import { fileURLToPath } from "node:url"
 import { defineConfig } from "vitest/config"
 
 export default defineConfig({
   resolve: {
+    alias: {
+      "ajv/dist/2020.js": fileURLToPath(
+        new URL("./node_modules/ajv/dist/2020.js", import.meta.url),
+      ),
+    },
     dedupe: ["react", "react-dom"],
     tsconfigPaths: true,
   },

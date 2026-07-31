@@ -3,4 +3,5 @@ dist
 .output
 coverage
 src/routeTree.gen.ts
+src/generated/
 package-lock.json
