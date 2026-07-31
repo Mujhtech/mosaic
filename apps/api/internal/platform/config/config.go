@@ -1,6 +1,7 @@
 package config
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io/fs"
@@ -12,6 +13,7 @@ import (
 	"github.com/joho/godotenv"
 	"github.com/kelseyhightower/envconfig"
 
+	"github.com/Mujhtech/mosaic/apps/api/internal/platform/billingmigrationobject"
 	"github.com/Mujhtech/mosaic/apps/api/internal/platform/telemetry"
 	"github.com/Mujhtech/mosaic/apps/api/internal/providercredential"
 )
@@ -49,7 +51,20 @@ type Config struct {
 	Analytics   AnalyticsConfig
 	Providers   ProviderConfig
 	Billing     BillingConfig
+	Migration   BillingMigrationConfig
 	Worker      WorkerConfig
+}
+
+// BillingMigrationConfig controls the opt-in execution plane for Phase 9C.
+// The separately encrypted source-object bucket/keyring are never reused for
+// public Assets or provider credentials.
+type BillingMigrationConfig struct {
+	Enabled                      bool          `envconfig:"MOSAIC_BILLING_MIGRATION_ENABLED" default:"false"`
+	SourceObjectKeyring          string        `envconfig:"MOSAIC_BILLING_MIGRATION_SOURCE_KEYRING"`
+	SourceObjectBucket           string        `envconfig:"MOSAIC_BILLING_MIGRATION_SOURCE_BUCKET" default:"mosaic-migration-private"`
+	SourceObjectChunkBytes       int           `envconfig:"MOSAIC_BILLING_MIGRATION_SOURCE_CHUNK_BYTES" default:"262144"`
+	SourceObjectOperationTimeout time.Duration `envconfig:"MOSAIC_BILLING_MIGRATION_SOURCE_OPERATION_TIMEOUT" default:"5m"`
+	WorkerPollInterval           time.Duration `envconfig:"MOSAIC_BILLING_MIGRATION_WORKER_POLL_INTERVAL" default:"1s"`
 }
 
 // BillingConfig holds Phase 9A's deployment-level settings. Mosaic Billing is
@@ -330,6 +345,8 @@ func load() (Config, error) {
 	cfg.Analytics.EventSchemaPath = strings.TrimSpace(cfg.Analytics.EventSchemaPath)
 	cfg.Analytics.EventV2SchemaPath = strings.TrimSpace(cfg.Analytics.EventV2SchemaPath)
 	cfg.Providers.CredentialKeyring = strings.TrimSpace(cfg.Providers.CredentialKeyring)
+	cfg.Migration.SourceObjectKeyring = strings.TrimSpace(cfg.Migration.SourceObjectKeyring)
+	cfg.Migration.SourceObjectBucket = strings.TrimSpace(cfg.Migration.SourceObjectBucket)
 	cfg.Billing.NotificationBaseURL = strings.TrimSpace(cfg.Billing.NotificationBaseURL)
 	cfg.Billing.AppleProductionBaseURL = strings.TrimSpace(cfg.Billing.AppleProductionBaseURL)
 	cfg.Billing.AppleSandboxBaseURL = strings.TrimSpace(cfg.Billing.AppleSandboxBaseURL)
@@ -425,6 +442,7 @@ func (cfg Config) validate() error {
 	cfg.validateProviders(report, productionLike)
 	cfg.validateAnalytics(report)
 	cfg.validateBilling(report, productionLike)
+	cfg.validateBillingMigration(report)
 	cfg.validateWorker(report)
 
 	cfg.validateTelemetry(report, productionLike)
@@ -455,6 +473,61 @@ func (cfg Config) validate() error {
 		return &ValidationError{Problems: report.list}
 	}
 	return nil
+}
+
+func (cfg Config) validateBillingMigration(report *problems) {
+	if cfg.Migration.Enabled && !cfg.Billing.Enabled {
+		report.add("MOSAIC_BILLING_ENABLED must be true when MOSAIC_BILLING_MIGRATION_ENABLED is true")
+	}
+	switch {
+	case cfg.Migration.Enabled && cfg.Migration.SourceObjectKeyring == "":
+		report.add("MOSAIC_BILLING_MIGRATION_SOURCE_KEYRING is required when billing migration execution is enabled")
+	case cfg.Migration.SourceObjectKeyring != "":
+		if err := billingmigrationobject.ValidateKeyring(cfg.Migration.SourceObjectKeyring); err != nil {
+			report.add("MOSAIC_BILLING_MIGRATION_SOURCE_KEYRING is not a valid version 1 AES-256 keyring")
+		}
+	}
+	if keyringMaterialOverlaps(cfg.Migration.SourceObjectKeyring, cfg.Providers.CredentialKeyring) {
+		report.add("MOSAIC_BILLING_MIGRATION_SOURCE_KEYRING must not reuse key material from MOSAIC_PROVIDER_CREDENTIAL_KEYRING")
+	}
+	if cfg.Migration.SourceObjectBucket == "" {
+		report.add("MOSAIC_BILLING_MIGRATION_SOURCE_BUCKET must not be empty")
+	} else if cfg.Migration.SourceObjectBucket == cfg.ObjectStore.Bucket {
+		report.add("MOSAIC_BILLING_MIGRATION_SOURCE_BUCKET must be distinct from MOSAIC_OBJECT_STORAGE_BUCKET")
+	}
+	if cfg.Migration.SourceObjectChunkBytes < 16*1024 || cfg.Migration.SourceObjectChunkBytes > 4*1024*1024 {
+		report.add("MOSAIC_BILLING_MIGRATION_SOURCE_CHUNK_BYTES must be between 16384 and 4194304")
+	}
+	report.requirePositive(map[string]time.Duration{
+		"MOSAIC_BILLING_MIGRATION_SOURCE_OPERATION_TIMEOUT": cfg.Migration.SourceObjectOperationTimeout,
+		"MOSAIC_BILLING_MIGRATION_WORKER_POLL_INTERVAL":     cfg.Migration.WorkerPollInterval,
+	})
+	if cfg.Migration.SourceObjectOperationTimeout > 15*time.Minute {
+		report.add("MOSAIC_BILLING_MIGRATION_SOURCE_OPERATION_TIMEOUT must not exceed 15m")
+	}
+}
+
+func keyringMaterialOverlaps(left, right string) bool {
+	if left == "" || right == "" {
+		return false
+	}
+	type keyring struct {
+		Keys map[string]string `json:"keys"`
+	}
+	var first, second keyring
+	if json.Unmarshal([]byte(left), &first) != nil || json.Unmarshal([]byte(right), &second) != nil {
+		return false
+	}
+	values := make(map[string]struct{}, len(first.Keys))
+	for _, value := range first.Keys {
+		values[value] = struct{}{}
+	}
+	for _, value := range second.Keys {
+		if _, exists := values[value]; exists {
+			return true
+		}
+	}
+	return false
 }
 
 func (cfg Config) validateHTTP(report *problems, productionLike bool) {

@@ -34,6 +34,11 @@ const (
 	// write the table but not decrypt it — fails to open rather than signing
 	// deliveries for the wrong tenant.
 	SubjectWebhookSigningSecret = "webhook_signing_secret"
+	// SubjectBillingMigrationCredential keeps migration API keys cryptographically
+	// separate from commerce/catalog connections. A credential copied between a
+	// provider connection and a migration program therefore cannot be opened,
+	// even when both rows belong to the same Project.
+	SubjectBillingMigrationCredential = "billing_migration_credential"
 )
 
 // SubjectScope binds a v2 envelope to one tenant and one row. Every field is
@@ -53,7 +58,8 @@ func validSubjectScope(scope SubjectScope) bool {
 		return false
 	}
 	switch scope.SubjectKind {
-	case SubjectStoreServerCredential, SubjectBillingRawInput, SubjectWebhookSigningSecret:
+	case SubjectStoreServerCredential, SubjectBillingRawInput, SubjectWebhookSigningSecret,
+		SubjectBillingMigrationCredential:
 		return true
 	default:
 		return false

@@ -44,6 +44,84 @@ func TestLoadUsesFoundationDefaults(t *testing.T) {
 	if cfg.Providers.OperationTimeout != 60*time.Second {
 		t.Fatalf("provider operation timeout = %s, want 60s", cfg.Providers.OperationTimeout)
 	}
+	if cfg.Migration.Enabled {
+		t.Fatal("billing migration execution must default off")
+	}
+	if cfg.Migration.SourceObjectBucket != "mosaic-migration-private" || cfg.Migration.SourceObjectChunkBytes != 256*1024 {
+		t.Fatalf("migration source-object defaults = %#v", cfg.Migration)
+	}
+	if cfg.Migration.SourceObjectOperationTimeout != 5*time.Minute || cfg.Migration.WorkerPollInterval != time.Second {
+		t.Fatalf("migration worker defaults = %#v", cfg.Migration)
+	}
+}
+
+func TestBillingMigrationExecutionRequiresBillingAndSeparateEncryption(t *testing.T) {
+	validKeyring := `{"version":1,"activeKeyId":"migration-1","keys":{"migration-1":"MTIzNDU2Nzg5MDEyMzQ1Njc4OTAxMjM0NTY3ODkwMTI"}}`
+	providerKeyring := `{"version":1,"activeKeyId":"provider-1","keys":{"provider-1":"QUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUE"}}`
+
+	for name, test := range map[string]struct {
+		values map[string]string
+		want   string
+	}{
+		"billing is enabled": {
+			values: map[string]string{"MOSAIC_BILLING_MIGRATION_ENABLED": "true", "MOSAIC_BILLING_MIGRATION_SOURCE_KEYRING": validKeyring},
+			want:   "MOSAIC_BILLING_ENABLED",
+		},
+		"source keyring is configured": {
+			values: map[string]string{"MOSAIC_BILLING_MIGRATION_ENABLED": "true", "MOSAIC_BILLING_ENABLED": "true"},
+			want:   "MOSAIC_BILLING_MIGRATION_SOURCE_KEYRING",
+		},
+		"source keyring is valid": {
+			values: map[string]string{"MOSAIC_BILLING_MIGRATION_SOURCE_KEYRING": `{"version":1,"activeKeyId":"missing","keys":{}}`},
+			want:   "MOSAIC_BILLING_MIGRATION_SOURCE_KEYRING",
+		},
+		"source keyring is not the provider credential keyring": {
+			values: map[string]string{"MOSAIC_BILLING_MIGRATION_SOURCE_KEYRING": validKeyring, "MOSAIC_PROVIDER_CREDENTIAL_KEYRING": validKeyring},
+			want:   "MOSAIC_PROVIDER_CREDENTIAL_KEYRING",
+		},
+		"source keyring does not reuse provider key material under another id": {
+			values: map[string]string{
+				"MOSAIC_BILLING_MIGRATION_SOURCE_KEYRING": validKeyring,
+				"MOSAIC_PROVIDER_CREDENTIAL_KEYRING":      `{"version":1,"activeKeyId":"provider-elsewhere","keys":{"provider-elsewhere":"MTIzNDU2Nzg5MDEyMzQ1Njc4OTAxMjM0NTY3ODkwMTI"}}`,
+			},
+			want: "MOSAIC_PROVIDER_CREDENTIAL_KEYRING",
+		},
+		"source objects use a private bucket": {
+			values: map[string]string{"MOSAIC_BILLING_MIGRATION_SOURCE_BUCKET": "mosaic-assets"},
+			want:   "MOSAIC_BILLING_MIGRATION_SOURCE_BUCKET",
+		},
+		"chunk size remains bounded": {
+			values: map[string]string{"MOSAIC_BILLING_MIGRATION_SOURCE_CHUNK_BYTES": "8192"},
+			want:   "MOSAIC_BILLING_MIGRATION_SOURCE_CHUNK_BYTES",
+		},
+		"source operation remains bounded": {
+			values: map[string]string{"MOSAIC_BILLING_MIGRATION_SOURCE_OPERATION_TIMEOUT": "16m"},
+			want:   "MOSAIC_BILLING_MIGRATION_SOURCE_OPERATION_TIMEOUT",
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			_, err := loadTestConfig(t, test.values)
+			if err == nil || !strings.Contains(err.Error(), test.want) {
+				t.Fatalf("error = %v, want %s", err, test.want)
+			}
+		})
+	}
+
+	cfg, err := loadTestConfig(t, map[string]string{
+		"MOSAIC_BILLING_ENABLED":                      "true",
+		"MOSAIC_BILLING_NOTIFICATION_BASE_URL":        "http://localhost:8080",
+		"MOSAIC_PROVIDER_CREDENTIAL_KEYRING":          providerKeyring,
+		"MOSAIC_BILLING_MIGRATION_ENABLED":            "true",
+		"MOSAIC_BILLING_MIGRATION_SOURCE_KEYRING":     validKeyring,
+		"MOSAIC_BILLING_MIGRATION_SOURCE_BUCKET":      "migration-evidence-private",
+		"MOSAIC_BILLING_MIGRATION_SOURCE_CHUNK_BYTES": "32768",
+	})
+	if err != nil {
+		t.Fatalf("valid migration configuration rejected: %v", err)
+	}
+	if !cfg.Migration.Enabled || cfg.Migration.SourceObjectChunkBytes != 32768 {
+		t.Fatalf("migration configuration = %#v", cfg.Migration)
+	}
 }
 
 func TestLoadRejectsInvalidAuthenticationRateLimits(t *testing.T) {
@@ -414,6 +492,9 @@ func clearConfigEnvironment(t *testing.T) {
 		"MOSAIC_PROVIDER_OPERATION_TIMEOUT", "MOSAIC_PROVIDER_CONNECT_TIMEOUT", "MOSAIC_PROVIDER_MAX_RESPONSE_BYTES",
 		"MOSAIC_PROVIDER_MAX_ATTEMPTS", "MOSAIC_PROVIDER_SNAPSHOT_TTL",
 		"MOSAIC_PROVIDER_WORKER_POLL_INTERVAL",
+		"MOSAIC_BILLING_MIGRATION_ENABLED", "MOSAIC_BILLING_MIGRATION_SOURCE_KEYRING",
+		"MOSAIC_BILLING_MIGRATION_SOURCE_BUCKET", "MOSAIC_BILLING_MIGRATION_SOURCE_CHUNK_BYTES",
+		"MOSAIC_BILLING_MIGRATION_SOURCE_OPERATION_TIMEOUT", "MOSAIC_BILLING_MIGRATION_WORKER_POLL_INTERVAL",
 		"MOSAIC_ANALYTICS_EVENT_SCHEMA_PATH", "MOSAIC_ANALYTICS_EVENT_V2_SCHEMA_PATH",
 		"MOSAIC_ANALYTICS_IP_REQUESTS_PER_MINUTE", "MOSAIC_ANALYTICS_IP_BURST",
 		"MOSAIC_ANALYTICS_KEY_BATCHES_PER_MINUTE", "MOSAIC_ANALYTICS_KEY_BATCH_BURST",
