@@ -723,9 +723,8 @@ MockMosaicPurchaseProvider _fallbackPurchaseProvider() {
   );
 }
 
-/// Phase 9B: Mosaic's authoritative answer to "what may this customer access,
-/// and why". It is deliberately separate from the provider-observed
-/// entitlements the paywall tabs use.
+/// Phase 9C: authority-aware access. Provider-observed and Mosaic-projected
+/// entitlements stay separate; the accepted epoch chooses one targeting source.
 final class CustomerEntitlementsPlayground extends StatefulWidget {
   const CustomerEntitlementsPlayground({super.key});
 
@@ -741,6 +740,8 @@ final class _CustomerEntitlementsPlaygroundState
   late final Mosaic _mosaic = Mosaic.configure(
     publicSdkKey: _publicSdkKey,
     baseUrl: Uri.parse(_hostedBaseUrl),
+    applicationId: _mosaicApplicationId,
+    applicationVersion: '4.2.0',
     purchaseProvider: _fallbackPurchaseProvider(),
     // The host's backend mints this. The stub reads a --dart-define so the
     // example can be run against a real Environment without shipping a secret.
@@ -882,6 +883,12 @@ final class _CustomerEntitlementsPlaygroundState
                 'Stale grace': '${diagnostics.staleGraceSeconds}s',
                 'Billing customer': diagnostics.billingCustomerId ?? '—',
                 'Projection': diagnostics.projectionState?.name ?? '—',
+                'Authority epoch':
+                    diagnostics.authority?.epoch.toString() ?? '—',
+                'Authority kind':
+                    diagnostics.authority?.kind.wireValue ?? 'unknown',
+                'Transition':
+                    diagnostics.authority?.transitionState.wireValue ?? '—',
               },
             ),
             const SizedBox(height: 16),

@@ -5,6 +5,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:mosaic_sdk/mosaic_sdk.dart';
 
 import 'support/canonical_fixture.dart';
+import 'support/customer_authority_fixture.dart';
 
 final class _ScriptedTransport implements MosaicCustomerEntitlementTransport {
   _ScriptedTransport(this.responses);
@@ -57,7 +58,7 @@ void main() {
 
   MosaicCustomerEntitlementSyncReceived received(String path) =>
       MosaicCustomerEntitlementSyncReceived(
-        source: fixture(path),
+        source: wrapCustomerSnapshotV2(fixture(path)),
       );
 
   MosaicCustomerEntitlementRuntime runtimeWith(
@@ -73,6 +74,9 @@ void main() {
           tokenId: 'token-a',
           expiresAt: now.add(const Duration(hours: 1)),
         ),
+        applicationId: fixtureAuthorityApplicationId,
+        platform: MosaicCustomerAuthorityPlatform.ios,
+        applicationVersion: '4.2.0',
         settings:
             const MosaicCustomerEntitlementSettings(refreshOnResume: false),
         clock: () => now,

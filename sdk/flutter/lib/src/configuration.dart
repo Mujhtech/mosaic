@@ -328,6 +328,9 @@ final class Mosaic extends ChangeNotifier with WidgetsBindingObserver {
                 cache: customerEntitlementCache ??
                     MosaicFileCustomerEntitlementCache(),
                 tokenProvider: customerTokenProvider,
+                applicationId: configuration.applicationId,
+                platform: _customerAuthorityPlatform,
+                applicationVersion: configuration.applicationVersion,
                 settings: customerEntitlementSettings,
                 timeout: configuration.requestTimeout,
                 clock: clock,
@@ -657,6 +660,15 @@ final class Mosaic extends ChangeNotifier with WidgetsBindingObserver {
       _customerEntitlements?.updates ??
       const Stream<MosaicCustomerEntitlementUpdate>.empty();
 
+  /// Replaying authority stream. It contains only the accepted authority
+  /// boundary and never exposes a Customer Access Token or provider payload.
+  Stream<MosaicCustomerAuthority> get customerAuthorityUpdates =>
+      _customerEntitlements?.authorityUpdates ??
+      const Stream<MosaicCustomerAuthority>.empty();
+
+  MosaicCustomerAuthority? get customerAuthority =>
+      _customerEntitlements?.authority;
+
   /// Answers one access question from memory. It performs no I/O and never
   /// returns a bare boolean.
   MosaicCustomerEntitlementCheck checkCustomerEntitlement(
@@ -688,6 +700,11 @@ final class Mosaic extends ChangeNotifier with WidgetsBindingObserver {
           )
         : await runtime.refresh();
   }
+
+  /// Urgent authority synchronization used before configuration refreshes at
+  /// lifecycle boundaries. This is an additive alias of the coalescing sync.
+  Future<MosaicCustomerEntitlementRefreshResult>
+      refreshCustomerAuthorityUrgently() => refreshCustomerEntitlements();
 
   MosaicCustomerEntitlementDiagnostics get customerEntitlementDiagnostics =>
       _customerEntitlements?.diagnostics ??
@@ -750,6 +767,7 @@ final class Mosaic extends ChangeNotifier with WidgetsBindingObserver {
     }
     final previous = client.accepted;
     final result = await client.load();
+    await _validateCustomerAuthorityScope();
     if (!identical(previous, client.accepted)) notifyListeners();
     return result;
   }
@@ -764,6 +782,7 @@ final class Mosaic extends ChangeNotifier with WidgetsBindingObserver {
     }
     final previous = client.accepted;
     final result = await client.refresh();
+    await _validateCustomerAuthorityScope();
     if (!identical(previous, client.accepted)) notifyListeners();
     return result;
   }
@@ -771,10 +790,28 @@ final class Mosaic extends ChangeNotifier with WidgetsBindingObserver {
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed && _configurationClient != null) {
-      // The client coalesces concurrent refreshes; presentation continues from
-      // the accepted snapshot while emergency-stop updates are fetched.
-      unawaited(refreshConfiguration());
+      unawaited(_refreshAuthorityThenConfiguration());
     }
+  }
+
+  Future<void> _refreshAuthorityThenConfiguration() async {
+    final entitlements = _customerEntitlements;
+    if (entitlements != null) {
+      // Runtime lifecycle observation may already have started this request;
+      // refresh coalescing makes this await the same operation.
+      await entitlements.refresh();
+    }
+    await refreshConfiguration();
+  }
+
+  Future<void> _validateCustomerAuthorityScope() async {
+    final entitlements = _customerEntitlements;
+    final release = _configurationClient?.accepted?.envelope.release;
+    if (entitlements == null || release == null) return;
+    await entitlements.validateAuthorityScope(
+      projectId: release.projectId,
+      environmentId: release.environment.id,
+    );
   }
 
   @override
@@ -796,6 +833,13 @@ final class Mosaic extends ChangeNotifier with WidgetsBindingObserver {
 }
 
 DateTime _utcNow() => DateTime.now().toUtc();
+
+MosaicCustomerAuthorityPlatform? get _customerAuthorityPlatform =>
+    switch (defaultTargetPlatform) {
+      TargetPlatform.iOS => MosaicCustomerAuthorityPlatform.ios,
+      TargetPlatform.android => MosaicCustomerAuthorityPlatform.android,
+      _ => null,
+    };
 
 /// Wraps the renderer's observation sink so a completed purchase also triggers
 /// an unawaited authoritative refresh. It returns `void` for the same reason

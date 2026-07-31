@@ -11,7 +11,7 @@ import 'sha256.dart';
 const String mosaicCustomerEntitlementCacheUnavailableCode =
     'entitlements.cache_unavailable';
 
-const int _cacheFormatVersion = 1;
+const int _cacheFormatVersion = 2;
 
 /// One accepted snapshot, with everything needed to decide freshness and
 /// monotonicity without re-reading the document.
@@ -19,6 +19,8 @@ final class MosaicCustomerEntitlementCacheRecord {
   MosaicCustomerEntitlementCacheRecord({
     required this.source,
     required this.binding,
+    required this.authority,
+    required this.snapshotAuthorityDigest,
     required this.snapshotVersion,
     required DateTime asOf,
     required this.entityTag,
@@ -28,6 +30,7 @@ final class MosaicCustomerEntitlementCacheRecord {
     this.staleGraceSeconds = 0,
     DateTime? trustedServerTime,
     DateTime? localReceiptTime,
+    this.isInvalidationTombstone = false,
   })  : asOf = asOf.toUtc(),
         issuedAt = issuedAt.toUtc(),
         refreshAfter = refreshAfter.toUtc(),
@@ -40,6 +43,8 @@ final class MosaicCustomerEntitlementCacheRecord {
   /// the digest still verifies after a restart.
   final String source;
   final MosaicCustomerBinding binding;
+  final MosaicCustomerAuthority authority;
+  final String snapshotAuthorityDigest;
   final int snapshotVersion;
   final DateTime asOf;
   final String entityTag;
@@ -57,6 +62,40 @@ final class MosaicCustomerEntitlementCacheRecord {
   final DateTime? trustedServerTime;
   final DateTime? localReceiptTime;
 
+  /// Durable fail-closed marker. It contains no replayable snapshot and is
+  /// atomically replaced by a later accepted full snapshot.
+  final bool isInvalidationTombstone;
+
+  factory MosaicCustomerEntitlementCacheRecord.invalidationTombstone() =>
+      MosaicCustomerEntitlementCacheRecord(
+        source: '',
+        binding: const MosaicCustomerBinding(
+          billingCustomerId: 'invalidated',
+          projectId: 'invalidated',
+          environmentId: 'invalidated',
+        ),
+        authority: const MosaicCustomerAuthority(
+          epoch: 0,
+          kind: MosaicCustomerAuthorityKind.source,
+          scope: MosaicCustomerAuthorityScope(
+            projectId: 'invalidated',
+            environmentId: 'invalidated',
+            applicationId: 'invalidated',
+            platform: MosaicCustomerAuthorityPlatform.ios,
+          ),
+          transitionState: MosaicCustomerAuthorityTransitionState.stable,
+        ),
+        snapshotAuthorityDigest:
+            'sha256:0000000000000000000000000000000000000000000000000000000000000000',
+        snapshotVersion: 0,
+        asOf: DateTime.fromMillisecondsSinceEpoch(0, isUtc: true),
+        entityTag: 'invalidated',
+        issuedAt: DateTime.fromMillisecondsSinceEpoch(0, isUtc: true),
+        refreshAfter: DateTime.fromMillisecondsSinceEpoch(0, isUtc: true),
+        validUntil: DateTime.fromMillisecondsSinceEpoch(0, isUtc: true),
+        isInvalidationTombstone: true,
+      );
+
   MosaicCustomerEntitlementCacheRecord slideFreshness({
     required DateTime refreshAfter,
     required DateTime validUntil,
@@ -67,6 +106,8 @@ final class MosaicCustomerEntitlementCacheRecord {
       MosaicCustomerEntitlementCacheRecord(
         source: source,
         binding: binding,
+        authority: authority,
+        snapshotAuthorityDigest: snapshotAuthorityDigest,
         snapshotVersion: snapshotVersion,
         asOf: asOf,
         entityTag: entityTag,
@@ -76,6 +117,7 @@ final class MosaicCustomerEntitlementCacheRecord {
         staleGraceSeconds: staleGraceSeconds,
         trustedServerTime: trustedServerTime ?? this.trustedServerTime,
         localReceiptTime: localReceiptTime ?? this.localReceiptTime,
+        isInvalidationTombstone: isInvalidationTombstone,
       );
 
   MosaicCustomerCachedSnapshotSummary get summary =>
@@ -276,6 +318,17 @@ final class MosaicFileCustomerEntitlementCache
 /// inside one shared document — is what makes a wrong-customer read a missing
 /// file instead of a filtering mistake.
 String mosaicCustomerEntitlementCacheNamespace(
+        Uri baseUrl, String publicSdkKey, String customerBinding,
+        [String? applicationId, String? platform]) =>
+    mosaicSha256String(
+      '${_normalizedBaseUrl(baseUrl)}\n$publicSdkKey\n$customerBinding\n'
+      '${applicationId ?? 'authority-unknown'}\n'
+      '${platform ?? 'authority-unknown'}\nentitlements-v2',
+    );
+
+/// Namespace used by Phase 9B. It is read only for removal; its records do not
+/// carry authority and can never be relabelled as a v2 cache entry.
+String mosaicLegacyCustomerEntitlementCacheNamespace(
   Uri baseUrl,
   String publicSdkKey,
   String customerBinding,
@@ -295,12 +348,30 @@ String _normalizedBaseUrl(Uri value) {
 String encodeCustomerEntitlementCacheRecord(
   MosaicCustomerEntitlementCacheRecord record,
 ) {
+  if (record.isInvalidationTombstone) {
+    final body = <String, Object?>{
+      'cacheFormatVersion': _cacheFormatVersion,
+      'invalidated': true,
+    };
+    return jsonEncode(<String, Object?>{
+      ...body,
+      'checksum': _checksum(body),
+    });
+  }
   final body = <String, Object?>{
     'cacheFormatVersion': _cacheFormatVersion,
     'snapshot': record.source,
     'billingCustomerId': record.binding.billingCustomerId,
     'projectId': record.binding.projectId,
     'environmentId': record.binding.environmentId,
+    'applicationId': record.authority.scope.applicationId,
+    'platform': record.authority.scope.platform.wireValue,
+    'authorityEpoch': record.authority.epoch,
+    'authorityKind': record.authority.kind.wireValue,
+    'transitionState': record.authority.transitionState.wireValue,
+    if (record.authority.cutoverAt != null)
+      'cutoverAt': record.authority.cutoverAt!.toIso8601String(),
+    'snapshotAuthorityDigest': record.snapshotAuthorityDigest,
     'snapshotVersion': record.snapshotVersion,
     'asOf': record.asOf.toIso8601String(),
     'entityTag': record.entityTag,
@@ -339,6 +410,17 @@ MosaicCustomerEntitlementCacheRecord decodeCustomerEntitlementCacheRecord(
       'cache_format_unsupported',
     );
   }
+  if (object['invalidated'] == true) {
+    if (object.keys.toSet().difference(_tombstoneKeys).isNotEmpty ||
+        !_tombstoneKeys.every(object.containsKey)) {
+      throw const MosaicCustomerEntitlementFormatException('cache_corrupt');
+    }
+    final body = Map<String, Object?>.of(object)..remove('checksum');
+    if (object['checksum'] != _checksum(body)) {
+      throw const MosaicCustomerEntitlementFormatException('cache_corrupt');
+    }
+    return MosaicCustomerEntitlementCacheRecord.invalidationTombstone();
+  }
   final keys = object.keys.toSet();
   if (!keys.containsAll(_requiredKeys) ||
       keys.difference(_allowedKeys).isNotEmpty) {
@@ -358,6 +440,28 @@ MosaicCustomerEntitlementCacheRecord decodeCustomerEntitlementCacheRecord(
         projectId: object['projectId']! as String,
         environmentId: object['environmentId']! as String,
       ),
+      authority: MosaicCustomerAuthority(
+        epoch: object['authorityEpoch']! as int,
+        kind: MosaicCustomerAuthorityKind.values.firstWhere(
+          (item) => item.wireValue == object['authorityKind'],
+        ),
+        scope: MosaicCustomerAuthorityScope(
+          projectId: object['projectId']! as String,
+          environmentId: object['environmentId']! as String,
+          applicationId: object['applicationId']! as String,
+          platform: MosaicCustomerAuthorityPlatform.values.firstWhere(
+            (item) => item.wireValue == object['platform'],
+          ),
+        ),
+        transitionState:
+            MosaicCustomerAuthorityTransitionState.values.firstWhere(
+          (item) => item.wireValue == object['transitionState'],
+        ),
+        cutoverAt: object['cutoverAt'] == null
+            ? null
+            : DateTime.parse(object['cutoverAt']! as String),
+      ),
+      snapshotAuthorityDigest: object['snapshotAuthorityDigest']! as String,
       snapshotVersion: object['snapshotVersion']! as int,
       asOf: DateTime.parse(object['asOf']! as String),
       entityTag: object['entityTag']! as String,
@@ -386,6 +490,12 @@ const Set<String> _requiredKeys = <String>{
   'billingCustomerId',
   'projectId',
   'environmentId',
+  'applicationId',
+  'platform',
+  'authorityEpoch',
+  'authorityKind',
+  'transitionState',
+  'snapshotAuthorityDigest',
   'snapshotVersion',
   'asOf',
   'entityTag',
@@ -400,4 +510,11 @@ const Set<String> _allowedKeys = <String>{
   ..._requiredKeys,
   'trustedServerTime',
   'localReceiptTime',
+  'cutoverAt',
+};
+
+const Set<String> _tombstoneKeys = <String>{
+  'cacheFormatVersion',
+  'invalidated',
+  'checksum',
 };

@@ -19,7 +19,12 @@ final class MosaicCustomerEntitlementSyncRequest {
     required this.customerToken,
     required this.timeout,
     required this.correlationId,
+    this.applicationId,
+    this.platform,
+    this.applicationVersion,
+    this.knownAuthorityEpoch,
     this.knownSnapshotVersion,
+    this.knownSnapshotAuthorityDigest,
     this.entityTag,
     this.requestedEntitlementKeys = const <String>[],
   });
@@ -32,8 +37,17 @@ final class MosaicCustomerEntitlementSyncRequest {
   final String customerToken;
   final Duration timeout;
   final String correlationId;
+  final String? applicationId;
+  final String? platform;
+  final String? applicationVersion;
+  final int? knownAuthorityEpoch;
 
   final int? knownSnapshotVersion;
+
+  /// Integrity identity of the retained authority-bound snapshot. This is
+  /// verification input only; the server still derives customer and scope
+  /// from authentication.
+  final String? knownSnapshotAuthorityDigest;
 
   /// Contract form, without the HTTP quoting.
   final String? entityTag;
@@ -113,27 +127,38 @@ HttpClient _newHttpClient() => HttpClient();
 /// already holds.
 Map<String, Object?> mosaicEncodeEntitlementSyncRequest(
   MosaicCustomerEntitlementSyncRequest request,
-) =>
-    <String, Object?>{
-      'authoritativeEntitlementContractVersion':
+) {
+  final applicationId = request.applicationId;
+  final platform = request.platform;
+  final applicationVersion = request.applicationVersion;
+  if (applicationId == null || platform == null || applicationVersion == null) {
+    throw StateError('Entitlement v2 request metadata is incomplete.');
+  }
+  return <String, Object?>{
+    'authoritativeEntitlementContractVersion':
+        mosaicAuthoritativeEntitlementContractVersionV2,
+    'recordType': 'entitlementSyncRequest',
+    'payload': <String, Object?>{
+      if (request.knownAuthorityEpoch != null)
+        'knownAuthorityEpoch': request.knownAuthorityEpoch,
+      if (request.knownSnapshotVersion != null)
+        'knownSnapshotVersion': request.knownSnapshotVersion,
+      if (request.knownSnapshotAuthorityDigest != null)
+        'knownSnapshotAuthorityDigest': request.knownSnapshotAuthorityDigest,
+      'request': <String, Object?>{
+        'applicationId': applicationId,
+        'platform': platform,
+        'appVersion': applicationVersion,
+        'sdkVersion': mosaicFlutterSdkVersion,
+        'supportedContractVersions': <String>[
           mosaicAuthoritativeEntitlementContractVersion,
-      'recordType': 'entitlementSyncRequest',
-      'payload': <String, Object?>{
-        // billingCustomerId is deliberately never sent. The Customer Access
-        // Token is the sole customer selector; the hint could only narrow the
-        // answer or fail the request, so omitting it removes a way to be wrong
-        // without removing any way to be right.
-        if (request.knownSnapshotVersion != null)
-          'knownSnapshotVersion': request.knownSnapshotVersion,
-        if (request.entityTag != null) 'entityTag': request.entityTag,
-        'supportedAuthoritativeEntitlementContracts': <String>[
-          mosaicAuthoritativeEntitlementContractVersion,
+          mosaicAuthoritativeEntitlementContractVersionV2,
         ],
-        if (request.requestedEntitlementKeys.isNotEmpty)
-          'requestedEntitlementKeys': request.requestedEntitlementKeys,
-        'correlationId': request.correlationId,
+        'capabilities': mosaicCustomerAuthorityCapabilities,
       },
-    };
+    },
+  };
+}
 
 /// Native HTTP transport for `/v1/sdk/billing/entitlements`.
 final class MosaicIoCustomerEntitlementTransport
@@ -185,8 +210,8 @@ final class MosaicIoCustomerEntitlementTransport
       ..headers.contentType = ContentType.json
       ..headers.set('Mosaic-SDK-Platform', 'flutter')
       ..headers.set('Mosaic-SDK-Version', mosaicFlutterSdkVersion);
-    if (request.entityTag case final tag?) {
-      outgoing.headers.set(HttpHeaders.ifNoneMatchHeader, '"$tag"');
+    if (request.applicationVersion case final appVersion?) {
+      outgoing.headers.set('Mosaic-App-Version', appVersion);
     }
     outgoing.write(jsonEncode(mosaicEncodeEntitlementSyncRequest(request)));
 

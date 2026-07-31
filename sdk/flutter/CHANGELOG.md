@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+- Include the verified cached `knownSnapshotAuthorityDigest` in authoritative
+  entitlement v2 sync requests. Stale customer, scope, epoch, or digest
+  bindings are discarded and request a full snapshot. Decode
+  `policy_unavailable` without fabricated minimum-support requirements and
+  expose it as safe `unavailable`, never `inactive`; invalidate the retained
+  authority snapshot with an atomic durable tombstone first so it cannot be
+  replayed after restart. Recognizable malformed policy-unavailable responses
+  fail closed through the same path, and storage failure reports
+  `entitlements.authority.policy_invalidation_persistence_failed` while
+  blocking cache bootstrap until tombstone persistence succeeds.
 - Add authoritative entitlements (Authoritative Entitlement Contract v1 and
   Customer Access Token Contract v1) under a purely additive `MosaicCustomer…`
   namespace. No provider-observed symbol changed, and Placement targeting

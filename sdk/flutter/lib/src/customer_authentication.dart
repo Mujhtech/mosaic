@@ -57,6 +57,7 @@ final class MosaicCustomerTokenRequest {
     required this.identityGeneration,
     this.userId,
     this.installationId,
+    this.acceptedAuthorityEpoch,
   });
 
   /// True when the previous token was refused by the server. The host must
@@ -74,6 +75,11 @@ final class MosaicCustomerTokenRequest {
   /// Installation identity, supplied as association evidence and a restore
   /// hint. It can never create or select a Billing Customer.
   final String? installationId;
+
+  /// The last accepted server-owned epoch. It lets the host avoid reusing a
+  /// token generation across an authority transition without making the token
+  /// itself parseable or persistent.
+  final int? acceptedAuthorityEpoch;
 }
 
 /// Mints a Customer Access Token through the host application's own backend.
@@ -163,6 +169,8 @@ final class MosaicCustomerTokenHolder {
   Future<MosaicCustomerTokenResolution>? _operation;
   int _identityGeneration = 0;
   int _tokenGeneration = 0;
+  int? _acceptedAuthorityEpoch;
+  int? _tokenAuthorityEpoch;
 
   /// The token generation that a forced refresh itself produced. A second
   /// force against that generation means the freshly minted token was refused,
@@ -178,7 +186,11 @@ final class MosaicCustomerTokenHolder {
   /// fire-and-forget paths must not be able to trigger a refresh storm.
   MosaicCustomerToken? get currentToken {
     final token = _token;
-    return token != null && token.isUsableAt(_clock()) ? token : null;
+    return token != null &&
+            _tokenAuthorityEpoch == _acceptedAuthorityEpoch &&
+            token.isUsableAt(_clock())
+        ? token
+        : null;
   }
 
   int get identityGeneration => _identityGeneration;
@@ -216,11 +228,21 @@ final class MosaicCustomerTokenHolder {
     _clearToken();
   }
 
+  /// Binds subsequent token generations to the accepted authority epoch.
+  /// Transitioning epochs invalidates the held token; an older token is never
+  /// reused to confirm a newer authority decision.
+  void bindAuthorityEpoch(int epoch) {
+    if (_acceptedAuthorityEpoch == epoch) return;
+    _acceptedAuthorityEpoch = epoch;
+    _clearToken();
+  }
+
   void _clearToken() {
     _token = null;
     _cooldownUntil = null;
     _forceMintedGeneration = -1;
     _forcingMint = false;
+    _tokenAuthorityEpoch = null;
     // An in-flight mint belongs to the previous generation. It is not
     // cancellable, so it is disowned: its result is discarded on completion.
     _operation = null;
@@ -269,9 +291,13 @@ final class MosaicCustomerTokenHolder {
     } else {
       final current = _token;
       if (current != null && current.isUsableAt(_clock())) {
-        return Future.value(
-          MosaicCustomerTokenResolved(current, generation: _tokenGeneration),
-        );
+        if (_tokenAuthorityEpoch != _acceptedAuthorityEpoch) {
+          _clearToken();
+        } else {
+          return Future.value(
+            MosaicCustomerTokenResolved(current, generation: _tokenGeneration),
+          );
+        }
       }
       final cooldownUntil = _cooldownUntil;
       if (cooldownUntil != null && _clock().isBefore(cooldownUntil)) {
@@ -296,6 +322,7 @@ final class MosaicCustomerTokenHolder {
       identityGeneration: generation,
       userId: _userId,
       installationId: _installationId,
+      acceptedAuthorityEpoch: _acceptedAuthorityEpoch,
     );
     try {
       final MosaicCustomerToken? token;
@@ -322,6 +349,7 @@ final class MosaicCustomerTokenHolder {
         return _fail('entitlements.token.expired_on_arrival');
       }
       _token = token;
+      _tokenAuthorityEpoch = _acceptedAuthorityEpoch;
       _tokenGeneration += 1;
       if (forcing) _forceMintedGeneration = _tokenGeneration;
       _cooldownUntil = null;

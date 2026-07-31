@@ -1,8 +1,11 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mosaic_sdk/mosaic_sdk.dart';
+
+import 'support/customer_authority_fixture.dart';
 
 void main() {
   test('Delivery v2 canonical snapshots decode atomically', () {
@@ -115,6 +118,78 @@ void main() {
     final resolution = await mosaic.decidePlacement('onboarding_complete');
     expect(resolution, isA<MosaicPlacementNoPaywall>());
     expect(transport.fetches, 0);
+  });
+
+  test('Mosaic authority never unions provider-observed access', () async {
+    debugDefaultTargetPlatformOverride = TargetPlatform.iOS;
+    try {
+      final v1 = (jsonDecode(_fixture(
+        'authoritative-entitlement/v1/snapshots/'
+        'inactive-expired-subscription.json',
+      )) as Map)
+          .cast<String, Object?>();
+      final payload = (v1['payload']! as Map).cast<String, Object?>()
+        ..['projectId'] = 'project_alpha'
+        ..['environmentId'] = 'environment_production';
+      payload['contentDigest'] = mosaicCustomerContentDigest(payload);
+      final provider = MockMosaicPurchaseProvider(
+        products: const <MosaicProduct>[
+          MosaicProduct(
+            id: 'product_export_pro',
+            title: 'Export Pro',
+            localizedPrice: r'$9.99',
+          ),
+        ],
+        activeEntitlements: const <MosaicEntitlement>[
+          MosaicEntitlement(id: 'pro'),
+        ],
+      );
+      final mosaic = Mosaic.configure(
+        publicSdkKey: 'public_test',
+        baseUrl: Uri.parse('https://mosaic.example'),
+        applicationId: fixtureAuthorityApplicationId,
+        applicationVersion: '4.2.0',
+        purchaseProvider: provider,
+        transport: _QueuedTransport(<MosaicConfigurationResponse>[]),
+        cache: _MemoryCache(),
+        identityStorage: MosaicMemoryIdentityStorage(),
+        bundledFallbackLoader: () async =>
+            _fixture('configuration-delivery/v2/advanced-release.json'),
+        customerEntitlementCache: MosaicMemoryCustomerEntitlementCache(),
+        customerEntitlementTransport:
+            _EntitlementTransport(wrapCustomerSnapshotV2(jsonEncode(v1))),
+        customerTokenProvider: (_) async => MosaicCustomerToken(
+          value: 'mcat_secret',
+          tokenId: 'token-a',
+          expiresAt: DateTime.now().toUtc().add(const Duration(hours: 1)),
+        ),
+        customerEntitlementSettings: const MosaicCustomerEntitlementSettings(
+          refreshOnResume: false,
+        ),
+      );
+
+      await mosaic.loadConfiguration();
+      final unknownAuthority = await mosaic.decidePlacement('export_pdf');
+      expect(mosaic.customerAuthority, isNull);
+      expect(
+        (unknownAuthority as MosaicPlacementNoPaywall).decision.matchedRuleId,
+        isNot('rule_pro'),
+        reason: 'Unknown authority must not fall back to provider access.',
+      );
+
+      await mosaic.refreshCustomerEntitlements();
+      final result = await mosaic.decidePlacement('export_pdf');
+
+      expect(mosaic.customerAuthority?.isMosaic, isTrue);
+      expect(result, isA<MosaicPlacementNoPaywall>());
+      expect(
+        (result as MosaicPlacementNoPaywall).decision.matchedRuleId,
+        isNot('rule_pro'),
+      );
+      mosaic.dispose();
+    } finally {
+      debugDefaultTargetPlatformOverride = null;
+    }
   });
 
   test('rollout implementation matches every cross-platform vector', () {
@@ -329,4 +404,17 @@ final class _QueuedTransport implements MosaicConfigurationTransport {
     fetches += 1;
     return responses.removeAt(0);
   }
+}
+
+final class _EntitlementTransport
+    implements MosaicCustomerEntitlementTransport {
+  const _EntitlementTransport(this.source);
+
+  final String source;
+
+  @override
+  Future<MosaicCustomerEntitlementSyncResponse> sync(
+    MosaicCustomerEntitlementSyncRequest request,
+  ) async =>
+      MosaicCustomerEntitlementSyncReceived(source: source);
 }

@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:flutter/widgets.dart';
 
@@ -7,6 +8,7 @@ import 'customer_entitlement_cache.dart';
 import 'customer_entitlement_transport.dart';
 import 'customer_entitlements.dart';
 import 'placement_identity.dart';
+import 'protocol.dart';
 
 /// Host-facing settings for the authoritative entitlement subsystem.
 final class MosaicCustomerEntitlementSettings {
@@ -40,6 +42,8 @@ final class MosaicCustomerEntitlementDiagnostics {
     this.lastReasonCode,
     this.billingCustomerId,
     this.projectionState,
+    this.authority,
+    this.minimumSupport,
   });
 
   final bool enabled;
@@ -57,6 +61,8 @@ final class MosaicCustomerEntitlementDiagnostics {
   final String? lastReasonCode;
   final String? billingCustomerId;
   final MosaicCustomerProjectionState? projectionState;
+  final MosaicCustomerAuthority? authority;
+  final MosaicCustomerMinimumSupport? minimumSupport;
 }
 
 typedef MosaicCustomerEntitlementClock = DateTime Function();
@@ -78,6 +84,9 @@ final class MosaicCustomerEntitlementRuntime extends ChangeNotifier
     required this.transport,
     required this.cache,
     required MosaicCustomerTokenProvider? tokenProvider,
+    this.applicationId,
+    this.platform,
+    this.applicationVersion,
     this.settings = const MosaicCustomerEntitlementSettings(),
     this.timeout = const Duration(seconds: 5),
     this.clock = _systemClock,
@@ -99,6 +108,9 @@ final class MosaicCustomerEntitlementRuntime extends ChangeNotifier
   final MosaicCustomerEntitlementSettings settings;
   final Duration timeout;
   final MosaicCustomerEntitlementClock clock;
+  final String? applicationId;
+  final MosaicCustomerAuthorityPlatform? platform;
+  final String? applicationVersion;
   final void Function(String diagnosticCode, {required bool severe})?
       onDiagnostic;
 
@@ -106,13 +118,17 @@ final class MosaicCustomerEntitlementRuntime extends ChangeNotifier
   final bool _enabled;
   final StreamController<MosaicCustomerEntitlementUpdate> _updates =
       StreamController<MosaicCustomerEntitlementUpdate>.broadcast();
-  final MosaicCustomerEntitlementDecoder _decoder =
-      const MosaicCustomerEntitlementDecoder();
+  final StreamController<MosaicCustomerAuthority> _authorityUpdates =
+      StreamController<MosaicCustomerAuthority>.broadcast(sync: true);
+  final MosaicCustomerAuthorityDecoder _decoder =
+      const MosaicCustomerAuthorityDecoder();
 
   String _customerBinding = '';
   String? _namespace;
   MosaicCustomerEntitlementCacheRecord? _record;
   MosaicCustomerEntitlementSnapshot? _snapshot;
+  MosaicCustomerAuthority? _authority;
+  MosaicCustomerMinimumSupport? _minimumSupport;
   Future<MosaicCustomerEntitlementRefreshResult>? _refresh;
   Future<void>? _load;
   int _generation = 0;
@@ -120,12 +136,52 @@ final class MosaicCustomerEntitlementRuntime extends ChangeNotifier
   bool _lastOutcomeUnavailable = true;
   bool _observingLifecycle = false;
   bool _disposed = false;
+  bool _authorityUnavailable = true;
+  String? _pendingPolicyInvalidationNamespace;
 
   /// Sealed transitions. `Cleared` exists so an identity change is observable
   /// without ever emitting the previous customer's grants.
   Stream<MosaicCustomerEntitlementUpdate> get updates => _updates.stream;
 
+  /// Replays the current accepted authority to every new listener, then emits
+  /// later epochs. The authority object carries no customer grants.
+  Stream<MosaicCustomerAuthority> get authorityUpdates => Stream.multi(
+        (controller) {
+          final subscription = _authorityUpdates.stream.listen(
+            controller.addSync,
+            onError: controller.addErrorSync,
+            onDone: controller.closeSync,
+          );
+          final current = _authority;
+          if (current != null) controller.addSync(current);
+          controller.onCancel = subscription.cancel;
+        },
+        isBroadcast: true,
+      );
+
+  MosaicCustomerAuthority? get authority => _authority;
+
   MosaicCustomerEntitlementSnapshot? get snapshot => _snapshot;
+
+  /// Validates server-owned Project and Environment scope against the accepted
+  /// delivery release. A mismatch clears the cache; callers must not retain or
+  /// reinterpret it under another release.
+  Future<bool> validateAuthorityScope({
+    required String? projectId,
+    required String environmentId,
+  }) async {
+    final authority = _authority;
+    if (authority == null) return true;
+    if (projectId == authority.scope.projectId &&
+        environmentId == authority.scope.environmentId) {
+      return true;
+    }
+    final namespace = _namespace;
+    if (namespace != null) {
+      await _discard(namespace, 'entitlements.authority.scope_mismatch');
+    }
+    return false;
+  }
 
   /// The current Customer Access Token, for transport-level binding of a
   /// Transaction Observation to this Billing Customer.
@@ -153,6 +209,8 @@ final class MosaicCustomerEntitlementRuntime extends ChangeNotifier
         lastReasonCode: _lastReasonCode,
         billingCustomerId: _snapshot?.billingCustomerId,
         projectionState: _snapshot?.projectionStatus.state,
+        authority: _authority,
+        minimumSupport: _minimumSupport,
       );
 
   // -------------------------------------------------------------------------
@@ -183,10 +241,15 @@ final class MosaicCustomerEntitlementRuntime extends ChangeNotifier
     final hadState = _snapshot != null || _record != null;
     _record = null;
     _snapshot = null;
+    _authority = null;
+    _minimumSupport = null;
+    _authorityUnavailable = true;
     _namespace = mosaicCustomerEntitlementCacheNamespace(
       baseUrl,
       publicSdkKey,
       binding,
+      applicationId,
+      platform?.wireValue,
     );
     if (hadState) _emitCleared('entitlements.identity.changed');
     await _forgetOtherCustomers(previousNamespace);
@@ -205,8 +268,16 @@ final class MosaicCustomerEntitlementRuntime extends ChangeNotifier
     final hadState = _snapshot != null || _record != null;
     _record = null;
     _snapshot = null;
-    _namespace =
-        mosaicCustomerEntitlementCacheNamespace(baseUrl, publicSdkKey, '');
+    _authority = null;
+    _minimumSupport = null;
+    _authorityUnavailable = true;
+    _namespace = mosaicCustomerEntitlementCacheNamespace(
+      baseUrl,
+      publicSdkKey,
+      '',
+      applicationId,
+      platform?.wireValue,
+    );
     _lastReasonCode = 'entitlements.token.signed_out';
     _lastOutcomeUnavailable = true;
     if (hadState) _emitCleared('entitlements.customer.signed_out');
@@ -221,6 +292,13 @@ final class MosaicCustomerEntitlementRuntime extends ChangeNotifier
         await cache.clear(previousNamespace);
       }
       await cache.removeOtherRecords(namespace);
+      // Phase 9B records have no authority epoch. Remove the current user's
+      // legacy namespace instead of ever inferring authority from its bytes.
+      await cache.clear(mosaicLegacyCustomerEntitlementCacheNamespace(
+        baseUrl,
+        publicSdkKey,
+        _customerBinding,
+      ));
     } on Object {
       _report(mosaicCustomerEntitlementCacheUnavailableCode, severe: true);
     }
@@ -231,7 +309,10 @@ final class MosaicCustomerEntitlementRuntime extends ChangeNotifier
   // -------------------------------------------------------------------------
 
   /// Loads the last accepted snapshot from the cache. Never networks.
-  Future<void> load() => _load ??= _performLoad();
+  Future<void> load() {
+    if (_record != null && _snapshot != null) return Future<void>.value();
+    return _load ??= _performLoad();
+  }
 
   Future<void> _performLoad() async {
     final generation = _generation;
@@ -239,25 +320,62 @@ final class MosaicCustomerEntitlementRuntime extends ChangeNotifier
       baseUrl,
       publicSdkKey,
       _customerBinding,
+      applicationId,
+      platform?.wireValue,
     );
     try {
+      final pendingInvalidation = _pendingPolicyInvalidationNamespace;
+      if (pendingInvalidation != null) {
+        if (!await _writePolicyInvalidationTombstone(pendingInvalidation)) {
+          return;
+        }
+        _pendingPolicyInvalidationNamespace = null;
+        if (pendingInvalidation == namespace) return;
+      }
       final record = await cache.read(namespace);
       if (generation != _generation) return;
       if (record == null) {
         _load = null;
         return;
       }
+      if (record.isInvalidationTombstone) {
+        _authorityUnavailable = true;
+        _lastOutcomeUnavailable = true;
+        _lastReasonCode = 'entitlements.authority.policy_unavailable';
+        return;
+      }
       final decoded = _decoder.decode(record.source);
-      if (decoded is! MosaicCustomerSnapshotRecord ||
-          !decoded.contentDigestValid) {
+      if (decoded is! MosaicCustomerAuthoritySnapshotRecord ||
+          !decoded.snapshotRecord.contentDigestValid ||
+          !decoded.snapshotAuthorityDigestValid ||
+          decoded.authority.epoch != record.authority.epoch ||
+          decoded.authority.scope != record.authority.scope ||
+          decoded.snapshotAuthorityDigest != record.snapshotAuthorityDigest ||
+          MosaicCustomerBinding(
+                billingCustomerId:
+                    decoded.snapshotRecord.snapshot.billingCustomerId,
+                projectId: decoded.snapshotRecord.snapshot.projectId,
+                environmentId: decoded.snapshotRecord.snapshot.environmentId,
+              ) !=
+              record.binding ||
+          !_supports(decoded.minimumSupport) ||
+          !_scopeMatchesConfiguration(decoded.authority.scope) ||
+          !_snapshotMatchesAuthority(
+            decoded.snapshotRecord.snapshot,
+            decoded.authority,
+          )) {
         // A record that no longer verifies is discarded rather than served. It
         // is not evidence of anything, in either direction.
         await _discard(namespace, 'entitlements.cache.invalid');
         return;
       }
       _record = record;
-      _snapshot = decoded.snapshot;
+      _snapshot = decoded.snapshotRecord.snapshot;
+      _authority = decoded.authority;
+      _minimumSupport = decoded.minimumSupport;
+      _authorityUnavailable = false;
       _lastOutcomeUnavailable = false;
+      _tokens.bindAuthorityEpoch(decoded.authority.epoch);
       notifyListeners();
     } on MosaicCustomerEntitlementFormatException catch (error) {
       if (generation == _generation) {
@@ -275,6 +393,9 @@ final class MosaicCustomerEntitlementRuntime extends ChangeNotifier
   Future<void> _discard(String namespace, String reasonCode) async {
     _record = null;
     _snapshot = null;
+    _authority = null;
+    _minimumSupport = null;
+    _authorityUnavailable = true;
     _lastReasonCode = reasonCode;
     try {
       await cache.clear(namespace);
@@ -292,6 +413,36 @@ final class MosaicCustomerEntitlementRuntime extends ChangeNotifier
   ) {
     final state = _cacheState();
     final snapshot = _snapshot;
+
+    final authority = _authority;
+    if (_authorityUnavailable || authority == null) {
+      return MosaicCustomerEntitlementCheck(
+        entitlementKey: entitlementKey,
+        state: MosaicCustomerAccessState.unavailable,
+        cacheState: state,
+        sourceCount: 0,
+        endKnown: false,
+        isStale: false,
+        isTestSource: false,
+        reasonCode: _lastReasonCode ?? 'entitlements.authority_unknown',
+        snapshotVersion: snapshot?.snapshotVersion,
+        asOf: snapshot?.asOf,
+      );
+    }
+    if (!authority.isMosaic) {
+      return MosaicCustomerEntitlementCheck(
+        entitlementKey: entitlementKey,
+        state: MosaicCustomerAccessState.unavailable,
+        cacheState: state,
+        sourceCount: 0,
+        endKnown: false,
+        isStale: false,
+        isTestSource: false,
+        reasonCode: 'entitlements.authority.${authority.kind.wireValue}',
+        snapshotVersion: snapshot?.snapshotVersion,
+        asOf: snapshot?.asOf,
+      );
+    }
 
     if (snapshot == null || state == MosaicEntitlementCacheState.missing) {
       return MosaicCustomerEntitlementCheck(
@@ -421,8 +572,19 @@ final class MosaicCustomerEntitlementRuntime extends ChangeNotifier
     if (!_enabled) {
       return _unavailable('entitlements.token.no_provider');
     }
+    if (applicationId == null ||
+        platform == null ||
+        applicationVersion == null) {
+      _authorityUnavailable = true;
+      return _unavailable('entitlements.authority.requestMetadataMissing');
+    }
     final generation = _generation;
     await load();
+    if (_pendingPolicyInvalidationNamespace != null) {
+      return _unavailable(
+        'entitlements.authority.policy_invalidation_persistence_failed',
+      );
+    }
     final resolution = await _tokens.resolve();
     if (resolution is MosaicCustomerTokenUnavailable) {
       return _unavailable(resolution.reasonCode);
@@ -473,55 +635,116 @@ final class MosaicCustomerEntitlementRuntime extends ChangeNotifier
         customerToken: token.value,
         timeout: timeout,
         correlationId: 'mosaic-flutter-${clock().microsecondsSinceEpoch}',
+        applicationId: applicationId,
+        platform: platform?.wireValue,
+        applicationVersion: applicationVersion,
+        knownAuthorityEpoch: record?.authority.epoch,
         knownSnapshotVersion: record?.snapshotVersion,
-        entityTag: record?.entityTag,
-        requestedEntitlementKeys: settings.requestedEntitlementKeys,
+        knownSnapshotAuthorityDigest: record?.snapshotAuthorityDigest,
       ),
     );
   }
 
-  /// A confirmed-current snapshot must not expire merely because it was
-  /// confirmed instead of resent. The canonical `snapshotUnchanged` record is
-  /// the only carrier of refreshed windows, so it is the only thing that moves
-  /// them.
+  /// The v2 unchanged record is the only response allowed to slide freshness.
   Future<MosaicCustomerEntitlementRefreshResult> _confirmFromRecord(
-    MosaicCustomerSnapshotUnchanged unchanged,
+    MosaicCustomerAuthorityUnchangedRecord decoded,
     DateTime? serverTime,
   ) async {
     final record = _record;
-    if (record == null) {
+    final snapshot = _snapshot;
+    if (record == null || snapshot == null) {
       return _unavailable('entitlements.sync.unchangedWithoutCache');
     }
+    final unchanged = decoded.unchanged;
     final binding = MosaicCustomerBinding(
       billingCustomerId: unchanged.billingCustomerId,
       projectId: unchanged.projectId,
       environmentId: unchanged.environmentId,
     );
-    if (binding != record.binding ||
-        unchanged.snapshotVersion != record.snapshotVersion) {
+    if (!_scopeMatchesConfiguration(decoded.authority.scope) ||
+        !_snapshotMatchesAuthority(snapshot, decoded.authority) ||
+        binding != record.binding ||
+        unchanged.snapshotVersion != record.snapshotVersion ||
+        unchanged.entityTag != record.entityTag ||
+        unchanged.asOf != record.asOf) {
       // A confirmation for another customer, Environment, or version confirms
       // nothing here. Sliding on it would extend one cache's life using
       // another's evidence.
       return _reject(
-        binding != record.binding
-            ? 'customer_mismatch'
-            : 'snapshot_version_not_newer',
-        binding != record.binding
+        binding != record.binding ||
+                !_scopeMatchesConfiguration(decoded.authority.scope)
+            ? 'scope_mismatch'
+            : 'unchanged_snapshot_mismatch',
+        binding != record.binding ||
+                !_scopeMatchesConfiguration(decoded.authority.scope)
             ? MosaicCustomerCacheAction.clear
             : MosaicCustomerCacheAction.preserve,
       );
     }
-    final slid = record.slideFreshness(
+    if (decoded.authority.epoch < record.authority.epoch) {
+      return _reject(
+          'authority_epoch_regression', MosaicCustomerCacheAction.preserve);
+    }
+    if (unchanged.issuedAt.isBefore(record.issuedAt) ||
+        unchanged.refreshAfter.isBefore(record.refreshAfter) ||
+        unchanged.validUntil.isBefore(record.validUntil)) {
+      return _reject(
+          'freshness_regression', MosaicCustomerCacheAction.preserve);
+    }
+
+    final cachedDecoded = _decoder.decode(record.source);
+    if (cachedDecoded is! MosaicCustomerAuthoritySnapshotRecord) {
+      return _reject(
+          'cached_snapshot_invalid', MosaicCustomerCacheAction.clear);
+    }
+    final expectedDigest = mosaicCustomerSnapshotAuthorityDigest(
+      mosaicCustomerAuthorityToJson(decoded.authority),
+      cachedDecoded.rawSnapshot,
+    );
+    if (decoded.snapshotAuthorityDigest != expectedDigest) {
+      return _reject('snapshot_authority_digest_mismatch',
+          MosaicCustomerCacheAction.preserve);
+    }
+    final source = jsonEncode(<String, Object?>{
+      'authoritativeEntitlementContractVersion':
+          mosaicAuthoritativeEntitlementContractVersionV2,
+      'recordType': 'customerEntitlementSnapshot',
+      'payload': <String, Object?>{
+        'authority': mosaicCustomerAuthorityToJson(decoded.authority),
+        'snapshot': cachedDecoded.rawSnapshot,
+        'snapshotAuthorityDigest': expectedDigest,
+        'minimumSupport':
+            mosaicCustomerMinimumSupportToJson(decoded.minimumSupport),
+      },
+    });
+    final slid = MosaicCustomerEntitlementCacheRecord(
+      source: source,
+      binding: record.binding,
+      authority: decoded.authority,
+      snapshotAuthorityDigest: expectedDigest,
+      snapshotVersion: record.snapshotVersion,
+      asOf: record.asOf,
+      entityTag: record.entityTag,
+      issuedAt: unchanged.issuedAt,
       refreshAfter: unchanged.refreshAfter,
       validUntil: unchanged.validUntil,
       staleGraceSeconds: unchanged.staleGraceSeconds,
       trustedServerTime: serverTime,
       localReceiptTime: clock().toUtc(),
     );
+    final commitGeneration = _generation;
+    if (!await _persist(slid, generation: commitGeneration)) {
+      return _persistenceUnavailable(commitGeneration);
+    }
+    final previousAuthority = _authority;
     _record = slid;
+    _authority = decoded.authority;
+    _minimumSupport = decoded.minimumSupport;
+    _authorityUnavailable = false;
     _lastReasonCode = null;
     _lastOutcomeUnavailable = false;
-    await _persist(slid);
+    _tokens.bindAuthorityEpoch(decoded.authority.epoch);
+    _emitAuthorityIfChanged(previousAuthority, decoded.authority);
     notifyListeners();
     return MosaicCustomerEntitlementUnchanged(
       snapshotVersion: slid.snapshotVersion,
@@ -546,10 +769,13 @@ final class MosaicCustomerEntitlementRuntime extends ChangeNotifier
       trustedServerTime: serverTime,
       localReceiptTime: clock().toUtc(),
     );
+    final commitGeneration = _generation;
+    if (!await _persist(reanchored, generation: commitGeneration)) {
+      return _persistenceUnavailable(commitGeneration);
+    }
     _record = reanchored;
     _lastReasonCode = null;
     _lastOutcomeUnavailable = false;
-    await _persist(reanchored);
     notifyListeners();
     return MosaicCustomerEntitlementUnchanged(
       snapshotVersion: reanchored.snapshotVersion,
@@ -562,30 +788,89 @@ final class MosaicCustomerEntitlementRuntime extends ChangeNotifier
     String source,
     DateTime? serverTime,
   ) async {
-    final MosaicCustomerSyncRecord decoded;
+    final MosaicCustomerAuthoritySyncRecord decoded;
     try {
       decoded = _decoder.decode(source);
     } on MosaicCustomerEntitlementFormatException catch (error) {
+      if (_isRecognizablePolicyUnavailable(source)) {
+        return _invalidateForPolicyUnavailable();
+      }
       return _reject(error.reasonCode, MosaicCustomerCacheAction.preserve);
     }
-    if (decoded is MosaicCustomerUnchangedRecord) {
+    final minimumSupport = switch (decoded) {
+      MosaicCustomerAuthoritySnapshotRecord(:final minimumSupport) =>
+        minimumSupport,
+      MosaicCustomerAuthorityUnchangedRecord(:final minimumSupport) =>
+        minimumSupport,
+      MosaicCustomerAuthorityUnavailableRecord(:final minimumSupport) =>
+        minimumSupport,
+    };
+    if (minimumSupport != null && !_supports(minimumSupport)) {
+      _minimumSupport = minimumSupport;
+      _authorityUnavailable = true;
+      return _unavailable('entitlements.authority.unsupported_client');
+    }
+    if (decoded is MosaicCustomerAuthorityUnavailableRecord) {
+      if (decoded.reason ==
+          MosaicCustomerAuthorityUnavailableReason.policyUnavailable) {
+        final retainedScope = _authority?.scope ?? _record?.authority.scope;
+        if (!_scopeMatchesConfiguration(decoded.scope) ||
+            retainedScope != null && decoded.scope != retainedScope) {
+          // A policy instruction for another Environment, Application, or
+          // platform says nothing about this retained authority. Preserve the
+          // accepted cache and diagnose the mismatch rather than invalidating
+          // unrelated access.
+          return _reject(
+            'scope_mismatch',
+            MosaicCustomerCacheAction.preserve,
+          );
+        }
+        return _invalidateForPolicyUnavailable();
+      }
+      _minimumSupport = decoded.minimumSupport;
+      _authorityUnavailable = true;
+      final scopeMismatch = !_scopeMatchesConfiguration(decoded.scope) ||
+          decoded.reason ==
+              MosaicCustomerAuthorityUnavailableReason.scopeMismatch;
+      if (scopeMismatch) {
+        return _reject('scope_mismatch', MosaicCustomerCacheAction.clear);
+      }
+      return _unavailable('entitlements.authority.${decoded.reason.wireValue}');
+    }
+    if (decoded is MosaicCustomerAuthorityUnchangedRecord) {
       // The contract-conformant unchanged answer, and the only thing that
       // slides the freshness window.
-      return _confirmFromRecord(decoded.unchanged, serverTime);
+      return _confirmFromRecord(decoded, serverTime);
     }
-    final record = decoded as MosaicCustomerSnapshotRecord;
-    final snapshot = record.snapshot;
+    final record = decoded as MosaicCustomerAuthoritySnapshotRecord;
+    final snapshot = record.snapshotRecord.snapshot;
+    if (!_scopeMatchesConfiguration(record.authority.scope) ||
+        !_snapshotMatchesAuthority(snapshot, record.authority)) {
+      return _reject('scope_mismatch', MosaicCustomerCacheAction.clear);
+    }
+    final cached = _record;
+    final incomingBinding = MosaicCustomerBinding(
+      billingCustomerId: snapshot.billingCustomerId,
+      projectId: snapshot.projectId,
+      environmentId: snapshot.environmentId,
+    );
+    if (cached != null && incomingBinding != cached.binding) {
+      return _reject('customer_mismatch', MosaicCustomerCacheAction.clear);
+    }
+    if (cached != null && record.authority.epoch < cached.authority.epoch) {
+      return _reject(
+          'authority_epoch_regression', MosaicCustomerCacheAction.preserve);
+    }
     final decision = mosaicEvaluateCustomerCacheDecision(
       contractVersion: mosaicAuthoritativeEntitlementContractVersion,
-      incomingBinding: MosaicCustomerBinding(
-        billingCustomerId: snapshot.billingCustomerId,
-        projectId: snapshot.projectId,
-        environmentId: snapshot.environmentId,
-      ),
+      incomingBinding: incomingBinding,
       incomingSnapshotVersion: snapshot.snapshotVersion,
       incomingAsOf: snapshot.asOf,
-      contentDigestValid: record.contentDigestValid,
-      cached: _record?.summary,
+      contentDigestValid: record.snapshotRecord.contentDigestValid &&
+          record.snapshotAuthorityDigestValid,
+      cached: cached == null || record.authority.epoch > cached.authority.epoch
+          ? null
+          : cached.summary,
     );
     if (!decision.accepted) {
       return _reject(decision.reasonCode, decision.cacheAction);
@@ -599,6 +884,8 @@ final class MosaicCustomerEntitlementRuntime extends ChangeNotifier
         projectId: snapshot.projectId,
         environmentId: snapshot.environmentId,
       ),
+      authority: record.authority,
+      snapshotAuthorityDigest: record.snapshotAuthorityDigest,
       snapshotVersion: snapshot.snapshotVersion,
       asOf: snapshot.asOf,
       entityTag: snapshot.entityTag,
@@ -609,30 +896,194 @@ final class MosaicCustomerEntitlementRuntime extends ChangeNotifier
       trustedServerTime: serverTime,
       localReceiptTime: now,
     );
+    final commitGeneration = _generation;
+    if (!await _persist(stored, generation: commitGeneration)) {
+      return _persistenceUnavailable(commitGeneration);
+    }
     // Acceptance is atomic. There is no partial merge: a reader never keeps
     // the entries it understood from a document it rejected, and never mixes
     // two versions.
     _record = stored;
     _snapshot = snapshot;
+    final previousAuthority = _authority;
+    _authority = record.authority;
+    _minimumSupport = record.minimumSupport;
+    _authorityUnavailable = false;
     _lastReasonCode = null;
     _lastOutcomeUnavailable = false;
-    await _persist(stored);
+    _tokens.bindAuthorityEpoch(record.authority.epoch);
+    _emitAuthorityIfChanged(previousAuthority, record.authority);
     _updates.add(MosaicCustomerEntitlementSnapshotAccepted(snapshot));
     notifyListeners();
     return MosaicCustomerEntitlementUpdated(snapshot);
   }
 
-  Future<void> _persist(MosaicCustomerEntitlementCacheRecord record) async {
+  bool _scopeMatchesConfiguration(MosaicCustomerAuthorityScope scope) =>
+      applicationId != null &&
+      platform != null &&
+      scope.applicationId == applicationId &&
+      scope.platform == platform;
+
+  bool _supports(MosaicCustomerMinimumSupport support) {
+    final appVersion = applicationVersion;
+    if (appVersion == null) return false;
+    final sdkComparison =
+        _compareVersions(mosaicFlutterSdkVersion, support.minimumSdkVersion);
+    final minimumAppComparison = _compareVersions(
+      appVersion,
+      support.supportedAppVersionWindow.minimumInclusive,
+    );
+    if (sdkComparison == null ||
+        minimumAppComparison == null ||
+        sdkComparison < 0 ||
+        minimumAppComparison < 0) {
+      return false;
+    }
+    final maximum = support.supportedAppVersionWindow.maximumInclusive;
+    if (maximum == null) return true;
+    final maximumComparison = _compareVersions(appVersion, maximum);
+    return maximumComparison != null && maximumComparison <= 0;
+  }
+
+  int? _compareVersions(String left, String right) {
+    List<int>? core(String value) {
+      final parts = value.split('-').first.split('.');
+      if (parts.length != 3) return null;
+      final parsed = parts.map(int.tryParse).toList();
+      if (parsed.any((item) => item == null)) return null;
+      return parsed.cast<int>();
+    }
+
+    final leftCore = core(left);
+    final rightCore = core(right);
+    if (leftCore == null || rightCore == null) return null;
+    for (var index = 0; index < 3; index += 1) {
+      final comparison = leftCore[index].compareTo(rightCore[index]);
+      if (comparison != 0) return comparison;
+    }
+    return 0;
+  }
+
+  bool _snapshotMatchesAuthority(
+    MosaicCustomerEntitlementSnapshot snapshot,
+    MosaicCustomerAuthority authority,
+  ) =>
+      snapshot.projectId == authority.scope.projectId &&
+      snapshot.environmentId == authority.scope.environmentId;
+
+  void _emitAuthorityIfChanged(
+    MosaicCustomerAuthority? previous,
+    MosaicCustomerAuthority current,
+  ) {
+    final changed = previous == null ||
+        previous.epoch != current.epoch ||
+        previous.kind != current.kind ||
+        previous.scope != current.scope ||
+        previous.transitionState != current.transitionState ||
+        previous.cutoverAt != current.cutoverAt;
+    if (!changed) return;
+    if (!_authorityUpdates.isClosed) _authorityUpdates.add(current);
+    if (!_updates.isClosed) {
+      _updates.add(MosaicCustomerAuthorityChanged(
+        previous: previous,
+        current: current,
+      ));
+    }
+  }
+
+  Future<bool> _persist(
+    MosaicCustomerEntitlementCacheRecord record, {
+    required int generation,
+  }) async {
     final namespace = _namespace;
-    if (namespace == null) return;
+    if (namespace == null) return false;
     try {
       await cache.write(namespace, record);
     } on Object {
-      // Persistence failure degrades durability, never correctness: the
-      // accepted snapshot is already being served from memory.
-      _report(mosaicCustomerEntitlementCacheUnavailableCode, severe: false);
+      return false;
+    }
+    if (generation == _generation) return true;
+    // The write completed after an identity change. Remove the superseded
+    // namespace again so the late completion cannot resurrect old access.
+    try {
+      await cache.clear(namespace);
+    } on Object {
+      _report(mosaicCustomerEntitlementCacheUnavailableCode, severe: true);
+    }
+    return false;
+  }
+
+  Future<MosaicCustomerEntitlementRefreshResult>
+      _invalidateForPolicyUnavailable() async {
+    final namespace = _namespace;
+    if (namespace == null ||
+        !await _writePolicyInvalidationTombstone(namespace)) {
+      _pendingPolicyInvalidationNamespace = namespace;
+      _clearAcceptedAuthority(
+        'entitlements.authority.policy_invalidation_persistence_failed',
+      );
+      return _unavailable(
+        'entitlements.authority.policy_invalidation_persistence_failed',
+      );
+    }
+    _pendingPolicyInvalidationNamespace = null;
+    _clearAcceptedAuthority('entitlements.authority.policy_unavailable');
+    return _unavailable('entitlements.authority.policy_unavailable');
+  }
+
+  Future<bool> _writePolicyInvalidationTombstone(String namespace) async {
+    try {
+      await cache.write(
+        namespace,
+        MosaicCustomerEntitlementCacheRecord.invalidationTombstone(),
+      );
+      return true;
+    } on Object {
+      _report(
+        'entitlements.authority.policy_invalidation_persistence_failed',
+        severe: true,
+      );
+      // A failed atomic replace may leave the previously accepted snapshot on
+      // disk. Remove it through the same cache abstraction before returning so
+      // a cold restart cannot replay access while the tombstone retry gate is
+      // active. If storage is wholly unavailable, the clear throws and the
+      // severe diagnostic plus gate remain the only safe process-local state.
+      try {
+        await cache.clear(namespace);
+      } on Object {
+        _report(mosaicCustomerEntitlementCacheUnavailableCode, severe: true);
+      }
+      return false;
     }
   }
+
+  void _clearAcceptedAuthority(String reasonCode) {
+    final hadState = _snapshot != null || _record != null || _authority != null;
+    _record = null;
+    _snapshot = null;
+    _authority = null;
+    _minimumSupport = null;
+    _authorityUnavailable = true;
+    _lastOutcomeUnavailable = true;
+    _lastReasonCode = reasonCode;
+    if (hadState) _emitCleared(reasonCode);
+    notifyListeners();
+  }
+
+  bool _isRecognizablePolicyUnavailable(String source) {
+    final recognized =
+        _decoder.decodePolicyUnavailableWithForbiddenSupport(source);
+    return recognized != null && _scopeMatchesConfiguration(recognized.scope);
+  }
+
+  MosaicCustomerEntitlementRefreshResult _persistenceUnavailable(
+    int generation,
+  ) =>
+      _unavailable(
+        generation == _generation
+            ? mosaicCustomerEntitlementCacheUnavailableCode
+            : 'entitlements.identity.changed',
+      );
 
   MosaicCustomerEntitlementRefreshResult _reject(
     String reasonCode,
@@ -645,6 +1096,9 @@ final class MosaicCustomerEntitlementRuntime extends ChangeNotifier
       // precisely the leak this rule exists to prevent.
       _record = null;
       _snapshot = null;
+      _authority = null;
+      _minimumSupport = null;
+      _authorityUnavailable = true;
       _lastOutcomeUnavailable = false;
       final namespace = _namespace;
       if (namespace != null) {
@@ -711,6 +1165,7 @@ final class MosaicCustomerEntitlementRuntime extends ChangeNotifier
     _disposed = true;
     if (_observingLifecycle) WidgetsBinding.instance.removeObserver(this);
     unawaited(_updates.close());
+    unawaited(_authorityUpdates.close());
     super.dispose();
   }
 }
