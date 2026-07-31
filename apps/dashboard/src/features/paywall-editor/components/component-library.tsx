@@ -81,6 +81,10 @@ function CatalogIcon({ type }: { type: InsertableBlockType }) {
       return <CreditCardIcon aria-hidden />;
     case "button":
       return <CursorClickIcon aria-hidden />;
+    default: {
+      const unhandled: never = type;
+      throw new Error(`Unhandled type: ${JSON.stringify(unhandled)}`);
+    }
   }
 }
 

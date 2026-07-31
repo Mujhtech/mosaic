@@ -69,6 +69,10 @@ function providerLabel(provider: ProviderProductMapping["provider"]) {
       return "StoreKit";
     case "google_play":
       return "Google Play Billing";
+    default: {
+      const unhandled: never = provider;
+      throw new Error(`Unhandled provider: ${JSON.stringify(unhandled)}`);
+    }
   }
 }
 
@@ -90,8 +94,9 @@ export function readinessStateLabel(state: ProductReadinessState) {
       return "Mock only";
     case "unavailable":
       return "Unavailable";
+    default:
+      return state;
   }
-  return state;
 }
 
 export function productReadinessView(

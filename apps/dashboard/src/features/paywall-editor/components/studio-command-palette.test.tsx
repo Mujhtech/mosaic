@@ -75,6 +75,8 @@ function PaletteHarness({
       case "reset":
         controller.reset();
         break;
+      default:
+        throw new Error(`Unhandled command: ${command}`);
     }
   }
 

@@ -46,5 +46,9 @@ export function LayerTypeIcon({ type }: { type: LayerType }) {
       return <TagIcon {...props} />;
     case "button":
       return <CursorClickIcon {...props} />;
+    default: {
+      const unhandled: never = type;
+      throw new Error(`Unhandled type: ${JSON.stringify(unhandled)}`);
+    }
   }
 }

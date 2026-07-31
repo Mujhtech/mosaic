@@ -208,6 +208,12 @@ export function defaultNodeLabel(node: ProtocolNode) {
       return "Navigate back";
     case "openExternalUrl":
       return "Open external URL";
+    default: {
+      const unhandled: never = node.action;
+      throw new Error(
+        `Unhandled node.action.type: ${JSON.stringify(unhandled)}`
+      );
+    }
   }
 }
 

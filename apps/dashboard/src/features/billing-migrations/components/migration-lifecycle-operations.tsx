@@ -432,6 +432,10 @@ export function MigrationLifecycleOperations({
         return Boolean(referenceId && expectedDigest);
       case "complete":
         return Boolean(authorityDigest && digests.policy && expectedDigest);
+      default: {
+        const unhandled: never = name;
+        throw new Error(`Unhandled name: ${JSON.stringify(unhandled)}`);
+      }
     }
   })();
   const needsReason = ![
@@ -638,6 +642,10 @@ export function MigrationLifecycleOperations({
               expectedStateVersion,
             },
           };
+        default: {
+          const unhandled: never = name;
+          throw new Error(`Unhandled name: ${JSON.stringify(unhandled)}`);
+        }
       }
     })();
     await mutation.mutateAsync({

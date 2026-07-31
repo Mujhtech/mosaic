@@ -115,6 +115,10 @@ function PaletteIcon({ name }: { readonly name: CommandIconName }) {
       return <SlidersHorizontalIcon aria-hidden />;
     case "file":
       return <DownloadSimpleIcon aria-hidden />;
+    default: {
+      const unhandled: never = name;
+      throw new Error(`Unhandled name: ${JSON.stringify(unhandled)}`);
+    }
   }
 }
 

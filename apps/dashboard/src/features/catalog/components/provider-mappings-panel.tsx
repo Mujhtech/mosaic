@@ -614,6 +614,10 @@ function syncStateLabel(syncState: ProviderMappingView["syncState"]) {
       return "Stale";
     case "failed":
       return "Synchronization failed";
+    default: {
+      const unhandled: never = syncState;
+      throw new Error(`Unhandled syncState: ${JSON.stringify(unhandled)}`);
+    }
   }
 }
 
@@ -697,5 +701,9 @@ function observationContext(
       return "Production";
     case "unknown":
       return "Unknown";
+    default: {
+      const unhandled: never = context;
+      throw new Error(`Unhandled context: ${JSON.stringify(unhandled)}`);
+    }
   }
 }

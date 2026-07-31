@@ -523,6 +523,10 @@ function localizedEntries(
       ];
     case "stack":
       return [];
+    default: {
+      const unhandled: never = node;
+      throw new Error(`Unhandled node.type: ${JSON.stringify(unhandled)}`);
+    }
   }
 }
 

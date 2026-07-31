@@ -361,6 +361,10 @@ export function StudioResizableWorkspace({
           return hasResizableProperties ? propertiesPanelRef.current : null;
         case "diagnostics":
           return diagnosticsPanelRef.current;
+        default: {
+          const unhandled: never = panel;
+          throw new Error(`Unhandled panel: ${JSON.stringify(unhandled)}`);
+        }
       }
     },
     [hasResizableProperties]

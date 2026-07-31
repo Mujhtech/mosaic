@@ -81,6 +81,10 @@ export function HostedResourceBoundary({
       );
     case "ready":
       return children;
+    default: {
+      const unhandled: never = state;
+      throw new Error(`Unhandled state.kind: ${JSON.stringify(unhandled)}`);
+    }
   }
 }
 

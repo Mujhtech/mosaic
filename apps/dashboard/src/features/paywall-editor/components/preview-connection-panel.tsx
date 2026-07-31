@@ -42,6 +42,10 @@ function statusLabel(status: PreviewConnectionStatus) {
       return "Disconnected";
     case "unavailable":
       return "Unavailable";
+    default: {
+      const unhandled: never = status;
+      throw new Error(`Unhandled status: ${JSON.stringify(unhandled)}`);
+    }
   }
 }
 

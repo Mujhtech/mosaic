@@ -51,6 +51,10 @@ function alignmentStyle(alignment: StackComponent["crossAxisAlignment"]) {
       return "flex-end";
     case "stretch":
       return "stretch";
+    default: {
+      const unhandled: never = alignment;
+      throw new Error(`Unhandled alignment: ${JSON.stringify(unhandled)}`);
+    }
   }
 }
 

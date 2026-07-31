@@ -493,6 +493,10 @@ export function advancedProperties(node: ProtocolNode) {
         node.accessibility.label
       );
       break;
+    default: {
+      const unhandled: never = node;
+      throw new Error(`Unhandled node.type: ${JSON.stringify(unhandled)}`);
+    }
   }
   return properties;
 }

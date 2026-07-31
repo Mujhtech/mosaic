@@ -199,6 +199,12 @@ export function migrationLifecycleMutationOptions(
           return (
             await completeBillingMigration({ ...common, body: command.body })
           ).data.data.payload;
+        default: {
+          const unhandled: never = command;
+          throw new Error(
+            `Unhandled command.kind: ${JSON.stringify(unhandled)}`
+          );
+        }
       }
     },
     onSettled: async () => {

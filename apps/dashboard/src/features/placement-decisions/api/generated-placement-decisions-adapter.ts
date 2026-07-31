@@ -85,6 +85,10 @@ function outcome(
         >["reason"],
         type: "unavailable",
       };
+    default: {
+      const unhandled: never = value;
+      throw new Error(`Unhandled value.type: ${JSON.stringify(unhandled)}`);
+    }
   }
 }
 
@@ -659,6 +663,10 @@ function toGeneratedOutcome(value: DecisionOutcome): PlacementOutcome {
       return { type: "no_paywall" };
     case "unavailable":
       return { reason: value.reason, type: "unavailable" };
+    default: {
+      const unhandled: never = value;
+      throw new Error(`Unhandled value.type: ${JSON.stringify(unhandled)}`);
+    }
   }
 }
 

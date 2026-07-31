@@ -590,6 +590,10 @@ export function duplicateSubtree(
           label: duplicateText(node.label),
           accessibility: duplicateControl(node.accessibility),
         };
+      default: {
+        const unhandled: never = node;
+        throw new Error(`Unhandled node.type: ${JSON.stringify(unhandled)}`);
+      }
     }
   }
 

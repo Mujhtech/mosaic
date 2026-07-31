@@ -172,6 +172,10 @@ export function resolvedBackground(
           : `Video background ${resolved.assetId} is unavailable in the browser; showing its fallback colour.`,
       };
     }
+    default: {
+      const unhandled: never = resolved;
+      throw new Error(`Unhandled resolved.type: ${JSON.stringify(unhandled)}`);
+    }
   }
 }
 

@@ -95,6 +95,10 @@ export function defaultBackground(
       return document.designSystem.backgrounds[0]
         ? { type, id: document.designSystem.backgrounds[0].id }
         : undefined;
+    default: {
+      const unhandled: never = type;
+      throw new Error(`Unhandled type: ${JSON.stringify(unhandled)}`);
+    }
   }
 }
 

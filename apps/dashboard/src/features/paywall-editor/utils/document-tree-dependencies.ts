@@ -273,6 +273,10 @@ export function nodeLocalizedEntries(node: ProtocolNode): LocalizedText[] {
       return node.accessibility.hidden ? [] : [node.accessibility.label];
     case "icon":
       return node.accessibility.hidden ? [] : [node.accessibility.label];
+    default: {
+      const unhandled: never = node;
+      throw new Error(`Unhandled node.type: ${JSON.stringify(unhandled)}`);
+    }
   }
 }
 

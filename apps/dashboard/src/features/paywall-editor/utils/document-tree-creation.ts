@@ -467,6 +467,10 @@ export function createBlock(
         accessibility: { role: "text" },
       };
     }
+    default: {
+      const unhandled: never = type;
+      throw new Error(`Unhandled type: ${JSON.stringify(unhandled)}`);
+    }
   }
 }
 

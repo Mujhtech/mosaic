@@ -545,5 +545,9 @@ export function InspectorForNode({ node }: { node: ProtocolNode }) {
       return <SwitchInspector node={node} />;
     case "countdown":
       return <CountdownInspector node={node} />;
+    default: {
+      const unhandled: never = node;
+      throw new Error(`Unhandled node.type: ${JSON.stringify(unhandled)}`);
+    }
   }
 }

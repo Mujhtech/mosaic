@@ -128,6 +128,10 @@ export function toContractOutcome(
       return { type: "no_paywall" };
     case "unavailable":
       return { reason: outcome.reason, type: "unavailable" };
+    default: {
+      const unhandled: never = outcome;
+      throw new Error(`Unhandled outcome.type: ${JSON.stringify(unhandled)}`);
+    }
   }
 }
 
