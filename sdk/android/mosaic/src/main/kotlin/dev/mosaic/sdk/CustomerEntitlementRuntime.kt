@@ -241,6 +241,13 @@ internal fun interface MosaicCustomerTrustedTime {
     fun nowEpochMillis(): Long?
 }
 
+internal typealias MosaicCustomerCacheCommit = (
+    MosaicCustomerEntitlementCache,
+    String,
+    String,
+    Boolean,
+) -> Unit
+
 /**
  * The authoritative entitlement runtime.
  *
@@ -263,6 +270,12 @@ class MosaicCustomerEntitlementRuntime internal constructor(
     private val diagnostics: MosaicDiagnosticSink = MosaicDiagnosticSink.None,
     private val policy: MosaicCustomerOfflinePolicy = MosaicCustomerBoundedGracePolicy,
     private val correlationId: () -> String = { "customer-sync-" + UUID.randomUUID() },
+    private val authorityRequestContext: suspend () -> MosaicCustomerAuthorityRequestContext? = { null },
+    private val authorityAware: Boolean = false,
+    private val cacheCommit: MosaicCustomerCacheCommit = { store, digest, payload, writePointer ->
+        store.write(digest, payload)
+        if (writePointer) store.writePointer(digest)
+    },
 ) {
     private val state = MutableStateFlow<MosaicCustomerEntitlementSnapshotState>(
         MosaicCustomerEntitlementSnapshotState.Loading,
@@ -271,11 +284,19 @@ class MosaicCustomerEntitlementRuntime internal constructor(
     /** The observable authoritative state, with the current value replayed to every new collector. */
     val customerEntitlements: StateFlow<MosaicCustomerEntitlementSnapshotState> = state.asStateFlow()
 
+    private val authorityState = MutableStateFlow<MosaicCustomerAuthorityState>(
+        MosaicCustomerAuthorityState.Unavailable(MosaicCustomerAuthorityUnavailableReason.AUTHORITY_UNKNOWN),
+    )
+
+    /** Replaying server-owned access authority. It is never inferred from the purchase provider. */
+    val customerAuthority: StateFlow<MosaicCustomerAuthorityState> = authorityState.asStateFlow()
+
     private val stateMutex = Mutex()
     private val identityMutationLock = Mutex()
 
     private var accepted: MosaicCachedCustomerEntitlements? = null
     private var bindingDigest: String? = null
+    private var pendingAuthorityInvalidationDigest: String? = null
     private var identityGeneration = 0
     private var inFlight: CompletableDeferred<MosaicCustomerEntitlementSyncResult>? = null
 
@@ -315,6 +336,9 @@ class MosaicCustomerEntitlementRuntime internal constructor(
                 lastUnavailableReason = lastUnavailableReason,
                 acceptedSnapshotCount = acceptedCount,
                 rejectedSnapshotCount = rejectedCount,
+                authorityEpoch = cached?.authority?.epoch,
+                authorityKind = cached?.authority?.kind,
+                authorityTransitionState = cached?.authority?.transitionState,
             )
         }
     }
@@ -351,7 +375,14 @@ class MosaicCustomerEntitlementRuntime internal constructor(
     }
 
     private suspend fun sync(generation: Int): MosaicCustomerEntitlementSyncResult {
-        val issued = when (val token = session.token()) {
+        if (!retryPendingAuthorityInvalidation(generation)) {
+            return MosaicCustomerEntitlementSyncResult.Unavailable(
+                MosaicCustomerEntitlementUnavailableReason.CACHE_WRITE_FAILED,
+            )
+        }
+        var cached = stateMutex.withLock { accepted }
+        val expectedAuthorityEpoch = cached?.authority?.epoch
+        val issued = when (val token = session.token(authorityEpoch = expectedAuthorityEpoch)) {
             is MosaicCustomerAccessTokenResult.Issued -> token
             MosaicCustomerAccessTokenResult.SignedOut -> return signedOut(generation)
             is MosaicCustomerAccessTokenResult.Unavailable -> return unavailable(
@@ -362,13 +393,31 @@ class MosaicCustomerEntitlementRuntime internal constructor(
             )
         }
 
-        val cached = stateMutex.withLock { accepted }
-        val body = MosaicCustomerEntitlementCodec.encodeSyncRequest(
-            correlationId = correlationId(),
-            knownSnapshotVersion = cached?.snapshot?.snapshotVersion,
-            entityTag = cached?.snapshot?.entityTag,
-            requestedEntitlementKeys = emptyList(),
-        )
+        val authorityContext = authorityRequestContext()
+        if (authorityContext != null && cached != null && issued.billingCustomerId != null &&
+            issued.billingCustomerId != cached.snapshot.billingCustomerId
+        ) {
+            // A token that is definitely bound to another customer invalidates the retained cache
+            // before any request can use it as conditional verification input.
+            reject(generation, MosaicCustomerSnapshotRejection.CUSTOMER_MISMATCH)
+            cached = null
+        }
+        val body = if (authorityContext != null) {
+            val retained = retainedAuthorityVerification(cached, issued, authorityContext)
+            MosaicCustomerAuthorityCodec.encodeSyncRequest(
+                authorityContext,
+                retained?.authorityEpoch,
+                retained?.snapshotVersion,
+                retained?.snapshotAuthorityDigest,
+            )
+        } else {
+            MosaicCustomerEntitlementCodec.encodeSyncRequest(
+                correlationId = correlationId(),
+                knownSnapshotVersion = cached?.snapshot?.snapshotVersion,
+                entityTag = cached?.snapshot?.entityTag,
+                requestedEntitlementKeys = emptyList(),
+            )
+        }
 
         var response = transport.sync(issued.token, body)
         if (response is MosaicCustomerEntitlementTransportResult.Unauthorized) {
@@ -376,7 +425,10 @@ class MosaicCustomerEntitlementRuntime internal constructor(
             // token into a retry storm against the host's backend; fewer would make every ordinary
             // token expiry look like a sign-out.
             session.invalidate(issued.token)
-            response = when (val refreshed = session.token(forceRefresh = true)) {
+            response = when (val refreshed = session.token(
+                forceRefresh = true,
+                authorityEpoch = expectedAuthorityEpoch,
+            )) {
                 is MosaicCustomerAccessTokenResult.Issued -> transport.sync(refreshed.token, body)
                 MosaicCustomerAccessTokenResult.SignedOut -> return signedOut(generation)
                 is MosaicCustomerAccessTokenResult.Unavailable -> return unavailable(
@@ -390,6 +442,7 @@ class MosaicCustomerEntitlementRuntime internal constructor(
                 // A second refusal is a real authorization answer. The state is published as
                 // unavailable — never inactive — and the customer is neither switched nor cleared:
                 // the host's backend, not this SDK, decides who this device is.
+                session.rejectAuthorityEpoch(expectedAuthorityEpoch)
                 unavailable(
                     generation,
                     MosaicCustomerEntitlementUnavailableReason.UNAUTHORIZED,
@@ -423,6 +476,13 @@ class MosaicCustomerEntitlementRuntime internal constructor(
         generation: Int,
         response: MosaicCustomerEntitlementTransportResult.Record,
     ): MosaicCustomerEntitlementSyncResult {
+        val version = runCatching {
+            JsonParser.parseString(response.body).asJsonObject
+                .get("authoritativeEntitlementContractVersion").asString
+        }.getOrNull()
+        if (version == MosaicCustomerAuthorityCodec.CONTRACT_VERSION) {
+            return acceptAuthorityRecord(generation, response)
+        }
         when (val decoded = MosaicCustomerEntitlementCodec.decodeRecord(response.body)) {
             is MosaicCustomerRecordDecoding.Unreadable -> return reject(generation, decoded.rejection)
             // The unchanged answer is a contract record, not an HTTP status. It carries its own
@@ -465,7 +525,9 @@ class MosaicCustomerEntitlementRuntime internal constructor(
                             null,
                         )
                     }
-                    persist(entry, response.body)
+                    if (!persist(entry, response.body)) {
+                        return@withLock cacheWriteUnavailableLocked()
+                    }
                     accepted = entry
                     acceptedCount += 1
                     val evaluation = evaluate(entry)
@@ -474,6 +536,399 @@ class MosaicCustomerEntitlementRuntime internal constructor(
                 }
             }
         }
+    }
+
+    private suspend fun acceptAuthorityRecord(
+        generation: Int,
+        response: MosaicCustomerEntitlementTransportResult.Record,
+    ): MosaicCustomerEntitlementSyncResult = when (val decoded = MosaicCustomerAuthorityCodec.decode(response.body)) {
+        MosaicCustomerAuthorityDecoding.Unreadable -> reject(
+            generation,
+            MosaicCustomerSnapshotRejection.MALFORMED_RECORD,
+        )
+        is MosaicCustomerAuthorityDecoding.PolicyUnavailableWithForbiddenSupport -> {
+            val expectedScope = authorityRequestContext()?.scope
+            if (expectedScope == null || decoded.scope != expectedScope) {
+                reject(generation, MosaicCustomerSnapshotRejection.APPLICATION_MISMATCH)
+            } else {
+                invalidateAuthorityForPolicy(generation, decoded.scope)
+            }
+        }
+        is MosaicCustomerAuthorityDecoding.Unavailable -> {
+            val expectedScope = authorityRequestContext()?.scope
+            if (expectedScope == null || decoded.scope != expectedScope) {
+                reject(generation, MosaicCustomerSnapshotRejection.APPLICATION_MISMATCH)
+            } else if (decoded.reason == MosaicCustomerAuthorityUnavailableReason.SCOPE_MISMATCH) {
+                reject(generation, MosaicCustomerSnapshotRejection.APPLICATION_MISMATCH)
+            } else if (decoded.reason == MosaicCustomerAuthorityUnavailableReason.POLICY_UNAVAILABLE) {
+                invalidateAuthorityForPolicy(generation, decoded.scope)
+            } else {
+                markAuthorityUnavailable(generation, decoded)
+            }
+        }
+        is MosaicCustomerAuthorityDecoding.Unchanged -> confirmAuthorityCache(generation, decoded)
+        is MosaicCustomerAuthorityDecoding.Snapshot -> {
+            val previousEpoch = stateMutex.withLock { accepted?.authority?.epoch }
+            val result = acceptAuthoritySnapshot(generation, response, decoded)
+            if (result is MosaicCustomerEntitlementSyncResult.Updated && previousEpoch != decoded.authority.epoch) {
+                // Bind the next request to the newly accepted epoch immediately. The token remains
+                // opaque; only its in-memory generation is replaced, and failures never revoke the
+                // snapshot that was just accepted.
+                session.token(forceRefresh = true, authorityEpoch = decoded.authority.epoch)
+            }
+            result
+        }
+    }
+
+    private data class RetainedAuthorityVerification(
+        val authorityEpoch: Long,
+        val snapshotVersion: Long,
+        val snapshotAuthorityDigest: String,
+    )
+
+    /** Conditional members are one integrity tuple; a partial or stale tuple requests a full snapshot. */
+    private fun retainedAuthorityVerification(
+        cached: MosaicCachedCustomerEntitlements?,
+        issued: MosaicCustomerAccessTokenResult.Issued,
+        context: MosaicCustomerAuthorityRequestContext,
+    ): RetainedAuthorityVerification? {
+        val retained = cached ?: return null
+        val authority = retained.authority ?: return null
+        val digest = retained.snapshotAuthorityDigest
+            ?.takeIf { Regex("^sha256:[a-f0-9]{64}$").matches(it) }
+            ?: return null
+        if (issued.billingCustomerId == null || issued.billingCustomerId != retained.snapshot.billingCustomerId) {
+            return null
+        }
+        if (authority.scope != context.scope ||
+            authority.scope.projectId != retained.snapshot.projectId ||
+            authority.scope.environmentId != retained.snapshot.environmentId
+        ) {
+            return null
+        }
+        return RetainedAuthorityVerification(authority.epoch, retained.snapshot.snapshotVersion, digest)
+    }
+
+    private suspend fun markAuthorityUnavailable(
+        generation: Int,
+        decoded: MosaicCustomerAuthorityDecoding.Unavailable,
+    ): MosaicCustomerEntitlementSyncResult = stateMutex.withLock {
+        if (generation != identityGeneration) {
+            return@withLock MosaicCustomerEntitlementSyncResult.Unavailable(
+                MosaicCustomerEntitlementUnavailableReason.AUTHORITY_UNKNOWN,
+            )
+        }
+        val reason = if (decoded.reason == MosaicCustomerAuthorityUnavailableReason.UNSUPPORTED_APP_VERSION) {
+            MosaicCustomerEntitlementUnavailableReason.UNSUPPORTED_APPLICATION_VERSION
+        } else {
+            MosaicCustomerEntitlementUnavailableReason.AUTHORITY_UNKNOWN
+        }
+        authorityState.value = MosaicCustomerAuthorityState.Unavailable(
+            decoded.reason,
+            decoded.scope,
+            decoded.minimumSupport,
+        )
+        lastUnavailableReason = reason
+        state.value = MosaicCustomerEntitlementSnapshotState.Unavailable(reason, accepted?.snapshot)
+        MosaicCustomerEntitlementSyncResult.Unavailable(reason)
+    }
+
+    private suspend fun invalidateAuthorityForPolicy(
+        generation: Int,
+        scope: MosaicCustomerAuthorityScope,
+    ): MosaicCustomerEntitlementSyncResult = stateMutex.withLock {
+        if (generation != identityGeneration) {
+            return@withLock MosaicCustomerEntitlementSyncResult.Unavailable(
+                MosaicCustomerEntitlementUnavailableReason.AUTHORITY_UNKNOWN,
+            )
+        }
+        val digest = bindingDigest
+        val persisted = digest == null || persistAuthorityInvalidationLocked(digest)
+        if (!persisted) {
+            pendingAuthorityInvalidationDigest = digest
+            recordAuthorityInvalidationWriteFailure()
+        }
+        accepted = null
+        authorityState.value = MosaicCustomerAuthorityState.Unavailable(
+            MosaicCustomerAuthorityUnavailableReason.POLICY_UNAVAILABLE,
+            scope,
+            minimumSupport = null,
+        )
+        val unavailableReason = if (persisted) {
+            MosaicCustomerEntitlementUnavailableReason.AUTHORITY_UNKNOWN
+        } else {
+            MosaicCustomerEntitlementUnavailableReason.CACHE_WRITE_FAILED
+        }
+        lastUnavailableReason = unavailableReason
+        state.value = MosaicCustomerEntitlementSnapshotState.Unavailable(
+            unavailableReason,
+        )
+        MosaicCustomerEntitlementSyncResult.Unavailable(unavailableReason)
+    }
+
+    private suspend fun retryPendingAuthorityInvalidation(generation: Int): Boolean = stateMutex.withLock {
+        if (generation != identityGeneration) {
+            return@withLock false
+        }
+        val digest = pendingAuthorityInvalidationDigest ?: return@withLock true
+        if (persistAuthorityInvalidationLocked(digest)) {
+            pendingAuthorityInvalidationDigest = null
+            true
+        } else {
+            recordAuthorityInvalidationWriteFailure()
+            false
+        }
+    }
+
+    private fun persistAuthorityInvalidationLocked(digest: String): Boolean = runCatching {
+        cacheCommit(
+            cache,
+            digest,
+            MosaicCustomerEntitlementCache.authorityPolicyUnavailableMarker(),
+            false,
+        )
+        true
+    }.getOrElse {
+        // If the atomic replacement failed, remove the prior durable snapshot
+        // so a cold restart cannot replay it. The pending invalidation remains
+        // gated and will retry before another network request.
+        runCatching { cache.clear(digest) }.onFailure {
+            diagnostics.record(
+                MosaicDiagnostic(
+                    MosaicDiagnosticCode.CUSTOMER_ENTITLEMENTS_CACHE_WRITE_FAILED,
+                    "Mosaic could not clear retained authority after invalidation persistence failed; " +
+                        "access remains unavailable and synchronization stays gated.",
+                ),
+            )
+        }
+        false
+    }
+
+    private fun recordAuthorityInvalidationWriteFailure() {
+        diagnostics.record(
+            MosaicDiagnostic(
+                MosaicDiagnosticCode.CUSTOMER_ENTITLEMENTS_CACHE_WRITE_FAILED,
+                "Mosaic could not durably invalidate retained authority; access is unavailable and " +
+                    "invalidation will be retried before synchronization.",
+            ),
+        )
+    }
+
+    private suspend fun acceptAuthoritySnapshot(
+        generation: Int,
+        response: MosaicCustomerEntitlementTransportResult.Record,
+        decoded: MosaicCustomerAuthorityDecoding.Snapshot,
+    ): MosaicCustomerEntitlementSyncResult {
+        val snapshot = decoded.snapshot
+        if (!decoded.snapshotAuthorityDigestValid) {
+            return reject(generation, MosaicCustomerSnapshotRejection.AUTHORITY_DIGEST_MISMATCH)
+        }
+        if (response.entityTag != null && response.entityTag != snapshot.entityTag) {
+            return reject(generation, MosaicCustomerSnapshotRejection.WEAK_ENTITY_TAG)
+        }
+        val context = authorityRequestContext()
+            ?: return unavailable(
+                generation,
+                MosaicCustomerEntitlementUnavailableReason.AUTHORITY_UNKNOWN,
+                MosaicDiagnosticCode.CUSTOMER_ENTITLEMENTS_SNAPSHOT_REJECTED,
+            )
+        val scope = decoded.authority.scope
+        val expected = context.scope
+        val scopeRejection = when {
+            scope.projectId != expected.projectId -> MosaicCustomerSnapshotRejection.PROJECT_MISMATCH
+            scope.environmentId != expected.environmentId -> MosaicCustomerSnapshotRejection.ENVIRONMENT_MISMATCH
+            scope.applicationId != expected.applicationId -> MosaicCustomerSnapshotRejection.APPLICATION_MISMATCH
+            scope.platform != "android" -> MosaicCustomerSnapshotRejection.PLATFORM_MISMATCH
+            snapshot.projectId != scope.projectId -> MosaicCustomerSnapshotRejection.PROJECT_MISMATCH
+            snapshot.environmentId != scope.environmentId -> MosaicCustomerSnapshotRejection.ENVIRONMENT_MISMATCH
+            else -> null
+        }
+        if (scopeRejection != null) return reject(generation, scopeRejection)
+        minimumSupportFailure(decoded.minimumSupport, context)?.let { reason ->
+            return unsupportedAuthority(generation, reason, decoded.minimumSupport)
+        }
+
+        val cached = stateMutex.withLock { accepted }
+        if (cached != null && cached.snapshot.billingCustomerId != snapshot.billingCustomerId) {
+            return reject(generation, MosaicCustomerSnapshotRejection.CUSTOMER_MISMATCH)
+        }
+        val cachedEpoch = cached?.authority?.epoch
+        if (cachedEpoch != null && decoded.authority.epoch < cachedEpoch) {
+            return reject(generation, MosaicCustomerSnapshotRejection.AUTHORITY_EPOCH_REGRESSION)
+        }
+        if (!decoded.snapshotContentDigestValid) {
+            return reject(generation, MosaicCustomerSnapshotRejection.CONTENT_DIGEST_MISMATCH)
+        }
+        if (cachedEpoch == decoded.authority.epoch) {
+            val decision = MosaicCustomerEntitlementAcceptance.decide(
+                cached = cached?.let(::binding),
+                incoming = MosaicCustomerSnapshotBinding(
+                    contractVersion = MosaicCustomerEntitlementCodec.CONTRACT_VERSION,
+                    billingCustomerId = snapshot.billingCustomerId,
+                    projectId = snapshot.projectId,
+                    environmentId = snapshot.environmentId,
+                    snapshotVersion = snapshot.snapshotVersion,
+                    asOfEpochMillis = snapshot.asOfEpochMillis,
+                    contentDigestValid = true,
+                ),
+            )
+            if (!decision.accepted) {
+                return reject(generation, decision.rejection ?: MosaicCustomerSnapshotRejection.MALFORMED_RECORD)
+            }
+        }
+        val entry = MosaicCachedCustomerEntitlements(
+            snapshot,
+            snapshot.freshness,
+            decoded.authority,
+            decoded.snapshotAuthorityDigest,
+            decoded.minimumSupport,
+        )
+        return stateMutex.withLock {
+            if (generation != identityGeneration) {
+                return@withLock MosaicCustomerEntitlementSyncResult.Rejected(
+                    MosaicCustomerSnapshotRejection.CUSTOMER_MISMATCH,
+                    null,
+                )
+            }
+            if (!persist(entry, response.body)) {
+                return@withLock cacheWriteUnavailableLocked()
+            }
+            accepted = entry
+            acceptedCount += 1
+            authorityState.value = MosaicCustomerAuthorityState.Available(decoded.authority, decoded.minimumSupport)
+            val evaluation = evaluate(entry)
+            publish(entry, evaluation)
+            MosaicCustomerEntitlementSyncResult.Updated(snapshot, evaluation.state)
+        }
+    }
+
+    private suspend fun confirmAuthorityCache(
+        generation: Int,
+        unchanged: MosaicCustomerAuthorityDecoding.Unchanged,
+    ): MosaicCustomerEntitlementSyncResult {
+        val context = authorityRequestContext()
+            ?: return unsupportedAuthority(
+                generation,
+                MosaicCustomerAuthorityUnavailableReason.AUTHORITY_UNKNOWN,
+                unchanged.minimumSupport,
+            )
+        minimumSupportFailure(unchanged.minimumSupport, context)?.let { reason ->
+            return unsupportedAuthority(generation, reason, unchanged.minimumSupport)
+        }
+        val unchangedScope = unchanged.authority.scope
+        val expectedScope = context.scope
+        when {
+            unchangedScope.projectId != expectedScope.projectId ->
+                return reject(generation, MosaicCustomerSnapshotRejection.PROJECT_MISMATCH)
+            unchangedScope.environmentId != expectedScope.environmentId ->
+                return reject(generation, MosaicCustomerSnapshotRejection.ENVIRONMENT_MISMATCH)
+            unchangedScope.applicationId != expectedScope.applicationId ->
+                return reject(generation, MosaicCustomerSnapshotRejection.APPLICATION_MISMATCH)
+            unchangedScope.platform != expectedScope.platform ->
+                return reject(generation, MosaicCustomerSnapshotRejection.PLATFORM_MISMATCH)
+        }
+        return stateMutex.withLock {
+            val cached = accepted ?: return@withLock unavailableLocked(
+                MosaicCustomerEntitlementUnavailableReason.NEVER_SYNCHRONIZED,
+                MosaicDiagnosticCode.CUSTOMER_ENTITLEMENTS_TRANSPORT_FAILED,
+            )
+            val authority = cached.authority
+            if (generation != identityGeneration || authority == null ||
+                unchanged.authority != authority ||
+                unchanged.unchanged.billingCustomerId != cached.snapshot.billingCustomerId ||
+                unchanged.unchanged.projectId != cached.snapshot.projectId ||
+                unchanged.unchanged.environmentId != cached.snapshot.environmentId ||
+                unchanged.unchanged.snapshotVersion != cached.snapshot.snapshotVersion ||
+                unchanged.unchanged.entityTag != cached.snapshot.entityTag ||
+                unchanged.snapshotAuthorityDigest != cached.snapshotAuthorityDigest ||
+                unchanged.unchanged.asOf != cached.snapshot.asOf ||
+                unchanged.unchanged.projectionStatus != cached.snapshot.projectionStatus
+            ) {
+                return@withLock rejectLocked(MosaicCustomerSnapshotRejection.AUTHORITY_EPOCH_REGRESSION)
+            }
+            val incoming = unchanged.unchanged.freshness
+            if (incoming.issuedAtEpochMillis < cached.window.issuedAtEpochMillis ||
+                incoming.refreshAfterEpochMillis < cached.window.refreshAfterEpochMillis ||
+                incoming.validUntilEpochMillis < cached.window.validUntilEpochMillis
+            ) {
+                return@withLock rejectLocked(MosaicCustomerSnapshotRejection.AS_OF_REGRESSION)
+            }
+            val slid = cached.copy(
+                window = incoming,
+                minimumSupport = unchanged.minimumSupport,
+            )
+            if (!persist(slid, null)) {
+                return@withLock cacheWriteUnavailableLocked()
+            }
+            accepted = slid
+            authorityState.value = MosaicCustomerAuthorityState.Available(authority, unchanged.minimumSupport)
+            val evaluation = evaluate(slid)
+            publish(slid, evaluation)
+            MosaicCustomerEntitlementSyncResult.Unchanged(slid.snapshot, evaluation.state)
+        }
+    }
+
+    private fun minimumSupportFailure(
+        support: MosaicCustomerAuthorityMinimumSupport,
+        context: MosaicCustomerAuthorityRequestContext,
+    ): MosaicCustomerAuthorityUnavailableReason? {
+        if (support.minimumContractVersion !in context.supportedContractVersions) {
+            return MosaicCustomerAuthorityUnavailableReason.UNSUPPORTED_CONTRACT
+        }
+        val sdkOrder = compareSemver(context.sdkVersion, support.minimumSdkVersion)
+        if (sdkOrder == null || sdkOrder < 0) {
+            return MosaicCustomerAuthorityUnavailableReason.UNSUPPORTED_SDK_VERSION
+        }
+        val minimumAppOrder = compareSemver(context.appVersion, support.minimumAppVersionInclusive)
+        if (minimumAppOrder == null || minimumAppOrder < 0) {
+            return MosaicCustomerAuthorityUnavailableReason.UNSUPPORTED_APP_VERSION
+        }
+        val maximum = support.maximumAppVersionInclusive
+        if (maximum != null) {
+            val maximumAppOrder = compareSemver(context.appVersion, maximum)
+            if (maximumAppOrder == null || maximumAppOrder > 0) {
+                return MosaicCustomerAuthorityUnavailableReason.UNSUPPORTED_APP_VERSION
+            }
+        }
+        if (!context.capabilities.containsAll(support.requiredCapabilities)) {
+            return MosaicCustomerAuthorityUnavailableReason.UNSUPPORTED_CAPABILITIES
+        }
+        return null
+    }
+
+    private suspend fun unsupportedAuthority(
+        generation: Int,
+        reason: MosaicCustomerAuthorityUnavailableReason,
+        minimumSupport: MosaicCustomerAuthorityMinimumSupport,
+    ): MosaicCustomerEntitlementSyncResult = stateMutex.withLock {
+        if (generation != identityGeneration) {
+            return@withLock MosaicCustomerEntitlementSyncResult.Unavailable(
+                MosaicCustomerEntitlementUnavailableReason.AUTHORITY_UNKNOWN,
+            )
+        }
+        authorityState.value = MosaicCustomerAuthorityState.Unavailable(
+            reason,
+            minimumSupport = minimumSupport,
+        )
+        val unavailableReason = if (reason == MosaicCustomerAuthorityUnavailableReason.UNSUPPORTED_APP_VERSION) {
+            MosaicCustomerEntitlementUnavailableReason.UNSUPPORTED_APPLICATION_VERSION
+        } else {
+            MosaicCustomerEntitlementUnavailableReason.AUTHORITY_UNKNOWN
+        }
+        lastUnavailableReason = unavailableReason
+        state.value = MosaicCustomerEntitlementSnapshotState.Unavailable(
+            unavailableReason,
+            accepted?.snapshot,
+        )
+        MosaicCustomerEntitlementSyncResult.Unavailable(unavailableReason)
+    }
+
+    private fun rejectLocked(rejection: MosaicCustomerSnapshotRejection): MosaicCustomerEntitlementSyncResult {
+        rejectedCount += 1
+        lastRejection = rejection
+        val cached = accepted
+        cached?.let { publish(it, evaluate(it)) }
+        return MosaicCustomerEntitlementSyncResult.Rejected(rejection, cached?.snapshot)
     }
 
     /**
@@ -555,8 +1010,10 @@ class MosaicCustomerEntitlementRuntime internal constructor(
                 staleGraceSeconds = unchanged.freshness.staleGraceSeconds,
             ),
         )
+        if (!persist(slid, null)) {
+            return@withLock cacheWriteUnavailableLocked()
+        }
         accepted = slid
-        persist(slid, null)
         val evaluation = evaluate(slid)
         publish(slid, evaluation)
         MosaicCustomerEntitlementSyncResult.Unchanged(slid.snapshot, evaluation.state)
@@ -582,6 +1039,8 @@ class MosaicCustomerEntitlementRuntime internal constructor(
             bindingDigest?.let(cache::clear)
             cache.clearAll()
             accepted = null
+            bindingDigest = null
+            pendingAuthorityInvalidationDigest = null
             lastUnavailableReason = MosaicCustomerEntitlementUnavailableReason.SNAPSHOT_REJECTED
             state.value = MosaicCustomerEntitlementSnapshotState.Unavailable(
                 MosaicCustomerEntitlementUnavailableReason.SNAPSHOT_REJECTED,
@@ -612,7 +1071,11 @@ class MosaicCustomerEntitlementRuntime internal constructor(
         stateMutex.withLock {
             if (generation == identityGeneration) {
                 accepted = null
+                pendingAuthorityInvalidationDigest = null
                 state.value = MosaicCustomerEntitlementSnapshotState.SignedOut
+                authorityState.value = MosaicCustomerAuthorityState.Unavailable(
+                    MosaicCustomerAuthorityUnavailableReason.AUTHORITY_UNKNOWN,
+                )
             }
             MosaicCustomerEntitlementSyncResult.SignedOut
         }
@@ -649,6 +1112,11 @@ class MosaicCustomerEntitlementRuntime internal constructor(
         return MosaicCustomerEntitlementSyncResult.Unavailable(reason, retryAfterSeconds)
     }
 
+    private fun cacheWriteUnavailableLocked(): MosaicCustomerEntitlementSyncResult = unavailableLocked(
+        MosaicCustomerEntitlementUnavailableReason.CACHE_WRITE_FAILED,
+        MosaicDiagnosticCode.CUSTOMER_ENTITLEMENTS_CACHE_WRITE_FAILED,
+    )
+
     // ------------------------------------------------------------------------------------------
     // Identity
     // ------------------------------------------------------------------------------------------
@@ -670,7 +1138,11 @@ class MosaicCustomerEntitlementRuntime internal constructor(
                 inFlight?.complete(MosaicCustomerEntitlementSyncResult.SignedOut)
                 inFlight = null
                 accepted = null
+                pendingAuthorityInvalidationDigest = null
                 state.value = MosaicCustomerEntitlementSnapshotState.Loading
+                authorityState.value = MosaicCustomerAuthorityState.Unavailable(
+                    MosaicCustomerAuthorityUnavailableReason.AUTHORITY_UNKNOWN,
+                )
                 if (bindingDigest != digest) {
                     cache.retainOnly(digest)
                     cache.writePointer(digest)
@@ -698,8 +1170,12 @@ class MosaicCustomerEntitlementRuntime internal constructor(
                 inFlight = null
                 accepted = null
                 bindingDigest = null
+                pendingAuthorityInvalidationDigest = null
                 cacheLoaded = true
                 state.value = MosaicCustomerEntitlementSnapshotState.SignedOut
+                authorityState.value = MosaicCustomerAuthorityState.Unavailable(
+                    MosaicCustomerAuthorityUnavailableReason.AUTHORITY_UNKNOWN,
+                )
                 cache.clearAll()
             }
             session.clear()
@@ -722,6 +1198,17 @@ class MosaicCustomerEntitlementRuntime internal constructor(
             // unavailable: nothing has failed, Mosaic simply has not answered about this person
             // before, and publishing a failure here would make every first sign-in look like one.
             val stored = cache.read(digest) ?: return@withLock
+            if (MosaicCustomerEntitlementCache.isAuthorityPolicyUnavailableMarker(stored)) {
+                accepted = null
+                authorityState.value = MosaicCustomerAuthorityState.Unavailable(
+                    MosaicCustomerAuthorityUnavailableReason.POLICY_UNAVAILABLE,
+                )
+                lastUnavailableReason = MosaicCustomerEntitlementUnavailableReason.AUTHORITY_UNKNOWN
+                state.value = MosaicCustomerEntitlementSnapshotState.Unavailable(
+                    MosaicCustomerEntitlementUnavailableReason.AUTHORITY_UNKNOWN,
+                )
+                return@withLock
+            }
             val decoded = MosaicCustomerEntitlementCodec.decodeCacheRecord(stored)
             if (decoded == null) {
                 // Truncated or tampered. It is discarded whole rather than partially read, and the
@@ -734,27 +1221,99 @@ class MosaicCustomerEntitlementRuntime internal constructor(
                     ),
                 )
                 cache.clear(digest)
+                val legacy = MosaicCustomerEntitlementCodec.isLegacyCacheRecord(stored)
+                val reason = if (legacy) {
+                    authorityState.value = MosaicCustomerAuthorityState.Unavailable(
+                        MosaicCustomerAuthorityUnavailableReason.AUTHORITY_UNKNOWN,
+                    )
+                    MosaicCustomerEntitlementUnavailableReason.AUTHORITY_UNKNOWN
+                } else {
+                    MosaicCustomerEntitlementUnavailableReason.SNAPSHOT_REJECTED
+                }
+                state.value = MosaicCustomerEntitlementSnapshotState.Unavailable(reason)
+                return@withLock
+            }
+            if (decoded.authority == null || decoded.minimumSupport == null) {
+                authorityState.value = MosaicCustomerAuthorityState.Unavailable(
+                    MosaicCustomerAuthorityUnavailableReason.AUTHORITY_UNKNOWN,
+                )
                 state.value = MosaicCustomerEntitlementSnapshotState.Unavailable(
-                    MosaicCustomerEntitlementUnavailableReason.SNAPSHOT_REJECTED,
+                    MosaicCustomerEntitlementUnavailableReason.AUTHORITY_UNKNOWN,
+                    decoded.snapshot,
                 )
                 return@withLock
             }
+            if (authorityAware) {
+                val context = authorityRequestContext()
+                val supportFailure = if (context == null) {
+                    MosaicCustomerAuthorityUnavailableReason.AUTHORITY_UNKNOWN
+                } else {
+                    minimumSupportFailure(decoded.minimumSupport, context)
+                }
+                val scopeMatches = context != null &&
+                    decoded.authority.scope == context.scope &&
+                    decoded.authority.scope.projectId == decoded.snapshot.projectId &&
+                    decoded.authority.scope.environmentId == decoded.snapshot.environmentId
+                if (!scopeMatches) {
+                    cache.clear(digest)
+                    authorityState.value = MosaicCustomerAuthorityState.Unavailable(
+                        MosaicCustomerAuthorityUnavailableReason.SCOPE_MISMATCH,
+                    )
+                    lastUnavailableReason = MosaicCustomerEntitlementUnavailableReason.AUTHORITY_UNKNOWN
+                    state.value = MosaicCustomerEntitlementSnapshotState.Unavailable(
+                        MosaicCustomerEntitlementUnavailableReason.AUTHORITY_UNKNOWN,
+                    )
+                    return@withLock
+                }
+                if (supportFailure != null) {
+                    authorityState.value = MosaicCustomerAuthorityState.Unavailable(
+                        supportFailure,
+                        minimumSupport = decoded.minimumSupport,
+                    )
+                    lastUnavailableReason = MosaicCustomerEntitlementUnavailableReason.AUTHORITY_UNKNOWN
+                    state.value = MosaicCustomerEntitlementSnapshotState.Unavailable(
+                        MosaicCustomerEntitlementUnavailableReason.AUTHORITY_UNKNOWN,
+                        decoded.snapshot,
+                    )
+                    return@withLock
+                }
+            }
             accepted = decoded
+            authorityState.value = MosaicCustomerAuthorityState.Available(
+                decoded.authority,
+                decoded.minimumSupport,
+            )
             publish(decoded, evaluate(decoded))
         }
     }
 
-    private fun persist(entry: MosaicCachedCustomerEntitlements, record: String?) {
-        val digest = bindingDigest
+    private fun persist(entry: MosaicCachedCustomerEntitlements, record: String?): Boolean {
+        val previousDigest = bindingDigest
+        val digest = previousDigest
             ?: MosaicCustomerEntitlementCache.bindingDigest(entry.snapshot.billingCustomerId)
-                .also { bindingDigest = it; runCatching { cache.writePointer(it) } }
         // A 304 slides the window without carrying a record, so the stored document is re-encoded
         // from what is already on disk rather than reconstructed from the decoded model — a
         // reconstruction could not reproduce the exact bytes the contentDigest was computed over.
-        val source = record ?: storedRecord(digest) ?: return
-        runCatching {
-            cache.write(digest, MosaicCustomerEntitlementCodec.encodeCacheRecord(source, entry.window))
+        val source = record ?: storedRecord(digest) ?: return false
+        val durableSource = if (record == null && entry.authority != null && entry.minimumSupport != null) {
+            runCatching {
+                MosaicCustomerAuthorityCodec.withMinimumSupport(source, entry.minimumSupport)
+            }.getOrNull() ?: return false
+        } else {
+            source
         }
+        val encoded = runCatching {
+            MosaicCustomerEntitlementCodec.encodeCacheRecord(durableSource, entry.window)
+        }.getOrNull() ?: return false
+        return runCatching {
+            // This callback is deliberately synchronous and runs while stateMutex is held. Cache
+            // commit therefore cannot race an identity generation change: the generation was
+            // checked immediately before this call, and no accepted/authority/state value is
+            // published until both snapshot and initial pointer writes have completed.
+            cacheCommit(cache, digest, encoded, previousDigest == null)
+            bindingDigest = digest
+            true
+        }.getOrDefault(false)
     }
 
     private fun storedRecord(digest: String): String? = cache.read(digest)?.let { stored ->
@@ -826,6 +1385,18 @@ class MosaicCustomerEntitlementRuntime internal constructor(
         // moment of the last sync. A cache that was fresh when it arrived and has since crossed
         // `validUntil` must answer as stale or unknown even though nothing has been fetched since,
         // and republishing keeps the observable state and the answer from ever disagreeing.
+        val currentAuthority = authorityState.value as? MosaicCustomerAuthorityState.Available
+        if (authorityAware && currentAuthority?.authority?.kind != MosaicCustomerAuthorityKind.MOSAIC) {
+            val unavailable = state.value as? MosaicCustomerEntitlementSnapshotState.Unavailable
+            return unknownCheck(
+                entitlementKey,
+                MosaicCustomerEntitlementExplanationCode.PROVIDER_EVIDENCE_STALE,
+                MosaicCustomerUncertaintyReason.STALE_VALIDATION,
+                MosaicCustomerEntitlementCacheState.MISSING,
+                snapshotVersion = unavailable?.lastKnown?.snapshotVersion,
+                asOf = unavailable?.lastKnown?.asOf,
+            )
+        }
         accepted?.let { publish(it, evaluate(it)) }
         val current = state.value
         return when (current) {

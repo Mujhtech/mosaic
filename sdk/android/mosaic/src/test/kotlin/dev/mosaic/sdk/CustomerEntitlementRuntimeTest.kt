@@ -593,15 +593,15 @@ class CustomerEntitlementRuntimeTest {
         assertEquals(MosaicCustomerEntitlementCacheState.INVALID, check.cacheState)
     }
 
-    /** A cold start serves the persisted snapshot without any network at all. */
+    /** A legacy v1 cache has no authority epoch and therefore cannot grant access after restart. */
     @Test
-    fun aColdStartServesThePersistedSnapshot() = runTest {
+    fun aColdStartTreatsALegacySnapshotAsAuthorityUnknown() = runTest {
         runtime({ _, _ -> record("bounded-offline-cache") }).refreshCustomerEntitlements()
 
         val reopened = runtime({ _, _ -> error("A cold start must read the cache before syncing.") })
         val check = reopened.checkCustomerEntitlement("pro")
 
-        assertTrue(check.state is MosaicCustomerEntitlementState.Active)
+        assertTrue(check.state is MosaicCustomerEntitlementState.Unknown)
         assertEquals(13L, check.snapshotVersion)
     }
 }

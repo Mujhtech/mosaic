@@ -5,10 +5,16 @@ import com.google.gson.JsonParser
 import java.io.File
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertTrue
+import org.junit.Rule
 import org.junit.Test
+import org.junit.rules.TemporaryFolder
 
 class PlacementDecisionTest {
+    @get:Rule
+    val folder = TemporaryFolder()
+
     private val invalidFixtureNames = listOf(
         "duplicate-priority.json",
         "fallback-cycle.json",
@@ -200,6 +206,46 @@ class PlacementDecisionTest {
         }
     }
 
+    /** Unknown authority must not be silently replaced by provider-observed active access. */
+    @Test
+    fun `authority-aware placement does not query provider before an epoch is accepted`() = runTest {
+        val provider = ActiveProvider()
+        val authorityRuntime = MosaicCustomerEntitlementRuntime(
+            transport = { _, _ -> error("Placement evaluation must not synchronize implicitly.") },
+            cache = MosaicCustomerEntitlementCache(folder.root),
+            session = MosaicCustomerTokenSession(
+                provider = { _ ->
+                    MosaicCustomerAccessTokenResult.Issued(
+                        MosaicCustomerAccessToken("mosaic-customer-token-placement"),
+                    )
+                },
+            ),
+            trustedTime = { null },
+            authorityAware = true,
+        )
+        val client = MosaicHostedConfigurationClient(
+            transport = MosaicConfigurationTransport { MosaicConfigurationResponse.NotModified },
+            cache = MemoryCache(
+                MosaicCachedConfiguration(
+                    "\"release-advanced\"",
+                    fixture("configuration-delivery/v2/advanced-release.json"),
+                ),
+            ),
+            purchaseProvider = provider,
+            customerEntitlementRuntime = authorityRuntime,
+        )
+
+        val decision = client.decidePlacement("export_pdf")
+        val matchedRuleId = when (decision) {
+            is MosaicPlacementDecisionResult.Available -> decision.matchedRuleId
+            is MosaicPlacementDecisionResult.NoPaywall -> decision.matchedRuleId
+            else -> null
+        }
+
+        assertNotEquals("rule_pro", matchedRuleId)
+        assertEquals(0, provider.activeEntitlementCalls)
+    }
+
     private fun context(value: JsonObject): MosaicDecisionContext {
         val attributes = value.getAsJsonObject("attributes")?.entrySet()?.associate { (key, element) -> key to parseTypedValue(element.asJsonObject, key) }.orEmpty()
         val entitlements = value.getAsJsonObject("entitlements")?.entrySet()?.associate { (key, element) -> key to MosaicEntitlementState.valueOf(element.asString.uppercase()) }.orEmpty()
@@ -225,5 +271,22 @@ class PlacementDecisionTest {
     private class MemoryCache(var value: MosaicCachedConfiguration?) : MosaicConfigurationCache {
         override suspend fun read() = value
         override suspend fun write(value: MosaicCachedConfiguration) { this.value = value }
+    }
+
+    private class ActiveProvider : MosaicPurchaseProvider {
+        var activeEntitlementCalls = 0
+
+        override suspend fun loadProducts(productIds: List<String>) = MosaicProductLoadResult.Loaded(
+            productIds.map { MosaicProduct(it, it, "\$9.99") },
+        )
+
+        override suspend fun purchase(productId: String) = MosaicPurchaseResult.ProductUnavailable(productId)
+
+        override suspend fun restore() = MosaicRestoreResult.NothingToRestore
+
+        override suspend fun activeEntitlements(): MosaicActiveEntitlementsResult {
+            activeEntitlementCalls += 1
+            return MosaicActiveEntitlementsResult.Available(setOf(MosaicEntitlement("entitlement_pro")))
+        }
     }
 }

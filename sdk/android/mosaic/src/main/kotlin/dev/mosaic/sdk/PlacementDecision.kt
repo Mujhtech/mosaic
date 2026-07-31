@@ -534,7 +534,7 @@ private fun parseSemver(value: String): Semver? {
     if (prerelease.any { part -> part.length > 1 && part[0] == '0' && part.all(Char::isDigit) }) return null
     return Semver(listOf(match.groupValues[1], match.groupValues[2].ifEmpty { "0" }, match.groupValues[3].ifEmpty { "0" }).map(String::toInt), prerelease)
 }
-private fun compareSemver(left: String, right: String): Int? {
+internal fun compareSemver(left: String, right: String): Int? {
     val a = parseSemver(left) ?: return null
     val b = parseSemver(right) ?: return null
     a.core.indices.forEach { index -> a.core[index].compareTo(b.core[index]).takeIf { it != 0 }?.let { return it } }

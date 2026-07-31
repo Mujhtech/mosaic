@@ -114,6 +114,11 @@ the Environment. The on-screen status reports persistent queue depth. The
 optional Transaction Observation handoff is likewise off unless
 `--ez mosaic.observations.enabled true` is passed.
 
+When the entitlement endpoint returns Contract v2, the example also shows the current source or
+Mosaic authority, authority epoch, and transition state. An unavailable or legacy authority is
+labelled explicitly and is never rendered as inactive access. Switching authority does not replace
+the configured RevenueCat or Google Play purchase provider.
+
 The example includes the optional `:mosaic-revenuecat` module, initializes it
 only when the host supplies that public key, and lets hosted refresh atomically
 accept the exact Commerce Configuration sidecar. Omit

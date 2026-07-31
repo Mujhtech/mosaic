@@ -83,6 +83,9 @@ internal class MosaicHTTPCustomerEntitlementTransport(
             .header("Accept", "application/json")
             .header("Mosaic-SDK-Platform", "android")
             .header("Mosaic-SDK-Version", MOSAIC_ANDROID_SDK_VERSION)
+            .header("Mosaic-Authority-Contract-Versions", "2,1")
+            .header("Mosaic-Authority-Capabilities", MosaicCustomerAuthorityCodec.capabilities.joinToString(","))
+            .apply { configuration.applicationVersion?.let { header("Mosaic-App-Version", it) } }
             // The sync request is a contract record, so it always has a body and is always a POST.
             // Conditional revalidation travels in that body rather than in `If-None-Match`.
             .post(requestBody.toRequestBody("application/json".toMediaType()))

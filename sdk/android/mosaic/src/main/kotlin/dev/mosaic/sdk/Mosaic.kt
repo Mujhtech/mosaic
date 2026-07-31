@@ -67,11 +67,16 @@ class Mosaic private constructor(
         bundledFallback: MosaicPaywallDocumentSource? = MosaicCanonicalBundleSource(context),
         diagnostics: MosaicDiagnosticSink = MosaicDiagnosticSink.None,
     ): MosaicHostedConfigurationClient {
-        val namespace = mosaicConfigurationCacheNamespace(configuration)
+        val detectedAppVersion = configuration.applicationVersion ?: runCatching {
+            context.applicationContext.packageManager
+                .getPackageInfo(context.applicationContext.packageName, 0).versionName
+        }.getOrNull()?.takeIf { Regex("^[0-9A-Za-z][0-9A-Za-z.+_-]{0,63}$").matches(it) } ?: "0"
+        val runtimeConfiguration = configuration.copy(applicationVersion = detectedAppVersion)
+        val namespace = mosaicConfigurationCacheNamespace(runtimeConfiguration)
         val identityStore = MosaicIdentityStore(context, namespace)
         val experimentStore = MosaicExperimentAssignmentStoreRegistry.store(context, namespace)
         val analytics = (context.applicationContext as? android.app.Application)?.let { application ->
-            MosaicAnalyticsRuntimeRegistry.runtime(application, namespace, configuration, identityStore)
+            MosaicAnalyticsRuntimeRegistry.runtime(application, namespace, runtimeConfiguration, identityStore)
         }
         // The observation runtime subscribes to the adapter stream that already exists; no provider
         // API changes and no code runs at all unless the host opted in.
@@ -84,7 +89,7 @@ class Mosaic private constructor(
                     MosaicTransactionObservationRuntimeRegistry.runtime(
                         application,
                         namespace,
-                        configuration,
+                        runtimeConfiguration,
                         updates,
                     )
                 }
@@ -96,21 +101,43 @@ class Mosaic private constructor(
         // One session for both consumers. Sharing it is what makes an observation's attribution
         // consistent with the entitlement state the same app is reading, and it keeps a single
         // single-flight boundary in front of the host's token backend rather than two competing ones.
-        val customerTokenSession = configuration.customerAccessTokenProvider?.let(::MosaicCustomerTokenSession)
+        val customerTokenSession = runtimeConfiguration.customerAccessTokenProvider?.let(::MosaicCustomerTokenSession)
         val customerEntitlements = customerTokenSession?.let { session ->
             MosaicCustomerEntitlementRuntime(
-                transport = MosaicHTTPCustomerEntitlementTransport(configuration),
+                transport = MosaicHTTPCustomerEntitlementTransport(runtimeConfiguration),
                 cache = MosaicCustomerEntitlementCache(context, namespace),
                 session = session,
                 trustedTime = {
                     clientReference.get()?.acceptedConfiguration?.trustedTimeAnchor?.nowEpochMillis()
                 },
                 diagnostics = diagnostics,
+                authorityRequestContext = {
+                    val release = clientReference.get()?.acceptedConfiguration?.release
+                    val projectId = release?.projectId
+                    val applicationId = runtimeConfiguration.applicationId
+                    if (release == null || projectId == null || applicationId == null) {
+                        null
+                    } else {
+                        MosaicCustomerAuthorityRequestContext(
+                            MosaicCustomerAuthorityScope(
+                                projectId,
+                                release.environment.id,
+                                applicationId,
+                                "android",
+                            ),
+                            detectedAppVersion,
+                        )
+                    }
+                },
+                authorityAware = true,
             )
         }
         val customerPurchaseRefresh = customerEntitlements?.let { runtime ->
-            commerceUpdates?.let { updates ->
-                MosaicCustomerPurchaseRefresh(runtime).also { it.collect(updates) }
+            MosaicCustomerPurchaseRefresh(runtime).also { refresh ->
+                commerceUpdates?.let(refresh::collect)
+                (purchaseProvider as? MosaicConfiguredPurchaseProvider)
+                    ?.purchaseRefreshes
+                    ?.let(refresh::collectPurchaseCompletions)
             }
         }
         // Attribution for the optional observation handoff. Without it a validated purchase anchors
@@ -125,19 +152,19 @@ class Mosaic private constructor(
             observations.bindCustomerTokenSource { customerTokenSession.heldToken() }
         }
         return MosaicHostedConfigurationClient(
-            transport = MosaicHTTPConfigurationTransport(configuration),
-            commerceTransport = configuration.applicationId?.let {
-                MosaicHTTPCommerceConfigurationTransport(configuration)
+            transport = MosaicHTTPConfigurationTransport(runtimeConfiguration),
+            commerceTransport = runtimeConfiguration.applicationId?.let {
+                MosaicHTTPCommerceConfigurationTransport(runtimeConfiguration)
             },
-            cache = MosaicFileConfigurationCache(context, configuration),
+            cache = MosaicFileConfigurationCache(context, runtimeConfiguration),
             bundledFallback = bundledFallback,
-            applicationId = configuration.applicationId,
+            applicationId = runtimeConfiguration.applicationId,
             configurablePurchaseProvider = purchaseProvider as? MosaicConfigurablePurchaseProvider,
             diagnostics = diagnostics,
             identityStore = identityStore,
             analyticsRuntime = analytics,
             purchaseProvider = purchaseProvider,
-            applicationVersion = configuration.applicationVersion,
+            applicationVersion = detectedAppVersion,
             experimentStore = experimentStore,
             transactionObservationRuntime = observations,
             customerEntitlementRuntime = customerEntitlements,

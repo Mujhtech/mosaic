@@ -428,7 +428,21 @@ class MosaicHostedConfigurationClient(
     val acceptedConfiguration: MosaicAcceptedConfiguration?
         get() = accepted
 
-    suspend fun refresh(): MosaicConfigurationRefreshResult = refreshLock.withLock {
+    suspend fun refresh(): MosaicConfigurationRefreshResult {
+        // A server-owned authority transition changes whether provider observations may participate
+        // in targeting, so every explicit refresh checks authority before fetching configuration.
+        // Failure remains safe and does not prevent the ordinary configuration recovery attempt.
+        try {
+            customerEntitlementRuntime?.refreshCustomerEntitlements()
+        } catch (cancellation: CancellationException) {
+            throw cancellation
+        } catch (_: Exception) {
+            // Entitlement transport and host token-provider defects cannot block configuration.
+        }
+        return refreshConfiguration()
+    }
+
+    private suspend fun refreshConfiguration(): MosaicConfigurationRefreshResult = refreshLock.withLock {
         loadValidCache()
         val response = try {
             transport.fetch(accepted?.etag)
@@ -642,8 +656,8 @@ class MosaicHostedConfigurationClient(
     //
     // Every member below is inert unless the host supplied a `customerAccessTokenProvider`, and
     // every one of them reports `unavailable` rather than `inactive` when it cannot answer. None of
-    // them changes what the provider-observed commerce API does, and Placement targeting continues
-    // to read provider-observed entitlements exactly as before.
+    // them changes what the provider-observed commerce API does. Placement targeting keeps reading
+    // provider observations until Mosaic authority is established, then reads Mosaic alone.
     // ------------------------------------------------------------------------------------------
 
     /**
@@ -658,6 +672,15 @@ class MosaicHostedConfigurationClient(
             ?: MutableStateFlow(
                 MosaicCustomerEntitlementSnapshotState.Unavailable(
                     MosaicCustomerEntitlementUnavailableReason.NOT_CONFIGURED,
+                ),
+            ).asStateFlow()
+
+    /** Replaying server-owned access authority; never inferred from the commerce adapter. */
+    val customerAuthority: StateFlow<MosaicCustomerAuthorityState>
+        get() = customerEntitlementRuntime?.customerAuthority
+            ?: MutableStateFlow<MosaicCustomerAuthorityState>(
+                MosaicCustomerAuthorityState.Unavailable(
+                    MosaicCustomerAuthorityUnavailableReason.AUTHORITY_UNKNOWN,
                 ),
             ).asStateFlow()
 
@@ -845,7 +868,29 @@ class MosaicHostedConfigurationClient(
                 configuration.release.paywallVersions.values.flatMap { it.productReferenceIds }
             ).toSet()
         val provider = purchaseProvider
-        val entitlementStates = if (entitlementKeys.isEmpty()) emptyMap() else when (val result = provider?.activeEntitlements()) {
+        val authority = customerEntitlementRuntime?.customerAuthority?.value
+        val authorityKind = (authority as? MosaicCustomerAuthorityState.Available)?.authority?.kind
+        val entitlementStates = if (entitlementKeys.isEmpty()) {
+            emptyMap()
+        } else if (authorityKind == MosaicCustomerAuthorityKind.MOSAIC) {
+            // Authority and commerce are independent. Once Mosaic is authoritative, targeting reads
+            // only accepted Mosaic entries; provider-observed access is not silently unioned.
+            entitlementKeys.associateWith { key ->
+                when (customerEntitlementRuntime?.checkCustomerEntitlement(key)?.state) {
+                    is MosaicCustomerEntitlementState.Active -> MosaicEntitlementState.ACTIVE
+                    is MosaicCustomerEntitlementState.Inactive -> MosaicEntitlementState.INACTIVE
+                    is MosaicCustomerEntitlementState.Unknown,
+                    is MosaicCustomerEntitlementState.Unavailable,
+                    null,
+                    -> MosaicEntitlementState.UNKNOWN
+                }
+            }
+        } else if (customerEntitlementRuntime != null && authorityKind == null) {
+            // An authority-aware runtime may not infer access from the commerce provider while its
+            // epoch is unknown or locally unsupported. Unknown remains unknown until the server
+            // establishes source, source_rollback, or Mosaic authority explicitly.
+            entitlementKeys.associateWith { MosaicEntitlementState.UNKNOWN }
+        } else when (val result = provider?.activeEntitlements()) {
             is MosaicActiveEntitlementsResult.Available -> entitlementKeys.associateWith { key ->
                 val referenceId = configuration.release.entitlementReferences.values.first { it.key == key }.id
                 if (result.entitlements.any { it.id == referenceId }) MosaicEntitlementState.ACTIVE else MosaicEntitlementState.INACTIVE

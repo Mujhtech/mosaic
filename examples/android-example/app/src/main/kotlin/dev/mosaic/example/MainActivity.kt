@@ -41,6 +41,7 @@ import dev.mosaic.sdk.MosaicCommerceUpdateAcceptanceDisposition
 import dev.mosaic.sdk.MosaicCustomerAccessToken
 import dev.mosaic.sdk.MosaicCustomerAccessTokenProvider
 import dev.mosaic.sdk.MosaicCustomerAccessTokenResult
+import dev.mosaic.sdk.MosaicCustomerAuthorityState
 import dev.mosaic.sdk.MosaicCustomerEntitlementSnapshotState
 import dev.mosaic.sdk.MosaicCustomerEntitlementState
 import dev.mosaic.sdk.MosaicCustomerSyncResult
@@ -169,12 +170,18 @@ class MainActivity : ComponentActivity() {
                 // The authoritative state is observed, not polled: identity changes and background
                 // refreshes both move it, and a Compose host should see both without asking.
                 val authoritative by hosted.customerEntitlements.collectAsState()
+                val authority by hosted.customerAuthority.collectAsState()
                 var restoreStatus by remember { mutableStateOf("") }
                 val scope = rememberCoroutineScope()
 
                 Column(Modifier.fillMaxSize()) {
                     Text(analyticsStatus, modifier = Modifier.padding(12.dp))
                     Text(observationStatus, modifier = Modifier.padding(horizontal = 12.dp))
+                    Text(
+                        describeAuthority(authority),
+                        style = MaterialTheme.typography.bodySmall,
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp),
+                    )
                     Text(
                         describeAuthoritative(authoritative) + restoreStatus,
                         style = MaterialTheme.typography.bodySmall,
@@ -263,6 +270,14 @@ class MainActivity : ComponentActivity() {
         const val CUSTOMER_TOKEN_EXTRA = "mosaic.customer.token"
         const val CUSTOMER_ID_EXTRA = "mosaic.customer.id"
     }
+}
+
+private fun describeAuthority(state: MosaicCustomerAuthorityState): String = when (state) {
+    is MosaicCustomerAuthorityState.Available ->
+        "Access authority: ${state.authority.kind.wireName} · epoch ${state.authority.epoch} · " +
+            state.authority.transitionState.wireName
+    is MosaicCustomerAuthorityState.Unavailable ->
+        "Access authority: unavailable (${state.reason.wireName}); provider access is not merged."
 }
 
 /**
