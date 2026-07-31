@@ -1,9 +1,18 @@
 import 'dart:convert';
 
+import 'commerce_configuration_v2.dart';
 import 'configuration_delivery.dart';
 import 'sha256.dart';
 
 const String mosaicCommerceConfigurationVersion = '1';
+const List<String> mosaicSupportedCommerceConfigurationVersions = <String>[
+  '2',
+  '1',
+];
+const List<String> mosaicSupportedCommerceProviderContractVersions = <String>[
+  '2',
+  '1',
+];
 const int mosaicMaximumCommerceConfigurationBytes = 1024 * 1024;
 
 final class MosaicCommerceConfigurationException implements Exception {
@@ -24,6 +33,15 @@ enum MosaicStorePlatform {
   final String wireValue;
 }
 
+enum MosaicCommerceProductType {
+  subscription('subscription'),
+  oneTimeNonConsumable('one_time_non_consumable');
+
+  const MosaicCommerceProductType(this.wireValue);
+
+  final String wireValue;
+}
+
 enum MosaicProviderCapabilityName {
   productLoading('productLoading'),
   subscriptions('subscriptions'),
@@ -37,7 +55,13 @@ enum MosaicProviderCapabilityName {
   deferredPurchases('deferredPurchases'),
   serverConfirmedTransactions('serverConfirmedTransactions'),
   productSynchronization('productSynchronization'),
-  providerDiagnostics('providerDiagnostics');
+  providerDiagnostics('providerDiagnostics'),
+  basePlans('basePlans'),
+  explicitOffers('explicitOffers'),
+  storeSynchronization('storeSynchronization'),
+  activePurchaseRecovery('activePurchaseRecovery'),
+  asynchronousCommerceUpdates('asynchronousCommerceUpdates'),
+  localDeliveryAcceptance('localDeliveryAcceptance');
 
   const MosaicProviderCapabilityName(this.wireValue);
 
@@ -136,16 +160,32 @@ final class MosaicSdkLocalProviderActivation extends MosaicProviderActivation {
   String get source => 'sdkLocal';
 }
 
+final class MosaicNativeStoreProviderActivation
+    extends MosaicProviderActivation {
+  const MosaicNativeStoreProviderActivation();
+
+  @override
+  String get source => 'nativeStore';
+}
+
+enum MosaicCommerceRecoveryMode {
+  providerDefined,
+  storeSynchronization,
+  activePurchaseRecovery,
+}
+
 final class MosaicActiveProvider {
   MosaicActiveProvider({
     required this.identity,
     required this.activation,
     required Iterable<MosaicProviderCapability> capabilities,
+    this.recoveryMode = MosaicCommerceRecoveryMode.providerDefined,
   }) : capabilities = List.unmodifiable(capabilities);
 
   final MosaicProviderIdentity identity;
   final MosaicProviderActivation activation;
   final List<MosaicProviderCapability> capabilities;
+  final MosaicCommerceRecoveryMode recoveryMode;
 
   MosaicProviderCapability? capability(MosaicProviderCapabilityName name) {
     for (final capability in capabilities) {
@@ -181,18 +221,42 @@ final class MosaicRevenueCatPackageMapping extends MosaicAdapterMapping {
   String get kind => 'revenueCatPackage';
 }
 
+final class MosaicStoreKitProductMapping extends MosaicAdapterMapping {
+  const MosaicStoreKitProductMapping();
+
+  @override
+  String get kind => 'storeKitProduct';
+}
+
+final class MosaicGooglePlayProductMapping extends MosaicAdapterMapping {
+  const MosaicGooglePlayProductMapping({
+    this.basePlanId,
+    this.offerId,
+  });
+
+  final String? basePlanId;
+  final String? offerId;
+
+  @override
+  String get kind => 'googlePlayProduct';
+}
+
 final class MosaicCommerceProductMapping {
   const MosaicCommerceProductMapping({
     required this.mosaicProductId,
     required this.mappingId,
     required this.providerProductReference,
     required this.adapterMapping,
+    this.productType,
+    this.entitlementKeys = const <String>[],
   });
 
   final String mosaicProductId;
   final String mappingId;
   final String providerProductReference;
   final MosaicAdapterMapping adapterMapping;
+  final MosaicCommerceProductType? productType;
+  final List<String> entitlementKeys;
 }
 
 final class MosaicCommerceEntitlementMapping {
@@ -208,9 +272,10 @@ final class MosaicCommerceEntitlementMapping {
 enum MosaicCommerceFreshnessSource {
   providerSynchronization,
   sdkLocalSnapshot,
+  nativeStoreConfiguration,
 }
 
-enum MosaicCommerceFreshnessStatus { fresh, stale }
+enum MosaicCommerceFreshnessStatus { configured, fresh, stale }
 
 final class MosaicCommerceFreshness {
   const MosaicCommerceFreshness({
@@ -220,6 +285,8 @@ final class MosaicCommerceFreshness {
     required this.synchronizedAt,
     required this.staleAt,
     this.expiresAt,
+    this.configuredAt,
+    this.observationEnvironment,
   });
 
   final MosaicCommerceFreshnessSource source;
@@ -228,10 +295,13 @@ final class MosaicCommerceFreshness {
   final DateTime synchronizedAt;
   final DateTime staleAt;
   final DateTime? expiresAt;
+  final DateTime? configuredAt;
+  final String? observationEnvironment;
 }
 
 final class MosaicCommerceConfiguration {
   MosaicCommerceConfiguration({
+    this.version = mosaicCommerceConfigurationVersion,
     required this.id,
     required this.environmentId,
     required this.applicationId,
@@ -258,6 +328,7 @@ final class MosaicCommerceConfiguration {
         });
 
   final String id;
+  final String version;
   final String environmentId;
   final String applicationId;
   final MosaicStorePlatform storePlatform;
@@ -334,7 +405,18 @@ final class MosaicCommerceConfigurationDecoder {
       },
       r'$',
     );
-    final version = _string(root['commerceConfigurationVersion'], r'$.version');
+    final version = _string(
+      root['commerceConfigurationVersion'],
+      r'$.commerceConfigurationVersion',
+    );
+    if (version == '2') {
+      return MosaicCommerceConfigurationV2Decoder.decode(
+        source,
+        expectedRelease: expectedRelease,
+        expectedApplicationId: expectedApplicationId,
+        expectedStorePlatform: expectedStorePlatform,
+      );
+    }
     if (version != mosaicCommerceConfigurationVersion) {
       throw const MosaicCommerceConfigurationException(
         'The Commerce Configuration version is unsupported.',
@@ -451,7 +533,7 @@ final class MosaicCommerceConfigurationDecoder {
       final name = _enumValue(
         item['name'],
         '$itemPath.name',
-        MosaicProviderCapabilityName.values,
+        _v1CapabilityNames,
         (value) => value.wireValue,
       );
       if (!seen.add(name)) {
@@ -695,7 +777,10 @@ final class MosaicCommerceConfigurationDecoder {
     final source = _enumValue(
       object['source'],
       '$path.source',
-      MosaicCommerceFreshnessSource.values,
+      const <MosaicCommerceFreshnessSource>[
+        MosaicCommerceFreshnessSource.providerSynchronization,
+        MosaicCommerceFreshnessSource.sdkLocalSnapshot,
+      ],
       (value) => value.name,
     );
     final expected = activationSource == 'providerConnection'
@@ -726,7 +811,10 @@ final class MosaicCommerceConfigurationDecoder {
       status: _enumValue(
         object['status'],
         '$path.status',
-        MosaicCommerceFreshnessStatus.values,
+        const <MosaicCommerceFreshnessStatus>[
+          MosaicCommerceFreshnessStatus.fresh,
+          MosaicCommerceFreshnessStatus.stale,
+        ],
         (value) => value.name,
       ),
       providerObservedAt: observed,
@@ -1014,3 +1102,20 @@ final RegExp _credentialPattern = RegExp(
   r'(?:^|[^A-Za-z0-9])(?:sk_|appl_|goog_|rcb_)[A-Za-z0-9_-]{8,}|authorization\s*:|bearer\s+',
   caseSensitive: false,
 );
+
+const List<MosaicProviderCapabilityName> _v1CapabilityNames =
+    <MosaicProviderCapabilityName>[
+  MosaicProviderCapabilityName.productLoading,
+  MosaicProviderCapabilityName.subscriptions,
+  MosaicProviderCapabilityName.oneTimeNonConsumables,
+  MosaicProviderCapabilityName.trials,
+  MosaicProviderCapabilityName.introductoryOffers,
+  MosaicProviderCapabilityName.promotionalOffers,
+  MosaicProviderCapabilityName.restore,
+  MosaicProviderCapabilityName.activeEntitlementLookup,
+  MosaicProviderCapabilityName.pendingPurchases,
+  MosaicProviderCapabilityName.deferredPurchases,
+  MosaicProviderCapabilityName.serverConfirmedTransactions,
+  MosaicProviderCapabilityName.productSynchronization,
+  MosaicProviderCapabilityName.providerDiagnostics,
+];

@@ -4,6 +4,7 @@ import (
 	"errors"
 	"regexp"
 	"strconv"
+	"time"
 
 	validation "github.com/go-ozzo/ozzo-validation/v4"
 
@@ -179,33 +180,47 @@ func (request *providerConnectionScopesRequest) Validate() error {
 }
 
 type providerAssignmentRequest struct {
-	ConnectionID                       string `json:"connectionId"`
-	AcknowledgeProductionConnectionUse bool   `json:"acknowledgeProductionConnectionUse"`
+	Provider                           cloudworkspace.ProviderKind           `json:"provider"`
+	ActivationKind                     cloudworkspace.ProviderActivationKind `json:"activationKind"`
+	ConnectionID                       string                                `json:"connectionId"`
+	AcknowledgeProductionConnectionUse bool                                  `json:"acknowledgeProductionConnectionUse"`
 }
 
 func (request *providerAssignmentRequest) Validate() error {
-	return validation.ValidateStruct(request, validation.Field(&request.ConnectionID, validation.Required))
+	return validation.ValidateStruct(request,
+		validation.Field(&request.Provider, validation.When(request.ActivationKind == cloudworkspace.ProviderActivationNativeStore, validation.Required)),
+		validation.Field(&request.ActivationKind, validation.In("", cloudworkspace.ProviderActivationConnection, cloudworkspace.ProviderActivationNativeStore)),
+		validation.Field(&request.ConnectionID,
+			validation.When(request.ActivationKind != cloudworkspace.ProviderActivationNativeStore, validation.Required),
+			validation.When(request.ActivationKind == cloudworkspace.ProviderActivationNativeStore, validation.Empty)),
+	)
 }
 
 type providerMappingDraftRequest struct {
-	ConnectionID               string `json:"connectionId"`
-	EnvironmentID              string `json:"environmentId"`
-	ApplicationID              string `json:"applicationId"`
-	ProviderProductIdentifier  string `json:"providerProductIdentifier"`
-	ProviderPackageIdentifier  string `json:"providerPackageIdentifier"`
-	ProviderOfferingIdentifier string `json:"providerOfferingIdentifier"`
-	ExpectedStoreProductID     string `json:"expectedStoreProductId"`
+	ConnectionID               string                      `json:"connectionId"`
+	Provider                   cloudworkspace.ProviderKind `json:"provider"`
+	EnvironmentID              string                      `json:"environmentId"`
+	ApplicationID              string                      `json:"applicationId"`
+	ProviderProductIdentifier  string                      `json:"providerProductIdentifier"`
+	ProviderPackageIdentifier  string                      `json:"providerPackageIdentifier"`
+	ProviderOfferingIdentifier string                      `json:"providerOfferingIdentifier"`
+	ExpectedStoreProductID     string                      `json:"expectedStoreProductId"`
+	ProviderBasePlanIdentifier string                      `json:"providerBasePlanIdentifier"`
+	ProviderOfferIdentifier    string                      `json:"providerOfferIdentifier"`
 }
 
 func (request *providerMappingDraftRequest) Validate() error {
 	if err := validation.ValidateStruct(request,
-		validation.Field(&request.ConnectionID, validation.Required),
+		validation.Field(&request.Provider, validation.When(request.ConnectionID == "", validation.Required,
+			validation.In(cloudworkspace.ProviderAppStore, cloudworkspace.ProviderGooglePlay))),
 		validation.Field(&request.EnvironmentID, validation.Required),
 		validation.Field(&request.ApplicationID, validation.Required),
 		validation.Field(&request.ProviderProductIdentifier, validation.Required, validation.Length(1, 255), validation.Match(nonWhitespacePattern)),
 		validation.Field(&request.ProviderPackageIdentifier, validation.Length(0, 255), validation.When(request.ProviderPackageIdentifier != "", validation.Match(nonWhitespacePattern))),
 		validation.Field(&request.ProviderOfferingIdentifier, validation.Length(0, 255), validation.When(request.ProviderOfferingIdentifier != "", validation.Match(nonWhitespacePattern))),
 		validation.Field(&request.ExpectedStoreProductID, validation.Length(0, 255), validation.When(request.ExpectedStoreProductID != "", validation.Match(nonWhitespacePattern))),
+		validation.Field(&request.ProviderBasePlanIdentifier, validation.Length(0, 255), validation.When(request.ProviderBasePlanIdentifier != "", validation.Match(nonWhitespacePattern))),
+		validation.Field(&request.ProviderOfferIdentifier, validation.Length(0, 255), validation.When(request.ProviderOfferIdentifier != "", validation.Match(nonWhitespacePattern))),
 	); err != nil {
 		return err
 	}
@@ -222,6 +237,8 @@ type providerMappingReplacementRequest struct {
 	ProviderProductIdentifier  string `json:"providerProductIdentifier"`
 	ProviderPackageIdentifier  string `json:"providerPackageIdentifier"`
 	ProviderOfferingIdentifier string `json:"providerOfferingIdentifier"`
+	ProviderBasePlanIdentifier string `json:"providerBasePlanIdentifier"`
+	ProviderOfferIdentifier    string `json:"providerOfferIdentifier"`
 }
 
 func (request *providerMappingReplacementRequest) Validate() error {
@@ -229,6 +246,8 @@ func (request *providerMappingReplacementRequest) Validate() error {
 		validation.Field(&request.ProviderProductIdentifier, validation.Required, validation.Length(1, 255), validation.Match(nonWhitespacePattern)),
 		validation.Field(&request.ProviderPackageIdentifier, validation.Length(0, 255), validation.When(request.ProviderPackageIdentifier != "", validation.Match(nonWhitespacePattern))),
 		validation.Field(&request.ProviderOfferingIdentifier, validation.Length(0, 255), validation.When(request.ProviderOfferingIdentifier != "", validation.Match(nonWhitespacePattern))),
+		validation.Field(&request.ProviderBasePlanIdentifier, validation.Length(0, 255), validation.When(request.ProviderBasePlanIdentifier != "", validation.Match(nonWhitespacePattern))),
+		validation.Field(&request.ProviderOfferIdentifier, validation.Length(0, 255), validation.When(request.ProviderOfferIdentifier != "", validation.Match(nonWhitespacePattern))),
 	); err != nil {
 		return err
 	}
@@ -239,6 +258,86 @@ func (request *providerMappingReplacementRequest) Validate() error {
 		}
 	}
 	return nil
+}
+
+type providerMappingObservationRequest struct {
+	AdapterVersion string                                    `json:"adapterVersion"`
+	StoreContext   cloudworkspace.ProviderObservationContext `json:"storeContext"`
+	Result         cloudworkspace.ProviderObservationResult  `json:"result"`
+	DiagnosticCode string                                    `json:"diagnosticCode"`
+	CorrelationID  string                                    `json:"correlationId"`
+	Metadata       providerMappingObservationMetadataRequest `json:"metadata"`
+	ObservedAt     time.Time                                 `json:"observedAt"`
+	ExpiresAt      *time.Time                                `json:"expiresAt"`
+}
+
+type providerMappingObservationMetadataRequest struct {
+	ClientPlatform        cloudworkspace.ProviderObservationClientPlatform      `json:"clientPlatform"`
+	ClientVersion         string                                                 `json:"clientVersion"`
+	ApplicationVersion    string                                                 `json:"applicationVersion"`
+	OSVersion             string                                                 `json:"osVersion"`
+	ConfigurationSource   cloudworkspace.ProviderObservationConfigurationSource `json:"configurationSource"`
+	StorefrontCountryCode string                                                 `json:"storefrontCountryCode"`
+	TestScenario          cloudworkspace.ProviderObservationTestScenario        `json:"testScenario"`
+}
+
+func (request providerMappingObservationMetadataRequest) domain() cloudworkspace.ProviderMappingObservationMetadata {
+	return cloudworkspace.ProviderMappingObservationMetadata{
+		ClientPlatform: request.ClientPlatform, ClientVersion: request.ClientVersion,
+		ApplicationVersion: request.ApplicationVersion, OSVersion: request.OSVersion,
+		ConfigurationSource: request.ConfigurationSource,
+		StorefrontCountryCode: request.StorefrontCountryCode, TestScenario: request.TestScenario,
+	}
+}
+
+func (request *providerMappingObservationRequest) Validate() error {
+	if err := validation.ValidateStruct(request,
+		validation.Field(&request.AdapterVersion, validation.Required, validation.Length(1, 64)),
+		validation.Field(&request.StoreContext, validation.Required, validation.In(
+			cloudworkspace.ProviderObservationStoreKitConfiguration,
+			cloudworkspace.ProviderObservationAppleSandbox,
+			cloudworkspace.ProviderObservationGooglePlayTest,
+			cloudworkspace.ProviderObservationProduction,
+			cloudworkspace.ProviderObservationUnknown,
+		)),
+		validation.Field(&request.Result, validation.Required, validation.In(
+			cloudworkspace.ProviderObservationAvailable,
+			cloudworkspace.ProviderObservationUnavailable,
+			cloudworkspace.ProviderObservationFailed,
+		)),
+		validation.Field(&request.DiagnosticCode, validation.Length(0, 128)),
+		validation.Field(&request.CorrelationID, validation.Required, validation.Length(1, 128)),
+		validation.Field(&request.ObservedAt, validation.Required),
+	); err != nil {
+		return err
+	}
+	return validation.ValidateStruct(&request.Metadata,
+		validation.Field(&request.Metadata.ClientPlatform, validation.In(
+			cloudworkspace.ProviderObservationClientIOS,
+			cloudworkspace.ProviderObservationClientAndroid,
+			cloudworkspace.ProviderObservationClientFlutter,
+			"",
+		)),
+		validation.Field(&request.Metadata.ClientVersion, validation.Length(0, 64)),
+		validation.Field(&request.Metadata.ApplicationVersion, validation.Length(0, 64)),
+		validation.Field(&request.Metadata.OSVersion, validation.Length(0, 64)),
+		validation.Field(&request.Metadata.ConfigurationSource, validation.In(
+			cloudworkspace.ProviderObservationConfigurationBundled,
+			cloudworkspace.ProviderObservationConfigurationRemote,
+			cloudworkspace.ProviderObservationConfigurationLocal,
+			cloudworkspace.ProviderObservationConfigurationUnknown,
+			"",
+		)),
+		validation.Field(&request.Metadata.StorefrontCountryCode,
+			validation.Match(regexp.MustCompile(`^$|^[A-Z]{2}$`))),
+		validation.Field(&request.Metadata.TestScenario, validation.In(
+			cloudworkspace.ProviderObservationScenarioProductLoad,
+			cloudworkspace.ProviderObservationScenarioConfigurationAcceptance,
+			cloudworkspace.ProviderObservationScenarioPurchasePresentation,
+			cloudworkspace.ProviderObservationScenarioRestore,
+			"",
+		)),
+	)
 }
 
 type providerEntitlementImportRequest struct {

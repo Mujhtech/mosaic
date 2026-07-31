@@ -147,6 +147,97 @@ func TestCatalogRelationshipsLifecycleUsageAndPlaceholders(t *testing.T) {
 	}
 }
 
+func TestNativeGooglePlayMappingObservationAndReplacementLifecycle(t *testing.T) {
+	service, _ := newService()
+	actor := cloudworkspace.Actor{ID: "actor-owner"}
+	ctx := context.Background()
+	organization, _ := service.CreateOrganization(ctx, actor, "Acme")
+	project, _ := service.CreateProject(ctx, actor, organization.ID, "mobile", "Mobile")
+	application, _ := service.CreateApplication(ctx, actor, project.ID, "Android", cloudworkspace.PlatformAndroid, "com.example.app")
+	product, _ := service.CreateProduct(ctx, actor, project.ID, "monthly", "Monthly", "", cloudworkspace.ProductSubscription)
+	entitlement, _ := service.CreateEntitlement(ctx, actor, project.ID, "pro", "Pro", "")
+	if _, err := service.AddProductEntitlement(ctx, actor, product.ID, entitlement.ID); err != nil {
+		t.Fatalf("grant entitlement: %v", err)
+	}
+	environments, _ := service.ListEnvironments(ctx, actor, project.ID, cloudworkspace.ListOptions{})
+	development := environments.Items[0]
+
+	assignment, err := service.SetActiveProviderAssignment(ctx, actor, development.ID, application.ID, cloudworkspace.SetActiveProviderAssignmentInput{
+		Provider: cloudworkspace.ProviderGooglePlay, ActivationKind: cloudworkspace.ProviderActivationNativeStore,
+	})
+	if err != nil {
+		t.Fatalf("activate native Google Play: %v", err)
+	}
+	if assignment.ConnectionID != "" || assignment.Provider != cloudworkspace.ProviderGooglePlay {
+		t.Fatalf("native assignment = %#v", assignment)
+	}
+	if _, err := service.CreateProviderMappingDraft(ctx, actor, product.ID, cloudworkspace.CreateProviderMappingDraftInput{
+		Provider: cloudworkspace.ProviderGooglePlay, EnvironmentID: development.ID,
+		ApplicationID: application.ID, ProviderProductIdentifier: "monthly",
+	}); !errors.Is(err, cloudworkspace.ErrMappingTargetInvalid) {
+		t.Fatalf("subscription without base plan error = %v, want invalid target", err)
+	}
+
+	mapping, err := service.CreateProviderMappingDraft(ctx, actor, product.ID, cloudworkspace.CreateProviderMappingDraftInput{
+		Provider: cloudworkspace.ProviderGooglePlay, EnvironmentID: development.ID,
+		ApplicationID: application.ID, ProviderProductIdentifier: "monthly",
+		ProviderBasePlanIdentifier: "monthly-auto", ProviderOfferIdentifier: "intro",
+	})
+	if err != nil {
+		t.Fatalf("create native mapping: %v", err)
+	}
+	otherProduct, _ := service.CreateProduct(ctx, actor, project.ID, "monthly-alt", "Monthly alt", "", cloudworkspace.ProductSubscription)
+	if _, err := service.CreateProviderMappingDraft(ctx, actor, otherProduct.ID, cloudworkspace.CreateProviderMappingDraftInput{
+		Provider: cloudworkspace.ProviderGooglePlay, EnvironmentID: development.ID,
+		ApplicationID: application.ID, ProviderProductIdentifier: "monthly",
+		ProviderBasePlanIdentifier: "different-selector",
+	}); !errors.Is(err, cloudworkspace.ErrConflict) {
+		t.Fatalf("duplicate native provider target error = %v, want conflict", err)
+	}
+	readiness, err := service.ProviderReadiness(ctx, actor, product.ID, development.ID, application.ID)
+	if err != nil || readiness.State != cloudworkspace.ProviderReadinessConfigured || len(readiness.Warnings) != 1 {
+		t.Fatalf("configured readiness = %#v error=%v", readiness, err)
+	}
+
+	expiresAt := fixedTime.Add(time.Hour)
+	if _, err := service.CreateProviderMappingObservation(ctx, actor, mapping.ID, cloudworkspace.CreateProviderMappingObservationInput{
+		AdapterVersion: "1.0.0", StoreContext: cloudworkspace.ProviderObservationGooglePlayTest,
+		Result: cloudworkspace.ProviderObservationAvailable, CorrelationID: "unsafe-run",
+		Metadata: cloudworkspace.ProviderMappingObservationMetadata{ClientVersion: "secret-token"},
+		ObservedAt: fixedTime, ExpiresAt: &expiresAt,
+	}); !errors.Is(err, cloudworkspace.ErrMappingTargetInvalid) {
+		t.Fatalf("sensitive observation metadata error = %v, want invalid target", err)
+	}
+	observation, err := service.CreateProviderMappingObservation(ctx, actor, mapping.ID, cloudworkspace.CreateProviderMappingObservationInput{
+		AdapterVersion: "1.0.0", StoreContext: cloudworkspace.ProviderObservationGooglePlayTest,
+		Result: cloudworkspace.ProviderObservationAvailable, CorrelationID: "test-run-1",
+		Metadata: cloudworkspace.ProviderMappingObservationMetadata{
+			ClientPlatform: cloudworkspace.ProviderObservationClientAndroid,
+			ConfigurationSource: cloudworkspace.ProviderObservationConfigurationRemote,
+			TestScenario: cloudworkspace.ProviderObservationScenarioProductLoad,
+		},
+		ObservedAt: fixedTime, ExpiresAt: &expiresAt,
+	})
+	if err != nil {
+		t.Fatalf("record observation: %v", err)
+	}
+	readiness, err = service.ProviderReadiness(ctx, actor, product.ID, development.ID, application.ID)
+	if err != nil || readiness.State != cloudworkspace.ProviderReadinessVerifiedInTest ||
+		readiness.Observation == nil || readiness.Observation.ID != observation.ID {
+		t.Fatalf("verified readiness = %#v error=%v", readiness, err)
+	}
+
+	replacement, err := service.ReplaceProviderMapping(ctx, actor, mapping.ID, cloudworkspace.ReplaceProviderMappingInput{
+		ProviderProductIdentifier: "monthly-v2", ProviderBasePlanIdentifier: "monthly-v2-auto",
+	})
+	if err != nil {
+		t.Fatalf("replace native mapping: %v", err)
+	}
+	if replacement.ReplacesMappingID != mapping.ID || replacement.Status != cloudworkspace.ProviderMappingActive {
+		t.Fatalf("replacement = %#v", replacement)
+	}
+}
+
 func TestProductReplacementGraphRejectsThreeNodeCycle(t *testing.T) {
 	service, _ := newService()
 	actor := cloudworkspace.Actor{ID: "actor-owner"}
@@ -281,10 +372,10 @@ func TestProviderFoundationEnforcesScopesModesLifecycleAndReadiness(t *testing.T
 	if _, err := service.SetEnvironmentMode(ctx, actor, development.ID, cloudworkspace.EnvironmentProduction); !errors.Is(err, cloudworkspace.ErrModeMismatch) {
 		t.Fatalf("scoped sandbox connection allowed production mode transition: %v", err)
 	}
-	if _, err := service.SetActiveProviderAssignment(ctx, actor, production.ID, application.ID, connection.ID, false); !errors.Is(err, cloudworkspace.ErrScopeMismatch) {
+	if _, err := service.SetActiveProviderAssignment(ctx, actor, production.ID, application.ID, cloudworkspace.SetActiveProviderAssignmentInput{ConnectionID: connection.ID}); !errors.Is(err, cloudworkspace.ErrScopeMismatch) {
 		t.Fatalf("out-of-scope production assignment error = %v, want scope mismatch", err)
 	}
-	assignment, err := service.SetActiveProviderAssignment(ctx, actor, development.ID, application.ID, connection.ID, false)
+	assignment, err := service.SetActiveProviderAssignment(ctx, actor, development.ID, application.ID, cloudworkspace.SetActiveProviderAssignmentInput{ConnectionID: connection.ID})
 	if err != nil {
 		t.Fatalf("set development assignment: %v", err)
 	}
@@ -301,7 +392,7 @@ func TestProviderFoundationEnforcesScopesModesLifecycleAndReadiness(t *testing.T
 	if err != nil {
 		t.Fatalf("evaluate readiness: %v", err)
 	}
-	if readiness.State != cloudworkspace.ProviderReadinessDraft ||
+	if readiness.State != cloudworkspace.ProviderReadinessAttentionRequired ||
 		!providerIssuePresent(readiness.Blockers, cloudworkspace.ProviderErrorProviderUnavailable) ||
 		!providerIssuePresent(readiness.Blockers, cloudworkspace.ProviderErrorMappingMissing) ||
 		!providerIssuePresent(readiness.Blockers, cloudworkspace.ProviderErrorMetadataStale) {
@@ -522,7 +613,7 @@ func TestProviderImportNormalizesSDKLookupKeysAndReusesEntitlementMapping(t *tes
 		t.Fatal(err)
 	}
 	if _, err := service.SetActiveProviderAssignment(
-		ctx, actor, development.ID, application.ID, connection.ID, false,
+		ctx, actor, development.ID, application.ID, cloudworkspace.SetActiveProviderAssignmentInput{ConnectionID: connection.ID},
 	); err != nil {
 		t.Fatalf("set active provider assignment: %v", err)
 	}

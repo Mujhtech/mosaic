@@ -50,8 +50,58 @@ func TestPhase3APersistenceRisks(t *testing.T) {
 	if err := goose.DownToContext(ctx, db, ".", 0); err != nil {
 		t.Fatalf("reset migrations: %v", err)
 	}
+	if err := goose.UpToContext(ctx, db, ".", 7); err != nil {
+		t.Fatalf("apply accepted migrations through 00007: %v", err)
+	}
+	if _, err := db.ExecContext(ctx, `
+		INSERT INTO organizations(id,name,created_at,updated_at)
+			VALUES('upgrade_org','Upgrade',now(),now());
+		INSERT INTO projects(id,organization_id,key,name,status,created_at,updated_at)
+			VALUES('upgrade_project','upgrade_org','upgrade','Upgrade','active',now(),now());
+		INSERT INTO applications(id,project_id,name,platform,identifier,created_at,updated_at)
+			VALUES('upgrade_application','upgrade_project','Upgrade iOS','ios','dev.mosaic.upgrade',now(),now());
+		INSERT INTO environments(id,project_id,key,name,mode,created_at,updated_at)
+			VALUES('upgrade_environment','upgrade_project','development','Development','development',now(),now());
+		INSERT INTO products(
+			id,project_id,key,internal_name,type,status,metadata_source,readiness_ready,created_at,updated_at
+		) VALUES(
+			'upgrade_product','upgrade_project','monthly','Monthly','subscription','connected','provider',true,now(),now()
+		);
+		INSERT INTO provider_connections(
+			id,project_id,name,provider,integration_mode,mode,status,health_status,created_at,updated_at
+		) VALUES(
+			'upgrade_connection','upgrade_project','RevenueCat','revenuecat','server_connected','sandbox','active','healthy',now(),now()
+		);
+		INSERT INTO provider_connection_environment_scopes(project_id,connection_id,environment_id,created_at)
+			VALUES('upgrade_project','upgrade_connection','upgrade_environment',now());
+		INSERT INTO provider_connection_application_scopes(project_id,connection_id,application_id,created_at)
+			VALUES('upgrade_project','upgrade_connection','upgrade_application',now());
+		INSERT INTO active_provider_assignments(
+			project_id,environment_id,application_id,platform,connection_id,created_by_actor_id,created_at,updated_at
+		) VALUES(
+			'upgrade_project','upgrade_environment','upgrade_application','ios','upgrade_connection','upgrade_actor',now(),now()
+		);
+		INSERT INTO provider_product_mappings(
+			id,project_id,product_id,application_id,provider,provider_product_identifier,status,
+			connection_id,environment_id,platform,created_at,updated_at
+		) VALUES(
+			'upgrade_mapping','upgrade_project','upgrade_product','upgrade_application','revenuecat','upgrade.monthly','active',
+			'upgrade_connection','upgrade_environment','ios',now(),now()
+		);
+	`); err != nil {
+		t.Fatalf("seed accepted 00007 provider state: %v", err)
+	}
 	if err := goose.UpContext(ctx, db, "."); err != nil {
-		t.Fatalf("apply migrations to empty PostgreSQL: %v", err)
+		t.Fatalf("upgrade accepted 00007 state through 00008: %v", err)
+	}
+	var upgradedProvider, upgradedActivation string
+	if err := db.QueryRowContext(ctx, `
+		SELECT provider,activation_kind
+		FROM active_provider_assignments
+		WHERE environment_id='upgrade_environment' AND application_id='upgrade_application'
+	`).Scan(&upgradedProvider, &upgradedActivation); err != nil ||
+		upgradedProvider != "revenuecat" || upgradedActivation != "provider_connection" {
+		t.Fatalf("00007 assignment upgrade provider=%q activation=%q error=%v", upgradedProvider, upgradedActivation, err)
 	}
 
 	pool, err := pgxpool.New(ctx, databaseURL)
@@ -275,10 +325,13 @@ func TestPhase3APersistenceRisks(t *testing.T) {
 	if err != nil {
 		t.Fatalf("create provider application: %v", err)
 	}
-	var development, production cloudworkspace.Environment
+	var development, staging, production cloudworkspace.Environment
 	for _, environment := range environments.Items {
 		if environment.Mode == cloudworkspace.EnvironmentDevelopment {
 			development = environment
+		}
+		if environment.Mode == cloudworkspace.EnvironmentStaging {
+			staging = environment
 		}
 		if environment.Mode == cloudworkspace.EnvironmentProduction {
 			production = environment
@@ -292,7 +345,7 @@ func TestPhase3APersistenceRisks(t *testing.T) {
 	if err != nil {
 		t.Fatalf("persist provider connection: %v", err)
 	}
-	if _, err := service.SetActiveProviderAssignment(ctx, owner, development.ID, application.ID, connection.ID, false); err != nil {
+	if _, err := service.SetActiveProviderAssignment(ctx, owner, development.ID, application.ID, cloudworkspace.SetActiveProviderAssignmentInput{ConnectionID: connection.ID}); err != nil {
 		t.Fatalf("persist provider assignment: %v", err)
 	}
 	if _, err := service.ReplaceProviderConnectionScopes(ctx, owner, connection.ID, cloudworkspace.ReplaceProviderConnectionScopesInput{
@@ -329,6 +382,114 @@ func TestPhase3APersistenceRisks(t *testing.T) {
 	}
 	if _, err := pool.Exec(ctx, `UPDATE provider_product_metadata_snapshots SET availability='unavailable' WHERE id=$1`, snapshot.ID); err == nil {
 		t.Fatal("immutable provider metadata snapshot accepted an update")
+	}
+	if _, err := pool.Exec(ctx, `
+		INSERT INTO provider_product_mappings(
+			id,project_id,product_id,application_id,provider,provider_product_identifier,status,
+			connection_id,environment_id,platform,created_at,updated_at
+		) VALUES(
+			'connected_out_of_scope',$1,$2,$3,'revenuecat','out.of.scope','active',
+			$4,$5,'ios',now(),now()
+		)`,
+		project.ID, replacement.ID, application.ID, connection.ID, staging.ID,
+	); err == nil {
+		t.Fatal("database accepted connected mapping outside its connection Environment scope")
+	}
+	androidApplication, err := service.CreateApplication(ctx, owner, project.ID, "Provider Android", cloudworkspace.PlatformAndroid, "com.example.provider.android")
+	if err != nil {
+		t.Fatalf("create native provider application: %v", err)
+	}
+	if _, err := service.SetActiveProviderAssignment(ctx, owner, development.ID, androidApplication.ID, cloudworkspace.SetActiveProviderAssignmentInput{
+		Provider: cloudworkspace.ProviderGooglePlay, ActivationKind: cloudworkspace.ProviderActivationNativeStore,
+	}); err != nil {
+		t.Fatalf("persist native provider assignment: %v", err)
+	}
+	nativeMapping, err := service.CreateProviderMappingDraft(ctx, owner, product.ID, cloudworkspace.CreateProviderMappingDraftInput{
+		Provider: cloudworkspace.ProviderGooglePlay, EnvironmentID: development.ID,
+		ApplicationID: androidApplication.ID, ProviderProductIdentifier: "monthly",
+		ProviderBasePlanIdentifier: "monthly-auto", ProviderOfferIdentifier: "intro",
+	})
+	if err != nil {
+		t.Fatalf("persist native provider mapping: %v", err)
+	}
+	nativeDuplicateProduct, err := service.CreateProduct(ctx, owner, project.ID, "monthly-native-duplicate", "Monthly native duplicate", "", cloudworkspace.ProductSubscription)
+	if err != nil {
+		t.Fatalf("create native duplicate Product: %v", err)
+	}
+	if _, err := pool.Exec(ctx, `
+		INSERT INTO provider_product_mappings(
+			id,project_id,product_id,application_id,provider,provider_product_identifier,status,
+			environment_id,platform,provider_base_plan_identifier,created_at,updated_at
+		) VALUES(
+			'native_duplicate_target',$1,$2,$3,'google_play','monthly','active',
+			$4,'android','different-selector',now(),now()
+		)`,
+		project.ID, nativeDuplicateProduct.ID, androidApplication.ID, development.ID,
+	); err == nil {
+		t.Fatal("database accepted duplicate current native provider Product target")
+	}
+	otherEnvironments, err := service.ListEnvironments(ctx, owner, otherProject.ID, cloudworkspace.ListOptions{})
+	if err != nil || len(otherEnvironments.Items) == 0 {
+		t.Fatalf("list cross-Project Environments: %#v, %v", otherEnvironments, err)
+	}
+	if _, err := pool.Exec(ctx, `
+		INSERT INTO provider_product_mappings(
+			id,project_id,product_id,application_id,provider,provider_product_identifier,status,
+			environment_id,platform,provider_base_plan_identifier,created_at,updated_at
+		) VALUES(
+			'native_cross_project',$1,$2,$3,'google_play','cross-project','active',
+			$4,'android','cross-project',now(),now()
+		)`,
+		project.ID, nativeDuplicateProduct.ID, androidApplication.ID, otherEnvironments.Items[0].ID,
+	); err == nil {
+		t.Fatal("database accepted native mapping with a cross-Project Environment")
+	}
+	expiresAt := now.Add(time.Hour)
+	observation, err := service.CreateProviderMappingObservation(ctx, owner, nativeMapping.ID, cloudworkspace.CreateProviderMappingObservationInput{
+		AdapterVersion: "1.0.0", StoreContext: cloudworkspace.ProviderObservationGooglePlayTest,
+		Result: cloudworkspace.ProviderObservationAvailable, CorrelationID: "postgres-test-run",
+		Metadata: cloudworkspace.ProviderMappingObservationMetadata{
+			ClientPlatform: cloudworkspace.ProviderObservationClientAndroid,
+			ConfigurationSource: cloudworkspace.ProviderObservationConfigurationRemote,
+			TestScenario: cloudworkspace.ProviderObservationScenarioProductLoad,
+		},
+		ObservedAt: now, ExpiresAt: &expiresAt,
+	})
+	if err != nil {
+		t.Fatalf("persist native provider observation: %v", err)
+	}
+	observations, err := reconstructed.ListProviderMappingObservations(ctx, owner, nativeMapping.ID)
+	if err != nil || len(observations) != 1 || observations[0].ID != observation.ID {
+		t.Fatalf("reconstruct native observations = %#v, %v", observations, err)
+	}
+	if _, err := pool.Exec(ctx, `
+		INSERT INTO provider_mapping_observations(
+			id,project_id,mapping_id,environment_id,application_id,platform,provider,
+			adapter_version,store_context,result,correlation_id,metadata,observed_at,received_at,created_by_actor_id
+		)
+		SELECT
+			'unsafe_observation',project_id,mapping_id,environment_id,application_id,platform,provider,
+			adapter_version,store_context,result,'unsafe-correlation','{"receipt":"forbidden"}'::jsonb,
+			observed_at,received_at,created_by_actor_id
+		FROM provider_mapping_observations WHERE id=$1`,
+		observation.ID,
+	); err == nil {
+		t.Fatal("database accepted unknown sensitive observation metadata")
+	}
+	if _, err := pool.Exec(ctx, `UPDATE provider_mapping_observations SET result='failed' WHERE id=$1`, observation.ID); err == nil {
+		t.Fatal("immutable native provider observation accepted an update")
+	}
+	if _, err := pool.Exec(ctx, `DELETE FROM provider_mapping_observations WHERE id=$1`, observation.ID); err == nil {
+		t.Fatal("immutable native provider observation accepted a delete")
+	}
+	nativeReplacement, err := service.ReplaceProviderMapping(ctx, owner, nativeMapping.ID, cloudworkspace.ReplaceProviderMappingInput{
+		ProviderProductIdentifier: "monthly-v2", ProviderBasePlanIdentifier: "monthly-v2-auto",
+	})
+	if err != nil || nativeReplacement.ReplacesMappingID != nativeMapping.ID {
+		t.Fatalf("replace native mapping = %#v, %v", nativeReplacement, err)
+	}
+	if _, err := pool.Exec(ctx, `UPDATE provider_product_mappings SET provider_product_identifier='mutated' WHERE id=$1`, nativeMapping.ID); err == nil {
+		t.Fatal("database accepted mutation of an archived provider mapping")
 	}
 	if got, err := reconstructed.GetProviderConnection(ctx, owner, connection.ID); err != nil ||
 		!reflect.DeepEqual(got.EnvironmentIDs, []string{development.ID, production.ID}) ||
@@ -593,7 +754,7 @@ func TestPhase4AProviderPersistenceRisks(t *testing.T) {
 		t.Fatalf("second-connection import = %#v, %v", secondImport, err)
 	}
 	if _, err := service.SetActiveProviderAssignment(
-		ctx, actor, development.ID, application.ID, secondConnection.ID, false,
+		ctx, actor, development.ID, application.ID, cloudworkspace.SetActiveProviderAssignmentInput{ConnectionID: secondConnection.ID},
 	); err != nil {
 		t.Fatalf("switch active provider connection: %v", err)
 	}

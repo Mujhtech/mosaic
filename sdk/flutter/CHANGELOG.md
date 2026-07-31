@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.2.0-dev.8
+
+- Accept frozen Commerce Configuration and Provider Contract v2 while
+  preserving strict v1 RevenueCat/custom-provider decoding and fallback.
+- Add native-store activation, exact StoreKit/Google mappings, immutable
+  Product grant snapshots, explicit recovery modes, complete runtime offer
+  metadata, and provider-neutral asynchronous commerce updates.
+- Add the optional `mosaic_native_store` thin bridge with StoreKit/Google
+  factories, closed channel DTOs, revision filtering, update deduplication,
+  invalidation/disposal, and safe missing-plugin outcomes.
+- Prefer hosted v2 sidecars while advertising `2,1`; retained v1 sidecars
+  remain valid.
+
 ## 0.2.0-dev.7
 
 - Enforce exact adapter-owned provider identity and capability declarations

@@ -12,6 +12,7 @@ import {
   testProviderConnection,
   type ProviderConnection,
   type ProviderImportRequest,
+  type SetProviderAssignmentRequest,
 } from "@/generated/api"
 import { invalidateCatalogImpact } from "@/features/catalog/mutations/catalog-impact"
 import { catalogKeys } from "@/features/catalog/queries/catalog-query"
@@ -220,15 +221,9 @@ export function setActiveProviderMutationOptions(
   queryClient: QueryClient,
 ) {
   return mutationOptions({
-    mutationFn: async ({
-      acknowledgeProductionConnectionUse,
-      connectionId,
-    }: {
-      acknowledgeProductionConnectionUse: boolean
-      connectionId: string
-    }) => {
+    mutationFn: async (body: SetProviderAssignmentRequest) => {
       const result = await setActiveProviderAssignment({
-        body: { acknowledgeProductionConnectionUse, connectionId },
+        body,
         client: generatedDashboardClient,
         path: { applicationId, environmentId },
         throwOnError: true,

@@ -1,0 +1,37 @@
+{
+  "commerceProviderContractVersion": "2",
+  "status": "releaseCandidate",
+  "schema": "../../schema/commerce-provider/v2/contract.schema.json",
+  "canonicalFixtures": [
+    "../../fixtures/commerce-provider/v2/storekit-profile.json",
+    "../../fixtures/commerce-provider/v2/google-play-profile.json",
+    "../../fixtures/commerce-provider/v2/product-load-unavailable.json",
+    "../../fixtures/commerce-provider/v2/purchase-request.json",
+    "../../fixtures/commerce-provider/v2/commerce-update-purchased.json",
+    "../../fixtures/commerce-provider/v2/commerce-update-accepted.json",
+    "../../fixtures/commerce-provider/v2/recovery-restored.json",
+    "../../fixtures/commerce-provider/v2/entitlement-provider-unavailable.json"
+  ],
+  "recordTypes": [
+    "providerProfile",
+    "productLoadRequest",
+    "productLoadResult",
+    "purchaseRequest",
+    "purchaseOutcome",
+    "restoreOutcome",
+    "activeEntitlementOutcome",
+    "providerDiagnostics",
+    "commerceUpdate",
+    "commerceUpdateAcceptance"
+  ],
+  "readerPolicy": {
+    "unknownContractVersion": "rejectRecord",
+    "unknownRecordType": "rejectRecord",
+    "unknownField": "rejectRecord",
+    "unknownOutcome": "rejectRecord",
+    "unsupportedCapability": "reportUnsupportedWithoutProviderFailure",
+    "unavailableProduct": "usePaywallProductFallback",
+    "entitlementLookupFailure": "neverInferInactive",
+    "rawProviderError": "forbidden"
+  }
+}

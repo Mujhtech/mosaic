@@ -120,6 +120,30 @@ Set `VITE_API_BASE_URL` for the hosted REST workspace. The default is `http://lo
 generated client supplies the versioned `/v1/...` paths. Local Studio itself does not require the
 API.
 
+## Purchase setup
+
+The existing project-wide `/catalog/providers` route is labeled **Purchase setup**. It separates:
+
+- explicit active-provider selection for one Mosaic Environment and registered Application;
+- built-in StoreKit for iOS and Google Play Billing for Android, neither of which creates a
+  credential connection; and
+- scoped RevenueCat or app-owned custom-provider Connections.
+
+Purchase setup never defaults to Staging or the first Environment. Product detail uses the selected
+Environment to show cross-platform coverage, then scopes StoreKit or Google Product/base-plan/offer
+mapping forms to one Application. `No offer` is an explicit Google subscription choice; Mosaic does
+not persist or guess an offer token.
+
+Native mapping identifiers are configuration only. They become **Configured**, not verified, when
+saved. Store context, test-client observations, metadata source, and freshness remain separate from
+the Mosaic Environment. Observed provider metadata is read-only and must not enter a Paywall
+document.
+
+Publishing recovery carries the exact Product, Environment, and Application plus a validated
+internal return path. Returning to Studio reopens and reruns Publish review against the current
+Draft. StoreKit actions use restore/store-sync language; Google actions use active-purchase recovery
+language.
+
 ## Commands
 
 ```bash

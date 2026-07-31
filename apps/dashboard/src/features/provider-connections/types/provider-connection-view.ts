@@ -5,6 +5,22 @@ import type {
   ProviderConnection,
   ProviderHealthStatus,
 } from "@/generated/api"
+import { environmentMatchesConnectionMode } from "@/features/provider-connections/types/provider-operation-input"
+
+export type PurchaseProviderChoice =
+  | {
+      id: "native:app_store" | "native:google_play"
+      kind: "native"
+      label: "Google Play Billing" | "StoreKit"
+      provider: "app_store" | "google_play"
+    }
+  | {
+      connection: ProviderConnection
+      id: `connection:${string}`
+      kind: "connection"
+      label: string
+      provider: ProviderConnection["provider"]
+    }
 
 export interface ActiveProviderAssignmentView {
   assignment: ActiveProviderAssignment
@@ -15,6 +31,56 @@ export interface ActiveProviderScopeView {
   application: Application
   assignment?: ActiveProviderAssignmentView
   environment: Environment
+}
+
+export function explicitPurchaseSetupEnvironment(
+  environments: readonly Environment[],
+  environmentId?: string,
+) {
+  if (!environmentId) return undefined
+  return environments.find((environment) => environment.id === environmentId)
+}
+
+export function purchaseProviderChoices(
+  application: Application,
+  environment: Environment,
+  connections: readonly ProviderConnection[],
+): PurchaseProviderChoice[] {
+  const nativeChoice: PurchaseProviderChoice =
+    application.platform === "ios"
+      ? {
+          id: "native:app_store",
+          kind: "native",
+          label: "StoreKit",
+          provider: "app_store",
+        }
+      : {
+          id: "native:google_play",
+          kind: "native",
+          label: "Google Play Billing",
+          provider: "google_play",
+        }
+  const connectionChoices = connections
+    .filter(
+      (connection) =>
+        connection.status === "active" &&
+        connection.healthStatus === "healthy" &&
+        connection.environmentIds.includes(environment.id) &&
+        connection.applicationIds.includes(application.id) &&
+        environmentMatchesConnectionMode(environment.mode, connection.mode),
+    )
+    .map(
+      (connection) =>
+        ({
+          connection,
+          id: `connection:${connection.id}`,
+          kind: "connection",
+          label: connection.name,
+          provider: connection.provider,
+        }) satisfies PurchaseProviderChoice,
+    )
+
+  return [nativeChoice, ...connectionChoices]
 }
 
 export function activeProviderScopes(

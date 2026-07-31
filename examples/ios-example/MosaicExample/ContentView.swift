@@ -1,5 +1,6 @@
 import MosaicRevenueCat
 import MosaicSDK
+import MosaicStoreKit
 import RevenueCat
 import SwiftUI
 import UIKit
@@ -177,8 +178,9 @@ private final class HostedConfigurationModel: ObservableObject {
   private let baseURL: URL?
   private let applicationID: String?
   private let revenueCatPublicSDKKey: String?
+  private let commerceProviderSelection: String?
   private var commerceManager: MosaicCommerceConfigurationManager?
-  private var commerceProvider: MosaicRevenueCatProvider?
+  private var commerceProvider: (any MosaicCommerceProvider)?
   private var commerceRouter: MosaicCommerceProviderRouter?
 
   init(environment: [String: String] = ProcessInfo.processInfo.environment) {
@@ -186,6 +188,7 @@ private final class HostedConfigurationModel: ObservableObject {
     baseURL = environment["MOSAIC_SDK_BASE_URL"].flatMap(URL.init(string:))
     applicationID = environment["MOSAIC_APPLICATION_ID"]
     revenueCatPublicSDKKey = environment["REVENUECAT_PUBLIC_SDK_KEY"]
+    commerceProviderSelection = environment["MOSAIC_COMMERCE_PROVIDER"]
     placement = environment["MOSAIC_PLACEMENT"] ?? "onboarding_complete"
     setupMessage =
       "Set MOSAIC_PUBLIC_SDK_KEY and MOSAIC_SDK_BASE_URL in the Xcode scheme. "
@@ -202,7 +205,18 @@ private final class HostedConfigurationModel: ObservableObject {
           forInfoDictionaryKey: "CFBundleShortVersionString"
         ) as? String
       let purchaseProvider: any MosaicPurchaseProvider
-      if let revenueCatPublicSDKKey, let applicationID {
+      if let applicationID, commerceProviderSelection == "storekit" {
+        let provider = try MosaicStoreKitProvider(
+          acceptor: ExampleStoreKitUpdateAcceptor()
+        )
+        let router = MosaicCommerceProviderRouter()
+        commerceProvider = provider
+        commerceRouter = router
+        commerceManager = try MosaicCommerceConfigurationManager(
+          cacheIdentifier: applicationID
+        )
+        purchaseProvider = router
+      } else if let revenueCatPublicSDKKey, let applicationID {
         Purchases.configure(withAPIKey: revenueCatPublicSDKKey)
         let provider = try MosaicRevenueCatProvider()
         let router = MosaicCommerceProviderRouter()
@@ -291,6 +305,17 @@ private final class HostedConfigurationModel: ObservableObject {
     case .unavailable(let diagnostics):
       statusText = diagnostics.last?.code ?? "Commerce configuration unavailable"
     }
+  }
+}
+
+private actor ExampleStoreKitUpdateAcceptor: MosaicCommerceUpdateAcceptor {
+  private var accepted = Set<String>()
+
+  func accept(
+    _ update: MosaicCommerceUpdate
+  ) -> MosaicCommerceUpdateAcceptanceDisposition {
+    accepted.insert(update.id)
+    return .accepted
   }
 }
 

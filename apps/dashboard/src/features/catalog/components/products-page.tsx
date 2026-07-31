@@ -97,7 +97,7 @@ export function ProductsPage({
             params={{ organizationId, projectId }}
             to="/organizations/$organizationId/projects/$projectId/catalog/providers"
           >
-            Connect or import from a provider
+            Review Purchase setup
           </Link>
           <p className="text-muted-foreground text-xs">
             Provider catalog IDs stay behind mappings; Paywalls continue referencing stable Mosaic
@@ -183,7 +183,7 @@ export function ProductsPage({
       </HostedResourceBoundary>
       {canManageProducts ? (
         <WorkflowPanel
-          description="Create a provider-neutral Product manually or import synchronized provider metadata from Commerce providers."
+          description="Create a provider-neutral Product manually or import synchronized provider metadata from Purchase setup."
           title="Create Product"
         >
           <form

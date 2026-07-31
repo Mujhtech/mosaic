@@ -16,6 +16,7 @@
 		A10000000000000000000007 /* MosaicSDK in Frameworks */ = {isa = PBXBuildFile; productRef = A90000000000000000000001 /* MosaicSDK */; };
 		A10000000000000000000008 /* LocalPreviewSwiftUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000008 /* LocalPreviewSwiftUITests.swift */; };
 		A10000000000000000000009 /* MosaicRevenueCat in Frameworks */ = {isa = PBXBuildFile; productRef = A90000000000000000000003 /* MosaicRevenueCat */; };
+		A10000000000000000000010 /* MosaicStoreKit in Frameworks */ = {isa = PBXBuildFile; productRef = A90000000000000000000005 /* MosaicStoreKit */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -46,6 +47,7 @@
 			files = (
 				A10000000000000000000004 /* MosaicSDK in Frameworks */,
 				A10000000000000000000009 /* MosaicRevenueCat in Frameworks */,
+				A10000000000000000000010 /* MosaicStoreKit in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -126,6 +128,7 @@
 			packageProductDependencies = (
 				A90000000000000000000001 /* MosaicSDK */,
 				A90000000000000000000003 /* MosaicRevenueCat */,
+				A90000000000000000000005 /* MosaicStoreKit */,
 			);
 			productName = MosaicExample;
 			productReference = A20000000000000000000004 /* MosaicExample.app */;
@@ -183,6 +186,7 @@
 			packageReferences = (
 				A90000000000000000000002 /* XCLocalSwiftPackageReference "../../sdk/ios" */,
 				A90000000000000000000004 /* XCLocalSwiftPackageReference "../../sdk/ios/RevenueCat" */,
+				A90000000000000000000006 /* XCLocalSwiftPackageReference "../../sdk/ios/StoreKit" */,
 			);
 			productRefGroup = A40000000000000000000005 /* Products */;
 			projectDirPath = "";
@@ -395,6 +399,10 @@
 			isa = XCLocalSwiftPackageReference;
 			relativePath = ../../sdk/ios/RevenueCat;
 		};
+		A90000000000000000000006 /* XCLocalSwiftPackageReference "../../sdk/ios/StoreKit" */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = ../../sdk/ios/StoreKit;
+		};
 /* End XCLocalSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
@@ -407,6 +415,11 @@
 			isa = XCSwiftPackageProductDependency;
 			package = A90000000000000000000004 /* XCLocalSwiftPackageReference "../../sdk/ios/RevenueCat" */;
 			productName = MosaicRevenueCat;
+		};
+		A90000000000000000000005 /* MosaicStoreKit */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = A90000000000000000000006 /* XCLocalSwiftPackageReference "../../sdk/ios/StoreKit" */;
+			productName = MosaicStoreKit;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};

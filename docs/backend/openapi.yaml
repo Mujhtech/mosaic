@@ -864,6 +864,54 @@ paths:
       responses:
         "200": { $ref: "#/components/responses/ProviderMetadataSnapshot" }
         default: { $ref: "#/components/responses/Error" }
+  /v1/provider-mappings/{mappingId}/usage:
+    parameters:
+      - $ref: "#/components/parameters/ProviderMappingID"
+    get:
+      operationId: getProviderMappingUsage
+      tags: [Provider Mappings]
+      description: Returns the exact mapping and affected Product, Plans, Access grants, mappings, and immutable historical references before replacement.
+      responses:
+        "200": { $ref: "#/components/responses/ProviderMappingUsage" }
+        default: { $ref: "#/components/responses/Error" }
+  /v1/provider-mappings/{mappingId}/observations:
+    parameters:
+      - $ref: "#/components/parameters/ProviderMappingID"
+    get:
+      operationId: listProviderMappingObservations
+      tags: [Provider Mappings]
+      responses:
+        "200": { $ref: "#/components/responses/ProviderMappingObservations" }
+        default: { $ref: "#/components/responses/Error" }
+    post:
+      operationId: createProviderMappingObservation
+      tags: [Provider Mappings]
+      description: Accepts bounded native-store test evidence through the authenticated developer session. It is not server-side store verification.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CreateProviderMappingObservationRequest" }
+      responses:
+        "201": { $ref: "#/components/responses/ProviderMappingObservation" }
+        default: { $ref: "#/components/responses/Error" }
+  /v1/native-providers/{provider}/profile:
+    parameters:
+      - in: path
+        name: provider
+        required: true
+        schema: { type: string, enum: [app_store, google_play] }
+      - in: query
+        name: platform
+        required: true
+        schema: { $ref: "#/components/schemas/Platform" }
+    get:
+      operationId: getNativeProviderProfile
+      tags: [Provider Assignments]
+      description: Returns credential-free native provider identity and capability declarations without requiring a Provider Connection.
+      responses:
+        "200": { $ref: "#/components/responses/ProviderProfile" }
+        default: { $ref: "#/components/responses/Error" }
   /v1/projects/{projectId}/entitlements:
     parameters:
       - $ref: "#/components/parameters/ProjectID"
@@ -1241,15 +1289,15 @@ paths:
       security: [{ PublicSDKKey: [] }]
       parameters:
         - { in: query, name: applicationId, required: true, schema: { type: string } }
-        - { in: header, name: Accept, required: true, schema: { type: string, const: "application/vnd.mosaic.commerce-configuration+json;version=1" } }
+        - { in: header, name: Accept, required: true, schema: { type: string, description: "Comma-separated accepted Commerce media types. Supported versions are application/vnd.mosaic.commerce-configuration+json;version=1 and version=2." } }
         - { in: header, name: Mosaic-SDK-Platform, required: true, schema: { type: string, enum: [flutter, ios, android] } }
         - { in: header, name: Mosaic-SDK-Version, required: true, schema: { type: string, minLength: 1, maxLength: 64, pattern: "^[0-9]+\\.[0-9]+(?:\\.[0-9]+)?(?:[-+][A-Za-z0-9.-]+)?$" } }
-        - { in: header, name: Mosaic-Commerce-Configuration-Versions, required: true, schema: { type: string, const: "1" } }
-        - { in: header, name: Mosaic-Commerce-Provider-Contract-Versions, required: true, schema: { type: string, const: "1" } }
+        - { in: header, name: Mosaic-Commerce-Configuration-Versions, required: true, schema: { type: string, pattern: "^(1|2)(, ?(1|2))*$" } }
+        - { in: header, name: Mosaic-Commerce-Provider-Contract-Versions, required: true, schema: { type: string, pattern: "^(1|2)(, ?(1|2))*$" } }
         - { in: header, name: If-None-Match, required: false, schema: { type: string } }
       responses:
         "200":
-          description: Immutable Commerce Configuration v1 sidecar associated with the current Configuration Release and requested Application.
+          description: Immutable version-negotiated Commerce Configuration sidecar associated with the current Configuration Release and requested Application.
           headers:
             ETag: { schema: { type: string, pattern: '^"sha256:[0-9a-f]{64}"$' } }
             Mosaic-Configuration-Release-Id: { schema: { type: string } }
@@ -1407,6 +1455,14 @@ components:
                   items: { type: array, items: { $ref: "#/components/schemas/ProviderSyncRun" } }
     ProviderAssignment: { description: Active provider assignment, content: { application/json: { schema: { $ref: "#/components/schemas/ProviderAssignmentEnvelope" } } } }
     ProviderReadiness: { description: Scoped provider readiness and stable recovery codes, content: { application/json: { schema: { $ref: "#/components/schemas/ProviderReadinessEnvelope" } } } }
+    ProviderMappingUsage: { description: Mapping-specific replacement impact, content: { application/json: { schema: { $ref: "#/components/schemas/ProviderMappingUsageEnvelope" } } } }
+    ProviderMappingObservation: { description: Accepted immutable native-store test observation, content: { application/json: { schema: { $ref: "#/components/schemas/ProviderMappingObservationEnvelope" } } } }
+    ProviderMappingObservations:
+      description: Immutable native-store observation history.
+      content:
+        application/json:
+          schema: { type: object, required: [data], properties: { data: { type: array, items: { $ref: "#/components/schemas/ProviderMappingObservation" } } } }
+    ProviderProfile: { description: Credential-free native provider capability profile, content: { application/json: { schema: { $ref: "#/components/schemas/ProviderProfileEnvelope" } } } }
     APIKey: { description: API key metadata, content: { application/json: { schema: { $ref: "#/components/schemas/APIKeyEnvelope" } } } }
     APIKeyList: { description: API keys without secrets, content: { application/json: { schema: { $ref: "#/components/schemas/APIKeyListEnvelope" } } } }
     APIKeySecret: { description: One-time secret result, content: { application/json: { schema: { $ref: "#/components/schemas/APIKeySecretEnvelope" } } } }
@@ -1464,6 +1520,7 @@ components:
     ProductStatus: { type: string, enum: [draft, connected, attention_required, archived] }
     MetadataSource: { type: string, enum: [mock, provider] }
     ProviderKind: { type: string, enum: [revenuecat, app_store, google_play, custom] }
+    ProviderActivationKind: { type: string, enum: [provider_connection, native_store] }
     ProviderConnectionKind: { type: string, enum: [revenuecat, custom] }
     ProviderIntegrationMode: { type: string, enum: [server_connected, sdk_only] }
     ProviderConnectionMode: { type: string, enum: [sandbox, production] }
@@ -1494,6 +1551,9 @@ components:
         - syncPartial
         - syncFailed
         - metadataStale
+        - basePlanMissing
+        - observationMissing
+        - observationStale
         - idempotencyConflict
     SignUpRequest:
       type: object
@@ -1691,6 +1751,8 @@ components:
         providerProductIdentifier: { type: string, minLength: 1, maxLength: 255 }
         providerPackageIdentifier: { type: string, minLength: 1, maxLength: 255, description: RevenueCat v2 Package ID or SDK lookup key; persisted as the verified lookup key. }
         providerOfferingIdentifier: { type: string, minLength: 1, maxLength: 255, description: RevenueCat v2 Offering ID or SDK lookup key; persisted as the verified lookup key. }
+        providerBasePlanIdentifier: { type: string, minLength: 1, maxLength: 255, description: Required exact Google base-plan ID for subscriptions. }
+        providerOfferIdentifier: { type: string, minLength: 1, maxLength: 255, description: Optional explicitly selected Google offer ID. Offer tokens are never persisted. }
     ProviderEntitlementImportRequest:
       type: object
       additionalProperties: false
@@ -1731,8 +1793,9 @@ components:
     SetProviderAssignmentRequest:
       type: object
       additionalProperties: false
-      required: [connectionId]
       properties:
+        provider: { $ref: "#/components/schemas/ProviderKind" }
+        activationKind: { $ref: "#/components/schemas/ProviderActivationKind" }
         connectionId: { type: string }
         acknowledgeProductionConnectionUse:
           type: boolean
@@ -1745,9 +1808,10 @@ components:
         Creates an unverified draft only. RevenueCat Product, Package, and Offering
         identifiers are server-side catalog references and never become the SDK
         providerProductReference until verified and normalized.
-      required: [connectionId, environmentId, applicationId, providerProductIdentifier]
+      required: [environmentId, applicationId, providerProductIdentifier]
       properties:
         connectionId: { type: string }
+        provider: { $ref: "#/components/schemas/ProviderKind" }
         environmentId: { type: string }
         applicationId: { type: string }
         providerProductIdentifier:
@@ -1767,6 +1831,21 @@ components:
           pattern: ".*\\S.*"
           description: RevenueCat-only metadata; requires providerPackageIdentifier.
         expectedStoreProductId: { type: string, maxLength: 255, pattern: ".*\\S.*" }
+        providerBasePlanIdentifier: { type: string, maxLength: 255, pattern: ".*\\S.*", description: Exact Google base-plan ID; required by service validation for subscriptions. }
+        providerOfferIdentifier: { type: string, maxLength: 255, pattern: ".*\\S.*", description: Optional exact Google offer ID; requires a base plan. Runtime offer tokens are forbidden. }
+    CreateProviderMappingObservationRequest:
+      type: object
+      additionalProperties: false
+      required: [adapterVersion, storeContext, result, correlationId, observedAt]
+      properties:
+        adapterVersion: { type: string, minLength: 1, maxLength: 64 }
+        storeContext: { type: string, enum: [storekitConfiguration, appleSandbox, googlePlayTest, production, unknown] }
+        result: { type: string, enum: [available, unavailable, failed] }
+        diagnosticCode: { type: string, maxLength: 128, description: Safe Mosaic code only; raw provider messages are forbidden. }
+        correlationId: { type: string, minLength: 1, maxLength: 128 }
+        metadata: { $ref: "#/components/schemas/ProviderMappingObservationMetadata" }
+        observedAt: { $ref: "#/components/schemas/Timestamp" }
+        expiresAt: { $ref: "#/components/schemas/Timestamp" }
     Organization:
       type: object
       additionalProperties: false
@@ -2028,12 +2107,14 @@ components:
     ActiveProviderAssignment:
       type: object
       additionalProperties: false
-      required: [projectId, environmentId, applicationId, platform, connectionId, productionConnectionUseAcknowledged, createdByActorId, createdAt, updatedAt]
+      required: [projectId, environmentId, applicationId, platform, provider, activationKind, productionConnectionUseAcknowledged, createdByActorId, createdAt, updatedAt]
       properties:
         projectId: { type: string }
         environmentId: { type: string }
         applicationId: { type: string }
         platform: { $ref: "#/components/schemas/Platform" }
+        provider: { $ref: "#/components/schemas/ProviderKind" }
+        activationKind: { $ref: "#/components/schemas/ProviderActivationKind" }
         connectionId: { type: string }
         productionConnectionUseAcknowledged: { type: boolean }
         createdByActorId: { type: string }
@@ -2153,6 +2234,9 @@ components:
           type: string
           description: Optional RevenueCat Offering metadata; present only with providerPackageIdentifier.
         expectedStoreProductId: { type: string }
+        providerBasePlanIdentifier: { type: string }
+        providerOfferIdentifier: { type: string }
+        replacesMappingId: { type: string }
         status: { $ref: "#/components/schemas/ProviderMappingStatus" }
         availability: { $ref: "#/components/schemas/ProviderAvailability" }
         syncState: { $ref: "#/components/schemas/ProviderSyncState" }
@@ -2197,16 +2281,70 @@ components:
       additionalProperties: false
       required: [state, productId, environmentId, applicationId, platform, blockers, warnings, evaluatedAt]
       properties:
-        state: { type: string, enum: [draft, mockOnly, connected, attentionRequired, unavailable, archived] }
+        state: { type: string, enum: [configured, verifiedInTest, attentionRequired, unavailable, archived] }
         productId: { type: string }
         environmentId: { type: string }
         applicationId: { type: string }
         platform: { $ref: "#/components/schemas/Platform" }
         connectionId: { type: string }
+        provider: { $ref: "#/components/schemas/ProviderKind" }
         mappingId: { type: string }
+        observation: { $ref: "#/components/schemas/ProviderMappingObservation" }
         blockers: { type: array, items: { $ref: "#/components/schemas/ProviderReadinessIssue" } }
         warnings: { type: array, items: { $ref: "#/components/schemas/ProviderReadinessIssue" } }
         evaluatedAt: { $ref: "#/components/schemas/Timestamp" }
+    ProviderMappingObservation:
+      type: object
+      additionalProperties: false
+      required: [id, projectId, mappingId, environmentId, applicationId, platform, provider, adapterVersion, storeContext, result, correlationId, metadata, observedAt, receivedAt, createdByActorId]
+      properties:
+        id: { type: string }
+        projectId: { type: string }
+        mappingId: { type: string }
+        environmentId: { type: string }
+        applicationId: { type: string }
+        platform: { $ref: "#/components/schemas/Platform" }
+        provider: { $ref: "#/components/schemas/ProviderKind" }
+        adapterVersion: { type: string }
+        storeContext: { type: string, enum: [storekitConfiguration, appleSandbox, googlePlayTest, production, unknown] }
+        result: { type: string, enum: [available, unavailable, failed] }
+        diagnosticCode: { type: string }
+        correlationId: { type: string }
+        metadata: { $ref: "#/components/schemas/ProviderMappingObservationMetadata" }
+        observedAt: { $ref: "#/components/schemas/Timestamp" }
+        expiresAt: { $ref: "#/components/schemas/Timestamp" }
+        receivedAt: { $ref: "#/components/schemas/Timestamp" }
+        createdByActorId: { type: string }
+    ProviderMappingObservationMetadata:
+      type: object
+      additionalProperties: false
+      description: Closed operational metadata. Unknown fields and receipt, token, credential, customer, account, authorization, or secret-like material are rejected.
+      properties:
+        clientPlatform: { type: string, enum: [ios, android, flutter] }
+        clientVersion: { type: string, maxLength: 64 }
+        applicationVersion: { type: string, maxLength: 64 }
+        osVersion: { type: string, maxLength: 64 }
+        configurationSource: { type: string, enum: [bundled, remote, local, unknown] }
+        storefrontCountryCode: { type: string, pattern: "^[A-Z]{2}$" }
+        testScenario: { type: string, enum: [productLoad, configurationAcceptance, purchasePresentation, restore] }
+    ProviderMappingUsage:
+      type: object
+      additionalProperties: false
+      required: [mapping, product, usage]
+      properties:
+        mapping: { $ref: "#/components/schemas/ProviderProductMapping" }
+        product: { $ref: "#/components/schemas/Product" }
+        usage: { $ref: "#/components/schemas/ProductUsage" }
+    ProviderProfile:
+      type: object
+      additionalProperties: false
+      required: [provider, displayName, platform, adapterVersion, capabilities]
+      properties:
+        provider: { $ref: "#/components/schemas/ProviderKind" }
+        displayName: { type: string }
+        platform: { $ref: "#/components/schemas/Platform" }
+        adapterVersion: { type: string }
+        capabilities: { type: array, items: { $ref: "#/components/schemas/ProviderCapability" } }
     ProductUsage:
       type: object
       additionalProperties: false
@@ -2414,6 +2552,9 @@ components:
     ProviderConnectionEnvelope: { type: object, required: [data], properties: { data: { $ref: "#/components/schemas/ProviderConnection" } } }
     ProviderAssignmentEnvelope: { type: object, required: [data], properties: { data: { $ref: "#/components/schemas/ActiveProviderAssignment" } } }
     ProviderReadinessEnvelope: { type: object, required: [data], properties: { data: { $ref: "#/components/schemas/ProviderReadiness" } } }
+    ProviderMappingUsageEnvelope: { type: object, required: [data], properties: { data: { $ref: "#/components/schemas/ProviderMappingUsage" } } }
+    ProviderMappingObservationEnvelope: { type: object, required: [data], properties: { data: { $ref: "#/components/schemas/ProviderMappingObservation" } } }
+    ProviderProfileEnvelope: { type: object, required: [data], properties: { data: { $ref: "#/components/schemas/ProviderProfile" } } }
     APIKeyEnvelope: { type: object, required: [data], properties: { data: { $ref: "#/components/schemas/APIKey" } } }
     APIKeySecretEnvelope: { type: object, required: [data], properties: { data: { $ref: "#/components/schemas/APIKeySecretResult" } } }
     PlanEnvelope: { type: object, required: [data], properties: { data: { $ref: "#/components/schemas/Plan" } } }

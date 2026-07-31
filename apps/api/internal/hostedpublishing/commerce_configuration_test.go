@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"reflect"
 	"testing"
 	"time"
 )
@@ -18,11 +19,14 @@ type commerceTestTransaction struct {
 	entitlements        []CommerceEntitlementMapping
 	grantCounts         map[string]int
 	snapshots           map[string]ProviderMetadataSnapshot
+	products            map[string]Product
+	entitlementKeys     map[string][]string
+	observations        map[string]ProviderMappingObservation
 	requestedProductIDs []string
 }
 
 func (tx *commerceTestTransaction) ProviderAssignment(string, string) (ProviderAssignment, bool) {
-	return tx.assignment, tx.assignment.ConnectionID != ""
+	return tx.assignment, tx.assignment.ConnectionID != "" || tx.assignment.Provider != ""
 }
 
 func (tx *commerceTestTransaction) ProviderConnection(string) (ProviderConnection, bool) {
@@ -42,6 +46,24 @@ func (tx *commerceTestTransaction) ProviderMappingsForCommerce(_, _, _, _ string
 		}
 	}
 	return result
+}
+
+func (tx *commerceTestTransaction) ProviderMappingsForNativeCommerce(_, _, _, _ string, productIDs []string) []CommerceProductMapping {
+	return tx.ProviderMappingsForCommerce("", "", "", "", productIDs)
+}
+
+func (tx *commerceTestTransaction) Product(id string) (Product, bool) {
+	value, ok := tx.products[id]
+	return value, ok
+}
+
+func (tx *commerceTestTransaction) ProductEntitlementKeys(id string) []string {
+	return append([]string(nil), tx.entitlementKeys[id]...)
+}
+
+func (tx *commerceTestTransaction) LatestProviderMappingObservation(id string) (ProviderMappingObservation, bool) {
+	value, ok := tx.observations[id]
+	return value, ok
 }
 
 func (tx *commerceTestTransaction) ProviderEntitlementMappingsForCommerce(string, string, string, []string) []CommerceEntitlementMapping {
@@ -72,11 +94,97 @@ func commerceValidatorForTest(t *testing.T) *CommerceConfigurationValidator {
 		t.Fatal(err)
 	}
 	defer configurationSchema.Close()
-	validator, err := CompileCommerceConfigurationValidator(providerSchema, configurationSchema)
+	providerV2Schema, err := os.Open("../../../../protocol/schema/commerce-provider/v2/contract.schema.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer providerV2Schema.Close()
+	configurationV2Schema, err := os.Open("../../../../protocol/schema/commerce-configuration/v2/configuration.schema.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer configurationV2Schema.Close()
+	validator, err := CompileCommerceConfigurationValidator(
+		providerSchema, configurationSchema, providerV2Schema, configurationV2Schema,
+	)
 	if err != nil {
 		t.Fatal(err)
 	}
 	return validator
+}
+
+func TestNativeCommerceConfigurationContainsExactMappingsGrantsAndObservation(t *testing.T) {
+	now := time.Date(2026, time.July, 24, 12, 0, 0, 0, time.UTC)
+	expiresAt := now.Add(time.Hour)
+	tx := &commerceTestTransaction{
+		assignment: ProviderAssignment{Provider: "google_play", ActivationKind: "native_store"},
+		mappings: []CommerceProductMapping{{
+			ID: "mapping_1", ProductID: "product_1", ProviderProductIdentifier: "monthly",
+			ProviderBasePlanIdentifier: "monthly-auto", ProviderOfferIdentifier: "intro",
+		}},
+		products: map[string]Product{
+			"product_1": {ID: "product_1", ProjectID: "project_1", Type: "subscription"},
+		},
+		entitlementKeys: map[string][]string{"product_1": {"pro"}},
+		observations: map[string]ProviderMappingObservation{
+			"mapping_1": {
+				ID: "observation_1", Result: "available", StoreContext: "googlePlayTest",
+				ObservedAt: now.Add(-time.Minute), ExpiresAt: &expiresAt,
+			},
+		},
+	}
+	service := &Service{commerceValidator: commerceValidatorForTest(t)}
+	snapshot, err := service.buildCommerceConfiguration(
+		tx,
+		Release{
+			ID: "release_1", ProjectID: "project_1", EnvironmentID: "environment_1",
+			Payload: json.RawMessage(`{"release":{"contentDigest":"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}}`),
+		},
+		Environment{ID: "environment_1", ProjectID: "project_1"},
+		Application{ID: "application_1", ProjectID: "project_1", Platform: "android"},
+		[]string{"product_1"},
+		now,
+	)
+	if err != nil {
+		t.Fatalf("build native sidecar: %v", err)
+	}
+	var envelope commerceConfigurationEnvelope
+	if err := json.Unmarshal(snapshot.Payload, &envelope); err != nil {
+		t.Fatal(err)
+	}
+	mapping := envelope.Configuration.ProductMappings[0]
+	if envelope.Version != "2" ||
+		envelope.Configuration.ActiveProvider.Activation.Source != "nativeStore" ||
+		envelope.Configuration.ActiveProvider.RecoveryMode != "activePurchaseRecovery" ||
+		mapping.AdapterMapping.Kind != "googlePlayProduct" ||
+		mapping.AdapterMapping.BasePlanID != "monthly-auto" ||
+		mapping.AdapterMapping.OfferID != "intro" ||
+		len(mapping.EntitlementKeys) != 1 || mapping.EntitlementKeys[0] != "pro" ||
+		envelope.Configuration.Freshness.Status != "fresh" ||
+		envelope.Configuration.Freshness.Observation == nil ||
+		envelope.Configuration.Freshness.Observation.Environment != "test" {
+		t.Fatalf("native sidecar = %#v", envelope)
+	}
+	fixture, err := os.ReadFile("../../../../protocol/fixtures/commerce-configuration/v2/google-play-configuration.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var frozen struct {
+		Configuration struct {
+			ActiveProvider struct {
+				Capabilities []commerceProviderCapability `json:"capabilities"`
+			} `json:"activeProvider"`
+		} `json:"configuration"`
+	}
+	if err := json.Unmarshal(fixture, &frozen); err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(envelope.Configuration.ActiveProvider.Capabilities, frozen.Configuration.ActiveProvider.Capabilities) {
+		t.Fatalf("native capability matrix drifted: got=%#v want=%#v",
+			envelope.Configuration.ActiveProvider.Capabilities,
+			frozen.Configuration.ActiveProvider.Capabilities,
+		)
+	}
 }
 
 func TestCommerceConfigurationUsesStoreAndCanonicalSDKLookupReferences(t *testing.T) {

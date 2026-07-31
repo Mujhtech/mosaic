@@ -1,0 +1,41 @@
+{
+  "commerceProviderContractVersion": "2",
+  "recordType": "productLoadResult",
+  "payload": {
+    "requestId": "load_google_000001",
+    "providerId": "google_play",
+    "products": [
+      {
+        "product": {
+          "mosaicProductId": "mosaic_pro_monthly",
+          "key": "pro_monthly",
+          "type": "subscription",
+          "entitlementKeys": [
+            "pro"
+          ]
+        },
+        "availability": {
+          "status": "unavailable",
+          "reason": "mappingInvalid"
+        },
+        "freshness": {
+          "source": "liveProvider",
+          "status": "fresh",
+          "observedAt": "2026-07-24T12:00:00Z"
+        },
+        "diagnostics": [
+          {
+            "code": "commerce.mapping.offerUnavailable",
+            "safeMessage": "The configured subscription offer is not available.",
+            "severity": "error",
+            "retryable": false,
+            "correlationId": "load_google_000001",
+            "mosaicProductId": "mosaic_pro_monthly",
+            "recoveryAction": "fixProductMapping"
+          }
+        ]
+      }
+    ],
+    "diagnostics": []
+  }
+}

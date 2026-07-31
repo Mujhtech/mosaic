@@ -48,9 +48,11 @@ type BrowserAuthConfig struct {
 }
 
 type ProtocolConfig struct {
-	V02SchemaPath                   string `envconfig:"MOSAIC_PROTOCOL_V02_SCHEMA_PATH" default:"../../protocol/schema/v0.2/paywall.schema.json"`
-	CommerceProviderSchemaPath      string `envconfig:"MOSAIC_COMMERCE_PROVIDER_SCHEMA_PATH" default:"../../protocol/schema/commerce-provider/v1/contract.schema.json"`
-	CommerceConfigurationSchemaPath string `envconfig:"MOSAIC_COMMERCE_CONFIGURATION_SCHEMA_PATH" default:"../../protocol/schema/commerce-configuration/v1/configuration.schema.json"`
+	V02SchemaPath                     string `envconfig:"MOSAIC_PROTOCOL_V02_SCHEMA_PATH" default:"../../protocol/schema/v0.2/paywall.schema.json"`
+	CommerceProviderSchemaPath        string `envconfig:"MOSAIC_COMMERCE_PROVIDER_SCHEMA_PATH" default:"../../protocol/schema/commerce-provider/v1/contract.schema.json"`
+	CommerceConfigurationSchemaPath   string `envconfig:"MOSAIC_COMMERCE_CONFIGURATION_SCHEMA_PATH" default:"../../protocol/schema/commerce-configuration/v1/configuration.schema.json"`
+	CommerceProviderV2SchemaPath      string `envconfig:"MOSAIC_COMMERCE_PROVIDER_V2_SCHEMA_PATH" default:"../../protocol/schema/commerce-provider/v2/contract.schema.json"`
+	CommerceConfigurationV2SchemaPath string `envconfig:"MOSAIC_COMMERCE_CONFIGURATION_V2_SCHEMA_PATH" default:"../../protocol/schema/commerce-configuration/v2/configuration.schema.json"`
 }
 
 type ProviderConfig struct {
@@ -133,6 +135,8 @@ func load() (Config, error) {
 	cfg.Protocol.V02SchemaPath = strings.TrimSpace(cfg.Protocol.V02SchemaPath)
 	cfg.Protocol.CommerceProviderSchemaPath = strings.TrimSpace(cfg.Protocol.CommerceProviderSchemaPath)
 	cfg.Protocol.CommerceConfigurationSchemaPath = strings.TrimSpace(cfg.Protocol.CommerceConfigurationSchemaPath)
+	cfg.Protocol.CommerceProviderV2SchemaPath = strings.TrimSpace(cfg.Protocol.CommerceProviderV2SchemaPath)
+	cfg.Protocol.CommerceConfigurationV2SchemaPath = strings.TrimSpace(cfg.Protocol.CommerceConfigurationV2SchemaPath)
 	cfg.Providers.CredentialKeyring = strings.TrimSpace(cfg.Providers.CredentialKeyring)
 	cfg.Providers.RevenueCatBaseURL = strings.TrimSpace(cfg.Providers.RevenueCatBaseURL)
 	cfg.ObjectStore.Endpoint = strings.TrimSpace(cfg.ObjectStore.Endpoint)
@@ -218,6 +222,9 @@ func (cfg Config) validate() error {
 	}
 	if cfg.Protocol.CommerceConfigurationSchemaPath == "" {
 		return fmt.Errorf("MOSAIC_COMMERCE_CONFIGURATION_SCHEMA_PATH must not be empty")
+	}
+	if cfg.Protocol.CommerceProviderV2SchemaPath == "" || cfg.Protocol.CommerceConfigurationV2SchemaPath == "" {
+		return errors.New("Commerce Configuration v2 schema paths are required")
 	}
 	if cfg.Providers.Enabled && cfg.Providers.CredentialKeyring == "" {
 		return fmt.Errorf("MOSAIC_PROVIDER_CREDENTIAL_KEYRING is required when provider integrations are enabled")

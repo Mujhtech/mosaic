@@ -12,6 +12,7 @@ public struct MosaicCommerceConfigurationAssociation: Codable, Sendable, Equatab
   public let configurationReleaseID: String
   public let configurationReleaseDigest: String
   public let mosaicProductIDs: [String]
+  public let mosaicProductTypes: [String: MosaicCommerceProductType]
 
   public init(
     environmentID: String,
@@ -19,7 +20,8 @@ public struct MosaicCommerceConfigurationAssociation: Codable, Sendable, Equatab
     storePlatform: MosaicCommerceStorePlatform,
     configurationReleaseID: String,
     configurationReleaseDigest: String,
-    mosaicProductIDs: [String]
+    mosaicProductIDs: [String],
+    mosaicProductTypes: [String: MosaicCommerceProductType] = [:]
   ) {
     self.environmentID = environmentID
     self.applicationID = applicationID
@@ -27,17 +29,32 @@ public struct MosaicCommerceConfigurationAssociation: Codable, Sendable, Equatab
     self.configurationReleaseID = configurationReleaseID
     self.configurationReleaseDigest = configurationReleaseDigest
     self.mosaicProductIDs = mosaicProductIDs
+    self.mosaicProductTypes = mosaicProductTypes
   }
 }
 
 public enum MosaicCommerceProviderActivation: Sendable, Equatable {
   case providerConnection(id: String)
   case sdkLocal(snapshotID: String)
+  case nativeStore
 }
 
 public enum MosaicCommerceAdapterMapping: Sendable, Equatable {
   case directProduct
   case revenueCatPackage(offeringIdentifier: String, packageIdentifier: String)
+  case storeKitProduct
+  case googlePlayProduct(basePlanID: String?, offerID: String?)
+}
+
+public enum MosaicCommerceProductType: String, Codable, Sendable, Equatable {
+  case subscription
+  case oneTimeNonConsumable = "one_time_non_consumable"
+}
+
+public enum MosaicCommerceRecoveryMode: String, Sendable, Equatable {
+  case providerDefined
+  case storeSynchronization
+  case activePurchaseRecovery
 }
 
 public struct MosaicCommerceProductMapping: Sendable, Equatable {
@@ -45,17 +62,23 @@ public struct MosaicCommerceProductMapping: Sendable, Equatable {
   public let mappingID: String
   public let providerProductReference: String
   public let adapterMapping: MosaicCommerceAdapterMapping
+  public let productType: MosaicCommerceProductType?
+  public let entitlementKeys: [String]
 
   public init(
     mosaicProductID: String,
     mappingID: String,
     providerProductReference: String,
-    adapterMapping: MosaicCommerceAdapterMapping
+    adapterMapping: MosaicCommerceAdapterMapping,
+    productType: MosaicCommerceProductType? = nil,
+    entitlementKeys: [String] = []
   ) {
     self.mosaicProductID = mosaicProductID
     self.mappingID = mappingID
     self.providerProductReference = providerProductReference
     self.adapterMapping = adapterMapping
+    self.productType = productType
+    self.entitlementKeys = entitlementKeys
   }
 }
 
@@ -72,11 +95,13 @@ public struct MosaicCommerceEntitlementMapping: Sendable, Equatable {
 public enum MosaicCommerceFreshnessSource: String, Sendable, Equatable {
   case providerSynchronization
   case sdkLocalSnapshot
+  case nativeStoreConfiguration
 }
 
 public enum MosaicCommerceFreshnessStatus: String, Sendable, Equatable {
   case fresh
   case stale
+  case configured
 }
 
 public struct MosaicCommerceFreshness: Sendable, Equatable {
@@ -92,9 +117,11 @@ public struct MosaicCommerceActiveProvider: Sendable, Equatable {
   public let identity: MosaicCommerceProviderIdentity
   public let activation: MosaicCommerceProviderActivation
   public let capabilities: [MosaicCommerceCapability]
+  public let recoveryMode: MosaicCommerceRecoveryMode
 }
 
 public struct MosaicCommerceConfiguration: Sendable, Equatable {
+  public let version: String
   public let id: String
   public let environmentID: String
   public let applicationID: String
@@ -146,6 +173,12 @@ public enum MosaicCommerceConfigurationDecoder {
       root["commerceConfigurationVersion"],
       path: "$.commerceConfigurationVersion"
     )
+    if version == "2" {
+      return try MosaicCommerceConfigurationV2Decoder.decode(
+        root,
+        association: association
+      )
+    }
     guard version == mosaicCommerceConfigurationVersion else {
       throw MosaicCommerceConfigurationError.unsupportedVersion(version)
     }
@@ -256,6 +289,7 @@ public enum MosaicCommerceConfigurationDecoder {
     try validateFreshness(freshness, activation: activeProvider.activation)
 
     return MosaicCommerceConfiguration(
+      version: "1",
       id: try CommerceValue.identifier(raw["id"], path: "\(path).id"),
       environmentID: environmentID,
       applicationID: applicationID,
@@ -381,7 +415,8 @@ public enum MosaicCommerceConfigurationDecoder {
     return MosaicCommerceActiveProvider(
       identity: identity,
       activation: activation,
-      capabilities: capabilities
+      capabilities: capabilities,
+      recoveryMode: .providerDefined
     )
   }
 
@@ -639,6 +674,7 @@ public enum MosaicCommerceConfigurationDecoder {
     switch activation {
     case .providerConnection: expected = .providerSynchronization
     case .sdkLocal: expected = .sdkLocalSnapshot
+    case .nativeStore: expected = .nativeStoreConfiguration
     }
     guard freshness.source == expected else {
       throw invalid("commerce_configuration_freshness_source_mismatch")
@@ -650,7 +686,7 @@ public enum MosaicCommerceConfigurationDecoder {
   }
 }
 
-private enum CommerceValue {
+enum CommerceValue {
   static func object(_ value: Any?, path: String) throws -> [String: Any] {
     guard let value = value as? [String: Any] else { throw shape(path, "expected_object") }
     return value

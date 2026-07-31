@@ -120,6 +120,34 @@ sidecar transport, validation, or adapter activation fails, the example keeps
 the deterministic local Provider and safe Product fallback available without
 printing the key or raw provider error.
 
+## Run native StoreKit or Google Play commerce
+
+The same Hosted screen also installs the optional StoreKit and Google Play
+factories. The accepted Commerce Configuration v2 sidecar selects the matching
+platform adapter; no Dart switch changes the Paywall or its Mosaic Product
+IDs.
+
+For iOS, use the example's StoreKit Configuration or an App Store sandbox
+application whose exact Product identifiers match the selected v2 sidecar.
+For Android, use a package-matching Play test build and exact Product,
+base-plan, and optional offer mapping. Launch with:
+
+```bash
+flutter run \
+  --dart-define=MOSAIC_HOSTED_BASE_URL=http://127.0.0.1:8080 \
+  --dart-define=MOSAIC_PUBLIC_SDK_KEY=public_example_key \
+  --dart-define=MOSAIC_APPLICATION_ID=application_ios \
+  --dart-define=MOSAIC_COMMERCE_ENABLED=true
+```
+
+Use `application_android` on Android. StoreKit restore performs an explicit
+user-requested store synchronization. Google restore recovers currently active
+purchases; it is not labeled as Apple-style synchronization. Missing plugin,
+unavailable Activity/store service, invalid mapping, pending purchase,
+cancellation, and access lookup failure remain distinct safe outcomes. The
+mock provider remains the deterministic fallback for local Product/Paywall
+work.
+
 ## Verify
 
 ```bash

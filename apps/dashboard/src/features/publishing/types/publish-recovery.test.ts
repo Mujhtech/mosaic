@@ -13,6 +13,7 @@ const context = {
   placementsHref: "/placements",
   projectId: "project_01",
   providersHref: "/providers",
+  returnTo: "/studio-hosted/org_01/project_01/env_staging/paywall_01/draft_01?review=publish",
 }
 
 describe("publish recovery routing", () => {
@@ -33,14 +34,28 @@ describe("publish recovery routing", () => {
       resourceType: "provider_mapping",
       severity: "error" as const,
     }
+    const basePlanIssue = {
+      applicationId: "app_android",
+      code: "commerce.mapping.basePlanMissing",
+      environmentId: "env_staging",
+      message: "Monthly has no Google Play base plan.",
+      productId: "product_monthly",
+      recoveryAction: "addGoogleBasePlan",
+      resourceType: "provider_mapping",
+      severity: "error" as const,
+    }
 
     expect(publishRecoveryHref(connectionIssue, context)).toBe(
-      "/providers?environmentId=env_production",
+      "/providers?environmentId=env_production&returnTo=%2Fstudio-hosted%2Forg_01%2Fproject_01%2Fenv_staging%2Fpaywall_01%2Fdraft_01%3Freview%3Dpublish",
     )
-    expect(publishRecoveryLabel(connectionIssue)).toBe("Review Commerce providers")
+    expect(publishRecoveryLabel(connectionIssue)).toBe("Review Purchase setup")
     expect(publishRecoveryHref(mappingIssue, context)).toBe(
-      "/organizations/org_01/projects/project_01/catalog/products/product_monthly?environmentId=env_staging&applicationId=app_ios",
+      "/organizations/org_01/projects/project_01/catalog/products/product_monthly?environmentId=env_staging&applicationId=app_ios&returnTo=%2Fstudio-hosted%2Forg_01%2Fproject_01%2Fenv_staging%2Fpaywall_01%2Fdraft_01%3Freview%3Dpublish",
     )
     expect(publishRecoveryLabel(mappingIssue)).toBe("Review Product mapping")
+    expect(publishRecoveryHref(basePlanIssue, context)).toBe(
+      "/organizations/org_01/projects/project_01/catalog/products/product_monthly?environmentId=env_staging&applicationId=app_android&returnTo=%2Fstudio-hosted%2Forg_01%2Fproject_01%2Fenv_staging%2Fpaywall_01%2Fdraft_01%3Freview%3Dpublish#provider-mappings-title",
+    )
+    expect(publishRecoveryLabel(basePlanIssue)).toBe("Add Google base plan")
   })
 })

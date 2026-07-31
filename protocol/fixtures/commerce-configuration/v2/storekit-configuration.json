@@ -1,0 +1,155 @@
+{
+  "commerceConfigurationVersion": "2",
+  "configuration": {
+    "id": "commerce_configuration_storekit_42",
+    "environmentId": "environment_production",
+    "applicationId": "application_ios",
+    "storePlatform": "ios",
+    "configurationRelease": {
+      "id": "configuration_release_42",
+      "contentDigest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+    },
+    "contentDigest": "sha256:4a306573de618a989765713f4ad9ed7134e6fc565aa4767134276eb8b51128f2",
+    "activeProvider": {
+      "identity": {
+        "id": "app_store",
+        "displayName": "StoreKit",
+        "adapterVersion": "1.0.0"
+      },
+      "activation": {
+        "source": "nativeStore"
+      },
+      "capabilities": [
+        {
+          "name": "productLoading",
+          "support": "supported"
+        },
+        {
+          "name": "subscriptions",
+          "support": "supported"
+        },
+        {
+          "name": "oneTimeNonConsumables",
+          "support": "supported"
+        },
+        {
+          "name": "trials",
+          "support": "supported"
+        },
+        {
+          "name": "introductoryOffers",
+          "support": "supported"
+        },
+        {
+          "name": "promotionalOffers",
+          "support": "conditional",
+          "reasonCode": "provider.configurationRequired"
+        },
+        {
+          "name": "restore",
+          "support": "supported"
+        },
+        {
+          "name": "activeEntitlementLookup",
+          "support": "supported"
+        },
+        {
+          "name": "pendingPurchases",
+          "support": "supported"
+        },
+        {
+          "name": "deferredPurchases",
+          "support": "unsupported",
+          "reasonCode": "provider.outcomeUnavailable"
+        },
+        {
+          "name": "serverConfirmedTransactions",
+          "support": "unsupported",
+          "reasonCode": "provider.serverValidationExcluded"
+        },
+        {
+          "name": "productSynchronization",
+          "support": "unsupported",
+          "reasonCode": "provider.serverSynchronizationUnavailable"
+        },
+        {
+          "name": "providerDiagnostics",
+          "support": "supported"
+        },
+        {
+          "name": "basePlans",
+          "support": "unsupported",
+          "reasonCode": "provider.capabilityUnavailable"
+        },
+        {
+          "name": "explicitOffers",
+          "support": "unsupported",
+          "reasonCode": "provider.capabilityUnavailable"
+        },
+        {
+          "name": "storeSynchronization",
+          "support": "supported"
+        },
+        {
+          "name": "activePurchaseRecovery",
+          "support": "unsupported",
+          "reasonCode": "provider.recoveryModeUnavailable"
+        },
+        {
+          "name": "asynchronousCommerceUpdates",
+          "support": "supported"
+        },
+        {
+          "name": "localDeliveryAcceptance",
+          "support": "supported"
+        }
+      ],
+      "recoveryMode": "storeSynchronization"
+    },
+    "productMappings": [
+      {
+        "mosaicProductId": "mosaic_pro_monthly",
+        "mappingId": "mapping_pro_monthly_storekit",
+        "productType": "subscription",
+        "entitlementKeys": [
+          "pro"
+        ],
+        "providerProductReference": "com.example.pro.monthly",
+        "adapterMapping": {
+          "kind": "storeKitProduct"
+        }
+      },
+      {
+        "mosaicProductId": "mosaic_pro_yearly",
+        "mappingId": "mapping_pro_yearly_storekit",
+        "productType": "subscription",
+        "entitlementKeys": [
+          "pro"
+        ],
+        "providerProductReference": "com.example.pro.yearly",
+        "adapterMapping": {
+          "kind": "storeKitProduct"
+        }
+      },
+      {
+        "mosaicProductId": "mosaic_pro_lifetime",
+        "mappingId": "mapping_pro_lifetime_storekit",
+        "productType": "one_time_non_consumable",
+        "entitlementKeys": [
+          "pro"
+        ],
+        "providerProductReference": "com.example.pro.lifetime",
+        "adapterMapping": {
+          "kind": "storeKitProduct"
+        }
+      }
+    ],
+    "entitlementMappings": [],
+    "freshness": {
+      "source": "nativeStoreConfiguration",
+      "status": "configured",
+      "configuredAt": "2026-07-24T12:00:00Z"
+    },
+    "diagnostics": []
+  }
+}

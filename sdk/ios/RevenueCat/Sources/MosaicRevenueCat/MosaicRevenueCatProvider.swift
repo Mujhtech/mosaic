@@ -153,6 +153,9 @@ public actor MosaicRevenueCatProvider: MosaicCommerceProvider {
         )
         snapshot = packages[target]
         unavailableReason = packageLoadFailure == nil ? .productNotFound : .providerUnavailable
+      case .storeKitProduct, .googlePlayProduct:
+        snapshot = nil
+        unavailableReason = .mappingInvalid
       }
 
       guard let snapshot else {

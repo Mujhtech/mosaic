@@ -10,6 +10,11 @@ import 'protocol.dart';
 const String mosaicCommerceProviderContractVersion = '1';
 const String mosaicCommerceConfigurationContentType =
     'application/vnd.mosaic.commerce-configuration+json;version=1';
+const String mosaicCommerceConfigurationContentTypeV2 =
+    'application/vnd.mosaic.commerce-configuration+json;version=2';
+const String mosaicCommerceConfigurationAccept =
+    '$mosaicCommerceConfigurationContentTypeV2, '
+    '$mosaicCommerceConfigurationContentType;q=0.9';
 
 final class MosaicRetainedCommerceConfiguration {
   const MosaicRetainedCommerceConfiguration({
@@ -116,18 +121,17 @@ final class MosaicIoCommerceConfigurationLoader
         HttpHeaders.authorizationHeader,
         'Bearer $publicSdkKey',
       )
-      ..headers
-          .set(HttpHeaders.acceptHeader, mosaicCommerceConfigurationContentType)
+      ..headers.set(HttpHeaders.acceptHeader, mosaicCommerceConfigurationAccept)
       ..headers.set(HttpHeaders.acceptEncodingHeader, 'gzip')
       ..headers.set('Mosaic-SDK-Platform', 'flutter')
       ..headers.set('Mosaic-SDK-Version', mosaicFlutterSdkVersion)
       ..headers.set(
         'Mosaic-Commerce-Configuration-Versions',
-        mosaicCommerceConfigurationVersion,
+        mosaicSupportedCommerceConfigurationVersions.join(','),
       )
       ..headers.set(
         'Mosaic-Commerce-Provider-Contract-Versions',
-        mosaicCommerceProviderContractVersion,
+        mosaicSupportedCommerceProviderContractVersions.join(','),
       );
     if (retained != null) {
       httpRequest.headers.set(HttpHeaders.ifNoneMatchHeader, retained.etag);
@@ -146,9 +150,10 @@ final class MosaicIoCommerceConfigurationLoader
           ? const MosaicCommerceConfigurationFailedResponse()
           : const MosaicCommerceConfigurationNotModifiedResponse();
     }
+    final contentType = response.headers.value(HttpHeaders.contentTypeHeader);
     if (response.statusCode != HttpStatus.ok ||
-        response.headers.value(HttpHeaders.contentTypeHeader) !=
-            mosaicCommerceConfigurationContentType ||
+        contentType != mosaicCommerceConfigurationContentType &&
+            contentType != mosaicCommerceConfigurationContentTypeV2 ||
         response.headers.value('Mosaic-Configuration-Release-Id') !=
             request.release.id) {
       return const MosaicCommerceConfigurationFailedResponse();

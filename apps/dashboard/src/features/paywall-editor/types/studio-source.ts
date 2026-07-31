@@ -8,6 +8,7 @@ export type StudioSource =
       readonly environmentName?: string
       readonly paywallId: string
       readonly draftId: string
+      readonly initialReview?: "publish"
     }
 
 export const LOCAL_STUDIO_SOURCE = Object.freeze({ kind: "local" }) satisfies StudioSource
@@ -18,4 +19,8 @@ export function hostedStudioHref(source: Extract<StudioSource, { kind: "hosted" 
 
 export function hostedStudioBackHref(source: Extract<StudioSource, { kind: "hosted" }>) {
   return `/organizations/${encodeURIComponent(source.organizationId)}/projects/${encodeURIComponent(source.projectId)}/monetization/${encodeURIComponent(source.environmentId)}/paywalls/${encodeURIComponent(source.paywallId)}`
+}
+
+export function hostedStudioPublishReviewHref(source: Extract<StudioSource, { kind: "hosted" }>) {
+  return `${hostedStudioHref(source)}?review=publish`
 }

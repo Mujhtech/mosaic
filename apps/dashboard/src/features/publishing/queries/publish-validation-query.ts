@@ -29,5 +29,6 @@ export function publishValidationQueryOptions(
   return queryOptions({
     queryKey: publishingKeys.validation(input, adapter),
     queryFn: () => adapter.validateDraftForPublish(input),
+    refetchOnMount: "always",
   })
 }

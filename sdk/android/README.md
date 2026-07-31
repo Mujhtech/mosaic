@@ -5,7 +5,13 @@ Jetpack Compose primitives. Local Preview uses the exact 0.2 contract.
 It uses provider-neutral commerce, a generated bundled fallback, and Hosted
 Configuration Delivery v1. RevenueCat support is isolated in the optional
 `:mosaic-revenuecat` module; the core `:mosaic` AAR has no RevenueCat or Play
-Billing dependency.
+Billing dependency. Native Google Play support is isolated in the optional
+`:mosaic-google-play` module and consumes Commerce Configuration v2.
+
+Development Maven coordinates are
+`dev.mosaic.sdk:mosaic:0.1.0-dev.6` and
+`dev.mosaic.sdk:mosaic-google-play:0.1.0-dev.6`. Artifact versions do not track
+the independently versioned commerce-adapter identity.
 
 ## Requirements
 

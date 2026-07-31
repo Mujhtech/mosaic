@@ -57,11 +57,12 @@ class CommerceConfigurationTest {
             request.url.encodedPath + "?" + request.url.encodedQuery,
         )
         assertEquals(
-            "application/vnd.mosaic.commerce-configuration+json;version=1",
+            "application/vnd.mosaic.commerce-configuration+json;version=2, " +
+                "application/vnd.mosaic.commerce-configuration+json;version=1;q=0.9",
             request.header("Accept"),
         )
-        assertEquals("1", request.header("Mosaic-Commerce-Configuration-Versions"))
-        assertEquals("1", request.header("Mosaic-Commerce-Provider-Contract-Versions"))
+        assertEquals("2,1", request.header("Mosaic-Commerce-Configuration-Versions"))
+        assertEquals("2,1", request.header("Mosaic-Commerce-Provider-Contract-Versions"))
         assertEquals("android", request.header("Mosaic-SDK-Platform"))
         assertEquals(
             "\"sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\"",
@@ -158,6 +159,50 @@ class CommerceConfigurationTest {
         assertTrue(configuration.activation is MosaicCommerceProviderActivation.SdkLocal)
         assertEquals(setOf("product_pro_monthly"), configuration.productMappings.keys)
         assertEquals(setOf("pro"), configuration.entitlementMappings.keys)
+    }
+
+    @Test
+    fun `decodes canonical Google v2 mapping without exposing an offer token`() {
+        val release = MosaicConfigurationRelease(
+            id = "configuration_release_42",
+            number = 42,
+            environment = MosaicDeliveryEnvironment("environment_production", "production"),
+            publishedAt = "2026-07-24T12:00:00Z",
+            contentDigest =
+                "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+            placements = emptyMap(),
+            paywallVersions = emptyMap(),
+            productReferences = listOf(
+                MosaicDeliveryProduct("mosaic_pro_monthly", "subscription", "Monthly"),
+                MosaicDeliveryProduct("mosaic_pro_yearly", "subscription", "Yearly"),
+                MosaicDeliveryProduct(
+                    "mosaic_pro_lifetime",
+                    "one_time_non_consumable",
+                    "Lifetime",
+                ),
+            ).associateBy { it.id },
+            assetReferences = emptyMap(),
+            encoded = "{}",
+        )
+
+        val configuration = MosaicCommerceConfigurationDecoder.decode(
+            repositoryFile(
+                "protocol/fixtures/commerce-configuration/v2/google-play-configuration.json",
+            ).toFile().readText(),
+            release,
+            "application_android",
+        )
+
+        assertEquals("2", configuration.version)
+        assertTrue(configuration.activation is MosaicCommerceProviderActivation.NativeStore)
+        assertEquals("activePurchaseRecovery", configuration.recoveryMode)
+        val monthly = configuration.productMappings.getValue("mosaic_pro_monthly")
+        assertEquals(setOf("pro"), monthly.entitlementKeys)
+        assertEquals(
+            MosaicCommerceAdapterMapping.GooglePlayProduct("monthly", "intro_7_day"),
+            monthly.adapterMapping,
+        )
+        assertTrue("offer tokens are runtime-only", "offerToken" !in configuration.encoded)
     }
 
     @Test

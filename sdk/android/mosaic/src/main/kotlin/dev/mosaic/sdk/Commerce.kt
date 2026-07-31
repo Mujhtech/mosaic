@@ -1,5 +1,8 @@
 package dev.mosaic.sdk
 
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.emptyFlow
+
 /** Runtime store data keyed by the stable Mosaic Product ID. */
 data class MosaicProduct(
     val id: String,
@@ -7,6 +10,20 @@ data class MosaicProduct(
     val localizedPrice: String,
     val subscriptionPeriod: String? = null,
     val currencyCode: String? = null,
+    val type: String? = null,
+    val entitlementKeys: Set<String> = emptySet(),
+    val trial: MosaicCommerceOffer? = null,
+    val introductoryOffer: MosaicCommerceOffer? = null,
+)
+
+data class MosaicCommercePeriod(val unit: String, val value: Int)
+
+data class MosaicCommerceOffer(
+    val localizedPrice: String?,
+    val period: MosaicCommercePeriod,
+    val cycles: Int = 1,
+    val paymentMode: String? = null,
+    val eligibility: String = "unknown",
 )
 
 data class MosaicEntitlement(val id: String)
@@ -66,7 +83,30 @@ sealed interface MosaicRestoreResult {
         val diagnosticCode: String = MosaicDiagnosticCode.RESTORE_FAILED.wireName,
         val diagnostic: MosaicCommerceSafeDiagnostic? = null,
     ) : MosaicRestoreResult
+
+    /** Complete Commerce Provider Contract v2 recovery outcome. */
+    data class Detailed(
+        val outcome: MosaicCommerceRecoveryOutcome,
+        val entitlements: Set<MosaicEntitlement>,
+        val metadata: MosaicCommerceRecoveryMetadata,
+    ) : MosaicRestoreResult
 }
+
+enum class MosaicCommerceRecoveryOutcome {
+    RESTORED,
+    NOTHING_TO_RESTORE,
+    CANCELLED,
+    PROVIDER_UNAVAILABLE,
+    FAILED,
+}
+
+data class MosaicCommerceRecoveryMetadata(
+    val operationId: String,
+    val providerId: String,
+    val recoveryMode: String,
+    val completedAt: String,
+    val diagnostics: List<MosaicCommerceSafeDiagnostic>,
+)
 
 sealed interface MosaicActiveEntitlementsResult {
     data class Available(val entitlements: Set<MosaicEntitlement>) : MosaicActiveEntitlementsResult
@@ -133,6 +173,70 @@ interface MosaicCommerceProviderAdapter {
     ): MosaicActiveEntitlementsResult
 }
 
+enum class MosaicCommerceUpdateOutcome {
+    PURCHASED,
+    PENDING,
+    CANCELLED,
+    PROVIDER_UNAVAILABLE,
+    FAILED,
+    ENTITLEMENTS_CHANGED,
+}
+
+data class MosaicCommerceConfigurationReference(
+    val configurationId: String,
+    val configurationRevision: String,
+)
+
+/** Provider-neutral delayed commerce event. Native tokens and receipts must never enter this type. */
+data class MosaicCommerceUpdate(
+    val updateId: String,
+    val operationId: String?,
+    val providerId: String,
+    val mosaicProductId: String,
+    val configuration: MosaicCommerceConfigurationReference,
+    val outcome: MosaicCommerceUpdateOutcome,
+    val transactionReference: String?,
+    val activeEntitlements: Set<MosaicEntitlement>,
+    val occurredAt: String,
+    val diagnostics: List<MosaicCommerceSafeDiagnostic> = emptyList(),
+)
+
+/**
+ * Host acceptance is the local delivery boundary. Returning true promises idempotent acceptance;
+ * adapters may only finish/acknowledge native transactions after this succeeds.
+ */
+enum class MosaicCommerceUpdateAcceptanceDisposition {
+    ACCEPTED,
+    ALREADY_ACCEPTED,
+    REJECTED_STALE_CONFIGURATION,
+    DELIVERY_FAILED,
+}
+
+fun interface MosaicCommerceUpdateAcceptance {
+    suspend fun accept(update: MosaicCommerceUpdate): MosaicCommerceUpdateAcceptanceDisposition
+}
+
+data class MosaicCommerceAdapterConfiguration(
+    val reference: MosaicCommerceConfigurationReference,
+    val mappings: List<MosaicCommerceProductMapping>,
+) {
+    init {
+        require(mappings.isNotEmpty())
+        require(mappings.map { it.mappingId }.toSet().size == mappings.size)
+        require(mappings.map { it.providerProductReference }.toSet().size == mappings.size)
+    }
+}
+
+/** Optional v2 lifecycle surface used by native-store modules and thin platform bridges. */
+interface MosaicCommerceProviderAdapterV2 : MosaicCommerceProviderAdapter, AutoCloseable {
+    val recoveryMode: String
+    val commerceUpdates: Flow<MosaicCommerceUpdate>
+        get() = emptyFlow()
+
+    /** Atomically installs one immutable mapping/grant snapshot and invalidates older handles. */
+    fun installConfiguration(configuration: MosaicCommerceAdapterConfiguration)
+}
+
 interface MosaicConfigurablePurchaseProvider : MosaicPurchaseProvider {
     fun accept(configuration: MosaicCommerceConfiguration)
     fun clearConfiguration()
@@ -160,10 +264,23 @@ class MosaicConfiguredPurchaseProvider(
                 return
             }
             if (this.configuration?.contentDigest == configuration.contentDigest) return
-            adapter.invalidateProductHandles()
             configurationGeneration += 1
             loadedMappingIds = emptySet()
             this.configuration = configuration
+            val v2Adapter = adapter as? MosaicCommerceProviderAdapterV2
+            if (v2Adapter == null) {
+                adapter.invalidateProductHandles()
+            } else {
+                v2Adapter.installConfiguration(
+                    MosaicCommerceAdapterConfiguration(
+                        reference = MosaicCommerceConfigurationReference(
+                            configurationId = configuration.id,
+                            configurationRevision = configuration.contentDigest,
+                        ),
+                        mappings = configuration.productMappings.values.toList(),
+                    ),
+                )
+            }
         }
     }
 
@@ -266,8 +383,16 @@ class MosaicConfiguredPurchaseProvider(
         }
         val declaredCapabilities = configuration.capabilities.associateBy { it.name }
         val runtimeCapabilities = adapter.capabilities.associateBy { it.name }
-        return declaredCapabilities.size == configuration.capabilities.size &&
-            runtimeCapabilities.size == adapter.capabilities.size &&
-            declaredCapabilities == runtimeCapabilities
+        val capabilitiesMatch =
+            declaredCapabilities.size == configuration.capabilities.size &&
+                runtimeCapabilities.size == adapter.capabilities.size &&
+                declaredCapabilities == runtimeCapabilities
+        if (!capabilitiesMatch) return false
+        val v2Adapter = adapter as? MosaicCommerceProviderAdapterV2
+        return if (configuration.version == "2") {
+            v2Adapter != null && configuration.recoveryMode == v2Adapter.recoveryMode
+        } else {
+            true
+        }
     }
 }

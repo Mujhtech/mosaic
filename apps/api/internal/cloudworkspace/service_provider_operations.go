@@ -938,19 +938,14 @@ type ReplaceProviderMappingInput struct {
 	ProviderProductIdentifier  string
 	ProviderPackageIdentifier  string
 	ProviderOfferingIdentifier string
+	ProviderBasePlanIdentifier string
+	ProviderOfferIdentifier    string
 }
 
 // ReplaceProviderMapping verifies a new RevenueCat target against the live
 // catalog, archives the old mapping, and creates a new immutable metadata
 // snapshot in one transaction.
 func (s *Service) ReplaceProviderMapping(ctx context.Context, actor Actor, mappingID string, input ReplaceProviderMappingInput) (ProviderProductMapping, error) {
-	if !validProviderMappingTarget(ProviderRevenueCat, CreateProviderMappingDraftInput{
-		ProviderProductIdentifier:  input.ProviderProductIdentifier,
-		ProviderPackageIdentifier:  input.ProviderPackageIdentifier,
-		ProviderOfferingIdentifier: input.ProviderOfferingIdentifier,
-	}) {
-		return ProviderProductMapping{}, ErrMappingTargetInvalid
-	}
 	var original ProviderProductMapping
 	err := s.repository.View(ctx, func(reader Reader) error {
 		var ok bool
@@ -963,6 +958,16 @@ func (s *Service) ReplaceProviderMapping(ctx context.Context, actor Actor, mappi
 	})
 	if err != nil {
 		return ProviderProductMapping{}, err
+	}
+	if original.Provider == ProviderAppStore || original.Provider == ProviderGooglePlay {
+		return s.replaceNativeProviderMapping(ctx, actor, original, input)
+	}
+	if !validProviderMappingTarget(ProviderRevenueCat, CreateProviderMappingDraftInput{
+		ProviderProductIdentifier:  input.ProviderProductIdentifier,
+		ProviderPackageIdentifier:  input.ProviderPackageIdentifier,
+		ProviderOfferingIdentifier: input.ProviderOfferingIdentifier,
+	}) {
+		return ProviderProductMapping{}, ErrMappingTargetInvalid
 	}
 	connection, project, catalog, err := s.fetchProviderCatalog(ctx, actor, original.ConnectionID, true)
 	if err != nil {
@@ -1032,6 +1037,7 @@ func (s *Service) ReplaceProviderMapping(ctx context.Context, actor Actor, mappi
 			Provider: ProviderRevenueCat, ProviderProductIdentifier: providerProduct.ID,
 			ProviderPackageIdentifier: packageLookupKey, ProviderOfferingIdentifier: offeringLookupKey,
 			ExpectedStoreProductID: providerProduct.StoreIdentifier,
+			ReplacesMappingID:      current.ID,
 			Status:                 ProviderMappingActive, Availability: ProviderAvailabilityAvailable,
 			SyncState: ProviderSyncCurrent, CreatedAt: now, UpdatedAt: now,
 		}
@@ -1053,6 +1059,69 @@ func (s *Service) ReplaceProviderMapping(ctx context.Context, actor Actor, mappi
 			"provider_mapping.replaced", "provider_mapping", result.ID, map[string]string{
 				"replacedMappingId": current.ID,
 			})
+		return nil
+	})
+	return result, err
+}
+
+func (s *Service) replaceNativeProviderMapping(ctx context.Context, actor Actor, original ProviderProductMapping, input ReplaceProviderMappingInput) (ProviderProductMapping, error) {
+	target := CreateProviderMappingDraftInput{
+		ProviderProductIdentifier:  input.ProviderProductIdentifier,
+		ProviderBasePlanIdentifier: input.ProviderBasePlanIdentifier,
+		ProviderOfferIdentifier:    input.ProviderOfferIdentifier,
+	}
+	if !validProviderMappingTarget(original.Provider, target) {
+		return ProviderProductMapping{}, ErrMappingTargetInvalid
+	}
+	var result ProviderProductMapping
+	err := s.repository.Transact(ctx, func(tx Transaction) error {
+		current, ok := tx.ProviderMapping(original.ID)
+		if !ok || current.Status == ProviderMappingArchived || current.ConnectionID != "" ||
+			current.Provider != original.Provider {
+			return ErrNotFound
+		}
+		product, project, err := productScope(tx, actor, current.ProductID, true)
+		if err != nil {
+			return err
+		}
+		if product.Status == ProductArchived ||
+			(current.Provider == ProviderGooglePlay && product.Type == ProductSubscription && input.ProviderBasePlanIdentifier == "") ||
+			(product.Type == ProductOneTimeNonConsumable &&
+				(input.ProviderBasePlanIdentifier != "" || input.ProviderOfferIdentifier != "")) {
+			return ErrMappingTargetInvalid
+		}
+		if candidate, exists := tx.NativeProviderMappingByTarget(
+			current.Provider, current.EnvironmentID, current.ApplicationID,
+			current.Platform, input.ProviderProductIdentifier,
+		); exists && candidate.ID != current.ID {
+			return &ConflictError{Resource: "provider_mapping", Field: "providerProductIdentifier"}
+		}
+		for _, candidate := range tx.ProviderMappings(product.ID) {
+			if candidate.ID != current.ID && candidate.ConnectionID == "" &&
+				candidate.Provider == current.Provider && candidate.EnvironmentID == current.EnvironmentID &&
+				candidate.ApplicationID == current.ApplicationID && candidate.Platform == current.Platform &&
+				candidate.Status != ProviderMappingArchived {
+				return ErrMappingAmbiguous
+			}
+		}
+		now := s.now()
+		current.Status, current.ArchivedAt, current.UpdatedAt = ProviderMappingArchived, &now, now
+		tx.SaveProviderMapping(current)
+		result = ProviderProductMapping{
+			ID: tx.NextID("mapping"), ProjectID: project.ID, ProductID: product.ID,
+			EnvironmentID: current.EnvironmentID, ApplicationID: current.ApplicationID,
+			Platform: current.Platform, Provider: current.Provider,
+			ProviderProductIdentifier:  input.ProviderProductIdentifier,
+			ProviderBasePlanIdentifier: input.ProviderBasePlanIdentifier,
+			ProviderOfferIdentifier:    input.ProviderOfferIdentifier,
+			ReplacesMappingID:          current.ID, Status: ProviderMappingActive,
+			Availability: ProviderAvailabilityUnknown, SyncState: ProviderSyncNeverSynced,
+			CreatedAt: now, UpdatedAt: now,
+		}
+		tx.SaveProviderMapping(result)
+		s.audit(tx, actor, project.OrganizationID, project.ID, current.EnvironmentID,
+			"provider_mapping.replaced", "provider_mapping", result.ID,
+			map[string]string{"replacedMappingId": current.ID, "provider": string(current.Provider)})
 		return nil
 	})
 	return result, err

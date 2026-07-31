@@ -124,7 +124,9 @@ final class Mosaic extends ChangeNotifier {
     required this.configuration,
     required this.purchaseProvider,
     required MosaicConfigurationClient? configurationClient,
-  }) : _configurationClient = configurationClient;
+    MosaicCommerceProviderRouter? commerceProviderRouter,
+  })  : _configurationClient = configurationClient,
+        _commerceProviderRouter = commerceProviderRouter;
 
   factory Mosaic.configure({
     String? publicSdkKey,
@@ -218,12 +220,14 @@ final class Mosaic extends ChangeNotifier {
                     },
               onDiagnostic: onDiagnostic,
             ),
+      commerceProviderRouter: router,
     );
   }
 
   final MosaicConfiguration configuration;
   final MosaicPurchaseProvider purchaseProvider;
   final MosaicConfigurationClient? _configurationClient;
+  final MosaicCommerceProviderRouter? _commerceProviderRouter;
 
   MosaicAcceptedConfiguration? get acceptedConfiguration =>
       _configurationClient?.accepted;
@@ -263,6 +267,12 @@ final class Mosaic extends ChangeNotifier {
     final result = await client.refresh();
     if (!identical(previous, client.accepted)) notifyListeners();
     return result;
+  }
+
+  @override
+  void dispose() {
+    _commerceProviderRouter?.deactivate();
+    super.dispose();
   }
 }
 

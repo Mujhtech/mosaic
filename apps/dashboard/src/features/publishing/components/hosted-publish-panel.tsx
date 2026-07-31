@@ -13,6 +13,7 @@ import {
   publishRecoveryHref,
   publishRecoveryLabel,
 } from "@/features/publishing/types/publish-recovery"
+import { hostedStudioPublishReviewHref } from "@/features/paywall-editor/types/studio-source"
 
 export function HostedPublishPanel({
   environmentId,
@@ -57,6 +58,14 @@ export function HostedPublishPanel({
   const placementsHref = `/organizations/${encodeURIComponent(organizationId)}/projects/${encodeURIComponent(projectId)}/monetization/${encodeURIComponent(environmentId)}/placements`
   const catalogHref = `/organizations/${encodeURIComponent(organizationId)}/projects/${encodeURIComponent(projectId)}/catalog/products`
   const providersHref = `/organizations/${encodeURIComponent(organizationId)}/projects/${encodeURIComponent(projectId)}/catalog/providers`
+  const returnTo = hostedStudioPublishReviewHref({
+    draftId: session.draft.id,
+    environmentId,
+    kind: "hosted",
+    organizationId,
+    paywallId,
+    projectId,
+  })
   const validationResult = validation.data
     ? {
         ...validation.data,
@@ -70,6 +79,7 @@ export function HostedPublishPanel({
             placementsHref,
             projectId,
             providersHref,
+            returnTo,
           }),
           recoveryLabel: publishRecoveryLabel(issue),
         })),

@@ -4,6 +4,94 @@ import XCTest
 @testable import MosaicSDK
 
 final class CommerceConfigurationTests: XCTestCase {
+  func testCanonicalStoreKitV2DecodesExactMappingGrantsAndNativeActivation() throws {
+    let association = MosaicCommerceConfigurationAssociation(
+      environmentID: "environment_production",
+      applicationID: "application_ios",
+      storePlatform: .ios,
+      configurationReleaseID: "configuration_release_42",
+      configurationReleaseDigest:
+        "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      mosaicProductIDs: ["mosaic_pro_monthly", "mosaic_pro_yearly", "mosaic_pro_lifetime"],
+      mosaicProductTypes: [
+        "mosaic_pro_monthly": .subscription,
+        "mosaic_pro_yearly": .subscription,
+        "mosaic_pro_lifetime": .oneTimeNonConsumable,
+      ]
+    )
+    let configuration = try MosaicCommerceConfigurationDecoder.decode(
+      commerceConfigurationV2FixtureData(),
+      association: association
+    )
+
+    XCTAssertEqual(configuration.version, "2")
+    XCTAssertEqual(configuration.activeProvider.identity.id, "app_store")
+    XCTAssertEqual(configuration.activeProvider.activation, .nativeStore)
+    XCTAssertEqual(configuration.activeProvider.recoveryMode, .storeSynchronization)
+    XCTAssertEqual(configuration.productMappings.count, 3)
+    let monthly = try XCTUnwrap(
+      configuration.productMappings.first { $0.mosaicProductID == "mosaic_pro_monthly" }
+    )
+    XCTAssertEqual(monthly.adapterMapping, .storeKitProduct)
+    XCTAssertEqual(monthly.productType, .subscription)
+    XCTAssertEqual(monthly.entitlementKeys, ["pro"])
+    XCTAssertEqual(configuration.freshness.source, .nativeStoreConfiguration)
+    XCTAssertEqual(configuration.freshness.status, .configured)
+
+    let provider = RecordingCommerceProvider(
+      identity: .init(
+        id: "app_store",
+        displayName: "StoreKit",
+        adapterVersion: "1.0.0"
+      ),
+      capabilities: configuration.activeProvider.capabilities
+    )
+    XCTAssertNoThrow(
+      try MosaicConfiguredPurchaseProvider(
+        configuration: configuration,
+        provider: provider
+      )
+    )
+  }
+
+  func testV2RouterRejectsDuplicateAndStaleAsynchronousUpdates() async throws {
+    let association = storeKitAssociation()
+    let configuration = try MosaicCommerceConfigurationDecoder.decode(
+      commerceConfigurationV2FixtureData(),
+      association: association
+    )
+    let provider = AsyncRecordingCommerceProvider(
+      capabilities: configuration.activeProvider.capabilities
+    )
+    let router = MosaicCommerceProviderRouter()
+    try await router.install(configuration: configuration, provider: provider)
+    let stream = await router.commerceUpdates
+    var iterator = stream.makeAsyncIterator()
+    let reference = MosaicCommerceConfigurationReference(
+      configurationID: configuration.id,
+      configurationRevision: configuration.contentDigest
+    )
+    let first = commerceUpdate(id: "update_storekit_1", configuration: reference)
+    await provider.emit(first)
+    let routedFirst = await iterator.next()
+    XCTAssertEqual(routedFirst, first)
+
+    await provider.emit(first)
+    await provider.emit(
+      commerceUpdate(
+        id: "update_storekit_stale",
+        configuration: .init(
+          configurationID: configuration.id,
+          configurationRevision: "stale_revision"
+        )
+      )
+    )
+    let second = commerceUpdate(id: "update_storekit_2", configuration: reference)
+    await provider.emit(second)
+    let routedSecond = await iterator.next()
+    XCTAssertEqual(routedSecond, second)
+  }
+
   func testCanonicalRevenueCatSidecarDecodesOnlyForExactReleaseAssociation() throws {
     let data = try commerceConfigurationFixtureData()
     let association = revenueCatAssociation()
@@ -282,11 +370,12 @@ final class CommerceConfigurationTests: XCTestCase {
     XCTAssertEqual(request.headers["Authorization"], "Bearer pk_test")
     XCTAssertEqual(request.headers["Mosaic-SDK-Platform"], "ios")
     XCTAssertEqual(request.headers["Mosaic-SDK-Version"], mosaicSDKVersion)
-    XCTAssertEqual(request.headers["Mosaic-Commerce-Configuration-Versions"], "1")
-    XCTAssertEqual(request.headers["Mosaic-Commerce-Provider-Contract-Versions"], "1")
+    XCTAssertEqual(request.headers["Mosaic-Commerce-Configuration-Versions"], "2,1")
+    XCTAssertEqual(request.headers["Mosaic-Commerce-Provider-Contract-Versions"], "2,1")
     XCTAssertEqual(
       request.headers["Accept"],
-      "application/vnd.mosaic.commerce-configuration+json;version=1"
+      "application/vnd.mosaic.commerce-configuration+json;version=2, "
+        + "application/vnd.mosaic.commerce-configuration+json;version=1"
     )
   }
 
@@ -311,6 +400,39 @@ final class CommerceConfigurationTests: XCTestCase {
       configurationReleaseDigest:
         "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
       mosaicProductIDs: ["product_pro_monthly"]
+    )
+  }
+
+  private func storeKitAssociation() -> MosaicCommerceConfigurationAssociation {
+    MosaicCommerceConfigurationAssociation(
+      environmentID: "environment_production",
+      applicationID: "application_ios",
+      storePlatform: .ios,
+      configurationReleaseID: "configuration_release_42",
+      configurationReleaseDigest:
+        "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      mosaicProductIDs: ["mosaic_pro_monthly", "mosaic_pro_yearly", "mosaic_pro_lifetime"],
+      mosaicProductTypes: [
+        "mosaic_pro_monthly": .subscription,
+        "mosaic_pro_yearly": .subscription,
+        "mosaic_pro_lifetime": .oneTimeNonConsumable,
+      ]
+    )
+  }
+
+  private func commerceUpdate(
+    id: String,
+    configuration: MosaicCommerceConfigurationReference
+  ) -> MosaicCommerceUpdate {
+    MosaicCommerceUpdate(
+      id: id,
+      providerID: "app_store",
+      mosaicProductID: "mosaic_pro_monthly",
+      configuration: configuration,
+      outcome: .purchased,
+      transactionReference: "storekit_42",
+      activeEntitlementKeys: ["pro"],
+      occurredAt: Date(timeIntervalSince1970: 1_721_822_700)
     )
   }
 }
@@ -344,11 +466,7 @@ private actor CommerceTransportStub: MosaicCommerceConfigurationTransport {
 }
 
 private actor RecordingCommerceProvider: MosaicCommerceProvider {
-  nonisolated let identity = MosaicCommerceProviderIdentity(
-    id: "acme-commerce",
-    displayName: "Acme Commerce",
-    adapterVersion: "2.3.1"
-  )
+  nonisolated let identity: MosaicCommerceProviderIdentity
   nonisolated let capabilities: [MosaicCommerceCapability]
   private var mappingIDs: [String] = []
   private var invalidations = 0
@@ -358,6 +476,11 @@ private actor RecordingCommerceProvider: MosaicCommerceProvider {
   private var purchaseFailure: MosaicCommerceDiagnostic?
 
   init(
+    identity: MosaicCommerceProviderIdentity = MosaicCommerceProviderIdentity(
+      id: "acme-commerce",
+      displayName: "Acme Commerce",
+      adapterVersion: "2.3.1"
+    ),
     capabilities: [MosaicCommerceCapability] = [
       MosaicCommerceCapability(name: .productLoading, support: .supported),
       MosaicCommerceCapability(name: .subscriptions, support: .supported),
@@ -369,6 +492,7 @@ private actor RecordingCommerceProvider: MosaicCommerceProvider {
       MosaicCommerceCapability(name: .activeEntitlementLookup, support: .supported),
     ]
   ) {
+    self.identity = identity
     self.capabilities = capabilities
   }
 
@@ -456,5 +580,62 @@ private actor RecordingCommerceProvider: MosaicCommerceProvider {
   func completeDeferredInvalidation() {
     invalidationContinuation?.resume()
     invalidationContinuation = nil
+  }
+}
+
+private actor AsyncRecordingCommerceProvider: MosaicAsynchronousCommerceProvider {
+  nonisolated let identity = MosaicCommerceProviderIdentity(
+    id: "app_store",
+    displayName: "StoreKit",
+    adapterVersion: "1.0.0"
+  )
+  nonisolated let capabilities: [MosaicCommerceCapability]
+  private let updates: AsyncStream<MosaicCommerceUpdate>
+  private let continuation: AsyncStream<MosaicCommerceUpdate>.Continuation
+
+  init(capabilities: [MosaicCommerceCapability]) {
+    self.capabilities = capabilities
+    (updates, continuation) = AsyncStream.makeStream()
+  }
+
+  var commerceUpdates: AsyncStream<MosaicCommerceUpdate> {
+    get async { updates }
+  }
+
+  func install(
+    configuration _: MosaicCommerceConfigurationReference,
+    mappings _: [MosaicCommerceProductMapping]
+  ) {}
+
+  func invalidateLoadedProducts() {}
+
+  func loadProducts(
+    mappings _: [MosaicCommerceProductMapping]
+  ) -> [MosaicCommerceResolvedProduct] {
+    []
+  }
+
+  func purchase(mosaicProductID: String) -> MosaicPurchaseResult {
+    .productUnavailable(productID: mosaicProductID)
+  }
+
+  func restore(
+    entitlementMappings _: [MosaicCommerceEntitlementMapping]
+  ) -> MosaicRestoreResult {
+    .nothingToRestore
+  }
+
+  func activeEntitlements(
+    entitlementMappings _: [MosaicCommerceEntitlementMapping]
+  ) -> MosaicActiveEntitlementsResult {
+    .available([])
+  }
+
+  func providerDiagnostics() -> MosaicCommerceProviderDiagnostics {
+    .init(providerID: identity.id, health: .healthy, diagnostics: [])
+  }
+
+  func emit(_ update: MosaicCommerceUpdate) {
+    continuation.yield(update)
   }
 }

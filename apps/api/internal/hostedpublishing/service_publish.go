@@ -4,12 +4,15 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"sort"
 	"strings"
 	"time"
 
 	"github.com/rs/zerolog"
 	"go.opentelemetry.io/otel/attribute"
+
+	"github.com/Mujhtech/mosaic/apps/api/internal/providerreadiness"
 )
 
 type PublishCommand struct {
@@ -243,8 +246,14 @@ func (s *Service) Publish(ctx context.Context, actor Actor, command PublishComma
 			warnings = append(warnings, "product_mock_metadata:"+product.ID)
 		}
 		providerIssues := providerPublicationIssues(tx, environment, products, s.now())
-		if environment.Mode == "production" && len(providerIssues) != 0 {
-			return &ProviderReadinessError{Blockers: providerIssues}
+		blockers := make([]ProviderPublicationIssue, 0, len(providerIssues))
+		for _, issue := range providerIssues {
+			if providerPublicationIssueBlocks(issue) {
+				blockers = append(blockers, issue)
+			}
+		}
+		if environment.Mode == "production" && len(blockers) != 0 {
+			return &ProviderReadinessError{Blockers: blockers}
 		}
 		for _, issue := range providerIssues {
 			warnings = append(warnings, providerPublicationWarning(issue))
@@ -309,17 +318,47 @@ func (s *Service) Publish(ctx context.Context, actor Actor, command PublishComma
 	if err != nil {
 		span.RecordError(err)
 		zerolog.Ctx(ctx).Warn().Err(err).Str("environment_id", command.EnvironmentID).Msg("configuration publication failed")
+		var readinessError *ProviderReadinessError
+		if errors.As(err, &readinessError) {
+			s.auditProviderPublishRejection(ctx, actor, command.ProjectID, command.EnvironmentID, readinessError.Blockers)
+		}
 	} else {
 		zerolog.Ctx(ctx).Info().Str("environment_id", command.EnvironmentID).Str("release_id", result.Release.ID).Int64("release_number", result.Release.ReleaseNumber).Msg("configuration published")
 	}
 	return result, err
 }
 
+func (s *Service) auditProviderPublishRejection(ctx context.Context, actor Actor, projectID, environmentID string, blockers []ProviderPublicationIssue) {
+	codes := make([]string, 0, len(blockers))
+	for _, blocker := range blockers {
+		codes = append(codes, blocker.Code+":"+blocker.ProductID+":"+blocker.ApplicationID)
+	}
+	sort.Strings(codes)
+	if err := s.repository.Transact(ctx, func(tx Transaction) error {
+		project, environment, err := environmentAccess(tx, actor, projectID, environmentID, true)
+		if err != nil {
+			return err
+		}
+		s.audit(tx, actor, project, environment.ID, "configuration.publish_rejected",
+			"environment", environment.ID, map[string]string{"providerBlockers": strings.Join(codes, ",")})
+		return nil
+	}); err != nil {
+		zerolog.Ctx(ctx).Warn().Err(err).Str("environment_id", environmentID).Msg("provider publish rejection audit failed")
+	}
+}
+
+func providerPublicationIssueBlocks(issue ProviderPublicationIssue) bool {
+	return issue.Code != "observationMissing" && issue.Code != "observationStale"
+}
+
 func providerPublicationWarning(issue ProviderPublicationIssue) string {
 	return "provider_readiness:" + issue.Code + ":" + issue.ProductID + ":" + issue.ApplicationID
 }
 
-func publicationIssue(code string, product Product, application Application, resourceType, resourceID, recoveryAction string) ProviderPublicationIssue {
+func publicationIssue(code string, product Product, application Application, resourceType, resourceID string, recoveryAction providerreadiness.Action) ProviderPublicationIssue {
+	if !providerreadiness.IsKnown(recoveryAction) {
+		panic("unknown provider publication recovery action: " + recoveryAction)
+	}
 	return ProviderPublicationIssue{
 		Code: code, ProductID: product.ID, ApplicationID: application.ID,
 		ResourceType: resourceType, ResourceID: resourceID, RecoveryAction: recoveryAction,
@@ -372,9 +411,6 @@ func providerPublicationIssues(reader Reader, environment Environment, products 
 			if product.Status != "connected" {
 				issues = append(issues, publicationIssue("productUnavailable", product, application, "product", product.ID, "connectProduct"))
 			}
-			if product.MetadataSource != "provider" {
-				issues = append(issues, publicationIssue("metadataStale", product, application, "product", product.ID, "syncProviderMetadata"))
-			}
 			grantCount := reader.ProductGrantCount(product.ID)
 			if grantCount == 0 {
 				issues = append(issues, publicationIssue("productUnavailable", product, application, "product", product.ID, "grantEntitlement"))
@@ -383,6 +419,39 @@ func providerPublicationIssues(reader Reader, environment Environment, products 
 			if !ok {
 				issues = append(issues, publicationIssue("providerUnavailable", product, application, "provider_assignment", environment.ID+":"+application.ID, "assignProviderConnection"))
 				continue
+			}
+			if assignment.ActivationKind == "native_store" {
+				if (assignment.Provider == "app_store" && application.Platform != "ios") ||
+					(assignment.Provider == "google_play" && application.Platform != "android") {
+					issues = append(issues, publicationIssue("scopeMismatch", product, application, "provider_assignment", environment.ID+":"+application.ID, "selectCompatibleProvider"))
+					continue
+				}
+				mappings := reader.ProviderMappingsForNativeCommerce(
+					assignment.Provider, environment.ID, application.ID, application.Platform, []string{product.ID},
+				)
+				switch len(mappings) {
+				case 0:
+					issues = append(issues, publicationIssue("mappingMissing", product, application, "product", product.ID, "createNativeProviderMapping"))
+				case 1:
+					mapping := mappings[0]
+					if assignment.Provider == "google_play" && product.Type == "subscription" && mapping.ProviderBasePlanIdentifier == "" {
+						issues = append(issues, publicationIssue("basePlanMissing", product, application, "provider_mapping", mapping.ID, "addGoogleBasePlan"))
+					}
+					observation, observed := reader.LatestProviderMappingObservation(mapping.ID)
+					if !observed {
+						issues = append(issues, publicationIssue("observationMissing", product, application, "provider_mapping", mapping.ID, "runNativeProviderTest"))
+					} else if observation.Result != "available" {
+						issues = append(issues, publicationIssue("productUnavailable", product, application, "provider_mapping", mapping.ID, "rerunNativeProviderTest"))
+					} else if observation.ExpiresAt != nil && !observation.ExpiresAt.After(now) {
+						issues = append(issues, publicationIssue("observationStale", product, application, "provider_mapping", mapping.ID, "rerunNativeProviderTest"))
+					}
+				default:
+					issues = append(issues, publicationIssue("mappingAmbiguous", product, application, "product", product.ID, "archiveDuplicateMappings"))
+				}
+				continue
+			}
+			if product.MetadataSource != "provider" {
+				issues = append(issues, publicationIssue("metadataStale", product, application, "product", product.ID, "syncProviderMetadata"))
 			}
 			connection, ok := reader.ProviderConnection(assignment.ConnectionID)
 			if !ok || connection.ProjectID != environment.ProjectID {
@@ -407,9 +476,9 @@ func providerPublicationIssues(reader Reader, environment Environment, products 
 				if code := providerEntitlementCoverageIssue(
 					reader, connection.ID, environment.ID, application.ID, product.ID, grantCount,
 				); code != "" {
-					recoveryAction := "importProviderEntitlementMapping"
+					recoveryAction := providerreadiness.ActionImportProviderEntitlementMapping
 					if code == "mappingAmbiguous" {
-						recoveryAction = "replaceProviderEntitlementMapping"
+						recoveryAction = providerreadiness.ActionReplaceProviderEntitlementMapping
 					}
 					issues = append(issues, publicationIssue(
 						code, product, application, "product", product.ID, recoveryAction,
@@ -613,7 +682,7 @@ func shouldBuildCommerceConfigurations(productIDs []string, providerIssues []Pro
 		return false
 	}
 	for _, issue := range providerIssues {
-		if issue.Code != "metadataStale" {
+		if issue.Code != "metadataStale" && providerPublicationIssueBlocks(issue) {
 			return false
 		}
 	}

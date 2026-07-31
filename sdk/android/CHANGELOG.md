@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.1.0-dev.6
+
+- Add local Maven publication metadata for
+  `dev.mosaic.sdk:mosaic:0.1.0-dev.6` and
+  `dev.mosaic.sdk:mosaic-google-play:0.1.0-dev.6`; the Google adapter POM
+  retains its project dependency on the matching core artifact.
+- Add optional `mosaic-google-play` adapter 1.0.0 using Google Play Billing
+  9.1.0 on API 24+, with exact Product/base-plan/offer selection, runtime-only
+  offer tokens, pending and delayed purchase handling, active-purchase
+  recovery, safe diagnostics, and Product-to-Entitlement grants.
+- Add strict Commerce Configuration v2 decoding and v2-first/v1 fallback
+  negotiation while preserving Commerce Configuration v1 and RevenueCat.
+- Persist idempotent local-delivery state before host acceptance and
+  acknowledge Google purchases only after accepted delivery.
+
 ## 0.1.0-dev.5
 
 - Report RevenueCat Provider ID `revenuecat` with Mosaic adapter version

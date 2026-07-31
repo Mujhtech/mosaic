@@ -1,5 +1,20 @@
 # Commerce Provider Contract changelog
 
+## Version 2 release candidate - 2026-07-24
+
+- Preserved all v1 behavior and fixtures as a parallel readable contract.
+- Added native recovery modes and explicit base-plan, offer, asynchronous
+  update, and local-delivery-acceptance capabilities.
+- Added configuration-bound asynchronous commerce updates with stable
+  deduplication identity and bounded safe outcomes.
+- Added idempotent local acceptance dispositions and froze the rule that only
+  accepted or already-accepted delivery authorizes native finish or
+  acknowledgement.
+- Documented exact v1/v2 negotiation and retain-last-accepted/bundled fallback.
+- Bound `configurationRevision` to the exact Commerce Configuration content
+  digest, required non-empty purchased-update access, and froze complete
+  truthful StoreKit and Google capability matrices.
+
 ## Version 1 release candidate - 2026-07-23
 
 - Added a separately versioned, closed, platform-neutral Commerce Provider
@@ -19,4 +34,3 @@
   retry-after, and redaction requirements.
 - Added minimum cross-platform fixtures, semantic validation, generated browser
   declarations, documentation, and generation-drift coverage.
-

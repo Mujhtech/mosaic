@@ -58,6 +58,9 @@ export function EnvironmentsPage({ organizationId, projectId }: EnvironmentsPage
               <li className="rounded border p-4" key={environment.id}>
                 <p className="font-semibold">{environment.name}</p>
                 <p className="text-muted-foreground mt-1 font-mono text-xs">{environment.key}</p>
+                <p className="text-muted-foreground mt-2 text-xs capitalize">
+                  Mosaic mode · {environment.mode}
+                </p>
               </li>
             ))}
           </ul>

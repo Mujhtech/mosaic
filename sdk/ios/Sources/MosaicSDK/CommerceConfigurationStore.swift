@@ -309,12 +309,14 @@ public actor MosaicCommerceConfigurationManager {
     }
 
     var headers = [
-      "Accept": mosaicCommerceConfigurationMediaType,
+      "Accept": mosaicCommerceConfigurationAcceptedMediaTypes,
       "Authorization": "Bearer \(normalizedKey)",
       "Mosaic-SDK-Platform": "ios",
       "Mosaic-SDK-Version": mosaicSDKVersion,
-      "Mosaic-Commerce-Configuration-Versions": mosaicCommerceConfigurationVersion,
-      "Mosaic-Commerce-Provider-Contract-Versions": mosaicCommerceProviderContractVersion,
+      "Mosaic-Commerce-Configuration-Versions":
+        mosaicSupportedCommerceConfigurationVersions.joined(separator: ","),
+      "Mosaic-Commerce-Provider-Contract-Versions":
+        mosaicSupportedCommerceProviderContractVersions.joined(separator: ","),
     ]
     if let etag = accepted?.etag {
       headers["If-None-Match"] = etag
@@ -368,12 +370,14 @@ public actor MosaicCommerceConfigurationManager {
       )
     }
     var headers = [
-      "Accept": mosaicCommerceConfigurationMediaType,
+      "Accept": mosaicCommerceConfigurationAcceptedMediaTypes,
       "Authorization": "Bearer \(publicSDKKey)",
       "Mosaic-SDK-Platform": "ios",
       "Mosaic-SDK-Version": mosaicSDKVersion,
-      "Mosaic-Commerce-Configuration-Versions": mosaicCommerceConfigurationVersion,
-      "Mosaic-Commerce-Provider-Contract-Versions": mosaicCommerceProviderContractVersion,
+      "Mosaic-Commerce-Configuration-Versions":
+        mosaicSupportedCommerceConfigurationVersions.joined(separator: ","),
+      "Mosaic-Commerce-Provider-Contract-Versions":
+        mosaicSupportedCommerceProviderContractVersions.joined(separator: ","),
     ]
     if let etag = accepted?.etag { headers["If-None-Match"] = etag }
     do {
@@ -423,7 +427,8 @@ public actor MosaicCommerceConfigurationManager {
       }
       return .accepted(configuration: accepted.configuration, source: accepted.source)
     case 200:
-      guard response.contentType == mosaicCommerceConfigurationMediaType,
+      guard [mosaicCommerceConfigurationMediaType, mosaicCommerceConfigurationMediaTypeV2]
+        .contains(response.contentType),
         let etag = response.etag,
         etag.range(
           of: "^\"sha256:[a-f0-9]{64}\"$",

@@ -48,18 +48,119 @@ const connection: ProviderConnection = {
 }
 
 const assignment: ActiveProviderAssignment = {
+  activationKind: "provider_connection",
   applicationId: application.id,
   connectionId: connection.id,
   createdAt: "2026-07-23T12:00:00Z",
   createdByActorId: "actor_01",
   environmentId: environment.id,
   platform: "ios",
+  provider: "revenuecat",
   productionConnectionUseAcknowledged: false,
   projectId: "project_01",
   updatedAt: "2026-07-23T12:00:00Z",
 }
 
 describe("ActiveProviderMatrix", () => {
+  it("lets Members review impact and directs them to an Owner or Admin instead of mutating", () => {
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { staleTime: Number.POSITIVE_INFINITY } },
+    })
+    queryClient.setQueryData(
+      providerConnectionKeys.replacementImpact(
+        environment.projectId,
+        connection.id,
+        environment.id,
+        application.id,
+        "revenuecat",
+        connection.id,
+      ),
+      { paywalls: [], products: [] },
+    )
+
+    render(
+      <QueryClientProvider client={queryClient}>
+        <ActiveProviderMatrix
+          applications={[application]}
+          assignments={[assignment]}
+          canManage={false}
+          connections={[connection]}
+          environment={environment}
+          managementEnabled
+          membersHref="/organizations/org_01/members"
+          organizationId="org_01"
+          projectId={environment.projectId}
+        />
+      </QueryClientProvider>,
+    )
+
+    fireEvent.click(screen.getByRole("button", { name: "Clear provider" }))
+
+    expect(screen.getByText("0 affected Products · 0 active Paywalls")).toBeVisible()
+    expect(screen.queryByRole("button", { name: "Confirm clear" })).not.toBeInTheDocument()
+    expect(screen.getByRole("link", { name: "Ask an Owner or Admin" })).toHaveAttribute(
+      "href",
+      "/organizations/org_01/members",
+    )
+  })
+
+  it("offers a direct Register Application action when setup has no Applications", () => {
+    render(
+      <ActiveProviderMatrix
+        applications={[]}
+        applicationsHref="/organizations/org_01/projects/project_01/apps"
+        assignments={[]}
+        connections={[]}
+        environment={environment}
+      />,
+    )
+
+    expect(screen.getByRole("link", { name: "Register Application" })).toHaveAttribute(
+      "href",
+      "/organizations/org_01/projects/project_01/apps",
+    )
+  })
+
+  it("renders StoreKit as a credential-free native assignment", () => {
+    const queryClient = new QueryClient()
+    queryClient.setQueryData(providerConnectionKeys.nativeProfile("app_store", "ios"), {
+      adapterVersion: "2.0",
+      capabilities: [
+        { name: "purchase", support: "supported" },
+        {
+          name: "deferredPurchaseOutcome",
+          reasonCode: "notExposedByTypedApi",
+          support: "unsupported",
+        },
+      ],
+      displayName: "StoreKit",
+      platform: "ios",
+      provider: "app_store",
+    })
+
+    render(
+      <QueryClientProvider client={queryClient}>
+        <ActiveProviderMatrix
+          applications={[application]}
+          assignments={[
+            {
+              ...assignment,
+              activationKind: "native_store",
+              connectionId: undefined,
+              provider: "app_store",
+            },
+          ]}
+          connections={[]}
+          environment={environment}
+        />
+      </QueryClientProvider>,
+    )
+
+    expect(screen.getByText("StoreKit")).toBeVisible()
+    expect(screen.getByText(/Built in · no server credentials · adapter 2.0/)).toBeVisible()
+    expect(screen.getByText("1 conditional or unsupported capability")).toBeVisible()
+  })
+
   it("renders a persisted assignment with explicit Environment, Application, and platform", () => {
     render(
       <ActiveProviderMatrix
@@ -116,6 +217,8 @@ describe("ActiveProviderMatrix", () => {
         connection.id,
         environment.id,
         application.id,
+        "revenuecat",
+        connection.id,
       ),
       {
         paywalls: [

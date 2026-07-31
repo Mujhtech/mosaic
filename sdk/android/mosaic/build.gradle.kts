@@ -1,7 +1,13 @@
+import org.gradle.api.publish.maven.MavenPublication
+
 plugins {
     id("com.android.library")
     id("org.jetbrains.kotlin.plugin.compose")
+    id("maven-publish")
 }
+
+group = "dev.mosaic.sdk"
+version = "0.1.0-dev.6"
 
 val canonicalFixture = layout.projectDirectory.file(
     "../../../protocol/fixtures/v0.2/complete-paywall.json",
@@ -52,12 +58,33 @@ android {
         }
     }
 
+    publishing {
+        singleVariant("release") {
+            withSourcesJar()
+        }
+    }
+
     sourceSets.named("main") {
         // The directory is generated and ignored; the explicit preBuild edge keeps it current.
         assets.srcDir(generatedCanonicalAssets.get().asFile)
     }
     sourceSets.named("androidTest") {
         assets.srcDir(generatedProtocolV02TestAssets.get().asFile)
+    }
+}
+
+afterEvaluate {
+    publishing {
+        publications {
+            register<MavenPublication>("release") {
+                from(components["release"])
+                artifactId = "mosaic"
+                pom {
+                    name.set("Mosaic Android SDK")
+                    description.set("Provider-neutral Mosaic protocol decoding and Jetpack Compose rendering.")
+                }
+            }
+        }
     }
 }
 

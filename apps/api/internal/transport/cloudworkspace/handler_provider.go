@@ -233,8 +233,11 @@ func (h *Handler) setActiveProviderAssignment(w http.ResponseWriter, r *http.Req
 		actor(r),
 		chi.URLParam(r, "environmentId"),
 		chi.URLParam(r, "applicationId"),
-		request.ConnectionID,
-		request.AcknowledgeProductionConnectionUse,
+		cloudworkspace.SetActiveProviderAssignmentInput{
+			Provider: request.Provider, ActivationKind: request.ActivationKind,
+			ConnectionID:             request.ConnectionID,
+			AcknowledgeProductionUse: request.AcknowledgeProductionConnectionUse,
+		},
 	)
 	if err != nil {
 		writeServiceError(w, r, err)
@@ -278,12 +281,15 @@ func (h *Handler) createProviderMappingDraft(w http.ResponseWriter, r *http.Requ
 	}
 	result, err := h.service.CreateProviderMappingDraft(r.Context(), actor(r), chi.URLParam(r, "productId"), cloudworkspace.CreateProviderMappingDraftInput{
 		ConnectionID:               request.ConnectionID,
+		Provider:                   request.Provider,
 		EnvironmentID:              request.EnvironmentID,
 		ApplicationID:              request.ApplicationID,
 		ProviderProductIdentifier:  request.ProviderProductIdentifier,
 		ProviderPackageIdentifier:  request.ProviderPackageIdentifier,
 		ProviderOfferingIdentifier: request.ProviderOfferingIdentifier,
 		ExpectedStoreProductID:     request.ExpectedStoreProductID,
+		ProviderBasePlanIdentifier: request.ProviderBasePlanIdentifier,
+		ProviderOfferIdentifier:    request.ProviderOfferIdentifier,
 	})
 	if err != nil {
 		writeServiceError(w, r, err)
@@ -312,6 +318,8 @@ func (h *Handler) replaceProviderMapping(w http.ResponseWriter, r *http.Request)
 			ProviderProductIdentifier:  request.ProviderProductIdentifier,
 			ProviderPackageIdentifier:  request.ProviderPackageIdentifier,
 			ProviderOfferingIdentifier: request.ProviderOfferingIdentifier,
+			ProviderBasePlanIdentifier: request.ProviderBasePlanIdentifier,
+			ProviderOfferIdentifier:    request.ProviderOfferIdentifier,
 		},
 	)
 	if err != nil {
@@ -319,6 +327,61 @@ func (h *Handler) replaceProviderMapping(w http.ResponseWriter, r *http.Request)
 		return
 	}
 	response.Created(w, r, result)
+}
+
+func (h *Handler) createProviderMappingObservation(w http.ResponseWriter, r *http.Request) {
+	request := new(providerMappingObservationRequest)
+	if !decodeAndValidate(w, r, request) {
+		return
+	}
+	result, err := h.service.CreateProviderMappingObservation(
+		r.Context(), actor(r), chi.URLParam(r, "mappingId"),
+		cloudworkspace.CreateProviderMappingObservationInput{
+			AdapterVersion: request.AdapterVersion, StoreContext: request.StoreContext,
+			Result: request.Result, DiagnosticCode: request.DiagnosticCode,
+			CorrelationID: request.CorrelationID, Metadata: request.Metadata.domain(),
+			ObservedAt: request.ObservedAt, ExpiresAt: request.ExpiresAt,
+		},
+	)
+	if err != nil {
+		writeServiceError(w, r, err)
+		return
+	}
+	response.Created(w, r, result)
+}
+
+func (h *Handler) listProviderMappingObservations(w http.ResponseWriter, r *http.Request) {
+	result, err := h.service.ListProviderMappingObservations(r.Context(), actor(r), chi.URLParam(r, "mappingId"))
+	if err != nil {
+		writeServiceError(w, r, err)
+		return
+	}
+	response.OK(w, r, result)
+}
+
+func (h *Handler) getProviderMappingUsage(w http.ResponseWriter, r *http.Request) {
+	result, err := h.service.ProviderMappingUsage(r.Context(), actor(r), chi.URLParam(r, "mappingId"))
+	if err != nil {
+		writeServiceError(w, r, err)
+		return
+	}
+	response.OK(w, r, result)
+}
+
+func (h *Handler) getNativeProviderProfile(w http.ResponseWriter, r *http.Request) {
+	platform := cloudworkspace.Platform(r.URL.Query().Get("platform"))
+	if platform != cloudworkspace.PlatformIOS && platform != cloudworkspace.PlatformAndroid {
+		writeValidationError(w, r, map[string][]string{"platform": []string{"Platform must be ios or android."}})
+		return
+	}
+	result, err := h.service.NativeProviderProfile(
+		r.Context(), cloudworkspace.ProviderKind(chi.URLParam(r, "provider")), platform,
+	)
+	if err != nil {
+		writeServiceError(w, r, err)
+		return
+	}
+	response.OK(w, r, result)
 }
 
 func (h *Handler) getProviderMappingMetadata(w http.ResponseWriter, r *http.Request) {

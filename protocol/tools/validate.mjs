@@ -27,6 +27,16 @@ import {
   validateCommerceConfigurationV1Artifacts,
   validateCommerceConfigurationV1JsonFormatting,
 } from "./commerce-configuration-validation-v1.mjs";
+import {
+  loadCommerceProviderV2Artifacts,
+  validateCommerceProviderV2Artifacts,
+  validateCommerceProviderV2JsonFormatting,
+} from "./commerce-provider-validation-v2.mjs";
+import {
+  loadCommerceConfigurationV2Artifacts,
+  validateCommerceConfigurationV2Artifacts,
+  validateCommerceConfigurationV2JsonFormatting,
+} from "./commerce-configuration-validation-v2.mjs";
 
 try {
   const artifactsV02 = loadProtocolV02Artifacts();
@@ -35,6 +45,9 @@ try {
   const commerceProviderArtifactsV1 = loadCommerceProviderV1Artifacts();
   const commerceConfigurationArtifactsV1 =
     loadCommerceConfigurationV1Artifacts();
+  const commerceProviderArtifactsV2 = loadCommerceProviderV2Artifacts();
+  const commerceConfigurationArtifactsV2 =
+    loadCommerceConfigurationV2Artifacts();
   const errors = [
     ...validateBrowserContractGeneration(),
     ...validateProtocolV02(artifactsV02),
@@ -66,6 +79,12 @@ try {
       commerceConfigurationArtifactsV1,
     ),
     ...validateCommerceConfigurationV1JsonFormatting(),
+    ...validateCommerceProviderV2Artifacts(commerceProviderArtifactsV2),
+    ...validateCommerceProviderV2JsonFormatting(),
+    ...validateCommerceConfigurationV2Artifacts(
+      commerceConfigurationArtifactsV2,
+    ),
+    ...validateCommerceConfigurationV2JsonFormatting(),
   ];
 
   if (errors.length > 0) {
@@ -78,7 +97,7 @@ try {
       `Validated ${relative(protocolV02Root, protocolV02Paths.canonicalFixture)} ` +
         "against the Mosaic Protocol 0.2 schema and compatibility manifest; " +
         "validated Local Preview 0.2 fixtures, Configuration Delivery v1, " +
-        "Commerce Provider Contract v1, Commerce Configuration v1, and the " +
+        "Commerce Provider Contracts v1/v2, Commerce Configurations v1/v2, and the " +
         "browser contract.",
     );
   }

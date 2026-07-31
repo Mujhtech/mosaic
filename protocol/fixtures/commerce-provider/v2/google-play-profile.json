@@ -1,0 +1,97 @@
+{
+  "commerceProviderContractVersion": "2",
+  "recordType": "providerProfile",
+  "payload": {
+    "provider": {
+      "id": "google_play",
+      "displayName": "Google Play Billing",
+      "adapterVersion": "1.0.0"
+    },
+    "capabilities": [
+      {
+        "name": "productLoading",
+        "support": "supported"
+      },
+      {
+        "name": "subscriptions",
+        "support": "supported"
+      },
+      {
+        "name": "oneTimeNonConsumables",
+        "support": "supported"
+      },
+      {
+        "name": "trials",
+        "support": "conditional",
+        "reasonCode": "provider.eligibilityRequired"
+      },
+      {
+        "name": "introductoryOffers",
+        "support": "conditional",
+        "reasonCode": "provider.eligibilityRequired"
+      },
+      {
+        "name": "promotionalOffers",
+        "support": "unsupported",
+        "reasonCode": "provider.capabilityUnavailable"
+      },
+      {
+        "name": "restore",
+        "support": "supported"
+      },
+      {
+        "name": "activeEntitlementLookup",
+        "support": "supported"
+      },
+      {
+        "name": "pendingPurchases",
+        "support": "supported"
+      },
+      {
+        "name": "deferredPurchases",
+        "support": "unsupported",
+        "reasonCode": "provider.outcomeUnavailable"
+      },
+      {
+        "name": "serverConfirmedTransactions",
+        "support": "unsupported",
+        "reasonCode": "provider.serverValidationExcluded"
+      },
+      {
+        "name": "productSynchronization",
+        "support": "unsupported",
+        "reasonCode": "provider.serverSynchronizationUnavailable"
+      },
+      {
+        "name": "providerDiagnostics",
+        "support": "supported"
+      },
+      {
+        "name": "basePlans",
+        "support": "supported"
+      },
+      {
+        "name": "explicitOffers",
+        "support": "supported"
+      },
+      {
+        "name": "storeSynchronization",
+        "support": "unsupported",
+        "reasonCode": "provider.recoveryModeUnavailable"
+      },
+      {
+        "name": "activePurchaseRecovery",
+        "support": "supported"
+      },
+      {
+        "name": "asynchronousCommerceUpdates",
+        "support": "supported"
+      },
+      {
+        "name": "localDeliveryAcceptance",
+        "support": "supported"
+      }
+    ],
+    "recoveryMode": "activePurchaseRecovery"
+  }
+}

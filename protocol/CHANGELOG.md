@@ -3,6 +3,24 @@
 All notable Mosaic protocol changes are recorded here. Versioned artifacts are
 not immutable until their review gate is approved.
 
+## Commerce Provider and Configuration v2 - 2026-07-24
+
+Status: release candidate
+
+- Added parallel v2 Commerce contracts without changing v1, Configuration
+  Delivery `1`, or Paywall Protocol `0.2`.
+- Froze credential-free native activation, exact StoreKit and Google
+  Product/base-plan/optional-offer mappings, immutable Product Entitlement
+  grants, and configured-versus-observed native freshness.
+- Added explicit recovery modes, asynchronous commerce updates, and idempotent
+  local acceptance before StoreKit finish or Google acknowledgement.
+- Added exact v1/v2 negotiation, atomic rejection, retain-last-accepted or
+  bundled fallback, fixtures, validation, and browser declarations.
+- Stage 5 review bound update revisions to the sidecar content digest,
+  aligned both native fixtures to the complete stable Product set, required
+  non-empty grants and purchased-update access, rejected duplicate native
+  Product targets, and froze complete native capability matrices.
+
 ## Commerce Configuration v1 - 2026-07-23
 
 Status: release candidate

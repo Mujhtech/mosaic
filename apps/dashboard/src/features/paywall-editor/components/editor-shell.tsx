@@ -96,7 +96,9 @@ export function EditorShell({
   const workspaceControllerRef = useRef<StudioResizableWorkspaceHandle | null>(null)
   const importInputRef = useRef<HTMLInputElement | null>(null)
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false)
-  const [publishReviewOpen, setPublishReviewOpen] = useState(false)
+  const [publishReviewOpen, setPublishReviewOpen] = useState(
+    source.kind === "hosted" && source.initialReview === "publish",
+  )
   const document = useEditorStoreSelector(selectDocument)
   const editableDocumentId = useEditorStoreSelector(selectEditableDocumentId)
   const currentLocale = useEditorStoreSelector(selectCurrentLocale)
@@ -328,6 +330,15 @@ export function EditorShell({
         ) : null}
         {source.kind === "hosted" && publishReviewOpen ? (
           <div className="mb-4">
+            {source.initialReview === "publish" ? (
+              <StatusMessage
+                className="border-primary/20 bg-primary/5 mb-3 rounded border p-3 text-sm"
+                tone="info"
+              >
+                Returned to Publish review. Mosaic is checking the current Draft and Purchase setup
+                again.
+              </StatusMessage>
+            ) : null}
             <HostedPublishPanel
               environmentId={source.environmentId}
               environmentName={hostedEnvironmentName ?? "Selected Environment"}

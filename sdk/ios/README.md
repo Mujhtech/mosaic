@@ -4,9 +4,39 @@ The SDK strictly decodes Mosaic Protocol 0.2 and renders it with native
 SwiftUI, and can receive validated draft and mock-commerce revisions from a
 local Mosaic Studio session over WebSockets. It preserves the Phase 1 bundled
 fallback and adds hosted Configuration Delivery plus the provider-neutral
-Commerce Configuration v1 boundary. The core package remains free of StoreKit
+Commerce Configuration v1/v2 boundary. The core package remains free of StoreKit
 and RevenueCat dependencies; the optional RevenueCat adapter is a separate
 package under `RevenueCat/`.
+
+The optional first-party StoreKit 2 adapter is a sibling package under
+`StoreKit/`. Core advertises Commerce Configuration and Provider Contract
+versions `2,1`, prefers a compatible v2 sidecar, and preserves an exact accepted
+v1 cache or bundled fallback when a v2 candidate is unavailable or invalid.
+RevenueCat and app-owned v1 providers continue to use the unchanged provider
+interface.
+
+## Installation
+
+Swift Package Manager is the primary source integration. Add `sdk/ios` for the
+`MosaicSDK` product and, when native StoreKit commerce is required, add
+`sdk/ios/StoreKit` for `MosaicStoreKit`.
+
+CocoaPods consumers can use the versioned podspecs locally while developing:
+
+```ruby
+pod "MosaicSDK", :path => "../mosaic/sdk/ios"
+pod "MosaicStoreKit", :path => "../mosaic/sdk/ios/StoreKit"
+```
+
+Both local pods must be present in the Podfile because CocoaPods does not permit
+a podspec dependency to declare another pod's local path. For distribution,
+publish `MosaicSDK.podspec` and `StoreKit/MosaicStoreKit.podspec` at the same
+version. The matching `ios-v<version>` GitHub release must contain
+`MosaicSDK-<version>.zip`, rooted at the contents of `sdk/ios`, and
+`MosaicStoreKit-<version>.zip`, rooted at the contents of `sdk/ios/StoreKit`.
+Consumers can then depend on both pods by version normally. The StoreKit pod has
+an exact same-version dependency on the core pod and does not duplicate core
+sources.
 
 ## Requirements
 
@@ -164,10 +194,10 @@ supports explicit purchase, restore, unavailable-product, and active-
 entitlement outcomes. It never opens StoreKit, handles receipts, or contacts a
 billing provider.
 
-## Hosted and SDK-local commerce providers
+## Hosted, SDK-local, and native-store commerce providers
 
-`MosaicCommerceConfigurationManager` strictly decodes the canonical Commerce
-Configuration v1 sidecar and accepts it only when Environment, Application,
+`MosaicCommerceConfigurationManager` strictly decodes canonical Commerce
+Configuration v1 and v2 sidecars and accepts one only when Environment, Application,
 store platform, Configuration Release ID, release digest, Product IDs, and the
 sidecar's own canonical digest all match. Resolution is valid hosted or
 SDK-local candidate, exact-association cache, exact-association bundled
@@ -211,6 +241,12 @@ if case .available(let configuration, _, _) = await commerce.status() {
   try await router.install(configuration: configuration, provider: appProvider)
 }
 ```
+
+For a v2 `nativeStore` activation, install `MosaicStoreKitProvider` from the
+optional `StoreKit/` package. The v2 mapping contains only the exact StoreKit
+Product identifier, stable Mosaic Product ID, Product type, and immutable
+Entitlement grants. StoreKit handles, receipts, verification material, and
+transactions never enter core configuration or diagnostics.
 
 App-owned providers implement `MosaicCommerceProvider` and report the identity,
 Mosaic adapter version, and runtime capabilities their installed adapter

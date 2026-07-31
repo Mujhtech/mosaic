@@ -6,7 +6,7 @@ Delivery v1, persistent cache and bundled-release fallback, Placements,
 localization and RTL,
 bundled fallback loading, mock commerce, normalized results, diagnostics,
 accessibility semantics, native rendering, Local Preview 0.2 support, and the
-provider-neutral Commerce Configuration v1/custom-provider boundary.
+provider-neutral Commerce Configuration v1/v2 custom-provider boundary.
 
 Protocol 0.2 RC4 adds document design-system tokens, solid/linear/radial/media
 backgrounds, native shadows, uniform width and height Fit/Fill/Fixed sizing,
@@ -16,8 +16,8 @@ Badges, safe product templates, navigation, Carousel, Switch, Countdown, and
 conditional visibility. The SDK never migrates a document implicitly.
 
 Analytics and experiments remain outside this package. Real billing adapters
-remain optional sibling packages so applications that do not use RevenueCat
-do not resolve or embed it.
+remain optional sibling packages, so core applications do not resolve or
+embed RevenueCat, StoreKit, or Google Play Billing.
 
 ## Requirements
 
@@ -80,7 +80,10 @@ Concurrent manual refreshes coalesce. Presentation never fetches.
 
 ## Commerce Configuration and custom Providers
 
-Commerce Configuration v1 is an optional immutable sidecar. When configured,
+Commerce Configuration v1 and v2 are optional immutable sidecars. v1 remains
+the closed RevenueCat/custom-provider contract. v2 adds credential-free native
+Store activation, exact StoreKit/Google mapping snapshots, immutable Product
+grants, explicit recovery modes, and delayed commerce-update acceptance. When configured,
 the SDK requires its Environment, Application, store platform, Configuration
 Release ID, release digest, Product set, and canonical content digest to match
 the accepted Delivery v1 release. Unknown fields, mappings, versions,
@@ -92,8 +95,8 @@ hosted route automatically:
 
 `GET /v1/sdk/commerce-configuration?applicationId=<registered-application-id>`
 
-The request reuses the public SDK key and sends the Flutter SDK, Commerce
-Configuration v1, and Provider Contract v1 capability headers. Tests, local
+The request reuses the public SDK key and advertises Commerce Configuration
+and Provider Contract versions `2,1`, preferring v2 while retaining v1 fallback. Tests, local
 Studio integrations, and self-hosted deployments may replace this narrow
 transport with `commerceConfigurationLoader`. Hosted responses are revalidated
 with `If-None-Match` only after the exact sidecar ETag, canonical content
@@ -140,6 +143,12 @@ final mosaic = Mosaic.configure(
 
 Never put a RevenueCat public SDK key, server key, app-user identifier,
 authorization header, or customer payload in the sidecar or diagnostics.
+
+The optional `packages/mosaic_native_store` plugin exposes
+`MosaicStoreKitProviderFactory` and `MosaicGooglePlayProviderFactory`. It is a
+closed, versioned channel bridge to Mosaic's reusable native modules, not an
+independent purchase implementation. Core remains functional when the plugin
+is absent. Native Product objects and Google offer tokens remain private.
 
 `MosaicPaywall` is the lower-level widget for an already decoded and validated
 `MosaicPaywallDocument`. Mosaic presents protocol-internal Sheet destinations

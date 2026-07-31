@@ -11,6 +11,7 @@ import java.util.GregorianCalendar
 import java.util.TimeZone
 
 const val MOSAIC_COMMERCE_CONFIGURATION_VERSION: String = "1"
+const val MOSAIC_COMMERCE_CONFIGURATION_VERSION_V2: String = "2"
 
 data class MosaicCommerceProviderIdentity(
     val id: String,
@@ -35,6 +36,10 @@ sealed interface MosaicCommerceProviderActivation {
     data class SdkLocal(val localSnapshotId: String) : MosaicCommerceProviderActivation {
         override val source: String = "sdkLocal"
     }
+
+    data object NativeStore : MosaicCommerceProviderActivation {
+        override val source: String = "nativeStore"
+    }
 }
 
 sealed interface MosaicCommerceAdapterMapping {
@@ -50,6 +55,13 @@ sealed interface MosaicCommerceAdapterMapping {
     ) : MosaicCommerceAdapterMapping {
         override val kind: String = "revenueCatPackage"
     }
+
+    data class GooglePlayProduct(
+        val basePlanId: String?,
+        val offerId: String?,
+    ) : MosaicCommerceAdapterMapping {
+        override val kind: String = "googlePlayProduct"
+    }
 }
 
 data class MosaicCommerceProductMapping(
@@ -57,6 +69,8 @@ data class MosaicCommerceProductMapping(
     val mappingId: String,
     val providerProductReference: String,
     val adapterMapping: MosaicCommerceAdapterMapping,
+    val productType: String? = null,
+    val entitlementKeys: Set<String> = emptySet(),
 )
 
 data class MosaicCommerceEntitlementMapping(
@@ -101,6 +115,8 @@ data class MosaicCommerceConfiguration(
     val freshness: MosaicCommerceFreshness,
     val diagnostics: List<MosaicCommerceSafeDiagnostic>,
     val encoded: String,
+    val version: String = MOSAIC_COMMERCE_CONFIGURATION_VERSION,
+    val recoveryMode: String = "providerDefined",
 )
 
 object MosaicCommerceConfigurationDecoder {
@@ -145,6 +161,22 @@ object MosaicCommerceConfigurationDecoder {
         release: MosaicConfigurationRelease,
         applicationId: String,
     ): MosaicCommerceConfiguration {
+        val version = runCatching {
+            JsonParser.parseString(source).asJsonObject
+                .get("commerceConfigurationVersion").asString
+        }.getOrNull()
+        if (version == MOSAIC_COMMERCE_CONFIGURATION_VERSION_V2) {
+            return try {
+                MosaicCommerceConfigurationV2Decoder.decode(source, release, applicationId)
+            } catch (error: MosaicCommerceConfigurationException) {
+                throw error
+            } catch (error: RuntimeException) {
+                throw MosaicCommerceConfigurationException(
+                    "Invalid Commerce Configuration v2.",
+                    error,
+                )
+            }
+        }
         val root = parseObject(source, "$")
         root.exactKeys(setOf("commerceConfigurationVersion", "configuration"), "$")
         requireCommerce(
@@ -391,6 +423,8 @@ object MosaicCommerceConfigurationDecoder {
                     MosaicCommerceAdapterMapping.DirectProduct -> "directProduct"
                     is MosaicCommerceAdapterMapping.RevenueCatPackage ->
                         "revenueCatPackage:${detail.offeringIdentifier}:${detail.packageIdentifier}"
+                    is MosaicCommerceAdapterMapping.GooglePlayProduct ->
+                        "googlePlayProduct:${detail.basePlanId}:${detail.offerId}"
                 }}"
             },
             "provider mapping targets",

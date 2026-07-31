@@ -8,6 +8,7 @@ import {
   createEntitlement,
   createPlan,
   createProduct,
+  createProviderMappingDraft,
   removePlanProduct,
   removeProductEntitlement,
   replaceProviderMapping,
@@ -15,6 +16,7 @@ import {
   setProductReplacement,
   type CreateCatalogResourceRequest,
   type CreateProductRequest,
+  type CreateProviderMappingDraftRequest,
   type ReplaceProviderMappingRequest,
 } from "@/generated/api"
 import {
@@ -74,6 +76,26 @@ export function replaceProviderMappingMutationOptions(
         body,
         client: generatedDashboardClient,
         path: { mappingId },
+        throwOnError: true,
+      })
+      return result.data.data
+    },
+    onSuccess: async () =>
+      invalidateCatalogImpact(queryClient, { productIds: [productId], projectId }),
+  })
+}
+
+export function createProviderMappingDraftMutationOptions(
+  productId: string,
+  projectId: string,
+  queryClient: QueryClient,
+) {
+  return mutationOptions({
+    mutationFn: async (body: CreateProviderMappingDraftRequest) => {
+      const result = await createProviderMappingDraft({
+        body,
+        client: generatedDashboardClient,
+        path: { productId },
         throwOnError: true,
       })
       return result.data.data

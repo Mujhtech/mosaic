@@ -317,14 +317,19 @@ func (r reader) ProviderDiagnostics(connectionID string) []cloudworkspace.Provid
 
 func scanProviderAssignment(row pgx.Row) (cloudworkspace.ActiveProviderAssignment, error) {
 	var v cloudworkspace.ActiveProviderAssignment
+	var connectionID *string
 	err := row.Scan(
-		&v.ProjectID, &v.EnvironmentID, &v.ApplicationID, &v.Platform, &v.ConnectionID,
+		&v.ProjectID, &v.EnvironmentID, &v.ApplicationID, &v.Platform, &v.Provider,
+		&v.ActivationKind, &connectionID,
 		&v.ProductionConnectionUseAcknowledged, &v.CreatedByActorID, &v.CreatedAt, &v.UpdatedAt,
 	)
+	if connectionID != nil {
+		v.ConnectionID = *connectionID
+	}
 	return v, err
 }
 
-const providerAssignmentColumns = `project_id,environment_id,application_id,platform,connection_id,production_connection_use_acknowledged,created_by_actor_id,created_at,updated_at`
+const providerAssignmentColumns = `project_id,environment_id,application_id,platform,provider,activation_kind,connection_id,production_connection_use_acknowledged,created_by_actor_id,created_at,updated_at`
 
 func (r reader) ActiveProviderAssignment(environmentID, applicationID string) (cloudworkspace.ActiveProviderAssignment, bool) {
 	return one(r, `SELECT `+providerAssignmentColumns+` FROM active_provider_assignments WHERE environment_id=$1 AND application_id=$2`, scanProviderAssignment, environmentID, applicationID)
@@ -335,11 +340,12 @@ func (r reader) ProviderAssignments(connectionID string) []cloudworkspace.Active
 
 func scanMapping(row pgx.Row) (cloudworkspace.ProviderProductMapping, error) {
 	var v cloudworkspace.ProviderProductMapping
-	var connectionID, environmentID, packageID, offeringID, expectedStoreID, currentSnapshotID, lastErrorCode *string
+	var connectionID, environmentID, packageID, offeringID, expectedStoreID, basePlanID, offerID, replacesID, currentSnapshotID, lastErrorCode *string
 	err := row.Scan(
 		&v.ID, &v.ProjectID, &v.ProductID, &connectionID, &environmentID, &v.ApplicationID,
 		&v.Platform, &v.Provider, &v.ProviderProductIdentifier, &packageID, &offeringID,
-		&expectedStoreID, &v.Status, &v.Availability, &v.SyncState, &currentSnapshotID,
+		&expectedStoreID, &basePlanID, &offerID, &replacesID,
+		&v.Status, &v.Availability, &v.SyncState, &currentSnapshotID,
 		&lastErrorCode, &v.ArchivedAt, &v.CreatedAt, &v.UpdatedAt,
 	)
 	if connectionID != nil {
@@ -357,6 +363,15 @@ func scanMapping(row pgx.Row) (cloudworkspace.ProviderProductMapping, error) {
 	if expectedStoreID != nil {
 		v.ExpectedStoreProductID = *expectedStoreID
 	}
+	if basePlanID != nil {
+		v.ProviderBasePlanIdentifier = *basePlanID
+	}
+	if offerID != nil {
+		v.ProviderOfferIdentifier = *offerID
+	}
+	if replacesID != nil {
+		v.ReplacesMappingID = *replacesID
+	}
 	if currentSnapshotID != nil {
 		v.CurrentSnapshotID = *currentSnapshotID
 	}
@@ -366,7 +381,7 @@ func scanMapping(row pgx.Row) (cloudworkspace.ProviderProductMapping, error) {
 	return v, err
 }
 
-const providerMappingColumns = `id,project_id,product_id,connection_id,environment_id,application_id,platform,provider,provider_product_identifier,provider_package_identifier,provider_offering_identifier,expected_store_product_id,status,availability,sync_state,current_snapshot_id,last_error_code,archived_at,created_at,updated_at`
+const providerMappingColumns = `id,project_id,product_id,connection_id,environment_id,application_id,platform,provider,provider_product_identifier,provider_package_identifier,provider_offering_identifier,expected_store_product_id,provider_base_plan_identifier,provider_offer_identifier,replaces_mapping_id,status,availability,sync_state,current_snapshot_id,last_error_code,archived_at,created_at,updated_at`
 
 func (r reader) ProviderMapping(id string) (cloudworkspace.ProviderProductMapping, bool) {
 	return one(r, `SELECT `+providerMappingColumns+` FROM provider_product_mappings WHERE id=$1`, scanMapping, id)
@@ -376,6 +391,15 @@ func (r reader) ProviderMappings(productID string) []cloudworkspace.ProviderProd
 }
 func (r reader) ProviderMappingsByConnection(connectionID string) []cloudworkspace.ProviderProductMapping {
 	return many(r, `SELECT `+providerMappingColumns+` FROM provider_product_mappings WHERE connection_id=$1 ORDER BY id`, scanMapping, connectionID)
+}
+func (r reader) NativeProviderMappingByTarget(provider cloudworkspace.ProviderKind, environmentID, applicationID string, platform cloudworkspace.Platform, target string) (cloudworkspace.ProviderProductMapping, bool) {
+	return one(r, `SELECT `+providerMappingColumns+` FROM provider_product_mappings
+		WHERE connection_id IS NULL AND provider=$1 AND environment_id=$2 AND application_id=$3
+		  AND platform=$4 AND provider_product_identifier=$5
+		  AND status IN ('draft','active','attention_required')
+		ORDER BY id LIMIT 1`,
+		scanMapping, provider, environmentID, applicationID, platform, target,
+	)
 }
 
 func scanProviderMetadataSnapshot(row pgx.Row) (cloudworkspace.ProviderProductMetadataSnapshot, error) {
@@ -393,6 +417,30 @@ func scanProviderMetadataSnapshot(row pgx.Row) (cloudworkspace.ProviderProductMe
 }
 func (r reader) ProviderMetadataSnapshot(id string) (cloudworkspace.ProviderProductMetadataSnapshot, bool) {
 	return one(r, `SELECT id,project_id,mapping_id,source,digest,availability,observed_at,synced_at,stale_at,expires_at,last_error_code,normalized_metadata,created_at FROM provider_product_metadata_snapshots WHERE id=$1`, scanProviderMetadataSnapshot, id)
+}
+
+func scanProviderMappingObservation(row pgx.Row) (cloudworkspace.ProviderMappingObservation, error) {
+	var v cloudworkspace.ProviderMappingObservation
+	var metadata []byte
+	err := row.Scan(
+		&v.ID, &v.ProjectID, &v.MappingID, &v.EnvironmentID, &v.ApplicationID,
+		&v.Platform, &v.Provider, &v.AdapterVersion, &v.StoreContext, &v.Result,
+		&v.DiagnosticCode, &v.CorrelationID, &metadata, &v.ObservedAt,
+		&v.ExpiresAt, &v.ReceivedAt, &v.CreatedByActorID,
+	)
+	if err == nil {
+		err = json.Unmarshal(metadata, &v.Metadata)
+	}
+	return v, err
+}
+
+const providerMappingObservationColumns = `id,project_id,mapping_id,environment_id,application_id,platform,provider,adapter_version,store_context,result,diagnostic_code,correlation_id,metadata,observed_at,expires_at,received_at,created_by_actor_id`
+
+func (r reader) ProviderMappingObservation(id string) (cloudworkspace.ProviderMappingObservation, bool) {
+	return one(r, `SELECT `+providerMappingObservationColumns+` FROM provider_mapping_observations WHERE id=$1`, scanProviderMappingObservation, id)
+}
+func (r reader) ProviderMappingObservations(mappingID string) []cloudworkspace.ProviderMappingObservation {
+	return many(r, `SELECT `+providerMappingObservationColumns+` FROM provider_mapping_observations WHERE mapping_id=$1 ORDER BY observed_at DESC,id DESC LIMIT 100`, scanProviderMappingObservation, mappingID)
 }
 
 func scanProviderEntitlementMapping(row pgx.Row) (cloudworkspace.ProviderEntitlementMapping, error) {
@@ -642,10 +690,11 @@ func (t *transaction) ReplaceProviderConnectionScopes(connectionID, projectID st
 }
 func (t *transaction) SaveActiveProviderAssignment(v cloudworkspace.ActiveProviderAssignment) {
 	t.exec(
-		`INSERT INTO active_provider_assignments(project_id,environment_id,application_id,platform,connection_id,production_connection_use_acknowledged,created_by_actor_id,created_at,updated_at)
-		 VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9)
-		 ON CONFLICT(environment_id,application_id) DO UPDATE SET connection_id=excluded.connection_id,platform=excluded.platform,production_connection_use_acknowledged=excluded.production_connection_use_acknowledged,created_by_actor_id=excluded.created_by_actor_id,updated_at=excluded.updated_at`,
-		v.ProjectID, v.EnvironmentID, v.ApplicationID, v.Platform, v.ConnectionID,
+		`INSERT INTO active_provider_assignments(project_id,environment_id,application_id,platform,provider,activation_kind,connection_id,production_connection_use_acknowledged,created_by_actor_id,created_at,updated_at)
+		 VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
+		 ON CONFLICT(environment_id,application_id) DO UPDATE SET provider=excluded.provider,activation_kind=excluded.activation_kind,connection_id=excluded.connection_id,platform=excluded.platform,production_connection_use_acknowledged=excluded.production_connection_use_acknowledged,created_by_actor_id=excluded.created_by_actor_id,updated_at=excluded.updated_at`,
+		v.ProjectID, v.EnvironmentID, v.ApplicationID, v.Platform, v.Provider, v.ActivationKind,
+		emptyStringAsNil(v.ConnectionID),
 		v.ProductionConnectionUseAcknowledged, v.CreatedByActorID, v.CreatedAt, v.UpdatedAt,
 	)
 }
@@ -654,15 +703,32 @@ func (t *transaction) DeleteActiveProviderAssignment(environmentID, applicationI
 }
 func (t *transaction) SaveProviderMapping(v cloudworkspace.ProviderProductMapping) {
 	t.exec(
-		`INSERT INTO provider_product_mappings(id,project_id,product_id,connection_id,environment_id,application_id,platform,provider,provider_product_identifier,provider_package_identifier,provider_offering_identifier,expected_store_product_id,status,availability,sync_state,current_snapshot_id,last_error_code,archived_at,created_at,updated_at)
-		 SELECT $1,p.project_id,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19 FROM products p WHERE p.id=$2
-		 ON CONFLICT(id) DO UPDATE SET provider_product_identifier=excluded.provider_product_identifier,provider_package_identifier=excluded.provider_package_identifier,provider_offering_identifier=excluded.provider_offering_identifier,expected_store_product_id=excluded.expected_store_product_id,status=excluded.status,availability=excluded.availability,sync_state=excluded.sync_state,current_snapshot_id=excluded.current_snapshot_id,last_error_code=excluded.last_error_code,archived_at=excluded.archived_at,updated_at=excluded.updated_at`,
+		`INSERT INTO provider_product_mappings(id,project_id,product_id,connection_id,environment_id,application_id,platform,provider,provider_product_identifier,provider_package_identifier,provider_offering_identifier,expected_store_product_id,provider_base_plan_identifier,provider_offer_identifier,replaces_mapping_id,status,availability,sync_state,current_snapshot_id,last_error_code,archived_at,created_at,updated_at)
+		 SELECT $1,p.project_id,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22 FROM products p WHERE p.id=$2
+		 ON CONFLICT(id) DO UPDATE SET provider_product_identifier=excluded.provider_product_identifier,provider_package_identifier=excluded.provider_package_identifier,provider_offering_identifier=excluded.provider_offering_identifier,expected_store_product_id=excluded.expected_store_product_id,provider_base_plan_identifier=excluded.provider_base_plan_identifier,provider_offer_identifier=excluded.provider_offer_identifier,replaces_mapping_id=excluded.replaces_mapping_id,status=excluded.status,availability=excluded.availability,sync_state=excluded.sync_state,current_snapshot_id=excluded.current_snapshot_id,last_error_code=excluded.last_error_code,archived_at=excluded.archived_at,updated_at=excluded.updated_at`,
 		v.ID, v.ProductID, emptyStringAsNil(v.ConnectionID), emptyStringAsNil(v.EnvironmentID),
 		v.ApplicationID, emptyStringAsNil(string(v.Platform)), v.Provider, v.ProviderProductIdentifier,
 		emptyStringAsNil(v.ProviderPackageIdentifier), emptyStringAsNil(v.ProviderOfferingIdentifier),
-		emptyStringAsNil(v.ExpectedStoreProductID), v.Status, v.Availability, v.SyncState,
+		emptyStringAsNil(v.ExpectedStoreProductID), emptyStringAsNil(v.ProviderBasePlanIdentifier),
+		emptyStringAsNil(v.ProviderOfferIdentifier), emptyStringAsNil(v.ReplacesMappingID),
+		v.Status, v.Availability, v.SyncState,
 		emptyStringAsNil(v.CurrentSnapshotID), emptyStringAsNil(string(v.LastErrorCode)), v.ArchivedAt,
 		v.CreatedAt, v.UpdatedAt,
+	)
+}
+func (t *transaction) SaveProviderMappingObservation(v cloudworkspace.ProviderMappingObservation) {
+	metadata, err := json.Marshal(v.Metadata)
+	if err != nil {
+		t.fail(err)
+		return
+	}
+	t.exec(
+		`INSERT INTO provider_mapping_observations(id,project_id,mapping_id,environment_id,application_id,platform,provider,adapter_version,store_context,result,diagnostic_code,correlation_id,metadata,observed_at,expires_at,received_at,created_by_actor_id)
+		 VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)`,
+		v.ID, v.ProjectID, v.MappingID, v.EnvironmentID, v.ApplicationID, v.Platform,
+		v.Provider, v.AdapterVersion, v.StoreContext, v.Result,
+		emptyStringAsNil(v.DiagnosticCode), v.CorrelationID, metadata,
+		v.ObservedAt, v.ExpiresAt, v.ReceivedAt, v.CreatedByActorID,
 	)
 }
 func (t *transaction) SaveProviderMetadataSnapshot(v cloudworkspace.ProviderProductMetadataSnapshot) {

@@ -1,7 +1,7 @@
 name = "mosaic_quality"
 description = "Read-heavy integration reviewer for correctness, security, test coverage, compatibility, and architectural compliance."
-model = "gpt-5.6-sol"
-model_reasoning_effort = "medium"
+model = "gpt-5.5"
+model_reasoning_effort = "high"
 sandbox_mode = "read-only"
 
 developer_instructions = """

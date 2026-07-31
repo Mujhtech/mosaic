@@ -1,0 +1,31 @@
+{
+  "commerceConfigurationVersion": "2",
+  "status": "releaseCandidate",
+  "schema": "../../schema/commerce-configuration/v2/configuration.schema.json",
+  "canonicalFixtures": [
+    "../../fixtures/commerce-configuration/v2/storekit-configuration.json",
+    "../../fixtures/commerce-configuration/v2/google-play-configuration.json"
+  ],
+  "activationSources": [
+    "providerConnection",
+    "sdkLocal",
+    "nativeStore"
+  ],
+  "adapterMappingKinds": [
+    "directProduct",
+    "revenueCatPackage",
+    "storeKitProduct",
+    "googlePlayProduct"
+  ],
+  "readerPolicy": {
+    "unknownVersion": "rejectSidecar",
+    "unknownField": "rejectSidecar",
+    "unknownAdapterMapping": "rejectSidecar",
+    "releaseAssociationMismatch": "rejectSidecar",
+    "digestMismatch": "rejectSidecar",
+    "ambiguousMapping": "rejectSidecar",
+    "cacheAssociation": "atomicallyWithConfigurationRelease",
+    "credentialMaterial": "forbidden",
+    "unsupportedVersion": "retainLastAcceptedOrBundledFallback"
+  }
+}

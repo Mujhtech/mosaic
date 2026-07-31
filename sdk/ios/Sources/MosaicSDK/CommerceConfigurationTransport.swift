@@ -2,6 +2,10 @@ import Foundation
 
 let mosaicCommerceConfigurationMediaType =
   "application/vnd.mosaic.commerce-configuration+json;version=1"
+let mosaicCommerceConfigurationMediaTypeV2 =
+  "application/vnd.mosaic.commerce-configuration+json;version=2"
+let mosaicCommerceConfigurationAcceptedMediaTypes =
+  "\(mosaicCommerceConfigurationMediaTypeV2), \(mosaicCommerceConfigurationMediaType)"
 
 struct MosaicCommerceConfigurationHTTPRequest: Sendable, Equatable {
   let url: URL

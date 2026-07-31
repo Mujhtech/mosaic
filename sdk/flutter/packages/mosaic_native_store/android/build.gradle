@@ -1,0 +1,47 @@
+group = "dev.mosaic.flutter"
+version = "0.1.0-dev.1"
+
+buildscript {
+    ext.kotlin_version = "2.2.20"
+    repositories {
+        google()
+        mavenCentral()
+    }
+    dependencies {
+        classpath "com.android.tools.build:gradle:8.11.1"
+        classpath "org.jetbrains.kotlin:kotlin-gradle-plugin:$kotlin_version"
+    }
+}
+
+apply plugin: "com.android.library"
+apply plugin: "kotlin-android"
+
+android {
+    namespace "dev.mosaic.flutter.native_store"
+    compileSdk 36
+
+    defaultConfig {
+        minSdk 24
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+
+    kotlinOptions {
+        jvmTarget = JavaVersion.VERSION_17.toString()
+    }
+}
+
+dependencies {
+    // Applications may substitute the versioned Maven coordinate with the
+    // sibling :mosaic-google-play project in a monorepo build.
+    def localGooglePlay = rootProject.findProject(":mosaic-google-play")
+    if (localGooglePlay != null) {
+        implementation localGooglePlay
+    } else {
+        implementation "dev.mosaic.sdk:mosaic-google-play:0.1.0-dev.6"
+    }
+    implementation "org.jetbrains.kotlinx:kotlinx-coroutines-android:1.10.2"
+}
