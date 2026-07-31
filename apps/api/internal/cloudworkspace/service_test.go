@@ -203,7 +203,7 @@ func TestNativeGooglePlayMappingObservationAndReplacementLifecycle(t *testing.T)
 	if _, err := service.CreateProviderMappingObservation(ctx, actor, mapping.ID, cloudworkspace.CreateProviderMappingObservationInput{
 		AdapterVersion: "1.0.0", StoreContext: cloudworkspace.ProviderObservationGooglePlayTest,
 		Result: cloudworkspace.ProviderObservationAvailable, CorrelationID: "unsafe-run",
-		Metadata: cloudworkspace.ProviderMappingObservationMetadata{ClientVersion: "secret-token"},
+		Metadata:   cloudworkspace.ProviderMappingObservationMetadata{ClientVersion: "secret-token"},
 		ObservedAt: fixedTime, ExpiresAt: &expiresAt,
 	}); !errors.Is(err, cloudworkspace.ErrMappingTargetInvalid) {
 		t.Fatalf("sensitive observation metadata error = %v, want invalid target", err)
@@ -212,9 +212,9 @@ func TestNativeGooglePlayMappingObservationAndReplacementLifecycle(t *testing.T)
 		AdapterVersion: "1.0.0", StoreContext: cloudworkspace.ProviderObservationGooglePlayTest,
 		Result: cloudworkspace.ProviderObservationAvailable, CorrelationID: "test-run-1",
 		Metadata: cloudworkspace.ProviderMappingObservationMetadata{
-			ClientPlatform: cloudworkspace.ProviderObservationClientAndroid,
+			ClientPlatform:      cloudworkspace.ProviderObservationClientAndroid,
 			ConfigurationSource: cloudworkspace.ProviderObservationConfigurationRemote,
-			TestScenario: cloudworkspace.ProviderObservationScenarioProductLoad,
+			TestScenario:        cloudworkspace.ProviderObservationScenarioProductLoad,
 		},
 		ObservedAt: fixedTime, ExpiresAt: &expiresAt,
 	})
@@ -866,6 +866,9 @@ func TestAPIKeySecretIsOneTimeIrreversibleAndRevocationIsMonotonic(t *testing.T)
 	created, err := service.CreateAPIKey(ctx, actor, environmentID, cloudworkspace.APIKeySecretServer)
 	if err != nil {
 		t.Fatalf("create API key: %v", err)
+	}
+	if created.APIKey.ApplicationID != "" || created.APIKey.ApplicationProjectID != "" {
+		t.Fatalf("secret-server key application binding = (%q,%q), want empty", created.APIKey.ApplicationID, created.APIKey.ApplicationProjectID)
 	}
 	rotated, err := service.RotateAPIKey(ctx, actor, created.APIKey.ID)
 	if err != nil {

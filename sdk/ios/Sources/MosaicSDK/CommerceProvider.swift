@@ -370,6 +370,7 @@ public enum MosaicConfiguredCommerceProviderError: Error, Sendable, Equatable {
 /// hosted Configuration Delivery and its associated commerce sidecar finish.
 /// Calls fail safely until an exact verified provider is installed.
 public actor MosaicCommerceProviderRouter: MosaicPurchaseProvider {
+  public var mosaicAnalyticsProviderID: String? { installedProvider?.identity.id }
   private var configured: MosaicConfiguredPurchaseProvider?
   private var installedProvider: (any MosaicCommerceProvider)?
   private var installationRevision = 0
@@ -579,10 +580,8 @@ public actor MosaicConfiguredPurchaseProvider: MosaicPurchaseProvider {
       by: \.name
     )
     guard capabilitiesByName.values.allSatisfy({ $0.count == 1 }),
-      (
-        configuration.version == "2"
-          || actualCapabilities.count == configuration.activeProvider.capabilities.count
-      ),
+      configuration.version == "2"
+        || actualCapabilities.count == configuration.activeProvider.capabilities.count,
       actualCapabilities.allSatisfy(Self.isValidCapability)
     else {
       throw MosaicConfiguredCommerceProviderError.providerCapabilitiesInvalid

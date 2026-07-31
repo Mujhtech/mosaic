@@ -406,6 +406,11 @@ public struct MosaicIdentitySnapshot: Sendable, Equatable {
 }
 
 enum MosaicPlacementEvaluator {
+  struct FallbackUse: Sendable, Equatable {
+    let trigger: String
+    let key: String
+  }
+
   struct Assignment {
     let type: String
     let value: String
@@ -414,6 +419,7 @@ enum MosaicPlacementEvaluator {
     let outcome: MosaicDecisionOutcome
     let matchedRuleID: String?
     let fallbackPath: [String]
+    let fallbackUses: [FallbackUse]
     let trace: MosaicDecisionTrace
   }
 
@@ -434,6 +440,7 @@ enum MosaicPlacementEvaluator {
       let resolved = resolve(override.outcome, fallbacks: set.fallbacks, trace: &trace)
       return Output(
         outcome: resolved.outcome, matchedRuleID: nil, fallbackPath: resolved.path,
+        fallbackUses: [],
         trace: .init(steps: trace))
     }
     guard set.enabled else {
@@ -443,6 +450,7 @@ enum MosaicPlacementEvaluator {
           rolloutBucket: nil, fallbackKey: nil))
       return Output(
         outcome: .unavailable(reason: "no_safe_decision"), matchedRuleID: nil, fallbackPath: [],
+        fallbackUses: [],
         trace: .init(steps: trace))
     }
     let assignment = assignment(policy: set.assignmentPolicy, identity: identity)
@@ -471,8 +479,19 @@ enum MosaicPlacementEvaluator {
           fallbackKey: nil))
       if matches {
         let resolved = resolve(rule.outcome, fallbacks: set.fallbacks, trace: &trace)
+        let fallbackUses: [FallbackUse]
+        if case .fallback = rule.outcome, let key = resolved.path.first,
+          let trigger = exactFallbackTrigger(
+            in: rule.conditions, set: set, context: context, identity: identity,
+            productReadiness: productReadiness)
+        {
+          fallbackUses = [.init(trigger: trigger, key: key)]
+        } else {
+          fallbackUses = []
+        }
         return Output(
           outcome: resolved.outcome, matchedRuleID: rule.id, fallbackPath: resolved.path,
+          fallbackUses: fallbackUses,
           trace: .init(steps: trace))
       }
     }
@@ -483,7 +502,54 @@ enum MosaicPlacementEvaluator {
     let resolved = resolve(set.defaultOutcome, fallbacks: set.fallbacks, trace: &trace)
     return Output(
       outcome: resolved.outcome, matchedRuleID: nil, fallbackPath: resolved.path,
+      fallbackUses: [],
       trace: .init(steps: trace))
+  }
+
+  /// Returns a trigger only when the winning condition tree contains one
+  /// unambiguous, currently observed commerce state from the closed Analytics
+  /// Event v1 trigger vocabulary. Arbitrary fallback keys and labels are never
+  /// interpreted as triggers.
+  private static func exactFallbackTrigger(
+    in node: MosaicConditionNode, set: MosaicDecisionRuleSet, context: MosaicDecisionContext,
+    identity: MosaicIdentitySnapshot, productReadiness: [String: MosaicProductReadiness]
+  ) -> String? {
+    var triggers = Set<String>()
+    func inspect(_ candidate: MosaicConditionNode) {
+      switch candidate {
+      case .all(let children), .any(let children): children.forEach(inspect)
+      case .not(let child): inspect(child)
+      case .condition(let source, _, _):
+        guard
+          evaluate(
+            candidate, set: set, context: context, identity: identity,
+            productReadiness: productReadiness) == .true
+        else { return }
+        switch source {
+        case .productAvailability(let id):
+          switch context.products[id] {
+          case .unavailable: triggers.insert("product_unavailable")
+          case .unknown: triggers.insert("product_unknown")
+          case .providerUnavailable: triggers.insert("provider_unavailable")
+          case .available, .failed, nil: break
+          }
+        case .productReadiness: break
+        case .providerCapability(let capability):
+          if context.providerCapabilities[capability] == .unavailable {
+            triggers.insert("provider_unavailable")
+          }
+        case .entitlementState(let key):
+          switch context.entitlements[key] {
+          case .unknown: triggers.insert("entitlement_unknown")
+          case .providerUnavailable: triggers.insert("provider_unavailable")
+          case .active, .inactive, .failed, nil: break
+          }
+        default: break
+        }
+      }
+    }
+    inspect(node)
+    return triggers.count == 1 ? triggers.first : nil
   }
 
   private static func matchingOverride(_ overrides: [MosaicQAOverride], tokens: [String], now: Date)

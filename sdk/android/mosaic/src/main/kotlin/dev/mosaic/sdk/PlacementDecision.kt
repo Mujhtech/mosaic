@@ -155,9 +155,20 @@ sealed interface MosaicEvaluationResult {
         val matchedRuleId: String?,
         val overrideLabel: String?,
         override val trace: MosaicDecisionTrace,
+        val fallbackPath: List<String> = emptyList(),
     ) : MosaicEvaluationResult
-    data class Unavailable(val reason: String, override val trace: MosaicDecisionTrace) : MosaicEvaluationResult
-    data class Failed(val diagnosticCode: String, override val trace: MosaicDecisionTrace) : MosaicEvaluationResult
+    data class Unavailable(
+        val reason: String,
+        override val trace: MosaicDecisionTrace,
+        val matchedRuleId: String? = null,
+        val fallbackPath: List<String> = emptyList(),
+    ) : MosaicEvaluationResult
+    data class Failed(
+        val diagnosticCode: String,
+        override val trace: MosaicDecisionTrace,
+        val matchedRuleId: String? = null,
+        val fallbackPath: List<String> = emptyList(),
+    ) : MosaicEvaluationResult
 }
 
 data class MosaicIdentityState(
@@ -331,17 +342,57 @@ object MosaicPlacementEvaluator {
         repeat(9) {
             when (outcome) {
                 is MosaicDecisionOutcome.Paywall -> return MosaicEvaluationResult.Paywall(outcome.paywallVersionId, outcome.unavailableFallbackKey, matchedRuleId, path, overrideLabel, trace.finish())
-                MosaicDecisionOutcome.NoPaywall -> return MosaicEvaluationResult.NoPaywall(matchedRuleId, overrideLabel, trace.finish())
-                is MosaicDecisionOutcome.Unavailable -> return MosaicEvaluationResult.Unavailable(outcome.reason, trace.finish())
+                MosaicDecisionOutcome.NoPaywall -> return MosaicEvaluationResult.NoPaywall(matchedRuleId, overrideLabel, trace.finish(), path)
+                is MosaicDecisionOutcome.Unavailable -> return MosaicEvaluationResult.Unavailable(outcome.reason, trace.finish(), matchedRuleId, path)
                 is MosaicDecisionOutcome.Fallback -> {
-                    if (!path.addUnique(outcome.key)) return MosaicEvaluationResult.Failed("decision.fallbackCycle", trace.finish())
+                    if (!path.addUnique(outcome.key)) return MosaicEvaluationResult.Failed("decision.fallbackCycle", trace.finish(), matchedRuleId, path)
                     trace.add(MosaicDecisionTraceStep("fallback", fallbackKey = outcome.key))
                     outcome = ruleSet.fallbacks[outcome.key]?.outcome
-                        ?: return MosaicEvaluationResult.Failed("decision.fallbackMissing", trace.finish())
+                        ?: return MosaicEvaluationResult.Failed("decision.fallbackMissing", trace.finish(), matchedRuleId, path)
                 }
             }
         }
-        return MosaicEvaluationResult.Failed("decision.fallbackDepth", trace.finish())
+        return MosaicEvaluationResult.Failed("decision.fallbackDepth", trace.finish(), matchedRuleId, path)
+    }
+
+    internal fun exactFallbackTrigger(
+        ruleSet: MosaicPlacementRuleSet,
+        ruleId: String?,
+        context: MosaicDecisionContext,
+    ): String? {
+        val conditions = ruleSet.rules.firstOrNull { it.id == ruleId }?.conditions ?: return null
+        val triggers = mutableSetOf<String>()
+        fun inspect(node: MosaicConditionNode) {
+            when (node) {
+                is MosaicConditionNode.All -> node.children.forEach(::inspect)
+                is MosaicConditionNode.Any -> node.children.forEach(::inspect)
+                is MosaicConditionNode.Not -> inspect(node.child)
+                is MosaicConditionNode.Condition -> {
+                    if (evaluateNode(node, ruleSet, context, TraceBuilder(), ruleId.orEmpty()) != MosaicTruthValue.TRUE) return
+                    when (val source = node.source) {
+                        is MosaicDecisionSource.Product -> if (source.kind == "product_availability") {
+                            when (context.products[source.productId]) {
+                                MosaicProductAvailability.UNAVAILABLE -> triggers += "product_unavailable"
+                                MosaicProductAvailability.UNKNOWN -> triggers += "product_unknown"
+                                MosaicProductAvailability.PROVIDER_UNAVAILABLE -> triggers += "provider_unavailable"
+                                else -> Unit
+                            }
+                        }
+                        is MosaicDecisionSource.ProviderCapability -> if (context.providerCapabilities[source.capability] == MosaicProviderCapabilityState.UNAVAILABLE) {
+                            triggers += "provider_unavailable"
+                        }
+                        is MosaicDecisionSource.Entitlement -> when (context.entitlements[source.key]) {
+                            MosaicEntitlementState.UNKNOWN -> triggers += "entitlement_unknown"
+                            MosaicEntitlementState.PROVIDER_UNAVAILABLE -> triggers += "provider_unavailable"
+                            else -> Unit
+                        }
+                        else -> Unit
+                    }
+                }
+            }
+        }
+        inspect(conditions)
+        return triggers.singleOrNull()
     }
 
     private fun evaluateNode(node: MosaicConditionNode, ruleSet: MosaicPlacementRuleSet, context: MosaicDecisionContext, trace: TraceBuilder, ruleId: String): MosaicTruthValue = when (node) {

@@ -20,6 +20,7 @@ class ConfigurationTest {
         assertEquals("public_test_key", mosaic.configuration.apiKey)
         assertEquals(endpoint, mosaic.configuration.endpoint)
         assertSame(provider, mosaic.purchaseProvider)
+        assertEquals(false, mosaic.configuration.analyticsCollectionEnabled)
     }
 
     @Test

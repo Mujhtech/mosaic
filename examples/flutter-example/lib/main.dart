@@ -34,6 +34,7 @@ const String _mosaicApplicationId = String.fromEnvironment(
 );
 const bool _commerceEnabled = bool.fromEnvironment('MOSAIC_COMMERCE_ENABLED');
 const bool _phase5Demo = bool.fromEnvironment('MOSAIC_PHASE5_DEMO');
+const bool _analyticsEnabled = bool.fromEnvironment('MOSAIC_ANALYTICS_ENABLED');
 const String _revenueCatPublicSdkKey = String.fromEnvironment(
   'REVENUECAT_PUBLIC_SDK_KEY',
 );
@@ -182,6 +183,11 @@ final class _HostedPaywallPlaygroundState
             onPressed: () => unawaited(_refresh()),
             icon: const Icon(Icons.cloud_sync_outlined),
           ),
+          IconButton(
+            tooltip: 'Flush analytics and show safe diagnostics',
+            onPressed: () => unawaited(_flushAnalytics()),
+            icon: const Icon(Icons.analytics_outlined),
+          ),
         ],
       ),
       body: Column(
@@ -253,6 +259,9 @@ final class _HostedPaywallPlaygroundState
     applicationId: !_connectedCommerceEnabled ? null : _mosaicApplicationId,
     storePlatform: _connectedCommerceEnabled ? _runtimeStorePlatform : null,
     purchaseProvider: _fallbackPurchaseProvider(),
+    analyticsEnvironmentSettings: MosaicAnalyticsEnvironmentSettings(
+      collectionEnabled: _analyticsEnabled,
+    ),
     commerceProviderFactories: <MosaicCommerceProviderFactory>[
       MosaicStoreKitProviderFactory(acceptUpdate: _acceptNativeStoreUpdate),
       MosaicGooglePlayProviderFactory(acceptUpdate: _acceptNativeStoreUpdate),
@@ -302,6 +311,15 @@ final class _HostedPaywallPlaygroundState
           'Unavailable: $diagnosticCode',
       };
     });
+  }
+
+  Future<void> _flushAnalytics() async {
+    final result = await _mosaic.flushAnalytics();
+    final diagnostics = await _mosaic.analyticsDiagnostics();
+    _recordEvent(
+      'Analytics ${result.runtimeType}: ${diagnostics.queuedEvents} queued, '
+      '${diagnostics.droppedEvents} dropped',
+    );
   }
 
   void _configurationChanged() {

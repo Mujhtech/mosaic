@@ -3,9 +3,24 @@ part of 'renderer.dart';
 extension on _MosaicPaywallState {
   Future<void> _loadProducts() async {
     final generation = ++_loadGeneration;
+    final analyticsAttemptId = mosaicAnalyticsId('product_load');
+    _productLoadAttemptId = analyticsAttemptId;
+    final analyticsStartedAt = widget.clock().toUtc();
     final requestedIds = widget.document.products
         .map((reference) => reference.productId)
         .toList(growable: false);
+
+    if (requestedIds.isNotEmpty) {
+      _analytics(
+        MosaicAnalyticsEventName.productLoadStarted,
+        correlation: widget.analyticsContext?.correlation(
+          productLoadAttemptId: analyticsAttemptId,
+        ),
+        payload: <String, Object?>{
+          'requestedProductCount': requestedIds.length.clamp(1, 64),
+        },
+      );
+    }
 
     var available = <String, MosaicProduct>{};
     try {
@@ -22,6 +37,18 @@ extension on _MosaicPaywallState {
         };
       }
     } on Object {
+      _analytics(
+        MosaicAnalyticsEventName.productLoadFailed,
+        correlation: widget.analyticsContext?.correlation(
+          productLoadAttemptId: analyticsAttemptId,
+        ),
+        payload: <String, Object?>{
+          'requestedProductCount': requestedIds.length.clamp(1, 64),
+          'durationMs': _analyticsDuration(analyticsStartedAt),
+          'diagnosticCode': 'commerce.product_load_failed',
+          'retryable': true,
+        },
+      );
       if (!mounted || generation != _loadGeneration) {
         return;
       }
@@ -46,6 +73,21 @@ extension on _MosaicPaywallState {
       _productsResolved = true;
       _reconcileProductSelections();
     });
+
+    if (requestedIds.isNotEmpty) {
+      _analytics(
+        MosaicAnalyticsEventName.productLoadCompleted,
+        correlation: widget.analyticsContext?.correlation(
+          productLoadAttemptId: analyticsAttemptId,
+        ),
+        payload: <String, Object?>{
+          'availableProductCount': available.length.clamp(0, 64),
+          'unavailableProductCount':
+              (requestedIds.length - available.length).clamp(0, 64),
+          'durationMs': _analyticsDuration(analyticsStartedAt),
+        },
+      );
+    }
 
     _notifyUnavailableSelections();
   }
@@ -190,6 +232,19 @@ extension on _MosaicPaywallState {
     String? referenceId,
     bool reportPresentationResult = true,
   }) {
+    final productId = referenceId == null
+        ? null
+        : widget.document.productReference(referenceId)?.productId;
+    if (productId != null) {
+      _analytics(
+        MosaicAnalyticsEventName.productUnavailable,
+        correlation: widget.analyticsContext?.correlation(
+          productLoadAttemptId: _productLoadAttemptId,
+        ),
+        attribution: widget.analyticsContext?.forProduct(productId),
+        payload: const <String, Object?>{'reason': 'product_not_found'},
+      );
+    }
     widget.onInteraction?.call(
       MosaicInteraction(
         outcome: MosaicInteractionOutcome.productUnavailable,
@@ -226,6 +281,15 @@ extension on _MosaicPaywallState {
         productSelectorId: selectorId,
       ),
     );
+    final productId =
+        widget.document.productReference(productReferenceId)?.productId;
+    if (productId != null) {
+      _analytics(
+        MosaicAnalyticsEventName.productSelected,
+        attribution: widget.analyticsContext?.forProduct(productId),
+        payload: const <String, Object?>{'source': 'user'},
+      );
+    }
   }
 
   Future<void> _purchase(
@@ -238,7 +302,12 @@ extension on _MosaicPaywallState {
     final selectorId = action.productSelectorId;
     final selector = widget.document.nodes
         .whereType<MosaicProductSelectorComponent>()
-        .firstWhere((candidate) => candidate.id == selectorId);
+        .where((candidate) => candidate.id == selectorId)
+        .firstOrNull;
+    if (selector == null) {
+      _reportRenderingFailure('renderer_invalid_purchase_action');
+      return;
+    }
     final selectedId = _selectedProductCardIds[selectorId];
     final selectedOption = _availableOptions(selector)
         .where((option) => option.selectionId == selectedId)
@@ -261,6 +330,23 @@ extension on _MosaicPaywallState {
       _busyActionId = buttonId;
     });
 
+    final analyticsAttemptId = mosaicAnalyticsId('purchase_attempt');
+    final analyticsStartedAt = widget.clock().toUtc();
+    final analyticsAttribution =
+        widget.analyticsContext?.forProduct(reference.productId);
+    _analytics(
+      MosaicAnalyticsEventName.paywallActionSelected,
+      payload: <String, Object?>{'action': 'purchase', 'componentId': buttonId},
+    );
+    _analytics(
+      MosaicAnalyticsEventName.purchaseStarted,
+      correlation: widget.analyticsContext?.correlation(
+        purchaseAttemptId: analyticsAttemptId,
+      ),
+      attribution: analyticsAttribution,
+      payload: const <String, Object?>{},
+    );
+
     try {
       final result =
           await widget.purchaseProvider.purchase(reference.productId);
@@ -268,7 +354,22 @@ extension on _MosaicPaywallState {
         return;
       }
       switch (result) {
-        case MosaicPurchased():
+        case MosaicPurchased(:final activeEntitlements):
+          _analytics(
+            MosaicAnalyticsEventName.purchaseCompletedClient,
+            correlation: widget.analyticsContext?.correlation(
+              purchaseAttemptId: analyticsAttemptId,
+            ),
+            attribution: analyticsAttribution,
+            payload: <String, Object?>{
+              'outcome': 'purchased',
+              'durationMs': _analyticsDuration(analyticsStartedAt),
+              'observedEntitlementKeys': activeEntitlements
+                  .map((item) => item.id)
+                  .take(64)
+                  .toList(growable: false),
+            },
+          );
           widget.onInteraction?.call(
             MosaicInteraction(
               outcome: MosaicInteractionOutcome.purchased,
@@ -281,7 +382,22 @@ extension on _MosaicPaywallState {
               productReferenceId: referenceId,
             ),
           );
-        case MosaicAlreadyEntitled():
+        case MosaicAlreadyEntitled(:final activeEntitlements):
+          _analytics(
+            MosaicAnalyticsEventName.purchaseCompletedClient,
+            correlation: widget.analyticsContext?.correlation(
+              purchaseAttemptId: analyticsAttemptId,
+            ),
+            attribution: analyticsAttribution,
+            payload: <String, Object?>{
+              'outcome': 'already_entitled',
+              'durationMs': _analyticsDuration(analyticsStartedAt),
+              'observedEntitlementKeys': activeEntitlements
+                  .map((item) => item.id)
+                  .take(64)
+                  .toList(growable: false),
+            },
+          );
           widget.onInteraction?.call(
             MosaicInteraction(
               outcome: MosaicInteractionOutcome.alreadyEntitled,
@@ -293,6 +409,12 @@ extension on _MosaicPaywallState {
             MosaicAlreadyEntitledPresentationResult(<String>{referenceId}),
           );
         case MosaicPurchaseCancelled():
+          _purchaseLifecycleAnalytics(
+              MosaicAnalyticsEventName.purchaseCancelled,
+              analyticsAttemptId,
+              analyticsStartedAt,
+              analyticsAttribution,
+              providerResultCode: 'commerce.purchase_cancelled');
           widget.onInteraction?.call(
             MosaicInteraction(
               outcome: MosaicInteractionOutcome.cancelled,
@@ -306,6 +428,8 @@ extension on _MosaicPaywallState {
             ),
           );
         case MosaicPurchasePending():
+          _purchaseLifecycleAnalytics(MosaicAnalyticsEventName.purchasePending,
+              analyticsAttemptId, analyticsStartedAt, analyticsAttribution);
           widget.onInteraction?.call(
             MosaicInteraction(
               outcome: MosaicInteractionOutcome.pending,
@@ -317,6 +441,8 @@ extension on _MosaicPaywallState {
             MosaicPendingPresentationResult(productReferenceId: referenceId),
           );
         case MosaicPurchaseDeferred():
+          _purchaseLifecycleAnalytics(MosaicAnalyticsEventName.purchaseDeferred,
+              analyticsAttemptId, analyticsStartedAt, analyticsAttribution);
           widget.onInteraction?.call(
             MosaicInteraction(
               outcome: MosaicInteractionOutcome.deferred,
@@ -328,20 +454,35 @@ extension on _MosaicPaywallState {
             MosaicDeferredPresentationResult(productReferenceId: referenceId),
           );
         case MosaicPurchaseProductUnavailable():
+          _analytics(
+            MosaicAnalyticsEventName.productUnavailable,
+            attribution: analyticsAttribution,
+            payload: const {'reason': 'product_not_found'},
+          );
           _notifyProductUnavailable(selectorId, referenceId: referenceId);
         case MosaicPurchaseProviderUnavailable():
+          _purchaseFailureAnalytics(analyticsAttemptId, analyticsStartedAt,
+              analyticsAttribution, 'commerce.provider_unavailable', true);
           _reportPurchaseFailure(
             selectorId: selectorId,
             referenceId: referenceId,
             diagnosticCode: 'purchase_provider_unavailable',
           );
         case MosaicPurchaseConfigurationUnavailable():
+          _purchaseFailureAnalytics(
+              analyticsAttemptId,
+              analyticsStartedAt,
+              analyticsAttribution,
+              'commerce.configuration_unavailable',
+              false);
           widget.onResult(
             const MosaicConfigurationUnavailablePresentationResult(
               diagnosticCode: 'commerce_configuration_unavailable',
             ),
           );
         case MosaicPurchaseFailed():
+          _purchaseFailureAnalytics(analyticsAttemptId, analyticsStartedAt,
+              analyticsAttribution, 'commerce.purchase_failed', false);
           _reportPurchaseFailure(
             selectorId: selectorId,
             referenceId: referenceId,
@@ -349,6 +490,8 @@ extension on _MosaicPaywallState {
           );
       }
     } on Object {
+      _purchaseFailureAnalytics(analyticsAttemptId, analyticsStartedAt,
+          analyticsAttribution, 'commerce.purchase_exception', true);
       if (mounted) {
         _reportPurchaseFailure(
           selectorId: selectorId,
@@ -400,6 +543,23 @@ extension on _MosaicPaywallState {
     _setPaywallState(() {
       _busyActionId = buttonId;
     });
+    final analyticsAttemptId = mosaicAnalyticsId('restore_attempt');
+    final analyticsStartedAt = widget.clock().toUtc();
+    final providerId = widget.analyticsContext?.providerId;
+    _analytics(MosaicAnalyticsEventName.paywallActionSelected,
+        payload: <String, Object?>{
+          'action': 'restore',
+          'componentId': buttonId
+        });
+    if (providerId != null) {
+      _analytics(
+        MosaicAnalyticsEventName.restoreStarted,
+        correlation: widget.analyticsContext?.correlation(
+          restoreAttemptId: analyticsAttemptId,
+        ),
+        payload: <String, Object?>{'providerId': providerId},
+      );
+    }
     try {
       final result = await widget.purchaseProvider.restore();
       if (!mounted) {
@@ -407,6 +567,8 @@ extension on _MosaicPaywallState {
       }
       switch (result) {
         case MosaicRestored():
+          _restoreCompletedAnalytics(analyticsAttemptId, analyticsStartedAt,
+              providerId, result.entitlements);
           final references = _referenceIds(result.entitlements);
           widget.onInteraction?.call(
             const MosaicInteraction(
@@ -415,30 +577,46 @@ extension on _MosaicPaywallState {
           );
           widget.onResult(MosaicRestoredPresentationResult(references));
         case MosaicNothingToRestore():
+          _restoreLifecycleAnalytics(
+              MosaicAnalyticsEventName.restoreNothingFound,
+              analyticsAttemptId,
+              analyticsStartedAt,
+              providerId);
           widget.onInteraction?.call(
             const MosaicInteraction(
               outcome: MosaicInteractionOutcome.restoreNoPurchases,
             ),
           );
         case MosaicRestoreCancelled():
+          _restoreLifecycleAnalytics(MosaicAnalyticsEventName.restoreCancelled,
+              analyticsAttemptId, analyticsStartedAt, providerId);
           widget.onInteraction?.call(
             const MosaicInteraction(
               outcome: MosaicInteractionOutcome.restoreCancelled,
             ),
           );
         case MosaicRestoreProviderUnavailable():
+          _restoreFailureAnalytics(analyticsAttemptId, analyticsStartedAt,
+              providerId, 'commerce.provider_unavailable', true);
           _reportRestoreFailure('restore_provider_unavailable');
         case MosaicRestoreConfigurationUnavailable():
+          _restoreFailureAnalytics(analyticsAttemptId, analyticsStartedAt,
+              providerId, 'commerce.configuration_unavailable', false);
           widget.onResult(
             const MosaicConfigurationUnavailablePresentationResult(
               diagnosticCode: 'commerce_configuration_unavailable',
             ),
           );
         case MosaicRestoreFailed():
+          _restoreFailureAnalytics(analyticsAttemptId, analyticsStartedAt,
+              providerId, 'commerce.restore_failed', false);
           _reportRestoreFailure('restore_provider_failed');
         case MosaicDetailedRestoreResult():
           switch (result.outcome) {
             case MosaicCommerceRecoveryOutcome.restored:
+              _restoreCompletedAnalytics(analyticsAttemptId, analyticsStartedAt,
+                  providerId, result.entitlements,
+                  providerOperationId: result.metadata.operationId);
               final references = _referenceIds(result.entitlements);
               widget.onInteraction?.call(
                 const MosaicInteraction(
@@ -446,24 +624,40 @@ extension on _MosaicPaywallState {
               );
               widget.onResult(MosaicRestoredPresentationResult(references));
             case MosaicCommerceRecoveryOutcome.nothingToRestore:
+              _restoreLifecycleAnalytics(
+                  MosaicAnalyticsEventName.restoreNothingFound,
+                  analyticsAttemptId,
+                  analyticsStartedAt,
+                  providerId);
               widget.onInteraction?.call(
                 const MosaicInteraction(
                   outcome: MosaicInteractionOutcome.restoreNoPurchases,
                 ),
               );
             case MosaicCommerceRecoveryOutcome.cancelled:
+              _restoreLifecycleAnalytics(
+                  MosaicAnalyticsEventName.restoreCancelled,
+                  analyticsAttemptId,
+                  analyticsStartedAt,
+                  providerId);
               widget.onInteraction?.call(
                 const MosaicInteraction(
                   outcome: MosaicInteractionOutcome.restoreCancelled,
                 ),
               );
             case MosaicCommerceRecoveryOutcome.providerUnavailable:
+              _restoreFailureAnalytics(analyticsAttemptId, analyticsStartedAt,
+                  providerId, 'commerce.provider_unavailable', true);
               _reportRestoreFailure('restore_provider_unavailable');
             case MosaicCommerceRecoveryOutcome.failed:
+              _restoreFailureAnalytics(analyticsAttemptId, analyticsStartedAt,
+                  providerId, 'commerce.restore_failed', false);
               _reportRestoreFailure('restore_provider_failed');
           }
       }
     } on Object {
+      _restoreFailureAnalytics(analyticsAttemptId, analyticsStartedAt,
+          providerId, 'commerce.restore_exception', true);
       if (mounted) {
         _reportRestoreFailure('restore_provider_exception');
       }
@@ -508,11 +702,98 @@ extension on _MosaicPaywallState {
     widget.onInteraction?.call(
       const MosaicInteraction(outcome: MosaicInteractionOutcome.dismissed),
     );
+    _analytics(MosaicAnalyticsEventName.paywallActionSelected,
+        payload: const <String, Object?>{'action': 'close'});
+    _analytics(MosaicAnalyticsEventName.paywallDismissed,
+        payload: const <String, Object?>{'reason': 'user'});
     widget.onResult(const MosaicDismissedPresentationResult());
+  }
+
+  int _analyticsDuration(DateTime startedAt) => widget
+      .clock()
+      .toUtc()
+      .difference(startedAt)
+      .inMilliseconds
+      .clamp(0, 86400000);
+
+  void _purchaseLifecycleAnalytics(
+      MosaicAnalyticsEventName name,
+      String attemptId,
+      DateTime startedAt,
+      MosaicAnalyticsAttribution? attribution,
+      {String? providerResultCode}) {
+    _analytics(name,
+        correlation:
+            widget.analyticsContext?.correlation(purchaseAttemptId: attemptId),
+        attribution: attribution,
+        payload: <String, Object?>{
+          'durationMs': _analyticsDuration(startedAt),
+          if (providerResultCode != null)
+            'providerResultCode': providerResultCode,
+        });
+  }
+
+  void _purchaseFailureAnalytics(String attemptId, DateTime startedAt,
+      MosaicAnalyticsAttribution? attribution, String code, bool retryable) {
+    _analytics(MosaicAnalyticsEventName.purchaseFailed,
+        correlation:
+            widget.analyticsContext?.correlation(purchaseAttemptId: attemptId),
+        attribution: attribution,
+        payload: <String, Object?>{
+          'durationMs': _analyticsDuration(startedAt),
+          'diagnosticCode': code,
+          'retryable': retryable,
+        });
+  }
+
+  void _restoreCompletedAnalytics(String attemptId, DateTime startedAt,
+      String? providerId, Set<MosaicEntitlement> entitlements,
+      {String? providerOperationId}) {
+    if (providerId == null) return;
+    final ids = entitlements.map((e) => e.id).take(64).toList(growable: false);
+    _analytics(MosaicAnalyticsEventName.restoreCompleted,
+        correlation: widget.analyticsContext?.correlation(
+          restoreAttemptId: attemptId,
+          providerOperationId: providerOperationId,
+        ),
+        payload: <String, Object?>{
+          'providerId': providerId,
+          'durationMs': _analyticsDuration(startedAt),
+          'restoredProductIds': const <String>[],
+          'observedEntitlementKeys': ids,
+        });
+  }
+
+  void _restoreLifecycleAnalytics(MosaicAnalyticsEventName name,
+      String attemptId, DateTime startedAt, String? providerId) {
+    if (providerId == null) return;
+    _analytics(name,
+        correlation:
+            widget.analyticsContext?.correlation(restoreAttemptId: attemptId),
+        payload: <String, Object?>{
+          'providerId': providerId,
+          'durationMs': _analyticsDuration(startedAt),
+        });
+  }
+
+  void _restoreFailureAnalytics(String attemptId, DateTime startedAt,
+      String? providerId, String code, bool retryable) {
+    if (providerId == null) return;
+    _analytics(MosaicAnalyticsEventName.restoreFailed,
+        correlation:
+            widget.analyticsContext?.correlation(restoreAttemptId: attemptId),
+        payload: <String, Object?>{
+          'providerId': providerId,
+          'durationMs': _analyticsDuration(startedAt),
+          'diagnosticCode': code,
+          'retryable': retryable,
+        });
   }
 
   void _navigateTo(MosaicNavigateToAction action) {
     if (_currentScreenId == null || action.screenId == _currentScreenId) return;
+    _analytics(MosaicAnalyticsEventName.paywallActionSelected,
+        payload: const <String, Object?>{'action': 'navigate_to'});
     final destination = widget.document.screen(action.screenId)!;
     _rememberCurrentScrollOffset();
     _setPaywallState(() {
@@ -534,6 +815,8 @@ extension on _MosaicPaywallState {
       );
       return;
     }
+    _analytics(MosaicAnalyticsEventName.paywallActionSelected,
+        payload: const <String, Object?>{'action': 'navigate_back'});
     _rememberCurrentScrollOffset();
     _navigationHistory.removeLast();
     final destinationId = _navigationHistory.last;
@@ -604,6 +887,11 @@ extension on _MosaicPaywallState {
     String buttonId,
   ) async {
     if (_busyActionId != null) return;
+    _analytics(MosaicAnalyticsEventName.paywallActionSelected,
+        payload: <String, Object?>{
+          'action': 'open_external_url',
+          'componentId': buttonId,
+        });
     _setPaywallState(() {
       _busyActionId = buttonId;
     });

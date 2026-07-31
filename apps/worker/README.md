@@ -1,10 +1,10 @@
 # Mosaic worker
 
-Phase 3A does not require a background job, so no placeholder worker process is
-started.
+The worker entry point lives in the shared Go module at `apps/api/cmd/worker`.
+It leases PostgreSQL-backed analytics aggregation, export, deletion, and
+retention jobs. When provider integrations are enabled, the same process also
+leases provider synchronization work. Jobs use bounded leases and retry state;
+no separate queue, Redis dependency, or second service is required.
 
-The API is currently an application-local Go module at `apps/api`. Before the
-first real background job is added, the owner must decide where
-shared Go application and domain packages live so the API and worker can reuse
-them without duplicate code. No root `go.work`, shared module, queue, Redis
-dependency, or placeholder process is introduced by this foundation.
+Run it after explicit migrations with `go run ./cmd/worker` from `apps/api`.
+PostgreSQL and the configured private S3-compatible bucket are required.

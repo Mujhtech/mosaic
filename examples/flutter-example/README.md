@@ -105,6 +105,38 @@ dart run tool/sync_fixture.dart
 flutter run --dart-define=MOSAIC_PHASE5_DEMO=true
 ```
 
+## Phase 6 analytics demonstration
+
+Collection remains disabled unless the Environment owner has enabled it. Once
+enabled server-side, opt the example in explicitly:
+
+```bash
+flutter run \
+  --dart-define=MOSAIC_HOSTED_BASE_URL=http://127.0.0.1:8080 \
+  --dart-define=MOSAIC_PUBLIC_SDK_KEY=public_example_key \
+  --dart-define=MOSAIC_ANALYTICS_ENABLED=true
+```
+
+Exercise a hosted Placement, Product selection, purchase/cancellation, and
+restore, then use the analytics toolbar action to flush and display aggregate
+safe diagnostics. Stop the API, repeat actions, restart the app, restore the
+same Environment namespace, restart the API, and flush to demonstrate
+persistent offline delivery. Local Preview never emits hosted analytics.
+
+The deterministic non-production reconstruction and canonical partial-batch
+proof runs without a server:
+
+```bash
+cd sdk/flutter
+flutter test test/analytics_test.dart \
+  --plain-name 'reconstructs offline queue and applies exact partial acknowledgement'
+```
+
+That test queues while offline, reconstructs the runtime from the same
+persistent storage, applies accepted/permanently-rejected/retryable results,
+advances through the canonical retry delay, and proves the retained event is
+later accepted.
+
 ## Run optional RevenueCat commerce
 
 The example includes the optional `mosaic_revenuecat` package but does not

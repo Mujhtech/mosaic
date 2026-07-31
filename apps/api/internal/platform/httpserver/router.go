@@ -11,6 +11,7 @@ import (
 	"github.com/riandyrn/otelchi"
 	"github.com/rs/zerolog"
 
+	"github.com/Mujhtech/mosaic/apps/api/internal/analytics"
 	"github.com/Mujhtech/mosaic/apps/api/internal/browserauth"
 	"github.com/Mujhtech/mosaic/apps/api/internal/cloudworkspace"
 	"github.com/Mujhtech/mosaic/apps/api/internal/hostedpublishing"
@@ -18,6 +19,7 @@ import (
 	"github.com/Mujhtech/mosaic/apps/api/internal/platform/authn"
 	"github.com/Mujhtech/mosaic/apps/api/internal/platform/httpserver/httpmiddleware"
 	"github.com/Mujhtech/mosaic/apps/api/internal/platform/httpserver/response"
+	analyticshttp "github.com/Mujhtech/mosaic/apps/api/internal/transport/analytics"
 	browserauthhttp "github.com/Mujhtech/mosaic/apps/api/internal/transport/browserauth"
 	cloudworkspacehttp "github.com/Mujhtech/mosaic/apps/api/internal/transport/cloudworkspace"
 	"github.com/Mujhtech/mosaic/apps/api/internal/transport/health"
@@ -54,14 +56,18 @@ type Config struct {
 }
 
 type Dependencies struct {
-	CloudWorkspace    *cloudworkspace.Service
-	HostedPublishing  *hostedpublishing.Service
-	PlacementDecision *placementdecision.Service
-	PrincipalResolver authn.Resolver
-	ReadinessChecker  health.Checker
-	BrowserAuth       *browserauth.Service
-	BrowserAuthConfig browserauthhttp.Config
-	DeliveryLimiter   hostedpublishinghttp.DeliveryRateLimiter
+	CloudWorkspace        *cloudworkspace.Service
+	HostedPublishing      *hostedpublishing.Service
+	PlacementDecision     *placementdecision.Service
+	PrincipalResolver     authn.Resolver
+	ReadinessChecker      health.Checker
+	BrowserAuth           *browserauth.Service
+	BrowserAuthConfig     browserauthhttp.Config
+	DeliveryLimiter       hostedpublishinghttp.DeliveryRateLimiter
+	Analytics             *analytics.Service
+	AnalyticsIPLimiter    analyticshttp.Limiter
+	AnalyticsKeyLimiter   analyticshttp.Limiter
+	AnalyticsEventLimiter analyticshttp.EventLimiter
 }
 
 func New(cfg Config, logger zerolog.Logger) http.Handler {
@@ -85,13 +91,13 @@ func NewWithDependencies(cfg Config, logger zerolog.Logger, dependencies Depende
 	// Compatibility aliases retained for existing probes while documented callers migrate.
 	router.Mount("/health", health.LiveRoutes())
 	router.Mount("/ready", health.ReadyRoutes(dependencies.ReadinessChecker))
-	if dependencies.BrowserAuth != nil || dependencies.CloudWorkspace != nil || dependencies.HostedPublishing != nil || dependencies.PlacementDecision != nil {
+	if dependencies.BrowserAuth != nil || dependencies.CloudWorkspace != nil || dependencies.HostedPublishing != nil || dependencies.PlacementDecision != nil || dependencies.Analytics != nil {
 		router.Route("/v1", func(versioned chi.Router) {
 			versioned.Use(trustedMutationOrigins(cfg.AllowedOrigins))
 			if dependencies.BrowserAuth != nil {
 				browserauthhttp.RegisterRoutes(versioned, dependencies.BrowserAuth, dependencies.BrowserAuthConfig)
 			}
-			if dependencies.CloudWorkspace != nil || dependencies.HostedPublishing != nil {
+			if dependencies.CloudWorkspace != nil || dependencies.HostedPublishing != nil || dependencies.Analytics != nil {
 				versioned.Group(func(authenticated chi.Router) {
 					authenticated.Use(authn.Middleware(dependencies.PrincipalResolver))
 					if dependencies.CloudWorkspace != nil {
@@ -109,11 +115,17 @@ func NewWithDependencies(cfg Config, logger zerolog.Logger, dependencies Depende
 						if dependencies.PlacementDecision != nil {
 							placementdecisionhttp.RegisterProjectRoutes(project, dependencies.PlacementDecision)
 						}
+						if dependencies.Analytics != nil {
+							analyticshttp.RegisterProjectRoutes(project, dependencies.Analytics)
+						}
 					})
 				})
 			}
 			if dependencies.HostedPublishing != nil {
 				hostedpublishinghttp.RegisterPublicRoutes(versioned, dependencies.HostedPublishing, dependencies.DeliveryLimiter)
+			}
+			if dependencies.Analytics != nil {
+				analyticshttp.RegisterPublicRoutes(versioned, dependencies.Analytics, dependencies.AnalyticsIPLimiter, dependencies.AnalyticsKeyLimiter, dependencies.AnalyticsEventLimiter)
 			}
 		})
 	}

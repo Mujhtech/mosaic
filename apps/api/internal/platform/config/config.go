@@ -35,7 +35,20 @@ type Config struct {
 	Protocol    ProtocolConfig
 	ObjectStore ObjectStoreConfig
 	Delivery    DeliveryConfig
+	Analytics   AnalyticsConfig
 	Providers   ProviderConfig
+}
+
+type AnalyticsConfig struct {
+	EventSchemaPath     string        `envconfig:"MOSAIC_ANALYTICS_EVENT_SCHEMA_PATH" default:"../../protocol/schema/analytics-event/v1/event.schema.json"`
+	IPRequestsPerMinute int           `envconfig:"MOSAIC_ANALYTICS_IP_REQUESTS_PER_MINUTE" default:"30"`
+	IPBurst             int           `envconfig:"MOSAIC_ANALYTICS_IP_BURST" default:"10"`
+	KeyBatchesPerMinute int           `envconfig:"MOSAIC_ANALYTICS_KEY_BATCHES_PER_MINUTE" default:"60"`
+	KeyBatchBurst       int           `envconfig:"MOSAIC_ANALYTICS_KEY_BATCH_BURST" default:"10"`
+	KeyEventsPerMinute  int           `envconfig:"MOSAIC_ANALYTICS_KEY_EVENTS_PER_MINUTE" default:"6000"`
+	KeyEventBurst       int           `envconfig:"MOSAIC_ANALYTICS_KEY_EVENT_BURST" default:"1000"`
+	LimiterEntries      int           `envconfig:"MOSAIC_ANALYTICS_LIMITER_ENTRIES" default:"10000"`
+	WorkerPollInterval  time.Duration `envconfig:"MOSAIC_ANALYTICS_WORKER_POLL_INTERVAL" default:"1s"`
 }
 
 type BrowserAuthConfig struct {
@@ -137,6 +150,7 @@ func load() (Config, error) {
 	cfg.Protocol.CommerceConfigurationSchemaPath = strings.TrimSpace(cfg.Protocol.CommerceConfigurationSchemaPath)
 	cfg.Protocol.CommerceProviderV2SchemaPath = strings.TrimSpace(cfg.Protocol.CommerceProviderV2SchemaPath)
 	cfg.Protocol.CommerceConfigurationV2SchemaPath = strings.TrimSpace(cfg.Protocol.CommerceConfigurationV2SchemaPath)
+	cfg.Analytics.EventSchemaPath = strings.TrimSpace(cfg.Analytics.EventSchemaPath)
 	cfg.Providers.CredentialKeyring = strings.TrimSpace(cfg.Providers.CredentialKeyring)
 	cfg.Providers.RevenueCatBaseURL = strings.TrimSpace(cfg.Providers.RevenueCatBaseURL)
 	cfg.ObjectStore.Endpoint = strings.TrimSpace(cfg.ObjectStore.Endpoint)
@@ -225,6 +239,25 @@ func (cfg Config) validate() error {
 	}
 	if cfg.Protocol.CommerceProviderV2SchemaPath == "" || cfg.Protocol.CommerceConfigurationV2SchemaPath == "" {
 		return errors.New("Commerce Configuration v2 schema paths are required")
+	}
+	if cfg.Analytics.EventSchemaPath == "" {
+		return errors.New("MOSAIC_ANALYTICS_EVENT_SCHEMA_PATH must not be empty")
+	}
+	for key, value := range map[string]int{
+		"MOSAIC_ANALYTICS_IP_REQUESTS_PER_MINUTE": cfg.Analytics.IPRequestsPerMinute,
+		"MOSAIC_ANALYTICS_IP_BURST":               cfg.Analytics.IPBurst,
+		"MOSAIC_ANALYTICS_KEY_BATCHES_PER_MINUTE": cfg.Analytics.KeyBatchesPerMinute,
+		"MOSAIC_ANALYTICS_KEY_BATCH_BURST":        cfg.Analytics.KeyBatchBurst,
+		"MOSAIC_ANALYTICS_KEY_EVENTS_PER_MINUTE":  cfg.Analytics.KeyEventsPerMinute,
+		"MOSAIC_ANALYTICS_KEY_EVENT_BURST":        cfg.Analytics.KeyEventBurst,
+		"MOSAIC_ANALYTICS_LIMITER_ENTRIES":        cfg.Analytics.LimiterEntries,
+	} {
+		if value <= 0 {
+			return fmt.Errorf("%s must be greater than zero", key)
+		}
+	}
+	if cfg.Analytics.WorkerPollInterval <= 0 {
+		return errors.New("MOSAIC_ANALYTICS_WORKER_POLL_INTERVAL must be greater than zero")
 	}
 	if cfg.Providers.Enabled && cfg.Providers.CredentialKeyring == "" {
 		return fmt.Errorf("MOSAIC_PROVIDER_CREDENTIAL_KEYRING is required when provider integrations are enabled")

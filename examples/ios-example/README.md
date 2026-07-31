@@ -63,6 +63,7 @@ MOSAIC_PUBLIC_SDK_KEY=<environment public SDK key>
 MOSAIC_SDK_BASE_URL=http://127.0.0.1:8080
 MOSAIC_PLACEMENT=export_pdf
 MOSAIC_APPLICATION_ID=<Mosaic Application ID>
+MOSAIC_ANALYTICS_ENABLED=1
 REVENUECAT_PUBLIC_SDK_KEY=<platform public SDK key>
 ```
 
@@ -93,6 +94,32 @@ deterministic provider without changing the Paywall document. RevenueCat
 remains optional. Its public SDK key
 is read only by the host app and passed directly to RevenueCat; Mosaic remote
 configuration and diagnostics never contain it.
+
+## Analytics offline/restart demonstration
+
+Analytics remains disabled unless both the Environment owner/admin setting and
+the host opt-in are enabled. `MOSAIC_ANALYTICS_ENABLED=1` represents that
+Environment setting in this development example. Local Studio and bundled
+fallback paywalls never emit hosted analytics.
+
+For a reproducible non-production queue demonstration:
+
+1. Run the local API with an Application-bound development public SDK key and
+   enable Analytics for that Environment.
+2. Launch Hosted mode with `MOSAIC_ANALYTICS_ENABLED=1`, stop the API, and use
+   **Analytics → Queue demo events**. The status reports persistent queue depth.
+3. Terminate and relaunch without deleting app data. The queue is restored from
+   backup-excluded Application Support storage.
+4. Restart the API and use **Analytics → Flush now**. Accepted, duplicate, and
+   permanently rejected entries are removed; only retryable entries remain.
+
+The deterministic SDK equivalent, including reconstruction and a mixed
+partial acknowledgement, is:
+
+```bash
+cd sdk/ios
+swift test --filter AnalyticsTests/testPersistentQueueReconstructionAndExactPartialAcknowledgement
+```
 
 ## Canonical fixture ownership
 

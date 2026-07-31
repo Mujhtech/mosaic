@@ -170,6 +170,8 @@ fun MosaicPaywall(
     diagnostics: MosaicDiagnosticSink = MosaicDiagnosticSink.None,
     clock: () -> Long = System::currentTimeMillis,
     onInteraction: (MosaicInteractionOutcome) -> Unit = {},
+    analyticsRuntime: MosaicAnalyticsRuntime? = null,
+    analyticsContext: MosaicAnalyticsPresentationContext? = null,
 ) {
     when (loadResult) {
         is MosaicPaywallLoadResult.Loaded -> MosaicPaywall(
@@ -184,6 +186,8 @@ fun MosaicPaywall(
             diagnostics = diagnostics,
             clock = clock,
             onInteraction = onInteraction,
+            analyticsRuntime = analyticsRuntime,
+            analyticsContext = analyticsContext,
         )
         is MosaicPaywallLoadResult.ConfigurationUnavailable -> {
             LaunchedEffect(loadResult) { onResult(loadResult.presentationResult) }
@@ -205,13 +209,18 @@ fun MosaicPaywall(
     diagnostics: MosaicDiagnosticSink = MosaicDiagnosticSink.None,
     clock: () -> Long = System::currentTimeMillis,
     onInteraction: (MosaicInteractionOutcome) -> Unit = {},
+    analyticsRuntime: MosaicAnalyticsRuntime? = null,
+    analyticsContext: MosaicAnalyticsPresentationContext? = null,
 ) {
-    val state = remember(document, purchaseProvider, diagnostics) {
-        MosaicPaywallState(document, purchaseProvider, diagnostics, clock)
+    val state = remember(document, purchaseProvider, diagnostics, analyticsRuntime, analyticsContext) {
+        MosaicPaywallState(document, purchaseProvider, diagnostics, clock, analyticsRuntime, analyticsContext)
     }
     val dispatch: (MosaicPaywallEvent) -> Unit = { event ->
         onInteraction(event.interaction)
         event.presentationResult?.let(onResult)
+    }
+    LaunchedEffect(state) {
+        state.presented()
     }
     LaunchedEffect(state, requestedLocale) {
         state.loadProducts(requestedLocale).forEach(dispatch)
@@ -262,7 +271,14 @@ fun MosaicPaywallContent(
         LocalMosaicVideoResolver provides videoResolver,
         LocalMosaicDiagnostics provides diagnostics,
     ) {
-        val current = state.currentScreen
+        val current = state.currentScreenOrNull
+        if (current == null) {
+            LaunchedEffect(state, state.currentScreenId) {
+                state.reportRenderingFailure("rendering.screen_unavailable")?.let(onEvent)
+            }
+            Box(modifier = modifier.testTag("mosaic-rendering-failed"))
+            return@CompositionLocalProvider
+        }
         if (current.presentation == MosaicScreenPresentation.SHEET) {
             MosaicScreenContent(
                 screen = state.backgroundScreen,
@@ -748,12 +764,13 @@ internal fun RenderButton(
     Button(
         onClick = {
             when (val action = component.action) {
-                is MosaicPurchaseAction -> scope.launch { onEvent(state.purchase(action.productSelectorId)) }
-                MosaicRestoreAction -> scope.launch { onEvent(state.restore()) }
-                MosaicCloseAction -> onEvent(state.close())
-                is MosaicNavigateToAction -> state.navigateTo(action.screenId)
-                MosaicNavigateBackAction -> state.navigateBack()
+                is MosaicPurchaseAction -> scope.launch { onEvent(state.purchase(action.productSelectorId, component.id)) }
+                MosaicRestoreAction -> scope.launch { onEvent(state.restore(component.id)) }
+                MosaicCloseAction -> onEvent(state.close(component.id))
+                is MosaicNavigateToAction -> { state.recordAction("navigate_to", component.id); state.navigateTo(action.screenId) }
+                MosaicNavigateBackAction -> { state.recordAction("navigate_back", component.id); state.navigateBack() }
                 is MosaicOpenExternalUrlAction -> {
+                    state.recordAction("open_external_url", component.id)
                     val opened = runCatching { uriHandler.openUri(action.url) }.isSuccess
                     state.recordExternalUrlResult(opened)
                 }

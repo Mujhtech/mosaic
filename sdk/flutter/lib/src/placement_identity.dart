@@ -197,6 +197,7 @@ final class MosaicIdentityController {
   Future<MosaicIdentityState> _identify(String userId) async {
     final normalized = _identity(userId, 'userId');
     final state = await load();
+    if (state.userId == normalized) return state;
     return _replace(MosaicIdentityState(
       installationId: state.installationId,
       userId: normalized,
@@ -227,6 +228,7 @@ final class MosaicIdentityController {
 
   Future<MosaicIdentityState> _resetUser() async {
     final state = await load();
+    if (state.userId == null && state.attributes.isEmpty) return state;
     return _replace(MosaicIdentityState(
       installationId: state.installationId,
       generation: state.generation + 1,
@@ -240,9 +242,7 @@ final class MosaicIdentityController {
     final state = await load();
     return _replace(MosaicIdentityState(
       installationId: _newIdentity('installation'),
-      userId: state.userId,
       generation: state.generation + 1,
-      attributes: state.attributes,
     ));
   }
 

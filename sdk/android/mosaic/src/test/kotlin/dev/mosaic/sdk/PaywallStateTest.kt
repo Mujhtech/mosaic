@@ -12,6 +12,18 @@ import java.nio.file.Files
 
 class PaywallStateTest {
     @Test
+    fun renderingFailureIsTerminalAndEmittedOnlyOncePerSafeCode() {
+        val state = MosaicPaywallState(canonicalDocument(), MockMosaicPurchaseProvider())
+
+        val first = state.reportRenderingFailure("rendering.screen_unavailable")
+        val duplicate = state.reportRenderingFailure("rendering.screen_unavailable")
+
+        assertEquals("renderingFailed", first?.interaction?.wireName)
+        assertTrue(first?.presentationResult is MosaicPresentationResult.RenderingFailed)
+        assertNull(duplicate)
+    }
+
+    @Test
     fun retainsConfiguredSelectionWhenAvailable() = runTest {
         val state = loadedState()
 

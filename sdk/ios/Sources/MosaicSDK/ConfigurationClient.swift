@@ -188,6 +188,31 @@ actor MosaicConfigurationClient {
     return .init(productIDs: products.sorted(), entitlementKeys: entitlements.sorted())
   }
 
+  struct AnalyticsPlacementMetadata: Sendable {
+    let source: MosaicConfigurationSource
+    let releaseID: String
+    let placementID: String
+    let ruleSetID: String
+    let ruleSetVersion: Int
+  }
+
+  func analyticsPlacementMetadata(_ key: String) -> AnalyticsPlacementMetadata? {
+    guard let accepted, accepted.source != .bundled,
+      let decision = accepted.release.decision(forPlacement: key)
+    else { return nil }
+    let set = decision.ruleSet
+    return .init(
+      source: accepted.source, releaseID: accepted.release.metadata.id,
+      placementID: set.placementId, ruleSetID: set.id, ruleSetVersion: set.version)
+  }
+
+  func analyticsPaywallMetadata(versionID: String) -> (paywallID: String, versionID: String)? {
+    guard let accepted, accepted.source != .bundled,
+      let paywall = accepted.release.paywallVersions.first(where: { $0.id == versionID })
+    else { return nil }
+    return (paywall.paywallID, paywall.id)
+  }
+
   func attributeDefinitions() -> [MosaicAttributeDefinition]? {
     guard let release = accepted?.release, !release.placementDecisions.isEmpty else { return nil }
     var byKey: [String: MosaicAttributeDefinition] = [:]
@@ -198,34 +223,60 @@ actor MosaicConfigurationClient {
     return byKey.values.sorted { $0.key < $1.key }
   }
 
+  struct AnalyticsDecisionEvaluation: Sendable {
+    let result: MosaicPlacementDecisionResult
+    let fallbackUses: [MosaicPlacementEvaluator.FallbackUse]
+
+    init(
+      _ result: MosaicPlacementDecisionResult,
+      fallbackUses: [MosaicPlacementEvaluator.FallbackUse] = []
+    ) {
+      self.result = result
+      self.fallbackUses = fallbackUses
+    }
+  }
+
   func decide(
     placement key: String, context: MosaicDecisionContext, identity: MosaicIdentitySnapshot
   ) -> MosaicPlacementDecisionResult {
+    evaluateDecision(placement: key, context: context, identity: identity).result
+  }
+
+  func decideForPresentation(
+    placement key: String, context: MosaicDecisionContext, identity: MosaicIdentitySnapshot
+  ) -> AnalyticsDecisionEvaluation {
+    evaluateDecision(placement: key, context: context, identity: identity)
+  }
+
+  private func evaluateDecision(
+    placement key: String, context: MosaicDecisionContext, identity: MosaicIdentitySnapshot
+  ) -> AnalyticsDecisionEvaluation {
     guard key.range(of: "^[a-z][a-z0-9_]{0,63}$", options: .regularExpression) != nil else {
       let diagnostic = MosaicDiagnostic(code: "delivery_invalid_placement", stage: .placement)
       recordDiagnostic(diagnostic)
-      return .placementUnavailable(diagnostics: diagnostics)
+      return .init(.placementUnavailable(diagnostics: diagnostics))
     }
     guard let accepted else {
       let diagnostic = MosaicDiagnostic(
         code: "delivery_configuration_unavailable", stage: .placement)
       recordDiagnostic(diagnostic)
-      return .configurationUnavailable(diagnostics: diagnostics)
+      return .init(.configurationUnavailable(diagnostics: diagnostics))
     }
     guard let decision = accepted.release.decision(forPlacement: key) else {
       if let paywall = accepted.release.paywall(forPlacement: key) {
-        return .paywallSelected(
-          document: paywall.document, paywallVersionID: paywall.id, matchedRuleID: nil,
-          fallbackPath: [], release: accepted.release.metadata, source: accepted.source,
-          trace: .init(steps: [
-            .init(
-              code: "legacy_binding_selected", ruleID: nil, safeLabel: nil, result: nil,
-              assignmentType: nil, rolloutBucket: nil, fallbackKey: nil)
-          ]))
+        return .init(
+          .paywallSelected(
+            document: paywall.document, paywallVersionID: paywall.id, matchedRuleID: nil,
+            fallbackPath: [], release: accepted.release.metadata, source: accepted.source,
+            trace: .init(steps: [
+              .init(
+                code: "legacy_binding_selected", ruleID: nil, safeLabel: nil, result: nil,
+                assignmentType: nil, rolloutBucket: nil, fallbackKey: nil)
+            ])))
       }
       let diagnostic = MosaicDiagnostic(code: "delivery_placement_unavailable", stage: .placement)
       recordDiagnostic(diagnostic)
-      return .placementUnavailable(diagnostics: diagnostics)
+      return .init(.placementUnavailable(diagnostics: diagnostics))
     }
     let readiness = Dictionary(
       uniqueKeysWithValues: accepted.release.productReferences.map { ($0.id, $0.readiness) })
@@ -236,45 +287,52 @@ actor MosaicConfigurationClient {
       let resolution = resolveAvailablePaywall(
         output.outcome, decision: decision, release: accepted.release, context: context,
         matchedRuleID: output.matchedRuleID, initialPath: output.fallbackPath,
+        initialFallbackUses: output.fallbackUses,
         initialTrace: output.trace)
       switch resolution.outcome {
       case .paywall(let versionID, _):
         guard let paywall = resolution.paywall else {
           let diagnostic = MosaicDiagnostic(code: "decision_content_unavailable", stage: .placement)
           recordDiagnostic(diagnostic)
-          return .evaluationFailed(diagnostics: diagnostics)
+          return .init(.evaluationFailed(diagnostics: diagnostics))
         }
-        return .paywallSelected(
-          document: paywall.document, paywallVersionID: versionID,
-          matchedRuleID: output.matchedRuleID,
-          fallbackPath: resolution.path, release: accepted.release.metadata,
-          source: accepted.source,
-          trace: resolution.trace)
+        return .init(
+          .paywallSelected(
+            document: paywall.document, paywallVersionID: versionID,
+            matchedRuleID: output.matchedRuleID,
+            fallbackPath: resolution.path, release: accepted.release.metadata,
+            source: accepted.source,
+            trace: resolution.trace), fallbackUses: resolution.fallbackUses)
       case .noPaywall:
-        return .noPaywall(
-          matchedRuleID: output.matchedRuleID, release: accepted.release.metadata,
-          source: accepted.source, trace: resolution.trace)
+        return .init(
+          .noPaywall(
+            matchedRuleID: output.matchedRuleID, release: accepted.release.metadata,
+            source: accepted.source, trace: resolution.trace),
+          fallbackUses: resolution.fallbackUses)
       case .unavailable(let reason):
         let diagnostic = MosaicDiagnostic(code: "decision_\(reason)", stage: .placement)
         recordDiagnostic(diagnostic)
-        return .placementUnavailable(diagnostics: diagnostics)
+        return .init(
+          .placementUnavailable(diagnostics: diagnostics), fallbackUses: resolution.fallbackUses)
       case .fallback:
         let diagnostic = MosaicDiagnostic(code: "decision_fallback_unresolved", stage: .placement)
         recordDiagnostic(diagnostic)
-        return .evaluationFailed(diagnostics: diagnostics)
+        return .init(.evaluationFailed(diagnostics: diagnostics))
       }
     case .noPaywall:
-      return .noPaywall(
-        matchedRuleID: output.matchedRuleID, release: accepted.release.metadata,
-        source: accepted.source, trace: output.trace)
+      return .init(
+        .noPaywall(
+          matchedRuleID: output.matchedRuleID, release: accepted.release.metadata,
+          source: accepted.source, trace: output.trace), fallbackUses: output.fallbackUses)
     case .unavailable(let reason):
       let diagnostic = MosaicDiagnostic(code: "decision_\(reason)", stage: .placement)
       recordDiagnostic(diagnostic)
-      return .placementUnavailable(diagnostics: diagnostics)
+      return .init(
+        .placementUnavailable(diagnostics: diagnostics), fallbackUses: output.fallbackUses)
     case .fallback:
       let diagnostic = MosaicDiagnostic(code: "decision_fallback_unresolved", stage: .placement)
       recordDiagnostic(diagnostic)
-      return .evaluationFailed(diagnostics: diagnostics)
+      return .init(.evaluationFailed(diagnostics: diagnostics))
     }
   }
 
@@ -282,13 +340,15 @@ actor MosaicConfigurationClient {
     let outcome: MosaicDecisionOutcome
     let paywall: MosaicConfigurationPaywallVersion?
     let path: [String]
+    let fallbackUses: [MosaicPlacementEvaluator.FallbackUse]
     let trace: MosaicDecisionTrace
   }
 
   private func resolveAvailablePaywall(
     _ outcome: MosaicDecisionOutcome, decision: MosaicPlacementDecision,
     release: MosaicConfigurationRelease, context: MosaicDecisionContext, matchedRuleID: String?,
-    initialPath: [String], initialTrace: MosaicDecisionTrace
+    initialPath: [String], initialFallbackUses: [MosaicPlacementEvaluator.FallbackUse],
+    initialTrace: MosaicDecisionTrace
   ) -> AvailablePaywallResolution {
     let fallbacks = Dictionary(
       uniqueKeysWithValues: decision.ruleSet.fallbacks.map { ($0.key, $0) })
@@ -296,6 +356,7 @@ actor MosaicConfigurationClient {
       uniqueKeysWithValues: release.productReferences.map { ($0.id, $0.readiness) })
     var current = outcome
     var path = initialPath
+    var fallbackUses = initialFallbackUses
     var steps = initialTrace.steps
     var namedFallbackCount = 0
     while namedFallbackCount <= 8 {
@@ -304,6 +365,7 @@ actor MosaicConfigurationClient {
         guard namedFallbackCount < 8, let fallback = fallbacks[key] else {
           return .init(
             outcome: .unavailable(reason: "no_safe_decision"), paywall: nil, path: path,
+            fallbackUses: fallbackUses,
             trace: .init(steps: steps))
         }
         namedFallbackCount += 1
@@ -320,8 +382,10 @@ actor MosaicConfigurationClient {
           guard let unavailableFallback else {
             return .init(
               outcome: .unavailable(reason: "content_unavailable"), paywall: nil, path: path,
+              fallbackUses: fallbackUses,
               trace: .init(steps: steps))
           }
+          fallbackUses.append(.init(trigger: "content_unavailable", key: unavailableFallback))
           current = .fallback(key: unavailableFallback)
           continue
         }
@@ -332,19 +396,25 @@ actor MosaicConfigurationClient {
           guard let unavailableFallback else {
             return .init(
               outcome: .unavailable(reason: "commerce_unavailable"), paywall: nil, path: path,
+              fallbackUses: fallbackUses,
               trace: .init(steps: steps))
           }
+          fallbackUses.append(.init(trigger: "commerce_unavailable", key: unavailableFallback))
           current = .fallback(key: unavailableFallback)
           continue
         }
         return .init(
-          outcome: current, paywall: paywall, path: path, trace: .init(steps: steps))
+          outcome: current, paywall: paywall, path: path, fallbackUses: fallbackUses,
+          trace: .init(steps: steps))
       case .noPaywall, .unavailable:
-        return .init(outcome: current, paywall: nil, path: path, trace: .init(steps: steps))
+        return .init(
+          outcome: current, paywall: nil, path: path, fallbackUses: fallbackUses,
+          trace: .init(steps: steps))
       }
     }
     return .init(
       outcome: .unavailable(reason: "no_safe_decision"), paywall: nil, path: path,
+      fallbackUses: fallbackUses,
       trace: .init(steps: steps))
   }
 

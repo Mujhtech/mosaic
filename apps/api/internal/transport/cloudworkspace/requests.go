@@ -60,7 +60,8 @@ func (request *applicationRequest) Validate() error {
 }
 
 type apiKeyRequest struct {
-	Kind cloudworkspace.APIKeyKind `json:"kind"`
+	Kind          cloudworkspace.APIKeyKind `json:"kind"`
+	ApplicationID string                    `json:"applicationId"`
 }
 
 type environmentModeRequest struct {
@@ -78,7 +79,12 @@ func (request *environmentModeRequest) Validate() error {
 }
 
 func (request *apiKeyRequest) Validate() error {
-	return validation.ValidateStruct(request, validation.Field(&request.Kind, validation.Required, validation.In(cloudworkspace.APIKeyPublicSDK, cloudworkspace.APIKeySecretServer)))
+	return validation.ValidateStruct(request,
+		validation.Field(&request.Kind, validation.Required, validation.In(cloudworkspace.APIKeyPublicSDK, cloudworkspace.APIKeySecretServer)),
+		validation.Field(&request.ApplicationID,
+			validation.When(request.Kind == cloudworkspace.APIKeyPublicSDK, validation.Required),
+			validation.When(request.Kind == cloudworkspace.APIKeySecretServer, validation.Empty)),
+	)
 }
 
 type catalogResourceRequest struct {
@@ -273,11 +279,11 @@ type providerMappingObservationRequest struct {
 
 type providerMappingObservationMetadataRequest struct {
 	ClientPlatform        cloudworkspace.ProviderObservationClientPlatform      `json:"clientPlatform"`
-	ClientVersion         string                                                 `json:"clientVersion"`
-	ApplicationVersion    string                                                 `json:"applicationVersion"`
-	OSVersion             string                                                 `json:"osVersion"`
+	ClientVersion         string                                                `json:"clientVersion"`
+	ApplicationVersion    string                                                `json:"applicationVersion"`
+	OSVersion             string                                                `json:"osVersion"`
 	ConfigurationSource   cloudworkspace.ProviderObservationConfigurationSource `json:"configurationSource"`
-	StorefrontCountryCode string                                                 `json:"storefrontCountryCode"`
+	StorefrontCountryCode string                                                `json:"storefrontCountryCode"`
 	TestScenario          cloudworkspace.ProviderObservationTestScenario        `json:"testScenario"`
 }
 
@@ -285,7 +291,7 @@ func (request providerMappingObservationMetadataRequest) domain() cloudworkspace
 	return cloudworkspace.ProviderMappingObservationMetadata{
 		ClientPlatform: request.ClientPlatform, ClientVersion: request.ClientVersion,
 		ApplicationVersion: request.ApplicationVersion, OSVersion: request.OSVersion,
-		ConfigurationSource: request.ConfigurationSource,
+		ConfigurationSource:   request.ConfigurationSource,
 		StorefrontCountryCode: request.StorefrontCountryCode, TestScenario: request.TestScenario,
 	}
 }

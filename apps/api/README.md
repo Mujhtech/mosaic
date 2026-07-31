@@ -26,6 +26,10 @@ for credential-free StoreKit and Google Play activation, native Product
 mappings, browser-session observations, readiness, and Commerce Configuration
 v2 delivery.
 
+See [`../../docs/backend/phase-6-analytics-identity-privacy.md`](../../docs/backend/phase-6-analytics-identity-privacy.md)
+for application-bound SDK ingestion, event-count reporting, retention,
+identity handling, private exports, and hard deletion with aggregate rebuilds.
+
 `cmd/api`, `cmd/worker`, and `cmd/migrate` load this directory's `.env` with `godotenv`
 and decode it with `envconfig`. Existing process environment variables override
 matching `.env` entries.

@@ -82,9 +82,11 @@ adb shell am start -n dev.mosaic.example/.MainActivity \
   --es mosaic.placement onboarding_complete
 ```
 
-Omit `mosaic.sdk.endpoint` to use Mosaic's hosted API. The example does not
-add analytics, experiments, Google Play Billing, or authoritative entitlement
-state.
+Omit `mosaic.sdk.endpoint` to use Mosaic's hosted API. The example does not add
+Experiments or authoritative entitlement state. Google Play remains optional.
+Hosted analytics is disabled by default; pass
+`--ez mosaic.analytics.enabled true` only after an owner enables analytics for
+the Environment. The on-screen status reports persistent queue depth.
 
 The example includes the optional `:mosaic-revenuecat` module, initializes it
 only when the host supplies that public key, and lets hosted refresh atomically
@@ -97,3 +99,42 @@ The hosted example renders through `MosaicPlacement`; advanced rules,
 deliberate `no_paywall`, named fallbacks, and offline last-known-valid decisions
 keep the same Placement extra and do not expose Paywall IDs to application
 code. Country remains an explicit trusted host input and is never inferred.
+
+### Offline analytics queue demonstration
+
+Use non-production data and an Application-bound public SDK key. First run once
+against the real endpoint so the hosted release is cached. Then stop that same
+local backend (or disconnect the emulator network), keeping every launch extra
+and therefore the SDK cache namespace unchanged. Relaunch, generate
+Placement/Paywall/commerce events, and stop the process:
+
+```bash
+adb shell am start -n dev.mosaic.example/.MainActivity \
+  --es mosaic.sdk.key SDK_KEY \
+  --es mosaic.sdk.endpoint http://10.0.2.2:8080 \
+  --es mosaic.application.id APPLICATION_ID \
+  --es mosaic.placement onboarding_complete \
+  --ez mosaic.analytics.enabled true
+adb shell am force-stop dev.mosaic.example
+```
+
+Restore that same backend/network and request a manual flush. The queue is restored
+before accepted, duplicate, and permanent results are removed; retryable
+results remain:
+
+```bash
+adb shell am start -n dev.mosaic.example/.MainActivity \
+  --es mosaic.sdk.key SDK_KEY \
+  --es mosaic.sdk.endpoint http://10.0.2.2:8080 \
+  --es mosaic.application.id APPLICATION_ID \
+  --es mosaic.placement onboarding_complete \
+  --ez mosaic.analytics.enabled true \
+  --ez mosaic.analytics.flush true
+```
+
+The reproducible JVM proof uses the frozen canonical mixed response:
+
+```bash
+../../sdk/android/gradlew -p ../../sdk/android :mosaic:testDebugUnitTest \
+  --tests 'dev.mosaic.sdk.AnalyticsQueueTest.offlineQueueSurvivesReconstructionThenAppliesCanonicalPartialBatch'
+```

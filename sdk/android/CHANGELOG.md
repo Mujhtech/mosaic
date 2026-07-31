@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Add Analytics Event Contract v1 decoding, persistent bounded delivery,
+  partial-batch handling, privacy controls, sessions, lifecycle flushing, and
+  provider-neutral monetization instrumentation.
 - Add strict atomic Configuration Delivery v2 and Placement Decision v1 decoding.
 - Add deterministic local targeting, typed attributes, safe traces, named fallbacks, and explicit `no_paywall` results.
 - Add app-private no-backup identity persistence, reset APIs, and Compose Placement integration while preserving Delivery v1 calls.

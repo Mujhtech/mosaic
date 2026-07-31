@@ -8,6 +8,7 @@ import { OneTimeSecret } from "@/features/api-keys/components/one-time-secret"
 import { HostedResourceBoundary } from "@/features/auth/components/hosted-resource-boundary"
 import { resolveHostedQueryState } from "@/features/auth/types/hosted-query-state"
 import {
+  buildApiKeyCreationInput,
   createApiKeyMutationOptions,
   revokeApiKeyMutationOptions,
   rotateApiKeyMutationOptions,
@@ -21,6 +22,7 @@ import { environmentsQueryOptions } from "@/features/environments/queries/enviro
 import { WorkspacePage, WorkflowPanel } from "@/features/organizations/components/workspace-page"
 import { ScopeMismatchRecovery } from "@/features/organizations/components/scope-mismatch-recovery"
 import { useValidatedProjectScope } from "@/features/projects/hooks/use-validated-project-scope"
+import { applicationsQueryOptions } from "@/features/projects/queries/projects-query"
 import type { ApiKey, ApiKeySecretResult } from "@/generated/api"
 
 interface ApiKeysPageProps {
@@ -39,8 +41,10 @@ export function ApiKeysPage({ environmentId, organizationId, projectId }: ApiKey
   const queryClient = useQueryClient()
   const [revealed, setRevealed] = useState<ApiKeySecretResult | null>(null)
   const [pendingAction, setPendingAction] = useState<PendingKeyAction | null>(null)
+  const [applicationId, setApplicationId] = useState("")
   const { project, scopeMismatch, scopeReady } = useValidatedProjectScope(organizationId, projectId)
   const environments = useQuery({ ...environmentsQueryOptions(projectId), enabled: scopeReady })
+  const applications = useQuery({ ...applicationsQueryOptions(projectId), enabled: scopeReady })
   const selectedEnvironment =
     environments.data?.items.find((item) => item.id === environmentId) ??
     environments.data?.items.find((item) => item.key === "development") ??
@@ -73,7 +77,7 @@ export function ApiKeysPage({ environmentId, organizationId, projectId }: ApiKey
     transferApiKeySecret(queryClient, result, setRevealed, sanitizeSecretMutationState)
   }
   const items = keys.data?.items ?? []
-  const error = project.error ?? environments.error ?? keys.error
+  const error = project.error ?? environments.error ?? applications.error ?? keys.error
   const state = resolveHostedQueryState({
     emptyDescription: "Create an SDK key safe for an app or a server key that must remain secret.",
     emptyTitle: "No API keys in this environment",
@@ -81,10 +85,14 @@ export function ApiKeysPage({ environmentId, organizationId, projectId }: ApiKey
     isEmpty: scopeReady && environments.isSuccess && keys.isSuccess && items.length === 0,
     isPending:
       project.isPending ||
-      (scopeReady && (environments.isPending || (Boolean(selectedEnvironment) && keys.isPending))),
+      (scopeReady &&
+        (environments.isPending ||
+          applications.isPending ||
+          (Boolean(selectedEnvironment) && keys.isPending))),
     loadingDescription: "Loading environment-scoped API-key metadata.",
     onRetry: () => {
       void environments.refetch()
+      void applications.refetch()
       void keys.refetch()
     },
     permissionDescription: "Project owner or admin permission is required to manage API keys.",
@@ -201,6 +209,13 @@ export function ApiKeysPage({ environmentId, organizationId, projectId }: ApiKey
                           ? `Last used ${apiKey.lastUsedAt}`
                           : "Never used"}
                     </p>
+                    {apiKey.kind === "public_sdk" ? (
+                      <p className="text-muted-foreground mt-1 text-xs">
+                        {readApiKeyApplicationId(apiKey)
+                          ? `Analytics application: ${applications.data?.items.find((application) => application.id === readApiKeyApplicationId(apiKey))?.name ?? readApiKeyApplicationId(apiKey)}`
+                          : "Legacy unbound key — configuration works, but analytics ingestion is rejected. Create an Application-bound SDK key to recover."}
+                      </p>
+                    ) : null}
                   </div>
                   <div className="flex gap-2">
                     <Button
@@ -231,17 +246,49 @@ export function ApiKeysPage({ environmentId, organizationId, projectId }: ApiKey
           description="SDK keys are safe for apps. Server keys must only be used by trusted backend services."
           title="Create API key"
         >
-          <div className="flex flex-wrap gap-2">
-            <Button onClick={() => create.mutate("public_sdk", { onSuccess: revealSecret })}>
-              <KeyIcon aria-hidden size={16} />
-              Create SDK key
-            </Button>
-            <Button
-              onClick={() => create.mutate("secret_server", { onSuccess: revealSecret })}
-              variant="outline"
-            >
-              Create server key
-            </Button>
+          <div className="grid max-w-xl gap-3">
+            <label className="space-y-1 text-sm font-medium">
+              Application for SDK analytics
+              <select
+                className="border-input bg-background h-10 w-full rounded border px-3"
+                onChange={(event) => setApplicationId(event.target.value)}
+                value={applicationId}
+              >
+                <option value="">Select an Application</option>
+                {applications.data?.items.map((application) => (
+                  <option key={application.id} value={application.id}>
+                    {application.name} · {application.platform}
+                  </option>
+                ))}
+              </select>
+              <span className="text-muted-foreground block text-xs font-normal">
+                Public SDK keys must be bound to one registered Application to ingest analytics.
+                Tenant scope still comes from the key; events never submit an Application ID.
+              </span>
+            </label>
+            <div className="flex flex-wrap gap-2">
+              <Button
+                disabled={!applicationId || create.isPending}
+                onClick={() =>
+                  create.mutate(buildApiKeyCreationInput("public_sdk", applicationId), {
+                    onSuccess: revealSecret,
+                  })
+                }
+              >
+                <KeyIcon aria-hidden size={16} />
+                Create SDK key
+              </Button>
+              <Button
+                onClick={() =>
+                  create.mutate(buildApiKeyCreationInput("secret_server"), {
+                    onSuccess: revealSecret,
+                  })
+                }
+                variant="outline"
+              >
+                Create server key
+              </Button>
+            </div>
           </div>
           {create.error || rotate.error || revoke.error ? (
             <p className="text-destructive mt-4 text-sm" role="alert">
@@ -252,4 +299,8 @@ export function ApiKeysPage({ environmentId, organizationId, projectId }: ApiKey
       ) : null}
     </WorkspacePage>
   )
+}
+
+function readApiKeyApplicationId(apiKey: ApiKey) {
+  return apiKey.applicationId
 }

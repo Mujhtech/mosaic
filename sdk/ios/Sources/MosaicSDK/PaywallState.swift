@@ -34,6 +34,7 @@ public final class MosaicPaywallModel: ObservableObject {
   private let resultHandler: @MainActor (MosaicPresentationResult) -> Void
   private let productReferencesByID: [String: MosaicProductReference]
   private let clock: @Sendable () -> Date
+  private let analytics: MosaicAnalyticsPresentationInstrumentation?
   private var hasPrepared = false
   private var diagnosedHiddenPurchaseButtonIDs = Set<String>()
   private var diagnosedRenderingSubjects = Set<String>()
@@ -43,6 +44,7 @@ public final class MosaicPaywallModel: ObservableObject {
     requestedLocale: String? = nil,
     purchaseProvider: any MosaicPurchaseProvider,
     clock: @escaping @Sendable () -> Date = { Date() },
+    analytics: MosaicAnalyticsPresentationInstrumentation? = nil,
     onInteraction: @escaping @MainActor (MosaicInteractionOutcome) -> Void = { _ in },
     onResult: @escaping @MainActor (MosaicPresentationResult) -> Void
   ) {
@@ -53,6 +55,7 @@ public final class MosaicPaywallModel: ObservableObject {
     )
     self.purchaseProvider = purchaseProvider
     self.clock = clock
+    self.analytics = analytics
     interactionHandler = onInteraction
     resultHandler = onResult
     productReferencesByID = Dictionary(
@@ -98,13 +101,40 @@ public final class MosaicPaywallModel: ObservableObject {
     defer { isLoadingProducts = false }
 
     let providerIDs = document.products.map(\.productId)
+    let loadStartedAt = clock()
+    let loadAttemptID = MosaicAnalyticsRuntime.identifier(prefix: "product_load")
+    if !providerIDs.isEmpty {
+      analytics?.emit(
+        .productLoadStarted,
+        correlation: .init(productLoadAttemptId: loadAttemptID),
+        payload: .init(requestedProductCount: min(64, providerIDs.count)),
+        occurredAt: loadStartedAt)
+    }
     let loadResult = await purchaseProvider.loadProducts(identifiers: providerIDs)
     let products: [MosaicProduct]
     switch loadResult {
     case .loaded(let loaded):
       products = loaded
+      if !providerIDs.isEmpty {
+        analytics?.emit(
+          .productLoadCompleted,
+          correlation: .init(productLoadAttemptId: loadAttemptID),
+          payload: .init(
+            availableProductCount: min(64, loaded.count),
+            unavailableProductCount: min(64, max(0, providerIDs.count - loaded.count)),
+            durationMs: durationMilliseconds(since: loadStartedAt)))
+      }
     case .unavailable(_, let diagnosticCode, _):
       products = []
+      if !providerIDs.isEmpty {
+        analytics?.emit(
+          .productLoadFailed,
+          correlation: .init(productLoadAttemptId: loadAttemptID),
+          payload: .init(
+            diagnosticCode: "commerce.product_load_failed", retryable: true,
+            requestedProductCount: min(64, providerIDs.count),
+            durationMs: durationMilliseconds(since: loadStartedAt)))
+      }
       if let diagnosticCode {
         diagnostics.append(
           MosaicDiagnostic(
@@ -124,6 +154,17 @@ public final class MosaicPaywallModel: ObservableObject {
         productsByProviderID[reference.productId].map { (reference.id, $0) }
       }
     )
+    let unavailableReason = {
+      if case .unavailable = loadResult { return "provider_unavailable" }
+      return "product_not_found"
+    }()
+    for reference in document.products where productsByReferenceID[reference.id] == nil {
+      analytics?.emit(
+        .productUnavailable,
+        correlation: .init(productLoadAttemptId: loadAttemptID),
+        attribution: analytics?.productAttribution(reference.id),
+        payload: .init(reason: unavailableReason))
+    }
 
     for selector in document.productSelectors {
       let available = availableOptions(for: selector)
@@ -138,6 +179,10 @@ public final class MosaicPaywallModel: ObservableObject {
       if let selected = initial ?? available.first {
         selectedProductCardIDs[selector.id] = selected.card?.id
         selectedProductReferenceIDs[selector.id] = selected.reference.id
+        analytics?.emit(
+          .productSelected,
+          attribution: analytics?.productAttribution(selected.reference.id),
+          payload: .init(source: "default"))
       } else {
         selectedProductCardIDs[selector.id] = nil
         selectedProductReferenceIDs[selector.id] = nil
@@ -290,6 +335,12 @@ public final class MosaicPaywallModel: ObservableObject {
     appendDiagnostic(code: "external_url_open_failed")
   }
 
+  public func recordExternalURLAction(componentID: String) {
+    analytics?.emit(
+      .paywallActionSelected,
+      payload: .init(action: "open_external_url", componentId: componentID))
+  }
+
   public func currentDate() -> Date { clock() }
 
   public func selectProduct(referenceID: String, in selectorID: String) {
@@ -302,6 +353,10 @@ public final class MosaicPaywallModel: ObservableObject {
     selectedProductCardIDs[selectorID] = option.card?.id
     selectedProductReferenceIDs[selectorID] = referenceID
     interactionHandler(.productSelected(productReferenceID: referenceID))
+    analytics?.emit(
+      .productSelected,
+      attribution: analytics?.productAttribution(referenceID),
+      payload: .init(source: "user"))
   }
 
   public func selectProduct(cardID: String, in selectorID: String) {
@@ -312,6 +367,10 @@ public final class MosaicPaywallModel: ObservableObject {
     selectedProductCardIDs[selectorID] = cardID
     selectedProductReferenceIDs[selectorID] = option.reference.id
     interactionHandler(.productSelected(productReferenceID: option.reference.id))
+    analytics?.emit(
+      .productSelected,
+      attribution: analytics?.productAttribution(option.reference.id),
+      payload: .init(source: "user"))
   }
 
   public func isPurchaseEnabled(_ button: MosaicPurchaseButtonComponent) -> Bool {
@@ -343,11 +402,18 @@ public final class MosaicPaywallModel: ObservableObject {
     guard isButtonEnabled(button) else { return }
     switch button.action {
     case .close:
+      analytics?.emit(
+        .paywallActionSelected, payload: .init(action: "close", componentId: button.id))
+      analytics?.emit(.paywallDismissed, payload: .init(reason: "user"))
       interactionHandler(.dismissed)
       resultHandler(.dismissed)
     case .navigateTo(let screenID):
+      analytics?.emit(
+        .paywallActionSelected, payload: .init(action: "navigate_to", componentId: button.id))
       navigate(to: screenID)
     case .navigateBack:
+      analytics?.emit(
+        .paywallActionSelected, payload: .init(action: "navigate_back", componentId: button.id))
       navigateBack()
     case .purchase, .restore, .openExternalURL:
       break
@@ -359,6 +425,8 @@ public final class MosaicPaywallModel: ObservableObject {
       reportRenderingFailure(code: "renderer_invalid_purchase_action")
       return
     }
+    analytics?.emit(
+      .paywallActionSelected, payload: .init(action: "purchase", componentId: button.id))
     await purchase(buttonID: button.id, selectorID: selectorID)
   }
 
@@ -368,6 +436,8 @@ public final class MosaicPaywallModel: ObservableObject {
       return
     }
     guard !busyButtonIDs.contains(button.id) else { return }
+    analytics?.emit(
+      .paywallActionSelected, payload: .init(action: "restore", componentId: button.id))
     busyButtonIDs.insert(button.id)
     defer { busyButtonIDs.remove(button.id) }
     await performRestore()
@@ -397,7 +467,19 @@ public final class MosaicPaywallModel: ObservableObject {
 
     busyPurchaseButtonID = button.id
     defer { busyPurchaseButtonID = nil }
-    switch await purchaseProvider.purchase(productID: reference.productId) {
+    analytics?.emit(
+      .paywallActionSelected, payload: .init(action: "purchase", componentId: button.id))
+    let attemptID = MosaicAnalyticsRuntime.identifier(prefix: "purchase_attempt")
+    let startedAt = clock()
+    if let attribution = analytics?.purchaseAttribution(referenceID) {
+      analytics?.emit(
+        .purchaseStarted, correlation: .init(purchaseAttemptId: attemptID),
+        attribution: attribution, payload: .init(), occurredAt: startedAt)
+    }
+    let purchaseResult = await purchaseProvider.purchase(productID: reference.productId)
+    recordPurchaseAnalytics(
+      purchaseResult, referenceID: referenceID, attemptID: attemptID, startedAt: startedAt)
+    switch purchaseResult {
     case .purchased:
       interactionHandler(.purchased(productReferenceID: referenceID))
       resultHandler(.purchased(productReferenceID: referenceID))
@@ -452,7 +534,18 @@ public final class MosaicPaywallModel: ObservableObject {
 
     busyRestoreButtonID = button.id
     defer { busyRestoreButtonID = nil }
-    switch await purchaseProvider.restore() {
+    analytics?.emit(
+      .paywallActionSelected, payload: .init(action: "restore", componentId: button.id))
+    let attemptID = MosaicAnalyticsRuntime.identifier(prefix: "restore_attempt")
+    let startedAt = clock()
+    if let providerID = analytics?.providerID {
+      analytics?.emit(
+        .restoreStarted, correlation: .init(restoreAttemptId: attemptID),
+        payload: .init(providerId: providerID), occurredAt: startedAt)
+    }
+    let restoreResult = await purchaseProvider.restore()
+    recordRestoreAnalytics(restoreResult, attemptID: attemptID, startedAt: startedAt)
+    switch restoreResult {
     case .restored:
       interactionHandler(.restored)
       resultHandler(.restored)
@@ -484,6 +577,9 @@ public final class MosaicPaywallModel: ObservableObject {
       reportRenderingFailure(code: "renderer_invalid_close_action")
       return
     }
+    analytics?.emit(
+      .paywallActionSelected, payload: .init(action: "close", componentId: button.id))
+    analytics?.emit(.paywallDismissed, payload: .init(reason: "user"))
     interactionHandler(.dismissed)
     resultHandler(.dismissed)
   }
@@ -510,7 +606,17 @@ public final class MosaicPaywallModel: ObservableObject {
 
     busyButtonIDs.insert(buttonID)
     defer { busyButtonIDs.remove(buttonID) }
-    switch await purchaseProvider.purchase(productID: reference.productId) {
+    let attemptID = MosaicAnalyticsRuntime.identifier(prefix: "purchase_attempt")
+    let startedAt = clock()
+    if let attribution = analytics?.purchaseAttribution(referenceID) {
+      analytics?.emit(
+        .purchaseStarted, correlation: .init(purchaseAttemptId: attemptID),
+        attribution: attribution, payload: .init(), occurredAt: startedAt)
+    }
+    let purchaseResult = await purchaseProvider.purchase(productID: reference.productId)
+    recordPurchaseAnalytics(
+      purchaseResult, referenceID: referenceID, attemptID: attemptID, startedAt: startedAt)
+    switch purchaseResult {
     case .purchased:
       interactionHandler(.purchased(productReferenceID: referenceID))
       resultHandler(.purchased(productReferenceID: referenceID))
@@ -557,7 +663,16 @@ public final class MosaicPaywallModel: ObservableObject {
   }
 
   private func performRestore() async {
-    switch await purchaseProvider.restore() {
+    let attemptID = MosaicAnalyticsRuntime.identifier(prefix: "restore_attempt")
+    let startedAt = clock()
+    if let providerID = analytics?.providerID {
+      analytics?.emit(
+        .restoreStarted, correlation: .init(restoreAttemptId: attemptID),
+        payload: .init(providerId: providerID), occurredAt: startedAt)
+    }
+    let restoreResult = await purchaseProvider.restore()
+    recordRestoreAnalytics(restoreResult, attemptID: attemptID, startedAt: startedAt)
+    switch restoreResult {
     case .restored:
       interactionHandler(.restored)
       resultHandler(.restored)
@@ -584,9 +699,102 @@ public final class MosaicPaywallModel: ObservableObject {
     }
   }
 
+  private func recordPurchaseAnalytics(
+    _ result: MosaicPurchaseResult, referenceID: String, attemptID: String, startedAt: Date
+  ) {
+    guard let analytics, let attribution = analytics.purchaseAttribution(referenceID) else {
+      return
+    }
+    let correlation = MosaicAnalyticsCorrelation(purchaseAttemptId: attemptID)
+    let duration = durationMilliseconds(since: startedAt)
+    switch result {
+    case .purchased:
+      analytics.emit(
+        .purchaseCompletedClient, correlation: correlation, attribution: attribution,
+        payload: .init(
+          durationMs: duration, outcome: "purchased", observedEntitlementKeys: []))
+      analytics.emit(.paywallDismissed, payload: .init(reason: "purchase_completed"))
+    case .alreadyEntitled:
+      analytics.emit(
+        .purchaseCompletedClient, correlation: correlation, attribution: attribution,
+        payload: .init(
+          durationMs: duration, outcome: "already_entitled", observedEntitlementKeys: []))
+    case .pending:
+      analytics.emit(
+        .purchasePending, correlation: correlation, attribution: attribution,
+        payload: .init(durationMs: duration))
+    case .deferred:
+      analytics.emit(
+        .purchaseDeferred, correlation: correlation, attribution: attribution,
+        payload: .init(durationMs: duration))
+    case .cancelled:
+      analytics.emit(
+        .purchaseCancelled, correlation: correlation, attribution: attribution,
+        payload: .init(durationMs: duration))
+    case .providerUnavailable:
+      analytics.emit(
+        .purchaseFailed, correlation: correlation, attribution: attribution,
+        payload: .init(
+          diagnosticCode: "commerce.provider_unavailable", retryable: true,
+          durationMs: duration))
+    case .failed:
+      analytics.emit(
+        .purchaseFailed, correlation: correlation, attribution: attribution,
+        payload: .init(
+          diagnosticCode: "commerce.purchase_failed", retryable: false,
+          durationMs: duration))
+    case .productUnavailable:
+      break
+    }
+  }
+
+  private func recordRestoreAnalytics(
+    _ result: MosaicRestoreResult, attemptID: String, startedAt: Date
+  ) {
+    guard let analytics, let providerID = analytics.providerID else { return }
+    let correlation = MosaicAnalyticsCorrelation(restoreAttemptId: attemptID)
+    let duration = durationMilliseconds(since: startedAt)
+    switch result {
+    case .restored(let entitlements):
+      analytics.emit(
+        .restoreCompleted, correlation: correlation,
+        payload: .init(
+          durationMs: duration,
+          observedEntitlementKeys: Array(entitlements.map(\.id).sorted().prefix(64)),
+          providerId: providerID, restoredProductIds: []))
+    case .nothingToRestore:
+      analytics.emit(
+        .restoreNothingFound, correlation: correlation,
+        payload: .init(durationMs: duration, providerId: providerID))
+    case .cancelled:
+      analytics.emit(
+        .restoreCancelled, correlation: correlation,
+        payload: .init(durationMs: duration, providerId: providerID))
+    case .providerUnavailable:
+      analytics.emit(
+        .restoreFailed, correlation: correlation,
+        payload: .init(
+          diagnosticCode: "commerce.provider_unavailable", retryable: true,
+          durationMs: duration, providerId: providerID))
+    case .failed:
+      analytics.emit(
+        .restoreFailed, correlation: correlation,
+        payload: .init(
+          diagnosticCode: "commerce.restore_failed", retryable: false,
+          durationMs: duration, providerId: providerID))
+    }
+  }
+
+  private func durationMilliseconds(since start: Date) -> Int {
+    min(86_400_000, max(0, Int(clock().timeIntervalSince(start) * 1_000)))
+  }
+
   public func reportRenderingFailure(code: String) {
     let safeCode = safeDiagnosticCode(code, fallback: "renderer_failed")
     diagnostics.append(MosaicDiagnostic(code: safeCode, stage: .rendering))
+    analytics?.emit(
+      .paywallRenderFailed,
+      payload: .init(diagnosticCode: "rendering.failed", retryable: false))
     resultHandler(.renderingFailed(diagnosticCode: safeCode))
   }
 

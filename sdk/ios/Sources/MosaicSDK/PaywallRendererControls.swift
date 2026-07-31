@@ -160,6 +160,7 @@ struct MosaicButtonView: View {
     case .close, .navigateTo, .navigateBack:
       model.performSynchronousAction(using: component)
     case .openExternalURL(let url):
+      model.recordExternalURLAction(componentID: component.id)
       openURL(url) { accepted in
         model.recordExternalURLOpenResult(accepted)
       }
@@ -755,4 +756,3 @@ struct MosaicBackgroundView: View {
   }
 
 }
-

@@ -119,32 +119,40 @@ class MainActivity : ComponentActivity() {
             purchaseProvider,
             endpoint,
             applicationId = applicationId,
+            analyticsCollectionEnabled = intent.getBooleanExtra(ANALYTICS_ENABLED_EXTRA, false),
         )
         val hosted = mosaic.hostedConfiguration(applicationContext)
         val placement = intent.getStringExtra(PLACEMENT_EXTRA)?.takeIf(String::isNotBlank)
             ?: "onboarding_complete"
         setContent {
             MaterialTheme {
+                var analyticsStatus by remember { mutableStateOf("Analytics disabled or waiting.") }
                 LaunchedEffect(hosted, placement) {
                     hosted.refresh()
+                    if (intent.getBooleanExtra(ANALYTICS_FLUSH_EXTRA, false)) hosted.flushAnalytics()
+                    val diagnostics = hosted.analyticsDiagnostics()
+                    analyticsStatus = "Analytics queue: ${diagnostics.queuedEventCount} events · ${diagnostics.queuedBytes} bytes"
                 }
-                MosaicPlacement(
-                    client = hosted,
-                    placement = placement,
-                    purchaseProvider = purchaseProvider,
-                    // Country is intentionally omitted unless the host has an explicit trusted value.
-                    onDecision = { decision ->
-                        when (decision) {
-                            is MosaicPlacementDecisionResult.Available -> Unit
-                            is MosaicPlacementDecisionResult.NoPaywall -> Unit
-                            is MosaicPlacementDecisionResult.PlacementUnavailable -> Unit
-                            is MosaicPlacementDecisionResult.EvaluationFailed -> Unit
-                            MosaicPlacementDecisionResult.ConfigurationUnavailable -> Unit
-                        }
-                    },
-                    onResult = {},
-                    modifier = Modifier.fillMaxSize(),
-                )
+                Column(Modifier.fillMaxSize()) {
+                    Text(analyticsStatus, modifier = Modifier.padding(12.dp))
+                    MosaicPlacement(
+                        client = hosted,
+                        placement = placement,
+                        purchaseProvider = purchaseProvider,
+                        // Country is intentionally omitted unless the host has an explicit trusted value.
+                        onDecision = { decision ->
+                            when (decision) {
+                                is MosaicPlacementDecisionResult.Available -> Unit
+                                is MosaicPlacementDecisionResult.NoPaywall -> Unit
+                                is MosaicPlacementDecisionResult.PlacementUnavailable -> Unit
+                                is MosaicPlacementDecisionResult.EvaluationFailed -> Unit
+                                MosaicPlacementDecisionResult.ConfigurationUnavailable -> Unit
+                            }
+                        },
+                        onResult = {},
+                        modifier = Modifier.weight(1f),
+                    )
+                }
             }
         }
     }
@@ -181,5 +189,7 @@ class MainActivity : ComponentActivity() {
         const val APPLICATION_ID_EXTRA = "mosaic.application.id"
         const val REVENUECAT_PUBLIC_KEY_EXTRA = "revenuecat.public.sdk.key"
         const val GOOGLE_PLAY_PROVIDER_EXTRA = "mosaic.google.play"
+        const val ANALYTICS_ENABLED_EXTRA = "mosaic.analytics.enabled"
+        const val ANALYTICS_FLUSH_EXTRA = "mosaic.analytics.flush"
     }
 }

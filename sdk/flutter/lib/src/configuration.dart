@@ -1,5 +1,9 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 
+import 'analytics.dart';
+import 'analytics_event.dart';
 import 'commerce.dart';
 import 'commerce_configuration.dart';
 import 'commerce_configuration_transport.dart';
@@ -9,6 +13,7 @@ import 'configuration_transport.dart';
 import 'placement_decision.dart';
 import 'placement_identity.dart';
 import 'presentation.dart';
+import 'protocol.dart';
 
 /// Immutable settings captured when a Mosaic client is configured.
 final class MosaicConfiguration {
@@ -127,9 +132,11 @@ final class Mosaic extends ChangeNotifier {
     required this.purchaseProvider,
     required MosaicConfigurationClient? configurationClient,
     required MosaicIdentityController identityController,
+    MosaicAnalyticsRuntime? analyticsRuntime,
     MosaicCommerceProviderRouter? commerceProviderRouter,
   })  : _configurationClient = configurationClient,
         _identityController = identityController,
+        _analyticsRuntime = analyticsRuntime,
         _commerceProviderRouter = commerceProviderRouter;
 
   factory Mosaic.configure({
@@ -148,6 +155,15 @@ final class Mosaic extends ChangeNotifier {
         const MosaicIoConfigurationTransport(),
     MosaicConfigurationCache cache = const MosaicFileConfigurationCache(),
     MosaicIdentityStorage identityStorage = const MosaicFileIdentityStorage(),
+    MosaicAnalyticsStorage analyticsStorage =
+        const MosaicFileAnalyticsStorage(),
+    MosaicAnalyticsTransport? analyticsTransport,
+    MosaicAnalyticsEnvironmentSettings analyticsEnvironmentSettings =
+        const MosaicAnalyticsEnvironmentSettings(collectionEnabled: false),
+    bool analyticsHostEnabled = true,
+    String analyticsSdkVersion = mosaicFlutterSdkVersion,
+    String? operatingSystemVersion,
+    String? locale,
     MosaicBundledConfigurationLoader? bundledFallbackLoader,
     MosaicCommerceConfigurationLoader? commerceConfigurationLoader,
     MosaicCommerceConfigurationTransport? commerceConfigurationTransport,
@@ -191,16 +207,46 @@ final class Mosaic extends ChangeNotifier {
                 timeout: configuration.requestTimeout,
               )
             : null);
+    final identityController = MosaicIdentityController(
+      storage: identityStorage,
+      namespace: mosaicIdentityNamespace(
+        resolvedBaseUrl ?? Uri.parse('mosaic://local'),
+        configuration.publicSdkKey,
+      ),
+    );
+    final resolvedAnalyticsTransport = analyticsTransport ??
+        (resolvedBaseUrl == null
+            ? null
+            : MosaicIoAnalyticsTransport(
+                baseUrl: resolvedBaseUrl,
+                publicSdkKey: configuration.publicSdkKey,
+                timeout: configuration.requestTimeout,
+              ));
+    final runtime = resolvedAnalyticsTransport == null
+        ? null
+        : MosaicAnalyticsRuntime.acquire(
+            namespace: mosaicAnalyticsNamespace(
+              resolvedBaseUrl!,
+              configuration.publicSdkKey,
+            ),
+            identityController: identityController,
+            context: MosaicAnalyticsContext(
+              platform: _analyticsPlatform,
+              sdkVersion: analyticsSdkVersion,
+              operatingSystemVersion: operatingSystemVersion,
+              applicationVersion: configuration.applicationVersion,
+              locale: locale,
+            ),
+            transport: resolvedAnalyticsTransport,
+            storage: analyticsStorage,
+            environmentEnabled: analyticsEnvironmentSettings.collectionEnabled,
+            hostEnabled: analyticsHostEnabled,
+          );
     return Mosaic._(
       configuration: configuration,
       purchaseProvider: resolvedPurchaseProvider,
-      identityController: MosaicIdentityController(
-        storage: identityStorage,
-        namespace: mosaicIdentityNamespace(
-          resolvedBaseUrl ?? Uri.parse('mosaic://local'),
-          configuration.publicSdkKey,
-        ),
-      ),
+      identityController: identityController,
+      analyticsRuntime: runtime,
       configurationClient: resolvedBaseUrl == null
           ? null
           : MosaicConfigurationClient(
@@ -240,6 +286,7 @@ final class Mosaic extends ChangeNotifier {
   final MosaicPurchaseProvider purchaseProvider;
   final MosaicConfigurationClient? _configurationClient;
   final MosaicIdentityController _identityController;
+  final MosaicAnalyticsRuntime? _analyticsRuntime;
   final MosaicCommerceProviderRouter? _commerceProviderRouter;
 
   MosaicAcceptedConfiguration? get acceptedConfiguration =>
@@ -249,6 +296,9 @@ final class Mosaic extends ChangeNotifier {
       acceptedConfiguration?.commerceEnvelope?.configuration;
 
   MosaicIdentityState? get identity => _identityController.current;
+  MosaicAnalyticsRuntime? get analytics => _analyticsRuntime;
+  MosaicAnalyticsCapabilityReport get analyticsCapabilityReport =>
+      MosaicAnalyticsCapabilityReport();
 
   /// Loads or creates the stable app-install-scoped anonymous identity.
   Future<MosaicIdentityState> loadIdentity() => _identityController.load();
@@ -256,7 +306,11 @@ final class Mosaic extends ChangeNotifier {
   /// Sets the host application's user identity. This may intentionally change
   /// assignments for Rule Sets using an identified-user policy.
   Future<MosaicIdentityState> identify(String userId) async {
+    final previous = await _identityController.load();
     final result = await _identityController.identify(userId);
+    await _analyticsRuntime?.identityDidChange(
+      effectiveUserChange: previous.userId != result.userId,
+    );
     notifyListeners();
     return result;
   }
@@ -291,16 +345,59 @@ final class Mosaic extends ChangeNotifier {
 
   /// Clears user identity and attributes while retaining installation identity.
   Future<MosaicIdentityState> resetUserIdentity() async {
+    final previous = await _identityController.load();
     final result = await _identityController.resetUser();
+    await _analyticsRuntime?.identityDidChange(
+      effectiveUserChange:
+          previous.userId != null || previous.attributes.isNotEmpty,
+    );
     notifyListeners();
     return result;
   }
 
-  /// Explicitly rotates the installation identity. User identity is retained.
+  /// Rotates installation identity and clears all user-bound state.
   Future<MosaicIdentityState> resetInstallationIdentity() async {
     final result = await _identityController.rotateInstallation();
+    await _analyticsRuntime?.identityDidChange(effectiveUserChange: true);
     notifyListeners();
     return result;
+  }
+
+  /// Public alias matching the cross-platform Phase 6 identity contract.
+  Future<MosaicIdentityState> resetIdentity() => resetUserIdentity();
+
+  Future<void> setAnalyticsCollection({
+    required bool environmentEnabled,
+    bool hostEnabled = true,
+  }) async =>
+      _analyticsRuntime?.setCollection(
+        environment: MosaicAnalyticsEnvironmentSettings(
+          collectionEnabled: environmentEnabled,
+        ),
+        hostEnabled: hostEnabled,
+      );
+
+  Future<MosaicAnalyticsFlushResult> flushAnalytics() async {
+    final runtime = _analyticsRuntime;
+    return runtime == null
+        ? const MosaicAnalyticsFlushDisabled()
+        : await runtime.flush();
+  }
+
+  Future<MosaicAnalyticsDiagnostics> analyticsDiagnostics() async {
+    final runtime = _analyticsRuntime;
+    return runtime == null
+        ? const MosaicAnalyticsDiagnostics(
+            collectionEnabled: false,
+            queuedEvents: 0,
+            queuedBytes: 0,
+            droppedEvents: 0,
+            expiredEvents: 0,
+            permanentlyRejectedEvents: 0,
+            retryableEvents: 0,
+            attemptsExhaustedEvents: 0,
+          )
+        : await runtime.diagnostics();
   }
 
   MosaicConfigurationCapabilityRequest get capabilityRequest =>
@@ -340,9 +437,15 @@ final class Mosaic extends ChangeNotifier {
   @override
   void dispose() {
     _commerceProviderRouter?.deactivate();
+    if (_analyticsRuntime case final runtime?) unawaited(runtime.release());
     super.dispose();
   }
 }
+
+String get _analyticsPlatform => switch (defaultTargetPlatform) {
+      TargetPlatform.iOS => 'ios',
+      _ => 'android',
+    };
 
 final class MosaicConfigurationException implements Exception {
   const MosaicConfigurationException(this.message);

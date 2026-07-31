@@ -1,0 +1,34 @@
+{
+  "eventId": "event_invalid_incomplete_rollout",
+  "eventSchemaVersion": "1",
+  "eventName": "placement_no_paywall",
+  "occurredAt": "2026-07-26T12:00:00.090Z",
+  "queuedAt": "2026-07-26T12:00:00.095Z",
+  "authority": "client_observed",
+  "identity": {
+    "installationId": "installation_7f39d5a2",
+    "generation": 3
+  },
+  "sessionId": "session_public_beta_001",
+  "context": {
+    "platform": "ios",
+    "sdkFamily": "ios",
+    "sdkVersion": "0.6.0"
+  },
+  "correlation": {
+    "placementRequestId": "placement_request_001"
+  },
+  "attribution": {
+    "configurationReleaseId": "configuration_release_42",
+    "placementId": "placement_export_pdf",
+    "placementRuleSetId": "rule_set_export_pdf",
+    "placementRuleSetVersion": 7,
+    "winningRuleId": "rule_holdout"
+  },
+  "payload": {
+    "finalOutcome": "no_paywall",
+    "decisionContractVersion": "1",
+    "assignmentKeyType": "installation",
+    "rolloutBucket": 1742
+  }
+}

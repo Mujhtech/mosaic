@@ -22,6 +22,7 @@ public enum MockMosaicRestoreBehavior: Sendable, Equatable {
 /// Deterministic provider for Phase 1 examples and tests; it never talks to a
 /// store and is not a StoreKit simulator or production adapter.
 public actor MockMosaicPurchaseProvider: MosaicPurchaseProvider {
+  public var mosaicAnalyticsProviderID: String? { "mock" }
   private let products: [String: MosaicProduct]
   private let purchaseBehavior: MockMosaicPurchaseBehavior
   private let restoreBehavior: MockMosaicRestoreBehavior

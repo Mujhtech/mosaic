@@ -233,7 +233,7 @@ func (h *Handler) createAPIKey(w http.ResponseWriter, r *http.Request) {
 	if !decodeAndValidate(w, r, request) {
 		return
 	}
-	result, err := h.service.CreateAPIKey(r.Context(), actor(r), chi.URLParam(r, "environmentId"), request.Kind)
+	result, err := h.service.CreateAPIKey(r.Context(), actor(r), chi.URLParam(r, "environmentId"), request.Kind, request.ApplicationID)
 	if err != nil {
 		writeServiceError(w, r, err)
 		return

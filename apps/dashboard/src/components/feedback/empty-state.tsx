@@ -14,7 +14,7 @@ export function EmptyState({ action, className, description, title }: EmptyState
     <section
       aria-live="polite"
       className={cn(
-        "border-border bg-muted/25 flex min-h-52 flex-col items-center justify-center rounded-2xl border border-dashed px-6 py-10 text-center",
+        "border-border bg-muted/25 flex min-h-52 flex-col items-center justify-center rounded border border-dashed px-6 py-10 text-center",
         className,
       )}
       role="status"

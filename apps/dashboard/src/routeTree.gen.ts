@@ -37,6 +37,7 @@ import { Route as HostedOrganizationsOrganizationIdProjectsProjectIdCatalogProvi
 import { Route as HostedOrganizationsOrganizationIdProjectsProjectIdCatalogProductsProductIdRouteImport } from './routes/_hosted/organizations/$organizationId/projects/$projectId/catalog/products/$productId'
 import { Route as HostedOrganizationsOrganizationIdProjectsProjectIdCatalogPlansPlanIdRouteImport } from './routes/_hosted/organizations/$organizationId/projects/$projectId/catalog/plans/$planId'
 import { Route as HostedOrganizationsOrganizationIdProjectsProjectIdCatalogEntitlementsEntitlementIdRouteImport } from './routes/_hosted/organizations/$organizationId/projects/$projectId/catalog/entitlements/$entitlementId'
+import { Route as HostedOrganizationsOrganizationIdProjectsProjectIdAnalyticsEnvironmentIdSurfaceRouteImport } from './routes/_hosted/organizations/$organizationId/projects/$projectId/analytics/$environmentId/$surface'
 import { Route as HostedOrganizationsOrganizationIdProjectsProjectIdMonetizationEnvironmentIdPlacementsPlacementIdRouteImport } from './routes/_hosted/organizations/$organizationId/projects/$projectId/monetization/$environmentId/placements/$placementId'
 import { Route as HostedOrganizationsOrganizationIdProjectsProjectIdMonetizationEnvironmentIdPaywallsPaywallIdRouteImport } from './routes/_hosted/organizations/$organizationId/projects/$projectId/monetization/$environmentId/paywalls/$paywallId'
 
@@ -229,6 +230,14 @@ const HostedOrganizationsOrganizationIdProjectsProjectIdCatalogEntitlementsEntit
       getParentRoute: () => HostedRoute,
     } as any,
   )
+const HostedOrganizationsOrganizationIdProjectsProjectIdAnalyticsEnvironmentIdSurfaceRoute =
+  HostedOrganizationsOrganizationIdProjectsProjectIdAnalyticsEnvironmentIdSurfaceRouteImport.update(
+    {
+      id: '/organizations/$organizationId/projects/$projectId/analytics/$environmentId/$surface',
+      path: '/organizations/$organizationId/projects/$projectId/analytics/$environmentId/$surface',
+      getParentRoute: () => HostedRoute,
+    } as any,
+  )
 const HostedOrganizationsOrganizationIdProjectsProjectIdMonetizationEnvironmentIdPlacementsPlacementIdRoute =
   HostedOrganizationsOrganizationIdProjectsProjectIdMonetizationEnvironmentIdPlacementsPlacementIdRouteImport.update(
     {
@@ -264,6 +273,7 @@ export interface FileRoutesByFullPath {
   '/organizations/$organizationId/projects/$projectId/settings/api-keys': typeof HostedOrganizationsOrganizationIdProjectsProjectIdSettingsApiKeysRoute
   '/organizations/$organizationId/projects/$projectId/settings/environments': typeof HostedOrganizationsOrganizationIdProjectsProjectIdSettingsEnvironmentsRoute
   '/studio-hosted/$organizationId/$projectId/$environmentId/$paywallId/$draftId': typeof Studio_layoutStudioHostedOrganizationIdProjectIdEnvironmentIdPaywallIdDraftIdRoute
+  '/organizations/$organizationId/projects/$projectId/analytics/$environmentId/$surface': typeof HostedOrganizationsOrganizationIdProjectsProjectIdAnalyticsEnvironmentIdSurfaceRoute
   '/organizations/$organizationId/projects/$projectId/catalog/entitlements/$entitlementId': typeof HostedOrganizationsOrganizationIdProjectsProjectIdCatalogEntitlementsEntitlementIdRoute
   '/organizations/$organizationId/projects/$projectId/catalog/plans/$planId': typeof HostedOrganizationsOrganizationIdProjectsProjectIdCatalogPlansPlanIdRoute
   '/organizations/$organizationId/projects/$projectId/catalog/products/$productId': typeof HostedOrganizationsOrganizationIdProjectsProjectIdCatalogProductsProductIdRoute
@@ -294,6 +304,7 @@ export interface FileRoutesByTo {
   '/organizations/$organizationId/projects/$projectId/settings/api-keys': typeof HostedOrganizationsOrganizationIdProjectsProjectIdSettingsApiKeysRoute
   '/organizations/$organizationId/projects/$projectId/settings/environments': typeof HostedOrganizationsOrganizationIdProjectsProjectIdSettingsEnvironmentsRoute
   '/studio-hosted/$organizationId/$projectId/$environmentId/$paywallId/$draftId': typeof Studio_layoutStudioHostedOrganizationIdProjectIdEnvironmentIdPaywallIdDraftIdRoute
+  '/organizations/$organizationId/projects/$projectId/analytics/$environmentId/$surface': typeof HostedOrganizationsOrganizationIdProjectsProjectIdAnalyticsEnvironmentIdSurfaceRoute
   '/organizations/$organizationId/projects/$projectId/catalog/entitlements/$entitlementId': typeof HostedOrganizationsOrganizationIdProjectsProjectIdCatalogEntitlementsEntitlementIdRoute
   '/organizations/$organizationId/projects/$projectId/catalog/plans/$planId': typeof HostedOrganizationsOrganizationIdProjectsProjectIdCatalogPlansPlanIdRoute
   '/organizations/$organizationId/projects/$projectId/catalog/products/$productId': typeof HostedOrganizationsOrganizationIdProjectsProjectIdCatalogProductsProductIdRoute
@@ -327,6 +338,7 @@ export interface FileRoutesById {
   '/_hosted/organizations/$organizationId/projects/$projectId/settings/api-keys': typeof HostedOrganizationsOrganizationIdProjectsProjectIdSettingsApiKeysRoute
   '/_hosted/organizations/$organizationId/projects/$projectId/settings/environments': typeof HostedOrganizationsOrganizationIdProjectsProjectIdSettingsEnvironmentsRoute
   '/_studio_layout/studio-hosted/$organizationId/$projectId/$environmentId/$paywallId/$draftId': typeof Studio_layoutStudioHostedOrganizationIdProjectIdEnvironmentIdPaywallIdDraftIdRoute
+  '/_hosted/organizations/$organizationId/projects/$projectId/analytics/$environmentId/$surface': typeof HostedOrganizationsOrganizationIdProjectsProjectIdAnalyticsEnvironmentIdSurfaceRoute
   '/_hosted/organizations/$organizationId/projects/$projectId/catalog/entitlements/$entitlementId': typeof HostedOrganizationsOrganizationIdProjectsProjectIdCatalogEntitlementsEntitlementIdRoute
   '/_hosted/organizations/$organizationId/projects/$projectId/catalog/plans/$planId': typeof HostedOrganizationsOrganizationIdProjectsProjectIdCatalogPlansPlanIdRoute
   '/_hosted/organizations/$organizationId/projects/$projectId/catalog/products/$productId': typeof HostedOrganizationsOrganizationIdProjectsProjectIdCatalogProductsProductIdRoute
@@ -359,6 +371,7 @@ export interface FileRouteTypes {
     | '/organizations/$organizationId/projects/$projectId/settings/api-keys'
     | '/organizations/$organizationId/projects/$projectId/settings/environments'
     | '/studio-hosted/$organizationId/$projectId/$environmentId/$paywallId/$draftId'
+    | '/organizations/$organizationId/projects/$projectId/analytics/$environmentId/$surface'
     | '/organizations/$organizationId/projects/$projectId/catalog/entitlements/$entitlementId'
     | '/organizations/$organizationId/projects/$projectId/catalog/plans/$planId'
     | '/organizations/$organizationId/projects/$projectId/catalog/products/$productId'
@@ -389,6 +402,7 @@ export interface FileRouteTypes {
     | '/organizations/$organizationId/projects/$projectId/settings/api-keys'
     | '/organizations/$organizationId/projects/$projectId/settings/environments'
     | '/studio-hosted/$organizationId/$projectId/$environmentId/$paywallId/$draftId'
+    | '/organizations/$organizationId/projects/$projectId/analytics/$environmentId/$surface'
     | '/organizations/$organizationId/projects/$projectId/catalog/entitlements/$entitlementId'
     | '/organizations/$organizationId/projects/$projectId/catalog/plans/$planId'
     | '/organizations/$organizationId/projects/$projectId/catalog/products/$productId'
@@ -421,6 +435,7 @@ export interface FileRouteTypes {
     | '/_hosted/organizations/$organizationId/projects/$projectId/settings/api-keys'
     | '/_hosted/organizations/$organizationId/projects/$projectId/settings/environments'
     | '/_studio_layout/studio-hosted/$organizationId/$projectId/$environmentId/$paywallId/$draftId'
+    | '/_hosted/organizations/$organizationId/projects/$projectId/analytics/$environmentId/$surface'
     | '/_hosted/organizations/$organizationId/projects/$projectId/catalog/entitlements/$entitlementId'
     | '/_hosted/organizations/$organizationId/projects/$projectId/catalog/plans/$planId'
     | '/_hosted/organizations/$organizationId/projects/$projectId/catalog/products/$productId'
@@ -642,6 +657,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof HostedOrganizationsOrganizationIdProjectsProjectIdCatalogEntitlementsEntitlementIdRouteImport
       parentRoute: typeof HostedRoute
     }
+    '/_hosted/organizations/$organizationId/projects/$projectId/analytics/$environmentId/$surface': {
+      id: '/_hosted/organizations/$organizationId/projects/$projectId/analytics/$environmentId/$surface'
+      path: '/organizations/$organizationId/projects/$projectId/analytics/$environmentId/$surface'
+      fullPath: '/organizations/$organizationId/projects/$projectId/analytics/$environmentId/$surface'
+      preLoaderRoute: typeof HostedOrganizationsOrganizationIdProjectsProjectIdAnalyticsEnvironmentIdSurfaceRouteImport
+      parentRoute: typeof HostedRoute
+    }
     '/_hosted/organizations/$organizationId/projects/$projectId/monetization/$environmentId/placements/$placementId': {
       id: '/_hosted/organizations/$organizationId/projects/$projectId/monetization/$environmentId/placements/$placementId'
       path: '/$placementId'
@@ -715,6 +737,7 @@ interface HostedRouteChildren {
   HostedOrganizationsOrganizationIdProjectsProjectIdCatalogProvidersRoute: typeof HostedOrganizationsOrganizationIdProjectsProjectIdCatalogProvidersRouteWithChildren
   HostedOrganizationsOrganizationIdProjectsProjectIdSettingsApiKeysRoute: typeof HostedOrganizationsOrganizationIdProjectsProjectIdSettingsApiKeysRoute
   HostedOrganizationsOrganizationIdProjectsProjectIdSettingsEnvironmentsRoute: typeof HostedOrganizationsOrganizationIdProjectsProjectIdSettingsEnvironmentsRoute
+  HostedOrganizationsOrganizationIdProjectsProjectIdAnalyticsEnvironmentIdSurfaceRoute: typeof HostedOrganizationsOrganizationIdProjectsProjectIdAnalyticsEnvironmentIdSurfaceRoute
   HostedOrganizationsOrganizationIdProjectsProjectIdCatalogEntitlementsEntitlementIdRoute: typeof HostedOrganizationsOrganizationIdProjectsProjectIdCatalogEntitlementsEntitlementIdRoute
   HostedOrganizationsOrganizationIdProjectsProjectIdCatalogPlansPlanIdRoute: typeof HostedOrganizationsOrganizationIdProjectsProjectIdCatalogPlansPlanIdRoute
   HostedOrganizationsOrganizationIdProjectsProjectIdCatalogProductsProductIdRoute: typeof HostedOrganizationsOrganizationIdProjectsProjectIdCatalogProductsProductIdRoute
@@ -746,6 +769,8 @@ const HostedRouteChildren: HostedRouteChildren = {
     HostedOrganizationsOrganizationIdProjectsProjectIdSettingsApiKeysRoute,
   HostedOrganizationsOrganizationIdProjectsProjectIdSettingsEnvironmentsRoute:
     HostedOrganizationsOrganizationIdProjectsProjectIdSettingsEnvironmentsRoute,
+  HostedOrganizationsOrganizationIdProjectsProjectIdAnalyticsEnvironmentIdSurfaceRoute:
+    HostedOrganizationsOrganizationIdProjectsProjectIdAnalyticsEnvironmentIdSurfaceRoute,
   HostedOrganizationsOrganizationIdProjectsProjectIdCatalogEntitlementsEntitlementIdRoute:
     HostedOrganizationsOrganizationIdProjectsProjectIdCatalogEntitlementsEntitlementIdRoute,
   HostedOrganizationsOrganizationIdProjectsProjectIdCatalogPlansPlanIdRoute:

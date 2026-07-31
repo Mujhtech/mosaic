@@ -4,6 +4,129 @@ export type ClientOptions = {
     baseUrl: `${string}://${string}` | (string & {});
 };
 
+export type AnalyticsEventBatch = {
+    analyticsEventContractVersion: '1';
+    batchId: string;
+    sentAt: Timestamp;
+    events: Array<{
+        [key: string]: unknown;
+    }>;
+};
+
+export type AnalyticsEventResult = {
+    eventId: string;
+    status: 'accepted' | 'duplicate' | 'permanently_rejected' | 'retryable';
+    code?: string;
+};
+
+export type AnalyticsIngestionResult = {
+    analyticsEventContractVersion: '1';
+    batchId: string;
+    receivedAt: Timestamp;
+    results: Array<AnalyticsEventResult>;
+};
+
+export type AnalyticsSettings = {
+    projectId: string;
+    environmentId: string;
+    collectionEnabled: boolean;
+    rawRetentionDays: number;
+    updatedAt: Timestamp;
+};
+
+export type UpdateAnalyticsSettingsRequest = {
+    collectionEnabled: boolean;
+    rawRetentionDays: number;
+};
+
+export type AnalyticsFreshness = {
+    latestReceivedAt?: Timestamp;
+    latestAggregatedAt?: Timestamp;
+    lateEventPolicy: string;
+};
+
+export type AnalyticsMetric = {
+    id: string;
+    value?: number;
+    numerator: number;
+    denominator?: number;
+    basis: 'event_count';
+    authority: 'client_observed' | 'trusted_server' | 'provider_confirmed';
+    attributionWindow: '24h';
+    timezone: string;
+    definition: string;
+    warnings?: Array<string>;
+    dimensions?: {
+        [key: string]: string;
+    };
+};
+
+export type AnalyticsResult = {
+    metrics: Array<AnalyticsMetric>;
+    freshness: AnalyticsFreshness;
+};
+
+export type CreateAnalyticsEventExportRequest = {
+    from: Timestamp;
+    to: Timestamp;
+    format: 'ndjson' | 'csv';
+};
+
+export type AnalyticsIdentityRequest = {
+    kind: 'application_user' | 'installation';
+    /**
+     * Opaque identifier. Application-user values accept non-control Unicode and punctuation but sensitive-shaped values are rejected.
+     */
+    identity: string;
+};
+
+export type CreateAnalyticsPrivacyExportRequest = AnalyticsIdentityRequest & {
+    format: 'ndjson' | 'csv';
+};
+
+export type CreateAnalyticsPrivacyDeletionRequest = AnalyticsIdentityRequest & {
+    requestDigest: string;
+    confirm: true;
+};
+
+export type AnalyticsPrivacyPreview = {
+    kind: 'application_user' | 'installation';
+    affectedEvents: number;
+    affectedSessions: number;
+    affectedEnvironmentIds: Array<string>;
+    requestDigest: string;
+};
+
+export type AnalyticsJob = {
+    id: string;
+    kind: 'events' | 'application_user' | 'installation';
+    status: 'queued' | 'leased' | 'recomputing' | 'completed' | 'failed' | 'expired';
+    format?: 'ndjson' | 'csv';
+    rowCount?: number;
+    byteLength?: number;
+    affectedEventCount?: number;
+    affectedSessionCount?: number;
+    expiresAt?: Timestamp;
+    createdAt: Timestamp;
+    updatedAt: Timestamp;
+};
+
+export type AnalyticsSettingsEnvelope = {
+    data: AnalyticsSettings;
+};
+
+export type AnalyticsResultEnvelope = {
+    data: AnalyticsResult;
+};
+
+export type AnalyticsPrivacyPreviewEnvelope = {
+    data: AnalyticsPrivacyPreview;
+};
+
+export type AnalyticsJobEnvelope = {
+    data: AnalyticsJob;
+};
+
 export type PlacementDecisionDocumentRequest = {
     document: PlacementDecisionDocument;
 };
@@ -383,6 +506,10 @@ export type CreateApplicationRequest = {
 
 export type CreateApiKeyRequest = {
     kind: ApiKeyKind;
+    /**
+     * Required for public_sdk keys and forbidden for secret_server keys.
+     */
+    applicationId?: string;
 };
 
 export type CreateCatalogResourceRequest = {
@@ -775,6 +902,10 @@ export type ActiveProviderAssignment = {
 export type ApiKey = {
     id: string;
     environmentId: string;
+    /**
+     * Trusted Application binding for public SDK analytics ingestion.
+     */
+    applicationId?: string;
     kind: ApiKeyKind;
     prefix: string;
     createdByActorId: string;
@@ -1516,6 +1647,20 @@ export type ReleaseId = string;
 export type IdempotencyKey = string;
 
 export type IfMatch = string;
+
+export type AnalyticsFrom = Timestamp;
+
+export type AnalyticsTo = Timestamp;
+
+export type AnalyticsTimezone = string;
+
+export type AnalyticsMetricBasis = 'event_count';
+
+export type AnalyticsPlatform = 'ios' | 'android';
+
+export type AnalyticsLocale = string;
+
+export type AnalyticsApplicationVersion = string;
 
 export type GetHealthData = {
     body?: never;
@@ -5426,3 +5571,560 @@ export type RevokePlacementQaOverrideResponses = {
 };
 
 export type RevokePlacementQaOverrideResponse = RevokePlacementQaOverrideResponses[keyof RevokePlacementQaOverrideResponses];
+
+export type IngestAnalyticsEventBatchData = {
+    body: AnalyticsEventBatch;
+    path?: never;
+    query?: never;
+    url: '/v1/sdk/events/batch';
+};
+
+export type IngestAnalyticsEventBatchErrors = {
+    /**
+     * Stable machine-readable failure.
+     */
+    401: ErrorEnvelope;
+    /**
+     * Stable machine-readable failure.
+     */
+    409: ErrorEnvelope;
+    /**
+     * Stable machine-readable failure.
+     */
+    422: ErrorEnvelope;
+    /**
+     * Stable machine-readable failure.
+     */
+    429: ErrorEnvelope;
+};
+
+export type IngestAnalyticsEventBatchError = IngestAnalyticsEventBatchErrors[keyof IngestAnalyticsEventBatchErrors];
+
+export type IngestAnalyticsEventBatchResponses = {
+    /**
+     * Per-event ingestion outcomes.
+     */
+    200: AnalyticsIngestionResult;
+};
+
+export type IngestAnalyticsEventBatchResponse = IngestAnalyticsEventBatchResponses[keyof IngestAnalyticsEventBatchResponses];
+
+export type GetAnalyticsSettingsData = {
+    body?: never;
+    path: {
+        projectId: string;
+        environmentId: string;
+    };
+    query?: never;
+    url: '/v1/projects/{projectId}/environments/{environmentId}/analytics/settings';
+};
+
+export type GetAnalyticsSettingsErrors = {
+    /**
+     * Stable machine-readable failure.
+     */
+    403: ErrorEnvelope;
+    /**
+     * Stable machine-readable failure.
+     */
+    404: ErrorEnvelope;
+};
+
+export type GetAnalyticsSettingsError = GetAnalyticsSettingsErrors[keyof GetAnalyticsSettingsErrors];
+
+export type GetAnalyticsSettingsResponses = {
+    /**
+     * Analytics settings.
+     */
+    200: AnalyticsSettingsEnvelope;
+};
+
+export type GetAnalyticsSettingsResponse = GetAnalyticsSettingsResponses[keyof GetAnalyticsSettingsResponses];
+
+export type UpdateAnalyticsSettingsData = {
+    body: UpdateAnalyticsSettingsRequest;
+    path: {
+        projectId: string;
+        environmentId: string;
+    };
+    query?: never;
+    url: '/v1/projects/{projectId}/environments/{environmentId}/analytics/settings';
+};
+
+export type UpdateAnalyticsSettingsErrors = {
+    /**
+     * Stable machine-readable failure.
+     */
+    403: ErrorEnvelope;
+    /**
+     * Stable machine-readable failure.
+     */
+    422: ErrorEnvelope;
+};
+
+export type UpdateAnalyticsSettingsError = UpdateAnalyticsSettingsErrors[keyof UpdateAnalyticsSettingsErrors];
+
+export type UpdateAnalyticsSettingsResponses = {
+    /**
+     * Updated analytics settings.
+     */
+    200: AnalyticsSettingsEnvelope;
+};
+
+export type UpdateAnalyticsSettingsResponse = UpdateAnalyticsSettingsResponses[keyof UpdateAnalyticsSettingsResponses];
+
+export type GetAnalyticsOverviewData = {
+    body?: never;
+    path: {
+        projectId: string;
+        environmentId: string;
+    };
+    query: {
+        from: Timestamp;
+        to: Timestamp;
+        timezone: string;
+        metricBasis: 'event_count';
+        platform?: 'ios' | 'android';
+        locale?: string;
+        applicationVersion?: string;
+    };
+    url: '/v1/projects/{projectId}/environments/{environmentId}/analytics/overview';
+};
+
+export type GetAnalyticsOverviewErrors = {
+    /**
+     * Stable machine-readable failure.
+     */
+    403: ErrorEnvelope;
+    /**
+     * Stable machine-readable failure.
+     */
+    422: ErrorEnvelope;
+};
+
+export type GetAnalyticsOverviewError = GetAnalyticsOverviewErrors[keyof GetAnalyticsOverviewErrors];
+
+export type GetAnalyticsOverviewResponses = {
+    /**
+     * Event-count analytics result.
+     */
+    200: AnalyticsResultEnvelope;
+};
+
+export type GetAnalyticsOverviewResponse = GetAnalyticsOverviewResponses[keyof GetAnalyticsOverviewResponses];
+
+export type GetAnalyticsFunnelData = {
+    body?: never;
+    path: {
+        projectId: string;
+        environmentId: string;
+        funnel: 'placements' | 'paywalls' | 'products' | 'purchases';
+    };
+    query: {
+        from: Timestamp;
+        to: Timestamp;
+        timezone: string;
+        metricBasis: 'event_count';
+        platform?: 'ios' | 'android';
+        locale?: string;
+        applicationVersion?: string;
+    };
+    url: '/v1/projects/{projectId}/environments/{environmentId}/analytics/funnels/{funnel}';
+};
+
+export type GetAnalyticsFunnelErrors = {
+    /**
+     * Stable machine-readable failure.
+     */
+    404: ErrorEnvelope;
+    /**
+     * Stable machine-readable failure.
+     */
+    422: ErrorEnvelope;
+};
+
+export type GetAnalyticsFunnelError = GetAnalyticsFunnelErrors[keyof GetAnalyticsFunnelErrors];
+
+export type GetAnalyticsFunnelResponses = {
+    /**
+     * Event-count analytics result.
+     */
+    200: AnalyticsResultEnvelope;
+};
+
+export type GetAnalyticsFunnelResponse = GetAnalyticsFunnelResponses[keyof GetAnalyticsFunnelResponses];
+
+export type CompareAnalyticsPaywallVersionsData = {
+    body?: never;
+    path: {
+        projectId: string;
+        environmentId: string;
+    };
+    query: {
+        from: Timestamp;
+        to: Timestamp;
+        timezone: string;
+        metricBasis: 'event_count';
+        platform?: 'ios' | 'android';
+        locale?: string;
+        applicationVersion?: string;
+    };
+    url: '/v1/projects/{projectId}/environments/{environmentId}/analytics/paywall-version-comparison';
+};
+
+export type CompareAnalyticsPaywallVersionsErrors = {
+    /**
+     * Stable machine-readable failure.
+     */
+    422: ErrorEnvelope;
+};
+
+export type CompareAnalyticsPaywallVersionsError = CompareAnalyticsPaywallVersionsErrors[keyof CompareAnalyticsPaywallVersionsErrors];
+
+export type CompareAnalyticsPaywallVersionsResponses = {
+    /**
+     * Event-count analytics result.
+     */
+    200: AnalyticsResultEnvelope;
+};
+
+export type CompareAnalyticsPaywallVersionsResponse = CompareAnalyticsPaywallVersionsResponses[keyof CompareAnalyticsPaywallVersionsResponses];
+
+export type GetAnalyticsProviderErrorsData = {
+    body?: never;
+    path: {
+        projectId: string;
+        environmentId: string;
+    };
+    query: {
+        from: Timestamp;
+        to: Timestamp;
+        timezone: string;
+        metricBasis: 'event_count';
+        platform?: 'ios' | 'android';
+        locale?: string;
+        applicationVersion?: string;
+    };
+    url: '/v1/projects/{projectId}/environments/{environmentId}/analytics/provider-errors';
+};
+
+export type GetAnalyticsProviderErrorsErrors = {
+    /**
+     * Stable machine-readable failure.
+     */
+    422: ErrorEnvelope;
+};
+
+export type GetAnalyticsProviderErrorsError = GetAnalyticsProviderErrorsErrors[keyof GetAnalyticsProviderErrorsErrors];
+
+export type GetAnalyticsProviderErrorsResponses = {
+    /**
+     * Event-count analytics result.
+     */
+    200: AnalyticsResultEnvelope;
+};
+
+export type GetAnalyticsProviderErrorsResponse = GetAnalyticsProviderErrorsResponses[keyof GetAnalyticsProviderErrorsResponses];
+
+export type GetAnalyticsProductAvailabilityFailuresData = {
+    body?: never;
+    path: {
+        projectId: string;
+        environmentId: string;
+    };
+    query: {
+        from: Timestamp;
+        to: Timestamp;
+        timezone: string;
+        metricBasis: 'event_count';
+        platform?: 'ios' | 'android';
+        locale?: string;
+        applicationVersion?: string;
+    };
+    url: '/v1/projects/{projectId}/environments/{environmentId}/analytics/product-availability-failures';
+};
+
+export type GetAnalyticsProductAvailabilityFailuresErrors = {
+    /**
+     * Stable machine-readable failure.
+     */
+    422: ErrorEnvelope;
+};
+
+export type GetAnalyticsProductAvailabilityFailuresError = GetAnalyticsProductAvailabilityFailuresErrors[keyof GetAnalyticsProductAvailabilityFailuresErrors];
+
+export type GetAnalyticsProductAvailabilityFailuresResponses = {
+    /**
+     * Event-count analytics result.
+     */
+    200: AnalyticsResultEnvelope;
+};
+
+export type GetAnalyticsProductAvailabilityFailuresResponse = GetAnalyticsProductAvailabilityFailuresResponses[keyof GetAnalyticsProductAvailabilityFailuresResponses];
+
+export type GetAnalyticsBreakdownData = {
+    body?: never;
+    path: {
+        projectId: string;
+        environmentId: string;
+        dimension: 'platforms' | 'locales';
+    };
+    query: {
+        from: Timestamp;
+        to: Timestamp;
+        timezone: string;
+        metricBasis: 'event_count';
+        platform?: 'ios' | 'android';
+        locale?: string;
+        applicationVersion?: string;
+    };
+    url: '/v1/projects/{projectId}/environments/{environmentId}/analytics/breakdowns/{dimension}';
+};
+
+export type GetAnalyticsBreakdownErrors = {
+    /**
+     * Stable machine-readable failure.
+     */
+    404: ErrorEnvelope;
+    /**
+     * Stable machine-readable failure.
+     */
+    422: ErrorEnvelope;
+};
+
+export type GetAnalyticsBreakdownError = GetAnalyticsBreakdownErrors[keyof GetAnalyticsBreakdownErrors];
+
+export type GetAnalyticsBreakdownResponses = {
+    /**
+     * Event-count analytics result.
+     */
+    200: AnalyticsResultEnvelope;
+};
+
+export type GetAnalyticsBreakdownResponse = GetAnalyticsBreakdownResponses[keyof GetAnalyticsBreakdownResponses];
+
+export type GetAnalyticsFreshnessData = {
+    body?: never;
+    path: {
+        projectId: string;
+        environmentId: string;
+    };
+    query: {
+        from: Timestamp;
+        to: Timestamp;
+        timezone: string;
+        metricBasis: 'event_count';
+    };
+    url: '/v1/projects/{projectId}/environments/{environmentId}/analytics/freshness';
+};
+
+export type GetAnalyticsFreshnessErrors = {
+    /**
+     * Stable machine-readable failure.
+     */
+    422: ErrorEnvelope;
+};
+
+export type GetAnalyticsFreshnessError = GetAnalyticsFreshnessErrors[keyof GetAnalyticsFreshnessErrors];
+
+export type GetAnalyticsFreshnessResponses = {
+    /**
+     * Event-count analytics result.
+     */
+    200: AnalyticsResultEnvelope;
+};
+
+export type GetAnalyticsFreshnessResponse = GetAnalyticsFreshnessResponses[keyof GetAnalyticsFreshnessResponses];
+
+export type CreateAnalyticsEventExportData = {
+    body: CreateAnalyticsEventExportRequest;
+    path: {
+        projectId: string;
+        environmentId: string;
+    };
+    query?: never;
+    url: '/v1/projects/{projectId}/environments/{environmentId}/analytics/exports';
+};
+
+export type CreateAnalyticsEventExportErrors = {
+    /**
+     * Stable machine-readable failure.
+     */
+    403: ErrorEnvelope;
+    /**
+     * Stable machine-readable failure.
+     */
+    422: ErrorEnvelope;
+};
+
+export type CreateAnalyticsEventExportError = CreateAnalyticsEventExportErrors[keyof CreateAnalyticsEventExportErrors];
+
+export type CreateAnalyticsEventExportResponses = {
+    /**
+     * Asynchronous analytics job.
+     */
+    202: AnalyticsJobEnvelope;
+};
+
+export type CreateAnalyticsEventExportResponse = CreateAnalyticsEventExportResponses[keyof CreateAnalyticsEventExportResponses];
+
+export type PreviewAnalyticsPrivacyRequestData = {
+    body: AnalyticsIdentityRequest;
+    path: {
+        projectId: string;
+    };
+    query?: never;
+    url: '/v1/projects/{projectId}/analytics/privacy/preview';
+};
+
+export type PreviewAnalyticsPrivacyRequestErrors = {
+    /**
+     * Stable machine-readable failure.
+     */
+    403: ErrorEnvelope;
+    /**
+     * Stable machine-readable failure.
+     */
+    404: ErrorEnvelope;
+};
+
+export type PreviewAnalyticsPrivacyRequestError = PreviewAnalyticsPrivacyRequestErrors[keyof PreviewAnalyticsPrivacyRequestErrors];
+
+export type PreviewAnalyticsPrivacyRequestResponses = {
+    /**
+     * Privacy impact preview.
+     */
+    200: AnalyticsPrivacyPreviewEnvelope;
+};
+
+export type PreviewAnalyticsPrivacyRequestResponse = PreviewAnalyticsPrivacyRequestResponses[keyof PreviewAnalyticsPrivacyRequestResponses];
+
+export type CreateAnalyticsPrivacyExportData = {
+    body: CreateAnalyticsPrivacyExportRequest;
+    path: {
+        projectId: string;
+    };
+    query?: never;
+    url: '/v1/projects/{projectId}/analytics/privacy/exports';
+};
+
+export type CreateAnalyticsPrivacyExportErrors = {
+    /**
+     * Stable machine-readable failure.
+     */
+    403: ErrorEnvelope;
+    /**
+     * Stable machine-readable failure.
+     */
+    422: ErrorEnvelope;
+};
+
+export type CreateAnalyticsPrivacyExportError = CreateAnalyticsPrivacyExportErrors[keyof CreateAnalyticsPrivacyExportErrors];
+
+export type CreateAnalyticsPrivacyExportResponses = {
+    /**
+     * Asynchronous analytics job.
+     */
+    202: AnalyticsJobEnvelope;
+};
+
+export type CreateAnalyticsPrivacyExportResponse = CreateAnalyticsPrivacyExportResponses[keyof CreateAnalyticsPrivacyExportResponses];
+
+export type CreateAnalyticsPrivacyDeletionData = {
+    body: CreateAnalyticsPrivacyDeletionRequest;
+    path: {
+        projectId: string;
+    };
+    query?: never;
+    url: '/v1/projects/{projectId}/analytics/privacy/deletions';
+};
+
+export type CreateAnalyticsPrivacyDeletionErrors = {
+    /**
+     * Stable machine-readable failure.
+     */
+    403: ErrorEnvelope;
+    /**
+     * Stable machine-readable failure.
+     */
+    409: ErrorEnvelope;
+    /**
+     * Stable machine-readable failure.
+     */
+    422: ErrorEnvelope;
+};
+
+export type CreateAnalyticsPrivacyDeletionError = CreateAnalyticsPrivacyDeletionErrors[keyof CreateAnalyticsPrivacyDeletionErrors];
+
+export type CreateAnalyticsPrivacyDeletionResponses = {
+    /**
+     * Asynchronous analytics job.
+     */
+    202: AnalyticsJobEnvelope;
+};
+
+export type CreateAnalyticsPrivacyDeletionResponse = CreateAnalyticsPrivacyDeletionResponses[keyof CreateAnalyticsPrivacyDeletionResponses];
+
+export type GetAnalyticsJobData = {
+    body?: never;
+    path: {
+        projectId: string;
+        jobId: string;
+    };
+    query?: never;
+    url: '/v1/projects/{projectId}/analytics/jobs/{jobId}';
+};
+
+export type GetAnalyticsJobErrors = {
+    /**
+     * Stable machine-readable failure.
+     */
+    403: ErrorEnvelope;
+    /**
+     * Stable machine-readable failure.
+     */
+    404: ErrorEnvelope;
+};
+
+export type GetAnalyticsJobError = GetAnalyticsJobErrors[keyof GetAnalyticsJobErrors];
+
+export type GetAnalyticsJobResponses = {
+    /**
+     * Asynchronous analytics job.
+     */
+    200: AnalyticsJobEnvelope;
+};
+
+export type GetAnalyticsJobResponse = GetAnalyticsJobResponses[keyof GetAnalyticsJobResponses];
+
+export type DownloadAnalyticsJobData = {
+    body?: never;
+    path: {
+        projectId: string;
+        jobId: string;
+    };
+    query?: never;
+    url: '/v1/projects/{projectId}/analytics/jobs/{jobId}/download';
+};
+
+export type DownloadAnalyticsJobErrors = {
+    /**
+     * Stable machine-readable failure.
+     */
+    403: ErrorEnvelope;
+    /**
+     * Stable machine-readable failure.
+     */
+    404: ErrorEnvelope;
+};
+
+export type DownloadAnalyticsJobError = DownloadAnalyticsJobErrors[keyof DownloadAnalyticsJobErrors];
+
+export type DownloadAnalyticsJobResponses = {
+    /**
+     * Private export artifact.
+     */
+    200: Blob | File;
+};
+
+export type DownloadAnalyticsJobResponse = DownloadAnalyticsJobResponses[keyof DownloadAnalyticsJobResponses];

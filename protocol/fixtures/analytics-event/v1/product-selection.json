@@ -1,0 +1,37 @@
+{
+  "eventId": "event_product_selected_001",
+  "eventSchemaVersion": "1",
+  "eventName": "product_selected",
+  "occurredAt": "2026-07-26T12:00:03.000Z",
+  "queuedAt": "2026-07-26T12:00:03.004Z",
+  "authority": "client_observed",
+  "identity": {
+    "installationId": "installation_7f39d5a2",
+    "applicationUserId": "customer_42",
+    "generation": 3
+  },
+  "sessionId": "session_public_beta_001",
+  "context": {
+    "platform": "ios",
+    "sdkFamily": "flutter",
+    "sdkVersion": "0.6.0",
+    "applicationVersion": "2.4.1",
+    "locale": "en-NG",
+    "configurationDeliveryVersion": "2",
+    "commerceProviderContractVersion": "2"
+  },
+  "correlation": {
+    "placementRequestId": "placement_request_001",
+    "paywallPresentationId": "presentation_001"
+  },
+  "attribution": {
+    "configurationReleaseId": "configuration_release_42",
+    "placementId": "placement_export_pdf",
+    "paywallId": "paywall_pro",
+    "paywallVersionId": "paywall_version_19",
+    "mosaicProductId": "product_yearly"
+  },
+  "payload": {
+    "source": "user"
+  }
+}

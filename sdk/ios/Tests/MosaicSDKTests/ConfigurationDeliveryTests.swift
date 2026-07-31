@@ -167,6 +167,22 @@ final class ConfigurationClientTests: XCTestCase {
     XCTAssertEqual(versionID, "paywall_version_ios")
     XCTAssertEqual(ruleID, "rule_ios_rollout")
     XCTAssertEqual(source, .remote)
+
+    let fallbackEvaluation = await client.decideForPresentation(
+      placement: "export_pdf",
+      context: MosaicDecisionContext(
+        platform: "ios", applicationVersion: "2.10.0", applicationLocale: "en-US",
+        entitlements: ["pro": .unknown], products: ["product_export_pro": .unavailable]),
+      identity: identity)
+    guard
+      case .paywallSelected(_, let fallbackVersionID, _, let fallbackPath, _, _, _) =
+        fallbackEvaluation.result
+    else { return XCTFail("Expected the exact Product-unavailable fallback") }
+    XCTAssertEqual(fallbackVersionID, "paywall_version_fallback")
+    XCTAssertEqual(fallbackPath, ["product_unavailable"])
+    XCTAssertEqual(
+      fallbackEvaluation.fallbackUses,
+      [.init(trigger: "product_unavailable", key: "product_unavailable")])
   }
 
   func testMalformedAndUnsupportedRefreshesPreserveThePreviousCompleteRelease() async throws {

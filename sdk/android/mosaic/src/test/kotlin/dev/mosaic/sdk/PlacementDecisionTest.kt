@@ -57,6 +57,16 @@ class PlacementDecisionTest {
                     assertEquals(expected.get("matchedRuleId")?.takeUnless { it.isJsonNull }?.asString, result.matchedRuleId)
                 }
             }
+            if (expected.getAsJsonArray("fallbackPath")?.size() ?: 0 > 0) {
+                assertEquals(
+                    "product_unavailable",
+                    MosaicPlacementEvaluator.exactFallbackTrigger(
+                        ruleSet,
+                        (result as MosaicEvaluationResult.Paywall).matchedRuleId,
+                        context,
+                    ),
+                )
+            }
         }
     }
 

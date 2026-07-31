@@ -1,0 +1,174 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:mosaic:protocol:schema:analytics-event:v1:compatibility-manifest",
+  "title": "Mosaic Analytics Event Contract v1 compatibility manifest",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "analyticsEventContractVersion",
+    "status",
+    "schemas",
+    "canonicalFixtures",
+    "eventSchemas",
+    "limits",
+    "readerPolicy"
+  ],
+  "properties": {
+    "analyticsEventContractVersion": {
+      "const": "1"
+    },
+    "status": {
+      "const": "releaseCandidate"
+    },
+    "schemas": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "event",
+        "batch",
+        "ingestionResponse"
+      ],
+      "properties": {
+        "event": {
+          "$ref": "#/$defs/relativeJsonPath"
+        },
+        "batch": {
+          "$ref": "#/$defs/relativeJsonPath"
+        },
+        "ingestionResponse": {
+          "$ref": "#/$defs/relativeJsonPath"
+        }
+      }
+    },
+    "canonicalFixtures": {
+      "type": "array",
+      "minItems": 12,
+      "maxItems": 32,
+      "uniqueItems": true,
+      "items": {
+        "$ref": "#/$defs/relativeJsonPath"
+      }
+    },
+    "eventSchemas": {
+      "type": "array",
+      "minItems": 27,
+      "maxItems": 27,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "eventName",
+          "supportedVersions",
+          "acceptedAuthorities"
+        ],
+        "properties": {
+          "eventName": {
+            "$ref": "urn:mosaic:protocol:schema:analytics-event:v1:event#/$defs/eventName"
+          },
+          "supportedVersions": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 1,
+            "uniqueItems": true,
+            "items": {
+              "const": "1"
+            }
+          },
+          "acceptedAuthorities": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 2,
+            "uniqueItems": true,
+            "items": {
+              "$ref": "urn:mosaic:protocol:schema:analytics-event:v1:event#/$defs/authority"
+            }
+          }
+        }
+      }
+    },
+    "limits": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "maxEventsPerBatch",
+        "sdkMaxEventsPerBatch",
+        "maxEventBytes",
+        "maxBatchBytes",
+        "eventExpirySeconds",
+        "futureSkewSeconds",
+        "attributionWindowSeconds"
+      ],
+      "properties": {
+        "maxEventsPerBatch": {
+          "const": 100
+        },
+        "sdkMaxEventsPerBatch": {
+          "const": 50
+        },
+        "maxEventBytes": {
+          "const": 32768
+        },
+        "maxBatchBytes": {
+          "const": 524288
+        },
+        "eventExpirySeconds": {
+          "const": 604800
+        },
+        "futureSkewSeconds": {
+          "const": 300
+        },
+        "attributionWindowSeconds": {
+          "const": 86400
+        }
+      }
+    },
+    "readerPolicy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "unknownContractVersion",
+        "unknownEventSchema",
+        "unknownEventName",
+        "unknownField",
+        "publicSdkAuthority",
+        "partialBatch",
+        "tenantScope",
+        "customMetadata"
+      ],
+      "properties": {
+        "unknownContractVersion": {
+          "const": "rejectBatch"
+        },
+        "unknownEventSchema": {
+          "const": "permanentlyRejectEvent"
+        },
+        "unknownEventName": {
+          "const": "permanentlyRejectEvent"
+        },
+        "unknownField": {
+          "const": "permanentlyRejectEvent"
+        },
+        "publicSdkAuthority": {
+          "const": "clientObservedOnly"
+        },
+        "partialBatch": {
+          "const": "oneResultPerEvent"
+        },
+        "tenantScope": {
+          "const": "deriveFromAuthentication"
+        },
+        "customMetadata": {
+          "const": "forbidden"
+        }
+      }
+    }
+  },
+  "$defs": {
+    "relativeJsonPath": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 256,
+      "pattern": "^\\.\\./\\.\\./.*\\.json$"
+    }
+  }
+}

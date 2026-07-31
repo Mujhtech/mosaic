@@ -31,8 +31,15 @@ func New(requestsPerMinute, burst, maxEntries int) *Limiter {
 }
 
 func (limiter *Limiter) Allow(key string) (bool, time.Duration) {
+	return limiter.AllowN(key, 1)
+}
+
+func (limiter *Limiter) AllowN(key string, tokens int) (bool, time.Duration) {
 	if limiter == nil || key == "" {
 		return true, 0
+	}
+	if tokens < 1 {
+		tokens = 1
 	}
 	limiter.mu.Lock()
 	defer limiter.mu.Unlock()
@@ -47,11 +54,12 @@ func (limiter *Limiter) Allow(key string) (bool, time.Duration) {
 	elapsed := now.Sub(value.last).Seconds()
 	value.tokens = math.Min(limiter.burst, value.tokens+elapsed*limiter.rate)
 	value.last = now
-	if value.tokens < 1 {
+	requested := float64(tokens)
+	if value.tokens < requested {
 		limiter.buckets[key] = value
-		return false, time.Duration(math.Ceil((1-value.tokens)/limiter.rate*1000)) * time.Millisecond
+		return false, time.Duration(math.Ceil((requested-value.tokens)/limiter.rate*1000)) * time.Millisecond
 	}
-	value.tokens--
+	value.tokens -= requested
 	limiter.buckets[key] = value
 	return true, 0
 }

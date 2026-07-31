@@ -211,8 +211,16 @@ void main() {
     expect(reset.installationId, anonymous.installationId);
     expect(reset.userId, isNull);
     expect(reset.attributes, isEmpty);
+    await reconstructed.identify('user_456');
+    await reconstructed.setAttributes(
+      const <String, MosaicAttributeValue>{
+        'student': MosaicBooleanAttribute(true),
+      },
+    );
     final rotated = await reconstructed.rotateInstallation();
     expect(rotated.installationId, isNot(anonymous.installationId));
+    expect(rotated.userId, isNull);
+    expect(rotated.attributes, isEmpty);
   });
 }
 

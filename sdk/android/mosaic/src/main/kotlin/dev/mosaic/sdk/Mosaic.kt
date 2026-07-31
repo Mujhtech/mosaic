@@ -8,6 +8,8 @@ data class MosaicConfiguration(
     val endpoint: URI? = null,
     val applicationVersion: String? = null,
     val applicationId: String? = null,
+    /** Must mirror the accepted Environment setting; false is the privacy-safe default. */
+    val analyticsCollectionEnabled: Boolean = false,
 ) {
     init {
         require(apiKey.isNotBlank()) { "apiKey must not be blank." }
@@ -44,23 +46,28 @@ class Mosaic private constructor(
         context: android.content.Context,
         bundledFallback: MosaicPaywallDocumentSource? = MosaicCanonicalBundleSource(context),
         diagnostics: MosaicDiagnosticSink = MosaicDiagnosticSink.None,
-    ): MosaicHostedConfigurationClient = MosaicHostedConfigurationClient(
-        transport = MosaicHTTPConfigurationTransport(configuration),
-        commerceTransport = configuration.applicationId?.let {
-            MosaicHTTPCommerceConfigurationTransport(configuration)
-        },
-        cache = MosaicFileConfigurationCache(context, configuration),
-        bundledFallback = bundledFallback,
-        applicationId = configuration.applicationId,
-        configurablePurchaseProvider = purchaseProvider as? MosaicConfigurablePurchaseProvider,
-        diagnostics = diagnostics,
-        identityStore = MosaicIdentityStore(
-            context,
-            mosaicConfigurationCacheNamespace(configuration),
-        ),
-        purchaseProvider = purchaseProvider,
-        applicationVersion = configuration.applicationVersion,
-    )
+    ): MosaicHostedConfigurationClient {
+        val namespace = mosaicConfigurationCacheNamespace(configuration)
+        val identityStore = MosaicIdentityStore(context, namespace)
+        val analytics = (context.applicationContext as? android.app.Application)?.let { application ->
+            MosaicAnalyticsRuntimeRegistry.runtime(application, namespace, configuration, identityStore)
+        }
+        return MosaicHostedConfigurationClient(
+            transport = MosaicHTTPConfigurationTransport(configuration),
+            commerceTransport = configuration.applicationId?.let {
+                MosaicHTTPCommerceConfigurationTransport(configuration)
+            },
+            cache = MosaicFileConfigurationCache(context, configuration),
+            bundledFallback = bundledFallback,
+            applicationId = configuration.applicationId,
+            configurablePurchaseProvider = purchaseProvider as? MosaicConfigurablePurchaseProvider,
+            diagnostics = diagnostics,
+            identityStore = identityStore,
+            analyticsRuntime = analytics,
+            purchaseProvider = purchaseProvider,
+            applicationVersion = configuration.applicationVersion,
+        )
+    }
 
     companion object {
         fun configure(
@@ -69,12 +76,14 @@ class Mosaic private constructor(
             endpoint: URI? = null,
             applicationVersion: String? = null,
             applicationId: String? = null,
+            analyticsCollectionEnabled: Boolean = false,
         ): Mosaic = Mosaic(
             configuration = MosaicConfiguration(
                 apiKey = apiKey,
                 endpoint = endpoint,
                 applicationVersion = applicationVersion,
                 applicationId = applicationId,
+                analyticsCollectionEnabled = analyticsCollectionEnabled,
             ).normalized(),
             purchaseProvider = purchaseProvider,
         )

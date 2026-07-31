@@ -16,6 +16,30 @@ Hosted authentication remains an explicit owner-decision gate. The login and sig
 locally with TanStack Form but do not create a browser session or simulate a signed-in user.
 `/studio` remains account-free.
 
+## Analytics workspace
+
+Hosted Analytics is direct-linkable at
+`/organizations/:organizationId/projects/:projectId/analytics/:environmentId/:surface`, where the
+surface is `overview`, `placements`, `paywalls`, `products`, `purchases`, or `data-privacy`.
+Date, reporting timezone, platform, locale, application version, and the fixed event-count metric
+basis are URL search state. Query cache keys include Project, Environment, and those filters.
+
+The workspace keeps client-observed and provider-confirmed outcomes separate, reports unavailable
+provider authority as unavailable rather than zero, and shows freshness, late-event policy,
+low-data warnings, exact-correlation funnels, immutable Paywall Version comparisons, and safe
+recovery links. No chart library or global analytics store is used.
+
+Members may read Analytics. Owners and admins may export filtered events and change collection or
+raw-event retention. Only owners may preview identities, export identity data, or request deletion.
+Identity values are submitted only in POST bodies and never enter URLs, TanStack Query keys,
+browser storage, logs, filenames, or public Asset URLs. Export and deletion are asynchronous and
+surface queued, processing, completed, failed, retry, private download, and audit-summary states.
+
+Public SDK keys created from API-key settings are bound to one registered Application for analytics
+ingestion. Existing unbound public keys continue to support configuration delivery, but Analytics
+shows them as legacy credentials and directs owners/admins to create a bound replacement. SDK event
+payloads do not submit tenant or Application identifiers; trusted scope is derived from the key.
+
 ## Requirements
 
 - Node.js 22.12 or newer

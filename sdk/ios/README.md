@@ -8,6 +8,38 @@ Commerce Configuration v1/v2 boundary. The core package remains free of StoreKit
 and RevenueCat dependencies; the optional RevenueCat adapter is a separate
 package under `RevenueCat/`.
 
+## Analytics Event v1, identity, and privacy
+
+Hosted clients implement the closed Analytics Event v1 contract with immutable
+event-time identity, session, correlation, and attribution. Collection starts
+disabled. The Environment setting and host override must both permit it:
+
+```swift
+await mosaic.setAnalyticsCollection(environmentEnabled: true, hostEnabled: true)
+let diagnostics = await mosaic.analyticsDiagnostics()
+let result = await mosaic.flushAnalytics()
+```
+
+Turning either setting off cancels delivery and atomically clears unsent
+events. Re-enabling starts a new session and does not reconstruct missed
+observations. Sessions persist across reconstruction within 30 minutes.
+`resetIdentity()` retains installation identity; `resetInstallationIdentity()`
+rotates it and clears user state. Queued historical events are never rewritten.
+
+The backup-excluded Application Support queue is scoped by endpoint and SDK
+key and bounded to 1,000 events/2 MiB, 32 KiB per event, 50 events/512 KiB per
+send, seven-day expiry, and ten attempts. It uses full-jitter exponential retry
+from one second through five minutes. Overflow evicts expired and lower-value
+events before purchase/restore outcomes while always honoring hard bounds.
+Accepted, duplicate, and permanent partial results are removed; retryable
+events remain. A malformed acknowledgement retains the complete sent batch.
+
+Foreground/background flush is coalesced and best effort;
+`flushAnalytics()` is deterministic. Analytics never changes Placement,
+rendering, Product, purchase, or restore outcomes. The SDK never originates
+`purchase_completed_provider`; its codec decodes that trusted-source fixture
+only for conformance. Local Preview and bundled/unhosted paywalls do not emit.
+
 Configuration Delivery v2 adds Placement Decision v1 without changing the
 existing Delivery v1 `resolve(placement:)` API. The new
 `decision(placement:context:)` evaluates the accepted release locally and

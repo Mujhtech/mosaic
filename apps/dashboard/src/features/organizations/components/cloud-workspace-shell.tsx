@@ -1,4 +1,5 @@
 import { CodeIcon } from "@phosphor-icons/react/dist/ssr/Code"
+import { ChartLineUpIcon } from "@phosphor-icons/react/dist/ssr/ChartLineUp"
 import { GearSixIcon } from "@phosphor-icons/react/dist/ssr/GearSix"
 import { KeyIcon } from "@phosphor-icons/react/dist/ssr/Key"
 import { PackageIcon } from "@phosphor-icons/react/dist/ssr/Package"
@@ -25,7 +26,7 @@ export function CloudWorkspaceShell() {
   return (
     <Sidebar collapsible="icon">
       <SidebarHeader>
-        <OrganizationSwitcher />
+        <OrganizationSwitcher organizationId={scope.organizationId} />
       </SidebarHeader>
       <SidebarContent>
         {scope.projectId && (
@@ -43,6 +44,13 @@ export function CloudWorkspaceShell() {
                   : `/organizations/${scope.organizationId}/projects/${scope.projectId}`,
                 icon: <StorefrontIcon aria-hidden size={18} />,
                 title: "Monetization",
+              },
+              {
+                to: scope.environmentId
+                  ? `/organizations/${scope.organizationId}/projects/${scope.projectId}/analytics/${scope.environmentId}/overview`
+                  : `/organizations/${scope.organizationId}/projects/${scope.projectId}`,
+                icon: <ChartLineUpIcon aria-hidden size={18} />,
+                title: "Analytics",
               },
               {
                 to: `/organizations/${scope.organizationId}/projects/${scope.projectId}/apps`,

@@ -116,6 +116,10 @@ sealed interface MosaicInteractionOutcome {
         override val wireName: String = "dismissed"
     }
 
+    data class RenderingFailed(val diagnosticCode: String) : MosaicInteractionOutcome {
+        override val wireName: String = "renderingFailed"
+    }
+
 }
 
 data class MosaicPaywallEvent(

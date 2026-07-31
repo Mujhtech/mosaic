@@ -3,6 +3,21 @@
 All notable Mosaic protocol changes are recorded here. Versioned artifacts are
 not immutable until their review gate is approved.
 
+## Analytics Event Contract v1 - 2026-07-26
+
+Status: release candidate
+
+- Added a separate closed Analytics Event `1` contract with typed Placement,
+  Paywall, Product, purchase, and restore observations.
+- Added stable correlation, immutable attribution, timestamp and authority
+  rules, bounded batch delivery, idempotency, and partial-batch results.
+- Added compatibility metadata, canonical journey/authority/response fixtures,
+  semantic validation, documentation, and a dedicated analytics changelog.
+- Closed correlation and attribution per event family and added shared
+  no-Paywall, fallback, failure, and unmapped-outcome conformance cases.
+- Preserved all Paywall, Placement Decision, Configuration Delivery, and
+  Commerce contract semantics.
+
 ## Placement Decision v1 and Configuration Delivery v2 - 2026-07-26
 
 Status: release candidate

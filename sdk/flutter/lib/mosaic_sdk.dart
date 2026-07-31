@@ -1,5 +1,7 @@
 library;
 
+export 'src/analytics.dart';
+export 'src/analytics_event.dart';
 export 'src/commerce.dart';
 export 'src/commerce_configuration.dart';
 export 'src/commerce_configuration_transport.dart';

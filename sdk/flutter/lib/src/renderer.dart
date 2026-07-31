@@ -6,6 +6,8 @@ import 'package:flutter/rendering.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:video_player/video_player.dart';
 
+import 'analytics.dart';
+import 'analytics_event.dart';
 import 'commerce.dart';
 import 'configuration.dart';
 import 'localization.dart';
@@ -198,6 +200,8 @@ final class MosaicPaywall extends StatefulWidget {
     this.videoResolver,
     this.onInteraction,
     this.onDiagnostic,
+    this.analyticsRuntime,
+    this.analyticsContext,
     this.clock = _mosaicSystemClock,
     this.externalUrlOpener = mosaicExternalUrlOpener,
     super.key,
@@ -211,6 +215,8 @@ final class MosaicPaywall extends StatefulWidget {
   final MosaicPresentationResultCallback onResult;
   final MosaicInteractionCallback? onInteraction;
   final MosaicDiagnosticCallback? onDiagnostic;
+  final MosaicAnalyticsRuntime? analyticsRuntime;
+  final MosaicAnalyticsPresentationContext? analyticsContext;
   final MosaicClock clock;
   final MosaicExternalUrlOpener externalUrlOpener;
 
@@ -229,6 +235,7 @@ final class _MosaicPaywallState extends State<MosaicPaywall> {
   final Set<String> _notifiedHiddenPurchaseTargets = <String>{};
   final Set<String> _notifiedMediaFailures = <String>{};
   final Set<String> _notifiedUnboundedFill = <String>{};
+  final Set<String> _reportedRenderingFailures = <String>{};
   final Map<String, bool> _switchValues = <String, bool>{};
   final Map<String, int> _carouselPages = <String, int>{};
   final Map<String, double> _screenScrollOffsets = <String, double>{};
@@ -245,6 +252,7 @@ final class _MosaicPaywallState extends State<MosaicPaywall> {
   int _loadGeneration = 0;
   Timer? _countdownTimer;
   String? _currentScreenId;
+  String? _productLoadAttemptId;
 
   @override
   void initState() {
@@ -254,6 +262,53 @@ final class _MosaicPaywallState extends State<MosaicPaywall> {
     _resetNavigationState();
     _configureCountdownTimer();
     unawaited(_loadProducts());
+    _analytics(
+      MosaicAnalyticsEventName.paywallPresented,
+      correlation: widget.analyticsContext?.correlation(),
+      attribution: widget.analyticsContext?.attribution,
+      payload: const {},
+    );
+  }
+
+  void _analytics(
+    MosaicAnalyticsEventName name, {
+    MosaicAnalyticsCorrelation? correlation,
+    MosaicAnalyticsAttribution? attribution,
+    required Map<String, Object?> payload,
+  }) {
+    final runtime = widget.analyticsRuntime;
+    if (runtime == null || widget.analyticsContext == null) return;
+    unawaited(runtime
+        .record(
+          name: name,
+          correlation: correlation ?? widget.analyticsContext!.correlation(),
+          attribution: attribution ?? widget.analyticsContext!.attribution,
+          payload: payload,
+        )
+        .catchError((Object _) => false));
+  }
+
+  void _reportRenderingFailure(String diagnosticCode) {
+    if (!_reportedRenderingFailures.add(diagnosticCode)) return;
+    _analytics(
+      MosaicAnalyticsEventName.paywallRenderFailed,
+      payload: const <String, Object?>{
+        'diagnosticCode': 'rendering.failed',
+        'retryable': false,
+      },
+    );
+    widget.onDiagnostic?.call(
+      MosaicDiagnostic(
+        code: diagnosticCode,
+        message: 'The Mosaic paywall could not be rendered safely.',
+        severity: MosaicDiagnosticSeverity.error,
+      ),
+    );
+    widget.onResult(
+      MosaicRenderingFailedPresentationResult(
+        diagnosticCode: diagnosticCode,
+      ),
+    );
   }
 
   @override

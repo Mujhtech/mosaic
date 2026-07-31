@@ -95,15 +95,17 @@ const (
 )
 
 type APIKey struct {
-	ID               string     `json:"id"`
-	EnvironmentID    string     `json:"environmentId"`
-	Kind             APIKeyKind `json:"kind"`
-	Prefix           string     `json:"prefix"`
-	CreatedByActorID string     `json:"createdByActorId"`
-	CreatedAt        time.Time  `json:"createdAt"`
-	RotatedAt        *time.Time `json:"rotatedAt,omitempty"`
-	RevokedAt        *time.Time `json:"revokedAt,omitempty"`
-	LastUsedAt       *time.Time `json:"lastUsedAt,omitempty"`
+	ID                   string     `json:"id"`
+	EnvironmentID        string     `json:"environmentId"`
+	ApplicationID        string     `json:"applicationId,omitempty"`
+	ApplicationProjectID string     `json:"-"`
+	Kind                 APIKeyKind `json:"kind"`
+	Prefix               string     `json:"prefix"`
+	CreatedByActorID     string     `json:"createdByActorId"`
+	CreatedAt            time.Time  `json:"createdAt"`
+	RotatedAt            *time.Time `json:"rotatedAt,omitempty"`
+	RevokedAt            *time.Time `json:"revokedAt,omitempty"`
+	LastUsedAt           *time.Time `json:"lastUsedAt,omitempty"`
 }
 
 type APIKeyRecord struct {
@@ -452,23 +454,23 @@ type ProviderMappingObservationMetadata struct {
 // ProviderMappingObservation is immutable, bounded developer-supplied evidence.
 // It never contains transactions, receipts, purchase tokens, or customer data.
 type ProviderMappingObservation struct {
-	ID               string                     `json:"id"`
-	ProjectID        string                     `json:"projectId"`
-	MappingID        string                     `json:"mappingId"`
-	EnvironmentID    string                     `json:"environmentId"`
-	ApplicationID    string                     `json:"applicationId"`
-	Platform         Platform                   `json:"platform"`
-	Provider         ProviderKind               `json:"provider"`
-	AdapterVersion   string                     `json:"adapterVersion"`
-	StoreContext     ProviderObservationContext `json:"storeContext"`
-	Result           ProviderObservationResult  `json:"result"`
-	DiagnosticCode   string                     `json:"diagnosticCode,omitempty"`
-	CorrelationID    string                     `json:"correlationId"`
+	ID               string                             `json:"id"`
+	ProjectID        string                             `json:"projectId"`
+	MappingID        string                             `json:"mappingId"`
+	EnvironmentID    string                             `json:"environmentId"`
+	ApplicationID    string                             `json:"applicationId"`
+	Platform         Platform                           `json:"platform"`
+	Provider         ProviderKind                       `json:"provider"`
+	AdapterVersion   string                             `json:"adapterVersion"`
+	StoreContext     ProviderObservationContext         `json:"storeContext"`
+	Result           ProviderObservationResult          `json:"result"`
+	DiagnosticCode   string                             `json:"diagnosticCode,omitempty"`
+	CorrelationID    string                             `json:"correlationId"`
 	Metadata         ProviderMappingObservationMetadata `json:"metadata"`
-	ObservedAt       time.Time                  `json:"observedAt"`
-	ExpiresAt        *time.Time                 `json:"expiresAt,omitempty"`
-	ReceivedAt       time.Time                  `json:"receivedAt"`
-	CreatedByActorID string                     `json:"createdByActorId"`
+	ObservedAt       time.Time                          `json:"observedAt"`
+	ExpiresAt        *time.Time                         `json:"expiresAt,omitempty"`
+	ReceivedAt       time.Time                          `json:"receivedAt"`
+	CreatedByActorID string                             `json:"createdByActorId"`
 }
 
 type ProviderMetadataSource string
@@ -679,9 +681,9 @@ const (
 )
 
 type ProviderReadinessIssue struct {
-	Code           ProviderErrorCode `json:"code"`
-	ResourceType   string            `json:"resourceType"`
-	ResourceID     string            `json:"resourceId"`
+	Code           ProviderErrorCode        `json:"code"`
+	ResourceType   string                   `json:"resourceType"`
+	ResourceID     string                   `json:"resourceId"`
 	RecoveryAction providerreadiness.Action `json:"recoveryAction"`
 }
 
