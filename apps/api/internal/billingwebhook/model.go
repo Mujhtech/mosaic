@@ -15,6 +15,8 @@ import "time"
 // transaction writes the complete body and delivery sends those exact bytes.
 const ContractVersion = "1"
 
+const ContractVersionV2 = "2"
+
 // EventTypeEntitlementsChanged is the one event type Phase 9B emits. The
 // contract declares ten; the other nine are reserved vocabulary.
 const EventTypeEntitlementsChanged = "customer.entitlements.changed"
@@ -116,15 +118,16 @@ type Actor struct{ ID string }
 // carries secret material — not the ciphertext, not the plaintext, not a
 // fingerprint an offline guess could be checked against.
 type Destination struct {
-	ID            string    `json:"id"`
-	ProjectID     string    `json:"projectId"`
-	EnvironmentID string    `json:"environmentId"`
-	URL           string    `json:"url"`
-	Status        string    `json:"status"`
-	EventTypes    []string  `json:"eventTypes"`
-	Description   string    `json:"description"`
-	CreatedAt     time.Time `json:"createdAt"`
-	UpdatedAt     time.Time `json:"updatedAt"`
+	ID              string    `json:"id"`
+	ProjectID       string    `json:"projectId"`
+	EnvironmentID   string    `json:"environmentId"`
+	URL             string    `json:"url"`
+	Status          string    `json:"status"`
+	ContractVersion int       `json:"contractVersion"`
+	EventTypes      []string  `json:"eventTypes"`
+	Description     string    `json:"description"`
+	CreatedAt       time.Time `json:"createdAt"`
+	UpdatedAt       time.Time `json:"updatedAt"`
 
 	SecretLastRotatedAt     *time.Time `json:"secretLastRotatedAt,omitempty"`
 	DisabledReason          string     `json:"disabledReason,omitempty"`
@@ -250,19 +253,21 @@ type StoredSecret struct {
 
 // DestinationInput is a create or update request after transport validation.
 type DestinationInput struct {
-	ProjectID     string
-	EnvironmentID string
-	URL           string
-	EventTypes    []string
-	Description   string
+	ProjectID       string
+	EnvironmentID   string
+	URL             string
+	EventTypes      []string
+	Description     string
+	ContractVersion int
 }
 
 // DestinationUpdate is a partial update. A nil field is unchanged, which keeps
 // "clear the description" distinguishable from "leave it alone".
 type DestinationUpdate struct {
-	URL         *string
-	EventTypes  []string
-	Description *string
+	URL             *string
+	EventTypes      []string
+	Description     *string
+	ContractVersion *int
 }
 
 // AttemptResult is the outcome of one delivery attempt, applied to the

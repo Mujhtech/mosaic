@@ -116,7 +116,11 @@ func (s *Service) CreateDestination(ctx context.Context, actor Actor, input Dest
 	if err := s.requireEnabled(ctx, input.ProjectID); err != nil {
 		return DestinationWithSecret{}, err
 	}
-	eventTypes, err := normalizeEventTypes(input.EventTypes)
+	contractVersion := input.ContractVersion
+	if contractVersion == 0 {
+		contractVersion = 1
+	}
+	eventTypes, err := normalizeEventTypes(contractVersion, input.EventTypes)
 	if err != nil {
 		return DestinationWithSecret{}, err
 	}
@@ -136,15 +140,16 @@ func (s *Service) CreateDestination(ctx context.Context, actor Actor, input Dest
 
 	now := s.now()
 	created, err := s.repository.CreateDestination(ctx, Destination{
-		ID:            destinationID,
-		ProjectID:     input.ProjectID,
-		EnvironmentID: input.EnvironmentID,
-		URL:           strings.TrimSpace(input.URL),
-		Status:        DestinationActive,
-		EventTypes:    eventTypes,
-		Description:   strings.TrimSpace(input.Description),
-		CreatedAt:     now,
-		UpdatedAt:     now,
+		ID:              destinationID,
+		ProjectID:       input.ProjectID,
+		EnvironmentID:   input.EnvironmentID,
+		URL:             strings.TrimSpace(input.URL),
+		Status:          DestinationActive,
+		ContractVersion: contractVersion,
+		EventTypes:      eventTypes,
+		Description:     strings.TrimSpace(input.Description),
+		CreatedAt:       now,
+		UpdatedAt:       now,
 	}, sealed, actor.ID, now)
 	if err != nil {
 		return DestinationWithSecret{}, err
@@ -195,12 +200,26 @@ func (s *Service) UpdateDestination(ctx context.Context, actor Actor, projectID,
 		trimmed := strings.TrimSpace(*update.URL)
 		update.URL = &trimmed
 	}
-	if update.EventTypes != nil {
-		eventTypes, err := normalizeEventTypes(update.EventTypes)
+	if update.EventTypes != nil || update.ContractVersion != nil {
+		destination, err := s.repository.Destination(ctx, projectID, destinationID)
 		if err != nil {
 			return Destination{}, err
 		}
-		update.EventTypes = eventTypes
+		version := destination.ContractVersion
+		if update.ContractVersion != nil {
+			version = *update.ContractVersion
+		}
+		requested := update.EventTypes
+		if requested == nil {
+			requested = destination.EventTypes
+		}
+		eventTypes, err := normalizeEventTypes(version, requested)
+		if err != nil {
+			return Destination{}, err
+		}
+		if update.EventTypes != nil || update.ContractVersion != nil {
+			update.EventTypes = eventTypes
+		}
 	}
 	return s.repository.UpdateDestination(ctx, projectID, destinationID, update, actor.ID, s.now())
 }
@@ -716,14 +735,24 @@ func (s *Service) newID(prefix string) (string, error) {
 // vocabulary Phase 9B emits. The contract declares ten event types; subscribing
 // to one Mosaic never emits would be a destination that is configured and
 // permanently silent.
-func normalizeEventTypes(requested []string) ([]string, error) {
+func normalizeEventTypes(contractVersion int, requested []string) ([]string, error) {
+	if contractVersion != 1 && contractVersion != 2 {
+		return nil, ErrInvalid
+	}
 	if len(requested) == 0 {
 		return []string{EventTypeEntitlementsChanged}, nil
 	}
 	seen := map[string]bool{}
 	result := make([]string, 0, len(requested))
 	for _, eventType := range requested {
-		if eventType != EventTypeEntitlementsChanged {
+		valid := eventType == EventTypeEntitlementsChanged
+		if contractVersion == 2 {
+			valid = valid || eventType == EventTypeAuthorityCutoverPending ||
+				eventType == EventTypeAuthorityCutoverCompleted ||
+				eventType == EventTypeAuthorityRollbackCompleted ||
+				eventType == EventTypeAuthorityStabilizationCompleted
+		}
+		if !valid {
 			return nil, ErrInvalid
 		}
 		if seen[eventType] {
