@@ -236,6 +236,8 @@ type Repository interface {
 	// Intake.
 	ResolveIntakeToken(ctx context.Context, tokenDigest []byte) (IntakeIdentity, error)
 	PersistRawInput(ctx context.Context, input RawInput, enqueue bool, now time.Time) (PersistResult, error)
+	PersistMigrationInput(ctx context.Context, input RawInput, binding MigrationValidationBinding, now time.Time) (MigrationValidationAcceptance, error)
+	MigrationValidationOutcome(ctx context.Context, projectID, programID, bindingID string) (MigrationValidationBinding, error)
 	RawInput(ctx context.Context, projectID, rawInputID string) (RawInput, error)
 	// ApplicationForIdentifier maps a verified bundle id or package name onto an
 	// Application inside the credential's scope.

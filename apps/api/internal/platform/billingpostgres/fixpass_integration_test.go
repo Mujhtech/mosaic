@@ -57,6 +57,7 @@ func TestKeyringRotationCoversEveryEnvelopeTable(t *testing.T) {
 		"store_server_credentials":        true,
 		"billing_raw_inputs":              true,
 		"webhook_signing_secrets":         true,
+		"billing_migration_credentials":   true,
 	}
 	for table := range found {
 		if !rotatable[table] {
@@ -89,12 +90,12 @@ func TestKeyringRotationResealsBothBillingTables(t *testing.T) {
 	keyA := "3q2-7wAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
 	keyB := "7v7-3QAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
 	underA, err := providercredential.NewAESGCMCipher(
-		`{"version":1,"activeKeyId":"key-a","keys":{"key-a":"`+keyA+`","key-b":"`+keyB+`"}}`, randomReader{})
+		`{"version":1,"activeKeyId":"key-a","keys":{"key-a":"`+keyA+`","key-b":"`+keyB+`","key_one":"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"}}`, randomReader{})
 	if err != nil {
 		t.Fatal(err)
 	}
 	underB, err := providercredential.NewAESGCMCipher(
-		`{"version":1,"activeKeyId":"key-b","keys":{"key-a":"`+keyA+`","key-b":"`+keyB+`"}}`, randomReader{})
+		`{"version":1,"activeKeyId":"key-b","keys":{"key-a":"`+keyA+`","key-b":"`+keyB+`","key_one":"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"}}`, randomReader{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -121,6 +122,23 @@ func TestKeyringRotationResealsBothBillingTables(t *testing.T) {
 		credentialID, projectID, organizationID, environmentID, billing.ClassAppleInAppPurchaseKey,
 		sealed.Version, sealed.Algorithm, sealed.KeyID, sealed.Nonce, sealed.Ciphertext, sealed.Fingerprint,
 		billing.TokenDigest("fixture-rotate-intake"), now); err != nil {
+		t.Fatal(err)
+	}
+
+	migrationCredentialID := "bmc_rotate_fixture"
+	if _, err := pool.Exec(ctx, `DELETE FROM billing_migration_credentials WHERE id IN ($1,'bmc_removed_fixture')`, migrationCredentialID); err != nil {
+		t.Fatal(err)
+	}
+	migrationSecret := []byte("revenuecat-migration-secret")
+	migrationScope := providercredential.SubjectScope{OrganizationID: organizationID, ProjectID: projectID, SubjectKind: providercredential.SubjectBillingMigrationCredential, SubjectID: migrationCredentialID, CredentialClass: "revenuecat_migration_api_key"}
+	migrationEnvelope, err := underA.EncryptSubject(migrationSecret, migrationScope)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := pool.Exec(ctx, `INSERT INTO billing_migration_credentials(id,project_id,provider,external_project_id,status,envelope_version,algorithm,key_id,nonce,ciphertext,fingerprint,created_by_actor_id,created_at) VALUES($1,$2,'revenuecat','rc-active','active',$3,$4,$5,$6,$7,$8,'actor',$9)`, migrationCredentialID, projectID, migrationEnvelope.Version, migrationEnvelope.Algorithm, migrationEnvelope.KeyID, migrationEnvelope.Nonce, migrationEnvelope.Ciphertext, migrationEnvelope.Fingerprint, now); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := pool.Exec(ctx, `INSERT INTO billing_migration_credentials(id,project_id,provider,external_project_id,status,envelope_version,algorithm,key_id,nonce,ciphertext,fingerprint,created_by_actor_id,created_at,removed_at,removed_by_actor_id,removal_digest) VALUES('bmc_removed_fixture',$1,'revenuecat','rc-removed','active',1,'AES-256-GCM','key-a',NULL,NULL,decode(repeat('90',32),'hex'),'actor',$2,$2,'actor',decode(repeat('91',32),'hex'))`, projectID, now); err != nil {
 		t.Fatal(err)
 	}
 
@@ -151,9 +169,9 @@ func TestKeyringRotationResealsBothBillingTables(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if counts["key-a"] < 2 {
-		t.Fatalf("keyring inspect reports %d envelope(s) under the retired key, want at least 2 "+
-			"(a credential and a raw body); an under-report is what makes a documented rotation destructive", counts["key-a"])
+	if counts["key-a"] < 3 {
+		t.Fatalf("keyring inspect reports %d envelope(s) under the retired key, want at least 3 "+
+			"(store credential, migration credential, and raw body); an under-report is what makes a documented rotation destructive", counts["key-a"])
 	}
 
 	// rotate: page, reseal under key B, write back.
@@ -162,9 +180,11 @@ func TestKeyringRotationResealsBothBillingTables(t *testing.T) {
 		t.Fatal(err)
 	}
 	tables := map[string]bool{}
+	removedMigrationPaged := false
 	resealed := make([]BillingEnvelope, 0, len(envelopes))
 	for _, envelope := range envelopes {
 		tables[envelope.Table] = true
+		removedMigrationPaged = removedMigrationPaged || envelope.RowID == "bmc_removed_fixture"
 		plaintext, err := underB.DecryptSubject(providercredential.Envelope{
 			Version: envelope.Version, Algorithm: envelope.Algorithm, KeyID: envelope.KeyID,
 			Nonce: envelope.Nonce, Ciphertext: envelope.Ciphertext,
@@ -181,8 +201,8 @@ func TestKeyringRotationResealsBothBillingTables(t *testing.T) {
 		envelope.Nonce, envelope.Ciphertext, envelope.Fingerprint = sealed.Nonce, sealed.Ciphertext, sealed.Fingerprint
 		resealed = append(resealed, envelope)
 	}
-	if !tables["store_server_credentials"] || !tables["billing_raw_inputs"] {
-		t.Fatalf("rotation paged over %v; both billing envelope tables must appear", tables)
+	if !tables["store_server_credentials"] || !tables["billing_migration_credentials"] || !tables["billing_raw_inputs"] {
+		t.Fatalf("rotation paged over %v; every active billing envelope table must appear", tables)
 	}
 	if err := repository.ReplaceEnvelopes(ctx, resealed, now); err != nil {
 		t.Fatal(err)
@@ -207,6 +227,26 @@ func TestKeyringRotationResealsBothBillingTables(t *testing.T) {
 	})
 	if err != nil || string(opened) != string(credentialSecret) {
 		t.Fatalf("credential did not survive rotation: %v", err)
+	}
+	var migrationKeyID string
+	var migrationNonce, migrationCiphertext, migrationFingerprint []byte
+	if err := pool.QueryRow(ctx, `SELECT key_id,nonce,ciphertext,fingerprint FROM billing_migration_credentials WHERE id=$1`, migrationCredentialID).Scan(&migrationKeyID, &migrationNonce, &migrationCiphertext, &migrationFingerprint); err != nil {
+		t.Fatal(err)
+	}
+	if migrationKeyID != "key-b" {
+		t.Fatalf("migration credential still sealed under %q", migrationKeyID)
+	}
+	openedMigration, err := underB.DecryptSubject(providercredential.Envelope{Version: migrationEnvelope.Version, Algorithm: migrationEnvelope.Algorithm, KeyID: migrationKeyID, Nonce: migrationNonce, Ciphertext: migrationCiphertext, CredentialClass: "revenuecat_migration_api_key", Fingerprint: migrationFingerprint}, migrationScope)
+	if err != nil || string(openedMigration) != string(migrationSecret) {
+		t.Fatalf("migration credential did not survive rotation: %v", err)
+	}
+	var removedKeyID string
+	var removedNonce, removedCiphertext []byte
+	if err := pool.QueryRow(ctx, `SELECT key_id,nonce,ciphertext FROM billing_migration_credentials WHERE id='bmc_removed_fixture'`).Scan(&removedKeyID, &removedNonce, &removedCiphertext); err != nil {
+		t.Fatal(err)
+	}
+	if removedKeyID != "key-a" || removedNonce != nil || removedCiphertext != nil || removedMigrationPaged {
+		t.Fatal("cryptographically removed migration credential was included in rotation")
 	}
 
 	stored, err := repository.RawInput(ctx, projectID, input.ID)

@@ -258,10 +258,22 @@ func (s *Service) validateApple(ctx context.Context, job ValidationJob, input Ra
 		return s.quarantineAttempt(job, input, attemptID, attemptNumber, started,
 			Permanent(CategoryResolution, "bundle_not_in_credential_scope"), QuarantineApplicationMismatch, "error")
 	}
+	if diagnostic, reason := migrationApplicationMismatch(input.MigrationValidation, applicationID); diagnostic != "" {
+		return s.quarantineAttempt(job, input, attemptID, attemptNumber, started,
+			Permanent(CategoryResolution, diagnostic), reason, "error")
+	}
+	if diagnostic, reason := migrationProviderProductMismatch(input.MigrationValidation, transaction.ProductID); diagnostic != "" {
+		return s.quarantineAttempt(job, input, attemptID, attemptNumber, started,
+			Permanent(CategoryResolution, diagnostic), reason, "error")
+	}
 	storeEnvironment := normalizeAppleEnvironment(transaction.Environment)
 	if storeEnvironment == StoreUnclassified {
 		return s.quarantineAttempt(job, input, attemptID, attemptNumber, started,
 			Permanent(CategoryInvalid, "unclassified_store_environment"), QuarantineStoreEnvironmentMismatch, "error")
+	}
+	if diagnostic, reason := migrationStoreEnvironmentMismatch(input.MigrationValidation, storeEnvironment); diagnostic != "" {
+		return s.quarantineAttempt(job, input, attemptID, attemptNumber, started,
+			Permanent(CategoryResolution, diagnostic), reason, "error")
 	}
 	if !storeEnvironmentMatchesMode(storeEnvironment, input.EnvironmentMode) {
 		// A sandbox transaction in a production Environment (or the reverse) is
@@ -635,6 +647,10 @@ func (s *Service) validateGoogle(ctx context.Context, job ValidationJob, input R
 		return s.quarantineAttempt(job, input, attemptID, attemptNumber, started,
 			Permanent(CategoryResolution, "package_not_in_credential_scope"), QuarantineApplicationMismatch, "error")
 	}
+	if diagnostic, reason := migrationApplicationMismatch(input.MigrationValidation, applicationID); diagnostic != "" {
+		return s.quarantineAttempt(job, input, attemptID, attemptNumber, started,
+			Permanent(CategoryResolution, diagnostic), reason, "error")
+	}
 
 	fact := TransactionFact{
 		ProjectID:           input.ProjectID,
@@ -780,6 +796,14 @@ func (s *Service) validateGoogle(ctx context.Context, job ValidationJob, input R
 		// timestamp means no fact.
 		return s.quarantineAttempt(job, input, attemptID, attemptNumber, started,
 			Permanent(CategoryInvalid, "no_provider_timestamp"), QuarantineMissingProviderTimestamp, "error")
+	}
+	if diagnostic, reason := migrationProviderProductMismatch(input.MigrationValidation, fact.ProviderProductIdentifier); diagnostic != "" {
+		return s.quarantineAttempt(job, input, attemptID, attemptNumber, started,
+			Permanent(CategoryResolution, diagnostic), reason, "error")
+	}
+	if diagnostic, reason := migrationStoreEnvironmentMismatch(input.MigrationValidation, fact.StoreEnvironment); diagnostic != "" {
+		return s.quarantineAttempt(job, input, attemptID, attemptNumber, started,
+			Permanent(CategoryResolution, diagnostic), reason, "error")
 	}
 	outcome := s.resolveAndBuild(ctx, job, input, fact, platform, attemptID, attemptNumber, started, fact.StoreEnvironment)
 	// Same treatment as Apple's appAccountToken: read from the authoritative
@@ -1144,8 +1168,9 @@ func googleSubscriptionKind(state string) string {
 	}
 }
 
-// googleCredential returns the service account, the credential record, and the
-// package name of the credential's first scoped Application.
+// googleCredential returns the service account, the credential record, and a
+// package name from its scope. Migration validation replaces the legacy
+// observation fallback with the exact expected Application package.
 //
 // The package name is returned because an observation's body carries none — only
 // an RTDN does — and the Play API requires one on every call. Falling back to
@@ -1164,6 +1189,12 @@ func (s *Service) googleCredential(ctx context.Context, input RawInput) (*google
 	credential, envelope, class, organizationID, packageName, err := s.repository.CredentialSecretFor(ctx, input.ProjectID, input.CredentialID)
 	if err != nil || credential.Status != "active" {
 		return nil, StoreServerCredential{}, "", ErrCredentialUnusable
+	}
+	if input.MigrationValidation != nil {
+		packageName, err = s.repository.ProviderApplicationIdentifier(ctx, input.CredentialID, input.MigrationValidation.ExpectedApplicationID)
+		if err != nil || packageName == "" {
+			return nil, credential, "", ErrApplicationNotScoped
+		}
 	}
 	plaintext, err := s.cipher.DecryptSubject(providercredential.Envelope{
 		Version: envelope.Version, Algorithm: envelope.Algorithm, KeyID: envelope.KeyID,
@@ -1260,6 +1291,9 @@ func (s *Service) resolveAndBuild(ctx context.Context, job ValidationJob, input 
 	} else {
 		fact.ResolutionState = StateUnresolved
 	}
+	if outcome, quarantined := s.enforceMigrationResolution(job, input, resolution, attemptID, attemptNumber, started); quarantined {
+		return outcome
+	}
 
 	factID, _ := s.newID("btf")
 	fact.ID = factID
@@ -1296,6 +1330,58 @@ func (s *Service) resolveAndBuild(ctx context.Context, job ValidationJob, input 
 	}
 	outcome.Ledger = s.ledgerFor(input, outcome)
 	return outcome
+}
+
+func migrationApplicationMismatch(binding *MigrationValidationBinding, applicationID string) (string, string) {
+	if binding == nil {
+		return "", ""
+	}
+	if applicationID != binding.ExpectedApplicationID {
+		return DiagnosticMigrationApplicationMismatch, QuarantineApplicationMismatch
+	}
+	return "", ""
+}
+
+func migrationProviderProductMismatch(binding *MigrationValidationBinding, providerProductID string) (string, string) {
+	if binding == nil {
+		return "", ""
+	}
+	if providerProductID != binding.ExpectedStoreProductIdentifier {
+		return DiagnosticMigrationProviderProductMismatch, QuarantineProductUnknown
+	}
+	return "", ""
+}
+
+func migrationStoreEnvironmentMismatch(binding *MigrationValidationBinding, storeEnvironment string) (string, string) {
+	if binding == nil {
+		return "", ""
+	}
+	if storeEnvironment != binding.ExpectedStoreEnvironment || (storeEnvironment != StoreProduction && storeEnvironment != StoreSandbox) {
+		return DiagnosticMigrationStoreEnvironmentMismatch, QuarantineStoreEnvironmentMismatch
+	}
+	return "", ""
+}
+
+func migrationResolutionMismatch(binding *MigrationValidationBinding, resolution Resolution) (string, string) {
+	if binding == nil {
+		return "", ""
+	}
+	if resolution.Outcome != ResolutionResolved || resolution.MosaicProductID == "" {
+		return DiagnosticMigrationMosaicProductUnresolved, QuarantineProductUnknown
+	}
+	if resolution.MosaicProductID != binding.ExpectedMosaicProductID {
+		return DiagnosticMigrationMosaicProductMismatch, QuarantineProductAmbiguous
+	}
+	return "", ""
+}
+
+func (s *Service) enforceMigrationResolution(job ValidationJob, input RawInput, resolution Resolution, attemptID string, attemptNumber int, started time.Time) (AttemptOutcome, bool) {
+	diagnostic, reason := migrationResolutionMismatch(input.MigrationValidation, resolution)
+	if diagnostic == "" {
+		return AttemptOutcome{}, false
+	}
+	return s.quarantineAttempt(job, input, attemptID, attemptNumber, started,
+		Permanent(CategoryResolution, diagnostic), reason, "error"), true
 }
 
 func (s *Service) ledgerFor(input RawInput, outcome AttemptOutcome) []LedgerEntry {

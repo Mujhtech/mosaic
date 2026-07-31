@@ -747,22 +747,28 @@ func quarantineReasonForIntake(input billing.RawInput) string {
 func (r *Repository) RawInput(ctx context.Context, projectID, rawInputID string) (billing.RawInput, error) {
 	var input billing.RawInput
 	var applicationID, credentialID, providerEventID, notificationKind, notificationSubtype *string
+	var migrationID, migrationProgramID, migrationReferenceKind, expectedApplicationID, expectedStoreProductID, expectedMosaicProductID, expectedStoreEnvironment *string
 	var envelopeVersion *int
 	var algorithm, keyID *string
 	var nonce, ciphertext, fingerprint, referenceDigest []byte
 	err := r.pool.QueryRow(ctx,
-		`SELECT id, project_id, organization_id, environment_id, environment_mode, application_id, credential_id,
-		        provider, source, source_authority, provider_event_id, idempotency_key, content_digest,
-		        transaction_reference_digest, body_state, envelope_version, algorithm, key_id, nonce, ciphertext,
-		        fingerprint, authentication_result, store_environment, notification_kind, notification_subtype,
-		        ingestion_status, correlation_id, provider_occurred_at, received_at, expires_at
-		 FROM billing_raw_inputs WHERE id=$1 AND project_id=$2`, rawInputID, projectID).
+		`SELECT i.id, i.project_id, i.organization_id, i.environment_id, i.environment_mode, i.application_id, i.credential_id,
+		        i.provider, i.source, i.source_authority, i.provider_event_id, i.idempotency_key, i.content_digest,
+		        i.transaction_reference_digest, i.body_state, i.envelope_version, i.algorithm, i.key_id, i.nonce, i.ciphertext,
+		        i.fingerprint, i.authentication_result, i.store_environment, i.notification_kind, i.notification_subtype,
+		        i.ingestion_status, i.correlation_id, i.provider_occurred_at, i.received_at, i.expires_at,
+		        mv.id,mv.program_id,mv.reference_kind,mv.expected_application_id,
+		        mv.expected_store_product_identifier,mv.expected_mosaic_product_id
+		        ,mv.expected_store_environment
+		 FROM billing_raw_inputs i LEFT JOIN billing_migration_validation_bindings mv ON mv.raw_input_id=i.id
+		 WHERE i.id=$1 AND i.project_id=$2`, rawInputID, projectID).
 		Scan(&input.ID, &input.ProjectID, &input.OrganizationID, &input.EnvironmentID, &input.EnvironmentMode,
 			&applicationID, &credentialID, &input.Provider, &input.Source, &input.SourceAuthority,
 			&providerEventID, &input.IdempotencyKey, &input.ContentDigest, &referenceDigest,
 			&input.BodyState, &envelopeVersion, &algorithm, &keyID, &nonce, &ciphertext, &fingerprint,
 			&input.AuthenticationResult, &input.StoreEnvironment, &notificationKind, &notificationSubtype,
-			&input.IngestionStatus, &input.CorrelationID, &input.ProviderOccurredAt, &input.ReceivedAt, &input.ExpiresAt)
+			&input.IngestionStatus, &input.CorrelationID, &input.ProviderOccurredAt, &input.ReceivedAt, &input.ExpiresAt,
+			&migrationID, &migrationProgramID, &migrationReferenceKind, &expectedApplicationID, &expectedStoreProductID, &expectedMosaicProductID, &expectedStoreEnvironment)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return billing.RawInput{}, billing.ErrNotFound
 	}
@@ -775,6 +781,12 @@ func (r *Repository) RawInput(ctx context.Context, projectID, rawInputID string)
 	input.NotificationKind = deref(notificationKind)
 	input.NotificationSubtype = deref(notificationSubtype)
 	input.TransactionReferenceDigest = referenceDigest
+	if migrationID != nil {
+		input.MigrationValidation = &billing.MigrationValidationBinding{ID: *migrationID, ProgramID: deref(migrationProgramID),
+			ProjectID: input.ProjectID, EnvironmentID: input.EnvironmentID, RawInputID: input.ID, Provider: input.Provider,
+			ReferenceKind: deref(migrationReferenceKind), ExpectedApplicationID: deref(expectedApplicationID),
+			ExpectedStoreProductIdentifier: deref(expectedStoreProductID), ExpectedMosaicProductID: deref(expectedMosaicProductID), ExpectedStoreEnvironment: deref(expectedStoreEnvironment)}
+	}
 	if envelopeVersion != nil && algorithm != nil && keyID != nil {
 		input.Envelope = &billing.Envelope{
 			Version: *envelopeVersion, Algorithm: *algorithm, KeyID: *keyID,

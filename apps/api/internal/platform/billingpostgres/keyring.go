@@ -46,12 +46,14 @@ func (e BillingEnvelope) Scope() providercredential.SubjectScope {
 	}
 }
 
-// EnvelopeCountsByKeyID reports how many Phase 9A envelopes each key seals,
+// EnvelopeCountsByKeyID reports how many billing envelopes each key seals,
 // across both tables. It never returns key material or ciphertext.
 func (r *Repository) EnvelopeCountsByKeyID(ctx context.Context) (map[string]int64, error) {
 	counts := make(map[string]int64)
 	rows, err := r.pool.Query(ctx,
 		`SELECT key_id, count(*) FROM store_server_credentials WHERE revoked_at IS NULL GROUP BY key_id
+		 UNION ALL
+		 SELECT key_id, count(*) FROM billing_migration_credentials WHERE status='active' AND removed_at IS NULL AND nonce IS NOT NULL AND ciphertext IS NOT NULL GROUP BY key_id
 		 UNION ALL
 		 SELECT key_id, count(*) FROM billing_raw_inputs WHERE body_state = 'stored' AND key_id IS NOT NULL GROUP BY key_id
 		 UNION ALL
@@ -105,6 +107,30 @@ func (r *Repository) EnvelopesNotUnderKey(ctx context.Context, keyID string, lim
 	rows.Close()
 	if err := rows.Err(); err != nil {
 		return nil, fmt.Errorf("read credential envelopes: %w", err)
+	}
+	if len(envelopes) >= limit {
+		return envelopes, nil
+	}
+
+	migrationRows, err := r.pool.Query(ctx,
+		`SELECT c.id,p.organization_id,c.project_id,c.envelope_version,c.algorithm,c.key_id,c.nonce,c.ciphertext,c.fingerprint
+		 FROM billing_migration_credentials c JOIN projects p ON p.id=c.project_id
+		 WHERE c.key_id<>$1 AND c.status='active' AND c.removed_at IS NULL AND c.nonce IS NOT NULL AND c.ciphertext IS NOT NULL
+		 ORDER BY c.id LIMIT $2`, keyID, limit-len(envelopes))
+	if err != nil {
+		return nil, fmt.Errorf("read billing migration credential envelopes: %w", err)
+	}
+	for migrationRows.Next() {
+		envelope := BillingEnvelope{Table: "billing_migration_credentials", SubjectKind: providercredential.SubjectBillingMigrationCredential, CredentialClass: "revenuecat_migration_api_key"}
+		if err := migrationRows.Scan(&envelope.RowID, &envelope.OrganizationID, &envelope.ProjectID, &envelope.Version, &envelope.Algorithm, &envelope.KeyID, &envelope.Nonce, &envelope.Ciphertext, &envelope.Fingerprint); err != nil {
+			migrationRows.Close()
+			return nil, fmt.Errorf("scan billing migration credential envelope: %w", err)
+		}
+		envelopes = append(envelopes, envelope)
+	}
+	migrationRows.Close()
+	if err := migrationRows.Err(); err != nil {
+		return nil, fmt.Errorf("read billing migration credential envelopes: %w", err)
 	}
 	if len(envelopes) >= limit {
 		return envelopes, nil
@@ -204,7 +230,11 @@ func (r *Repository) ReplaceEnvelopes(ctx context.Context, envelopes []BillingEn
 			statement = `UPDATE webhook_signing_secrets
 				SET envelope_version=$2, algorithm=$3, key_id=$4, nonce=$5, ciphertext=$6,
 				    fingerprint=$7
-				WHERE id=$1 AND $8 IS NOT NULL`
+				WHERE id=$1 AND $8::timestamptz IS NOT NULL`
+		case "billing_migration_credentials":
+			statement = `UPDATE billing_migration_credentials
+				SET envelope_version=$2,algorithm=$3,key_id=$4,nonce=$5,ciphertext=$6,fingerprint=$7
+				WHERE id=$1 AND removed_at IS NULL AND nonce IS NOT NULL AND ciphertext IS NOT NULL AND $8::timestamptz IS NOT NULL`
 		default:
 			return fmt.Errorf("unsupported billing envelope table %q", envelope.Table)
 		}

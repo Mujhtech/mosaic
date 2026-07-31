@@ -399,6 +399,33 @@ func (r *Repository) CompleteAttempt(ctx context.Context, job billing.Validation
 		}
 	}
 
+	// Completing the ordinary Phase 9A attempt is also the only operation that
+	// may complete a Phase 9C validation binding. Retryable attempts deliberately
+	// leave it accepted; pending is never represented as validated evidence.
+	var migrationBinding billing.MigrationValidationBinding
+	err = tx.QueryRow(ctx, `SELECT id,program_id,project_id,environment_id,raw_input_id,provider,reference_kind,
+		expected_application_id,expected_store_product_identifier,expected_mosaic_product_id,expected_store_environment
+		FROM billing_migration_validation_bindings WHERE raw_input_id=$1 FOR UPDATE`, attempt.RawInputID).
+		Scan(&migrationBinding.ID, &migrationBinding.ProgramID, &migrationBinding.ProjectID, &migrationBinding.EnvironmentID,
+			&migrationBinding.RawInputID, &migrationBinding.Provider, &migrationBinding.ReferenceKind,
+			&migrationBinding.ExpectedApplicationID, &migrationBinding.ExpectedStoreProductIdentifier, &migrationBinding.ExpectedMosaicProductID, &migrationBinding.ExpectedStoreEnvironment)
+
+	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
+		return fmt.Errorf("lock migration validation binding: %w", err)
+	}
+	if err == nil && attempt.Outcome != billing.OutcomeRetryableFailure {
+		status := billing.MigrationValidationQuarantined
+		if attempt.Outcome == billing.OutcomeValidated && outcome.Fact != nil {
+			status = billing.MigrationValidationValidated
+		}
+		evidenceDigest := billing.MigrationValidationEvidenceDigest(migrationBinding, attempt)
+		if _, err := tx.Exec(ctx, `UPDATE billing_migration_validation_bindings SET status=$2,diagnostic_code=NULLIF($3,''),
+			validation_attempt_id=$4,evidence_digest=$5,provider_watermark=$6,completed_at=$6 WHERE id=$1 AND status='accepted'`,
+			migrationBinding.ID, status, attempt.DiagnosticCode, attempt.ID, evidenceDigest, attempt.CompletedAt); err != nil {
+			return fmt.Errorf("complete migration validation binding: %w", err)
+		}
+	}
+
 	if write := outcome.Quarantine; write != nil {
 		if err := upsertQuarantine(ctx, tx, attempt.ProjectID, attempt.EnvironmentID, *write); err != nil {
 			return err
