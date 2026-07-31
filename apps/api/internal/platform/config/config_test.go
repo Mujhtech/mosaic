@@ -358,6 +358,32 @@ func TestTelemetryExportSecurityIsValidated(t *testing.T) {
 	}
 }
 
+// The gRPC transport is configured through the same endpoint variable as HTTP,
+// and the OpenTelemetry specification defines that variable as a URL for both.
+// A bare host:port is the form a gRPC operator reaches for out of habit, and it
+// is the one form that must be rejected: the SDK would silently fall back to its
+// own default collector rather than the address that was written down.
+func TestTelemetryGRPCEndpointsAreValidatedAsURLs(t *testing.T) {
+	for name, test := range map[string]struct {
+		endpoint  string
+		wantError bool
+	}{
+		"plaintext grpc url":               {endpoint: "http://localhost:4317"},
+		"tls grpc url":                     {endpoint: "https://collector.example:4317"},
+		"grpc url behind a gateway prefix": {endpoint: "https://gateway.example/otlp"},
+		"bare host and port":               {endpoint: "localhost:4317", wantError: true},
+		"scheme-relative host and port":    {endpoint: "//localhost:4317", wantError: true},
+	} {
+		t.Run(name, func(t *testing.T) {
+			_, err := loadTestConfig(t, map[string]string{
+				"OTEL_EXPORTER_OTLP_PROTOCOL": "grpc",
+				"OTEL_EXPORTER_OTLP_ENDPOINT": test.endpoint,
+			})
+			assertTelemetryValidation(t, err, test.wantError)
+		})
+	}
+}
+
 func TestProductionTelemetryRequiresVerifiedCollectorOrAcknowledgement(t *testing.T) {
 	for name, test := range map[string]struct {
 		overrides map[string]string
