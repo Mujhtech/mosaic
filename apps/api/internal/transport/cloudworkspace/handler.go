@@ -43,6 +43,7 @@ func RegisterRoutes(router chi.Router, service *cloudworkspace.Service, resolver
 
 func RegisterWorkspaceRoutes(router chi.Router, service *cloudworkspace.Service) {
 	handler := &Handler{service: service}
+	router.Get("/workspace/bootstrap", handler.getWorkspaceBootstrap)
 	router.Route("/organizations", func(router chi.Router) {
 		router.Get("/", handler.listOrganizations)
 		router.Post("/", handler.createOrganization)
