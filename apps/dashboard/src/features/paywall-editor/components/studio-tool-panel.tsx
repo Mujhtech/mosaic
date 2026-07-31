@@ -257,14 +257,17 @@ function AssetsPanel({ assets }: { assets: readonly Asset[] }) {
   const editor = useEditorActions();
   const source = useStudioSource();
 
-  function uniqueId(prefix: string) {
-    const used = new Set(assets.map((asset) => asset.id));
-    let index = assets.length + 1;
-    while (used.has(`${prefix}-${index}`)) {
-      index += 1;
-    }
-    return `${prefix}-${index}`;
-  }
+  const uniqueId = useCallback(
+    (prefix: string) => {
+      const used = new Set(assets.map((asset) => asset.id));
+      let index = assets.length + 1;
+      while (used.has(`${prefix}-${index}`)) {
+        index += 1;
+      }
+      return `${prefix}-${index}`;
+    },
+    [assets]
+  );
 
   const addAsset = useCallback(
     (type: Asset["type"]) => {

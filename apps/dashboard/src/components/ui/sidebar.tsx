@@ -98,7 +98,7 @@ function SidebarProvider({
   const toggleSidebar = useCallback(
     () =>
       isMobile ? setOpenMobile((open) => !open) : setOpen((open) => !open),
-    [isMobile, setOpen, setOpenMobile]
+    [isMobile, setOpen]
   );
 
   // Adds a keyboard shortcut to toggle the sidebar.
@@ -131,7 +131,7 @@ function SidebarProvider({
       setOpenMobile,
       toggleSidebar,
     }),
-    [state, open, setOpen, isMobile, openMobile, setOpenMobile, toggleSidebar]
+    [state, open, setOpen, isMobile, openMobile, toggleSidebar]
   );
 
   return (
@@ -612,12 +612,12 @@ function SidebarMenuSkeleton({
       data-slot="sidebar-menu-skeleton"
       {...props}
     >
-      {showIcon && (
+      {showIcon ? (
         <Skeleton
           className="size-4 rounded"
           data-sidebar="menu-skeleton-icon"
         />
-      )}
+      ) : null}
       <Skeleton
         className="h-4 max-w-(--skeleton-width) flex-1"
         data-sidebar="menu-skeleton-text"

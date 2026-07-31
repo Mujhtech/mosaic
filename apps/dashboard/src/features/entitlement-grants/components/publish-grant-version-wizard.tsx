@@ -132,13 +132,13 @@ export function PublishGrantVersionWizard({
     proposal,
   });
 
-  function reset() {
+  const reset = useCallback(() => {
     setStep("shape");
     setImpact(undefined);
     setPreviewedFingerprint(undefined);
     setError(null);
     setBusy(false);
-  }
+  }, []);
 
   const preview = useCallback(async () => {
     setBusy(true);

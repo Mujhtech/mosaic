@@ -397,6 +397,7 @@ export function usePreviewConnection(options: {
     [send, sessionId]
   );
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: connectionEpoch is the reconnect trigger; the socket state itself is read through refs
   useEffect(() => {
     if (!endpoint || typeof WebSocket === "undefined") {
       return;
@@ -771,6 +772,7 @@ export function usePreviewConnection(options: {
     sessionId,
   ]);
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: locale and textScale reach sendLatestDraft through refs, so listing them here is what re-sends the preview when either changes
   useEffect(() => {
     if (
       status !== "connected" ||
@@ -790,6 +792,7 @@ export function usePreviewConnection(options: {
     status,
   ]);
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: the mock commerce state reaches sendLatestCommerce through refs, so listing it here is what re-sends it when it changes
   useEffect(() => {
     if (
       status !== "connected" ||

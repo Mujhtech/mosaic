@@ -36,6 +36,7 @@ export function OneTimeSecret({
   writeToClipboard = (value) => navigator.clipboard.writeText(value),
 }: OneTimeSecretProps) {
   const [copied, setCopied] = useState(false);
+  const copyButtonLabel = copied ? "Copied" : copyLabel;
   const [copyFailed, setCopyFailed] = useState(false);
   const titleId = useId();
 
@@ -84,7 +85,7 @@ export function OneTimeSecret({
       </code>
       <Button className="mt-3" onClick={handleClick} variant="outline">
         <CopyIcon aria-hidden size={16} />
-        {copied ? "Copied" : copyLabel}
+        {copyButtonLabel}
       </Button>
       <p aria-live="polite" className="mt-2 text-muted-foreground text-xs">
         {copyFailed

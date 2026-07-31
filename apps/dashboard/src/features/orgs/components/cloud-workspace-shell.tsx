@@ -69,7 +69,7 @@ export function CloudWorkspaceShell() {
         <EnvironmentSwitcher />
       </SidebarHeader>
       <SidebarContent className="scrollbar-thin scrollbar-gutter-stable">
-        {scope.projectId && (
+        {scope.projectId ? (
           <NavMain
             items={[
               {
@@ -251,8 +251,8 @@ export function CloudWorkspaceShell() {
             ]}
             label="Workspace"
           />
-        )}
-        {scope.organizationId && canManage && (
+        ) : null}
+        {scope.organizationId && canManage ? (
           <NavMain
             items={[
               {
@@ -263,7 +263,7 @@ export function CloudWorkspaceShell() {
             ]}
             label="Organization"
           />
-        )}
+        ) : null}
       </SidebarContent>
       <SidebarFooter>
         <UserMenu />

@@ -39,6 +39,9 @@ interface TransactionLedgerTableProps {
  * Both timestamps are always visible and separately labelled, and Mosaic
  * Environment and Store Environment occupy separate columns.
  */
+const SKELETON_ROWS = ["a", "b", "c", "d", "e"];
+const SKELETON_CELLS = Array.from({ length: 10 }, (_, index) => `c${index}`);
+
 export function TransactionLedgerTable({
   applications,
   environmentName,
@@ -88,10 +91,10 @@ export function TransactionLedgerTable({
       </TableHeader>
       <TableBody>
         {isPending
-          ? Array.from({ length: 5 }, (_, index) => (
-              <TableRow key={`skeleton-${index}`}>
-                {Array.from({ length: 10 }, (__, cell) => (
-                  <TableCell key={`skeleton-${index}-${cell}`}>
+          ? SKELETON_ROWS.map((row) => (
+              <TableRow key={row}>
+                {SKELETON_CELLS.map((cell) => (
+                  <TableCell key={`${row}-${cell}`}>
                     <Skeleton className="h-4 w-20" />
                   </TableCell>
                 ))}

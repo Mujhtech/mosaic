@@ -37,6 +37,7 @@ export function MigrationImpactReviewAction({
   const [confirmedBinding, setConfirmedBinding] = useState<string | null>(null);
   const confirmed = confirmedBinding === binding;
   const explanationId = `${binding.replaceAll(/[^a-zA-Z0-9_-]/g, "-")}-explanation`;
+  const buttonLabel = isPending ? pendingLabel : actionLabel;
   return (
     <section className="rounded border border-dashed p-3">
       <h3 className="font-semibold text-sm">{title}</h3>
@@ -72,7 +73,7 @@ export function MigrationImpactReviewAction({
         type="button"
         variant={variant}
       >
-        {isPending ? pendingLabel : actionLabel}
+        {buttonLabel}
       </Button>
       {disabledReason ? (
         <p className="mt-2 text-muted-foreground text-sm" id={explanationId}>

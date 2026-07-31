@@ -316,15 +316,18 @@ function DecisionWorkspace({
         setFieldValue: (name: "rules", value: readonly PlacementRule[]) => void;
       }
     ).setFieldValue("rules", next);
-  const updateFallbacks = (next: readonly NamedFallback[]) =>
-    (
-      form as unknown as {
-        setFieldValue: (
-          name: "fallbacks",
-          value: readonly NamedFallback[]
-        ) => void;
-      }
-    ).setFieldValue("fallbacks", next);
+  const updateFallbacks = useCallback(
+    (next: readonly NamedFallback[]) =>
+      (
+        formRef.current as unknown as {
+          setFieldValue: (
+            name: "fallbacks",
+            value: readonly NamedFallback[]
+          ) => void;
+        }
+      ).setFieldValue("fallbacks", next),
+    []
+  );
   const handleClick3 = useCallback(() => {
     const fallbacks = formRef.current.state.values.fallbacks;
     updateFallbacks([
@@ -791,6 +794,7 @@ function FallbackList({
       {fallbacks.map((fallback, index) => (
         <li
           className="grid gap-3 rounded border p-3 lg:grid-cols-[14rem_1fr_auto]"
+          // biome-ignore lint/suspicious/noArrayIndexKey: the fallback key is the field being edited, so keying on it would remount the row and drop focus on every keystroke; every input in the row is controlled, so a reused row still renders the right values
           key={`${fallback.key}:${index}`}
         >
           <Field>

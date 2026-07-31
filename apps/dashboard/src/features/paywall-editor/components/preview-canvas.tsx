@@ -315,6 +315,7 @@ export function PreviewCanvas({
     [canvas.fitMode, canvas.zoom]
   );
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: a device or orientation change resizes the frame, so the viewport has to be refitted even though the effect reads the flow through a ref
   useEffect(() => {
     const flow = flowRef.current;
     if (!flow) {

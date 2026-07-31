@@ -142,6 +142,7 @@ export function useComponentTreeModel({
     return { byComponent, documentSummary };
   }, [validation.issues]);
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: expanding or collapsing the tree moves the selected row, so the scroll has to run again even though the effect reads nothing from it
   useLayoutEffect(() => {
     if (!document) {
       return;

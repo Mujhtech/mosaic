@@ -100,17 +100,6 @@ export function ApiKeysPage({
     ...apiKeysQueryOptions(selectedEnvironment?.id ?? ""),
     enabled: scopeReady && Boolean(selectedEnvironment),
   });
-  function sanitizeSecretMutationState() {
-    create.reset();
-    rotate.reset();
-    clearApiKeySecretMutationCache(queryClient);
-  }
-
-  function dismissSecret() {
-    setRevealed(null);
-    sanitizeSecretMutationState();
-  }
-
   const create = useMutation(
     createApiKeyMutationOptions(selectedEnvironment?.id ?? "", queryClient)
   );
@@ -120,6 +109,16 @@ export function ApiKeysPage({
   const revoke = useMutation(
     revokeApiKeyMutationOptions(selectedEnvironment?.id ?? "", queryClient)
   );
+  const sanitizeSecretMutationState = useCallback(() => {
+    create.reset();
+    rotate.reset();
+    clearApiKeySecretMutationCache(queryClient);
+  }, [create, queryClient, rotate]);
+
+  const dismissSecret = useCallback(() => {
+    setRevealed(null);
+    sanitizeSecretMutationState();
+  }, [sanitizeSecretMutationState]);
   const revealSecret = useCallback(
     (result: ApiKeySecretResult) => {
       transferApiKeySecret(

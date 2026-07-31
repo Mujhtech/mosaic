@@ -123,7 +123,7 @@ export function ProviderCredentialSheet({
             <form.Subscribe selector={(state) => state.isSubmitting}>
               {(isSubmitting) => (
                 <Button disabled={isSubmitting} type="submit">
-                  {isSubmitting ? "Validating…" : title}
+                  {isSubmitting ? "Validating…" : `${title}`}
                 </Button>
               )}
             </form.Subscribe>

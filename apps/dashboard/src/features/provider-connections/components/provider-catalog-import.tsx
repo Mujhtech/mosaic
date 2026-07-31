@@ -129,21 +129,24 @@ export function ProviderCatalogImport({
     });
   }, [availability, preview.products, search]);
 
-  function productDraft(productId: string): ProductDraft {
-    const product = preview.products.find((item) => item.id === productId);
-    return (
-      drafts[productId] ?? {
-        existingProductId: "",
-        internalName:
-          product?.displayName ||
-          product?.storeIdentifier ||
-          "Imported Product",
-        key: catalogKey(product?.storeIdentifier ?? productId),
-        providerOfferingIdentifier: "",
-        providerPackageIdentifier: "",
-      }
-    );
-  }
+  const productDraft = useCallback(
+    (productId: string): ProductDraft => {
+      const product = preview.products.find((item) => item.id === productId);
+      return (
+        drafts[productId] ?? {
+          existingProductId: "",
+          internalName:
+            product?.displayName ||
+            product?.storeIdentifier ||
+            "Imported Product",
+          key: catalogKey(product?.storeIdentifier ?? productId),
+          providerOfferingIdentifier: "",
+          providerPackageIdentifier: "",
+        }
+      );
+    },
+    [drafts, preview.products]
+  );
 
   function updateDraft(productId: string, change: Partial<ProductDraft>) {
     setDrafts((current) => ({
@@ -164,41 +167,48 @@ export function ProviderCatalogImport({
     });
   }
 
-  function selections(
-    ids: readonly string[]
-  ): ProviderProductImportSelection[] {
-    return ids.flatMap((id) => {
-      const product = preview.products.find((item) => item.id === id);
-      if (!product) {
-        return [];
-      }
-      const draft = productDraft(id);
-      return [
-        {
-          applicationId: selectedApplicationId,
-          entitlements: providerEntitlementSelections(
-            preview.entitlements,
-            entitlementTargets[id] ?? {}
-          ),
-          environmentId: selectedEnvironmentId,
-          ...(draft.existingProductId
-            ? { existingProductId: draft.existingProductId }
-            : {
-                internalName: draft.internalName.trim(),
-                key: draft.key.trim(),
-              }),
-          ...(draft.providerOfferingIdentifier &&
-          draft.providerPackageIdentifier
-            ? {
-                providerOfferingIdentifier: draft.providerOfferingIdentifier,
-                providerPackageIdentifier: draft.providerPackageIdentifier,
-              }
-            : {}),
-          providerProductIdentifier: providerImportIdentifier(product),
-        },
-      ];
-    });
-  }
+  const selections = useCallback(
+    (ids: readonly string[]): ProviderProductImportSelection[] =>
+      ids.flatMap((id) => {
+        const product = preview.products.find((item) => item.id === id);
+        if (!product) {
+          return [];
+        }
+        const draft = productDraft(id);
+        return [
+          {
+            applicationId: selectedApplicationId,
+            entitlements: providerEntitlementSelections(
+              preview.entitlements,
+              entitlementTargets[id] ?? {}
+            ),
+            environmentId: selectedEnvironmentId,
+            ...(draft.existingProductId
+              ? { existingProductId: draft.existingProductId }
+              : {
+                  internalName: draft.internalName.trim(),
+                  key: draft.key.trim(),
+                }),
+            ...(draft.providerOfferingIdentifier &&
+            draft.providerPackageIdentifier
+              ? {
+                  providerOfferingIdentifier: draft.providerOfferingIdentifier,
+                  providerPackageIdentifier: draft.providerPackageIdentifier,
+                }
+              : {}),
+            providerProductIdentifier: providerImportIdentifier(product),
+          },
+        ];
+      }),
+    [
+      entitlementTargets,
+      preview.entitlements,
+      preview.products,
+      productDraft,
+      selectedApplicationId,
+      selectedEnvironmentId,
+    ]
+  );
 
   const submit = useCallback(
     async (ids = [...selectedIds]) => {
