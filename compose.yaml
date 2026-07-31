@@ -76,6 +76,10 @@ services:
       MOSAIC_OBJECT_STORAGE_TLS: "false"
       MOSAIC_PUBLIC_ASSET_BASE_URL: ${MOSAIC_PUBLIC_ASSET_BASE_URL:-https://localhost:8443/v1/sdk/assets}
       MOSAIC_SESSION_COOKIE_SECURE: ${MOSAIC_SESSION_COOKIE_SECURE:-false}
+      MOSAIC_PROVIDER_INTEGRATIONS_ENABLED: ${MOSAIC_PROVIDER_INTEGRATIONS_ENABLED:-false}
+      MOSAIC_PROVIDER_CREDENTIAL_KEYRING: ${MOSAIC_PROVIDER_CREDENTIAL_KEYRING:-}
+      MOSAIC_REVENUECAT_BASE_URL: ${MOSAIC_REVENUECAT_BASE_URL:-https://api.revenuecat.com/v2}
+      MOSAIC_PROVIDER_OPERATION_TIMEOUT: ${MOSAIC_PROVIDER_OPERATION_TIMEOUT:-60s}
     depends_on:
       postgres:
         condition: service_healthy
@@ -85,6 +89,28 @@ services:
         condition: service_completed_successfully
     ports:
       - "${MOSAIC_API_PORT:-8080}:8080"
+
+  provider-worker:
+    profiles: ["providers"]
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+    entrypoint: ["/usr/local/bin/worker"]
+    environment:
+      DATABASE_URL: postgres://${POSTGRES_USER:-mosaic}:${POSTGRES_PASSWORD:-mosaic_dev}@postgres:5432/${POSTGRES_DB:-mosaic}?sslmode=disable
+      DATABASE_MAX_CONNECTIONS: ${DATABASE_MAX_CONNECTIONS:-10}
+      DATABASE_MIN_CONNECTIONS: ${DATABASE_MIN_CONNECTIONS:-2}
+      DATABASE_CONNECT_TIMEOUT: ${DATABASE_CONNECT_TIMEOUT:-5s}
+      MOSAIC_PROVIDER_INTEGRATIONS_ENABLED: "true"
+      MOSAIC_PROVIDER_CREDENTIAL_KEYRING: ${MOSAIC_PROVIDER_CREDENTIAL_KEYRING:-}
+      MOSAIC_REVENUECAT_BASE_URL: ${MOSAIC_REVENUECAT_BASE_URL:-https://api.revenuecat.com/v2}
+      MOSAIC_PROVIDER_OPERATION_TIMEOUT: ${MOSAIC_PROVIDER_OPERATION_TIMEOUT:-60s}
+      OTEL_SERVICE_NAME: mosaic-provider-worker
+    depends_on:
+      postgres:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
 
   local-edge:
     image: caddy:2.10-alpine

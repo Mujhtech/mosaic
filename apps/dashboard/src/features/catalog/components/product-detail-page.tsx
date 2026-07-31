@@ -1,6 +1,6 @@
 import { ArchiveIcon } from "@phosphor-icons/react/dist/ssr/Archive"
 import { ArrowCounterClockwiseIcon } from "@phosphor-icons/react/dist/ssr/ArrowCounterClockwise"
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
+import { useMutation, useQueries, useQuery, useQueryClient } from "@tanstack/react-query"
 import { Link } from "@tanstack/react-router"
 import { useState } from "react"
 
@@ -11,9 +11,11 @@ import { resolveHostedQueryState } from "@/features/auth/types/hosted-query-stat
 import { ProductReadinessPanel } from "@/features/catalog/components/product-readiness-panel"
 import { ProviderMappingsPanel } from "@/features/catalog/components/provider-mappings-panel"
 import {
+  archiveProviderMappingMutationOptions,
   grantEntitlementMutationOptions,
   productLifecycleMutationOptions,
   removeEntitlementGrantMutationOptions,
+  replaceProviderMappingMutationOptions,
   setProductReplacementMutationOptions,
 } from "@/features/catalog/mutations/catalog-mutations"
 import {
@@ -21,6 +23,7 @@ import {
   productEntitlementsQueryOptions,
   productQueryOptions,
   productReadinessQueryOptions,
+  providerMappingMetadataQueryOptions,
   productsQueryOptions,
   productUsageQueryOptions,
   providerMappingsQueryOptions,
@@ -77,6 +80,12 @@ export function ProductDetailPage({
   const scopeReady = project.isSuccess && product.isSuccess && scopeMismatch === null
   const usage = useQuery({ ...productUsageQueryOptions(productId), enabled: scopeReady })
   const mappings = useQuery({ ...providerMappingsQueryOptions(productId), enabled: scopeReady })
+  const metadataQueries = useQueries({
+    queries: (mappings.data?.items ?? []).map((mapping) => ({
+      ...providerMappingMetadataQueryOptions(mapping.id),
+      enabled: scopeReady && Boolean(mapping.currentSnapshotId) && mapping.status !== "archived",
+    })),
+  })
   const grants = useQuery({ ...productEntitlementsQueryOptions(productId), enabled: scopeReady })
   const entitlements = useQuery({ ...entitlementsQueryOptions(projectId), enabled: scopeReady })
   const replacements = useQuery({ ...productsQueryOptions(projectId), enabled: scopeReady })
@@ -109,6 +118,12 @@ export function ProductDetailPage({
   const grant = useMutation(grantEntitlementMutationOptions(productId, projectId, queryClient))
   const removeGrant = useMutation(
     removeEntitlementGrantMutationOptions(productId, projectId, queryClient),
+  )
+  const archiveMapping = useMutation(
+    archiveProviderMappingMutationOptions(productId, projectId, queryClient),
+  )
+  const replaceMapping = useMutation(
+    replaceProviderMappingMutationOptions(productId, projectId, queryClient),
   )
   const error =
     project.error ??
@@ -169,12 +184,13 @@ export function ProductDetailPage({
   )
   const connectedReadiness = readiness.data ? productReadinessView(readiness.data) : null
   const mappingViews =
-    mappings.data?.items.map((mapping) =>
+    mappings.data?.items.map((mapping, index) =>
       providerMappingView(
         mapping,
         applications.data?.items ?? [],
         environments.data?.items ?? [],
         connections.data?.items ?? [],
+        metadataQueries[index]?.data,
       ),
     ) ?? []
   const manageProvidersHref = `/organizations/${encodeURIComponent(organizationId)}/projects/${encodeURIComponent(projectId)}/catalog/providers`
@@ -241,6 +257,23 @@ export function ProductDetailPage({
         </div>
 
         <WorkflowPanel
+          description="These fields belong to Mosaic and remain stable when provider mappings or credentials change."
+          title="Mosaic-owned Product"
+        >
+          <dl className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            <Metric label="Internal name" value={product.data?.internalName ?? "—"} />
+            <Metric label="Product key" value={product.data?.key ?? "—"} />
+            <Metric label="Type" value={product.data?.type.replaceAll("_", " ") ?? "—"} />
+            <Metric label="Entitlement grants" value={`${grants.data?.items.length ?? 0}`} />
+          </dl>
+          <p className="text-muted-foreground mt-4 text-sm">
+            {product.data?.description || "No internal description."} Provider display names,
+            localized prices, periods, offers, and availability are synchronized read-only evidence
+            below and never overwrite this identity.
+          </p>
+        </WorkflowPanel>
+
+        <WorkflowPanel
           description="Choose one Environment and one registered Application. Mosaic does not fall back to project-wide or another platform’s readiness."
           title="Readiness scope"
         >
@@ -293,7 +326,13 @@ export function ProductDetailPage({
           ) : null}
         </WorkflowPanel>
 
-        {connectedReadiness ? <ProductReadinessPanel readiness={connectedReadiness} /> : null}
+        {connectedReadiness ? (
+          <ProductReadinessPanel
+            accessHref="#entitlement-grants-title"
+            manageProvidersHref={manageProvidersHref}
+            readiness={connectedReadiness}
+          />
+        ) : null}
 
         <WorkflowPanel
           description="Usage is always shown before lifecycle controls. Historical references keep this Mosaic Product ID stable."
@@ -371,7 +410,18 @@ export function ProductDetailPage({
           ) : null}
         </WorkflowPanel>
 
-        <ProviderMappingsPanel manageProvidersHref={manageProvidersHref} mappings={mappingViews} />
+        <ProviderMappingsPanel
+          error={archiveMapping.error ?? replaceMapping.error}
+          isPending={archiveMapping.isPending || replaceMapping.isPending}
+          manageProvidersHref={manageProvidersHref}
+          mappings={mappingViews}
+          onArchive={async (mappingId) => {
+            await archiveMapping.mutateAsync(mappingId)
+          }}
+          onReplace={async (mappingId, body) => {
+            await replaceMapping.mutateAsync({ body, mappingId })
+          }}
+        />
 
         <WorkflowPanel
           description="Archive removes this Product from future selection without deleting history. Restore preserves the same ID."

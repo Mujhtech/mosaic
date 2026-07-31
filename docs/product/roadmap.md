@@ -2710,35 +2710,38 @@ Release milestone:
 
 Do not begin Phase 5 until Gate 4A, Gate 4B, and the consolidated Phase 4 review are accepted.
 
-## Phase 5: Placements and Targeting
+## Phase 5: Advanced Placement Decisions and Targeting
+
+Phase 5 extends the basic one-to-one Placement contract introduced during hosted publishing.
+
+Basic Placement names and SDK presentation APIs already exist before this phase.
+
+Phase 5 adds remotely configurable, deterministic, offline-capable decisions.
 
 ### Objectives
 
-- allow applications to request monetization decisions by intent
-- remove hardcoded paywall identifiers from application workflows
-- support remotely configurable targeting
+- select the correct published Paywall for a Placement
+- support a deliberate `no_paywall` outcome
+- target users without application-code changes
+- preserve deterministic decisions
+- support offline evaluation
+- make every decision explainable
+- prevent selection of Paywalls whose Products are unavailable
+- preserve user privacy and minimize collected attributes
 
-### Deliverables
+### Placement Model
 
-- named placements
-- placement SDK APIs
-- rule evaluation
-- rule priority
-- platform targeting
-- locale targeting
-- country targeting
-- app-version targeting
-- user attributes
-- entitlement targeting
-- percentage rollout
-- QA overrides
-- default outcomes
-- fallback behaviour
-- rule-decision diagnostics
+A Placement is a stable user-facing application intent.
 
-### Example
+Examples:
 
-Applications should call:
+- `onboarding_complete`
+- `export_pdf`
+- `unlock_ai`
+- `usage_limit_reached`
+- `premium_feature_tapped`
+
+Applications call:
 
 ```dart
 final result = await Mosaic.present(
@@ -2746,100 +2749,575 @@ final result = await Mosaic.present(
 );
 ```
 
-rather than referencing a specific paywall identifier.
-
-### Information architecture
-
-The user-facing model should favour:
-
-```text
-Plan
-→ Products
-→ Paywalls
-→ Placements
+```swift
+let result = await Mosaic.present(
+    placement: "export_pdf"
+)
 ```
 
-Avoid exposing unnecessary implementation hierarchy such as:
-
-```text
-Product
-→ Package
-→ Offering
-→ Entitlement
+```kotlin
+val result = Mosaic.present(
+    placement = "export_pdf"
+)
 ```
 
-### Exit criteria
+Applications should not hardcode Paywall Version IDs.
 
-- applications reference placement names
-- matching is deterministic
+### Placement Outcomes
+
+A Placement decision may return:
+
+- show a published Paywall Version
+- show no Paywall
+- use a defined fallback Paywall
+- return an explicit unavailable result
+
+A nonmatching rule is not an error.
+
+A `no_paywall` outcome must be an explicit supported decision.
+
+### Decision Inputs
+
+Supported inputs may include:
+
+- platform
+- operating-system version where justified
+- application version
+- locale
+- explicitly supplied country
+- anonymous installation ID
+- optional application user ID
+- allow-listed user attributes
+- provider-observed Entitlement state
+- Product availability
+- Product readiness
+- Environment
+- QA override
+
+Country must not be silently inferred from locale.
+
+Every decision input must have a documented source.
+
+### Identity Model
+
+Support:
+
+- generated installation ID
+- optional application user ID
+- anonymous-to-identified aliasing
+- stable decision assignment
+- typed user attributes
+- attribute allow-listing
+- attribute size limits
+- attribute removal
+- identity reset
+
+Do not rely on advertising identifiers.
+
+Do not require personal information for Placement evaluation.
+
+### User Attributes
+
+Supported attribute types should be constrained, such as:
+
+- string
+- boolean
+- number
+- timestamp
+- bounded string list
+
+Attributes must be:
+
+- explicitly supplied by the host application
+- allow-listed by Project configuration
+- size-limited
+- inspectable in the targeting simulator
+- excluded from logs where sensitive
+- omitted when unnecessary
+
+Do not provide an arbitrary remote scripting language.
+
+### Rule Model
+
+A rule should include:
+
+- stable rule ID
+- Placement ID
+- priority
+- conditions
+- outcome
+- fallback
+- enabled state
+- created metadata
+- updated metadata
+- configuration version
+
+Conditions may support bounded operators such as:
+
+- equals
+- not equals
+- in
+- not in
+- greater than
+- greater than or equal
+- less than
+- less than or equal
+- exists
+- does not exist
+- semantic-version comparison
+- percentage bucket
+
+Do not allow executable JavaScript or arbitrary remote expressions.
+
+### Rule Priority and Conflict Handling
+
+Rule evaluation order must be explicit and deterministic.
+
+The dashboard must detect:
+
+- unreachable rules
+- duplicate conditions
+- conflicting rules
+- missing fallback
+- unsupported attribute types
+- invalid app-version comparisons
+- Paywalls with unavailable Products
+
+Users should see which rule wins and why.
+
+### Deterministic Percentage Rollout
+
+Percentage rollout must use a versioned deterministic algorithm.
+
+The bucket should derive from values such as:
+
+```text
+Project ID
++ Placement ID
++ Rule ID
++ stable identity key
++ bucketing algorithm version
+```
+
+The same identity and configuration must receive the same outcome.
+
+Do not use a new random value on every Placement call.
+
+### Offline Evaluation
+
+Placement decisions should be evaluable from the accepted Configuration Release.
+
+The SDK must not require a network request every time a Placement is presented.
+
+Evaluation order:
+
+1. use the current accepted Configuration Release
+2. evaluate rules locally
+3. verify Product and capability availability
+4. choose the outcome
+5. use fallback where necessary
+6. return an explicit result
+
+### Product and Entitlement Safety
+
+A rule must not select a Paywall that cannot safely resolve required Products for the current:
+
+- application
+- Environment
+- platform
+- active provider
+
+Entitlement states must preserve:
+
+- active
+- inactive
+- unknown
+- provider unavailable
+- failed
+
+Unknown Entitlement state must not silently become inactive.
+
+### Targeting Simulator
+
+Provide a simulator in the dashboard.
+
+Users should be able to enter:
+
+```text
+Platform: iOS
+Application version: 2.3.0
+Locale: de-DE
+Country: DE
+Entitlement: free
+Product availability:
+- Pro Monthly
+- Pro Yearly
+User attributes:
+- student = true
+```
+
+The simulator should return:
+
+- selected Placement
+- evaluated rules
+- condition results
+- winning rule
+- selected Paywall Version
+- Product readiness
+- fallback path
+- final outcome
+- decision trace
+
+### Decision Diagnostics
+
+Each Placement result should support safe development diagnostics containing:
+
+- Placement key
+- Configuration Release ID
+- evaluated rule IDs
+- winning rule
+- decision reason
+- fallback reason
+- Product-readiness result
+- identity-key type
+- bucketing-algorithm version
+
+Do not expose sensitive user attributes unnecessarily.
+
+### Dashboard
+
+Implement:
+
+- Placement list
+- Placement detail
+- rule builder
+- rule priority
+- audience conditions
+- percentage rollout
+- QA overrides
+- Product and Entitlement conditions
+- fallback configuration
+- simulator
+- decision trace
+- unreachable-rule warnings
+- conflict warnings
+- archive and usage inspection
+
+### SDKs
+
+Flutter, SwiftUI, and Compose must support:
+
+- local rule evaluation
+- typed user attributes
+- identify
+- reset identity
+- Placement decision result
+- `no_paywall`
+- deterministic rollout
+- Product-readiness fallback
+- development diagnostics
+- offline operation
+
+### Explicit Exclusions
+
+Do not implement:
+
+- experiments
+- statistical result reporting
+- analytics dashboards
+- AI targeting
+- arbitrary remote code
+- server request on every Placement
+- automatic Product substitution
+- automatic Entitlement assumptions
+
+### Exit Criteria
+
+- applications use stable Placement names
+- basic Phase 3 Placement APIs remain compatible
+- rules evaluate deterministically
+- rule priority is explicit
+- conflicts are detected
+- percentage rollout remains stable
+- local offline evaluation works
 - nonmatching users continue safely
-- rule decisions are debuggable
+- `no_paywall` works
+- unknown Entitlement state is preserved
+- unavailable Products trigger defined fallback
 - targeting can change without an application release
-- the dashboard explains why a rule matched
-- workflows do not end in dead ends
+- user attributes are typed and allow-listed
+- identity aliasing is documented
+- the simulator explains the final decision
+- decision traces are debuggable
+- no workflow ends in a dead end
 
 ### Review Gate 5
 
+Create:
+
+```text
+docs/reviews/phase-5.md
+```
+
 The Phase 5 demo is:
 
-> One placement showing different paywalls based on platform, locale, app version, or user attributes.
+> Call one Placement and show different published Paywalls for iOS, Android, application version, locale, Product availability, Entitlement state, and user attributes while preserving deterministic offline decisions.
+
+Release milestone:
+
+> Public Alpha
+
+Classify Phase 5 as:
+
+- Accepted
+- Accepted with tracked follow-ups
+- Rejected pending fixes
 
 ---
 
-## Phase 6: Analytics
+## Phase 6: Analytics, Identity, and Privacy
 
 ### Objectives
 
-- provide reliable paywall and placement funnel analytics
-- preserve attribution to exact paywall versions
+- provide reliable Paywall, Product, commerce, and Placement analytics
+- preserve attribution to immutable versions
+- distinguish client-observed outcomes from provider-confirmed outcomes
+- provide a stable identity model
 - ensure analytics never block rendering or purchasing
+- establish privacy and data-governance controls
 
-### Deliverables
+### Event Contract
 
-#### SDK events
+Define a versioned Analytics Event Contract.
 
-- placement requested
-- placement matched
-- placement not matched
-- paywall presented
-- paywall dismissed
-- paywall render failed
-- product selected
+Every event should include where applicable:
+
+- event ID
+- event-schema version
+- occurred-at timestamp
+- received-at timestamp
+- Organization ID
+- Project ID
+- Environment ID
+- Application ID
+- anonymous installation ID
+- optional application user ID
+- session ID
+- platform
+- SDK version
+- application version
+- Configuration Release ID
+- Placement ID
+- rule ID
+- Paywall ID
+- Paywall Version ID
+- Product ID
+- Plan ID
+- provider
+- experiment ID and Variant ID where applicable later
+- typed event properties
+
+### Event Taxonomy
+
+Support events such as:
+
+#### Placement
+
+- Placement requested
+- Placement matched
+- Placement returned no Paywall
+- Placement fallback used
+- Placement failed
+
+#### Paywall
+
+- Paywall presented
+- Paywall dismissed
+- Paywall render failed
+- Paywall action selected
+
+#### Product
+
+- Product load started
+- Product load completed
+- Product load failed
+- Product unavailable
+- Product selected
+
+#### Purchase
+
 - purchase started
-- purchase completed
+- purchase completed on client
+- purchase pending
 - purchase cancelled
 - purchase failed
+
+#### Restore
+
 - restore started
 - restore completed
+- restore found nothing
 - restore failed
 
-#### Delivery
+Client-observed purchase completion must remain distinguishable from provider-confirmed transaction completion.
 
-- local event queue
-- event batching
-- retry handling
+Provider-confirmed transaction completion is available only when a provider supplies a trusted confirmation path.
+
+### Delivery Semantics
+
+Use:
+
+> At-least-once SDK delivery with idempotent server ingestion.
+
+SDK delivery must support:
+
+- local queue
+- batching
+- bounded retry
+- bounded backoff
 - local storage limits
-- event identifiers
-- idempotency strategy
-- environment isolation
-- nonblocking delivery
+- lifecycle-aware flushing
+- request cancellation
+- event expiry
+- explicit drop policy
+- nonblocking rendering
+- nonblocking purchasing
 
-#### Dashboard
+An analytics failure must never block:
 
-- impressions
+- Placement evaluation
+- Paywall rendering
+- Product loading
+- purchase
+- restore
+
+### Event Ingestion
+
+Implement:
+
+- batch endpoint
+- environment-scoped SDK authentication
+- idempotency by event ID
+- schema-version validation
+- bounded payload size
+- rate limiting
+- safe rejection
+- ingestion telemetry
+- tenant isolation
+- retention metadata
+
+Do not introduce Kafka, ClickHouse, or another analytics database solely because future scale may require it.
+
+Use the existing architecture until measured load justifies an ADR.
+
+### Identity
+
+Support:
+
+- anonymous installation identity
+- optional application user identity
+- aliasing
+- logout or identity reset
+- cross-session continuity
+- identity merge audit
+- deleted-user handling
+- no advertising-ID dependency
+
+Identity merge rules must be deterministic.
+
+Do not merge users based on email, display name, or heuristic similarity.
+
+### Metrics
+
+Dashboard metrics should include:
+
+- Paywall impressions
 - dismissals
-- product selections
+- Product selections
 - purchase starts
-- purchase completions
+- client-observed purchase completions
+- provider-confirmed completions where available
 - conversion rate
-- placement metrics
-- paywall metrics
-- version comparisons
-- platform breakdowns
-- locale breakdowns
-- event export
+- Product conversion
+- Plan conversion
+- Placement performance
+- Paywall performance
+- Paywall Version comparison
+- provider error breakdown
+- Product-availability failures
+- platform breakdown
+- locale breakdown
+- export
 
-### Explicit exclusions
+### Metric Definitions
+
+Every metric must document:
+
+- numerator
+- denominator
+- event basis or unique-user basis
+- attribution window
+- timezone
+- identity handling
+- retry handling
+- duplicate handling
+- cancelled and pending outcome handling
+- client-observed versus provider-confirmed basis
+
+Do not show a metric named only `Conversion` without defining it.
+
+### Attribution
+
+Events must remain attributable to:
+
+- exact Configuration Release
+- exact Placement rule
+- exact Paywall Version
+- exact Mosaic Product
+- provider
+- application
+- Environment
+
+Historical definitions must not change when current Paywalls or Products are updated.
+
+### Privacy and Data Governance
+
+Implement:
+
+- data minimization
+- attribute allow-listing
+- consent-aware collection where required
+- retention configuration
+- user-data export
+- user-data deletion
+- Organization isolation
+- server-side filtering
+- audit events
+- sensitive-property redaction
+- documented data inventory
+- no unnecessary personal information
+
+Do not collect raw Paywall text, secrets, store credentials, or full request bodies by default.
+
+### Dashboard
+
+Implement:
+
+- analytics overview
+- Placement funnel
+- Paywall funnel
+- Product funnel
+- Paywall Version comparison
+- provider errors
+- Product-availability failures
+- platform and locale filtering
+- Environment filtering
+- metric definitions
+- event export
+- retention settings
+- user-data export and deletion workflows
+
+### Explicit Exclusions
 
 Do not implement:
 
@@ -2850,22 +3328,50 @@ Do not implement:
 - cohort analysis
 - predictive analytics
 - revenue forecasting
+- AI insights
+- experiment statistics
 
-### Exit criteria
+### Exit Criteria
 
-- event delivery does not block UI
-- event delivery does not block purchases
-- conversion funnels are visible
-- historical versions remain attributable
+- analytics does not block UI or purchasing
+- event ingestion is idempotent
+- event schemas are versioned
+- events remain attributable to immutable versions
+- Placement funnels are visible
+- Paywall funnels are visible
+- Product funnels are visible
+- client and provider-confirmed outcomes are distinct
+- Product and provider failures are visible
 - retries work
-- duplicate-event handling is documented
-- metrics can be filtered by project and environment
+- identity aliasing is deterministic
+- user-data export works
+- user-data deletion works
+- retention is configurable
+- metric definitions are visible
+- metrics filter by Project and Environment
+- privacy controls are documented
 
 ### Review Gate 6
 
+Create:
+
+```text
+docs/reviews/phase-6.md
+```
+
 The Phase 6 demo is:
 
-> Show how users move from paywall presentation to completed purchase for a specific paywall version.
+> Trace users from Placement request to Paywall presentation, Product selection, purchase start, and completion for one exact Paywall Version and Product, then export or delete one user’s data.
+
+Release milestone:
+
+> Public Beta
+
+Classify Phase 6 as:
+
+- Accepted
+- Accepted with tracked follow-ups
+- Rejected pending fixes
 
 ---
 
@@ -2873,157 +3379,400 @@ The Phase 6 demo is:
 
 ### Objectives
 
-- enable valid paywall experiments without application-code changes
-- provide deterministic assignment and reliable exposure tracking
+- enable valid Paywall and Product-presentation experiments without application-code changes
+- preserve deterministic assignment
+- support offline assignment
+- preserve immutable attribution
+- report results without overstating certainty
 
-### Deliverables
+### Experiment Model
 
-- control and variants
-- weighted allocation
-- deterministic assignment
-- persistent assignment
-- immutable variant versions
-- exposure tracking
-- audience targeting
+An Experiment should contain:
+
+- stable Experiment ID
+- Project and Environment
+- Placement
+- control Variant
+- one or more treatment Variants
+- immutable Paywall Version references
+- immutable Configuration Release references
+- targeting
+- allocation
+- assignment-key policy
+- bucketing-algorithm version
 - start and end times
-- QA overrides
+- status
+- primary metric
+- guardrail metrics
+- traffic-allocation history
+
+### Variant Model
+
+Each Variant references immutable resources.
+
+A Variant must not mutate during an active Experiment.
+
+Changing a Variant creates:
+
+- a new Paywall Version
+- a new Variant version
+- or a new Experiment
+
+Changing a Provider Product Mapping must not silently change an active Variant.
+
+### Assignment
+
+Implement:
+
+- versioned bucketing algorithm
+- stable assignment-key definition
+- SDK-local assignment for offline operation
+- anonymous installation assignment
+- identified-user assignment
+- cross-device assignment where supported
+- persistent assignment
+- weighted allocation
+- QA override
+
+The same identity and Experiment version must receive the same Variant.
+
+### Exposure
+
+Assignment alone does not count as exposure.
+
+Exposure occurs only when the Variant Paywall is actually presented.
+
+Exposure events must include:
+
+- Experiment ID
+- Variant ID
+- Paywall Version ID
+- Configuration Release ID
+- Placement ID
+- assignment-key type
+- bucketing-algorithm version
+- exposure timestamp
+
+### Experiment Safety
+
+Implement:
+
+- broken-Variant emergency stop
 - pause and resume
-- result reporting
-- raw-event export
-- experiment history
+- scheduled start and end
+- traffic-allocation history
+- sample-ratio mismatch detection
+- minimum-sample warnings
+- overlapping-Experiment warnings
+- mutual-exclusion groups
+- Product-availability comparison
+- provider-capability comparison
+- fallback detection
 - guardrail metrics
 
-### Experiment rules
+### Statistical Reporting
 
-- assignment alone does not count as exposure
-- exposure occurs only after the paywall is presented
-- variants remain immutable during an active experiment
-- modifying a variant creates a new version
-- the same stable identity receives the same assignment
+Use an explicitly documented statistical method.
 
-### Explicit exclusions
+Reports should include:
+
+- sample size
+- conversion estimate
+- confidence interval or equivalent uncertainty
+- allocation
+- exposure count
+- conversion count
+- observation window
+- data freshness
+- sample-ratio warnings
+- guardrail changes
+
+Do not display a simplistic `Winner` label based only on raw conversion percentages.
+
+### Supported Experiment Variables
+
+Experiments may test:
+
+- Paywall layout
+- copy
+- Product ordering
+- default selected Product
+- Product-set composition
+- trial messaging
+- annual versus monthly emphasis
+- image or media presentation
+- CTA treatment
+
+Do not mutate provider Product mappings inside an active Variant.
+
+### Dashboard
+
+Implement:
+
+- Experiment list
+- Experiment creation
+- control and Variant selection
+- allocation editor
+- targeting
+- QA overrides
+- start and end
+- result reporting
+- sample-ratio warnings
+- overlap warnings
+- mutual-exclusion configuration
+- emergency stop
+- raw-event export
+- Experiment history
+
+### Explicit Exclusions
 
 Do not implement:
 
 - automatic winner selection
-- AI experiment recommendations
-- predictive experiment outcomes
+- AI Experiment recommendations
+- predictive Experiment outcomes
+- automated traffic reallocation
+- autonomous publishing
 
-### Exit criteria
+### Exit Criteria
 
-- assignment remains stable
-- variants remain immutable
+- assignment is deterministic
+- offline assignment works
+- identified-user assignment works across devices where supported
+- Variants remain immutable
 - exposure occurs only after presentation
 - results remain attributable to exact versions
-- experiments can be paused safely
-- QA users can force a variant
-- data can be exported
+- allocation history is preserved
+- sample-ratio mismatches are detected
+- minimum-sample warnings are shown
+- overlapping Experiments are warned or isolated
+- Product-availability differences are detected
+- broken Variants can be stopped safely
+- QA users can force a Variant
+- uncertainty is shown
+- raw data can be exported
 
 ### Review Gate 7
 
+Create:
+
+```text
+docs/reviews/phase-7.md
+```
+
 The Phase 7 demo is:
 
-> Split users between two paywall versions and compare completed-purchase conversion.
+> Split users between two immutable Paywall Variants, preserve offline and identified-user assignment, record exposure only after presentation, detect a sample-ratio issue, and compare purchase conversion with documented uncertainty.
+
+Release milestone:
+
+> v1 Feature Complete
+
+Classify Phase 7 as:
+
+- Accepted
+- Accepted with tracked follow-ups
+- Rejected pending fixes
 
 ---
 
-## Phase 8: Self-Hosting and Public Alpha
+## Phase 8: Operational Hardening and v1 General Availability
 
 ### Objectives
 
-- make Mosaic independently deployable
-- publish the open-source platform for external developers
-- document installation, upgrades, backups, and security
+- make Mosaic reliable to install, operate, upgrade, secure, and recover
+- harden Mosaic Cloud and self-hosted deployments
+- stabilize public APIs and SDK compatibility
+- complete v1 documentation and operational tooling
+- move from beta to General Availability
 
-### Deliverables
+Phase 8 should prioritize hardening over adding new product functionality.
 
-- Docker Compose deployment
-- API container
-- worker container
-- dashboard container
-- PostgreSQL
-- Redis where required
-- S3-compatible storage
-- environment configuration
-- database migrations
+### Deployment and Operations
+
+Implement:
+
+- tested Docker Compose deployment
+- production deployment examples
+- environment configuration reference
 - administrator bootstrap
 - health checks
-- backup documentation
-- restore documentation
-- upgrade documentation
+- readiness checks
+- installation diagnostics
+- operational dashboards
+- structured logs
+- traces
+- metrics
+- rate limiting
+- abuse protection
+- resource limits
+- graceful shutdown
+- worker recovery
+- object-storage diagnostics
+
+### Database and Upgrades
+
+Implement:
+
+- migration compatibility policy
+- preflight migration checks
+- migration status
+- migration rollback procedures where safe
+- upgrade testing
+- downgrade limitations
+- release channels
+- upgrade notifications
+- failed-upgrade recovery
+- backup verification
+- restore verification
+- data-integrity checks
+- persistent-volume documentation
+
+A production installation must not silently auto-migrate without an accepted deployment workflow.
+
+### Security
+
+Complete:
+
+- security review
+- dependency scanning
+- secret scanning
+- software-bill-of-materials generation
+- session-security review
+- API-key review
+- provider-secret encryption review
+- credential-rotation documentation
+- least-privilege deployment guidance
+- cross-tenant authorization review
+- rate-limit review
+- object-storage access review
+- vulnerability-reporting policy
+- security-contact process
+- audit-log review
+
+### API and SDK Stability
+
+Define:
+
+- REST API versioning policy
+- Paywall Protocol compatibility policy
+- Configuration Delivery compatibility policy
+- Commerce Provider Contract compatibility policy
+- SDK semantic-versioning policy
+- deprecation policy
+- minimum supported SDK window
+- migration guides
+- release notes
+- rollback guidance
+
+### Documentation and Community
+
+Complete:
+
+- installation guide
+- local-development guide
+- SDK quickstarts
+- Flutter guide
+- iOS guide
+- Android guide
+- provider guides
+- Product Catalog guide
+- publishing guide
+- Placement guide
+- analytics guide
+- Experiment guide
+- backup and restore guide
+- upgrade guide
 - security guide
-- production configuration examples
-- public SDK documentation
-- contribution guide
 - troubleshooting guide
+- contribution guide
+- code of conduct
+- release notes
+- support workflow
 
-### Exit criteria
+### Operational Verification
 
-Running:
+Demonstrate:
 
-```bash
-docker compose up
-```
+- clean installation
+- upgrade from the previous supported release
+- database migration
+- failed-migration recovery
+- backup
+- restore
+- API restart
+- worker restart
+- object-storage restart
+- SDK configuration delivery after recovery
+- provider-secret rotation
+- public SDK-key rotation
 
-starts a complete usable Mosaic installation.
+### Exit Criteria
 
-The installation supports:
+A production installation can be:
 
-- account creation
-- project creation
-- local and hosted paywall editing
-- publishing
-- SDK configuration delivery
-- commerce providers
-- placements
-- analytics
-- experiments
+- installed
+- configured
+- upgraded
+- backed up
+- restored
+- monitored
+- secured
+- recovered from a failed migration
+- recovered from a failed process
+- operated using documented procedures
+
+Additional criteria:
+
+- Docker Compose starts a complete installation
+- production examples are tested
+- backup and restore are demonstrated
+- upgrade paths are documented and tested
+- critical security findings are resolved
+- operational alerts are actionable
+- public APIs have compatibility policies
+- SDKs have stable compatibility policies
+- v1 documentation covers the complete workflow
+- no known critical data-loss path remains
 
 ### Review Gate 8
 
-Classify the public alpha as:
+Create:
 
-- Ready
+```text
+docs/reviews/phase-8.md
+```
+
+Classify v1 readiness as:
+
+- Ready for General Availability
 - Ready with documented limitations
 - Not ready
 
 The Phase 8 demo is:
 
-> Clone Mosaic, run Docker Compose, create a paywall, and publish it to an example application.
+> Install Mosaic, publish a Paywall, upgrade the deployment, rotate credentials, restore from backup, and verify that SDK configuration delivery and provider integrations continue working.
+
+Release milestone:
+
+> v1 General Availability
 
 ---
 
-## Phase 9: Mosaic Billing
+## Phase 9: Mosaic Billing Program
 
-### Objectives
+### Conditional Entry Gate
 
-- build an optional open-source subscription infrastructure layer
-- allow teams to replace RevenueCat when they choose
-- preserve compatibility with external providers
+Phase 9 begins only when post-v1 adoption demonstrates meaningful demand for replacing RevenueCat or equivalent subscription infrastructure.
 
-### Deliverables
+The entry review must provide evidence such as:
 
-- Apple transaction validation
-- Google purchase validation
-- subscription-state engine
-- unified customer model
-- entitlements
-- renewals
-- expiration
-- grace periods
-- billing retry states
-- refunds
-- revocations
-- upgrades
-- downgrades
-- cross-platform identity
-- restore synchronization
-- customer server API
-- billing webhooks
-- audit history
-- replayable billing events
-
-### Migration rules
+- design-partner requests
+- public user demand
+- migration intent
+- provider-cost concerns
+- self-hosting requirements
+- need for authoritative cross-platform Entitlements
 
 Mosaic Billing remains optional.
 
@@ -3034,25 +3783,209 @@ Teams may continue using:
 - Google Play Billing
 - custom providers
 
-Using Mosaic Studio, paywalls, placements, analytics, and experiments must not require Mosaic Billing.
+Using Studio, Products, Paywalls, Placements, analytics, and Experiments must not require Mosaic Billing.
 
-### Exit criteria
+### Objectives
 
-- Apple transactions validate reliably
-- Google purchases validate reliably
-- entitlement state remains consistent
-- refunds and revocations update access correctly
-- webhooks retry safely
-- billing events are auditable
-- billing events can be replayed
+- validate Apple and Google transactions server-side
+- ingest provider notifications reliably
+- maintain an auditable subscription-state engine
+- compute authoritative customer Entitlement state
+- preserve historical Product meaning
+- support migration, reconciliation, and repair
+- keep billing events replayable
+
+---
+
+### Gate 9A: Transaction Ingestion and Validation
+
+Implement:
+
+- Apple transaction validation
+- Google purchase validation
+- App Store Server Notifications
+- Google Real-time Developer Notifications
+- sandbox and production isolation
+- encrypted store credentials
+- credential rotation
+- idempotent transaction ingestion
+- append-only billing-event log
+- raw notification retention policy
+- transaction-to-Mosaic-Product resolution
+- Provider Product Mapping history
+- unknown Product quarantine
+- duplicate-event handling
+- ordering handling
+- retry handling
+- reconciliation jobs
+- replayable ingestion
+- validation diagnostics
+- audit events
+
+Do not update customer access directly from an unvalidated client event.
+
+### Gate 9A Exit Criteria
+
+- Apple transactions validate
+- Google purchases validate
+- notifications ingest idempotently
+- duplicates do not duplicate billing state
+- unknown Products are quarantined
+- sandbox and production are isolated
+- credentials are protected
+- events are replayable
+- reconciliation detects missing or conflicting state
+
+Create:
+
+```text
+docs/reviews/phase-9a.md
+```
+
+---
+
+### Gate 9B: Subscription State and Entitlements
+
+Implement:
+
+- unified customer model
+- anonymous and identified aliases
+- cross-platform identity
+- subscription-state machine
+- active state
+- expired state
+- grace-period state
+- billing-retry state
+- revoked state
+- refunded state
+- upgrade
+- downgrade
+- restore synchronization
+- versioned Product-to-Entitlement grants
+- authoritative Entitlement computation
+- server-side Entitlement API
+- state history
+- state replay from billing events
+- concurrency controls
+- audit trail
+
+State computation:
+
+```text
+Validated Transaction
++ Mosaic Product
++ Versioned Entitlement Grants
++ Subscription State
+= Customer Entitlement State
+```
+
+Historical transactions must continue to resolve using the Product and grant history required to preserve their meaning.
+
+A Product replacement must not remove access from customers who purchased an earlier Product.
+
+### Gate 9B Exit Criteria
+
+- customer state is deterministic
+- replay produces the same state
+- renewals update state
+- expiration updates state
+- grace periods update state
+- billing retry is represented
+- refunds and revocations update access
+- upgrades and downgrades preserve history
 - cross-platform identity is documented
-- migration guides exist
+- Entitlement API is authorized and auditable
+- Product replacement preserves purchase meaning
+
+Create:
+
+```text
+docs/reviews/phase-9b.md
+```
+
+---
+
+### Gate 9C: Migration, Reconciliation, and Operations
+
+Implement:
+
+- RevenueCat migration tools
+- customer import
+- transaction import
+- customer aliases
+- cross-platform identity reconciliation
+- Product replacement history
+- provider Product migration
+- migration dry run
+- migration validation
+- migration rollback strategy
+- retryable billing webhooks
+- webhook signing
+- webhook audit history
+- manual reconciliation
+- repair tools
+- invalid mapping diagnostics
+- quarantined-event review
+- support tooling
+- operational dashboards
+- operational runbooks
+
+Migration must not require users to stop using existing providers before validation is complete.
+
+### Gate 9C Exit Criteria
+
+- migration dry run works
+- imported customers reconcile
+- imported Products map correctly
+- invalid mappings are visible
+- migration rollback is documented
+- webhooks retry and remain auditable
+- repair tools are permission-protected
+- operational alerts are actionable
+- runbooks cover common failures
+
+Create:
+
+```text
+docs/reviews/phase-9c.md
+```
+
+---
+
+### Phase 9 Exit Criteria
+
+Phase 9 is complete only when Gates 9A, 9B, and 9C are accepted.
+
+The consolidated review must confirm:
+
+- transaction validation is reliable
+- ingestion is idempotent
+- billing events are append-only and replayable
+- unknown Products are quarantined
+- Entitlement state remains consistent
+- refunds and revocations update access
+- Product replacements preserve historical meaning
+- cross-platform identity is documented and tested
+- migration and rollback procedures exist
+- webhooks retry safely
+- repair workflows are auditable
+- Mosaic Billing remains optional
 
 ### Review Gate 9
 
+Create:
+
+```text
+docs/reviews/phase-9.md
+```
+
 The Phase 9 demo is:
 
-> Complete a purchase and see Mosaic validate it, update entitlement state, and notify the application backend.
+> Complete a purchase, validate the provider transaction, resolve it to a Mosaic Product, apply versioned Entitlement grants, update customer access, replay the billing events, and notify the application backend.
+
+Release milestone:
+
+> Optional Mosaic Billing Availability
 
 ---
 
@@ -3060,124 +3993,231 @@ The Phase 9 demo is:
 
 ### Objectives
 
-- add AI assistance after Mosaic has reliable workflows and analytics
-- help teams create and improve monetization experiences
+- add optional AI assistance after Mosaic has reliable authoring, publishing, commerce, analytics, and Experiment foundations
+- improve authoring and analysis without removing human control
 - keep every AI action reviewable
+- preserve normal Mosaic operation when AI is disabled
+- protect Organization data boundaries
 
-### Deliverables
+Phase 10 is divided into:
 
-- paywall draft generation
-- copy suggestions
-- localization assistance
-- layout recommendations
-- accessibility suggestions
-- experiment suggestions
-- funnel explanations
-- anomaly detection
-- conversion-drop investigation
-- reviewable optimization proposals
+- Gate 10A — Authoring Assistance
+- Gate 10B — Monetization Insights
 
-### AI rules
+### AI Foundation
 
-AI must:
+Implement:
 
-- remain optional
-- explain recommendations
-- distinguish evidence from inference
-- never fabricate analytics
-- never publish without approval
-- never start an experiment without approval
-- preserve structured editable output
-- respect organization data boundaries
+- model-provider abstraction
+- Organization-level opt-in
+- Project-level configuration
+- role-based access
+- usage and cost limits
+- prompt and output audit metadata
+- data-retention configuration
+- sensitive-data filtering
+- timeout and retry handling
+- graceful provider failure
+- provider disable switch
+- evaluation datasets
+- quality monitoring
 
-### Exit criteria
+Do not train on Organization data without explicit permission.
 
-- generated paywalls conform to the Mosaic protocol
-- recommendations cite observed Mosaic data
-- users can review and edit all generated output
-- AI cannot silently publish changes
-- AI cannot silently create experiments
-- AI failures do not affect normal Mosaic workflows
-
-### Review Gate 10
-
-The Phase 10 demo is:
-
-> Ask why conversion dropped, receive an evidence-backed explanation, and generate a reviewable experiment proposal.
+Do not require AI for normal Mosaic workflows.
 
 ---
 
-# Phase Review Process
+### Gate 10A: Authoring Assistance
+
+Support:
+
+- generate a Paywall draft from a prompt
+- generate structured Protocol-valid output
+- copy suggestions
+- headline alternatives
+- CTA alternatives
+- localization assistance
+- layout recommendations
+- accessibility suggestions
+- component suggestions
+- theme suggestions
+- explain validation errors
+- reviewable document diff
+- accept individual changes
+- reject individual changes
+- undo accepted changes
+
+AI-generated documents must:
+
+- conform to a supported Paywall Protocol
+- use supported components only
+- preserve stable Product IDs
+- avoid inventing Product mappings
+- avoid inventing prices
+- avoid inventing analytics
+- remain editable in Studio
+
+AI must never publish automatically.
+
+### Gate 10A Exit Criteria
+
+- generated drafts validate
+- unsupported components are not generated
+- Product IDs are not fabricated
+- generated copy is reviewable
+- diffs are visible
+- individual suggestions can be accepted or rejected
+- undo works
+- accessibility suggestions explain their basis
+- AI failure does not affect Studio
 
 Create:
+
+```text
+docs/reviews/phase-10a.md
+```
+
+---
+
+### Gate 10B: Monetization Insights
+
+Support:
+
+- funnel explanations
+- conversion-change investigation
+- anomaly detection
+- Paywall Version comparison
+- Product performance explanation
+- provider-error explanation
+- localization regression detection
+- accessibility regression detection
+- Experiment suggestions
+- proposed Variant generation
+- evidence-linked recommendations
+
+Every recommendation must identify:
+
+- observed data
+- metric definition
+- time window
+- affected Paywall Version
+- affected Product
+- affected Placement
+- confidence or uncertainty
+- whether the statement is observation or inference
+
+AI must not fabricate causality.
+
+Use phrasing such as:
+
+```text
+Observed:
+Purchase-start rate decreased after Release 42.
+
+Possible explanation:
+Android Product-load failures increased during the same period.
+```
+
+Do not state an inferred cause as proven fact.
+
+AI must never:
+
+- publish a Paywall
+- start an Experiment
+- change Product mappings
+- change pricing
+- change active providers
+- modify Entitlements
+
+without explicit user approval through the normal product workflow.
+
+### Gate 10B Exit Criteria
+
+- recommendations cite Mosaic data
+- metric definitions are included
+- observations and inferences are distinct
+- affected versions are identified
+- users can inspect supporting evidence
+- suggested Experiments remain drafts
+- AI cannot publish or activate changes
+- Organization data remains isolated
+- AI can be disabled without affecting Mosaic
+
+Create:
+
+```text
+docs/reviews/phase-10b.md
+```
+
+---
+
+### Phase 10 Exit Criteria
+
+Phase 10 is complete only when Gates 10A and 10B are accepted.
+
+The consolidated review must confirm:
+
+- AI remains optional
+- normal Mosaic operation does not depend on AI
+- structured output is Protocol-valid
+- Product IDs and prices are not invented
+- recommendations cite observed data
+- uncertainty is visible
+- users review all changes
+- AI cannot publish automatically
+- AI cannot start Experiments automatically
+- AI cannot change commerce configuration automatically
+- data boundaries and retention are documented
+
+### Review Gate 10
+
+Create:
+
+```text
+docs/reviews/phase-10.md
+```
+
+The Phase 10 demo is:
+
+> Generate a reviewable Paywall draft, accept selected changes, then ask why conversion changed and receive an evidence-linked explanation plus a draft Experiment proposal that cannot run without approval.
+
+Classify Phase 10 as:
+
+- Accepted
+- Accepted with tracked follow-ups
+- Rejected pending fixes
+
+---
+
+# Updated Review Files
+
+Use:
 
 ```text
 docs/reviews/
 ├── phase-0.md
 ├── phase-1.md
 ├── phase-2.md
+├── phase-2.5a.md
+├── phase-2.5b.md
+├── phase-2.5c.md
 ├── phase-2.5.md
+├── phase-3a.md
+├── phase-3b.md
 ├── phase-3.md
+├── phase-4a.md
+├── phase-4b.md
 ├── phase-4.md
 ├── phase-5.md
 ├── phase-6.md
 ├── phase-7.md
 ├── phase-8.md
+├── phase-9a.md
+├── phase-9b.md
+├── phase-9c.md
 ├── phase-9.md
+├── phase-10a.md
+├── phase-10b.md
 └── phase-10.md
 ```
-
-Each phase review must contain the following sections.
-
-## Status
-
-Choose one:
-
-- Accepted
-- Accepted with tracked follow-ups
-- Rejected pending fixes
-
-## Product Review
-
-- Does the phase solve its intended user problem?
-- Did the implementation remain within scope?
-- Were exclusions respected?
-- Is later-phase functionality being introduced prematurely?
-
-## Engineering Review
-
-- Does the architecture remain valid?
-- Are tests complete?
-- Are compatibility requirements preserved?
-- Are failures handled safely?
-- Are known limitations documented?
-
-## UX Review
-
-- Are there dead ends?
-- Is terminology understandable?
-- Is implementation hierarchy hidden?
-- Can the primary workflow be completed without documentation?
-- Can navigation or click count be reduced?
-
-## Demo Review
-
-- What is the one-minute demo?
-- Can it be performed reliably?
-- Does it communicate clear user value?
-
-## Risks
-
-- blocking risks
-- important follow-ups
-- deferred improvements
-- unavailable checks
-- known technical debt
-
-## Decision
-
-Choose one:
-
-- Proceed
-- Hold
-- Pivot

@@ -1,10 +1,15 @@
-import { useQuery } from "@tanstack/react-query"
+import { useQueries, useQuery } from "@tanstack/react-query"
 import { useState } from "react"
 
 import { Button } from "@/components/ui/button"
 import { buttonVariants } from "@/components/ui/button-variants"
 import { HostedAccessBanner } from "@/features/auth/components/hosted-access-banner"
-import { productsQueryOptions } from "@/features/catalog/queries/catalog-query"
+import {
+  productReadinessQueryOptions,
+  productsQueryOptions,
+  providerMappingMetadataQueryOptions,
+  providerMappingsQueryOptions,
+} from "@/features/catalog/queries/catalog-query"
 import { MOCK_PURCHASE_STATES } from "@/features/paywall-editor/constants/editor-constants"
 import {
   useEditorActions,
@@ -19,6 +24,12 @@ import type {
 import { hostedStudioHref, type StudioSource } from "@/features/paywall-editor/types/studio-source"
 import { resolveLocalizedText } from "@/features/paywall-editor/utils/document-tree"
 import { ApiError } from "@/lib/api/errors"
+import {
+  activeProviderAssignmentQueryOptions,
+  providerConnectionsQueryOptions,
+} from "@/features/provider-connections/queries/provider-connection-queries"
+import { applicationsQueryOptions } from "@/features/projects/queries/projects-query"
+import type { ProviderConnection } from "@/generated/api"
 
 const CONTROL_CLASS =
   "border-input bg-background focus-visible:ring-ring w-full rounded border px-2 py-2 text-sm focus-visible:ring-2 focus-visible:outline-none"
@@ -138,7 +149,14 @@ function HostedCatalogProductBindingsContent({
   source: Extract<StudioSource, { kind: "hosted" }>
 }) {
   const catalog = useQuery(productsQueryOptions(source.projectId))
+  const applications = useQuery(applicationsQueryOptions(source.projectId))
+  const connections = useQuery(providerConnectionsQueryOptions(source.projectId))
+  const [applicationId, setApplicationId] = useState("")
   const products = catalog.data?.items.filter((product) => product.status !== "archived") ?? []
+  const selectedApplicationId =
+    applications.data?.items.find((application) => application.id === applicationId)?.id ??
+    applications.data?.items[0]?.id ??
+    ""
   const catalogHref = `/organizations/${encodeURIComponent(source.organizationId)}/projects/${encodeURIComponent(source.projectId)}/catalog/products`
   const returnTo = hostedStudioHref(source)
 
@@ -187,6 +205,20 @@ function HostedCatalogProductBindingsContent({
         </div>
       ) : document ? (
         <div className="space-y-2">
+          <label className="mb-3 block text-xs font-medium">
+            Provider preview Application
+            <select
+              className={`${CONTROL_CLASS} mt-1`}
+              onChange={(event) => setApplicationId(event.currentTarget.value)}
+              value={selectedApplicationId}
+            >
+              {applications.data?.items.map((application) => (
+                <option key={application.id} value={application.id}>
+                  {application.name} · {application.platform.toUpperCase()}
+                </option>
+              ))}
+            </select>
+          </label>
           {document.products.map((reference) => {
             const selected = products.find((product) => product.id === reference.productId)
             const label = resolveLocalizedText(document, reference.label, currentLocale)
@@ -216,10 +248,12 @@ function HostedCatalogProductBindingsContent({
                     Simulated metadata only; publishing requires acknowledgement.
                   </span>
                 ) : selected ? (
-                  <span className="text-muted-foreground text-[11px]">
-                    Connected Product identity only. Provider price and availability are unavailable
-                    in this response; simulated preview remains active.
-                  </span>
+                  <ConnectedProductBindingContext
+                    applicationId={selectedApplicationId}
+                    connections={connections.data?.items ?? []}
+                    environmentId={source.environmentId}
+                    productId={selected.id}
+                  />
                 ) : null}
               </label>
             )
@@ -230,6 +264,69 @@ function HostedCatalogProductBindingsContent({
         Manage Project Products
       </a>
     </section>
+  )
+}
+
+function ConnectedProductBindingContext({
+  applicationId,
+  connections,
+  environmentId,
+  productId,
+}: {
+  applicationId: string
+  connections: readonly ProviderConnection[]
+  environmentId: string
+  productId: string
+}) {
+  const mappings = useQuery(providerMappingsQueryOptions(productId))
+  const activeAssignment = useQuery({
+    ...activeProviderAssignmentQueryOptions(environmentId, applicationId || "unselected"),
+    enabled: Boolean(applicationId),
+  })
+  const readiness = useQuery({
+    ...productReadinessQueryOptions(productId, environmentId, applicationId || "unselected"),
+    enabled: Boolean(applicationId),
+  })
+  const scopedMappings =
+    mappings.data?.items.filter(
+      (mapping) =>
+        mapping.applicationId === applicationId &&
+        mapping.environmentId === environmentId &&
+        mapping.connectionId === activeAssignment.data?.connectionId,
+    ) ?? []
+  const metadata = useQueries({
+    queries: scopedMappings.map((mapping) => ({
+      ...providerMappingMetadataQueryOptions(mapping.id),
+      enabled: Boolean(mapping.currentSnapshotId) && mapping.status !== "archived",
+    })),
+  })
+  const mapping = scopedMappings.length === 1 ? scopedMappings[0] : undefined
+  const snapshot = scopedMappings.length === 1 ? metadata[0]?.data : undefined
+  const connection = connections.find((item) => item.id === activeAssignment.data?.connectionId)
+  const displayName =
+    typeof snapshot?.metadata.displayName === "string" ? snapshot.metadata.displayName : undefined
+  const state =
+    mappings.isPending || readiness.isPending || activeAssignment.isPending
+      ? "Checking provider context…"
+      : !activeAssignment.data
+        ? "No active provider is selected for this Application and Environment."
+        : scopedMappings.length > 1
+          ? "Ambiguous provider mappings block publishing."
+          : !mapping
+            ? "No scoped provider mapping. Mock preview is the safe fallback."
+            : `${connection?.name ?? "Provider"} · ${mapping.availability} · ${mapping.syncState.replaceAll("_", " ")} · readiness ${readiness.data?.state ?? "unavailable"}`
+
+  return (
+    <span className="text-muted-foreground block text-[11px] leading-5">
+      {displayName ? `Synchronized connected Product: ${displayName}. ` : ""}
+      {state}
+      {snapshot
+        ? ` Observed ${snapshot.observedAt}; stale after ${snapshot.staleAt}.`
+        : " Synchronized catalog evidence is unavailable; simulated preview remains active."}
+      {
+        " Live localized price, period, trial, and offer details are resolved by the active native provider at runtime."
+      }
+    </span>
   )
 }
 

@@ -289,6 +289,12 @@ class MosaicPaywallState(
                 interaction = MosaicInteractionOutcome.AlreadyEntitled(selected.reference.id),
                 presentationResult = MosaicPresentationResult.AlreadyEntitled(selected.reference.id),
             )
+            is MosaicPurchaseResult.Pending -> MosaicPaywallEvent(
+                interaction = MosaicInteractionOutcome.PurchasePending(selected.reference.id),
+            )
+            is MosaicPurchaseResult.Deferred -> MosaicPaywallEvent(
+                interaction = MosaicInteractionOutcome.PurchaseDeferred(selected.reference.id),
+            )
             is MosaicPurchaseResult.Cancelled -> MosaicPaywallEvent(
                 interaction = MosaicInteractionOutcome.Cancelled(selected.reference.id),
                 presentationResult = MosaicPresentationResult.Cancelled(selected.reference.id),
@@ -297,6 +303,24 @@ class MosaicPaywallState(
                 interaction = MosaicInteractionOutcome.ProductUnavailable(selected.reference.id),
                 presentationResult = MosaicPresentationResult.ProductUnavailable(selected.reference.id),
             )
+            is MosaicPurchaseResult.ProviderUnavailable -> {
+                diagnostics.record(
+                    MosaicDiagnostic(
+                        MosaicDiagnosticCode.COMMERCE_PROVIDER_UNAVAILABLE,
+                        "The commerce provider is currently unavailable.",
+                    ),
+                )
+                MosaicPaywallEvent(
+                    interaction = MosaicInteractionOutcome.PurchaseFailed(
+                        selected.reference.id,
+                        result.diagnosticCode,
+                    ),
+                    presentationResult = MosaicPresentationResult.PurchaseFailed(
+                        selected.reference.id,
+                        result.diagnosticCode,
+                    ),
+                )
+            }
             is MosaicPurchaseResult.Failed -> {
                 diagnostics.record(
                     MosaicDiagnostic(
@@ -337,15 +361,23 @@ class MosaicPaywallState(
                 interaction = MosaicInteractionOutcome.Restored(result.entitlements),
                 presentationResult = MosaicPresentationResult.Restored(result.entitlements),
             )
-            is MosaicRestoreResult.AlreadyEntitled -> MosaicPaywallEvent(
-                interaction = MosaicInteractionOutcome.AlreadyEntitled(),
-                presentationResult = MosaicPresentationResult.AlreadyEntitled(
-                    entitlements = result.entitlements,
-                ),
-            )
             MosaicRestoreResult.NothingToRestore -> MosaicPaywallEvent(
                 MosaicInteractionOutcome.RestoreNoPurchases,
             )
+            MosaicRestoreResult.Cancelled -> MosaicPaywallEvent(
+                MosaicInteractionOutcome.RestoreCancelled,
+            )
+            is MosaicRestoreResult.ProviderUnavailable -> {
+                diagnostics.record(
+                    MosaicDiagnostic(
+                        MosaicDiagnosticCode.COMMERCE_PROVIDER_UNAVAILABLE,
+                        "The commerce provider is currently unavailable.",
+                    ),
+                )
+                MosaicPaywallEvent(
+                    MosaicInteractionOutcome.RestoreFailed(result.diagnosticCode),
+                )
+            }
             is MosaicRestoreResult.Failed -> {
                 diagnostics.record(
                     MosaicDiagnostic(

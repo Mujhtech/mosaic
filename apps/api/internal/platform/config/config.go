@@ -35,6 +35,7 @@ type Config struct {
 	Protocol    ProtocolConfig
 	ObjectStore ObjectStoreConfig
 	Delivery    DeliveryConfig
+	Providers   ProviderConfig
 }
 
 type BrowserAuthConfig struct {
@@ -47,7 +48,22 @@ type BrowserAuthConfig struct {
 }
 
 type ProtocolConfig struct {
-	V02SchemaPath string `envconfig:"MOSAIC_PROTOCOL_V02_SCHEMA_PATH" default:"../../protocol/schema/v0.2/paywall.schema.json"`
+	V02SchemaPath                   string `envconfig:"MOSAIC_PROTOCOL_V02_SCHEMA_PATH" default:"../../protocol/schema/v0.2/paywall.schema.json"`
+	CommerceProviderSchemaPath      string `envconfig:"MOSAIC_COMMERCE_PROVIDER_SCHEMA_PATH" default:"../../protocol/schema/commerce-provider/v1/contract.schema.json"`
+	CommerceConfigurationSchemaPath string `envconfig:"MOSAIC_COMMERCE_CONFIGURATION_SCHEMA_PATH" default:"../../protocol/schema/commerce-configuration/v1/configuration.schema.json"`
+}
+
+type ProviderConfig struct {
+	Enabled            bool          `envconfig:"MOSAIC_PROVIDER_INTEGRATIONS_ENABLED" default:"false"`
+	CredentialKeyring  string        `envconfig:"MOSAIC_PROVIDER_CREDENTIAL_KEYRING"`
+	RevenueCatBaseURL  string        `envconfig:"MOSAIC_REVENUECAT_BASE_URL" default:"https://api.revenuecat.com/v2"`
+	RequestTimeout     time.Duration `envconfig:"MOSAIC_PROVIDER_REQUEST_TIMEOUT" default:"8s"`
+	OperationTimeout   time.Duration `envconfig:"MOSAIC_PROVIDER_OPERATION_TIMEOUT" default:"60s"`
+	ConnectTimeout     time.Duration `envconfig:"MOSAIC_PROVIDER_CONNECT_TIMEOUT" default:"3s"`
+	MaxResponseBytes   int64         `envconfig:"MOSAIC_PROVIDER_MAX_RESPONSE_BYTES" default:"2097152"`
+	MaxAttempts        int           `envconfig:"MOSAIC_PROVIDER_MAX_ATTEMPTS" default:"3"`
+	SnapshotTTL        time.Duration `envconfig:"MOSAIC_PROVIDER_SNAPSHOT_TTL" default:"24h"`
+	WorkerPollInterval time.Duration `envconfig:"MOSAIC_PROVIDER_WORKER_POLL_INTERVAL" default:"1s"`
 }
 
 type ObjectStoreConfig struct {
@@ -115,6 +131,10 @@ func load() (Config, error) {
 	cfg.Telemetry.OTLPEndpoint = strings.TrimSpace(cfg.Telemetry.OTLPEndpoint)
 	cfg.BrowserAuth.CookieDomain = strings.TrimSpace(cfg.BrowserAuth.CookieDomain)
 	cfg.Protocol.V02SchemaPath = strings.TrimSpace(cfg.Protocol.V02SchemaPath)
+	cfg.Protocol.CommerceProviderSchemaPath = strings.TrimSpace(cfg.Protocol.CommerceProviderSchemaPath)
+	cfg.Protocol.CommerceConfigurationSchemaPath = strings.TrimSpace(cfg.Protocol.CommerceConfigurationSchemaPath)
+	cfg.Providers.CredentialKeyring = strings.TrimSpace(cfg.Providers.CredentialKeyring)
+	cfg.Providers.RevenueCatBaseURL = strings.TrimSpace(cfg.Providers.RevenueCatBaseURL)
 	cfg.ObjectStore.Endpoint = strings.TrimSpace(cfg.ObjectStore.Endpoint)
 	cfg.ObjectStore.AccessKey = strings.TrimSpace(cfg.ObjectStore.AccessKey)
 	cfg.ObjectStore.SecretKey = strings.TrimSpace(cfg.ObjectStore.SecretKey)
@@ -192,6 +212,42 @@ func (cfg Config) validate() error {
 	}
 	if strings.TrimSpace(cfg.Protocol.V02SchemaPath) == "" {
 		return fmt.Errorf("MOSAIC_PROTOCOL_V02_SCHEMA_PATH must not be empty")
+	}
+	if cfg.Protocol.CommerceProviderSchemaPath == "" {
+		return fmt.Errorf("MOSAIC_COMMERCE_PROVIDER_SCHEMA_PATH must not be empty")
+	}
+	if cfg.Protocol.CommerceConfigurationSchemaPath == "" {
+		return fmt.Errorf("MOSAIC_COMMERCE_CONFIGURATION_SCHEMA_PATH must not be empty")
+	}
+	if cfg.Providers.Enabled && cfg.Providers.CredentialKeyring == "" {
+		return fmt.Errorf("MOSAIC_PROVIDER_CREDENTIAL_KEYRING is required when provider integrations are enabled")
+	}
+	if cfg.Providers.RevenueCatBaseURL == "" {
+		return fmt.Errorf("MOSAIC_REVENUECAT_BASE_URL must not be empty")
+	}
+	providerBaseURL, err := url.Parse(cfg.Providers.RevenueCatBaseURL)
+	if err != nil || providerBaseURL.Host == "" || providerBaseURL.User != nil ||
+		providerBaseURL.Scheme != "https" && providerBaseURL.Scheme != "http" {
+		return fmt.Errorf("MOSAIC_REVENUECAT_BASE_URL must be an absolute HTTP(S) URL without credentials")
+	}
+	if cfg.Environment != "development" && cfg.Environment != "test" && providerBaseURL.Scheme != "https" {
+		return fmt.Errorf("MOSAIC_REVENUECAT_BASE_URL must use HTTPS outside development and test")
+	}
+	if cfg.Providers.RequestTimeout <= 0 || cfg.Providers.OperationTimeout <= 0 || cfg.Providers.ConnectTimeout <= 0 ||
+		cfg.Providers.SnapshotTTL <= 0 || cfg.Providers.WorkerPollInterval <= 0 {
+		return fmt.Errorf("provider timeout, freshness, and worker intervals must be greater than zero")
+	}
+	if cfg.Providers.OperationTimeout < cfg.Providers.RequestTimeout {
+		return fmt.Errorf("MOSAIC_PROVIDER_OPERATION_TIMEOUT must be greater than or equal to MOSAIC_PROVIDER_REQUEST_TIMEOUT")
+	}
+	if cfg.Providers.OperationTimeout > 5*time.Minute {
+		return fmt.Errorf("MOSAIC_PROVIDER_OPERATION_TIMEOUT must not exceed 5m")
+	}
+	if cfg.Providers.MaxResponseBytes <= 0 {
+		return fmt.Errorf("MOSAIC_PROVIDER_MAX_RESPONSE_BYTES must be greater than zero")
+	}
+	if cfg.Providers.MaxAttempts < 1 || cfg.Providers.MaxAttempts > 5 {
+		return fmt.Errorf("MOSAIC_PROVIDER_MAX_ATTEMPTS must be between 1 and 5")
 	}
 	if strings.TrimSpace(cfg.ObjectStore.Endpoint) == "" || strings.TrimSpace(cfg.ObjectStore.AccessKey) == "" || strings.TrimSpace(cfg.ObjectStore.SecretKey) == "" || strings.TrimSpace(cfg.ObjectStore.Bucket) == "" {
 		return fmt.Errorf("S3-compatible object-storage configuration must not be empty")

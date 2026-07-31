@@ -88,7 +88,7 @@ export function ProductsPage({
       title="Products"
     >
       <WorkflowPanel
-        description="Import and synchronization begin from an explicit Provider Connection. RevenueCat authorization is still awaiting owner approval, so no credential is collected here."
+        description="Import and synchronization begin from one explicit, tested Provider Connection."
         title="Connected Catalog"
       >
         <div className="flex flex-wrap items-center gap-3">
@@ -97,13 +97,11 @@ export function ProductsPage({
             params={{ organizationId, projectId }}
             to="/organizations/$organizationId/projects/$projectId/catalog/providers"
           >
-            Review Commerce providers
+            Connect or import from a provider
           </Link>
-          <Button disabled type="button">
-            Import Products
-          </Button>
           <p className="text-muted-foreground text-xs">
-            Import becomes available after an authorized, tested connection is active.
+            Provider catalog IDs stay behind mappings; Paywalls continue referencing stable Mosaic
+            Product IDs.
           </p>
         </div>
       </WorkflowPanel>
@@ -185,7 +183,7 @@ export function ProductsPage({
       </HostedResourceBoundary>
       {canManageProducts ? (
         <WorkflowPanel
-          description="Provider connection and metadata synchronization are not enabled yet."
+          description="Create a provider-neutral Product manually or import synchronized provider metadata from Commerce providers."
           title="Create Product"
         >
           <form

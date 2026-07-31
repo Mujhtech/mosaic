@@ -122,7 +122,7 @@ this avoids the permissive default in `go-chi/cors`.
 
 ## Configuration
 
-At startup, the API and migration command load `apps/api/.env` with
+At startup, the API, provider worker, and migration command load `apps/api/.env` with
 `github.com/joho/godotenv`, then decode and validate the typed configuration
 with `github.com/kelseyhightower/envconfig`. Existing process environment
 variables take precedence because `.env` loading does not overwrite them.
@@ -153,6 +153,8 @@ variables take precedence because `.env` loading does not overwrite them.
 | `MOSAIC_AUTH_BURST`               | `4`                                  | Burst size for each authentication limiter bucket.                                                          |
 | `MOSAIC_AUTH_LIMITER_ENTRIES`     | `10000`                              | Bound on in-process authentication limiter keys.                                                            |
 | `MOSAIC_PROTOCOL_V02_SCHEMA_PATH` | repository canonical schema path     | Canonical Protocol 0.2 JSON Schema compiled at startup.                                                      |
+| `MOSAIC_COMMERCE_PROVIDER_SCHEMA_PATH` | repository canonical schema path | Canonical Commerce Provider v1 JSON Schema compiled at API startup.                                          |
+| `MOSAIC_COMMERCE_CONFIGURATION_SCHEMA_PATH` | repository canonical schema path | Canonical Commerce Configuration v1 JSON Schema compiled at API startup.                              |
 | `MOSAIC_OBJECT_STORAGE_ENDPOINT`  | `localhost:9000`                     | S3-compatible object-storage endpoint.                                                                      |
 | `MOSAIC_OBJECT_STORAGE_ACCESS_KEY`| `mosaic`                             | Object-storage access key; development value is rejected in hosted environments.                            |
 | `MOSAIC_OBJECT_STORAGE_SECRET_KEY`| `mosaic_dev_secret`                  | Object-storage secret; never logged and development value is rejected in hosted environments.               |
@@ -163,6 +165,10 @@ variables take precedence because `.env` loading does not overwrite them.
 | `MOSAIC_DELIVERY_REQUESTS_PER_MINUTE` | `120`                           | Refill rate for each SDK delivery IP/API-key bucket.                                                         |
 | `MOSAIC_DELIVERY_BURST`           | `30`                                 | Burst size for each SDK delivery limiter bucket.                                                             |
 | `MOSAIC_DELIVERY_LIMITER_ENTRIES` | `10000`                              | Bound on in-process delivery limiter keys.                                                                   |
+
+RevenueCat credentials, adapter timeouts, provider metadata freshness, and
+worker polling variables are documented in
+[`phase-4a-provider-integrations.md`](phase-4a-provider-integrations.md).
 
 The process listens only after configuration, logging, telemetry, and a verified
 PostgreSQL pool initialize. It fails startup instead of selecting volatile storage.
@@ -187,8 +193,9 @@ Stopping or recreating the API container does not remove data. Back up the
 PostgreSQL volume with `pg_dump` before destructive migrations or environment
 changes; named volumes are durability, not a backup policy.
 
-## Deferred boundaries
+## Background provider worker
 
-No runnable worker is created because Phase 3A has no background job. A
-root/shared Go module decision is still required before API and worker
-application/domain packages can be reused coherently.
+`cmd/worker` uses the same PostgreSQL repository and provider credential
+keyring as the API. It is enabled in Compose with the `providers` profile and
+processes bounded, leased provider-synchronization jobs. It never applies
+migrations or falls back to volatile storage.

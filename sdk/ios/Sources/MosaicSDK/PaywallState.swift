@@ -103,7 +103,7 @@ public final class MosaicPaywallModel: ObservableObject {
     switch loadResult {
     case .loaded(let loaded):
       products = loaded
-    case .unavailable(_, let diagnosticCode):
+    case .unavailable(_, let diagnosticCode, _):
       products = []
       if let diagnosticCode {
         diagnostics.append(
@@ -401,6 +401,12 @@ public final class MosaicPaywallModel: ObservableObject {
     case .purchased:
       interactionHandler(.purchased(productReferenceID: referenceID))
       resultHandler(.purchased(productReferenceID: referenceID))
+    case .pending:
+      interactionHandler(.purchasePending(productReferenceID: referenceID))
+      resultHandler(.purchasePending(productReferenceID: referenceID))
+    case .deferred:
+      interactionHandler(.purchaseDeferred(productReferenceID: referenceID))
+      resultHandler(.purchaseDeferred(productReferenceID: referenceID))
     case .alreadyEntitled:
       interactionHandler(.alreadyEntitled(productReferenceID: referenceID))
       resultHandler(.alreadyEntitled(productReferenceID: referenceID))
@@ -410,7 +416,19 @@ public final class MosaicPaywallModel: ObservableObject {
     case .productUnavailable:
       interactionHandler(.productUnavailable(productReferenceID: referenceID))
       resultHandler(.productUnavailable(productReferenceID: referenceID))
-    case .failed(_, let diagnosticCode):
+    case .providerUnavailable(_, let diagnosticCode, _):
+      let safeCode = safeDiagnosticCode(
+        diagnosticCode,
+        fallback: "commerce_provider_unavailable"
+      )
+      diagnostics.append(MosaicDiagnostic(code: safeCode, stage: .commerce))
+      interactionHandler(
+        .providerUnavailable(productReferenceID: referenceID, diagnosticCode: safeCode)
+      )
+      resultHandler(
+        .providerUnavailable(productReferenceID: referenceID, diagnosticCode: safeCode)
+      )
+    case .failed(_, let diagnosticCode, _):
       let safeCode = safeDiagnosticCode(
         diagnosticCode,
         fallback: "purchase_provider_failed"
@@ -438,12 +456,20 @@ public final class MosaicPaywallModel: ObservableObject {
     case .restored:
       interactionHandler(.restored)
       resultHandler(.restored)
-    case .alreadyEntitled:
-      interactionHandler(.alreadyEntitled(productReferenceID: nil))
-      resultHandler(.alreadyEntitled(productReferenceID: nil))
     case .nothingToRestore:
       interactionHandler(.restoreNoPurchases)
-    case .failed(let diagnosticCode):
+    case .cancelled:
+      interactionHandler(.restoreCancelled)
+      resultHandler(.restoreCancelled)
+    case .providerUnavailable(let diagnosticCode, _):
+      let safeCode = safeDiagnosticCode(
+        diagnosticCode,
+        fallback: "commerce_provider_unavailable"
+      )
+      diagnostics.append(MosaicDiagnostic(code: safeCode, stage: .commerce))
+      interactionHandler(.providerUnavailable(productReferenceID: nil, diagnosticCode: safeCode))
+      resultHandler(.providerUnavailable(productReferenceID: nil, diagnosticCode: safeCode))
+    case .failed(let diagnosticCode, _):
       let safeCode = safeDiagnosticCode(
         diagnosticCode,
         fallback: "restore_provider_failed"
@@ -488,6 +514,12 @@ public final class MosaicPaywallModel: ObservableObject {
     case .purchased:
       interactionHandler(.purchased(productReferenceID: referenceID))
       resultHandler(.purchased(productReferenceID: referenceID))
+    case .pending:
+      interactionHandler(.purchasePending(productReferenceID: referenceID))
+      resultHandler(.purchasePending(productReferenceID: referenceID))
+    case .deferred:
+      interactionHandler(.purchaseDeferred(productReferenceID: referenceID))
+      resultHandler(.purchaseDeferred(productReferenceID: referenceID))
     case .alreadyEntitled:
       interactionHandler(.alreadyEntitled(productReferenceID: referenceID))
       resultHandler(.alreadyEntitled(productReferenceID: referenceID))
@@ -497,7 +529,19 @@ public final class MosaicPaywallModel: ObservableObject {
     case .productUnavailable:
       interactionHandler(.productUnavailable(productReferenceID: referenceID))
       resultHandler(.productUnavailable(productReferenceID: referenceID))
-    case .failed(_, let diagnosticCode):
+    case .providerUnavailable(_, let diagnosticCode, _):
+      let safeCode = safeDiagnosticCode(
+        diagnosticCode,
+        fallback: "commerce_provider_unavailable"
+      )
+      diagnostics.append(MosaicDiagnostic(code: safeCode, stage: .commerce))
+      interactionHandler(
+        .providerUnavailable(productReferenceID: referenceID, diagnosticCode: safeCode)
+      )
+      resultHandler(
+        .providerUnavailable(productReferenceID: referenceID, diagnosticCode: safeCode)
+      )
+    case .failed(_, let diagnosticCode, _):
       let safeCode = safeDiagnosticCode(
         diagnosticCode,
         fallback: "purchase_provider_failed"
@@ -517,12 +561,20 @@ public final class MosaicPaywallModel: ObservableObject {
     case .restored:
       interactionHandler(.restored)
       resultHandler(.restored)
-    case .alreadyEntitled:
-      interactionHandler(.alreadyEntitled(productReferenceID: nil))
-      resultHandler(.alreadyEntitled(productReferenceID: nil))
     case .nothingToRestore:
       interactionHandler(.restoreNoPurchases)
-    case .failed(let diagnosticCode):
+    case .cancelled:
+      interactionHandler(.restoreCancelled)
+      resultHandler(.restoreCancelled)
+    case .providerUnavailable(let diagnosticCode, _):
+      let safeCode = safeDiagnosticCode(
+        diagnosticCode,
+        fallback: "commerce_provider_unavailable"
+      )
+      diagnostics.append(MosaicDiagnostic(code: safeCode, stage: .commerce))
+      interactionHandler(.providerUnavailable(productReferenceID: nil, diagnosticCode: safeCode))
+      resultHandler(.providerUnavailable(productReferenceID: nil, diagnosticCode: safeCode))
+    case .failed(let diagnosticCode, _):
       let safeCode = safeDiagnosticCode(
         diagnosticCode,
         fallback: "restore_provider_failed"

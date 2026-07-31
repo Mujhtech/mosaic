@@ -22,12 +22,19 @@ import {
   validateCommerceProviderV1Artifacts,
   validateCommerceProviderV1JsonFormatting,
 } from "./commerce-provider-validation-v1.mjs";
+import {
+  loadCommerceConfigurationV1Artifacts,
+  validateCommerceConfigurationV1Artifacts,
+  validateCommerceConfigurationV1JsonFormatting,
+} from "./commerce-configuration-validation-v1.mjs";
 
 try {
   const artifactsV02 = loadProtocolV02Artifacts();
   const previewArtifactsV02 = loadPreviewV02Artifacts();
   const deliveryArtifactsV1 = loadDeliveryV1Artifacts();
   const commerceProviderArtifactsV1 = loadCommerceProviderV1Artifacts();
+  const commerceConfigurationArtifactsV1 =
+    loadCommerceConfigurationV1Artifacts();
   const errors = [
     ...validateBrowserContractGeneration(),
     ...validateProtocolV02(artifactsV02),
@@ -55,6 +62,10 @@ try {
     ...validateDeliveryV1JsonFormatting(),
     ...validateCommerceProviderV1Artifacts(commerceProviderArtifactsV1),
     ...validateCommerceProviderV1JsonFormatting(),
+    ...validateCommerceConfigurationV1Artifacts(
+      commerceConfigurationArtifactsV1,
+    ),
+    ...validateCommerceConfigurationV1JsonFormatting(),
   ];
 
   if (errors.length > 0) {
@@ -67,7 +78,8 @@ try {
       `Validated ${relative(protocolV02Root, protocolV02Paths.canonicalFixture)} ` +
         "against the Mosaic Protocol 0.2 schema and compatibility manifest; " +
         "validated Local Preview 0.2 fixtures, Configuration Delivery v1, " +
-        "Commerce Provider Contract v1, and the browser contract.",
+        "Commerce Provider Contract v1, Commerce Configuration v1, and the " +
+        "browser contract.",
     );
   }
 } catch (error) {

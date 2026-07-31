@@ -1,4 +1,6 @@
+import MosaicRevenueCat
 import MosaicSDK
+import RevenueCat
 import SwiftUI
 import UIKit
 
@@ -173,10 +175,17 @@ private final class HostedConfigurationModel: ObservableObject {
   let setupMessage: String
   private let publicSDKKey: String?
   private let baseURL: URL?
+  private let applicationID: String?
+  private let revenueCatPublicSDKKey: String?
+  private var commerceManager: MosaicCommerceConfigurationManager?
+  private var commerceProvider: MosaicRevenueCatProvider?
+  private var commerceRouter: MosaicCommerceProviderRouter?
 
   init(environment: [String: String] = ProcessInfo.processInfo.environment) {
     publicSDKKey = environment["MOSAIC_PUBLIC_SDK_KEY"]
     baseURL = environment["MOSAIC_SDK_BASE_URL"].flatMap(URL.init(string:))
+    applicationID = environment["MOSAIC_APPLICATION_ID"]
+    revenueCatPublicSDKKey = environment["REVENUECAT_PUBLIC_SDK_KEY"]
     placement = environment["MOSAIC_PLACEMENT"] ?? "onboarding_complete"
     setupMessage =
       "Set MOSAIC_PUBLIC_SDK_KEY and MOSAIC_SDK_BASE_URL in the Xcode scheme. "
@@ -188,18 +197,34 @@ private final class HostedConfigurationModel: ObservableObject {
     isLoading = true
     defer { isLoading = false }
     do {
-      let applicationVersion = Bundle.main.object(
-        forInfoDictionaryKey: "CFBundleShortVersionString"
-      ) as? String
+      let applicationVersion =
+        Bundle.main.object(
+          forInfoDictionaryKey: "CFBundleShortVersionString"
+        ) as? String
+      let purchaseProvider: any MosaicPurchaseProvider
+      if let revenueCatPublicSDKKey, let applicationID {
+        Purchases.configure(withAPIKey: revenueCatPublicSDKKey)
+        let provider = try MosaicRevenueCatProvider()
+        let router = MosaicCommerceProviderRouter()
+        commerceProvider = provider
+        commerceRouter = router
+        commerceManager = try MosaicCommerceConfigurationManager(
+          cacheIdentifier: applicationID
+        )
+        purchaseProvider = router
+      } else {
+        purchaseProvider = MockMosaicPurchaseProvider(
+          products: MosaicProduct.phase1MockProducts
+        )
+      }
       let configured = try await Mosaic.configure(
         publicSDKKey: publicSDKKey,
         baseURL: baseURL,
         applicationVersion: applicationVersion,
-        purchaseProvider: MockMosaicPurchaseProvider(
-          products: MosaicProduct.phase1MockProducts
-        )
+        purchaseProvider: purchaseProvider
       )
       mosaic = configured
+      await refreshCommerce(for: configured)
       await updateStatus(for: configured)
     } catch {
       statusText = "Hosted SDK settings are invalid. Check the key and base URL."
@@ -210,6 +235,7 @@ private final class HostedConfigurationModel: ObservableObject {
     guard let mosaic else { return }
     isLoading = true
     _ = await mosaic.refresh()
+    await refreshCommerce(for: mosaic)
     await updateStatus(for: mosaic)
     isLoading = false
   }
@@ -217,6 +243,7 @@ private final class HostedConfigurationModel: ObservableObject {
   func refreshIfNeeded() async {
     guard let mosaic else { return }
     _ = await mosaic.refreshIfNeeded()
+    await refreshCommerce(for: mosaic)
     await updateStatus(for: mosaic)
   }
 
@@ -233,6 +260,36 @@ private final class HostedConfigurationModel: ObservableObject {
     case .unavailable(let diagnostics):
       releaseIdentity = "unavailable"
       statusText = diagnostics.last?.code ?? "Configuration unavailable"
+    }
+  }
+
+  private func refreshCommerce(for mosaic: Mosaic) async {
+    guard let applicationID, let publicSDKKey, let baseURL,
+      let commerceManager, let commerceProvider, let commerceRouter,
+      let association = await mosaic.commerceConfigurationAssociation(
+        applicationID: applicationID
+      )
+    else { return }
+
+    switch await commerceManager.refresh(
+      publicSDKKey: publicSDKKey,
+      baseURL: baseURL,
+      association: association
+    ) {
+    case .accepted(let configuration, _), .preserved(let configuration, _, _):
+      do {
+        try await commerceRouter.install(
+          configuration: configuration,
+          provider: commerceProvider
+        )
+        _ = await commerceRouter.loadProducts(
+          identifiers: configuration.productMappings.map(\.mosaicProductID)
+        )
+      } catch {
+        statusText = "Commerce provider configuration was rejected safely."
+      }
+    case .unavailable(let diagnostics):
+      statusText = diagnostics.last?.code ?? "Commerce configuration unavailable"
     }
   }
 }

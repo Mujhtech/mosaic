@@ -76,9 +76,20 @@ func RegisterWorkspaceRoutes(router chi.Router, service *cloudworkspace.Service)
 	router.Route("/provider-connections/{connectionId}", func(router chi.Router) {
 		router.Get("/", handler.getProviderConnection)
 		router.Put("/scopes", handler.replaceProviderConnectionScopes)
+		router.Post("/test", handler.testProviderConnection)
+		router.Get("/health", handler.getProviderConnectionHealth)
+		router.Get("/capabilities", handler.getProviderConnectionCapabilities)
+		router.Get("/diagnostics", handler.getProviderConnectionDiagnostics)
+		router.Get("/catalog-preview", handler.previewProviderCatalog)
+		router.Post("/rotate-credential", handler.rotateProviderCredential)
+		router.Post("/reconnect", handler.reconnectProviderConnection)
+		router.Post("/sync", handler.enqueueProviderSync)
+		router.Get("/sync-runs", handler.listProviderSyncRuns)
 		router.Post("/revoke", handler.revokeProviderConnection)
 	})
 	router.Post("/provider-mappings/{mappingId}/archive", handler.archiveProviderMapping)
+	router.Post("/provider-mappings/{mappingId}/replace", handler.replaceProviderMapping)
+	router.Get("/provider-mappings/{mappingId}/metadata", handler.getProviderMappingMetadata)
 	router.Get("/plans/{planId}", handler.getPlan)
 	router.Patch("/plans/{planId}", handler.updatePlan)
 	router.Get("/plans/{planId}/products", handler.listPlanProducts)
@@ -116,6 +127,7 @@ func RegisterProjectRoutes(router chi.Router, service *cloudworkspace.Service) {
 	router.Get("/environments", handler.listEnvironments)
 	router.Get("/provider-connections", handler.listProviderConnections)
 	router.Post("/provider-connections", handler.createProviderConnection)
+	router.Post("/provider-imports", handler.importProviderProducts)
 	router.Get("/plans", handler.listPlans)
 	router.Post("/plans", handler.createPlan)
 	router.Get("/products", handler.listProducts)
@@ -195,6 +207,26 @@ func writeServiceError(w http.ResponseWriter, r *http.Request, err error) {
 		status, code, message = http.StatusConflict, "productionConnectionAcknowledgementRequired", "Production provider use outside a production Environment requires explicit acknowledgement."
 	case errors.Is(err, cloudworkspace.ErrProviderUnsupported):
 		status, code, message = http.StatusUnprocessableEntity, "providerIntegrationUnsupported", "The provider and integration mode combination is not supported."
+	case errors.Is(err, cloudworkspace.ErrProviderFeatureDisabled):
+		status, code, message = http.StatusServiceUnavailable, "providerFeatureDisabled", "Server-connected commerce providers are not enabled."
+	case errors.Is(err, cloudworkspace.ErrProviderProjectInvalid):
+		status, code, message = http.StatusUnprocessableEntity, "providerProjectInvalid", "The RevenueCat project identifier is required and must be valid."
+	case errors.Is(err, cloudworkspace.ErrProviderCredentialInvalid):
+		status, code, message = http.StatusUnprocessableEntity, string(cloudworkspace.ProviderErrorCredentialInvalid), "The provider credential is invalid or unavailable."
+	case errors.Is(err, cloudworkspace.ErrProviderPermissionDenied):
+		status, code, message = http.StatusUnprocessableEntity, string(cloudworkspace.ProviderErrorPermissionDenied), "The provider credential does not have the required read permissions."
+	case errors.Is(err, cloudworkspace.ErrProviderRateLimited):
+		status, code, message = http.StatusTooManyRequests, string(cloudworkspace.ProviderErrorRateLimited), "The provider rate limit was reached. Retry later."
+	case errors.Is(err, cloudworkspace.ErrProviderUnavailable):
+		status, code, message = http.StatusServiceUnavailable, string(cloudworkspace.ProviderErrorProviderUnavailable), "The provider is temporarily unavailable."
+	case errors.Is(err, cloudworkspace.ErrProviderInvalidResponse):
+		status, code, message = http.StatusBadGateway, string(cloudworkspace.ProviderErrorInvalidResponse), "The provider returned an invalid response."
+	case errors.Is(err, cloudworkspace.ErrProviderSyncInProgress):
+		status, code, message = http.StatusConflict, string(cloudworkspace.ProviderErrorSyncInProgress), "A synchronization is already queued or running."
+	case errors.Is(err, cloudworkspace.ErrProviderImportInProgress):
+		status, code, message = http.StatusConflict, "importInProgress", "The matching import is still in progress."
+	case errors.Is(err, cloudworkspace.ErrIdempotencyConflict):
+		status, code, message = http.StatusConflict, string(cloudworkspace.ProviderErrorIdempotencyConflict), "The Idempotency-Key was already used with different input."
 	case errors.Is(err, cloudworkspace.ErrMappingAmbiguous):
 		status, code, message = http.StatusConflict, string(cloudworkspace.ProviderErrorMappingAmbiguous), "More than one provider mapping matches the requested scope."
 	case errors.Is(err, cloudworkspace.ErrMappingTargetInvalid):

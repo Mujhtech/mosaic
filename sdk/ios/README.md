@@ -3,8 +3,10 @@
 The SDK strictly decodes Mosaic Protocol 0.2 and renders it with native
 SwiftUI, and can receive validated draft and mock-commerce revisions from a
 local Mosaic Studio session over WebSockets. It preserves the Phase 1 bundled
-fallback and provider-neutral commerce APIs; no account, hosted service,
-remote publishing, analytics, StoreKit, or RevenueCat integration is involved.
+fallback and adds hosted Configuration Delivery plus the provider-neutral
+Commerce Configuration v1 boundary. The core package remains free of StoreKit
+and RevenueCat dependencies; the optional RevenueCat adapter is a separate
+package under `RevenueCat/`.
 
 ## Requirements
 
@@ -162,6 +164,81 @@ supports explicit purchase, restore, unavailable-product, and active-
 entitlement outcomes. It never opens StoreKit, handles receipts, or contacts a
 billing provider.
 
+## Hosted and SDK-local commerce providers
+
+`MosaicCommerceConfigurationManager` strictly decodes the canonical Commerce
+Configuration v1 sidecar and accepts it only when Environment, Application,
+store platform, Configuration Release ID, release digest, Product IDs, and the
+sidecar's own canonical digest all match. Resolution is valid hosted or
+SDK-local candidate, exact-association cache, exact-association bundled
+fallback, then explicit unavailable.
+
+Hosted refresh calls
+`GET /v1/sdk/commerce-configuration?applicationId=<Mosaic Application ID>`
+with the public SDK key as Bearer authorization, the frozen iOS/version
+capability headers, strong digest ETags, and
+`Mosaic-Configuration-Release-Id`. Unsafe response metadata, association
+drift, or cache-write failure cannot activate a candidate.
+
+Pass `MosaicCommerceProviderRouter` to `Mosaic.configure` while delivery
+starts, derive the exact sidecar association, then install a provider only
+after the sidecar is accepted:
+
+```swift
+let router = MosaicCommerceProviderRouter()
+let mosaic = try await Mosaic.configure(
+  publicSDKKey: publicSDKKey,
+  baseURL: baseURL,
+  purchaseProvider: router
+)
+guard let association = await mosaic.commerceConfigurationAssociation(
+  applicationID: applicationID
+) else { return }
+
+let commerce = try MosaicCommerceConfigurationManager(
+  cacheIdentifier: "\(baseURL.absoluteString):\(applicationID)"
+)
+_ = await commerce.bootstrap(
+  association: association,
+  bundledFallbackData: bundledCommerceConfiguration
+)
+_ = await commerce.refresh(
+  publicSDKKey: publicSDKKey,
+  baseURL: baseURL,
+  association: association
+)
+if case .available(let configuration, _, _) = await commerce.status() {
+  try await router.install(configuration: configuration, provider: appProvider)
+}
+```
+
+App-owned providers implement `MosaicCommerceProvider` and report the identity,
+Mosaic adapter version, and runtime capabilities their installed adapter
+actually implements. Before accepting mappings, the router requires the
+provider ID and adapter version to match and requires every sidecar-declared
+capability to have the same support and reason code in the installed adapter.
+Adapter capabilities not present in the sidecar do not implicitly activate
+features.
+
+Raw provider errors, credentials, receipts, and customer identifiers are never
+part of the public contract or safe diagnostics. Purchase, restore, and active
+Entitlement provider-failure results carry a complete bounded diagnostic with
+a stable code, safe message, retryability, correlation ID, safe provider code,
+recovery action, and Product context where applicable. The configured boundary
+repairs invalid custom-provider diagnostic values. SwiftUI interaction and
+presentation results deliberately retain only the sanitized stable code.
+
+Installing or replacing a configuration clears the router while
+`invalidateLoadedProducts()` removes provider-native handles. Purchase remains
+unavailable until products are loaded again from the new exact mappings.
+Provider implementations must use actor-isolated generation tracking so an
+older in-flight load cannot restore stale handles.
+
+Restore normalizes an existing entitlement to `.restored`; it does not expose
+a separate already-entitled restore result. Active Entitlement lookup returns
+exactly `.available`, `.unknown`, `.providerUnavailable`, or `.failed`.
+Provider failures never imply an empty or inactive Entitlement set.
+
 ## Bundled fallback and direct rendering
 
 The preview screen takes a valid bundled `MosaicPaywallDocument` and an
@@ -226,6 +303,7 @@ From the repository root:
 swift format lint --strict --recursive sdk/ios/Package.swift sdk/ios/Sources sdk/ios/Tests
 swift build --package-path sdk/ios
 swift test --package-path sdk/ios
+swift test --package-path sdk/ios/RevenueCat
 xcodebuild -project examples/ios-example/MosaicExample.xcodeproj \
   -scheme MosaicExample \
   -destination 'generic/platform=iOS Simulator' \

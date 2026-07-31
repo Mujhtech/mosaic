@@ -1092,6 +1092,85 @@ export type MosaicCommerceProviderV1Record =
   | MosaicCommerceProviderV1Envelope<"activeEntitlementOutcome", MosaicCommerceProviderV1ActiveEntitlementOutcome>
   | MosaicCommerceProviderV1Envelope<"providerDiagnostics", MosaicCommerceProviderV1ProviderDiagnostics>;
 
+export type MosaicCommerceConfigurationV1Identifier = string;
+
+export type MosaicCommerceConfigurationV1EntitlementKey = string;
+
+export type MosaicCommerceConfigurationV1OpaqueProviderIdentifier = string;
+
+export type MosaicCommerceConfigurationV1Sha256Digest = string;
+
+export type MosaicCommerceConfigurationV1UtcTimestamp = string;
+
+export type MosaicCommerceConfigurationV1StorePlatform = "ios" | "android";
+
+export type MosaicCommerceConfigurationV1ConfigurationRelease = {
+  "id": MosaicCommerceConfigurationV1Identifier;
+  "contentDigest": MosaicCommerceConfigurationV1Sha256Digest;
+};
+
+export type MosaicCommerceConfigurationV1ProviderActivation = {
+  "source": "providerConnection";
+  "providerConnectionId": MosaicCommerceConfigurationV1Identifier;
+} | {
+  "source": "sdkLocal";
+  "localSnapshotId": MosaicCommerceConfigurationV1Identifier;
+};
+
+export type MosaicCommerceConfigurationV1ActiveProvider = {
+  "identity": MosaicCommerceProviderV1ProviderIdentity;
+  "activation": MosaicCommerceConfigurationV1ProviderActivation;
+  "capabilities": Array<MosaicCommerceProviderV1ProviderCapability>;
+};
+
+export type MosaicCommerceConfigurationV1AdapterMapping = {
+  "kind": "directProduct";
+} | {
+  "kind": "revenueCatPackage";
+  "offeringIdentifier": MosaicCommerceConfigurationV1OpaqueProviderIdentifier;
+  "packageIdentifier": MosaicCommerceConfigurationV1OpaqueProviderIdentifier;
+};
+
+export type MosaicCommerceConfigurationV1ProductMapping = {
+  "mosaicProductId": MosaicCommerceConfigurationV1Identifier;
+  "mappingId": MosaicCommerceConfigurationV1Identifier;
+  "providerProductReference": MosaicCommerceConfigurationV1OpaqueProviderIdentifier;
+  "adapterMapping": MosaicCommerceConfigurationV1AdapterMapping;
+};
+
+export type MosaicCommerceConfigurationV1EntitlementMapping = {
+  "mosaicEntitlementKey": MosaicCommerceConfigurationV1EntitlementKey;
+  "providerEntitlementIdentifier": MosaicCommerceConfigurationV1OpaqueProviderIdentifier;
+};
+
+export type MosaicCommerceConfigurationV1Freshness = {
+  "source": "providerSynchronization" | "sdkLocalSnapshot";
+  "status": "fresh" | "stale";
+  "providerObservedAt": MosaicCommerceConfigurationV1UtcTimestamp;
+  "synchronizedAt": MosaicCommerceConfigurationV1UtcTimestamp;
+  "staleAt": MosaicCommerceConfigurationV1UtcTimestamp;
+  "expiresAt"?: MosaicCommerceConfigurationV1UtcTimestamp;
+};
+
+export type MosaicCommerceConfigurationV1Configuration = {
+  "id": MosaicCommerceConfigurationV1Identifier;
+  "environmentId": MosaicCommerceConfigurationV1Identifier;
+  "applicationId": MosaicCommerceConfigurationV1Identifier;
+  "storePlatform": MosaicCommerceConfigurationV1StorePlatform;
+  "configurationRelease": MosaicCommerceConfigurationV1ConfigurationRelease;
+  "contentDigest": MosaicCommerceConfigurationV1Sha256Digest;
+  "activeProvider": MosaicCommerceConfigurationV1ActiveProvider;
+  "productMappings": Array<MosaicCommerceConfigurationV1ProductMapping>;
+  "entitlementMappings": Array<MosaicCommerceConfigurationV1EntitlementMapping>;
+  "freshness": MosaicCommerceConfigurationV1Freshness;
+  "diagnostics": Array<MosaicCommerceProviderV1Diagnostic>;
+};
+
+export type MosaicCommerceConfigurationV1 = {
+  "commerceConfigurationVersion": "1";
+  "configuration": MosaicCommerceConfigurationV1Configuration;
+};
+
 export type MosaicPaywallDocument = MosaicPaywallV02Document;
 export type MosaicPreviewMessage = MosaicPreviewV02Message;
 export type MosaicLocalProject = MosaicLocalProjectV02;

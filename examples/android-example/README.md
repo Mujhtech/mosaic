@@ -52,18 +52,28 @@ The SDK accepts only credential-free local `ws://` or `wss://` endpoints. The
 example enables Android cleartext traffic solely for this local development
 connection.
 
-For the Phase 3B hosted path, pass an environment-scoped public SDK key. The
+For the hosted path, pass an environment-scoped public SDK key. The
 app fetches Configuration Delivery v1, resolves the requested Placement,
 caches the last valid release, and renders with the same native Compose
-renderer. Commerce remains the deterministic mock provider:
+renderer. It uses deterministic app-owned commerce unless a RevenueCat public
+SDK key and Mosaic Application ID are also supplied:
 
 ```bash
 adb shell am start -n dev.mosaic.example/.MainActivity \
   --es mosaic.sdk.key mosaic_sdk_example \
   --es mosaic.sdk.endpoint http://10.0.2.2:8080 \
+  --es mosaic.application.id application_android \
+  --es revenuecat.public.sdk.key goog_example_public_key \
   --es mosaic.placement onboarding_complete
 ```
 
 Omit `mosaic.sdk.endpoint` to use Mosaic's hosted API. The example does not
-add analytics, experiments, RevenueCat, Google Play Billing, or authoritative
-entitlement state.
+add analytics, experiments, Google Play Billing, or authoritative entitlement
+state.
+
+The example includes the optional `:mosaic-revenuecat` module, initializes it
+only when the host supplies that public key, and lets hosted refresh atomically
+accept the exact Commerce Configuration sidecar. Omit
+`revenuecat.public.sdk.key` to switch back to the app-owned provider without
+changing the Paywall document. The example never embeds a RevenueCat key or
+customer identity.

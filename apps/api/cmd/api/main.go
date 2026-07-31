@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"crypto/rand"
 	"errors"
 	"fmt"
 	"net/http"
@@ -24,7 +25,9 @@ import (
 	"github.com/Mujhtech/mosaic/apps/api/internal/platform/logging"
 	"github.com/Mujhtech/mosaic/apps/api/internal/platform/objectstoreminio"
 	"github.com/Mujhtech/mosaic/apps/api/internal/platform/ratelimit"
+	"github.com/Mujhtech/mosaic/apps/api/internal/platform/revenuecat"
 	"github.com/Mujhtech/mosaic/apps/api/internal/platform/telemetry"
+	"github.com/Mujhtech/mosaic/apps/api/internal/providercredential"
 	browserauthhttp "github.com/Mujhtech/mosaic/apps/api/internal/transport/browserauth"
 )
 
@@ -106,6 +109,26 @@ func run() (runErr error) {
 	if closeSchemaErr != nil {
 		return fmt.Errorf("close canonical Protocol 0.2 schema: %w", closeSchemaErr)
 	}
+	commerceProviderSchema, err := os.Open(cfg.Protocol.CommerceProviderSchemaPath)
+	if err != nil {
+		return fmt.Errorf("open canonical Commerce Provider v1 schema: %w", err)
+	}
+	commerceConfigurationSchema, err := os.Open(cfg.Protocol.CommerceConfigurationSchemaPath)
+	if err != nil {
+		_ = commerceProviderSchema.Close()
+		return fmt.Errorf("open canonical Commerce Configuration v1 schema: %w", err)
+	}
+	commerceValidator, err := hostedpublishing.CompileCommerceConfigurationValidator(
+		commerceProviderSchema, commerceConfigurationSchema,
+	)
+	closeCommerceProviderErr := commerceProviderSchema.Close()
+	closeCommerceConfigurationErr := commerceConfigurationSchema.Close()
+	if err != nil {
+		return err
+	}
+	if closeErr := errors.Join(closeCommerceProviderErr, closeCommerceConfigurationErr); closeErr != nil {
+		return fmt.Errorf("close canonical commerce schemas: %w", closeErr)
+	}
 
 	objectStore, err := objectstoreminio.New(objectstoreminio.Config{
 		Endpoint: cfg.ObjectStore.Endpoint, AccessKey: cfg.ObjectStore.AccessKey,
@@ -119,11 +142,33 @@ func run() (runErr error) {
 	}
 
 	workspaceRepository := cloudworkspacepostgres.New(databasePool)
-	workspaceService := cloudworkspace.NewService(workspaceRepository)
+	workspaceOptions := make([]cloudworkspace.ServiceOption, 0, 1)
+	if cfg.Providers.Enabled {
+		credentialCipher, err := providercredential.NewAESGCMCipher(cfg.Providers.CredentialKeyring, rand.Reader)
+		if err != nil {
+			return fmt.Errorf("configure provider credential encryption: %w", err)
+		}
+		revenueCatClient, err := revenuecat.New(revenuecat.Config{
+			BaseURL:          cfg.Providers.RevenueCatBaseURL,
+			RequestTimeout:   cfg.Providers.RequestTimeout,
+			OperationTimeout: cfg.Providers.OperationTimeout,
+			ConnectTimeout:   cfg.Providers.ConnectTimeout,
+			MaxResponseBytes: cfg.Providers.MaxResponseBytes,
+			MaxAttempts:      cfg.Providers.MaxAttempts,
+		})
+		if err != nil {
+			return fmt.Errorf("configure RevenueCat adapter: %w", err)
+		}
+		workspaceOptions = append(workspaceOptions,
+			cloudworkspace.WithProviderOperations(credentialCipher, revenueCatClient, cfg.Providers.SnapshotTTL),
+		)
+	}
+	workspaceService := cloudworkspace.NewService(workspaceRepository, workspaceOptions...)
 	browserAuthService := browserauth.NewService(browserauthpostgres.New(databasePool), cfg.BrowserAuth.SessionLifetime)
 	publishingRepository := hostedpublishingpostgres.New(databasePool)
 	publishingService := hostedpublishing.NewService(publishingRepository,
 		hostedpublishing.WithProtocolValidator(protocolValidator),
+		hostedpublishing.WithCommerceConfigurationValidator(commerceValidator),
 		hostedpublishing.WithObjectStore(objectStore, cfg.ObjectStore.PublicAssetBaseURL, cfg.ObjectStore.MaxUploadBytes),
 	)
 	deliveryLimiter := ratelimit.New(cfg.Delivery.RequestsPerMinute, cfg.Delivery.Burst, cfg.Delivery.LimiterEntries)

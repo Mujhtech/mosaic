@@ -18,17 +18,22 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
+import com.revenuecat.purchases.Purchases
+import com.revenuecat.purchases.PurchasesConfiguration
 import dev.mosaic.sdk.MosaicAndroidPreviewIdentity
 import dev.mosaic.sdk.MosaicBundledImageResolver
 import dev.mosaic.sdk.MosaicBundledVideoResolver
 import dev.mosaic.sdk.MosaicLocalPreviewClient
 import dev.mosaic.sdk.MosaicLocalPreviewConfiguration
 import dev.mosaic.sdk.MosaicLocalPreviewScreen
+import dev.mosaic.sdk.MosaicConfiguredPurchaseProvider
 import dev.mosaic.sdk.MockMosaicPurchaseProvider
 import dev.mosaic.sdk.Mosaic
 import dev.mosaic.sdk.MosaicPaywallLoadResult
 import dev.mosaic.sdk.MosaicPaywall
 import dev.mosaic.sdk.MosaicPlacementResult
+import dev.mosaic.sdk.MosaicPurchaseProvider
+import dev.mosaic.sdk.revenuecat.MosaicRevenueCatAdapter
 import java.net.URI
 
 class MainActivity : ComponentActivity() {
@@ -102,8 +107,14 @@ class MainActivity : ComponentActivity() {
 
     private fun showHostedPaywall(sdkKey: String) {
         val endpoint = intent.getStringExtra(SDK_ENDPOINT_EXTRA)?.let(URI::create)
-        val purchaseProvider = MockMosaicPurchaseProvider(MockMosaicPurchaseProvider.phase1Products())
-        val mosaic = Mosaic.configure(sdkKey, purchaseProvider, endpoint)
+        val applicationId = intent.getStringExtra(APPLICATION_ID_EXTRA)?.takeIf(String::isNotBlank)
+        val purchaseProvider = configuredHostedProvider()
+        val mosaic = Mosaic.configure(
+            sdkKey,
+            purchaseProvider,
+            endpoint,
+            applicationId = applicationId,
+        )
         val hosted = mosaic.hostedConfiguration(applicationContext)
         val placement = intent.getStringExtra(PLACEMENT_EXTRA)?.takeIf(String::isNotBlank)
             ?: "onboarding_complete"
@@ -129,11 +140,25 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    private fun configuredHostedProvider(): MosaicPurchaseProvider {
+        val revenueCatPublicKey =
+            intent.getStringExtra(REVENUECAT_PUBLIC_KEY_EXTRA)?.takeIf(String::isNotBlank)
+                ?: return MockMosaicPurchaseProvider(MockMosaicPurchaseProvider.phase1Products())
+        Purchases.configure(
+            PurchasesConfiguration.Builder(applicationContext, revenueCatPublicKey).build(),
+        )
+        return MosaicConfiguredPurchaseProvider(
+            MosaicRevenueCatAdapter(Purchases.sharedInstance) { this },
+        )
+    }
+
     companion object {
         const val PREVIEW_ENDPOINT_EXTRA = "mosaic.preview.endpoint"
         const val PREVIEW_SESSION_EXTRA = "mosaic.preview.session"
         const val SDK_KEY_EXTRA = "mosaic.sdk.key"
         const val SDK_ENDPOINT_EXTRA = "mosaic.sdk.endpoint"
         const val PLACEMENT_EXTRA = "mosaic.placement"
+        const val APPLICATION_ID_EXTRA = "mosaic.application.id"
+        const val REVENUECAT_PUBLIC_KEY_EXTRA = "revenuecat.public.sdk.key"
     }
 }

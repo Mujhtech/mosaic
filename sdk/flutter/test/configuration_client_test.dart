@@ -173,22 +173,114 @@ void main() {
       'environment_staging',
     );
   });
+
+  test('invalid remote sidecar retains the atomically cached release pair',
+      () async {
+    final releaseSource = deliveryFixtureSource('product-reference.json');
+    final validSidecar = _commerceForRelease(releaseSource);
+    final invalidSidecar =
+        validSidecar.replaceFirst('application_ios', 'application_other');
+    final cache = _Cache(
+      entry: MosaicConfigurationCacheEntry(
+        etag: '"release-product"',
+        releaseSource: releaseSource,
+        commerceConfigurationSource: validSidecar,
+      ),
+    );
+    final mosaic = _mosaic(
+      transport: _Transport(<MosaicConfigurationResponse>[
+        MosaicConfigurationUpdatedResponse(
+          source: releaseSource,
+          etag: '"release-product-2"',
+        ),
+      ]),
+      cache: cache,
+      applicationId: 'application_ios',
+      storePlatform: MosaicStorePlatform.ios,
+      commerceConfigurationLoader: (_) async => invalidSidecar,
+    );
+
+    expect(await mosaic.loadConfiguration(), isA<MosaicConfigurationReady>());
+    final accepted = mosaic.acceptedConfiguration;
+    expect(accepted!.commerceEnvelope, isNotNull);
+
+    expect(
+      await mosaic.refreshConfiguration(),
+      isA<MosaicConfigurationRetained>(),
+    );
+    expect(mosaic.acceptedConfiguration, same(accepted));
+    expect(cache.writes, 0);
+    expect(
+      cache.entry!.commerceConfigurationSource,
+      validSidecar,
+    );
+  });
+
+  test('commerce 304 reuses only the validated cached release pair', () async {
+    final releaseSource = deliveryFixtureSource('product-reference.json');
+    final sidecar = _commerceForRelease(releaseSource);
+    final sidecarDigest =
+        ((jsonDecode(sidecar) as Map<String, Object?>)['configuration']!
+            as Map<String, Object?>)['contentDigest']! as String;
+    final sidecarEtag = '"$sidecarDigest"';
+    final cache = _Cache(
+      entry: MosaicConfigurationCacheEntry(
+        etag: '"release-product"',
+        releaseSource: releaseSource,
+        commerceConfigurationSource: sidecar,
+        commerceConfigurationEtag: sidecarEtag,
+      ),
+    );
+    final commerceTransport = _CommerceTransport(
+      const MosaicCommerceConfigurationNotModifiedResponse(),
+    );
+    final mosaic = _mosaic(
+      transport: _Transport(<MosaicConfigurationResponse>[
+        MosaicConfigurationUpdatedResponse(
+          source: releaseSource,
+          etag: '"release-product-2"',
+        ),
+      ]),
+      cache: cache,
+      applicationId: 'application_ios',
+      storePlatform: MosaicStorePlatform.ios,
+      commerceConfigurationTransport: commerceTransport,
+    );
+
+    expect(await mosaic.loadConfiguration(), isA<MosaicConfigurationReady>());
+    expect(
+      await mosaic.refreshConfiguration(),
+      isA<MosaicConfigurationUpdated>(),
+    );
+    expect(commerceTransport.requests.single.retained!.etag, sidecarEtag);
+    expect(cache.entry!.commerceConfigurationSource, sidecar);
+    expect(cache.entry!.commerceConfigurationEtag, sidecarEtag);
+    expect(cache.entry!.etag, '"release-product-2"');
+  });
 }
 
 Mosaic _mosaic({
   required MosaicConfigurationTransport transport,
   required MosaicConfigurationCache cache,
   String? bundledFallbackSource,
+  String? applicationId,
+  MosaicStorePlatform? storePlatform,
+  MosaicCommerceConfigurationLoader? commerceConfigurationLoader,
+  MosaicCommerceConfigurationTransport? commerceConfigurationTransport,
 }) =>
     Mosaic.configure(
       publicSdkKey: 'mos_public_sdk_test.secret',
       baseUrl: Uri.parse('https://mosaic.example'),
       applicationVersion: '1.0.0',
+      applicationId: applicationId,
+      storePlatform: storePlatform,
       purchaseProvider: MockMosaicPurchaseProvider(),
       transport: transport,
       cache: cache,
       bundledFallbackLoader: () async =>
           bundledFallbackSource ?? deliveryFixtureSource(),
+      commerceConfigurationLoader: commerceConfigurationLoader,
+      commerceConfigurationTransport: commerceConfigurationTransport,
     );
 
 String _releaseWithEnvironment(String environmentId) {
@@ -213,6 +305,74 @@ Object? _canonicalize(Object? value) {
     };
   }
   return value;
+}
+
+String _commerceForRelease(String releaseSource) {
+  final delivery = jsonDecode(releaseSource) as Map<String, Object?>;
+  final release = delivery['release']! as Map<String, Object?>;
+  final environment = release['environment']! as Map<String, Object?>;
+  final products = release['productReferences']! as List<Object?>;
+  final configuration = <String, Object?>{
+    'id': 'commerce_configuration_test',
+    'environmentId': environment['id'],
+    'applicationId': 'application_ios',
+    'storePlatform': 'ios',
+    'configurationRelease': <String, Object?>{
+      'id': release['id'],
+      'contentDigest': release['contentDigest'],
+    },
+    'activeProvider': <String, Object?>{
+      'identity': <String, Object?>{
+        'id': 'custom.example',
+        'displayName': 'Custom Example',
+        'adapterVersion': '1.0.0',
+      },
+      'activation': <String, Object?>{
+        'source': 'sdkLocal',
+        'localSnapshotId': 'snapshot_1',
+      },
+      'capabilities': <Object?>[
+        <String, Object?>{
+          'name': 'productLoading',
+          'support': 'supported',
+        },
+      ],
+    },
+    'productMappings': <Object?>[
+      for (final raw in products) _commerceProductMapping(raw),
+    ],
+    'entitlementMappings': <Object?>[
+      <String, Object?>{
+        'mosaicEntitlementKey': 'pro',
+        'providerEntitlementIdentifier': 'provider_pro',
+      },
+    ],
+    'freshness': <String, Object?>{
+      'source': 'sdkLocalSnapshot',
+      'status': 'fresh',
+      'providerObservedAt': '2026-07-23T12:00:00Z',
+      'synchronizedAt': '2026-07-23T12:00:00Z',
+      'staleAt': '2026-07-24T12:00:00Z',
+    },
+    'diagnostics': <Object?>[],
+  };
+  configuration['contentDigest'] =
+      'sha256:${mosaicSha256String(jsonEncode(_canonicalize(configuration)))}';
+  return jsonEncode(<String, Object?>{
+    'commerceConfigurationVersion': '1',
+    'configuration': configuration,
+  });
+}
+
+Map<String, Object?> _commerceProductMapping(Object? raw) {
+  final product = raw! as Map<String, Object?>;
+  final id = product['id']! as String;
+  return <String, Object?>{
+    'mosaicProductId': id,
+    'mappingId': 'mapping_$id',
+    'providerProductReference': 'provider.$id',
+    'adapterMapping': <String, Object?>{'kind': 'directProduct'},
+  };
 }
 
 final class _Cache implements MosaicConfigurationCache {
@@ -249,6 +409,22 @@ final class _Transport implements MosaicConfigurationTransport {
   ) async {
     requests.add(request);
     return _responses.removeAt(0);
+  }
+}
+
+final class _CommerceTransport implements MosaicCommerceConfigurationTransport {
+  _CommerceTransport(this.response);
+
+  final MosaicCommerceConfigurationResponse response;
+  final List<MosaicCommerceConfigurationRequest> requests =
+      <MosaicCommerceConfigurationRequest>[];
+
+  @override
+  Future<MosaicCommerceConfigurationResponse> fetch(
+    MosaicCommerceConfigurationRequest request,
+  ) async {
+    requests.add(request);
+    return response;
   }
 }
 

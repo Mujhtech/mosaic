@@ -93,7 +93,7 @@ func TestGetProjectMatchesCanonicalPathWithoutTrailingSlash(t *testing.T) {
 	assertErrorCode(t, response, http.StatusNotFound, "not_found")
 }
 
-func TestProviderConnectionEndpointRejectsCredentialSubmission(t *testing.T) {
+func TestRevenueCatConnectionRequiresProjectAndOneTimeSecret(t *testing.T) {
 	service := cloudworkspace.NewService(cloudworkspacememory.New())
 	actor := cloudworkspace.Actor{ID: "actor-owner"}
 	organization, _ := service.CreateOrganization(t.Context(), actor, "Acme")
@@ -103,20 +103,20 @@ func TestProviderConnectionEndpointRejectsCredentialSubmission(t *testing.T) {
 	handler := cloudworkspacehttp.Routes(service, authn.ResolverFunc(func(*http.Request) (authn.Principal, error) {
 		return authn.Principal{ActorID: actor.ID, Method: "test"}, nil
 	}))
-	body := `{
-		"name":"RevenueCat",
-		"provider":"revenuecat",
-		"integrationMode":"server_connected",
-		"mode":"sandbox",
-		"environmentIds":["` + environments.Items[0].ID + `"],
-		"applicationIds":["` + application.ID + `"],
-		"credential":"must-not-be-accepted"
-	}`
-	recorder := request(t, handler, http.MethodPost, "/projects/"+project.ID+"/provider-connections", body)
-	assertErrorCode(t, recorder, http.StatusUnprocessableEntity, "validation_failed")
+	base := `"name":"RevenueCat","provider":"revenuecat","integrationMode":"server_connected","mode":"sandbox",` +
+		`"environmentIds":["` + environments.Items[0].ID + `"],"applicationIds":["` + application.ID + `"]`
+	for name, body := range map[string]string{
+		"missing project":    `{` + base + `,"credential":"sk_valid"}`,
+		"missing credential": `{` + base + `,"externalProjectId":"proj_resource"}`,
+	} {
+		t.Run(name, func(t *testing.T) {
+			recorder := request(t, handler, http.MethodPost, "/projects/"+project.ID+"/provider-connections", body)
+			assertErrorCode(t, recorder, http.StatusUnprocessableEntity, "validation_failed")
+		})
+	}
 	connections, err := service.ListProviderConnections(t.Context(), actor, project.ID, cloudworkspace.ListOptions{})
 	if err != nil || len(connections.Items) != 0 {
-		t.Fatalf("rejected credential request persisted connection: %#v, %v", connections, err)
+		t.Fatalf("invalid RevenueCat request persisted connection: %#v, %v", connections, err)
 	}
 }
 

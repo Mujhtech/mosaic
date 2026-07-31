@@ -104,7 +104,7 @@ void main() {
     );
     final expectations = <MockMosaicRestoreScenario, Type>{
       MockMosaicRestoreScenario.success: MosaicRestored,
-      MockMosaicRestoreScenario.alreadyEntitled: MosaicRestoreAlreadyEntitled,
+      MockMosaicRestoreScenario.alreadyEntitled: MosaicRestored,
       MockMosaicRestoreScenario.noPurchases: MosaicNothingToRestore,
       MockMosaicRestoreScenario.failure: MosaicRestoreFailed,
     };

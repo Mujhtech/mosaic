@@ -43,13 +43,24 @@ purchase and restore outcomes, active Entitlement lookup, freshness, and safe
 diagnostics. It does not add provider data to Paywall Protocol `0.2` or
 Configuration Delivery `1`.
 
+Commerce Configuration `1` is the separate immutable sidecar that associates
+one accepted Configuration Delivery release with an exact Application and
+platform, selects one provider, and carries verified Product and Entitlement
+mappings. It supports both backend Provider Connections and equivalently
+verified SDK-local custom-provider snapshots without placing credentials or
+customer data in delivered configuration.
+
 Canonical Commerce artifacts live under:
 
 ```text
 protocol/
+├── schema/commerce-configuration/v1/
 ├── schema/commerce-provider/v1/
+├── compatibility/commerce-configuration/v1.json
 ├── compatibility/commerce-provider/v1.json
+├── fixtures/commerce-configuration/v1/
 ├── fixtures/commerce-provider/v1/
+├── commerce-configuration/CHANGELOG.md
 └── commerce/CHANGELOG.md
 ```
 
@@ -64,10 +75,10 @@ npm --prefix protocol run validate
 npm --prefix protocol test
 ```
 
-Generation refreshes the browser declarations from the canonical `0.2`
-schemas. Validation checks the current paywall and Local Preview schemas,
-fixtures, capability/reference invariants, message flow, runtime reset, and
-browser generation drift.
+Generation refreshes browser declarations from the canonical schemas.
+Validation checks the current paywall, Local Preview, Delivery, Commerce
+Provider, and Commerce Configuration schemas, fixtures, semantic invariants,
+canonical digests, and browser generation drift.
 
 See:
 
@@ -76,3 +87,4 @@ See:
 - `docs/protocol/versioning.md`
 - `docs/protocol/configuration-delivery-v1.md`
 - `docs/protocol/commerce-provider-v1.md`
+- `docs/protocol/commerce-configuration-v1.md`

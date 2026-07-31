@@ -1,5 +1,30 @@
 # Changelog
 
+## 0.2.0-dev.7
+
+- Enforce exact adapter-owned provider identity and capability declarations
+  before activating mappings; the RevenueCat adapter version is `1.0.0`
+  independently of `purchases_flutter 10.4.3`.
+- Require the hosted response to repeat the exact retained ETag and
+  Configuration Release ID before accepting Commerce Configuration `304`.
+- Attach the complete safe correlated provider diagnostic to Product-load,
+  purchase, restore, and active-Access failures.
+- Normalize RevenueCat's already-purchased restore recovery with no active
+  Access to `nothingToRestore`.
+- Add strict Commerce Configuration v1 decoding with canonical digest,
+  release/scope/Product-set binding, credential rejection, and safe
+  diagnostics.
+- Cache accepted Commerce Configuration bytes atomically with their Delivery
+  v1 release and retain the last valid pair after sidecar failure.
+- Add an SDK-local custom commerce Provider/factory/router boundary and
+  normalized pending, deferred, Provider-unavailable, and Entitlement failure
+  outcomes.
+- Add the optional nested `mosaic_revenuecat` adapter package pinned to the
+  official `purchases_flutter 10.4.3` release.
+- Bind hosted sidecar ETags to canonical content digests, safely revalidate
+  only complete retained pairs, and align restore and active Entitlement
+  outcomes with Commerce Provider Contract v1.
+
 ## 0.2.0-dev.6
 
 - Add strict Configuration Delivery v1 validation for releases, embedded

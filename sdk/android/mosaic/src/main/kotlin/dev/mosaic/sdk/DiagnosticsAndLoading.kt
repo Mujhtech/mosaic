@@ -24,6 +24,11 @@ enum class MosaicDiagnosticCode(val wireName: String) {
     CONFIGURATION_REFRESH_TRANSPORT_FAILED("configuration.refresh.transportFailed"),
     CONFIGURATION_REFRESH_UNEXPECTED_NOT_MODIFIED("configuration.refresh.unexpected304"),
     CONFIGURATION_CACHE_WRITE_FAILED("configuration.cache.writeFailed"),
+    COMMERCE_CONFIGURATION_UNAVAILABLE("commerce.configurationUnavailable"),
+    COMMERCE_CONFIGURATION_REJECTED("commerce.configurationRejected"),
+    COMMERCE_CONFIGURATION_CACHE_WRITE_FAILED("commerce.configurationCacheWriteFailed"),
+    COMMERCE_MAPPING_INVALID("commerce.mappingInvalid"),
+    COMMERCE_PROVIDER_UNAVAILABLE("commerce.providerUnavailable"),
 }
 
 data class MosaicDiagnostic(

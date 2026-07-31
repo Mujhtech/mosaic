@@ -3,16 +3,19 @@ import { mutationOptions, type QueryClient } from "@tanstack/react-query"
 import {
   addPlanProduct,
   addProductEntitlement,
+  archiveProviderMapping,
   archiveProduct,
   createEntitlement,
   createPlan,
   createProduct,
   removePlanProduct,
   removeProductEntitlement,
+  replaceProviderMapping,
   restoreProduct,
   setProductReplacement,
   type CreateCatalogResourceRequest,
   type CreateProductRequest,
+  type ReplaceProviderMappingRequest,
 } from "@/generated/api"
 import {
   invalidateCatalogImpact,
@@ -32,6 +35,51 @@ export function createPlanMutationOptions(projectId: string, queryClient: QueryC
       return result.data.data
     },
     onSuccess: async () => invalidateCatalogImpact(queryClient, { projectId }),
+  })
+}
+
+export function archiveProviderMappingMutationOptions(
+  productId: string,
+  projectId: string,
+  queryClient: QueryClient,
+) {
+  return mutationOptions({
+    mutationFn: async (mappingId: string) => {
+      const result = await archiveProviderMapping({
+        client: generatedDashboardClient,
+        path: { mappingId },
+        throwOnError: true,
+      })
+      return result.data.data
+    },
+    onSuccess: async () =>
+      invalidateCatalogImpact(queryClient, { productIds: [productId], projectId }),
+  })
+}
+
+export function replaceProviderMappingMutationOptions(
+  productId: string,
+  projectId: string,
+  queryClient: QueryClient,
+) {
+  return mutationOptions({
+    mutationFn: async ({
+      body,
+      mappingId,
+    }: {
+      body: ReplaceProviderMappingRequest
+      mappingId: string
+    }) => {
+      const result = await replaceProviderMapping({
+        body,
+        client: generatedDashboardClient,
+        path: { mappingId },
+        throwOnError: true,
+      })
+      return result.data.data
+    },
+    onSuccess: async () =>
+      invalidateCatalogImpact(queryClient, { productIds: [productId], projectId }),
   })
 }
 

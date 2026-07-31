@@ -1,5 +1,38 @@
 # Changelog
 
+## 0.1.0-dev.5
+
+- Report RevenueCat Provider ID `revenuecat` with Mosaic adapter version
+  `1.0.0`, independently from the RevenueCat Purchases Android dependency
+  version, and reject sidecars whose Provider identity, adapter version, or
+  exact runtime capability tuples do not match the installed adapter.
+- Require Commerce Configuration `304` responses to repeat both the exact
+  retained sidecar digest ETag and Configuration Release ID; missing,
+  malformed, weak, or mismatched headers now preserve the valid pair and fail
+  revalidation safely.
+- Require custom adapters to report provider identity, truthful capabilities,
+  and bounded safe diagnostics; provider-failure outcomes can carry the
+  complete correlated diagnostic.
+- Invalidate provider-native purchase handles on Commerce Configuration swaps,
+  including concurrent RevenueCat reloads, and require exact remapping before
+  another purchase.
+- Validate hosted Commerce response media type, digest ETag, release header,
+  retained `304` pairs, and every canonical safe-diagnostic field.
+- Align restore and active-Entitlement results with Commerce Provider v1:
+  restore no longer exposes `AlreadyEntitled`, and provider unavailability is
+  distinct from unknown and failed Entitlement lookup.
+- Add strict Commerce Configuration v1 decoding, release/application/platform
+  association, content-digest verification, atomic paired caching, and
+  last-known-valid recovery.
+- Add the SDK-local configurable provider boundary with stable Mosaic Product
+  and Entitlement IDs and safe unavailable behavior before configuration.
+- Add an optional `mosaic-revenuecat` module using RevenueCat Purchases Android
+  10.15.0 for direct products and exact Offering/Package mappings without
+  forcing RevenueCat into the core SDK or initializing it on the host's behalf.
+- Normalize product, purchase, pending, cancellation, already-entitled,
+  restore, entitlement, provider-unavailable, and failure results without
+  retaining credentials, purchase tokens, or customer data.
+
 ## 0.1.0-dev.4
 
 - Add Hosted Configuration Delivery v1 with endpoint/key-isolated persistent

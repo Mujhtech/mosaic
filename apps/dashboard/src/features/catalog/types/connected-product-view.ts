@@ -3,6 +3,7 @@ import type {
   Environment,
   ProviderConnection,
   ProviderProductMapping,
+  ProviderProductMetadataSnapshot,
   ProviderReadiness,
 } from "@/generated/api"
 
@@ -32,6 +33,7 @@ export interface ProviderMappingView {
   connectionLabel: string
   connectionLastSuccessfulSyncAt?: string
   environmentLabel: string
+  expectedStoreProductId?: string
   id: string
   lastErrorCode?: ProviderProductMapping["lastErrorCode"]
   platformLabel: string
@@ -39,6 +41,14 @@ export interface ProviderMappingView {
   providerOfferingIdentifier?: string
   providerPackageIdentifier?: string
   providerProductIdentifier: string
+  providerDisplayName?: string
+  providerProductState?: string
+  providerProductType?: string
+  snapshotId?: string
+  snapshotExpiresAt?: string
+  snapshotObservedAt?: string
+  snapshotStaleAt?: string
+  snapshotSyncedAt?: string
   status: ProviderProductMapping["status"]
   syncState: ProviderProductMapping["syncState"]
 }
@@ -93,10 +103,14 @@ export function providerMappingView(
   applications: readonly Application[],
   environments: readonly Environment[],
   connections: readonly ProviderConnection[],
+  snapshot?: ProviderProductMetadataSnapshot,
 ): ProviderMappingView {
   const application = applications.find((item) => item.id === mapping.applicationId)
   const environment = environments.find((item) => item.id === mapping.environmentId)
   const connection = connections.find((item) => item.id === mapping.connectionId)
+  const metadata = snapshot?.metadata
+  const metadataString = (key: string) =>
+    typeof metadata?.[key] === "string" ? metadata[key] : undefined
 
   return {
     applicationLabel: application?.name ?? mapping.applicationId,
@@ -104,13 +118,22 @@ export function providerMappingView(
     connectionLabel: connection?.name ?? mapping.connectionId ?? "No connection assigned",
     connectionLastSuccessfulSyncAt: connection?.lastSuccessfulSyncAt,
     environmentLabel: environment?.name ?? mapping.environmentId ?? "No Environment assigned",
+    expectedStoreProductId: mapping.expectedStoreProductId,
     id: mapping.id,
     lastErrorCode: mapping.lastErrorCode,
     platformLabel: mapping.platform.toUpperCase(),
     providerLabel: providerLabel(mapping.provider),
     providerOfferingIdentifier: mapping.providerOfferingIdentifier,
     providerPackageIdentifier: mapping.providerPackageIdentifier,
+    providerDisplayName: metadataString("displayName"),
+    providerProductState: metadataString("state"),
+    providerProductType: metadataString("type"),
     providerProductIdentifier: mapping.providerProductIdentifier,
+    snapshotId: mapping.currentSnapshotId,
+    snapshotExpiresAt: snapshot?.expiresAt,
+    snapshotObservedAt: snapshot?.observedAt,
+    snapshotStaleAt: snapshot?.staleAt,
+    snapshotSyncedAt: snapshot?.syncedAt,
     status: mapping.status,
     syncState: mapping.syncState,
   }

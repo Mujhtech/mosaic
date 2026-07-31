@@ -290,6 +290,31 @@ func (r reader) ProviderConnectionApplicationIDs(connectionID string) []string {
 	return many(r, `SELECT application_id FROM provider_connection_application_scopes WHERE connection_id=$1 ORDER BY application_id`, scanString, connectionID)
 }
 
+func scanProviderCredential(row pgx.Row) (cloudworkspace.ProviderCredentialRecord, error) {
+	var v cloudworkspace.ProviderCredentialRecord
+	err := row.Scan(
+		&v.ConnectionID, &v.ProjectID, &v.OrganizationID, &v.Class, &v.Version,
+		&v.Algorithm, &v.KeyID, &v.Nonce, &v.Ciphertext, &v.Fingerprint,
+		&v.CreatedAt, &v.RotatedAt, &v.RevokedAt, &v.UpdatedAt,
+	)
+	return v, err
+}
+func (r reader) ProviderCredential(connectionID string) (cloudworkspace.ProviderCredentialRecord, bool) {
+	return one(r, `SELECT connection_id,project_id,organization_id,credential_class,envelope_version,algorithm,key_id,nonce,ciphertext,fingerprint,created_at,rotated_at,revoked_at,updated_at FROM provider_connection_credentials WHERE connection_id=$1`, scanProviderCredential, connectionID)
+}
+
+func scanProviderDiagnostic(row pgx.Row) (cloudworkspace.ProviderDiagnostic, error) {
+	var v cloudworkspace.ProviderDiagnostic
+	err := row.Scan(
+		&v.ID, &v.ProjectID, &v.ConnectionID, &v.Operation, &v.Code,
+		&v.Retryable, &v.RetryAfterSeconds, &v.CorrelationID, &v.OccurredAt,
+	)
+	return v, err
+}
+func (r reader) ProviderDiagnostics(connectionID string) []cloudworkspace.ProviderDiagnostic {
+	return many(r, `SELECT id,project_id,connection_id,operation,code,retryable,retry_after_seconds,correlation_id,occurred_at FROM provider_diagnostics WHERE connection_id=$1 ORDER BY occurred_at DESC,id DESC LIMIT 100`, scanProviderDiagnostic, connectionID)
+}
+
 func scanProviderAssignment(row pgx.Row) (cloudworkspace.ActiveProviderAssignment, error) {
 	var v cloudworkspace.ActiveProviderAssignment
 	err := row.Scan(
@@ -349,13 +374,17 @@ func (r reader) ProviderMapping(id string) (cloudworkspace.ProviderProductMappin
 func (r reader) ProviderMappings(productID string) []cloudworkspace.ProviderProductMapping {
 	return many(r, `SELECT `+providerMappingColumns+` FROM provider_product_mappings WHERE product_id=$1 ORDER BY id`, scanMapping, productID)
 }
+func (r reader) ProviderMappingsByConnection(connectionID string) []cloudworkspace.ProviderProductMapping {
+	return many(r, `SELECT `+providerMappingColumns+` FROM provider_product_mappings WHERE connection_id=$1 ORDER BY id`, scanMapping, connectionID)
+}
 
 func scanProviderMetadataSnapshot(row pgx.Row) (cloudworkspace.ProviderProductMetadataSnapshot, error) {
 	var v cloudworkspace.ProviderProductMetadataSnapshot
 	var lastErrorCode *string
 	err := row.Scan(
 		&v.ID, &v.ProjectID, &v.MappingID, &v.Source, &v.Digest, &v.Availability,
-		&v.ObservedAt, &v.SyncedAt, &v.ExpiresAt, &lastErrorCode, &v.CreatedAt,
+		&v.ObservedAt, &v.SyncedAt, &v.StaleAt, &v.ExpiresAt, &lastErrorCode,
+		&v.Metadata, &v.CreatedAt,
 	)
 	if lastErrorCode != nil {
 		v.LastErrorCode = cloudworkspace.ProviderErrorCode(*lastErrorCode)
@@ -363,7 +392,93 @@ func scanProviderMetadataSnapshot(row pgx.Row) (cloudworkspace.ProviderProductMe
 	return v, err
 }
 func (r reader) ProviderMetadataSnapshot(id string) (cloudworkspace.ProviderProductMetadataSnapshot, bool) {
-	return one(r, `SELECT id,project_id,mapping_id,source,digest,availability,observed_at,synced_at,expires_at,last_error_code,created_at FROM provider_product_metadata_snapshots WHERE id=$1`, scanProviderMetadataSnapshot, id)
+	return one(r, `SELECT id,project_id,mapping_id,source,digest,availability,observed_at,synced_at,stale_at,expires_at,last_error_code,normalized_metadata,created_at FROM provider_product_metadata_snapshots WHERE id=$1`, scanProviderMetadataSnapshot, id)
+}
+
+func scanProviderEntitlementMapping(row pgx.Row) (cloudworkspace.ProviderEntitlementMapping, error) {
+	var v cloudworkspace.ProviderEntitlementMapping
+	err := row.Scan(
+		&v.ID, &v.ProjectID, &v.EntitlementID, &v.ConnectionID, &v.EnvironmentID,
+		&v.ApplicationID, &v.ProviderEntitlementIdentifier, &v.Status,
+		&v.ArchivedAt, &v.CreatedAt, &v.UpdatedAt,
+	)
+	return v, err
+}
+func (r reader) ProviderEntitlementMappings(connectionID, environmentID, applicationID string) []cloudworkspace.ProviderEntitlementMapping {
+	return many(r, `SELECT id,project_id,entitlement_id,connection_id,environment_id,application_id,provider_entitlement_identifier,status,archived_at,created_at,updated_at FROM provider_entitlement_mappings WHERE connection_id=$1 AND environment_id=$2 AND application_id=$3 ORDER BY id`, scanProviderEntitlementMapping, connectionID, environmentID, applicationID)
+}
+
+func scanProviderImport(row pgx.Row) (cloudworkspace.ProviderImportRequest, error) {
+	var v cloudworkspace.ProviderImportRequest
+	var keyHash, requestHash []byte
+	err := row.Scan(
+		&v.ID, &v.ProjectID, &v.ConnectionID, &keyHash, &requestHash, &v.Status,
+		&v.CreatedByActorID, &v.CreatedAt, &v.CompletedAt,
+	)
+	if err == nil && (len(keyHash) != len(v.IdempotencyKeyHash) || len(requestHash) != len(v.RequestHash)) {
+		return v, errors.New("provider import has invalid digest length")
+	}
+	copy(v.IdempotencyKeyHash[:], keyHash)
+	copy(v.RequestHash[:], requestHash)
+	return v, err
+}
+func (r reader) ProviderImportByKeyHash(projectID string, keyHash [32]byte) (cloudworkspace.ProviderImportRequest, bool) {
+	return one(r, `SELECT id,project_id,connection_id,idempotency_key_hash,request_hash,status,created_by_actor_id,created_at,completed_at FROM provider_import_requests WHERE project_id=$1 AND idempotency_key_hash=$2`, scanProviderImport, projectID, keyHash[:])
+}
+
+func scanProviderImportItem(row pgx.Row) (cloudworkspace.ProviderImportItem, error) {
+	var v cloudworkspace.ProviderImportItem
+	var productID, mappingID, errorCode *string
+	err := row.Scan(
+		&v.ImportID, &v.ProjectID, &v.ProviderProductIdentifier, &productID,
+		&mappingID, &v.Status, &errorCode, &v.CreatedAt,
+	)
+	if productID != nil {
+		v.MosaicProductID = *productID
+	}
+	if mappingID != nil {
+		v.MappingID = *mappingID
+	}
+	if errorCode != nil {
+		v.ErrorCode = cloudworkspace.ProviderErrorCode(*errorCode)
+	}
+	return v, err
+}
+func (r reader) ProviderImportItems(importID string) []cloudworkspace.ProviderImportItem {
+	return many(r, `SELECT import_id,project_id,provider_product_identifier,mosaic_product_id,mapping_id,status,error_code,created_at FROM provider_import_items WHERE import_id=$1 ORDER BY provider_product_identifier`, scanProviderImportItem, importID)
+}
+
+func scanProviderSyncJob(row pgx.Row) (cloudworkspace.ProviderSyncJob, error) {
+	var v cloudworkspace.ProviderSyncJob
+	var leaseOwner *string
+	err := row.Scan(
+		&v.ID, &v.ProjectID, &v.ConnectionID, &v.Status, &v.AttemptCount,
+		&v.MaxAttempts, &v.AvailableAt, &leaseOwner, &v.LeaseExpiresAt,
+		&v.RequestedByActorID, &v.CreatedAt, &v.UpdatedAt,
+	)
+	if leaseOwner != nil {
+		v.LeaseOwner = *leaseOwner
+	}
+	return v, err
+}
+
+const providerSyncJobColumns = `id,project_id,connection_id,status,attempt_count,max_attempts,available_at,lease_owner,lease_expires_at,requested_by_actor_id,created_at,updated_at`
+const leasedProviderSyncJobColumns = `job.id,job.project_id,job.connection_id,job.status,job.attempt_count,job.max_attempts,job.available_at,job.lease_owner,job.lease_expires_at,job.requested_by_actor_id,job.created_at,job.updated_at`
+
+func (r reader) ProviderSyncJobs(connectionID string) []cloudworkspace.ProviderSyncJob {
+	return many(r, `SELECT `+providerSyncJobColumns+` FROM provider_sync_jobs WHERE connection_id=$1 ORDER BY created_at DESC,id DESC`, scanProviderSyncJob, connectionID)
+}
+
+func scanProviderSyncRun(row pgx.Row) (cloudworkspace.ProviderSyncRun, error) {
+	var v cloudworkspace.ProviderSyncRun
+	err := row.Scan(
+		&v.ID, &v.ProjectID, &v.ConnectionID, &v.JobID, &v.Status, &v.ItemCount,
+		&v.SuccessCount, &v.FailureCount, &v.StartedAt, &v.CompletedAt, &v.CreatedAt,
+	)
+	return v, err
+}
+func (r reader) ProviderSyncRuns(connectionID string) []cloudworkspace.ProviderSyncRun {
+	return many(r, `SELECT id,project_id,connection_id,job_id,status,item_count,success_count,failure_count,started_at,completed_at,created_at FROM provider_sync_runs WHERE connection_id=$1 ORDER BY started_at DESC,id DESC`, scanProviderSyncRun, connectionID)
 }
 func scanAudit(row pgx.Row) (cloudworkspace.AuditEvent, error) {
 	var v cloudworkspace.AuditEvent
@@ -483,6 +598,24 @@ func (t *transaction) SaveProviderConnection(v cloudworkspace.ProviderConnection
 		emptyStringAsNil(string(v.LastErrorCode)), v.RevokedAt, v.CreatedAt, v.UpdatedAt,
 	)
 }
+func (t *transaction) SaveProviderCredential(v cloudworkspace.ProviderCredentialRecord) {
+	t.exec(
+		`INSERT INTO provider_connection_credentials(connection_id,project_id,organization_id,credential_class,envelope_version,algorithm,key_id,nonce,ciphertext,fingerprint,created_at,rotated_at,revoked_at,updated_at)
+		 VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)
+		 ON CONFLICT(connection_id) DO UPDATE SET credential_class=excluded.credential_class,envelope_version=excluded.envelope_version,algorithm=excluded.algorithm,key_id=excluded.key_id,nonce=excluded.nonce,ciphertext=excluded.ciphertext,fingerprint=excluded.fingerprint,rotated_at=excluded.rotated_at,revoked_at=excluded.revoked_at,updated_at=excluded.updated_at`,
+		v.ConnectionID, v.ProjectID, v.OrganizationID, v.Class, v.Version, v.Algorithm,
+		v.KeyID, v.Nonce, v.Ciphertext, v.Fingerprint, v.CreatedAt, v.RotatedAt,
+		v.RevokedAt, v.UpdatedAt,
+	)
+}
+func (t *transaction) SaveProviderDiagnostic(v cloudworkspace.ProviderDiagnostic) {
+	t.exec(
+		`INSERT INTO provider_diagnostics(id,project_id,connection_id,operation,code,retryable,retry_after_seconds,correlation_id,occurred_at)
+		 VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
+		v.ID, v.ProjectID, v.ConnectionID, v.Operation, v.Code, v.Retryable,
+		v.RetryAfterSeconds, v.CorrelationID, v.OccurredAt,
+	)
+}
 func (t *transaction) ReplaceProviderConnectionScopes(connectionID, projectID string, environmentIDs, applicationIDs []string, createdAt time.Time) {
 	t.exec(
 		`DELETE FROM provider_connection_environment_scopes
@@ -534,10 +667,99 @@ func (t *transaction) SaveProviderMapping(v cloudworkspace.ProviderProductMappin
 }
 func (t *transaction) SaveProviderMetadataSnapshot(v cloudworkspace.ProviderProductMetadataSnapshot) {
 	t.exec(
-		`INSERT INTO provider_product_metadata_snapshots(id,project_id,mapping_id,source,digest,availability,observed_at,synced_at,expires_at,last_error_code,created_at)
-		 VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`,
+		`INSERT INTO provider_product_metadata_snapshots(id,project_id,mapping_id,source,digest,availability,observed_at,synced_at,stale_at,expires_at,last_error_code,normalized_metadata,created_at)
+		 VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)`,
 		v.ID, v.ProjectID, v.MappingID, v.Source, v.Digest, v.Availability, v.ObservedAt,
-		v.SyncedAt, v.ExpiresAt, emptyStringAsNil(string(v.LastErrorCode)), v.CreatedAt,
+		v.SyncedAt, v.StaleAt, v.ExpiresAt, emptyStringAsNil(string(v.LastErrorCode)),
+		v.Metadata, v.CreatedAt,
+	)
+}
+func (t *transaction) SaveProviderEntitlementMapping(v cloudworkspace.ProviderEntitlementMapping) {
+	t.exec(
+		`INSERT INTO provider_entitlement_mappings(id,project_id,entitlement_id,connection_id,environment_id,application_id,provider_entitlement_identifier,status,archived_at,created_at,updated_at)
+		 VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
+		 ON CONFLICT(id) DO UPDATE SET provider_entitlement_identifier=excluded.provider_entitlement_identifier,status=excluded.status,archived_at=excluded.archived_at,updated_at=excluded.updated_at`,
+		v.ID, v.ProjectID, v.EntitlementID, v.ConnectionID, v.EnvironmentID,
+		v.ApplicationID, v.ProviderEntitlementIdentifier, v.Status, v.ArchivedAt,
+		v.CreatedAt, v.UpdatedAt,
+	)
+}
+func (t *transaction) SaveProviderImport(v cloudworkspace.ProviderImportRequest) {
+	t.exec(
+		`INSERT INTO provider_import_requests(id,project_id,connection_id,idempotency_key_hash,request_hash,status,created_by_actor_id,created_at,completed_at)
+		 VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9)
+		 ON CONFLICT(id) DO UPDATE SET status=excluded.status,completed_at=excluded.completed_at`,
+		v.ID, v.ProjectID, v.ConnectionID, v.IdempotencyKeyHash[:], v.RequestHash[:],
+		v.Status, v.CreatedByActorID, v.CreatedAt, v.CompletedAt,
+	)
+}
+func (t *transaction) SaveProviderImportItem(v cloudworkspace.ProviderImportItem) {
+	t.exec(
+		`INSERT INTO provider_import_items(import_id,project_id,provider_product_identifier,mosaic_product_id,mapping_id,status,error_code,created_at)
+		 VALUES($1,$2,$3,$4,$5,$6,$7,$8)
+		 ON CONFLICT(import_id,provider_product_identifier) DO UPDATE SET mosaic_product_id=excluded.mosaic_product_id,mapping_id=excluded.mapping_id,status=excluded.status,error_code=excluded.error_code,created_at=excluded.created_at`,
+		v.ImportID, v.ProjectID, v.ProviderProductIdentifier, emptyStringAsNil(v.MosaicProductID),
+		emptyStringAsNil(v.MappingID), v.Status, emptyStringAsNil(string(v.ErrorCode)), v.CreatedAt,
+	)
+}
+func (t *transaction) SaveProviderSyncJob(v cloudworkspace.ProviderSyncJob) {
+	t.exec(
+		`INSERT INTO provider_sync_jobs(id,project_id,connection_id,status,attempt_count,max_attempts,available_at,lease_owner,lease_expires_at,requested_by_actor_id,created_at,updated_at)
+		 VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
+		 ON CONFLICT(id) DO UPDATE SET status=excluded.status,attempt_count=excluded.attempt_count,available_at=excluded.available_at,lease_owner=excluded.lease_owner,lease_expires_at=excluded.lease_expires_at,updated_at=excluded.updated_at`,
+		v.ID, v.ProjectID, v.ConnectionID, v.Status, v.AttemptCount, v.MaxAttempts,
+		v.AvailableAt, emptyStringAsNil(v.LeaseOwner), v.LeaseExpiresAt,
+		v.RequestedByActorID, v.CreatedAt, v.UpdatedAt,
+	)
+}
+func (t *transaction) LeaseProviderSyncJob(workerID string, now, leaseExpiresAt time.Time) (cloudworkspace.ProviderSyncJob, bool) {
+	query := `WITH candidate AS (
+	    SELECT id
+	    FROM provider_sync_jobs
+	    WHERE available_at <= $2
+	      AND (status = 'queued' OR (status = 'leased' AND lease_expires_at <= $2))
+	    ORDER BY available_at,created_at,id
+	    FOR UPDATE SKIP LOCKED
+	    LIMIT 1
+	)
+	UPDATE provider_sync_jobs job
+	SET status='leased',attempt_count=attempt_count+1,lease_owner=$1,lease_expires_at=$3,updated_at=$2
+	FROM candidate
+	WHERE job.id=candidate.id
+	RETURNING ` + leasedProviderSyncJobColumns
+	return one(t.reader, query, scanProviderSyncJob, workerID, now, leaseExpiresAt)
+}
+func (t *transaction) OwnsProviderSyncJobLease(jobID, workerID string, attemptCount int, now time.Time) bool {
+	var lockedJobID string
+	err := t.tx.QueryRow(t.ctx, `SELECT id
+		FROM provider_sync_jobs
+		WHERE id=$1 AND status='leased' AND lease_owner=$2 AND attempt_count=$3 AND lease_expires_at>$4
+		FOR UPDATE`, jobID, workerID, attemptCount, now).Scan(&lockedJobID)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return false
+	}
+	if err != nil {
+		t.fail(err)
+		return false
+	}
+	return lockedJobID == jobID
+}
+func (t *transaction) SaveProviderSyncRun(v cloudworkspace.ProviderSyncRun) {
+	t.exec(
+		`INSERT INTO provider_sync_runs(id,project_id,connection_id,job_id,status,item_count,success_count,failure_count,started_at,completed_at,created_at)
+		 VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
+		 ON CONFLICT(id) DO UPDATE SET status=excluded.status,item_count=excluded.item_count,success_count=excluded.success_count,failure_count=excluded.failure_count,completed_at=excluded.completed_at`,
+		v.ID, v.ProjectID, v.ConnectionID, v.JobID, v.Status, v.ItemCount,
+		v.SuccessCount, v.FailureCount, v.StartedAt, v.CompletedAt, v.CreatedAt,
+	)
+}
+func (t *transaction) SaveProviderSyncRunItem(v cloudworkspace.ProviderSyncRunItem) {
+	t.exec(
+		`INSERT INTO provider_sync_run_items(run_id,project_id,mapping_id,status,snapshot_id,error_code,completed_at)
+		 VALUES($1,$2,$3,$4,$5,$6,$7)
+		 ON CONFLICT(run_id,mapping_id) DO UPDATE SET status=excluded.status,snapshot_id=excluded.snapshot_id,error_code=excluded.error_code,completed_at=excluded.completed_at`,
+		v.RunID, v.ProjectID, v.MappingID, v.Status, emptyStringAsNil(v.SnapshotID),
+		emptyStringAsNil(string(v.ErrorCode)), v.CompletedAt,
 	)
 }
 func (t *transaction) SaveAuditEvent(v cloudworkspace.AuditEvent) {

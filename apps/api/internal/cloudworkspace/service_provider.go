@@ -2,11 +2,16 @@ package cloudworkspace
 
 import (
 	"context"
+	"encoding/hex"
 	"slices"
 	"strings"
 
 	"go.opentelemetry.io/otel/attribute"
+
+	"github.com/Mujhtech/mosaic/apps/api/internal/providercredential"
 )
+
+const providerCredentialClass = "serverSecret"
 
 type CreateProviderConnectionInput struct {
 	Name              string
@@ -16,6 +21,7 @@ type CreateProviderConnectionInput struct {
 	ExternalProjectID string
 	EnvironmentIDs    []string
 	ApplicationIDs    []string
+	Credential        string
 }
 
 type ReplaceProviderConnectionScopesInput struct {
@@ -76,10 +82,46 @@ func uniqueStrings(values []string) []string {
 func providerScopes(reader Reader, connection ProviderConnection) ProviderConnection {
 	connection.EnvironmentIDs = reader.ProviderConnectionEnvironmentIDs(connection.ID)
 	connection.ApplicationIDs = reader.ProviderConnectionApplicationIDs(connection.ID)
+	if credential, ok := reader.ProviderCredential(connection.ID); ok {
+		connection.Credential = publicProviderCredential(credential)
+	}
 	return connection
 }
 
-func validateProviderScopes(reader Reader, projectID string, environmentIDs, applicationIDs []string) error {
+func publicProviderCredential(record ProviderCredentialRecord) *ProviderCredential {
+	return &ProviderCredential{
+		Class: record.Class, Fingerprint: "hmac-sha256:" + hex.EncodeToString(record.Fingerprint),
+		KeyID: record.KeyID, EnvelopeVersion: record.Version, CreatedAt: record.CreatedAt,
+		RotatedAt: record.RotatedAt, RevokedAt: record.RevokedAt,
+	}
+}
+
+func validRevenueCatCredential(value string) bool {
+	return strings.HasPrefix(value, "sk_") && len(value) >= 6 && len(value) <= 4096 &&
+		strings.TrimSpace(value) == value && !strings.ContainsAny(value, "\r\n\t ")
+}
+
+func (s *Service) encryptProviderCredential(project Project, connectionID string, plaintext string) (ProviderCredentialRecord, error) {
+	if s.credentialCipher == nil || !validRevenueCatCredential(plaintext) {
+		return ProviderCredentialRecord{}, ErrProviderCredentialInvalid
+	}
+	envelope, err := s.credentialCipher.Encrypt([]byte(plaintext), providercredential.Scope{
+		OrganizationID: project.OrganizationID, ProjectID: project.ID,
+		ConnectionID: connectionID, CredentialClass: providerCredentialClass,
+	})
+	if err != nil {
+		return ProviderCredentialRecord{}, ErrProviderCredentialInvalid
+	}
+	now := s.now()
+	return ProviderCredentialRecord{
+		ConnectionID: connectionID, ProjectID: project.ID, OrganizationID: project.OrganizationID,
+		Class: envelope.CredentialClass, Version: envelope.Version, Algorithm: envelope.Algorithm,
+		KeyID: envelope.KeyID, Nonce: envelope.Nonce, Ciphertext: envelope.Ciphertext,
+		Fingerprint: envelope.Fingerprint, CreatedAt: now, UpdatedAt: now,
+	}, nil
+}
+
+func validateProviderScopes(reader Reader, projectID string, mode ProviderConnectionMode, environmentIDs, applicationIDs []string) error {
 	if len(environmentIDs) == 0 || len(applicationIDs) == 0 {
 		return ErrScopeMismatch
 	}
@@ -87,6 +129,10 @@ func validateProviderScopes(reader Reader, projectID string, environmentIDs, app
 		environment, ok := reader.Environment(environmentID)
 		if !ok || environment.ProjectID != projectID {
 			return ErrScopeMismatch
+		}
+		if mode == ProviderProduction && environment.Mode != EnvironmentProduction ||
+			mode == ProviderSandbox && environment.Mode == EnvironmentProduction {
+			return ErrModeMismatch
 		}
 	}
 	for _, applicationID := range applicationIDs {
@@ -113,9 +159,22 @@ func (s *Service) CreateProviderConnection(ctx context.Context, actor Actor, pro
 		if !supportedProviderIntegration(input.Provider, input.IntegrationMode) {
 			return ErrProviderUnsupported
 		}
+		if input.Provider == ProviderRevenueCat &&
+			(strings.TrimSpace(input.ExternalProjectID) == "" ||
+				strings.TrimSpace(input.ExternalProjectID) != input.ExternalProjectID ||
+				len(input.ExternalProjectID) > 255) {
+			return ErrProviderProjectInvalid
+		}
+		if input.Provider == ProviderRevenueCat && s.providerCatalog != nil {
+			if input.Credential == "" {
+				return ErrProviderCredentialInvalid
+			}
+		} else if input.Credential != "" {
+			return ErrProviderUnsupported
+		}
 		environmentIDs := uniqueStrings(input.EnvironmentIDs)
 		applicationIDs := uniqueStrings(input.ApplicationIDs)
-		if err := validateProviderScopes(tx, projectID, environmentIDs, applicationIDs); err != nil {
+		if err := validateProviderScopes(tx, projectID, input.Mode, environmentIDs, applicationIDs); err != nil {
 			return err
 		}
 		for _, connection := range tx.ProviderConnections(projectID) {
@@ -141,6 +200,14 @@ func (s *Service) CreateProviderConnection(ctx context.Context, actor Actor, pro
 		}
 		tx.SaveProviderConnection(result)
 		tx.ReplaceProviderConnectionScopes(result.ID, projectID, environmentIDs, applicationIDs, now)
+		if input.Provider == ProviderRevenueCat && s.providerCatalog != nil {
+			credential, err := s.encryptProviderCredential(project, result.ID, input.Credential)
+			if err != nil {
+				return err
+			}
+			tx.SaveProviderCredential(credential)
+			result.Credential = publicProviderCredential(credential)
+		}
 		s.audit(tx, actor, project.OrganizationID, projectID, "", "provider_connection.created", "provider_connection", result.ID, map[string]string{
 			"provider":        string(result.Provider),
 			"integrationMode": string(result.IntegrationMode),
@@ -207,7 +274,7 @@ func (s *Service) ReplaceProviderConnectionScopes(ctx context.Context, actor Act
 		}
 		environmentIDs := uniqueStrings(input.EnvironmentIDs)
 		applicationIDs := uniqueStrings(input.ApplicationIDs)
-		if err := validateProviderScopes(tx, project.ID, environmentIDs, applicationIDs); err != nil {
+		if err := validateProviderScopes(tx, project.ID, connection.Mode, environmentIDs, applicationIDs); err != nil {
 			return err
 		}
 		for _, assignment := range tx.ProviderAssignments(connection.ID) {
@@ -220,6 +287,19 @@ func (s *Service) ReplaceProviderConnectionScopes(ctx context.Context, actor Act
 				if mapping.ConnectionID == connection.ID && mapping.Status != ProviderMappingArchived &&
 					(!scopeContains(environmentIDs, mapping.EnvironmentID) || !scopeContains(applicationIDs, mapping.ApplicationID)) {
 					return ErrScopeMismatch
+				}
+			}
+		}
+		for _, currentEnvironmentID := range tx.ProviderConnectionEnvironmentIDs(connection.ID) {
+			for _, currentApplicationID := range tx.ProviderConnectionApplicationIDs(connection.ID) {
+				for _, mapping := range tx.ProviderEntitlementMappings(
+					connection.ID, currentEnvironmentID, currentApplicationID,
+				) {
+					if mapping.Status == ProviderMappingActive &&
+						(!scopeContains(environmentIDs, mapping.EnvironmentID) ||
+							!scopeContains(applicationIDs, mapping.ApplicationID)) {
+						return ErrScopeMismatch
+					}
 				}
 			}
 		}
@@ -259,6 +339,10 @@ func (s *Service) RevokeProviderConnection(ctx context.Context, actor Actor, con
 		connection.Status, connection.HealthStatus, connection.LastErrorCode = ProviderConnectionRevoked, ProviderHealthRevoked, ProviderErrorConnectionRevoked
 		connection.RevokedAt, connection.UpdatedAt = &now, now
 		tx.SaveProviderConnection(connection)
+		if credential, ok := tx.ProviderCredential(connection.ID); ok {
+			credential.RevokedAt, credential.UpdatedAt = &now, now
+			tx.SaveProviderCredential(credential)
+		}
 		s.audit(tx, actor, project.OrganizationID, project.ID, "", "provider_connection.revoked", "provider_connection", connection.ID, map[string]string{})
 		result, organizationID = providerScopes(tx, connection), project.OrganizationID
 		return nil
@@ -502,6 +586,26 @@ func (s *Service) ArchiveProviderMapping(ctx context.Context, actor Actor, mappi
 	return result, err
 }
 
+func (s *Service) GetProviderMappingMetadata(ctx context.Context, actor Actor, mappingID string) (ProviderProductMetadataSnapshot, error) {
+	var result ProviderProductMetadataSnapshot
+	err := s.repository.View(ctx, func(reader Reader) error {
+		mapping, ok := reader.ProviderMapping(mappingID)
+		if !ok || mapping.Status == ProviderMappingArchived || mapping.CurrentSnapshotID == "" {
+			return ErrNotFound
+		}
+		if _, _, err := productScope(reader, actor, mapping.ProductID, false); err != nil {
+			return err
+		}
+		snapshot, ok := reader.ProviderMetadataSnapshot(mapping.CurrentSnapshotID)
+		if !ok || snapshot.MappingID != mapping.ID || snapshot.ProjectID != mapping.ProjectID {
+			return ErrNotFound
+		}
+		result = snapshot
+		return nil
+	})
+	return result, err
+}
+
 func readinessIssue(code ProviderErrorCode, resourceType, resourceID, recoveryAction string) ProviderReadinessIssue {
 	return ProviderReadinessIssue{Code: code, ResourceType: resourceType, ResourceID: resourceID, RecoveryAction: recoveryAction}
 }
@@ -546,7 +650,8 @@ func (s *Service) ProviderReadiness(ctx context.Context, actor Actor, productID,
 			}
 			result.Blockers = append(result.Blockers, readinessIssue(ProviderErrorMetadataStale, "product", product.ID, "syncProviderMetadata"))
 		}
-		if len(reader.ProductGrants(product.ID)) == 0 {
+		productGrants := reader.ProductGrants(product.ID)
+		if len(productGrants) == 0 {
 			if result.State == "" {
 				result.State = ProviderReadinessDraft
 			}
@@ -583,6 +688,36 @@ func (s *Service) ProviderReadiness(ctx context.Context, actor Actor, productID,
 		if connection.Status != ProviderConnectionActive || connection.HealthStatus != ProviderHealthHealthy {
 			result.Blockers = append(result.Blockers, readinessIssue(ProviderErrorProviderUnavailable, "provider_connection", connection.ID, "testOrReconnectProvider"))
 		}
+		entitlementMappings := reader.ProviderEntitlementMappings(connection.ID, environment.ID, application.ID)
+		mappingsByEntitlement := make(map[string]int, len(entitlementMappings))
+		entitlementsByProviderIdentifier := make(map[string]string, len(entitlementMappings))
+		for _, mapping := range entitlementMappings {
+			if mapping.Status != ProviderMappingActive {
+				continue
+			}
+			mappingsByEntitlement[mapping.EntitlementID]++
+			if existing, duplicate := entitlementsByProviderIdentifier[mapping.ProviderEntitlementIdentifier]; duplicate &&
+				existing != mapping.EntitlementID {
+				result.Blockers = append(result.Blockers, readinessIssue(
+					ProviderErrorMappingAmbiguous, "provider_entitlement_mapping", mapping.ID, "replaceProviderEntitlementMapping",
+				))
+			} else {
+				entitlementsByProviderIdentifier[mapping.ProviderEntitlementIdentifier] = mapping.EntitlementID
+			}
+		}
+		for _, grant := range productGrants {
+			switch mappingsByEntitlement[grant.EntitlementID] {
+			case 0:
+				result.Blockers = append(result.Blockers, readinessIssue(
+					ProviderErrorMappingMissing, "entitlement", grant.EntitlementID, "importProviderEntitlementMapping",
+				))
+			case 1:
+			default:
+				result.Blockers = append(result.Blockers, readinessIssue(
+					ProviderErrorMappingAmbiguous, "entitlement", grant.EntitlementID, "replaceProviderEntitlementMapping",
+				))
+			}
+		}
 		activeMappings := make([]ProviderProductMapping, 0, 1)
 		for _, mapping := range reader.ProviderMappings(product.ID) {
 			if mapping.ConnectionID == connection.ID && mapping.EnvironmentID == environment.ID &&
@@ -600,12 +735,23 @@ func (s *Service) ProviderReadiness(ctx context.Context, actor Actor, productID,
 			if mapping.Availability != ProviderAvailabilityAvailable {
 				result.Blockers = append(result.Blockers, readinessIssue(ProviderErrorProductUnavailable, "provider_mapping", mapping.ID, "reviewProviderProduct"))
 			}
-			metadataStale := mapping.SyncState != ProviderSyncCurrent || mapping.CurrentSnapshotID == ""
-			if !metadataStale {
+			metadataStale := false
+			metadataExpired := false
+			if mapping.SyncState != ProviderSyncCurrent || mapping.CurrentSnapshotID == "" {
+				metadataStale = true
+			} else {
 				snapshot, ok := reader.ProviderMetadataSnapshot(mapping.CurrentSnapshotID)
-				metadataStale = !ok || snapshot.ExpiresAt != nil && !snapshot.ExpiresAt.After(result.EvaluatedAt)
+				if !ok {
+					metadataStale = true
+				} else if snapshot.ExpiresAt != nil && !snapshot.ExpiresAt.After(result.EvaluatedAt) {
+					metadataExpired = true
+				} else if snapshot.StaleAt.IsZero() || !snapshot.StaleAt.After(result.EvaluatedAt) {
+					metadataStale = true
+				}
 			}
-			if metadataStale {
+			if metadataExpired {
+				result.Blockers = append(result.Blockers, readinessIssue(ProviderErrorProductUnavailable, "provider_mapping", mapping.ID, "syncProviderMetadata"))
+			} else if metadataStale {
 				issue := readinessIssue(ProviderErrorMetadataStale, "provider_mapping", mapping.ID, "syncProviderMetadata")
 				if environment.Mode == EnvironmentProduction {
 					result.Blockers = append(result.Blockers, issue)

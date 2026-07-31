@@ -6,7 +6,7 @@ sealed interface MosaicPresentationResult {
     data class Purchased(
         val productReferenceId: String,
         val providerProductId: String,
-        val transactionId: String,
+        val transactionId: String?,
     ) : MosaicPresentationResult {
         override val wireName: String = "purchased"
     }
@@ -88,6 +88,14 @@ sealed interface MosaicInteractionOutcome {
         override val wireName: String = "purchaseFailed"
     }
 
+    data class PurchasePending(val productReferenceId: String) : MosaicInteractionOutcome {
+        override val wireName: String = "purchasePending"
+    }
+
+    data class PurchaseDeferred(val productReferenceId: String) : MosaicInteractionOutcome {
+        override val wireName: String = "purchaseDeferred"
+    }
+
     data class Restored(val entitlements: Set<MosaicEntitlement>) : MosaicInteractionOutcome {
         override val wireName: String = "restored"
     }
@@ -98,6 +106,10 @@ sealed interface MosaicInteractionOutcome {
 
     data class RestoreFailed(val diagnosticCode: String) : MosaicInteractionOutcome {
         override val wireName: String = "restoreFailed"
+    }
+
+    data object RestoreCancelled : MosaicInteractionOutcome {
+        override val wireName: String = "restoreCancelled"
     }
 
     data object Dismissed : MosaicInteractionOutcome {

@@ -115,7 +115,7 @@ final class MockMosaicPurchaseProvider implements MosaicPurchaseProvider {
         if (_entitlements.isEmpty) {
           return const MosaicNothingToRestore();
         }
-        return MosaicRestoreAlreadyEntitled(_entitlements);
+        return MosaicRestored(_entitlements);
       case MockMosaicRestoreScenario.automatic:
         if (_entitlements.isEmpty) {
           return const MosaicNothingToRestore();

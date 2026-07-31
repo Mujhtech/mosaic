@@ -4,9 +4,8 @@ info:
   version: 0.6.0-phase4a
   description: |
     Hosted workspace, provider foundation, publishing, Asset, browser-session, and SDK-delivery API.
-    Provider Connection endpoints currently accept non-secret metadata only. RevenueCat
-    credential submission and authenticated provider calls remain unavailable pending
-    the OAuth-vs-API-secret product-owner decision.
+    RevenueCat server-connected integrations use least-privilege v2 secret keys. Secrets
+    are accepted only on create, rotate, and reconnect and are never returned.
 servers:
   - url: /
 security:
@@ -322,8 +321,9 @@ paths:
       operationId: createProviderConnection
       tags: [Provider Connections]
       description: |
-        Creates non-secret provider metadata and explicit Environment/Application scopes.
-        The connection starts pending and untested. Credential fields are not accepted.
+        Creates a RevenueCat v2 connection with explicit Environment/Application scopes
+        and a one-time least-privilege secret key. The secret is encrypted at rest and
+        never returned. Custom SDK-local connections do not accept a credential.
       requestBody:
         required: true
         content:
@@ -331,6 +331,22 @@ paths:
             schema: { $ref: "#/components/schemas/CreateProviderConnectionRequest" }
       responses:
         "201": { $ref: "#/components/responses/ProviderConnection" }
+        default: { $ref: "#/components/responses/Error" }
+  /v1/projects/{projectId}/provider-imports:
+    parameters:
+      - $ref: "#/components/parameters/ProjectID"
+      - $ref: "#/components/parameters/IdempotencyKey"
+    post:
+      operationId: importProviderProducts
+      tags: [Provider Imports]
+      description: Imports selected live-catalog Products and optional Entitlements with item-level results.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ProviderImportRequest" }
+      responses:
+        "200": { $ref: "#/components/responses/ProviderImportResult" }
         default: { $ref: "#/components/responses/Error" }
   /v1/environments/{environmentId}/api-keys:
     parameters:
@@ -451,6 +467,97 @@ paths:
       description: Revokes the connection without deleting assignments, mappings, metadata history, or audit evidence.
       responses:
         "200": { $ref: "#/components/responses/ProviderConnection" }
+        default: { $ref: "#/components/responses/Error" }
+  /v1/provider-connections/{connectionId}/test:
+    parameters:
+      - $ref: "#/components/parameters/ProviderConnectionID"
+    post:
+      operationId: testProviderConnection
+      tags: [Provider Connections]
+      responses:
+        "200": { $ref: "#/components/responses/ProviderConnectionHealth" }
+        default: { $ref: "#/components/responses/Error" }
+  /v1/provider-connections/{connectionId}/health:
+    parameters:
+      - $ref: "#/components/parameters/ProviderConnectionID"
+    get:
+      operationId: getProviderConnectionHealth
+      tags: [Provider Connections]
+      responses:
+        "200": { $ref: "#/components/responses/ProviderConnectionHealth" }
+        default: { $ref: "#/components/responses/Error" }
+  /v1/provider-connections/{connectionId}/capabilities:
+    parameters:
+      - $ref: "#/components/parameters/ProviderConnectionID"
+    get:
+      operationId: getProviderConnectionCapabilities
+      tags: [Provider Connections]
+      responses:
+        "200": { $ref: "#/components/responses/ProviderConnectionCapabilities" }
+        default: { $ref: "#/components/responses/Error" }
+  /v1/provider-connections/{connectionId}/diagnostics:
+    parameters:
+      - $ref: "#/components/parameters/ProviderConnectionID"
+    get:
+      operationId: listProviderConnectionDiagnostics
+      tags: [Provider Connections]
+      responses:
+        "200": { $ref: "#/components/responses/ProviderDiagnostics" }
+        default: { $ref: "#/components/responses/Error" }
+  /v1/provider-connections/{connectionId}/catalog-preview:
+    parameters:
+      - $ref: "#/components/parameters/ProviderConnectionID"
+    get:
+      operationId: previewProviderCatalog
+      tags: [Provider Imports]
+      responses:
+        "200": { $ref: "#/components/responses/ProviderCatalogPreview" }
+        default: { $ref: "#/components/responses/Error" }
+  /v1/provider-connections/{connectionId}/rotate-credential:
+    parameters:
+      - $ref: "#/components/parameters/ProviderConnectionID"
+    post:
+      operationId: rotateProviderCredential
+      tags: [Provider Connections]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ProviderCredentialRequest" }
+      responses:
+        "200": { $ref: "#/components/responses/ProviderConnection" }
+        default: { $ref: "#/components/responses/Error" }
+  /v1/provider-connections/{connectionId}/reconnect:
+    parameters:
+      - $ref: "#/components/parameters/ProviderConnectionID"
+    post:
+      operationId: reconnectProviderConnection
+      tags: [Provider Connections]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ProviderCredentialRequest" }
+      responses:
+        "200": { $ref: "#/components/responses/ProviderConnection" }
+        default: { $ref: "#/components/responses/Error" }
+  /v1/provider-connections/{connectionId}/sync:
+    parameters:
+      - $ref: "#/components/parameters/ProviderConnectionID"
+    post:
+      operationId: enqueueProviderSync
+      tags: [Provider Synchronization]
+      responses:
+        "202": { $ref: "#/components/responses/ProviderSyncJob" }
+        default: { $ref: "#/components/responses/Error" }
+  /v1/provider-connections/{connectionId}/sync-runs:
+    parameters:
+      - $ref: "#/components/parameters/ProviderConnectionID"
+    get:
+      operationId: listProviderSyncRuns
+      tags: [Provider Synchronization]
+      responses:
+        "200": { $ref: "#/components/responses/ProviderSyncRuns" }
         default: { $ref: "#/components/responses/Error" }
   /v1/api-keys/{apiKeyId}/rotate:
     parameters:
@@ -731,6 +838,31 @@ paths:
       description: Archives a mapping in place while preserving its identity and immutable metadata snapshots.
       responses:
         "200": { $ref: "#/components/responses/ProviderMapping" }
+        default: { $ref: "#/components/responses/Error" }
+  /v1/provider-mappings/{mappingId}/replace:
+    parameters:
+      - $ref: "#/components/parameters/ProviderMappingID"
+    post:
+      operationId: replaceProviderMapping
+      tags: [Provider Mappings]
+      description: Verifies the replacement against the live provider catalog, archives the old mapping, and atomically creates a new active mapping and metadata snapshot.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ReplaceProviderMappingRequest" }
+      responses:
+        "201": { $ref: "#/components/responses/ProviderMapping" }
+        default: { $ref: "#/components/responses/Error" }
+  /v1/provider-mappings/{mappingId}/metadata:
+    parameters:
+      - $ref: "#/components/parameters/ProviderMappingID"
+    get:
+      operationId: getProviderMappingMetadata
+      tags: [Provider Mappings]
+      description: Returns the current immutable normalized metadata snapshot selected by the mapping. Raw provider payloads are never returned.
+      responses:
+        "200": { $ref: "#/components/responses/ProviderMetadataSnapshot" }
         default: { $ref: "#/components/responses/Error" }
   /v1/projects/{projectId}/entitlements:
     parameters:
@@ -1102,6 +1234,42 @@ paths:
         "404": { $ref: "#/components/responses/Error" }
         "406": { $ref: "#/components/responses/Error" }
         "429": { $ref: "#/components/responses/Error" }
+  /v1/sdk/commerce-configuration:
+    get:
+      operationId: getSDKCommerceConfiguration
+      tags: [SDK Configuration]
+      security: [{ PublicSDKKey: [] }]
+      parameters:
+        - { in: query, name: applicationId, required: true, schema: { type: string } }
+        - { in: header, name: Accept, required: true, schema: { type: string, const: "application/vnd.mosaic.commerce-configuration+json;version=1" } }
+        - { in: header, name: Mosaic-SDK-Platform, required: true, schema: { type: string, enum: [flutter, ios, android] } }
+        - { in: header, name: Mosaic-SDK-Version, required: true, schema: { type: string, minLength: 1, maxLength: 64, pattern: "^[0-9]+\\.[0-9]+(?:\\.[0-9]+)?(?:[-+][A-Za-z0-9.-]+)?$" } }
+        - { in: header, name: Mosaic-Commerce-Configuration-Versions, required: true, schema: { type: string, const: "1" } }
+        - { in: header, name: Mosaic-Commerce-Provider-Contract-Versions, required: true, schema: { type: string, const: "1" } }
+        - { in: header, name: If-None-Match, required: false, schema: { type: string } }
+      responses:
+        "200":
+          description: Immutable Commerce Configuration v1 sidecar associated with the current Configuration Release and requested Application.
+          headers:
+            ETag: { schema: { type: string, pattern: '^"sha256:[0-9a-f]{64}"$' } }
+            Mosaic-Configuration-Release-Id: { schema: { type: string } }
+            Cache-Control: { schema: { type: string } }
+            Vary: { schema: { type: string } }
+          content:
+            application/vnd.mosaic.commerce-configuration+json:
+              schema: { type: object, additionalProperties: true }
+        "304":
+          description: The current immutable sidecar is unchanged.
+          headers:
+            ETag: { schema: { type: string } }
+            Mosaic-Configuration-Release-Id: { schema: { type: string } }
+            Cache-Control: { schema: { type: string } }
+            Vary: { schema: { type: string } }
+        "401": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "406": { $ref: "#/components/responses/Error" }
+        "422": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/Error" }
   /v1/sdk/assets/{assetId}/{contentDigest}:
     parameters:
       - { $ref: "#/components/parameters/AssetID" }
@@ -1186,6 +1354,57 @@ components:
     EnvironmentList: { description: Environments, content: { application/json: { schema: { $ref: "#/components/schemas/EnvironmentListEnvelope" } } } }
     ProviderConnection: { description: Non-secret Provider Connection metadata, content: { application/json: { schema: { $ref: "#/components/schemas/ProviderConnectionEnvelope" } } } }
     ProviderConnectionList: { description: Non-secret Provider Connections, content: { application/json: { schema: { $ref: "#/components/schemas/ProviderConnectionListEnvelope" } } } }
+    ProviderConnectionHealth:
+      description: Safe connection health and capability summary.
+      content:
+        application/json:
+          schema: { type: object, required: [data], properties: { data: { $ref: "#/components/schemas/ProviderConnectionHealth" } } }
+    ProviderConnectionCapabilities:
+      description: Closed provider capability matrix and required least-privilege permissions.
+      content:
+        application/json:
+          schema: { type: object, required: [data], properties: { data: { $ref: "#/components/schemas/ProviderConnectionCapabilities" } } }
+    ProviderDiagnostics:
+      description: Safe provider diagnostics without provider response bodies or secrets.
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [data]
+            properties:
+              data:
+                type: object
+                required: [items]
+                properties:
+                  items: { type: array, items: { $ref: "#/components/schemas/ProviderDiagnostic" } }
+    ProviderCatalogPreview:
+      description: Normalized live provider catalog preview.
+      content:
+        application/json:
+          schema: { type: object, required: [data], properties: { data: { $ref: "#/components/schemas/ProviderCatalogPreview" } } }
+    ProviderImportResult:
+      description: Idempotent selected-import result with item-level outcomes.
+      content:
+        application/json:
+          schema: { type: object, required: [data], properties: { data: { $ref: "#/components/schemas/ProviderImportResult" } } }
+    ProviderSyncJob:
+      description: Accepted provider synchronization job.
+      content:
+        application/json:
+          schema: { type: object, required: [data], properties: { data: { $ref: "#/components/schemas/ProviderSyncJob" } } }
+    ProviderSyncRuns:
+      description: Provider synchronization run history.
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [data]
+            properties:
+              data:
+                type: object
+                required: [items]
+                properties:
+                  items: { type: array, items: { $ref: "#/components/schemas/ProviderSyncRun" } }
     ProviderAssignment: { description: Active provider assignment, content: { application/json: { schema: { $ref: "#/components/schemas/ProviderAssignmentEnvelope" } } } }
     ProviderReadiness: { description: Scoped provider readiness and stable recovery codes, content: { application/json: { schema: { $ref: "#/components/schemas/ProviderReadinessEnvelope" } } } }
     APIKey: { description: API key metadata, content: { application/json: { schema: { $ref: "#/components/schemas/APIKeyEnvelope" } } } }
@@ -1200,6 +1419,11 @@ components:
     ProductReadiness: { description: Product readiness, content: { application/json: { schema: { $ref: "#/components/schemas/ProductReadinessEnvelope" } } } }
     ProviderMapping: { description: Placeholder mapping, content: { application/json: { schema: { $ref: "#/components/schemas/ProviderMappingEnvelope" } } } }
     ProviderMappingList: { description: Placeholder mappings, content: { application/json: { schema: { $ref: "#/components/schemas/ProviderMappingListEnvelope" } } } }
+    ProviderMetadataSnapshot:
+      description: Current immutable normalized provider metadata and freshness evidence.
+      content:
+        application/json:
+          schema: { type: object, required: [data], properties: { data: { $ref: "#/components/schemas/ProviderProductMetadataSnapshot" } } }
     Entitlement: { description: Entitlement definition, content: { application/json: { schema: { $ref: "#/components/schemas/EntitlementEnvelope" } } } }
     EntitlementList: { description: Entitlement definitions, content: { application/json: { schema: { $ref: "#/components/schemas/EntitlementListEnvelope" } } } }
     ProductEntitlementGrant: { description: Product grant, content: { application/json: { schema: { $ref: "#/components/schemas/ProductEntitlementGrantEnvelope" } } } }
@@ -1426,16 +1650,77 @@ components:
     CreateProviderConnectionRequest:
       type: object
       additionalProperties: false
-      description: Non-secret metadata only. Credential, token, secret, and authorization-code properties are unsupported.
       required: [name, provider, integrationMode, mode, environmentIds, applicationIds]
+      allOf:
+        - if:
+            properties:
+              provider: { const: revenuecat }
+          then:
+            required: [externalProjectId, credential]
       properties:
         name: { type: string, minLength: 1, maxLength: 120 }
         provider: { $ref: "#/components/schemas/ProviderConnectionKind" }
         integrationMode: { $ref: "#/components/schemas/ProviderIntegrationMode" }
         mode: { $ref: "#/components/schemas/ProviderConnectionMode" }
-        externalProjectId: { type: string, maxLength: 255 }
+        externalProjectId: { type: string, minLength: 1, maxLength: 255, description: Required RevenueCat v2 Project resource ID. }
+        credential:
+          type: string
+          minLength: 6
+          maxLength: 4096
+          pattern: "^sk_[^\\s]+$"
+          writeOnly: true
+          description: One-time RevenueCat v2 least-privilege secret key. Never returned or logged.
         environmentIds: { type: array, minItems: 1, maxItems: 100, uniqueItems: true, items: { type: string } }
         applicationIds: { type: array, minItems: 1, maxItems: 100, uniqueItems: true, items: { type: string } }
+    ProviderCredentialRequest:
+      type: object
+      additionalProperties: false
+      required: [credential]
+      properties:
+        credential:
+          type: string
+          minLength: 6
+          maxLength: 4096
+          pattern: "^sk_[^\\s]+$"
+          writeOnly: true
+    ReplaceProviderMappingRequest:
+      type: object
+      additionalProperties: false
+      required: [providerProductIdentifier]
+      properties:
+        providerProductIdentifier: { type: string, minLength: 1, maxLength: 255 }
+        providerPackageIdentifier: { type: string, minLength: 1, maxLength: 255, description: RevenueCat v2 Package ID or SDK lookup key; persisted as the verified lookup key. }
+        providerOfferingIdentifier: { type: string, minLength: 1, maxLength: 255, description: RevenueCat v2 Offering ID or SDK lookup key; persisted as the verified lookup key. }
+    ProviderEntitlementImportRequest:
+      type: object
+      additionalProperties: false
+      required: [providerIdentifier]
+      properties:
+        providerIdentifier: { type: string, minLength: 1, maxLength: 255 }
+        existingEntitlementId: { type: string }
+        key: { type: string, pattern: "^[a-z][a-z0-9_-]{1,62}$" }
+        name: { type: string, minLength: 1, maxLength: 120 }
+    ProviderProductImportItemRequest:
+      type: object
+      additionalProperties: false
+      required: [providerProductIdentifier, environmentId, applicationId, entitlements]
+      properties:
+        providerProductIdentifier: { type: string, minLength: 1, maxLength: 255 }
+        providerPackageIdentifier: { type: string, minLength: 1, maxLength: 255 }
+        providerOfferingIdentifier: { type: string, minLength: 1, maxLength: 255 }
+        existingProductId: { type: string }
+        key: { type: string, pattern: "^[a-z][a-z0-9_-]{1,62}$" }
+        internalName: { type: string, minLength: 1, maxLength: 120 }
+        environmentId: { type: string }
+        applicationId: { type: string }
+        entitlements: { type: array, maxItems: 128, items: { $ref: "#/components/schemas/ProviderEntitlementImportRequest" } }
+    ProviderImportRequest:
+      type: object
+      additionalProperties: false
+      required: [connectionId, items]
+      properties:
+        connectionId: { type: string }
+        items: { type: array, minItems: 1, maxItems: 100, items: { $ref: "#/components/schemas/ProviderProductImportItemRequest" } }
     ReplaceProviderConnectionScopesRequest:
       type: object
       additionalProperties: false
@@ -1457,10 +1742,9 @@ components:
       type: object
       additionalProperties: false
       description: |
-        providerProductIdentifier is copied unchanged into Commerce Provider Contract
-        providerProductReference for the selected adapter. Package and Offering identifiers
-        are optional RevenueCat metadata and must be supplied together; custom providers
-        cannot receive them.
+        Creates an unverified draft only. RevenueCat Product, Package, and Offering
+        identifiers are server-side catalog references and never become the SDK
+        providerProductReference until verified and normalized.
       required: [connectionId, environmentId, applicationId, providerProductIdentifier]
       properties:
         connectionId: { type: string }
@@ -1471,7 +1755,7 @@ components:
           minLength: 1
           maxLength: 255
           pattern: ".*\\S.*"
-          description: Opaque adapter-owned value mapped exactly to Commerce Provider Contract providerProductReference.
+          description: Opaque provider catalog resource identifier.
         providerPackageIdentifier:
           type: string
           maxLength: 255
@@ -1559,9 +1843,188 @@ components:
         lastSuccessfulTestAt: { $ref: "#/components/schemas/Timestamp" }
         lastSuccessfulSyncAt: { $ref: "#/components/schemas/Timestamp" }
         lastErrorCode: { $ref: "#/components/schemas/ProviderErrorCode" }
+        credential: { $ref: "#/components/schemas/ProviderCredential" }
         revokedAt: { $ref: "#/components/schemas/Timestamp" }
         createdAt: { $ref: "#/components/schemas/Timestamp" }
         updatedAt: { $ref: "#/components/schemas/Timestamp" }
+    ProviderCredential:
+      type: object
+      additionalProperties: false
+      description: Safe credential metadata only; contains no plaintext, ciphertext, nonce, or authorization material.
+      required: [class, fingerprint, keyId, envelopeVersion, createdAt]
+      properties:
+        class: { type: string, const: serverSecret }
+        fingerprint: { type: string, pattern: "^hmac-sha256:[0-9a-f]{64}$" }
+        keyId: { type: string }
+        envelopeVersion: { type: integer, minimum: 1 }
+        createdAt: { $ref: "#/components/schemas/Timestamp" }
+        rotatedAt: { $ref: "#/components/schemas/Timestamp" }
+        revokedAt: { $ref: "#/components/schemas/Timestamp" }
+    ProviderCapability:
+      type: object
+      additionalProperties: false
+      required: [name, support]
+      properties:
+        name: { type: string }
+        support: { type: string, enum: [supported, conditional, unsupported] }
+        reasonCode: { type: string }
+    ProviderConnectionHealth:
+      type: object
+      additionalProperties: false
+      required: [connectionId, status, capabilities, requiredPermissions]
+      properties:
+        connectionId: { type: string }
+        status: { $ref: "#/components/schemas/ProviderHealthStatus" }
+        lastSuccessfulAt: { $ref: "#/components/schemas/Timestamp" }
+        lastErrorCode: { $ref: "#/components/schemas/ProviderErrorCode" }
+        capabilities: { type: array, items: { $ref: "#/components/schemas/ProviderCapability" } }
+        requiredPermissions: { type: array, items: { type: string } }
+    ProviderConnectionCapabilities:
+      type: object
+      additionalProperties: false
+      required: [connectionId, capabilities, requiredPermissions]
+      properties:
+        connectionId: { type: string }
+        capabilities: { type: array, items: { $ref: "#/components/schemas/ProviderCapability" } }
+        requiredPermissions: { type: array, items: { type: string } }
+    ProviderDiagnostic:
+      type: object
+      additionalProperties: false
+      required: [id, projectId, connectionId, operation, code, retryable, correlationId, occurredAt]
+      properties:
+        id: { type: string }
+        projectId: { type: string }
+        connectionId: { type: string }
+        operation: { type: string }
+        code: { $ref: "#/components/schemas/ProviderErrorCode" }
+        retryable: { type: boolean }
+        retryAfterSeconds: { type: integer, minimum: 0 }
+        correlationId: { type: string }
+        occurredAt: { $ref: "#/components/schemas/Timestamp" }
+    ProviderCatalogApplication:
+      type: object
+      additionalProperties: false
+      required: [id, name, platform]
+      properties:
+        id: { type: string }
+        name: { type: string }
+        platform: { type: string, enum: [app_store, play_store] }
+        identifier: { type: string }
+    ProviderCatalogProduct:
+      type: object
+      additionalProperties: false
+      required: [id, applicationId, storeIdentifier, type, state, importable]
+      properties:
+        id: { type: string }
+        applicationId: { type: string }
+        storeIdentifier: { type: string }
+        displayName: { type: string }
+        type: { type: string, enum: [subscription, non_consumable, consumable, unknown] }
+        state: { type: string }
+        importable: { type: boolean }
+    ProviderCatalogEntitlement:
+      type: object
+      additionalProperties: false
+      required: [id, lookupKey, displayName, state]
+      properties:
+        id: { type: string }
+        lookupKey: { type: string }
+        displayName: { type: string }
+        state: { type: string }
+    ProviderCatalogPackage:
+      type: object
+      additionalProperties: false
+      required: [id, lookupKey, displayName, productIds]
+      properties:
+        id: { type: string }
+        lookupKey: { type: string }
+        displayName: { type: string }
+        productIds: { type: array, items: { type: string } }
+    ProviderCatalogOffering:
+      type: object
+      additionalProperties: false
+      required: [id, lookupKey, displayName, state, isCurrent, packages]
+      properties:
+        id: { type: string }
+        lookupKey: { type: string }
+        displayName: { type: string }
+        state: { type: string }
+        isCurrent: { type: boolean }
+        packages: { type: array, items: { $ref: "#/components/schemas/ProviderCatalogPackage" } }
+    ProviderCatalogPreview:
+      type: object
+      additionalProperties: false
+      required: [connectionId, observedAt, applications, products, entitlements, offerings]
+      properties:
+        connectionId: { type: string }
+        observedAt: { $ref: "#/components/schemas/Timestamp" }
+        applications: { type: array, items: { $ref: "#/components/schemas/ProviderCatalogApplication" } }
+        products: { type: array, items: { $ref: "#/components/schemas/ProviderCatalogProduct" } }
+        entitlements: { type: array, items: { $ref: "#/components/schemas/ProviderCatalogEntitlement" } }
+        offerings: { type: array, items: { $ref: "#/components/schemas/ProviderCatalogOffering" } }
+    ProviderImport:
+      type: object
+      additionalProperties: false
+      required: [id, projectId, connectionId, status, createdByActorId, createdAt]
+      properties:
+        id: { type: string }
+        projectId: { type: string }
+        connectionId: { type: string }
+        status: { type: string, enum: [in_progress, completed, partial] }
+        createdByActorId: { type: string }
+        createdAt: { $ref: "#/components/schemas/Timestamp" }
+        completedAt: { $ref: "#/components/schemas/Timestamp" }
+    ProviderImportItem:
+      type: object
+      additionalProperties: false
+      required: [importId, projectId, providerProductIdentifier, status, createdAt]
+      properties:
+        importId: { type: string }
+        projectId: { type: string }
+        providerProductIdentifier: { type: string }
+        mosaicProductId: { type: string }
+        mappingId: { type: string }
+        status: { type: string, enum: [imported, failed] }
+        errorCode: { $ref: "#/components/schemas/ProviderErrorCode" }
+        createdAt: { $ref: "#/components/schemas/Timestamp" }
+    ProviderImportResult:
+      type: object
+      additionalProperties: false
+      required: [import, items]
+      properties:
+        import: { $ref: "#/components/schemas/ProviderImport" }
+        items: { type: array, items: { $ref: "#/components/schemas/ProviderImportItem" } }
+    ProviderSyncJob:
+      type: object
+      additionalProperties: false
+      required: [id, projectId, connectionId, status, attemptCount, maxAttempts, availableAt, requestedByActorId, createdAt, updatedAt]
+      properties:
+        id: { type: string }
+        projectId: { type: string }
+        connectionId: { type: string }
+        status: { type: string, enum: [queued, leased, completed, failed] }
+        attemptCount: { type: integer, minimum: 0 }
+        maxAttempts: { type: integer, minimum: 1 }
+        availableAt: { $ref: "#/components/schemas/Timestamp" }
+        requestedByActorId: { type: string }
+        createdAt: { $ref: "#/components/schemas/Timestamp" }
+        updatedAt: { $ref: "#/components/schemas/Timestamp" }
+    ProviderSyncRun:
+      type: object
+      additionalProperties: false
+      required: [id, projectId, connectionId, jobId, status, itemCount, successCount, failureCount, startedAt, createdAt]
+      properties:
+        id: { type: string }
+        projectId: { type: string }
+        connectionId: { type: string }
+        jobId: { type: string }
+        status: { type: string, enum: [running, completed, partial, failed] }
+        itemCount: { type: integer, minimum: 0 }
+        successCount: { type: integer, minimum: 0 }
+        failureCount: { type: integer, minimum: 0 }
+        startedAt: { $ref: "#/components/schemas/Timestamp" }
+        completedAt: { $ref: "#/components/schemas/Timestamp" }
+        createdAt: { $ref: "#/components/schemas/Timestamp" }
     ActiveProviderAssignment:
       type: object
       additionalProperties: false
@@ -1682,7 +2145,7 @@ components:
         provider: { $ref: "#/components/schemas/ProviderKind" }
         providerProductIdentifier:
           type: string
-          description: Opaque value emitted unchanged as Commerce Provider Contract providerProductReference.
+          description: RevenueCat v2 Product resource identifier used only by server-side catalog synchronization.
         providerPackageIdentifier:
           type: string
           description: Optional RevenueCat Package metadata; present only with providerOfferingIdentifier.
@@ -1702,7 +2165,7 @@ components:
       type: object
       additionalProperties: false
       description: Immutable safe metadata evidence; raw provider responses and credentials are excluded.
-      required: [id, projectId, mappingId, source, digest, availability, observedAt, syncedAt, createdAt]
+      required: [id, projectId, mappingId, source, digest, availability, observedAt, syncedAt, staleAt, metadata, createdAt]
       properties:
         id: { type: string }
         projectId: { type: string }
@@ -1712,8 +2175,13 @@ components:
         availability: { $ref: "#/components/schemas/ProviderAvailability" }
         observedAt: { $ref: "#/components/schemas/Timestamp" }
         syncedAt: { $ref: "#/components/schemas/Timestamp" }
+        staleAt: { $ref: "#/components/schemas/Timestamp" }
         expiresAt: { $ref: "#/components/schemas/Timestamp" }
         lastErrorCode: { $ref: "#/components/schemas/ProviderErrorCode" }
+        metadata:
+          type: object
+          additionalProperties: true
+          description: Normalized safe metadata only; raw provider responses are never persisted.
         createdAt: { $ref: "#/components/schemas/Timestamp" }
     ProviderReadinessIssue:
       type: object

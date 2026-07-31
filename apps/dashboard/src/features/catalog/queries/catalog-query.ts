@@ -6,6 +6,7 @@ import {
   getProduct,
   getProductReadiness,
   getProductUsage,
+  getProviderMappingMetadata,
   listEntitlements,
   listPlanProducts,
   listPlans,
@@ -34,6 +35,23 @@ export const catalogKeys = {
     ["catalog", projectId, "products", filters] as const,
   providerMappings: (productId: string) =>
     ["catalog", "product", productId, "provider-mappings"] as const,
+  providerMetadata: (mappingId: string) =>
+    ["catalog", "provider-mapping", mappingId, "metadata"] as const,
+}
+
+export function providerMappingMetadataQueryOptions(mappingId: string) {
+  return queryOptions({
+    queryKey: catalogKeys.providerMetadata(mappingId),
+    queryFn: async ({ signal }) => {
+      const result = await getProviderMappingMetadata({
+        client: generatedDashboardClient,
+        path: { mappingId },
+        signal,
+        throwOnError: true,
+      })
+      return result.data.data
+    },
+  })
 }
 
 export interface ProductFilters {

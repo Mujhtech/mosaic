@@ -238,6 +238,16 @@ func (s *Service) SetEnvironmentMode(ctx context.Context, actor Actor, environme
 			result, organizationID = environment, project.OrganizationID
 			return nil
 		}
+		for _, connection := range tx.ProviderConnections(project.ID) {
+			if connection.Status == ProviderConnectionRevoked ||
+				!scopeContains(tx.ProviderConnectionEnvironmentIDs(connection.ID), environment.ID) {
+				continue
+			}
+			if mode == EnvironmentProduction && connection.Mode == ProviderSandbox ||
+				mode != EnvironmentProduction && connection.Mode == ProviderProduction {
+				return ErrModeMismatch
+			}
+		}
 		for _, application := range tx.Applications(project.ID) {
 			assignment, ok := tx.ActiveProviderAssignment(environmentID, application.ID)
 			if !ok {

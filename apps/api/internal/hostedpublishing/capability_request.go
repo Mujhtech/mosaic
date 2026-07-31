@@ -107,6 +107,24 @@ func ValidateSDKCapabilityRequest(request SDKCapabilityRequest, release Release)
 	return nil
 }
 
+// ValidateSDKCommerceCapabilityRequest enforces the closed Commerce
+// Configuration v1 delivery negotiation contract. Commerce provider
+// capabilities are represented by the immutable sidecar itself, so the SDK
+// reports only the configuration and provider contract versions it can decode.
+func ValidateSDKCommerceCapabilityRequest(platform, sdkVersion string, configurationVersions, providerContractVersions []string) error {
+	if platform != "flutter" && platform != "ios" && platform != "android" {
+		return ErrUnsupportedCapability
+	}
+	if len(sdkVersion) > 64 || !semanticVersionPattern.MatchString(sdkVersion) {
+		return ErrUnsupportedCapability
+	}
+	if !containsExactUnique(configurationVersions, "1", 8) ||
+		!containsExactUnique(providerContractVersions, "1", 8) {
+		return ErrUnsupportedCapability
+	}
+	return nil
+}
+
 func safeApplicationVersion(value string) bool {
 	for _, character := range value {
 		if character <= 0x1f || character == 0x7f {

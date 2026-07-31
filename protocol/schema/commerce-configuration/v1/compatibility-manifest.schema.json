@@ -1,0 +1,110 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:mosaic:protocol:schema:commerce-configuration:v1:compatibility-manifest",
+  "title": "Mosaic Commerce Configuration v1 Compatibility Manifest",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "commerceConfigurationVersion",
+    "status",
+    "schema",
+    "canonicalFixtures",
+    "activationSources",
+    "adapterMappingKinds",
+    "readerPolicy"
+  ],
+  "properties": {
+    "commerceConfigurationVersion": {
+      "const": "1"
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "draft",
+        "releaseCandidate",
+        "approved",
+        "deprecated"
+      ]
+    },
+    "schema": {
+      "type": "string",
+      "minLength": 1
+    },
+    "canonicalFixtures": {
+      "type": "array",
+      "minItems": 2,
+      "maxItems": 8,
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    },
+    "activationSources": {
+      "type": "array",
+      "minItems": 2,
+      "maxItems": 2,
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "enum": [
+          "providerConnection",
+          "sdkLocal"
+        ]
+      }
+    },
+    "adapterMappingKinds": {
+      "type": "array",
+      "minItems": 2,
+      "maxItems": 2,
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "enum": [
+          "directProduct",
+          "revenueCatPackage"
+        ]
+      }
+    },
+    "readerPolicy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "unknownVersion",
+        "unknownField",
+        "unknownAdapterMapping",
+        "releaseAssociationMismatch",
+        "digestMismatch",
+        "ambiguousMapping",
+        "cacheAssociation",
+        "credentialMaterial"
+      ],
+      "properties": {
+        "unknownVersion": {
+          "const": "rejectSidecar"
+        },
+        "unknownField": {
+          "const": "rejectSidecar"
+        },
+        "unknownAdapterMapping": {
+          "const": "rejectSidecar"
+        },
+        "releaseAssociationMismatch": {
+          "const": "rejectSidecar"
+        },
+        "digestMismatch": {
+          "const": "rejectSidecar"
+        },
+        "ambiguousMapping": {
+          "const": "rejectSidecar"
+        },
+        "cacheAssociation": {
+          "const": "atomicallyWithConfigurationRelease"
+        },
+        "credentialMaterial": {
+          "const": "forbidden"
+        }
+      }
+    }
+  }
+}
