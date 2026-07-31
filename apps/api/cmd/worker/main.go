@@ -24,6 +24,7 @@ import (
 	"github.com/Mujhtech/mosaic/apps/api/internal/billing"
 	"github.com/Mujhtech/mosaic/apps/api/internal/billingaccess"
 	"github.com/Mujhtech/mosaic/apps/api/internal/billingcustomer"
+	"github.com/Mujhtech/mosaic/apps/api/internal/billingmigration"
 	"github.com/Mujhtech/mosaic/apps/api/internal/billingprojection"
 	"github.com/Mujhtech/mosaic/apps/api/internal/billingrestore"
 	"github.com/Mujhtech/mosaic/apps/api/internal/billingwebhook"
@@ -36,6 +37,11 @@ import (
 	"github.com/Mujhtech/mosaic/apps/api/internal/platform/billingcustomerpostgres"
 	"github.com/Mujhtech/mosaic/apps/api/internal/platform/billingdiagnosticspostgres"
 	"github.com/Mujhtech/mosaic/apps/api/internal/platform/billingkeys"
+	"github.com/Mujhtech/mosaic/apps/api/internal/platform/billingmigrationevaluation"
+	"github.com/Mujhtech/mosaic/apps/api/internal/platform/billingmigrationobject"
+	"github.com/Mujhtech/mosaic/apps/api/internal/platform/billingmigrationpostgres"
+	"github.com/Mujhtech/mosaic/apps/api/internal/platform/billingmigrationrepair"
+	"github.com/Mujhtech/mosaic/apps/api/internal/platform/billingmigrationvalidation"
 	"github.com/Mujhtech/mosaic/apps/api/internal/platform/billingpostgres"
 	"github.com/Mujhtech/mosaic/apps/api/internal/platform/billingprojectionpostgres"
 	"github.com/Mujhtech/mosaic/apps/api/internal/platform/billingrestorepostgres"
@@ -68,6 +74,30 @@ func main() {
 type jobFamily struct {
 	name    string
 	process func(context.Context, string) (bool, error)
+}
+
+// migrationSourceObjectDeleter keeps retention deletion pinned to the private
+// migration bucket. The public asset store is deliberately not accepted here.
+type migrationSourceObjectDeleter struct{ store *objectstoreminio.Store }
+
+func (d migrationSourceObjectDeleter) DeleteRawSourceObject(ctx context.Context, key string) (string, error) {
+	if err := d.store.Delete(ctx, key); err != nil {
+		return "retryable_failure", err
+	}
+	return "deleted", nil
+}
+
+type migrationRetentionProcessor struct {
+	service *billingmigration.OperationsService
+	deleter migrationSourceObjectDeleter
+}
+
+func (p migrationRetentionProcessor) ProcessNext(ctx context.Context, workerID string) (bool, error) {
+	err := p.service.RunRetention(ctx, workerID, 2*time.Minute, p.deleter)
+	if errors.Is(err, billingmigration.ErrNotFound) {
+		return false, nil
+	}
+	return true, err
 }
 
 func run() (runErr error) {
@@ -182,6 +212,7 @@ func run() (runErr error) {
 
 	var billingService *billing.Service
 	var billingRepository *billingpostgres.Repository
+	var projectionRepository *billingprojectionpostgres.Repository
 	var projectionService *billingprojection.Service
 	var restoreService *billingrestore.Service
 	var restoreRepository *billingrestorepostgres.Repository
@@ -217,7 +248,8 @@ func run() (runErr error) {
 			return fmt.Errorf("configure Google Play client: %w", err)
 		}
 		billingRepository = billingpostgres.New(pool)
-		projectionService = billingprojection.NewService(billingprojectionpostgres.New(pool))
+		projectionRepository = billingprojectionpostgres.New(pool)
+		projectionService = billingprojection.NewService(projectionRepository)
 		// The worker is where the Phase 9A→9B seam matters most: it runs the
 		// validation job, so it is where a committed fact has to reach a Purchase
 		// Lineage and a Billing Customer. The identity and access services are
@@ -241,6 +273,66 @@ func run() (runErr error) {
 		webhookService = billingwebhook.NewService(webhookRepository, billingCipher,
 			billingwebhook.NewPolicy(billingwebhook.WithSelfHostedAllowlist(
 				cfg.Billing.WebhookAllowPrivateDestinations)))
+	}
+
+	var migrationSourcePull *billingmigration.SourcePullProcessor
+	var migrationSourceExecution *billingmigration.SourceExecutionProcessor
+	var migrationTransitionDelivery *billingmigration.TransitionDeliveryService
+	var migrationRetention migrationRetentionProcessor
+	if cfg.Migration.Enabled {
+		if billingService == nil {
+			return errors.New("billing migration execution requires billing service")
+		}
+		migrationObjectStore, err := objectstoreminio.New(objectstoreminio.Config{
+			Endpoint: cfg.ObjectStore.Endpoint, AccessKey: cfg.ObjectStore.AccessKey,
+			SecretKey: cfg.ObjectStore.SecretKey, Bucket: cfg.Migration.SourceObjectBucket,
+			UseTLS: cfg.ObjectStore.UseTLS, OperationTimeout: cfg.Migration.SourceObjectOperationTimeout,
+			CheckTimeout: cfg.ObjectStore.CheckTimeout,
+		})
+		if err != nil {
+			return fmt.Errorf("configure migration source object storage: %w", err)
+		}
+		if err = migrationObjectStore.Check(runContext); err != nil {
+			return fmt.Errorf("initialize migration source object storage: %w", err)
+		}
+		migrationObjectCipher, err := billingmigrationobject.NewKeyringCipher(
+			cfg.Migration.SourceObjectKeyring, cfg.Migration.SourceObjectChunkBytes)
+		if err != nil {
+			return fmt.Errorf("configure migration source object encryption: %w", err)
+		}
+		migrationCredentialCipher, err := providercredential.NewAESGCMCipher(
+			cfg.Providers.CredentialKeyring, rand.Reader)
+		if err != nil {
+			return fmt.Errorf("configure migration provider credential encryption: %w", err)
+		}
+		migrationRevenueCat, err := revenuecat.New(revenuecat.Config{
+			BaseURL: cfg.Providers.RevenueCatBaseURL, RequestTimeout: cfg.Providers.RequestTimeout,
+			OperationTimeout: cfg.Providers.OperationTimeout,
+			ConnectTimeout:   cfg.Providers.ConnectTimeout, MaxResponseBytes: cfg.Providers.MaxResponseBytes,
+			MaxAttempts: cfg.Providers.MaxAttempts,
+		})
+		if err != nil {
+			return fmt.Errorf("configure RevenueCat migration source adapter: %w", err)
+		}
+		migrationRepository := billingmigrationpostgres.New(pool)
+		migrationRepairExecutor := billingmigrationrepair.NewProductionExecutor(
+			billingmigrationrepair.NewPostgresStore(pool),
+			billingmigrationvalidation.New(billingService),
+			projectionService,
+			projectionRepository)
+		migrationIngestor := billingmigration.NewSourceObjectIngestor(
+			migrationRepository, migrationObjectStore, migrationObjectCipher, nil)
+		migrationSourcePull = billingmigration.NewSourcePullProcessor(
+			migrationRepository, migrationRevenueCat, migrationIngestor, migrationCredentialCipher, nil)
+		migrationEvaluator := billingmigrationevaluation.New(pool)
+		migrationSourceExecution = billingmigration.NewSourceExecutionProcessor(
+			migrationRepository, billingmigrationvalidation.New(billingService),
+			migrationEvaluator, migrationEvaluator, nil)
+		migrationTransitionDelivery = billingmigration.NewTransitionDeliveryService(migrationRepository, nil)
+		migrationRetention = migrationRetentionProcessor{
+			service: billingmigration.NewOperationsService(migrationRepository, migrationRepository, migrationRepairExecutor),
+			deleter: migrationSourceObjectDeleter{store: migrationObjectStore},
+		}
 	}
 
 	workerID, err := os.Hostname()
@@ -289,7 +381,7 @@ func run() (runErr error) {
 		}
 	}
 
-	families := make([]jobFamily, 0, 8)
+	families := make([]jobFamily, 0, 24)
 	if providerService != nil {
 		families = append(families, jobFamily{"provider_sync", providerService.ProcessNextProviderSync})
 	}
@@ -318,6 +410,16 @@ func run() (runErr error) {
 			jobFamily{"billing_reconciliation", billingService.ProcessNextReconciliation},
 			jobFamily{"billing_replay", billingService.ProcessNextReplay},
 			jobFamily{"billing_retention", billingService.ProcessRetention},
+		)
+	}
+	if migrationSourcePull != nil {
+		families = append(families,
+			jobFamily{"billing_migration_source_pull", migrationSourcePull.ProcessNext},
+			jobFamily{"billing_migration_import_validation", migrationSourceExecution.ProcessNextImport},
+			jobFamily{"billing_migration_prepared_snapshot", migrationSourceExecution.ProcessNextRun},
+			jobFamily{"billing_migration_final_delta", migrationSourceExecution.ProcessNextFinalDelta},
+			jobFamily{"billing_migration_transition_delivery", migrationTransitionDelivery.ProcessOne},
+			jobFamily{"billing_migration_retention", migrationRetention.ProcessNext},
 		)
 	}
 	families = append(families,
@@ -368,6 +470,9 @@ func run() (runErr error) {
 		// coupled to analytics aggregation load.
 		if billingService != nil && cfg.Billing.WorkerPollInterval < interval {
 			interval = cfg.Billing.WorkerPollInterval
+		}
+		if migrationSourcePull != nil && cfg.Migration.WorkerPollInterval < interval {
+			interval = cfg.Migration.WorkerPollInterval
 		}
 		select {
 		case <-runContext.Done():

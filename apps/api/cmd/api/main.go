@@ -20,6 +20,7 @@ import (
 	"github.com/Mujhtech/mosaic/apps/api/internal/billingcustomer"
 	"github.com/Mujhtech/mosaic/apps/api/internal/billingdiagnostics"
 	"github.com/Mujhtech/mosaic/apps/api/internal/billinggrant"
+	"github.com/Mujhtech/mosaic/apps/api/internal/billingmigration"
 	"github.com/Mujhtech/mosaic/apps/api/internal/billingoperator"
 	"github.com/Mujhtech/mosaic/apps/api/internal/billingprojection"
 	"github.com/Mujhtech/mosaic/apps/api/internal/billingrestore"
@@ -38,6 +39,9 @@ import (
 	"github.com/Mujhtech/mosaic/apps/api/internal/platform/billingdiagnosticspostgres"
 	"github.com/Mujhtech/mosaic/apps/api/internal/platform/billinggrantpostgres"
 	"github.com/Mujhtech/mosaic/apps/api/internal/platform/billingkeys"
+	"github.com/Mujhtech/mosaic/apps/api/internal/platform/billingmigrationpostgres"
+	"github.com/Mujhtech/mosaic/apps/api/internal/platform/billingmigrationrepair"
+	"github.com/Mujhtech/mosaic/apps/api/internal/platform/billingmigrationvalidation"
 	"github.com/Mujhtech/mosaic/apps/api/internal/platform/billingoperatorpostgres"
 	"github.com/Mujhtech/mosaic/apps/api/internal/platform/billingpostgres"
 	"github.com/Mujhtech/mosaic/apps/api/internal/platform/billingprojectionpostgres"
@@ -106,6 +110,10 @@ func closeSchemas(readers map[protocolschema.Schema]io.ReadCloser) {
 	for _, reader := range readers {
 		_ = reader.Close()
 	}
+}
+
+func repairExecutionEnabled(cfg config.Config) bool {
+	return cfg.Billing.Enabled && cfg.Migration.Enabled
 }
 
 func run() (runErr error) {
@@ -300,6 +308,14 @@ func run() (runErr error) {
 	var billingAccessService *billingaccess.Service
 	var billingDiagnosticsService *billingdiagnostics.Service
 	var billingGrantService *billinggrant.Service
+	var billingMigrationService *billingmigration.Service
+	var billingMigrationSourcePull *billingmigration.SourcePullService
+	var billingMigrationOperations *billingmigration.OperationsService
+	var billingMigrationRedelivery *billingmigration.RedeliveryService
+	var billingMigrationReads *billingmigration.OperationalReadService
+	var billingMigrationStabilization *billingmigration.StabilizationService
+	var billingMigrationRollbackReadiness *billingmigration.RollbackReadinessService
+	var billingMigrationRepairOnline bool
 	var billingRestoreService *billingrestore.Service
 	var billingCustomerService *billingcustomer.Service
 	var billingOperatorService *billingoperator.Service
@@ -310,6 +326,29 @@ func run() (runErr error) {
 		billingCipher, err := providercredential.NewAESGCMCipher(cfg.Providers.CredentialKeyring, rand.Reader)
 		if err != nil {
 			return fmt.Errorf("configure billing credential encryption: %w", err)
+		}
+		migrationRevenueCatClient, err := revenuecat.New(revenuecat.Config{
+			BaseURL: cfg.Providers.RevenueCatBaseURL, RequestTimeout: cfg.Providers.RequestTimeout,
+			OperationTimeout: cfg.Providers.OperationTimeout, ConnectTimeout: cfg.Providers.ConnectTimeout,
+			MaxResponseBytes: cfg.Providers.MaxResponseBytes, MaxAttempts: cfg.Providers.MaxAttempts,
+		})
+		if err != nil {
+			return fmt.Errorf("configure RevenueCat migration adapter: %w", err)
+		}
+		migrationRepository := billingmigrationpostgres.New(databasePool)
+		billingMigrationService = billingmigration.NewService(
+			migrationRepository, billingCipher, migrationRevenueCatClient)
+		// Non-repair operator controls remain readable/usable when the optional
+		// execution plane is disabled; repair itself fails closed through a nil
+		// executor and the explicit transport gate below.
+		billingMigrationOperations = billingmigration.NewOperationsService(
+			migrationRepository, migrationRepository, nil)
+		billingMigrationRedelivery = billingmigration.NewRedeliveryService(migrationRepository, nil)
+		billingMigrationReads = billingmigration.NewOperationalReadService(migrationRepository, migrationRepository)
+		billingMigrationStabilization = billingmigration.NewStabilizationService(migrationRepository, migrationRepository)
+		billingMigrationRollbackReadiness = billingmigration.NewRollbackReadinessService(migrationRepository, migrationRepository)
+		if cfg.Migration.Enabled {
+			billingMigrationSourcePull = billingmigration.NewSourcePullService(migrationRepository, nil)
 		}
 		// The Apple root is compiled in, so a broken embed fails startup rather
 		// than the first notification.
@@ -376,6 +415,17 @@ func run() (runErr error) {
 			billing.WithNotificationBaseURL(cfg.Billing.NotificationBaseURL),
 			billing.WithSeam(billingseam.New(billingCustomerService, billingAccessService),
 				billingseam.New(billingCustomerService, billingAccessService)))
+		if repairExecutionEnabled(cfg) {
+			migrationRepairExecutor := billingmigrationrepair.NewProductionExecutor(
+				billingmigrationrepair.NewPostgresStore(databasePool),
+				billingmigrationvalidation.New(billingService),
+				billingProjectionService,
+				projectionRepository,
+			)
+			billingMigrationOperations = billingmigration.NewOperationsService(
+				migrationRepository, migrationRepository, migrationRepairExecutor)
+			billingMigrationRepairOnline = true
+		}
 		billingGrantService = billinggrant.NewService(billinggrantpostgres.New(databasePool))
 		// The operator surface reads through the same repositories the trusted
 		// APIs read through, so the dashboard and an application backend see one
@@ -416,35 +466,43 @@ func run() (runErr error) {
 		TrustedProxyCIDRs: cfg.HTTP.TrustedProxyCIDRs,
 		EnableHSTS:        cfg.ProductionLike(),
 	}, logger, httpserver.Dependencies{
-		BrowserAuth:            browserAuthService,
-		BrowserAuthConfig:      browserauthhttp.Config{CookieSecure: cfg.BrowserAuth.CookieSecure, CookieDomain: cfg.BrowserAuth.CookieDomain, AllowedOrigins: cfg.HTTP.CORSAllowedOrigins, RateLimiter: authenticationLimiter},
-		CloudWorkspace:         workspaceService,
-		HostedPublishing:       publishingService,
-		PlacementDecision:      placementDecisionService,
-		PrincipalResolver:      authn.NewBrowserSessionResolver(browserAuthService),
-		DeliveryLimiter:        deliveryLimiter,
-		Analytics:              analyticsService,
-		AnalyticsIPLimiter:     analyticsIPLimiter,
-		AnalyticsKeyLimiter:    analyticsKeyLimiter,
-		AnalyticsEventLimiter:  analyticsEventLimiter,
-		Experiment:             experimentService,
-		Billing:                billingService,
-		BillingAccess:          billingAccessService,
-		BillingDiagnostics:     billingDiagnosticsService,
-		BillingGrant:           billingGrantService,
-		BillingRestore:         billingRestoreService,
-		BillingCustomer:        billingCustomerService,
-		BillingOperator:        billingOperatorService,
-		BillingWebhook:         billingWebhookService,
-		BillingIPLimiter:       billingIPLimiter,
-		BillingKeyLimiter:      billingKeyLimiter,
-		EntitlementSyncLimiter: entitlementSyncLimiter,
-		APILimiter:             apiLimiter,
-		DecisionLimiter:        decisionLimiter,
-		UploadLimiter:          uploadLimiter,
-		ExportLimiter:          exportLimiter,
-		Readiness:              readiness,
-		ReadinessChecker:       database.HealthChecker{Pinger: databasePool},
+		BrowserAuth:                       browserAuthService,
+		BrowserAuthConfig:                 browserauthhttp.Config{CookieSecure: cfg.BrowserAuth.CookieSecure, CookieDomain: cfg.BrowserAuth.CookieDomain, AllowedOrigins: cfg.HTTP.CORSAllowedOrigins, RateLimiter: authenticationLimiter},
+		CloudWorkspace:                    workspaceService,
+		HostedPublishing:                  publishingService,
+		PlacementDecision:                 placementDecisionService,
+		PrincipalResolver:                 authn.NewBrowserSessionResolver(browserAuthService),
+		DeliveryLimiter:                   deliveryLimiter,
+		Analytics:                         analyticsService,
+		AnalyticsIPLimiter:                analyticsIPLimiter,
+		AnalyticsKeyLimiter:               analyticsKeyLimiter,
+		AnalyticsEventLimiter:             analyticsEventLimiter,
+		Experiment:                        experimentService,
+		Billing:                           billingService,
+		BillingAccess:                     billingAccessService,
+		BillingDiagnostics:                billingDiagnosticsService,
+		BillingGrant:                      billingGrantService,
+		BillingMigration:                  billingMigrationService,
+		BillingMigrationSourcePull:        billingMigrationSourcePull,
+		BillingMigrationOperations:        billingMigrationOperations,
+		BillingMigrationRedelivery:        billingMigrationRedelivery,
+		BillingMigrationReads:             billingMigrationReads,
+		BillingMigrationStabilization:     billingMigrationStabilization,
+		BillingMigrationRollbackReadiness: billingMigrationRollbackReadiness,
+		BillingMigrationRepairOnline:      billingMigrationRepairOnline,
+		BillingRestore:                    billingRestoreService,
+		BillingCustomer:                   billingCustomerService,
+		BillingOperator:                   billingOperatorService,
+		BillingWebhook:                    billingWebhookService,
+		BillingIPLimiter:                  billingIPLimiter,
+		BillingKeyLimiter:                 billingKeyLimiter,
+		EntitlementSyncLimiter:            entitlementSyncLimiter,
+		APILimiter:                        apiLimiter,
+		DecisionLimiter:                   decisionLimiter,
+		UploadLimiter:                     uploadLimiter,
+		ExportLimiter:                     exportLimiter,
+		Readiness:                         readiness,
+		ReadinessChecker:                  database.HealthChecker{Pinger: databasePool},
 	})
 
 	server := &http.Server{

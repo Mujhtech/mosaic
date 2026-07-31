@@ -18,6 +18,7 @@ import (
 	"github.com/Mujhtech/mosaic/apps/api/internal/billingcustomer"
 	"github.com/Mujhtech/mosaic/apps/api/internal/billingdiagnostics"
 	"github.com/Mujhtech/mosaic/apps/api/internal/billinggrant"
+	"github.com/Mujhtech/mosaic/apps/api/internal/billingmigration"
 	"github.com/Mujhtech/mosaic/apps/api/internal/billingoperator"
 	"github.com/Mujhtech/mosaic/apps/api/internal/billingrestore"
 	"github.com/Mujhtech/mosaic/apps/api/internal/billingwebhook"
@@ -35,6 +36,7 @@ import (
 	billingcustomerhttp "github.com/Mujhtech/mosaic/apps/api/internal/transport/billingcustomer"
 	billingdiagnosticshttp "github.com/Mujhtech/mosaic/apps/api/internal/transport/billingdiagnostics"
 	billinggranthttp "github.com/Mujhtech/mosaic/apps/api/internal/transport/billinggrant"
+	billingmigrationhttp "github.com/Mujhtech/mosaic/apps/api/internal/transport/billingmigration"
 	billingoperatorhttp "github.com/Mujhtech/mosaic/apps/api/internal/transport/billingoperator"
 	billingrestorehttp "github.com/Mujhtech/mosaic/apps/api/internal/transport/billingrestore"
 	billingwebhookhttp "github.com/Mujhtech/mosaic/apps/api/internal/transport/billingwebhook"
@@ -115,6 +117,16 @@ type Dependencies struct {
 	// management surface: history, impact preview, and publish. It is nil
 	// whenever Billing is.
 	BillingGrant *billinggrant.Service
+	// BillingMigration owns the Phase 9C evidence/control-plane foundation. It
+	// cannot switch authority or write Transaction Facts.
+	BillingMigration                  *billingmigration.Service
+	BillingMigrationSourcePull        *billingmigration.SourcePullService
+	BillingMigrationOperations        *billingmigration.OperationsService
+	BillingMigrationRedelivery        *billingmigration.RedeliveryService
+	BillingMigrationReads             *billingmigration.OperationalReadService
+	BillingMigrationStabilization     *billingmigration.StabilizationService
+	BillingMigrationRollbackReadiness *billingmigration.RollbackReadinessService
+	BillingMigrationRepairOnline      bool
 	// BillingRestore owns the Phase 9B restore and sync chain: the SDK and
 	// trusted request surfaces and the status read. It is nil whenever Billing
 	// is.
@@ -246,6 +258,19 @@ func NewWithDependencies(cfg Config, logger zerolog.Logger, dependencies Depende
 							billinggranthttp.RegisterProjectRoutes(project, dependencies.BillingGrant,
 								httpmiddleware.RateLimit("export", dependencies.ExportLimiter, principalKey))
 						}
+						if dependencies.BillingMigration != nil {
+							billingmigrationhttp.RegisterProjectRoutes(project, billingmigrationhttp.Services{
+								Program:           dependencies.BillingMigration,
+								SourcePull:        dependencies.BillingMigrationSourcePull,
+								Operations:        dependencies.BillingMigrationOperations,
+								Redelivery:        dependencies.BillingMigrationRedelivery,
+								Reads:             dependencies.BillingMigrationReads,
+								Stabilization:     dependencies.BillingMigrationStabilization,
+								RollbackReadiness: dependencies.BillingMigrationRollbackReadiness,
+								RepairOnline:      dependencies.BillingMigrationRepairOnline,
+							},
+								httpmiddleware.RateLimit("export", dependencies.ExportLimiter, principalKey))
+						}
 						if dependencies.BillingOperator != nil {
 							// The customer lookup and the manual sync share the
 							// export-class bucket: the lookup is the one surface
@@ -373,7 +398,7 @@ func NewWithDependencies(cfg Config, logger zerolog.Logger, dependencies Depende
 func hasBillingSurface(dependencies Dependencies) bool {
 	return dependencies.Billing != nil || dependencies.BillingOperator != nil ||
 		dependencies.BillingGrant != nil || dependencies.BillingDiagnostics != nil ||
-		dependencies.BillingWebhook != nil
+		dependencies.BillingWebhook != nil || dependencies.BillingMigration != nil
 }
 
 // hasEnvironmentBillingSurface reports whether any module publishes routes
