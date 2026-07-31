@@ -529,6 +529,10 @@ func (s *Service) GetPlacementBinding(ctx context.Context, actor Actor, projectI
 }
 
 func (s *Service) AuthenticateSDKKey(ctx context.Context, rawKey string) (SDKConfiguration, error) {
+	return s.AuthenticateSDKKeyVersion(ctx, rawKey, "1")
+}
+
+func (s *Service) AuthenticateSDKKeyVersion(ctx context.Context, rawKey, deliveryVersion string) (SDKConfiguration, error) {
 	parts := strings.SplitN(strings.TrimSpace(rawKey), ".", 2)
 	if len(parts) != 2 || parts[0] == "" || parts[1] == "" {
 		return SDKConfiguration{}, ErrUnauthenticated
@@ -553,7 +557,15 @@ func (s *Service) AuthenticateSDKKey(ctx context.Context, rawKey string) (SDKCon
 			return ErrNoCurrentRelease
 		}
 		tx.TouchAPIKey(key.ID)
-		result = SDKConfiguration{Release: release, Environment: environment, APIKeyID: key.ID}
+		representation := ReleaseRepresentation{ReleaseID: release.ID, EnvironmentID: environment.ID, DeliveryContractVersion: "1", Payload: release.Payload, ContentHash: release.ContentHash, CreatedAt: release.PublishedAt}
+		if deliveryVersion != "1" || release.DeliveryContractVersion == "2" {
+			var ok bool
+			representation, ok = tx.ReleaseRepresentation(release.ID, deliveryVersion)
+			if !ok {
+				return ErrUnsupportedCapability
+			}
+		}
+		result = SDKConfiguration{Release: release, Payload: representation.Payload, ContentHash: representation.ContentHash, DeliveryContractVersion: representation.DeliveryContractVersion, Environment: environment, APIKeyID: key.ID}
 		return nil
 	})
 	return result, err

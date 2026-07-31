@@ -9,9 +9,21 @@ import java.security.MessageDigest
 
 const val MOSAIC_CONFIGURATION_DELIVERY_VERSION: String = "1"
 
-data class MosaicDeliveryEnvironment(val id: String, val key: String)
+enum class MosaicDeliveryEnvironmentMode { DEVELOPMENT, STAGING, PRODUCTION }
+
+data class MosaicDeliveryEnvironment(
+    val id: String,
+    val key: String,
+    /** Authoritative for Delivery v2. Delivery v1 intentionally has no Environment mode. */
+    val mode: MosaicDeliveryEnvironmentMode? = null,
+)
 data class MosaicPlacementBinding(val key: String, val paywallVersionId: String)
-data class MosaicDeliveryProduct(val id: String, val type: String, val fallbackDisplayName: String)
+data class MosaicDeliveryProduct(
+    val id: String,
+    val type: String,
+    val fallbackDisplayName: String,
+    val readiness: MosaicProductReadiness = MosaicProductReadiness.READY,
+)
 data class MosaicDeliveryAsset(
     val id: String,
     val kind: String,
@@ -40,6 +52,10 @@ data class MosaicConfigurationRelease(
     val productReferences: Map<String, MosaicDeliveryProduct>,
     val assetReferences: Map<String, MosaicDeliveryAsset>,
     val encoded: String,
+    val projectId: String? = null,
+    val placementDecisions: Map<String, MosaicPlacementRuleSet> = emptyMap(),
+    val entitlementReferences: Map<String, MosaicDeliveryEntitlement> = emptyMap(),
+    val deliveryVersion: String = MOSAIC_CONFIGURATION_DELIVERY_VERSION,
 ) {
     fun paywall(forPlacement: String): MosaicDeliveredPaywall? =
         placements[forPlacement]?.paywallVersionId?.let(paywallVersions::get)
@@ -57,6 +73,12 @@ object MosaicConfigurationDeliveryDecoder {
         source: String,
         capabilityReport: MosaicCapabilityReport = MosaicProtocolCapabilities.report(),
     ): MosaicConfigurationRelease {
+        val version = runCatching {
+            JsonParser.parseString(source).asJsonObject.get("configurationDeliveryVersion").asString
+        }.getOrNull()
+        if (version == MOSAIC_CONFIGURATION_DELIVERY_VERSION_V2) {
+            return MosaicConfigurationDeliveryV2Decoder.decode(source, capabilityReport)
+        }
         val root = parseObject(source, "$")
         root.exactKeys(setOf("configurationDeliveryVersion", "release"), "$")
         root.string("configurationDeliveryVersion", "$").also {

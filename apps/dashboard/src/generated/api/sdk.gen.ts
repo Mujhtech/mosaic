@@ -2,7 +2,7 @@
 
 import { type Client, type ClientMeta, formDataBodySerializer, type Options as Options2, type RequestResult, type TDataShape } from './client';
 import { client } from './client.gen';
-import type { AddMemberData, AddMemberErrors, AddMemberResponses, AddPlanProductData, AddPlanProductErrors, AddPlanProductResponses, AddProductEntitlementData, AddProductEntitlementErrors, AddProductEntitlementResponses, ArchiveAssetData, ArchiveAssetErrors, ArchiveAssetResponses, ArchiveProductData, ArchiveProductErrors, ArchiveProductResponses, ArchiveProjectData, ArchiveProjectErrors, ArchiveProjectResponses, ArchiveProviderMappingData, ArchiveProviderMappingErrors, ArchiveProviderMappingResponses, BindPlacementData, BindPlacementErrors, BindPlacementResponses, ClearActiveProviderAssignmentData, ClearActiveProviderAssignmentErrors, ClearActiveProviderAssignmentResponses, ClonePaywallVersionToDraftData, ClonePaywallVersionToDraftErrors, ClonePaywallVersionToDraftResponses, CreateApiKeyData, CreateApiKeyErrors, CreateApiKeyResponses, CreateApplicationData, CreateApplicationErrors, CreateApplicationResponses, CreateEntitlementData, CreateEntitlementErrors, CreateEntitlementResponses, CreateOrganizationData, CreateOrganizationErrors, CreateOrganizationResponses, CreatePaywallData, CreatePaywallDraftData, CreatePaywallDraftErrors, CreatePaywallDraftResponses, CreatePaywallErrors, CreatePaywallResponses, CreatePlacementData, CreatePlacementErrors, CreatePlacementResponses, CreatePlanData, CreatePlanErrors, CreatePlanResponses, CreateProductData, CreateProductErrors, CreateProductResponses, CreateProjectData, CreateProjectErrors, CreateProjectResponses, CreateProviderConnectionData, CreateProviderConnectionErrors, CreateProviderConnectionResponses, CreateProviderMappingData, CreateProviderMappingDraftData, CreateProviderMappingDraftErrors, CreateProviderMappingDraftResponses, CreateProviderMappingErrors, CreateProviderMappingObservationData, CreateProviderMappingObservationErrors, CreateProviderMappingObservationResponses, CreateProviderMappingResponses, DeleteProductData, DeleteProductErrors, DeleteProductResponses, EnqueueProviderSyncData, EnqueueProviderSyncErrors, EnqueueProviderSyncResponses, GetActivePaywallDraftData, GetActivePaywallDraftErrors, GetActivePaywallDraftResponses, GetActiveProviderAssignmentData, GetActiveProviderAssignmentErrors, GetActiveProviderAssignmentResponses, GetAssetContentData, GetAssetContentErrors, GetAssetContentResponses, GetAssetData, GetAssetErrors, GetAssetResponses, GetAssetUsageData, GetAssetUsageErrors, GetAssetUsageResponses, GetEntitlementData, GetEntitlementErrors, GetEntitlementResponses, GetHealthData, GetHealthResponses, GetNativeProviderProfileData, GetNativeProviderProfileErrors, GetNativeProviderProfileResponses, GetOrganizationData, GetOrganizationErrors, GetOrganizationResponses, GetPaywallData, GetPaywallDraftData, GetPaywallDraftErrors, GetPaywallDraftResponses, GetPaywallErrors, GetPaywallResponses, GetPaywallVersionData, GetPaywallVersionErrors, GetPaywallVersionResponses, GetPlacementBindingData, GetPlacementBindingErrors, GetPlacementBindingResponses, GetPlanData, GetPlanErrors, GetPlanResponses, GetProductData, GetProductErrors, GetProductReadinessData, GetProductReadinessErrors, GetProductReadinessResponses, GetProductResponses, GetProductUsageData, GetProductUsageErrors, GetProductUsageResponses, GetProjectData, GetProjectErrors, GetProjectResponses, GetProviderConnectionCapabilitiesData, GetProviderConnectionCapabilitiesErrors, GetProviderConnectionCapabilitiesResponses, GetProviderConnectionData, GetProviderConnectionErrors, GetProviderConnectionHealthData, GetProviderConnectionHealthErrors, GetProviderConnectionHealthResponses, GetProviderConnectionResponses, GetProviderMappingMetadataData, GetProviderMappingMetadataErrors, GetProviderMappingMetadataResponses, GetProviderMappingUsageData, GetProviderMappingUsageErrors, GetProviderMappingUsageResponses, GetProviderReadinessData, GetProviderReadinessErrors, GetProviderReadinessResponses, GetReadinessData, GetReadinessErrors, GetReadinessResponses, GetSdkCommerceConfigurationData, GetSdkCommerceConfigurationErrors, GetSdkCommerceConfigurationResponses, GetSdkConfigurationData, GetSdkConfigurationErrors, GetSdkConfigurationResponses, GetSessionData, GetSessionErrors, GetSessionResponses, ImportProviderProductsData, ImportProviderProductsErrors, ImportProviderProductsResponses, ListApiKeysData, ListApiKeysErrors, ListApiKeysResponses, ListApplicationsData, ListApplicationsErrors, ListApplicationsResponses, ListAssetsData, ListAssetsErrors, ListAssetsResponses, ListAuditEventsData, ListAuditEventsErrors, ListAuditEventsResponses, ListConfigurationReleasesData, ListConfigurationReleasesErrors, ListConfigurationReleasesResponses, ListEntitlementsData, ListEntitlementsErrors, ListEntitlementsResponses, ListEnvironmentsData, ListEnvironmentsErrors, ListEnvironmentsResponses, ListMembersData, ListMembersErrors, ListMembersResponses, ListOrganizationsData, ListOrganizationsErrors, ListOrganizationsResponses, ListPaywallsData, ListPaywallsErrors, ListPaywallsResponses, ListPaywallVersionsData, ListPaywallVersionsErrors, ListPaywallVersionsResponses, ListPlacementsData, ListPlacementsErrors, ListPlacementsResponses, ListPlanProductsData, ListPlanProductsErrors, ListPlanProductsResponses, ListPlansData, ListPlansErrors, ListPlansResponses, ListProductEntitlementsData, ListProductEntitlementsErrors, ListProductEntitlementsResponses, ListProductsData, ListProductsErrors, ListProductsResponses, ListProjectsData, ListProjectsErrors, ListProjectsResponses, ListProviderConnectionDiagnosticsData, ListProviderConnectionDiagnosticsErrors, ListProviderConnectionDiagnosticsResponses, ListProviderConnectionsData, ListProviderConnectionsErrors, ListProviderConnectionsResponses, ListProviderMappingObservationsData, ListProviderMappingObservationsErrors, ListProviderMappingObservationsResponses, ListProviderMappingsData, ListProviderMappingsErrors, ListProviderMappingsResponses, ListProviderSyncRunsData, ListProviderSyncRunsErrors, ListProviderSyncRunsResponses, LoginData, LoginErrors, LoginResponses, LogoutData, LogoutResponses, PreviewProviderCatalogData, PreviewProviderCatalogErrors, PreviewProviderCatalogResponses, PublishConfigurationData, PublishConfigurationErrors, PublishConfigurationResponses, ReconnectProviderConnectionData, ReconnectProviderConnectionErrors, ReconnectProviderConnectionResponses, RemoveMemberData, RemoveMemberErrors, RemoveMemberResponses, RemovePlanProductData, RemovePlanProductErrors, RemovePlanProductResponses, RemoveProductEntitlementData, RemoveProductEntitlementErrors, RemoveProductEntitlementResponses, ReplaceProviderConnectionScopesData, ReplaceProviderConnectionScopesErrors, ReplaceProviderConnectionScopesResponses, ReplaceProviderMappingData, ReplaceProviderMappingErrors, ReplaceProviderMappingResponses, RestoreProductData, RestoreProductErrors, RestoreProductResponses, RestoreProjectData, RestoreProjectErrors, RestoreProjectResponses, RevokeApiKeyData, RevokeApiKeyErrors, RevokeApiKeyResponses, RevokeProviderConnectionData, RevokeProviderConnectionErrors, RevokeProviderConnectionResponses, RollbackConfigurationReleaseData, RollbackConfigurationReleaseErrors, RollbackConfigurationReleaseResponses, RotateApiKeyData, RotateApiKeyErrors, RotateApiKeyResponses, RotateProviderCredentialData, RotateProviderCredentialErrors, RotateProviderCredentialResponses, SetActiveProviderAssignmentData, SetActiveProviderAssignmentErrors, SetActiveProviderAssignmentResponses, SetEnvironmentModeData, SetEnvironmentModeErrors, SetEnvironmentModeResponses, SetProductReplacementData, SetProductReplacementErrors, SetProductReplacementResponses, SignUpData, SignUpErrors, SignUpResponses, TestProviderConnectionData, TestProviderConnectionErrors, TestProviderConnectionResponses, UpdateEntitlementData, UpdateEntitlementErrors, UpdateEntitlementResponses, UpdateEnvironmentData, UpdateEnvironmentErrors, UpdateEnvironmentResponses, UpdateMemberData, UpdateMemberErrors, UpdateMemberResponses, UpdateOrganizationData, UpdateOrganizationErrors, UpdateOrganizationResponses, UpdatePaywallData, UpdatePaywallDraftData, UpdatePaywallDraftErrors, UpdatePaywallDraftResponses, UpdatePaywallErrors, UpdatePaywallResponses, UpdatePlacementData, UpdatePlacementErrors, UpdatePlacementResponses, UpdatePlanData, UpdatePlanErrors, UpdatePlanResponses, UpdateProductData, UpdateProductErrors, UpdateProductResponses, UpdateProjectData, UpdateProjectErrors, UpdateProjectResponses, UploadAssetData, UploadAssetErrors, UploadAssetResponses, ValidatePaywallDraftData, ValidatePaywallDraftErrors, ValidatePaywallDraftResponses } from './types.gen';
+import type { AddMemberData, AddMemberErrors, AddMemberResponses, AddPlanProductData, AddPlanProductErrors, AddPlanProductResponses, AddProductEntitlementData, AddProductEntitlementErrors, AddProductEntitlementResponses, ArchiveAssetData, ArchiveAssetErrors, ArchiveAssetResponses, ArchivePlacementAttributeData, ArchivePlacementAttributeErrors, ArchivePlacementAttributeResponses, ArchivePlacementRuleSetData, ArchivePlacementRuleSetErrors, ArchivePlacementRuleSetResponses, ArchivePlacementWithUsageCheckData, ArchivePlacementWithUsageCheckErrors, ArchivePlacementWithUsageCheckResponses, ArchiveProductData, ArchiveProductErrors, ArchiveProductResponses, ArchiveProjectData, ArchiveProjectErrors, ArchiveProjectResponses, ArchiveProviderMappingData, ArchiveProviderMappingErrors, ArchiveProviderMappingResponses, BindPlacementData, BindPlacementErrors, BindPlacementResponses, ClearActiveProviderAssignmentData, ClearActiveProviderAssignmentErrors, ClearActiveProviderAssignmentResponses, ClonePaywallVersionToDraftData, ClonePaywallVersionToDraftErrors, ClonePaywallVersionToDraftResponses, ClonePlacementRuleSetVersionData, ClonePlacementRuleSetVersionErrors, ClonePlacementRuleSetVersionResponses, CreateApiKeyData, CreateApiKeyErrors, CreateApiKeyResponses, CreateApplicationData, CreateApplicationErrors, CreateApplicationResponses, CreateEntitlementData, CreateEntitlementErrors, CreateEntitlementResponses, CreateOrganizationData, CreateOrganizationErrors, CreateOrganizationResponses, CreatePaywallData, CreatePaywallDraftData, CreatePaywallDraftErrors, CreatePaywallDraftResponses, CreatePaywallErrors, CreatePaywallResponses, CreatePlacementAliasData, CreatePlacementAliasErrors, CreatePlacementAliasResponses, CreatePlacementAttributeData, CreatePlacementAttributeErrors, CreatePlacementAttributeResponses, CreatePlacementData, CreatePlacementErrors, CreatePlacementQaOverrideData, CreatePlacementQaOverrideErrors, CreatePlacementQaOverrideResponses, CreatePlacementResponses, CreatePlacementRuleSetData, CreatePlacementRuleSetErrors, CreatePlacementRuleSetResponses, CreatePlanData, CreatePlanErrors, CreatePlanResponses, CreateProductData, CreateProductErrors, CreateProductResponses, CreateProjectData, CreateProjectErrors, CreateProjectResponses, CreateProviderConnectionData, CreateProviderConnectionErrors, CreateProviderConnectionResponses, CreateProviderMappingData, CreateProviderMappingDraftData, CreateProviderMappingDraftErrors, CreateProviderMappingDraftResponses, CreateProviderMappingErrors, CreateProviderMappingObservationData, CreateProviderMappingObservationErrors, CreateProviderMappingObservationResponses, CreateProviderMappingResponses, DeleteProductData, DeleteProductErrors, DeleteProductResponses, EnqueueProviderSyncData, EnqueueProviderSyncErrors, EnqueueProviderSyncResponses, GetActivePaywallDraftData, GetActivePaywallDraftErrors, GetActivePaywallDraftResponses, GetActiveProviderAssignmentData, GetActiveProviderAssignmentErrors, GetActiveProviderAssignmentResponses, GetAssetContentData, GetAssetContentErrors, GetAssetContentResponses, GetAssetData, GetAssetErrors, GetAssetResponses, GetAssetUsageData, GetAssetUsageErrors, GetAssetUsageResponses, GetEntitlementData, GetEntitlementErrors, GetEntitlementResponses, GetHealthData, GetHealthResponses, GetNativeProviderProfileData, GetNativeProviderProfileErrors, GetNativeProviderProfileResponses, GetOrganizationData, GetOrganizationErrors, GetOrganizationResponses, GetPaywallData, GetPaywallDraftData, GetPaywallDraftErrors, GetPaywallDraftResponses, GetPaywallErrors, GetPaywallResponses, GetPaywallVersionData, GetPaywallVersionErrors, GetPaywallVersionResponses, GetPlacementBindingData, GetPlacementBindingErrors, GetPlacementBindingResponses, GetPlacementDecisionData, GetPlacementDecisionErrors, GetPlacementDecisionResponses, GetPlacementUsageData, GetPlacementUsageErrors, GetPlacementUsageResponses, GetPlanData, GetPlanErrors, GetPlanResponses, GetProductData, GetProductErrors, GetProductReadinessData, GetProductReadinessErrors, GetProductReadinessResponses, GetProductResponses, GetProductUsageData, GetProductUsageErrors, GetProductUsageResponses, GetProjectData, GetProjectErrors, GetProjectResponses, GetProviderConnectionCapabilitiesData, GetProviderConnectionCapabilitiesErrors, GetProviderConnectionCapabilitiesResponses, GetProviderConnectionData, GetProviderConnectionErrors, GetProviderConnectionHealthData, GetProviderConnectionHealthErrors, GetProviderConnectionHealthResponses, GetProviderConnectionResponses, GetProviderMappingMetadataData, GetProviderMappingMetadataErrors, GetProviderMappingMetadataResponses, GetProviderMappingUsageData, GetProviderMappingUsageErrors, GetProviderMappingUsageResponses, GetProviderReadinessData, GetProviderReadinessErrors, GetProviderReadinessResponses, GetReadinessData, GetReadinessErrors, GetReadinessResponses, GetSdkCommerceConfigurationData, GetSdkCommerceConfigurationErrors, GetSdkCommerceConfigurationResponses, GetSdkConfigurationData, GetSdkConfigurationErrors, GetSdkConfigurationResponses, GetSessionData, GetSessionErrors, GetSessionResponses, ImportProviderProductsData, ImportProviderProductsErrors, ImportProviderProductsResponses, ListApiKeysData, ListApiKeysErrors, ListApiKeysResponses, ListApplicationsData, ListApplicationsErrors, ListApplicationsResponses, ListAssetsData, ListAssetsErrors, ListAssetsResponses, ListAuditEventsData, ListAuditEventsErrors, ListAuditEventsResponses, ListConfigurationReleasesData, ListConfigurationReleasesErrors, ListConfigurationReleasesResponses, ListEntitlementsData, ListEntitlementsErrors, ListEntitlementsResponses, ListEnvironmentsData, ListEnvironmentsErrors, ListEnvironmentsResponses, ListMembersData, ListMembersErrors, ListMembersResponses, ListOrganizationsData, ListOrganizationsErrors, ListOrganizationsResponses, ListPaywallsData, ListPaywallsErrors, ListPaywallsResponses, ListPaywallVersionsData, ListPaywallVersionsErrors, ListPaywallVersionsResponses, ListPlacementAliasesData, ListPlacementAliasesResponses, ListPlacementAttributesData, ListPlacementAttributesErrors, ListPlacementAttributesResponses, ListPlacementQaOverridesData, ListPlacementQaOverridesResponses, ListPlacementRuleSetVersionsData, ListPlacementRuleSetVersionsResponses, ListPlacementsData, ListPlacementsErrors, ListPlacementsResponses, ListPlanProductsData, ListPlanProductsErrors, ListPlanProductsResponses, ListPlansData, ListPlansErrors, ListPlansResponses, ListProductEntitlementsData, ListProductEntitlementsErrors, ListProductEntitlementsResponses, ListProductsData, ListProductsErrors, ListProductsResponses, ListProjectsData, ListProjectsErrors, ListProjectsResponses, ListProviderConnectionDiagnosticsData, ListProviderConnectionDiagnosticsErrors, ListProviderConnectionDiagnosticsResponses, ListProviderConnectionsData, ListProviderConnectionsErrors, ListProviderConnectionsResponses, ListProviderMappingObservationsData, ListProviderMappingObservationsErrors, ListProviderMappingObservationsResponses, ListProviderMappingsData, ListProviderMappingsErrors, ListProviderMappingsResponses, ListProviderSyncRunsData, ListProviderSyncRunsErrors, ListProviderSyncRunsResponses, LoginData, LoginErrors, LoginResponses, LogoutData, LogoutResponses, PreviewProviderCatalogData, PreviewProviderCatalogErrors, PreviewProviderCatalogResponses, PublishConfigurationData, PublishConfigurationErrors, PublishConfigurationResponses, PublishPlacementRuleSetData, PublishPlacementRuleSetErrors, PublishPlacementRuleSetResponses, ReconnectProviderConnectionData, ReconnectProviderConnectionErrors, ReconnectProviderConnectionResponses, RemoveMemberData, RemoveMemberErrors, RemoveMemberResponses, RemovePlanProductData, RemovePlanProductErrors, RemovePlanProductResponses, RemoveProductEntitlementData, RemoveProductEntitlementErrors, RemoveProductEntitlementResponses, ReplaceProviderConnectionScopesData, ReplaceProviderConnectionScopesErrors, ReplaceProviderConnectionScopesResponses, ReplaceProviderMappingData, ReplaceProviderMappingErrors, ReplaceProviderMappingResponses, RestoreProductData, RestoreProductErrors, RestoreProductResponses, RestoreProjectData, RestoreProjectErrors, RestoreProjectResponses, RevokeApiKeyData, RevokeApiKeyErrors, RevokeApiKeyResponses, RevokePlacementQaOverrideData, RevokePlacementQaOverrideErrors, RevokePlacementQaOverrideResponses, RevokeProviderConnectionData, RevokeProviderConnectionErrors, RevokeProviderConnectionResponses, RollbackConfigurationReleaseData, RollbackConfigurationReleaseErrors, RollbackConfigurationReleaseResponses, RotateApiKeyData, RotateApiKeyErrors, RotateApiKeyResponses, RotateProviderCredentialData, RotateProviderCredentialErrors, RotateProviderCredentialResponses, SetActiveProviderAssignmentData, SetActiveProviderAssignmentErrors, SetActiveProviderAssignmentResponses, SetEnvironmentModeData, SetEnvironmentModeErrors, SetEnvironmentModeResponses, SetProductReplacementData, SetProductReplacementErrors, SetProductReplacementResponses, SignUpData, SignUpErrors, SignUpResponses, SimulatePlacementDecisionData, SimulatePlacementDecisionErrors, SimulatePlacementDecisionResponses, TestProviderConnectionData, TestProviderConnectionErrors, TestProviderConnectionResponses, UpdateEntitlementData, UpdateEntitlementErrors, UpdateEntitlementResponses, UpdateEnvironmentData, UpdateEnvironmentErrors, UpdateEnvironmentResponses, UpdateMemberData, UpdateMemberErrors, UpdateMemberResponses, UpdateOrganizationData, UpdateOrganizationErrors, UpdateOrganizationResponses, UpdatePaywallData, UpdatePaywallDraftData, UpdatePaywallDraftErrors, UpdatePaywallDraftResponses, UpdatePaywallErrors, UpdatePaywallResponses, UpdatePlacementData, UpdatePlacementErrors, UpdatePlacementResponses, UpdatePlacementRuleSetDraftData, UpdatePlacementRuleSetDraftErrors, UpdatePlacementRuleSetDraftResponses, UpdatePlanData, UpdatePlanErrors, UpdatePlanResponses, UpdateProductData, UpdateProductErrors, UpdateProductResponses, UpdateProjectData, UpdateProjectErrors, UpdateProjectResponses, UploadAssetData, UploadAssetErrors, UploadAssetResponses, ValidatePaywallDraftData, ValidatePaywallDraftErrors, ValidatePaywallDraftResponses, ValidatePlacementRuleSetData, ValidatePlacementRuleSetResponses } from './types.gen';
 
 export type Options<TData extends TDataShape = TDataShape, ThrowOnError extends boolean = boolean, TResponse = unknown> = Options2<TData, ThrowOnError, TResponse> & {
     /**
@@ -1312,3 +1312,224 @@ export const getSdkCommerceConfiguration = <ThrowOnError extends boolean = false
  * Public immutable Asset bytes. The URL contains no storage key or credential.
  */
 export const getAssetContent = <ThrowOnError extends boolean = false>(options: Options<GetAssetContentData, ThrowOnError>): RequestResult<GetAssetContentResponses, GetAssetContentErrors, ThrowOnError> => (options.client ?? client).get<GetAssetContentResponses, GetAssetContentErrors, ThrowOnError>({ url: '/v1/sdk/assets/{assetId}/{contentDigest}', ...options });
+
+export const listPlacementAttributes = <ThrowOnError extends boolean = false>(options: Options<ListPlacementAttributesData, ThrowOnError>): RequestResult<ListPlacementAttributesResponses, ListPlacementAttributesErrors, ThrowOnError> => (options.client ?? client).get<ListPlacementAttributesResponses, ListPlacementAttributesErrors, ThrowOnError>({
+    security: [{
+            in: 'cookie',
+            name: 'mosaic_session',
+            type: 'apiKey'
+        }],
+    url: '/v1/projects/{projectId}/placement-attributes',
+    ...options
+});
+
+export const createPlacementAttribute = <ThrowOnError extends boolean = false>(options: Options<CreatePlacementAttributeData, ThrowOnError>): RequestResult<CreatePlacementAttributeResponses, CreatePlacementAttributeErrors, ThrowOnError> => (options.client ?? client).post<CreatePlacementAttributeResponses, CreatePlacementAttributeErrors, ThrowOnError>({
+    security: [{
+            in: 'cookie',
+            name: 'mosaic_session',
+            type: 'apiKey'
+        }],
+    url: '/v1/projects/{projectId}/placement-attributes',
+    ...options,
+    headers: {
+        'Content-Type': 'application/json',
+        ...options.headers
+    }
+});
+
+export const archivePlacementAttribute = <ThrowOnError extends boolean = false>(options: Options<ArchivePlacementAttributeData, ThrowOnError>): RequestResult<ArchivePlacementAttributeResponses, ArchivePlacementAttributeErrors, ThrowOnError> => (options.client ?? client).delete<ArchivePlacementAttributeResponses, ArchivePlacementAttributeErrors, ThrowOnError>({
+    security: [{
+            in: 'cookie',
+            name: 'mosaic_session',
+            type: 'apiKey'
+        }],
+    url: '/v1/projects/{projectId}/placement-attributes/{attributeId}',
+    ...options
+});
+
+export const getPlacementUsage = <ThrowOnError extends boolean = false>(options: Options<GetPlacementUsageData, ThrowOnError>): RequestResult<GetPlacementUsageResponses, GetPlacementUsageErrors, ThrowOnError> => (options.client ?? client).get<GetPlacementUsageResponses, GetPlacementUsageErrors, ThrowOnError>({
+    security: [{
+            in: 'cookie',
+            name: 'mosaic_session',
+            type: 'apiKey'
+        }],
+    url: '/v1/projects/{projectId}/placements/{placementId}/usage',
+    ...options
+});
+
+export const listPlacementAliases = <ThrowOnError extends boolean = false>(options: Options<ListPlacementAliasesData, ThrowOnError>): RequestResult<ListPlacementAliasesResponses, unknown, ThrowOnError> => (options.client ?? client).get<ListPlacementAliasesResponses, unknown, ThrowOnError>({
+    security: [{
+            in: 'cookie',
+            name: 'mosaic_session',
+            type: 'apiKey'
+        }],
+    url: '/v1/projects/{projectId}/placements/{placementId}/aliases',
+    ...options
+});
+
+export const createPlacementAlias = <ThrowOnError extends boolean = false>(options: Options<CreatePlacementAliasData, ThrowOnError>): RequestResult<CreatePlacementAliasResponses, CreatePlacementAliasErrors, ThrowOnError> => (options.client ?? client).post<CreatePlacementAliasResponses, CreatePlacementAliasErrors, ThrowOnError>({
+    security: [{
+            in: 'cookie',
+            name: 'mosaic_session',
+            type: 'apiKey'
+        }],
+    url: '/v1/projects/{projectId}/placements/{placementId}/aliases',
+    ...options,
+    headers: {
+        'Content-Type': 'application/json',
+        ...options.headers
+    }
+});
+
+export const archivePlacementWithUsageCheck = <ThrowOnError extends boolean = false>(options: Options<ArchivePlacementWithUsageCheckData, ThrowOnError>): RequestResult<ArchivePlacementWithUsageCheckResponses, ArchivePlacementWithUsageCheckErrors, ThrowOnError> => (options.client ?? client).post<ArchivePlacementWithUsageCheckResponses, ArchivePlacementWithUsageCheckErrors, ThrowOnError>({
+    security: [{
+            in: 'cookie',
+            name: 'mosaic_session',
+            type: 'apiKey'
+        }],
+    url: '/v1/projects/{projectId}/placements/{placementId}/archive',
+    ...options
+});
+
+export const getPlacementDecision = <ThrowOnError extends boolean = false>(options: Options<GetPlacementDecisionData, ThrowOnError>): RequestResult<GetPlacementDecisionResponses, GetPlacementDecisionErrors, ThrowOnError> => (options.client ?? client).get<GetPlacementDecisionResponses, GetPlacementDecisionErrors, ThrowOnError>({
+    security: [{
+            in: 'cookie',
+            name: 'mosaic_session',
+            type: 'apiKey'
+        }],
+    url: '/v1/projects/{projectId}/environments/{environmentId}/placements/{placementId}/rule-set',
+    ...options
+});
+
+export const createPlacementRuleSet = <ThrowOnError extends boolean = false>(options: Options<CreatePlacementRuleSetData, ThrowOnError>): RequestResult<CreatePlacementRuleSetResponses, CreatePlacementRuleSetErrors, ThrowOnError> => (options.client ?? client).post<CreatePlacementRuleSetResponses, CreatePlacementRuleSetErrors, ThrowOnError>({
+    security: [{
+            in: 'cookie',
+            name: 'mosaic_session',
+            type: 'apiKey'
+        }],
+    url: '/v1/projects/{projectId}/environments/{environmentId}/placements/{placementId}/rule-set',
+    ...options,
+    headers: {
+        'Content-Type': 'application/json',
+        ...options.headers
+    }
+});
+
+export const updatePlacementRuleSetDraft = <ThrowOnError extends boolean = false>(options: Options<UpdatePlacementRuleSetDraftData, ThrowOnError>): RequestResult<UpdatePlacementRuleSetDraftResponses, UpdatePlacementRuleSetDraftErrors, ThrowOnError> => (options.client ?? client).put<UpdatePlacementRuleSetDraftResponses, UpdatePlacementRuleSetDraftErrors, ThrowOnError>({
+    security: [{
+            in: 'cookie',
+            name: 'mosaic_session',
+            type: 'apiKey'
+        }],
+    url: '/v1/projects/{projectId}/environments/{environmentId}/placements/{placementId}/rule-sets/{ruleSetId}/draft',
+    ...options,
+    headers: {
+        'Content-Type': 'application/json',
+        ...options.headers
+    }
+});
+
+export const validatePlacementRuleSet = <ThrowOnError extends boolean = false>(options: Options<ValidatePlacementRuleSetData, ThrowOnError>): RequestResult<ValidatePlacementRuleSetResponses, unknown, ThrowOnError> => (options.client ?? client).post<ValidatePlacementRuleSetResponses, unknown, ThrowOnError>({
+    security: [{
+            in: 'cookie',
+            name: 'mosaic_session',
+            type: 'apiKey'
+        }],
+    url: '/v1/projects/{projectId}/environments/{environmentId}/placements/{placementId}/rule-sets/{ruleSetId}/validate',
+    ...options
+});
+
+export const publishPlacementRuleSet = <ThrowOnError extends boolean = false>(options: Options<PublishPlacementRuleSetData, ThrowOnError>): RequestResult<PublishPlacementRuleSetResponses, PublishPlacementRuleSetErrors, ThrowOnError> => (options.client ?? client).post<PublishPlacementRuleSetResponses, PublishPlacementRuleSetErrors, ThrowOnError>({
+    security: [{
+            in: 'cookie',
+            name: 'mosaic_session',
+            type: 'apiKey'
+        }],
+    url: '/v1/projects/{projectId}/environments/{environmentId}/placements/{placementId}/rule-sets/{ruleSetId}/publish',
+    ...options,
+    headers: {
+        'Content-Type': 'application/json',
+        ...options.headers
+    }
+});
+
+/**
+ * Archives the Rule Set and supersedes its active Draft while retaining immutable published versions. Only owners and admins may archive. Archived Rule Sets cannot be restored, edited, cloned, or published.
+ */
+export const archivePlacementRuleSet = <ThrowOnError extends boolean = false>(options: Options<ArchivePlacementRuleSetData, ThrowOnError>): RequestResult<ArchivePlacementRuleSetResponses, ArchivePlacementRuleSetErrors, ThrowOnError> => (options.client ?? client).post<ArchivePlacementRuleSetResponses, ArchivePlacementRuleSetErrors, ThrowOnError>({
+    security: [{
+            in: 'cookie',
+            name: 'mosaic_session',
+            type: 'apiKey'
+        }],
+    url: '/v1/projects/{projectId}/environments/{environmentId}/placements/{placementId}/rule-sets/{ruleSetId}/archive',
+    ...options
+});
+
+export const listPlacementRuleSetVersions = <ThrowOnError extends boolean = false>(options: Options<ListPlacementRuleSetVersionsData, ThrowOnError>): RequestResult<ListPlacementRuleSetVersionsResponses, unknown, ThrowOnError> => (options.client ?? client).get<ListPlacementRuleSetVersionsResponses, unknown, ThrowOnError>({
+    security: [{
+            in: 'cookie',
+            name: 'mosaic_session',
+            type: 'apiKey'
+        }],
+    url: '/v1/projects/{projectId}/environments/{environmentId}/placements/{placementId}/rule-sets/{ruleSetId}/versions',
+    ...options
+});
+
+export const clonePlacementRuleSetVersion = <ThrowOnError extends boolean = false>(options: Options<ClonePlacementRuleSetVersionData, ThrowOnError>): RequestResult<ClonePlacementRuleSetVersionResponses, ClonePlacementRuleSetVersionErrors, ThrowOnError> => (options.client ?? client).post<ClonePlacementRuleSetVersionResponses, ClonePlacementRuleSetVersionErrors, ThrowOnError>({
+    security: [{
+            in: 'cookie',
+            name: 'mosaic_session',
+            type: 'apiKey'
+        }],
+    url: '/v1/projects/{projectId}/environments/{environmentId}/placements/{placementId}/rule-sets/{ruleSetId}/versions/{versionId}/draft',
+    ...options
+});
+
+export const simulatePlacementDecision = <ThrowOnError extends boolean = false>(options: Options<SimulatePlacementDecisionData, ThrowOnError>): RequestResult<SimulatePlacementDecisionResponses, SimulatePlacementDecisionErrors, ThrowOnError> => (options.client ?? client).post<SimulatePlacementDecisionResponses, SimulatePlacementDecisionErrors, ThrowOnError>({
+    security: [{
+            in: 'cookie',
+            name: 'mosaic_session',
+            type: 'apiKey'
+        }],
+    url: '/v1/projects/{projectId}/environments/{environmentId}/placements/{placementId}/rule-sets/{ruleSetId}/simulate',
+    ...options,
+    headers: {
+        'Content-Type': 'application/json',
+        ...options.headers
+    }
+});
+
+export const listPlacementQaOverrides = <ThrowOnError extends boolean = false>(options: Options<ListPlacementQaOverridesData, ThrowOnError>): RequestResult<ListPlacementQaOverridesResponses, unknown, ThrowOnError> => (options.client ?? client).get<ListPlacementQaOverridesResponses, unknown, ThrowOnError>({
+    security: [{
+            in: 'cookie',
+            name: 'mosaic_session',
+            type: 'apiKey'
+        }],
+    url: '/v1/projects/{projectId}/environments/{environmentId}/placements/{placementId}/qa-overrides',
+    ...options
+});
+
+export const createPlacementQaOverride = <ThrowOnError extends boolean = false>(options: Options<CreatePlacementQaOverrideData, ThrowOnError>): RequestResult<CreatePlacementQaOverrideResponses, CreatePlacementQaOverrideErrors, ThrowOnError> => (options.client ?? client).post<CreatePlacementQaOverrideResponses, CreatePlacementQaOverrideErrors, ThrowOnError>({
+    security: [{
+            in: 'cookie',
+            name: 'mosaic_session',
+            type: 'apiKey'
+        }],
+    url: '/v1/projects/{projectId}/environments/{environmentId}/placements/{placementId}/qa-overrides',
+    ...options,
+    headers: {
+        'Content-Type': 'application/json',
+        ...options.headers
+    }
+});
+
+export const revokePlacementQaOverride = <ThrowOnError extends boolean = false>(options: Options<RevokePlacementQaOverrideData, ThrowOnError>): RequestResult<RevokePlacementQaOverrideResponses, RevokePlacementQaOverrideErrors, ThrowOnError> => (options.client ?? client).delete<RevokePlacementQaOverrideResponses, RevokePlacementQaOverrideErrors, ThrowOnError>({
+    security: [{
+            in: 'cookie',
+            name: 'mosaic_session',
+            type: 'apiKey'
+        }],
+    url: '/v1/projects/{projectId}/environments/{environmentId}/placements/{placementId}/qa-overrides/{overrideId}',
+    ...options
+});

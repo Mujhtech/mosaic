@@ -14,6 +14,7 @@ import (
 	"github.com/Mujhtech/mosaic/apps/api/internal/browserauth"
 	"github.com/Mujhtech/mosaic/apps/api/internal/cloudworkspace"
 	"github.com/Mujhtech/mosaic/apps/api/internal/hostedpublishing"
+	"github.com/Mujhtech/mosaic/apps/api/internal/placementdecision"
 	"github.com/Mujhtech/mosaic/apps/api/internal/platform/authn"
 	"github.com/Mujhtech/mosaic/apps/api/internal/platform/httpserver/httpmiddleware"
 	"github.com/Mujhtech/mosaic/apps/api/internal/platform/httpserver/response"
@@ -21,6 +22,7 @@ import (
 	cloudworkspacehttp "github.com/Mujhtech/mosaic/apps/api/internal/transport/cloudworkspace"
 	"github.com/Mujhtech/mosaic/apps/api/internal/transport/health"
 	hostedpublishinghttp "github.com/Mujhtech/mosaic/apps/api/internal/transport/hostedpublishing"
+	placementdecisionhttp "github.com/Mujhtech/mosaic/apps/api/internal/transport/placementdecision"
 )
 
 const (
@@ -54,6 +56,7 @@ type Config struct {
 type Dependencies struct {
 	CloudWorkspace    *cloudworkspace.Service
 	HostedPublishing  *hostedpublishing.Service
+	PlacementDecision *placementdecision.Service
 	PrincipalResolver authn.Resolver
 	ReadinessChecker  health.Checker
 	BrowserAuth       *browserauth.Service
@@ -82,7 +85,7 @@ func NewWithDependencies(cfg Config, logger zerolog.Logger, dependencies Depende
 	// Compatibility aliases retained for existing probes while documented callers migrate.
 	router.Mount("/health", health.LiveRoutes())
 	router.Mount("/ready", health.ReadyRoutes(dependencies.ReadinessChecker))
-	if dependencies.BrowserAuth != nil || dependencies.CloudWorkspace != nil || dependencies.HostedPublishing != nil {
+	if dependencies.BrowserAuth != nil || dependencies.CloudWorkspace != nil || dependencies.HostedPublishing != nil || dependencies.PlacementDecision != nil {
 		router.Route("/v1", func(versioned chi.Router) {
 			versioned.Use(trustedMutationOrigins(cfg.AllowedOrigins))
 			if dependencies.BrowserAuth != nil {
@@ -102,6 +105,9 @@ func NewWithDependencies(cfg Config, logger zerolog.Logger, dependencies Depende
 						}
 						if dependencies.HostedPublishing != nil {
 							hostedpublishinghttp.RegisterProjectRoutes(project, dependencies.HostedPublishing)
+						}
+						if dependencies.PlacementDecision != nil {
+							placementdecisionhttp.RegisterProjectRoutes(project, dependencies.PlacementDecision)
 						}
 					})
 				})

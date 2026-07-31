@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased
+
+- Add strict Configuration Delivery v2 and Placement Decision v1 acceptance.
+- Add offline deterministic targeting, exact rollout bucketing, explicit
+  no-Paywall/fallback decision results, and privacy-safe bounded traces.
+- Add actor-isolated app-install identity persistence, identify/reset APIs, and
+  atomic typed user attributes.
+
 ## 0.1.0-dev.5
 
 - Add version-matched CocoaPods specifications for `MosaicSDK` and the optional

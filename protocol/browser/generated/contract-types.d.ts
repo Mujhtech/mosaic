@@ -1504,6 +1504,291 @@ export type MosaicCommerceConfigurationV2 = {
   "configuration": MosaicCommerceConfigurationV2Configuration;
 };
 
+export type MosaicPlacementDecisionV1Identifier = string;
+
+export type MosaicPlacementDecisionV1Key = string;
+
+export type MosaicPlacementDecisionV1EnvironmentKey = string;
+
+export type MosaicPlacementDecisionV1UtcTimestamp = string;
+
+export type MosaicPlacementDecisionV1SafeLabel = string;
+
+export type MosaicPlacementDecisionV1TypedValue = {
+  "type": "string";
+  "value": string;
+} | {
+  "type": "boolean";
+  "value": boolean;
+} | {
+  "type": "number";
+  "value": number;
+} | {
+  "type": "timestamp";
+  "value": MosaicPlacementDecisionV1UtcTimestamp;
+} | {
+  "type": "semantic_version";
+  "value": string;
+} | {
+  "type": "string_list";
+  "value": Array<string>;
+};
+
+export type MosaicPlacementDecisionV1Source = {
+  "kind": "device.platform" | "device.os_version" | "application.version" | "application.locale" | "context.country" | "environment.id" | "environment.key" | "identity.user_present";
+} | {
+  "kind": "user_attribute";
+  "key": MosaicPlacementDecisionV1Key;
+} | {
+  "kind": "entitlement_state";
+  "key": MosaicPlacementDecisionV1Key;
+} | {
+  "kind": "product_availability" | "product_readiness";
+  "productId": MosaicPlacementDecisionV1Identifier;
+} | {
+  "kind": "provider_capability";
+  "capability": "product_loading" | "purchase" | "restore" | "entitlement_lookup";
+};
+
+export type MosaicPlacementDecisionV1Leaf = {
+  "type": "condition";
+  "source": MosaicPlacementDecisionV1Source;
+  "operator": "equals" | "not_equals" | "in" | "not_in" | "greater_than" | "greater_than_or_equal" | "less_than" | "less_than_or_equal" | "exists" | "does_not_exist" | "contains_any" | "contains_all" | "locale_matches";
+  "operand"?: MosaicPlacementDecisionV1TypedValue;
+};
+
+export type MosaicPlacementDecisionV1ConditionNode = MosaicPlacementDecisionV1Leaf | {
+  "type": "all" | "any";
+  "children": Array<MosaicPlacementDecisionV1ConditionNode>;
+} | {
+  "type": "not";
+  "child": MosaicPlacementDecisionV1ConditionNode;
+};
+
+export type MosaicPlacementDecisionV1Outcome = {
+  "type": "paywall";
+  "paywallVersionId": MosaicPlacementDecisionV1Identifier;
+  "unavailableFallbackKey"?: MosaicPlacementDecisionV1Key;
+} | {
+  "type": "no_paywall";
+} | {
+  "type": "fallback";
+  "key": MosaicPlacementDecisionV1Key;
+} | {
+  "type": "unavailable";
+  "reason": "no_safe_decision" | "configuration_incompatible" | "content_unavailable" | "commerce_unavailable";
+};
+
+export type MosaicPlacementDecisionV1Rollout = {
+  "algorithm": "sha256_length_prefixed_v1";
+  "thresholdBasisPoints": number;
+};
+
+export type MosaicPlacementDecisionV1Rule = {
+  "id": MosaicPlacementDecisionV1Identifier;
+  "priority": number;
+  "enabled": boolean;
+  "safeLabel"?: MosaicPlacementDecisionV1SafeLabel;
+  "conditions": MosaicPlacementDecisionV1ConditionNode;
+  "rollout"?: MosaicPlacementDecisionV1Rollout;
+  "outcome": MosaicPlacementDecisionV1Outcome;
+};
+
+export type MosaicPlacementDecisionV1Fallback = {
+  "key": MosaicPlacementDecisionV1Key;
+  "safeLabel"?: MosaicPlacementDecisionV1SafeLabel;
+  "outcome": MosaicPlacementDecisionV1Outcome;
+};
+
+export type MosaicPlacementDecisionV1AttributeDefinition = {
+  "key": MosaicPlacementDecisionV1Key;
+  "type": "string" | "boolean" | "number" | "timestamp" | "semantic_version" | "string_list";
+  "sensitivity": "standard" | "sensitive";
+  "allowedOperators": Array<"equals" | "not_equals" | "in" | "not_in" | "greater_than" | "greater_than_or_equal" | "less_than" | "less_than_or_equal" | "exists" | "does_not_exist" | "contains_any" | "contains_all">;
+};
+
+export type MosaicPlacementDecisionV1Compatibility = {
+  "requiredFeatures": Array<"condition.all" | "condition.any" | "condition.not" | "operator.contains_all" | "operator.contains_any" | "operator.does_not_exist" | "operator.equals" | "operator.exists" | "operator.greater_than" | "operator.greater_than_or_equal" | "operator.in" | "operator.less_than" | "operator.less_than_or_equal" | "operator.locale_matches" | "operator.not_equals" | "operator.not_in" | "outcome.fallback" | "outcome.no_paywall" | "outcome.paywall" | "outcome.unavailable" | "override.qa" | "source.application.locale" | "source.application.version" | "source.context.country" | "source.device.os_version" | "source.device.platform" | "source.entitlement_state" | "source.environment.id" | "source.environment.key" | "source.identity.user_present" | "source.product_availability" | "source.product_readiness" | "source.provider_capability" | "source.user_attribute">;
+  "bucketingAlgorithms": Array<"sha256_length_prefixed_v1">;
+};
+
+export type MosaicPlacementDecisionV1QaOverride = {
+  "id": MosaicPlacementDecisionV1Identifier;
+  "selectorDigest": string;
+  "safeLabel": MosaicPlacementDecisionV1SafeLabel;
+  "startsAt": MosaicPlacementDecisionV1UtcTimestamp;
+  "expiresAt": MosaicPlacementDecisionV1UtcTimestamp;
+  "outcome": MosaicPlacementDecisionV1Outcome;
+};
+
+export type MosaicPlacementDecisionV1RuleSet = {
+  "id": MosaicPlacementDecisionV1Identifier;
+  "version": number;
+  "projectId": MosaicPlacementDecisionV1Identifier;
+  "environmentId": MosaicPlacementDecisionV1Identifier;
+  "environmentKey": MosaicPlacementDecisionV1EnvironmentKey;
+  "placementId": MosaicPlacementDecisionV1Identifier;
+  "placementKey": MosaicPlacementDecisionV1Key;
+  "enabled": boolean;
+  "assignmentPolicy": "installation" | "identified_user" | "identified_user_or_installation";
+  "attributeDefinitions": Array<MosaicPlacementDecisionV1AttributeDefinition>;
+  "fallbacks": Array<MosaicPlacementDecisionV1Fallback>;
+  "rules": Array<MosaicPlacementDecisionV1Rule>;
+  "defaultOutcome": MosaicPlacementDecisionV1Outcome;
+  "qaOverrides": Array<MosaicPlacementDecisionV1QaOverride>;
+  "compatibility": MosaicPlacementDecisionV1Compatibility;
+};
+
+export type MosaicPlacementDecisionV1 = {
+  "placementDecisionVersion": "1";
+  "ruleSet": MosaicPlacementDecisionV1RuleSet;
+};
+
+export type MosaicConfigurationDeliveryV1Identifier = string;
+
+export type MosaicConfigurationDeliveryV1PlacementKey = string;
+
+export type MosaicConfigurationDeliveryV1EnvironmentKey = string;
+
+export type MosaicConfigurationDeliveryV1UtcTimestamp = string;
+
+export type MosaicConfigurationDeliveryV1Sha256Digest = string;
+
+export type MosaicConfigurationDeliveryV1ImmutableHttpsUrl = string;
+
+export type MosaicConfigurationDeliveryV1Environment = {
+  "id": MosaicConfigurationDeliveryV1Identifier;
+  "key": MosaicConfigurationDeliveryV1EnvironmentKey;
+};
+
+export type MosaicConfigurationDeliveryV1ProtocolCompatibility = {
+  "version": "0.2";
+  "requiredCapabilities": Array<MosaicPaywallV02RequiredCapability>;
+};
+
+export type MosaicConfigurationDeliveryV1ReleaseCompatibility = {
+  "paywallProtocols": Array<MosaicConfigurationDeliveryV1ProtocolCompatibility>;
+  "acceptance": "atomic";
+};
+
+export type MosaicConfigurationDeliveryV1PlacementBinding = {
+  "key": MosaicConfigurationDeliveryV1PlacementKey;
+  "paywallVersionId": MosaicConfigurationDeliveryV1Identifier;
+};
+
+export type MosaicConfigurationDeliveryV1AssetBinding = {
+  "documentAssetId": MosaicConfigurationDeliveryV1Identifier;
+  "assetReferenceId": MosaicConfigurationDeliveryV1Identifier;
+};
+
+export type MosaicConfigurationDeliveryV1PaywallVersion = {
+  "id": MosaicConfigurationDeliveryV1Identifier;
+  "paywallId": MosaicConfigurationDeliveryV1Identifier;
+  "protocolVersion": "0.2";
+  "documentDigest": MosaicConfigurationDeliveryV1Sha256Digest;
+  "document": MosaicPaywallV02Document;
+  "productReferenceIds": Array<MosaicConfigurationDeliveryV1Identifier>;
+  "assetBindings": Array<MosaicConfigurationDeliveryV1AssetBinding>;
+};
+
+export type MosaicConfigurationDeliveryV1ProductReference = {
+  "id": MosaicConfigurationDeliveryV1Identifier;
+  "type": "subscription" | "one_time_non_consumable";
+  "fallbackDisplayName": string;
+};
+
+export type MosaicConfigurationDeliveryV1AssetReference = {
+  "id": MosaicConfigurationDeliveryV1Identifier;
+  "kind": "image" | "video";
+  "mediaType": string;
+  "byteLength": number;
+  "contentDigest": MosaicConfigurationDeliveryV1Sha256Digest;
+  "url": MosaicConfigurationDeliveryV1ImmutableHttpsUrl;
+};
+
+export type MosaicConfigurationDeliveryV1Release = {
+  "id": MosaicConfigurationDeliveryV1Identifier;
+  "number": number;
+  "environment": MosaicConfigurationDeliveryV1Environment;
+  "publishedAt": MosaicConfigurationDeliveryV1UtcTimestamp;
+  "contentDigest": MosaicConfigurationDeliveryV1Sha256Digest;
+  "compatibility": MosaicConfigurationDeliveryV1ReleaseCompatibility;
+  "placements": Array<MosaicConfigurationDeliveryV1PlacementBinding>;
+  "paywallVersions": Array<MosaicConfigurationDeliveryV1PaywallVersion>;
+  "productReferences": Array<MosaicConfigurationDeliveryV1ProductReference>;
+  "assetReferences": Array<MosaicConfigurationDeliveryV1AssetReference>;
+};
+
+export type MosaicConfigurationDeliveryV1 = {
+  "configurationDeliveryVersion": "1";
+  "release": MosaicConfigurationDeliveryV1Release;
+};
+
+export type MosaicConfigurationDeliveryV2Identifier = MosaicConfigurationDeliveryV1Identifier;
+
+export type MosaicConfigurationDeliveryV2Key = string;
+
+export type MosaicConfigurationDeliveryV2Environment = {
+  "id": MosaicConfigurationDeliveryV2Identifier;
+  "key": string;
+  "mode": "development" | "staging" | "production";
+};
+
+export type MosaicConfigurationDeliveryV2DecisionFeature = "condition.all" | "condition.any" | "condition.not" | "operator.contains_all" | "operator.contains_any" | "operator.does_not_exist" | "operator.equals" | "operator.exists" | "operator.greater_than" | "operator.greater_than_or_equal" | "operator.in" | "operator.less_than" | "operator.less_than_or_equal" | "operator.locale_matches" | "operator.not_equals" | "operator.not_in" | "outcome.fallback" | "outcome.no_paywall" | "outcome.paywall" | "outcome.unavailable" | "override.qa" | "source.application.locale" | "source.application.version" | "source.context.country" | "source.device.os_version" | "source.device.platform" | "source.entitlement_state" | "source.environment.id" | "source.environment.key" | "source.identity.user_present" | "source.product_availability" | "source.product_readiness" | "source.provider_capability" | "source.user_attribute";
+
+export type MosaicConfigurationDeliveryV2PaywallVersion = MosaicConfigurationDeliveryV1PaywallVersion;
+
+export type MosaicConfigurationDeliveryV2AssetReference = MosaicConfigurationDeliveryV1AssetReference;
+
+export type MosaicConfigurationDeliveryV2ProductReference = {
+  "id": MosaicConfigurationDeliveryV2Identifier;
+  "type": "subscription" | "one_time_non_consumable";
+  "fallbackDisplayName": string;
+  "readiness": "ready" | "not_ready";
+};
+
+export type MosaicConfigurationDeliveryV2EntitlementReference = {
+  "id": MosaicConfigurationDeliveryV2Identifier;
+  "key": MosaicConfigurationDeliveryV2Key;
+};
+
+export type MosaicConfigurationDeliveryV2DecisionCompatibility = {
+  "version": "1";
+  "requiredFeatures": Array<MosaicConfigurationDeliveryV2DecisionFeature>;
+  "bucketingAlgorithms": Array<"sha256_length_prefixed_v1">;
+};
+
+export type MosaicConfigurationDeliveryV2PaywallCompatibility = {
+  "version": "0.2";
+  "requiredCapabilities": Array<MosaicPaywallV02RequiredCapability>;
+};
+
+export type MosaicConfigurationDeliveryV2Compatibility = {
+  "placementDecisionContracts": Array<MosaicConfigurationDeliveryV2DecisionCompatibility>;
+  "paywallProtocols": Array<MosaicConfigurationDeliveryV2PaywallCompatibility>;
+  "acceptance": "atomic";
+};
+
+export type MosaicConfigurationDeliveryV2Release = {
+  "id": MosaicConfigurationDeliveryV2Identifier;
+  "number": number;
+  "projectId": MosaicConfigurationDeliveryV2Identifier;
+  "environment": MosaicConfigurationDeliveryV2Environment;
+  "publishedAt": MosaicConfigurationDeliveryV1UtcTimestamp;
+  "contentDigest": MosaicConfigurationDeliveryV1Sha256Digest;
+  "compatibility": MosaicConfigurationDeliveryV2Compatibility;
+  "placementDecisions": Array<MosaicPlacementDecisionV1>;
+  "paywallVersions": Array<MosaicConfigurationDeliveryV2PaywallVersion>;
+  "productReferences": Array<MosaicConfigurationDeliveryV2ProductReference>;
+  "entitlementReferences": Array<MosaicConfigurationDeliveryV2EntitlementReference>;
+  "assetReferences": Array<MosaicConfigurationDeliveryV2AssetReference>;
+};
+
+export type MosaicConfigurationDeliveryV2 = {
+  "configurationDeliveryVersion": "2";
+  "release": MosaicConfigurationDeliveryV2Release;
+};
+
 export type MosaicPaywallDocument = MosaicPaywallV02Document;
 export type MosaicPreviewMessage = MosaicPreviewV02Message;
 export type MosaicLocalProject = MosaicLocalProjectV02;

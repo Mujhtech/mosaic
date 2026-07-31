@@ -110,7 +110,8 @@ final class MosaicIoConfigurationTransport
       ..headers.set('Mosaic-SDK-Version', mosaicFlutterSdkVersion)
       ..headers.set(
         'Mosaic-Configuration-Versions',
-        mosaicConfigurationDeliveryVersion,
+        '$mosaicConfigurationDeliveryVersion,'
+            '$mosaicConfigurationDeliveryVersionV2',
       )
       ..headers.set('Mosaic-Paywall-Protocol-Versions', mosaicProtocolVersion)
       ..headers.set(
@@ -153,8 +154,10 @@ final class MosaicIoConfigurationTransport
     final contentType = response.headers.contentType;
     if (contentType == null ||
         contentType.mimeType != 'application/vnd.mosaic.configuration+json' ||
-        contentType.parameters['version'] !=
-            mosaicConfigurationDeliveryVersion) {
+        !const <String>{
+          mosaicConfigurationDeliveryVersion,
+          mosaicConfigurationDeliveryVersionV2,
+        }.contains(contentType.parameters['version'])) {
       return const MosaicConfigurationFailedResponse(
         diagnosticCode: 'configuration.refresh.invalidContentType',
       );
@@ -186,4 +189,5 @@ Uri _configurationEndpoint(Uri baseUrl) {
 }
 
 const String _deliveryContentType =
+    'application/vnd.mosaic.configuration+json;version=2, '
     'application/vnd.mosaic.configuration+json;version=1';

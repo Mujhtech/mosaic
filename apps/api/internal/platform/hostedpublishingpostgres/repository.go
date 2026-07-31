@@ -145,11 +145,30 @@ func (r reader) Applications(projectID string) []hostedpublishing.Application {
 }
 
 func (r reader) Product(id string) (hostedpublishing.Product, bool) {
-	return one(r, `SELECT id,project_id,type,status,metadata_source,internal_name FROM products WHERE id=$1`, func(row pgx.Row) (hostedpublishing.Product, error) {
+	return one(r, `SELECT id,project_id,type,status,metadata_source,internal_name,readiness_ready FROM products WHERE id=$1`, func(row pgx.Row) (hostedpublishing.Product, error) {
 		var value hostedpublishing.Product
-		err := row.Scan(&value.ID, &value.ProjectID, &value.Type, &value.Status, &value.MetadataSource, &value.InternalName)
+		err := row.Scan(&value.ID, &value.ProjectID, &value.Type, &value.Status, &value.MetadataSource, &value.InternalName, &value.ReadinessReady)
 		return value, err
 	}, id)
+}
+
+func (r reader) PublishedDecisionVersions(environmentID string) []hostedpublishing.PublishedDecisionVersion {
+	return many(r, `SELECT version.id,version.placement_id,version.document_bytes FROM placement_rule_sets rule_set JOIN placement_rule_set_versions version ON version.id=rule_set.current_published_version_id JOIN placements placement ON placement.id=rule_set.placement_id WHERE rule_set.environment_id=$1 AND rule_set.status='active' AND placement.status='active' ORDER BY placement.key`, func(row pgx.Row) (hostedpublishing.PublishedDecisionVersion, error) {
+		var value hostedpublishing.PublishedDecisionVersion
+		return value, row.Scan(&value.ID, &value.PlacementID, &value.Document)
+	}, environmentID)
+}
+func (r reader) ReleaseDecisionVersions(releaseID string) []hostedpublishing.PublishedDecisionVersion {
+	return many(r, `SELECT version.id,version.placement_id,version.document_bytes FROM configuration_release_rule_set_versions reference JOIN placement_rule_set_versions version ON version.id=reference.rule_set_version_id WHERE reference.release_id=$1 ORDER BY version.placement_id`, func(row pgx.Row) (hostedpublishing.PublishedDecisionVersion, error) {
+		var value hostedpublishing.PublishedDecisionVersion
+		return value, row.Scan(&value.ID, &value.PlacementID, &value.Document)
+	}, releaseID)
+}
+func (r reader) EntitlementByKey(projectID, key string) (hostedpublishing.EntitlementReference, bool) {
+	return one(r, `SELECT id,key FROM entitlements WHERE project_id=$1 AND key=$2`, func(row pgx.Row) (hostedpublishing.EntitlementReference, error) {
+		var value hostedpublishing.EntitlementReference
+		return value, row.Scan(&value.ID, &value.Key)
+	}, projectID, key)
 }
 
 func (r reader) ProviderMappingCount(productID string) int {
@@ -541,6 +560,13 @@ func (r reader) Release(id string) (hostedpublishing.Release, bool) {
 	return one(r, `SELECT `+releaseColumns+` FROM configuration_releases WHERE id=$1`, scanRelease, id)
 }
 
+func (r reader) ReleaseRepresentation(releaseID, version string) (hostedpublishing.ReleaseRepresentation, bool) {
+	return one(r, `SELECT release_id,environment_id,delivery_contract_version,payload_bytes,content_hash,created_at FROM configuration_release_representations WHERE release_id=$1 AND delivery_contract_version=$2`, func(row pgx.Row) (hostedpublishing.ReleaseRepresentation, error) {
+		var value hostedpublishing.ReleaseRepresentation
+		return value, row.Scan(&value.ReleaseID, &value.EnvironmentID, &value.DeliveryContractVersion, &value.Payload, &value.ContentHash, &value.CreatedAt)
+	}, releaseID, version)
+}
+
 func (r reader) Releases(environmentID string) []hostedpublishing.Release {
 	return many(r, `SELECT `+releaseColumns+` FROM configuration_releases WHERE environment_id=$1 ORDER BY release_number DESC`, scanRelease, environmentID)
 }
@@ -699,6 +725,13 @@ func (t *transaction) SavePlacementBinding(value hostedpublishing.PlacementBindi
 
 func (t *transaction) SaveRelease(value hostedpublishing.Release) {
 	t.exec(`INSERT INTO configuration_releases(id,project_id,environment_id,release_number,delivery_contract_version,payload,payload_bytes,content_hash,source_release_id,rollback_source_release_id,published_by_actor_id,published_at) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)`, value.ID, value.ProjectID, value.EnvironmentID, value.ReleaseNumber, value.DeliveryContractVersion, value.Payload, []byte(value.Payload), value.ContentHash, nullable(value.SourceReleaseID), nullable(value.RollbackSourceReleaseID), value.PublishedByActorID, value.PublishedAt)
+}
+
+func (t *transaction) SaveReleaseRepresentation(value hostedpublishing.ReleaseRepresentation) {
+	t.exec(`INSERT INTO configuration_release_representations(release_id,environment_id,delivery_contract_version,payload,payload_bytes,content_hash,created_at) VALUES($1,$2,$3,$4,$5,$6,$7)`, value.ReleaseID, value.EnvironmentID, value.DeliveryContractVersion, string(value.Payload), []byte(value.Payload), value.ContentHash, value.CreatedAt)
+}
+func (t *transaction) SaveReleaseRuleSetVersion(releaseID, environmentID, projectID, versionID, placementID string) {
+	t.exec(`INSERT INTO configuration_release_rule_set_versions(release_id,environment_id,project_id,rule_set_version_id,placement_id) VALUES($1,$2,$3,$4,$5)`, releaseID, environmentID, projectID, versionID, placementID)
 }
 
 func (t *transaction) SaveReleasePlacement(value hostedpublishing.ReleasePlacement) {

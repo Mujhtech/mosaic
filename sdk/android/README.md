@@ -3,7 +3,7 @@
 The Android SDK strictly decodes Mosaic Protocol 0.2 and renders it with
 Jetpack Compose primitives. Local Preview uses the exact 0.2 contract.
 It uses provider-neutral commerce, a generated bundled fallback, and Hosted
-Configuration Delivery v1. RevenueCat support is isolated in the optional
+Configuration Delivery v1 and v2. RevenueCat support is isolated in the optional
 `:mosaic-revenuecat` module; the core `:mosaic` AAR has no RevenueCat or Play
 Billing dependency. Native Google Play support is isolated in the optional
 `:mosaic-google-play` module and consumes Commerce Configuration v2.
@@ -122,6 +122,48 @@ Each request advertises the full sorted Protocol 0.2 capability catalog as
 exact `name@version` pairs for backend compatibility validation.
 Diagnostics contain stable codes and safe messages, never SDK keys, response
 documents, or transport internals.
+
+### Advanced Placement decisions
+
+Delivery v2 is accepted atomically and evaluated locally. A rejected refresh
+keeps the last accepted v1 or v2 release, so `paywall()` and `MosaicPlacement`
+remain offline-capable and do not request configuration per presentation.
+Existing v1 calls remain source compatible:
+
+```kotlin
+when (val decision = hosted.decidePlacement("export_pdf", country = explicitCountry)) {
+    is MosaicPlacementDecisionResult.Available -> Unit
+    is MosaicPlacementDecisionResult.NoPaywall -> Unit
+    is MosaicPlacementDecisionResult.PlacementUnavailable -> Unit
+    is MosaicPlacementDecisionResult.EvaluationFailed -> inspect(decision.diagnosticCode, decision.trace)
+    MosaicPlacementDecisionResult.ConfigurationUnavailable -> Unit
+}
+```
+
+`country` is optional trusted host input and is never inferred from locale,
+timezone, currency, IP address, or device region. Evaluation uses exact
+priority, three-state conditions, semantic versions, RFC 4647 basic locale
+matching, named fallbacks, and `sha256_length_prefixed_v1`. Safe traces include
+rule/source metadata and buckets but never identity or attribute values,
+assignment keys, provider payloads, or override tokens.
+
+Identity is stored in the application's private no-backup directory. Its APIs
+are suspendable and serialized; no main-thread file access or global coroutine
+scope is used:
+
+```kotlin
+hosted.identify(
+    userId = applicationUserId,
+    attributes = mapOf("student" to MosaicTypedValue.BooleanValue(true)),
+)
+hosted.resetIdentity()             // retains installation ID
+hosted.resetInstallationIdentity() // explicitly rotates installation ID
+```
+
+Attribute updates are atomic, bounded, typed, and restricted to definitions in
+the accepted release. Identity reset also clears in-memory QA tokens, which are
+never persisted. `MosaicPlacement` evaluates before composing the existing
+native renderer and reuses the decision's Product-load snapshot.
 
 ## Commerce Configuration and providers
 

@@ -96,6 +96,18 @@ func deliveryFixtureData(named name: String = "valid-release.json") throws -> Da
   try Data(contentsOf: deliveryFixtureURL(named: name))
 }
 
+func phase5FixtureData(_ relativePath: String) throws -> Data {
+  let fileManager = FileManager.default
+  var directory = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
+  while directory.path != "/" {
+    let candidate = directory.appendingPathComponent("protocol/fixtures").appendingPathComponent(
+      relativePath)
+    if fileManager.fileExists(atPath: candidate.path) { return try Data(contentsOf: candidate) }
+    directory.deleteLastPathComponent()
+  }
+  throw CanonicalFixtureLookupError.notFound
+}
+
 func commerceConfigurationFixtureData(
   named name: String = "revenuecat-configuration.json"
 ) throws -> Data {

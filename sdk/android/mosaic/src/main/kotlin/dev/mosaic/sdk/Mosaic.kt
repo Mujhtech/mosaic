@@ -54,6 +54,12 @@ class Mosaic private constructor(
         applicationId = configuration.applicationId,
         configurablePurchaseProvider = purchaseProvider as? MosaicConfigurablePurchaseProvider,
         diagnostics = diagnostics,
+        identityStore = MosaicIdentityStore(
+            context,
+            mosaicConfigurationCacheNamespace(configuration),
+        ),
+        purchaseProvider = purchaseProvider,
+        applicationVersion = configuration.applicationVersion,
     )
 
     companion object {

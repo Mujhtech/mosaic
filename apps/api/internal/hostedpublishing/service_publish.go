@@ -12,6 +12,7 @@ import (
 	"github.com/rs/zerolog"
 	"go.opentelemetry.io/otel/attribute"
 
+	"github.com/Mujhtech/mosaic/apps/api/internal/placementdecision"
 	"github.com/Mujhtech/mosaic/apps/api/internal/providerreadiness"
 )
 
@@ -45,6 +46,12 @@ type deliveryRelease struct {
 type deliveryEnvironment struct {
 	ID  string `json:"id"`
 	Key string `json:"key"`
+}
+
+type deliveryV2Environment struct {
+	ID   string `json:"id"`
+	Key  string `json:"key"`
+	Mode string `json:"mode"`
 }
 
 type deliveryCompatibility struct {
@@ -236,6 +243,51 @@ func (s *Service) Publish(ctx context.Context, actor Actor, command PublishComma
 		if !publishedDraft {
 			return ErrPlacementUnpublished
 		}
+		decisionVersions := tx.PublishedDecisionVersions(environment.ID)
+		entitlements := make(map[string]EntitlementReference)
+		for _, decisionVersion := range decisionVersions {
+			decision, _, _, err := placementdecision.Canonicalize(decisionVersion.Document)
+			if err != nil || decision.ProjectID != project.ID || decision.EnvironmentID != environment.ID || decision.PlacementID != decisionVersion.PlacementID {
+				return &ValidationError{Errors: []string{"placement_decision_invalid"}}
+			}
+			paywallIDs, productIDs, entitlementKeys := decisionReferences(decision)
+			for _, paywallVersionID := range paywallIDs {
+				if _, exists := versions[paywallVersionID]; exists {
+					continue
+				}
+				selected, ok := tx.PaywallVersion(paywallVersionID)
+				if !ok || selected.ProjectID != project.ID || selected.EnvironmentID != environment.ID {
+					return &ValidationError{Errors: []string{"placement_decision_paywall_invalid"}}
+				}
+				selected.ProductIDs, selected.Assets = tx.VersionProducts(selected.ID), tx.VersionAssets(selected.ID)
+				versions[selected.ID] = selected
+				productIDs = append(productIDs, selected.ProductIDs...)
+				for _, binding := range selected.Assets {
+					asset, ok := tx.Asset(binding.AssetID)
+					if !ok || asset.ProjectID != project.ID || asset.Status != "ready" {
+						return ErrAssetNotReady
+					}
+					assets[asset.ID] = asset
+				}
+			}
+			for _, productID := range uniqueStrings(productIDs) {
+				if _, exists := products[productID]; exists {
+					continue
+				}
+				product, ok := tx.Product(productID)
+				if !ok || product.ProjectID != project.ID || product.Status == "archived" {
+					return ErrProductInvalid
+				}
+				products[product.ID] = product
+			}
+			for _, key := range uniqueStrings(entitlementKeys) {
+				entitlement, ok := tx.EntitlementByKey(project.ID, key)
+				if !ok {
+					return &ValidationError{Errors: []string{"placement_decision_entitlement_invalid"}}
+				}
+				entitlements[key] = entitlement
+			}
+		}
 		for _, product := range products {
 			if product.MetadataSource != "mock" {
 				continue
@@ -274,7 +326,27 @@ func (s *Service) Publish(ctx context.Context, actor Actor, command PublishComma
 			DeliveryContractVersion: DeliveryVersion, Payload: payload, ContentHash: contentHash,
 			SourceReleaseID: state.CurrentReleaseID, PublishedByActorID: actor.ID, PublishedAt: now,
 		}
+		if len(decisionVersions) != 0 {
+			release.DeliveryContractVersion = "2"
+		}
 		tx.SaveRelease(release)
+		if projected, safe := projectDeliveryV1Placements(resolved, decisionVersions); safe {
+			v1Payload, v1Hash, err := buildDeliveryPayload(releaseID, releaseNumber, environment, now, projected, versions, products, assets)
+			if err != nil {
+				return err
+			}
+			tx.SaveReleaseRepresentation(ReleaseRepresentation{ReleaseID: release.ID, EnvironmentID: environment.ID, DeliveryContractVersion: "1", Payload: v1Payload, ContentHash: v1Hash, CreatedAt: now})
+		}
+		if len(decisionVersions) != 0 {
+			v2Payload, v2Hash, err := buildDeliveryV2Payload(payload, project.ID, environment.Mode, decisionVersions, products, entitlements)
+			if err != nil {
+				return err
+			}
+			tx.SaveReleaseRepresentation(ReleaseRepresentation{ReleaseID: release.ID, EnvironmentID: environment.ID, DeliveryContractVersion: "2", Payload: v2Payload, ContentHash: v2Hash, CreatedAt: now})
+			for _, decisionVersion := range decisionVersions {
+				tx.SaveReleaseRuleSetVersion(release.ID, environment.ID, project.ID, decisionVersion.ID, decisionVersion.PlacementID)
+			}
+		}
 		for index := range resolved {
 			resolved[index].ReleaseID = release.ID
 			tx.SaveReleasePlacement(resolved[index])
@@ -631,6 +703,223 @@ func buildDeliveryPayload(releaseID string, releaseNumber int64, environment Env
 	return payload, digestString(string(payload)), nil
 }
 
+func decisionReferences(document placementdecision.Document) (paywallVersionIDs, productIDs, entitlementKeys []string) {
+	visitOutcome := func(outcome placementdecision.Outcome) {
+		if outcome.Type == "paywall" {
+			paywallVersionIDs = append(paywallVersionIDs, outcome.PaywallVersionID)
+		}
+	}
+	visitOutcome(document.DefaultOutcome)
+	for _, fallback := range document.Fallbacks {
+		visitOutcome(fallback.Outcome)
+	}
+	for _, override := range document.QAOverrides {
+		visitOutcome(override.Outcome)
+	}
+	var visitCondition func(placementdecision.Condition)
+	visitCondition = func(condition placementdecision.Condition) {
+		if condition.Type == "condition" {
+			switch condition.Source.Kind {
+			case "product_availability", "product_readiness":
+				productIDs = append(productIDs, condition.Source.ProductID)
+			case "entitlement_state":
+				entitlementKeys = append(entitlementKeys, condition.Source.Key)
+			}
+			return
+		}
+		if condition.Child != nil {
+			visitCondition(*condition.Child)
+		}
+		for _, child := range condition.Children {
+			visitCondition(child)
+		}
+	}
+	for _, rule := range document.Rules {
+		visitOutcome(rule.Outcome)
+		visitCondition(rule.Condition)
+	}
+	return uniqueStrings(paywallVersionIDs), uniqueStrings(productIDs), uniqueStrings(entitlementKeys)
+}
+
+func safeV1Projection(decisions []PublishedDecisionVersion) bool {
+	_, safe := projectDeliveryV1Placements(nil, decisions)
+	return safe
+}
+
+func projectDeliveryV1Placements(legacy []ReleasePlacement, decisions []PublishedDecisionVersion) ([]ReleasePlacement, bool) {
+	projected := make(map[string]ReleasePlacement, len(legacy)+len(decisions))
+	for _, placement := range legacy {
+		projected[placement.PlacementID] = placement
+	}
+	for _, version := range decisions {
+		document, _, _, err := placementdecision.Canonicalize(version.Document)
+		if err != nil || document.DefaultOutcome.Type != "paywall" {
+			return nil, false
+		}
+		projected[document.PlacementID] = ReleasePlacement{ProjectID: document.ProjectID, EnvironmentID: document.EnvironmentID, PlacementID: document.PlacementID, PlacementKey: document.PlacementKey, PaywallVersionID: document.DefaultOutcome.PaywallVersionID}
+	}
+	result := make([]ReleasePlacement, 0, len(projected))
+	for _, placement := range projected {
+		result = append(result, placement)
+	}
+	sortPlacements(result)
+	return result, true
+}
+
+type deliveryV2Envelope struct {
+	ConfigurationDeliveryVersion string            `json:"configurationDeliveryVersion"`
+	Release                      deliveryV2Release `json:"release"`
+}
+type deliveryV2Release struct {
+	ID                    string                  `json:"id"`
+	Number                int64                   `json:"number"`
+	ProjectID             string                  `json:"projectId"`
+	Environment           deliveryV2Environment   `json:"environment"`
+	PublishedAt           string                  `json:"publishedAt"`
+	ContentDigest         string                  `json:"contentDigest"`
+	Compatibility         deliveryV2Compatibility `json:"compatibility"`
+	PlacementDecisions    []json.RawMessage       `json:"placementDecisions"`
+	PaywallVersions       []deliveryVersion       `json:"paywallVersions"`
+	ProductReferences     []deliveryV2Product     `json:"productReferences"`
+	EntitlementReferences []EntitlementReference  `json:"entitlementReferences"`
+	AssetReferences       []deliveryAsset         `json:"assetReferences"`
+}
+type deliveryV2Compatibility struct {
+	PlacementDecisionContracts []deliveryDecisionCompatibility `json:"placementDecisionContracts"`
+	PaywallProtocols           []deliveryProtocolCompatibility `json:"paywallProtocols"`
+	Acceptance                 string                          `json:"acceptance"`
+}
+type deliveryDecisionCompatibility struct {
+	Version             string   `json:"version"`
+	RequiredFeatures    []string `json:"requiredFeatures"`
+	BucketingAlgorithms []string `json:"bucketingAlgorithms"`
+}
+type deliveryV2Product struct {
+	ID                  string `json:"id"`
+	Type                string `json:"type"`
+	FallbackDisplayName string `json:"fallbackDisplayName"`
+	Readiness           string `json:"readiness"`
+}
+
+func buildDeliveryV2Payload(v1Payload json.RawMessage, projectID, environmentMode string, decisions []PublishedDecisionVersion, products map[string]Product, entitlements map[string]EntitlementReference) (json.RawMessage, string, error) {
+	var v1 deliveryEnvelope
+	if err := json.Unmarshal(v1Payload, &v1); err != nil {
+		return nil, "", err
+	}
+	decisionDocuments := make([]json.RawMessage, 0, len(decisions))
+	featureSet := map[string]struct{}{}
+	algorithmSet := map[string]struct{}{}
+	requiredPaywalls := map[string]struct{}{}
+	requiredProducts := map[string]struct{}{}
+	for _, version := range decisions {
+		document, canonical, _, err := placementdecision.Canonicalize(version.Document)
+		if err != nil {
+			return nil, "", err
+		}
+		decisionDocuments = append(decisionDocuments, canonical)
+		paywalls, conditionProducts, _ := decisionReferences(document)
+		for _, id := range paywalls {
+			requiredPaywalls[id] = struct{}{}
+		}
+		for _, id := range conditionProducts {
+			requiredProducts[id] = struct{}{}
+		}
+		compatibility := placementdecision.DeriveCompatibility(document)
+		for _, feature := range compatibility.RequiredFeatures {
+			featureSet[feature] = struct{}{}
+		}
+		for _, algorithm := range compatibility.RequiredBucketingAlgorithms {
+			algorithmSet[algorithm] = struct{}{}
+		}
+	}
+	features := make([]string, 0, len(featureSet))
+	for value := range featureSet {
+		features = append(features, value)
+	}
+	sort.Strings(features)
+	algorithms := make([]string, 0, len(algorithmSet))
+	for value := range algorithmSet {
+		algorithms = append(algorithms, value)
+	}
+	sort.Strings(algorithms)
+	deliveryPaywalls := make([]deliveryVersion, 0, len(requiredPaywalls))
+	requiredAssets := map[string]struct{}{}
+	requiredCapabilities := map[string]deliveryRequiredCapability{}
+	for _, version := range v1.Release.PaywallVersions {
+		if _, ok := requiredPaywalls[version.ID]; !ok {
+			continue
+		}
+		deliveryPaywalls = append(deliveryPaywalls, version)
+		for _, id := range version.ProductReferenceIDs {
+			requiredProducts[id] = struct{}{}
+		}
+		for _, binding := range version.AssetBindings {
+			requiredAssets[binding.AssetReferenceID] = struct{}{}
+		}
+		capabilities, err := documentRequiredCapabilities(version.Document)
+		if err != nil {
+			return nil, "", err
+		}
+		for _, capability := range capabilities {
+			requiredCapabilities[capability.Name+"@"+capability.Version] = capability
+		}
+	}
+	capabilityValues := make([]deliveryRequiredCapability, 0, len(requiredCapabilities))
+	for _, capability := range requiredCapabilities {
+		capabilityValues = append(capabilityValues, capability)
+	}
+	sort.Slice(capabilityValues, func(i, j int) bool {
+		return capabilityValues[i].Name+capabilityValues[i].Version < capabilityValues[j].Name+capabilityValues[j].Version
+	})
+	productValues := make([]Product, 0, len(requiredProducts))
+	for _, product := range products {
+		if _, ok := requiredProducts[product.ID]; ok {
+			productValues = append(productValues, product)
+		}
+	}
+	sort.Slice(productValues, func(i, j int) bool { return productValues[i].ID < productValues[j].ID })
+	deliveryProducts := make([]deliveryV2Product, 0, len(productValues))
+	for _, product := range productValues {
+		readiness := "not_ready"
+		if product.ReadinessReady {
+			readiness = "ready"
+		}
+		deliveryProducts = append(deliveryProducts, deliveryV2Product{ID: product.ID, Type: product.Type, FallbackDisplayName: product.InternalName, Readiness: readiness})
+	}
+	entitlementValues := make([]EntitlementReference, 0, len(entitlements))
+	for _, value := range entitlements {
+		entitlementValues = append(entitlementValues, value)
+	}
+	sort.Slice(entitlementValues, func(i, j int) bool { return entitlementValues[i].Key < entitlementValues[j].Key })
+	deliveryAssets := make([]deliveryAsset, 0, len(requiredAssets))
+	for _, asset := range v1.Release.AssetReferences {
+		if _, ok := requiredAssets[asset.ID]; ok {
+			deliveryAssets = append(deliveryAssets, asset)
+		}
+	}
+	paywallProtocols := []deliveryProtocolCompatibility{{Version: ProtocolVersion, RequiredCapabilities: capabilityValues}}
+	envelope := deliveryV2Envelope{ConfigurationDeliveryVersion: "2", Release: deliveryV2Release{ID: v1.Release.ID, Number: v1.Release.Number, ProjectID: projectID, Environment: deliveryV2Environment{ID: v1.Release.Environment.ID, Key: v1.Release.Environment.Key, Mode: environmentMode}, PublishedAt: v1.Release.PublishedAt, Compatibility: deliveryV2Compatibility{PlacementDecisionContracts: []deliveryDecisionCompatibility{{Version: "1", RequiredFeatures: features, BucketingAlgorithms: algorithms}}, PaywallProtocols: paywallProtocols, Acceptance: "atomic"}, PlacementDecisions: decisionDocuments, PaywallVersions: deliveryPaywalls, ProductReferences: deliveryProducts, EntitlementReferences: entitlementValues, AssetReferences: deliveryAssets}}
+	material, err := json.Marshal(envelope.Release)
+	if err != nil {
+		return nil, "", err
+	}
+	var canonicalMaterial map[string]any
+	if err := json.Unmarshal(material, &canonicalMaterial); err != nil {
+		return nil, "", err
+	}
+	delete(canonicalMaterial, "contentDigest")
+	canonicalBytes, err := canonicalJSON(canonicalMaterial)
+	if err != nil {
+		return nil, "", err
+	}
+	envelope.Release.ContentDigest = "sha256:" + digestString(string(canonicalBytes))
+	payload, err := json.Marshal(envelope)
+	if err != nil {
+		return nil, "", err
+	}
+	return payload, digestString(string(payload)), nil
+}
+
 func documentRequiredCapabilities(document json.RawMessage) ([]deliveryRequiredCapability, error) {
 	var value struct {
 		Compatibility struct {
@@ -732,8 +1021,38 @@ func (s *Service) Rollback(ctx context.Context, actor Actor, projectID, environm
 		if err != nil {
 			return err
 		}
-		result = Release{ID: releaseID, ProjectID: project.ID, EnvironmentID: environment.ID, ReleaseNumber: releaseNumber, DeliveryContractVersion: DeliveryVersion, Payload: payload, ContentHash: contentHash, SourceReleaseID: state.CurrentReleaseID, RollbackSourceReleaseID: target.ID, PublishedByActorID: actor.ID, PublishedAt: now}
+		result = Release{ID: releaseID, ProjectID: project.ID, EnvironmentID: environment.ID, ReleaseNumber: releaseNumber, DeliveryContractVersion: target.DeliveryContractVersion, Payload: payload, ContentHash: contentHash, SourceReleaseID: state.CurrentReleaseID, RollbackSourceReleaseID: target.ID, PublishedByActorID: actor.ID, PublishedAt: now}
 		tx.SaveRelease(result)
+		safeTargetV1 := target.DeliveryContractVersion == "1"
+		v1SourcePayload := target.Payload
+		if target.DeliveryContractVersion == "2" {
+			var targetV1 ReleaseRepresentation
+			targetV1, safeTargetV1 = tx.ReleaseRepresentation(target.ID, "1")
+			if safeTargetV1 {
+				v1SourcePayload = targetV1.Payload
+			}
+		}
+		if safeTargetV1 {
+			v1Payload, v1Hash, err := cloneDeliveryPayload(v1SourcePayload, result.ID, releaseNumber, now)
+			if err != nil {
+				return err
+			}
+			tx.SaveReleaseRepresentation(ReleaseRepresentation{ReleaseID: result.ID, EnvironmentID: environment.ID, DeliveryContractVersion: "1", Payload: v1Payload, ContentHash: v1Hash, CreatedAt: now})
+		}
+		if target.DeliveryContractVersion == "2" {
+			targetV2, ok := tx.ReleaseRepresentation(target.ID, "2")
+			if !ok {
+				return ErrUnsupportedCapability
+			}
+			v2Payload, v2Hash, err := cloneDeliveryV2Payload(targetV2.Payload, result.ID, releaseNumber, now)
+			if err != nil {
+				return err
+			}
+			tx.SaveReleaseRepresentation(ReleaseRepresentation{ReleaseID: result.ID, EnvironmentID: environment.ID, DeliveryContractVersion: "2", Payload: v2Payload, ContentHash: v2Hash, CreatedAt: now})
+			for _, decisionVersion := range tx.ReleaseDecisionVersions(target.ID) {
+				tx.SaveReleaseRuleSetVersion(result.ID, environment.ID, project.ID, decisionVersion.ID, decisionVersion.PlacementID)
+			}
+		}
 		for index := range placements {
 			placements[index].ReleaseID = result.ID
 			tx.SaveReleasePlacement(placements[index])
@@ -782,6 +1101,33 @@ func cloneDeliveryPayload(target json.RawMessage, releaseID string, releaseNumbe
 	envelope.Release.Number = releaseNumber
 	envelope.Release.PublishedAt = publishedAt.UTC().Format(time.RFC3339Nano)
 	envelope.Release.ContentDigest = ""
+	material, err := json.Marshal(envelope.Release)
+	if err != nil {
+		return nil, "", err
+	}
+	var canonicalMaterial map[string]any
+	if err := json.Unmarshal(material, &canonicalMaterial); err != nil {
+		return nil, "", err
+	}
+	delete(canonicalMaterial, "contentDigest")
+	canonicalBytes, err := canonicalJSON(canonicalMaterial)
+	if err != nil {
+		return nil, "", err
+	}
+	envelope.Release.ContentDigest = "sha256:" + digestString(string(canonicalBytes))
+	payload, err := json.Marshal(envelope)
+	if err != nil {
+		return nil, "", err
+	}
+	return payload, digestString(string(payload)), nil
+}
+
+func cloneDeliveryV2Payload(target json.RawMessage, releaseID string, releaseNumber int64, publishedAt time.Time) (json.RawMessage, string, error) {
+	var envelope deliveryV2Envelope
+	if err := json.Unmarshal(target, &envelope); err != nil || envelope.ConfigurationDeliveryVersion != "2" {
+		return nil, "", ErrUnsupportedCapability
+	}
+	envelope.Release.ID, envelope.Release.Number, envelope.Release.PublishedAt, envelope.Release.ContentDigest = releaseID, releaseNumber, publishedAt.UTC().Format(time.RFC3339Nano), ""
 	material, err := json.Marshal(envelope.Release)
 	if err != nil {
 		return nil, "", err

@@ -39,6 +39,7 @@ void main() {
         'configurationUnavailable',
         'purchaseFailed',
         'renderingFailed',
+        'noPaywall',
       ],
     );
   });

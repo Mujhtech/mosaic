@@ -7,6 +7,28 @@ import {
 import type { HostedPublishingAdapter } from "@/features/publishing/api/hosted-publishing-adapter"
 
 describe("Placement creation and Environment binding", () => {
+  it("creates a Placement without forcing a default Paywall binding", async () => {
+    const placement = {
+      id: "placement_unbound",
+      key: "export_pdf",
+      name: "Export PDF",
+      status: "active" as const,
+    }
+    const adapter = {
+      bindPlacement: vi.fn(),
+      createPlacement: vi.fn().mockResolvedValue(placement),
+    } as unknown as HostedPublishingAdapter
+
+    await expect(
+      createPlacementAndBind(
+        { key: placement.key, name: placement.name },
+        { environmentId: "env_01", projectId: "project_01" },
+        adapter,
+      ),
+    ).resolves.toEqual(placement)
+    expect(adapter.bindPlacement).not.toHaveBeenCalled()
+  })
+
   it("retries binding against the Placement preserved after a partial failure", async () => {
     const placement = {
       id: "placement_01",

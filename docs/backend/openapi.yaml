@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Mosaic API
-  version: 0.6.0-phase4a
+  version: 0.7.0-phase5
   description: |
     Hosted workspace, provider foundation, publishing, Asset, browser-session, and SDK-delivery API.
     RevenueCat server-connected integrations use least-privilege v2 secret keys. Secrets
@@ -1258,18 +1258,21 @@ paths:
       parameters:
         - { in: header, name: Mosaic-SDK-Platform, required: true, schema: { type: string, enum: [flutter, ios, android] } }
         - { in: header, name: Mosaic-SDK-Version, required: true, schema: { type: string, minLength: 1, maxLength: 64, pattern: "^[0-9]+\\.[0-9]+(?:\\.[0-9]+)?(?:[-+][A-Za-z0-9.-]+)?$" } }
-        - { in: header, name: Mosaic-Configuration-Versions, required: true, schema: { type: string, const: "1" } }
+        - { in: header, name: Mosaic-Configuration-Versions, required: true, schema: { type: string, pattern: "^(1|2)(, ?(1|2))*$" } }
         - { in: header, name: Mosaic-Paywall-Protocol-Versions, required: true, schema: { type: string, const: "0.2" } }
         - in: header
           name: Mosaic-Paywall-Capabilities
           required: true
           description: Comma-separated unique exact Protocol capability pairs (`name@0.2`), bounded to 128 pairs. The selected Release is returned only when every required pair is reported.
           schema: { type: string, minLength: 1, maxLength: 16384, example: "component.text@0.2,layout.stack@0.2" }
+        - { in: header, name: Mosaic-Placement-Decision-Versions, required: false, schema: { type: string, pattern: "^1$" } }
+        - { in: header, name: Mosaic-Decision-Features, required: false, description: Comma-separated exact Placement Decision v1 feature identifiers., schema: { type: string, maxLength: 16384 } }
+        - { in: header, name: Mosaic-Bucketing-Algorithms, required: false, schema: { type: string, enum: [sha256_length_prefixed_v1] } }
         - { in: header, name: Mosaic-App-Version, required: false, schema: { type: string, minLength: 1, maxLength: 64 } }
         - { in: header, name: If-None-Match, required: false, schema: { type: string } }
       responses:
         "200":
-          description: Complete immutable Configuration Delivery v1 envelope.
+          description: Highest mutually supported immutable Configuration Delivery v2 or safe v1 projection. A v1 candidate is withheld when an advanced Placement lacks an explicit Paywall default.
           headers:
             ETag: { schema: { type: string } }
             Cache-Control: { schema: { type: string } }
@@ -1344,6 +1347,124 @@ paths:
             video/mp4: { schema: { type: string, format: binary } }
         "404": { $ref: "#/components/responses/Error" }
         "503": { $ref: "#/components/responses/Error" }
+  /v1/projects/{projectId}/placement-attributes:
+    parameters: [{ $ref: "#/components/parameters/ProjectID" }]
+    get:
+      operationId: listPlacementAttributes
+      tags: [Placement Decisions]
+      responses: { "200": { description: Project attribute allow-list., content: { application/json: { schema: { $ref: "#/components/schemas/PlacementAttributeListEnvelope" } } } }, "401": { $ref: "#/components/responses/Error" }, "403": { $ref: "#/components/responses/Error" } }
+    post:
+      operationId: createPlacementAttribute
+      tags: [Placement Decisions]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/CreatePlacementAttributeRequest" } } } }
+      responses: { "201": { description: Attribute definition created., content: { application/json: { schema: { $ref: "#/components/schemas/PlacementAttributeEnvelope" } } } }, "409": { $ref: "#/components/responses/Error" }, "422": { $ref: "#/components/responses/Error" } }
+  /v1/projects/{projectId}/placement-attributes/{attributeId}:
+    parameters: [{ $ref: "#/components/parameters/ProjectID" }, { name: attributeId, in: path, required: true, schema: { type: string } }]
+    delete:
+      operationId: archivePlacementAttribute
+      tags: [Placement Decisions]
+      responses: { "204": { description: Attribute definition archived. }, "404": { $ref: "#/components/responses/Error" }, "409": { $ref: "#/components/responses/Error" } }
+  /v1/projects/{projectId}/placements/{placementId}/usage:
+    parameters: [{ $ref: "#/components/parameters/ProjectID" }, { $ref: "#/components/parameters/PlacementID" }]
+    get:
+      operationId: getPlacementUsage
+      tags: [Placement Decisions]
+      responses: { "200": { description: Placement usage., content: { application/json: { schema: { $ref: "#/components/schemas/PlacementUsageEnvelope" } } } }, "404": { $ref: "#/components/responses/Error" } }
+  /v1/projects/{projectId}/placements/{placementId}/aliases:
+    parameters: [{ $ref: "#/components/parameters/ProjectID" }, { $ref: "#/components/parameters/PlacementID" }]
+    get:
+      operationId: listPlacementAliases
+      tags: [Placement Decisions]
+      responses: { "200": { description: Placement aliases., content: { application/json: { schema: { $ref: "#/components/schemas/PlacementAliasListEnvelope" } } } } }
+    post:
+      operationId: createPlacementAlias
+      tags: [Placement Decisions]
+      requestBody: { required: true, content: { application/json: { schema: { type: object, additionalProperties: false, required: [key], properties: { key: { type: string, pattern: "^[a-z][a-z0-9_]{0,63}$" } } } } } }
+      responses: { "201": { description: Alias created., content: { application/json: { schema: { $ref: "#/components/schemas/PlacementAliasEnvelope" } } } }, "409": { $ref: "#/components/responses/Error" } }
+  /v1/projects/{projectId}/placements/{placementId}/archive:
+    parameters: [{ $ref: "#/components/parameters/ProjectID" }, { $ref: "#/components/parameters/PlacementID" }]
+    post:
+      operationId: archivePlacementWithUsageCheck
+      tags: [Placement Decisions]
+      responses: { "204": { description: Placement archived. }, "409": { $ref: "#/components/responses/Error" } }
+  /v1/projects/{projectId}/environments/{environmentId}/placements/{placementId}/rule-set:
+    parameters: [{ $ref: "#/components/parameters/ProjectID" }, { $ref: "#/components/parameters/EnvironmentID" }, { $ref: "#/components/parameters/PlacementID" }]
+    get:
+      operationId: getPlacementDecision
+      tags: [Placement Decisions]
+      responses: { "200": { description: Combined Rule Set and current Draft detail., headers: { ETag: { schema: { type: string } } }, content: { application/json: { schema: { $ref: "#/components/schemas/PlacementRuleSetDraftEnvelope" } } } }, "404": { $ref: "#/components/responses/Error" } }
+    post:
+      operationId: createPlacementRuleSet
+      tags: [Placement Decisions]
+      parameters: [{ $ref: "#/components/parameters/IdempotencyKey" }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/PlacementDecisionDocumentRequest" } } } }
+      responses: { "201": { description: Rule Set and Draft created., content: { application/json: { schema: { $ref: "#/components/schemas/PlacementRuleSetDraftEnvelope" } } } }, "409": { $ref: "#/components/responses/Error" }, "422": { $ref: "#/components/responses/Error" } }
+  /v1/projects/{projectId}/environments/{environmentId}/placements/{placementId}/rule-sets/{ruleSetId}/draft:
+    parameters: [{ $ref: "#/components/parameters/ProjectID" }, { $ref: "#/components/parameters/EnvironmentID" }, { $ref: "#/components/parameters/PlacementID" }, { $ref: "#/components/parameters/RuleSetID" }]
+    put:
+      operationId: updatePlacementRuleSetDraft
+      tags: [Placement Decisions]
+      parameters: [{ $ref: "#/components/parameters/IfMatch" }, { $ref: "#/components/parameters/IdempotencyKey" }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/PlacementDecisionDocumentRequest" } } } }
+      responses: { "200": { description: New immutable Draft revision., content: { application/json: { schema: { $ref: "#/components/schemas/PlacementRuleSetDraftEnvelope" } } } }, "412": { $ref: "#/components/responses/Error" }, "422": { $ref: "#/components/responses/Error" }, "428": { $ref: "#/components/responses/Error" } }
+  /v1/projects/{projectId}/environments/{environmentId}/placements/{placementId}/rule-sets/{ruleSetId}/validate:
+    parameters: [{ $ref: "#/components/parameters/ProjectID" }, { $ref: "#/components/parameters/EnvironmentID" }, { $ref: "#/components/parameters/PlacementID" }, { $ref: "#/components/parameters/RuleSetID" }]
+    post:
+      operationId: validatePlacementRuleSet
+      tags: [Placement Decisions]
+      responses: { "200": { description: Semantic validation result., content: { application/json: { schema: { $ref: "#/components/schemas/PlacementValidationEnvelope" } } } } }
+  /v1/projects/{projectId}/environments/{environmentId}/placements/{placementId}/rule-sets/{ruleSetId}/publish:
+    parameters: [{ $ref: "#/components/parameters/ProjectID" }, { $ref: "#/components/parameters/EnvironmentID" }, { $ref: "#/components/parameters/PlacementID" }, { $ref: "#/components/parameters/RuleSetID" }]
+    post:
+      operationId: publishPlacementRuleSet
+      tags: [Placement Decisions]
+      requestBody: { required: true, content: { application/json: { schema: { type: object, additionalProperties: false, required: [expectedRevision], properties: { expectedRevision: { type: integer, minimum: 1 } } } } } }
+      responses: { "201": { description: Immutable Rule Set Version., content: { application/json: { schema: { $ref: "#/components/schemas/PlacementRuleSetVersionEnvelope" } } } }, "412": { $ref: "#/components/responses/Error" }, "422": { $ref: "#/components/responses/Error" } }
+  /v1/projects/{projectId}/environments/{environmentId}/placements/{placementId}/rule-sets/{ruleSetId}/archive:
+    parameters: [{ $ref: "#/components/parameters/ProjectID" }, { $ref: "#/components/parameters/EnvironmentID" }, { $ref: "#/components/parameters/PlacementID" }, { $ref: "#/components/parameters/RuleSetID" }]
+    post:
+      operationId: archivePlacementRuleSet
+      tags: [Placement Decisions]
+      description: Archives the Rule Set and supersedes its active Draft while retaining immutable published versions. Only owners and admins may archive. Archived Rule Sets cannot be restored, edited, cloned, or published.
+      responses: { "204": { description: Rule Set archived; immutable version history is retained. }, "403": { $ref: "#/components/responses/Error" }, "404": { $ref: "#/components/responses/Error" }, "409": { description: Rule Set is already archived or conflicts with current state., content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } } } }
+  /v1/projects/{projectId}/environments/{environmentId}/placements/{placementId}/rule-sets/{ruleSetId}/versions:
+    parameters: [{ $ref: "#/components/parameters/ProjectID" }, { $ref: "#/components/parameters/EnvironmentID" }, { $ref: "#/components/parameters/PlacementID" }, { $ref: "#/components/parameters/RuleSetID" }]
+    get:
+      operationId: listPlacementRuleSetVersions
+      tags: [Placement Decisions]
+      responses: { "200": { description: Immutable version history., content: { application/json: { schema: { $ref: "#/components/schemas/PlacementRuleSetVersionListEnvelope" } } } } }
+  /v1/projects/{projectId}/environments/{environmentId}/placements/{placementId}/rule-sets/{ruleSetId}/versions/{versionId}/draft:
+    parameters: [{ $ref: "#/components/parameters/ProjectID" }, { $ref: "#/components/parameters/EnvironmentID" }, { $ref: "#/components/parameters/PlacementID" }, { $ref: "#/components/parameters/RuleSetID" }, { name: versionId, in: path, required: true, schema: { type: string } }]
+    post:
+      operationId: clonePlacementRuleSetVersion
+      tags: [Placement Decisions]
+      parameters: [{ $ref: "#/components/parameters/IdempotencyKey" }]
+      responses: { "201": { description: Active Draft cloned from the immutable version., content: { application/json: { schema: { $ref: "#/components/schemas/PlacementRuleSetDraftEnvelope" } } } }, "409": { $ref: "#/components/responses/Error" } }
+  /v1/projects/{projectId}/environments/{environmentId}/placements/{placementId}/rule-sets/{ruleSetId}/simulate:
+    parameters: [{ $ref: "#/components/parameters/ProjectID" }, { $ref: "#/components/parameters/EnvironmentID" }, { $ref: "#/components/parameters/PlacementID" }, { $ref: "#/components/parameters/RuleSetID" }]
+    post:
+      operationId: simulatePlacementDecision
+      tags: [Placement Decisions]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/PlacementSimulationRequest" } } } }
+      responses: { "200": { description: Ephemeral bounded decision trace; request inputs are neither logged nor persisted., content: { application/json: { schema: { $ref: "#/components/schemas/PlacementSimulationEnvelope" } } } }, "422": { $ref: "#/components/responses/Error" } }
+  /v1/projects/{projectId}/environments/{environmentId}/placements/{placementId}/qa-overrides:
+    parameters: [{ $ref: "#/components/parameters/ProjectID" }, { $ref: "#/components/parameters/EnvironmentID" }, { $ref: "#/components/parameters/PlacementID" }]
+    get:
+      operationId: listPlacementQAOverrides
+      tags: [Placement Decisions]
+      responses: { "200": { description: Active non-production QA overrides., content: { application/json: { schema: { $ref: "#/components/schemas/QAOverrideListEnvelope" } } } } }
+    post:
+      operationId: createPlacementQAOverride
+      tags: [Placement Decisions]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/CreateQAOverrideRequest" } } } }
+      responses: { "201": { description: Override created; opaque token is returned once., content: { application/json: { schema: { $ref: "#/components/schemas/QAOverrideCreatedEnvelope" } } } }, "422": { $ref: "#/components/responses/Error" } }
+  /v1/projects/{projectId}/environments/{environmentId}/placements/{placementId}/qa-overrides/{overrideId}:
+    parameters: [{ $ref: "#/components/parameters/ProjectID" }, { $ref: "#/components/parameters/EnvironmentID" }, { $ref: "#/components/parameters/PlacementID" }, { name: overrideId, in: path, required: true, schema: { type: string } }]
+    delete:
+      operationId: revokePlacementQAOverride
+      tags: [Placement Decisions]
+      responses: { "204": { description: Override revoked; the next immutable release omits it. }, "404": { $ref: "#/components/responses/Error" } }
+
 components:
   securitySchemes:
     BrowserSession:
@@ -1380,6 +1501,7 @@ components:
     DraftID: { in: path, name: draftId, required: true, schema: { type: string } }
     VersionID: { in: path, name: versionId, required: true, schema: { type: string } }
     PlacementID: { in: path, name: placementId, required: true, schema: { type: string } }
+    RuleSetID: { in: path, name: ruleSetId, required: true, schema: { type: string } }
     AssetID: { in: path, name: assetId, required: true, schema: { type: string } }
     ReleaseID: { in: path, name: releaseId, required: true, schema: { type: string } }
     IdempotencyKey: { in: header, name: Idempotency-Key, required: true, schema: { type: string, minLength: 1, maxLength: 255 } }
@@ -1506,6 +1628,169 @@ components:
     ReleaseList: { description: Configuration Release history, content: { application/json: { schema: { $ref: "#/components/schemas/ReleaseListEnvelope" } } } }
     PublishResult: { description: Publication result and nonblocking warnings, content: { application/json: { schema: { $ref: "#/components/schemas/PublishResultEnvelope" } } } }
   schemas:
+    PlacementDecisionDocumentRequest:
+      type: object
+      additionalProperties: false
+      required: [document]
+      properties: { document: { $ref: "#/components/schemas/PlacementDecisionDocument" } }
+    PlacementDecisionDocument:
+      type: object
+      description: Canonical Placement Decision v1 envelope; see protocol/schema/placement-decision/v1/decision.schema.json.
+      additionalProperties: true
+      required: [placementDecisionVersion, ruleSet]
+      properties:
+        placementDecisionVersion: { type: string, const: "1" }
+        ruleSet: { type: object, additionalProperties: true }
+    PlacementValidationIssue:
+      type: object
+      required: [severity, code, recoveryAction]
+      properties:
+        severity: { type: string, enum: [error, warning] }
+        code: { type: string }
+        ruleId: { type: string }
+        conditionPath: { type: string }
+        resourceType: { type: string }
+        resourceId: { type: string }
+        recoveryAction: { type: string }
+    PlacementValidation:
+      type: object
+      required: [valid, issues]
+      properties: { valid: { type: boolean }, issues: { type: array, items: { $ref: "#/components/schemas/PlacementValidationIssue" } } }
+    PlacementRuleSet:
+      type: object
+      required: [id, projectId, environmentId, placementId, contractVersion, status, createdByActorId, createdAt, updatedAt]
+      properties:
+        id: { type: string }
+        projectId: { type: string }
+        environmentId: { type: string }
+        placementId: { type: string }
+        contractVersion: { type: string, const: "1" }
+        status: { type: string, enum: [active, archived] }
+        currentDraftId: { type: string }
+        currentPublishedVersionId: { type: string }
+        createdByActorId: { type: string }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+        archivedAt: { type: string, format: date-time }
+    PlacementRuleSetDraft:
+      type: object
+      required: [id, ruleSetId, projectId, environmentId, status, revision, createdByActorId, updatedByActorId, createdAt, updatedAt]
+      properties:
+        id: { type: string }
+        ruleSetId: { type: string }
+        projectId: { type: string }
+        environmentId: { type: string }
+        status: { type: string, enum: [active, published, superseded] }
+        revision: { type: integer, format: int64 }
+        sourceVersionId: { type: string }
+        createdByActorId: { type: string }
+        updatedByActorId: { type: string }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+    PlacementRuleSetDraftResource:
+      type: object
+      required: [ruleSet, draft, document, validation]
+      properties: { ruleSet: { $ref: "#/components/schemas/PlacementRuleSet" }, draft: { $ref: "#/components/schemas/PlacementRuleSetDraft" }, document: { $ref: "#/components/schemas/PlacementDecisionDocument" }, validation: { $ref: "#/components/schemas/PlacementValidation" } }
+    PlacementRuleSetVersion:
+      type: object
+      required: [id, ruleSetId, projectId, environmentId, placementId, versionNumber, sourceDraftId, sourceRevision, contractVersion, document, documentHash, validation, publishedByActorId, publishedAt]
+      properties:
+        id: { type: string }
+        ruleSetId: { type: string }
+        projectId: { type: string }
+        environmentId: { type: string }
+        placementId: { type: string }
+        versionNumber: { type: integer, format: int64 }
+        sourceDraftId: { type: string }
+        sourceRevision: { type: integer, format: int64 }
+        contractVersion: { type: string, const: "1" }
+        document: { $ref: "#/components/schemas/PlacementDecisionDocument" }
+        documentHash: { type: string }
+        validation: { $ref: "#/components/schemas/PlacementValidation" }
+        publishedByActorId: { type: string }
+        publishedAt: { type: string, format: date-time }
+    PlacementAttribute:
+      type: object
+      required: [id, projectId, key, type, description, allowedOperators, sensitivity, status, revision, createdByActorId, updatedByActorId, createdAt, updatedAt]
+      properties:
+        id: { type: string }
+        projectId: { type: string }
+        key: { type: string }
+        type: { type: string, enum: [string, boolean, number, timestamp, semantic_version, string_list] }
+        description: { type: string }
+        allowedOperators: { type: array, items: { type: string } }
+        sensitivity: { type: string, enum: [standard, sensitive] }
+        status: { type: string, enum: [active, archived] }
+        revision: { type: integer, format: int64 }
+        createdByActorId: { type: string }
+        updatedByActorId: { type: string }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+        archivedAt: { type: string, format: date-time }
+    CreatePlacementAttributeRequest:
+      type: object
+      additionalProperties: false
+      required: [key, type, allowedOperators, sensitivity]
+      properties: { key: { type: string }, type: { type: string }, description: { type: string }, allowedOperators: { type: array, minItems: 1, maxItems: 13, items: { type: string } }, sensitivity: { type: string, enum: [standard, sensitive] } }
+    PlacementAlias:
+      type: object
+      required: [id, projectId, placementId, key, status, createdByActorId, createdAt]
+      properties: { id: { type: string }, projectId: { type: string }, placementId: { type: string }, key: { type: string }, status: { type: string, enum: [active, archived] }, createdByActorId: { type: string }, createdAt: { type: string, format: date-time }, archivedAt: { type: string, format: date-time } }
+    PlacementUsage:
+      type: object
+      required: [ruleSetCount, aliasCount, publishedRuleCount]
+      properties: { ruleSetCount: { type: integer }, aliasCount: { type: integer }, publishedRuleCount: { type: integer } }
+    PlacementOutcome:
+      type: object
+      additionalProperties: false
+      required: [type]
+      properties: { type: { type: string, enum: [paywall, no_paywall, fallback, unavailable] }, paywallVersionId: { type: string }, key: { type: string }, unavailableFallbackKey: { type: string }, reason: { type: string } }
+    QAOverride:
+      type: object
+      required: [id, projectId, environmentId, placementId, safeLabel, outcome, status, createdByActorId, createdAt, expiresAt]
+      properties: { id: { type: string }, projectId: { type: string }, environmentId: { type: string }, placementId: { type: string }, safeLabel: { type: string }, outcome: { $ref: "#/components/schemas/PlacementOutcome" }, status: { type: string, enum: [active, revoked, expired] }, createdByActorId: { type: string }, createdAt: { type: string, format: date-time }, expiresAt: { type: string, format: date-time }, revokedAt: { type: string, format: date-time } }
+    CreateQAOverrideRequest:
+      type: object
+      additionalProperties: false
+      required: [safeLabel, selector, outcome, expiresAt]
+      properties: { safeLabel: { type: string, minLength: 1, maxLength: 80 }, selector: { type: string, minLength: 16, writeOnly: true }, outcome: { $ref: "#/components/schemas/PlacementOutcome" }, expiresAt: { type: string, format: date-time } }
+    QAOverrideCreated:
+      type: object
+      required: [override, token]
+      properties: { override: { $ref: "#/components/schemas/QAOverride" }, token: { type: string, description: Returned once and never persisted in plaintext. } }
+    PlacementSimulationRequest:
+      type: object
+      additionalProperties: false
+      properties:
+        platform: { type: string, enum: [ios, android] }
+        osVersion: { type: string }
+        applicationVersion: { type: string }
+        locale: { type: string }
+        country: { type: string }
+        installationId: { type: string, writeOnly: true }
+        userId: { type: string, writeOnly: true }
+        attributes: { type: object, additionalProperties: true, writeOnly: true }
+        entitlements: { type: object, additionalProperties: true }
+        productAvailability: { type: object, additionalProperties: true }
+        productReadiness: { type: object, additionalProperties: true }
+        providerCapabilities: { type: object, additionalProperties: true }
+        overrideToken: { type: string, writeOnly: true }
+    PlacementSimulationResult:
+      type: object
+      required: [selectedOutcome, finalOutcome, fallbackPath, trace]
+      properties: { winningRuleId: { type: string }, selectedOutcome: { $ref: "#/components/schemas/PlacementOutcome" }, finalOutcome: { $ref: "#/components/schemas/PlacementOutcome" }, fallbackPath: { type: array, items: { type: string } }, assignmentKeyType: { type: string }, rolloutBucket: { type: integer, minimum: 0, maximum: 9999 }, trace: { type: array, maxItems: 256, items: { type: object, additionalProperties: true } } }
+    PlacementRuleSetDraftEnvelope: { type: object, required: [data], properties: { data: { $ref: "#/components/schemas/PlacementRuleSetDraftResource" } } }
+    PlacementValidationEnvelope: { type: object, required: [data], properties: { data: { $ref: "#/components/schemas/PlacementValidation" } } }
+    PlacementRuleSetVersionEnvelope: { type: object, required: [data], properties: { data: { $ref: "#/components/schemas/PlacementRuleSetVersion" } } }
+    PlacementRuleSetVersionListEnvelope: { type: object, required: [data], properties: { data: { type: object, required: [items], properties: { items: { type: array, items: { $ref: "#/components/schemas/PlacementRuleSetVersion" } } } } } }
+    PlacementAttributeEnvelope: { type: object, required: [data], properties: { data: { $ref: "#/components/schemas/PlacementAttribute" } } }
+    PlacementAttributeListEnvelope: { type: object, required: [data], properties: { data: { type: object, required: [items], properties: { items: { type: array, items: { $ref: "#/components/schemas/PlacementAttribute" } } } } } }
+    PlacementAliasEnvelope: { type: object, required: [data], properties: { data: { $ref: "#/components/schemas/PlacementAlias" } } }
+    PlacementAliasListEnvelope: { type: object, required: [data], properties: { data: { type: object, required: [items], properties: { items: { type: array, items: { $ref: "#/components/schemas/PlacementAlias" } } } } } }
+    PlacementUsageEnvelope: { type: object, required: [data], properties: { data: { $ref: "#/components/schemas/PlacementUsage" } } }
+    QAOverrideCreatedEnvelope: { type: object, required: [data], properties: { data: { $ref: "#/components/schemas/QAOverrideCreated" } } }
+    QAOverrideListEnvelope: { type: object, required: [data], properties: { data: { type: object, required: [items], properties: { items: { type: array, items: { $ref: "#/components/schemas/QAOverride" } } } } } }
+    PlacementSimulationEnvelope: { type: object, required: [data], properties: { data: { $ref: "#/components/schemas/PlacementSimulationResult" } } }
     Timestamp: { type: string, format: date-time }
     Page:
       type: object

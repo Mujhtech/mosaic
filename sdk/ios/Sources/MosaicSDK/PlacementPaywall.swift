@@ -7,6 +7,7 @@ public struct MosaicPlacementPaywall: View {
   private enum LoadState {
     case loading
     case resolved(MosaicPaywallDocument)
+    case noPaywall
     case unavailable(String)
   }
 
@@ -54,6 +55,9 @@ public struct MosaicPlacementPaywall: View {
           onInteraction: onInteraction,
           onResult: onResult
         )
+      case .noPaywall:
+        Color.clear
+          .accessibilityHidden(true)
       case .unavailable(let diagnosticCode):
         VStack(spacing: 12) {
           Image(systemName: "rectangle.slash")
@@ -73,13 +77,27 @@ public struct MosaicPlacementPaywall: View {
       }
     }
     .task(id: placement) {
-      switch await mosaic.resolve(placement: placement) {
-      case .resolved(let document, _, _, _):
+      switch await mosaic.decision(placement: placement) {
+      case .paywallSelected(let document, _, _, _, _, _, _):
         state = .resolved(document)
-      case .unavailable(let diagnostics):
+      case .noPaywall:
+        state = .noPaywall
+      case .configurationUnavailable(let diagnostics):
         let code = diagnostics.last?.code ?? "delivery_configuration_unavailable"
         state = .unavailable(code)
         onResult(.configurationUnavailable)
+      case .placementUnavailable(let diagnostics):
+        let code = diagnostics.last?.code ?? "delivery_placement_unavailable"
+        state = .unavailable(code)
+        onResult(.configurationUnavailable)
+      case .unsupportedDecisionContract(let diagnostics):
+        let code = diagnostics.last?.code ?? "delivery_unsupported_decision_contract"
+        state = .unavailable(code)
+        onResult(.configurationUnavailable)
+      case .evaluationFailed(let diagnostics):
+        let code = diagnostics.last?.code ?? "decision_evaluation_failed"
+        state = .unavailable(code)
+        onResult(.renderingFailed(diagnosticCode: code))
       }
     }
   }

@@ -2,7 +2,6 @@ import { useForm } from "@tanstack/react-form"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { Link } from "@tanstack/react-router"
 
-import { EmptyState } from "@/components/feedback/empty-state"
 import { Button } from "@/components/ui/button"
 import { buttonVariants } from "@/components/ui/button-variants"
 import { Field, FieldError, FieldLabel } from "@/components/ui/field"
@@ -24,7 +23,7 @@ import type {
 } from "@/features/publishing/api/hosted-publishing-adapter"
 import { useHostedPublishingAdapter } from "@/features/publishing/api/use-hosted-publishing-adapter"
 
-const KEY_PATTERN = /^[a-z][a-z0-9_-]{1,62}$/
+const KEY_PATTERN = /^[a-z][a-z0-9_]{0,63}$/
 
 function BindPlacementAction({
   environmentId,
@@ -108,7 +107,6 @@ function CreatePlacementForm({
     defaultValues: { key: "", name: "", paywallId: paywalls[0]?.id ?? "" },
     onSubmit: async ({ value, formApi }) => {
       const paywall = paywalls.find((item) => item.id === value.paywallId)
-      if (!paywall) return
       try {
         const partial =
           mutation.error instanceof PlacementCreatedWithoutBindingError ? mutation.error : null
@@ -181,13 +179,14 @@ function CreatePlacementForm({
       <form.Field name="paywallId">
         {(field) => (
           <Field>
-            <FieldLabel htmlFor="placement-paywall">Paywall</FieldLabel>
+            <FieldLabel htmlFor="placement-paywall">Default Paywall (optional)</FieldLabel>
             <select
               className="border-input bg-background h-8 rounded border px-2 text-sm"
               id="placement-paywall"
               onChange={(event) => field.handleChange(event.currentTarget.value)}
               value={field.state.value}
             >
+              <option value="">No Paywall yet</option>
               {paywalls.map((paywall) => (
                 <option key={paywall.id} value={paywall.id}>
                   {paywall.name}
@@ -197,16 +196,12 @@ function CreatePlacementForm({
           </Field>
         )}
       </form.Field>
-      <Button
-        className="lg:mt-6"
-        disabled={mutation.isPending || paywalls.length === 0}
-        type="submit"
-      >
+      <Button className="lg:mt-6" disabled={mutation.isPending} type="submit">
         {mutation.isPending
           ? "Creating…"
           : mutation.error instanceof PlacementCreatedWithoutBindingError
             ? "Retry binding"
-            : "Create and bind"}
+            : "Create Placement"}
       </Button>
       {mutation.error ? (
         <div
@@ -266,7 +261,7 @@ export function PlacementsPage({
 
   return (
     <MonetizationWorkspace
-      description="Use stable app intent keys and bind each Placement to a Paywall in this Environment."
+      description="Use stable app intent keys with a compatible default decision, then add deterministic Rules when needed."
       environmentId={environmentId}
       organizationId={organizationId}
       projectId={projectId}
@@ -274,67 +269,71 @@ export function PlacementsPage({
       title="Placements"
     >
       <HostedResourceBoundary state={state}>
-        {availablePaywalls.length === 0 ? (
-          <EmptyState
-            action={
-              <Link
-                className={buttonVariants()}
-                params={{ environmentId, organizationId, projectId }}
-                to="/organizations/$organizationId/projects/$projectId/monetization/$environmentId/paywalls"
-              >
-                Create a Paywall
-              </Link>
-            }
-            description="A Placement needs an active Paywall before it can be bound."
-            title="Create a Paywall first"
-          />
-        ) : (
-          <>
-            <WorkflowPanel
-              description="This creates the stable key and binds it in the selected Environment."
-              title="Create Placement"
-            >
-              <CreatePlacementForm
-                environmentId={environmentId}
-                paywalls={availablePaywalls}
-                projectId={projectId}
-              />
-            </WorkflowPanel>
-            <WorkflowPanel title="Environment bindings">
-              {items.length === 0 ? (
-                <p className="text-muted-foreground text-sm">
-                  No Placements yet. Create the first app intent above.
-                </p>
-              ) : (
-                <ul className="space-y-3">
-                  {items.map((placement) => (
-                    <li className="rounded border p-4" key={placement.id}>
-                      <div className="flex flex-col gap-4 xl:flex-row xl:items-center">
-                        <div className="min-w-0 flex-1">
-                          <p className="font-semibold">{placement.name}</p>
-                          <p className="text-muted-foreground mt-1 font-mono text-xs">
-                            {placement.key}
-                          </p>
-                          <p className="text-muted-foreground mt-2 text-xs">
-                            {placement.binding
-                              ? `Bound to ${placement.binding.paywallName}`
-                              : "Binding is not confirmed in this browser session."}
-                          </p>
-                        </div>
-                        <BindPlacementAction
-                          environmentId={environmentId}
-                          paywalls={availablePaywalls}
-                          placement={placement}
-                          projectId={projectId}
-                        />
+        <>
+          <WorkflowPanel
+            description="This creates the stable key. An optional active Paywall preserves the simple default binding."
+            title="Create Placement"
+          >
+            <CreatePlacementForm
+              environmentId={environmentId}
+              paywalls={availablePaywalls}
+              projectId={projectId}
+            />
+          </WorkflowPanel>
+          <WorkflowPanel title="Environment bindings">
+            {items.length === 0 ? (
+              <p className="text-muted-foreground text-sm">
+                No Placements yet. Create the first app intent above.
+              </p>
+            ) : (
+              <ul className="space-y-3">
+                {items.map((placement) => (
+                  <li className="rounded border p-4" key={placement.id}>
+                    <div className="flex flex-col gap-4 xl:flex-row xl:items-center">
+                      <div className="min-w-0 flex-1">
+                        <p className="font-semibold">{placement.name}</p>
+                        <p className="text-muted-foreground mt-1 font-mono text-xs">
+                          {placement.key}
+                        </p>
+                        <p className="text-muted-foreground mt-2 text-xs">
+                          {placement.binding
+                            ? `Bound to ${placement.binding.paywallName}`
+                            : "Binding is not confirmed in this browser session."}
+                        </p>
                       </div>
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </WorkflowPanel>
-          </>
-        )}
+                      <div className="flex flex-wrap items-end gap-2">
+                        {availablePaywalls.length > 0 ? (
+                          <BindPlacementAction
+                            environmentId={environmentId}
+                            paywalls={availablePaywalls}
+                            placement={placement}
+                            projectId={projectId}
+                          />
+                        ) : (
+                          <span className="text-muted-foreground text-xs">
+                            Create a Paywall to select a compatible default.
+                          </span>
+                        )}
+                        <Link
+                          className={buttonVariants({ size: "sm", variant: "outline" })}
+                          params={{
+                            environmentId,
+                            organizationId,
+                            placementId: placement.id,
+                            projectId,
+                          }}
+                          to="/organizations/$organizationId/projects/$projectId/monetization/$environmentId/placements/$placementId"
+                        >
+                          Open decision
+                        </Link>
+                      </div>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </WorkflowPanel>
+        </>
       </HostedResourceBoundary>
     </MonetizationWorkspace>
   )

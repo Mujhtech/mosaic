@@ -7,6 +7,8 @@ void main() {
     'protocol/fixtures/v0.2/complete-paywall.json': 'complete-paywall.json',
     'protocol/fixtures/configuration-delivery/v1/valid-release.json':
         'configuration-release.json',
+    'protocol/fixtures/configuration-delivery/v2/advanced-release.json':
+        'advanced-configuration-release.json',
   };
   for (final entry in fixtures.entries) {
     final source = File('${repository.path}/${entry.key}');

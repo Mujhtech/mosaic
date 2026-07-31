@@ -1,0 +1,30 @@
+{
+  "cases": [
+    {
+      "name": "explicit default Paywall is safe",
+      "defaultOutcome": {
+        "type": "paywall",
+        "paywallVersionId": "paywall_version_default"
+      },
+      "hasAdvancedRules": false,
+      "expected": "project_default_paywall"
+    },
+    {
+      "name": "no_paywall is never projected",
+      "defaultOutcome": {
+        "type": "no_paywall"
+      },
+      "hasAdvancedRules": false,
+      "expected": "withhold_v1_candidate"
+    },
+    {
+      "name": "advanced Rule is never projected as unconditional",
+      "defaultOutcome": {
+        "type": "paywall",
+        "paywallVersionId": "paywall_version_default"
+      },
+      "hasAdvancedRules": true,
+      "expected": "project_default_paywall"
+    }
+  ]
+}

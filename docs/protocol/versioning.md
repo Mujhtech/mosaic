@@ -6,10 +6,10 @@ Protocol `0.2` RC4 and Local Preview `0.2` are the only supported contracts
 while Mosaic is iterating before its first stable release. Earlier experimental
 contracts have been retired rather than carried as compatibility readers.
 
-Configuration Delivery `1`, Commerce Provider Contracts `1`/`2`, and Commerce
-Configurations `1`/`2` are independent versioned contracts. Their exact versions
-values do not imply compatibility with one another and do not change the
-Paywall `schemaVersion`.
+Configuration Delivery `1`/`2`, Placement Decision `1`, Commerce Provider
+Contracts `1`/`2`, and Commerce Configurations `1`/`2` are independent
+versioned contracts. Their exact version values do not imply compatibility
+with one another and do not change the Paywall `schemaVersion`.
 
 `schemaVersion`, Local Preview versions, and capability versions are exact
 identifiers. A reader declaring `0.2` accepts only `0.2`; it must not infer
@@ -60,6 +60,20 @@ Studio checks the client's capability report before sending a draft.
 The protocol remains platform-neutral. Framework convenience, native resource
 names, billing-provider models, and platform-only view behavior are not reasons
 to fork the shared schema.
+
+## Placement Decision and Delivery versioning
+
+Placement Decision readers require exact `placementDecisionVersion: "1"` and
+exact support for every declared feature and bucketing algorithm. Unknown or
+malformed decision semantics reject the whole candidate Configuration Delivery
+release; readers never skip an unsupported Rule.
+
+Configuration Delivery `2` is parallel to immutable Delivery `1`. It adds
+atomic Placement Decision `1` Rule Sets and exact Product/Entitlement
+references without changing embedded Paywall Protocol `0.2` documents. A
+reader never interprets v2 as v1. A server may construct a v1 projection only
+from an explicit default Paywall outcome; it never projects `no_paywall` or an
+advanced Rule as an unconditional binding.
 
 ## Commerce Provider versioning
 

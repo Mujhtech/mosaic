@@ -2,7 +2,7 @@
 
 This native Flutter example has separate Local preview and Hosted tabs. Local
 preview connects to the account-free Studio relay. Hosted mode loads a valid
-cached or bundled Configuration Delivery v1 release immediately and refreshes
+cached or bundled Configuration Delivery v1/v2 release immediately and refreshes
 the configured environment only when the refresh action is pressed.
 reports its Protocol 0.2 and Local Preview 0.2 capabilities, and rerenders an
 accepted draft without rebuilding the app. When Studio is disconnected or a
@@ -95,6 +95,16 @@ the app to verify the last-known-valid cache; clear app data to demonstrate the
 generated bundled release. Network or validation failures retain the current
 complete release and surface a safe diagnostic instead of a partial paywall.
 
+To use the canonical Phase 5 Delivery v2 snapshot, sync fixtures and enable the
+advanced `export_pdf` Placement. The SDK evaluates it locally and can return a
+deliberate `noPaywall`, an immutable Paywall, or its named Product fallback
+without fetching during presentation:
+
+```bash
+dart run tool/sync_fixture.dart
+flutter run --dart-define=MOSAIC_PHASE5_DEMO=true
+```
+
 ## Run optional RevenueCat commerce
 
 The example includes the optional `mosaic_revenuecat` package but does not
@@ -158,10 +168,10 @@ flutter test --no-pub
 flutter build bundle --no-pub
 ```
 
-The sync command copies both
+The sync command copies
 `protocol/fixtures/v0.2/complete-paywall.json` and the canonical valid Delivery
-v1 release byte-for-byte into ignored `assets/generated/` output. Neither is a
-second canonical
+v1 and advanced Delivery v2 releases byte-for-byte into ignored
+`assets/generated/` output. None is a second canonical
 fixture. The current fallback therefore exercises the same Screens, Button
 children, Icons, navigation, external URL handoff, horizontal Product Selector,
 authored Product Cards/Product Badges, safe product templates, and Protocol 0.2

@@ -1,5 +1,7 @@
 // Generated public declarations for protocol/browser/index.js. Do not edit.
 import type {
+  MosaicConfigurationDeliveryV1,
+  MosaicConfigurationDeliveryV2,
   MosaicCommerceConfigurationV1,
   MosaicCommerceConfigurationV2,
   MosaicCommerceProviderV1Record,
@@ -20,6 +22,7 @@ import type {
   MosaicPaywallV02ProductSelectorComponent,
   MosaicPaywallV02Shadow,
   MosaicPaywallV02Visibility,
+  MosaicPlacementDecisionV1,
   MosaicPreviewCapabilityReportPayload,
   MosaicPreviewCapabilityName,
   MosaicPreviewMessage,
@@ -40,6 +43,10 @@ export type MosaicAnyCommerceProviderRecord =
 export type MosaicAnyCommerceConfiguration =
   | MosaicCommerceConfigurationV1
   | MosaicCommerceConfigurationV2;
+export type MosaicAnyPlacementDecision = MosaicPlacementDecisionV1;
+export type MosaicAnyConfigurationDelivery =
+  | MosaicConfigurationDeliveryV1
+  | MosaicConfigurationDeliveryV2;
 
 export type MosaicLocalPreviewNegotiationDiagnostic = {
   readonly code: "preview.noMutualVersion" | "preview.incompatibleSchemaVersion" | "preview.invalidNegotiation" | "preview.invalidCapabilityReport" | "preview.invalidDraft" | "preview.unsupportedPreviewCapability" | "preview.unsupportedCapability" | "preview.documentTooLarge";

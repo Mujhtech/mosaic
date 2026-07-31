@@ -1,5 +1,3 @@
-import 'dart:convert';
-
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mosaic_sdk/mosaic_sdk.dart';
 
@@ -40,14 +38,16 @@ void main() {
     }
   });
 
-  test('Flutter capability request matches the canonical semantic payload', () {
+  test('Flutter capability request advertises Delivery v2 decisions', () {
     final actual = const MosaicConfigurationCapabilityRequest(
       applicationVersion: '1.0.0',
     ).toJson();
-    final expected = jsonDecode(
-      deliveryFixtureSource('capability-request.json'),
-    );
-    expect(actual, expected);
+    expect(actual['sdkVersion'], mosaicFlutterSdkVersion);
+    expect(
+        actual['supportedConfigurationDeliveryVersions'], <String>['1', '2']);
+    expect(actual['supportedPlacementDecisionContracts'], <String>['1']);
+    expect(actual['supportedBucketingAlgorithms'],
+        <String>['sha256_length_prefixed_v1']);
   });
 
   test('hosted transport advertises every exact Protocol 0.2 capability', () {

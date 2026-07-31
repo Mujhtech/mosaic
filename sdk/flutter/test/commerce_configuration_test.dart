@@ -34,8 +34,7 @@ void main() {
 
   test('decodes canonical native-store v2 mappings without changing v1', () {
     final storeKit = _v2FixtureSource('storekit-configuration.json');
-    final storeKitEnvelope =
-        const MosaicCommerceConfigurationDecoder().decode(
+    final storeKitEnvelope = const MosaicCommerceConfigurationDecoder().decode(
       storeKit,
       expectedRelease: _releaseFor(storeKit),
       expectedApplicationId: 'application_ios',
@@ -60,8 +59,8 @@ void main() {
       expectedApplicationId: 'application_android',
       expectedStorePlatform: MosaicStorePlatform.android,
     );
-    final monthly = googleEnvelope.configuration
-        .mappingForProduct('mosaic_pro_monthly')!;
+    final monthly =
+        googleEnvelope.configuration.mappingForProduct('mosaic_pro_monthly')!;
     expect(monthly.entitlementKeys, <String>['pro']);
     expect(
       monthly.adapterMapping,

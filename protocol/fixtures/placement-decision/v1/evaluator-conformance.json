@@ -1,0 +1,634 @@
+{
+  "fixtureVersion": "1",
+  "decision": {
+    "placementDecisionVersion": "1",
+    "ruleSet": {
+      "id": "ruleset_export_pdf",
+      "version": 7,
+      "projectId": "project_alpha",
+      "environmentId": "environment_production",
+      "environmentKey": "production",
+      "placementId": "placement_export_pdf",
+      "placementKey": "export_pdf",
+      "enabled": true,
+      "assignmentPolicy": "installation",
+      "attributeDefinitions": [
+        {
+          "key": "student",
+          "type": "boolean",
+          "sensitivity": "standard",
+          "allowedOperators": [
+            "equals",
+            "exists"
+          ]
+        }
+      ],
+      "fallbacks": [
+        {
+          "key": "product_unavailable",
+          "safeLabel": "Product unavailable fallback",
+          "outcome": {
+            "type": "paywall",
+            "paywallVersionId": "paywall_version_fallback"
+          }
+        }
+      ],
+      "rules": [
+        {
+          "id": "rule_pro",
+          "priority": 10,
+          "enabled": true,
+          "safeLabel": "Active Pro access",
+          "conditions": {
+            "type": "condition",
+            "source": {
+              "kind": "entitlement_state",
+              "key": "pro"
+            },
+            "operator": "equals",
+            "operand": {
+              "type": "string",
+              "value": "active"
+            }
+          },
+          "outcome": {
+            "type": "no_paywall"
+          }
+        },
+        {
+          "id": "rule_product_unavailable",
+          "priority": 20,
+          "enabled": true,
+          "safeLabel": "Unavailable export Product",
+          "conditions": {
+            "type": "condition",
+            "source": {
+              "kind": "product_availability",
+              "productId": "product_export_pro"
+            },
+            "operator": "equals",
+            "operand": {
+              "type": "string",
+              "value": "unavailable"
+            }
+          },
+          "outcome": {
+            "type": "fallback",
+            "key": "product_unavailable"
+          }
+        },
+        {
+          "id": "rule_student_de",
+          "priority": 30,
+          "enabled": true,
+          "safeLabel": "German students",
+          "conditions": {
+            "type": "all",
+            "children": [
+              {
+                "type": "condition",
+                "source": {
+                  "kind": "context.country"
+                },
+                "operator": "equals",
+                "operand": {
+                  "type": "string",
+                  "value": "DE"
+                }
+              },
+              {
+                "type": "condition",
+                "source": {
+                  "kind": "user_attribute",
+                  "key": "student"
+                },
+                "operator": "equals",
+                "operand": {
+                  "type": "boolean",
+                  "value": true
+                }
+              }
+            ]
+          },
+          "outcome": {
+            "type": "paywall",
+            "paywallVersionId": "paywall_version_student"
+          }
+        },
+        {
+          "id": "rule_ios_rollout",
+          "priority": 40,
+          "enabled": true,
+          "safeLabel": "iOS English minimum version rollout",
+          "conditions": {
+            "type": "all",
+            "children": [
+              {
+                "type": "condition",
+                "source": {
+                  "kind": "device.platform"
+                },
+                "operator": "equals",
+                "operand": {
+                  "type": "string",
+                  "value": "ios"
+                }
+              },
+              {
+                "type": "condition",
+                "source": {
+                  "kind": "application.locale"
+                },
+                "operator": "locale_matches",
+                "operand": {
+                  "type": "string",
+                  "value": "en"
+                }
+              },
+              {
+                "type": "condition",
+                "source": {
+                  "kind": "application.version"
+                },
+                "operator": "greater_than_or_equal",
+                "operand": {
+                  "type": "semantic_version",
+                  "value": "2.3"
+                }
+              }
+            ]
+          },
+          "rollout": {
+            "algorithm": "sha256_length_prefixed_v1",
+            "thresholdBasisPoints": 7000
+          },
+          "outcome": {
+            "type": "paywall",
+            "paywallVersionId": "paywall_version_ios"
+          }
+        },
+        {
+          "id": "rule_locale_equals",
+          "priority": 45,
+          "enabled": true,
+          "safeLabel": "Canonical English US locale equality",
+          "conditions": {
+            "type": "condition",
+            "source": {
+              "kind": "application.locale"
+            },
+            "operator": "equals",
+            "operand": {
+              "type": "string",
+              "value": "en-US"
+            }
+          },
+          "outcome": {
+            "type": "paywall",
+            "paywallVersionId": "paywall_version_student"
+          }
+        },
+        {
+          "id": "rule_locale_in",
+          "priority": 46,
+          "enabled": true,
+          "safeLabel": "Canonical locale membership",
+          "conditions": {
+            "type": "condition",
+            "source": {
+              "kind": "application.locale"
+            },
+            "operator": "in",
+            "operand": {
+              "type": "string_list",
+              "value": [
+                "pt-BR",
+                "de-DE"
+              ]
+            }
+          },
+          "outcome": {
+            "type": "paywall",
+            "paywallVersionId": "paywall_version_fallback"
+          }
+        },
+        {
+          "id": "rule_malformed_version_equals",
+          "priority": 47,
+          "enabled": true,
+          "safeLabel": "Malformed version equality remains unknown",
+          "conditions": {
+            "type": "all",
+            "children": [
+              {
+                "type": "condition",
+                "source": {
+                  "kind": "application.locale"
+                },
+                "operator": "equals",
+                "operand": {
+                  "type": "string",
+                  "value": "zz-EQ"
+                }
+              },
+              {
+                "type": "not",
+                "child": {
+                  "type": "condition",
+                  "source": {
+                    "kind": "application.version"
+                  },
+                  "operator": "equals",
+                  "operand": {
+                    "type": "semantic_version",
+                    "value": "2.3"
+                  }
+                }
+              }
+            ]
+          },
+          "outcome": {
+            "type": "paywall",
+            "paywallVersionId": "paywall_version_ios"
+          }
+        },
+        {
+          "id": "rule_malformed_version_not_equals",
+          "priority": 48,
+          "enabled": true,
+          "safeLabel": "Malformed version inequality remains unknown",
+          "conditions": {
+            "type": "all",
+            "children": [
+              {
+                "type": "condition",
+                "source": {
+                  "kind": "application.locale"
+                },
+                "operator": "equals",
+                "operand": {
+                  "type": "string",
+                  "value": "zz-NE"
+                }
+              },
+              {
+                "type": "condition",
+                "source": {
+                  "kind": "application.version"
+                },
+                "operator": "not_equals",
+                "operand": {
+                  "type": "semantic_version",
+                  "value": "2.3"
+                }
+              }
+            ]
+          },
+          "outcome": {
+            "type": "paywall",
+            "paywallVersionId": "paywall_version_ios"
+          }
+        },
+        {
+          "id": "rule_malformed_version_ordering",
+          "priority": 49,
+          "enabled": true,
+          "safeLabel": "Malformed version ordering remains unknown",
+          "conditions": {
+            "type": "all",
+            "children": [
+              {
+                "type": "condition",
+                "source": {
+                  "kind": "application.locale"
+                },
+                "operator": "equals",
+                "operand": {
+                  "type": "string",
+                  "value": "zz-OR"
+                }
+              },
+              {
+                "type": "condition",
+                "source": {
+                  "kind": "application.version"
+                },
+                "operator": "greater_than",
+                "operand": {
+                  "type": "semantic_version",
+                  "value": "2.3"
+                }
+              }
+            ]
+          },
+          "outcome": {
+            "type": "paywall",
+            "paywallVersionId": "paywall_version_ios"
+          }
+        }
+      ],
+      "defaultOutcome": {
+        "type": "no_paywall"
+      },
+      "qaOverrides": [],
+      "compatibility": {
+        "requiredFeatures": [
+          "condition.all",
+          "condition.not",
+          "operator.equals",
+          "operator.greater_than",
+          "operator.greater_than_or_equal",
+          "operator.in",
+          "operator.locale_matches",
+          "operator.not_equals",
+          "outcome.fallback",
+          "outcome.no_paywall",
+          "outcome.paywall",
+          "source.application.locale",
+          "source.application.version",
+          "source.context.country",
+          "source.device.platform",
+          "source.entitlement_state",
+          "source.product_availability",
+          "source.user_attribute"
+        ],
+        "bucketingAlgorithms": [
+          "sha256_length_prefixed_v1"
+        ]
+      }
+    }
+  },
+  "cases": [
+    {
+      "name": "active entitlement wins first priority and no_paywall is success",
+      "context": {
+        "entitlements": {
+          "pro": "active"
+        },
+        "products": {
+          "product_export_pro": "available"
+        }
+      },
+      "assignment": {
+        "type": "installation",
+        "value": "install_01"
+      },
+      "expected": {
+        "matchedRuleId": "rule_pro",
+        "outcome": {
+          "type": "no_paywall"
+        }
+      }
+    },
+    {
+      "name": "unknown entitlement does not become inactive and unavailable Product follows fallback",
+      "context": {
+        "entitlements": {
+          "pro": "unknown"
+        },
+        "products": {
+          "product_export_pro": "unavailable"
+        }
+      },
+      "assignment": {
+        "type": "installation",
+        "value": "install_01"
+      },
+      "expected": {
+        "matchedRuleId": "rule_product_unavailable",
+        "fallbackPath": [
+          "product_unavailable"
+        ],
+        "outcome": {
+          "type": "paywall",
+          "paywallVersionId": "paywall_version_fallback"
+        }
+      }
+    },
+    {
+      "name": "country is explicit and typed boolean attribute matches",
+      "context": {
+        "country": "DE",
+        "attributes": {
+          "student": {
+            "type": "boolean",
+            "value": true
+          }
+        },
+        "entitlements": {
+          "pro": "inactive"
+        },
+        "products": {
+          "product_export_pro": "available"
+        }
+      },
+      "assignment": {
+        "type": "installation",
+        "value": "install_01"
+      },
+      "expected": {
+        "matchedRuleId": "rule_student_de",
+        "outcome": {
+          "type": "paywall",
+          "paywallVersionId": "paywall_version_student"
+        }
+      }
+    },
+    {
+      "name": "locale does not infer country and semantic version is not lexical",
+      "context": {
+        "platform": "ios",
+        "applicationLocale": "en-US",
+        "applicationVersion": "2.10.0",
+        "entitlements": {
+          "pro": "inactive"
+        },
+        "products": {
+          "product_export_pro": "available"
+        }
+      },
+      "assignment": {
+        "type": "installation",
+        "value": "install_01"
+      },
+      "expected": {
+        "matchedRuleId": "rule_ios_rollout",
+        "rolloutBucket": 863,
+        "outcome": {
+          "type": "paywall",
+          "paywallVersionId": "paywall_version_ios"
+        }
+      }
+    },
+    {
+      "name": "valid static match outside rollout continues to exact default",
+      "context": {
+        "platform": "ios",
+        "applicationLocale": "en-GB",
+        "applicationVersion": "2.3",
+        "entitlements": {
+          "pro": "inactive"
+        },
+        "products": {
+          "product_export_pro": "available"
+        }
+      },
+      "assignment": {
+        "type": "installation",
+        "value": "outside_5"
+      },
+      "expected": {
+        "matchedRuleId": null,
+        "outcome": {
+          "type": "no_paywall"
+        }
+      }
+    },
+    {
+      "name": "no matching rule selects exact default",
+      "context": {
+        "platform": "android",
+        "applicationLocale": "fr-FR",
+        "applicationVersion": "1.0.0",
+        "entitlements": {
+          "pro": "inactive"
+        },
+        "products": {
+          "product_export_pro": "available"
+        }
+      },
+      "assignment": {
+        "type": "installation",
+        "value": "install_01"
+      },
+      "expected": {
+        "matchedRuleId": null,
+        "outcome": {
+          "type": "no_paywall"
+        }
+      }
+    },
+    {
+      "name": "runtime underscore locale equals authored canonical locale",
+      "context": {
+        "platform": "android",
+        "applicationLocale": "en_US",
+        "applicationVersion": "1.0.0",
+        "entitlements": {
+          "pro": "inactive"
+        },
+        "products": {
+          "product_export_pro": "available"
+        }
+      },
+      "assignment": {
+        "type": "installation",
+        "value": "install_01"
+      },
+      "expected": {
+        "matchedRuleId": "rule_locale_equals",
+        "outcome": {
+          "type": "paywall",
+          "paywallVersionId": "paywall_version_student"
+        }
+      }
+    },
+    {
+      "name": "locale membership uses canonical normalization",
+      "context": {
+        "platform": "android",
+        "applicationLocale": "pt_BR",
+        "applicationVersion": "1.0.0",
+        "entitlements": {
+          "pro": "inactive"
+        },
+        "products": {
+          "product_export_pro": "available"
+        }
+      },
+      "assignment": {
+        "type": "installation",
+        "value": "install_01"
+      },
+      "expected": {
+        "matchedRuleId": "rule_locale_in",
+        "outcome": {
+          "type": "paywall",
+          "paywallVersionId": "paywall_version_fallback"
+        }
+      }
+    },
+    {
+      "name": "malformed application version equality remains unknown and defaults",
+      "context": {
+        "platform": "android",
+        "applicationLocale": "zz-EQ",
+        "applicationVersion": "not-semver",
+        "entitlements": {
+          "pro": "inactive"
+        },
+        "products": {
+          "product_export_pro": "available"
+        }
+      },
+      "assignment": {
+        "type": "installation",
+        "value": "install_01"
+      },
+      "expected": {
+        "matchedRuleId": null,
+        "outcome": {
+          "type": "no_paywall"
+        }
+      }
+    },
+    {
+      "name": "malformed application version inequality remains unknown and defaults",
+      "context": {
+        "platform": "android",
+        "applicationLocale": "zz-NE",
+        "applicationVersion": "not-semver",
+        "entitlements": {
+          "pro": "inactive"
+        },
+        "products": {
+          "product_export_pro": "available"
+        }
+      },
+      "assignment": {
+        "type": "installation",
+        "value": "install_01"
+      },
+      "expected": {
+        "matchedRuleId": null,
+        "outcome": {
+          "type": "no_paywall"
+        }
+      }
+    },
+    {
+      "name": "malformed application version ordering remains unknown and defaults",
+      "context": {
+        "platform": "android",
+        "applicationLocale": "zz-OR",
+        "applicationVersion": "zzzz",
+        "entitlements": {
+          "pro": "inactive"
+        },
+        "products": {
+          "product_export_pro": "available"
+        }
+      },
+      "assignment": {
+        "type": "installation",
+        "value": "install_01"
+      },
+      "expected": {
+        "matchedRuleId": null,
+        "outcome": {
+          "type": "no_paywall"
+        }
+      }
+    }
+  ]
+}

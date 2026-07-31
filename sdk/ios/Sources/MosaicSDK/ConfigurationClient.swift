@@ -42,6 +42,11 @@ public enum MosaicPlacementResolution: Sendable, Equatable {
   case unavailable(diagnostics: [MosaicDiagnostic])
 }
 
+struct MosaicDecisionRequirements: Sendable {
+  let productIDs: [String]
+  let entitlementKeys: [String]
+}
+
 actor MosaicConfigurationClient {
   private struct AcceptedRelease: Sendable {
     let release: MosaicConfigurationRelease
@@ -148,6 +153,201 @@ actor MosaicConfigurationClient {
     )
   }
 
+  func decisionRequirements(placement key: String) -> MosaicDecisionRequirements {
+    guard let release = accepted?.release, let decision = release.decision(forPlacement: key) else {
+      return .init(productIDs: [], entitlementKeys: [])
+    }
+    var products = Set<String>()
+    var entitlements = Set<String>()
+    func inspect(_ node: MosaicConditionNode) {
+      switch node {
+      case .condition(let source, _, _):
+        switch source {
+        case .productAvailability(let id), .productReadiness(let id): products.insert(id)
+        case .entitlementState(let key): entitlements.insert(key)
+        default: break
+        }
+      case .all(let children), .any(let children):
+        for child in children { inspect(child) }
+      case .not(let child): inspect(child)
+      }
+    }
+    for rule in decision.ruleSet.rules { inspect(rule.conditions) }
+    let paywallIDs = Set(
+      ([decision.ruleSet.defaultOutcome]
+        + decision.ruleSet.rules.map(\.outcome)
+        + decision.ruleSet.fallbacks.map(\.outcome)
+        + decision.ruleSet.qaOverrides.map(\.outcome)).compactMap { outcome in
+          if case .paywall(let id, _) = outcome { return id }
+          return nil
+        }
+    )
+    for paywall in release.paywallVersions where paywallIDs.contains(paywall.id) {
+      products.formUnion(paywall.productReferenceIDs)
+    }
+    return .init(productIDs: products.sorted(), entitlementKeys: entitlements.sorted())
+  }
+
+  func attributeDefinitions() -> [MosaicAttributeDefinition]? {
+    guard let release = accepted?.release, !release.placementDecisions.isEmpty else { return nil }
+    var byKey: [String: MosaicAttributeDefinition] = [:]
+    for definition in release.placementDecisions.flatMap({ $0.ruleSet.attributeDefinitions }) {
+      if let existing = byKey[definition.key], existing != definition { return [] }
+      byKey[definition.key] = definition
+    }
+    return byKey.values.sorted { $0.key < $1.key }
+  }
+
+  func decide(
+    placement key: String, context: MosaicDecisionContext, identity: MosaicIdentitySnapshot
+  ) -> MosaicPlacementDecisionResult {
+    guard key.range(of: "^[a-z][a-z0-9_]{0,63}$", options: .regularExpression) != nil else {
+      let diagnostic = MosaicDiagnostic(code: "delivery_invalid_placement", stage: .placement)
+      recordDiagnostic(diagnostic)
+      return .placementUnavailable(diagnostics: diagnostics)
+    }
+    guard let accepted else {
+      let diagnostic = MosaicDiagnostic(
+        code: "delivery_configuration_unavailable", stage: .placement)
+      recordDiagnostic(diagnostic)
+      return .configurationUnavailable(diagnostics: diagnostics)
+    }
+    guard let decision = accepted.release.decision(forPlacement: key) else {
+      if let paywall = accepted.release.paywall(forPlacement: key) {
+        return .paywallSelected(
+          document: paywall.document, paywallVersionID: paywall.id, matchedRuleID: nil,
+          fallbackPath: [], release: accepted.release.metadata, source: accepted.source,
+          trace: .init(steps: [
+            .init(
+              code: "legacy_binding_selected", ruleID: nil, safeLabel: nil, result: nil,
+              assignmentType: nil, rolloutBucket: nil, fallbackKey: nil)
+          ]))
+      }
+      let diagnostic = MosaicDiagnostic(code: "delivery_placement_unavailable", stage: .placement)
+      recordDiagnostic(diagnostic)
+      return .placementUnavailable(diagnostics: diagnostics)
+    }
+    let readiness = Dictionary(
+      uniqueKeysWithValues: accepted.release.productReferences.map { ($0.id, $0.readiness) })
+    let output = MosaicPlacementEvaluator.evaluate(
+      decision: decision, context: context, identity: identity, productReadiness: readiness)
+    switch output.outcome {
+    case .paywall:
+      let resolution = resolveAvailablePaywall(
+        output.outcome, decision: decision, release: accepted.release, context: context,
+        matchedRuleID: output.matchedRuleID, initialPath: output.fallbackPath,
+        initialTrace: output.trace)
+      switch resolution.outcome {
+      case .paywall(let versionID, _):
+        guard let paywall = resolution.paywall else {
+          let diagnostic = MosaicDiagnostic(code: "decision_content_unavailable", stage: .placement)
+          recordDiagnostic(diagnostic)
+          return .evaluationFailed(diagnostics: diagnostics)
+        }
+        return .paywallSelected(
+          document: paywall.document, paywallVersionID: versionID,
+          matchedRuleID: output.matchedRuleID,
+          fallbackPath: resolution.path, release: accepted.release.metadata,
+          source: accepted.source,
+          trace: resolution.trace)
+      case .noPaywall:
+        return .noPaywall(
+          matchedRuleID: output.matchedRuleID, release: accepted.release.metadata,
+          source: accepted.source, trace: resolution.trace)
+      case .unavailable(let reason):
+        let diagnostic = MosaicDiagnostic(code: "decision_\(reason)", stage: .placement)
+        recordDiagnostic(diagnostic)
+        return .placementUnavailable(diagnostics: diagnostics)
+      case .fallback:
+        let diagnostic = MosaicDiagnostic(code: "decision_fallback_unresolved", stage: .placement)
+        recordDiagnostic(diagnostic)
+        return .evaluationFailed(diagnostics: diagnostics)
+      }
+    case .noPaywall:
+      return .noPaywall(
+        matchedRuleID: output.matchedRuleID, release: accepted.release.metadata,
+        source: accepted.source, trace: output.trace)
+    case .unavailable(let reason):
+      let diagnostic = MosaicDiagnostic(code: "decision_\(reason)", stage: .placement)
+      recordDiagnostic(diagnostic)
+      return .placementUnavailable(diagnostics: diagnostics)
+    case .fallback:
+      let diagnostic = MosaicDiagnostic(code: "decision_fallback_unresolved", stage: .placement)
+      recordDiagnostic(diagnostic)
+      return .evaluationFailed(diagnostics: diagnostics)
+    }
+  }
+
+  private struct AvailablePaywallResolution {
+    let outcome: MosaicDecisionOutcome
+    let paywall: MosaicConfigurationPaywallVersion?
+    let path: [String]
+    let trace: MosaicDecisionTrace
+  }
+
+  private func resolveAvailablePaywall(
+    _ outcome: MosaicDecisionOutcome, decision: MosaicPlacementDecision,
+    release: MosaicConfigurationRelease, context: MosaicDecisionContext, matchedRuleID: String?,
+    initialPath: [String], initialTrace: MosaicDecisionTrace
+  ) -> AvailablePaywallResolution {
+    let fallbacks = Dictionary(
+      uniqueKeysWithValues: decision.ruleSet.fallbacks.map { ($0.key, $0) })
+    let readiness = Dictionary(
+      uniqueKeysWithValues: release.productReferences.map { ($0.id, $0.readiness) })
+    var current = outcome
+    var path = initialPath
+    var steps = initialTrace.steps
+    var namedFallbackCount = 0
+    while namedFallbackCount <= 8 {
+      switch current {
+      case .fallback(let key):
+        guard namedFallbackCount < 8, let fallback = fallbacks[key] else {
+          return .init(
+            outcome: .unavailable(reason: "no_safe_decision"), paywall: nil, path: path,
+            trace: .init(steps: steps))
+        }
+        namedFallbackCount += 1
+        path.append(key)
+        if steps.count < 256 {
+          steps.append(
+            .init(
+              code: "fallback_selected", ruleID: matchedRuleID, safeLabel: fallback.safeLabel,
+              result: nil, assignmentType: nil, rolloutBucket: nil, fallbackKey: key))
+        }
+        current = fallback.outcome
+      case .paywall(let versionID, let unavailableFallback):
+        guard let paywall = release.paywallVersions.first(where: { $0.id == versionID }) else {
+          guard let unavailableFallback else {
+            return .init(
+              outcome: .unavailable(reason: "content_unavailable"), paywall: nil, path: path,
+              trace: .init(steps: steps))
+          }
+          current = .fallback(key: unavailableFallback)
+          continue
+        }
+        let commerceReady = paywall.productReferenceIDs.allSatisfy {
+          readiness[$0] == .ready && context.products[$0] == .available
+        }
+        guard commerceReady else {
+          guard let unavailableFallback else {
+            return .init(
+              outcome: .unavailable(reason: "commerce_unavailable"), paywall: nil, path: path,
+              trace: .init(steps: steps))
+          }
+          current = .fallback(key: unavailableFallback)
+          continue
+        }
+        return .init(
+          outcome: current, paywall: paywall, path: path, trace: .init(steps: steps))
+      case .noPaywall, .unavailable:
+        return .init(outcome: current, paywall: nil, path: path, trace: .init(steps: steps))
+      }
+    }
+    return .init(
+      outcome: .unavailable(reason: "no_safe_decision"), paywall: nil, path: path,
+      trace: .init(steps: steps))
+  }
+
   func commerceConfigurationAssociation(
     applicationID: String,
     storePlatform: MosaicCommerceStorePlatform
@@ -197,6 +397,11 @@ actor MosaicConfigurationClient {
       "Mosaic-SDK-Version": mosaicSDKVersion,
       "Mosaic-Configuration-Versions": mosaicSupportedConfigurationDeliveryVersions.joined(
         separator: ","),
+      "Mosaic-Placement-Decision-Versions": mosaicSupportedPlacementDecisionVersions.joined(
+        separator: ","),
+      "Mosaic-Decision-Features": MosaicConfigurationDeliveryV2Decoder.supportedCapabilityFeatures
+        .joined(separator: ","),
+      "Mosaic-Bucketing-Algorithms": mosaicSupportedBucketingAlgorithms.joined(separator: ","),
       "Mosaic-Paywall-Protocol-Versions": mosaicSupportedProtocolVersions.joined(separator: ","),
       "Mosaic-Paywall-Capabilities": MosaicCapabilityCatalog.v02.map {
         "\($0.rawValue)@\(mosaicProtocolVersion)"
@@ -381,10 +586,11 @@ private enum MosaicPackagedConfigurationRelease {
         forResource: "complete-paywall",
         withExtension: "json",
         subdirectory: "v0.2"
-      ) ?? MosaicResourceBundle.bundle.url(
-        forResource: "complete-paywall",
-        withExtension: "json"
       )
+        ?? MosaicResourceBundle.bundle.url(
+          forResource: "complete-paywall",
+          withExtension: "json"
+        )
     else { throw CocoaError(.fileNoSuchFile) }
     let documentData = try Data(contentsOf: url)
     let document = try DeliveryValueForFallback.object(

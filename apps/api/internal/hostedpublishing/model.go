@@ -41,6 +41,25 @@ type Product struct {
 	Status         string
 	MetadataSource string
 	InternalName   string
+	ReadinessReady bool
+}
+
+type PublishedDecisionVersion struct {
+	ID          string
+	PlacementID string
+	Document    json.RawMessage
+}
+type EntitlementReference struct {
+	ID  string `json:"id"`
+	Key string `json:"key"`
+}
+type ReleaseRepresentation struct {
+	ReleaseID               string
+	EnvironmentID           string
+	DeliveryContractVersion string
+	Payload                 json.RawMessage
+	ContentHash             string
+	CreatedAt               time.Time
 }
 
 type ProviderAssignment struct {
@@ -117,11 +136,11 @@ type CommerceConfigurationSnapshot struct {
 }
 
 type ProviderPublicationIssue struct {
-	Code           string `json:"code"`
-	ProductID      string `json:"productId"`
-	ApplicationID  string `json:"applicationId"`
-	ResourceType   string `json:"resourceType"`
-	ResourceID     string `json:"resourceId"`
+	Code           string                   `json:"code"`
+	ProductID      string                   `json:"productId"`
+	ApplicationID  string                   `json:"applicationId"`
+	ResourceType   string                   `json:"resourceType"`
+	ResourceID     string                   `json:"resourceId"`
 	RecoveryAction providerreadiness.Action `json:"recoveryAction"`
 }
 
@@ -332,9 +351,12 @@ type PublishResult struct {
 }
 
 type SDKConfiguration struct {
-	Release     Release
-	Environment Environment
-	APIKeyID    string
+	Release                 Release
+	Payload                 json.RawMessage
+	ContentHash             string
+	DeliveryContractVersion string
+	Environment             Environment
+	APIKeyID                string
 }
 
 type SDKCommerceConfiguration struct {

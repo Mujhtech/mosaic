@@ -3,6 +3,16 @@
 All notable Mosaic protocol changes are recorded here. Versioned artifacts are
 not immutable until their review gate is approved.
 
+## Placement Decision v1 and Configuration Delivery v2 - 2026-07-26
+
+Status: release candidate
+
+- Added a separate Placement Decision `1` contract for deterministic local targeting, three-state evaluation, explicit outcomes/fallbacks, assignment policy, rollout, compatibility, and privacy-safe diagnostics.
+- Added Configuration Delivery `2` as an atomic envelope containing exact Decision v1 Rule Sets, Paywall Protocol `0.2` Versions, and Product/Entitlement references.
+- Added shared evaluator and rollout conformance fixtures, focused atomic-rejection fixtures, semantic validators, generated browser declarations, documentation, and changelogs.
+- Preserved Configuration Delivery `1`, Paywall Protocol `0.2`, and Commerce contract semantics.
+- Added evaluator conformance for canonical locale equality/membership and unknown malformed application versions without changing Placement Decision v1 wire syntax.
+
 ## Commerce Provider and Configuration v2 - 2026-07-24
 
 Status: release candidate
