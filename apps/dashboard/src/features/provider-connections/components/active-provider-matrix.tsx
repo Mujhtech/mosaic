@@ -1,6 +1,6 @@
 import { WarningCircleIcon } from "@phosphor-icons/react/dist/ssr/WarningCircle";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useState } from "react";
+import { useCallback, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -267,6 +267,9 @@ function ProviderAssignmentControl({
   organizationId: string;
   projectId: string;
 }) {
+  const handleClick3 = useCallback(() => setReviewAction("clear"), []);
+  const handleClick2 = useCallback(() => setReviewAction("set"), []);
+  const handleClick = useCallback(() => setReviewAction(null), []);
   const queryClient = useQueryClient();
   const currentChoiceId = currentAssignment
     ? currentAssignment.activationKind === "native_store"
@@ -463,7 +466,7 @@ function ProviderAssignmentControl({
           ) : null}
           <Button
             disabled={mutation.isPending}
-            onClick={() => setReviewAction(null)}
+            onClick={handleClick}
             size="sm"
             type="button"
             variant="outline"
@@ -500,7 +503,7 @@ function ProviderAssignmentControl({
         </Select>
         <Button
           disabled={!selected || selected.id === currentChoiceId}
-          onClick={() => setReviewAction("set")}
+          onClick={handleClick2}
           size="sm"
           type="button"
           variant="outline"
@@ -509,7 +512,7 @@ function ProviderAssignmentControl({
         </Button>
         {currentAssignment ? (
           <Button
-            onClick={() => setReviewAction("clear")}
+            onClick={handleClick3}
             size="sm"
             type="button"
             variant="outline"

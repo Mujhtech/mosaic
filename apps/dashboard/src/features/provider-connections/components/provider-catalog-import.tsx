@@ -1,7 +1,7 @@
 import { CaretDownIcon } from "@phosphor-icons/react/dist/ssr/CaretDown";
 import { CheckCircleIcon } from "@phosphor-icons/react/dist/ssr/CheckCircle";
 import { WarningCircleIcon } from "@phosphor-icons/react/dist/ssr/WarningCircle";
-import { useMemo, useRef, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -226,6 +226,9 @@ export function ProviderCatalogImport({
     }
   }
 
+  const handleClick = useCallback(() => {
+    submit();
+  }, [submit]);
   const failedProductIds =
     result?.items
       .filter((item) => item.status !== "imported")
@@ -588,9 +591,7 @@ export function ProviderCatalogImport({
             !selectedApplicationId ||
             !selectedEnvironmentId
           }
-          onClick={() => {
-            submit();
-          }}
+          onClick={handleClick}
           type="button"
         >
           {isImporting

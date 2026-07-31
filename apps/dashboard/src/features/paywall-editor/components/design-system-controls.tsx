@@ -5,6 +5,7 @@ import { CaretRightIcon } from "@phosphor-icons/react/dist/ssr/CaretRight";
 import { CopyIcon } from "@phosphor-icons/react/dist/ssr/Copy";
 import { PlusIcon } from "@phosphor-icons/react/dist/ssr/Plus";
 import { TrashIcon } from "@phosphor-icons/react/dist/ssr/Trash";
+import { useCallback } from "react";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -260,6 +261,18 @@ export function ColorControl({
   value: ProtocolColor;
 }) {
   const editor = useEditorActions();
+  const handleCommit = useCallback(
+    () => editor.commitDocumentTransaction(),
+    [editor]
+  );
+  const handleCancel = useCallback(
+    () => editor.cancelDocumentTransaction(),
+    [editor]
+  );
+  const handleBegin = useCallback(
+    () => editor.beginDocumentTransaction(),
+    [editor]
+  );
   return (
     <>
       <label className="sr-only" htmlFor={id}>
@@ -269,10 +282,10 @@ export function ColorControl({
         document={document}
         id={id}
         label={label}
-        onBegin={() => editor.beginDocumentTransaction()}
-        onCancel={() => editor.cancelDocumentTransaction()}
+        onBegin={handleBegin}
+        onCancel={handleCancel}
         onChange={onChange}
-        onCommit={() => editor.commitDocumentTransaction()}
+        onCommit={handleCommit}
         value={value}
       />
     </>

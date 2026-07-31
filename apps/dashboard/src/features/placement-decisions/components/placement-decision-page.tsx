@@ -8,7 +8,7 @@ import {
   useQueryClient,
 } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
-import { useRef, useState } from "react";
+import { useCallback, useRef, useState } from "react";
 
 import { EmptyState } from "@/components/feedback/empty-state";
 import { ErrorState } from "@/components/feedback/error-state";
@@ -211,6 +211,7 @@ function DecisionWorkspace({
   paywalls: readonly HostedPaywallListItem[];
   scope: { environmentId: string; placementId: string; projectId: string };
 }) {
+  const handleClick2 = useCallback(() => setConfirmingRuleSetArchive(true), []);
   const [tab, setTab] = useState<DetailTab>("overview");
   const [confirmingRuleSetArchive, setConfirmingRuleSetArchive] =
     useState(false);
@@ -249,6 +250,7 @@ function DecisionWorkspace({
         (current) => (current ? { ...current, status: "archived" } : current)
       ),
   });
+  const handleClick = useCallback(() => archive.mutate(), [archive]);
   const archiveRuleSet = useMutation({
     mutationFn: () => adapter.archiveRuleSet(scope, detail.draft.ruleSetId),
     onSuccess: () =>
@@ -259,6 +261,11 @@ function DecisionWorkspace({
   // Archiving a Placement or its rule set previously rendered the raw server
   // message. Mosaic-owned copy plus the correlation ID is the documented
   // support path, and a coded refusal here can name the page that resolves it.
+  const handleConfirm = useCallback(() => {
+    archiveRuleSet.mutate(undefined, {
+      onSuccess: () => setConfirmingRuleSetArchive(false),
+    });
+  }, [archiveRuleSet]);
   const archiveError = archiveRuleSet.error ?? archive.error;
   const archiveFailure = archiveError
     ? describeApiError(archiveError, {
@@ -274,6 +281,21 @@ function DecisionWorkspace({
       form.reset(saved);
     },
   });
+  // TanStack Form's instance type is deep enough that naming it in a dependency
+  // array trips TS2589, so the callbacks read it through a ref instead. The
+  // instance is stable across renders, so the behaviour is unchanged.
+  const formRef = useRef(form);
+  formRef.current = form;
+  const handleClick7 = useCallback(() => {
+    formRef.current.handleSubmit();
+  }, []);
+  const handleClick5 = useCallback(
+    () => validation.mutate(formRef.current.state.values.revision),
+    [validation]
+  );
+  const handleClick4 = useCallback(() => {
+    formRef.current.handleSubmit();
+  }, []);
   const publish = useMutation({
     mutationFn: () =>
       adapter.publishRuleSet(scope, {
@@ -285,6 +307,7 @@ function DecisionWorkspace({
         queryKey: placementDecisionKeys.detail(scope, adapter),
       }),
   });
+  const handleClick6 = useCallback(() => publish.mutate(), [publish]);
   const issues =
     validation.data?.issues ?? detail.draft.validation?.issues ?? [];
   const updateRules = (next: readonly PlacementRule[]) =>
@@ -302,6 +325,16 @@ function DecisionWorkspace({
         ) => void;
       }
     ).setFieldValue("fallbacks", next);
+  const handleClick3 = useCallback(() => {
+    const fallbacks = formRef.current.state.values.fallbacks;
+    updateFallbacks([
+      ...fallbacks,
+      {
+        key: `fallback_${fallbacks.length + 1}`,
+        outcome: { type: "no_paywall" },
+      },
+    ]);
+  }, [updateFallbacks]);
   const updateDefaultOutcome = (next: DecisionOutcome) =>
     (
       form as unknown as {
@@ -340,7 +373,7 @@ function DecisionWorkspace({
               detail.status === "archived" ||
               detail.usage.ruleSetCount > 0
             }
-            onClick={() => archive.mutate()}
+            onClick={handleClick}
             size="sm"
             type="button"
             variant="outline"
@@ -370,7 +403,7 @@ function DecisionWorkspace({
             </div>
             <Button
               disabled={archiveRuleSet.isPending}
-              onClick={() => setConfirmingRuleSetArchive(true)}
+              onClick={handleClick2}
               size="sm"
               type="button"
               variant="outline"
@@ -381,11 +414,7 @@ function DecisionWorkspace({
                 : "Archive settings"}
             </Button>
             <ArchiveRuleSetConfirmation
-              onConfirm={() => {
-                archiveRuleSet.mutate(undefined, {
-                  onSuccess: () => setConfirmingRuleSetArchive(false),
-                });
-              }}
+              onConfirm={handleConfirm}
               onOpenChange={setConfirmingRuleSetArchive}
               open={confirmingRuleSetArchive}
               pending={archiveRuleSet.isPending}
@@ -568,16 +597,7 @@ function DecisionWorkspace({
                 </p>
               </div>
               <Button
-                onClick={() => {
-                  const fallbacks = form.state.values.fallbacks;
-                  updateFallbacks([
-                    ...fallbacks,
-                    {
-                      key: `fallback_${fallbacks.length + 1}`,
-                      outcome: { type: "no_paywall" },
-                    },
-                  ]);
-                }}
+                onClick={handleClick3}
                 size="sm"
                 type="button"
                 variant="outline"
@@ -659,9 +679,7 @@ function DecisionWorkspace({
           <div className="flex flex-wrap items-center gap-2">
             <Button
               disabled={save.isPending}
-              onClick={() => {
-                form.handleSubmit();
-              }}
+              onClick={handleClick4}
               type="button"
             >
               <FloppyDiskIcon aria-hidden />
@@ -669,7 +687,7 @@ function DecisionWorkspace({
             </Button>
             <Button
               disabled={validation.isPending || form.state.isDirty}
-              onClick={() => validation.mutate(form.state.values.revision)}
+              onClick={handleClick5}
               type="button"
               variant="outline"
             >
@@ -681,7 +699,7 @@ function DecisionWorkspace({
                 publish.isPending ||
                 !validation.data?.valid
               }
-              onClick={() => publish.mutate()}
+              onClick={handleClick6}
               type="button"
               variant="outline"
             >
@@ -712,9 +730,7 @@ function DecisionWorkspace({
               <p className="text-destructive text-sm">{save.error.message}</p>
               <div className="mt-2 flex gap-2">
                 <Button
-                  onClick={() => {
-                    form.handleSubmit();
-                  }}
+                  onClick={handleClick7}
                   size="sm"
                   type="button"
                   variant="outline"

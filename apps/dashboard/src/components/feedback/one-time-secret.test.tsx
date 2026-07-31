@@ -1,5 +1,5 @@
 import { fireEvent, render, screen } from "@testing-library/react";
-import { useState } from "react";
+import { useCallback, useState } from "react";
 import { describe, expect, it, vi } from "vitest";
 
 import { OneTimeSecret } from "@/components/feedback/one-time-secret";
@@ -9,11 +9,12 @@ function SecretHarness({
 }: {
   writeToClipboard: (value: string) => Promise<void>;
 }) {
+  const handleDismiss = useCallback(() => setVisible(false), []);
   const [visible, setVisible] = useState(true);
 
   return visible ? (
     <OneTimeSecret
-      onDismiss={() => setVisible(false)}
+      onDismiss={handleDismiss}
       secret="mosaic_test_secret"
       writeToClipboard={writeToClipboard}
     />

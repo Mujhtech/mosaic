@@ -1,5 +1,5 @@
 import { fireEvent, render, screen } from "@testing-library/react";
-import { useLayoutEffect, useState } from "react";
+import { useCallback, useLayoutEffect, useState } from "react";
 import { describe, expect, it, vi } from "vitest";
 import { COMPONENT_CATALOG } from "@/features/paywall-editor/components/component-catalog";
 import { StudioCommandPalette } from "@/features/paywall-editor/components/studio-command-palette";
@@ -33,6 +33,7 @@ function PaletteHarness({
   onExport: () => void;
   onRequestImport: () => void;
 }) {
+  const handleClick = useCallback(() => setOpen(true), []);
   const [open, setOpen] = useState(true);
   const document = useEditorStoreSelector(selectDocument);
   const editor = useEditorActions();
@@ -91,7 +92,7 @@ function PaletteHarness({
           )
           .join("|")}
       </output>
-      <button onClick={() => setOpen(true)} type="button">
+      <button onClick={handleClick} type="button">
         Reopen command palette
       </button>
       <StudioCommandPalette

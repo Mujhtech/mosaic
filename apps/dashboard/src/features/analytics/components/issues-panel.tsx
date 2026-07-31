@@ -1,5 +1,6 @@
 import { ArrowSquareOutIcon } from "@phosphor-icons/react/dist/ssr/ArrowSquareOut";
 import { useQuery } from "@tanstack/react-query";
+import { useCallback } from "react";
 
 import { EmptyState } from "@/components/feedback/empty-state";
 import type { AnalyticsAdapter } from "../api/analytics-adapter";
@@ -21,13 +22,14 @@ export function IssuesPanel({
   scope: AnalyticsScope;
 }) {
   const query = useQuery(issuesQueryOptions(scope, filters, adapter));
+  const handleRetry = useCallback(() => {
+    query.refetch();
+  }, [query]);
   return (
     <AnalyticsQueryResult
       error={query.error}
       isPending={query.isPending}
-      onRetry={() => {
-        query.refetch();
-      }}
+      onRetry={handleRetry}
     >
       {query.data?.length === 0 ? (
         <EmptyState

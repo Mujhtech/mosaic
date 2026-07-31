@@ -1,6 +1,7 @@
 import { WarningCircleIcon } from "@phosphor-icons/react/dist/ssr/WarningCircle";
 import { useForm } from "@tanstack/react-form";
 import { useMutation } from "@tanstack/react-query";
+import { useCallback } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Field, FieldError, FieldLabel } from "@/components/ui/field";
@@ -128,6 +129,10 @@ export function DecisionSimulator({
     },
   });
 
+  const handleClick = useCallback(() => {
+    form.reset();
+    simulation.reset();
+  }, [form, simulation]);
   return (
     <section
       aria-labelledby="simulator-heading"
@@ -456,14 +461,7 @@ export function DecisionSimulator({
           <Button disabled={simulation.isPending} type="submit">
             {simulation.isPending ? "Evaluating…" : "Run simulation"}
           </Button>
-          <Button
-            onClick={() => {
-              form.reset();
-              simulation.reset();
-            }}
-            type="button"
-            variant="outline"
-          >
+          <Button onClick={handleClick} type="button" variant="outline">
             Clear inputs
           </Button>
         </div>

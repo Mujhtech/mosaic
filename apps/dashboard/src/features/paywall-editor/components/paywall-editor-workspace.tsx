@@ -2,7 +2,7 @@ import type { UseQueryResult } from "@tanstack/react-query";
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import type { ReactNode } from "react";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { ErrorState } from "@/components/feedback/error-state";
 import { LoadingState } from "@/components/feedback/loading-state";
@@ -245,6 +245,11 @@ function WorkspaceContent({
     );
   }
 
+  const handleResume = useCallback(() => {
+    if (autosave.status === "valid" || autosave.status === "recoverable") {
+      applyProject(autosave.project);
+    }
+  }, [applyProject, autosave]);
   async function importFile(file: File) {
     try {
       if (file.size > MAX_LOCAL_PROJECT_BYTES) {
@@ -309,14 +314,7 @@ function WorkspaceContent({
         autosave={autosave}
         importError={importError}
         onImport={importFile}
-        onResume={() => {
-          if (
-            autosave.status === "valid" ||
-            autosave.status === "recoverable"
-          ) {
-            applyProject(autosave.project);
-          }
-        }}
+        onResume={handleResume}
         onSelectTemplate={(templateId) => {
           const template = EDITOR_TEMPLATES.find(
             (entry) => entry.id === templateId

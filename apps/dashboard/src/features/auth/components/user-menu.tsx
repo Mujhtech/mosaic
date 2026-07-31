@@ -2,6 +2,7 @@ import { CaretUpDownIcon } from "@phosphor-icons/react/dist/ssr/CaretUpDown";
 import { SignOutIcon } from "@phosphor-icons/react/dist/ssr/SignOut";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
+import { useCallback } from "react";
 
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import {
@@ -37,6 +38,7 @@ export function UserMenu() {
     },
   });
 
+  const handleClick = useCallback(() => logout.mutate(), [logout]);
   const displayName =
     session.data?.name ?? session.data?.email ?? "Signed-out session";
 
@@ -79,7 +81,7 @@ export function UserMenu() {
               <DropdownMenuItem
                 className="gap-2 p-2"
                 disabled={logout.isPending}
-                onClick={() => logout.mutate()}
+                onClick={handleClick}
               >
                 <SignOutIcon aria-hidden className="size-4" />
                 {logout.isPending ? "Signing out…" : "Sign out"}

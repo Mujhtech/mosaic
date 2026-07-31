@@ -1,4 +1,5 @@
 import { type ErrorComponentProps, Link } from "@tanstack/react-router";
+import { useCallback } from "react";
 
 import { EmptyState } from "@/components/feedback/empty-state";
 import { ErrorState } from "@/components/feedback/error-state";
@@ -8,20 +9,17 @@ import { buttonVariants } from "@/components/ui/button-variants";
 import { describeApiError } from "@/lib/api/errors";
 
 function RouteRecoveryActions() {
+  const handleClick = useCallback(() => {
+    if (typeof window !== "undefined") {
+      window.history.back();
+    }
+  }, []);
   return (
     <div className="mt-4 flex flex-wrap gap-2">
       <Link className={buttonVariants({ variant: "outline" })} to="/workspace">
         Go to workspace
       </Link>
-      <Button
-        onClick={() => {
-          if (typeof window !== "undefined") {
-            window.history.back();
-          }
-        }}
-        type="button"
-        variant="ghost"
-      >
+      <Button onClick={handleClick} type="button" variant="ghost">
         Go back
       </Button>
     </div>

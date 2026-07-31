@@ -1,5 +1,5 @@
 import { type QueryClient, useMutation } from "@tanstack/react-query";
-import { useState } from "react";
+import { useCallback, useState } from "react";
 
 import { Input } from "@/components/ui/input";
 import {
@@ -647,6 +647,9 @@ export function MigrationLifecycleOperations({
     setAcknowledged(false);
   }
 
+  const handleConfirm = useCallback(() => {
+    submit();
+  }, [submit]);
   const facts = [
     {
       label: "Program state",
@@ -805,9 +808,7 @@ export function MigrationLifecycleOperations({
             facts={facts}
             impactSummary={impact[name]}
             isPending={mutation.isPending}
-            onConfirm={() => {
-              submit();
-            }}
+            onConfirm={handleConfirm}
             pendingLabel="Submitting command…"
             title="Review dangerous command"
           />

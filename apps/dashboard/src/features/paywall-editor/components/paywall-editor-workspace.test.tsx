@@ -1,5 +1,5 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { useEffect } from "react";
+import { useCallback, useEffect } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
@@ -58,6 +58,10 @@ describe("PaywallEditorWorkspace", () => {
     function ProviderProbe() {
       const editor = useEditorActions();
       const workspace = useStudioWorkspaceActions();
+      const handleClick = useCallback(
+        () => workspace.setSelectedTool("components"),
+        [workspace]
+      );
       const selectedTool = useStudioWorkspaceSelector(selectSelectedTool);
       editorStores.add(editor);
 
@@ -66,10 +70,7 @@ describe("PaywallEditorWorkspace", () => {
       }, []);
 
       return (
-        <button
-          onClick={() => workspace.setSelectedTool("components")}
-          type="button"
-        >
+        <button onClick={handleClick} type="button">
           {selectedTool}
         </button>
       );

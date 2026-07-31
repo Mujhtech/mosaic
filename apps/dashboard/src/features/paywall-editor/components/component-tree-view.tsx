@@ -12,6 +12,7 @@ import { PlusIcon } from "@phosphor-icons/react/dist/ssr/Plus";
 import { StackIcon } from "@phosphor-icons/react/dist/ssr/Stack";
 import { WarningCircleIcon } from "@phosphor-icons/react/dist/ssr/WarningCircle";
 import { XCircleIcon } from "@phosphor-icons/react/dist/ssr/XCircle";
+import { useCallback } from "react";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -98,6 +99,14 @@ export function ComponentTreeView({ model }: { model: ComponentTreeModel }) {
     cancelPointerLayerDrag,
     handleTreeKeyDown,
   } = model;
+  const handleClick2 = useCallback(
+    () => addDestination("sheet"),
+    [addDestination]
+  );
+  const handleClick = useCallback(
+    () => addDestination("screen"),
+    [addDestination]
+  );
   return (
     <section aria-labelledby="component-tree-title">
       <div className="mb-3 flex items-start justify-between gap-2">
@@ -125,10 +134,10 @@ export function ComponentTreeView({ model }: { model: ComponentTreeModel }) {
               <PlusIcon aria-hidden />
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
-              <DropdownMenuItem onClick={() => addDestination("screen")}>
+              <DropdownMenuItem onClick={handleClick}>
                 <DevicesIcon aria-hidden /> Add screen
               </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => addDestination("sheet")}>
+              <DropdownMenuItem onClick={handleClick2}>
                 <StackIcon aria-hidden /> Add sheet
               </DropdownMenuItem>
             </DropdownMenuContent>

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useCallback, useState } from "react";
 import {
   accessStateExplanation,
   accessStateLabel,
@@ -107,6 +107,7 @@ function EntitlementRow({
   scope: WorkspaceScope;
   sources: readonly BillingEntitlementSource[];
 }) {
+  const handleClick = useCallback(() => setOpen((current) => !current), []);
   const [open, setOpen] = useState(false);
   const contentId = `entitlement-sources-${entry.entitlementId}`;
 
@@ -190,7 +191,7 @@ function EntitlementRow({
         aria-controls={contentId}
         aria-expanded={open}
         className="mt-3 font-semibold text-primary text-sm"
-        onClick={() => setOpen((current) => !current)}
+        onClick={handleClick}
         type="button"
       >
         {open

@@ -8,7 +8,7 @@ import {
   useQuery,
   useQueryClient,
 } from "@tanstack/react-query";
-import { useState } from "react";
+import { useCallback, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { buttonVariants } from "@/components/ui/button-variants";
@@ -57,6 +57,9 @@ export function ProviderConnectionDetailPage({
   organizationId: string;
   projectId: string;
 }) {
+  const handleClick7 = useCallback(() => setCatalogRequested(true), []);
+  const handleClick5 = useCallback(() => setConfirmRevoke(false), []);
+  const handleClick3 = useCallback(() => setConfirmRevoke(true), []);
   const queryClient = useQueryClient();
   const [catalogRequested, setCatalogRequested] = useState(false);
   const [confirmRevoke, setConfirmRevoke] = useState(false);
@@ -86,6 +89,9 @@ export function ProviderConnectionDetailPage({
     ...providerSyncRunsQueryOptions(connectionId),
     enabled: scopeReady,
   });
+  const handleClick6 = useCallback(() => {
+    syncRuns.refetch();
+  }, [syncRuns]);
   const applications = useQuery({
     ...applicationsQueryOptions(projectId),
     enabled: scopeReady,
@@ -116,6 +122,10 @@ export function ProviderConnectionDetailPage({
   const testConnection = useMutation(
     testProviderConnectionMutationOptions(connectionId, projectId, queryClient)
   );
+  const handleClick = useCallback(
+    () => testConnection.mutate(),
+    [testConnection]
+  );
   const rotate = useMutation(
     replaceProviderCredentialMutationOptions(
       "rotate",
@@ -139,9 +149,17 @@ export function ProviderConnectionDetailPage({
       queryClient
     )
   );
+  const handleClick4 = useCallback(
+    () =>
+      revoke.mutate(undefined, {
+        onSuccess: () => setConfirmRevoke(false),
+      }),
+    [revoke]
+  );
   const sync = useMutation(
     enqueueProviderSyncMutationOptions(connectionId, projectId, queryClient)
   );
+  const handleClick2 = useCallback(() => sync.mutate(), [sync]);
   const importProducts = useMutation(
     importProviderProductsMutationOptions(connectionId, projectId, queryClient)
   );
@@ -268,7 +286,7 @@ export function ProviderConnectionDetailPage({
                 testConnection.isPending ||
                 connection.data?.status === "revoked"
               }
-              onClick={() => testConnection.mutate()}
+              onClick={handleClick}
               type="button"
             >
               {testConnection.isPending ? "Testing…" : "Test connection"}
@@ -295,7 +313,7 @@ export function ProviderConnectionDetailPage({
                 connection.data?.status !== "active" ||
                 health.data?.status !== "healthy"
               }
-              onClick={() => sync.mutate()}
+              onClick={handleClick2}
               type="button"
               variant="outline"
             >
@@ -304,7 +322,7 @@ export function ProviderConnectionDetailPage({
             </Button>
             <Button
               disabled={connection.data?.status === "revoked"}
-              onClick={() => setConfirmRevoke(true)}
+              onClick={handleClick3}
               type="button"
               variant="destructive"
             >
@@ -365,11 +383,7 @@ export function ProviderConnectionDetailPage({
               <div className="mt-3 flex gap-2">
                 <Button
                   disabled={revoke.isPending}
-                  onClick={() =>
-                    revoke.mutate(undefined, {
-                      onSuccess: () => setConfirmRevoke(false),
-                    })
-                  }
+                  onClick={handleClick4}
                   type="button"
                   variant="destructive"
                 >
@@ -377,7 +391,7 @@ export function ProviderConnectionDetailPage({
                 </Button>
                 <Button
                   disabled={revoke.isPending}
-                  onClick={() => setConfirmRevoke(false)}
+                  onClick={handleClick5}
                   type="button"
                   variant="outline"
                 >
@@ -492,9 +506,7 @@ export function ProviderConnectionDetailPage({
           )}
           <Button
             className="mt-3"
-            onClick={() => {
-              syncRuns.refetch();
-            }}
+            onClick={handleClick6}
             size="sm"
             type="button"
             variant="outline"
@@ -546,7 +558,7 @@ export function ProviderConnectionDetailPage({
           ) : (
             <Button
               disabled={connection.data?.status === "revoked"}
-              onClick={() => setCatalogRequested(true)}
+              onClick={handleClick7}
               type="button"
             >
               Load provider catalog

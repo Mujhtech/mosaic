@@ -2,7 +2,7 @@ import { useForm } from "@tanstack/react-form";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 
-import { useState } from "react";
+import { useCallback, useState } from "react";
 import { EmptyState } from "@/components/feedback/empty-state";
 import { Button } from "@/components/ui/button";
 import { buttonVariants } from "@/components/ui/button-variants";
@@ -327,6 +327,7 @@ export function PlacementsPage({
   organizationId: string;
   projectId: string;
 }) {
+  const handleCreated = useCallback(() => setCreateOpen(false), []);
   const adapter = useHostedPublishingAdapter();
   const [createOpen, setCreateOpen] = useState(false);
   // These resources are independent and begin together; TanStack Query deduplicates shared reads.
@@ -374,7 +375,7 @@ export function PlacementsPage({
       <DialogContent className="max-h-[calc(100vh-4rem)] overflow-y-auto">
         <CreatePlacementForm
           environmentId={environmentId}
-          onCreated={() => setCreateOpen(false)}
+          onCreated={handleCreated}
           paywalls={availablePaywalls}
           projectId={projectId}
         />

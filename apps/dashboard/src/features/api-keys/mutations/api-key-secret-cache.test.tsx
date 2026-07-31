@@ -5,7 +5,7 @@ import {
   useQueryClient,
 } from "@tanstack/react-query";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { useState } from "react";
+import { useCallback, useState } from "react";
 import { describe, expect, it, vi } from "vitest";
 
 import {
@@ -39,6 +39,14 @@ function ObserverHarness() {
     transferApiKeySecret(queryClient, result, setRevealed, mutation.reset);
   }
 
+  const handleClick2 = useCallback(
+    () => mutation.mutate("mosaic_secret_second", { onSuccess: reveal }),
+    [mutation, reveal]
+  );
+  const handleClick = useCallback(
+    () => mutation.mutate("mosaic_secret_first", { onSuccess: reveal }),
+    [mutation, reveal]
+  );
   function dismiss() {
     setRevealed(null);
     mutation.reset();
@@ -47,20 +55,10 @@ function ObserverHarness() {
 
   return (
     <>
-      <button
-        onClick={() =>
-          mutation.mutate("mosaic_secret_first", { onSuccess: reveal })
-        }
-        type="button"
-      >
+      <button onClick={handleClick} type="button">
         Reveal first
       </button>
-      <button
-        onClick={() =>
-          mutation.mutate("mosaic_secret_second", { onSuccess: reveal })
-        }
-        type="button"
-      >
+      <button onClick={handleClick2} type="button">
         Replace secret
       </button>
       <button onClick={dismiss} type="button">

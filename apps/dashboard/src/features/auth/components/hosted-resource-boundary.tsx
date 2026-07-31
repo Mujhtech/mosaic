@@ -1,7 +1,7 @@
 import { CopyIcon } from "@phosphor-icons/react/dist/ssr/Copy";
 import { Link } from "@tanstack/react-router";
 import type { ReactNode } from "react";
-import { useState } from "react";
+import { useCallback, useState } from "react";
 
 import { EmptyState } from "@/components/feedback/empty-state";
 import { ErrorState } from "@/components/feedback/error-state";
@@ -194,6 +194,9 @@ export function RequestIdCopy({ requestId }: { requestId: string }) {
     }
   }
 
+  const handleClick = useCallback(() => {
+    copyRequestId();
+  }, [copyRequestId]);
   return (
     <div className="flex flex-wrap items-center gap-2">
       <span className="text-muted-foreground text-xs">
@@ -203,13 +206,7 @@ export function RequestIdCopy({ requestId }: { requestId: string }) {
         </code>
       </span>
       {canCopy ? (
-        <Button
-          onClick={() => {
-            copyRequestId();
-          }}
-          size="sm"
-          variant="ghost"
-        >
+        <Button onClick={handleClick} size="sm" variant="ghost">
           <CopyIcon aria-hidden size={16} />
           {copied ? "Request ID copied" : "Copy request ID"}
         </Button>

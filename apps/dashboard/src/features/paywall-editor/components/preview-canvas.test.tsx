@@ -1,5 +1,5 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { useLayoutEffect } from "react";
+import { useCallback, useLayoutEffect } from "react";
 import { describe, expect, it } from "vitest";
 import {
   calculateCanvasScale,
@@ -139,6 +139,10 @@ function PreviewProbe() {
     undoStack,
   } = useEditorStore();
   const { selectComponent, undo } = useEditorActions();
+  const handleClick = useCallback(
+    () => selectComponent("purchase-progress"),
+    [selectComponent]
+  );
   const buttons = document
     ? flattenDocument(document).filter((entry) => entry.node.type === "button")
     : [];
@@ -174,10 +178,7 @@ function PreviewProbe() {
       <button onClick={undo} type="button">
         Undo canvas change
       </button>
-      <button
-        onClick={() => selectComponent("purchase-progress")}
-        type="button"
-      >
+      <button onClick={handleClick} type="button">
         Preview purchase progress
       </button>
     </div>

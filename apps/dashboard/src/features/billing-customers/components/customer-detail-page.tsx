@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useState } from "react";
+import { useCallback, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { HostedResourceBoundary } from "@/features/auth/components/hosted-resource-boundary";
@@ -106,6 +106,7 @@ export function CustomerDetailPage({
   // A queued recomputation is the one moment the page is expected to change
   // without the operator doing anything, so both authoritative reads poll until
   // the projection reports `current` and then stop.
+  const handleClick = useCallback(() => sync.mutate(), [sync]);
   const recomputeQueued = sync.isSuccess;
   const detail = useQuery({
     ...billingCustomerQueryOptions(
@@ -296,7 +297,7 @@ export function CustomerDetailPage({
                   from facts Mosaic already holds. */}
               <Button
                 disabled={sync.isPending}
-                onClick={() => sync.mutate()}
+                onClick={handleClick}
                 type="button"
               >
                 {sync.isPending ? "Queueing…" : "Recompute projection"}
@@ -591,6 +592,7 @@ function CustomerSubscriptionsPanel({
   scopeReady: boolean;
   totalCount: number | undefined;
 }) {
+  const handleClick = useCallback(() => setExpanded(true), []);
   const [expanded, setExpanded] = useState(false);
   const [cursor, setCursor] = useState<string | undefined>(undefined);
 
@@ -638,7 +640,7 @@ function CustomerSubscriptionsPanel({
           this customer.{" "}
           <button
             className="font-semibold text-primary"
-            onClick={() => setExpanded(true)}
+            onClick={handleClick}
             type="button"
           >
             See all subscriptions

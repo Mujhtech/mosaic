@@ -1,7 +1,7 @@
 import { KeyIcon } from "@phosphor-icons/react/dist/ssr/Key";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
-import { useState } from "react";
+import { useCallback, useState } from "react";
 import { OneTimeSecret } from "@/components/feedback/one-time-secret";
 import { Button } from "@/components/ui/button";
 import {
@@ -59,6 +59,7 @@ export function ApiKeysPage({
   organizationId,
   projectId,
 }: ApiKeysPageProps) {
+  const handleClick = useCallback(() => setPendingAction(null), []);
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [revealed, setRevealed] = useState<ApiKeySecretResult | null>(null);
@@ -127,6 +128,20 @@ export function ApiKeysPage({
       sanitizeSecretMutationState
     );
   }
+  const handleClick3 = useCallback(
+    () =>
+      create.mutate(buildApiKeyCreationInput("secret_server"), {
+        onSuccess: revealSecret,
+      }),
+    [create, revealSecret]
+  );
+  const handleClick2 = useCallback(
+    () =>
+      create.mutate(buildApiKeyCreationInput("public_sdk", applicationId), {
+        onSuccess: revealSecret,
+      }),
+    [applicationId, create, revealSecret]
+  );
   const items = keys.data?.items ?? [];
   const error =
     project.error ?? environments.error ?? applications.error ?? keys.error;
@@ -265,7 +280,7 @@ export function ApiKeysPage({
                 >
                   Confirm {pendingAction.action}
                 </Button>
-                <Button onClick={() => setPendingAction(null)} variant="ghost">
+                <Button onClick={handleClick} variant="ghost">
                   Cancel
                 </Button>
               </SheetFooter>
@@ -371,26 +386,12 @@ export function ApiKeysPage({
             <div className="flex flex-wrap gap-2">
               <Button
                 disabled={!applicationId || create.isPending}
-                onClick={() =>
-                  create.mutate(
-                    buildApiKeyCreationInput("public_sdk", applicationId),
-                    {
-                      onSuccess: revealSecret,
-                    }
-                  )
-                }
+                onClick={handleClick2}
               >
                 <KeyIcon aria-hidden size={16} />
                 Create SDK key
               </Button>
-              <Button
-                onClick={() =>
-                  create.mutate(buildApiKeyCreationInput("secret_server"), {
-                    onSuccess: revealSecret,
-                  })
-                }
-                variant="outline"
-              >
+              <Button onClick={handleClick3} variant="outline">
                 Create server key
               </Button>
             </div>

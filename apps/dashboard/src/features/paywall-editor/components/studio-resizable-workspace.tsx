@@ -322,6 +322,33 @@ export function StudioResizableWorkspace({
     pendingCommitsRef.current.set(panel, timeoutId);
   }
 
+  const handleDoubleClick3 = useCallback(
+    () =>
+      scheduleDoubleClickPanelCommit(
+        "diagnostics",
+        diagnosticsPanelRef.current,
+        panelPreferences.diagnostics
+      ),
+    [panelPreferences, scheduleDoubleClickPanelCommit]
+  );
+  const handleDoubleClick2 = useCallback(
+    () =>
+      scheduleDoubleClickPanelCommit(
+        "properties",
+        propertiesPanelRef.current,
+        panelPreferences.properties
+      ),
+    [panelPreferences, scheduleDoubleClickPanelCommit]
+  );
+  const handleDoubleClick = useCallback(
+    () =>
+      scheduleDoubleClickPanelCommit(
+        "left",
+        leftPanelRef.current,
+        panelPreferences.left
+      ),
+    [panelPreferences, scheduleDoubleClickPanelCommit]
+  );
   const getPanelHandle = useCallback(
     (panel: StudioWorkspacePanel) => {
       switch (panel) {
@@ -493,13 +520,7 @@ export function StudioResizableWorkspace({
               <ResizableHandle
                 aria-label="Resize Studio tools and canvas"
                 id="studio-left-handle"
-                onDoubleClick={() =>
-                  scheduleDoubleClickPanelCommit(
-                    "left",
-                    leftPanelRef.current,
-                    panelPreferences.left
-                  )
-                }
+                onDoubleClick={handleDoubleClick}
                 withHandle
               />
 
@@ -519,13 +540,7 @@ export function StudioResizableWorkspace({
                   <ResizableHandle
                     aria-label="Resize Studio canvas and properties"
                     id="studio-right-handle"
-                    onDoubleClick={() =>
-                      scheduleDoubleClickPanelCommit(
-                        "properties",
-                        propertiesPanelRef.current,
-                        panelPreferences.properties
-                      )
-                    }
+                    onDoubleClick={handleDoubleClick2}
                     withHandle
                   />
 
@@ -554,13 +569,7 @@ export function StudioResizableWorkspace({
           <ResizableHandle
             aria-label="Resize Studio workspace and diagnostics"
             id="studio-diagnostics-handle"
-            onDoubleClick={() =>
-              scheduleDoubleClickPanelCommit(
-                "diagnostics",
-                diagnosticsPanelRef.current,
-                panelPreferences.diagnostics
-              )
-            }
+            onDoubleClick={handleDoubleClick3}
             withHandle
           />
 

@@ -6,7 +6,7 @@ import {
 import { useForm } from "@tanstack/react-form";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
-import { useState } from "react";
+import { useCallback, useState } from "react";
 
 import { ErrorState } from "@/components/feedback/error-state";
 import { LiveAnnouncer } from "@/components/feedback/live-announcer";
@@ -424,6 +424,7 @@ function ValidationPanel({
   const validation = useMutation(
     validateExperimentMutationOptions(scope, experimentId, adapter)
   );
+  const handleClick = useCallback(() => validation.mutate(), [validation]);
   const publish = useMutation(
     publishExperimentMutationOptions(scope, experimentId, adapter, queryClient)
   );
@@ -435,7 +436,7 @@ function ValidationPanel({
       <div className="flex flex-wrap gap-2">
         <Button
           disabled={!canManage || validation.isPending}
-          onClick={() => validation.mutate()}
+          onClick={handleClick}
           type="button"
           variant="outline"
         >
@@ -584,6 +585,14 @@ function HistoryPanel({
   const exportMutation = useMutation(
     exportExperimentMutationOptions(scope, experimentId, adapter)
   );
+  const handleClick2 = useCallback(
+    () => exportMutation.mutate(true),
+    [exportMutation]
+  );
+  const handleClick = useCallback(
+    () => exportMutation.mutate(false),
+    [exportMutation]
+  );
   if (history.isPending) {
     return <LoadingState title="Loading immutable history" />;
   }
@@ -606,7 +615,7 @@ function HistoryPanel({
         <div className="flex flex-wrap gap-2">
           <Button
             disabled={!canManage || exportMutation.isPending}
-            onClick={() => exportMutation.mutate(false)}
+            onClick={handleClick}
             type="button"
             variant="outline"
           >
@@ -615,7 +624,7 @@ function HistoryPanel({
           </Button>
           <Button
             disabled={!canRequestIdentityExport || exportMutation.isPending}
-            onClick={() => exportMutation.mutate(true)}
+            onClick={handleClick2}
             type="button"
             variant="outline"
           >

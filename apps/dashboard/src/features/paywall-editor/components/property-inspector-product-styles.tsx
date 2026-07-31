@@ -1,5 +1,5 @@
 /* eslint-disable react-refresh/only-export-components -- internal inspector modules colocate private controls with their supporting types and transforms. */
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { SelectItem } from "@/components/ui/select";
@@ -149,6 +149,10 @@ export function ProductLayerStyleSection({ node }: { node: ProductLayerNode }) {
     });
   }
 
+  const handleClick = useCallback(
+    () => updateStyles((styles) => ({ ...styles, selected: {} })),
+    [updateStyles]
+  );
   function setValue(
     key: "background" | "cornerRadius" | "opacity" | "shadow",
     value: unknown
@@ -258,9 +262,7 @@ export function ProductLayerStyleSection({ node }: { node: ProductLayerNode }) {
           <Button
             className="w-full"
             disabled={disabled || activeOverrides.length === 0}
-            onClick={() =>
-              updateStyles((styles) => ({ ...styles, selected: {} }))
-            }
+            onClick={handleClick}
             size="xs"
             type="button"
             variant="outline"

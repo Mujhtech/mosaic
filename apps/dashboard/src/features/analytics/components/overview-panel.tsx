@@ -1,4 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
+import { useCallback } from "react";
 
 import { EmptyState } from "@/components/feedback/empty-state";
 import type { AnalyticsAdapter } from "../api/analytics-adapter";
@@ -22,14 +23,18 @@ export function OverviewPanel({
   scope: AnalyticsScope;
 }) {
   const overview = useQuery(overviewQueryOptions(scope, filters, adapter));
+  const handleRetry = useCallback(() => {
+    overview.refetch();
+  }, [overview]);
   const breakdowns = useQuery(breakdownsQueryOptions(scope, filters, adapter));
+  const handleRetry2 = useCallback(() => {
+    breakdowns.refetch();
+  }, [breakdowns]);
   return (
     <AnalyticsQueryResult
       error={overview.error}
       isPending={overview.isPending}
-      onRetry={() => {
-        overview.refetch();
-      }}
+      onRetry={handleRetry}
     >
       {overview.data?.metrics.length === 0 ? (
         <EmptyState
@@ -45,9 +50,7 @@ export function OverviewPanel({
           <AnalyticsQueryResult
             error={breakdowns.error}
             isPending={breakdowns.isPending}
-            onRetry={() => {
-              breakdowns.refetch();
-            }}
+            onRetry={handleRetry2}
           >
             {breakdowns.data ? (
               <BreakdownTables breakdowns={breakdowns.data} />

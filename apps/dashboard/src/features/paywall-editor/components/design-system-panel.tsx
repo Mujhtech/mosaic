@@ -1,5 +1,5 @@
 import { StatusMessage } from "@mosaic/design-system";
-import { useState } from "react";
+import { useCallback, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -74,6 +74,7 @@ function tokenReplacementOptions(
 }
 
 export function DesignSystemPanel() {
+  const handleClick = useCallback(() => setPendingDelete(null), []);
   const { document } = useEditorStore();
   const editor = useEditorActions();
   const [pendingDelete, setPendingDelete] = useState<PendingDelete | null>(
@@ -440,7 +441,7 @@ export function DesignSystemPanel() {
           </div>
           <div className="flex justify-end gap-2">
             <Button
-              onClick={() => setPendingDelete(null)}
+              onClick={handleClick}
               size="sm"
               type="button"
               variant="ghost"

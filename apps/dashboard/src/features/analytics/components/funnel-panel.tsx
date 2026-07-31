@@ -1,4 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
+import { useCallback } from "react";
 
 import { EmptyState } from "@/components/feedback/empty-state";
 import type { AnalyticsAdapter } from "../api/analytics-adapter";
@@ -19,13 +20,14 @@ export function FunnelPanel({
   scope: AnalyticsScope;
 }) {
   const query = useQuery(funnelQueryOptions(scope, funnel, filters, adapter));
+  const handleRetry = useCallback(() => {
+    query.refetch();
+  }, [query]);
   return (
     <AnalyticsQueryResult
       error={query.error}
       isPending={query.isPending}
-      onRetry={() => {
-        query.refetch();
-      }}
+      onRetry={handleRetry}
     >
       {query.data?.steps.length === 0 ? (
         <EmptyState

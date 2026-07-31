@@ -6,7 +6,7 @@ import {
   waitFor,
   within,
 } from "@testing-library/react";
-import { useLayoutEffect } from "react";
+import { useCallback, useLayoutEffect } from "react";
 import { describe, expect, it } from "vitest";
 
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -100,12 +100,13 @@ function TreeProbe({ serializePortable }: { serializePortable: boolean }) {
     (entry) => workspace.labels[entry.node.id] === "Nested copy"
   )?.node.id;
 
+  const handleClick = useCallback(
+    () => editor.selectComponent(nestedCopy ?? null),
+    [editor, nestedCopy]
+  );
   return (
     <div>
-      <button
-        onClick={() => editor.selectComponent(nestedCopy ?? null)}
-        type="button"
-      >
+      <button onClick={handleClick} type="button">
         Select nested copy
       </button>
       <output data-testid="document-nodes">

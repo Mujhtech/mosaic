@@ -3,7 +3,7 @@ import { ArrowClockwiseIcon } from "@phosphor-icons/react/dist/ssr/ArrowClockwis
 import { CloudArrowUpIcon } from "@phosphor-icons/react/dist/ssr/CloudArrowUp";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
-import { useRef, useState } from "react";
+import { useCallback, useRef, useState } from "react";
 
 import { EmptyState } from "@/components/feedback/empty-state";
 import { Button } from "@/components/ui/button";
@@ -42,6 +42,12 @@ function AssetRow({
   asset: HostedAsset;
   projectId: string;
 }) {
+  const handleClick4 = useCallback(() => setReviewingArchive(false), []);
+  const handleClick2 = useCallback(() => setReviewingArchive(true), []);
+  const handleClick = useCallback(
+    () => setShowUsage((current) => !current),
+    []
+  );
   const queryClient = useQueryClient();
   const [showUsage, setShowUsage] = useState(false);
   const [reviewingArchive, setReviewingArchive] = useState(false);
@@ -60,6 +66,13 @@ function AssetRow({
     )
   );
 
+  const handleClick3 = useCallback(
+    () =>
+      archive.mutate(undefined, {
+        onSuccess: () => setReviewingArchive(false),
+      }),
+    [archive]
+  );
   return (
     <li className="rounded border border-border p-4">
       <div className="flex flex-col gap-4 lg:flex-row lg:items-start">
@@ -94,7 +107,7 @@ function AssetRow({
         </div>
         <div className="flex flex-wrap gap-2">
           <Button
-            onClick={() => setShowUsage((current) => !current)}
+            onClick={handleClick}
             size="sm"
             type="button"
             variant="outline"
@@ -103,7 +116,7 @@ function AssetRow({
           </Button>
           {asset.status !== "archived" && asset.status !== "deleted" ? (
             <Button
-              onClick={() => setReviewingArchive(true)}
+              onClick={handleClick2}
               size="sm"
               type="button"
               variant="ghost"
@@ -170,18 +183,14 @@ function AssetRow({
           <div className="mt-3 flex gap-2">
             <Button
               disabled={archive.isPending}
-              onClick={() =>
-                archive.mutate(undefined, {
-                  onSuccess: () => setReviewingArchive(false),
-                })
-              }
+              onClick={handleClick3}
               size="sm"
               type="button"
             >
               {archive.isPending ? "Archiving…" : "Confirm archive"}
             </Button>
             <Button
-              onClick={() => setReviewingArchive(false)}
+              onClick={handleClick4}
               size="sm"
               type="button"
               variant="ghost"
@@ -211,6 +220,9 @@ export function AssetsPage({
   projectId: string;
   returnTo?: string;
 }) {
+  const handleClick3 = useCallback(() => inputRef.current?.click(), []);
+  const handleClick2 = useCallback(() => inputRef.current?.click(), []);
+  const handleClick = useCallback(() => inputRef.current?.click(), []);
   const inputRef = useRef<HTMLInputElement | null>(null);
   const queryClient = useQueryClient();
   const assets = useQuery(assetsQueryOptions(projectId, generatedAssetAdapter));
@@ -255,7 +267,7 @@ export function AssetsPage({
               Return to Studio
             </a>
           ) : null}
-          <Button onClick={() => inputRef.current?.click()} type="button">
+          <Button onClick={handleClick} type="button">
             <CloudArrowUpIcon aria-hidden /> Upload Asset
           </Button>
         </div>
@@ -304,7 +316,7 @@ export function AssetsPage({
           <p className="text-destructive text-sm">{upload.error.message}</p>
           <Button
             className="mt-2"
-            onClick={() => inputRef.current?.click()}
+            onClick={handleClick2}
             size="sm"
             type="button"
             variant="outline"
@@ -322,7 +334,7 @@ export function AssetsPage({
           {items.length === 0 ? (
             <EmptyState
               action={
-                <Button onClick={() => inputRef.current?.click()} type="button">
+                <Button onClick={handleClick3} type="button">
                   Upload first Asset
                 </Button>
               }

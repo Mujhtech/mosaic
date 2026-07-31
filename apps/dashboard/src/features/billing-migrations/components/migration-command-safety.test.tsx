@@ -1,4 +1,5 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { useCallback } from "react";
 import { describe, expect, it, vi } from "vitest";
 
 import { MigrationImpactReviewAction } from "@/features/billing-migrations/components/migration-impact-review-action";
@@ -7,26 +8,25 @@ import { ApiError } from "@/lib/api/errors";
 
 function StaleHarness({ onStale }: { onStale: () => Promise<unknown> }) {
   const command = useMigrationCommand(onStale);
+  const handleClick = useCallback(
+    () =>
+      command.run(
+        () =>
+          Promise.reject(
+            new ApiError("raw conflict", {
+              code: "migration_state_conflict",
+              correlationId: "request_1",
+              retryable: false,
+              status: 409,
+            })
+          ),
+        "freeze"
+      ),
+    [command]
+  );
   return (
     <>
-      <button
-        onClick={() =>
-          command.run(
-            () =>
-              Promise.reject(
-                new ApiError("raw conflict", {
-                  code: "migration_state_conflict",
-                  correlationId: "request_1",
-                  retryable: false,
-                  status: 409,
-                })
-              ),
-            "freeze"
-          )
-        }
-      >
-        Freeze
-      </button>
+      <button onClick={handleClick}>Freeze</button>
       {command.error ? <p role="alert">{command.error}</p> : null}
     </>
   );

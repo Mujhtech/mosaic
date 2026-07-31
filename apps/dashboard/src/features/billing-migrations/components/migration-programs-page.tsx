@@ -1,6 +1,6 @@
 import { useMutation, useQueries, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
-import { useState } from "react";
+import { useCallback, useState } from "react";
 
 import { EmptyState } from "@/components/feedback/empty-state";
 import { Button } from "@/components/ui/button";
@@ -54,6 +54,7 @@ export function MigrationProgramsPage({
   const create = useMutation(
     createMigrationProgramMutationOptions(projectId, queryClient)
   );
+  const resetMutationCallback = useCallback(() => create.reset(), [create]);
   const [createOpen, setCreateOpen] = useState(false);
 
   if (scopeMismatch) {
@@ -138,7 +139,7 @@ export function MigrationProgramsPage({
                 to: "/orgs/$organizationId/projects/$projectId/env/$environmentKey/billing/migrations/$programId",
               });
             }}
-            resetMutation={() => create.reset()}
+            resetMutation={resetMutationCallback}
           />
         </div>
       </DialogContent>

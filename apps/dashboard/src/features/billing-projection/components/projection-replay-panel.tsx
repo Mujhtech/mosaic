@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useCallback, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Field, FieldDescription, FieldLabel } from "@/components/ui/field";
@@ -72,6 +72,9 @@ export function ProjectionReplayPanel({
     }
   }
 
+  const handleClick = useCallback(() => {
+    run();
+  }, [run]);
   if (!canManage) {
     return (
       <WorkflowPanel title="Replay a projection">
@@ -192,9 +195,7 @@ export function ProjectionReplayPanel({
       <div className="mt-4 flex flex-wrap items-center gap-3">
         <Button
           disabled={busy || Boolean(scopeIssue)}
-          onClick={() => {
-            run();
-          }}
+          onClick={handleClick}
           type="button"
         >
           {busy ? "Replaying…" : "Run replay"}

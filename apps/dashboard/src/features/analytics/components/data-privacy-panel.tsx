@@ -1,6 +1,6 @@
 import { useForm } from "@tanstack/react-form";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useState } from "react";
+import { useCallback, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -65,6 +65,9 @@ function CollectionSettingsPanel({
 }) {
   const queryClient = useQueryClient();
   const settings = useQuery(settingsQueryOptions(scope, adapter));
+  const handleRetry = useCallback(() => {
+    settings.refetch();
+  }, [settings]);
   const canManage = role === "owner" || role === "admin";
   const mutation = useMutation({
     mutationFn: (next: { enabled: boolean; rawRetentionDays: number }) =>
@@ -83,9 +86,7 @@ function CollectionSettingsPanel({
       <AnalyticsQueryResult
         error={settings.error}
         isPending={settings.isPending}
-        onRetry={() => {
-          settings.refetch();
-        }}
+        onRetry={handleRetry}
       >
         {settings.data ? (
           <form
@@ -179,6 +180,16 @@ function IdentityOperationsPanel({
   role?: AnalyticsRole;
   scope: AnalyticsScope;
 }) {
+  const handleClick2 = useCallback(() => {
+    setMode("delete");
+    setPreview(undefined);
+    setJob(undefined);
+  }, []);
+  const handleClick = useCallback(() => {
+    setMode("export");
+    setPreview(undefined);
+    setJob(undefined);
+  }, []);
   const [mode, setMode] = useState<"export" | "delete">("export");
   const [preview, setPreview] = useState<IdentityPreview>();
   const [identityRequest, setIdentityRequest] = useState<IdentityRequest>();
@@ -208,6 +219,18 @@ function IdentityOperationsPanel({
     }) => adapter.confirmDeletion(scope, request, requestDigest),
     onSuccess: setJob,
   });
+  const handleRetry = useCallback(
+    () =>
+      preview &&
+      identityRequest &&
+      (mode === "export"
+        ? exportMutation.mutate(identityRequest)
+        : deletionMutation.mutate({
+            request: identityRequest,
+            requestDigest: preview.requestToken,
+          })),
+    [deletionMutation, exportMutation, identityRequest, mode, preview]
+  );
   const downloadMutation = useMutation({
     mutationFn: async () => {
       if (!job?.id) {
@@ -217,6 +240,10 @@ function IdentityOperationsPanel({
     },
     onSuccess: (blob) => downloadBlob(blob, "mosaic-identity-export.ndjson"),
   });
+  const handleDownload = useCallback(
+    () => downloadMutation.mutate(),
+    [downloadMutation]
+  );
   const jobQuery = useQuery({
     ...jobQueryOptions(scope, job?.id ?? "", adapter),
     enabled: Boolean(job?.id),
@@ -256,22 +283,14 @@ function IdentityOperationsPanel({
       <div className="space-y-5">
         <div aria-label="Privacy operation" className="flex gap-2" role="group">
           <Button
-            onClick={() => {
-              setMode("export");
-              setPreview(undefined);
-              setJob(undefined);
-            }}
+            onClick={handleClick}
             type="button"
             variant={mode === "export" ? "default" : "outline"}
           >
             Export
           </Button>
           <Button
-            onClick={() => {
-              setMode("delete");
-              setPreview(undefined);
-              setJob(undefined);
-            }}
+            onClick={handleClick2}
             type="button"
             variant={mode === "delete" ? "destructive" : "outline"}
           >
@@ -356,17 +375,8 @@ function IdentityOperationsPanel({
         {job ? (
           <JobStatus
             job={jobQuery.data ?? job}
-            onDownload={() => downloadMutation.mutate()}
-            onRetry={() =>
-              preview &&
-              identityRequest &&
-              (mode === "export"
-                ? exportMutation.mutate(identityRequest)
-                : deletionMutation.mutate({
-                    request: identityRequest,
-                    requestDigest: preview.requestToken,
-                  }))
-            }
+            onDownload={handleDownload}
+            onRetry={handleRetry}
           />
         ) : null}
         {downloadMutation.error ? (

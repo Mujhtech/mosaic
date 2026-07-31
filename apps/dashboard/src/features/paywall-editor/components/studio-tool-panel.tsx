@@ -3,7 +3,7 @@ import { PlusIcon } from "@phosphor-icons/react/dist/ssr/Plus";
 import { TrashIcon } from "@phosphor-icons/react/dist/ssr/Trash";
 import { useQuery } from "@tanstack/react-query";
 import type { RefObject } from "react";
-import { useState } from "react";
+import { useCallback, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { buttonVariants } from "@/components/ui/button-variants";
@@ -293,6 +293,8 @@ function AssetsPanel({ assets }: { assets: readonly Asset[] }) {
     }));
   }
 
+  const handleClick2 = useCallback(() => addAsset("video"), [addAsset]);
+  const handleClick = useCallback(() => addAsset("image"), [addAsset]);
   function updateAsset(id: string, updater: (asset: Asset) => Asset) {
     editor.updateDocument((document) => ({
       ...document,
@@ -322,16 +324,11 @@ function AssetsPanel({ assets }: { assets: readonly Asset[] }) {
         />
       ) : null}
       <div className="grid grid-cols-2 gap-2">
-        <Button
-          onClick={() => addAsset("image")}
-          size="sm"
-          type="button"
-          variant="outline"
-        >
+        <Button onClick={handleClick} size="sm" type="button" variant="outline">
           <PlusIcon aria-hidden /> Image
         </Button>
         <Button
-          onClick={() => addAsset("video")}
+          onClick={handleClick2}
           size="sm"
           type="button"
           variant="outline"

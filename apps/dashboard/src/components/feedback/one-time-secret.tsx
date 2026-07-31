@@ -1,6 +1,6 @@
 import { CopyIcon } from "@phosphor-icons/react/dist/ssr/Copy";
 import { XIcon } from "@phosphor-icons/react/dist/ssr/X";
-import { useId, useState } from "react";
+import { useCallback, useId, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 
@@ -49,6 +49,9 @@ export function OneTimeSecret({
     }
   }
 
+  const handleClick = useCallback(() => {
+    copySecret();
+  }, [copySecret]);
   return (
     <section
       aria-labelledby={titleId}
@@ -79,13 +82,7 @@ export function OneTimeSecret({
       <code className="mt-4 block select-all overflow-x-auto break-all rounded border bg-background p-3 text-sm">
         {secret}
       </code>
-      <Button
-        className="mt-3"
-        onClick={() => {
-          copySecret();
-        }}
-        variant="outline"
-      >
+      <Button className="mt-3" onClick={handleClick} variant="outline">
         <CopyIcon aria-hidden size={16} />
         {copied ? "Copied" : copyLabel}
       </Button>

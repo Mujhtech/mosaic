@@ -2,7 +2,7 @@ import { Plus, Trash } from "@phosphor-icons/react";
 import { useForm } from "@tanstack/react-form";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, useNavigate } from "@tanstack/react-router";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { ErrorState } from "@/components/feedback/error-state";
 import { LoadingState } from "@/components/feedback/loading-state";
@@ -282,6 +282,18 @@ export function ExperimentBuilder({
     },
   });
 
+  const handleClick = useCallback(() => {
+    saveMutation.reset();
+    form
+      .handleSubmit()
+      .catch((submitError: unknown) =>
+        setLocalError(
+          submitError instanceof Error
+            ? submitError.message
+            : "The Draft could not be saved."
+        )
+      );
+  }, [form, saveMutation]);
   useEffect(() => {
     if (!resources.data) {
       return;
@@ -934,18 +946,7 @@ export function ExperimentBuilder({
             </p>
             <Button
               className="mt-3"
-              onClick={() => {
-                saveMutation.reset();
-                form
-                  .handleSubmit()
-                  .catch((submitError: unknown) =>
-                    setLocalError(
-                      submitError instanceof Error
-                        ? submitError.message
-                        : "The Draft could not be saved."
-                    )
-                  );
-              }}
+              onClick={handleClick}
               type="button"
               variant="outline"
             >

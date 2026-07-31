@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useCallback, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { StatusPill } from "@/features/billing-ledger/components/billing-chrome";
@@ -37,6 +37,8 @@ export function BillingEnablementPanel({
   membersHref,
   onChange,
 }: BillingEnablementPanelProps) {
+  const handleClick2 = useCallback(() => setConfirmDisable(false), []);
+  const handleClick = useCallback(() => setConfirmDisable(true), []);
   const [confirmDisable, setConfirmDisable] = useState(false);
   const credentialsStillActive =
     error instanceof ApiError &&
@@ -71,7 +73,7 @@ export function BillingEnablementPanel({
         {canManage && billingEnabled === true ? (
           <Button
             disabled={isSaving}
-            onClick={() => setConfirmDisable(true)}
+            onClick={handleClick}
             type="button"
             variant="outline"
           >
@@ -145,7 +147,7 @@ export function BillingEnablementPanel({
             </Button>
             <Button
               disabled={isSaving}
-              onClick={() => setConfirmDisable(false)}
+              onClick={handleClick2}
               type="button"
               variant="outline"
             >

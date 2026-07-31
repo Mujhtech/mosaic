@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useCallback, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -72,6 +72,9 @@ export function PublishGrantVersionWizard({
   products,
   triggerLabel = "Create new version",
 }: PublishGrantVersionWizardProps) {
+  const handleClick4 = useCallback(() => setStep("review"), []);
+  const handleClick3 = useCallback(() => setStep("publish"), []);
+  const handleClick2 = useCallback(() => setStep("shape"), []);
   const [open, setOpen] = useState(false);
   const [step, setStep] = useState<"publish" | "review" | "shape">("shape");
   const [impact, setImpact] = useState<GrantVersionImpact | undefined>(
@@ -156,6 +159,9 @@ export function PublishGrantVersionWizard({
     }
   }
 
+  const handleClick = useCallback(() => {
+    preview();
+  }, [preview]);
   async function publish() {
     setBusy(true);
     setError(null);
@@ -174,6 +180,9 @@ export function PublishGrantVersionWizard({
     }
   }
 
+  const handleClick5 = useCallback(() => {
+    publish();
+  }, [publish]);
   return (
     <Dialog
       onOpenChange={(nextOpen) => {
@@ -441,28 +450,18 @@ export function PublishGrantVersionWizard({
         <DialogFooter className="flex-col border-t p-5 sm:flex-col sm:justify-start">
           <div className="flex flex-wrap gap-2">
             {step === "shape" ? (
-              <Button
-                disabled={busy}
-                onClick={() => {
-                  preview();
-                }}
-                type="button"
-              >
+              <Button disabled={busy} onClick={handleClick} type="button">
                 {busy ? "Previewing…" : "Preview impact"}
               </Button>
             ) : null}
             {step === "review" ? (
               <>
-                <Button
-                  onClick={() => setStep("shape")}
-                  type="button"
-                  variant="outline"
-                >
+                <Button onClick={handleClick2} type="button" variant="outline">
                   Back to shape
                 </Button>
                 <Button
                   disabled={impact?.additiveSuperset === false}
-                  onClick={() => setStep("publish")}
+                  onClick={handleClick3}
                   type="button"
                 >
                   Continue to publish
@@ -471,18 +470,12 @@ export function PublishGrantVersionWizard({
             ) : null}
             {step === "publish" ? (
               <>
-                <Button
-                  onClick={() => setStep("review")}
-                  type="button"
-                  variant="outline"
-                >
+                <Button onClick={handleClick4} type="button" variant="outline">
                   Back to impact
                 </Button>
                 <Button
                   disabled={!gate.allowed}
-                  onClick={() => {
-                    publish();
-                  }}
+                  onClick={handleClick5}
                   type="button"
                 >
                   {busy ? "Publishing…" : "Publish new version"}

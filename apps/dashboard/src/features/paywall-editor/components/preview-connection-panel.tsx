@@ -1,7 +1,7 @@
 import { CopyIcon } from "@phosphor-icons/react/dist/ssr/Copy";
 import { PlugsConnectedIcon } from "@phosphor-icons/react/dist/ssr/PlugsConnected";
 import { WarningCircleIcon } from "@phosphor-icons/react/dist/ssr/WarningCircle";
-import { useState } from "react";
+import { useCallback, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { useEditorSelection } from "@/features/paywall-editor/hooks/use-editor-selection";
@@ -201,6 +201,14 @@ export function PreviewConnectionPanel({
       ? `${incompatibleClientCount} of ${clients.length} previews need compatibility attention`
       : aggregate.label;
   const configuration = `command=npm run dev:studio\nendpoint=${endpoint}\nsession=${sessionId}\nsubprotocols=${PREVIEW_WEBSOCKET_SUBPROTOCOLS.join(",")}`;
+  const handleClick = useCallback(async () => {
+    try {
+      await navigator.clipboard.writeText(configuration);
+      setCopied(true);
+    } catch {
+      setCopied(false);
+    }
+  }, [configuration]);
   const latestDiagnostic = diagnostics[0];
 
   return (
@@ -244,18 +252,7 @@ export function PreviewConnectionPanel({
           {sessionId}
         </code>
         <div className="mt-2 flex gap-2">
-          <Button
-            onClick={async () => {
-              try {
-                await navigator.clipboard.writeText(configuration);
-                setCopied(true);
-              } catch {
-                setCopied(false);
-              }
-            }}
-            size="xs"
-            variant="outline"
-          >
+          <Button onClick={handleClick} size="xs" variant="outline">
             <CopyIcon aria-hidden />
             {copied ? "Copied" : "Copy configuration"}
           </Button>

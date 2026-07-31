@@ -2,7 +2,7 @@ import { ArrowClockwiseIcon } from "@phosphor-icons/react/dist/ssr/ArrowClockwis
 import { ArrowsLeftRightIcon } from "@phosphor-icons/react/dist/ssr/ArrowsLeftRight";
 import { DownloadSimpleIcon } from "@phosphor-icons/react/dist/ssr/DownloadSimple";
 import { WarningDiamondIcon } from "@phosphor-icons/react/dist/ssr/WarningDiamond";
-import { useState } from "react";
+import { useCallback, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import type { HostedAutosaveConflict } from "@/features/paywalls/hooks/use-hosted-draft-autosave";
@@ -52,6 +52,12 @@ export function HostedDraftConflict({
     }
   }
 
+  const handleClick2 = useCallback(() => {
+    inspectLatest();
+  }, [inspectLatest]);
+  const handleClick = useCallback(() => {
+    inspectLatest();
+  }, [inspectLatest]);
   const sections = latest ? changedSections(conflict, latest) : [];
 
   return (
@@ -93,9 +99,7 @@ export function HostedDraftConflict({
             </Button>
             <Button
               disabled={isInspecting}
-              onClick={() => {
-                inspectLatest();
-              }}
+              onClick={handleClick}
               size="sm"
               type="button"
               variant="outline"
@@ -109,9 +113,7 @@ export function HostedDraftConflict({
               <p className="text-destructive text-sm">{inspectError}</p>
               <Button
                 className="mt-2"
-                onClick={() => {
-                  inspectLatest();
-                }}
+                onClick={handleClick2}
                 size="sm"
                 type="button"
                 variant="ghost"

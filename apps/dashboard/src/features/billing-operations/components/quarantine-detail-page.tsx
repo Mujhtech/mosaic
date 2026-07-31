@@ -1,5 +1,6 @@
 import { ArrowLeftIcon } from "@phosphor-icons/react/dist/ssr/ArrowLeft";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useCallback } from "react";
 
 import { buttonVariants } from "@/components/ui/button-variants";
 import { HostedResourceBoundary } from "@/features/auth/components/hosted-resource-boundary";
@@ -84,6 +85,7 @@ export function QuarantineDetailPage({
       queryClient
     )
   );
+  const handleRetryValidation = useCallback(() => retry.mutate(), [retry]);
   const closeSuperseded = useMutation(
     closeQuarantineSupersededMutationOptions(
       projectId,
@@ -279,7 +281,7 @@ export function QuarantineDetailPage({
               onCloseSuperseded={(supersededByRecordId) =>
                 closeSuperseded.mutate({ supersededByRecordId })
               }
-              onRetryValidation={() => retry.mutate()}
+              onRetryValidation={handleRetryValidation}
               {...(data.providerProductIdentifier
                 ? { providerProductIdentifier: data.providerProductIdentifier }
                 : {})}

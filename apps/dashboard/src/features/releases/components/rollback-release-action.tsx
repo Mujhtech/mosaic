@@ -1,6 +1,6 @@
 import { ArrowUDownLeftIcon } from "@phosphor-icons/react/dist/ssr/ArrowUDownLeft";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -25,6 +25,8 @@ export function RollbackReleaseAction({
   projectId: string;
   release: HostedRelease;
 }) {
+  const handleClick2 = useCallback(() => setReviewing(false), []);
+  const handleClick = useCallback(() => setReviewing(true), []);
   const adapter = useHostedPublishingAdapter();
   const scope = { environmentId, organizationId, projectId };
   const queryClient = useQueryClient();
@@ -48,12 +50,7 @@ export function RollbackReleaseAction({
 
   if (!reviewing) {
     return (
-      <Button
-        onClick={() => setReviewing(true)}
-        size="sm"
-        type="button"
-        variant="outline"
-      >
+      <Button onClick={handleClick} size="sm" type="button" variant="outline">
         <ArrowUDownLeftIcon aria-hidden />
         Roll back to Release {release.number}
       </Button>
@@ -79,12 +76,7 @@ export function RollbackReleaseAction({
             ? "Rolling back…"
             : "Confirm new rollback Release"}
         </Button>
-        <Button
-          onClick={() => setReviewing(false)}
-          size="sm"
-          type="button"
-          variant="ghost"
-        >
+        <Button onClick={handleClick2} size="sm" type="button" variant="ghost">
           Cancel
         </Button>
       </div>

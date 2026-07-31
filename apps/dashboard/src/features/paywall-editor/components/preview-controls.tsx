@@ -10,6 +10,7 @@ import { SunIcon } from "@phosphor-icons/react/dist/ssr/Sun";
 import { TextAaIcon } from "@phosphor-icons/react/dist/ssr/TextAa";
 import { useReactFlow, useViewport } from "@xyflow/react";
 import type { ReactNode } from "react";
+import { useCallback } from "react";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -385,6 +386,14 @@ function SecondaryPreviewSettings({ toolbar }: { toolbar: boolean }) {
 export function CanvasPreviewToolbar() {
   const canvas = useStudioWorkspaceSelector(selectCanvasPreferences);
   const workspace = useStudioWorkspaceActions();
+  const handleClick = useCallback(
+    () =>
+      workspace.setCanvasPreference(
+        "orientation",
+        canvas.orientation === "portrait" ? "landscape" : "portrait"
+      ),
+    [canvas, workspace]
+  );
   const flow = useReactFlow();
   const viewport = useViewport();
   const visibleZoom = canvas.fitMode === "fit" ? viewport.zoom : canvas.zoom;
@@ -396,6 +405,15 @@ export function CanvasPreviewToolbar() {
     flow.zoomTo(nextZoom, { duration: 160 });
   }
 
+  const handleClick4 = useCallback(
+    () => setZoom(visibleZoom + 0.1),
+    [setZoom, visibleZoom]
+  );
+  const handleClick3 = useCallback(() => setZoom(1), [setZoom]);
+  const handleClick2 = useCallback(
+    () => setZoom(visibleZoom - 0.1),
+    [setZoom, visibleZoom]
+  );
   function fitDevice() {
     workspace.setCanvasPreference("fitMode", "fit");
     flow.fitView({
@@ -417,22 +435,17 @@ export function CanvasPreviewToolbar() {
       <span aria-hidden className="mx-0.5 h-4 w-px bg-border" />
       <IconControl
         label={`Use ${canvas.orientation === "portrait" ? "landscape" : "portrait"} orientation`}
-        onClick={() =>
-          workspace.setCanvasPreference(
-            "orientation",
-            canvas.orientation === "portrait" ? "landscape" : "portrait"
-          )
-        }
+        onClick={handleClick}
       >
         <ArrowsClockwiseIcon aria-hidden />
       </IconControl>
       <span aria-hidden className="mx-0.5 h-4 w-px bg-border" />
-      <IconControl label="Zoom out" onClick={() => setZoom(visibleZoom - 0.1)}>
+      <IconControl label="Zoom out" onClick={handleClick2}>
         <MagnifyingGlassMinusIcon aria-hidden />
       </IconControl>
       <Button
         className="min-w-11 px-1.5 font-mono text-[11px] tabular-nums transition-transform duration-150 active:scale-[0.96] motion-reduce:transition-none"
-        onClick={() => setZoom(1)}
+        onClick={handleClick3}
         size="xs"
         title="Set canvas zoom to 100%"
         type="button"
@@ -440,7 +453,7 @@ export function CanvasPreviewToolbar() {
       >
         {Math.round(visibleZoom * 100)}%
       </Button>
-      <IconControl label="Zoom in" onClick={() => setZoom(visibleZoom + 0.1)}>
+      <IconControl label="Zoom in" onClick={handleClick4}>
         <MagnifyingGlassPlusIcon aria-hidden />
       </IconControl>
       <IconControl
@@ -488,6 +501,18 @@ export function PreviewControls() {
   const editor = useEditorActions();
   const canvas = useStudioWorkspaceSelector(selectCanvasPreferences);
   const workspace = useStudioWorkspaceActions();
+  const handleClick2 = useCallback(
+    () => workspace.setCanvasPreference("fitMode", "fit"),
+    [workspace]
+  );
+  const handleClick = useCallback(
+    () =>
+      workspace.setCanvasPreference(
+        "orientation",
+        canvas.orientation === "portrait" ? "landscape" : "portrait"
+      ),
+    [canvas, workspace]
+  );
   if (!document) {
     return null;
   }
@@ -525,12 +550,7 @@ export function PreviewControls() {
         <div className="flex flex-wrap items-center gap-1.5">
           <IconControl
             label={`Use ${canvas.orientation === "portrait" ? "landscape" : "portrait"} orientation`}
-            onClick={() =>
-              workspace.setCanvasPreference(
-                "orientation",
-                canvas.orientation === "portrait" ? "landscape" : "portrait"
-              )
-            }
+            onClick={handleClick}
           >
             <ArrowsClockwiseIcon aria-hidden />
           </IconControl>
@@ -556,7 +576,7 @@ export function PreviewControls() {
           </IconControl>
           <IconControl
             label="Fit device to canvas"
-            onClick={() => workspace.setCanvasPreference("fitMode", "fit")}
+            onClick={handleClick2}
             pressed={canvas.fitMode === "fit"}
           >
             <CornersOutIcon aria-hidden />

@@ -1,6 +1,6 @@
 import { ArrowLeftIcon } from "@phosphor-icons/react/dist/ssr/ArrowLeft";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useState } from "react";
+import { useCallback, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { buttonVariants } from "@/components/ui/button-variants";
@@ -60,6 +60,8 @@ export function StoreConnectionDetailPage({
   organizationId,
   projectId,
 }: StoreConnectionDetailPageProps) {
+  const handleClick4 = useCallback(() => setConfirmRevoke(false), []);
+  const handleClick2 = useCallback(() => setConfirmRevoke(true), []);
   const queryClient = useQueryClient();
   const access = useOrganizationAccess(organizationId);
   const [revealed, setRevealed] =
@@ -87,15 +89,27 @@ export function StoreConnectionDetailPage({
   const revoke = useMutation(
     revokeStoreCredentialMutationOptions(credentialId, projectId, queryClient)
   );
+  const handleClick3 = useCallback(
+    () =>
+      revoke.mutate(undefined, {
+        onSuccess: () => setConfirmRevoke(false),
+      }),
+    [revoke]
+  );
   const test = useMutation(
     testStoreCredentialMutationOptions(credentialId, projectId, queryClient)
   );
 
+  const handleClick = useCallback(() => test.mutate(), [test]);
   function sanitizeSecretMutationState() {
     rotate.reset();
     clearStoreCredentialSecretMutationCache(queryClient);
   }
 
+  const handleDismiss = useCallback(() => {
+    setRevealed(null);
+    sanitizeSecretMutationState();
+  }, [sanitizeSecretMutationState]);
   const record = credential.data;
   const environmentName =
     environments.data?.items.find((item) => item.id === record?.environmentId)
@@ -198,7 +212,7 @@ export function StoreConnectionDetailPage({
                 <div className="flex flex-wrap gap-2">
                   <Button
                     disabled={!actions.test || test.isPending}
-                    onClick={() => test.mutate()}
+                    onClick={handleClick}
                     type="button"
                   >
                     {test.isPending ? "Testing…" : "Test connection"}
@@ -219,7 +233,7 @@ export function StoreConnectionDetailPage({
                   ) : null}
                   {actions.revoke ? (
                     <Button
-                      onClick={() => setConfirmRevoke(true)}
+                      onClick={handleClick2}
                       type="button"
                       variant="destructive"
                     >
@@ -272,11 +286,7 @@ export function StoreConnectionDetailPage({
                   <div className="mt-3 flex gap-2">
                     <Button
                       disabled={revoke.isPending}
-                      onClick={() =>
-                        revoke.mutate(undefined, {
-                          onSuccess: () => setConfirmRevoke(false),
-                        })
-                      }
+                      onClick={handleClick3}
                       type="button"
                       variant="destructive"
                     >
@@ -284,7 +294,7 @@ export function StoreConnectionDetailPage({
                     </Button>
                     <Button
                       disabled={revoke.isPending}
-                      onClick={() => setConfirmRevoke(false)}
+                      onClick={handleClick4}
                       type="button"
                       variant="outline"
                     >
@@ -300,10 +310,7 @@ export function StoreConnectionDetailPage({
                 {...(revealed?.notificationEndpointUrl
                   ? { endpointUrl: revealed.notificationEndpointUrl }
                   : {})}
-                onDismiss={() => {
-                  setRevealed(null);
-                  sanitizeSecretMutationState();
-                }}
+                onDismiss={handleDismiss}
               />
             ) : null}
 

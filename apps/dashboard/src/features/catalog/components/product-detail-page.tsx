@@ -7,7 +7,7 @@ import {
   useQueryClient,
 } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
-import { useState } from "react";
+import { useCallback, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { buttonVariants } from "@/components/ui/button-variants";
@@ -93,6 +93,10 @@ export function ProductDetailPage({
   readinessEnvironmentId,
   returnTo,
 }: ProductDetailPageProps) {
+  const handleClick = useCallback(() => {
+    setSelectedReplacementId(null);
+    setShowLifecycle(true);
+  }, []);
   const queryClient = useQueryClient();
   const access = useOrganizationAccess(organizationId);
   const [showLifecycle, setShowLifecycle] = useState(false);
@@ -332,6 +336,9 @@ export function ProductDetailPage({
     }
   }
 
+  const handleClick2 = useCallback(() => {
+    confirmArchive();
+  }, [confirmArchive]);
   function cancelArchiveReview() {
     setSelectedReplacementId(null);
     setShowLifecycle(false);
@@ -674,13 +681,7 @@ export function ProductDetailPage({
                 Restore Product
               </Button>
             ) : (
-              <Button
-                onClick={() => {
-                  setSelectedReplacementId(null);
-                  setShowLifecycle(true);
-                }}
-                variant="outline"
-              >
+              <Button onClick={handleClick} variant="outline">
                 <ArchiveIcon aria-hidden size={16} />
                 Review archive
               </Button>
@@ -757,9 +758,7 @@ export function ProductDetailPage({
                       Boolean(effectiveReplacementId)
                     )
                   }
-                  onClick={() => {
-                    confirmArchive();
-                  }}
+                  onClick={handleClick2}
                 >
                   {setReplacement.isPending
                     ? "Saving replacement…"

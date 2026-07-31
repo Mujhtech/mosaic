@@ -4,7 +4,7 @@ import { EyeSlashIcon } from "@phosphor-icons/react/dist/ssr/EyeSlash";
 import { MinusIcon } from "@phosphor-icons/react/dist/ssr/Minus";
 import { PlusIcon } from "@phosphor-icons/react/dist/ssr/Plus";
 import { TrashIcon } from "@phosphor-icons/react/dist/ssr/Trash";
-import { useEffect, useRef } from "react";
+import { useCallback, useEffect, useRef } from "react";
 
 import { Button } from "@/components/ui/button";
 import { SelectItem } from "@/components/ui/select";
@@ -173,6 +173,14 @@ export function DocumentBackgroundEditor({
     });
   }
 
+  const handleClick2 = useCallback(
+    () => addAndUseMedia("video"),
+    [addAndUseMedia]
+  );
+  const handleClick = useCallback(
+    () => addAndUseMedia("image"),
+    [addAndUseMedia]
+  );
   const imageAssets = document.assets.filter((asset) => asset.type === "image");
   const videoAssets = document.assets.filter((asset) => asset.type === "video");
   const selectedMediaExists =
@@ -331,7 +339,7 @@ export function DocumentBackgroundEditor({
           {imageAssets.length === 0 ||
           (value?.type === "image" && !selectedMediaExists) ? (
             <Button
-              onClick={() => addAndUseMedia("image")}
+              onClick={handleClick}
               size="xs"
               type="button"
               variant="outline"
@@ -342,7 +350,7 @@ export function DocumentBackgroundEditor({
           {videoAssets.length === 0 ||
           (value?.type === "video" && !selectedMediaExists) ? (
             <Button
-              onClick={() => addAndUseMedia("video")}
+              onClick={handleClick2}
               size="xs"
               type="button"
               variant="outline"

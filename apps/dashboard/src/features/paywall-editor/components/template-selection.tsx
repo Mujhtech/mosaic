@@ -1,7 +1,7 @@
 import { FileArrowUpIcon } from "@phosphor-icons/react/dist/ssr/FileArrowUp";
 import { FloppyDiskBackIcon } from "@phosphor-icons/react/dist/ssr/FloppyDiskBack";
 import { SquaresFourIcon } from "@phosphor-icons/react/dist/ssr/SquaresFour";
-import { useRef } from "react";
+import { useCallback, useRef } from "react";
 
 import { Button } from "@/components/ui/button";
 import { EDITOR_TEMPLATES } from "@/features/paywall-editor/constants/templates";
@@ -22,6 +22,7 @@ export function TemplateSelection({
   onResume,
   onImport,
 }: TemplateSelectionProps) {
+  const handleClick = useCallback(() => inputRef.current?.click(), []);
   const inputRef = useRef<HTMLInputElement>(null);
 
   return (
@@ -131,7 +132,7 @@ export function TemplateSelection({
         </div>
 
         <div className="mt-6 flex flex-wrap items-center gap-3">
-          <Button onClick={() => inputRef.current?.click()} variant="outline">
+          <Button onClick={handleClick} variant="outline">
             <FileArrowUpIcon aria-hidden />
             Import JSON
           </Button>

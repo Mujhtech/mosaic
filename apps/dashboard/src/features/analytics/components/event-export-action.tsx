@@ -1,6 +1,6 @@
 import { DownloadSimpleIcon } from "@phosphor-icons/react/dist/ssr/DownloadSimple";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { useState } from "react";
+import { useCallback, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import type { AnalyticsAdapter } from "../api/analytics-adapter";
@@ -23,6 +23,8 @@ export function EventExportAction({
     mutationFn: () => adapter.createEventExport(scope, filters),
     onSuccess: (job) => setJobId(job.id),
   });
+  const handleClick3 = useCallback(() => mutation.mutate(), [mutation]);
+  const handleClick2 = useCallback(() => mutation.mutate(), [mutation]);
   const downloadMutation = useMutation({
     mutationFn: async () => {
       if (!jobId) {
@@ -32,6 +34,10 @@ export function EventExportAction({
     },
     onSuccess: (blob) => downloadBlob(blob, "mosaic-event-export.ndjson"),
   });
+  const handleClick = useCallback(
+    () => downloadMutation.mutate(),
+    [downloadMutation]
+  );
   const job = useQuery({
     ...jobQueryOptions(scope, jobId ?? "", adapter),
     enabled: Boolean(jobId),
@@ -46,7 +52,7 @@ export function EventExportAction({
       {job.data?.state === "completed" && job.data.downloadAvailable ? (
         <Button
           disabled={downloadMutation.isPending}
-          onClick={() => downloadMutation.mutate()}
+          onClick={handleClick}
           type="button"
           variant="outline"
         >
@@ -59,7 +65,7 @@ export function EventExportAction({
             job.data?.state === "queued" ||
             job.data?.state === "leased"
           }
-          onClick={() => mutation.mutate()}
+          onClick={handleClick2}
           type="button"
           variant="outline"
         >
@@ -72,11 +78,7 @@ export function EventExportAction({
         </Button>
       )}
       {job.data?.state === "failed" ? (
-        <Button
-          onClick={() => mutation.mutate()}
-          type="button"
-          variant="outline"
-        >
+        <Button onClick={handleClick3} type="button" variant="outline">
           Retry export
         </Button>
       ) : null}

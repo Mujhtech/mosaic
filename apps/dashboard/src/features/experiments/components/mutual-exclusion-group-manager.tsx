@@ -1,6 +1,6 @@
 import { useForm } from "@tanstack/react-form";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useState } from "react";
+import { useCallback, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Field, FieldLabel } from "@/components/ui/field";
@@ -131,6 +131,7 @@ export function MutualExclusionGroupManager({
     form.reset();
   }
 
+  const handleClick = useCallback(() => beginVersion(), [beginVersion]);
   const selectedGroup = groups.data?.find(
     (group) => group.id === selectedGroupId
   );
@@ -196,7 +197,7 @@ export function MutualExclusionGroupManager({
                   New immutable Version for {selectedGroup.name}
                 </p>
                 <Button
-                  onClick={() => beginVersion()}
+                  onClick={handleClick}
                   size="sm"
                   type="button"
                   variant="ghost"

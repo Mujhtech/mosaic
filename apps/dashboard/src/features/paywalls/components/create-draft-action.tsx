@@ -1,6 +1,6 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
-import { useRef, useState } from "react";
+import { useCallback, useRef, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -22,6 +22,7 @@ export function CreateDraftAction({
   paywallId: string;
   projectId: string;
 }) {
+  const handleClick2 = useCallback(() => inputRef.current?.click(), []);
   const adapter = useHostedPublishingAdapter();
   const inputRef = useRef<HTMLInputElement | null>(null);
   const navigate = useNavigate();
@@ -49,14 +50,15 @@ export function CreateDraftAction({
     });
   }
 
+  const handleClick = useCallback(() => {
+    create(EDITOR_TEMPLATES[0]!.document);
+  }, [create]);
   return (
     <div>
       <div className="flex flex-wrap gap-2">
         <Button
           disabled={createDraft.isPending}
-          onClick={() => {
-            create(EDITOR_TEMPLATES[0]!.document);
-          }}
+          onClick={handleClick}
           size="sm"
           type="button"
         >
@@ -66,7 +68,7 @@ export function CreateDraftAction({
         </Button>
         <Button
           disabled={createDraft.isPending}
-          onClick={() => inputRef.current?.click()}
+          onClick={handleClick2}
           size="sm"
           type="button"
           variant="outline"
