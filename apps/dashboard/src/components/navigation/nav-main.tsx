@@ -1,8 +1,11 @@
-import { Link, useRouterState } from "@tanstack/react-router"
-import type { ReactNode } from "react"
-
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
-
+import { CaretRightIcon } from "@phosphor-icons/react/dist/ssr/CaretRight";
+import { Link, useRouterState } from "@tanstack/react-router";
+import type { ReactNode } from "react";
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible";
 import {
   SidebarGroup,
   SidebarGroupLabel,
@@ -12,23 +15,24 @@ import {
   SidebarMenuSub,
   SidebarMenuSubButton,
   SidebarMenuSubItem,
-} from "@/components/ui/sidebar"
-import { CaretRightIcon } from "@phosphor-icons/react/dist/ssr/CaretRight"
+} from "@/components/ui/sidebar";
 
 export interface NavigationItem {
-  icon: ReactNode
-  title: string
-  to?: string
-  subItems?: readonly NavigationItem[]
+  icon: ReactNode;
+  subItems?: readonly NavigationItem[];
+  title: string;
+  to?: string;
 }
 
 interface NavMainProps {
-  label: string
-  items: readonly NavigationItem[]
+  items: readonly NavigationItem[];
+  label: string;
 }
 
 export function NavMain({ items, label }: NavMainProps) {
-  const pathname = useRouterState({ select: (state) => state.location.pathname })
+  const pathname = useRouterState({
+    select: (state) => state.location.pathname,
+  });
 
   return (
     <SidebarGroup>
@@ -38,14 +42,14 @@ export function NavMain({ items, label }: NavMainProps) {
           if (item.subItems) {
             return (
               <Collapsible
-                key={item.title}
+                className="group/collapsible"
                 // asChild
                 defaultOpen={item.subItems.some(
                   (subItem) =>
                     subItem.to === pathname ||
-                    (subItem.to ? pathname.startsWith(`${subItem.to}/`) : false),
+                    (subItem.to ? pathname.startsWith(`${subItem.to}/`) : false)
                 )}
-                className="group/collapsible"
+                key={item.title}
               >
                 <SidebarMenuItem>
                   <CollapsibleTrigger
@@ -62,7 +66,9 @@ export function NavMain({ items, label }: NavMainProps) {
                     <SidebarMenuSub>
                       {item.subItems?.map((subItem) => (
                         <SidebarMenuSubItem key={subItem.title}>
-                          <SidebarMenuSubButton render={<Link to={subItem.to} />}>
+                          <SidebarMenuSubButton
+                            render={<Link to={subItem.to} />}
+                          >
                             <span>{subItem.title}</span>
                           </SidebarMenuSubButton>
                         </SidebarMenuSubItem>
@@ -71,7 +77,7 @@ export function NavMain({ items, label }: NavMainProps) {
                   </CollapsibleContent>
                 </SidebarMenuItem>
               </Collapsible>
-            )
+            );
           }
 
           return (
@@ -85,9 +91,9 @@ export function NavMain({ items, label }: NavMainProps) {
                 <span>{item.title}</span>
               </SidebarMenuButton>
             </SidebarMenuItem>
-          )
+          );
         })}
       </SidebarMenu>
     </SidebarGroup>
-  )
+  );
 }

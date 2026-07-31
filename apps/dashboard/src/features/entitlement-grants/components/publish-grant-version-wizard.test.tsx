@@ -1,13 +1,13 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react"
-import { describe, expect, it, vi } from "vitest"
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { describe, expect, it, vi } from "vitest";
 
-import { PublishGrantVersionWizard } from "@/features/entitlement-grants/components/publish-grant-version-wizard"
+import { PublishGrantVersionWizard } from "@/features/entitlement-grants/components/publish-grant-version-wizard";
 import type {
   Entitlement,
   GrantVersionImpact,
   Product,
   PublishGrantVersionRequest,
-} from "@/generated/api"
+} from "@/generated/api";
 
 const products = [
   {
@@ -22,7 +22,7 @@ const products = [
     type: "subscription",
     updatedAt: "2026-01-01T00:00:00Z",
   },
-] as unknown as Product[]
+] as unknown as Product[];
 
 const entitlements = [
   {
@@ -33,21 +33,23 @@ const entitlements = [
     projectId: "proj_01",
     updatedAt: "2026-01-01T00:00:00Z",
   },
-] as unknown as Entitlement[]
+] as unknown as Entitlement[];
 
-type PreviewFn = (proposal: PublishGrantVersionRequest) => Promise<GrantVersionImpact | undefined>
-type PublishFn = (proposal: PublishGrantVersionRequest) => Promise<void>
+type PreviewFn = (
+  proposal: PublishGrantVersionRequest
+) => Promise<GrantVersionImpact | undefined>;
+type PublishFn = (proposal: PublishGrantVersionRequest) => Promise<void>;
 
 function renderWizard(
-  overrides: {
-    onPreview?: PreviewFn
-    onPublish?: PublishFn
-  } = {},
+  overrides: { onPreview?: PreviewFn; onPublish?: PublishFn } = {}
 ) {
   const onPreview = vi.fn<PreviewFn>(
-    overrides.onPreview ?? (async () => ({ additiveSuperset: true, impactedActiveSources: 12 })),
-  )
-  const onPublish = vi.fn<PublishFn>(overrides.onPublish ?? (async () => undefined))
+    overrides.onPreview ??
+      (async () => ({ additiveSuperset: true, impactedActiveSources: 12 }))
+  );
+  const onPublish = vi.fn<PublishFn>(
+    overrides.onPublish ?? (async () => undefined)
+  );
   render(
     <PublishGrantVersionWizard
       canManage
@@ -57,10 +59,10 @@ function renderWizard(
       onPublish={onPublish}
       productId="prod_01"
       products={products}
-    />,
-  )
-  fireEvent.click(screen.getByRole("button", { name: "Create new version" }))
-  return { onPreview, onPublish }
+    />
+  );
+  fireEvent.click(screen.getByRole("button", { name: "Create new version" }));
+  return { onPreview, onPublish };
 }
 
 /**
@@ -74,43 +76,61 @@ function renderWizard(
  */
 describe("publish grant version wizard", () => {
   it("offers no publish control until the impact of this proposal has been previewed", async () => {
-    const { onPreview } = renderWizard()
+    const { onPreview } = renderWizard();
 
-    expect(screen.queryByRole("button", { name: /Publish new version/ })).not.toBeInTheDocument()
+    expect(
+      screen.queryByRole("button", { name: /Publish new version/ })
+    ).not.toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("button", { name: "Preview impact" }))
-    await waitFor(() => expect(onPreview).toHaveBeenCalledTimes(1))
+    fireEvent.click(screen.getByRole("button", { name: "Preview impact" }));
+    await waitFor(() => expect(onPreview).toHaveBeenCalledTimes(1));
 
     // Step two states the blast radius and still does not publish.
-    expect(await screen.findByText(/12 purchases currently granting access/)).toBeInTheDocument()
-    expect(screen.queryByRole("button", { name: /Publish new version/ })).not.toBeInTheDocument()
+    expect(
+      await screen.findByText(/12 purchases currently granting access/)
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: /Publish new version/ })
+    ).not.toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("button", { name: "Continue to publish" }))
-    const publish = await screen.findByRole("button", { name: /Publish new version/ })
+    fireEvent.click(
+      screen.getByRole("button", { name: "Continue to publish" })
+    );
+    const publish = await screen.findByRole("button", {
+      name: /Publish new version/,
+    });
     // A reason is required before the version can be written.
-    expect(publish).toBeDisabled()
+    expect(publish).toBeDisabled();
 
     fireEvent.change(screen.getByLabelText("Reason for this change"), {
       target: { value: "Grace access was never meant to be off." },
-    })
-    await waitFor(() => expect(publish).not.toBeDisabled())
-  })
+    });
+    await waitFor(() => expect(publish).not.toBeDisabled());
+  });
 
   it("discards the preview when the proposal is edited afterwards", async () => {
-    const { onPreview } = renderWizard()
+    const { onPreview } = renderWizard();
 
-    fireEvent.click(screen.getByRole("button", { name: "Preview impact" }))
-    await waitFor(() => expect(onPreview).toHaveBeenCalled())
-    fireEvent.click(await screen.findByRole("button", { name: "Back to shape" }))
+    fireEvent.click(screen.getByRole("button", { name: "Preview impact" }));
+    await waitFor(() => expect(onPreview).toHaveBeenCalled());
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Back to shape" })
+    );
 
     // Widening the policy makes the number the operator was shown wrong, so the
     // preview and every downstream step are withdrawn.
-    fireEvent.click(screen.getByLabelText(/Billing retry/))
+    fireEvent.click(screen.getByLabelText(/Billing retry/));
 
-    expect(screen.queryByText(/purchases currently granting access/)).not.toBeInTheDocument()
-    expect(screen.getByRole("button", { name: "Preview impact" })).toBeInTheDocument()
-    expect(screen.queryByRole("button", { name: /Publish new version/ })).not.toBeInTheDocument()
-  })
+    expect(
+      screen.queryByText(/purchases currently granting access/)
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Preview impact" })
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: /Publish new version/ })
+    ).not.toBeInTheDocument();
+  });
 
   it("refuses a retroactive narrowing the publish call would reject", async () => {
     renderWizard({
@@ -119,11 +139,15 @@ describe("publish grant version wizard", () => {
         impactedActiveSources: 340,
         narrowingCode: "grace_access_narrowed",
       }),
-    })
+    });
 
-    fireEvent.click(screen.getByRole("button", { name: "Preview impact" }))
+    fireEvent.click(screen.getByRole("button", { name: "Preview impact" }));
 
-    expect(await screen.findByText("Publish would be refused")).toBeInTheDocument()
-    expect(screen.getByRole("button", { name: "Continue to publish" })).toBeDisabled()
-  })
-})
+    expect(
+      await screen.findByText("Publish would be refused")
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Continue to publish" })
+    ).toBeDisabled();
+  });
+});

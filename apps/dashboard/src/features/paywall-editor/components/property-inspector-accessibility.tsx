@@ -1,53 +1,54 @@
 /* eslint-disable react-refresh/only-export-components -- internal inspector modules colocate private controls with their supporting types and transforms. */
-import { PlusIcon } from "@phosphor-icons/react/dist/ssr/Plus"
-import type { ReactNode } from "react"
+import { PlusIcon } from "@phosphor-icons/react/dist/ssr/Plus";
+import type { ReactNode } from "react";
 
-import { Button } from "@/components/ui/button"
-import { useEditorActions } from "@/features/paywall-editor/stores/editor-store-context"
-import type {
-  LocalizedText,
-  MosaicDocument,
-  ProtocolNode,
-} from "@/features/paywall-editor/types/editor"
-import { updateNode } from "@/features/paywall-editor/utils/document-tree"
-import { createSeededLocalizedText } from "@/features/paywall-editor/utils/editor-transforms"
-
+import { Button } from "@/components/ui/button";
+import { SelectItem } from "@/components/ui/select";
 import {
   CONTROL_CLASS,
-  ControlNode,
+  type ControlNode,
   Field,
   InspectorSection,
-  TwoColumn,
   isControlNode,
+  TwoColumn,
   useInspectorContext,
-} from "@/features/paywall-editor/components/property-inspector-core"
+} from "@/features/paywall-editor/components/property-inspector-core";
 import {
   CheckboxField,
   LocalizedField,
   NumberField,
   SelectField,
-} from "@/features/paywall-editor/components/property-inspector-fields"
-import { SelectItem } from "@/components/ui/select"
+} from "@/features/paywall-editor/components/property-inspector-fields";
+import { useEditorActions } from "@/features/paywall-editor/stores/editor-store-context";
+import type {
+  LocalizedText,
+  MosaicDocument,
+  ProtocolNode,
+} from "@/features/paywall-editor/types/editor";
+import { updateNode } from "@/features/paywall-editor/utils/document-tree";
+import { createSeededLocalizedText } from "@/features/paywall-editor/utils/editor-transforms";
 
 export function seedOptionalLocalizedText(options: {
-  defaultValue: string
-  keyBase: string
-  nodeId: string
-  update: (node: ProtocolNode, text: LocalizedText) => ProtocolNode
+  defaultValue: string;
+  keyBase: string;
+  nodeId: string;
+  update: (node: ProtocolNode, text: LocalizedText) => ProtocolNode;
 }) {
   return (document: MosaicDocument) => {
     const seeded = createSeededLocalizedText({
       document,
       defaultValue: options.defaultValue,
       keyBase: options.keyBase,
-    })
-    return updateNode(seeded.document, options.nodeId, (node) => options.update(node, seeded.text))
-  }
+    });
+    return updateNode(seeded.document, options.nodeId, (node) =>
+      options.update(node, seeded.text)
+    );
+  };
 }
 
 export function ControlAccessibilitySection({ node }: { node: ControlNode }) {
-  const { disabled } = useInspectorContext()
-  const editor = useEditorActions()
+  const { disabled } = useInspectorContext();
+  const editor = useEditorActions();
 
   return (
     <InspectorSection title="Accessibility">
@@ -67,10 +68,12 @@ export function ControlAccessibilitySection({ node }: { node: ControlNode }) {
             disabled={disabled}
             onClick={() =>
               editor.updateComponent(node.id, (current) => {
-                if (!isControlNode(current)) return current
-                const accessibility = { ...current.accessibility }
-                delete accessibility.hint
-                return { ...current, accessibility }
+                if (!isControlNode(current)) {
+                  return current;
+                }
+                const accessibility = { ...current.accessibility };
+                delete accessibility.hint;
+                return { ...current, accessibility };
               })
             }
             size="xs"
@@ -91,9 +94,12 @@ export function ControlAccessibilitySection({ node }: { node: ControlNode }) {
                 nodeId: node.id,
                 update: (current, hint) =>
                   isControlNode(current)
-                    ? { ...current, accessibility: { ...current.accessibility, hint } }
+                    ? {
+                        ...current,
+                        accessibility: { ...current.accessibility, hint },
+                      }
                     : current,
-              }),
+              })
             )
           }
           size="sm"
@@ -105,17 +111,17 @@ export function ControlAccessibilitySection({ node }: { node: ControlNode }) {
         </Button>
       )}
     </InspectorSection>
-  )
+  );
 }
 
 export function TextAccessibilitySection({
   node,
 }: {
-  node: Extract<ProtocolNode, { type: "text" | "countdown" }>
+  node: Extract<ProtocolNode, { type: "text" | "countdown" }>;
 }) {
-  const { disabled } = useInspectorContext()
-  const editor = useEditorActions()
-  const label = node.accessibility.label
+  const { disabled } = useInspectorContext();
+  const editor = useEditorActions();
+  const label = node.accessibility.label;
 
   return (
     <InspectorSection title="Accessibility">
@@ -125,8 +131,10 @@ export function TextAccessibilitySection({
           label="Role"
           onChange={(role) =>
             editor.updateComponent(node.id, (current) => {
-              if (current.type !== "text" && current.type !== "countdown") return current
-              const currentLabel = current.accessibility.label
+              if (current.type !== "text" && current.type !== "countdown") {
+                return current;
+              }
+              const currentLabel = current.accessibility.label;
               return {
                 ...current,
                 accessibility:
@@ -136,8 +144,11 @@ export function TextAccessibilitySection({
                         level: 2,
                         ...(currentLabel ? { label: currentLabel } : {}),
                       }
-                    : { role: "text", ...(currentLabel ? { label: currentLabel } : {}) },
-              }
+                    : {
+                        role: "text",
+                        ...(currentLabel ? { label: currentLabel } : {}),
+                      },
+              };
             })
           }
           value={node.accessibility.role}
@@ -158,12 +169,12 @@ export function TextAccessibilitySection({
                   (current.type !== "text" && current.type !== "countdown") ||
                   current.accessibility.role !== "heading"
                 ) {
-                  return current
+                  return current;
                 }
                 return {
                   ...current,
                   accessibility: { ...current.accessibility, level },
-                }
+                };
               })
             }
             value={node.accessibility.level}
@@ -174,15 +185,21 @@ export function TextAccessibilitySection({
       </TwoColumn>
       {label ? (
         <>
-          <LocalizedField address="accessibility.label" label="Accessibility label" text={label} />
+          <LocalizedField
+            address="accessibility.label"
+            label="Accessibility label"
+            text={label}
+          />
           <Button
             disabled={disabled}
             onClick={() =>
               editor.updateComponent(node.id, (current) => {
-                if (current.type !== "text" && current.type !== "countdown") return current
-                const accessibility = { ...current.accessibility }
-                delete accessibility.label
-                return { ...current, accessibility }
+                if (current.type !== "text" && current.type !== "countdown") {
+                  return current;
+                }
+                const accessibility = { ...current.accessibility };
+                delete accessibility.label;
+                return { ...current, accessibility };
               })
             }
             size="xs"
@@ -198,17 +215,25 @@ export function TextAccessibilitySection({
           onClick={() =>
             editor.updateDocument(
               seedOptionalLocalizedText({
-                defaultValue: node.type === "countdown" ? "Offer countdown" : "Text content",
+                defaultValue:
+                  node.type === "countdown"
+                    ? "Offer countdown"
+                    : "Text content",
                 keyBase: `paywall.${node.id.replaceAll("-", "_")}.accessibility`,
                 nodeId: node.id,
                 update: (current, nextLabel) => {
-                  if (current.type !== "text" && current.type !== "countdown") return current
+                  if (current.type !== "text" && current.type !== "countdown") {
+                    return current;
+                  }
                   return {
                     ...current,
-                    accessibility: { ...current.accessibility, label: nextLabel },
-                  }
+                    accessibility: {
+                      ...current.accessibility,
+                      label: nextLabel,
+                    },
+                  };
                 },
-              }),
+              })
             )
           }
           size="sm"
@@ -220,15 +245,15 @@ export function TextAccessibilitySection({
         </Button>
       )}
     </InspectorSection>
-  )
+  );
 }
 
 export function ImageAccessibilitySection({
   node,
 }: {
-  node: Extract<ProtocolNode, { type: "image" | "icon" }>
+  node: Extract<ProtocolNode, { type: "image" | "icon" }>;
 }) {
-  const editor = useEditorActions()
+  const editor = useEditorActions();
   return (
     <InspectorSection title="Accessibility">
       <CheckboxField
@@ -241,9 +266,9 @@ export function ImageAccessibilitySection({
             editor.updateComponent(node.id, (current) =>
               current.type === node.type
                 ? { ...current, accessibility: { hidden: true } }
-                : current,
-            )
-            return
+                : current
+            );
+            return;
           }
           editor.updateDocument(
             seedOptionalLocalizedText({
@@ -254,61 +279,66 @@ export function ImageAccessibilitySection({
                 current.type === node.type
                   ? { ...current, accessibility: { hidden: false, label } }
                   : current,
-            }),
-          )
+            })
+          );
         }}
       />
-      {!node.accessibility.hidden ? (
+      {node.accessibility.hidden ? null : (
         <LocalizedField
           address="accessibility.label"
           label="Accessibility label"
           text={node.accessibility.label}
         />
-      ) : null}
+      )}
     </InspectorSection>
-  )
+  );
 }
 
 export interface AdvancedProperty {
-  readonly address: string
-  readonly label: string
-  readonly value: string
+  readonly address: string;
+  readonly label: string;
+  readonly value: string;
 }
 
 export function addLocalizationKey(
   properties: AdvancedProperty[],
   address: string,
   label: string,
-  text: LocalizedText | undefined,
+  text: LocalizedText | undefined
 ) {
-  if (!text) return
+  if (!text) {
+    return;
+  }
   properties.push({
     address: `${address}.localizationKey`,
     label: `${label} localization key`,
     value: text.localizationKey,
-  })
+  });
 }
 
-export function addControlLocalizationKeys(properties: AdvancedProperty[], node: ControlNode) {
+export function addControlLocalizationKeys(
+  properties: AdvancedProperty[],
+  node: ControlNode
+) {
   addLocalizationKey(
     properties,
     "accessibility.label",
     "Accessibility label",
-    node.accessibility.label,
-  )
+    node.accessibility.label
+  );
   addLocalizationKey(
     properties,
     "accessibility.hint",
     "Accessibility hint",
-    node.accessibility.hint,
-  )
+    node.accessibility.hint
+  );
 }
 
 export function advancedProperties(node: ProtocolNode) {
   const properties: AdvancedProperty[] = [
     { address: "id", label: "Component ID", value: node.id },
     { address: "type", label: "Component type", value: node.type },
-  ]
+  ];
 
   switch (node.type) {
     case "stack":
@@ -316,17 +346,17 @@ export function advancedProperties(node: ProtocolNode) {
         address: "children",
         label: "Child count",
         value: String(node.children.length),
-      })
-      break
+      });
+      break;
     case "text":
-      addLocalizationKey(properties, "value", "Text", node.value)
+      addLocalizationKey(properties, "value", "Text", node.value);
       addLocalizationKey(
         properties,
         "accessibility.label",
         "Accessibility label",
-        node.accessibility.label,
-      )
-      break
+        node.accessibility.label
+      );
+      break;
     case "image":
     case "icon":
       if (!node.accessibility.hidden) {
@@ -334,22 +364,31 @@ export function advancedProperties(node: ProtocolNode) {
           properties,
           "accessibility.label",
           "Accessibility label",
-          node.accessibility.label,
-        )
+          node.accessibility.label
+        );
       }
-      break
+      break;
     case "featureList":
-      properties.push({ address: "marker", label: "Marker", value: node.marker })
+      properties.push({
+        address: "marker",
+        label: "Marker",
+        value: node.marker,
+      });
       node.items.forEach((item, index) => {
         properties.push({
           address: `items.${item.id}.id`,
           label: `Benefit ${index + 1} ID`,
           value: item.id,
-        })
-        addLocalizationKey(properties, `items.${item.id}.text`, `Benefit ${index + 1}`, item.text)
-      })
-      addControlLocalizationKeys(properties, node)
-      break
+        });
+        addLocalizationKey(
+          properties,
+          `items.${item.id}.text`,
+          `Benefit ${index + 1}`,
+          item.text
+        );
+      });
+      addControlLocalizationKeys(properties, node);
+      break;
     case "productSelector":
       properties.push(
         {
@@ -361,16 +400,16 @@ export function advancedProperties(node: ProtocolNode) {
           address: "unavailableFallback.whenNoneAvailable",
           label: "Unavailable policy",
           value: node.unavailableFallback.whenNoneAvailable,
-        },
-      )
+        }
+      );
       addLocalizationKey(
         properties,
         "unavailableFallback.message",
         "Unavailable message",
-        node.unavailableFallback.message,
-      )
-      addControlLocalizationKeys(properties, node)
-      break
+        node.unavailableFallback.message
+      );
+      addControlLocalizationKeys(properties, node);
+      break;
     case "productCard":
       properties.push(
         {
@@ -378,77 +417,102 @@ export function advancedProperties(node: ProtocolNode) {
           label: "Product reference",
           value: node.productReferenceId,
         },
-        { address: "children", label: "Child count", value: String(node.children.length) },
-      )
+        {
+          address: "children",
+          label: "Child count",
+          value: String(node.children.length),
+        }
+      );
       addLocalizationKey(
         properties,
         "accessibility.label",
         "Accessibility label",
-        node.accessibility?.label,
-      )
-      break
+        node.accessibility?.label
+      );
+      break;
     case "productBadge":
       properties.push(
-        { address: "placement.mode", label: "Placement", value: node.placement.mode },
-        { address: "children", label: "Child count", value: String(node.children.length) },
-      )
-      break
+        {
+          address: "placement.mode",
+          label: "Placement",
+          value: node.placement.mode,
+        },
+        {
+          address: "children",
+          label: "Child count",
+          value: String(node.children.length),
+        }
+      );
+      break;
     case "button":
       properties.push({
         address: "children",
         label: "Child count",
         value: String(node.children.length),
-      })
-      addControlLocalizationKeys(properties, node)
-      break
+      });
+      addControlLocalizationKeys(properties, node);
+      break;
     case "carousel":
       node.pages.forEach((page, index) => {
         properties.push(
-          { address: `pages.${index}.id`, label: `Page ${index + 1} ID`, value: page.id },
+          {
+            address: `pages.${index}.id`,
+            label: `Page ${index + 1} ID`,
+            value: page.id,
+          },
           {
             address: `pages.${index}.content.id`,
             label: `Page ${index + 1} content ID`,
             value: page.content.id,
-          },
-        )
+          }
+        );
         addLocalizationKey(
           properties,
           `pages.${index}.accessibilityLabel`,
           `Page ${index + 1} label`,
-          page.accessibilityLabel,
-        )
-      })
-      addControlLocalizationKeys(properties, node)
-      break
+          page.accessibilityLabel
+        );
+      });
+      addControlLocalizationKeys(properties, node);
+      break;
     case "switch":
-      addLocalizationKey(properties, "label", "Switch label", node.label)
-      addControlLocalizationKeys(properties, node)
-      break
+      addLocalizationKey(properties, "label", "Switch label", node.label);
+      addControlLocalizationKeys(properties, node);
+      break;
     case "countdown":
-      addLocalizationKey(properties, "completedText", "Completed text", node.completedText)
+      addLocalizationKey(
+        properties,
+        "completedText",
+        "Completed text",
+        node.completedText
+      );
       addLocalizationKey(
         properties,
         "accessibility.label",
         "Accessibility label",
-        node.accessibility.label,
-      )
-      break
+        node.accessibility.label
+      );
+      break;
   }
-  return properties
+  return properties;
 }
 
 export function AdvancedPropertiesSection({
   children,
   properties,
 }: {
-  children?: ReactNode
-  properties: readonly AdvancedProperty[]
+  children?: ReactNode;
+  properties: readonly AdvancedProperty[];
 }) {
   return (
     <InspectorSection title="Advanced">
       {children}
       {properties.map((property) => (
-        <Field address={property.address} key={property.address} label={property.label}>
+        <Field
+          address={property.address}
+          key={property.address}
+          label={property.label}
+        >
           {(fieldProps) => (
             <input
               {...fieldProps}
@@ -460,13 +524,19 @@ export function AdvancedPropertiesSection({
         </Field>
       ))}
     </InspectorSection>
-  )
+  );
 }
 
-export function AdvancedSection({ children, node }: { children?: ReactNode; node: ProtocolNode }) {
+export function AdvancedSection({
+  children,
+  node,
+}: {
+  children?: ReactNode;
+  node: ProtocolNode;
+}) {
   return (
     <AdvancedPropertiesSection properties={advancedProperties(node)}>
       {children}
     </AdvancedPropertiesSection>
-  )
+  );
 }

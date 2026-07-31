@@ -1,30 +1,42 @@
-import { ArrowLeftIcon } from "@phosphor-icons/react/dist/ssr/ArrowLeft"
-import { ArrowsClockwiseIcon } from "@phosphor-icons/react/dist/ssr/ArrowsClockwise"
-import { CheckCircleIcon } from "@phosphor-icons/react/dist/ssr/CheckCircle"
-import { WarningCircleIcon } from "@phosphor-icons/react/dist/ssr/WarningCircle"
-import { useMutation, useQueries, useQuery, useQueryClient } from "@tanstack/react-query"
-import { useState } from "react"
+import { ArrowLeftIcon } from "@phosphor-icons/react/dist/ssr/ArrowLeft";
+import { ArrowsClockwiseIcon } from "@phosphor-icons/react/dist/ssr/ArrowsClockwise";
+import { CheckCircleIcon } from "@phosphor-icons/react/dist/ssr/CheckCircle";
+import { WarningCircleIcon } from "@phosphor-icons/react/dist/ssr/WarningCircle";
+import {
+  useMutation,
+  useQueries,
+  useQuery,
+  useQueryClient,
+} from "@tanstack/react-query";
+import { useState } from "react";
 
-import { Button } from "@/components/ui/button"
-import { buttonVariants } from "@/components/ui/button-variants"
-import { HostedResourceBoundary } from "@/features/auth/components/hosted-resource-boundary"
-import { resolveHostedQueryState } from "@/features/auth/types/hosted-query-state"
+import { Button } from "@/components/ui/button";
+import { buttonVariants } from "@/components/ui/button-variants";
+import { HostedResourceBoundary } from "@/features/auth/components/hosted-resource-boundary";
+import { resolveHostedQueryState } from "@/features/auth/types/hosted-query-state";
 import {
   entitlementsQueryOptions,
   productsQueryOptions,
   providerMappingsQueryOptions,
-} from "@/features/catalog/queries/catalog-query"
-import { environmentsQueryOptions } from "@/features/environments/queries/environments-query"
-import { WorkspacePage, WorkflowPanel } from "@/features/orgs/components/workspace-page"
-import { ProviderCatalogImport } from "@/features/provider-connections/components/provider-catalog-import"
-import { ProviderCredentialSheet } from "@/features/provider-connections/components/provider-credential-sheet"
+} from "@/features/catalog/queries/catalog-query";
+import { environmentsQueryOptions } from "@/features/environments/queries/environments-query";
+import {
+  WorkflowPanel,
+  WorkspacePage,
+} from "@/features/orgs/components/workspace-page";
+import {
+  applicationsQueryOptions,
+  projectQueryOptions,
+} from "@/features/projects/queries/projects-query";
+import { ProviderCatalogImport } from "@/features/provider-connections/components/provider-catalog-import";
+import { ProviderCredentialSheet } from "@/features/provider-connections/components/provider-credential-sheet";
 import {
   enqueueProviderSyncMutationOptions,
   importProviderProductsMutationOptions,
   replaceProviderCredentialMutationOptions,
   revokeProviderConnectionMutationOptions,
   testProviderConnectionMutationOptions,
-} from "@/features/provider-connections/mutations/provider-connection-mutations"
+} from "@/features/provider-connections/mutations/provider-connection-mutations";
 import {
   providerCatalogPreviewQueryOptions,
   providerConnectionCapabilitiesQueryOptions,
@@ -32,78 +44,108 @@ import {
   providerConnectionHealthQueryOptions,
   providerConnectionQueryOptions,
   providerSyncRunsQueryOptions,
-} from "@/features/provider-connections/queries/provider-connection-queries"
-import { providerCredentialActions } from "@/features/provider-connections/types/provider-connection-view"
-import { environmentMatchesConnectionMode } from "@/features/provider-connections/types/provider-operation-input"
-import {
-  applicationsQueryOptions,
-  projectQueryOptions,
-} from "@/features/projects/queries/projects-query"
+} from "@/features/provider-connections/queries/provider-connection-queries";
+import { providerCredentialActions } from "@/features/provider-connections/types/provider-connection-view";
+import { environmentMatchesConnectionMode } from "@/features/provider-connections/types/provider-operation-input";
 
 export function ProviderConnectionDetailPage({
   connectionId,
   organizationId,
   projectId,
 }: {
-  connectionId: string
-  organizationId: string
-  projectId: string
+  connectionId: string;
+  organizationId: string;
+  projectId: string;
 }) {
-  const queryClient = useQueryClient()
-  const [catalogRequested, setCatalogRequested] = useState(false)
-  const [confirmRevoke, setConfirmRevoke] = useState(false)
-  const project = useQuery(projectQueryOptions(projectId))
-  const connection = useQuery(providerConnectionQueryOptions(connectionId))
+  const queryClient = useQueryClient();
+  const [catalogRequested, setCatalogRequested] = useState(false);
+  const [confirmRevoke, setConfirmRevoke] = useState(false);
+  const project = useQuery(projectQueryOptions(projectId));
+  const connection = useQuery(providerConnectionQueryOptions(connectionId));
   const scopeMismatch =
     project.isSuccess &&
     connection.isSuccess &&
-    (project.data.organizationId !== organizationId || connection.data.projectId !== projectId)
+    (project.data.organizationId !== organizationId ||
+      connection.data.projectId !== projectId);
   const scopeReady =
-    project.data?.organizationId === organizationId && connection.data?.projectId === projectId
+    project.data?.organizationId === organizationId &&
+    connection.data?.projectId === projectId;
   const health = useQuery({
     ...providerConnectionHealthQueryOptions(connectionId),
     enabled: scopeReady,
-  })
+  });
   const capabilities = useQuery({
     ...providerConnectionCapabilitiesQueryOptions(connectionId),
     enabled: scopeReady,
-  })
+  });
   const diagnostics = useQuery({
     ...providerConnectionDiagnosticsQueryOptions(connectionId),
     enabled: scopeReady,
-  })
-  const syncRuns = useQuery({ ...providerSyncRunsQueryOptions(connectionId), enabled: scopeReady })
-  const applications = useQuery({ ...applicationsQueryOptions(projectId), enabled: scopeReady })
-  const environments = useQuery({ ...environmentsQueryOptions(projectId), enabled: scopeReady })
-  const products = useQuery({ ...productsQueryOptions(projectId), enabled: scopeReady })
-  const entitlements = useQuery({ ...entitlementsQueryOptions(projectId), enabled: scopeReady })
+  });
+  const syncRuns = useQuery({
+    ...providerSyncRunsQueryOptions(connectionId),
+    enabled: scopeReady,
+  });
+  const applications = useQuery({
+    ...applicationsQueryOptions(projectId),
+    enabled: scopeReady,
+  });
+  const environments = useQuery({
+    ...environmentsQueryOptions(projectId),
+    enabled: scopeReady,
+  });
+  const products = useQuery({
+    ...productsQueryOptions(projectId),
+    enabled: scopeReady,
+  });
+  const entitlements = useQuery({
+    ...entitlementsQueryOptions(projectId),
+    enabled: scopeReady,
+  });
   const mappingQueries = useQueries({
     queries: (products.data?.items ?? []).map((product) => ({
       ...providerMappingsQueryOptions(product.id),
       enabled: scopeReady,
     })),
-  })
+  });
   const catalog = useQuery({
     ...providerCatalogPreviewQueryOptions(connectionId),
-    enabled: scopeReady && catalogRequested && connection.data?.status !== "revoked",
-  })
+    enabled:
+      scopeReady && catalogRequested && connection.data?.status !== "revoked",
+  });
   const testConnection = useMutation(
-    testProviderConnectionMutationOptions(connectionId, projectId, queryClient),
-  )
+    testProviderConnectionMutationOptions(connectionId, projectId, queryClient)
+  );
   const rotate = useMutation(
-    replaceProviderCredentialMutationOptions("rotate", connectionId, projectId, queryClient),
-  )
+    replaceProviderCredentialMutationOptions(
+      "rotate",
+      connectionId,
+      projectId,
+      queryClient
+    )
+  );
   const reconnect = useMutation(
-    replaceProviderCredentialMutationOptions("reconnect", connectionId, projectId, queryClient),
-  )
+    replaceProviderCredentialMutationOptions(
+      "reconnect",
+      connectionId,
+      projectId,
+      queryClient
+    )
+  );
   const revoke = useMutation(
-    revokeProviderConnectionMutationOptions(connectionId, projectId, queryClient),
-  )
-  const sync = useMutation(enqueueProviderSyncMutationOptions(connectionId, projectId, queryClient))
+    revokeProviderConnectionMutationOptions(
+      connectionId,
+      projectId,
+      queryClient
+    )
+  );
+  const sync = useMutation(
+    enqueueProviderSyncMutationOptions(connectionId, projectId, queryClient)
+  );
   const importProducts = useMutation(
-    importProviderProductsMutationOptions(connectionId, projectId, queryClient),
-  )
-  const mappingError = mappingQueries.find((query) => query.error)?.error
+    importProviderProductsMutationOptions(connectionId, projectId, queryClient)
+  );
+  const mappingError = mappingQueries.find((query) => query.error)?.error;
   const error =
     project.error ??
     connection.error ??
@@ -115,9 +157,10 @@ export function ProviderConnectionDetailPage({
     environments.error ??
     products.error ??
     entitlements.error ??
-    mappingError
+    mappingError;
   const state = resolveHostedQueryState({
-    emptyDescription: "Return to Commerce providers and choose an existing connection.",
+    emptyDescription:
+      "Return to Commerce providers and choose an existing connection.",
     emptyTitle: "Provider Connection unavailable",
     error,
     isEmpty: connection.isSuccess && !connection.data,
@@ -134,36 +177,41 @@ export function ProviderConnectionDetailPage({
           products.isPending ||
           entitlements.isPending ||
           mappingQueries.some((query) => query.isPending))),
-    loadingDescription: "Loading provider health, capabilities, diagnostics, and synchronization.",
+    loadingDescription:
+      "Loading provider health, capabilities, diagnostics, and synchronization.",
     onRetry: () => {
-      void project.refetch()
-      void connection.refetch()
-      void health.refetch()
-      void capabilities.refetch()
-      void diagnostics.refetch()
-      void syncRuns.refetch()
+      project.refetch();
+      connection.refetch();
+      health.refetch();
+      capabilities.refetch();
+      diagnostics.refetch();
+      syncRuns.refetch();
     },
-    permissionDescription: "Project membership is required to inspect this Provider Connection.",
-  })
+    permissionDescription:
+      "Project membership is required to inspect this Provider Connection.",
+  });
   const scopedApplications =
-    applications.data?.items.filter((item) => connection.data?.applicationIds.includes(item.id)) ??
-    []
+    applications.data?.items.filter((item) =>
+      connection.data?.applicationIds.includes(item.id)
+    ) ?? [];
   const scopedEnvironments =
     environments.data?.items.filter(
       (item) =>
         connection.data?.environmentIds.includes(item.id) &&
-        environmentMatchesConnectionMode(item.mode, connection.data.mode),
-    ) ?? []
+        environmentMatchesConnectionMode(item.mode, connection.data.mode)
+    ) ?? [];
   const affectedProducts =
     products.data?.items.filter((_, index) =>
-      mappingQueries[index]?.data?.items.some((mapping) => mapping.connectionId === connectionId),
-    ) ?? []
+      mappingQueries[index]?.data?.items.some(
+        (mapping) => mapping.connectionId === connectionId
+      )
+    ) ?? [];
   const credentialActions = connection.data
     ? providerCredentialActions(
         connection.data,
-        health.data?.status ?? connection.data.healthStatus,
+        health.data?.status ?? connection.data.healthStatus
       )
-    : { reconnect: false, rotate: false }
+    : { reconnect: false, rotate: false };
 
   if (scopeMismatch) {
     return (
@@ -178,7 +226,7 @@ export function ProviderConnectionDetailPage({
           Return to Commerce providers
         </a>
       </WorkspacePage>
-    )
+    );
   }
 
   return (
@@ -202,7 +250,11 @@ export function ProviderConnectionDetailPage({
           <Metric label="Mode" value={connection.data?.mode ?? "—"} />
           <Metric
             label="Credential"
-            value={connection.data?.credential ? "Encrypted · present" : "Not available"}
+            value={
+              connection.data?.credential
+                ? "Encrypted · present"
+                : "Not available"
+            }
           />
         </div>
 
@@ -212,7 +264,10 @@ export function ProviderConnectionDetailPage({
         >
           <div className="flex flex-wrap gap-2">
             <Button
-              disabled={testConnection.isPending || connection.data?.status === "revoked"}
+              disabled={
+                testConnection.isPending ||
+                connection.data?.status === "revoked"
+              }
               onClick={() => testConnection.mutate()}
               type="button"
             >
@@ -222,7 +277,7 @@ export function ProviderConnectionDetailPage({
               <ProviderCredentialSheet
                 action="rotate"
                 onSubmit={async (credential) => {
-                  await rotate.mutateAsync({ credential })
+                  await rotate.mutateAsync({ credential });
                 }}
               />
             ) : null}
@@ -230,7 +285,7 @@ export function ProviderConnectionDetailPage({
               <ProviderCredentialSheet
                 action="reconnect"
                 onSubmit={async (credential) => {
-                  await reconnect.mutateAsync({ credential })
+                  await reconnect.mutateAsync({ credential });
                 }}
               />
             ) : null}
@@ -257,36 +312,38 @@ export function ProviderConnectionDetailPage({
             </Button>
           </div>
           {testConnection.error || sync.error ? (
-            <p className="text-destructive mt-3 text-sm" role="alert">
+            <p className="mt-3 text-destructive text-sm" role="alert">
               {(testConnection.error ?? sync.error)?.message}
             </p>
           ) : null}
           {sync.data ? (
-            <p className="text-muted-foreground mt-3 text-sm" role="status">
-              Synchronization job {sync.data.id} is {sync.data.status}. Refresh history to follow
-              recovery attempts.
+            <p className="mt-3 text-muted-foreground text-sm" role="status">
+              Synchronization job {sync.data.id} is {sync.data.status}. Refresh
+              history to follow recovery attempts.
             </p>
           ) : null}
           {confirmRevoke ? (
-            <div className="border-destructive/25 bg-destructive/5 mt-4 rounded border p-4">
-              <p className="text-sm font-semibold">Revoke this connection?</p>
-              <p className="text-muted-foreground mt-1 text-sm leading-6">
+            <div className="mt-4 rounded border border-destructive/25 bg-destructive/5 p-4">
+              <p className="font-semibold text-sm">Revoke this connection?</p>
+              <p className="mt-1 text-muted-foreground text-sm leading-6">
                 This blocks synchronization and provider readiness across{" "}
-                {connection.data?.applicationIds.length ?? 0} Application scope(s) and{" "}
-                {connection.data?.environmentIds.length ?? 0} Environment scope(s). Existing
-                immutable releases remain historical; reconnect with a new credential to recover.
+                {connection.data?.applicationIds.length ?? 0} Application
+                scope(s) and {connection.data?.environmentIds.length ?? 0}{" "}
+                Environment scope(s). Existing immutable releases remain
+                historical; reconnect with a new credential to recover.
               </p>
               {affectedProducts.length > 0 ? (
                 <div className="mt-3">
-                  <p className="text-sm font-medium">
-                    {affectedProducts.length} connected Product(s), their Paywalls, Placements, and
-                    active-provider assignments may be blocked:
+                  <p className="font-medium text-sm">
+                    {affectedProducts.length} connected Product(s), their
+                    Paywalls, Placements, and active-provider assignments may be
+                    blocked:
                   </p>
                   <ul className="mt-2 space-y-1 text-sm">
                     {affectedProducts.map((product) => (
                       <li key={product.id}>
                         <a
-                          className="text-primary font-medium"
+                          className="font-medium text-primary"
                           href={`/orgs/${encodeURIComponent(organizationId)}/projects/${encodeURIComponent(projectId)}/catalog/products/${encodeURIComponent(product.id)}`}
                         >
                           Review {product.internalName} usage and recovery
@@ -296,10 +353,12 @@ export function ProviderConnectionDetailPage({
                   </ul>
                 </div>
               ) : (
-                <p className="mt-3 text-sm">No connected Products are currently affected.</p>
+                <p className="mt-3 text-sm">
+                  No connected Products are currently affected.
+                </p>
               )}
               {revoke.error ? (
-                <p className="text-destructive mt-2 text-sm" role="alert">
+                <p className="mt-2 text-destructive text-sm" role="alert">
                   {revoke.error.message}
                 </p>
               ) : null}
@@ -307,7 +366,9 @@ export function ProviderConnectionDetailPage({
                 <Button
                   disabled={revoke.isPending}
                   onClick={() =>
-                    revoke.mutate(undefined, { onSuccess: () => setConfirmRevoke(false) })
+                    revoke.mutate(undefined, {
+                      onSuccess: () => setConfirmRevoke(false),
+                    })
                   }
                   type="button"
                   variant="destructive"
@@ -338,21 +399,23 @@ export function ProviderConnectionDetailPage({
                   className="flex items-start justify-between gap-3 rounded border p-3"
                   key={capability.name}
                 >
-                  <span className="text-sm font-medium">{capability.name}</span>
-                  <span className="text-muted-foreground text-right text-xs">
+                  <span className="font-medium text-sm">{capability.name}</span>
+                  <span className="text-right text-muted-foreground text-xs">
                     {capability.support}
                     {capability.reasonCode ? ` · ${capability.reasonCode}` : ""}
                   </span>
                 </li>
               ))}
             </ul>
-            <h3 className="mt-4 text-xs font-semibold tracking-wide uppercase">
+            <h3 className="mt-4 font-semibold text-xs uppercase tracking-wide">
               Required read permissions
             </h3>
-            <ul className="text-muted-foreground mt-2 space-y-1 font-mono text-xs">
-              {(capabilities.data?.requiredPermissions ?? []).map((permission) => (
-                <li key={permission}>{permission}</li>
-              ))}
+            <ul className="mt-2 space-y-1 font-mono text-muted-foreground text-xs">
+              {(capabilities.data?.requiredPermissions ?? []).map(
+                (permission) => (
+                  <li key={permission}>{permission}</li>
+                )
+              )}
             </ul>
           </WorkflowPanel>
 
@@ -365,14 +428,23 @@ export function ProviderConnectionDetailPage({
             ) : (
               <ul className="space-y-2">
                 {diagnostics.data?.map((diagnostic) => (
-                  <li className="rounded border p-3 text-xs" key={diagnostic.id}>
+                  <li
+                    className="rounded border p-3 text-xs"
+                    key={diagnostic.id}
+                  >
                     <p className="flex items-center gap-2 font-semibold">
-                      <WarningCircleIcon aria-hidden className="text-destructive" />
+                      <WarningCircleIcon
+                        aria-hidden
+                        className="text-destructive"
+                      />
                       {diagnostic.code} · {diagnostic.operation}
                     </p>
-                    <p className="text-muted-foreground mt-1">
-                      {diagnostic.occurredAt} · correlation {diagnostic.correlationId} ·{" "}
-                      {diagnostic.retryable ? "retryable" : "review credential or scope"}
+                    <p className="mt-1 text-muted-foreground">
+                      {diagnostic.occurredAt} · correlation{" "}
+                      {diagnostic.correlationId} ·{" "}
+                      {diagnostic.retryable
+                        ? "retryable"
+                        : "review credential or scope"}
                     </p>
                   </li>
                 ))}
@@ -385,10 +457,12 @@ export function ProviderConnectionDetailPage({
           description="Every run reports bounded attempts and partial outcomes. All mappings on this connection are affected."
           title="Synchronization history"
         >
-          <p className="text-muted-foreground mb-3 text-xs">
+          <p className="mb-3 text-muted-foreground text-xs">
             Affected Products:{" "}
             {affectedProducts.length > 0
-              ? affectedProducts.map((product) => product.internalName).join(", ")
+              ? affectedProducts
+                  .map((product) => product.internalName)
+                  .join(", ")
               : "No mapped Products"}
           </p>
           {(syncRuns.data ?? []).length === 0 ? (
@@ -398,15 +472,18 @@ export function ProviderConnectionDetailPage({
               {syncRuns.data?.map((run) => (
                 <li className="rounded border p-3" key={run.id}>
                   <div className="flex flex-wrap items-center justify-between gap-2">
-                    <p className="text-sm font-semibold">
-                      {run.status} · {run.successCount}/{run.itemCount} synchronized
+                    <p className="font-semibold text-sm">
+                      {run.status} · {run.successCount}/{run.itemCount}{" "}
+                      synchronized
                     </p>
-                    <span className="text-muted-foreground text-xs">{run.startedAt}</span>
+                    <span className="text-muted-foreground text-xs">
+                      {run.startedAt}
+                    </span>
                   </div>
                   {run.failureCount > 0 ? (
-                    <p className="text-destructive mt-1 text-xs">
-                      {run.failureCount} mapping(s) failed. Run synchronization again after
-                      resolving the latest diagnostic.
+                    <p className="mt-1 text-destructive text-xs">
+                      {run.failureCount} mapping(s) failed. Run synchronization
+                      again after resolving the latest diagnostic.
                     </p>
                   ) : null}
                 </li>
@@ -415,7 +492,9 @@ export function ProviderConnectionDetailPage({
           )}
           <Button
             className="mt-3"
-            onClick={() => void syncRuns.refetch()}
+            onClick={() => {
+              syncRuns.refetch();
+            }}
             size="sm"
             type="button"
             variant="outline"
@@ -428,7 +507,43 @@ export function ProviderConnectionDetailPage({
           description="Preview the live RevenueCat catalog, then map selected resources to stable Mosaic Products and Entitlements."
           title="Catalog import"
         >
-          {!catalogRequested ? (
+          {catalogRequested ? (
+            catalog.isPending ? (
+              <p aria-live="polite" className="text-muted-foreground text-sm">
+                Loading normalized provider catalog…
+              </p>
+            ) : catalog.error ? (
+              <div role="alert">
+                <p className="text-destructive text-sm">
+                  {catalog.error.message}
+                </p>
+                <Button
+                  className="mt-2"
+                  onClick={() => {
+                    catalog.refetch();
+                  }}
+                  size="sm"
+                  type="button"
+                  variant="outline"
+                >
+                  Retry catalog preview
+                </Button>
+              </div>
+            ) : catalog.data ? (
+              <ProviderCatalogImport
+                applications={scopedApplications}
+                catalogProductsHref={`/orgs/${encodeURIComponent(organizationId)}/projects/${encodeURIComponent(projectId)}/catalog/products`}
+                entitlements={entitlements.data?.items ?? []}
+                environments={scopedEnvironments}
+                onImport={(items, idempotencyKey) =>
+                  importProducts.mutateAsync({ idempotencyKey, items })
+                }
+                preview={catalog.data}
+                products={products.data?.items ?? []}
+                providersHref={`/orgs/${encodeURIComponent(organizationId)}/projects/${encodeURIComponent(projectId)}/catalog/providers`}
+              />
+            ) : null
+          ) : (
             <Button
               disabled={connection.data?.status === "revoked"}
               onClick={() => setCatalogRequested(true)}
@@ -436,59 +551,33 @@ export function ProviderConnectionDetailPage({
             >
               Load provider catalog
             </Button>
-          ) : catalog.isPending ? (
-            <p aria-live="polite" className="text-muted-foreground text-sm">
-              Loading normalized provider catalog…
-            </p>
-          ) : catalog.error ? (
-            <div role="alert">
-              <p className="text-destructive text-sm">{catalog.error.message}</p>
-              <Button
-                className="mt-2"
-                onClick={() => void catalog.refetch()}
-                size="sm"
-                type="button"
-                variant="outline"
-              >
-                Retry catalog preview
-              </Button>
-            </div>
-          ) : catalog.data ? (
-            <ProviderCatalogImport
-              applications={scopedApplications}
-              catalogProductsHref={`/orgs/${encodeURIComponent(organizationId)}/projects/${encodeURIComponent(projectId)}/catalog/products`}
-              entitlements={entitlements.data?.items ?? []}
-              environments={scopedEnvironments}
-              onImport={(items, idempotencyKey) =>
-                importProducts.mutateAsync({ idempotencyKey, items })
-              }
-              preview={catalog.data}
-              products={products.data?.items ?? []}
-              providersHref={`/orgs/${encodeURIComponent(organizationId)}/projects/${encodeURIComponent(projectId)}/catalog/providers`}
-            />
-          ) : null}
+          )}
         </WorkflowPanel>
 
         {connection.data?.credential ? (
           <p className="text-muted-foreground text-xs">
-            Credential metadata: fingerprint {connection.data.credential.fingerprint} · envelope v
-            {connection.data.credential.envelopeVersion} · key {connection.data.credential.keyId}.
-            No authorization material is returned.
+            Credential metadata: fingerprint{" "}
+            {connection.data.credential.fingerprint} · envelope v
+            {connection.data.credential.envelopeVersion} · key{" "}
+            {connection.data.credential.keyId}. No authorization material is
+            returned.
           </p>
         ) : null}
       </HostedResourceBoundary>
     </WorkspacePage>
-  )
+  );
 }
 
 function Metric({ label, value }: { label: string; value: string }) {
   return (
     <div className="rounded border p-4">
       <p className="text-muted-foreground text-xs">{label}</p>
-      <p className="mt-1 flex items-center gap-1.5 text-sm font-semibold capitalize">
-        {value === "healthy" ? <CheckCircleIcon aria-hidden className="text-primary" /> : null}
+      <p className="mt-1 flex items-center gap-1.5 font-semibold text-sm capitalize">
+        {value === "healthy" ? (
+          <CheckCircleIcon aria-hidden className="text-primary" />
+        ) : null}
         {value.replaceAll("_", " ")}
       </p>
     </div>
-  )
+  );
 }

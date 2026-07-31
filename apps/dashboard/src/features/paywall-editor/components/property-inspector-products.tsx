@@ -1,73 +1,79 @@
-import { PlusIcon } from "@phosphor-icons/react/dist/ssr/Plus"
+import { PlusIcon } from "@phosphor-icons/react/dist/ssr/Plus";
 
-import { Button } from "@/components/ui/button"
-import { LAYER_TYPE_LABELS } from "@/features/paywall-editor/components/component-catalog"
-import { LayerTypeIcon } from "@/features/paywall-editor/components/layer-type-icon"
-import { useEditorActions } from "@/features/paywall-editor/stores/editor-store-context"
-import type { ProtocolNode } from "@/features/paywall-editor/types/editor"
-import {
-  appendProductBadge,
-  appendProductCard,
-  findParent,
-  resolveLocalizedText,
-} from "@/features/paywall-editor/utils/document-tree"
-
+import { Button } from "@/components/ui/button";
+import { SelectItem } from "@/components/ui/select";
+import { LAYER_TYPE_LABELS } from "@/features/paywall-editor/components/component-catalog";
+import { LayerTypeIcon } from "@/features/paywall-editor/components/layer-type-icon";
 import {
   AdvancedSection,
   ControlAccessibilitySection,
   seedOptionalLocalizedText,
-} from "@/features/paywall-editor/components/property-inspector-accessibility"
+} from "@/features/paywall-editor/components/property-inspector-accessibility";
 import {
   BackgroundSection,
   BorderSection,
-} from "@/features/paywall-editor/components/property-inspector-background"
+} from "@/features/paywall-editor/components/property-inspector-background";
 import {
+  alignmentOptions,
   CompactOptionField,
   FLOW_OPTIONS,
   InspectorSection,
   PRODUCT_VARIABLE_TOKENS,
   TwoColumn,
-  alignmentOptions,
   useInspectorContext,
-} from "@/features/paywall-editor/components/property-inspector-core"
+} from "@/features/paywall-editor/components/property-inspector-core";
 import {
   CheckboxField,
   LocalizedField,
   NumberField,
   SelectField,
-} from "@/features/paywall-editor/components/property-inspector-fields"
+} from "@/features/paywall-editor/components/property-inspector-fields";
 import {
   AppearanceSection,
   SizingFields,
   SpacingSection,
   VisibilitySection,
-} from "@/features/paywall-editor/components/property-inspector-layout"
+} from "@/features/paywall-editor/components/property-inspector-layout";
 import {
   ProductLayerLayoutSection,
   ProductLayerStyleSection,
-} from "@/features/paywall-editor/components/property-inspector-product-styles"
-import { SelectItem } from "@/components/ui/select"
+} from "@/features/paywall-editor/components/property-inspector-product-styles";
+import { useEditorActions } from "@/features/paywall-editor/stores/editor-store-context";
+import type { ProtocolNode } from "@/features/paywall-editor/types/editor";
+import {
+  appendProductBadge,
+  appendProductCard,
+  findParent,
+  resolveLocalizedText,
+} from "@/features/paywall-editor/utils/document-tree";
 
 export function ProductCardInspector({
   node,
 }: {
-  node: Extract<ProtocolNode, { type: "productCard" }>
+  node: Extract<ProtocolNode, { type: "productCard" }>;
 }) {
-  const { disabled, document, locale } = useInspectorContext()
-  const editor = useEditorActions()
-  const parent = findParent(document, node.id)
-  const selector = parent?.parent.type === "productSelector" ? parent.parent : null
-  const product = document.products.find((candidate) => candidate.id === node.productReferenceId)
+  const { disabled, document, locale } = useInspectorContext();
+  const editor = useEditorActions();
+  const parent = findParent(document, node.id);
+  const selector =
+    parent?.parent.type === "productSelector" ? parent.parent : null;
+  const product = document.products.find(
+    (candidate) => candidate.id === node.productReferenceId
+  );
   const usedProductIds = new Set(
-    selector?.cards.flatMap((card) => (card.id === node.id ? [] : card.productReferenceId)),
-  )
-  const badge = node.children.find((child) => child.type === "productBadge")
+    selector?.cards.flatMap((card) =>
+      card.id === node.id ? [] : card.productReferenceId
+    )
+  );
+  const badge = node.children.find((child) => child.type === "productBadge");
 
   function addBadge() {
-    const result = appendProductBadge(document, node.id)
-    if (!result) return
-    editor.updateDocument(() => result.document)
-    editor.selectComponent(result.selectionId)
+    const result = appendProductBadge(document, node.id);
+    if (!result) {
+      return;
+    }
+    editor.updateDocument(() => result.document);
+    editor.selectComponent(result.selectionId);
   }
 
   return (
@@ -78,7 +84,9 @@ export function ProductCardInspector({
           label="Product"
           onChange={(productReferenceId) =>
             editor.updateComponent(node.id, (current) =>
-              current.type === "productCard" ? { ...current, productReferenceId } : current,
+              current.type === "productCard"
+                ? { ...current, productReferenceId }
+                : current
             )
           }
           value={node.productReferenceId}
@@ -99,24 +107,27 @@ export function ProductCardInspector({
           description="The selector keeps exactly one initial selection."
           label="Initial selection"
           onChange={(checked) => {
-            if (!checked || !selector) return
+            if (!(checked && selector)) {
+              return;
+            }
             editor.updateComponent(selector.id, (current) =>
               current.type === "productSelector"
                 ? { ...current, initialProductCardId: node.id }
-                : current,
-            )
+                : current
+            );
           }}
         />
         {product ? (
-          <p className="text-muted-foreground text-[11px] leading-4">
-            Provider product ID: <span className="font-mono">{product.productId}</span>
+          <p className="text-[11px] text-muted-foreground leading-4">
+            Provider product ID:{" "}
+            <span className="font-mono">{product.productId}</span>
           </p>
         ) : null}
       </InspectorSection>
       <InspectorSection title="Content">
         <p className="text-muted-foreground text-xs leading-5">
-          Add and reorder Text, Icon, Image, Stack, Feature List, or Countdown directly in Layers.
-          The whole card remains one selectable control.
+          Add and reorder Text, Icon, Image, Stack, Feature List, or Countdown
+          directly in Layers. The whole card remains one selectable control.
         </p>
         {badge ? (
           <Button
@@ -157,10 +168,12 @@ export function ProductCardInspector({
               disabled={disabled}
               onClick={() =>
                 editor.updateComponent(node.id, (current) => {
-                  if (current.type !== "productCard") return current
-                  const next = { ...current }
-                  delete next.accessibility
-                  return next
+                  if (current.type !== "productCard") {
+                    return current;
+                  }
+                  const next = { ...current };
+                  delete next.accessibility;
+                  return next;
                 })
               }
               size="xs"
@@ -183,7 +196,7 @@ export function ProductCardInspector({
                     current.type === "productCard"
                       ? { ...current, accessibility: { label } }
                       : current,
-                }),
+                })
               )
             }
             size="sm"
@@ -196,15 +209,15 @@ export function ProductCardInspector({
       </InspectorSection>
       <AdvancedSection node={node} />
     </>
-  )
+  );
 }
 
 export function ProductBadgeInspector({
   node,
 }: {
-  node: Extract<ProtocolNode, { type: "productBadge" }>
+  node: Extract<ProtocolNode, { type: "productBadge" }>;
 }) {
-  const editor = useEditorActions()
+  const editor = useEditorActions();
   return (
     <>
       <InspectorSection defaultOpen title="Badge">
@@ -221,7 +234,7 @@ export function ProductBadgeInspector({
                         ? { mode: "overlay", anchor: "topEnd", inset: 8 }
                         : { mode: "nested" },
                   }
-                : current,
+                : current
             )
           }
           value={node.placement.mode}
@@ -236,7 +249,8 @@ export function ProductBadgeInspector({
               label="Position"
               onChange={(anchor) =>
                 editor.updateComponent(node.id, (current) =>
-                  current.type === "productBadge" && current.placement.mode === "overlay"
+                  current.type === "productBadge" &&
+                  current.placement.mode === "overlay"
                     ? {
                         ...current,
                         placement: {
@@ -244,7 +258,7 @@ export function ProductBadgeInspector({
                           anchor: anchor as typeof current.placement.anchor,
                         },
                       }
-                    : current,
+                    : current
                 )
               }
               value={node.placement.anchor}
@@ -261,9 +275,10 @@ export function ProductBadgeInspector({
               min={0}
               onChange={(inset) =>
                 editor.updateComponent(node.id, (current) =>
-                  current.type === "productBadge" && current.placement.mode === "overlay"
+                  current.type === "productBadge" &&
+                  current.placement.mode === "overlay"
                     ? { ...current, placement: { ...current.placement, inset } }
-                    : current,
+                    : current
                 )
               }
               unit="lu"
@@ -274,14 +289,14 @@ export function ProductBadgeInspector({
       </InspectorSection>
       <InspectorSection title="Content">
         <p className="text-muted-foreground text-xs leading-5">
-          Badge content is made from child layers. Add, reorder, and edit Text, Icon, or Stack
-          children in Layers; product variables work inside Text.
+          Badge content is made from child layers. Add, reorder, and edit Text,
+          Icon, or Stack children in Layers; product variables work inside Text.
         </p>
-        <div className="border-border divide-border divide-y rounded border">
+        <div className="divide-y divide-border rounded border border-border">
           {node.children.map((child) => (
             <button
               aria-label={`Edit ${LAYER_TYPE_LABELS[child.type]} in Product Badge`}
-              className="hover:bg-muted flex w-full items-center gap-2 p-2 text-left text-xs"
+              className="flex w-full items-center gap-2 p-2 text-left text-xs hover:bg-muted"
               key={child.id}
               onClick={() => editor.selectComponent(child.id)}
               type="button"
@@ -289,7 +304,9 @@ export function ProductBadgeInspector({
               <span className="size-4 shrink-0">
                 <LayerTypeIcon type={child.type} />
               </span>
-              <span className="min-w-0 flex-1 truncate">{LAYER_TYPE_LABELS[child.type]}</span>
+              <span className="min-w-0 flex-1 truncate">
+                {LAYER_TYPE_LABELS[child.type]}
+              </span>
             </button>
           ))}
         </div>
@@ -298,54 +315,60 @@ export function ProductBadgeInspector({
       <ProductLayerStyleSection node={node} />
       <AdvancedSection node={node} />
     </>
-  )
+  );
 }
 
 export function ProductSelectorInspector({
   node,
 }: {
-  node: Extract<ProtocolNode, { type: "productSelector" }>
+  node: Extract<ProtocolNode, { type: "productSelector" }>;
 }) {
-  const { disabled, document } = useInspectorContext()
-  const editor = useEditorActions()
+  const { disabled, document } = useInspectorContext();
+  const editor = useEditorActions();
 
   function addProductCard() {
-    const result = appendProductCard(document, node.id)
-    if (!result) return
-    editor.updateDocument(() => result.document)
-    editor.selectComponent(result.selectionId)
+    const result = appendProductCard(document, node.id);
+    if (!result) {
+      return;
+    }
+    editor.updateDocument(() => result.document);
+    editor.selectComponent(result.selectionId);
   }
 
   return (
     <>
       <InspectorSection defaultOpen title="Product Cards">
         <p className="text-muted-foreground text-xs leading-5">
-          Product Cards are authored layers. Reorder the full card rows in Layers and edit each
-          card&apos;s product, content, badge, and selected appearance separately.
+          Product Cards are authored layers. Reorder the full card rows in
+          Layers and edit each card&apos;s product, content, badge, and selected
+          appearance separately.
         </p>
-        <div className="border-border divide-border divide-y rounded border">
+        <div className="divide-y divide-border rounded border border-border">
           {node.cards.map((card, index) => {
             const productName =
-              document.products.find((product) => product.id === card.productReferenceId)?.label
-                .default ?? card.productReferenceId
-            const isInitial = card.id === node.initialProductCardId
+              document.products.find(
+                (product) => product.id === card.productReferenceId
+              )?.label.default ?? card.productReferenceId;
+            const isInitial = card.id === node.initialProductCardId;
             return (
               <button
                 aria-label={`Edit ${productName} Product Card${isInitial ? " (initial selection)" : ""}`}
-                className="hover:bg-muted flex w-full items-center gap-2 p-2 text-left text-xs"
+                className="flex w-full items-center gap-2 p-2 text-left text-xs hover:bg-muted"
                 key={card.id}
                 onClick={() => editor.selectComponent(card.id)}
                 type="button"
               >
-                <span className="bg-muted grid size-5 shrink-0 place-items-center rounded text-[10px]">
+                <span className="grid size-5 shrink-0 place-items-center rounded bg-muted text-[10px]">
                   {index + 1}
                 </span>
                 <span className="min-w-0 flex-1 truncate">{productName}</span>
                 {isInitial ? (
-                  <span className="text-primary text-[10px] font-medium">Initial</span>
+                  <span className="font-medium text-[10px] text-primary">
+                    Initial
+                  </span>
                 ) : null}
               </button>
-            )
+            );
           })}
         </div>
         <Button
@@ -364,9 +387,10 @@ export function ProductSelectorInspector({
           multiline
           text={node.unavailableFallback.message}
         />
-        <p className="text-muted-foreground text-[11px] leading-4">
-          If the initial product is unavailable, Mosaic selects the first available authored card.
-          When none are available, this message replaces the group and Purchase is disabled.
+        <p className="text-[11px] text-muted-foreground leading-4">
+          If the initial product is unavailable, Mosaic selects the first
+          available authored card. When none are available, this message
+          replaces the group and Purchase is disabled.
         </p>
       </InspectorSection>
       <InspectorSection defaultOpen title="Layout">
@@ -377,7 +401,7 @@ export function ProductSelectorInspector({
             editor.updateComponent(node.id, (current) =>
               current.type === "productSelector"
                 ? ({ ...current, direction } as typeof current)
-                : current,
+                : current
             )
           }
           options={FLOW_OPTIONS}
@@ -390,7 +414,7 @@ export function ProductSelectorInspector({
             editor.updateComponent(node.id, (current) =>
               current.type === "productSelector"
                 ? ({ ...current, crossAxisAlignment } as typeof current)
-                : current,
+                : current
             )
           }
           options={alignmentOptions(node.direction)}
@@ -406,7 +430,7 @@ export function ProductSelectorInspector({
           min={0}
           onChange={(gap) =>
             editor.updateComponent(node.id, (current) =>
-              current.type === "productSelector" ? { ...current, gap } : current,
+              current.type === "productSelector" ? { ...current, gap } : current
             )
           }
           unit="lu"
@@ -420,5 +444,5 @@ export function ProductSelectorInspector({
       <ControlAccessibilitySection node={node} />
       <AdvancedSection node={node} />
     </>
-  )
+  );
 }

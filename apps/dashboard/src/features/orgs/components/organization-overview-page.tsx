@@ -1,17 +1,21 @@
-import { useQuery } from "@tanstack/react-query"
-import { Link } from "@tanstack/react-router"
+import { useQuery } from "@tanstack/react-query";
+import { Link } from "@tanstack/react-router";
 
-import { buttonVariants } from "@/components/ui/button-variants"
-import { HostedResourceBoundary } from "@/features/auth/components/hosted-resource-boundary"
-import { resolveHostedQueryState } from "@/features/auth/types/hosted-query-state"
-import { organizationQueryOptions } from "@/features/orgs/queries/organizations-query"
-import { WorkspacePage, WorkflowPanel } from "@/features/orgs/components/workspace-page"
-import { projectsQueryOptions } from "@/features/projects/queries/projects-query"
+import { buttonVariants } from "@/components/ui/button-variants";
+import { HostedResourceBoundary } from "@/features/auth/components/hosted-resource-boundary";
+import { resolveHostedQueryState } from "@/features/auth/types/hosted-query-state";
+import {
+  WorkflowPanel,
+  WorkspacePage,
+} from "@/features/orgs/components/workspace-page";
+import { organizationQueryOptions } from "@/features/orgs/queries/organizations-query";
+import { projectsQueryOptions } from "@/features/projects/queries/projects-query";
+import { workspaceScopeParams } from "@/lib/routing/workspace-params";
 
 interface OrganizationOverviewPageProps {
-  onProjectStatusChange: (status: "active" | "archived") => void
-  organizationId: string
-  projectStatus: "active" | "archived"
+  onProjectStatusChange: (status: "active" | "archived") => void;
+  organizationId: string;
+  projectStatus: "active" | "archived";
 }
 
 export function OrganizationOverviewPage({
@@ -19,10 +23,12 @@ export function OrganizationOverviewPage({
   organizationId,
   projectStatus,
 }: OrganizationOverviewPageProps) {
-  const organization = useQuery(organizationQueryOptions(organizationId))
-  const projects = useQuery(projectsQueryOptions(organizationId, projectStatus))
-  const projectItems = projects.data?.items ?? []
-  const error = organization.error ?? projects.error
+  const organization = useQuery(organizationQueryOptions(organizationId));
+  const projects = useQuery(
+    projectsQueryOptions(organizationId, projectStatus)
+  );
+  const projectItems = projects.data?.items ?? [];
+  const error = organization.error ?? projects.error;
   const state = resolveHostedQueryState({
     emptyAction:
       projectStatus === "active" ? (
@@ -38,17 +44,22 @@ export function OrganizationOverviewPage({
       projectStatus === "active"
         ? "Create a project to group apps, environments, and the project-wide Catalog."
         : "Archived Projects appear here and can be opened to restore them.",
-    emptyTitle: projectStatus === "active" ? "No active projects" : "No archived projects",
+    emptyTitle:
+      projectStatus === "active"
+        ? "No active projects"
+        : "No archived projects",
     error,
-    isEmpty: organization.isSuccess && projects.isSuccess && projectItems.length === 0,
+    isEmpty:
+      organization.isSuccess && projects.isSuccess && projectItems.length === 0,
     isPending: organization.isPending || projects.isPending,
     loadingDescription: "Loading organization and projects.",
     onRetry: () => {
-      void organization.refetch()
-      void projects.refetch()
+      organization.refetch();
+      projects.refetch();
     },
-    permissionDescription: "You must be a member of this organization to view its projects.",
-  })
+    permissionDescription:
+      "You must be a member of this organization to view its projects.",
+  });
 
   return (
     <WorkspacePage
@@ -96,15 +107,24 @@ export function OrganizationOverviewPage({
         </button>
       </div>
       <HostedResourceBoundary state={state}>
-        <WorkflowPanel title={projectStatus === "active" ? "Active Projects" : "Archived Projects"}>
+        <WorkflowPanel
+          title={
+            projectStatus === "active" ? "Active Projects" : "Archived Projects"
+          }
+        >
           <ul className="grid gap-3 md:grid-cols-2">
             {projectItems.map((project) => (
               <li className="rounded border p-4" key={project.id}>
                 <p className="font-semibold">{project.name}</p>
-                <p className="text-muted-foreground mt-1 font-mono text-xs">{project.key}</p>
+                <p className="mt-1 font-mono text-muted-foreground text-xs">
+                  {project.key}
+                </p>
                 <Link
-                  className="text-primary mt-5 inline-flex text-sm font-medium hover:underline"
-                  params={(prev) => prev}
+                  className="mt-5 inline-flex font-medium text-primary text-sm hover:underline"
+                  params={(prev) => ({
+                    ...prev,
+                    ...workspaceScopeParams(prev),
+                  })}
                   to="/orgs/$organizationId/projects/$projectId/env/$environmentKey"
                 >
                   Open project
@@ -115,5 +135,5 @@ export function OrganizationOverviewPage({
         </WorkflowPanel>
       </HostedResourceBoundary>
     </WorkspacePage>
-  )
+  );
 }

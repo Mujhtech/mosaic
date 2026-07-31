@@ -1,55 +1,58 @@
-import { ArrowLeftIcon } from "@phosphor-icons/react/dist/ssr/ArrowLeft"
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
-import { useState } from "react"
+import { ArrowLeftIcon } from "@phosphor-icons/react/dist/ssr/ArrowLeft";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useState } from "react";
 
-import { Button } from "@/components/ui/button"
-import { buttonVariants } from "@/components/ui/button-variants"
-import { HostedResourceBoundary } from "@/features/auth/components/hosted-resource-boundary"
-import { resolveHostedQueryState } from "@/features/auth/types/hosted-query-state"
+import { Button } from "@/components/ui/button";
+import { buttonVariants } from "@/components/ui/button-variants";
+import { HostedResourceBoundary } from "@/features/auth/components/hosted-resource-boundary";
+import { resolveHostedQueryState } from "@/features/auth/types/hosted-query-state";
 import {
   BillingBoundaryNote,
   DefinitionRow,
   EnvironmentBadges,
   ProviderBadge,
   StatusPill,
-} from "@/features/billing-ledger/components/billing-chrome"
+} from "@/features/billing-ledger/components/billing-chrome";
 import {
   credentialStatusLabel,
   formatBillingTimestamp,
   storeEnvironmentLabel,
-} from "@/features/billing-ledger/types/billing-vocabulary"
-import { environmentsQueryOptions } from "@/features/environments/queries/environments-query"
-import { ScopeMismatchRecovery } from "@/features/orgs/components/scope-mismatch-recovery"
-import { WorkspacePage, WorkflowPanel } from "@/features/orgs/components/workspace-page"
-import { useValidatedProjectScope } from "@/features/projects/hooks/use-validated-project-scope"
-import { applicationsQueryOptions } from "@/features/projects/queries/projects-query"
-import { NotificationEndpointPanel } from "@/features/store-connections/components/notification-endpoint-panel"
-import { NotificationSetupGuide } from "@/features/store-connections/components/notification-setup-guide"
-import { RotateStoreCredentialSheet } from "@/features/store-connections/components/rotate-store-credential-sheet"
+} from "@/features/billing-ledger/types/billing-vocabulary";
+import { environmentsQueryOptions } from "@/features/environments/queries/environments-query";
+import { ScopeMismatchRecovery } from "@/features/orgs/components/scope-mismatch-recovery";
+import {
+  WorkflowPanel,
+  WorkspacePage,
+} from "@/features/orgs/components/workspace-page";
+import { useValidatedProjectScope } from "@/features/projects/hooks/use-validated-project-scope";
+import { applicationsQueryOptions } from "@/features/projects/queries/projects-query";
+import { NotificationEndpointPanel } from "@/features/store-connections/components/notification-endpoint-panel";
+import { NotificationSetupGuide } from "@/features/store-connections/components/notification-setup-guide";
+import { RotateStoreCredentialSheet } from "@/features/store-connections/components/rotate-store-credential-sheet";
 import {
   revokeStoreCredentialMutationOptions,
   rotateStoreCredentialMutationOptions,
   testStoreCredentialMutationOptions,
-} from "@/features/store-connections/mutations/store-credential-mutations"
+} from "@/features/store-connections/mutations/store-credential-mutations";
 import {
   clearStoreCredentialSecretMutationCache,
   transferStoreCredentialEndpoint,
-} from "@/features/store-connections/mutations/store-credential-secret-cache"
-import { storeCredentialQueryOptions } from "@/features/store-connections/queries/store-connection-queries"
+} from "@/features/store-connections/mutations/store-credential-secret-cache";
+import { storeCredentialQueryOptions } from "@/features/store-connections/queries/store-connection-queries";
 import {
   storeCredentialActions,
   storeCredentialHealthExplanation,
   storeCredentialHealthLabel,
   usesInboundNotificationEndpoint,
-} from "@/features/store-connections/types/store-connection-view"
-import { useOrganizationAccess } from "@/hooks/use-organization-access"
-import type { StoreServerCredentialWithEndpoint } from "@/generated/api"
-import { storeConnectionsHref } from "@/lib/routing/workspace-hrefs"
+} from "@/features/store-connections/types/store-connection-view";
+import type { StoreServerCredentialWithEndpoint } from "@/generated/api";
+import { useOrganizationAccess } from "@/hooks/use-organization-access";
+import { storeConnectionsHref } from "@/lib/routing/workspace-hrefs";
 
 interface StoreConnectionDetailPageProps {
-  credentialId: string
-  organizationId: string
-  projectId: string
+  credentialId: string;
+  organizationId: string;
+  projectId: string;
 }
 
 export function StoreConnectionDetailPage({
@@ -57,55 +60,76 @@ export function StoreConnectionDetailPage({
   organizationId,
   projectId,
 }: StoreConnectionDetailPageProps) {
-  const queryClient = useQueryClient()
-  const access = useOrganizationAccess(organizationId)
-  const [revealed, setRevealed] = useState<StoreServerCredentialWithEndpoint | null>(null)
-  const [confirmRevoke, setConfirmRevoke] = useState(false)
-  const { project, scopeMismatch, scopeReady } = useValidatedProjectScope(organizationId, projectId)
+  const queryClient = useQueryClient();
+  const access = useOrganizationAccess(organizationId);
+  const [revealed, setRevealed] =
+    useState<StoreServerCredentialWithEndpoint | null>(null);
+  const [confirmRevoke, setConfirmRevoke] = useState(false);
+  const { project, scopeMismatch, scopeReady } = useValidatedProjectScope(
+    organizationId,
+    projectId
+  );
   const credential = useQuery({
     ...storeCredentialQueryOptions(projectId, credentialId),
     enabled: scopeReady,
-  })
-  const environments = useQuery({ ...environmentsQueryOptions(projectId), enabled: scopeReady })
-  const applications = useQuery({ ...applicationsQueryOptions(projectId), enabled: scopeReady })
+  });
+  const environments = useQuery({
+    ...environmentsQueryOptions(projectId),
+    enabled: scopeReady,
+  });
+  const applications = useQuery({
+    ...applicationsQueryOptions(projectId),
+    enabled: scopeReady,
+  });
   const rotate = useMutation(
-    rotateStoreCredentialMutationOptions(credentialId, projectId, queryClient),
-  )
+    rotateStoreCredentialMutationOptions(credentialId, projectId, queryClient)
+  );
   const revoke = useMutation(
-    revokeStoreCredentialMutationOptions(credentialId, projectId, queryClient),
-  )
-  const test = useMutation(testStoreCredentialMutationOptions(credentialId, projectId, queryClient))
+    revokeStoreCredentialMutationOptions(credentialId, projectId, queryClient)
+  );
+  const test = useMutation(
+    testStoreCredentialMutationOptions(credentialId, projectId, queryClient)
+  );
 
   function sanitizeSecretMutationState() {
-    rotate.reset()
-    clearStoreCredentialSecretMutationCache(queryClient)
+    rotate.reset();
+    clearStoreCredentialSecretMutationCache(queryClient);
   }
 
-  const record = credential.data
+  const record = credential.data;
   const environmentName =
-    environments.data?.items.find((item) => item.id === record?.environmentId)?.name ??
+    environments.data?.items.find((item) => item.id === record?.environmentId)
+      ?.name ??
     record?.environmentId ??
-    "—"
+    "—";
   const actions = record
     ? storeCredentialActions(record)
-    : { revoke: false, rotate: false, test: false }
-  const error = project.error ?? credential.error ?? environments.error ?? applications.error
+    : { revoke: false, rotate: false, test: false };
+  const error =
+    project.error ??
+    credential.error ??
+    environments.error ??
+    applications.error;
   const state = resolveHostedQueryState({
-    emptyDescription: "Return to Store Server Credentials and choose an existing connection.",
+    emptyDescription:
+      "Return to Store Server Credentials and choose an existing connection.",
     emptyTitle: "Store Server Credential unavailable",
     error,
     isEmpty: credential.isSuccess && !record,
     isPending:
       project.isPending ||
-      (scopeReady && (credential.isPending || environments.isPending || applications.isPending)),
+      (scopeReady &&
+        (credential.isPending ||
+          environments.isPending ||
+          applications.isPending)),
     loadingDescription: "Loading Store Server Credential metadata and health.",
     onRetry: () => {
-      void credential.refetch()
+      credential.refetch();
     },
     permissionDescription:
       "Organization owner or admin permission is required to inspect a Store Server Credential.",
     scope: { organizationId, projectId },
-  })
+  });
 
   if (scopeMismatch) {
     return (
@@ -119,15 +143,18 @@ export function StoreConnectionDetailPage({
           projectId={projectId}
         />
       </WorkspacePage>
-    )
+    );
   }
 
-  const listHref = storeConnectionsHref({ organizationId, projectId }) ?? "#"
+  const listHref = storeConnectionsHref({ organizationId, projectId }) ?? "#";
 
   return (
     <WorkspacePage
       actions={
-        <a className={buttonVariants({ size: "sm", variant: "outline" })} href={listHref}>
+        <a
+          className={buttonVariants({ size: "sm", variant: "outline" })}
+          href={listHref}
+        >
           <ArrowLeftIcon aria-hidden /> All credentials
         </a>
       }
@@ -156,11 +183,15 @@ export function StoreConnectionDetailPage({
                       : "negative"
                 }
               />
-              {record.status === "revoked" ? <StatusPill label="Revoked" tone="negative" /> : null}
+              {record.status === "revoked" ? (
+                <StatusPill label="Revoked" tone="negative" />
+              ) : null}
             </div>
 
             <WorkflowPanel
-              description={storeCredentialHealthExplanation(record.healthStatus)}
+              description={storeCredentialHealthExplanation(
+                record.healthStatus
+              )}
               title="Credential operations"
             >
               {access.canManage ? (
@@ -175,13 +206,13 @@ export function StoreConnectionDetailPage({
                   {actions.rotate ? (
                     <RotateStoreCredentialSheet
                       onRotate={async (secret) => {
-                        const rotated = await rotate.mutateAsync({ secret })
+                        const rotated = await rotate.mutateAsync({ secret });
                         transferStoreCredentialEndpoint(
                           queryClient,
                           rotated,
                           setRevealed,
-                          sanitizeSecretMutationState,
-                        )
+                          sanitizeSecretMutationState
+                        );
                       }}
                       provider={record.provider}
                     />
@@ -198,10 +229,10 @@ export function StoreConnectionDetailPage({
                 </div>
               ) : (
                 <p className="text-muted-foreground text-sm">
-                  Organization owner or admin permission is required to test, rotate, or revoke this
-                  credential.{" "}
+                  Organization owner or admin permission is required to test,
+                  rotate, or revoke this credential.{" "}
                   <a
-                    className="text-primary font-semibold"
+                    className="font-semibold text-primary"
                     href={`/orgs/${encodeURIComponent(organizationId)}/members`}
                   >
                     Ask an Owner or Admin
@@ -209,28 +240,32 @@ export function StoreConnectionDetailPage({
                 </p>
               )}
               {test.error || rotate.error ? (
-                <p className="text-destructive mt-3 text-sm" role="alert">
+                <p className="mt-3 text-destructive text-sm" role="alert">
                   {(test.error ?? rotate.error)?.message}
                 </p>
               ) : null}
               {test.isSuccess ? (
-                <p className="text-muted-foreground mt-3 text-sm" role="status">
+                <p className="mt-3 text-muted-foreground text-sm" role="status">
                   Test completed. Health is now{" "}
-                  {storeCredentialHealthLabel(test.data?.healthStatus)}. Testing reads only; it
-                  changes nothing in your store account.
+                  {storeCredentialHealthLabel(test.data?.healthStatus)}. Testing
+                  reads only; it changes nothing in your store account.
                 </p>
               ) : null}
               {confirmRevoke ? (
-                <div className="border-destructive/25 bg-destructive/5 mt-4 rounded border p-4">
-                  <p className="text-sm font-semibold">Revoke this Store Server Credential?</p>
-                  <p className="text-muted-foreground mt-1 text-sm leading-6">
-                    Validation stops using this key and its intake token is cleared, so the
-                    notification endpoint stops resolving. Everything already recorded stays: the
-                    ledger is the evidence trail a revocation is usually part of investigating.
-                    Inputs that arrive afterwards are not attributed to this Project.
+                <div className="mt-4 rounded border border-destructive/25 bg-destructive/5 p-4">
+                  <p className="font-semibold text-sm">
+                    Revoke this Store Server Credential?
+                  </p>
+                  <p className="mt-1 text-muted-foreground text-sm leading-6">
+                    Validation stops using this key and its intake token is
+                    cleared, so the notification endpoint stops resolving.
+                    Everything already recorded stays: the ledger is the
+                    evidence trail a revocation is usually part of
+                    investigating. Inputs that arrive afterwards are not
+                    attributed to this Project.
                   </p>
                   {revoke.error ? (
-                    <p className="text-destructive mt-2 text-sm" role="alert">
+                    <p className="mt-2 text-destructive text-sm" role="alert">
                       {revoke.error.message}
                     </p>
                   ) : null}
@@ -238,7 +273,9 @@ export function StoreConnectionDetailPage({
                     <Button
                       disabled={revoke.isPending}
                       onClick={() =>
-                        revoke.mutate(undefined, { onSuccess: () => setConfirmRevoke(false) })
+                        revoke.mutate(undefined, {
+                          onSuccess: () => setConfirmRevoke(false),
+                        })
                       }
                       type="button"
                       variant="destructive"
@@ -264,8 +301,8 @@ export function StoreConnectionDetailPage({
                   ? { endpointUrl: revealed.notificationEndpointUrl }
                   : {})}
                 onDismiss={() => {
-                  setRevealed(null)
-                  sanitizeSecretMutationState()
+                  setRevealed(null);
+                  sanitizeSecretMutationState();
                 }}
               />
             ) : null}
@@ -277,16 +314,28 @@ export function StoreConnectionDetailPage({
               title="Credential metadata"
             >
               <dl>
-                <DefinitionRow label="Status" value={credentialStatusLabel(record.status)} />
+                <DefinitionRow
+                  label="Status"
+                  value={credentialStatusLabel(record.status)}
+                />
                 <DefinitionRow
                   label="Store Environment"
                   value={storeEnvironmentLabel(record.storeEnvironment)}
                 />
-                <DefinitionRow label="Mosaic Environment" value={environmentName} />
+                <DefinitionRow
+                  label="Mosaic Environment"
+                  value={environmentName}
+                />
                 {record.provider === "app_store" ? (
                   <>
-                    <DefinitionRow label="Issuer ID" value={record.appleIssuerId ?? "—"} />
-                    <DefinitionRow label="Key ID" value={record.appleKeyId ?? "—"} />
+                    <DefinitionRow
+                      label="Issuer ID"
+                      value={record.appleIssuerId ?? "—"}
+                    />
+                    <DefinitionRow
+                      label="Key ID"
+                      value={record.appleKeyId ?? "—"}
+                    />
                   </>
                 ) : (
                   <>
@@ -308,9 +357,18 @@ export function StoreConnectionDetailPage({
                   label="Last tested"
                   value={formatBillingTimestamp(record.lastTestedAt)}
                 />
-                <DefinitionRow label="Created" value={formatBillingTimestamp(record.createdAt)} />
-                <DefinitionRow label="Rotated" value={formatBillingTimestamp(record.rotatedAt)} />
-                <DefinitionRow label="Revoked" value={formatBillingTimestamp(record.revokedAt)} />
+                <DefinitionRow
+                  label="Created"
+                  value={formatBillingTimestamp(record.createdAt)}
+                />
+                <DefinitionRow
+                  label="Rotated"
+                  value={formatBillingTimestamp(record.rotatedAt)}
+                />
+                <DefinitionRow
+                  label="Revoked"
+                  value={formatBillingTimestamp(record.revokedAt)}
+                />
               </dl>
             </WorkflowPanel>
 
@@ -319,7 +377,9 @@ export function StoreConnectionDetailPage({
               title="Application scope"
             >
               {(record.applications ?? []).length === 0 ? (
-                <p className="text-sm">No Application scope is recorded for this credential.</p>
+                <p className="text-sm">
+                  No Application scope is recorded for this credential.
+                </p>
               ) : (
                 <ul className="space-y-2">
                   {record.applications?.map((application) => (
@@ -329,7 +389,7 @@ export function StoreConnectionDetailPage({
                     >
                       <span className="font-medium">
                         {applications.data?.items.find(
-                          (item) => item.id === application.applicationId,
+                          (item) => item.id === application.applicationId
                         )?.name ?? application.applicationId}
                       </span>
                       <span className="text-muted-foreground text-xs">
@@ -345,5 +405,5 @@ export function StoreConnectionDetailPage({
         ) : null}
       </HostedResourceBoundary>
     </WorkspacePage>
-  )
+  );
 }

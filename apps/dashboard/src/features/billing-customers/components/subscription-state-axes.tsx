@@ -1,4 +1,3 @@
-import { StatusPill } from "@/features/billing-ledger/components/billing-chrome"
 import {
   accessStateLabel,
   accessStateTone,
@@ -11,8 +10,9 @@ import {
   subscriptionAccessStatement,
   uncertaintyReasonLabel,
   uncertaintyTone,
-} from "@/features/billing-customers/types/entitlement-vocabulary"
-import type { BillingSubscriptionSnapshot } from "@/generated/api"
+} from "@/features/billing-customers/types/entitlement-vocabulary";
+import { StatusPill } from "@/features/billing-ledger/components/billing-chrome";
+import type { BillingSubscriptionSnapshot } from "@/generated/api";
 
 /**
  * The five state axes, always rendered as five separate text-first pills.
@@ -34,13 +34,13 @@ import type { BillingSubscriptionSnapshot } from "@/generated/api"
 export function SubscriptionStateAxes({
   subscription,
 }: {
-  subscription: BillingSubscriptionSnapshot
+  subscription: BillingSubscriptionSnapshot;
 }) {
   const statement = subscriptionAccessStatement({
     accessState: subscription.accessState,
     periodEnd: subscription.periodEnd,
     renewalIntent: subscription.renewalIntent,
-  })
+  });
 
   return (
     <div>
@@ -90,14 +90,20 @@ export function SubscriptionStateAxes({
         </p>
       ) : null}
     </div>
-  )
+  );
 }
 
-function Axis({ children, label }: { children: React.ReactNode; label: string }) {
+function Axis({
+  children,
+  label,
+}: {
+  children: React.ReactNode;
+  label: string;
+}) {
   return (
     <div>
       <dt className="text-muted-foreground text-xs">{label}</dt>
       <dd className="mt-1">{children}</dd>
     </div>
-  )
+  );
 }

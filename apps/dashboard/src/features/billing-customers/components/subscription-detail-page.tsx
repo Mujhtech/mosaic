@@ -1,43 +1,46 @@
-import { useQuery } from "@tanstack/react-query"
+import { useQuery } from "@tanstack/react-query";
 
-import { HostedResourceBoundary } from "@/features/auth/components/hosted-resource-boundary"
-import { resolveHostedQueryState } from "@/features/auth/types/hosted-query-state"
-import {
-  DefinitionRow,
-  LedgerPaging,
-  StatusPill,
-} from "@/features/billing-ledger/components/billing-chrome"
-import { pagedListHeading } from "@/features/billing-ledger/types/billing-list-headings"
-import { providerLabel } from "@/features/billing-ledger/types/billing-vocabulary"
-import { SubscriptionStateAxes } from "@/features/billing-customers/components/subscription-state-axes"
+import { HostedResourceBoundary } from "@/features/auth/components/hosted-resource-boundary";
+import { resolveHostedQueryState } from "@/features/auth/types/hosted-query-state";
+import { SubscriptionStateAxes } from "@/features/billing-customers/components/subscription-state-axes";
 import {
   subscriptionQueryOptions,
   subscriptionTimelineQueryOptions,
-} from "@/features/billing-customers/queries/customer-queries"
+} from "@/features/billing-customers/queries/customer-queries";
 import {
   AUTHORITATIVE_ACCESS_NOTE,
   AUTHORITATIVE_TIMESTAMP_NOTE,
   explanationSentence,
   formatEntitlementInstant,
   timelineEntryTypeLabel,
-} from "@/features/billing-customers/types/entitlement-vocabulary"
-import { ScopeMismatchRecovery } from "@/features/orgs/components/scope-mismatch-recovery"
-import { WorkflowPanel, WorkspacePage } from "@/features/orgs/components/workspace-page"
-import { useValidatedProjectScope } from "@/features/projects/hooks/use-validated-project-scope"
+} from "@/features/billing-customers/types/entitlement-vocabulary";
+import {
+  DefinitionRow,
+  LedgerPaging,
+  StatusPill,
+} from "@/features/billing-ledger/components/billing-chrome";
+import { pagedListHeading } from "@/features/billing-ledger/types/billing-list-headings";
+import { providerLabel } from "@/features/billing-ledger/types/billing-vocabulary";
+import { ScopeMismatchRecovery } from "@/features/orgs/components/scope-mismatch-recovery";
+import {
+  WorkflowPanel,
+  WorkspacePage,
+} from "@/features/orgs/components/workspace-page";
+import { useValidatedProjectScope } from "@/features/projects/hooks/use-validated-project-scope";
+import type { BillingSubscriptionSnapshot } from "@/generated/api";
 import {
   billingCustomerHref,
   billingTransactionsHref,
   catalogProductHref,
-} from "@/lib/routing/workspace-hrefs"
-import type { BillingSubscriptionSnapshot } from "@/generated/api"
+} from "@/lib/routing/workspace-hrefs";
 
 interface SubscriptionDetailPageProps {
-  cursor?: string
-  environmentId: string
-  instanceId: string
-  onCursorChange: (cursor: string | undefined) => void
-  organizationId: string
-  projectId: string
+  cursor?: string;
+  environmentId: string;
+  instanceId: string;
+  onCursorChange: (cursor: string | undefined) => void;
+  organizationId: string;
+  projectId: string;
 }
 
 /**
@@ -62,31 +65,39 @@ export function SubscriptionDetailPage({
   organizationId,
   projectId,
 }: SubscriptionDetailPageProps) {
-  const { project, scopeMismatch, scopeReady } = useValidatedProjectScope(organizationId, projectId)
+  const { project, scopeMismatch, scopeReady } = useValidatedProjectScope(
+    organizationId,
+    projectId
+  );
   const subscription = useQuery({
     ...subscriptionQueryOptions(projectId, environmentId, instanceId),
     enabled: scopeReady,
-  })
+  });
   const timeline = useQuery({
-    ...subscriptionTimelineQueryOptions(projectId, environmentId, instanceId, cursor),
+    ...subscriptionTimelineQueryOptions(
+      projectId,
+      environmentId,
+      instanceId,
+      cursor
+    ),
     enabled: scopeReady,
-  })
-  const timelineEntries = timeline.data?.items ?? []
+  });
+  const timelineEntries = timeline.data?.items ?? [];
 
-  const error = project.error ?? subscription.error
+  const error = project.error ?? subscription.error;
   const state = resolveHostedQueryState({
     error,
     isEmpty: false,
     isPending: project.isPending || (scopeReady && subscription.isPending),
     loadingDescription: "Loading this Subscription Instance's projected state.",
     onRetry: () => {
-      void subscription.refetch()
-      void timeline.refetch()
+      subscription.refetch();
+      timeline.refetch();
     },
     permissionDescription:
       "Organization owner or admin permission is required to read a Subscription Instance.",
     scope: { environmentId, organizationId, projectId },
-  })
+  });
 
   if (scopeMismatch) {
     return (
@@ -100,11 +111,11 @@ export function SubscriptionDetailPage({
           projectId={projectId}
         />
       </WorkspacePage>
-    )
+    );
   }
 
-  const scope = { environmentId, organizationId, projectId }
-  const data = subscription.data
+  const scope = { environmentId, organizationId, projectId };
+  const data = subscription.data;
 
   return (
     <WorkspacePage
@@ -114,14 +125,16 @@ export function SubscriptionDetailPage({
     >
       {data?.billingCustomerId ? (
         <a
-          className="text-primary text-sm font-semibold"
+          className="font-semibold text-primary text-sm"
           href={billingCustomerHref(scope, data.billingCustomerId) ?? "#"}
         >
           Back to the Billing Customer
         </a>
       ) : null}
 
-      <p className="text-muted-foreground text-xs leading-5">{AUTHORITATIVE_ACCESS_NOTE}</p>
+      <p className="text-muted-foreground text-xs leading-5">
+        {AUTHORITATIVE_ACCESS_NOTE}
+      </p>
 
       <HostedResourceBoundary state={state}>
         <WorkflowPanel
@@ -133,7 +146,10 @@ export function SubscriptionDetailPage({
 
         <WorkflowPanel title="Provider-derived effective times">
           <dl>
-            <DefinitionRow label="Store" value={providerLabel(storeProviderOf(data))} />
+            <DefinitionRow
+              label="Store"
+              value={providerLabel(storeProviderOf(data))}
+            />
             <DefinitionRow
               label="Period"
               value={`${formatEntitlementInstant(data?.periodStart)} → ${formatEntitlementInstant(data?.periodEnd)}`}
@@ -195,21 +211,24 @@ export function SubscriptionDetailPage({
               value={String(data?.sourceFactCount ?? "—")}
             />
           </dl>
-          <p className="text-muted-foreground mt-2 text-xs leading-5">
+          <p className="mt-2 text-muted-foreground text-xs leading-5">
             {AUTHORITATIVE_TIMESTAMP_NOTE}
           </p>
           {data?.explanationCode ? (
-            <p className="mt-2 text-sm leading-6">{explanationSentence(data.explanationCode)}</p>
+            <p className="mt-2 text-sm leading-6">
+              {explanationSentence(data.explanationCode)}
+            </p>
           ) : null}
           {data?.supersededBySubscriptionInstanceId ? (
-            <p className="text-muted-foreground mt-2 text-sm leading-6">
-              Superseded by {data.supersededBySubscriptionInstanceId}. Nothing was deleted — the
-              replacement is recorded explicitly and this instance stays readable.
+            <p className="mt-2 text-muted-foreground text-sm leading-6">
+              Superseded by {data.supersededBySubscriptionInstanceId}. Nothing
+              was deleted — the replacement is recorded explicitly and this
+              instance stays readable.
             </p>
           ) : null}
           {data?.mosaicProductId ? (
             <a
-              className="text-primary mt-2 inline-flex text-sm font-semibold"
+              className="mt-2 inline-flex font-semibold text-primary text-sm"
               href={catalogProductHref(scope, data.mosaicProductId) ?? "#"}
             >
               Product
@@ -249,7 +268,7 @@ export function SubscriptionDetailPage({
               {timelineEntries.map((entry) => (
                 <li className="rounded border p-4" key={entry.timelineEntryId}>
                   <div className="flex flex-wrap items-center justify-between gap-2">
-                    <span className="text-sm font-semibold">
+                    <span className="font-semibold text-sm">
                       {timelineEntryTypeLabel(entry.entryType)}
                     </span>
                     <StatusPill label="Immutable" tone="neutral" />
@@ -262,17 +281,21 @@ export function SubscriptionDetailPage({
                       both. */}
                   <div className="mt-2 text-xs">
                     <p title={entry.effectiveAt}>
-                      <span className="text-muted-foreground">Effective at </span>
+                      <span className="text-muted-foreground">
+                        Effective at{" "}
+                      </span>
                       {formatEntitlementInstant(entry.effectiveAt)}
                     </p>
                     <p className="mt-0.5" title={entry.observedAt}>
-                      <span className="text-muted-foreground">Observed at </span>
+                      <span className="text-muted-foreground">
+                        Observed at{" "}
+                      </span>
                       {formatEntitlementInstant(entry.observedAt)}
                     </p>
                   </div>
 
                   {entry.explanationCode ? (
-                    <p className="text-muted-foreground mt-2 text-sm leading-6">
+                    <p className="mt-2 text-muted-foreground text-sm leading-6">
                       {explanationSentence(entry.explanationCode)}
                     </p>
                   ) : null}
@@ -286,7 +309,7 @@ export function SubscriptionDetailPage({
                   ) : null}
 
                   <a
-                    className="text-primary mt-2 inline-flex text-xs font-semibold"
+                    className="mt-2 inline-flex font-semibold text-primary text-xs"
                     href={billingTransactionsHref(scope) ?? "#"}
                   >
                     Find the recorded facts behind this
@@ -306,7 +329,7 @@ export function SubscriptionDetailPage({
         </WorkflowPanel>
       </HostedResourceBoundary>
     </WorkspacePage>
-  )
+  );
 }
 
 /**
@@ -314,8 +337,14 @@ export function SubscriptionDetailPage({
  * store in provider vocabulary. Mapping here keeps one provider label in use
  * across both features rather than introducing a second name for one store.
  */
-function storeProviderOf(subscription: BillingSubscriptionSnapshot | undefined) {
-  if (subscription?.storePlatform === "apple_app_store") return "app_store"
-  if (subscription?.storePlatform === "google_play") return "google_play"
-  return subscription?.storePlatform
+function storeProviderOf(
+  subscription: BillingSubscriptionSnapshot | undefined
+) {
+  if (subscription?.storePlatform === "apple_app_store") {
+    return "app_store";
+  }
+  if (subscription?.storePlatform === "google_play") {
+    return "google_play";
+  }
+  return subscription?.storePlatform;
 }

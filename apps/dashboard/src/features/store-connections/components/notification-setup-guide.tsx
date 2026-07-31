@@ -1,6 +1,6 @@
-import type { StoreServerCredential } from "@/generated/api"
-import { WorkflowPanel } from "@/features/orgs/components/workspace-page"
-import { storeEnvironmentLabel } from "@/features/billing-ledger/types/billing-vocabulary"
+import { storeEnvironmentLabel } from "@/features/billing-ledger/types/billing-vocabulary";
+import { WorkflowPanel } from "@/features/orgs/components/workspace-page";
+import type { StoreServerCredential } from "@/generated/api";
 
 /**
  * Store-side configuration steps.
@@ -10,8 +10,12 @@ import { storeEnvironmentLabel } from "@/features/billing-ledger/types/billing-v
  * to Pub/Sub and Mosaic pulls. Only one of the two has an inbound URL to
  * configure.
  */
-export function NotificationSetupGuide({ credential }: { credential: StoreServerCredential }) {
-  const storeEnvironment = storeEnvironmentLabel(credential.storeEnvironment)
+export function NotificationSetupGuide({
+  credential,
+}: {
+  credential: StoreServerCredential;
+}) {
+  const storeEnvironment = storeEnvironmentLabel(credential.storeEnvironment);
 
   if (credential.provider === "google_play") {
     return (
@@ -21,21 +25,22 @@ export function NotificationSetupGuide({ credential }: { credential: StoreServer
       >
         <ol className="list-decimal space-y-3 pl-5 text-sm leading-6">
           <li>
-            In Google Cloud, create a Pub/Sub topic and a <strong>pull</strong> subscription on it.
-            Mosaic never needs a push endpoint.
+            In Google Cloud, create a Pub/Sub topic and a <strong>pull</strong>{" "}
+            subscription on it. Mosaic never needs a push endpoint.
           </li>
           <li>
             Grant this service account (
-            <code className="text-xs">{credential.googleClientEmail}</code>) the Pub/Sub Subscriber
-            role on that subscription, and read-only Play Developer API access for the Applications
-            below.
+            <code className="text-xs">{credential.googleClientEmail}</code>) the
+            Pub/Sub Subscriber role on that subscription, and read-only Play
+            Developer API access for the Applications below.
           </li>
           <li>
-            In Play Console · Monetisation setup, set the Cloud Pub/Sub topic name for real-time
-            developer notifications.
+            In Play Console · Monetisation setup, set the Cloud Pub/Sub topic
+            name for real-time developer notifications.
           </li>
           <li>
-            Confirm the subscription identifiers recorded here match the ones in Google Cloud:{" "}
+            Confirm the subscription identifiers recorded here match the ones in
+            Google Cloud:{" "}
             <code className="text-xs">
               {credential.googlePubSubProjectId ?? "—"} /{" "}
               {credential.googlePubSubSubscriptionId ?? "—"}
@@ -43,14 +48,15 @@ export function NotificationSetupGuide({ credential }: { credential: StoreServer
             .
           </li>
         </ol>
-        <p className="text-muted-foreground mt-4 text-xs leading-5">
-          Mosaic reads from the Play Developer API and never acknowledges, consumes, or refunds a
-          purchase. Acknowledgement stays with your app and its Play Billing integration. An
-          unacknowledged purchase is refunded by Google after three days, so do not remove
-          acknowledgement from your app.
+        <p className="mt-4 text-muted-foreground text-xs leading-5">
+          Mosaic reads from the Play Developer API and never acknowledges,
+          consumes, or refunds a purchase. Acknowledgement stays with your app
+          and its Play Billing integration. An unacknowledged purchase is
+          refunded by Google after three days, so do not remove acknowledgement
+          from your app.
         </p>
       </WorkflowPanel>
-    )
+    );
   }
 
   return (
@@ -60,26 +66,30 @@ export function NotificationSetupGuide({ credential }: { credential: StoreServer
     >
       <ol className="list-decimal space-y-3 pl-5 text-sm leading-6">
         <li>
-          Open App Store Connect · your app · App Information · App Store Server Notifications.
+          Open App Store Connect · your app · App Information · App Store Server
+          Notifications.
         </li>
         <li>
-          Paste the endpoint URL into the <strong>{storeEnvironment}</strong> URL field for version
-          2 notifications. Sandbox and production are separate fields and separate Mosaic
-          credentials; never paste one into the other.
+          Paste the endpoint URL into the <strong>{storeEnvironment}</strong>{" "}
+          URL field for version 2 notifications. Sandbox and production are
+          separate fields and separate Mosaic credentials; never paste one into
+          the other.
         </li>
         <li>
-          Confirm the issuer ID and key ID recorded here match the In-App Purchase key you uploaded:{" "}
+          Confirm the issuer ID and key ID recorded here match the In-App
+          Purchase key you uploaded:{" "}
           <code className="text-xs">{credential.appleIssuerId ?? "—"}</code> /{" "}
           <code className="text-xs">{credential.appleKeyId ?? "—"}</code>.
         </li>
         <li>
-          Confirm delivery by watching <strong>Last fact recorded</strong> on the billing health
-          view, or by opening the transaction ledger. Mosaic does not publish a last-notification
-          timestamp, so a recorded fact is the signal that intake worked end to end. Apple retries a
-          failed notification only five times in production and never in sandbox, so a misconfigured
-          endpoint loses transactions rather than queuing them.
+          Confirm delivery by watching <strong>Last fact recorded</strong> on
+          the billing health view, or by opening the transaction ledger. Mosaic
+          does not publish a last-notification timestamp, so a recorded fact is
+          the signal that intake worked end to end. Apple retries a failed
+          notification only five times in production and never in sandbox, so a
+          misconfigured endpoint loses transactions rather than queuing them.
         </li>
       </ol>
     </WorkflowPanel>
-  )
+  );
 }

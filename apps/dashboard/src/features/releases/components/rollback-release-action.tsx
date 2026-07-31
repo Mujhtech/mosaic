@@ -1,18 +1,18 @@
-import { ArrowUDownLeftIcon } from "@phosphor-icons/react/dist/ssr/ArrowUDownLeft"
-import { useMutation, useQueryClient } from "@tanstack/react-query"
-import { useEffect, useRef, useState } from "react"
+import { ArrowUDownLeftIcon } from "@phosphor-icons/react/dist/ssr/ArrowUDownLeft";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useEffect, useRef, useState } from "react";
 
-import { Button } from "@/components/ui/button"
+import { Button } from "@/components/ui/button";
 import {
   ApiErrorDetails,
   ApiErrorRecoveryAction,
   RequestIdCopy,
-} from "@/features/auth/components/hosted-resource-boundary"
-import { rollbackReleaseMutationOptions } from "@/features/releases/mutations/rollback-mutation"
-import { describeApiError } from "@/lib/api/errors"
-import type { WorkspaceScope } from "@/lib/routing/workspace-hrefs"
-import type { HostedRelease } from "@/features/publishing/api/hosted-publishing-adapter"
-import { useHostedPublishingAdapter } from "@/features/publishing/api/use-hosted-publishing-adapter"
+} from "@/features/auth/components/hosted-resource-boundary";
+import type { HostedRelease } from "@/features/publishing/api/hosted-publishing-adapter";
+import { useHostedPublishingAdapter } from "@/features/publishing/api/use-hosted-publishing-adapter";
+import { rollbackReleaseMutationOptions } from "@/features/releases/mutations/rollback-mutation";
+import { describeApiError } from "@/lib/api/errors";
+import type { WorkspaceScope } from "@/lib/routing/workspace-hrefs";
 
 export function RollbackReleaseAction({
   environmentId,
@@ -20,47 +20,53 @@ export function RollbackReleaseAction({
   projectId,
   release,
 }: {
-  environmentId: string
-  organizationId?: string
-  projectId: string
-  release: HostedRelease
+  environmentId: string;
+  organizationId?: string;
+  projectId: string;
+  release: HostedRelease;
 }) {
-  const adapter = useHostedPublishingAdapter()
-  const scope = { environmentId, organizationId, projectId }
-  const queryClient = useQueryClient()
-  const [reviewing, setReviewing] = useState(false)
+  const adapter = useHostedPublishingAdapter();
+  const scope = { environmentId, organizationId, projectId };
+  const queryClient = useQueryClient();
+  const [reviewing, setReviewing] = useState(false);
   const rollback = useMutation(
     rollbackReleaseMutationOptions(
       { environmentId, projectId, releaseId: release.id },
       adapter,
-      queryClient,
-    ),
-  )
+      queryClient
+    )
+  );
 
   if (rollback.data) {
     return (
       <RollbackSuccessMessage
-        rolledBackNumber={release.number}
         currentNumber={rollback.data.number}
+        rolledBackNumber={release.number}
       />
-    )
+    );
   }
 
   if (!reviewing) {
     return (
-      <Button onClick={() => setReviewing(true)} size="sm" type="button" variant="outline">
+      <Button
+        onClick={() => setReviewing(true)}
+        size="sm"
+        type="button"
+        variant="outline"
+      >
         <ArrowUDownLeftIcon aria-hidden />
         Roll back to Release {release.number}
       </Button>
-    )
+    );
   }
 
   return (
-    <div className="border-border bg-muted/40 rounded border p-3">
-      <p className="text-sm font-semibold">Create a new rollback Release?</p>
-      <p className="text-muted-foreground mt-1 text-sm leading-6">
-        Mosaic will copy Release {release.number} into a new immutable Release and make that new
-        Release current. Existing history will not be rewritten.
+    <div className="rounded border border-border bg-muted/40 p-3">
+      <p className="font-semibold text-sm">Create a new rollback Release?</p>
+      <p className="mt-1 text-muted-foreground text-sm leading-6">
+        Mosaic will copy Release {release.number} into a new immutable Release
+        and make that new Release current. Existing history will not be
+        rewritten.
       </p>
       <div className="mt-3 flex gap-2">
         <Button
@@ -69,15 +75,24 @@ export function RollbackReleaseAction({
           size="sm"
           type="button"
         >
-          {rollback.isPending ? "Rolling back…" : "Confirm new rollback Release"}
+          {rollback.isPending
+            ? "Rolling back…"
+            : "Confirm new rollback Release"}
         </Button>
-        <Button onClick={() => setReviewing(false)} size="sm" type="button" variant="ghost">
+        <Button
+          onClick={() => setReviewing(false)}
+          size="sm"
+          type="button"
+          variant="ghost"
+        >
           Cancel
         </Button>
       </div>
-      {rollback.error ? <RollbackError error={rollback.error} scope={scope} /> : null}
+      {rollback.error ? (
+        <RollbackError error={rollback.error} scope={scope} />
+      ) : null}
     </div>
-  )
+  );
 }
 
 /**
@@ -85,8 +100,14 @@ export function RollbackReleaseAction({
  * copy explains the coded condition and, where one exists, offers the page
  * that resolves it.
  */
-function RollbackError({ error, scope }: { error: unknown; scope: WorkspaceScope }) {
-  const described = describeApiError(error, scope)
+function RollbackError({
+  error,
+  scope,
+}: {
+  error: unknown;
+  scope: WorkspaceScope;
+}) {
+  const described = describeApiError(error, scope);
 
   return (
     <div className="mt-2 space-y-2">
@@ -94,10 +115,14 @@ function RollbackError({ error, scope }: { error: unknown; scope: WorkspaceScope
         {described.description}
       </p>
       <ApiErrorDetails details={described.details} />
-      {described.recovery ? <ApiErrorRecoveryAction recovery={described.recovery} /> : null}
-      {described.correlationId ? <RequestIdCopy requestId={described.correlationId} /> : null}
+      {described.recovery ? (
+        <ApiErrorRecoveryAction recovery={described.recovery} />
+      ) : null}
+      {described.correlationId ? (
+        <RequestIdCopy requestId={described.correlationId} />
+      ) : null}
     </div>
-  )
+  );
 }
 
 /**
@@ -109,18 +134,24 @@ function RollbackSuccessMessage({
   currentNumber,
   rolledBackNumber,
 }: {
-  currentNumber: number
-  rolledBackNumber: number
+  currentNumber: number;
+  rolledBackNumber: number;
 }) {
-  const messageRef = useRef<HTMLParagraphElement>(null)
+  const messageRef = useRef<HTMLParagraphElement>(null);
 
   useEffect(() => {
-    messageRef.current?.focus()
-  }, [])
+    messageRef.current?.focus();
+  }, []);
 
   return (
-    <p className="text-primary text-sm font-medium" ref={messageRef} role="status" tabIndex={-1}>
-      Release {currentNumber} is now current. Release {rolledBackNumber} remains in history.
+    <p
+      className="font-medium text-primary text-sm"
+      ref={messageRef}
+      role="status"
+      tabIndex={-1}
+    >
+      Release {currentNumber} is now current. Release {rolledBackNumber} remains
+      in history.
     </p>
-  )
+  );
 }

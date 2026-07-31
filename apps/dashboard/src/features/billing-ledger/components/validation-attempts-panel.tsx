@@ -1,12 +1,12 @@
-import { RequestIdCopy } from "@/features/auth/components/hosted-resource-boundary"
-import { StatusPill } from "@/features/billing-ledger/components/billing-chrome"
+import { RequestIdCopy } from "@/features/auth/components/hosted-resource-boundary";
+import { StatusPill } from "@/features/billing-ledger/components/billing-chrome";
 import {
   formatBillingTimestamp,
   storeEnvironmentLabel,
   validationOutcomeLabel,
-} from "@/features/billing-ledger/types/billing-vocabulary"
-import { WorkflowPanel } from "@/features/orgs/components/workspace-page"
-import type { ValidationAttempt } from "@/generated/api"
+} from "@/features/billing-ledger/types/billing-vocabulary";
+import { WorkflowPanel } from "@/features/orgs/components/workspace-page";
+import type { ValidationAttempt } from "@/generated/api";
 
 /**
  * Validation Attempts, newest first.
@@ -19,9 +19,15 @@ import type { ValidationAttempt } from "@/generated/api"
  * Failed attempts show Mosaic's own diagnostic code and a bounded store code.
  * A store response body is never stored and so is never rendered.
  */
-export function ValidationAttemptsPanel({ attempts }: { attempts: readonly ValidationAttempt[] }) {
-  const ordered = [...attempts].sort((a, b) => (b.attemptNumber ?? 0) - (a.attemptNumber ?? 0))
-  const latest = ordered[0]?.attemptNumber
+export function ValidationAttemptsPanel({
+  attempts,
+}: {
+  attempts: readonly ValidationAttempt[];
+}) {
+  const ordered = [...attempts].sort(
+    (a, b) => (b.attemptNumber ?? 0) - (a.attemptNumber ?? 0)
+  );
+  const latest = ordered[0]?.attemptNumber;
 
   return (
     <WorkflowPanel
@@ -30,8 +36,8 @@ export function ValidationAttemptsPanel({ attempts }: { attempts: readonly Valid
     >
       {ordered.length === 0 ? (
         <p className="text-sm">
-          No Validation Attempt is recorded against this input yet. An attempt appears as soon as
-          the validation worker picks it up.
+          No Validation Attempt is recorded against this input yet. An attempt
+          appears as soon as the validation worker picks it up.
         </p>
       ) : (
         <ol className="space-y-3">
@@ -39,11 +45,13 @@ export function ValidationAttemptsPanel({ attempts }: { attempts: readonly Valid
             const superseded =
               typeof latest === "number" &&
               typeof attempt.attemptNumber === "number" &&
-              attempt.attemptNumber < latest
+              attempt.attemptNumber < latest;
             return (
               <li className="rounded border p-4" key={attempt.id}>
                 <div className="flex flex-wrap items-center justify-between gap-2">
-                  <p className="text-sm font-semibold">Attempt {attempt.attemptNumber ?? "—"}</p>
+                  <p className="font-semibold text-sm">
+                    Attempt {attempt.attemptNumber ?? "—"}
+                  </p>
                   <div className="flex flex-wrap items-center gap-2">
                     <StatusPill
                       label={validationOutcomeLabel(attempt.outcome)}
@@ -58,42 +66,65 @@ export function ValidationAttemptsPanel({ attempts }: { attempts: readonly Valid
                       }
                     />
                     {superseded ? (
-                      <StatusPill label={`Superseded by attempt ${latest}`} tone="neutral" />
+                      <StatusPill
+                        label={`Superseded by attempt ${latest}`}
+                        tone="neutral"
+                      />
                     ) : null}
                   </div>
                 </div>
-                <dl className="text-muted-foreground mt-3 grid gap-x-6 gap-y-1 text-xs sm:grid-cols-2">
-                  <Row label="Started" value={formatBillingTimestamp(attempt.startedAt)} />
-                  <Row label="Completed" value={formatBillingTimestamp(attempt.completedAt)} />
+                <dl className="mt-3 grid gap-x-6 gap-y-1 text-muted-foreground text-xs sm:grid-cols-2">
+                  <Row
+                    label="Started"
+                    value={formatBillingTimestamp(attempt.startedAt)}
+                  />
+                  <Row
+                    label="Completed"
+                    value={formatBillingTimestamp(attempt.completedAt)}
+                  />
                   <Row
                     label="Store Environment"
                     value={storeEnvironmentLabel(attempt.storeEnvironment)}
                   />
-                  <Row label="Validator version" value={String(attempt.validatorVersion ?? "—")} />
+                  <Row
+                    label="Validator version"
+                    value={String(attempt.validatorVersion ?? "—")}
+                  />
                   <Row
                     label="Latency"
-                    value={attempt.latencyMs === undefined ? "—" : `${attempt.latencyMs} ms`}
+                    value={
+                      attempt.latencyMs === undefined
+                        ? "—"
+                        : `${attempt.latencyMs} ms`
+                    }
                   />
                   <Row label="Credential" value={attempt.credentialId ?? "—"} />
                   {attempt.replayOfAttemptId ? (
-                    <Row label="Replay of attempt" value={attempt.replayOfAttemptId} />
+                    <Row
+                      label="Replay of attempt"
+                      value={attempt.replayOfAttemptId}
+                    />
                   ) : null}
                 </dl>
                 {attempt.outcome && attempt.outcome !== "validated" ? (
-                  <div className="bg-muted/40 mt-3 rounded border p-3 text-xs">
+                  <div className="mt-3 rounded border bg-muted/40 p-3 text-xs">
                     <p className="font-medium">
                       {attempt.diagnosticCode ?? "unclassified_failure"}
-                      {attempt.failureCategory ? ` · ${attempt.failureCategory}` : ""}
+                      {attempt.failureCategory
+                        ? ` · ${attempt.failureCategory}`
+                        : ""}
                     </p>
-                    <p className="text-muted-foreground mt-1 leading-5">
+                    <p className="mt-1 text-muted-foreground leading-5">
                       {attempt.retryable
                         ? "Mosaic will try again with backoff. Each retry appends a new attempt; this one stays as it is."
                         : "This category never succeeds by retrying unchanged. Correct the underlying condition, then re-run validation from the quarantine record."}
                     </p>
                     {attempt.providerCode || attempt.providerHttpStatus ? (
-                      <p className="text-muted-foreground mt-1">
+                      <p className="mt-1 text-muted-foreground">
                         Store code {attempt.providerCode ?? "—"}
-                        {attempt.providerHttpStatus ? ` · HTTP ${attempt.providerHttpStatus}` : ""}
+                        {attempt.providerHttpStatus
+                          ? ` · HTTP ${attempt.providerHttpStatus}`
+                          : ""}
                       </p>
                     ) : null}
                   </div>
@@ -104,19 +135,19 @@ export function ValidationAttemptsPanel({ attempts }: { attempts: readonly Valid
                   </div>
                 ) : null}
               </li>
-            )
+            );
           })}
         </ol>
       )}
     </WorkflowPanel>
-  )
+  );
 }
 
 function Row({ label, value }: { label: string; value: string }) {
   return (
     <div className="flex justify-between gap-3">
       <dt>{label}</dt>
-      <dd className="text-foreground text-right break-all">{value}</dd>
+      <dd className="break-all text-right text-foreground">{value}</dd>
     </div>
-  )
+  );
 }

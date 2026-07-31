@@ -1,4 +1,4 @@
-export type StudioWorkspacePanel = "left" | "properties" | "diagnostics"
+export type StudioWorkspacePanel = "left" | "properties" | "diagnostics";
 
 export type StudioTool =
   | "layers"
@@ -8,7 +8,7 @@ export type StudioTool =
   | "products"
   | "localization"
   | "assets"
-  | "settings"
+  | "settings";
 
 export type StudioCanvasDevice =
   | "iphone-17-pro"
@@ -21,10 +21,10 @@ export type StudioCanvasDevice =
   | "pixel-10-pro-xl"
   | "galaxy-s26"
   | "galaxy-s26-plus"
-  | "galaxy-s26-ultra"
-export type StudioCanvasOrientation = "portrait" | "landscape"
-export type StudioCanvasFitMode = "fit" | "manual"
-export type StudioCanvasAppearance = "light" | "dark"
+  | "galaxy-s26-ultra";
+export type StudioCanvasOrientation = "portrait" | "landscape";
+export type StudioCanvasFitMode = "fit" | "manual";
+export type StudioCanvasAppearance = "light" | "dark";
 
 export type StudioRecentInsertableType =
   | "stack"
@@ -36,79 +36,83 @@ export type StudioRecentInsertableType =
   | "icon"
   | "featureList"
   | "productSelector"
-  | "button"
+  | "button";
 
 export interface StudioWorkspacePanelPreference {
-  readonly size: number
-  readonly collapsed: boolean
+  readonly collapsed: boolean;
+  readonly size: number;
 }
 
 export interface StudioCanvasPreferences {
-  readonly device: StudioCanvasDevice
-  readonly orientation: StudioCanvasOrientation
-  readonly zoom: number
-  readonly fitMode: StudioCanvasFitMode
-  readonly locale: string
-  readonly forceRTL: boolean
-  readonly appearance: StudioCanvasAppearance
-  readonly textScale: number
-  readonly safeArea: boolean
-  readonly countdownPreviewAt: string
+  readonly appearance: StudioCanvasAppearance;
+  readonly countdownPreviewAt: string;
+  readonly device: StudioCanvasDevice;
+  readonly fitMode: StudioCanvasFitMode;
+  readonly forceRTL: boolean;
+  readonly locale: string;
+  readonly orientation: StudioCanvasOrientation;
+  readonly safeArea: boolean;
+  readonly textScale: number;
+  readonly zoom: number;
 }
 
 export interface StudioCanvasFramePosition {
-  readonly x: number
-  readonly y: number
+  readonly x: number;
+  readonly y: number;
 }
 
 export interface StudioLayerMetadata {
-  readonly labels: Readonly<Record<string, string>>
-  readonly lockedIds: readonly string[]
-  readonly canvasHiddenIds: readonly string[]
+  readonly canvasHiddenIds: readonly string[];
+  readonly labels: Readonly<Record<string, string>>;
+  readonly lockedIds: readonly string[];
 }
 
 export interface StudioWorkspacePreferencesV1 {
-  readonly schemaVersion: 1
-  readonly panels: Readonly<Record<StudioWorkspacePanel, StudioWorkspacePanelPreference>>
-  readonly selectedTool: StudioTool
-  readonly canvas: StudioCanvasPreferences
-  readonly framePositions: Readonly<Record<string, StudioCanvasFramePosition>>
-  readonly layerMetadata: StudioLayerMetadata
-  readonly recentInsertions: readonly StudioRecentInsertableType[]
+  readonly canvas: StudioCanvasPreferences;
+  readonly framePositions: Readonly<Record<string, StudioCanvasFramePosition>>;
+  readonly layerMetadata: StudioLayerMetadata;
+  readonly panels: Readonly<
+    Record<StudioWorkspacePanel, StudioWorkspacePanelPreference>
+  >;
+  readonly recentInsertions: readonly StudioRecentInsertableType[];
+  readonly schemaVersion: 1;
+  readonly selectedTool: StudioTool;
 }
 
 export type StudioWorkspaceParseResult =
   | {
-      readonly status: "invalid"
-      readonly preferences: StudioWorkspacePreferencesV1
+      readonly status: "invalid";
+      readonly preferences: StudioWorkspacePreferencesV1;
     }
   | {
-      readonly status: "valid"
-      readonly preferences: StudioWorkspacePreferencesV1
-    }
+      readonly status: "valid";
+      readonly preferences: StudioWorkspacePreferencesV1;
+    };
 
 export type StudioWorkspaceReadResult =
   | {
-      readonly status: "missing"
-      readonly source: "default"
-      readonly preferences: StudioWorkspacePreferencesV1
+      readonly status: "missing";
+      readonly source: "default";
+      readonly preferences: StudioWorkspacePreferencesV1;
     }
   | {
-      readonly status: "invalid"
-      readonly source: "default"
-      readonly preferences: StudioWorkspacePreferencesV1
+      readonly status: "invalid";
+      readonly source: "default";
+      readonly preferences: StudioWorkspacePreferencesV1;
     }
   | {
-      readonly status: "valid"
-      readonly source: "persisted"
-      readonly preferences: StudioWorkspacePreferencesV1
-    }
+      readonly status: "valid";
+      readonly source: "persisted";
+      readonly preferences: StudioWorkspacePreferencesV1;
+    };
 
 export type StudioWorkspaceWriteResult =
   | { readonly status: "written" }
   | { readonly status: "invalid" }
   | { readonly status: "unavailable" }
-  | { readonly status: "failed" }
+  | { readonly status: "failed" };
 
 export type StudioWorkspaceResetResult =
-  { readonly status: "reset" } | { readonly status: "unavailable" } | { readonly status: "failed" }
+  | { readonly status: "reset" }
+  | { readonly status: "unavailable" }
+  | { readonly status: "failed" };

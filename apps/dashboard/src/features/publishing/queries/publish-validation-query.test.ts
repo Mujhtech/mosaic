@@ -1,13 +1,13 @@
-import { describe, expect, it, vi } from "vitest"
+import { describe, expect, it, vi } from "vitest";
 
-import type { HostedPublishingAdapter } from "@/features/publishing/api/hosted-publishing-adapter"
-import { publishValidationQueryOptions } from "@/features/publishing/queries/publish-validation-query"
+import type { HostedPublishingAdapter } from "@/features/publishing/api/hosted-publishing-adapter";
+import { publishValidationQueryOptions } from "@/features/publishing/queries/publish-validation-query";
 
 describe("Publish validation query", () => {
   it("always revalidates when Publish review remounts after a recovery workflow", () => {
     const adapter = {
       validateDraftForPublish: vi.fn(),
-    } as unknown as HostedPublishingAdapter
+    } as unknown as HostedPublishingAdapter;
 
     const options = publishValidationQueryOptions(
       {
@@ -17,9 +17,9 @@ describe("Publish validation query", () => {
         paywallId: "paywall_01",
         projectId: "project_01",
       },
-      adapter,
-    )
+      adapter
+    );
 
-    expect(options.refetchOnMount).toBe("always")
-  })
-})
+    expect(options.refetchOnMount).toBe("always");
+  });
+});

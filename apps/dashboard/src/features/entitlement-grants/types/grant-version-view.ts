@@ -1,4 +1,7 @@
-import type { GrantVersionImpact, PublishGrantVersionRequest } from "@/generated/api"
+import type {
+  GrantVersionImpact,
+  PublishGrantVersionRequest,
+} from "@/generated/api";
 
 /**
  * What a Product grants, versioned.
@@ -21,11 +24,11 @@ import type { GrantVersionImpact, PublishGrantVersionRequest } from "@/generated
  *    that answers "how many people could lose access".
  */
 
-export type GrantProposal = PublishGrantVersionRequest
+export type GrantProposal = PublishGrantVersionRequest;
 
 /** Every published version is immutable. The function exists to say so once. */
 export function isGrantVersionEditable() {
-  return false
+  return false;
 }
 
 const NARROWING_CODE_SENTENCES: Record<string, string> = {
@@ -43,19 +46,21 @@ const NARROWING_CODE_SENTENCES: Record<string, string> = {
     "The version in force supports a purchase type this proposal drops. Purchases already made under it would be left granting nothing.",
   trial_access_narrowed:
     "The version in force grants access during a trial and this proposal does not. A retroactive change may only widen access.",
-}
+};
 
 function humanize(value: string) {
-  const spaced = value.replaceAll("_", " ")
-  return spaced.charAt(0).toUpperCase() + spaced.slice(1)
+  const spaced = value.replaceAll("_", " ");
+  return spaced.charAt(0).toUpperCase() + spaced.slice(1);
 }
 
 export function narrowingCodeExplanation(code: string | undefined) {
-  if (!code) return undefined
+  if (!code) {
+    return;
+  }
   return (
     NARROWING_CODE_SENTENCES[code] ??
     `Mosaic reported the narrowing "${humanize(code).toLowerCase()}". A retroactive grant version may add Entitlements or widen access policy, never remove or narrow either.`
-  )
+  );
 }
 
 const POLICY_LABELS: Record<keyof GrantAccessPolicyFields, string> = {
@@ -64,30 +69,33 @@ const POLICY_LABELS: Record<keyof GrantAccessPolicyFields, string> = {
   grantsInGrace: "Store grace period",
   grantsInOneTimeOwnership: "One-time purchase ownership",
   grantsInTrial: "Trial period",
-}
+};
 
 interface GrantAccessPolicyFields {
-  grantsInActive?: boolean
-  grantsInBillingRetry?: boolean
-  grantsInGrace?: boolean
-  grantsInOneTimeOwnership?: boolean
-  grantsInTrial?: boolean
+  grantsInActive?: boolean;
+  grantsInBillingRetry?: boolean;
+  grantsInGrace?: boolean;
+  grantsInOneTimeOwnership?: boolean;
+  grantsInTrial?: boolean;
 }
 
-export const grantPolicyFields = Object.keys(POLICY_LABELS) as (keyof GrantAccessPolicyFields)[]
+export const grantPolicyFields = Object.keys(
+  POLICY_LABELS
+) as (keyof GrantAccessPolicyFields)[];
 
 export function grantPolicyLabel(field: keyof GrantAccessPolicyFields) {
-  return POLICY_LABELS[field]
+  return POLICY_LABELS[field];
 }
 
 const POLICY_NOTES: Partial<Record<keyof GrantAccessPolicyFields, string>> = {
   grantsInBillingRetry:
     "Contradicts both stores' documentation: neither grants access while a charge is being retried. Only an organization owner may turn this on.",
-  grantsInGrace: "Both stores grant access during grace, so this is on by default.",
-}
+  grantsInGrace:
+    "Both stores grant access during grace, so this is on by default.",
+};
 
 export function grantPolicyNote(field: keyof GrantAccessPolicyFields) {
-  return POLICY_NOTES[field]
+  return POLICY_NOTES[field];
 }
 
 /**
@@ -97,7 +105,7 @@ export function grantPolicyNote(field: keyof GrantAccessPolicyFields) {
  * stating the rule.
  */
 export const PAUSE_POLICY_NOTE =
-  "Google's pause never grants access. That is fixed and cannot be overridden by a grant version."
+  "Google's pause never grants access. That is fixed and cannot be overridden by a grant version.";
 
 /**
  * A stable identity for a proposal.
@@ -119,7 +127,7 @@ export function proposalFingerprint(proposal: GrantProposal) {
     proposal.grantsInGrace === true,
     proposal.grantsInBillingRetry === true,
     proposal.grantsInOneTimeOwnership === true,
-  ])
+  ]);
 }
 
 export type PublishBlockedReason =
@@ -128,25 +136,27 @@ export type PublishBlockedReason =
   | "narrowing"
   | "no_permission"
   | "preview_stale"
-  | "reason_required"
+  | "reason_required";
 
 export interface PublishGate {
-  allowed: boolean
-  blockedBy?: PublishBlockedReason
-  explanation?: string
+  allowed: boolean;
+  blockedBy?: PublishBlockedReason;
+  explanation?: string;
 }
 
 const BLOCKED_EXPLANATIONS: Record<PublishBlockedReason, string> = {
   already_publishing: "Mosaic is publishing this version.",
-  incomplete: "Choose a Product, an Entitlement, and the instant the new version takes effect.",
+  incomplete:
+    "Choose a Product, an Entitlement, and the instant the new version takes effect.",
   narrowing:
     "This retroactive proposal would take access away. The publish call would refuse it, so it is refused here too.",
-  no_permission: "Publishing a grant version requires organization owner or admin permission.",
+  no_permission:
+    "Publishing a grant version requires organization owner or admin permission.",
   preview_stale:
     "Preview the impact of this exact proposal first. The confirmation has to state how many customers could lose access, and that number changes with every field.",
   reason_required:
     "Give the reason for this change. It is what an investigation reads months from now.",
-}
+};
 
 /**
  * The one place that decides whether "Publish" is enabled.
@@ -158,36 +168,47 @@ const BLOCKED_EXPLANATIONS: Record<PublishBlockedReason, string> = {
  * make the confirmation describe something adjacent to what is published.
  */
 export function evaluatePublishGate(input: {
-  canManage: boolean
-  impact: GrantVersionImpact | undefined
-  isSubmitting: boolean
-  previewedFingerprint: string | undefined
-  proposal: GrantProposal
+  canManage: boolean;
+  impact: GrantVersionImpact | undefined;
+  isSubmitting: boolean;
+  previewedFingerprint: string | undefined;
+  proposal: GrantProposal;
 }): PublishGate {
   const gate = (blockedBy: PublishBlockedReason): PublishGate => ({
     allowed: false,
     blockedBy,
     explanation: BLOCKED_EXPLANATIONS[blockedBy],
-  })
+  });
 
-  if (!input.canManage) return gate("no_permission")
-  if (input.isSubmitting) return gate("already_publishing")
+  if (!input.canManage) {
+    return gate("no_permission");
+  }
+  if (input.isSubmitting) {
+    return gate("already_publishing");
+  }
   if (
-    !input.proposal.productId ||
-    !input.proposal.entitlementId ||
-    !input.proposal.effectiveStart
+    !(
+      input.proposal.productId &&
+      input.proposal.entitlementId &&
+      input.proposal.effectiveStart
+    )
   ) {
-    return gate("incomplete")
+    return gate("incomplete");
   }
   if (!input.proposal.reason || input.proposal.reason.trim().length === 0) {
-    return gate("reason_required")
+    return gate("reason_required");
   }
-  if (!input.impact || input.previewedFingerprint !== proposalFingerprint(input.proposal)) {
-    return gate("preview_stale")
+  if (
+    !input.impact ||
+    input.previewedFingerprint !== proposalFingerprint(input.proposal)
+  ) {
+    return gate("preview_stale");
   }
-  if (input.impact.additiveSuperset === false) return gate("narrowing")
+  if (input.impact.additiveSuperset === false) {
+    return gate("narrowing");
+  }
 
-  return { allowed: true }
+  return { allowed: true };
 }
 
 /**
@@ -198,19 +219,23 @@ export function evaluatePublishGate(input: {
  * decision.
  */
 export function impactHeadline(impact: GrantVersionImpact | undefined) {
-  if (!impact) return "Nothing has been previewed yet."
-  const active = impact.impactedActiveSources ?? 0
-  if (active === 0) {
-    return "No purchase currently granting access cites this Product, so no customer can lose access from this change."
+  if (!impact) {
+    return "Nothing has been previewed yet.";
   }
-  return `${active} purchase${active === 1 ? "" : "s"} currently granting access cite this Product. That is how many customers could lose access if this change narrows what it grants.`
+  const active = impact.impactedActiveSources ?? 0;
+  if (active === 0) {
+    return "No purchase currently granting access cites this Product, so no customer can lose access from this change.";
+  }
+  return `${active} purchase${active === 1 ? "" : "s"} currently granting access cite this Product. That is how many customers could lose access if this change narrows what it grants.`;
 }
 
 /** Half-open `[start, end)`. The absent end is the version in force now. */
 export function grantIntervalLabel(
   effectiveStart: string | undefined,
-  effectiveEnd: string | undefined,
+  effectiveEnd: string | undefined
 ) {
-  const start = effectiveStart ?? "—"
-  return effectiveEnd ? `${start} → ${effectiveEnd}` : `${start} → in force now`
+  const start = effectiveStart ?? "—";
+  return effectiveEnd
+    ? `${start} → ${effectiveEnd}`
+    : `${start} → in force now`;
 }

@@ -1,16 +1,16 @@
-import { KeyIcon } from "@phosphor-icons/react/dist/ssr/Key"
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
-import { useNavigate } from "@tanstack/react-router"
-import { useState } from "react"
-
-import { Button } from "@/components/ui/button"
+import { KeyIcon } from "@phosphor-icons/react/dist/ssr/Key";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useNavigate } from "@tanstack/react-router";
+import { useState } from "react";
+import { OneTimeSecret } from "@/components/feedback/one-time-secret";
+import { Button } from "@/components/ui/button";
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from "@/components/ui/select"
+} from "@/components/ui/select";
 import {
   Sheet,
   SheetContent,
@@ -18,97 +18,128 @@ import {
   SheetFooter,
   SheetHeader,
   SheetTitle,
-} from "@/components/ui/sheet"
-import { OneTimeSecret } from "@/components/feedback/one-time-secret"
-import { HostedResourceBoundary } from "@/features/auth/components/hosted-resource-boundary"
-import { resolveHostedQueryState } from "@/features/auth/types/hosted-query-state"
+} from "@/components/ui/sheet";
 import {
   buildApiKeyCreationInput,
   createApiKeyMutationOptions,
   revokeApiKeyMutationOptions,
   rotateApiKeyMutationOptions,
-} from "@/features/api-keys/mutations/api-key-mutations"
+} from "@/features/api-keys/mutations/api-key-mutations";
 import {
   clearApiKeySecretMutationCache,
   transferApiKeySecret,
-} from "@/features/api-keys/mutations/api-key-secret-cache"
-import { apiKeysQueryOptions } from "@/features/api-keys/queries/api-keys-query"
-import { environmentsQueryOptions } from "@/features/environments/queries/environments-query"
-import { WorkspacePage, WorkflowPanel } from "@/features/orgs/components/workspace-page"
-import { ScopeMismatchRecovery } from "@/features/orgs/components/scope-mismatch-recovery"
-import { useValidatedProjectScope } from "@/features/projects/hooks/use-validated-project-scope"
-import { applicationsQueryOptions } from "@/features/projects/queries/projects-query"
-import type { ApiKey, ApiKeySecretResult } from "@/generated/api"
+} from "@/features/api-keys/mutations/api-key-secret-cache";
+import { apiKeysQueryOptions } from "@/features/api-keys/queries/api-keys-query";
+import { HostedResourceBoundary } from "@/features/auth/components/hosted-resource-boundary";
+import { resolveHostedQueryState } from "@/features/auth/types/hosted-query-state";
+import { environmentsQueryOptions } from "@/features/environments/queries/environments-query";
+import { ScopeMismatchRecovery } from "@/features/orgs/components/scope-mismatch-recovery";
+import {
+  WorkflowPanel,
+  WorkspacePage,
+} from "@/features/orgs/components/workspace-page";
+import { useValidatedProjectScope } from "@/features/projects/hooks/use-validated-project-scope";
+import { applicationsQueryOptions } from "@/features/projects/queries/projects-query";
+import type { ApiKey, ApiKeySecretResult } from "@/generated/api";
+import { workspaceScopeParams } from "@/lib/routing/workspace-params";
 
 interface ApiKeysPageProps {
-  environmentId?: string
-  organizationId: string
-  projectId: string
+  environmentId?: string;
+  organizationId: string;
+  projectId: string;
 }
 
 interface PendingKeyAction {
-  action: "revoke" | "rotate"
-  apiKey: ApiKey
+  action: "revoke" | "rotate";
+  apiKey: ApiKey;
 }
 
-export function ApiKeysPage({ environmentId, organizationId, projectId }: ApiKeysPageProps) {
-  const navigate = useNavigate()
-  const queryClient = useQueryClient()
-  const [revealed, setRevealed] = useState<ApiKeySecretResult | null>(null)
-  const [pendingAction, setPendingAction] = useState<PendingKeyAction | null>(null)
-  const [applicationId, setApplicationId] = useState("")
-  const { project, scopeMismatch, scopeReady } = useValidatedProjectScope(organizationId, projectId)
-  const environments = useQuery({ ...environmentsQueryOptions(projectId), enabled: scopeReady })
-  const applications = useQuery({ ...applicationsQueryOptions(projectId), enabled: scopeReady })
+export function ApiKeysPage({
+  environmentId,
+  organizationId,
+  projectId,
+}: ApiKeysPageProps) {
+  const navigate = useNavigate();
+  const queryClient = useQueryClient();
+  const [revealed, setRevealed] = useState<ApiKeySecretResult | null>(null);
+  const [pendingAction, setPendingAction] = useState<PendingKeyAction | null>(
+    null
+  );
+  const [applicationId, setApplicationId] = useState("");
+  const { project, scopeMismatch, scopeReady } = useValidatedProjectScope(
+    organizationId,
+    projectId
+  );
+  const environments = useQuery({
+    ...environmentsQueryOptions(projectId),
+    enabled: scopeReady,
+  });
+  const applications = useQuery({
+    ...applicationsQueryOptions(projectId),
+    enabled: scopeReady,
+  });
   const selectedEnvironment =
     environments.data?.items.find((item) => item.id === environmentId) ??
     environments.data?.items.find((item) => item.key === "development") ??
-    environments.data?.items[0]
-  const environmentOptions = (environments.data?.items ?? []).map((environment) => ({
-    label: environment.name,
-    value: environment.id,
-  }))
+    environments.data?.items[0];
+  const environmentOptions = (environments.data?.items ?? []).map(
+    (environment) => ({
+      label: environment.name,
+      value: environment.id,
+    })
+  );
   const applicationOptions = [
     { label: "Select an Application", value: "" },
     ...(applications.data?.items ?? []).map((application) => ({
       label: `${application.name} · ${application.platform}`,
       value: application.id,
     })),
-  ]
+  ];
   const keys = useQuery({
     ...apiKeysQueryOptions(selectedEnvironment?.id ?? ""),
     enabled: scopeReady && Boolean(selectedEnvironment),
-  })
+  });
   function sanitizeSecretMutationState() {
-    create.reset()
-    rotate.reset()
-    clearApiKeySecretMutationCache(queryClient)
+    create.reset();
+    rotate.reset();
+    clearApiKeySecretMutationCache(queryClient);
   }
 
   function dismissSecret() {
-    setRevealed(null)
-    sanitizeSecretMutationState()
+    setRevealed(null);
+    sanitizeSecretMutationState();
   }
 
   const create = useMutation(
-    createApiKeyMutationOptions(selectedEnvironment?.id ?? "", queryClient),
-  )
+    createApiKeyMutationOptions(selectedEnvironment?.id ?? "", queryClient)
+  );
   const rotate = useMutation(
-    rotateApiKeyMutationOptions(selectedEnvironment?.id ?? "", queryClient),
-  )
+    rotateApiKeyMutationOptions(selectedEnvironment?.id ?? "", queryClient)
+  );
   const revoke = useMutation(
-    revokeApiKeyMutationOptions(selectedEnvironment?.id ?? "", queryClient),
-  )
+    revokeApiKeyMutationOptions(selectedEnvironment?.id ?? "", queryClient)
+  );
   function revealSecret(result: ApiKeySecretResult) {
-    transferApiKeySecret(queryClient, result, setRevealed, sanitizeSecretMutationState)
+    transferApiKeySecret(
+      queryClient,
+      result,
+      setRevealed,
+      sanitizeSecretMutationState
+    );
   }
-  const items = keys.data?.items ?? []
-  const error = project.error ?? environments.error ?? applications.error ?? keys.error
+  const items = keys.data?.items ?? [];
+  const error =
+    project.error ?? environments.error ?? applications.error ?? keys.error;
   const state = resolveHostedQueryState({
-    emptyDescription: "Create an SDK key safe for an app or a server key that must remain secret.",
+    emptyDescription:
+      "Create an SDK key safe for an app or a server key that must remain secret.",
     emptyTitle: "No API keys in this environment",
     error,
-    isEmpty: scopeReady && environments.isSuccess && keys.isSuccess && items.length === 0,
+    isEmpty:
+      scopeReady &&
+      environments.isSuccess &&
+      keys.isSuccess &&
+      items.length === 0,
     isPending:
       project.isPending ||
       (scopeReady &&
@@ -117,14 +148,15 @@ export function ApiKeysPage({ environmentId, organizationId, projectId }: ApiKey
           (Boolean(selectedEnvironment) && keys.isPending))),
     loadingDescription: "Loading environment-scoped API-key metadata.",
     onRetry: () => {
-      void environments.refetch()
-      void applications.refetch()
-      void keys.refetch()
+      environments.refetch();
+      applications.refetch();
+      keys.refetch();
     },
-    permissionDescription: "Project owner or admin permission is required to manage API keys.",
-  })
+    permissionDescription:
+      "Project owner or admin permission is required to manage API keys.",
+  });
 
-  const canManageKeys = state.kind === "empty" || state.kind === "ready"
+  const canManageKeys = state.kind === "empty" || state.kind === "ready";
 
   if (scopeMismatch) {
     return (
@@ -138,7 +170,7 @@ export function ApiKeysPage({ environmentId, organizationId, projectId }: ApiKey
           projectId={projectId}
         />
       </WorkspacePage>
-    )
+    );
   }
 
   return (
@@ -147,18 +179,21 @@ export function ApiKeysPage({ environmentId, organizationId, projectId }: ApiKey
       title="API keys"
     >
       <WorkflowPanel title="Environment">
-        <div className="flex max-w-md flex-col gap-2 text-sm font-medium">
+        <div className="flex max-w-md flex-col gap-2 font-medium text-sm">
           <label htmlFor="api-key-environment">Selected environment</label>
           <Select
             items={environmentOptions}
             onValueChange={(value) => {
-              dismissSecret()
-              setPendingAction(null)
-              void navigate({
-                params: (prev) => prev,
+              dismissSecret();
+              setPendingAction(null);
+              navigate({
+                params: (prev) => ({
+                  ...prev,
+                  ...workspaceScopeParams(prev),
+                }),
                 search: { environmentId: value },
                 to: "/orgs/$organizationId/projects/$projectId/env/$environmentKey/settings/api-keys",
-              })
+              });
             }}
             value={selectedEnvironment?.id ?? ""}
           >
@@ -176,14 +211,18 @@ export function ApiKeysPage({ environmentId, organizationId, projectId }: ApiKey
         </div>
       </WorkflowPanel>
 
-      {revealed ? <OneTimeSecret onDismiss={dismissSecret} secret={revealed.secret} /> : null}
+      {revealed ? (
+        <OneTimeSecret onDismiss={dismissSecret} secret={revealed.secret} />
+      ) : null}
 
       {/* Rotation and revocation are destructive and irreversible, so the
           confirmation is a modal surface: it takes focus, traps it, restores
           focus to the invoking row action, and closes on Escape. */}
       <Sheet
         onOpenChange={(open) => {
-          if (!open) setPendingAction(null)
+          if (!open) {
+            setPendingAction(null);
+          }
         }}
         open={pendingAction !== null}
       >
@@ -211,16 +250,16 @@ export function ApiKeysPage({ environmentId, organizationId, projectId }: ApiKey
                 <Button
                   disabled={rotate.isPending || revoke.isPending}
                   onClick={() => {
-                    const onSuccess = () => setPendingAction(null)
+                    const onSuccess = () => setPendingAction(null);
                     if (pendingAction.action === "rotate") {
                       rotate.mutate(pendingAction.apiKey.id, {
                         onSuccess: (result) => {
-                          revealSecret(result)
-                          onSuccess()
+                          revealSecret(result);
+                          onSuccess();
                         },
-                      })
+                      });
                     } else {
-                      revoke.mutate(pendingAction.apiKey.id, { onSuccess })
+                      revoke.mutate(pendingAction.apiKey.id, { onSuccess });
                     }
                   }}
                 >
@@ -239,22 +278,22 @@ export function ApiKeysPage({ environmentId, organizationId, projectId }: ApiKey
         <WorkflowPanel title="Environment keys">
           <ul className="divide-y">
             {items.map((apiKey) => {
-              const revoked = Boolean(apiKey.revokedAt)
+              const revoked = Boolean(apiKey.revokedAt);
               return (
                 <li
                   className="flex flex-col gap-3 py-4 sm:flex-row sm:items-center"
                   key={apiKey.id}
                 >
                   <div className="min-w-0 flex-1">
-                    <p className="text-sm font-semibold">
+                    <p className="font-semibold text-sm">
                       {apiKey.kind === "public_sdk"
                         ? "SDK key — safe for apps"
                         : "Server key — keep secret"}
                     </p>
-                    <p className="text-muted-foreground mt-1 font-mono text-xs">
+                    <p className="mt-1 font-mono text-muted-foreground text-xs">
                       {apiKey.prefix}••••••••
                     </p>
-                    <p className="text-muted-foreground mt-1 text-xs">
+                    <p className="mt-1 text-muted-foreground text-xs">
                       {revoked
                         ? "Revoked"
                         : apiKey.lastUsedAt
@@ -262,7 +301,7 @@ export function ApiKeysPage({ environmentId, organizationId, projectId }: ApiKey
                           : "Never used"}
                     </p>
                     {apiKey.kind === "public_sdk" ? (
-                      <p className="text-muted-foreground mt-1 text-xs">
+                      <p className="mt-1 text-muted-foreground text-xs">
                         {readApiKeyApplicationId(apiKey)
                           ? `Analytics application: ${applications.data?.items.find((application) => application.id === readApiKeyApplicationId(apiKey))?.name ?? readApiKeyApplicationId(apiKey)}`
                           : "Legacy unbound key — configuration works, but analytics ingestion is rejected. Create an Application-bound SDK key to recover."}
@@ -272,7 +311,9 @@ export function ApiKeysPage({ environmentId, organizationId, projectId }: ApiKey
                   <div className="flex gap-2">
                     <Button
                       disabled={revoked || rotate.isPending}
-                      onClick={() => setPendingAction({ action: "rotate", apiKey })}
+                      onClick={() =>
+                        setPendingAction({ action: "rotate", apiKey })
+                      }
                       size="sm"
                       variant="outline"
                     >
@@ -280,7 +321,9 @@ export function ApiKeysPage({ environmentId, organizationId, projectId }: ApiKey
                     </Button>
                     <Button
                       disabled={revoked || revoke.isPending}
-                      onClick={() => setPendingAction({ action: "revoke", apiKey })}
+                      onClick={() =>
+                        setPendingAction({ action: "revoke", apiKey })
+                      }
                       size="sm"
                       variant="outline"
                     >
@@ -288,7 +331,7 @@ export function ApiKeysPage({ environmentId, organizationId, projectId }: ApiKey
                     </Button>
                   </div>
                 </li>
-              )
+              );
             })}
           </ul>
         </WorkflowPanel>
@@ -299,8 +342,10 @@ export function ApiKeysPage({ environmentId, organizationId, projectId }: ApiKey
           title="Create API key"
         >
           <div className="grid max-w-xl gap-3">
-            <div className="space-y-1 text-sm font-medium">
-              <label htmlFor="api-key-application">Application for SDK analytics</label>
+            <div className="space-y-1 font-medium text-sm">
+              <label htmlFor="api-key-application">
+                Application for SDK analytics
+              </label>
               <Select
                 items={applicationOptions}
                 onValueChange={(value) => setApplicationId(value)}
@@ -317,18 +362,22 @@ export function ApiKeysPage({ environmentId, organizationId, projectId }: ApiKey
                   ))}
                 </SelectContent>
               </Select>
-              <span className="text-muted-foreground block text-xs font-normal">
-                Public SDK keys must be bound to one registered Application to ingest analytics.
-                Tenant scope still comes from the key; events never submit an Application ID.
+              <span className="block font-normal text-muted-foreground text-xs">
+                Public SDK keys must be bound to one registered Application to
+                ingest analytics. Tenant scope still comes from the key; events
+                never submit an Application ID.
               </span>
             </div>
             <div className="flex flex-wrap gap-2">
               <Button
                 disabled={!applicationId || create.isPending}
                 onClick={() =>
-                  create.mutate(buildApiKeyCreationInput("public_sdk", applicationId), {
-                    onSuccess: revealSecret,
-                  })
+                  create.mutate(
+                    buildApiKeyCreationInput("public_sdk", applicationId),
+                    {
+                      onSuccess: revealSecret,
+                    }
+                  )
                 }
               >
                 <KeyIcon aria-hidden size={16} />
@@ -347,16 +396,16 @@ export function ApiKeysPage({ environmentId, organizationId, projectId }: ApiKey
             </div>
           </div>
           {create.error || rotate.error || revoke.error ? (
-            <p className="text-destructive mt-4 text-sm" role="alert">
+            <p className="mt-4 text-destructive text-sm" role="alert">
               {(create.error ?? rotate.error ?? revoke.error)?.message}
             </p>
           ) : null}
         </WorkflowPanel>
       ) : null}
     </WorkspacePage>
-  )
+  );
 }
 
 function readApiKeyApplicationId(apiKey: ApiKey) {
-  return apiKey.applicationId
+  return apiKey.applicationId;
 }

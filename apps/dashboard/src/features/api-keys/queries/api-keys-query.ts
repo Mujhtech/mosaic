@@ -1,12 +1,12 @@
-import { queryOptions } from "@tanstack/react-query"
+import { queryOptions } from "@tanstack/react-query";
 
-import { listApiKeys, type ApiKeyKind } from "@/generated/api"
-import { generatedDashboardClient } from "@/lib/api/generated-dashboard-client"
+import { type ApiKeyKind, listApiKeys } from "@/generated/api";
+import { generatedDashboardClient } from "@/lib/api/generated-dashboard-client";
 
 export const apiKeyKeys = {
   list: (environmentId: string, kind?: ApiKeyKind) =>
     ["api-keys", environmentId, kind ?? "all"] as const,
-}
+};
 
 export function apiKeysQueryOptions(environmentId: string, kind?: ApiKeyKind) {
   return queryOptions({
@@ -18,8 +18,8 @@ export function apiKeysQueryOptions(environmentId: string, kind?: ApiKeyKind) {
         query: { kind },
         signal,
         throwOnError: true,
-      })
-      return result.data.data
+      });
+      return result.data.data;
     },
-  })
+  });
 }

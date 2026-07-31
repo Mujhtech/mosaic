@@ -1,39 +1,47 @@
 /* eslint-disable react-refresh/only-export-components -- internal inspector modules colocate private controls with their supporting types and transforms. */
-import { useEffect, useState } from "react"
+import { useEffect, useState } from "react";
 
-import { Button } from "@/components/ui/button"
-import { useEditorActions } from "@/features/paywall-editor/stores/editor-store-context"
-import type { ProtocolColor, ProtocolNode } from "@/features/paywall-editor/types/editor"
-import { updateNode } from "@/features/paywall-editor/utils/document-tree"
-import type {
-  MosaicPaywallV02EdgeInsets,
-  MosaicPaywallV02ProductCardSelectedStyle,
-  MosaicPaywallV02ProductCardStyles,
-} from "@/lib/mosaic-protocol"
-import { resolveProductBadgeStyle, resolveProductCardStyle } from "@/lib/mosaic-protocol"
-
-import { DocumentBackgroundEditor } from "@/features/paywall-editor/components/property-inspector-background"
+import { Button } from "@/components/ui/button";
+import { SelectItem } from "@/components/ui/select";
+import { DocumentBackgroundEditor } from "@/features/paywall-editor/components/property-inspector-background";
 import {
+  alignmentOptions,
   CompactOptionField,
-  FLOW_OPTIONS,
+  distributionOptions,
   Field,
+  FLOW_OPTIONS,
   InspectorSection,
   TwoColumn,
-  alignmentOptions,
-  distributionOptions,
   useInspectorContext,
-} from "@/features/paywall-editor/components/property-inspector-core"
+} from "@/features/paywall-editor/components/property-inspector-core";
 import {
   ColorField,
   EdgeInsetsFields,
   NumberField,
   SelectField,
-} from "@/features/paywall-editor/components/property-inspector-fields"
-import { SizingFields } from "@/features/paywall-editor/components/property-inspector-layout"
-import { SelectItem } from "@/components/ui/select"
+} from "@/features/paywall-editor/components/property-inspector-fields";
+import { SizingFields } from "@/features/paywall-editor/components/property-inspector-layout";
+import { useEditorActions } from "@/features/paywall-editor/stores/editor-store-context";
+import type {
+  ProtocolColor,
+  ProtocolNode,
+} from "@/features/paywall-editor/types/editor";
+import { updateNode } from "@/features/paywall-editor/utils/document-tree";
+import type {
+  MosaicPaywallV02EdgeInsets,
+  MosaicPaywallV02ProductCardSelectedStyle,
+  MosaicPaywallV02ProductCardStyles,
+} from "@/lib/mosaic-protocol";
+import {
+  resolveProductBadgeStyle,
+  resolveProductCardStyle,
+} from "@/lib/mosaic-protocol";
 
-export type CardState = "default" | "selected"
-export type ProductLayerNode = Extract<ProtocolNode, { type: "productCard" | "productBadge" }>
+export type CardState = "default" | "selected";
+export type ProductLayerNode = Extract<
+  ProtocolNode,
+  { type: "productCard" | "productBadge" }
+>;
 
 export const PRODUCT_STYLE_OVERRIDE_FIELDS = [
   { label: "fill", path: ["background"] },
@@ -46,85 +54,110 @@ export const PRODUCT_STYLE_OVERRIDE_FIELDS = [
   { label: "padding bottom", path: ["padding", "bottom"] },
   { label: "padding end", path: ["padding", "end"] },
   { label: "opacity", path: ["opacity"] },
-] as const
+] as const;
 
 export function productStyleOverrideExists(
   style: MosaicPaywallV02ProductCardSelectedStyle,
-  path: readonly string[],
+  path: readonly string[]
 ) {
-  let current: unknown = style
+  let current: unknown = style;
   for (const segment of path) {
-    if (!current || typeof current !== "object" || !(segment in current)) return false
-    current = (current as Record<string, unknown>)[segment]
+    if (!current || typeof current !== "object" || !(segment in current)) {
+      return false;
+    }
+    current = (current as Record<string, unknown>)[segment];
   }
-  return true
+  return true;
 }
 
 export function removeProductStyleOverride(
   style: MosaicPaywallV02ProductCardSelectedStyle,
-  path: readonly string[],
+  path: readonly string[]
 ) {
-  function remove(value: Record<string, unknown>, remaining: readonly string[]) {
-    const [segment, ...rest] = remaining
-    if (!segment) return value
-    const next = { ...value }
-    if (rest.length === 0) {
-      delete next[segment]
-      return next
+  function remove(
+    value: Record<string, unknown>,
+    remaining: readonly string[]
+  ) {
+    const [segment, ...rest] = remaining;
+    if (!segment) {
+      return value;
     }
-    const child = next[segment]
-    if (!child || typeof child !== "object" || Array.isArray(child)) return next
-    const nextChild = remove(child as Record<string, unknown>, rest)
-    if (Object.keys(nextChild).length === 0) delete next[segment]
-    else next[segment] = nextChild
-    return next
+    const next = { ...value };
+    if (rest.length === 0) {
+      delete next[segment];
+      return next;
+    }
+    const child = next[segment];
+    if (!child || typeof child !== "object" || Array.isArray(child)) {
+      return next;
+    }
+    const nextChild = remove(child as Record<string, unknown>, rest);
+    if (Object.keys(nextChild).length === 0) {
+      delete next[segment];
+    } else {
+      next[segment] = nextChild;
+    }
+    return next;
   }
 
-  return remove(style as Record<string, unknown>, path) as MosaicPaywallV02ProductCardSelectedStyle
+  return remove(
+    style as Record<string, unknown>,
+    path
+  ) as MosaicPaywallV02ProductCardSelectedStyle;
 }
 
 // Selected/unselected product-layer styles are edited as one atomic inspector section; extracting
 // either branch would duplicate transaction, validation, and preview-state coordination.
 // oxlint-disable-next-line react-doctor/no-giant-component
 export function ProductLayerStyleSection({ node }: { node: ProductLayerNode }) {
-  const { disabled, document, issues } = useInspectorContext()
-  const editor = useEditorActions()
+  const { disabled, document, issues } = useInspectorContext();
+  const editor = useEditorActions();
   const [state, setState] = useState<CardState>(() =>
     issues.some(
-      (issue) => issue.componentId === node.id && issue.property?.startsWith("styles.selected"),
+      (issue) =>
+        issue.componentId === node.id &&
+        issue.property?.startsWith("styles.selected")
     )
       ? "selected"
-      : "default",
-  )
+      : "default"
+  );
   const resolved =
     node.type === "productCard"
       ? resolveProductCardStyle(node, state === "selected")
-      : resolveProductBadgeStyle(node, state === "selected")
-  const customShadow = resolved.shadow?.type === "shadow" ? resolved.shadow : null
+      : resolveProductBadgeStyle(node, state === "selected");
+  const customShadow =
+    resolved.shadow?.type === "shadow" ? resolved.shadow : null;
   const activeOverrides = PRODUCT_STYLE_OVERRIDE_FIELDS.filter(({ path }) =>
-    productStyleOverrideExists(node.styles.selected, path),
-  )
+    productStyleOverrideExists(node.styles.selected, path)
+  );
 
   useEffect(() => {
-    editor.setProductLayerPreview({ nodeId: node.id, state })
-    return () => editor.setProductLayerPreview(null)
-  }, [editor, node.id, state])
+    editor.setProductLayerPreview({ nodeId: node.id, state });
+    return () => editor.setProductLayerPreview(null);
+  }, [editor, node.id, state]);
 
   function updateStyles(
-    updater: (styles: MosaicPaywallV02ProductCardStyles) => MosaicPaywallV02ProductCardStyles,
+    updater: (
+      styles: MosaicPaywallV02ProductCardStyles
+    ) => MosaicPaywallV02ProductCardStyles
   ) {
     editor.updateComponent(node.id, (current) => {
-      if (current.type !== "productCard" && current.type !== "productBadge") return current
-      return { ...current, styles: updater(current.styles) } as ProtocolNode
-    })
+      if (current.type !== "productCard" && current.type !== "productBadge") {
+        return current;
+      }
+      return { ...current, styles: updater(current.styles) } as ProtocolNode;
+    });
   }
 
-  function setValue(key: "background" | "cornerRadius" | "opacity" | "shadow", value: unknown) {
+  function setValue(
+    key: "background" | "cornerRadius" | "opacity" | "shadow",
+    value: unknown
+  ) {
     updateStyles((styles) =>
       state === "default"
         ? { ...styles, default: { ...styles.default, [key]: value } }
-        : { ...styles, selected: { ...styles.selected, [key]: value } },
-    )
+        : { ...styles, selected: { ...styles.selected, [key]: value } }
+    );
   }
 
   function setBorder(part: "color" | "width", value: ProtocolColor | number) {
@@ -143,11 +176,14 @@ export function ProductLayerStyleSection({ node }: { node: ProductLayerNode }) {
               ...styles.selected,
               border: { ...styles.selected.border, [part]: value },
             },
-          },
-    )
+          }
+    );
   }
 
-  function setPaddingEdge(edge: keyof MosaicPaywallV02EdgeInsets, value: number) {
+  function setPaddingEdge(
+    edge: keyof MosaicPaywallV02EdgeInsets,
+    value: number
+  ) {
     updateStyles((styles) =>
       state === "default"
         ? {
@@ -163,28 +199,28 @@ export function ProductLayerStyleSection({ node }: { node: ProductLayerNode }) {
               ...styles.selected,
               padding: { ...styles.selected.padding, [edge]: value },
             },
-          },
-    )
+          }
+    );
   }
 
   function resetSelectedOverride(path: readonly string[]) {
     updateStyles((styles) => ({
       ...styles,
       selected: removeProductStyleOverride(styles.selected, path),
-    }))
+    }));
   }
 
   return (
     <InspectorSection title="Appearance">
       <div
         aria-label="Product layer state"
-        className="bg-muted grid grid-cols-2 rounded p-0.5"
+        className="grid grid-cols-2 rounded bg-muted p-0.5"
         role="group"
       >
         {(["default", "selected"] as const).map((candidate) => (
           <button
             aria-pressed={state === candidate}
-            className="aria-pressed:bg-background aria-pressed:text-foreground text-muted-foreground h-7 rounded-[5px] text-xs font-medium aria-pressed:shadow-sm"
+            className="h-7 rounded-[5px] font-medium text-muted-foreground text-xs aria-pressed:bg-background aria-pressed:text-foreground aria-pressed:shadow-sm"
             key={candidate}
             onClick={() => setState(candidate)}
             type="button"
@@ -194,10 +230,13 @@ export function ProductLayerStyleSection({ node }: { node: ProductLayerNode }) {
         ))}
       </div>
       {state === "selected" ? (
-        <div className="bg-muted/60 space-y-2 rounded p-2 text-[11px] leading-4">
+        <div className="space-y-2 rounded bg-muted/60 p-2 text-[11px] leading-4">
           <p>Selected values inherit from Default until you change them.</p>
           {activeOverrides.length > 0 ? (
-            <div aria-label="Selected appearance overrides" className="flex flex-wrap gap-1">
+            <div
+              aria-label="Selected appearance overrides"
+              className="flex flex-wrap gap-1"
+            >
               {activeOverrides.map(({ label, path }) => (
                 <Button
                   aria-label={`Reset ${label} to Default`}
@@ -219,7 +258,9 @@ export function ProductLayerStyleSection({ node }: { node: ProductLayerNode }) {
           <Button
             className="w-full"
             disabled={disabled || activeOverrides.length === 0}
-            onClick={() => updateStyles((styles) => ({ ...styles, selected: {} }))}
+            onClick={() =>
+              updateStyles((styles) => ({ ...styles, selected: {} }))
+            }
             size="xs"
             type="button"
             variant="outline"
@@ -241,11 +282,14 @@ export function ProductLayerStyleSection({ node }: { node: ProductLayerNode }) {
                     ...current.styles,
                     [state]: {
                       ...current.styles[state],
-                      background: background ?? { type: "color", value: "transparent" },
+                      background: background ?? {
+                        type: "color",
+                        value: "transparent",
+                      },
                     },
                   },
                 }
-              : current,
+              : current
           )
         }
         value={resolved.background}
@@ -268,14 +312,17 @@ export function ProductLayerStyleSection({ node }: { node: ProductLayerNode }) {
                     offsetX: 0,
                     offsetY: 8,
                     blurRadius: 24,
-                  },
+                  }
           )
         }
         value={resolved.shadow?.type ?? "none"}
       >
         <SelectItem value="none">None</SelectItem>
         <SelectItem value="shadow">Custom</SelectItem>
-        <SelectItem disabled={document.designSystem.shadows.length === 0} value="shadowToken">
+        <SelectItem
+          disabled={document.designSystem.shadows.length === 0}
+          value="shadowToken"
+        >
           Design-system shadow
         </SelectItem>
       </SelectField>
@@ -299,8 +346,13 @@ export function ProductLayerStyleSection({ node }: { node: ProductLayerNode }) {
             address={`styles.${state}.shadow.color`}
             label="Shadow colour"
             onUpdate={(current, color) => {
-              if (current.type !== "productCard" && current.type !== "productBadge") return current
-              const shadow = { ...customShadow, color }
+              if (
+                current.type !== "productCard" &&
+                current.type !== "productBadge"
+              ) {
+                return current;
+              }
+              const shadow = { ...customShadow, color };
               return {
                 ...current,
                 styles:
@@ -313,7 +365,7 @@ export function ProductLayerStyleSection({ node }: { node: ProductLayerNode }) {
                         ...current.styles,
                         selected: { ...current.styles.selected, shadow },
                       },
-              } as ProtocolNode
+              } as ProtocolNode;
             }}
             value={customShadow.color}
           />
@@ -323,7 +375,9 @@ export function ProductLayerStyleSection({ node }: { node: ProductLayerNode }) {
               label="Shadow X"
               max={4096}
               min={-4096}
-              onChange={(offsetX) => setValue("shadow", { ...customShadow, offsetX })}
+              onChange={(offsetX) =>
+                setValue("shadow", { ...customShadow, offsetX })
+              }
               unit="lu"
               value={customShadow.offsetX}
             />
@@ -332,7 +386,9 @@ export function ProductLayerStyleSection({ node }: { node: ProductLayerNode }) {
               label="Shadow Y"
               max={4096}
               min={-4096}
-              onChange={(offsetY) => setValue("shadow", { ...customShadow, offsetY })}
+              onChange={(offsetY) =>
+                setValue("shadow", { ...customShadow, offsetY })
+              }
               unit="lu"
               value={customShadow.offsetY}
             />
@@ -342,7 +398,9 @@ export function ProductLayerStyleSection({ node }: { node: ProductLayerNode }) {
             label="Shadow blur"
             max={4096}
             min={0}
-            onChange={(blurRadius) => setValue("shadow", { ...customShadow, blurRadius })}
+            onChange={(blurRadius) =>
+              setValue("shadow", { ...customShadow, blurRadius })
+            }
             unit="lu"
             value={customShadow.blurRadius}
           />
@@ -406,11 +464,15 @@ export function ProductLayerStyleSection({ node }: { node: ProductLayerNode }) {
         )}
       </Field>
     </InspectorSection>
-  )
+  );
 }
 
-export function ProductLayerLayoutSection({ node }: { node: ProductLayerNode }) {
-  const editor = useEditorActions()
+export function ProductLayerLayoutSection({
+  node,
+}: {
+  node: ProductLayerNode;
+}) {
+  const editor = useEditorActions();
   return (
     <InspectorSection defaultOpen title="Layout">
       <CompactOptionField
@@ -418,7 +480,9 @@ export function ProductLayerLayoutSection({ node }: { node: ProductLayerNode }) 
         label="Flow"
         onChange={(direction) =>
           editor.updateComponent(node.id, (current) =>
-            current.type === node.type ? ({ ...current, direction } as ProtocolNode) : current,
+            current.type === node.type
+              ? ({ ...current, direction } as ProtocolNode)
+              : current
           )
         }
         options={FLOW_OPTIONS}
@@ -431,7 +495,7 @@ export function ProductLayerLayoutSection({ node }: { node: ProductLayerNode }) 
           editor.updateComponent(node.id, (current) =>
             current.type === node.type
               ? ({ ...current, mainAxisDistribution } as ProtocolNode)
-              : current,
+              : current
           )
         }
         options={distributionOptions(node.direction)}
@@ -444,7 +508,7 @@ export function ProductLayerLayoutSection({ node }: { node: ProductLayerNode }) 
           editor.updateComponent(node.id, (current) =>
             current.type === node.type
               ? ({ ...current, crossAxisAlignment } as ProtocolNode)
-              : current,
+              : current
           )
         }
         options={alignmentOptions(node.direction)}
@@ -458,12 +522,14 @@ export function ProductLayerLayoutSection({ node }: { node: ProductLayerNode }) 
         min={0}
         onChange={(gap) =>
           editor.updateComponent(node.id, (current) =>
-            current.type === node.type ? ({ ...current, gap } as ProtocolNode) : current,
+            current.type === node.type
+              ? ({ ...current, gap } as ProtocolNode)
+              : current
           )
         }
         unit="lu"
         value={node.gap}
       />
     </InspectorSection>
-  )
+  );
 }

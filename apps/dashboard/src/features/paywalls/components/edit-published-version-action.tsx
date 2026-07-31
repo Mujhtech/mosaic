@@ -1,10 +1,10 @@
-import { NotePencilIcon } from "@phosphor-icons/react/dist/ssr/NotePencil"
-import { useMutation, useQueryClient } from "@tanstack/react-query"
+import { NotePencilIcon } from "@phosphor-icons/react/dist/ssr/NotePencil";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 
-import { Button } from "@/components/ui/button"
-import { createDraftFromVersionMutationOptions } from "@/features/paywalls/mutations/paywall-mutations"
-import type { HostedDraft } from "@/features/publishing/api/hosted-publishing-adapter"
-import { useHostedPublishingAdapter } from "@/features/publishing/api/use-hosted-publishing-adapter"
+import { Button } from "@/components/ui/button";
+import { createDraftFromVersionMutationOptions } from "@/features/paywalls/mutations/paywall-mutations";
+import type { HostedDraft } from "@/features/publishing/api/hosted-publishing-adapter";
+import { useHostedPublishingAdapter } from "@/features/publishing/api/use-hosted-publishing-adapter";
 
 export function EditPublishedVersionAction({
   environmentId,
@@ -13,28 +13,30 @@ export function EditPublishedVersionAction({
   projectId,
   versionId,
 }: {
-  environmentId: string
-  onDraftCreated: (draft: HostedDraft) => void
-  paywallId: string
-  projectId: string
-  versionId: string
+  environmentId: string;
+  onDraftCreated: (draft: HostedDraft) => void;
+  paywallId: string;
+  projectId: string;
+  versionId: string;
 }) {
-  const adapter = useHostedPublishingAdapter()
-  const queryClient = useQueryClient()
+  const adapter = useHostedPublishingAdapter();
+  const queryClient = useQueryClient();
   const createDraft = useMutation(
     createDraftFromVersionMutationOptions(
       { environmentId, paywallId, projectId, versionId },
       adapter,
-      queryClient,
-    ),
-  )
+      queryClient
+    )
+  );
 
   return (
     <div>
       <Button
         disabled={createDraft.isPending || adapter.status !== "available"}
         onClick={() =>
-          createDraft.mutate(undefined, { onSuccess: (draft) => onDraftCreated(draft) })
+          createDraft.mutate(undefined, {
+            onSuccess: (draft) => onDraftCreated(draft),
+          })
         }
         size="sm"
         type="button"
@@ -44,10 +46,10 @@ export function EditPublishedVersionAction({
         {createDraft.isPending ? "Creating Draft…" : "Edit as new Draft"}
       </Button>
       {createDraft.error ? (
-        <p className="text-destructive mt-2 text-sm" role="alert">
+        <p className="mt-2 text-destructive text-sm" role="alert">
           {createDraft.error.message}
         </p>
       ) : null}
     </div>
-  )
+  );
 }

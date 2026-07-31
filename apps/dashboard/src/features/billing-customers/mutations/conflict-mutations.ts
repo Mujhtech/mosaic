@@ -1,11 +1,10 @@
-import { mutationOptions, type QueryClient } from "@tanstack/react-query"
-
+import { mutationOptions, type QueryClient } from "@tanstack/react-query";
+import { conflictKeys } from "@/features/billing-customers/queries/conflict-queries";
 import {
-  resolveBillingIdentityConflict,
   type ResolveIdentityConflictRequest,
-} from "@/generated/api"
-import { conflictKeys } from "@/features/billing-customers/queries/conflict-queries"
-import { generatedDashboardClient } from "@/lib/api/generated-dashboard-client"
+  resolveBillingIdentityConflict,
+} from "@/generated/api";
+import { generatedDashboardClient } from "@/lib/api/generated-dashboard-client";
 
 /**
  * Record an operator's resolution of an identity conflict.
@@ -19,7 +18,7 @@ import { generatedDashboardClient } from "@/lib/api/generated-dashboard-client"
 export function resolveIdentityConflictMutationOptions(
   projectId: string,
   conflictId: string,
-  queryClient: QueryClient,
+  queryClient: QueryClient
 ) {
   return mutationOptions({
     mutationFn: async (request: ResolveIdentityConflictRequest) => {
@@ -28,12 +27,14 @@ export function resolveIdentityConflictMutationOptions(
         client: generatedDashboardClient,
         path: { conflictId, projectId },
         throwOnError: true,
-      })
-      return result.data.data
+      });
+      return result.data.data;
     },
     onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: conflictKeys.scope(projectId) })
-      await queryClient.invalidateQueries({ queryKey: ["billing-customers"] })
+      await queryClient.invalidateQueries({
+        queryKey: conflictKeys.scope(projectId),
+      });
+      await queryClient.invalidateQueries({ queryKey: ["billing-customers"] });
     },
-  })
+  });
 }

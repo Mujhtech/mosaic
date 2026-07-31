@@ -1,10 +1,10 @@
-import { useEffect, useEffectEvent, useRef } from "react"
+import { useEffect, useEffectEvent, useRef } from "react";
 
-import { useEditorActions } from "@/features/paywall-editor/stores/editor-store-context"
+import { useEditorActions } from "@/features/paywall-editor/stores/editor-store-context";
 import type {
   StudioTool,
   StudioWorkspacePanel,
-} from "@/features/paywall-editor/types/studio-workspace"
+} from "@/features/paywall-editor/types/studio-workspace";
 
 export const STUDIO_SHORTCUT_HINTS = Object.freeze({
   appearance: "Shift A",
@@ -22,155 +22,179 @@ export const STUDIO_SHORTCUT_HINTS = Object.freeze({
   toggleLeft: "[",
   toggleProperties: "]",
   undo: "⌘/Ctrl Z",
-})
+});
 
 const TOOL_CHORDS: Readonly<Record<string, StudioTool>> = Object.freeze({
   c: "components",
   l: "layers",
   o: "localization",
   p: "products",
-})
-const CHORD_TIMEOUT_MS = 1_200
+});
+const CHORD_TIMEOUT_MS = 1200;
 
 function isEditableTarget(target: EventTarget | null) {
-  if (!(target instanceof HTMLElement)) return false
+  if (!(target instanceof HTMLElement)) {
+    return false;
+  }
 
   return (
     target instanceof HTMLInputElement ||
     target instanceof HTMLTextAreaElement ||
     target instanceof HTMLSelectElement ||
     target.closest('[contenteditable]:not([contenteditable="false"])') !== null
-  )
+  );
 }
 
 export interface EditorKeyboardShortcutHandlers {
-  readonly onFitCanvas?: () => void
-  readonly onOpenCommandPalette?: () => void
-  readonly onOpenTool?: (tool: StudioTool) => void
-  readonly onResetZoom?: () => void
-  readonly onToggleAppearance?: () => void
-  readonly onTogglePanel?: (panel: StudioWorkspacePanel) => void
+  readonly onFitCanvas?: () => void;
+  readonly onOpenCommandPalette?: () => void;
+  readonly onOpenTool?: (tool: StudioTool) => void;
+  readonly onResetZoom?: () => void;
+  readonly onToggleAppearance?: () => void;
+  readonly onTogglePanel?: (panel: StudioWorkspacePanel) => void;
 }
 
-export function useEditorKeyboardShortcuts(handlers: EditorKeyboardShortcutHandlers = {}) {
-  const editor = useEditorActions()
-  const chordRef = useRef<"g" | null>(null)
-  const chordTimeoutRef = useRef<number | null>(null)
+export function useEditorKeyboardShortcuts(
+  handlers: EditorKeyboardShortcutHandlers = {}
+) {
+  const editor = useEditorActions();
+  const chordRef = useRef<"g" | null>(null);
+  const chordTimeoutRef = useRef<number | null>(null);
   const invokeHandler = useEffectEvent(
-    (name: keyof EditorKeyboardShortcutHandlers, argument?: StudioTool | StudioWorkspacePanel) => {
-      const handler = handlers[name]
-      if (!handler) return
-      if (argument === undefined) (handler as () => void)()
-      else (handler as (value: StudioTool | StudioWorkspacePanel) => void)(argument)
-    },
-  )
+    (
+      name: keyof EditorKeyboardShortcutHandlers,
+      argument?: StudioTool | StudioWorkspacePanel
+    ) => {
+      const handler = handlers[name];
+      if (!handler) {
+        return;
+      }
+      if (argument === undefined) {
+        (handler as () => void)();
+      } else {
+        (handler as (value: StudioTool | StudioWorkspacePanel) => void)(
+          argument
+        );
+      }
+    }
+  );
 
   useEffect(() => {
     function onKeyDown(event: KeyboardEvent) {
       if (isEditableTarget(event.target)) {
-        chordRef.current = null
-        return
+        chordRef.current = null;
+        return;
       }
 
-      const modifier = event.metaKey || event.ctrlKey
-      const key = event.key.toLowerCase()
+      const modifier = event.metaKey || event.ctrlKey;
+      const key = event.key.toLowerCase();
 
       if (chordRef.current === "g") {
-        chordRef.current = null
+        chordRef.current = null;
         if (chordTimeoutRef.current !== null) {
-          window.clearTimeout(chordTimeoutRef.current)
-          chordTimeoutRef.current = null
+          window.clearTimeout(chordTimeoutRef.current);
+          chordTimeoutRef.current = null;
         }
-        const tool = TOOL_CHORDS[key]
+        const tool = TOOL_CHORDS[key];
         if (tool && !modifier && !event.altKey) {
-          invokeHandler("onOpenTool", tool)
-          event.preventDefault()
+          invokeHandler("onOpenTool", tool);
+          event.preventDefault();
         }
-        return
+        return;
       }
 
       if (key === "g" && !modifier && !event.altKey && !event.shiftKey) {
-        chordRef.current = "g"
+        chordRef.current = "g";
         if (chordTimeoutRef.current !== null) {
-          window.clearTimeout(chordTimeoutRef.current)
+          window.clearTimeout(chordTimeoutRef.current);
         }
         chordTimeoutRef.current = window.setTimeout(() => {
-          chordRef.current = null
-          chordTimeoutRef.current = null
-        }, CHORD_TIMEOUT_MS)
-        event.preventDefault()
-        return
+          chordRef.current = null;
+          chordTimeoutRef.current = null;
+        }, CHORD_TIMEOUT_MS);
+        event.preventDefault();
+        return;
       }
 
       if (modifier && event.shiftKey && key === "k") {
-        invokeHandler("onOpenCommandPalette")
-        event.preventDefault()
-        return
+        invokeHandler("onOpenCommandPalette");
+        event.preventDefault();
+        return;
       }
 
-      const snapshot = editor.getSnapshot()
+      const snapshot = editor.getSnapshot();
       if (modifier && key === "z") {
-        if (event.shiftKey && snapshot.redoStack.length > 0) editor.redo()
-        else if (snapshot.undoStack.length > 0) editor.undo()
-        event.preventDefault()
-        return
+        if (event.shiftKey && snapshot.redoStack.length > 0) {
+          editor.redo();
+        } else if (snapshot.undoStack.length > 0) {
+          editor.undo();
+        }
+        event.preventDefault();
+        return;
       }
       if (modifier && key === "y" && snapshot.redoStack.length > 0) {
-        editor.redo()
-        event.preventDefault()
-        return
+        editor.redo();
+        event.preventDefault();
+        return;
       }
       if (event.altKey && event.shiftKey && key === "d") {
-        editor.duplicateSelectedComponent()
-        event.preventDefault()
-        return
+        editor.duplicateSelectedComponent();
+        event.preventDefault();
+        return;
       }
       if ((event.key === "Backspace" || event.key === "Delete") && !modifier) {
-        editor.removeSelectedComponent()
-        event.preventDefault()
-        return
+        editor.removeSelectedComponent();
+        event.preventDefault();
+        return;
       }
       if (modifier && event.key === "ArrowUp") {
-        editor.moveSelectedComponent(-1)
-        event.preventDefault()
-        return
+        editor.moveSelectedComponent(-1);
+        event.preventDefault();
+        return;
       }
       if (modifier && event.key === "ArrowDown") {
-        editor.moveSelectedComponent(1)
-        event.preventDefault()
-        return
+        editor.moveSelectedComponent(1);
+        event.preventDefault();
+        return;
       }
 
-      if (!modifier && !event.altKey && !event.shiftKey && event.key === "[") {
-        invokeHandler("onTogglePanel", "left")
-        event.preventDefault()
-      } else if (!modifier && !event.altKey && !event.shiftKey && event.key === "]") {
-        invokeHandler("onTogglePanel", "properties")
-        event.preventDefault()
-      } else if (!modifier && !event.altKey && !event.shiftKey && event.key === "\\") {
-        invokeHandler("onTogglePanel", "diagnostics")
-        event.preventDefault()
-      } else if (!modifier && !event.altKey && !event.shiftKey && key === "f") {
-        invokeHandler("onFitCanvas")
-        event.preventDefault()
+      if (!(modifier || event.altKey || event.shiftKey) && event.key === "[") {
+        invokeHandler("onTogglePanel", "left");
+        event.preventDefault();
       } else if (
-        !modifier &&
-        !event.altKey &&
+        !(modifier || event.altKey || event.shiftKey) &&
+        event.key === "]"
+      ) {
+        invokeHandler("onTogglePanel", "properties");
+        event.preventDefault();
+      } else if (
+        !(modifier || event.altKey || event.shiftKey) &&
+        event.key === "\\"
+      ) {
+        invokeHandler("onTogglePanel", "diagnostics");
+        event.preventDefault();
+      } else if (!(modifier || event.altKey || event.shiftKey) && key === "f") {
+        invokeHandler("onFitCanvas");
+        event.preventDefault();
+      } else if (
+        !(modifier || event.altKey) &&
         event.shiftKey &&
         (event.code === "Digit0" || event.key === ")" || event.key === "0")
       ) {
-        invokeHandler("onResetZoom")
-        event.preventDefault()
-      } else if (!modifier && !event.altKey && event.shiftKey && key === "a") {
-        invokeHandler("onToggleAppearance")
-        event.preventDefault()
+        invokeHandler("onResetZoom");
+        event.preventDefault();
+      } else if (!(modifier || event.altKey) && event.shiftKey && key === "a") {
+        invokeHandler("onToggleAppearance");
+        event.preventDefault();
       }
     }
 
-    window.addEventListener("keydown", onKeyDown)
+    window.addEventListener("keydown", onKeyDown);
     return () => {
-      window.removeEventListener("keydown", onKeyDown)
-      if (chordTimeoutRef.current !== null) window.clearTimeout(chordTimeoutRef.current)
-    }
-  }, [editor])
+      window.removeEventListener("keydown", onKeyDown);
+      if (chordTimeoutRef.current !== null) {
+        window.clearTimeout(chordTimeoutRef.current);
+      }
+    };
+  }, [editor]);
 }

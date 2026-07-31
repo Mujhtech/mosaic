@@ -1,15 +1,14 @@
-import { useQuery } from "@tanstack/react-query"
-
-import { Button } from "@/components/ui/button"
+import { useQuery } from "@tanstack/react-query";
+import { EmptyState } from "@/components/feedback/empty-state";
+import { Button } from "@/components/ui/button";
+import { buttonVariants } from "@/components/ui/button-variants";
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from "@/components/ui/select"
-import { buttonVariants } from "@/components/ui/button-variants"
-import { EmptyState } from "@/components/feedback/empty-state"
+} from "@/components/ui/select";
 import {
   Table,
   TableBody,
@@ -18,13 +17,13 @@ import {
   TableHead,
   TableHeader,
   TableRow,
-} from "@/components/ui/table"
-import { HostedResourceBoundary } from "@/features/auth/components/hosted-resource-boundary"
-import { resolveHostedQueryState } from "@/features/auth/types/hosted-query-state"
+} from "@/components/ui/table";
+import { HostedResourceBoundary } from "@/features/auth/components/hosted-resource-boundary";
+import { resolveHostedQueryState } from "@/features/auth/types/hosted-query-state";
 import {
   BillingBoundaryNote,
   StatusPill,
-} from "@/features/billing-ledger/components/billing-chrome"
+} from "@/features/billing-ledger/components/billing-chrome";
 import {
   formatBillingTimestamp,
   providerLabel,
@@ -32,25 +31,28 @@ import {
   quarantineSeverityLabel,
   quarantineStatusLabel,
   storeEnvironmentLabel,
-} from "@/features/billing-ledger/types/billing-vocabulary"
+} from "@/features/billing-ledger/types/billing-vocabulary";
 import {
-  quarantineRecordsQueryOptions,
   type QuarantineListFilters,
-} from "@/features/billing-operations/queries/quarantine-queries"
-import { environmentsQueryOptions } from "@/features/environments/queries/environments-query"
-import { ScopeMismatchRecovery } from "@/features/orgs/components/scope-mismatch-recovery"
-import { WorkspacePage, WorkflowPanel } from "@/features/orgs/components/workspace-page"
-import { useValidatedProjectScope } from "@/features/projects/hooks/use-validated-project-scope"
+  quarantineRecordsQueryOptions,
+} from "@/features/billing-operations/queries/quarantine-queries";
+import { environmentsQueryOptions } from "@/features/environments/queries/environments-query";
+import { ScopeMismatchRecovery } from "@/features/orgs/components/scope-mismatch-recovery";
+import {
+  WorkflowPanel,
+  WorkspacePage,
+} from "@/features/orgs/components/workspace-page";
+import { useValidatedProjectScope } from "@/features/projects/hooks/use-validated-project-scope";
 
 const fieldClass =
-  "border-input bg-background focus-visible:border-ring focus-visible:ring-ring/40 h-9 rounded border px-3 text-sm outline-none focus-visible:ring-3"
+  "border-input bg-background focus-visible:border-ring focus-visible:ring-ring/40 h-9 rounded border px-3 text-sm outline-none focus-visible:ring-3";
 
 interface QuarantinePageProps {
-  environmentId: string
-  filters: QuarantineListFilters
-  onFiltersChange: (filters: QuarantineListFilters) => void
-  organizationId: string
-  projectId: string
+  environmentId: string;
+  filters: QuarantineListFilters;
+  onFiltersChange: (filters: QuarantineListFilters) => void;
+  organizationId: string;
+  projectId: string;
 }
 
 const QUARANTINE_STATUS_OPTIONS = [
@@ -59,13 +61,13 @@ const QUARANTINE_STATUS_OPTIONS = [
   { label: "Retrying", value: "retrying" },
   { label: "Closed after a successful attempt", value: "closed_after_success" },
   { label: "Closed as superseded", value: "closed_superseded" },
-]
+];
 
 const quarantineProviderOptions = [
   { label: "Any store", value: "" },
   { label: providerLabel("app_store"), value: "app_store" },
   { label: providerLabel("google_play"), value: "google_play" },
-]
+];
 
 export function QuarantinePage({
   environmentId,
@@ -74,40 +76,48 @@ export function QuarantinePage({
   organizationId,
   projectId,
 }: QuarantinePageProps) {
-  const { project, scopeMismatch, scopeReady } = useValidatedProjectScope(organizationId, projectId)
-  const environments = useQuery({ ...environmentsQueryOptions(projectId), enabled: scopeReady })
+  const { project, scopeMismatch, scopeReady } = useValidatedProjectScope(
+    organizationId,
+    projectId
+  );
+  const environments = useQuery({
+    ...environmentsQueryOptions(projectId),
+    enabled: scopeReady,
+  });
   const records = useQuery({
     ...quarantineRecordsQueryOptions(projectId, environmentId, filters),
     enabled: scopeReady,
-  })
+  });
 
   const environmentName =
-    environments.data?.items.find((item) => item.id === environmentId)?.name ?? environmentId
-  const items = records.data?.items ?? []
-  const nextCursor = records.data?.nextCursor
-  const { cursor: _cursor, ...activeFilters } = filters
-  void _cursor
-  const filtered = Object.values(activeFilters).some(Boolean)
+    environments.data?.items.find((item) => item.id === environmentId)?.name ??
+    environmentId;
+  const items = records.data?.items ?? [];
+  const nextCursor = records.data?.nextCursor;
+  const { cursor: _cursor, ...activeFilters } = filters;
+  const filtered = Object.values(activeFilters).some(Boolean);
 
   // Any filter change invalidates the cursor: a cursor is only meaningful for
   // the query that produced it.
   function updateFilters(patch: Partial<QuarantineListFilters>) {
-    onFiltersChange({ ...activeFilters, ...patch })
+    onFiltersChange({ ...activeFilters, ...patch });
   }
 
-  const error = project.error ?? environments.error ?? records.error
+  const error = project.error ?? environments.error ?? records.error;
   const state = resolveHostedQueryState({
     error,
     isEmpty: false,
-    isPending: project.isPending || (scopeReady && (environments.isPending || records.isPending)),
+    isPending:
+      project.isPending ||
+      (scopeReady && (environments.isPending || records.isPending)),
     loadingDescription: `Loading quarantine records for the ${environmentName} Mosaic Environment.`,
     onRetry: () => {
-      void records.refetch()
+      records.refetch();
     },
     permissionDescription:
       "Organization owner or admin permission is required to read quarantine records.",
     scope: { environmentId, organizationId, projectId },
-  })
+  });
 
   if (scopeMismatch) {
     return (
@@ -121,10 +131,10 @@ export function QuarantinePage({
           projectId={projectId}
         />
       </WorkspacePage>
-    )
+    );
   }
 
-  const base = `/orgs/${encodeURIComponent(organizationId)}/projects/${encodeURIComponent(projectId)}/billing/${encodeURIComponent(environmentId)}`
+  const base = `/orgs/${encodeURIComponent(organizationId)}/projects/${encodeURIComponent(projectId)}/billing/${encodeURIComponent(environmentId)}`;
 
   return (
     <WorkspacePage
@@ -136,13 +146,14 @@ export function QuarantinePage({
 
       <WorkflowPanel title="Filters">
         <div className="flex flex-wrap gap-4">
-          <div className="space-y-1 text-sm font-medium">
+          <div className="space-y-1 font-medium text-sm">
             <label htmlFor="quarantine-status">Status</label>
             <Select
               items={QUARANTINE_STATUS_OPTIONS}
               onValueChange={(value) =>
                 updateFilters({
-                  status: (value || undefined) as QuarantineListFilters["status"],
+                  status: (value ||
+                    undefined) as QuarantineListFilters["status"],
                 })
               }
               value={filters.status ?? ""}
@@ -159,13 +170,14 @@ export function QuarantinePage({
               </SelectContent>
             </Select>
           </div>
-          <div className="space-y-1 text-sm font-medium">
+          <div className="space-y-1 font-medium text-sm">
             <label htmlFor="quarantine-store">Store</label>
             <Select
               items={quarantineProviderOptions}
               onValueChange={(value) =>
                 updateFilters({
-                  provider: (value || undefined) as QuarantineListFilters["provider"],
+                  provider: (value ||
+                    undefined) as QuarantineListFilters["provider"],
                 })
               }
               value={filters.provider ?? ""}
@@ -185,25 +197,25 @@ export function QuarantinePage({
           {/* A reason-code filter can arrive from a health or ledger recovery
               link. Without a visible control it would filter invisibly. */}
           {filters.reasonCode ? (
-            <label className="space-y-1 text-sm font-medium">
+            <label className="space-y-1 font-medium text-sm">
               Reason
               <input
-                className={`${fieldClass} text-muted-foreground block`}
+                className={`${fieldClass} block text-muted-foreground`}
                 disabled
                 readOnly
                 value={quarantineReasonLabel(filters.reasonCode)}
               />
             </label>
           ) : null}
-          <label className="space-y-1 text-sm font-medium">
+          <label className="space-y-1 font-medium text-sm">
             Mosaic Environment
             <input
-              className={`${fieldClass} text-muted-foreground block`}
+              className={`${fieldClass} block text-muted-foreground`}
               disabled
               readOnly
               value={environmentName}
             />
-            <span className="text-muted-foreground block text-xs font-normal">
+            <span className="block font-normal text-muted-foreground text-xs">
               Fixed by the address. It is the tenant boundary, never a filter.
             </span>
           </label>
@@ -251,13 +263,17 @@ export function QuarantinePage({
                     : "Every input Mosaic has accepted in this Mosaic Environment either produced a fact or is still being validated."
               }
               title={
-                filtered ? "No quarantine records match these filters" : "Nothing is quarantined"
+                filtered
+                  ? "No quarantine records match these filters"
+                  : "Nothing is quarantined"
               }
             />
             <QuarantinePaging
               cursor={filters.cursor}
               nextCursor={nextCursor}
-              onCursorChange={(cursor) => onFiltersChange({ ...activeFilters, cursor })}
+              onCursorChange={(cursor) =>
+                onFiltersChange({ ...activeFilters, cursor })
+              }
             />
           </>
         ) : (
@@ -291,14 +307,16 @@ export function QuarantinePage({
                   <TableRow key={record.id}>
                     <TableCell>
                       <a
-                        className="text-primary font-medium"
+                        className="font-medium text-primary"
                         href={`${base}/quarantine/${encodeURIComponent(record.id ?? "")}`}
                       >
                         {quarantineReasonLabel(record.reasonCode)}
                       </a>
                     </TableCell>
                     <TableCell>{providerLabel(record.provider)}</TableCell>
-                    <TableCell>{storeEnvironmentLabel(record.storeEnvironment)}</TableCell>
+                    <TableCell>
+                      {storeEnvironmentLabel(record.storeEnvironment)}
+                    </TableCell>
                     <TableCell>
                       {record.providerProductIdentifier ?? (
                         <span className="text-muted-foreground">—</span>
@@ -316,7 +334,9 @@ export function QuarantinePage({
                         }
                       />
                     </TableCell>
-                    <TableCell>{quarantineStatusLabel(record.status)}</TableCell>
+                    <TableCell>
+                      {quarantineStatusLabel(record.status)}
+                    </TableCell>
                     <TableCell>{record.attemptCount ?? 0}</TableCell>
                     <TableCell title={record.firstSeenAt}>
                       {formatBillingTimestamp(record.firstSeenAt)}
@@ -331,13 +351,15 @@ export function QuarantinePage({
             <QuarantinePaging
               cursor={filters.cursor}
               nextCursor={nextCursor}
-              onCursorChange={(cursor) => onFiltersChange({ ...activeFilters, cursor })}
+              onCursorChange={(cursor) =>
+                onFiltersChange({ ...activeFilters, cursor })
+              }
             />
           </WorkflowPanel>
         )}
       </HostedResourceBoundary>
     </WorkspacePage>
-  )
+  );
 }
 
 /**
@@ -352,16 +374,23 @@ function QuarantinePaging({
   nextCursor,
   onCursorChange,
 }: {
-  cursor: string | undefined
-  nextCursor: string | undefined
-  onCursorChange: (cursor: string | undefined) => void
+  cursor: string | undefined;
+  nextCursor: string | undefined;
+  onCursorChange: (cursor: string | undefined) => void;
 }) {
-  if (!cursor && !nextCursor) return null
+  if (!(cursor || nextCursor)) {
+    return null;
+  }
 
   return (
     <div className="mt-4 flex flex-wrap items-center gap-2">
       {cursor ? (
-        <Button onClick={() => onCursorChange(undefined)} size="sm" type="button" variant="outline">
+        <Button
+          onClick={() => onCursorChange(undefined)}
+          size="sm"
+          type="button"
+          variant="outline"
+        >
           First page
         </Button>
       ) : null}
@@ -375,8 +404,10 @@ function QuarantinePaging({
           Next page
         </Button>
       ) : (
-        <p className="text-muted-foreground text-xs">End of the quarantine history.</p>
+        <p className="text-muted-foreground text-xs">
+          End of the quarantine history.
+        </p>
       )}
     </div>
-  )
+  );
 }

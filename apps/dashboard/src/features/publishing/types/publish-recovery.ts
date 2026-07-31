@@ -1,43 +1,52 @@
-import type { PublishValidationIssue } from "@/features/publishing/api/hosted-publishing-adapter"
-import { appendSearch } from "@/lib/routing/workspace-hrefs"
 import {
-  providerRecoveryDescriptor,
   type ProviderRecoveryDestination,
-} from "@/features/catalog/types/provider-recovery"
+  providerRecoveryDescriptor,
+} from "@/features/catalog/types/provider-recovery";
+import type { PublishValidationIssue } from "@/features/publishing/api/hosted-publishing-adapter";
+import { appendSearch } from "@/lib/routing/workspace-hrefs";
 
 interface PublishRecoveryContext {
-  assetsHref: string
-  catalogHref: string
-  environmentId: string
-  organizationId: string
-  placementsHref: string
-  projectId: string
-  providersHref: string
-  returnTo?: string
+  assetsHref: string;
+  catalogHref: string;
+  environmentId: string;
+  organizationId: string;
+  placementsHref: string;
+  projectId: string;
+  providersHref: string;
+  returnTo?: string;
 }
 
-function productHref(context: PublishRecoveryContext, issue: PublishValidationIssue) {
+function productHref(
+  context: PublishRecoveryContext,
+  issue: PublishValidationIssue
+) {
   if (!issue.productId) {
-    return appendSearch(context.catalogHref, { returnTo: context.returnTo })
+    return appendSearch(context.catalogHref, { returnTo: context.returnTo });
   }
 
-  const base = `/orgs/${encodeURIComponent(context.organizationId)}/projects/${encodeURIComponent(context.projectId)}/catalog/products/${encodeURIComponent(issue.productId)}`
-  const search = new URLSearchParams()
-  search.set("environmentId", issue.environmentId ?? context.environmentId)
-  if (issue.applicationId) search.set("applicationId", issue.applicationId)
-  if (context.returnTo) search.set("returnTo", context.returnTo)
-  return `${base}?${search.toString()}`
+  const base = `/orgs/${encodeURIComponent(context.organizationId)}/projects/${encodeURIComponent(context.projectId)}/catalog/products/${encodeURIComponent(issue.productId)}`;
+  const search = new URLSearchParams();
+  search.set("environmentId", issue.environmentId ?? context.environmentId);
+  if (issue.applicationId) {
+    search.set("applicationId", issue.applicationId);
+  }
+  if (context.returnTo) {
+    search.set("returnTo", context.returnTo);
+  }
+  return `${base}?${search.toString()}`;
 }
 
 export function publishRecoveryHref(
   issue: PublishValidationIssue,
-  context: PublishRecoveryContext,
+  context: PublishRecoveryContext
 ) {
   if (issue.recoveryHref) {
-    return appendSearch(issue.recoveryHref, { returnTo: context.returnTo })
+    return appendSearch(issue.recoveryHref, { returnTo: context.returnTo });
   }
   if (issue.recoveryAction) {
-    const destination = providerRecoveryDescriptor(issue.recoveryAction).destination
+    const destination = providerRecoveryDescriptor(
+      issue.recoveryAction
+    ).destination;
     const destinations: Record<ProviderRecoveryDestination, string> = {
       access: `${productHref(context, issue)}#access-grants-title`,
       applications: `/orgs/${encodeURIComponent(context.organizationId)}/projects/${encodeURIComponent(context.projectId)}/apps`,
@@ -47,14 +56,14 @@ export function publishRecoveryHref(
         environmentId: issue.environmentId ?? context.environmentId,
         returnTo: context.returnTo,
       }),
-    }
-    return destinations[destination]
+    };
+    return destinations[destination];
   }
   if (issue.code.startsWith("asset.")) {
-    return appendSearch(context.assetsHref, { returnTo: context.returnTo })
+    return appendSearch(context.assetsHref, { returnTo: context.returnTo });
   }
   if (issue.code.startsWith("placement.")) {
-    return appendSearch(context.placementsHref, { returnTo: context.returnTo })
+    return appendSearch(context.placementsHref, { returnTo: context.returnTo });
   }
 
   if (
@@ -75,7 +84,7 @@ export function publishRecoveryHref(
     return appendSearch(context.providersHref, {
       environmentId: issue.environmentId ?? context.environmentId,
       returnTo: context.returnTo,
-    })
+    });
   }
 
   if (
@@ -97,18 +106,21 @@ export function publishRecoveryHref(
     issue.code.startsWith("product.unavailable") ||
     issue.code === "product.not_ready"
   ) {
-    return productHref(context, issue)
+    return productHref(context, issue);
   }
 
   if (issue.code.startsWith("product.")) {
-    return appendSearch(context.catalogHref, { returnTo: context.returnTo })
+    return appendSearch(context.catalogHref, { returnTo: context.returnTo });
   }
-  return undefined
 }
 
 export function publishRecoveryLabel(issue: PublishValidationIssue) {
-  if (issue.recoveryLabel) return issue.recoveryLabel
-  if (issue.recoveryAction) return providerRecoveryDescriptor(issue.recoveryAction).label
+  if (issue.recoveryLabel) {
+    return issue.recoveryLabel;
+  }
+  if (issue.recoveryAction) {
+    return providerRecoveryDescriptor(issue.recoveryAction).label;
+  }
   if (
     issue.resourceType === "provider_assignment" ||
     issue.resourceType === "provider_connection" ||
@@ -117,29 +129,42 @@ export function publishRecoveryLabel(issue: PublishValidationIssue) {
     issue.code.includes("active_provider") ||
     issue.code.includes("connection")
   ) {
-    return "Review Purchase setup"
+    return "Review Purchase setup";
   }
-  if (issue.code === "commerce.mapping.basePlanMissing") return "Select base plan"
+  if (issue.code === "commerce.mapping.basePlanMissing") {
+    return "Select base plan";
+  }
   if (
     issue.code === "commerce.mapping.offerMissing" ||
     issue.code === "commerce.mapping.offerIneligible"
   ) {
-    return "Review Google Play offer"
+    return "Review Google Play offer";
   }
-  if (issue.code.startsWith("commerce.observation.")) return "Review test evidence"
+  if (issue.code.startsWith("commerce.observation.")) {
+    return "Review test evidence";
+  }
   if (
     issue.code.startsWith("product.mapping") ||
     issue.code.startsWith("commerce.mapping.") ||
     issue.code === "mappingAmbiguous" ||
     issue.code === "mappingMissing"
   ) {
-    return "Review Product mapping"
+    return "Review Product mapping";
   }
-  if (issue.code.startsWith("product.metadata") || issue.code === "metadataStale") {
-    return "Retry Product synchronization"
+  if (
+    issue.code.startsWith("product.metadata") ||
+    issue.code === "metadataStale"
+  ) {
+    return "Retry Product synchronization";
   }
-  if (issue.code.startsWith("product.entitlement")) return "Add Entitlement grant"
-  if (issue.code.startsWith("placement.")) return "Review Placements"
-  if (issue.code.startsWith("asset.")) return "Review Assets"
-  return "Resolve issue"
+  if (issue.code.startsWith("product.entitlement")) {
+    return "Add Entitlement grant";
+  }
+  if (issue.code.startsWith("placement.")) {
+    return "Review Placements";
+  }
+  if (issue.code.startsWith("asset.")) {
+    return "Review Assets";
+  }
+  return "Resolve issue";
 }

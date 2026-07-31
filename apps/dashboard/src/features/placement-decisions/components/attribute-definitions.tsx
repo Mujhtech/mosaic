@@ -1,40 +1,39 @@
-import { ArchiveIcon } from "@phosphor-icons/react/dist/ssr/Archive"
-import { LockKeyIcon } from "@phosphor-icons/react/dist/ssr/LockKey"
-import { useForm } from "@tanstack/react-form"
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
-
-import { Button } from "@/components/ui/button"
-import { EmptyState } from "@/components/feedback/empty-state"
-import { ErrorState } from "@/components/feedback/error-state"
-import { LoadingState } from "@/components/feedback/loading-state"
-import { Field, FieldError, FieldLabel } from "@/components/ui/field"
-import { Input } from "@/components/ui/input"
+import { ArchiveIcon } from "@phosphor-icons/react/dist/ssr/Archive";
+import { LockKeyIcon } from "@phosphor-icons/react/dist/ssr/LockKey";
+import { useForm } from "@tanstack/react-form";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { EmptyState } from "@/components/feedback/empty-state";
+import { ErrorState } from "@/components/feedback/error-state";
+import { LoadingState } from "@/components/feedback/loading-state";
+import { Button } from "@/components/ui/button";
+import { Field, FieldError, FieldLabel } from "@/components/ui/field";
+import { Input } from "@/components/ui/input";
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from "@/components/ui/select"
-import type { PlacementDecisionsAdapter } from "@/features/placement-decisions/api/placement-decisions-adapter"
-import { createAttributeMutationOptions } from "@/features/placement-decisions/mutations/placement-decision-mutations"
+} from "@/components/ui/select";
+import type { PlacementDecisionsAdapter } from "@/features/placement-decisions/api/placement-decisions-adapter";
+import { createAttributeMutationOptions } from "@/features/placement-decisions/mutations/placement-decision-mutations";
 import {
   attributeDefinitionsQueryOptions,
   placementDecisionKeys,
-} from "@/features/placement-decisions/queries/placement-decision-queries"
+} from "@/features/placement-decisions/queries/placement-decision-queries";
 import type {
   AttributeDefinition,
   AttributeType,
   ConditionOperator,
-} from "@/features/placement-decisions/types/placement-decision"
+} from "@/features/placement-decisions/types/placement-decision";
 
-const ATTRIBUTE_KEY = /^[a-z][a-z0-9_]{0,63}$/
+const ATTRIBUTE_KEY = /^[a-z][a-z0-9_]{0,63}$/;
 const DEFAULT_OPERATORS: readonly ConditionOperator[] = [
   "equals",
   "not_equals",
   "exists",
   "does_not_exist",
-]
+];
 
 const ATTRIBUTE_TYPE_OPTIONS = [
   "string",
@@ -43,34 +42,39 @@ const ATTRIBUTE_TYPE_OPTIONS = [
   "timestamp",
   "semantic_version",
   "string_list",
-].map((type) => ({ label: type.replace("_", " "), value: type }))
+].map((type) => ({ label: type.replace("_", " "), value: type }));
 
 const SENSITIVITY_OPTIONS = [
   { label: "Standard", value: "standard" },
   { label: "Sensitive", value: "sensitive" },
-]
+];
 
 export function AttributeDefinitions({
   adapter,
   projectId,
 }: {
-  adapter: PlacementDecisionsAdapter
-  projectId: string
+  adapter: PlacementDecisionsAdapter;
+  projectId: string;
 }) {
-  const queryClient = useQueryClient()
-  const attributes = useQuery(attributeDefinitionsQueryOptions(projectId, adapter))
-  const create = useMutation(createAttributeMutationOptions(projectId, adapter, queryClient))
+  const queryClient = useQueryClient();
+  const attributes = useQuery(
+    attributeDefinitionsQueryOptions(projectId, adapter)
+  );
+  const create = useMutation(
+    createAttributeMutationOptions(projectId, adapter, queryClient)
+  );
   const archive = useMutation({
-    mutationFn: (attributeId: string) => adapter.archiveAttribute(projectId, attributeId),
+    mutationFn: (attributeId: string) =>
+      adapter.archiveAttribute(projectId, attributeId),
     onSuccess: (_, attributeId) =>
       queryClient.setQueryData<readonly AttributeDefinition[]>(
         placementDecisionKeys.attributes(projectId, adapter),
         (current) =>
           current?.map((item) =>
-            item.id === attributeId ? { ...item, status: "archived" } : item,
-          ) ?? [],
+            item.id === attributeId ? { ...item, status: "archived" } : item
+          ) ?? []
       ),
-  })
+  });
   const form = useForm({
     defaultValues: {
       description: "",
@@ -79,38 +83,47 @@ export function AttributeDefinitions({
       type: "string" as AttributeType,
     },
     onSubmit: async ({ value, formApi }) => {
-      await create.mutateAsync({ ...value, allowedOperators: DEFAULT_OPERATORS })
-      formApi.reset()
+      await create.mutateAsync({
+        ...value,
+        allowedOperators: DEFAULT_OPERATORS,
+      });
+      formApi.reset();
     },
-  })
+  });
 
-  if (attributes.isPending)
-    return <LoadingState description="Loading Project attribute definitions." />
-  if (attributes.error)
+  if (attributes.isPending) {
+    return (
+      <LoadingState description="Loading Project attribute definitions." />
+    );
+  }
+  if (attributes.error) {
     return (
       <ErrorState
         description={attributes.error.message}
-        onRetry={() => void attributes.refetch()}
+        onRetry={() => {
+          attributes.refetch();
+        }}
       />
-    )
+    );
+  }
 
   return (
     <section aria-labelledby="attributes-heading" className="space-y-4">
       <div>
-        <h2 className="text-base font-semibold" id="attributes-heading">
+        <h2 className="font-semibold text-base" id="attributes-heading">
           Attribute definitions
         </h2>
-        <p className="text-muted-foreground mt-1 text-sm">
-          Allow-list typed keys for local SDK targeting. Mosaic stores definitions, never customer
-          values.
+        <p className="mt-1 text-muted-foreground text-sm">
+          Allow-list typed keys for local SDK targeting. Mosaic stores
+          definitions, never customer values.
         </p>
       </div>
       <form
-        className="border-border grid gap-3 rounded border p-4 lg:grid-cols-[1fr_1fr_1fr_1.5fr_auto] lg:items-start"
+        className="grid gap-3 rounded border border-border p-4 lg:grid-cols-[1fr_1fr_1fr_1.5fr_auto] lg:items-start"
         onSubmit={(event) => {
-          event.preventDefault()
-          event.stopPropagation()
-          void form.handleSubmit()
+          event.preventDefault();
+          event.stopPropagation();
+          form.handleSubmit();
         }}
       >
         <form.Field
@@ -123,15 +136,21 @@ export function AttributeDefinitions({
           }}
         >
           {(field) => (
-            <Field data-invalid={field.state.meta.errors.length > 0 || undefined}>
+            <Field
+              data-invalid={field.state.meta.errors.length > 0 || undefined}
+            >
               <FieldLabel htmlFor="attribute-key">Key</FieldLabel>
               <Input
                 id="attribute-key"
-                onChange={(event) => field.handleChange(event.currentTarget.value.toLowerCase())}
+                onChange={(event) =>
+                  field.handleChange(event.currentTarget.value.toLowerCase())
+                }
                 placeholder="student"
                 value={field.state.value}
               />
-              <FieldError errors={field.state.meta.errors.map((message) => ({ message }))} />
+              <FieldError
+                errors={field.state.meta.errors.map((message) => ({ message }))}
+              />
             </Field>
           )}
         </form.Field>
@@ -141,7 +160,9 @@ export function AttributeDefinitions({
               <FieldLabel htmlFor="attribute-type">Type</FieldLabel>
               <Select
                 items={ATTRIBUTE_TYPE_OPTIONS}
-                onValueChange={(value) => field.handleChange(value as AttributeType)}
+                onValueChange={(value) =>
+                  field.handleChange(value as AttributeType)
+                }
                 value={field.state.value}
               >
                 <SelectTrigger id="attribute-type">
@@ -161,10 +182,14 @@ export function AttributeDefinitions({
         <form.Field name="sensitivity">
           {(field) => (
             <Field>
-              <FieldLabel htmlFor="attribute-sensitivity">Sensitivity</FieldLabel>
+              <FieldLabel htmlFor="attribute-sensitivity">
+                Sensitivity
+              </FieldLabel>
               <Select
                 items={SENSITIVITY_OPTIONS}
-                onValueChange={(value) => field.handleChange(value as "standard" | "sensitive")}
+                onValueChange={(value) =>
+                  field.handleChange(value as "standard" | "sensitive")
+                }
                 value={field.state.value}
               >
                 <SelectTrigger id="attribute-sensitivity">
@@ -184,11 +209,15 @@ export function AttributeDefinitions({
         <form.Field name="description">
           {(field) => (
             <Field>
-              <FieldLabel htmlFor="attribute-description">Internal description</FieldLabel>
+              <FieldLabel htmlFor="attribute-description">
+                Internal description
+              </FieldLabel>
               <Input
                 id="attribute-description"
                 maxLength={256}
-                onChange={(event) => field.handleChange(event.currentTarget.value)}
+                onChange={(event) =>
+                  field.handleChange(event.currentTarget.value)
+                }
                 value={field.state.value}
               />
             </Field>
@@ -223,9 +252,9 @@ export function AttributeDefinitions({
                     <LockKeyIcon aria-label="Sensitive" />
                   ) : null}
                 </p>
-                <p className="text-muted-foreground mt-1 text-xs">
-                  {attribute.type.replace("_", " ")} · {attribute.usageCount} Rule references ·
-                  revision {attribute.revision}
+                <p className="mt-1 text-muted-foreground text-xs">
+                  {attribute.type.replace("_", " ")} · {attribute.usageCount}{" "}
+                  Rule references · revision {attribute.revision}
                 </p>
                 {attribute.description ? (
                   <p className="mt-1 text-sm">{attribute.description}</p>
@@ -254,5 +283,5 @@ export function AttributeDefinitions({
         </p>
       ) : null}
     </section>
-  )
+  );
 }

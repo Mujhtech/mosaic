@@ -1,11 +1,11 @@
-import { Link, type ErrorComponentProps } from "@tanstack/react-router"
+import { type ErrorComponentProps, Link } from "@tanstack/react-router";
 
-import { EmptyState } from "@/components/feedback/empty-state"
-import { ErrorState } from "@/components/feedback/error-state"
-import { LoadingState } from "@/components/feedback/loading-state"
-import { Button } from "@/components/ui/button"
-import { buttonVariants } from "@/components/ui/button-variants"
-import { describeApiError } from "@/lib/api/errors"
+import { EmptyState } from "@/components/feedback/empty-state";
+import { ErrorState } from "@/components/feedback/error-state";
+import { LoadingState } from "@/components/feedback/loading-state";
+import { Button } from "@/components/ui/button";
+import { buttonVariants } from "@/components/ui/button-variants";
+import { describeApiError } from "@/lib/api/errors";
 
 function RouteRecoveryActions() {
   return (
@@ -15,7 +15,9 @@ function RouteRecoveryActions() {
       </Link>
       <Button
         onClick={() => {
-          if (typeof window !== "undefined") window.history.back()
+          if (typeof window !== "undefined") {
+            window.history.back();
+          }
         }}
         type="button"
         variant="ghost"
@@ -23,13 +25,13 @@ function RouteRecoveryActions() {
         Go back
       </Button>
     </div>
-  )
+  );
 }
 
 export function RouteErrorState({ error, reset }: ErrorComponentProps) {
   // Stack traces and raw server messages are never rendered; operators get the
   // correlation ID instead (client error reporting is off by design).
-  const described = describeApiError(error)
+  const described = describeApiError(error);
 
   return (
     <div className="mx-auto my-10 max-w-3xl">
@@ -42,16 +44,16 @@ export function RouteErrorState({ error, reset }: ErrorComponentProps) {
         onRetry={reset}
       />
       {described.correlationId ? (
-        <p className="text-muted-foreground mt-3 text-xs">
+        <p className="mt-3 text-muted-foreground text-xs">
           Request ID:{" "}
-          <code className="bg-muted rounded px-1 py-0.5 font-mono select-all">
+          <code className="select-all rounded bg-muted px-1 py-0.5 font-mono">
             {described.correlationId}
           </code>
         </p>
       ) : null}
       <RouteRecoveryActions />
     </div>
-  )
+  );
 }
 
 export function RouteNotFoundState() {
@@ -63,7 +65,7 @@ export function RouteNotFoundState() {
       />
       <RouteRecoveryActions />
     </div>
-  )
+  );
 }
 
 export function RoutePendingState() {
@@ -72,5 +74,5 @@ export function RoutePendingState() {
       className="mx-auto my-10 max-w-3xl"
       description="Preparing your Mosaic workspace."
     />
-  )
+  );
 }

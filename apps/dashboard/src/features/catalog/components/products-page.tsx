@@ -1,10 +1,10 @@
-import { useState } from "react"
-import { useForm } from "@tanstack/react-form"
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
-import { Link } from "@tanstack/react-router"
+import { useForm } from "@tanstack/react-form";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { Link } from "@tanstack/react-router";
+import { useState } from "react";
 
-import { Button } from "@/components/ui/button"
-import { buttonVariants } from "@/components/ui/button-variants"
+import { Button } from "@/components/ui/button";
+import { buttonVariants } from "@/components/ui/button-variants";
 import {
   Dialog,
   DialogClose,
@@ -14,29 +14,36 @@ import {
   DialogHeader,
   DialogTitle,
   DialogTrigger,
-} from "@/components/ui/dialog"
-import { Field, FieldDescription, FieldLabel } from "@/components/ui/field"
-import { Input } from "@/components/ui/input"
+} from "@/components/ui/dialog";
+import { Field, FieldDescription, FieldLabel } from "@/components/ui/field";
+import { Input } from "@/components/ui/input";
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from "@/components/ui/select"
-import { HostedResourceBoundary } from "@/features/auth/components/hosted-resource-boundary"
-import { resolveHostedQueryState } from "@/features/auth/types/hosted-query-state"
-import { createProductMutationOptions } from "@/features/catalog/mutations/catalog-mutations"
-import { productsQueryOptions, type ProductFilters } from "@/features/catalog/queries/catalog-query"
-import { WorkspacePage, WorkflowPanel } from "@/features/orgs/components/workspace-page"
-import { ScopeMismatchRecovery } from "@/features/orgs/components/scope-mismatch-recovery"
-import { useValidatedProjectScope } from "@/features/projects/hooks/use-validated-project-scope"
-import { describeReturnDestination } from "@/lib/routing/workspace-hrefs"
+} from "@/components/ui/select";
+import { HostedResourceBoundary } from "@/features/auth/components/hosted-resource-boundary";
+import { resolveHostedQueryState } from "@/features/auth/types/hosted-query-state";
+import { createProductMutationOptions } from "@/features/catalog/mutations/catalog-mutations";
+import {
+  type ProductFilters,
+  productsQueryOptions,
+} from "@/features/catalog/queries/catalog-query";
+import { ScopeMismatchRecovery } from "@/features/orgs/components/scope-mismatch-recovery";
+import {
+  WorkflowPanel,
+  WorkspacePage,
+} from "@/features/orgs/components/workspace-page";
+import { useValidatedProjectScope } from "@/features/projects/hooks/use-validated-project-scope";
+import { describeReturnDestination } from "@/lib/routing/workspace-hrefs";
+import { workspaceScopeParams } from "@/lib/routing/workspace-params";
 
 const PRODUCT_TYPE_OPTIONS = [
   { label: "Subscription", value: "subscription" },
   { label: "One-time non-consumable", value: "one_time_non_consumable" },
-]
+];
 
 const STATUS_FILTER_OPTIONS = [
   { label: "All statuses", value: "" },
@@ -44,25 +51,25 @@ const STATUS_FILTER_OPTIONS = [
   { label: "Connected", value: "connected" },
   { label: "Attention required", value: "attention_required" },
   { label: "Archived", value: "archived" },
-]
+];
 
 const TYPE_FILTER_OPTIONS = [
   { label: "All types", value: "" },
   { label: "Subscription", value: "subscription" },
   { label: "One-time", value: "one_time_non_consumable" },
-]
+];
 
 interface ProductsPageProps {
-  filters: ProductFilters
-  onFiltersChange: (filters: ProductFilters) => void
-  organizationId: string
-  projectId: string
+  filters: ProductFilters;
+  onFiltersChange: (filters: ProductFilters) => void;
+  organizationId: string;
+  projectId: string;
   /**
    * Where a recovery round trip came from. Mosaic Billing sends operators here
    * from a quarantine record to map a store Product, and the way back has to
    * survive the trip or the repair loop cannot be walked.
    */
-  returnTo?: string
+  returnTo?: string;
 }
 
 export function ProductsPage({
@@ -72,12 +79,20 @@ export function ProductsPage({
   projectId,
   returnTo,
 }: ProductsPageProps) {
-  const queryClient = useQueryClient()
-  const { project, scopeMismatch, scopeReady } = useValidatedProjectScope(organizationId, projectId)
-  const products = useQuery({ ...productsQueryOptions(projectId, filters), enabled: scopeReady })
-  const mutation = useMutation(createProductMutationOptions(projectId, queryClient))
-  const items = products.data?.items ?? []
-  const [createOpen, setCreateOpen] = useState(false)
+  const queryClient = useQueryClient();
+  const { project, scopeMismatch, scopeReady } = useValidatedProjectScope(
+    organizationId,
+    projectId
+  );
+  const products = useQuery({
+    ...productsQueryOptions(projectId, filters),
+    enabled: scopeReady,
+  });
+  const mutation = useMutation(
+    createProductMutationOptions(projectId, queryClient)
+  );
+  const items = products.data?.items ?? [];
+  const [createOpen, setCreateOpen] = useState(false);
   const form = useForm({
     defaultValues: {
       description: "",
@@ -91,28 +106,32 @@ export function ProductsPage({
         internalName: value.internalName.trim(),
         key: value.key.trim(),
         type: value.type,
-      })
-      form.reset()
-      setCreateOpen(false)
+      });
+      form.reset();
+      setCreateOpen(false);
     },
-  })
+  });
   const state = resolveHostedQueryState({
     emptyDescription:
       filters.search || filters.status || filters.type
         ? "Adjust the project-wide filters or create a Product."
         : "Create a Monthly, Yearly, or one-time Product with mock metadata.",
     emptyTitle:
-      filters.search || filters.status || filters.type ? "No Products match" : "No Products yet",
+      filters.search || filters.status || filters.type
+        ? "No Products match"
+        : "No Products yet",
     error: project.error ?? products.error,
     isEmpty: scopeReady && products.isSuccess && items.length === 0,
     isPending: project.isPending || (scopeReady && products.isPending),
     loadingDescription: "Loading project Products.",
-    onRetry: () => void products.refetch(),
+    onRetry: () => {
+      products.refetch();
+    },
     permissionDescription:
       "Project membership is required to view Products; owner or admin is required to change them.",
     scope: { organizationId, projectId },
-  })
-  const canManageProducts = state.kind === "empty" || state.kind === "ready"
+  });
+  const canManageProducts = state.kind === "empty" || state.kind === "ready";
 
   if (scopeMismatch) {
     return (
@@ -126,34 +145,36 @@ export function ProductsPage({
           projectId={projectId}
         />
       </WorkspacePage>
-    )
+    );
   }
 
   const createDialog = (
     <Dialog
       onOpenChange={(open) => {
-        setCreateOpen(open)
+        setCreateOpen(open);
         if (!open) {
-          form.reset()
-          mutation.reset()
+          form.reset();
+          mutation.reset();
         }
       }}
       open={createOpen}
     >
-      <DialogTrigger render={<Button size="sm" />}>Create Product</DialogTrigger>
+      <DialogTrigger render={<Button size="sm" />}>
+        Create Product
+      </DialogTrigger>
       <DialogContent>
         <form
           onSubmit={(event) => {
-            event.preventDefault()
-            event.stopPropagation()
-            void form.handleSubmit()
+            event.preventDefault();
+            event.stopPropagation();
+            form.handleSubmit();
           }}
         >
           <DialogHeader>
             <DialogTitle>Create Product</DialogTitle>
             <DialogDescription>
-              Create a provider-neutral Product manually or import synchronized provider metadata
-              from Purchase setup.
+              Create a provider-neutral Product manually or import synchronized
+              provider metadata from Purchase setup.
             </DialogDescription>
           </DialogHeader>
           <div className="grid gap-4 px-4">
@@ -176,7 +197,9 @@ export function ProductsPage({
                   <FieldLabel htmlFor="product-key">Key</FieldLabel>
                   <Input
                     id="product-key"
-                    onChange={(event) => field.handleChange(event.target.value.toLowerCase())}
+                    onChange={(event) =>
+                      field.handleChange(event.target.value.toLowerCase())
+                    }
                     placeholder="monthly"
                     value={field.state.value}
                   />
@@ -190,7 +213,9 @@ export function ProductsPage({
                   <Select
                     items={PRODUCT_TYPE_OPTIONS}
                     onValueChange={(value) =>
-                      field.handleChange(value as "one_time_non_consumable" | "subscription")
+                      field.handleChange(
+                        value as "one_time_non_consumable" | "subscription"
+                      )
                     }
                     value={field.state.value}
                   >
@@ -211,13 +236,17 @@ export function ProductsPage({
             <form.Field name="description">
               {(field) => (
                 <Field>
-                  <FieldLabel htmlFor="product-description">Description</FieldLabel>
+                  <FieldLabel htmlFor="product-description">
+                    Description
+                  </FieldLabel>
                   <Input
                     id="product-description"
                     onChange={(event) => field.handleChange(event.target.value)}
                     value={field.state.value}
                   />
-                  <FieldDescription>Optional Mosaic-owned metadata.</FieldDescription>
+                  <FieldDescription>
+                    Optional Mosaic-owned metadata.
+                  </FieldDescription>
                 </Field>
               )}
             </form.Field>
@@ -228,7 +257,9 @@ export function ProductsPage({
             ) : null}
           </div>
           <DialogFooter>
-            <DialogClose render={<Button type="button" variant="outline" />}>Cancel</DialogClose>
+            <DialogClose render={<Button type="button" variant="outline" />}>
+              Cancel
+            </DialogClose>
             <Button disabled={mutation.isPending} type="submit">
               {mutation.isPending ? "Creating…" : "Create Product"}
             </Button>
@@ -236,7 +267,7 @@ export function ProductsPage({
         </form>
       </DialogContent>
     </Dialog>
-  )
+  );
 
   return (
     <WorkspacePage
@@ -246,7 +277,10 @@ export function ProductsPage({
       title="Products"
     >
       {returnTo ? (
-        <a className="text-primary inline-flex text-sm font-semibold" href={returnTo}>
+        <a
+          className="inline-flex font-semibold text-primary text-sm"
+          href={returnTo}
+        >
           {describeReturnDestination(returnTo)}
         </a>
       ) : null}
@@ -257,31 +291,37 @@ export function ProductsPage({
         <div className="flex flex-wrap items-center gap-3">
           <Link
             className={buttonVariants({ variant: "outline" })}
-            params={(prev) => prev}
+            params={(prev) => ({
+              ...prev,
+              ...workspaceScopeParams(prev),
+            })}
             to="/orgs/$organizationId/projects/$projectId/env/$environmentKey/catalog/providers"
           >
             Review Purchase setup
           </Link>
           <p className="text-muted-foreground text-xs">
-            Provider catalog IDs stay behind mappings; Paywalls continue referencing stable Mosaic
-            Product IDs.
+            Provider catalog IDs stay behind mappings; Paywalls continue
+            referencing stable Mosaic Product IDs.
           </p>
         </div>
       </WorkflowPanel>
       <WorkflowPanel title="Filters">
         <div className="grid gap-3 sm:grid-cols-3">
-          <label className="text-sm font-medium">
+          <label className="font-medium text-sm">
             Search
             <Input
               className="mt-2"
               onChange={(event) =>
-                onFiltersChange({ ...filters, search: event.target.value || undefined })
+                onFiltersChange({
+                  ...filters,
+                  search: event.target.value || undefined,
+                })
               }
               placeholder="Search Products"
               value={filters.search ?? ""}
             />
           </label>
-          <div className="text-sm font-medium">
+          <div className="font-medium text-sm">
             <label htmlFor="product-status-filter">Status</label>
             <Select
               items={STATUS_FILTER_OPTIONS}
@@ -305,7 +345,7 @@ export function ProductsPage({
               </SelectContent>
             </Select>
           </div>
-          <div className="text-sm font-medium">
+          <div className="font-medium text-sm">
             <label htmlFor="product-type-filter">Type</label>
             <Select
               items={TYPE_FILTER_OPTIONS}
@@ -335,18 +375,32 @@ export function ProductsPage({
         <WorkflowPanel title="Products">
           <ul className="divide-y">
             {items.map((product) => (
-              <li className="flex items-center justify-between gap-4 py-4" key={product.id}>
+              <li
+                className="flex items-center justify-between gap-4 py-4"
+                key={product.id}
+              >
                 <span>
-                  <span className="block text-sm font-semibold">{product.internalName}</span>
-                  <span className="text-muted-foreground mt-1 block text-xs">
-                    {product.type === "subscription" ? "Subscription" : "One-time"} ·{" "}
-                    {product.metadataSource === "mock" ? "Mock metadata" : "Provider metadata"} ·{" "}
-                    {product.status.replaceAll("_", " ")}
+                  <span className="block font-semibold text-sm">
+                    {product.internalName}
+                  </span>
+                  <span className="mt-1 block text-muted-foreground text-xs">
+                    {product.type === "subscription"
+                      ? "Subscription"
+                      : "One-time"}{" "}
+                    ·{" "}
+                    {product.metadataSource === "mock"
+                      ? "Mock metadata"
+                      : "Provider metadata"}{" "}
+                    · {product.status.replaceAll("_", " ")}
                   </span>
                 </span>
                 <Link
-                  className="text-primary text-sm font-medium hover:underline"
-                  params={(prev) => ({ ...prev, productId: product.id })}
+                  className="font-medium text-primary text-sm hover:underline"
+                  params={(prev) => ({
+                    ...prev,
+                    ...workspaceScopeParams(prev),
+                    productId: product.id,
+                  })}
                   search={returnTo ? { returnTo } : {}}
                   to="/orgs/$organizationId/projects/$projectId/env/$environmentKey/catalog/products/$productId"
                 >
@@ -358,5 +412,5 @@ export function ProductsPage({
         </WorkflowPanel>
       </HostedResourceBoundary>
     </WorkspacePage>
-  )
+  );
 }

@@ -1,33 +1,23 @@
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
-import { useState } from "react"
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useState } from "react";
 
-import { Button } from "@/components/ui/button"
-import { HostedResourceBoundary } from "@/features/auth/components/hosted-resource-boundary"
-import { resolveHostedQueryState } from "@/features/auth/types/hosted-query-state"
-import {
-  DefinitionRow,
-  EnvironmentBadges,
-  LedgerPaging,
-  StatusPill,
-} from "@/features/billing-ledger/components/billing-chrome"
-import {
-  cappedListHeading,
-  pagedListHeading,
-} from "@/features/billing-ledger/types/billing-list-headings"
-import { providerLabel } from "@/features/billing-ledger/types/billing-vocabulary"
-import { EntitlementExplanationPanel } from "@/features/billing-customers/components/entitlement-explanation-panel"
-import { requestCustomerSyncMutationOptions } from "@/features/billing-customers/mutations/customer-mutations"
+import { Button } from "@/components/ui/button";
+import { HostedResourceBoundary } from "@/features/auth/components/hosted-resource-boundary";
+import { resolveHostedQueryState } from "@/features/auth/types/hosted-query-state";
+import { EntitlementExplanationPanel } from "@/features/billing-customers/components/entitlement-explanation-panel";
+import { SubscriptionStateAxes } from "@/features/billing-customers/components/subscription-state-axes";
+import { requestCustomerSyncMutationOptions } from "@/features/billing-customers/mutations/customer-mutations";
 import {
   billingCustomerQueryOptions,
   customerEntitlementSnapshotQueryOptions,
   customerSubscriptionsQueryOptions,
   projectionRefetchInterval,
-} from "@/features/billing-customers/queries/customer-queries"
+} from "@/features/billing-customers/queries/customer-queries";
 import {
-  aliasTypeLabel,
-  aliasTypeNote,
   AUTHORITATIVE_ACCESS_NOTE,
   AUTHORITATIVE_TIMESTAMP_NOTE,
+  aliasTypeLabel,
+  aliasTypeNote,
   customerDiagnosticsLabel,
   customerIdentityExplanation,
   customerIdentityLabel,
@@ -43,17 +33,28 @@ import {
   projectionStatusTone,
   sourceAuthorityLabel,
   verificationStatusLabel,
-} from "@/features/billing-customers/types/entitlement-vocabulary"
-import { SubscriptionStateAxes } from "@/features/billing-customers/components/subscription-state-axes"
-import { environmentsQueryOptions } from "@/features/environments/queries/environments-query"
-import { ScopeMismatchRecovery } from "@/features/orgs/components/scope-mismatch-recovery"
+} from "@/features/billing-customers/types/entitlement-vocabulary";
+import {
+  DefinitionRow,
+  EnvironmentBadges,
+  LedgerPaging,
+  StatusPill,
+} from "@/features/billing-ledger/components/billing-chrome";
+import {
+  cappedListHeading,
+  pagedListHeading,
+} from "@/features/billing-ledger/types/billing-list-headings";
+import { providerLabel } from "@/features/billing-ledger/types/billing-vocabulary";
+import { environmentsQueryOptions } from "@/features/environments/queries/environments-query";
+import { ScopeMismatchRecovery } from "@/features/orgs/components/scope-mismatch-recovery";
 import {
   ScopeBadge,
   WorkflowPanel,
   WorkspacePage,
-} from "@/features/orgs/components/workspace-page"
-import { useValidatedProjectScope } from "@/features/projects/hooks/use-validated-project-scope"
-import { useOrganizationAccess } from "@/hooks/use-organization-access"
+} from "@/features/orgs/components/workspace-page";
+import { useValidatedProjectScope } from "@/features/projects/hooks/use-validated-project-scope";
+import type { BillingSubscriptionSnapshot } from "@/generated/api";
+import { useOrganizationAccess } from "@/hooks/use-organization-access";
 import {
   billingCustomersHref,
   billingIdentityConflictHref,
@@ -61,14 +62,13 @@ import {
   billingSubscriptionHref,
   catalogProductHref,
   type WorkspaceScope,
-} from "@/lib/routing/workspace-hrefs"
-import type { BillingSubscriptionSnapshot } from "@/generated/api"
+} from "@/lib/routing/workspace-hrefs";
 
 interface CustomerDetailPageProps {
-  customerId: string
-  environmentId: string
-  organizationId: string
-  projectId: string
+  customerId: string;
+  environmentId: string;
+  organizationId: string;
+  projectId: string;
 }
 
 /**
@@ -85,51 +85,72 @@ export function CustomerDetailPage({
   organizationId,
   projectId,
 }: CustomerDetailPageProps) {
-  const { project, scopeMismatch, scopeReady } = useValidatedProjectScope(organizationId, projectId)
-  const access = useOrganizationAccess(organizationId)
-  const queryClient = useQueryClient()
-  const environments = useQuery({ ...environmentsQueryOptions(projectId), enabled: scopeReady })
+  const { project, scopeMismatch, scopeReady } = useValidatedProjectScope(
+    organizationId,
+    projectId
+  );
+  const access = useOrganizationAccess(organizationId);
+  const queryClient = useQueryClient();
+  const environments = useQuery({
+    ...environmentsQueryOptions(projectId),
+    enabled: scopeReady,
+  });
   const sync = useMutation(
-    requestCustomerSyncMutationOptions(projectId, environmentId, customerId, queryClient),
-  )
+    requestCustomerSyncMutationOptions(
+      projectId,
+      environmentId,
+      customerId,
+      queryClient
+    )
+  );
   // A queued recomputation is the one moment the page is expected to change
   // without the operator doing anything, so both authoritative reads poll until
   // the projection reports `current` and then stop.
-  const recomputeQueued = sync.isSuccess
+  const recomputeQueued = sync.isSuccess;
   const detail = useQuery({
-    ...billingCustomerQueryOptions(projectId, environmentId, customerId, recomputeQueued),
+    ...billingCustomerQueryOptions(
+      projectId,
+      environmentId,
+      customerId,
+      recomputeQueued
+    ),
     enabled: scopeReady,
-  })
+  });
   const snapshot = useQuery({
     ...customerEntitlementSnapshotQueryOptions(
       projectId,
       environmentId,
       customerId,
-      recomputeQueued,
+      recomputeQueued
     ),
     enabled: scopeReady,
-  })
+  });
 
   const environmentName =
-    environments.data?.items.find((item) => item.id === environmentId)?.name ?? environmentId
-  const customer = detail.data?.customer
-  const projectionStatus = snapshot.data?.projectionStatus ?? detail.data?.projectionStatus
-  const currentSnapshot = snapshot.data?.snapshot ?? detail.data?.currentSnapshot
+    environments.data?.items.find((item) => item.id === environmentId)?.name ??
+    environmentId;
+  const customer = detail.data?.customer;
+  const projectionStatus =
+    snapshot.data?.projectionStatus ?? detail.data?.projectionStatus;
+  const currentSnapshot =
+    snapshot.data?.snapshot ?? detail.data?.currentSnapshot;
 
-  const error = project.error ?? environments.error ?? detail.error
+  const error = project.error ?? environments.error ?? detail.error;
   const state = resolveHostedQueryState({
     error,
     isEmpty: false,
-    isPending: project.isPending || (scopeReady && (environments.isPending || detail.isPending)),
+    isPending:
+      project.isPending ||
+      (scopeReady && (environments.isPending || detail.isPending)),
     loadingDescription: "Loading this Billing Customer's authoritative state.",
     onRetry: () => {
-      void detail.refetch()
-      void snapshot.refetch()
+      detail.refetch();
+      snapshot.refetch();
     },
     permissionDescription:
       "Organization owner or admin permission is required to read a Billing Customer.",
     scope: { environmentId, organizationId, projectId },
-  })
+  });
 
   if (scopeMismatch) {
     return (
@@ -143,10 +164,10 @@ export function CustomerDetailPage({
           projectId={projectId}
         />
       </WorkspacePage>
-    )
+    );
   }
 
-  const scope = { environmentId, organizationId, projectId }
+  const scope = { environmentId, organizationId, projectId };
 
   return (
     <WorkspacePage
@@ -154,11 +175,16 @@ export function CustomerDetailPage({
       eyebrow="Mosaic Billing · Customer"
       title={customerId}
     >
-      <a className="text-primary text-sm font-semibold" href={billingCustomersHref(scope) ?? "#"}>
+      <a
+        className="font-semibold text-primary text-sm"
+        href={billingCustomersHref(scope) ?? "#"}
+      >
         Back to Customers
       </a>
 
-      <p className="text-muted-foreground text-xs leading-5">{AUTHORITATIVE_ACCESS_NOTE}</p>
+      <p className="text-muted-foreground text-xs leading-5">
+        {AUTHORITATIVE_ACCESS_NOTE}
+      </p>
 
       <HostedResourceBoundary state={state}>
         <WorkflowPanel title="Customer">
@@ -167,11 +193,15 @@ export function CustomerDetailPage({
               label={customerStatusLabel(customer?.status)}
               tone={customerStatusTone(customer?.status)}
             />
-            <StatusPill label={customerIdentityLabel(customer ?? {})} tone="neutral" />
+            <StatusPill
+              label={customerIdentityLabel(customer ?? {})}
+              tone="neutral"
+            />
             {customer?.hasOpenIdentityConflict ? (
               <StatusPill label="Open identity conflict" tone="attention" />
             ) : null}
-            {customer?.diagnosticsStatus && customer.diagnosticsStatus !== "none" ? (
+            {customer?.diagnosticsStatus &&
+            customer.diagnosticsStatus !== "none" ? (
               <StatusPill
                 label={customerDiagnosticsLabel(customer.diagnosticsStatus)}
                 tone="attention"
@@ -179,15 +209,21 @@ export function CustomerDetailPage({
             ) : null}
           </div>
 
-          <p className="mt-3 text-sm leading-6">{customerIdentityExplanation(customer ?? {})}</p>
+          <p className="mt-3 text-sm leading-6">
+            {customerIdentityExplanation(customer ?? {})}
+          </p>
 
           <div className="mt-3 flex flex-wrap items-center gap-2">
             <ScopeBadge>
-              <span className="text-muted-foreground/80 mr-1">Identity scope:</span>
+              <span className="mr-1 text-muted-foreground/80">
+                Identity scope:
+              </span>
               Project-wide
             </ScopeBadge>
             <ScopeBadge>
-              <span className="text-muted-foreground/80 mr-1">Access scope:</span>
+              <span className="mr-1 text-muted-foreground/80">
+                Access scope:
+              </span>
               {environmentName}
             </ScopeBadge>
           </div>
@@ -211,7 +247,7 @@ export function CustomerDetailPage({
             <DefinitionRow
               label="Last projected at (when the run committed)"
               value={formatEntitlementInstant(
-                projectionStatus?.lastProjectedAt ?? customer?.lastProjectedAt,
+                projectionStatus?.lastProjectedAt ?? customer?.lastProjectedAt
               )}
             />
             <DefinitionRow
@@ -219,7 +255,7 @@ export function CustomerDetailPage({
               value={String(currentSnapshot?.projectionRuleVersion ?? "—")}
             />
           </dl>
-          <p className="text-muted-foreground mt-2 text-xs leading-5">
+          <p className="mt-2 text-muted-foreground text-xs leading-5">
             {AUTHORITATIVE_TIMESTAMP_NOTE}
           </p>
         </WorkflowPanel>
@@ -233,15 +269,23 @@ export function CustomerDetailPage({
             {projectionStatusExplanation(projectionStatus?.state)}
           </p>
           {projectionStatus?.pendingFactCount ? (
-            <p className="text-muted-foreground mt-1 text-sm leading-6">
-              {projectionStatus.pendingFactCount} fact(s) recorded but not yet projected. Until they
-              are, entries derived from them read undetermined rather than inactive.
+            <p className="mt-1 text-muted-foreground text-sm leading-6">
+              {projectionStatus.pendingFactCount} fact(s) recorded but not yet
+              projected. Until they are, entries derived from them read
+              undetermined rather than inactive.
             </p>
           ) : null}
-          {projectionRefetchInterval(projectionStatus?.state, recomputeQueued) ? (
-            <p className="text-muted-foreground mt-1 text-sm leading-6" role="status">
-              Watching for the projection to commit. This page re-reads every few seconds and stops
-              on its own once the projection reports current.
+          {projectionRefetchInterval(
+            projectionStatus?.state,
+            recomputeQueued
+          ) ? (
+            <p
+              className="mt-1 text-muted-foreground text-sm leading-6"
+              role="status"
+            >
+              Watching for the projection to commit. This page re-reads every
+              few seconds and stops on its own once the projection reports
+              current.
             </p>
           ) : null}
 
@@ -250,26 +294,34 @@ export function CustomerDetailPage({
               {/* Deliberately not called "restore". No operator action can make
                   a store replay a person's purchases; this recomputes access
                   from facts Mosaic already holds. */}
-              <Button disabled={sync.isPending} onClick={() => sync.mutate()} type="button">
+              <Button
+                disabled={sync.isPending}
+                onClick={() => sync.mutate()}
+                type="button"
+              >
                 {sync.isPending ? "Queueing…" : "Recompute projection"}
               </Button>
-              <p className="text-muted-foreground mt-2 text-xs leading-5">
-                Queues a recomputation of this customer&rsquo;s committed access from the facts
-                Mosaic already holds. It is not a device restore and cannot pull purchases from a
-                store — for that, see{" "}
-                <a className="text-primary font-semibold" href={billingRestoresHref(scope) ?? "#"}>
+              <p className="mt-2 text-muted-foreground text-xs leading-5">
+                Queues a recomputation of this customer&rsquo;s committed access
+                from the facts Mosaic already holds. It is not a device restore
+                and cannot pull purchases from a store — for that, see{" "}
+                <a
+                  className="font-semibold text-primary"
+                  href={billingRestoresHref(scope) ?? "#"}
+                >
                   restores
                 </a>
                 . Requests coalesce, so clicking twice produces one projection.
               </p>
               {sync.isSuccess ? (
                 <p className="mt-2 text-sm leading-6" role="status">
-                  Queued. The snapshot version moves once the projection commits; a projection that
-                  changes nothing does not advance it.
+                  Queued. The snapshot version moves once the projection
+                  commits; a projection that changes nothing does not advance
+                  it.
                 </p>
               ) : null}
               {sync.error ? (
-                <p className="text-destructive mt-2 text-sm" role="alert">
+                <p className="mt-2 text-destructive text-sm" role="alert">
                   {sync.error.message}
                 </p>
               ) : null}
@@ -287,17 +339,24 @@ export function CustomerDetailPage({
                 <li className="rounded border p-3" key={conflict.conflictId}>
                   <div className="flex flex-wrap items-center justify-between gap-2">
                     <a
-                      className="text-primary font-mono text-sm font-semibold break-all"
-                      href={billingIdentityConflictHref(scope, conflict.conflictId ?? "") ?? "#"}
+                      className="break-all font-mono font-semibold text-primary text-sm"
+                      href={
+                        billingIdentityConflictHref(
+                          scope,
+                          conflict.conflictId ?? ""
+                        ) ?? "#"
+                      }
                     >
                       {conflict.conflictId}
                     </a>
                     <StatusPill
                       label={conflict.status === "open" ? "Open" : "Resolved"}
-                      tone={conflict.status === "open" ? "attention" : "neutral"}
+                      tone={
+                        conflict.status === "open" ? "attention" : "neutral"
+                      }
                     />
                   </div>
-                  <p className="text-muted-foreground mt-1 text-xs">
+                  <p className="mt-1 text-muted-foreground text-xs">
                     Scope {conflict.scope ?? "—"} · opened{" "}
                     {formatEntitlementInstant(conflict.openedAt)}
                   </p>
@@ -315,25 +374,32 @@ export function CustomerDetailPage({
         >
           {(detail.data?.aliases ?? []).length === 0 ? (
             <p className="text-sm leading-6">
-              No alias is recorded. For a purchase-anchored customer that is expected: the purchase
-              is anchored to the store&rsquo;s own chain, not to a person.
+              No alias is recorded. For a purchase-anchored customer that is
+              expected: the purchase is anchored to the store&rsquo;s own chain,
+              not to a person.
             </p>
           ) : (
             <ul className="space-y-2">
               {(detail.data?.aliases ?? []).map((alias) => (
                 <li className="rounded border p-3" key={alias.aliasId}>
                   <div className="flex flex-wrap items-center gap-2">
-                    <span className="text-sm font-medium">{aliasTypeLabel(alias.aliasType)}</span>
+                    <span className="font-medium text-sm">
+                      {aliasTypeLabel(alias.aliasType)}
+                    </span>
                     <StatusPill
                       label={verificationStatusLabel(alias.verificationStatus)}
-                      tone={alias.verificationStatus === "verified" ? "positive" : "neutral"}
+                      tone={
+                        alias.verificationStatus === "verified"
+                          ? "positive"
+                          : "neutral"
+                      }
                     />
                     <StatusPill
                       label={alias.active ? "Active" : "Ended"}
                       tone={alias.active ? "positive" : "neutral"}
                     />
                   </div>
-                  <p className="text-muted-foreground mt-1 text-xs">
+                  <p className="mt-1 text-muted-foreground text-xs">
                     {sourceAuthorityLabel(alias.sourceAuthority)} ·{" "}
                     {formatEntitlementInstant(alias.effectiveStart)}
                     {alias.effectiveEnd
@@ -341,7 +407,7 @@ export function CustomerDetailPage({
                       : " → active"}
                   </p>
                   {aliasTypeNote(alias.aliasType) ? (
-                    <p className="text-muted-foreground mt-1 text-xs leading-5">
+                    <p className="mt-1 text-muted-foreground text-xs leading-5">
                       {aliasTypeNote(alias.aliasType)}
                     </p>
                   ) : null}
@@ -357,22 +423,37 @@ export function CustomerDetailPage({
         >
           {(detail.data?.purchaseLineages ?? []).length === 0 ? (
             <p className="text-sm leading-6">
-              No purchase lineage is recorded for this customer in this Mosaic Environment.
+              No purchase lineage is recorded for this customer in this Mosaic
+              Environment.
             </p>
           ) : (
             <ul className="space-y-2">
               {(detail.data?.purchaseLineages ?? []).map((lineage) => (
-                <li className="rounded border p-3" key={lineage.purchaseLineageId}>
+                <li
+                  className="rounded border p-3"
+                  key={lineage.purchaseLineageId}
+                >
                   <div className="flex flex-wrap items-center justify-between gap-2">
-                    <span className="font-mono text-xs break-all">{lineage.purchaseLineageId}</span>
+                    <span className="break-all font-mono text-xs">
+                      {lineage.purchaseLineageId}
+                    </span>
                     <div className="flex flex-wrap items-center gap-2">
-                      <StatusPill label={providerLabel(lineage.provider)} tone="neutral" />
+                      <StatusPill
+                        label={providerLabel(lineage.provider)}
+                        tone="neutral"
+                      />
                       {lineage.projectionFrozen ? (
-                        <StatusPill label="Projection frozen" tone="attention" />
-                      ) : null}
-                      {lineage.diagnosticStatus && lineage.diagnosticStatus !== "none" ? (
                         <StatusPill
-                          label={lineageDiagnosticLabel(lineage.diagnosticStatus)}
+                          label="Projection frozen"
+                          tone="attention"
+                        />
+                      ) : null}
+                      {lineage.diagnosticStatus &&
+                      lineage.diagnosticStatus !== "none" ? (
+                        <StatusPill
+                          label={lineageDiagnosticLabel(
+                            lineage.diagnosticStatus
+                          )}
                           tone="attention"
                         />
                       ) : null}
@@ -385,7 +466,7 @@ export function CustomerDetailPage({
                     />
                   </div>
                   {lineage.projectionFrozen ? (
-                    <p className="text-muted-foreground mt-2 text-xs leading-5">
+                    <p className="mt-2 text-muted-foreground text-xs leading-5">
                       {PROJECTION_FROZEN_NOTE}
                     </p>
                   ) : null}
@@ -410,13 +491,18 @@ export function CustomerDetailPage({
           title="One-time purchases"
         >
           {(detail.data?.oneTimePurchases ?? []).length === 0 ? (
-            <p className="text-sm leading-6">No one-time purchase is recorded for this customer.</p>
+            <p className="text-sm leading-6">
+              No one-time purchase is recorded for this customer.
+            </p>
           ) : (
             <ul className="space-y-2">
               {(detail.data?.oneTimePurchases ?? []).map((purchase) => (
-                <li className="rounded border p-3" key={purchase.oneTimePurchaseInstanceId}>
+                <li
+                  className="rounded border p-3"
+                  key={purchase.oneTimePurchaseInstanceId}
+                >
                   <div className="flex flex-wrap items-center justify-between gap-2">
-                    <span className="font-mono text-xs break-all">
+                    <span className="break-all font-mono text-xs">
                       {purchase.oneTimePurchaseInstanceId}
                     </span>
                     <StatusPill
@@ -424,14 +510,17 @@ export function CustomerDetailPage({
                       tone={oneTimeValidityTone(purchase.validityState)}
                     />
                   </div>
-                  <p className="text-muted-foreground mt-1 text-xs">
+                  <p className="mt-1 text-muted-foreground text-xs">
                     {providerLabel(purchase.provider)} · acquired{" "}
                     {formatEntitlementInstant(purchase.acquiredAt)}
                   </p>
                   {purchase.mosaicProductId ? (
                     <a
-                      className="text-primary mt-1 inline-flex text-xs font-semibold"
-                      href={catalogProductHref(scope, purchase.mosaicProductId) ?? "#"}
+                      className="mt-1 inline-flex font-semibold text-primary text-xs"
+                      href={
+                        catalogProductHref(scope, purchase.mosaicProductId) ??
+                        "#"
+                      }
                     >
                       Product
                     </a>
@@ -443,7 +532,7 @@ export function CustomerDetailPage({
         </WorkflowPanel>
       </HostedResourceBoundary>
     </WorkspacePage>
-  )
+  );
 }
 
 /**
@@ -451,7 +540,7 @@ export function CustomerDetailPage({
  * page is one request. This is the bound, and it must match the API's own —
  * disclosing a cap that is not the real cap is worse than disclosing none.
  */
-const EMBEDDED_SUBSCRIPTION_CAP = 50
+const EMBEDDED_SUBSCRIPTION_CAP = 50;
 
 /**
  * The detail response's own count of this customer's subscriptions, when it
@@ -464,10 +553,14 @@ const EMBEDDED_SUBSCRIPTION_CAP = 50
  * which is the case where saying nothing is most likely to mislead.
  */
 function embeddedSubscriptionTotal(detail: unknown): number | undefined {
-  if (!detail || typeof detail !== "object") return undefined
-  const record = detail as Record<string, unknown>
-  const value = record.subscriptionTotalCount ?? record.totalCount
-  return typeof value === "number" && Number.isFinite(value) ? value : undefined
+  if (!detail || typeof detail !== "object") {
+    return;
+  }
+  const record = detail as Record<string, unknown>;
+  const value = record.subscriptionTotalCount ?? record.totalCount;
+  return typeof value === "number" && Number.isFinite(value)
+    ? value
+    : undefined;
 }
 
 /**
@@ -490,27 +583,32 @@ function CustomerSubscriptionsPanel({
   scopeReady,
   totalCount,
 }: {
-  customerId: string
-  embedded: readonly BillingSubscriptionSnapshot[]
-  environmentId: string
-  projectId: string
-  scope: WorkspaceScope
-  scopeReady: boolean
-  totalCount: number | undefined
+  customerId: string;
+  embedded: readonly BillingSubscriptionSnapshot[];
+  environmentId: string;
+  projectId: string;
+  scope: WorkspaceScope;
+  scopeReady: boolean;
+  totalCount: number | undefined;
 }) {
-  const [expanded, setExpanded] = useState(false)
-  const [cursor, setCursor] = useState<string | undefined>(undefined)
+  const [expanded, setExpanded] = useState(false);
+  const [cursor, setCursor] = useState<string | undefined>(undefined);
 
   const paged = useQuery({
-    ...customerSubscriptionsQueryOptions(projectId, environmentId, customerId, cursor),
+    ...customerSubscriptionsQueryOptions(
+      projectId,
+      environmentId,
+      customerId,
+      cursor
+    ),
     enabled: scopeReady && expanded,
-  })
+  });
 
   const capped =
-    totalCount !== undefined
-      ? totalCount > embedded.length
-      : embedded.length >= EMBEDDED_SUBSCRIPTION_CAP
-  const items = expanded ? (paged.data?.items ?? []) : embedded
+    totalCount === undefined
+      ? embedded.length >= EMBEDDED_SUBSCRIPTION_CAP
+      : totalCount > embedded.length;
+  const items = expanded ? (paged.data?.items ?? []) : embedded;
 
   return (
     <WorkflowPanel
@@ -532,12 +630,14 @@ function CustomerSubscriptionsPanel({
       }
     >
       {!expanded && capped ? (
-        <p className="text-muted-foreground mb-3 text-sm leading-6">
-          This panel carries the first {EMBEDDED_SUBSCRIPTION_CAP} the detail read returns
-          {totalCount === undefined ? " and there may be more" : ""}. Open the full list to page
-          through every Subscription Instance Mosaic holds for this customer.{" "}
+        <p className="mb-3 text-muted-foreground text-sm leading-6">
+          This panel carries the first {EMBEDDED_SUBSCRIPTION_CAP} the detail
+          read returns
+          {totalCount === undefined ? " and there may be more" : ""}. Open the
+          full list to page through every Subscription Instance Mosaic holds for
+          this customer.{" "}
           <button
-            className="text-primary font-semibold"
+            className="font-semibold text-primary"
             onClick={() => setExpanded(true)}
             type="button"
           >
@@ -565,11 +665,17 @@ function CustomerSubscriptionsPanel({
       ) : (
         <ul className="space-y-3">
           {items.map((subscription) => (
-            <li className="rounded border p-4" key={subscription.subscriptionInstanceId}>
+            <li
+              className="rounded border p-4"
+              key={subscription.subscriptionInstanceId}
+            >
               <a
-                className="text-primary font-mono text-sm font-semibold break-all"
+                className="break-all font-mono font-semibold text-primary text-sm"
                 href={
-                  billingSubscriptionHref(scope, subscription.subscriptionInstanceId ?? "") ?? "#"
+                  billingSubscriptionHref(
+                    scope,
+                    subscription.subscriptionInstanceId ?? ""
+                  ) ?? "#"
                 }
               >
                 {subscription.subscriptionInstanceId}
@@ -591,5 +697,5 @@ function CustomerSubscriptionsPanel({
         />
       ) : null}
     </WorkflowPanel>
-  )
+  );
 }

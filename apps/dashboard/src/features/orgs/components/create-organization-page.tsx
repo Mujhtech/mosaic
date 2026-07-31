@@ -1,29 +1,39 @@
-import { useForm } from "@tanstack/react-form"
-import { useMutation, useQueryClient } from "@tanstack/react-query"
-import { useNavigate } from "@tanstack/react-router"
+import { useForm } from "@tanstack/react-form";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useNavigate } from "@tanstack/react-router";
 
-import { Button } from "@/components/ui/button"
-import { Field, FieldDescription, FieldError, FieldLabel } from "@/components/ui/field"
-import { Input } from "@/components/ui/input"
-import { HostedAccessBanner } from "@/features/auth/components/hosted-access-banner"
-import { createOrganizationMutationOptions } from "@/features/orgs/mutations/organization-mutations"
-import { WorkspacePage, WorkflowPanel } from "@/features/orgs/components/workspace-page"
-import { ApiError } from "@/lib/api/errors"
+import { Button } from "@/components/ui/button";
+import {
+  Field,
+  FieldDescription,
+  FieldError,
+  FieldLabel,
+} from "@/components/ui/field";
+import { Input } from "@/components/ui/input";
+import { HostedAccessBanner } from "@/features/auth/components/hosted-access-banner";
+import {
+  WorkflowPanel,
+  WorkspacePage,
+} from "@/features/orgs/components/workspace-page";
+import { createOrganizationMutationOptions } from "@/features/orgs/mutations/organization-mutations";
+import { ApiError } from "@/lib/api/errors";
 
 export function CreateOrganizationPage() {
-  const navigate = useNavigate()
-  const queryClient = useQueryClient()
-  const mutation = useMutation(createOrganizationMutationOptions(queryClient))
+  const navigate = useNavigate();
+  const queryClient = useQueryClient();
+  const mutation = useMutation(createOrganizationMutationOptions(queryClient));
   const form = useForm({
     defaultValues: { name: "" },
     onSubmit: async ({ value }) => {
-      const organization = await mutation.mutateAsync({ name: value.name.trim() })
+      const organization = await mutation.mutateAsync({
+        name: value.name.trim(),
+      });
       await navigate({
         params: { organizationId: organization.id },
         to: "/orgs/$organizationId",
-      })
+      });
     },
-  })
+  });
 
   return (
     <WorkspacePage
@@ -37,9 +47,9 @@ export function CreateOrganizationPage() {
         <form
           className="max-w-xl space-y-5"
           onSubmit={(event) => {
-            event.preventDefault()
-            event.stopPropagation()
-            void form.handleSubmit()
+            event.preventDefault();
+            event.stopPropagation();
+            form.handleSubmit();
           }}
         >
           <form.Field
@@ -54,8 +64,12 @@ export function CreateOrganizationPage() {
             }}
           >
             {(field) => (
-              <Field data-invalid={field.state.meta.errors.length > 0 || undefined}>
-                <FieldLabel htmlFor="organization-name">Organization name</FieldLabel>
+              <Field
+                data-invalid={field.state.meta.errors.length > 0 || undefined}
+              >
+                <FieldLabel htmlFor="organization-name">
+                  Organization name
+                </FieldLabel>
                 <Input
                   aria-invalid={field.state.meta.errors.length > 0 || undefined}
                   autoComplete="organization"
@@ -65,20 +79,33 @@ export function CreateOrganizationPage() {
                   placeholder="Acme Mobile"
                   value={field.state.value}
                 />
-                <FieldDescription>Visible to every member of this organization.</FieldDescription>
-                <FieldError errors={field.state.meta.errors.map((message) => ({ message }))} />
+                <FieldDescription>
+                  Visible to every member of this organization.
+                </FieldDescription>
+                <FieldError
+                  errors={field.state.meta.errors.map((message) => ({
+                    message,
+                  }))}
+                />
               </Field>
             )}
           </form.Field>
           {mutation.error &&
-          !(mutation.error instanceof ApiError && mutation.error.status === 401) ? (
+          !(
+            mutation.error instanceof ApiError && mutation.error.status === 401
+          ) ? (
             <p className="text-destructive text-sm" role="alert">
               {mutation.error.message}
             </p>
           ) : null}
-          <form.Subscribe selector={(state) => [state.canSubmit, state.isSubmitting]}>
+          <form.Subscribe
+            selector={(state) => [state.canSubmit, state.isSubmitting]}
+          >
             {([canSubmit, isSubmitting]) => (
-              <Button disabled={!canSubmit || isSubmitting || mutation.isPending} type="submit">
+              <Button
+                disabled={!canSubmit || isSubmitting || mutation.isPending}
+                type="submit"
+              >
                 {mutation.isPending ? "Creating…" : "Create organization"}
               </Button>
             )}
@@ -86,5 +113,5 @@ export function CreateOrganizationPage() {
         </form>
       </WorkflowPanel>
     </WorkspacePage>
-  )
+  );
 }

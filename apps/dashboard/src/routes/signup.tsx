@@ -1,12 +1,12 @@
-import { createFileRoute } from "@tanstack/react-router"
+import { createFileRoute } from "@tanstack/react-router";
 
-import { AuthPageShell } from "@/features/auth/components/auth-page-shell"
-import { SignupForm } from "@/features/auth/components/signup-form"
-import { safeInternalReturnTo } from "@/features/auth/types/hosted-access"
-import { routeHead } from "@/lib/routing/route-head"
+import { AuthPageShell } from "@/features/auth/components/auth-page-shell";
+import { SignupForm } from "@/features/auth/components/signup-form";
+import { safeInternalReturnTo } from "@/features/auth/types/hosted-access";
+import { routeHead } from "@/lib/routing/route-head";
 
 interface AuthRouteSearch {
-  returnTo?: string
+  returnTo?: string;
 }
 
 export const Route = createFileRoute("/signup")({
@@ -17,16 +17,16 @@ export const Route = createFileRoute("/signup")({
       title: "Sign up",
     }),
   validateSearch: (search: Record<string, unknown>): AuthRouteSearch => {
-    const returnTo = safeInternalReturnTo(search.returnTo, "")
-    return returnTo ? { returnTo } : {}
+    const returnTo = safeInternalReturnTo(search.returnTo, "");
+    return returnTo ? { returnTo } : {};
   },
-})
+});
 
 function SignupRoute() {
-  const { returnTo } = Route.useSearch()
+  const { returnTo } = Route.useSearch();
   return (
     <AuthPageShell>
       <SignupForm returnTo={returnTo} />
     </AuthPageShell>
-  )
+  );
 }

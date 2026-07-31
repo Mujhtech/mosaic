@@ -1,10 +1,10 @@
-import { queryOptions } from "@tanstack/react-query"
+import { queryOptions } from "@tanstack/react-query";
 
 import {
   getOperatorBillingIdentityConflict,
   listOperatorBillingIdentityConflicts,
-} from "@/generated/api"
-import { generatedDashboardClient } from "@/lib/api/generated-dashboard-client"
+} from "@/generated/api";
+import { generatedDashboardClient } from "@/lib/api/generated-dashboard-client";
 
 /**
  * Identity conflicts are Project-scoped, so their query keys are too.
@@ -21,9 +21,12 @@ export const conflictKeys = {
   list: (projectId: string, status: string) =>
     ["billing-conflicts", projectId, "conflicts", status] as const,
   scope: (projectId: string) => ["billing-conflicts", projectId] as const,
-}
+};
 
-export function identityConflictsQueryOptions(projectId: string, status: "open" | "resolved") {
+export function identityConflictsQueryOptions(
+  projectId: string,
+  status: "open" | "resolved"
+) {
   return queryOptions({
     queryKey: conflictKeys.list(projectId, status),
     queryFn: async ({ signal }) => {
@@ -33,13 +36,16 @@ export function identityConflictsQueryOptions(projectId: string, status: "open" 
         query: { status },
         signal,
         throwOnError: true,
-      })
-      return result.data.data?.items ?? []
+      });
+      return result.data.data?.items ?? [];
     },
-  })
+  });
 }
 
-export function identityConflictQueryOptions(projectId: string, conflictId: string) {
+export function identityConflictQueryOptions(
+  projectId: string,
+  conflictId: string
+) {
   return queryOptions({
     queryKey: conflictKeys.detail(projectId, conflictId),
     queryFn: async ({ signal }) => {
@@ -48,8 +54,8 @@ export function identityConflictQueryOptions(projectId: string, conflictId: stri
         path: { conflictId, projectId },
         signal,
         throwOnError: true,
-      })
-      return result.data.data
+      });
+      return result.data.data;
     },
-  })
+  });
 }

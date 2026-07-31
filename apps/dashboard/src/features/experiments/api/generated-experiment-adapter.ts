@@ -1,3 +1,9 @@
+import type {
+  Experiment as GeneratedExperiment,
+  ExperimentDraft as GeneratedExperimentDraft,
+  ExperimentQaOverride as GeneratedQaOverride,
+  ExperimentValidationIssue as GeneratedValidationIssue,
+} from "@/generated/api";
 import {
   createExperiment,
   createExperimentGroupVersion,
@@ -20,18 +26,10 @@ import {
   transitionExperimentLifecycle,
   updateExperimentDraft,
   validateExperimentDraft,
-} from "@/generated/api"
-import type {
-  Experiment as GeneratedExperiment,
-  ExperimentDraft as GeneratedExperimentDraft,
-  ExperimentQaOverride as GeneratedQaOverride,
-  ExperimentValidationIssue as GeneratedValidationIssue,
-} from "@/generated/api"
-import type { Client } from "@/generated/api/client"
-import { generatedDashboardClient } from "@/lib/api/generated-dashboard-client"
-import { ApiError } from "@/lib/api/errors"
-
-import { ExperimentDraftConflictError, type ExperimentAdapter } from "./experiment-adapter"
+} from "@/generated/api";
+import type { Client } from "@/generated/api/client";
+import { ApiError } from "@/lib/api/errors";
+import { generatedDashboardClient } from "@/lib/api/generated-dashboard-client";
 import type {
   ExperimentDetail,
   ExperimentDraft,
@@ -40,19 +38,25 @@ import type {
   ExperimentListItem,
   GuardrailResult,
   QaOverride,
-} from "../types/experiment"
+} from "../types/experiment";
+import {
+  type ExperimentAdapter,
+  ExperimentDraftConflictError,
+} from "./experiment-adapter";
+
+const MATURITY_WARNING = /window|matur/i;
 
 function createIdempotencyKey() {
   return typeof globalThis.crypto?.randomUUID === "function"
     ? globalThis.crypto.randomUUID()
-    : `mosaic-${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`
+    : `mosaic-${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
 }
 
-const draftIdempotencyKeys = new Map<string, string>()
-const createIdempotencyKeys = new Map<string, string>()
+const draftIdempotencyKeys = new Map<string, string>();
+const createIdempotencyKeys = new Map<string, string>();
 
 function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value)
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 function mapDraft(draft: GeneratedExperimentDraft): ExperimentDraft {
@@ -68,18 +72,19 @@ function mapDraft(draft: GeneratedExperimentDraft): ExperimentDraft {
     startsAt: draft.document.schedule.startsAt,
     updatedAt: draft.updatedAt,
     variants: draft.document.variants,
-  }
+  };
 }
 
 function mapExperiment(
   experiment: GeneratedExperiment,
-  placementNames: ReadonlyMap<string, string> = new Map(),
+  placementNames: ReadonlyMap<string, string> = new Map()
 ): ExperimentDetail {
-  const activeVersion = experiment.activeVersion
+  const activeVersion = experiment.activeVersion;
   const matchingDraft =
-    activeVersion && experiment.currentDraft?.revision === activeVersion.sourceRevision
+    activeVersion &&
+    experiment.currentDraft?.revision === activeVersion.sourceRevision
       ? experiment.currentDraft
-      : undefined
+      : undefined;
   return {
     activeDefinition: activeVersion
       ? {
@@ -88,14 +93,16 @@ function mapExperiment(
           bucketingAlgorithm: activeVersion.bucketingAlgorithm,
           endsAt: activeVersion.schedule.endsAt,
           guardrailMetricVersionIds: activeVersion.guardrailMetricVersionIds,
-          mutualExclusionGroupVersionId: activeVersion.mutualExclusionGroupVersionId,
+          mutualExclusionGroupVersionId:
+            activeVersion.mutualExclusionGroupVersionId,
           primaryMetricVersionId: activeVersion.primaryMetricVersionId,
           publishedAt: activeVersion.publishedAt,
           qaPolicyEnabled: matchingDraft?.document.qaPolicy.enabled,
           sourceRevision: activeVersion.sourceRevision,
           startsAt: activeVersion.schedule.startsAt,
           variants: activeVersion.variants.map((variant) => ({
-            allocationBasisPoints: variant.allocationEnd - variant.allocationStart,
+            allocationBasisPoints:
+              variant.allocationEnd - variant.allocationStart,
             id: variant.id,
             name: variant.name,
             paywallId: variant.paywallId,
@@ -114,15 +121,18 @@ function mapExperiment(
     })),
     activeVersionId: experiment.activeVersion?.id,
     activeVersionNumber: experiment.activeVersion?.versionNumber,
-    currentDraft: experiment.currentDraft ? mapDraft(experiment.currentDraft) : undefined,
+    currentDraft: experiment.currentDraft
+      ? mapDraft(experiment.currentDraft)
+      : undefined,
     hypothesis: experiment.hypothesis,
     id: experiment.id,
     name: experiment.name,
     placementId: experiment.placementId,
-    placementName: placementNames.get(experiment.placementId) ?? experiment.placementId,
+    placementName:
+      placementNames.get(experiment.placementId) ?? experiment.placementId,
     status: experiment.state,
     updatedAt: experiment.updatedAt,
-  }
+  };
 }
 
 function mapIssue(issue: GeneratedValidationIssue): ExperimentIssue {
@@ -134,18 +144,21 @@ function mapIssue(issue: GeneratedValidationIssue): ExperimentIssue {
     recoveryAction: issue.recoveryAction,
     severity: issue.severity,
     title: issue.code.replaceAll("_", " "),
-  }
+  };
 }
 
 function mapQaOverride(override: GeneratedQaOverride): QaOverride {
   return {
     expiresAt: override.expiresAt,
     id: override.id,
-    identityType: override.identityType === "installation" ? "installation" : "identified_user",
+    identityType:
+      override.identityType === "installation"
+        ? "installation"
+        : "identified_user",
     label: override.safeLabel,
     variantId: override.variantId,
     visibleSelectorDigest: override.selectorDigest ?? "Pending",
-  }
+  };
 }
 
 function generatedDocument(document: ExperimentDraftDocument) {
@@ -157,21 +170,25 @@ function generatedDocument(document: ExperimentDraftDocument) {
     qaPolicy: { enabled: document.qaEnabled ?? true },
     schedule: { endsAt: document.endsAt, startsAt: document.startsAt },
     variants: document.variants.map((variant) => ({ ...variant })),
-  }
+  };
 }
 
 function conflictFrom(error: unknown) {
-  if (!(error instanceof ApiError) || error.status !== 409) return null
-  const details = isRecord(error.details) ? error.details : undefined
-  const currentRevision = details?.currentRevision
-  if (typeof currentRevision !== "number") return null
-  return new ExperimentDraftConflictError(currentRevision)
+  if (!(error instanceof ApiError) || error.status !== 409) {
+    return null;
+  }
+  const details = isRecord(error.details) ? error.details : undefined;
+  const currentRevision = details?.currentRevision;
+  if (typeof currentRevision !== "number") {
+    return null;
+  }
+  return new ExperimentDraftConflictError(currentRevision);
 }
 
 function warningIssue(
   code: string,
   message: string,
-  severity: ExperimentIssue["severity"] = "warning",
+  severity: ExperimentIssue["severity"] = "warning"
 ): ExperimentIssue {
   return {
     code,
@@ -183,29 +200,35 @@ function warningIssue(
       "Resolve the underlying issue and wait for fresh aggregates. Do not change active allocation in place.",
     severity,
     title: code.replaceAll("_", " "),
-  }
+  };
 }
 
 function stringValue(record: Record<string, unknown>, key: string) {
-  return typeof record[key] === "string" ? record[key] : undefined
+  return typeof record[key] === "string" ? record[key] : undefined;
 }
 
 function mapResultWarning(warning: unknown, index: number): ExperimentIssue {
   if (!isRecord(warning)) {
-    return warningIssue(`result_warning_${index + 1}`, String(warning))
+    return warningIssue(`result_warning_${index + 1}`, String(warning));
   }
-  const code = stringValue(warning, "code") ?? `result_warning_${index + 1}`
+  const code = stringValue(warning, "code") ?? `result_warning_${index + 1}`;
   const mapped = warningIssue(
     code,
-    stringValue(warning, "message") ?? stringValue(warning, "summary") ?? "Result warning",
-    warning.severity === "critical" || warning.severity === "info" ? warning.severity : "warning",
-  )
+    stringValue(warning, "message") ??
+      stringValue(warning, "summary") ??
+      "Result warning",
+    warning.severity === "critical" || warning.severity === "info"
+      ? warning.severity
+      : "warning"
+  );
   return {
     ...mapped,
-    investigation: stringValue(warning, "investigation") ?? mapped.investigation,
-    recoveryAction: stringValue(warning, "recoveryAction") ?? mapped.recoveryAction,
+    investigation:
+      stringValue(warning, "investigation") ?? mapped.investigation,
+    recoveryAction:
+      stringValue(warning, "recoveryAction") ?? mapped.recoveryAction,
     title: stringValue(warning, "title") ?? mapped.title,
-  }
+  };
 }
 
 function mapGuardrailResult(guardrail: unknown): GuardrailResult {
@@ -214,51 +237,58 @@ function mapGuardrailResult(guardrail: unknown): GuardrailResult {
       name: String(guardrail),
       severity: "warning" as const,
       summary: String(guardrail),
-    }
+    };
   }
-  const severity = guardrail.severity
+  const severity = guardrail.severity;
   const mappedSeverity: GuardrailResult["severity"] =
     severity === "ok" ||
     severity === "critical" ||
     severity === "unavailable" ||
     severity === "warning"
       ? severity
-      : "warning"
+      : "warning";
   return {
     code: stringValue(guardrail, "code"),
-    estimate: typeof guardrail.estimate === "number" ? guardrail.estimate : undefined,
+    estimate:
+      typeof guardrail.estimate === "number" ? guardrail.estimate : undefined,
     investigation: stringValue(guardrail, "investigation"),
-    name: stringValue(guardrail, "name") ?? stringValue(guardrail, "title") ?? "Guardrail",
+    name:
+      stringValue(guardrail, "name") ??
+      stringValue(guardrail, "title") ??
+      "Guardrail",
     recoveryAction: stringValue(guardrail, "recoveryAction"),
     severity: mappedSeverity,
     summary:
-      stringValue(guardrail, "summary") ?? stringValue(guardrail, "message") ?? "Unavailable",
-  }
+      stringValue(guardrail, "summary") ??
+      stringValue(guardrail, "message") ??
+      "Unavailable",
+  };
 }
 
 export function createGeneratedExperimentAdapter(
-  client: Client = generatedDashboardClient,
+  client: Client = generatedDashboardClient
 ): ExperimentAdapter {
   return {
     async archive(scope, experimentId, reason) {
-      return this.transition(scope, experimentId, "archived", reason)
+      return this.transition(scope, experimentId, "archived", reason);
     },
     async complete(scope, experimentId, reason) {
-      return this.transition(scope, experimentId, "completed", reason)
+      return this.transition(scope, experimentId, "completed", reason);
     },
     async create(scope, input) {
-      const requestScope = `${scope.projectId}:${scope.environmentId}:${input.placementId}:${input.name}`
-      const key = createIdempotencyKeys.get(requestScope) ?? createIdempotencyKey()
-      createIdempotencyKeys.set(requestScope, key)
+      const requestScope = `${scope.projectId}:${scope.environmentId}:${input.placementId}:${input.name}`;
+      const key =
+        createIdempotencyKeys.get(requestScope) ?? createIdempotencyKey();
+      createIdempotencyKeys.set(requestScope, key);
       const result = await createExperiment({
         body: input,
         client,
         headers: { "Idempotency-Key": key },
         path: scope,
         throwOnError: true,
-      })
-      createIdempotencyKeys.delete(requestScope)
-      return mapExperiment(result.data.data)
+      });
+      createIdempotencyKeys.delete(requestScope);
+      return mapExperiment(result.data.data);
     },
     async createMutualExclusionGroup(scope, input) {
       const result = await createExperimentGroupVersion({
@@ -266,16 +296,17 @@ export function createGeneratedExperimentAdapter(
         client,
         path: scope,
         throwOnError: true,
-      })
-      const { group, version } = result.data.data
+      });
+      const { group, version } = result.data.data;
       return {
-        assignmentKeyPolicy: version.assignmentKeyPolicy as typeof input.assignmentKeyPolicy,
+        assignmentKeyPolicy:
+          version.assignmentKeyPolicy as typeof input.assignmentKeyPolicy,
         holdoutBasisPoints: version.holdoutBasisPoints,
         id: group.id,
         members: version.members,
         name: group.name,
         versionId: version.id,
-      }
+      };
     },
     async createMutualExclusionGroupVersion(scope, groupId, input) {
       const result = await createExperimentMutualExclusionGroupVersion({
@@ -283,17 +314,18 @@ export function createGeneratedExperimentAdapter(
         client,
         path: { ...scope, groupId },
         throwOnError: true,
-      })
-      const version = result.data.data
+      });
+      const version = result.data.data;
       return {
-        assignmentKeyPolicy: version.assignmentKeyPolicy as typeof input.assignmentKeyPolicy,
+        assignmentKeyPolicy:
+          version.assignmentKeyPolicy as typeof input.assignmentKeyPolicy,
         createdAt: version.createdAt,
         groupId: version.groupId,
         holdoutBasisPoints: version.holdoutBasisPoints,
         id: version.id,
         members: version.members,
         versionNumber: version.versionNumber,
-      }
+      };
     },
     async createQaOverride(scope, experimentId, input) {
       const result = await createExperimentQaOverride({
@@ -307,15 +339,18 @@ export function createGeneratedExperimentAdapter(
         client,
         path: { ...scope, experimentId },
         throwOnError: true,
-      })
-      return { override: mapQaOverride(result.data.data.override), token: result.data.data.token }
+      });
+      return {
+        override: mapQaOverride(result.data.data.override),
+        token: result.data.data.token,
+      };
     },
     async deleteQaOverride(scope, experimentId, overrideId) {
       await revokeExperimentQaOverride({
         client,
         path: { ...scope, experimentId, overrideId },
         throwOnError: true,
-      })
+      });
     },
     async emergencyStop(scope, experimentId, reason) {
       const result = await transitionExperimentLifecycle({
@@ -323,8 +358,8 @@ export function createGeneratedExperimentAdapter(
         client,
         path: { ...scope, experimentId, lifecycleAction: "emergency-stop" },
         throwOnError: true,
-      })
-      return mapExperiment(result.data.data)
+      });
+      return mapExperiment(result.data.data);
     },
     async get(scope, experimentId) {
       const [experimentResult, placementsResult] = await Promise.all([
@@ -338,18 +373,21 @@ export function createGeneratedExperimentAdapter(
           path: { projectId: scope.projectId },
           throwOnError: true,
         }),
-      ])
+      ]);
       const names = new Map(
-        placementsResult.data.data.items.map((placement) => [placement.id, placement.name]),
-      )
-      return mapExperiment(experimentResult.data.data, names)
+        placementsResult.data.data.items.map((placement) => [
+          placement.id,
+          placement.name,
+        ])
+      );
+      return mapExperiment(experimentResult.data.data, names);
     },
     async history(scope, experimentId) {
       const result = await listExperimentHistory({
         client,
         path: { ...scope, experimentId },
         throwOnError: true,
-      })
+      });
       return result.data.data.items.map((entry) => ({
         actorLabel: entry.actorId,
         createdAt: entry.createdAt,
@@ -357,7 +395,7 @@ export function createGeneratedExperimentAdapter(
         reason: entry.reason,
         releaseId: entry.releaseId,
         summary: `${entry.fromState} → ${entry.toState}`,
-      }))
+      }));
     },
     async list(scope) {
       const [experimentsResult, placementsResult] = await Promise.all([
@@ -367,20 +405,23 @@ export function createGeneratedExperimentAdapter(
           path: { projectId: scope.projectId },
           throwOnError: true,
         }),
-      ])
+      ]);
       const names = new Map(
-        placementsResult.data.data.items.map((placement) => [placement.id, placement.name]),
-      )
-      return experimentsResult.data.data.items.map((experiment): ExperimentListItem =>
-        mapExperiment(experiment, names),
-      )
+        placementsResult.data.data.items.map((placement) => [
+          placement.id,
+          placement.name,
+        ])
+      );
+      return experimentsResult.data.data.items.map(
+        (experiment): ExperimentListItem => mapExperiment(experiment, names)
+      );
     },
     async listImmutablePaywallVersions(scope) {
       const paywallResult = await listPaywalls({
         client,
         path: { projectId: scope.projectId },
         throwOnError: true,
-      })
+      });
       const versions = await Promise.all(
         paywallResult.data.data.items
           .filter((paywall) => paywall.status === "active")
@@ -389,30 +430,34 @@ export function createGeneratedExperimentAdapter(
               client,
               path: { paywallId: paywall.id, projectId: scope.projectId },
               throwOnError: true,
-            })
+            });
             return result.data.data.items
-              .filter((version) => version.environmentId === scope.environmentId)
+              .filter(
+                (version) => version.environmentId === scope.environmentId
+              )
               .map((version) => ({
                 createdAt: version.createdAt,
                 id: version.id,
                 paywallId: paywall.id,
                 paywallName: paywall.name,
                 versionNumber: version.versionNumber,
-              }))
-          }),
-      )
-      return versions.flat()
+              }));
+          })
+      );
+      return versions.flat();
     },
     async listMetricDefinitions(scope) {
       const result = await listExperimentMetricDefinitions({
         client,
         path: scope,
         throwOnError: true,
-      })
+      });
       return result.data.data.items.map((metric) => ({
         assignmentUnit: metric.assignmentUnit,
         authority:
-          metric.authority === "provider_confirmed" ? "provider_confirmed" : "client_observed",
+          metric.authority === "provider_confirmed"
+            ? "provider_confirmed"
+            : "client_observed",
         availability: metric.availability,
         definition: metric.definition,
         eligibleAsGuardrail: metric.guardrailEligible,
@@ -421,24 +466,28 @@ export function createGeneratedExperimentAdapter(
         id: metric.id,
         name: metric.name,
         versionId: `${metric.id}@${metric.version}`,
-      }))
+      }));
     },
     async listMutualExclusionGroups(scope) {
       const result = await listExperimentGroups({
         client,
         path: scope,
         throwOnError: true,
-      })
+      });
       return result.data.data.items
         .filter((group) => group.status === "active" && group.activeVersionId)
-        .map((group) => ({ id: group.id, name: group.name, versionId: group.activeVersionId! }))
+        .map((group) => ({
+          id: group.id,
+          name: group.name,
+          versionId: group.activeVersionId!,
+        }));
     },
     async listMutualExclusionGroupVersions(scope, groupId) {
       const result = await listExperimentMutualExclusionGroupVersions({
         client,
         path: { ...scope, groupId },
         throwOnError: true,
-      })
+      });
       return result.data.data.items.map((version) => ({
         assignmentKeyPolicy:
           version.assignmentKeyPolicy === "installation" ||
@@ -451,17 +500,17 @@ export function createGeneratedExperimentAdapter(
         id: version.id,
         members: version.members,
         versionNumber: version.versionNumber,
-      }))
+      }));
     },
     async listQaOverrides(scope, experimentId) {
       const result = await listExperimentQaOverrides({
         client,
         path: { ...scope, experimentId },
         throwOnError: true,
-      })
+      });
       return result.data.data.items
         .filter((override) => override.status === "active")
-        .map(mapQaOverride)
+        .map(mapQaOverride);
     },
     async publish(scope, experimentId, expectedRevision) {
       await publishExperiment({
@@ -469,8 +518,8 @@ export function createGeneratedExperimentAdapter(
         client,
         path: { ...scope, experimentId },
         throwOnError: true,
-      })
-      return this.get(scope, experimentId)
+      });
+      return this.get(scope, experimentId);
     },
     async requestExport(scope, experimentId, identityScoped) {
       const result = await createExperimentRawExport({
@@ -478,14 +527,17 @@ export function createGeneratedExperimentAdapter(
         client,
         path: { ...scope, experimentId },
         throwOnError: true,
-      })
-      const job = result.data.data
+      });
+      const job = result.data.data;
       return {
         expiresAt: job.expiresAt,
         id: job.id,
         identityScoped,
-        status: job.status === "leased" || job.status === "recomputing" ? "running" : job.status,
-      }
+        status:
+          job.status === "leased" || job.status === "recomputing"
+            ? "running"
+            : job.status,
+      };
     },
     async results(scope, experimentId) {
       const [result, detail, metrics] = await Promise.all([
@@ -504,46 +556,65 @@ export function createGeneratedExperimentAdapter(
           path: scope,
           throwOnError: true,
         }),
-      ])
-      const data = result.data.data
+      ]);
+      const data = result.data.data;
       const names = new Map(
-        detail.data.data.activeVersion?.variants.map((variant) => [variant.id, variant.name]) ?? [],
-      )
-      const warnings = (data.warnings as readonly unknown[]).map(mapResultWarning)
+        detail.data.data.activeVersion?.variants.map((variant) => [
+          variant.id,
+          variant.name,
+        ]) ?? []
+      );
+      const warnings = (data.warnings as readonly unknown[]).map(
+        mapResultWarning
+      );
       if (data.srm.status === "mismatch") {
         warnings.unshift({
           ...warningIssue(
             "sample_ratio_mismatch",
             data.srm.explanation,
-            data.srm.severity === "critical" ? "critical" : "warning",
+            data.srm.severity === "critical" ? "critical" : "warning"
           ),
           investigation: data.srm.investigationSteps.join(" "),
-        })
+        });
       } else if (data.srm.status === "insufficient_sample") {
-        warnings.unshift(warningIssue("srm_insufficient_sample", data.srm.explanation, "info"))
+        warnings.unshift(
+          warningIssue("srm_insufficient_sample", data.srm.explanation, "info")
+        );
       }
       const freshnessMinutes = data.freshness
-        ? Math.max(0, Math.floor((Date.now() - new Date(data.freshness).getTime()) / 60_000))
-        : undefined
-      const primaryId = detail.data.data.activeVersion?.primaryMetricVersionId
+        ? Math.max(
+            0,
+            Math.floor(
+              (Date.now() - new Date(data.freshness).getTime()) / 60_000
+            )
+          )
+        : undefined;
+      const primaryId = detail.data.data.activeVersion?.primaryMetricVersionId;
       const primary = metrics.data.data.items.find(
-        (metric) => `${metric.id}@${metric.version}` === primaryId,
-      )
+        (metric) => `${metric.id}@${metric.version}` === primaryId
+      );
       return {
         aggregateUpdatedAt: data.freshness,
-        attributionWindowMature: !data.warnings.some((warning) => /window|matur/i.test(warning)),
+        attributionWindowMature: !data.warnings.some((warning) =>
+          MATURITY_WARNING.test(warning)
+        ),
         fallbackExposures: data.variants.reduce(
           (total, variant) => total + variant.fallbackPresentations,
-          0,
+          0
         ),
         freshnessMinutes,
-        guardrails: (data.guardrails as readonly unknown[]).map(mapGuardrailResult),
+        guardrails: (data.guardrails as readonly unknown[]).map(
+          mapGuardrailResult
+        ),
         interim: data.interim,
         issues: warnings,
         primaryMetricName: primary?.name ?? primaryId ?? "Primary metric",
         primaryMetricAuthority:
-          primary?.authority === "provider_confirmed" ? "provider_confirmed" : "client_observed",
-        primaryMetricAvailability: primary?.availability ?? "trusted_source_unavailable",
+          primary?.authority === "provider_confirmed"
+            ? "provider_confirmed"
+            : "client_observed",
+        primaryMetricAvailability:
+          primary?.availability ?? "trusted_source_unavailable",
         primaryMetricEventFilter: primary?.eventFilter ?? {},
         srm: data.srm,
         treatments: data.lifts.map((lift) => ({
@@ -556,56 +627,77 @@ export function createGeneratedExperimentAdapter(
           allocationBasisPoints: variant.allocationBasisPoints,
           conversions: variant.uniqueConversions,
           estimate: variant.estimate,
-          interval: { high: variant.wilson95.upper, low: variant.wilson95.lower },
+          interval: {
+            high: variant.wilson95.upper,
+            low: variant.wilson95.lower,
+          },
           name: names.get(variant.variantId) ?? variant.variantId,
-          role: variant.role === "control" ? ("control" as const) : ("treatment" as const),
+          role:
+            variant.role === "control"
+              ? ("control" as const)
+              : ("treatment" as const),
           uniqueExposures: variant.uniqueExposures,
           variantId: variant.variantId,
         })),
-      }
+      };
     },
     async saveDraft(scope, experimentId, document, expectedRevision) {
       const detail = await getExperiment({
         client,
         path: { ...scope, experimentId },
         throwOnError: true,
-      })
-      const currentDraft = detail.data.data.currentDraft
-      if (!currentDraft) throw new Error("This Experiment has no editable Draft.")
-      if (currentDraft.revision !== expectedRevision) {
-        throw new ExperimentDraftConflictError(currentDraft.revision, mapDraft(currentDraft))
+      });
+      const currentDraft = detail.data.data.currentDraft;
+      if (!currentDraft) {
+        throw new Error("This Experiment has no editable Draft.");
       }
-      const requestScope = `${scope.projectId}:${scope.environmentId}:${experimentId}:${expectedRevision}`
-      const key = draftIdempotencyKeys.get(requestScope) ?? createIdempotencyKey()
-      draftIdempotencyKeys.set(requestScope, key)
+      if (currentDraft.revision !== expectedRevision) {
+        throw new ExperimentDraftConflictError(
+          currentDraft.revision,
+          mapDraft(currentDraft)
+        );
+      }
+      const requestScope = `${scope.projectId}:${scope.environmentId}:${experimentId}:${expectedRevision}`;
+      const key =
+        draftIdempotencyKeys.get(requestScope) ?? createIdempotencyKey();
+      draftIdempotencyKeys.set(requestScope, key);
       try {
         const result = await updateExperimentDraft({
           body: { document: generatedDocument(document), expectedRevision },
           client,
           headers: {
             "Idempotency-Key": key,
-            "If-Match": JSON.stringify(`experiment-draft:${currentDraft.id}:${expectedRevision}`),
+            "If-Match": JSON.stringify(
+              `experiment-draft:${currentDraft.id}:${expectedRevision}`
+            ),
           },
           path: { ...scope, experimentId },
           throwOnError: true,
-        })
-        draftIdempotencyKeys.delete(requestScope)
-        return mapDraft(result.data.data)
+        });
+        draftIdempotencyKeys.delete(requestScope);
+        return mapDraft(result.data.data);
       } catch (error) {
-        throw conflictFrom(error) ?? error
+        throw conflictFrom(error) ?? error;
       }
     },
     async transition(scope, experimentId, target, reason) {
-      let action: "schedule" | "start" | "pause" | "resume" | "stop" | "complete" | "archive"
+      let action:
+        | "schedule"
+        | "start"
+        | "pause"
+        | "resume"
+        | "stop"
+        | "complete"
+        | "archive";
       if (target === "running") {
         const current = await getExperiment({
           client,
           path: { ...scope, experimentId },
           throwOnError: true,
-        })
-        action = current.data.data.state === "paused" ? "resume" : "start"
+        });
+        action = current.data.data.state === "paused" ? "resume" : "start";
       } else if (target === "scheduled") {
-        action = "schedule"
+        action = "schedule";
       } else if (
         target === "paused" ||
         target === "stopped" ||
@@ -619,27 +711,30 @@ export function createGeneratedExperimentAdapter(
               ? "pause"
               : target === "completed"
                 ? "complete"
-                : "archive"
+                : "archive";
       } else {
-        throw new Error("Draft is not a lifecycle action.")
+        throw new Error("Draft is not a lifecycle action.");
       }
       const result = await transitionExperimentLifecycle({
         body: { reason },
         client,
         path: { ...scope, experimentId, lifecycleAction: action },
         throwOnError: true,
-      })
-      return mapExperiment(result.data.data)
+      });
+      return mapExperiment(result.data.data);
     },
     async validate(scope, experimentId) {
       const result = await validateExperimentDraft({
         client,
         path: { ...scope, experimentId },
         throwOnError: true,
-      })
-      return { canPublish: result.data.data.valid, issues: result.data.data.issues.map(mapIssue) }
+      });
+      return {
+        canPublish: result.data.data.valid,
+        issues: result.data.data.issues.map(mapIssue),
+      };
     },
-  }
+  };
 }
 
-export const generatedExperimentAdapter = createGeneratedExperimentAdapter()
+export const generatedExperimentAdapter = createGeneratedExperimentAdapter();

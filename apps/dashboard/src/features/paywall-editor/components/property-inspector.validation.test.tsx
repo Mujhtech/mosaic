@@ -1,24 +1,24 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react"
-import { describe, expect, it } from "vitest"
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { describe, expect, it } from "vitest";
 
-import { EDITOR_TEMPLATES } from "@/features/paywall-editor/constants/templates"
-import { EditorStoreProvider } from "@/features/paywall-editor/stores/editor-store-context"
-import { StudioWorkspaceStoreProvider } from "@/features/paywall-editor/stores/studio-workspace-store-context"
-import { cloneValue } from "@/features/paywall-editor/utils/clone"
-import { appendScreen } from "@/features/paywall-editor/utils/document-tree"
-import { getInspectorFieldId } from "@/features/paywall-editor/utils/property-inspector-navigation"
+import { EDITOR_TEMPLATES } from "@/features/paywall-editor/constants/templates";
+import { EditorStoreProvider } from "@/features/paywall-editor/stores/editor-store-context";
+import { StudioWorkspaceStoreProvider } from "@/features/paywall-editor/stores/studio-workspace-store-context";
+import { cloneValue } from "@/features/paywall-editor/utils/clone";
+import { appendScreen } from "@/features/paywall-editor/utils/document-tree";
+import { getInspectorFieldId } from "@/features/paywall-editor/utils/property-inspector-navigation";
 import {
-  InspectorHarness,
   documentWithBlock,
-  expectSectionsOpen,
   expectReadOnlyField,
+  expectSectionsOpen,
   getInspectorSection,
+  InspectorHarness,
   openInspectorSection,
-  renderInspector,
-  renderSeedMode,
   renderedPropertyAddresses,
   renderedSectionTitles,
-} from "./property-inspector-test-support"
+  renderInspector,
+  renderSeedMode,
+} from "./property-inspector-test-support";
 
 describe("property inspector safety", () => {
   it.each([
@@ -155,14 +155,11 @@ describe("property inspector safety", () => {
         "Advanced",
       ],
     ],
-  ] as const)(
-    "uses the frozen progressive section model for %s",
-    async (selection, templateIndex, sections) => {
-      const view = renderInspector(selection, templateIndex)
-      await waitFor(() => expect(renderedSectionTitles()).toEqual([...sections]))
-      view.unmount()
-    },
-  )
+  ] as const)("uses the frozen progressive section model for %s", async (selection, templateIndex, sections) => {
+    const view = renderInspector(selection, templateIndex);
+    await waitFor(() => expect(renderedSectionTitles()).toEqual([...sections]));
+    view.unmount();
+  });
 
   it.each([
     [
@@ -228,17 +225,20 @@ describe("property inspector safety", () => {
       ],
     ],
   ] as const)("uses the frozen progressive section model for %s", async (type, sections) => {
-    const fixture = documentWithBlock(type)
+    const fixture = documentWithBlock(type);
     const view = render(
       <StudioWorkspaceStoreProvider storage={null}>
         <EditorStoreProvider>
-          <InspectorHarness initialDocument={fixture.document} selection={fixture.nodeId} />
+          <InspectorHarness
+            initialDocument={fixture.document}
+            selection={fixture.nodeId}
+          />
         </EditorStoreProvider>
-      </StudioWorkspaceStoreProvider>,
-    )
-    await waitFor(() => expect(renderedSectionTitles()).toEqual([...sections]))
-    view.unmount()
-  })
+      </StudioWorkspaceStoreProvider>
+    );
+    await waitFor(() => expect(renderedSectionTitles()).toEqual([...sections]));
+    view.unmount();
+  });
 
   it("refreshes a localized form value after undo on the same selection", () => {
     render(
@@ -246,39 +246,40 @@ describe("property inspector safety", () => {
         <EditorStoreProvider>
           <InspectorHarness selection="headline" />
         </EditorStoreProvider>
-      </StudioWorkspaceStoreProvider>,
-    )
+      </StudioWorkspaceStoreProvider>
+    );
 
-    const headline = screen.getByRole("textbox", { name: "Text" })
-    expect(headline).toHaveValue("Build a paywall people understand")
-    fireEvent.change(headline, { target: { value: "A changed headline" } })
-    fireEvent.blur(headline)
-    expect(screen.getByRole("textbox", { name: "Text" })).toHaveValue("A changed headline")
-
-    fireEvent.click(screen.getByRole("button", { name: "Undo editor change" }))
+    const headline = screen.getByRole("textbox", { name: "Text" });
+    expect(headline).toHaveValue("Build a paywall people understand");
+    fireEvent.change(headline, { target: { value: "A changed headline" } });
+    fireEvent.blur(headline);
     expect(screen.getByRole("textbox", { name: "Text" })).toHaveValue(
-      "Build a paywall people understand",
-    )
-  })
+      "A changed headline"
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Undo editor change" }));
+    expect(screen.getByRole("textbox", { name: "Text" })).toHaveValue(
+      "Build a paywall people understand"
+    );
+  });
 
   it.each([
     ["feature", "Add benefit"],
     ["hint", "Add accessibility hint"],
-  ] as const)(
-    "seeds every locale and stays valid when creating %s localized text",
-    async (mode, action) => {
-      renderSeedMode(mode)
-      if (mode === "hint") {
-        await waitFor(() => expect(getInspectorSection("Accessibility")).toBeInTheDocument())
-        openInspectorSection("Accessibility")
-      }
-      fireEvent.click(await screen.findByRole("button", { name: action }))
+  ] as const)("seeds every locale and stays valid when creating %s localized text", async (mode, action) => {
+    renderSeedMode(mode);
+    if (mode === "hint") {
       await waitFor(() =>
-        expect(screen.getByTestId("all-locales-seeded")).toHaveTextContent("true"),
-      )
-      expect(screen.getByTestId("validation-count")).toHaveTextContent("0")
-    },
-  )
+        expect(getInspectorSection("Accessibility")).toBeInTheDocument()
+      );
+      openInspectorSection("Accessibility");
+    }
+    fireEvent.click(await screen.findByRole("button", { name: action }));
+    await waitFor(() =>
+      expect(screen.getByTestId("all-locales-seeded")).toHaveTextContent("true")
+    );
+    expect(screen.getByTestId("validation-count")).toHaveTextContent("0");
+  });
 
   it.each([
     [
@@ -428,29 +429,34 @@ describe("property inspector safety", () => {
         "accessibility.label.localizationKey",
       ],
     ],
-  ] as const)(
-    "renders contextual Protocol 0.2 property coverage for %s",
-    async (selection, templateIndex, expectedAddresses) => {
-      renderInspector(selection, templateIndex)
-      await waitFor(() =>
-        expect(document.getElementById(getInspectorFieldId(selection, "id"))).toBeInTheDocument(),
-      )
-      expect(renderedPropertyAddresses()).toEqual(expect.arrayContaining([...expectedAddresses]))
-    },
-  )
+  ] as const)("renders contextual Protocol 0.2 property coverage for %s", async (selection, templateIndex, expectedAddresses) => {
+    renderInspector(selection, templateIndex);
+    await waitFor(() =>
+      expect(
+        document.getElementById(getInspectorFieldId(selection, "id"))
+      ).toBeInTheDocument()
+    );
+    expect(renderedPropertyAddresses()).toEqual(
+      expect.arrayContaining([...expectedAddresses])
+    );
+  });
 
   it("seeds every locale and stays valid when an image becomes non-decorative", async () => {
-    renderSeedMode("image")
-    await waitFor(() => expect(getInspectorSection("Accessibility")).toBeInTheDocument())
-    openInspectorSection("Accessibility")
+    renderSeedMode("image");
+    await waitFor(() =>
+      expect(getInspectorSection("Accessibility")).toBeInTheDocument()
+    );
+    openInspectorSection("Accessibility");
     const decorative = await screen.findByRole("checkbox", {
       name: /Decorative; hide from assistive technology/i,
-    })
-    expect(decorative).toBeChecked()
-    fireEvent.click(decorative)
-    await waitFor(() => expect(screen.getByTestId("all-locales-seeded")).toHaveTextContent("true"))
-    expect(screen.getByTestId("validation-count")).toHaveTextContent("0")
-  })
+    });
+    expect(decorative).toBeChecked();
+    fireEvent.click(decorative);
+    await waitFor(() =>
+      expect(screen.getByTestId("all-locales-seeded")).toHaveTextContent("true")
+    );
+    expect(screen.getByTestId("validation-count")).toHaveTextContent("0");
+  });
 
   it.each([
     {
@@ -509,24 +515,31 @@ describe("property inspector safety", () => {
       selection: "close",
       templateIndex: 0,
     },
-  ])(
-    "progressively discloses Protocol 0.2 fields for $selection",
-    async ({ advancedAddress, advancedValue, primarySection, selection, templateIndex }) => {
-      renderInspector(selection, templateIndex)
+  ])("progressively discloses Protocol 0.2 fields for $selection", async ({
+    advancedAddress,
+    advancedValue,
+    primarySection,
+    selection,
+    templateIndex,
+  }) => {
+    renderInspector(selection, templateIndex);
 
-      await waitFor(() => expect(getInspectorSection(primarySection)).toBeInTheDocument())
-      expectSectionsOpen(primarySection, "Layout")
-      openInspectorSection("Advanced")
-      expectReadOnlyField(selection, advancedAddress, advancedValue)
-    },
-  )
+    await waitFor(() =>
+      expect(getInspectorSection(primarySection)).toBeInTheDocument()
+    );
+    expectSectionsOpen(primarySection, "Layout");
+    openInspectorSection("Advanced");
+    expectReadOnlyField(selection, advancedAddress, advancedValue);
+  });
 
   it("inspects the immutable Scroll Container without exposing structural actions", async () => {
-    renderInspector("paywall-scroll")
+    renderInspector("paywall-scroll");
 
-    const indicators = await screen.findByRole("checkbox", { name: "Show scroll indicators" })
-    expect(indicators).toBeChecked()
-    expectSectionsOpen("Layout")
+    const indicators = await screen.findByRole("checkbox", {
+      name: "Show scroll indicators",
+    });
+    expect(indicators).toBeChecked();
+    expectSectionsOpen("Layout");
     expect(renderedPropertyAddresses()).toEqual(
       expect.arrayContaining([
         "showsIndicators",
@@ -536,40 +549,49 @@ describe("property inspector safety", () => {
         "axis",
         "safeArea",
         "content.id",
-      ]),
-    )
+      ])
+    );
 
-    openInspectorSection("Advanced")
-    expectReadOnlyField("paywall-scroll", "axis", "vertical")
-    expectReadOnlyField("paywall-scroll", "safeArea", "respect")
-    expectReadOnlyField("paywall-scroll", "content.id", "paywall-content")
+    openInspectorSection("Advanced");
+    expectReadOnlyField("paywall-scroll", "axis", "vertical");
+    expectReadOnlyField("paywall-scroll", "safeArea", "respect");
+    expectReadOnlyField("paywall-scroll", "content.id", "paywall-content");
 
-    fireEvent.click(indicators)
-    expect(indicators).not.toBeChecked()
-    expect(screen.getByTestId("inspector-undo-count")).toHaveTextContent("1")
-  })
+    fireEvent.click(indicators);
+    expect(indicators).not.toBeChecked();
+    expect(screen.getByTestId("inspector-undo-count")).toHaveTextContent("1");
+  });
 
   it("sets an eligible Screen as the start destination", async () => {
-    const appended = appendScreen(cloneValue(EDITOR_TEMPLATES[0]!.document))
+    const appended = appendScreen(cloneValue(EDITOR_TEMPLATES[0]!.document));
     const addedScreen = appended.document.screens.find(
-      (candidate) => candidate.id === appended.screenId,
-    )
-    if (!addedScreen) throw new Error("Missing appended screen")
+      (candidate) => candidate.id === appended.screenId
+    );
+    if (!addedScreen) {
+      throw new Error("Missing appended screen");
+    }
 
     render(
       <StudioWorkspaceStoreProvider storage={null}>
         <EditorStoreProvider>
-          <InspectorHarness initialDocument={appended.document} selection={addedScreen.layout.id} />
+          <InspectorHarness
+            initialDocument={appended.document}
+            selection={addedScreen.layout.id}
+          />
         </EditorStoreProvider>
-      </StudioWorkspaceStoreProvider>,
-    )
+      </StudioWorkspaceStoreProvider>
+    );
 
-    fireEvent.click(await screen.findByRole("button", { name: "Set as start" }))
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Set as start" })
+    );
     await waitFor(() =>
       expect(screen.getByTestId("inspector-document")).toHaveTextContent(
-        `"initialScreenId":"${appended.screenId}"`,
-      ),
-    )
-    expect(screen.queryByRole("button", { name: "Set as start" })).not.toBeInTheDocument()
-  })
-})
+        `"initialScreenId":"${appended.screenId}"`
+      )
+    );
+    expect(
+      screen.queryByRole("button", { name: "Set as start" })
+    ).not.toBeInTheDocument();
+  });
+});

@@ -1,11 +1,11 @@
-import { useQuery } from "@tanstack/react-query"
+import { useQuery } from "@tanstack/react-query";
 
-import { EmptyState } from "@/components/feedback/empty-state"
-import type { AnalyticsAdapter } from "../api/analytics-adapter"
-import { funnelQueryOptions } from "../queries/analytics-queries"
-import type { AnalyticsFilters, AnalyticsScope } from "../types/analytics"
-import { FunnelTable } from "./funnel-table"
-import { AnalyticsQueryResult } from "./query-result"
+import { EmptyState } from "@/components/feedback/empty-state";
+import type { AnalyticsAdapter } from "../api/analytics-adapter";
+import { funnelQueryOptions } from "../queries/analytics-queries";
+import type { AnalyticsFilters, AnalyticsScope } from "../types/analytics";
+import { FunnelTable } from "./funnel-table";
+import { AnalyticsQueryResult } from "./query-result";
 
 export function FunnelPanel({
   adapter,
@@ -13,17 +13,19 @@ export function FunnelPanel({
   funnel,
   scope,
 }: {
-  adapter: AnalyticsAdapter
-  filters: AnalyticsFilters
-  funnel: "placements" | "paywalls" | "products" | "purchases"
-  scope: AnalyticsScope
+  adapter: AnalyticsAdapter;
+  filters: AnalyticsFilters;
+  funnel: "placements" | "paywalls" | "products" | "purchases";
+  scope: AnalyticsScope;
 }) {
-  const query = useQuery(funnelQueryOptions(scope, funnel, filters, adapter))
+  const query = useQuery(funnelQueryOptions(scope, funnel, filters, adapter));
   return (
     <AnalyticsQueryResult
       error={query.error}
       isPending={query.isPending}
-      onRetry={() => void query.refetch()}
+      onRetry={() => {
+        query.refetch();
+      }}
     >
       {query.data?.steps.length === 0 ? (
         <EmptyState
@@ -34,5 +36,5 @@ export function FunnelPanel({
         <FunnelTable report={query.data} />
       ) : null}
     </AnalyticsQueryResult>
-  )
+  );
 }

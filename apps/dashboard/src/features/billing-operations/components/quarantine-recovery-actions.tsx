@@ -1,29 +1,29 @@
-import { useState } from "react"
+import { useState } from "react";
 
-import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { WorkflowPanel } from "@/features/orgs/components/workspace-page"
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import {
+  type QuarantineRecoveryAction,
   quarantineNoActionExplanation,
   quarantineRecoveryActions,
-  type QuarantineRecoveryAction,
-} from "@/features/billing-operations/types/quarantine-recovery"
-import type { QuarantineRecord } from "@/generated/api"
+} from "@/features/billing-operations/types/quarantine-recovery";
+import { WorkflowPanel } from "@/features/orgs/components/workspace-page";
+import type { QuarantineRecord } from "@/generated/api";
 
 interface QuarantineRecoveryActionsProps {
-  canManage: boolean
-  closeError?: string
-  isClosing: boolean
-  isRetrying: boolean
-  membersHref: string
-  onCloseSuperseded: (supersededByRecordId: string) => void
-  onRetryValidation: () => void
-  productMappingHref: string
+  canManage: boolean;
+  closeError?: string;
+  isClosing: boolean;
+  isRetrying: boolean;
+  membersHref: string;
+  onCloseSuperseded: (supersededByRecordId: string) => void;
+  onRetryValidation: () => void;
+  productMappingHref: string;
   /** The store Product this input named; absent when it never got that far. */
-  providerProductIdentifier?: string
-  record: QuarantineRecord
-  retryError?: string
-  storeConnectionsHref: string
+  providerProductIdentifier?: string;
+  record: QuarantineRecord;
+  retryError?: string;
+  storeConnectionsHref: string;
 }
 
 /**
@@ -49,60 +49,71 @@ export function QuarantineRecoveryActionsPanel({
   retryError,
   storeConnectionsHref,
 }: QuarantineRecoveryActionsProps) {
-  const [supersededBy, setSupersededBy] = useState("")
-  const actions = quarantineRecoveryActions(record)
+  const [supersededBy, setSupersededBy] = useState("");
+  const actions = quarantineRecoveryActions(record);
 
   return (
     <WorkflowPanel
       description="A quarantined input becomes a Transaction Fact only by asking the store again and succeeding. There is deliberately no control that records a validated fact from an operator's judgement."
       title="Recovery"
     >
-      {!canManage ? (
+      {canManage ? (
+        actions.length === 0 ? (
+          <div className="rounded border border-border bg-muted/30 p-4 text-sm leading-6">
+            <p className="font-medium">
+              No recovery action applies to this record.
+            </p>
+            <p className="mt-1 text-muted-foreground">
+              {quarantineNoActionExplanation(record.reasonCode)}
+            </p>
+            <a
+              className="mt-2 inline-flex font-semibold text-primary text-sm"
+              href={storeConnectionsHref}
+            >
+              Review Store Server Credentials
+            </a>
+          </div>
+        ) : (
+          <ul className="space-y-3">
+            {actions.map((action) => (
+              <li className="rounded border p-4" key={action.kind}>
+                <p className="font-semibold text-sm">{action.label}</p>
+                <p className="mt-1 text-muted-foreground text-sm leading-6">
+                  {action.description}
+                </p>
+                <ActionControl
+                  action={action}
+                  closeError={closeError}
+                  isClosing={isClosing}
+                  isRetrying={isRetrying}
+                  onCloseSuperseded={() =>
+                    onCloseSuperseded(supersededBy.trim())
+                  }
+                  onRetryValidation={onRetryValidation}
+                  productMappingHref={productMappingHref}
+                  {...(providerProductIdentifier
+                    ? { providerProductIdentifier }
+                    : {})}
+                  retryError={retryError}
+                  setSupersededBy={setSupersededBy}
+                  storeConnectionsHref={storeConnectionsHref}
+                  supersededBy={supersededBy}
+                />
+              </li>
+            ))}
+          </ul>
+        )
+      ) : (
         <p className="text-muted-foreground text-sm">
-          Organization owner or admin permission is required to run a recovery action.{" "}
-          <a className="text-primary font-semibold" href={membersHref}>
+          Organization owner or admin permission is required to run a recovery
+          action.{" "}
+          <a className="font-semibold text-primary" href={membersHref}>
             Ask an Owner or Admin
           </a>
         </p>
-      ) : actions.length === 0 ? (
-        <div className="border-border bg-muted/30 rounded border p-4 text-sm leading-6">
-          <p className="font-medium">No recovery action applies to this record.</p>
-          <p className="text-muted-foreground mt-1">
-            {quarantineNoActionExplanation(record.reasonCode)}
-          </p>
-          <a
-            className="text-primary mt-2 inline-flex text-sm font-semibold"
-            href={storeConnectionsHref}
-          >
-            Review Store Server Credentials
-          </a>
-        </div>
-      ) : (
-        <ul className="space-y-3">
-          {actions.map((action) => (
-            <li className="rounded border p-4" key={action.kind}>
-              <p className="text-sm font-semibold">{action.label}</p>
-              <p className="text-muted-foreground mt-1 text-sm leading-6">{action.description}</p>
-              <ActionControl
-                action={action}
-                closeError={closeError}
-                isClosing={isClosing}
-                isRetrying={isRetrying}
-                onCloseSuperseded={() => onCloseSuperseded(supersededBy.trim())}
-                onRetryValidation={onRetryValidation}
-                productMappingHref={productMappingHref}
-                {...(providerProductIdentifier ? { providerProductIdentifier } : {})}
-                retryError={retryError}
-                setSupersededBy={setSupersededBy}
-                storeConnectionsHref={storeConnectionsHref}
-                supersededBy={supersededBy}
-              />
-            </li>
-          ))}
-        </ul>
       )}
     </WorkflowPanel>
-  )
+  );
 }
 
 function ActionControl({
@@ -119,37 +130,41 @@ function ActionControl({
   storeConnectionsHref,
   supersededBy,
 }: {
-  action: QuarantineRecoveryAction
-  closeError?: string
-  isClosing: boolean
-  isRetrying: boolean
-  onCloseSuperseded: () => void
-  onRetryValidation: () => void
-  productMappingHref: string
-  providerProductIdentifier?: string
-  retryError?: string
-  setSupersededBy: (value: string) => void
-  storeConnectionsHref: string
-  supersededBy: string
+  action: QuarantineRecoveryAction;
+  closeError?: string;
+  isClosing: boolean;
+  isRetrying: boolean;
+  onCloseSuperseded: () => void;
+  onRetryValidation: () => void;
+  productMappingHref: string;
+  providerProductIdentifier?: string;
+  retryError?: string;
+  setSupersededBy: (value: string) => void;
+  storeConnectionsHref: string;
+  supersededBy: string;
 }) {
   switch (action.kind) {
     case "retry_provider_validation":
       return (
         <div className="mt-3">
-          <Button disabled={isRetrying} onClick={onRetryValidation} type="button">
+          <Button
+            disabled={isRetrying}
+            onClick={onRetryValidation}
+            type="button"
+          >
             {isRetrying ? "Re-queueing…" : "Re-run validation"}
           </Button>
           {retryError ? (
-            <p className="text-destructive mt-2 text-sm" role="alert">
+            <p className="mt-2 text-destructive text-sm" role="alert">
               {retryError}
             </p>
           ) : null}
         </div>
-      )
+      );
     case "close_superseded":
       return (
         <div className="mt-3 space-y-2">
-          <label className="block max-w-sm space-y-1 text-xs font-medium">
+          <label className="block max-w-sm space-y-1 font-medium text-xs">
             Quarantine record that replaced this one
             <Input
               onChange={(event) => setSupersededBy(event.currentTarget.value)}
@@ -167,8 +182,8 @@ function ActionControl({
             {isClosing ? "Closing…" : "Close as superseded"}
           </Button>
           <p className="text-muted-foreground text-xs leading-5">
-            Closing asserts nothing about the original input and produces no Transaction Fact. The
-            record and its history stay readable.
+            Closing asserts nothing about the original input and produces no
+            Transaction Fact. The record and its history stay readable.
           </p>
           {closeError ? (
             <p className="text-destructive text-sm" role="alert">
@@ -176,44 +191,48 @@ function ActionControl({
             </p>
           ) : null}
         </div>
-      )
+      );
     case "repair_product_mapping":
       return (
         <div className="mt-3 space-y-2">
           {providerProductIdentifier ? (
             <p className="text-muted-foreground text-xs leading-5">
               Map the store Product{" "}
-              <code className="bg-muted rounded px-1 py-0.5 font-mono select-all">
+              <code className="select-all rounded bg-muted px-1 py-0.5 font-mono">
                 {providerProductIdentifier}
               </code>{" "}
-              to a Mosaic Product. Replacing a mapping keeps the previous one in history, so past
-              resolutions stay reproducible.
+              to a Mosaic Product. Replacing a mapping keeps the previous one in
+              history, so past resolutions stay reproducible.
             </p>
           ) : (
             <p className="text-muted-foreground text-xs leading-5">
-              This input never got far enough to name a store Product, so there is nothing to map
-              yet. Confirm the credential and Application scope first.
+              This input never got far enough to name a store Product, so there
+              is nothing to map yet. Confirm the credential and Application
+              scope first.
             </p>
           )}
-          <a className="text-primary inline-flex text-sm font-semibold" href={productMappingHref}>
+          <a
+            className="inline-flex font-semibold text-primary text-sm"
+            href={productMappingHref}
+          >
             {providerProductIdentifier
               ? "Find the Mosaic Product for this store Product"
               : "Open Products"}
           </a>
           <p className="text-muted-foreground text-xs leading-5">
-            Mosaic brings you back to this record when you are done, so you can re-run validation
-            without navigating from memory.
+            Mosaic brings you back to this record when you are done, so you can
+            re-run validation without navigating from memory.
           </p>
         </div>
-      )
+      );
     default:
       return (
         <a
-          className="text-primary mt-3 inline-flex text-sm font-semibold"
+          className="mt-3 inline-flex font-semibold text-primary text-sm"
           href={storeConnectionsHref}
         >
           Open Store Server Credentials
         </a>
-      )
+      );
   }
 }

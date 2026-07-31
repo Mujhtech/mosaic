@@ -1,12 +1,12 @@
-import { createFileRoute } from "@tanstack/react-router"
+import { createFileRoute } from "@tanstack/react-router";
 
-import { RoutePendingState } from "@/components/feedback/route-feedback"
+import { RoutePendingState } from "@/components/feedback/route-feedback";
 
-import { OrganizationOverviewPage } from "@/features/orgs/components/organization-overview-page"
-import { routeHead } from "@/lib/routing/route-head"
+import { OrganizationOverviewPage } from "@/features/orgs/components/organization-overview-page";
+import { routeHead } from "@/lib/routing/route-head";
 
 interface OrganizationSearch {
-  projectStatus?: "archived"
+  projectStatus?: "archived";
 }
 
 export const Route = createFileRoute("/_hosted/orgs/$organizationId/")({
@@ -16,23 +16,25 @@ export const Route = createFileRoute("/_hosted/orgs/$organizationId/")({
   validateSearch: (search: Record<string, unknown>): OrganizationSearch => ({
     projectStatus: search.projectStatus === "archived" ? "archived" : undefined,
   }),
-})
+});
 
 function OrganizationRoute() {
-  const { organizationId } = Route.useParams()
-  const { projectStatus } = Route.useSearch()
-  const navigate = Route.useNavigate()
+  const { organizationId } = Route.useParams();
+  const { projectStatus } = Route.useSearch();
+  const navigate = Route.useNavigate();
 
   return (
     <OrganizationOverviewPage
       onProjectStatusChange={(nextStatus) => {
-        void navigate({
+        navigate({
           replace: true,
-          search: { projectStatus: nextStatus === "archived" ? "archived" : undefined },
-        })
+          search: {
+            projectStatus: nextStatus === "archived" ? "archived" : undefined,
+          },
+        });
       }}
       organizationId={organizationId}
       projectStatus={projectStatus ?? "active"}
     />
-  )
+  );
 }

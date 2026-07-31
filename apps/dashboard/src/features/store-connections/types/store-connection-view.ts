@@ -1,4 +1,4 @@
-import type { StoreServerCredential } from "@/generated/api"
+import type { StoreServerCredential } from "@/generated/api";
 
 /**
  * Read-side view rules for Store Server Credentials.
@@ -9,7 +9,9 @@ import type { StoreServerCredential } from "@/generated/api"
  * back, and only for the moment it is on screen.
  */
 
-export type StoreCredentialHealth = NonNullable<StoreServerCredential["healthStatus"]>
+export type StoreCredentialHealth = NonNullable<
+  StoreServerCredential["healthStatus"]
+>;
 
 const HEALTH_LABELS: Record<StoreCredentialHealth, string> = {
   degraded: "Degraded",
@@ -17,46 +19,51 @@ const HEALTH_LABELS: Record<StoreCredentialHealth, string> = {
   revoked: "Revoked",
   unavailable: "Unavailable",
   untested: "Not tested yet",
-}
+};
 
 const HEALTH_EXPLANATIONS: Record<StoreCredentialHealth, string> = {
   degraded:
     "The store answered, but not cleanly. Validation may be slow or intermittently failing. Test the connection to see the current code.",
   healthy: "The stored key authenticated against the store on its last test.",
-  revoked: "This credential is revoked. Its notification endpoint no longer resolves.",
+  revoked:
+    "This credential is revoked. Its notification endpoint no longer resolves.",
   unavailable:
     "The store refused this credential. Rotate it with a current key; nothing already recorded is affected.",
-  untested: "Test the connection to confirm the stored key still authenticates.",
-}
+  untested:
+    "Test the connection to confirm the stored key still authenticates.",
+};
 
 export function storeCredentialHealthLabel(value: string | undefined) {
-  return HEALTH_LABELS[value as StoreCredentialHealth] ?? "Unknown"
+  return HEALTH_LABELS[value as StoreCredentialHealth] ?? "Unknown";
 }
 
 export function storeCredentialHealthExplanation(value: string | undefined) {
   return (
     HEALTH_EXPLANATIONS[value as StoreCredentialHealth] ??
     "Mosaic has no health signal for this credential yet."
-  )
+  );
 }
 
 export function storeCredentialIsUnhealthy(
-  credential: Pick<StoreServerCredential, "healthStatus">,
+  credential: Pick<StoreServerCredential, "healthStatus">
 ) {
-  return credential.healthStatus === "degraded" || credential.healthStatus === "unavailable"
+  return (
+    credential.healthStatus === "degraded" ||
+    credential.healthStatus === "unavailable"
+  );
 }
 
 export interface StoreCredentialActions {
-  revoke: boolean
-  rotate: boolean
-  test: boolean
+  revoke: boolean;
+  rotate: boolean;
+  test: boolean;
 }
 
 export function storeCredentialActions(
-  credential: Pick<StoreServerCredential, "status">,
+  credential: Pick<StoreServerCredential, "status">
 ): StoreCredentialActions {
-  const active = credential.status !== "revoked"
-  return { revoke: active, rotate: active, test: active }
+  const active = credential.status !== "revoked";
+  return { revoke: active, rotate: active, test: active };
 }
 
 /**
@@ -66,21 +73,25 @@ export function storeCredentialActions(
  * again once it leaves local state.
  */
 export function redactNotificationEndpoint(url: string | undefined) {
-  if (!url) return undefined
+  if (!url) {
+    return;
+  }
   try {
-    const parsed = new URL(url)
-    const segments = parsed.pathname.split("/").filter(Boolean)
-    if (segments.length === 0) return `${parsed.origin}/…`
-    segments[segments.length - 1] = "••••••••"
-    return `${parsed.origin}/${segments.join("/")}`
+    const parsed = new URL(url);
+    const segments = parsed.pathname.split("/").filter(Boolean);
+    if (segments.length === 0) {
+      return `${parsed.origin}/…`;
+    }
+    segments[segments.length - 1] = "••••••••";
+    return `${parsed.origin}/${segments.join("/")}`;
   } catch {
-    return "••••••••"
+    return "••••••••";
   }
 }
 
 /** Apple posts to an endpoint Mosaic hosts. Google is a Pub/Sub pull. */
 export function usesInboundNotificationEndpoint(
-  credential: Pick<StoreServerCredential, "provider">,
+  credential: Pick<StoreServerCredential, "provider">
 ) {
-  return credential.provider === "app_store"
+  return credential.provider === "app_store";
 }

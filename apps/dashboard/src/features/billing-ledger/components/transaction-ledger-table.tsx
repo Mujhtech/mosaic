@@ -1,4 +1,4 @@
-import { Skeleton } from "@/components/ui/skeleton"
+import { Skeleton } from "@/components/ui/skeleton";
 import {
   Table,
   TableBody,
@@ -7,26 +7,26 @@ import {
   TableHead,
   TableHeader,
   TableRow,
-} from "@/components/ui/table"
-import { StatusPill } from "@/features/billing-ledger/components/billing-chrome"
+} from "@/components/ui/table";
+import { StatusPill } from "@/features/billing-ledger/components/billing-chrome";
 import {
   factKindLabel,
   formatBillingTimestamp,
   providerLabel,
   resolutionStateLabel,
   storeEnvironmentLabel,
-  transactionTypeLabel,
   TIMESTAMP_DISTINCTION_NOTE,
-} from "@/features/billing-ledger/types/billing-vocabulary"
-import type { Application, Product, TransactionFact } from "@/generated/api"
+  transactionTypeLabel,
+} from "@/features/billing-ledger/types/billing-vocabulary";
+import type { Application, Product, TransactionFact } from "@/generated/api";
 
 interface TransactionLedgerTableProps {
-  applications: readonly Application[]
-  environmentName: string
-  factHref: (factId: string) => string
-  isPending: boolean
-  items: readonly TransactionFact[]
-  products: readonly Product[]
+  applications: readonly Application[];
+  environmentName: string;
+  factHref: (factId: string) => string;
+  isPending: boolean;
+  items: readonly TransactionFact[];
+  products: readonly Product[];
 }
 
 /**
@@ -48,20 +48,29 @@ export function TransactionLedgerTable({
   products,
 }: TransactionLedgerTableProps) {
   function applicationName(applicationId: string | undefined) {
-    if (!applicationId) return "—"
-    return applications.find((item) => item.id === applicationId)?.name ?? applicationId
+    if (!applicationId) {
+      return "—";
+    }
+    return (
+      applications.find((item) => item.id === applicationId)?.name ??
+      applicationId
+    );
   }
 
   function productName(productId: string | undefined) {
-    if (!productId) return undefined
-    return products.find((item) => item.id === productId)?.internalName ?? productId
+    if (!productId) {
+      return;
+    }
+    return (
+      products.find((item) => item.id === productId)?.internalName ?? productId
+    );
   }
 
   return (
     <Table>
       <TableCaption>
-        Store-confirmed Transaction Facts in the {environmentName} Mosaic Environment.{" "}
-        {TIMESTAMP_DISTINCTION_NOTE}
+        Store-confirmed Transaction Facts in the {environmentName} Mosaic
+        Environment. {TIMESTAMP_DISTINCTION_NOTE}
       </TableCaption>
       <TableHeader>
         <TableRow>
@@ -89,28 +98,32 @@ export function TransactionLedgerTable({
               </TableRow>
             ))
           : items.map((fact) => {
-              const resolved = productName(fact.mosaicProductId)
+              const resolved = productName(fact.mosaicProductId);
               return (
                 <TableRow key={fact.id}>
                   <TableCell>
                     <a
-                      className="text-primary font-medium"
+                      className="font-medium text-primary"
                       href={factHref(fact.id ?? "")}
                       title={fact.providerTransactionId}
                     >
                       {fact.providerTransactionId ?? fact.id ?? "—"}
                     </a>
-                    <span className="text-muted-foreground block text-xs">
+                    <span className="block text-muted-foreground text-xs">
                       {transactionTypeLabel(fact.transactionType)}
                     </span>
                   </TableCell>
                   <TableCell>{providerLabel(fact.provider)}</TableCell>
-                  <TableCell>{storeEnvironmentLabel(fact.storeEnvironment)}</TableCell>
+                  <TableCell>
+                    {storeEnvironmentLabel(fact.storeEnvironment)}
+                  </TableCell>
                   <TableCell>{environmentName}</TableCell>
                   <TableCell>{applicationName(fact.applicationId)}</TableCell>
                   <TableCell>
-                    {resolved ?? <span className="text-muted-foreground">Unresolved</span>}
-                    <span className="text-muted-foreground block text-xs">
+                    {resolved ?? (
+                      <span className="text-muted-foreground">Unresolved</span>
+                    )}
+                    <span className="block text-muted-foreground text-xs">
                       {fact.providerProductIdentifier ?? "—"}
                     </span>
                   </TableCell>
@@ -134,9 +147,9 @@ export function TransactionLedgerTable({
                     {formatBillingTimestamp(fact.recordedAt)}
                   </TableCell>
                 </TableRow>
-              )
+              );
             })}
       </TableBody>
     </Table>
-  )
+  );
 }

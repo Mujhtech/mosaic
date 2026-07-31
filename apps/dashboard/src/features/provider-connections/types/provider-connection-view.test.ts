@@ -1,9 +1,9 @@
-import { describe, expect, it } from "vitest"
+import { describe, expect, it } from "vitest";
 
 import {
-  purchaseProviderChoices,
   providerCredentialActions,
-} from "@/features/provider-connections/types/provider-connection-view"
+  purchaseProviderChoices,
+} from "@/features/provider-connections/types/provider-connection-view";
 
 describe("Purchase setup scope", () => {
   it("offers only the platform-compatible built-in provider without a Connection", () => {
@@ -15,7 +15,7 @@ describe("Purchase setup scope", () => {
       name: "Staging",
       projectId: "project_01",
       updatedAt: "2026-07-24T12:00:00Z",
-    } as const
+    } as const;
     const iosChoices = purchaseProviderChoices(
       {
         createdAt: "2026-07-24T12:00:00Z",
@@ -27,8 +27,8 @@ describe("Purchase setup scope", () => {
         updatedAt: "2026-07-24T12:00:00Z",
       },
       environment,
-      [],
-    )
+      []
+    );
     const androidChoices = purchaseProviderChoices(
       {
         createdAt: "2026-07-24T12:00:00Z",
@@ -40,8 +40,8 @@ describe("Purchase setup scope", () => {
         updatedAt: "2026-07-24T12:00:00Z",
       },
       environment,
-      [],
-    )
+      []
+    );
 
     expect(iosChoices).toEqual([
       {
@@ -50,7 +50,7 @@ describe("Purchase setup scope", () => {
         label: "StoreKit",
         provider: "app_store",
       },
-    ])
+    ]);
     expect(androidChoices).toEqual([
       {
         id: "native:google_play",
@@ -58,25 +58,27 @@ describe("Purchase setup scope", () => {
         label: "Google Play Billing",
         provider: "google_play",
       },
-    ])
-  })
-})
+    ]);
+  });
+});
 
 describe("provider credential recovery actions", () => {
   it("never offers rotation for revoked connections and exposes reconnect for recoverable health", () => {
-    expect(providerCredentialActions({ status: "revoked" }, "revoked")).toEqual({
-      reconnect: true,
-      rotate: false,
-    })
+    expect(providerCredentialActions({ status: "revoked" }, "revoked")).toEqual(
+      {
+        reconnect: true,
+        rotate: false,
+      }
+    );
     expect(
       providerCredentialActions(
         { lastErrorCode: "permissionDenied", status: "active" },
-        "degraded",
-      ),
-    ).toEqual({ reconnect: true, rotate: true })
+        "degraded"
+      )
+    ).toEqual({ reconnect: true, rotate: true });
     expect(providerCredentialActions({ status: "active" }, "healthy")).toEqual({
       reconnect: false,
       rotate: true,
-    })
-  })
-})
+    });
+  });
+});

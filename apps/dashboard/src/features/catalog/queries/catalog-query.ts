@@ -1,4 +1,4 @@
-import { queryOptions } from "@tanstack/react-query"
+import { queryOptions } from "@tanstack/react-query";
 
 import {
   getEntitlement,
@@ -17,22 +17,37 @@ import {
   listProviderMappings,
   type ProductStatus,
   type ProductType,
-} from "@/generated/api"
-import { generatedDashboardClient } from "@/lib/api/generated-dashboard-client"
+} from "@/generated/api";
+import { generatedDashboardClient } from "@/lib/api/generated-dashboard-client";
 
 export const catalogKeys = {
   all: (projectId: string) => ["catalog", projectId] as const,
-  entitlement: (entitlementId: string) => ["catalog", "entitlement", entitlementId] as const,
-  entitlements: (projectId: string) => ["catalog", projectId, "entitlements"] as const,
+  entitlement: (entitlementId: string) =>
+    ["catalog", "entitlement", entitlementId] as const,
+  entitlements: (projectId: string) =>
+    ["catalog", projectId, "entitlements"] as const,
   plan: (planId: string) => ["catalog", "plan", planId] as const,
-  planProducts: (planId: string) => ["catalog", "plan", planId, "products"] as const,
+  planProducts: (planId: string) =>
+    ["catalog", "plan", planId, "products"] as const,
   plans: (projectId: string) => ["catalog", projectId, "plans"] as const,
   product: (productId: string) => ["catalog", "product", productId] as const,
   productEntitlements: (productId: string) =>
     ["catalog", "product", productId, "entitlements"] as const,
-  productReadiness: (productId: string, environmentId: string, applicationId: string) =>
-    ["catalog", "product", productId, "readiness", environmentId, applicationId] as const,
-  productUsage: (productId: string) => ["catalog", "product", productId, "usage"] as const,
+  productReadiness: (
+    productId: string,
+    environmentId: string,
+    applicationId: string
+  ) =>
+    [
+      "catalog",
+      "product",
+      productId,
+      "readiness",
+      environmentId,
+      applicationId,
+    ] as const,
+  productUsage: (productId: string) =>
+    ["catalog", "product", productId, "usage"] as const,
   products: (projectId: string, filters: ProductFilters = {}) =>
     ["catalog", projectId, "products", filters] as const,
   providerMappings: (productId: string) =>
@@ -43,7 +58,7 @@ export const catalogKeys = {
     ["catalog", "provider-mapping", mappingId, "observations"] as const,
   providerUsage: (mappingId: string) =>
     ["catalog", "provider-mapping", mappingId, "usage"] as const,
-}
+};
 
 export function providerMappingMetadataQueryOptions(mappingId: string) {
   return queryOptions({
@@ -54,10 +69,10 @@ export function providerMappingMetadataQueryOptions(mappingId: string) {
         path: { mappingId },
         signal,
         throwOnError: true,
-      })
-      return result.data.data
+      });
+      return result.data.data;
     },
-  })
+  });
 }
 
 export function providerMappingObservationsQueryOptions(mappingId: string) {
@@ -69,10 +84,10 @@ export function providerMappingObservationsQueryOptions(mappingId: string) {
         path: { mappingId },
         signal,
         throwOnError: true,
-      })
-      return result.data.data
+      });
+      return result.data.data;
     },
-  })
+  });
 }
 
 export function providerMappingUsageQueryOptions(mappingId: string) {
@@ -84,16 +99,16 @@ export function providerMappingUsageQueryOptions(mappingId: string) {
         path: { mappingId },
         signal,
         throwOnError: true,
-      })
-      return result.data.data
+      });
+      return result.data.data;
     },
-  })
+  });
 }
 
 export interface ProductFilters {
-  search?: string
-  status?: ProductStatus
-  type?: ProductType
+  search?: string;
+  status?: ProductStatus;
+  type?: ProductType;
 }
 
 export function plansQueryOptions(projectId: string) {
@@ -105,10 +120,10 @@ export function plansQueryOptions(projectId: string) {
         path: { projectId },
         signal,
         throwOnError: true,
-      })
-      return result.data.data
+      });
+      return result.data.data;
     },
-  })
+  });
 }
 
 export function planQueryOptions(planId: string) {
@@ -120,10 +135,10 @@ export function planQueryOptions(planId: string) {
         path: { planId },
         signal,
         throwOnError: true,
-      })
-      return result.data.data
+      });
+      return result.data.data;
     },
-  })
+  });
 }
 
 export function planProductsQueryOptions(planId: string) {
@@ -135,13 +150,16 @@ export function planProductsQueryOptions(planId: string) {
         path: { planId },
         signal,
         throwOnError: true,
-      })
-      return result.data.data
+      });
+      return result.data.data;
     },
-  })
+  });
 }
 
-export function productsQueryOptions(projectId: string, filters: ProductFilters = {}) {
+export function productsQueryOptions(
+  projectId: string,
+  filters: ProductFilters = {}
+) {
   return queryOptions({
     queryKey: catalogKeys.products(projectId, filters),
     queryFn: async ({ signal }) => {
@@ -151,10 +169,10 @@ export function productsQueryOptions(projectId: string, filters: ProductFilters 
         query: filters,
         signal,
         throwOnError: true,
-      })
-      return result.data.data
+      });
+      return result.data.data;
     },
-  })
+  });
 }
 
 export function productQueryOptions(productId: string) {
@@ -166,10 +184,10 @@ export function productQueryOptions(productId: string) {
         path: { productId },
         signal,
         throwOnError: true,
-      })
-      return result.data.data
+      });
+      return result.data.data;
     },
-  })
+  });
 }
 
 export function productUsageQueryOptions(productId: string) {
@@ -181,19 +199,23 @@ export function productUsageQueryOptions(productId: string) {
         path: { productId },
         signal,
         throwOnError: true,
-      })
-      return result.data.data
+      });
+      return result.data.data;
     },
-  })
+  });
 }
 
 export function productReadinessQueryOptions(
   productId: string,
   environmentId: string,
-  applicationId: string,
+  applicationId: string
 ) {
   return queryOptions({
-    queryKey: catalogKeys.productReadiness(productId, environmentId, applicationId),
+    queryKey: catalogKeys.productReadiness(
+      productId,
+      environmentId,
+      applicationId
+    ),
     queryFn: async ({ signal }) => {
       const result = await getProductReadiness({
         client: generatedDashboardClient,
@@ -201,10 +223,10 @@ export function productReadinessQueryOptions(
         query: { applicationId, environmentId },
         signal,
         throwOnError: true,
-      })
-      return result.data.data
+      });
+      return result.data.data;
     },
-  })
+  });
 }
 
 export function providerMappingsQueryOptions(productId: string) {
@@ -216,10 +238,10 @@ export function providerMappingsQueryOptions(productId: string) {
         path: { productId },
         signal,
         throwOnError: true,
-      })
-      return result.data.data
+      });
+      return result.data.data;
     },
-  })
+  });
 }
 
 export function entitlementsQueryOptions(projectId: string) {
@@ -231,10 +253,10 @@ export function entitlementsQueryOptions(projectId: string) {
         path: { projectId },
         signal,
         throwOnError: true,
-      })
-      return result.data.data
+      });
+      return result.data.data;
     },
-  })
+  });
 }
 
 export function entitlementQueryOptions(entitlementId: string) {
@@ -246,10 +268,10 @@ export function entitlementQueryOptions(entitlementId: string) {
         path: { entitlementId },
         signal,
         throwOnError: true,
-      })
-      return result.data.data
+      });
+      return result.data.data;
     },
-  })
+  });
 }
 
 export function productEntitlementsQueryOptions(productId: string) {
@@ -261,8 +283,8 @@ export function productEntitlementsQueryOptions(productId: string) {
         path: { productId },
         signal,
         throwOnError: true,
-      })
-      return result.data.data
+      });
+      return result.data.data;
     },
-  })
+  });
 }

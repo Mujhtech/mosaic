@@ -1,27 +1,33 @@
-import { ArrowSquareOutIcon } from "@phosphor-icons/react/dist/ssr/ArrowSquareOut"
-import { useQuery } from "@tanstack/react-query"
+import { ArrowSquareOutIcon } from "@phosphor-icons/react/dist/ssr/ArrowSquareOut";
+import { useQuery } from "@tanstack/react-query";
 
-import { EmptyState } from "@/components/feedback/empty-state"
-import type { AnalyticsAdapter } from "../api/analytics-adapter"
-import { issuesQueryOptions } from "../queries/analytics-queries"
-import type { AnalyticsFilters, AnalyticsScope, IssueRow } from "../types/analytics"
-import { AnalyticsQueryResult } from "./query-result"
+import { EmptyState } from "@/components/feedback/empty-state";
+import type { AnalyticsAdapter } from "../api/analytics-adapter";
+import { issuesQueryOptions } from "../queries/analytics-queries";
+import type {
+  AnalyticsFilters,
+  AnalyticsScope,
+  IssueRow,
+} from "../types/analytics";
+import { AnalyticsQueryResult } from "./query-result";
 
 export function IssuesPanel({
   adapter,
   filters,
   scope,
 }: {
-  adapter: AnalyticsAdapter
-  filters: AnalyticsFilters
-  scope: AnalyticsScope
+  adapter: AnalyticsAdapter;
+  filters: AnalyticsFilters;
+  scope: AnalyticsScope;
 }) {
-  const query = useQuery(issuesQueryOptions(scope, filters, adapter))
+  const query = useQuery(issuesQueryOptions(scope, filters, adapter));
   return (
     <AnalyticsQueryResult
       error={query.error}
       isPending={query.isPending}
-      onRetry={() => void query.refetch()}
+      onRetry={() => {
+        query.refetch();
+      }}
     >
       {query.data?.length === 0 ? (
         <EmptyState
@@ -31,7 +37,9 @@ export function IssuesPanel({
       ) : query.data ? (
         <div className="overflow-x-auto rounded border">
           <table className="w-full min-w-160 text-left text-sm">
-            <caption className="sr-only">Product, provider, and Placement recovery issues</caption>
+            <caption className="sr-only">
+              Product, provider, and Placement recovery issues
+            </caption>
             <thead className="bg-muted/40 text-muted-foreground text-xs uppercase">
               <tr>
                 <th className="px-4 py-3" scope="col">
@@ -48,25 +56,31 @@ export function IssuesPanel({
                 </th>
               </tr>
             </thead>
-            <tbody className="divide-border divide-y">
+            <tbody className="divide-y divide-border">
               {query.data.map((issue) => (
-                <IssueTableRow issue={issue} scope={scope} key={issue.id} />
+                <IssueTableRow issue={issue} key={issue.id} scope={scope} />
               ))}
             </tbody>
           </table>
         </div>
       ) : null}
     </AnalyticsQueryResult>
-  )
+  );
 }
 
-function IssueTableRow({ issue, scope }: { issue: IssueRow; scope: AnalyticsScope }) {
+function IssueTableRow({
+  issue,
+  scope,
+}: {
+  issue: IssueRow;
+  scope: AnalyticsScope;
+}) {
   const href =
     issue.kind === "provider"
       ? `/orgs/${scope.organizationId}/projects/${scope.projectId}/catalog/providers?environmentId=${scope.environmentId}`
       : issue.kind === "product"
         ? `/orgs/${scope.organizationId}/projects/${scope.projectId}/catalog/products`
-        : `/orgs/${scope.organizationId}/projects/${scope.projectId}/monetization/${scope.environmentId}/placements${issue.recoveryId ? `/${issue.recoveryId}` : ""}`
+        : `/orgs/${scope.organizationId}/projects/${scope.projectId}/monetization/${scope.environmentId}/placements${issue.recoveryId ? `/${issue.recoveryId}` : ""}`;
   return (
     <tr>
       <th className="px-4 py-4 font-medium" scope="row">
@@ -79,12 +93,12 @@ function IssueTableRow({ issue, scope }: { issue: IssueRow; scope: AnalyticsScop
       </td>
       <td className="px-4 py-4">
         <a
-          className="text-primary inline-flex items-center gap-1 font-medium underline-offset-4 hover:underline"
+          className="inline-flex items-center gap-1 font-medium text-primary underline-offset-4 hover:underline"
           href={href}
         >
           Open recovery <ArrowSquareOutIcon aria-hidden size={15} />
         </a>
       </td>
     </tr>
-  )
+  );
 }

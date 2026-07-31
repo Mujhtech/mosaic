@@ -1,47 +1,47 @@
-import { CopyIcon } from "@phosphor-icons/react/dist/ssr/Copy"
-import { PlugsConnectedIcon } from "@phosphor-icons/react/dist/ssr/PlugsConnected"
-import { WarningCircleIcon } from "@phosphor-icons/react/dist/ssr/WarningCircle"
-import { useState } from "react"
+import { CopyIcon } from "@phosphor-icons/react/dist/ssr/Copy";
+import { PlugsConnectedIcon } from "@phosphor-icons/react/dist/ssr/PlugsConnected";
+import { WarningCircleIcon } from "@phosphor-icons/react/dist/ssr/WarningCircle";
+import { useState } from "react";
 
-import { Button } from "@/components/ui/button"
-import { useEditorSelection } from "@/features/paywall-editor/hooks/use-editor-selection"
-import { previewAcknowledgementKey } from "@/features/paywall-editor/hooks/use-preview-connection"
-import { PREVIEW_WEBSOCKET_SUBPROTOCOLS } from "@/features/paywall-editor/schema/preview-message"
+import { Button } from "@/components/ui/button";
+import { useEditorSelection } from "@/features/paywall-editor/hooks/use-editor-selection";
 import type {
   PreviewAcknowledgement,
   PreviewAggregate,
-} from "@/features/paywall-editor/hooks/use-preview-connection"
+} from "@/features/paywall-editor/hooks/use-preview-connection";
+import { previewAcknowledgementKey } from "@/features/paywall-editor/hooks/use-preview-connection";
+import { PREVIEW_WEBSOCKET_SUBPROTOCOLS } from "@/features/paywall-editor/schema/preview-message";
 import type {
   MosaicDocument,
   PreviewClient,
   PreviewConnectionStatus,
   PreviewDiagnostic,
-} from "@/features/paywall-editor/types/editor"
-import { compatibilityWarnings } from "@/features/paywall-editor/utils/preview-compatibility"
+} from "@/features/paywall-editor/types/editor";
+import { compatibilityWarnings } from "@/features/paywall-editor/utils/preview-compatibility";
 
 const PREVIEW_PLATFORMS: ReadonlyArray<{
-  id: Exclude<PreviewClient["platform"], "unknown">
-  label: string
+  id: Exclude<PreviewClient["platform"], "unknown">;
+  label: string;
 }> = [
   { id: "flutter", label: "Flutter" },
   { id: "ios", label: "iOS" },
   { id: "android", label: "Android" },
-]
+];
 
 function statusLabel(status: PreviewConnectionStatus) {
   switch (status) {
     case "idle":
-      return "Waiting"
+      return "Waiting";
     case "connecting":
-      return "Connecting"
+      return "Connecting";
     case "connected":
-      return "Relay connected"
+      return "Relay connected";
     case "reconnecting":
-      return "Reconnecting"
+      return "Reconnecting";
     case "disconnected":
-      return "Disconnected"
+      return "Disconnected";
     case "unavailable":
-      return "Unavailable"
+      return "Unavailable";
   }
 }
 
@@ -50,7 +50,7 @@ function hasCapabilityReport(client: PreviewClient) {
     client.supportedSchemaVersions.length > 0 ||
     client.supportedCapabilities.length > 0 ||
     client.previewCapabilities.length > 0
-  )
+  );
 }
 
 function platformStatus(clients: readonly PreviewClient[]) {
@@ -59,76 +59,87 @@ function platformStatus(clients: readonly PreviewClient[]) {
       detail: "Waiting for example app",
       dotClassName: "bg-muted-foreground/35",
       label: "Not connected",
-    }
+    };
   }
 
-  const reportedCount = clients.filter(hasCapabilityReport).length
+  const reportedCount = clients.filter(hasCapabilityReport).length;
   if (reportedCount === 0) {
     return {
       detail: "Capability handshake",
       dotClassName: "bg-amber-500",
       label: "Connecting",
-    }
+    };
   }
   if (reportedCount < clients.length) {
     return {
       detail: `${clients.length} preview clients`,
       dotClassName: "bg-amber-500",
       label: `${reportedCount} of ${clients.length} ready`,
-    }
+    };
   }
 
-  const onlyClient = clients.length === 1 ? clients[0] : undefined
+  const onlyClient = clients.length === 1 ? clients[0] : undefined;
   return {
-    detail: onlyClient?.device.displayName ?? `${clients.length} preview clients`,
+    detail:
+      onlyClient?.device.displayName ?? `${clients.length} preview clients`,
     dotClassName: "bg-emerald-500",
     label: clients.length === 1 ? "Connected" : `${clients.length} connected`,
-  }
+  };
 }
 
 function platformLabel(platform: PreviewClient["platform"]) {
-  return PREVIEW_PLATFORMS.find((entry) => entry.id === platform)?.label ?? "Native"
+  return (
+    PREVIEW_PLATFORMS.find((entry) => entry.id === platform)?.label ?? "Native"
+  );
 }
 
-function capabilityList(capabilities: readonly { name: string; version: string }[]) {
-  if (capabilities.length === 0) return "None reported"
-  return capabilities.map((capability) => `${capability.name} · ${capability.version}`).join(", ")
+function capabilityList(
+  capabilities: readonly { name: string; version: string }[]
+) {
+  if (capabilities.length === 0) {
+    return "None reported";
+  }
+  return capabilities
+    .map((capability) => `${capability.name} · ${capability.version}`)
+    .join(", ");
 }
 
 function capabilitySummary(client: PreviewClient) {
-  if (!hasCapabilityReport(client)) return "Waiting for report"
-  return `${client.supportedCapabilities.length} protocol · ${client.previewCapabilities.length} preview`
+  if (!hasCapabilityReport(client)) {
+    return "Waiting for report";
+  }
+  return `${client.supportedCapabilities.length} protocol · ${client.previewCapabilities.length} preview`;
 }
 
 function DiagnosticCard({
   diagnostic,
   onInspect,
 }: {
-  diagnostic: PreviewDiagnostic
-  onInspect: (componentId: string) => void
+  diagnostic: PreviewDiagnostic;
+  onInspect: (componentId: string) => void;
 }) {
-  const componentId = diagnostic.componentId
+  const componentId = diagnostic.componentId;
   return (
-    <article className="border-border rounded border p-2.5 text-xs">
+    <article className="rounded border border-border p-2.5 text-xs">
       <div className="flex items-start justify-between gap-2">
         <p className="font-medium">{diagnostic.message}</p>
-        <span className="bg-muted shrink-0 rounded-full px-2 py-0.5 text-[10px] font-medium capitalize">
+        <span className="shrink-0 rounded-full bg-muted px-2 py-0.5 font-medium text-[10px] capitalize">
           {diagnostic.severity}
         </span>
       </div>
       {diagnostic.recovery ? (
-        <p className="text-muted-foreground mt-1">{diagnostic.recovery}</p>
+        <p className="mt-1 text-muted-foreground">{diagnostic.recovery}</p>
       ) : null}
       {componentId ? (
         <button
-          type="button"
-          className="text-primary focus-visible:ring-ring mt-2 rounded font-semibold outline-none hover:underline focus-visible:ring-2"
+          className="mt-2 rounded font-semibold text-primary outline-none hover:underline focus-visible:ring-2 focus-visible:ring-ring"
           onClick={() => onInspect(componentId)}
+          type="button"
         >
           Inspect affected content
         </button>
       ) : null}
-      <details className="text-muted-foreground mt-2">
+      <details className="mt-2 text-muted-foreground">
         <summary className="cursor-pointer">Diagnostic details</summary>
         <dl className="mt-1 grid grid-cols-[auto_1fr] gap-x-2">
           <dt>Code</dt>
@@ -148,7 +159,7 @@ function DiagnosticCard({
         </dl>
       </details>
     </article>
-  )
+  );
 }
 
 // The panel intentionally presents one connection aggregate; diagnostic cards and protocol state
@@ -167,63 +178,65 @@ export function PreviewConnectionPanel({
   latestSentRevisionId,
   onReconnect,
 }: {
-  document: MosaicDocument
-  endpoint: string
-  sessionId: string
-  status: PreviewConnectionStatus
-  clients: readonly PreviewClient[]
-  diagnostics: readonly PreviewDiagnostic[]
-  acknowledgements: Readonly<Record<string, PreviewAcknowledgement>>
-  aggregate: PreviewAggregate
-  latestSentEditableDocumentId: string | null
-  latestSentRevisionId: string | null
-  onReconnect: () => void
+  document: MosaicDocument;
+  endpoint: string;
+  sessionId: string;
+  status: PreviewConnectionStatus;
+  clients: readonly PreviewClient[];
+  diagnostics: readonly PreviewDiagnostic[];
+  acknowledgements: Readonly<Record<string, PreviewAcknowledgement>>;
+  aggregate: PreviewAggregate;
+  latestSentEditableDocumentId: string | null;
+  latestSentRevisionId: string | null;
+  onReconnect: () => void;
 }) {
-  const [copied, setCopied] = useState(false)
-  const { selectComponent } = useEditorSelection()
-  const warnings = compatibilityWarnings(document, clients)
+  const [copied, setCopied] = useState(false);
+  const { selectComponent } = useEditorSelection();
+  const warnings = compatibilityWarnings(document, clients);
   const incompatibleClientCount = clients.filter(
-    (client) => compatibilityWarnings(document, [client]).length > 0,
-  ).length
+    (client) => compatibilityWarnings(document, [client]).length > 0
+  ).length;
   const aggregateLabel =
     incompatibleClientCount > 0
       ? `${incompatibleClientCount} of ${clients.length} previews need compatibility attention`
-      : aggregate.label
-  const configuration = `command=npm run dev:studio\nendpoint=${endpoint}\nsession=${sessionId}\nsubprotocols=${PREVIEW_WEBSOCKET_SUBPROTOCOLS.join(",")}`
-  const latestDiagnostic = diagnostics[0]
+      : aggregate.label;
+  const configuration = `command=npm run dev:studio\nendpoint=${endpoint}\nsession=${sessionId}\nsubprotocols=${PREVIEW_WEBSOCKET_SUBPROTOCOLS.join(",")}`;
+  const latestDiagnostic = diagnostics[0];
 
   return (
     <section
-      id="connected-preview-panel"
-      className="focus-visible:ring-ring scroll-mt-3 space-y-4 rounded outline-none focus-visible:ring-2 focus-visible:ring-offset-2"
       aria-labelledby="native-preview-title"
+      className="scroll-mt-3 space-y-4 rounded outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+      id="connected-preview-panel"
       tabIndex={-1}
     >
-      <p className="sr-only" aria-live="polite" aria-atomic="true">
+      <p aria-atomic="true" aria-live="polite" className="sr-only">
         {aggregateLabel}. {statusLabel(status)}.
       </p>
       <div className="flex items-start justify-between gap-3">
         <div>
-          <h2 id="native-preview-title" className="text-sm font-semibold">
+          <h2 className="font-semibold text-sm" id="native-preview-title">
             Native previews
           </h2>
-          <p className="text-muted-foreground mt-0.5 text-xs">{aggregateLabel}</p>
+          <p className="mt-0.5 text-muted-foreground text-xs">
+            {aggregateLabel}
+          </p>
         </div>
-        <span className="bg-muted rounded-full px-2 py-1 text-[11px] font-medium">
+        <span className="rounded-full bg-muted px-2 py-1 font-medium text-[11px]">
           {statusLabel(status)}
         </span>
       </div>
 
-      <div className="bg-muted/70 rounded p-3 text-xs">
+      <div className="rounded bg-muted/70 p-3 text-xs">
         <div className="flex items-center justify-between gap-3">
           <p className="font-semibold">Connection instructions</p>
           <span className="text-muted-foreground">{statusLabel(status)}</span>
         </div>
-        <p className="text-muted-foreground mt-1 leading-5">
-          From the dashboard folder, start Studio and its relay. Then configure each example app
-          with this endpoint and session.
+        <p className="mt-1 text-muted-foreground leading-5">
+          From the dashboard folder, start Studio and its relay. Then configure
+          each example app with this endpoint and session.
         </p>
-        <code className="bg-background mt-2 block overflow-x-auto rounded border p-2 leading-5">
+        <code className="mt-2 block overflow-x-auto rounded border bg-background p-2 leading-5">
           npm run dev:studio
           <br />
           {endpoint}
@@ -232,22 +245,22 @@ export function PreviewConnectionPanel({
         </code>
         <div className="mt-2 flex gap-2">
           <Button
-            size="xs"
-            variant="outline"
             onClick={async () => {
               try {
-                await navigator.clipboard.writeText(configuration)
-                setCopied(true)
+                await navigator.clipboard.writeText(configuration);
+                setCopied(true);
               } catch {
-                setCopied(false)
+                setCopied(false);
               }
             }}
+            size="xs"
+            variant="outline"
           >
             <CopyIcon aria-hidden />
             {copied ? "Copied" : "Copy configuration"}
           </Button>
           {status === "disconnected" || status === "unavailable" ? (
-            <Button size="xs" variant="outline" onClick={onReconnect}>
+            <Button onClick={onReconnect} size="xs" variant="outline">
               Reconnect
             </Button>
           ) : null}
@@ -255,69 +268,91 @@ export function PreviewConnectionPanel({
       </div>
 
       <div>
-        <h3 className="text-xs font-semibold">Platform status</h3>
+        <h3 className="font-semibold text-xs">Platform status</h3>
         <ul className="mt-2 grid grid-cols-3 gap-2">
           {PREVIEW_PLATFORMS.map((platform) => {
             const state = platformStatus(
-              clients.filter((client) => client.platform === platform.id),
-            )
+              clients.filter((client) => client.platform === platform.id)
+            );
             return (
-              <li key={platform.id} className="border-border min-w-0 rounded border p-2">
+              <li
+                className="min-w-0 rounded border border-border p-2"
+                key={platform.id}
+              >
                 <div className="flex items-center gap-1.5">
                   <span
-                    className={`size-1.5 shrink-0 rounded-full ${state.dotClassName}`}
                     aria-hidden
+                    className={`size-1.5 shrink-0 rounded-full ${state.dotClassName}`}
                   />
-                  <p className="truncate text-xs font-medium">{platform.label}</p>
+                  <p className="truncate font-medium text-xs">
+                    {platform.label}
+                  </p>
                 </div>
-                <p className="mt-1 truncate text-[11px] font-medium">{state.label}</p>
+                <p className="mt-1 truncate font-medium text-[11px]">
+                  {state.label}
+                </p>
                 <p
-                  className="text-muted-foreground mt-0.5 truncate text-[10px]"
+                  className="mt-0.5 truncate text-[10px] text-muted-foreground"
                   title={state.detail}
                 >
                   {state.detail}
                 </p>
               </li>
-            )
+            );
           })}
         </ul>
       </div>
 
       {clients.length === 0 ? (
-        <div className="border-border rounded border border-dashed p-4 text-center">
-          <PlugsConnectedIcon className="text-muted-foreground mx-auto" aria-hidden size={24} />
-          <p className="mt-2 text-sm font-medium">No example app connected</p>
-          <p className="text-muted-foreground mt-1 text-xs">
-            Start any example app with the configuration above to preview this draft natively.
+        <div className="rounded border border-border border-dashed p-4 text-center">
+          <PlugsConnectedIcon
+            aria-hidden
+            className="mx-auto text-muted-foreground"
+            size={24}
+          />
+          <p className="mt-2 font-medium text-sm">No example app connected</p>
+          <p className="mt-1 text-muted-foreground text-xs">
+            Start any example app with the configuration above to preview this
+            draft natively.
           </p>
         </div>
       ) : (
         <div>
-          <h3 className="text-xs font-semibold">Connected clients</h3>
+          <h3 className="font-semibold text-xs">Connected clients</h3>
           <ul className="mt-2 space-y-2">
             {clients.map((client) => {
               const recordedAcknowledgement = latestSentEditableDocumentId
                 ? acknowledgements[
-                    previewAcknowledgementKey(client.clientId, latestSentEditableDocumentId)
+                    previewAcknowledgementKey(
+                      client.clientId,
+                      latestSentEditableDocumentId
+                    )
                   ]
-                : undefined
+                : undefined;
               const acknowledgement =
                 recordedAcknowledgement?.revisionId === latestSentRevisionId
                   ? recordedAcknowledgement
-                  : undefined
-              const hasCompatibilityWarning = compatibilityWarnings(document, [client]).length > 0
+                  : undefined;
+              const hasCompatibilityWarning =
+                compatibilityWarnings(document, [client]).length > 0;
               return (
-                <li key={client.clientId} className="border-border rounded border p-3">
+                <li
+                  className="rounded border border-border p-3"
+                  key={client.clientId}
+                >
                   <div className="flex items-center justify-between gap-2">
                     <div className="min-w-0">
-                      <p className="truncate text-sm font-medium">{client.displayName}</p>
-                      <p className="text-muted-foreground truncate text-xs">
-                        {platformLabel(client.platform)} · {client.application.displayName} ·{" "}
+                      <p className="truncate font-medium text-sm">
+                        {client.displayName}
+                      </p>
+                      <p className="truncate text-muted-foreground text-xs">
+                        {platformLabel(client.platform)} ·{" "}
+                        {client.application.displayName} ·{" "}
                         {client.device.displayName}
                       </p>
                     </div>
                     <span
-                      className={`rounded-full px-2 py-1 text-[11px] font-medium ${
+                      className={`rounded-full px-2 py-1 font-medium text-[11px] ${
                         hasCompatibilityWarning
                           ? "bg-amber-100 text-amber-900"
                           : acknowledgement?.status === "accepted"
@@ -338,62 +373,73 @@ export function PreviewConnectionPanel({
                   </div>
                   {acknowledgement ? (
                     <>
-                      <p className="text-muted-foreground mt-2 text-xs">
+                      <p className="mt-2 text-muted-foreground text-xs">
                         {acknowledgement.message}
                       </p>
-                      <details className="text-muted-foreground mt-1 text-[11px]">
-                        <summary className="cursor-pointer">Update details</summary>
+                      <details className="mt-1 text-[11px] text-muted-foreground">
+                        <summary className="cursor-pointer">
+                          Update details
+                        </summary>
                         Local update {acknowledgement.revisionSequence}
                       </details>
                     </>
                   ) : null}
                 </li>
-              )
+              );
             })}
           </ul>
         </div>
       )}
 
       <div>
-        <h3 className="text-xs font-semibold">Capabilities</h3>
+        <h3 className="font-semibold text-xs">Capabilities</h3>
         {clients.length === 0 ? (
-          <p className="text-muted-foreground mt-1 text-xs">
+          <p className="mt-1 text-muted-foreground text-xs">
             Capability reports appear after a native client connects.
           </p>
         ) : (
           <ul className="mt-2 space-y-2">
             {clients.map((client) => (
               <li
+                className="rounded border border-border px-2.5 py-2 text-xs"
                 key={client.clientId}
-                className="border-border rounded border px-2.5 py-2 text-xs"
               >
                 <details>
                   <summary className="cursor-pointer font-medium">
                     {client.displayName} · {capabilitySummary(client)}
                   </summary>
                   {hasCapabilityReport(client) ? (
-                    <dl className="text-muted-foreground mt-2 grid gap-1.5">
+                    <dl className="mt-2 grid gap-1.5 text-muted-foreground">
                       <div>
-                        <dt className="text-foreground font-medium">Schema versions</dt>
+                        <dt className="font-medium text-foreground">
+                          Schema versions
+                        </dt>
                         <dd className="mt-0.5 break-words">
-                          {client.supportedSchemaVersions.join(", ") || "None reported"}
+                          {client.supportedSchemaVersions.join(", ") ||
+                            "None reported"}
                         </dd>
                       </div>
                       <div>
-                        <dt className="text-foreground font-medium">Protocol capabilities</dt>
+                        <dt className="font-medium text-foreground">
+                          Protocol capabilities
+                        </dt>
                         <dd className="mt-0.5 break-words">
                           {capabilityList(client.supportedCapabilities)}
                         </dd>
                       </div>
                       <div>
-                        <dt className="text-foreground font-medium">Preview capabilities</dt>
+                        <dt className="font-medium text-foreground">
+                          Preview capabilities
+                        </dt>
                         <dd className="mt-0.5 break-words">
                           {capabilityList(client.previewCapabilities)}
                         </dd>
                       </div>
                       {client.maxDocumentBytes ? (
                         <div>
-                          <dt className="text-foreground font-medium">Document limit</dt>
+                          <dt className="font-medium text-foreground">
+                            Document limit
+                          </dt>
                           <dd className="mt-0.5">
                             {client.maxDocumentBytes.toLocaleString()} bytes
                           </dd>
@@ -401,8 +447,9 @@ export function PreviewConnectionPanel({
                       ) : null}
                     </dl>
                   ) : (
-                    <p className="text-muted-foreground mt-2">
-                      The client is connected and has not reported capabilities yet.
+                    <p className="mt-2 text-muted-foreground">
+                      The client is connected and has not reported capabilities
+                      yet.
                     </p>
                   )}
                 </details>
@@ -412,7 +459,7 @@ export function PreviewConnectionPanel({
         )}
 
         {warnings.length === 0 ? (
-          <p className="text-muted-foreground mt-2 text-xs">
+          <p className="mt-2 text-muted-foreground text-xs">
             {clients.length === 0
               ? "Connect a client to check this draft."
               : "Connected clients support this draft and its preview updates."}
@@ -421,10 +468,10 @@ export function PreviewConnectionPanel({
           <ul className="mt-2 space-y-2">
             {warnings.map((warning) => (
               <li
+                className="flex gap-2 rounded bg-amber-50 p-2 text-amber-950 text-xs"
                 key={warning}
-                className="flex gap-2 rounded bg-amber-50 p-2 text-xs text-amber-950"
               >
-                <WarningCircleIcon className="mt-0.5 shrink-0" aria-hidden />
+                <WarningCircleIcon aria-hidden className="mt-0.5 shrink-0" />
                 {warning}
               </li>
             ))}
@@ -433,24 +480,32 @@ export function PreviewConnectionPanel({
       </div>
 
       <div>
-        <h3 className="text-xs font-semibold">Last diagnostic</h3>
+        <h3 className="font-semibold text-xs">Last diagnostic</h3>
         {latestDiagnostic ? (
           <div className="mt-2">
-            <DiagnosticCard diagnostic={latestDiagnostic} onInspect={selectComponent} />
+            <DiagnosticCard
+              diagnostic={latestDiagnostic}
+              onInspect={selectComponent}
+            />
           </div>
         ) : (
-          <p className="text-muted-foreground mt-1 text-xs">No preview diagnostics yet.</p>
+          <p className="mt-1 text-muted-foreground text-xs">
+            No preview diagnostics yet.
+          </p>
         )}
         {diagnostics.length > 1 ? (
           <details className="mt-2 text-xs">
-            <summary className="text-muted-foreground cursor-pointer font-medium">
+            <summary className="cursor-pointer font-medium text-muted-foreground">
               {diagnostics.length - 1} earlier{" "}
               {diagnostics.length === 2 ? "diagnostic" : "diagnostics"}
             </summary>
             <ul className="mt-2 space-y-2">
               {diagnostics.slice(1).map((diagnostic) => (
                 <li key={diagnostic.id}>
-                  <DiagnosticCard diagnostic={diagnostic} onInspect={selectComponent} />
+                  <DiagnosticCard
+                    diagnostic={diagnostic}
+                    onInspect={selectComponent}
+                  />
                 </li>
               ))}
             </ul>
@@ -458,5 +513,5 @@ export function PreviewConnectionPanel({
         ) : null}
       </div>
     </section>
-  )
+  );
 }

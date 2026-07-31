@@ -5,14 +5,18 @@ export function pagedListHeading({
   nextCursor,
   noun,
 }: {
-  count: number
-  cursor: string | undefined
-  nextCursor: string | undefined
-  noun: string
+  count: number;
+  cursor: string | undefined;
+  nextCursor: string | undefined;
+  noun: string;
 }) {
-  if (!cursor && !nextCursor) return `All ${count} ${noun}`
-  if (nextCursor) return `Showing ${count} ${noun} on this page — more follow`
-  return `Showing ${count} ${noun} on the last page`
+  if (!(cursor || nextCursor)) {
+    return `All ${count} ${noun}`;
+  }
+  if (nextCursor) {
+    return `Showing ${count} ${noun} on this page — more follow`;
+  }
+  return `Showing ${count} ${noun} on the last page`;
 }
 
 /** Describes a server-bounded embedded list whose surface has no cursor. */
@@ -22,15 +26,19 @@ export function cappedListHeading({
   noun,
   totalCount,
 }: {
-  cap: number
-  count: number
-  noun: string
-  totalCount: number | undefined
+  cap: number;
+  count: number;
+  noun: string;
+  totalCount: number | undefined;
 }) {
   if (totalCount !== undefined && totalCount > count) {
-    return `Showing ${count} of ${totalCount} ${noun}`
+    return `Showing ${count} of ${totalCount} ${noun}`;
   }
-  if (totalCount !== undefined) return `All ${count} ${noun}`
-  if (count >= cap) return `Showing the ${cap} most recent ${noun} — more may exist`
-  return `All ${count} ${noun}`
+  if (totalCount !== undefined) {
+    return `All ${count} ${noun}`;
+  }
+  if (count >= cap) {
+    return `Showing the ${cap} most recent ${noun} — more may exist`;
+  }
+  return `All ${count} ${noun}`;
 }

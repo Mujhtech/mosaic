@@ -1,10 +1,10 @@
-import { MonetizationWorkspace } from "@/features/environments/components/monetization-workspace"
-import { ExperimentBuilder } from "./experiment-builder"
+import { MonetizationWorkspace } from "@/features/environments/components/monetization-workspace";
+import { ExperimentBuilder } from "./experiment-builder";
 
 export function NewExperimentPage(props: {
-  environmentId: string
-  organizationId: string
-  projectId: string
+  environmentId: string;
+  organizationId: string;
+  projectId: string;
 }) {
   return (
     <MonetizationWorkspace
@@ -15,5 +15,5 @@ export function NewExperimentPage(props: {
     >
       <ExperimentBuilder {...props} />
     </MonetizationWorkspace>
-  )
+  );
 }

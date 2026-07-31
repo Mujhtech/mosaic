@@ -1,5 +1,8 @@
-import type { BootstrapOrganization, WorkspaceBootstrap } from "@/generated/api"
-import { DEFAULT_ENVIRONMENT_ALIAS } from "@/features/environments/types/environment-alias"
+import { DEFAULT_ENVIRONMENT_ALIAS } from "@/features/environments/types/environment-alias";
+import type {
+  BootstrapOrganization,
+  WorkspaceBootstrap,
+} from "@/generated/api";
 
 /**
  * Where entry sends an operator, as a router target so the decision is asserted
@@ -8,20 +11,24 @@ import { DEFAULT_ENVIRONMENT_ALIAS } from "@/features/environments/types/environ
 export type WorkspaceEntryTarget =
   | { reason: "no-organizations"; to: "/orgs/new" }
   | {
-      params: { organizationId: string }
-      reason: "no-projects"
-      to: "/orgs/$organizationId/projects/new"
+      params: { organizationId: string };
+      reason: "no-projects";
+      to: "/orgs/$organizationId/projects/new";
     }
   | {
-      params: { organizationId: string }
-      reason: "cannot-create-project"
-      to: "/orgs/$organizationId"
+      params: { organizationId: string };
+      reason: "cannot-create-project";
+      to: "/orgs/$organizationId";
     }
   | {
-      params: { environmentKey: string; organizationId: string; projectId: string }
-      reason: "resolved"
-      to: "/orgs/$organizationId/projects/$projectId/env/$environmentKey"
-    }
+      params: {
+        environmentKey: string;
+        organizationId: string;
+        projectId: string;
+      };
+      reason: "resolved";
+      to: "/orgs/$organizationId/projects/$projectId/env/$environmentKey";
+    };
 
 /**
  * The router payload for a target, without the `reason` the resolver carries for
@@ -30,11 +37,11 @@ export type WorkspaceEntryTarget =
 export function workspaceEntryNavigation(target: WorkspaceEntryTarget) {
   return target.to === "/orgs/new"
     ? { to: target.to }
-    : { params: target.params, to: target.to }
+    : { params: target.params, to: target.to };
 }
 
 function canCreateProject(entry: BootstrapOrganization) {
-  return entry.role === "owner" || entry.role === "admin"
+  return entry.role === "owner" || entry.role === "admin";
 }
 
 /**
@@ -48,17 +55,22 @@ function canCreateProject(entry: BootstrapOrganization) {
  * Organization that does have a Project, and land on the Organization overview
  * when none does.
  */
-export function resolveWorkspaceEntry(bootstrap: WorkspaceBootstrap): WorkspaceEntryTarget {
-  const organizations = bootstrap.organizations
-  const [first] = organizations
+export function resolveWorkspaceEntry(
+  bootstrap: WorkspaceBootstrap
+): WorkspaceEntryTarget {
+  const organizations = bootstrap.organizations;
+  const [first] = organizations;
   if (!first) {
-    return { reason: "no-organizations", to: "/orgs/new" }
+    return { reason: "no-organizations", to: "/orgs/new" };
   }
 
-  const populated = organizations.find((entry) => entry.projects.length > 0)
-  const target = first.projects.length > 0 || canCreateProject(first) ? first : (populated ?? first)
+  const populated = organizations.find((entry) => entry.projects.length > 0);
+  const target =
+    first.projects.length > 0 || canCreateProject(first)
+      ? first
+      : (populated ?? first);
 
-  const [project] = target.projects
+  const [project] = target.projects;
   if (project) {
     return {
       params: {
@@ -70,7 +82,7 @@ export function resolveWorkspaceEntry(bootstrap: WorkspaceBootstrap): WorkspaceE
       },
       reason: "resolved",
       to: "/orgs/$organizationId/projects/$projectId/env/$environmentKey",
-    }
+    };
   }
 
   if (canCreateProject(target)) {
@@ -78,12 +90,12 @@ export function resolveWorkspaceEntry(bootstrap: WorkspaceBootstrap): WorkspaceE
       params: { organizationId: target.organization.id },
       reason: "no-projects",
       to: "/orgs/$organizationId/projects/new",
-    }
+    };
   }
 
   return {
     params: { organizationId: target.organization.id },
     reason: "cannot-create-project",
     to: "/orgs/$organizationId",
-  }
+  };
 }

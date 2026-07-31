@@ -1,10 +1,11 @@
-import * as React from "react"
+import type { ReactNode } from "react";
+import { Component } from "react";
 
-import { ErrorState } from "@/components/feedback/error-state"
-import { describeApiError } from "@/lib/api/errors"
+import { ErrorState } from "@/components/feedback/error-state";
+import { describeApiError } from "@/lib/api/errors";
 
 interface AppErrorBoundaryState {
-  error: unknown
+  error: unknown;
 }
 
 /**
@@ -16,40 +17,43 @@ interface AppErrorBoundaryState {
  * anywhere: the operator gets recovery actions and, when available, the
  * correlation identifier to quote to whoever runs the API.
  */
-export class AppErrorBoundary extends React.Component<
-  { children: React.ReactNode },
+// biome-ignore lint/style/useReactFunctionComponents: React implements error boundaries only via componentDidCatch on a class
+export class AppErrorBoundary extends Component<
+  { children: ReactNode },
   AppErrorBoundaryState
 > {
-  state: AppErrorBoundaryState = { error: null }
+  state: AppErrorBoundaryState = { error: null };
 
   static getDerivedStateFromError(error: unknown): AppErrorBoundaryState {
-    return { error }
+    return { error };
   }
 
   render() {
-    if (!this.state.error) return this.props.children
+    if (!this.state.error) {
+      return this.props.children;
+    }
 
-    const described = describeApiError(this.state.error)
+    const described = describeApiError(this.state.error);
 
     return (
       <div className="mx-auto my-10 max-w-3xl px-4">
         <ErrorState
           description="Mosaic stopped rendering unexpectedly. Reload the page; unsaved local Studio work is kept in this browser."
           onRetry={() => {
-            this.setState({ error: null })
+            this.setState({ error: null });
           }}
           retryLabel="Try rendering again"
           title="The dashboard could not be displayed"
         />
         {described.correlationId ? (
-          <p className="text-muted-foreground mt-3 text-xs">
+          <p className="mt-3 text-muted-foreground text-xs">
             Request ID:{" "}
-            <code className="bg-muted rounded px-1 py-0.5 font-mono select-all">
+            <code className="select-all rounded bg-muted px-1 py-0.5 font-mono">
               {described.correlationId}
             </code>
           </p>
         ) : null}
       </div>
-    )
+    );
   }
 }

@@ -1,21 +1,17 @@
-import { useMutation, useQuery } from "@tanstack/react-query"
-import { useState } from "react"
+import { useMutation, useQuery } from "@tanstack/react-query";
+import { useState } from "react";
 
-import { EmptyState } from "@/components/feedback/empty-state"
-import { buttonVariants } from "@/components/ui/button-variants"
-import { HostedResourceBoundary } from "@/features/auth/components/hosted-resource-boundary"
-import { resolveHostedQueryState } from "@/features/auth/types/hosted-query-state"
-import { LedgerPaging, StatusPill } from "@/features/billing-ledger/components/billing-chrome"
-import { pagedListHeading } from "@/features/billing-ledger/types/billing-list-headings"
-import { BILLING_OPTIONAL_NOTE } from "@/features/billing-ledger/types/billing-vocabulary"
-import { billingHealthQueryOptions } from "@/features/billing-operations/queries/billing-health-queries"
-import { CustomerSearchForm } from "@/features/billing-customers/components/customer-search-form"
-import { lookupBillingCustomerMutationOptions } from "@/features/billing-customers/mutations/customer-mutations"
-import { billingCustomersQueryOptions } from "@/features/billing-customers/queries/customer-queries"
+import { EmptyState } from "@/components/feedback/empty-state";
+import { buttonVariants } from "@/components/ui/button-variants";
+import { HostedResourceBoundary } from "@/features/auth/components/hosted-resource-boundary";
+import { resolveHostedQueryState } from "@/features/auth/types/hosted-query-state";
+import { CustomerSearchForm } from "@/features/billing-customers/components/customer-search-form";
+import { lookupBillingCustomerMutationOptions } from "@/features/billing-customers/mutations/customer-mutations";
+import { billingCustomersQueryOptions } from "@/features/billing-customers/queries/customer-queries";
 import {
-  describeLookupMiss,
   type CustomerIdentifierType,
-} from "@/features/billing-customers/types/customer-search"
+  describeLookupMiss,
+} from "@/features/billing-customers/types/customer-search";
 import {
   AUTHORITATIVE_ACCESS_NOTE,
   customerIdentityExplanation,
@@ -23,19 +19,31 @@ import {
   customerStatusLabel,
   customerStatusTone,
   formatEntitlementInstant,
-} from "@/features/billing-customers/types/entitlement-vocabulary"
-import { environmentsQueryOptions } from "@/features/environments/queries/environments-query"
-import { ScopeMismatchRecovery } from "@/features/orgs/components/scope-mismatch-recovery"
-import { WorkflowPanel, WorkspacePage } from "@/features/orgs/components/workspace-page"
-import { useValidatedProjectScope } from "@/features/projects/hooks/use-validated-project-scope"
-import { billingCustomerHref, storeConnectionsHref } from "@/lib/routing/workspace-hrefs"
-import type { BillingCustomerSummary } from "@/generated/api"
+} from "@/features/billing-customers/types/entitlement-vocabulary";
+import {
+  LedgerPaging,
+  StatusPill,
+} from "@/features/billing-ledger/components/billing-chrome";
+import { pagedListHeading } from "@/features/billing-ledger/types/billing-list-headings";
+import { BILLING_OPTIONAL_NOTE } from "@/features/billing-ledger/types/billing-vocabulary";
+import { billingHealthQueryOptions } from "@/features/billing-operations/queries/billing-health-queries";
+import { environmentsQueryOptions } from "@/features/environments/queries/environments-query";
+import { ScopeMismatchRecovery } from "@/features/orgs/components/scope-mismatch-recovery";
+import {
+  WorkflowPanel,
+  WorkspacePage,
+} from "@/features/orgs/components/workspace-page";
+import { useValidatedProjectScope } from "@/features/projects/hooks/use-validated-project-scope";
+import type { BillingCustomerSummary } from "@/generated/api";
+import {
+  billingCustomerHref,
+  storeConnectionsHref,
+} from "@/lib/routing/workspace-hrefs";
 
 interface BillingCustomersPageProps {
-  conflictedOnly?: boolean
-  cursor?: string
-  environmentId: string
-  onFiltersChange: (filters: { conflictedOnly?: boolean; cursor?: string }) => void
+  conflictedOnly?: boolean;
+  cursor?: string;
+  environmentId: string;
   /**
    * Opens one customer after a successful typed lookup. The route owns it so
    * the transition is a router navigation rather than a full document load: a
@@ -43,9 +51,13 @@ interface BillingCustomersPageProps {
    * and the session state the rest of the workspace depends on, and turned a
    * lookup into a page reload.
    */
-  onCustomerFound: (customerId: string) => void
-  organizationId: string
-  projectId: string
+  onCustomerFound: (customerId: string) => void;
+  onFiltersChange: (filters: {
+    conflictedOnly?: boolean;
+    cursor?: string;
+  }) => void;
+  organizationId: string;
+  projectId: string;
 }
 
 /**
@@ -64,40 +76,51 @@ export function BillingCustomersPage({
   organizationId,
   projectId,
 }: BillingCustomersPageProps) {
-  const { project, scopeMismatch, scopeReady } = useValidatedProjectScope(organizationId, projectId)
-  const environments = useQuery({ ...environmentsQueryOptions(projectId), enabled: scopeReady })
+  const { project, scopeMismatch, scopeReady } = useValidatedProjectScope(
+    organizationId,
+    projectId
+  );
+  const environments = useQuery({
+    ...environmentsQueryOptions(projectId),
+    enabled: scopeReady,
+  });
   const health = useQuery({
     ...billingHealthQueryOptions(projectId, environmentId),
     enabled: scopeReady,
-  })
+  });
   const customers = useQuery({
     ...billingCustomersQueryOptions(projectId, environmentId, {
       ...(conflictedOnly ? { conflictedOnly: true } : {}),
       ...(cursor ? { cursor } : {}),
     }),
     enabled: scopeReady,
-  })
-  const lookup = useMutation(lookupBillingCustomerMutationOptions(projectId, environmentId))
-  const [missMessage, setMissMessage] = useState<string | undefined>(undefined)
+  });
+  const lookup = useMutation(
+    lookupBillingCustomerMutationOptions(projectId, environmentId)
+  );
+  const [missMessage, setMissMessage] = useState<string | undefined>(undefined);
 
   const environmentName =
-    environments.data?.items.find((item) => item.id === environmentId)?.name ?? environmentId
-  const billingEnabled = health.data?.billingEnabled !== false
-  const items = customers.data?.items ?? []
+    environments.data?.items.find((item) => item.id === environmentId)?.name ??
+    environmentId;
+  const billingEnabled = health.data?.billingEnabled !== false;
+  const items = customers.data?.items ?? [];
 
-  const error = project.error ?? environments.error ?? customers.error
+  const error = project.error ?? environments.error ?? customers.error;
   const state = resolveHostedQueryState({
     error,
     isEmpty: false,
-    isPending: project.isPending || (scopeReady && (environments.isPending || customers.isPending)),
+    isPending:
+      project.isPending ||
+      (scopeReady && (environments.isPending || customers.isPending)),
     loadingDescription: `Loading Billing Customers for the ${environmentName} Mosaic Environment.`,
     onRetry: () => {
-      void customers.refetch()
+      customers.refetch();
     },
     permissionDescription:
       "Organization owner or admin permission is required to read Billing Customers.",
     scope: { environmentId, organizationId, projectId },
-  })
+  });
 
   if (scopeMismatch) {
     return (
@@ -111,24 +134,24 @@ export function BillingCustomersPage({
           projectId={projectId}
         />
       </WorkspacePage>
-    )
+    );
   }
 
-  const scope = { environmentId, organizationId, projectId }
-  const connectionsHref = storeConnectionsHref(scope) ?? "#"
+  const scope = { environmentId, organizationId, projectId };
+  const connectionsHref = storeConnectionsHref(scope) ?? "#";
 
   async function search(input: {
-    identifierType: CustomerIdentifierType
-    identifierValue: string
+    identifierType: CustomerIdentifierType;
+    identifierValue: string;
   }) {
-    setMissMessage(undefined)
-    const result = await lookup.mutateAsync(input)
+    setMissMessage(undefined);
+    const result = await lookup.mutateAsync(input);
     if (result?.found && result.customer?.billingCustomerId) {
-      onCustomerFound(result.customer.billingCustomerId)
-      return
+      onCustomerFound(result.customer.billingCustomerId);
+      return;
     }
     // A miss is an answer. It renders as a result, never as a failure banner.
-    setMissMessage(describeLookupMiss(input.identifierType))
+    setMissMessage(describeLookupMiss(input.identifierType));
   }
 
   return (
@@ -137,24 +160,106 @@ export function BillingCustomersPage({
       eyebrow="Mosaic Billing · Customers"
       title="Customers"
     >
-      <p className="text-muted-foreground text-xs leading-5">{AUTHORITATIVE_ACCESS_NOTE}</p>
+      <p className="text-muted-foreground text-xs leading-5">
+        {AUTHORITATIVE_ACCESS_NOTE}
+      </p>
 
       <WorkflowPanel title="Find a customer">
         <CustomerSearchForm isPending={lookup.isPending} onSearch={search} />
         {missMessage ? (
           <div className="mt-4">
-            <EmptyState description={missMessage} title="No matching Billing Customer" />
+            <EmptyState
+              description={missMessage}
+              title="No matching Billing Customer"
+            />
           </div>
         ) : null}
         {lookup.error ? (
-          <p className="text-destructive mt-3 text-sm" role="alert">
+          <p className="mt-3 text-destructive text-sm" role="alert">
             {lookup.error.message}
           </p>
         ) : null}
       </WorkflowPanel>
 
       <HostedResourceBoundary state={state}>
-        {!billingEnabled ? (
+        {billingEnabled ? (
+          items.length === 0 ? (
+            <>
+              <EmptyState
+                description={
+                  conflictedOnly
+                    ? "No Billing Customer in this Mosaic Environment is party to an open identity conflict. That is the healthy state."
+                    : "No Billing Customer exists in this Mosaic Environment yet. One comes into existence when your backend identifies a user, or when a validated purchase needs somewhere to attach — never when an SDK merely starts up."
+                }
+                title={
+                  conflictedOnly
+                    ? "No conflicted customers"
+                    : "No Billing Customers recorded yet"
+                }
+              />
+              <LedgerPaging
+                cursor={cursor}
+                endLabel="End of the customer list."
+                nextCursor={customers.data?.nextCursor}
+                onCursorChange={(next) =>
+                  onFiltersChange({
+                    ...(conflictedOnly ? { conflictedOnly } : {}),
+                    cursor: next,
+                  })
+                }
+              />
+            </>
+          ) : (
+            <WorkflowPanel
+              description="Identified means a person your backend named is attached. Purchase-anchored means revenue is attached but nobody has been named yet — the correct resting state for an anonymous purchase, not a defect."
+              title={pagedListHeading({
+                count: items.length,
+                cursor,
+                nextCursor: customers.data?.nextCursor,
+                noun: "Billing Customer(s)",
+              })}
+            >
+              <label className="mb-4 flex items-center gap-2 text-sm">
+                <input
+                  checked={conflictedOnly === true}
+                  onChange={(event) => {
+                    const checked = event.currentTarget.checked;
+                    onFiltersChange(checked ? { conflictedOnly: true } : {});
+                  }}
+                  type="checkbox"
+                />
+                Show only customers party to an open identity conflict
+              </label>
+
+              <ul className="space-y-2">
+                {items.map((customer) => (
+                  <CustomerRow
+                    customer={customer}
+                    href={
+                      billingCustomerHref(
+                        scope,
+                        customer.billingCustomerId ?? ""
+                      ) ?? "#"
+                    }
+                    key={customer.billingCustomerId}
+                  />
+                ))}
+              </ul>
+
+              <LedgerPaging
+                cursor={cursor}
+                endLabel="End of the customer list."
+                nextCursor={customers.data?.nextCursor}
+                onCursorChange={(next) =>
+                  onFiltersChange({
+                    ...(conflictedOnly ? { conflictedOnly } : {}),
+                    cursor: next,
+                  })
+                }
+              />
+            </WorkflowPanel>
+          )
+        ) : (
           <EmptyState
             action={
               <a className={buttonVariants()} href={connectionsHref}>
@@ -164,79 +269,26 @@ export function BillingCustomersPage({
             description={`Mosaic Billing is turned off for this Project, so no purchase is recorded and no access is computed. Every Entitlement read answers "Mosaic cannot answer" rather than inactive. ${BILLING_OPTIONAL_NOTE}`}
             title="Mosaic Billing is not enabled for this Project"
           />
-        ) : items.length === 0 ? (
-          <>
-            <EmptyState
-              description={
-                conflictedOnly
-                  ? "No Billing Customer in this Mosaic Environment is party to an open identity conflict. That is the healthy state."
-                  : "No Billing Customer exists in this Mosaic Environment yet. One comes into existence when your backend identifies a user, or when a validated purchase needs somewhere to attach — never when an SDK merely starts up."
-              }
-              title={
-                conflictedOnly ? "No conflicted customers" : "No Billing Customers recorded yet"
-              }
-            />
-            <LedgerPaging
-              cursor={cursor}
-              endLabel="End of the customer list."
-              nextCursor={customers.data?.nextCursor}
-              onCursorChange={(next) =>
-                onFiltersChange({ ...(conflictedOnly ? { conflictedOnly } : {}), cursor: next })
-              }
-            />
-          </>
-        ) : (
-          <WorkflowPanel
-            description="Identified means a person your backend named is attached. Purchase-anchored means revenue is attached but nobody has been named yet — the correct resting state for an anonymous purchase, not a defect."
-            title={pagedListHeading({
-              count: items.length,
-              cursor,
-              nextCursor: customers.data?.nextCursor,
-              noun: "Billing Customer(s)",
-            })}
-          >
-            <label className="mb-4 flex items-center gap-2 text-sm">
-              <input
-                checked={conflictedOnly === true}
-                onChange={(event) => {
-                  const checked = event.currentTarget.checked
-                  onFiltersChange(checked ? { conflictedOnly: true } : {})
-                }}
-                type="checkbox"
-              />
-              Show only customers party to an open identity conflict
-            </label>
-
-            <ul className="space-y-2">
-              {items.map((customer) => (
-                <CustomerRow
-                  customer={customer}
-                  href={billingCustomerHref(scope, customer.billingCustomerId ?? "") ?? "#"}
-                  key={customer.billingCustomerId}
-                />
-              ))}
-            </ul>
-
-            <LedgerPaging
-              cursor={cursor}
-              endLabel="End of the customer list."
-              nextCursor={customers.data?.nextCursor}
-              onCursorChange={(next) =>
-                onFiltersChange({ ...(conflictedOnly ? { conflictedOnly } : {}), cursor: next })
-              }
-            />
-          </WorkflowPanel>
         )}
       </HostedResourceBoundary>
     </WorkspacePage>
-  )
+  );
 }
 
-function CustomerRow({ customer, href }: { customer: BillingCustomerSummary; href: string }) {
+function CustomerRow({
+  customer,
+  href,
+}: {
+  customer: BillingCustomerSummary;
+  href: string;
+}) {
   return (
     <li className="rounded border p-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <a className="text-primary font-mono text-sm font-semibold break-all" href={href}>
+        <a
+          className="break-all font-mono font-semibold text-primary text-sm"
+          href={href}
+        >
           {customer.billingCustomerId}
         </a>
         <div className="flex flex-wrap items-center gap-2">
@@ -253,15 +305,15 @@ function CustomerRow({ customer, href }: { customer: BillingCustomerSummary; hre
           ) : null}
         </div>
       </div>
-      <p className="text-muted-foreground mt-2 text-xs leading-5">
+      <p className="mt-2 text-muted-foreground text-xs leading-5">
         {customerIdentityExplanation(customer)}
       </p>
-      <p className="text-muted-foreground mt-1 text-xs">
+      <p className="mt-1 text-muted-foreground text-xs">
         {customer.snapshotVersion === undefined
           ? "Never projected in this Environment — not the same as having no entitlements."
           : `Snapshot version ${customer.snapshotVersion}`}{" "}
         · last projected {formatEntitlementInstant(customer.lastProjectedAt)}
       </p>
     </li>
-  )
+  );
 }

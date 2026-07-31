@@ -1,16 +1,22 @@
-import { useState } from "react"
+import { useState } from "react";
 
-import { Button } from "@/components/ui/button"
-import { Field, FieldDescription, FieldError, FieldLabel } from "@/components/ui/field"
-import { Input } from "@/components/ui/input"
+import { Button } from "@/components/ui/button";
+import {
+  Field,
+  FieldDescription,
+  FieldError,
+  FieldLabel,
+} from "@/components/ui/field";
+import { Input } from "@/components/ui/input";
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from "@/components/ui/select"
+} from "@/components/ui/select";
 import {
+  type CustomerIdentifierType,
   customerIdentifierTypes,
   describeSearchIssue,
   identifierTypeHelp,
@@ -19,15 +25,14 @@ import {
   SEARCH_HELPER_TEXT,
   SEARCH_PRIVACY_NOTE,
   validateCustomerSearch,
-  type CustomerIdentifierType,
-} from "@/features/billing-customers/types/customer-search"
+} from "@/features/billing-customers/types/customer-search";
 
 interface CustomerSearchFormProps {
-  isPending: boolean
+  isPending: boolean;
   onSearch: (input: {
-    identifierType: CustomerIdentifierType
-    identifierValue: string
-  }) => Promise<void>
+    identifierType: CustomerIdentifierType;
+    identifierValue: string;
+  }) => Promise<void>;
 }
 
 /**
@@ -39,45 +44,53 @@ interface CustomerSearchFormProps {
  * addresses to match them against. Saying what is accepted is how this control
  * says what does not exist.
  */
-export function CustomerSearchForm({ isPending, onSearch }: CustomerSearchFormProps) {
-  const [identifierType, setIdentifierType] =
-    useState<CustomerIdentifierType>("billing_customer_id")
-  const [identifierValue, setIdentifierValue] = useState("")
-  const [issue, setIssue] = useState<string | undefined>(undefined)
+export function CustomerSearchForm({
+  isPending,
+  onSearch,
+}: CustomerSearchFormProps) {
+  const [identifierType, setIdentifierType] = useState<CustomerIdentifierType>(
+    "billing_customer_id"
+  );
+  const [identifierValue, setIdentifierValue] = useState("");
+  const [issue, setIssue] = useState<string | undefined>(undefined);
 
   const identifierTypeOptions = customerIdentifierTypes.map((type) => ({
     label: identifierTypeLabel(type),
     value: type,
-  }))
+  }));
 
   async function submit() {
-    const found = validateCustomerSearch({ identifierType, identifierValue })
+    const found = validateCustomerSearch({ identifierType, identifierValue });
     if (found) {
-      setIssue(describeSearchIssue(found))
-      return
+      setIssue(describeSearchIssue(found));
+      return;
     }
-    setIssue(undefined)
-    await onSearch({ identifierType, identifierValue: identifierValue.trim() })
+    setIssue(undefined);
+    await onSearch({ identifierType, identifierValue: identifierValue.trim() });
   }
 
   return (
     <form
       className="space-y-4"
       onSubmit={(event) => {
-        event.preventDefault()
-        void submit()
+        event.preventDefault();
+        submit();
       }}
     >
-      <p className="text-muted-foreground text-xs leading-5">{SEARCH_HELPER_TEXT}</p>
+      <p className="text-muted-foreground text-xs leading-5">
+        {SEARCH_HELPER_TEXT}
+      </p>
 
       <div className="grid gap-3 sm:grid-cols-[minmax(0,14rem)_minmax(0,1fr)_auto] sm:items-end">
         <Field>
-          <FieldLabel htmlFor="customer-identifier-type">Identifier type</FieldLabel>
+          <FieldLabel htmlFor="customer-identifier-type">
+            Identifier type
+          </FieldLabel>
           <Select
             items={identifierTypeOptions}
             onValueChange={(value) => {
-              setIdentifierType(value as CustomerIdentifierType)
-              setIssue(undefined)
+              setIdentifierType(value as CustomerIdentifierType);
+              setIssue(undefined);
             }}
             value={identifierType}
           >
@@ -104,13 +117,15 @@ export function CustomerSearchForm({ isPending, onSearch }: CustomerSearchFormPr
             id="customer-identifier-value"
             maxLength={MAX_IDENTIFIER_LENGTH}
             onChange={(event) => {
-              const value = event.currentTarget.value
-              setIdentifierValue(value)
-              setIssue(undefined)
+              const value = event.currentTarget.value;
+              setIdentifierValue(value);
+              setIssue(undefined);
             }}
             value={identifierValue}
           />
-          <FieldDescription>{identifierTypeHelp(identifierType)}</FieldDescription>
+          <FieldDescription>
+            {identifierTypeHelp(identifierType)}
+          </FieldDescription>
           {issue ? <FieldError errors={[{ message: issue }]} /> : null}
         </Field>
 
@@ -119,7 +134,9 @@ export function CustomerSearchForm({ isPending, onSearch }: CustomerSearchFormPr
         </Button>
       </div>
 
-      <p className="text-muted-foreground text-xs leading-5">{SEARCH_PRIVACY_NOTE}</p>
+      <p className="text-muted-foreground text-xs leading-5">
+        {SEARCH_PRIVACY_NOTE}
+      </p>
     </form>
-  )
+  );
 }

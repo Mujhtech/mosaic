@@ -1,53 +1,56 @@
-import { useQueries, useQuery } from "@tanstack/react-query"
-import { useState } from "react"
+import { useQueries, useQuery } from "@tanstack/react-query";
+import { useState } from "react";
 
-import { Button } from "@/components/ui/button"
+import { Button } from "@/components/ui/button";
+import { buttonVariants } from "@/components/ui/button-variants";
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from "@/components/ui/select"
-import { buttonVariants } from "@/components/ui/button-variants"
-import { HostedAccessBanner } from "@/features/auth/components/hosted-access-banner"
+} from "@/components/ui/select";
+import { HostedAccessBanner } from "@/features/auth/components/hosted-access-banner";
 import {
   productReadinessQueryOptions,
   productsQueryOptions,
   providerMappingMetadataQueryOptions,
   providerMappingObservationsQueryOptions,
   providerMappingsQueryOptions,
-} from "@/features/catalog/queries/catalog-query"
-import { MOCK_PURCHASE_STATES } from "@/features/paywall-editor/constants/editor-constants"
+} from "@/features/catalog/queries/catalog-query";
+import { MOCK_PURCHASE_STATES } from "@/features/paywall-editor/constants/editor-constants";
 import {
   useEditorActions,
   useEditorStore,
-} from "@/features/paywall-editor/stores/editor-store-context"
-import { useStudioSource } from "@/features/paywall-editor/stores/use-studio-source"
+} from "@/features/paywall-editor/stores/editor-store-context";
+import { useStudioSource } from "@/features/paywall-editor/stores/use-studio-source";
 import type {
   MockProductDefinition,
   MockPurchaseState,
   MosaicDocument,
-} from "@/features/paywall-editor/types/editor"
-import { hostedStudioHref, type StudioSource } from "@/features/paywall-editor/types/studio-source"
-import { resolveLocalizedText } from "@/features/paywall-editor/utils/document-tree"
-import { studioApplicationsErrorMessage } from "@/features/paywall-editor/utils/studio-applications-error"
-import { ApiError } from "@/lib/api/errors"
+} from "@/features/paywall-editor/types/editor";
+import {
+  hostedStudioHref,
+  type StudioSource,
+} from "@/features/paywall-editor/types/studio-source";
+import { resolveLocalizedText } from "@/features/paywall-editor/utils/document-tree";
+import { studioApplicationsErrorMessage } from "@/features/paywall-editor/utils/studio-applications-error";
+import { applicationsQueryOptions } from "@/features/projects/queries/projects-query";
 import {
   activeProviderAssignmentQueryOptions,
   nativeProviderProfileQueryOptions,
   providerConnectionsQueryOptions,
-} from "@/features/provider-connections/queries/provider-connection-queries"
-import { applicationsQueryOptions } from "@/features/projects/queries/projects-query"
-import type { ProviderConnection } from "@/generated/api"
+} from "@/features/provider-connections/queries/provider-connection-queries";
+import type { ProviderConnection } from "@/generated/api";
+import { ApiError } from "@/lib/api/errors";
 
 const CONTROL_CLASS =
-  "border-input bg-background focus-visible:ring-ring w-full rounded border px-2 py-2 text-sm focus-visible:ring-2 focus-visible:outline-none"
+  "border-input bg-background focus-visible:ring-ring w-full rounded border px-2 py-2 text-sm focus-visible:ring-2 focus-visible:outline-none";
 
 const MOCK_AVAILABILITY_OPTIONS = [
   { label: "Available", value: "available" },
   { label: "Not configured", value: "unavailable" },
-]
+];
 
 function availableMock(productReferenceId: string): MockProductDefinition {
   return {
@@ -57,7 +60,7 @@ function availableMock(productReferenceId: string): MockProductDefinition {
     localizedPrice: "$0.00",
     currencyCode: "USD",
     billingPeriod: { unit: "month", value: 1 },
-  }
+  };
 }
 
 function MockProductBinding({
@@ -65,24 +68,26 @@ function MockProductBinding({
   product,
   onChange,
 }: {
-  label: string
-  product: MockProductDefinition
-  onChange: (product: MockProductDefinition) => void
+  label: string;
+  product: MockProductDefinition;
+  onChange: (product: MockProductDefinition) => void;
 }) {
   const [draftPrice, setDraftPrice] = useState(
-    product.availability === "available" ? product.localizedPrice : "$0.00",
-  )
-  const availabilityId = `mock-availability-${product.productReferenceId}`
-  const priceId = `mock-price-${product.productReferenceId}`
+    product.availability === "available" ? product.localizedPrice : "$0.00"
+  );
+  const availabilityId = `mock-availability-${product.productReferenceId}`;
+  const priceId = `mock-price-${product.productReferenceId}`;
 
   return (
-    <div className="border-border rounded border p-3">
+    <div className="rounded border border-border p-3">
       <div className="mb-2">
-        <p className="text-sm font-medium">{label}</p>
-        <p className="text-muted-foreground text-[11px]">{product.productReferenceId}</p>
+        <p className="font-medium text-sm">{label}</p>
+        <p className="text-[11px] text-muted-foreground">
+          {product.productReferenceId}
+        </p>
       </div>
       <label
-        className="text-muted-foreground mb-1 block text-xs font-medium"
+        className="mb-1 block font-medium text-muted-foreground text-xs"
         htmlFor={availabilityId}
       >
         Mock availability
@@ -97,12 +102,15 @@ function MockProductBinding({
                   productReferenceId: product.productReferenceId,
                   availability: "unavailable",
                   reason: "notConfigured",
-                },
-          )
+                }
+          );
         }}
         value={product.availability}
       >
-        <SelectTrigger aria-label={`${label} mock availability`} id={availabilityId}>
+        <SelectTrigger
+          aria-label={`${label} mock availability`}
+          id={availabilityId}
+        >
           <SelectValue />
         </SelectTrigger>
         <SelectContent>
@@ -115,32 +123,37 @@ function MockProductBinding({
       </Select>
       {product.availability === "available" ? (
         <div className="mt-3">
-          <label className="text-muted-foreground mb-1 block text-xs font-medium" htmlFor={priceId}>
+          <label
+            className="mb-1 block font-medium text-muted-foreground text-xs"
+            htmlFor={priceId}
+          >
             Local price
           </label>
           <input
-            id={priceId}
-            className={CONTROL_CLASS}
             aria-label={`${label} local price`}
-            value={draftPrice}
-            onChange={(event) => setDraftPrice(event.target.value)}
+            className={CONTROL_CLASS}
+            id={priceId}
             onBlur={() => {
               if (draftPrice !== product.localizedPrice) {
-                onChange({ ...product, localizedPrice: draftPrice })
+                onChange({ ...product, localizedPrice: draftPrice });
               }
             }}
+            onChange={(event) => setDraftPrice(event.target.value)}
+            value={draftPrice}
           />
         </div>
       ) : null}
     </div>
-  )
+  );
 }
 
 function HostedCatalogProductBindings() {
-  const source = useStudioSource()
-  const { document, currentLocale } = useEditorStore()
-  const editor = useEditorActions()
-  if (source.kind !== "hosted") return null
+  const source = useStudioSource();
+  const { document, currentLocale } = useEditorStore();
+  const editor = useEditorActions();
+  if (source.kind !== "hosted") {
+    return null;
+  }
   return (
     <HostedCatalogProductBindingsContent
       currentLocale={currentLocale}
@@ -149,13 +162,13 @@ function HostedCatalogProductBindings() {
         editor.updateDocument((current) => ({
           ...current,
           products: current.products.map((product) =>
-            product.id === referenceId ? { ...product, productId } : product,
+            product.id === referenceId ? { ...product, productId } : product
           ),
         }))
       }
       source={source}
     />
-  )
+  );
 }
 
 function HostedCatalogProductBindingsContent({
@@ -164,54 +177,67 @@ function HostedCatalogProductBindingsContent({
   onBind,
   source,
 }: {
-  currentLocale: string
-  document: MosaicDocument | null
-  onBind: (referenceId: string, productId: string) => void
-  source: Extract<StudioSource, { kind: "hosted" }>
+  currentLocale: string;
+  document: MosaicDocument | null;
+  onBind: (referenceId: string, productId: string) => void;
+  source: Extract<StudioSource, { kind: "hosted" }>;
 }) {
-  const catalog = useQuery(productsQueryOptions(source.projectId))
-  const applications = useQuery(applicationsQueryOptions(source.projectId))
-  const connections = useQuery(providerConnectionsQueryOptions(source.projectId))
-  const [applicationId, setApplicationId] = useState("")
-  const products = catalog.data?.items.filter((product) => product.status !== "archived") ?? []
+  const catalog = useQuery(productsQueryOptions(source.projectId));
+  const applications = useQuery(applicationsQueryOptions(source.projectId));
+  const connections = useQuery(
+    providerConnectionsQueryOptions(source.projectId)
+  );
+  const [applicationId, setApplicationId] = useState("");
+  const products =
+    catalog.data?.items.filter((product) => product.status !== "archived") ??
+    [];
   const applicationOptions = [
     { label: "Select Application", value: "" },
     ...(applications.data?.items ?? []).map((application) => ({
       label: `${application.name} · ${application.platform.toUpperCase()}`,
       value: application.id,
     })),
-  ]
+  ];
   const productBindingOptions = products.map((product) => ({
     label: `${product.internalName} · ${product.status.replaceAll("_", " ")}`,
     value: product.id,
-  }))
+  }));
   // A Draft can still cite a Product that is no longer in the Catalog. Keeping its
   // raw ID as an option is what stops opening the panel from silently rebinding it.
   function bindingOptions(productId: string, isKnown: boolean) {
     return isKnown
       ? productBindingOptions
-      : [{ label: `Current ID · ${productId}`, value: productId }, ...productBindingOptions]
+      : [
+          { label: `Current ID · ${productId}`, value: productId },
+          ...productBindingOptions,
+        ];
   }
   const selectedApplication = applications.data?.items.find(
-    (application) => application.id === applicationId,
-  )
-  const selectedApplicationId = selectedApplication?.id ?? ""
-  const catalogHref = `/orgs/${encodeURIComponent(source.organizationId)}/projects/${encodeURIComponent(source.projectId)}/catalog/products`
-  const returnTo = hostedStudioHref(source)
+    (application) => application.id === applicationId
+  );
+  const selectedApplicationId = selectedApplication?.id ?? "";
+  const catalogHref = `/orgs/${encodeURIComponent(source.organizationId)}/projects/${encodeURIComponent(source.projectId)}/catalog/products`;
+  const returnTo = hostedStudioHref(source);
 
   if (catalog.error instanceof ApiError && catalog.error.status === 401) {
-    return <HostedAccessBanner compact returnTo={returnTo} />
+    return <HostedAccessBanner compact returnTo={returnTo} />;
   }
 
   return (
-    <section aria-labelledby="catalog-product-bindings-title" className="space-y-3">
+    <section
+      aria-labelledby="catalog-product-bindings-title"
+      className="space-y-3"
+    >
       <div>
-        <h2 className="text-sm font-semibold" id="catalog-product-bindings-title">
+        <h2
+          className="font-semibold text-sm"
+          id="catalog-product-bindings-title"
+        >
           Catalog Product bindings
         </h2>
-        <p className="text-muted-foreground mt-0.5 text-xs leading-5">
-          Bind each paywall Product Reference to a stable Project Product. Mock preview prices and
-          outcomes remain separate below.
+        <p className="mt-0.5 text-muted-foreground text-xs leading-5">
+          Bind each paywall Product Reference to a stable Project Product. Mock
+          preview prices and outcomes remain separate below.
         </p>
       </div>
       {catalog.isPending ? (
@@ -219,7 +245,10 @@ function HostedCatalogProductBindingsContent({
           Loading Project Products…
         </p>
       ) : catalog.error ? (
-        <div className="border-destructive/25 bg-destructive/5 rounded border p-3" role="alert">
+        <div
+          className="rounded border border-destructive/25 bg-destructive/5 p-3"
+          role="alert"
+        >
           <p className="text-destructive text-xs">
             {catalog.error instanceof ApiError && catalog.error.status === 403
               ? "You do not have permission to view this Project’s Products. Your Draft remains editable."
@@ -227,7 +256,9 @@ function HostedCatalogProductBindingsContent({
           </p>
           <Button
             className="mt-2"
-            onClick={() => void catalog.refetch()}
+            onClick={() => {
+              catalog.refetch();
+            }}
             size="sm"
             type="button"
             variant="outline"
@@ -236,26 +267,33 @@ function HostedCatalogProductBindingsContent({
           </Button>
         </div>
       ) : products.length === 0 ? (
-        <div className="border-border rounded border border-dashed p-3 text-xs">
+        <div className="rounded border border-border border-dashed p-3 text-xs">
           <p className="font-medium">No active Project Products</p>
-          <p className="text-muted-foreground mt-1 leading-5">
-            Create a Product, then return here to bind its stable Mosaic Product ID.
+          <p className="mt-1 text-muted-foreground leading-5">
+            Create a Product, then return here to bind its stable Mosaic Product
+            ID.
           </p>
         </div>
       ) : document ? (
         <div className="space-y-2">
           {applications.isPending ? (
             <p className="text-muted-foreground text-xs" role="status">
-              Loading Applications{source.environmentName ? ` for ${source.environmentName}` : ""}…
+              Loading Applications
+              {source.environmentName ? ` for ${source.environmentName}` : ""}…
             </p>
           ) : applications.error ? (
-            <div className="border-destructive/25 bg-destructive/5 rounded border p-3" role="alert">
+            <div
+              className="rounded border border-destructive/25 bg-destructive/5 p-3"
+              role="alert"
+            >
               <p className="text-destructive text-xs">
                 {studioApplicationsErrorMessage(applications.error)}
               </p>
               <Button
                 className="mt-2"
-                onClick={() => void applications.refetch()}
+                onClick={() => {
+                  applications.refetch();
+                }}
                 size="sm"
                 type="button"
                 variant="outline"
@@ -267,15 +305,17 @@ function HostedCatalogProductBindingsContent({
             <div className="rounded border border-dashed p-3 text-xs">
               <p className="font-medium">No registered Applications</p>
               <a
-                className="text-primary mt-2 inline-flex font-semibold"
+                className="mt-2 inline-flex font-semibold text-primary"
                 href={`/orgs/${encodeURIComponent(source.organizationId)}/projects/${encodeURIComponent(source.projectId)}/apps`}
               >
                 Register Application
               </a>
             </div>
           ) : null}
-          <div className="mb-3 block text-xs font-medium">
-            <label htmlFor="provider-preview-application">Provider preview Application</label>
+          <div className="mb-3 block font-medium text-xs">
+            <label htmlFor="provider-preview-application">
+              Provider preview Application
+            </label>
             <Select
               items={applicationOptions}
               onValueChange={(value) => setApplicationId(value)}
@@ -300,17 +340,28 @@ function HostedCatalogProductBindingsContent({
                 ))}
               </SelectContent>
             </Select>
-            <span className="text-muted-foreground mt-1 block text-[11px] leading-5">
-              Hosted Environment: {source.environmentName ?? source.environmentId}. Mosaic does not
-              silently choose an Application or another platform for commerce readiness.
+            <span className="mt-1 block text-[11px] text-muted-foreground leading-5">
+              Hosted Environment:{" "}
+              {source.environmentName ?? source.environmentId}. Mosaic does not
+              silently choose an Application or another platform for commerce
+              readiness.
             </span>
           </div>
           {document.products.map((reference) => {
-            const selected = products.find((product) => product.id === reference.productId)
-            const label = resolveLocalizedText(document, reference.label, currentLocale)
+            const selected = products.find(
+              (product) => product.id === reference.productId
+            );
+            const label = resolveLocalizedText(
+              document,
+              reference.label,
+              currentLocale
+            );
             return (
-              <div className="border-border grid gap-1 rounded border p-3" key={reference.id}>
-                <span className="text-xs font-medium">{label}</span>
+              <div
+                className="grid gap-1 rounded border border-border p-3"
+                key={reference.id}
+              >
+                <span className="font-medium text-xs">{label}</span>
                 <Select
                   items={bindingOptions(reference.productId, Boolean(selected))}
                   onValueChange={(value) => onBind(reference.id, value)}
@@ -320,19 +371,22 @@ function HostedCatalogProductBindingsContent({
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    {bindingOptions(reference.productId, Boolean(selected)).map((option) => (
-                      <SelectItem key={option.value} value={option.value}>
-                        {option.label}
-                      </SelectItem>
-                    ))}
+                    {bindingOptions(reference.productId, Boolean(selected)).map(
+                      (option) => (
+                        <SelectItem key={option.value} value={option.value}>
+                          {option.label}
+                        </SelectItem>
+                      )
+                    )}
                   </SelectContent>
                 </Select>
-                <span className="text-muted-foreground font-mono text-[10px] break-all">
+                <span className="break-all font-mono text-[10px] text-muted-foreground">
                   {reference.productId}
                 </span>
                 {selected?.metadataSource === "mock" ? (
-                  <span className="text-muted-foreground text-[11px]">
-                    Simulated metadata only; publishing requires acknowledgement.
+                  <span className="text-[11px] text-muted-foreground">
+                    Simulated metadata only; publishing requires
+                    acknowledgement.
                   </span>
                 ) : selected && selectedApplicationId ? (
                   <ConnectedProductBindingContext
@@ -342,21 +396,25 @@ function HostedCatalogProductBindingsContent({
                     productId={selected.id}
                   />
                 ) : selected ? (
-                  <span className="text-muted-foreground text-[11px] leading-5">
-                    Select an Application to inspect its active provider, mapping, and readiness.
-                    Simulated preview remains active and is not store verification.
+                  <span className="text-[11px] text-muted-foreground leading-5">
+                    Select an Application to inspect its active provider,
+                    mapping, and readiness. Simulated preview remains active and
+                    is not store verification.
                   </span>
                 ) : null}
               </div>
-            )
+            );
           })}
         </div>
       ) : null}
-      <a className={buttonVariants({ size: "sm", variant: "outline" })} href={catalogHref}>
+      <a
+        className={buttonVariants({ size: "sm", variant: "outline" })}
+        href={catalogHref}
+      >
         Manage Project Products
       </a>
     </section>
-  )
+  );
 }
 
 function ConnectedProductBindingContext({
@@ -365,21 +423,28 @@ function ConnectedProductBindingContext({
   environmentId,
   productId,
 }: {
-  applicationId: string
-  connections: readonly ProviderConnection[]
-  environmentId: string
-  productId: string
+  applicationId: string;
+  connections: readonly ProviderConnection[];
+  environmentId: string;
+  productId: string;
 }) {
-  const source = useStudioSource()
-  const mappings = useQuery(providerMappingsQueryOptions(productId))
+  const source = useStudioSource();
+  const mappings = useQuery(providerMappingsQueryOptions(productId));
   const activeAssignment = useQuery({
-    ...activeProviderAssignmentQueryOptions(environmentId, applicationId || "unselected"),
+    ...activeProviderAssignmentQueryOptions(
+      environmentId,
+      applicationId || "unselected"
+    ),
     enabled: Boolean(applicationId),
-  })
+  });
   const readiness = useQuery({
-    ...productReadinessQueryOptions(productId, environmentId, applicationId || "unselected"),
+    ...productReadinessQueryOptions(
+      productId,
+      environmentId,
+      applicationId || "unselected"
+    ),
     enabled: Boolean(applicationId),
-  })
+  });
   const scopedMappings =
     mappings.data?.items.filter(
       (mapping) =>
@@ -388,69 +453,79 @@ function ConnectedProductBindingContext({
         mapping.provider === activeAssignment.data?.provider &&
         (activeAssignment.data?.activationKind === "native_store"
           ? !mapping.connectionId
-          : mapping.connectionId === activeAssignment.data?.connectionId),
-    ) ?? []
+          : mapping.connectionId === activeAssignment.data?.connectionId)
+    ) ?? [];
   const metadata = useQueries({
     queries: scopedMappings.map((mapping) => ({
       ...providerMappingMetadataQueryOptions(mapping.id),
-      enabled: Boolean(mapping.currentSnapshotId) && mapping.status !== "archived",
+      enabled:
+        Boolean(mapping.currentSnapshotId) && mapping.status !== "archived",
     })),
-  })
+  });
   const observations = useQueries({
     queries: scopedMappings.map((mapping) => ({
       ...providerMappingObservationsQueryOptions(mapping.id),
-      enabled: mapping.provider === "app_store" || mapping.provider === "google_play",
+      enabled:
+        mapping.provider === "app_store" || mapping.provider === "google_play",
     })),
-  })
-  const mapping = scopedMappings.length === 1 ? scopedMappings[0] : undefined
-  const snapshot = scopedMappings.length === 1 ? metadata[0]?.data : undefined
+  });
+  const mapping = scopedMappings.length === 1 ? scopedMappings[0] : undefined;
+  const snapshot = scopedMappings.length === 1 ? metadata[0]?.data : undefined;
   const latestObservation =
     scopedMappings.length === 1
       ? [...(observations[0]?.data ?? [])].sort((left, right) =>
-          right.observedAt.localeCompare(left.observedAt),
+          right.observedAt.localeCompare(left.observedAt)
         )[0]
-      : undefined
-  const connection = connections.find((item) => item.id === activeAssignment.data?.connectionId)
+      : undefined;
+  const connection = connections.find(
+    (item) => item.id === activeAssignment.data?.connectionId
+  );
   const nativeProvider =
     activeAssignment.data?.provider === "app_store" ||
     activeAssignment.data?.provider === "google_play"
       ? activeAssignment.data.provider
-      : null
+      : null;
   const profile = useQuery({
     ...nativeProviderProfileQueryOptions(
       nativeProvider ?? "app_store",
-      activeAssignment.data?.platform ?? "ios",
+      activeAssignment.data?.platform ?? "ios"
     ),
-    enabled: activeAssignment.data?.activationKind === "native_store" && Boolean(nativeProvider),
-  })
+    enabled:
+      activeAssignment.data?.activationKind === "native_store" &&
+      Boolean(nativeProvider),
+  });
   const providerLabel =
     profile.data?.displayName ??
     (nativeProvider === "app_store"
       ? "StoreKit"
       : nativeProvider === "google_play"
         ? "Google Play Billing"
-        : connection?.name)
+        : connection?.name);
   const capabilityWarnings =
-    profile.data?.capabilities.filter((capability) => capability.support !== "supported") ?? []
+    profile.data?.capabilities.filter(
+      (capability) => capability.support !== "supported"
+    ) ?? [];
   const displayName =
-    typeof snapshot?.metadata.displayName === "string" ? snapshot.metadata.displayName : undefined
+    typeof snapshot?.metadata.displayName === "string"
+      ? snapshot.metadata.displayName
+      : undefined;
   const state =
     mappings.isPending || readiness.isPending || activeAssignment.isPending
       ? "Checking provider context…"
-      : !activeAssignment.data
-        ? "No active provider is selected for this Application and Environment."
-        : scopedMappings.length > 1
+      : activeAssignment.data
+        ? scopedMappings.length > 1
           ? "Ambiguous provider mappings block publishing."
-          : !mapping
-            ? "No scoped provider mapping. Mock preview is the safe fallback."
-            : `${providerLabel ?? "Provider"} · ${mapping.availability} · ${mapping.syncState.replaceAll("_", " ")} · readiness ${readiness.data?.state ?? "unavailable"}`
+          : mapping
+            ? `${providerLabel ?? "Provider"} · ${mapping.availability} · ${mapping.syncState.replaceAll("_", " ")} · readiness ${readiness.data?.state ?? "unavailable"}`
+            : "No scoped provider mapping. Mock preview is the safe fallback."
+        : "No active provider is selected for this Application and Environment.";
   const diagnosticsHref =
     source.kind === "hosted"
       ? `/orgs/${encodeURIComponent(source.organizationId)}/projects/${encodeURIComponent(source.projectId)}/catalog/products/${encodeURIComponent(productId)}?environmentId=${encodeURIComponent(environmentId)}&applicationId=${encodeURIComponent(applicationId)}&returnTo=${encodeURIComponent(hostedStudioHref(source))}`
-      : undefined
+      : undefined;
 
   return (
-    <span className="text-muted-foreground block text-[11px] leading-5">
+    <span className="block text-[11px] text-muted-foreground leading-5">
       <span className="block">
         {displayName ? `Observed connected Product: ${displayName}. ` : ""}
         {state}
@@ -462,8 +537,8 @@ function ConnectedProductBindingContext({
       </span>
       {profile.data ? (
         <span className="mt-1 block">
-          Adapter {profile.data.adapterVersion} · {profile.data.capabilities.length} declared
-          capabilities
+          Adapter {profile.data.adapterVersion} ·{" "}
+          {profile.data.capabilities.length} declared capabilities
           {capabilityWarnings.length
             ? ` · ${capabilityWarnings.length} conditional or unsupported`
             : ""}
@@ -474,16 +549,16 @@ function ConnectedProductBindingContext({
         </span>
       ) : null}
       <span className="block">
-        Live localized price, period, trial, and offer details are resolved by the active provider
-        at runtime.
+        Live localized price, period, trial, and offer details are resolved by
+        the active provider at runtime.
       </span>
       {diagnosticsHref ? (
-        <a className="text-primary font-semibold" href={diagnosticsHref}>
+        <a className="font-semibold text-primary" href={diagnosticsHref}>
           Open scoped Product diagnostics
         </a>
       ) : null}
     </span>
-  )
+  );
 }
 
 export function MockCommercePanel({
@@ -492,48 +567,54 @@ export function MockCommercePanel({
   onProductsChange,
   onPurchaseStateChange,
 }: {
-  mockProducts: readonly MockProductDefinition[]
-  mockPurchaseState: MockPurchaseState
-  onProductsChange: (products: MockProductDefinition[]) => void
-  onPurchaseStateChange: (state: MockPurchaseState) => void
+  mockProducts: readonly MockProductDefinition[];
+  mockPurchaseState: MockPurchaseState;
+  onProductsChange: (products: MockProductDefinition[]) => void;
+  onPurchaseStateChange: (state: MockPurchaseState) => void;
 }) {
-  const { document, currentLocale } = useEditorStore()
-  const source = useStudioSource()
+  const { document, currentLocale } = useEditorStore();
+  const source = useStudioSource();
 
   function updateProduct(nextProduct: MockProductDefinition) {
     const nextProducts = mockProducts.map((product) =>
-      product.productReferenceId === nextProduct.productReferenceId ? nextProduct : product,
-    )
-    onProductsChange(nextProducts)
+      product.productReferenceId === nextProduct.productReferenceId
+        ? nextProduct
+        : product
+    );
+    onProductsChange(nextProducts);
     if (nextProduct.availability === "available") {
-      onPurchaseStateChange("productAvailable")
-    } else if (nextProducts.every((product) => product.availability === "unavailable")) {
-      onPurchaseStateChange("productUnavailable")
+      onPurchaseStateChange("productAvailable");
+    } else if (
+      nextProducts.every((product) => product.availability === "unavailable")
+    ) {
+      onPurchaseStateChange("productUnavailable");
     }
   }
 
   return (
-    <section className="space-y-4" aria-labelledby="mock-commerce-title">
+    <section aria-labelledby="mock-commerce-title" className="space-y-4">
       <HostedCatalogProductBindings />
       {source.kind === "hosted" ? <hr className="border-border" /> : null}
       <div>
-        <h2 id="mock-commerce-title" className="text-sm font-semibold">
+        <h2 className="font-semibold text-sm" id="mock-commerce-title">
           Test purchase
         </h2>
-        <p className="text-muted-foreground mt-0.5 text-xs">
+        <p className="mt-0.5 text-muted-foreground text-xs">
           Safe local outcomes; no store purchase
         </p>
       </div>
       <div>
         <label
-          className="text-muted-foreground mb-1 block text-xs font-medium"
+          className="mb-1 block font-medium text-muted-foreground text-xs"
           htmlFor="mock-outcome"
         >
           Preview state
         </label>
         <Select
           items={MOCK_PURCHASE_STATES}
-          onValueChange={(value) => onPurchaseStateChange(value as MockPurchaseState)}
+          onValueChange={(value) =>
+            onPurchaseStateChange(value as MockPurchaseState)
+          }
           value={mockPurchaseState}
         >
           <SelectTrigger id="mock-outcome">
@@ -549,33 +630,37 @@ export function MockCommercePanel({
         </Select>
       </div>
       <div>
-        <h3 className="text-xs font-semibold">Mock product bindings</h3>
+        <h3 className="font-semibold text-xs">Mock product bindings</h3>
         {mockProducts.length === 0 ? (
-          <p className="text-muted-foreground mt-2 text-xs">
+          <p className="mt-2 text-muted-foreground text-xs">
             This paywall does not declare a product to bind.
           </p>
         ) : (
           <div className="mt-2 space-y-2">
             {mockProducts.map((product) => {
               const reference = document?.products.find(
-                (entry) => entry.id === product.productReferenceId,
-              )
+                (entry) => entry.id === product.productReferenceId
+              );
               const label =
                 reference && document
-                  ? resolveLocalizedText(document, reference.label, currentLocale)
-                  : "Imported product"
+                  ? resolveLocalizedText(
+                      document,
+                      reference.label,
+                      currentLocale
+                    )
+                  : "Imported product";
               return (
                 <MockProductBinding
                   key={`${product.productReferenceId}:${product.availability}`}
                   label={label}
-                  product={product}
                   onChange={updateProduct}
+                  product={product}
                 />
-              )
+              );
             })}
           </div>
         )}
       </div>
     </section>
-  )
+  );
 }

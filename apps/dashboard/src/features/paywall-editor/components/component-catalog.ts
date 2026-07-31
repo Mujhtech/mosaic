@@ -1,16 +1,25 @@
-import type { InsertableBlockType, ProtocolNode } from "@/features/paywall-editor/types/editor"
+import type {
+  InsertableBlockType,
+  ProtocolNode,
+} from "@/features/paywall-editor/types/editor";
 
-export const COMPONENT_LIBRARY_DRAG_TYPE = "application/x-mosaic-component-type"
+export const COMPONENT_LIBRARY_DRAG_TYPE =
+  "application/x-mosaic-component-type";
 export const COMPONENT_LIBRARY_COUNTDOWN_ENDS_AT_DRAG_TYPE =
-  "application/x-mosaic-countdown-ends-at"
+  "application/x-mosaic-countdown-ends-at";
 
-export type ComponentCategory = "Layout" | "Content" | "Controls" | "Commerce" | "Navigation"
+export type ComponentCategory =
+  | "Layout"
+  | "Content"
+  | "Controls"
+  | "Commerce"
+  | "Navigation";
 
 export interface ComponentCatalogEntry {
-  readonly type: InsertableBlockType
-  readonly label: string
-  readonly description: string
-  readonly category: ComponentCategory
+  readonly category: ComponentCategory;
+  readonly description: string;
+  readonly label: string;
+  readonly type: InsertableBlockType;
 }
 
 export const COMPONENT_CATEGORIES = [
@@ -89,23 +98,25 @@ export const COMPONENT_CATEGORIES = [
       {
         type: "button",
         label: "Button",
-        description: "Create a native Button and choose its action in Properties.",
+        description:
+          "Create a native Button and choose its action in Properties.",
         category: "Commerce",
       },
     ],
   },
 ] as const satisfies readonly {
-  readonly label: ComponentCategory
-  readonly entries: readonly ComponentCatalogEntry[]
-}[]
+  readonly label: ComponentCategory;
+  readonly entries: readonly ComponentCatalogEntry[];
+}[];
 
-export const COMPONENT_CATALOG = COMPONENT_CATEGORIES.flatMap<ComponentCatalogEntry>(
-  (category) => category.entries,
-)
+export const COMPONENT_CATALOG =
+  COMPONENT_CATEGORIES.flatMap<ComponentCatalogEntry>(
+    (category) => category.entries
+  );
 
 export const COMPONENT_CATALOG_BY_TYPE = new Map(
-  COMPONENT_CATALOG.map((entry) => [entry.type, entry]),
-) as ReadonlyMap<InsertableBlockType, ComponentCatalogEntry>
+  COMPONENT_CATALOG.map((entry) => [entry.type, entry])
+) as ReadonlyMap<InsertableBlockType, ComponentCatalogEntry>;
 
 export const LAYER_TYPE_LABELS = Object.freeze({
   stack: "Stack",
@@ -120,4 +131,4 @@ export const LAYER_TYPE_LABELS = Object.freeze({
   productCard: "Product Card",
   productBadge: "Product Badge",
   button: "Button",
-}) satisfies Readonly<Record<ProtocolNode["type"], string>>
+}) satisfies Readonly<Record<ProtocolNode["type"], string>>;

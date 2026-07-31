@@ -1,102 +1,125 @@
 /* eslint-disable react-refresh/only-export-components -- token controls share private immutable token helpers. */
-import { ArrowDownIcon } from "@phosphor-icons/react/dist/ssr/ArrowDown"
-import { ArrowUpIcon } from "@phosphor-icons/react/dist/ssr/ArrowUp"
-import { CaretRightIcon } from "@phosphor-icons/react/dist/ssr/CaretRight"
-import { CopyIcon } from "@phosphor-icons/react/dist/ssr/Copy"
-import { PlusIcon } from "@phosphor-icons/react/dist/ssr/Plus"
-import { TrashIcon } from "@phosphor-icons/react/dist/ssr/Trash"
+import { ArrowDownIcon } from "@phosphor-icons/react/dist/ssr/ArrowDown";
+import { ArrowUpIcon } from "@phosphor-icons/react/dist/ssr/ArrowUp";
+import { CaretRightIcon } from "@phosphor-icons/react/dist/ssr/CaretRight";
+import { CopyIcon } from "@phosphor-icons/react/dist/ssr/Copy";
+import { PlusIcon } from "@phosphor-icons/react/dist/ssr/Plus";
+import { TrashIcon } from "@phosphor-icons/react/dist/ssr/Trash";
 
-import { Button } from "@/components/ui/button"
+import { Button } from "@/components/ui/button";
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from "@/components/ui/select"
-import { InspectorColorControl } from "@/features/paywall-editor/components/inspector-color-control"
-import { useEditorActions } from "@/features/paywall-editor/stores/editor-store-context"
+} from "@/components/ui/select";
+import { InspectorColorControl } from "@/features/paywall-editor/components/inspector-color-control";
+import { useEditorActions } from "@/features/paywall-editor/stores/editor-store-context";
 import type {
   MosaicDocument,
   PaywallDesignSystem,
   ProtocolBackground,
   ProtocolColor,
   ProtocolShadow,
-} from "@/features/paywall-editor/types/editor"
-import { cloneValue } from "@/features/paywall-editor/utils/clone"
+} from "@/features/paywall-editor/types/editor";
+import { cloneValue } from "@/features/paywall-editor/utils/clone";
+import type { DesignCategory } from "@/features/paywall-editor/utils/style-authoring";
 import {
   clampGradientAngle,
   defaultMediaBackground,
   insertGradientStop,
   updateGradientStopPosition,
-} from "@/features/paywall-editor/utils/style-authoring"
-import type { DesignCategory } from "@/features/paywall-editor/utils/style-authoring"
+} from "@/features/paywall-editor/utils/style-authoring";
 import type {
   MosaicPaywallV02BackgroundToken,
   MosaicPaywallV02ColorToken,
   MosaicPaywallV02ShadowToken,
-} from "@/lib/mosaic-protocol"
+} from "@/lib/mosaic-protocol";
 
 export type DesignToken =
-  MosaicPaywallV02ColorToken | MosaicPaywallV02BackgroundToken | MosaicPaywallV02ShadowToken
+  | MosaicPaywallV02ColorToken
+  | MosaicPaywallV02BackgroundToken
+  | MosaicPaywallV02ShadowToken;
 
 export interface PendingDelete {
-  readonly category: DesignCategory
-  readonly id: string
+  readonly category: DesignCategory;
+  readonly id: string;
 }
 
 export const FIELD_CLASS =
-  "border-input bg-background focus:border-ring focus:ring-ring/30 h-8 min-w-0 rounded border px-2 text-xs outline-none focus:ring-2"
+  "border-input bg-background focus:border-ring focus:ring-ring/30 h-8 min-w-0 rounded border px-2 text-xs outline-none focus:ring-2";
 
 export function replaceTokenReferences(
   value: unknown,
   referenceType: string,
   id: string,
-  replacement: unknown,
+  replacement: unknown
 ): unknown {
   if (Array.isArray(value)) {
-    return value.map((entry) => replaceTokenReferences(entry, referenceType, id, replacement))
+    return value.map((entry) =>
+      replaceTokenReferences(entry, referenceType, id, replacement)
+    );
   }
-  if (!value || typeof value !== "object") return value
-  const record = value as Record<string, unknown>
-  if (record.type === referenceType && record.id === id) return cloneValue(replacement)
+  if (!value || typeof value !== "object") {
+    return value;
+  }
+  const record = value as Record<string, unknown>;
+  if (record.type === referenceType && record.id === id) {
+    return cloneValue(replacement);
+  }
   return Object.fromEntries(
     Object.entries(record).map(([key, entry]) => [
       key,
       replaceTokenReferences(entry, referenceType, id, replacement),
-    ]),
-  )
+    ])
+  );
 }
 
-export function countTokenReferences(value: unknown, referenceType: string, id: string): number {
+export function countTokenReferences(
+  value: unknown,
+  referenceType: string,
+  id: string
+): number {
   if (Array.isArray(value)) {
-    return value.reduce((total, entry) => total + countTokenReferences(entry, referenceType, id), 0)
+    return value.reduce(
+      (total, entry) => total + countTokenReferences(entry, referenceType, id),
+      0
+    );
   }
-  if (!value || typeof value !== "object") return 0
-  const record = value as Record<string, unknown>
+  if (!value || typeof value !== "object") {
+    return 0;
+  }
+  const record = value as Record<string, unknown>;
   return (
     (record.type === referenceType && record.id === id ? 1 : 0) +
     Object.values(record).reduce<number>(
       (total, entry) => total + countTokenReferences(entry, referenceType, id),
-      0,
+      0
     )
-  )
+  );
 }
 
 export function nextTokenId(tokens: readonly DesignToken[], prefix: string) {
-  const used = new Set(tokens.map((token) => token.id))
-  let ordinal = tokens.length + 1
-  while (used.has(`${prefix}-${ordinal}`)) ordinal += 1
-  return `${prefix}-${ordinal}`
+  const used = new Set(tokens.map((token) => token.id));
+  let ordinal = tokens.length + 1;
+  while (used.has(`${prefix}-${ordinal}`)) {
+    ordinal += 1;
+  }
+  return `${prefix}-${ordinal}`;
 }
 
 export function tokensFor(
   system: PaywallDesignSystem,
-  category: DesignCategory,
+  category: DesignCategory
 ): readonly DesignToken[] {
-  if (category === "colors") return system.colors
-  if (category === "backgrounds") return system.backgrounds
-  return system.shadows
+  if (category === "colors") {
+    return system.colors;
+  }
+  if (category === "backgrounds") {
+    return system.backgrounds;
+  }
+  return system.shadows;
 }
 
 export function SectionHeading({
@@ -104,15 +127,15 @@ export function SectionHeading({
   label,
   onAdd,
 }: {
-  count: number
-  label: string
-  onAdd: () => void
+  count: number;
+  label: string;
+  onAdd: () => void;
 }) {
   return (
     <div className="flex items-center justify-between gap-2">
       <div>
-        <h3 className="text-sm font-semibold">{label}</h3>
-        <p className="text-muted-foreground text-[11px]">
+        <h3 className="font-semibold text-sm">{label}</h3>
+        <p className="text-[11px] text-muted-foreground">
           {count} {count === 1 ? "style" : "styles"}
         </p>
       </div>
@@ -126,7 +149,7 @@ export function SectionHeading({
         <PlusIcon aria-hidden />
       </Button>
     </div>
-  )
+  );
 }
 
 export function TokenActions({
@@ -137,12 +160,12 @@ export function TokenActions({
   onDuplicate,
   onMove,
 }: {
-  canMoveDown: boolean
-  canMoveUp: boolean
-  name: string
-  onDelete: () => void
-  onDuplicate: () => void
-  onMove: (offset: -1 | 1) => void
+  canMoveDown: boolean;
+  canMoveUp: boolean;
+  name: string;
+  onDelete: () => void;
+  onDuplicate: () => void;
+  onMove: (offset: -1 | 1) => void;
 }) {
   return (
     <div className="flex shrink-0">
@@ -185,7 +208,7 @@ export function TokenActions({
         <TrashIcon aria-hidden />
       </Button>
     </div>
-  )
+  );
 }
 
 export function TokenSummary({
@@ -195,17 +218,17 @@ export function TokenSummary({
   open,
   summary,
 }: {
-  editorId: string
-  name: string
-  onToggle: () => void
-  open: boolean
-  summary: string
+  editorId: string;
+  name: string;
+  onToggle: () => void;
+  open: boolean;
+  summary: string;
 }) {
   return (
     <button
       aria-controls={editorId}
       aria-expanded={open}
-      className="hover:bg-muted/60 focus-visible:ring-ring flex min-w-0 flex-1 items-center gap-2 rounded px-1.5 py-1 text-left focus-visible:ring-2 focus-visible:outline-none"
+      className="flex min-w-0 flex-1 items-center gap-2 rounded px-1.5 py-1 text-left hover:bg-muted/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
       onClick={onToggle}
       type="button"
     >
@@ -213,10 +236,14 @@ export function TokenSummary({
         aria-hidden
         className={`size-3.5 shrink-0 transition-transform ${open ? "rotate-90" : ""}`}
       />
-      <span className="min-w-0 flex-1 truncate text-xs font-medium">{name}</span>
-      <span className="text-muted-foreground max-w-24 truncate text-[11px]">{summary}</span>
+      <span className="min-w-0 flex-1 truncate font-medium text-xs">
+        {name}
+      </span>
+      <span className="max-w-24 truncate text-[11px] text-muted-foreground">
+        {summary}
+      </span>
     </button>
-  )
+  );
 }
 
 export function ColorControl({
@@ -226,13 +253,13 @@ export function ColorControl({
   onChange,
   value,
 }: {
-  document: MosaicDocument
-  id: string
-  label: string
-  onChange: (value: ProtocolColor) => void
-  value: ProtocolColor
+  document: MosaicDocument;
+  id: string;
+  label: string;
+  onChange: (value: ProtocolColor) => void;
+  value: ProtocolColor;
 }) {
-  const editor = useEditorActions()
+  const editor = useEditorActions();
   return (
     <>
       <label className="sr-only" htmlFor={id}>
@@ -249,7 +276,7 @@ export function ColorControl({
         value={value}
       />
     </>
-  )
+  );
 }
 
 const BACKGROUND_KIND_OPTIONS = [
@@ -258,12 +285,12 @@ const BACKGROUND_KIND_OPTIONS = [
   { label: "Radial gradient", value: "radialGradient" },
   { label: "Image", value: "image" },
   { label: "Video", value: "video" },
-]
+];
 
 const CONTENT_MODE_OPTIONS = [
   { label: "Fit", value: "fit" },
   { label: "Fill", value: "fill" },
-]
+];
 
 export function BackgroundEditor({
   document,
@@ -272,17 +299,18 @@ export function BackgroundEditor({
   onChange,
   value,
 }: {
-  document: MosaicDocument
-  id: string
-  onAddMedia: (type: "image" | "video") => void
-  onChange: (value: ProtocolBackground) => void
-  value: ProtocolBackground
+  document: MosaicDocument;
+  id: string;
+  onAddMedia: (type: "image" | "video") => void;
+  onChange: (value: ProtocolBackground) => void;
+  value: ProtocolBackground;
 }) {
-  const images = document.assets.filter((asset) => asset.type === "image")
-  const videos = document.assets.filter((asset) => asset.type === "video")
+  const images = document.assets.filter((asset) => asset.type === "image");
+  const videos = document.assets.filter((asset) => asset.type === "video");
   function changeType(type: ProtocolBackground["type"]) {
-    if (type === "color") onChange({ type, value: "surface.default" })
-    else if (type === "linearGradient") {
+    if (type === "color") {
+      onChange({ type, value: "surface.default" });
+    } else if (type === "linearGradient") {
       onChange({
         type,
         angle: 180,
@@ -290,7 +318,7 @@ export function BackgroundEditor({
           { position: 0, color: "surface.default" },
           { position: 1, color: "surface.elevated" },
         ],
-      })
+      });
     } else if (type === "radialGradient") {
       onChange({
         type,
@@ -300,25 +328,31 @@ export function BackgroundEditor({
           { position: 0, color: "surface.elevated" },
           { position: 1, color: "surface.default" },
         ],
-      })
+      });
     } else if (type === "image") {
-      if (images[0]) onChange(defaultMediaBackground(type, images[0].id))
-    } else if (type === "video") {
-      if (videos[0]) onChange(defaultMediaBackground(type, videos[0].id))
+      if (images[0]) {
+        onChange(defaultMediaBackground(type, images[0].id));
+      }
+    } else if (type === "video" && videos[0]) {
+      onChange(defaultMediaBackground(type, videos[0].id));
     }
   }
-  const assetOptions = (value.type === "image" ? images : videos).map((asset) => ({
-    label: asset.id,
-    value: asset.id,
-  }))
+  const assetOptions = (value.type === "image" ? images : videos).map(
+    (asset) => ({
+      label: asset.id,
+      value: asset.id,
+    })
+  );
   const posterOptions = [
     { label: "No poster", value: "" },
     ...images.map((asset) => ({ label: asset.id, value: asset.id })),
-  ]
+  ];
   const selectedMediaExists =
     value.type === "image" || value.type === "video"
-      ? document.assets.some((asset) => asset.type === value.type && asset.id === value.assetId)
-      : true
+      ? document.assets.some(
+          (asset) => asset.type === value.type && asset.id === value.assetId
+        )
+      : true;
   return (
     <div className="space-y-2">
       <Select
@@ -333,8 +367,12 @@ export function BackgroundEditor({
           {BACKGROUND_KIND_OPTIONS.map((option) => (
             <SelectItem
               disabled={
-                (option.value === "image" && images.length === 0 && value.type !== "image") ||
-                (option.value === "video" && videos.length === 0 && value.type !== "video")
+                (option.value === "image" &&
+                  images.length === 0 &&
+                  value.type !== "image") ||
+                (option.value === "video" &&
+                  videos.length === 0 &&
+                  value.type !== "video")
               }
               key={option.value}
               value={option.value}
@@ -345,19 +383,32 @@ export function BackgroundEditor({
         </SelectContent>
       </Select>
       {images.length === 0 || videos.length === 0 || !selectedMediaExists ? (
-        <div className="border-border bg-muted/30 flex flex-wrap gap-1.5 rounded border p-2">
-          {!selectedMediaExists ? (
-            <p className="text-muted-foreground w-full text-[11px] leading-4">
-              The selected media asset is missing. Add a replacement to keep this style valid.
+        <div className="flex flex-wrap gap-1.5 rounded border border-border bg-muted/30 p-2">
+          {selectedMediaExists ? null : (
+            <p className="w-full text-[11px] text-muted-foreground leading-4">
+              The selected media asset is missing. Add a replacement to keep
+              this style valid.
             </p>
-          ) : null}
-          {images.length === 0 || (value.type === "image" && !selectedMediaExists) ? (
-            <Button onClick={() => onAddMedia("image")} size="xs" type="button" variant="outline">
+          )}
+          {images.length === 0 ||
+          (value.type === "image" && !selectedMediaExists) ? (
+            <Button
+              onClick={() => onAddMedia("image")}
+              size="xs"
+              type="button"
+              variant="outline"
+            >
               <PlusIcon aria-hidden /> Add image
             </Button>
           ) : null}
-          {videos.length === 0 || (value.type === "video" && !selectedMediaExists) ? (
-            <Button onClick={() => onAddMedia("video")} size="xs" type="button" variant="outline">
+          {videos.length === 0 ||
+          (value.type === "video" && !selectedMediaExists) ? (
+            <Button
+              onClick={() => onAddMedia("video")}
+              size="xs"
+              type="button"
+              variant="outline"
+            >
               <PlusIcon aria-hidden /> Add video
             </Button>
           ) : null}
@@ -380,7 +431,10 @@ export function BackgroundEditor({
             max={360}
             min={0}
             onChange={(event) =>
-              onChange({ ...value, angle: clampGradientAngle(event.target.valueAsNumber) })
+              onChange({
+                ...value,
+                angle: clampGradientAngle(event.target.valueAsNumber),
+              })
             }
             type="number"
             value={value.angle}
@@ -391,7 +445,9 @@ export function BackgroundEditor({
         <div className="grid grid-cols-3 gap-1.5">
           {(["x", "y"] as const).map((axis) => (
             <label className="grid gap-1 text-[11px]" key={axis}>
-              <span className="text-muted-foreground">Centre {axis.toUpperCase()}</span>
+              <span className="text-muted-foreground">
+                Centre {axis.toUpperCase()}
+              </span>
               <input
                 className={FIELD_CLASS}
                 max={100}
@@ -399,7 +455,10 @@ export function BackgroundEditor({
                 onChange={(event) =>
                   onChange({
                     ...value,
-                    center: { ...value.center, [axis]: event.target.valueAsNumber / 100 },
+                    center: {
+                      ...value.center,
+                      [axis]: event.target.valueAsNumber / 100,
+                    },
                   })
                 }
                 type="number"
@@ -413,7 +472,9 @@ export function BackgroundEditor({
               className={FIELD_CLASS}
               max={200}
               min={1}
-              onChange={(event) => onChange({ ...value, radius: event.target.valueAsNumber / 100 })}
+              onChange={(event) =>
+                onChange({ ...value, radius: event.target.valueAsNumber / 100 })
+              }
               type="number"
               value={Math.round(value.radius * 100)}
             />
@@ -423,7 +484,10 @@ export function BackgroundEditor({
       {value.type === "linearGradient" || value.type === "radialGradient" ? (
         <div className="space-y-2">
           {value.stops.map((stop, index) => (
-            <div className="grid grid-cols-[1fr_4rem_auto] items-end gap-1.5" key={stop.position}>
+            <div
+              className="grid grid-cols-[1fr_4rem_auto] items-end gap-1.5"
+              key={stop.position}
+            >
               <ColorControl
                 document={document}
                 id={`${id}-stop-${index}`}
@@ -432,7 +496,7 @@ export function BackgroundEditor({
                   onChange({
                     ...value,
                     stops: value.stops.map((entry, current) =>
-                      current === index ? { ...entry, color } : entry,
+                      current === index ? { ...entry, color } : entry
                     ),
                   })
                 }
@@ -449,7 +513,7 @@ export function BackgroundEditor({
                     stops: updateGradientStopPosition(
                       value.stops,
                       index,
-                      event.target.valueAsNumber / 100,
+                      event.target.valueAsNumber / 100
                     ),
                   })
                 }
@@ -462,7 +526,9 @@ export function BackgroundEditor({
                 onClick={() =>
                   onChange({
                     ...value,
-                    stops: value.stops.filter((_, current) => current !== index),
+                    stops: value.stops.filter(
+                      (_, current) => current !== index
+                    ),
                   })
                 }
                 size="icon-sm"
@@ -529,7 +595,10 @@ export function BackgroundEditor({
             <Select
               items={posterOptions}
               onValueChange={(posterAssetId) =>
-                onChange({ ...value, posterAssetId: posterAssetId || undefined })
+                onChange({
+                  ...value,
+                  posterAssetId: posterAssetId || undefined,
+                })
               }
               value={value.posterAssetId ?? ""}
             >
@@ -555,7 +624,7 @@ export function BackgroundEditor({
         </>
       ) : null}
     </div>
-  )
+  );
 }
 
 export function ShadowEditor({
@@ -564,13 +633,17 @@ export function ShadowEditor({
   onChange,
   value,
 }: {
-  document: MosaicDocument
-  id: string
-  onChange: (value: ProtocolShadow) => void
-  value: ProtocolShadow
+  document: MosaicDocument;
+  id: string;
+  onChange: (value: ProtocolShadow) => void;
+  value: ProtocolShadow;
 }) {
   if (value.type === "shadowToken") {
-    return <p className="text-muted-foreground text-[11px]">Linked to shadow {value.id}</p>
+    return (
+      <p className="text-[11px] text-muted-foreground">
+        Linked to shadow {value.id}
+      </p>
+    );
   }
   return (
     <div className="space-y-2">
@@ -585,13 +658,19 @@ export function ShadowEditor({
         {(["offsetX", "offsetY", "blurRadius"] as const).map((property) => (
           <label className="grid gap-1 text-[11px]" key={property}>
             <span className="text-muted-foreground">
-              {property === "offsetX" ? "X" : property === "offsetY" ? "Y" : "Blur"}
+              {property === "offsetX"
+                ? "X"
+                : property === "offsetY"
+                  ? "Y"
+                  : "Blur"}
             </span>
             <input
               className={FIELD_CLASS}
               max={4096}
               min={property === "blurRadius" ? 0 : -4096}
-              onChange={(event) => onChange({ ...value, [property]: event.target.valueAsNumber })}
+              onChange={(event) =>
+                onChange({ ...value, [property]: event.target.valueAsNumber })
+              }
               type="number"
               value={value[property]}
             />
@@ -599,5 +678,5 @@ export function ShadowEditor({
         ))}
       </div>
     </div>
-  )
+  );
 }

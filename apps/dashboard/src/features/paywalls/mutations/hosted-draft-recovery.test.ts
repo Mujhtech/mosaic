@@ -1,14 +1,14 @@
-import { beforeEach, describe, expect, it } from "vitest"
+import { beforeEach, describe, expect, it } from "vitest";
 
-import type { MosaicDocument } from "@/features/paywall-editor/types/editor"
+import type { MosaicDocument } from "@/features/paywall-editor/types/editor";
 import {
   readHostedDraftRecovery,
   serializeHostedRecoveryDocument,
   writeHostedDraftRecovery,
-} from "@/features/paywalls/mutations/hosted-draft-recovery"
+} from "@/features/paywalls/mutations/hosted-draft-recovery";
 
 describe("hosted Draft browser recovery", () => {
-  beforeEach(() => window.localStorage.clear())
+  beforeEach(() => window.localStorage.clear());
 
   it("preserves and exports conflicting edits without requiring a valid protocol document", () => {
     const scope = {
@@ -16,27 +16,29 @@ describe("hosted Draft browser recovery", () => {
       environmentId: "env_staging",
       paywallId: "paywall_01",
       projectId: "project_01",
-    }
+    };
     const unfinishedDocument = {
       id: "unfinished-paywall",
       revision: 9,
       schemaVersion: "0.2",
-    } as MosaicDocument
+    } as MosaicDocument;
 
     expect(
       writeHostedDraftRecovery(scope, {
         document: unfinishedDocument,
         expectedRevision: 7,
         reason: "conflict",
-      }),
-    ).toBe(true)
+      })
+    ).toBe(true);
 
-    const recovered = readHostedDraftRecovery(scope)
+    const recovered = readHostedDraftRecovery(scope);
     expect(recovered).toMatchObject({
       document: unfinishedDocument,
       expectedRevision: 7,
       reason: "conflict",
-    })
-    expect(serializeHostedRecoveryDocument(recovered!)).toContain('"id": "unfinished-paywall"')
-  })
-})
+    });
+    expect(serializeHostedRecoveryDocument(recovered!)).toContain(
+      '"id": "unfinished-paywall"'
+    );
+  });
+});

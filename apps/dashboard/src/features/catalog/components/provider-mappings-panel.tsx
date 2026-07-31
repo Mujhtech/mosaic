@@ -1,10 +1,13 @@
-import { useState } from "react"
+import { useState } from "react";
 
-import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import type { ProviderMappingView } from "@/features/catalog/types/connected-product-view"
-import { validateNativeProviderMapping } from "@/features/catalog/types/native-provider-mapping"
-import type { ProviderMappingUsage, ReplaceProviderMappingRequest } from "@/generated/api"
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import type { ProviderMappingView } from "@/features/catalog/types/connected-product-view";
+import { validateNativeProviderMapping } from "@/features/catalog/types/native-provider-mapping";
+import type {
+  ProviderMappingUsage,
+  ReplaceProviderMappingRequest,
+} from "@/generated/api";
 
 export function ProviderMappingsPanel({
   error,
@@ -18,49 +21,58 @@ export function ProviderMappingsPanel({
   onReplace,
   productType,
 }: {
-  canManage?: boolean
-  error?: Error | null
-  isPending?: boolean
-  manageProvidersHref: string
-  membersHref?: string
-  mappings: readonly ProviderMappingView[]
-  onArchive?: (mappingId: string) => Promise<void>
-  onLoadUsage?: (mappingId: string) => Promise<ProviderMappingUsage>
-  onReplace?: (mappingId: string, body: ReplaceProviderMappingRequest) => Promise<void>
-  productType?: "one_time_non_consumable" | "subscription"
+  canManage?: boolean;
+  error?: Error | null;
+  isPending?: boolean;
+  manageProvidersHref: string;
+  membersHref?: string;
+  mappings: readonly ProviderMappingView[];
+  onArchive?: (mappingId: string) => Promise<void>;
+  onLoadUsage?: (mappingId: string) => Promise<ProviderMappingUsage>;
+  onReplace?: (
+    mappingId: string,
+    body: ReplaceProviderMappingRequest
+  ) => Promise<void>;
+  productType?: "one_time_non_consumable" | "subscription";
 }) {
-  const [editingId, setEditingId] = useState<string | null>(null)
-  const [usage, setUsage] = useState<ProviderMappingUsage | null>(null)
-  const [usageError, setUsageError] = useState<Error | null>(null)
-  const [usagePending, setUsagePending] = useState(false)
-  const [replacementOfferSelection, setReplacementOfferSelection] = useState<"none" | "specific">(
-    "none",
-  )
-  const [replacement, setReplacement] = useState<ReplaceProviderMappingRequest>({
-    providerProductIdentifier: "",
-  })
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [usage, setUsage] = useState<ProviderMappingUsage | null>(null);
+  const [usageError, setUsageError] = useState<Error | null>(null);
+  const [usagePending, setUsagePending] = useState(false);
+  const [replacementOfferSelection, setReplacementOfferSelection] = useState<
+    "none" | "specific"
+  >("none");
+  const [replacement, setReplacement] = useState<ReplaceProviderMappingRequest>(
+    {
+      providerProductIdentifier: "",
+    }
+  );
   return (
-    <section aria-labelledby="provider-mappings-title" className="rounded border">
+    <section
+      aria-labelledby="provider-mappings-title"
+      className="rounded border"
+    >
       <header className="border-b px-5 py-4">
-        <h2 className="text-sm font-semibold" id="provider-mappings-title">
+        <h2 className="font-semibold text-sm" id="provider-mappings-title">
           Provider mappings
         </h2>
-        <p className="text-muted-foreground mt-1 text-sm leading-6">
-          Provider-owned identifiers, availability, and synchronization evidence are read-only.
-          Mosaic-owned names, keys, Plan membership, and Entitlement grants remain editable
-          separately.
+        <p className="mt-1 text-muted-foreground text-sm leading-6">
+          Provider-owned identifiers, availability, and synchronization evidence
+          are read-only. Mosaic-owned names, keys, Plan membership, and
+          Entitlement grants remain editable separately.
         </p>
       </header>
       <div className="p-5">
         {mappings.length === 0 ? (
           <div className="rounded border border-dashed p-4">
-            <p className="text-sm font-semibold">No provider mapping</p>
-            <p className="text-muted-foreground mt-1 text-sm leading-6">
-              This Product remains available for simulated preview, but connected publishing needs
-              an explicit active provider and verified mapping.
+            <p className="font-semibold text-sm">No provider mapping</p>
+            <p className="mt-1 text-muted-foreground text-sm leading-6">
+              This Product remains available for simulated preview, but
+              connected publishing needs an explicit active provider and
+              verified mapping.
             </p>
             <a
-              className="text-primary mt-3 inline-flex text-sm font-medium"
+              className="mt-3 inline-flex font-medium text-primary text-sm"
               href={manageProvidersHref}
             >
               Review Purchase setup
@@ -73,11 +85,11 @@ export function ProviderMappingsPanel({
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <div>
                     <p className="font-medium">{mapping.providerLabel}</p>
-                    <p className="text-muted-foreground mt-1 text-xs">
+                    <p className="mt-1 text-muted-foreground text-xs">
                       {mapping.connectionLabel} · {mapping.status}
                     </p>
                   </div>
-                  <span className="border-border bg-muted rounded-full border px-2.5 py-1 text-xs font-medium capitalize">
+                  <span className="rounded-full border border-border bg-muted px-2.5 py-1 font-medium text-xs capitalize">
                     {mappingStateLabel(mapping)}
                   </span>
                 </div>
@@ -92,16 +104,32 @@ export function ProviderMappingsPanel({
                     }
                     value={mapping.providerProductIdentifier}
                   />
-                  {mapping.provider !== "app_store" && mapping.provider !== "google_play" ? (
+                  {mapping.provider !== "app_store" &&
+                  mapping.provider !== "google_play" ? (
                     <MappingField
                       label="Store Product ID"
-                      value={mapping.expectedStoreProductId ?? "Awaiting verified synchronization"}
+                      value={
+                        mapping.expectedStoreProductId ??
+                        "Awaiting verified synchronization"
+                      }
                     />
                   ) : null}
-                  <MappingField label="Environment" value={mapping.environmentLabel} />
-                  <MappingField label="Application" value={mapping.applicationLabel} />
-                  <MappingField label="Platform" value={mapping.platformLabel} />
-                  <MappingField label="Availability" value={mapping.availability} />
+                  <MappingField
+                    label="Environment"
+                    value={mapping.environmentLabel}
+                  />
+                  <MappingField
+                    label="Application"
+                    value={mapping.applicationLabel}
+                  />
+                  <MappingField
+                    label="Platform"
+                    value={mapping.platformLabel}
+                  />
+                  <MappingField
+                    label="Availability"
+                    value={mapping.availability}
+                  />
                   <MappingField
                     label="Provider display name"
                     value={mapping.providerDisplayName ?? "Unavailable"}
@@ -109,8 +137,12 @@ export function ProviderMappingsPanel({
                   <MappingField
                     label="Provider Product"
                     value={
-                      mapping.providerProductType || mapping.providerProductState
-                        ? [mapping.providerProductType, mapping.providerProductState]
+                      mapping.providerProductType ||
+                      mapping.providerProductState
+                        ? [
+                            mapping.providerProductType,
+                            mapping.providerProductState,
+                          ]
                             .filter(Boolean)
                             .join(" · ")
                         : "Unavailable"
@@ -121,13 +153,22 @@ export function ProviderMappingsPanel({
                     value={mapping.snapshotId ?? "No synchronized snapshot"}
                   />
                   {mapping.providerOfferingIdentifier ? (
-                    <MappingField label="Offering" value={mapping.providerOfferingIdentifier} />
+                    <MappingField
+                      label="Offering"
+                      value={mapping.providerOfferingIdentifier}
+                    />
                   ) : null}
                   {mapping.providerPackageIdentifier ? (
-                    <MappingField label="Package" value={mapping.providerPackageIdentifier} />
+                    <MappingField
+                      label="Package"
+                      value={mapping.providerPackageIdentifier}
+                    />
                   ) : null}
                   {mapping.providerBasePlanIdentifier ? (
-                    <MappingField label="Base plan" value={mapping.providerBasePlanIdentifier} />
+                    <MappingField
+                      label="Base plan"
+                      value={mapping.providerBasePlanIdentifier}
+                    />
                   ) : null}
                   {mapping.provider === "google_play" ? (
                     <MappingField
@@ -136,11 +177,15 @@ export function ProviderMappingsPanel({
                     />
                   ) : null}
                   {mapping.snapshotSource ? (
-                    <MappingField label="Metadata source" value={mapping.snapshotSource} />
+                    <MappingField
+                      label="Metadata source"
+                      value={mapping.snapshotSource}
+                    />
                   ) : null}
                 </dl>
-                <p className="text-muted-foreground mt-3 text-xs">
-                  {mapping.provider === "app_store" || mapping.provider === "google_play"
+                <p className="mt-3 text-muted-foreground text-xs">
+                  {mapping.provider === "app_store" ||
+                  mapping.provider === "google_play"
                     ? mapping.latestObservation
                       ? `Observed by a ${observationContext(mapping.latestObservation.storeContext)} test client at ${mapping.latestObservation.observedAt}${mapping.latestObservation.expiresAt ? `; expires ${mapping.latestObservation.expiresAt}` : ""}.`
                       : "Configured with an exact store identifier. No accepted test-client observation exists yet."
@@ -151,17 +196,19 @@ export function ProviderMappingsPanel({
                         : "The connection has never reported a successful synchronization."}
                 </p>
                 {mapping.lastErrorCode ? (
-                  <p className="text-destructive mt-2 text-xs" role="status">
+                  <p className="mt-2 text-destructive text-xs" role="status">
                     Last mapping error: {mapping.lastErrorCode}
                   </p>
                 ) : null}
                 {mapping.latestObservation ? (
-                  <div className="bg-muted/40 mt-3 rounded border p-3 text-xs">
+                  <div className="mt-3 rounded border bg-muted/40 p-3 text-xs">
                     <p className="font-semibold">
                       Test-client observation ·{" "}
-                      {observationContext(mapping.latestObservation.storeContext)}
+                      {observationContext(
+                        mapping.latestObservation.storeContext
+                      )}
                     </p>
-                    <p className="text-muted-foreground mt-1">
+                    <p className="mt-1 text-muted-foreground">
                       {mapping.latestObservation.result} · observed{" "}
                       {mapping.latestObservation.observedAt} · received{" "}
                       {mapping.latestObservation.receivedAt} · adapter{" "}
@@ -172,29 +219,36 @@ export function ProviderMappingsPanel({
                     </p>
                     {Object.keys(mapping.latestObservation.metadata).length ? (
                       <dl className="mt-2 grid gap-2 sm:grid-cols-2">
-                        {Object.entries(mapping.latestObservation.metadata).map(([key, value]) => (
-                          <MappingField
-                            key={key}
-                            label={key}
-                            value={typeof value === "string" ? value : JSON.stringify(value)}
-                          />
-                        ))}
+                        {Object.entries(mapping.latestObservation.metadata).map(
+                          ([key, value]) => (
+                            <MappingField
+                              key={key}
+                              label={key}
+                              value={
+                                typeof value === "string"
+                                  ? value
+                                  : JSON.stringify(value)
+                              }
+                            />
+                          )
+                        )}
                       </dl>
                     ) : null}
                   </div>
                 ) : mapping.providerLabel === "StoreKit" ||
                   mapping.providerLabel === "Google Play Billing" ? (
-                  <p className="text-muted-foreground mt-3 text-xs">
-                    No accepted test-client observation. This mapping is configured, not verified in
-                    test.
+                  <p className="mt-3 text-muted-foreground text-xs">
+                    No accepted test-client observation. This mapping is
+                    configured, not verified in test.
                   </p>
                 ) : null}
                 <div className="mt-3 flex flex-wrap gap-3 text-sm">
-                  <a className="text-primary font-medium" href="#used-in-title">
+                  <a className="font-medium text-primary" href="#used-in-title">
                     View usage
                   </a>
                   <span className="text-muted-foreground">
-                    {mapping.syncState === "current" && mapping.availability === "available"
+                    {mapping.syncState === "current" &&
+                    mapping.availability === "available"
                       ? "Ready for scoped publishing when Entitlement grants and active-provider assignment also pass."
                       : mapping.providerLabel === "StoreKit" ||
                           mapping.providerLabel === "Google Play Billing"
@@ -204,43 +258,56 @@ export function ProviderMappingsPanel({
                   {mapping.status !== "archived" && onReplace && onArchive ? (
                     <Button
                       onClick={() => {
-                        setEditingId(editingId === mapping.id ? null : mapping.id)
-                        setUsage(null)
-                        setUsageError(null)
+                        setEditingId(
+                          editingId === mapping.id ? null : mapping.id
+                        );
+                        setUsage(null);
+                        setUsageError(null);
                         setReplacementOfferSelection(
-                          mapping.providerOfferIdentifier ? "specific" : "none",
-                        )
+                          mapping.providerOfferIdentifier ? "specific" : "none"
+                        );
                         setReplacement({
-                          providerProductIdentifier: mapping.providerProductIdentifier,
+                          providerProductIdentifier:
+                            mapping.providerProductIdentifier,
                           ...(mapping.providerOfferingIdentifier
                             ? {
-                                providerOfferingIdentifier: mapping.providerOfferingIdentifier,
+                                providerOfferingIdentifier:
+                                  mapping.providerOfferingIdentifier,
                               }
                             : {}),
                           ...(mapping.providerPackageIdentifier
-                            ? { providerPackageIdentifier: mapping.providerPackageIdentifier }
+                            ? {
+                                providerPackageIdentifier:
+                                  mapping.providerPackageIdentifier,
+                              }
                             : {}),
                           ...(mapping.providerBasePlanIdentifier
                             ? {
-                                providerBasePlanIdentifier: mapping.providerBasePlanIdentifier,
+                                providerBasePlanIdentifier:
+                                  mapping.providerBasePlanIdentifier,
                               }
                             : {}),
                           ...(mapping.providerOfferIdentifier
-                            ? { providerOfferIdentifier: mapping.providerOfferIdentifier }
+                            ? {
+                                providerOfferIdentifier:
+                                  mapping.providerOfferIdentifier,
+                              }
                             : {}),
-                        })
+                        });
                         if (editingId !== mapping.id && onLoadUsage) {
-                          setUsagePending(true)
-                          void onLoadUsage(mapping.id)
+                          setUsagePending(true);
+                          onLoadUsage(mapping.id)
                             .then(setUsage)
                             .catch((loadError: unknown) =>
                               setUsageError(
                                 loadError instanceof Error
                                   ? loadError
-                                  : new Error("Mapping usage could not be loaded."),
-                              ),
+                                  : new Error(
+                                      "Mapping usage could not be loaded."
+                                    )
+                              )
                             )
-                            .finally(() => setUsagePending(false))
+                            .finally(() => setUsagePending(false));
                         }
                       }}
                       size="sm"
@@ -252,38 +319,49 @@ export function ProviderMappingsPanel({
                   ) : null}
                 </div>
                 {editingId === mapping.id && onReplace && onArchive ? (
-                  <div className="border-border bg-muted/35 mt-4 rounded border p-4">
-                    <p className="text-sm font-semibold">Replace or archive this mapping</p>
-                    <p className="text-muted-foreground mt-1 text-xs">
-                      Mapping-specific usage must load before confirmation. Replacement creates a
-                      new mapping; history remains immutable.
+                  <div className="mt-4 rounded border border-border bg-muted/35 p-4">
+                    <p className="font-semibold text-sm">
+                      Replace or archive this mapping
+                    </p>
+                    <p className="mt-1 text-muted-foreground text-xs">
+                      Mapping-specific usage must load before confirmation.
+                      Replacement creates a new mapping; history remains
+                      immutable.
                     </p>
                     {usagePending ? (
-                      <p className="text-muted-foreground mt-3 text-xs" role="status">
-                        Loading affected Product, Plans, Access grants, mappings, and historical
-                        references…
+                      <p
+                        className="mt-3 text-muted-foreground text-xs"
+                        role="status"
+                      >
+                        Loading affected Product, Plans, Access grants,
+                        mappings, and historical references…
                       </p>
                     ) : usageError ? (
-                      <div className="border-destructive/40 mt-3 rounded border p-3">
+                      <div className="mt-3 rounded border border-destructive/40 p-3">
                         <p className="text-destructive text-xs" role="alert">
-                          Usage could not be loaded. Replacement remains disabled.
+                          Usage could not be loaded. Replacement remains
+                          disabled.
                         </p>
                         <Button
                           className="mt-2"
                           onClick={() => {
-                            if (!onLoadUsage) return
-                            setUsageError(null)
-                            setUsagePending(true)
-                            void onLoadUsage(mapping.id)
+                            if (!onLoadUsage) {
+                              return;
+                            }
+                            setUsageError(null);
+                            setUsagePending(true);
+                            onLoadUsage(mapping.id)
                               .then(setUsage)
                               .catch((loadError: unknown) =>
                                 setUsageError(
                                   loadError instanceof Error
                                     ? loadError
-                                    : new Error("Mapping usage could not be loaded."),
-                                ),
+                                    : new Error(
+                                        "Mapping usage could not be loaded."
+                                      )
+                                )
                               )
-                              .finally(() => setUsagePending(false))
+                              .finally(() => setUsagePending(false));
                           }}
                           size="sm"
                           type="button"
@@ -293,17 +371,20 @@ export function ProviderMappingsPanel({
                         </Button>
                       </div>
                     ) : usage ? (
-                      <p className="bg-background mt-3 rounded border p-3 text-xs">
+                      <p className="mt-3 rounded border bg-background p-3 text-xs">
                         {usage.usage.plans.length} Plan
                         {usage.usage.plans.length === 1 ? "" : "s"} ·{" "}
                         {usage.usage.entitlements.length} Access grant
                         {usage.usage.entitlements.length === 1 ? "" : "s"} ·{" "}
-                        {usage.usage.historicalReferences.length} historical reference
-                        {usage.usage.historicalReferences.length === 1 ? "" : "s"}
+                        {usage.usage.historicalReferences.length} historical
+                        reference
+                        {usage.usage.historicalReferences.length === 1
+                          ? ""
+                          : "s"}
                       </p>
                     ) : null}
                     <div className="mt-3 grid gap-3 sm:grid-cols-3">
-                      <label className="text-xs font-medium">
+                      <label className="font-medium text-xs">
                         {mapping.provider === "app_store"
                           ? "StoreKit Product ID"
                           : mapping.provider === "google_play"
@@ -314,15 +395,17 @@ export function ProviderMappingsPanel({
                           onChange={(event) =>
                             setReplacement((current) => ({
                               ...current,
-                              providerProductIdentifier: event.currentTarget.value,
+                              providerProductIdentifier:
+                                event.currentTarget.value,
                             }))
                           }
                           value={replacement.providerProductIdentifier}
                         />
                       </label>
-                      {mapping.provider === "google_play" && productType === "subscription" ? (
+                      {mapping.provider === "google_play" &&
+                      productType === "subscription" ? (
                         <>
-                          <label className="text-xs font-medium">
+                          <label className="font-medium text-xs">
                             Base plan ID
                             <Input
                               className="mt-1"
@@ -333,7 +416,9 @@ export function ProviderMappingsPanel({
                                     event.currentTarget.value || undefined,
                                 }))
                               }
-                              value={replacement.providerBasePlanIdentifier ?? ""}
+                              value={
+                                replacement.providerBasePlanIdentifier ?? ""
+                              }
                             />
                           </label>
                           <fieldset className="space-y-2 text-xs">
@@ -343,11 +428,11 @@ export function ProviderMappingsPanel({
                                 checked={replacementOfferSelection === "none"}
                                 name={`replacement-offer-${mapping.id}`}
                                 onChange={() => {
-                                  setReplacementOfferSelection("none")
+                                  setReplacementOfferSelection("none");
                                   setReplacement((current) => ({
                                     ...current,
                                     providerOfferIdentifier: undefined,
-                                  }))
+                                  }));
                                 }}
                                 type="radio"
                               />
@@ -355,33 +440,41 @@ export function ProviderMappingsPanel({
                             </label>
                             <label className="flex gap-2">
                               <input
-                                checked={replacementOfferSelection === "specific"}
+                                checked={
+                                  replacementOfferSelection === "specific"
+                                }
                                 name={`replacement-offer-${mapping.id}`}
-                                onChange={() => setReplacementOfferSelection("specific")}
+                                onChange={() =>
+                                  setReplacementOfferSelection("specific")
+                                }
                                 type="radio"
                               />
                               Use a specific offer
                             </label>
                           </fieldset>
                           {replacementOfferSelection === "specific" ? (
-                            <label className="text-xs font-medium">
+                            <label className="font-medium text-xs">
                               Offer ID
                               <Input
                                 className="mt-1"
                                 onChange={(event) =>
                                   setReplacement((current) => ({
                                     ...current,
-                                    providerOfferIdentifier: event.currentTarget.value || undefined,
+                                    providerOfferIdentifier:
+                                      event.currentTarget.value || undefined,
                                   }))
                                 }
-                                value={replacement.providerOfferIdentifier ?? ""}
+                                value={
+                                  replacement.providerOfferIdentifier ?? ""
+                                }
                               />
                             </label>
                           ) : null}
                         </>
-                      ) : mapping.provider !== "app_store" && mapping.provider !== "google_play" ? (
+                      ) : mapping.provider !== "app_store" &&
+                        mapping.provider !== "google_play" ? (
                         <>
-                          <label className="text-xs font-medium">
+                          <label className="font-medium text-xs">
                             Offering lookup key
                             <Input
                               className="mt-1"
@@ -392,20 +485,25 @@ export function ProviderMappingsPanel({
                                     event.currentTarget.value || undefined,
                                 }))
                               }
-                              value={replacement.providerOfferingIdentifier ?? ""}
+                              value={
+                                replacement.providerOfferingIdentifier ?? ""
+                              }
                             />
                           </label>
-                          <label className="text-xs font-medium">
+                          <label className="font-medium text-xs">
                             Package lookup key
                             <Input
                               className="mt-1"
                               onChange={(event) =>
                                 setReplacement((current) => ({
                                   ...current,
-                                  providerPackageIdentifier: event.currentTarget.value || undefined,
+                                  providerPackageIdentifier:
+                                    event.currentTarget.value || undefined,
                                 }))
                               }
-                              value={replacement.providerPackageIdentifier ?? ""}
+                              value={
+                                replacement.providerPackageIdentifier ?? ""
+                              }
                             />
                           </label>
                         </>
@@ -422,7 +520,7 @@ export function ProviderMappingsPanel({
                                 mapping,
                                 productType,
                                 replacement,
-                                replacementOfferSelection,
+                                replacementOfferSelection
                               )
                             }
                             onClick={async () => {
@@ -430,8 +528,8 @@ export function ProviderMappingsPanel({
                                 ...replacement,
                                 providerProductIdentifier:
                                   replacement.providerProductIdentifier.trim(),
-                              })
-                              setEditingId(null)
+                              });
+                              setEditingId(null);
                             }}
                             size="sm"
                             type="button"
@@ -441,8 +539,8 @@ export function ProviderMappingsPanel({
                           <Button
                             disabled={isPending}
                             onClick={async () => {
-                              await onArchive(mapping.id)
-                              setEditingId(null)
+                              await onArchive(mapping.id);
+                              setEditingId(null);
                             }}
                             size="sm"
                             type="button"
@@ -452,7 +550,10 @@ export function ProviderMappingsPanel({
                           </Button>
                         </>
                       ) : membersHref ? (
-                        <a className="text-primary text-xs font-semibold" href={membersHref}>
+                        <a
+                          className="font-semibold text-primary text-xs"
+                          href={membersHref}
+                        >
                           Ask an Owner or Admin to change this mapping
                         </a>
                       ) : null}
@@ -473,59 +574,63 @@ export function ProviderMappingsPanel({
           </ul>
         )}
         {error ? (
-          <p className="text-destructive mt-3 text-sm" role="alert">
+          <p className="mt-3 text-destructive text-sm" role="alert">
             {error.message}
           </p>
         ) : null}
       </div>
     </section>
-  )
+  );
 }
 
 function syncStateLabel(syncState: ProviderMappingView["syncState"]) {
   switch (syncState) {
     case "never_synced":
-      return "Never synchronized"
+      return "Never synchronized";
     case "current":
-      return "Current"
+      return "Current";
     case "stale":
-      return "Stale"
+      return "Stale";
     case "failed":
-      return "Synchronization failed"
+      return "Synchronization failed";
   }
 }
 
 function mappingStateLabel(mapping: ProviderMappingView) {
   if (mapping.provider === "app_store" || mapping.provider === "google_play") {
-    if (!mapping.latestObservation) return "Configured"
+    if (!mapping.latestObservation) {
+      return "Configured";
+    }
     if (
       mapping.latestObservation.expiresAt &&
       Date.parse(mapping.latestObservation.expiresAt) <= Date.now()
     ) {
-      return "Observation stale"
+      return "Observation stale";
     }
-    return `Observed · ${mapping.latestObservation.result}`
+    return `Observed · ${mapping.latestObservation.result}`;
   }
-  return syncStateLabel(mapping.syncState)
+  return syncStateLabel(mapping.syncState);
 }
 
 function replacementIsValid(
   mapping: ProviderMappingView,
   productType: "one_time_non_consumable" | "subscription" | undefined,
   replacement: ReplaceProviderMappingRequest,
-  offerSelection: "none" | "specific",
+  offerSelection: "none" | "specific"
 ) {
   if (mapping.provider !== "app_store" && mapping.provider !== "google_play") {
-    return Boolean(replacement.providerProductIdentifier.trim())
+    return Boolean(replacement.providerProductIdentifier.trim());
   }
-  if (!productType) return false
+  if (!productType) {
+    return false;
+  }
   if (
     mapping.provider === "google_play" &&
     productType === "subscription" &&
     offerSelection === "specific" &&
     !replacement.providerOfferIdentifier?.trim()
   ) {
-    return false
+    return false;
   }
   return (
     Object.keys(
@@ -543,33 +648,33 @@ function replacementIsValid(
                 : {}),
             }
           : {}),
-      }),
+      })
     ).length === 0
-  )
+  );
 }
 
 function MappingField({ label, value }: { label: string; value: string }) {
   return (
     <div>
       <dt className="text-muted-foreground text-xs">{label}</dt>
-      <dd className="mt-1 font-mono text-xs break-all">{value}</dd>
+      <dd className="mt-1 break-all font-mono text-xs">{value}</dd>
     </div>
-  )
+  );
 }
 
 function observationContext(
-  context: NonNullable<ProviderMappingView["latestObservation"]>["storeContext"],
+  context: NonNullable<ProviderMappingView["latestObservation"]>["storeContext"]
 ) {
   switch (context) {
     case "storekitConfiguration":
-      return "StoreKit Configuration"
+      return "StoreKit Configuration";
     case "appleSandbox":
-      return "Apple Sandbox"
+      return "Apple Sandbox";
     case "googlePlayTest":
-      return "Google Play test"
+      return "Google Play test";
     case "production":
-      return "Production"
+      return "Production";
     case "unknown":
-      return "Unknown"
+      return "Unknown";
   }
 }

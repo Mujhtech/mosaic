@@ -1,12 +1,11 @@
-import { mutationOptions, type QueryClient } from "@tanstack/react-query"
-
+import { mutationOptions, type QueryClient } from "@tanstack/react-query";
+import { customerKeys } from "@/features/billing-customers/queries/customer-queries";
 import {
+  type BillingCustomerLookupRequest,
   createBillingCustomerSyncRequest,
   lookupBillingCustomer,
-  type BillingCustomerLookupRequest,
-} from "@/generated/api"
-import { customerKeys } from "@/features/billing-customers/queries/customer-queries"
-import { generatedDashboardClient } from "@/lib/api/generated-dashboard-client"
+} from "@/generated/api";
+import { generatedDashboardClient } from "@/lib/api/generated-dashboard-client";
 
 /**
  * The typed-identifier lookup is a mutation, not a query.
@@ -17,7 +16,10 @@ import { generatedDashboardClient } from "@/lib/api/generated-dashboard-client"
  * travels in a POST body so it also stays out of URLs, access logs, and browser
  * history.
  */
-export function lookupBillingCustomerMutationOptions(projectId: string, environmentId: string) {
+export function lookupBillingCustomerMutationOptions(
+  projectId: string,
+  environmentId: string
+) {
   return mutationOptions({
     mutationFn: async (request: BillingCustomerLookupRequest) => {
       const result = await lookupBillingCustomer({
@@ -25,12 +27,12 @@ export function lookupBillingCustomerMutationOptions(projectId: string, environm
         client: generatedDashboardClient,
         path: { environmentId, projectId },
         throwOnError: true,
-      })
+      });
       // A miss answers 200 with `found: false`. It is a result, not an error,
       // and the caller renders it as one.
-      return result.data.data
+      return result.data.data;
     },
-  })
+  });
 }
 
 /**
@@ -49,7 +51,7 @@ export function requestCustomerSyncMutationOptions(
   projectId: string,
   environmentId: string,
   customerId: string,
-  queryClient: QueryClient,
+  queryClient: QueryClient
 ) {
   return mutationOptions({
     mutationFn: async () => {
@@ -57,16 +59,20 @@ export function requestCustomerSyncMutationOptions(
         client: generatedDashboardClient,
         path: { customerId, environmentId, projectId },
         throwOnError: true,
-      })
-      return result.data.data
+      });
+      return result.data.data;
     },
     onSuccess: async () => {
       await queryClient.invalidateQueries({
         queryKey: customerKeys.detail(projectId, environmentId, customerId),
-      })
+      });
       await queryClient.invalidateQueries({
-        queryKey: customerKeys.entitlements(projectId, environmentId, customerId),
-      })
+        queryKey: customerKeys.entitlements(
+          projectId,
+          environmentId,
+          customerId
+        ),
+      });
     },
-  })
+  });
 }

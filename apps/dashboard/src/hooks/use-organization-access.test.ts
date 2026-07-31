@@ -1,7 +1,6 @@
-import { describe, expect, it } from "vitest"
-
-import { organizationAccessFor } from "@/hooks/use-organization-access"
-import type { Membership } from "@/generated/api"
+import { describe, expect, it } from "vitest";
+import type { Membership } from "@/generated/api";
+import { organizationAccessFor } from "@/hooks/use-organization-access";
 
 const membership = (role: Membership["role"]): Membership => ({
   actorId: `actor_${role}`,
@@ -9,7 +8,7 @@ const membership = (role: Membership["role"]): Membership => ({
   organizationId: "org_01",
   role,
   updatedAt: "2026-07-24T12:00:00Z",
-})
+});
 
 describe("organization access", () => {
   it.each([
@@ -22,7 +21,7 @@ describe("organization access", () => {
         membership("owner"),
         membership("admin"),
         membership("member"),
-      ]),
-    ).toMatchObject({ canManage, role })
-  })
-})
+      ])
+    ).toMatchObject({ canManage, role });
+  });
+});

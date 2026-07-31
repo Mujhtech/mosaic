@@ -1,9 +1,9 @@
-import { describe, expect, it } from "vitest"
+import { describe, expect, it } from "vitest";
 
 import {
   publishRecoveryHref,
   publishRecoveryLabel,
-} from "@/features/publishing/types/publish-recovery"
+} from "@/features/publishing/types/publish-recovery";
 
 const context = {
   assetsHref: "/assets",
@@ -13,8 +13,9 @@ const context = {
   placementsHref: "/placements",
   projectId: "project_01",
   providersHref: "/providers",
-  returnTo: "/studio/org_01/project_01/env_staging/paywall_01/draft_01?review=publish",
-}
+  returnTo:
+    "/studio/org_01/project_01/env_staging/paywall_01/draft_01?review=publish",
+};
 
 describe("publish recovery routing", () => {
   it("routes provider and scoped Product blockers to their exact recovery surfaces", () => {
@@ -24,7 +25,7 @@ describe("publish recovery routing", () => {
       message: "The active connection was revoked.",
       resourceType: "provider_connection",
       severity: "error" as const,
-    }
+    };
     const mappingIssue = {
       applicationId: "app_ios",
       code: "mappingMissing",
@@ -33,7 +34,7 @@ describe("publish recovery routing", () => {
       productId: "product_monthly",
       resourceType: "provider_mapping",
       severity: "error" as const,
-    }
+    };
     const basePlanIssue = {
       applicationId: "app_android",
       code: "commerce.mapping.basePlanMissing",
@@ -43,19 +44,19 @@ describe("publish recovery routing", () => {
       recoveryAction: "addGoogleBasePlan",
       resourceType: "provider_mapping",
       severity: "error" as const,
-    }
+    };
 
     expect(publishRecoveryHref(connectionIssue, context)).toBe(
-      "/providers?environmentId=env_production&returnTo=%2Fstudio%2Forg_01%2Fproject_01%2Fenv_staging%2Fpaywall_01%2Fdraft_01%3Freview%3Dpublish",
-    )
-    expect(publishRecoveryLabel(connectionIssue)).toBe("Review Purchase setup")
+      "/providers?environmentId=env_production&returnTo=%2Fstudio%2Forg_01%2Fproject_01%2Fenv_staging%2Fpaywall_01%2Fdraft_01%3Freview%3Dpublish"
+    );
+    expect(publishRecoveryLabel(connectionIssue)).toBe("Review Purchase setup");
     expect(publishRecoveryHref(mappingIssue, context)).toBe(
-      "/orgs/org_01/projects/project_01/catalog/products/product_monthly?environmentId=env_staging&applicationId=app_ios&returnTo=%2Fstudio%2Forg_01%2Fproject_01%2Fenv_staging%2Fpaywall_01%2Fdraft_01%3Freview%3Dpublish",
-    )
-    expect(publishRecoveryLabel(mappingIssue)).toBe("Review Product mapping")
+      "/orgs/org_01/projects/project_01/catalog/products/product_monthly?environmentId=env_staging&applicationId=app_ios&returnTo=%2Fstudio%2Forg_01%2Fproject_01%2Fenv_staging%2Fpaywall_01%2Fdraft_01%3Freview%3Dpublish"
+    );
+    expect(publishRecoveryLabel(mappingIssue)).toBe("Review Product mapping");
     expect(publishRecoveryHref(basePlanIssue, context)).toBe(
-      "/orgs/org_01/projects/project_01/catalog/products/product_monthly?environmentId=env_staging&applicationId=app_android&returnTo=%2Fstudio%2Forg_01%2Fproject_01%2Fenv_staging%2Fpaywall_01%2Fdraft_01%3Freview%3Dpublish#provider-mappings-title",
-    )
-    expect(publishRecoveryLabel(basePlanIssue)).toBe("Add Google base plan")
-  })
-})
+      "/orgs/org_01/projects/project_01/catalog/products/product_monthly?environmentId=env_staging&applicationId=app_android&returnTo=%2Fstudio%2Forg_01%2Fproject_01%2Fenv_staging%2Fpaywall_01%2Fdraft_01%3Freview%3Dpublish#provider-mappings-title"
+    );
+    expect(publishRecoveryLabel(basePlanIssue)).toBe("Add Google base plan");
+  });
+});

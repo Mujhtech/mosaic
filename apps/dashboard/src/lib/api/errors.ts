@@ -7,32 +7,32 @@ import {
   providersHref,
   storeConnectionsHref,
   type WorkspaceScope,
-} from "@/lib/routing/workspace-hrefs"
+} from "@/lib/routing/workspace-hrefs";
 
 interface ApiErrorOptions {
-  cause?: unknown
-  code: string
-  correlationId: string
-  details?: unknown
-  retryable: boolean
-  status: number
+  cause?: unknown;
+  code: string;
+  correlationId: string;
+  details?: unknown;
+  retryable: boolean;
+  status: number;
 }
 
 export class ApiError extends Error {
-  readonly code: string
-  readonly correlationId: string
-  readonly details?: unknown
-  readonly retryable: boolean
-  readonly status: number
+  readonly code: string;
+  readonly correlationId: string;
+  readonly details?: unknown;
+  readonly retryable: boolean;
+  readonly status: number;
 
   constructor(message: string, options: ApiErrorOptions) {
-    super(message, { cause: options.cause })
-    this.name = "ApiError"
-    this.code = options.code
-    this.correlationId = options.correlationId
-    this.details = options.details
-    this.retryable = options.retryable
-    this.status = options.status
+    super(message, { cause: options.cause });
+    this.name = "ApiError";
+    this.code = options.code;
+    this.correlationId = options.correlationId;
+    this.details = options.details;
+    this.retryable = options.retryable;
+    this.status = options.status;
   }
 }
 
@@ -44,8 +44,8 @@ export class ApiNetworkError extends ApiError {
       correlationId,
       retryable: true,
       status: 0,
-    })
-    this.name = "ApiNetworkError"
+    });
+    this.name = "ApiNetworkError";
   }
 }
 
@@ -57,8 +57,8 @@ export class ApiRequestAbortedError extends ApiError {
       correlationId,
       retryable: false,
       status: 0,
-    })
-    this.name = "ApiRequestAbortedError"
+    });
+    this.name = "ApiRequestAbortedError";
   }
 }
 
@@ -72,13 +72,13 @@ export type ApiErrorKind =
   | "server"
   | "unauthorized"
   | "unknown"
-  | "validation"
+  | "validation";
 
 /** A single, Mosaic-owned next step for a described failure. */
 export interface ApiErrorRecovery {
   /** Internal destination. Absent when no page can resolve the condition. */
-  href?: string
-  label: string
+  href?: string;
+  label: string;
 }
 
 /**
@@ -87,21 +87,21 @@ export interface ApiErrorRecovery {
  * prose, so they stay safe to render.
  */
 export interface ApiErrorDetailEntry {
-  label?: string
-  value: string
+  label?: string;
+  value: string;
 }
 
 export interface ApiErrorDescription {
   /** Correlation identifier operators can use to find the matching server log entry. */
-  correlationId?: string
+  correlationId?: string;
   /** Mosaic-owned copy. Never the raw server message, which may leak internals. */
-  description: string
+  description: string;
   /** Structured, safe-to-render specifics such as readiness blockers or rejected fields. */
-  details?: ApiErrorDetailEntry[]
-  kind: ApiErrorKind
+  details?: ApiErrorDetailEntry[];
+  kind: ApiErrorKind;
   /** Where the operator goes next. Present only for codes with a known remedy. */
-  recovery?: ApiErrorRecovery
-  retryable: boolean
+  recovery?: ApiErrorRecovery;
+  retryable: boolean;
 }
 
 const DESCRIPTIONS: Record<ApiErrorKind, string> = {
@@ -114,30 +114,49 @@ const DESCRIPTIONS: Record<ApiErrorKind, string> = {
   server: "The Mosaic API reported an unexpected error. Retry shortly.",
   unauthorized: "Your session is no longer valid. Sign in again to continue.",
   unknown: "Mosaic could not complete this request.",
-  validation: "The submitted values were rejected. Review the form and try again.",
-}
+  validation:
+    "The submitted values were rejected. Review the form and try again.",
+};
 
 function classifyApiError(error: ApiError): ApiErrorKind {
-  if (error instanceof ApiRequestAbortedError) return "aborted"
-  if (error instanceof ApiNetworkError || error.status === 0) return "network"
-  if (error.status === 401) return "unauthorized"
-  if (error.status === 403) return "forbidden"
-  if (error.status === 404) return "not_found"
-  if (error.status === 409) return "conflict"
-  if (error.status === 422 || error.status === 400) return "validation"
-  if (error.status === 429) return "rate_limited"
-  if (error.status >= 500) return "server"
-  return "unknown"
+  if (error instanceof ApiRequestAbortedError) {
+    return "aborted";
+  }
+  if (error instanceof ApiNetworkError || error.status === 0) {
+    return "network";
+  }
+  if (error.status === 401) {
+    return "unauthorized";
+  }
+  if (error.status === 403) {
+    return "forbidden";
+  }
+  if (error.status === 404) {
+    return "not_found";
+  }
+  if (error.status === 409) {
+    return "conflict";
+  }
+  if (error.status === 422 || error.status === 400) {
+    return "validation";
+  }
+  if (error.status === 429) {
+    return "rate_limited";
+  }
+  if (error.status >= 500) {
+    return "server";
+  }
+  return "unknown";
 }
 
 function record(value: unknown): Record<string, unknown> | undefined {
   return typeof value === "object" && value !== null && !Array.isArray(value)
     ? (value as Record<string, unknown>)
-    : undefined
+    : undefined;
 }
 
 function text(value: unknown): string | undefined {
-  return typeof value === "string" && value.trim() !== "" ? value : undefined
+  return typeof value === "string" && value.trim() !== "" ? value : undefined;
 }
 
 /**
@@ -146,49 +165,62 @@ function text(value: unknown): string | undefined {
  * object is never stringified into the page.
  */
 function blockerEntries(details: unknown): ApiErrorDetailEntry[] | undefined {
-  const blockers = record(details)?.blockers
-  if (!Array.isArray(blockers)) return undefined
+  const blockers = record(details)?.blockers;
+  if (!Array.isArray(blockers)) {
+    return;
+  }
   const entries = blockers.flatMap((blocker) => {
-    const item = record(blocker)
-    const code = text(item?.code)
-    if (!code) return []
-    const productId = text(item?.productId)
-    return [{ label: productId ? `Product ${productId}` : undefined, value: code }]
-  })
-  return entries.length > 0 ? entries : undefined
+    const item = record(blocker);
+    const code = text(item?.code);
+    if (!code) {
+      return [];
+    }
+    const productId = text(item?.productId);
+    return [
+      { label: productId ? `Product ${productId}` : undefined, value: code },
+    ];
+  });
+  return entries.length > 0 ? entries : undefined;
 }
 
 /**
  * Validation details arrive in two shapes: a `fields` map from transport-level
  * request validation, and a flat `errors` list from document validation.
  */
-function validationEntries(details: unknown): ApiErrorDetailEntry[] | undefined {
-  const payload = record(details)
-  const fields = record(payload?.fields)
+function validationEntries(
+  details: unknown
+): ApiErrorDetailEntry[] | undefined {
+  const payload = record(details);
+  const fields = record(payload?.fields);
   if (fields) {
     const entries = Object.entries(fields).flatMap(([field, messages]) => {
       const value = Array.isArray(messages)
-        ? messages.filter((message): message is string => typeof message === "string").join(", ")
-        : text(messages)
-      return value ? [{ label: field, value }] : []
-    })
-    if (entries.length > 0) return entries
+        ? messages
+            .filter((message): message is string => typeof message === "string")
+            .join(", ")
+        : text(messages);
+      return value ? [{ label: field, value }] : [];
+    });
+    if (entries.length > 0) {
+      return entries;
+    }
   }
 
-  const errors = payload?.errors
+  const errors = payload?.errors;
   if (Array.isArray(errors)) {
     const entries = errors.flatMap((issue) => {
-      const value = text(issue) ?? text(record(issue)?.code)
-      return value ? [{ value }] : []
-    })
-    if (entries.length > 0) return entries
+      const value = text(issue) ?? text(record(issue)?.code);
+      return value ? [{ value }] : [];
+    });
+    if (entries.length > 0) {
+      return entries;
+    }
   }
-  return undefined
 }
 
 function reasonEntries(details: unknown): ApiErrorDetailEntry[] | undefined {
-  const reason = text(record(details)?.reason)
-  return reason ? [{ label: "Reason", value: reason }] : undefined
+  const reason = text(record(details)?.reason);
+  return reason ? [{ label: "Reason", value: reason }] : undefined;
 }
 
 /**
@@ -196,25 +228,35 @@ function reasonEntries(details: unknown): ApiErrorDetailEntry[] | undefined {
  * or the protocol version it must speak. Without it there is no path from the
  * response to the header to send or the SDK build to upgrade.
  */
-function capabilityEntries(details: unknown): ApiErrorDetailEntry[] | undefined {
-  const payload = record(details)
-  const entries: ApiErrorDetailEntry[] = []
-  const requirement = text(payload?.requirement)
-  if (requirement) entries.push({ label: "Requirement", value: requirement })
-  const capability = text(payload?.capability)
-  if (capability) entries.push({ label: "Capability", value: capability })
-  const version = text(payload?.version)
-  if (version) entries.push({ label: "Version", value: version })
-  const reason = text(payload?.reason)
-  if (reason) entries.push({ label: "Reason", value: reason })
-  return entries.length > 0 ? entries : undefined
+function capabilityEntries(
+  details: unknown
+): ApiErrorDetailEntry[] | undefined {
+  const payload = record(details);
+  const entries: ApiErrorDetailEntry[] = [];
+  const requirement = text(payload?.requirement);
+  if (requirement) {
+    entries.push({ label: "Requirement", value: requirement });
+  }
+  const capability = text(payload?.capability);
+  if (capability) {
+    entries.push({ label: "Capability", value: capability });
+  }
+  const version = text(payload?.version);
+  if (version) {
+    entries.push({ label: "Version", value: version });
+  }
+  const reason = text(payload?.reason);
+  if (reason) {
+    entries.push({ label: "Reason", value: reason });
+  }
+  return entries.length > 0 ? entries : undefined;
 }
 
 interface CodeDescriptor {
-  description: string
-  details?: (details: unknown) => ApiErrorDetailEntry[] | undefined
-  href?: (scope: WorkspaceScope) => string | undefined
-  label?: string
+  description: string;
+  details?: (details: unknown) => ApiErrorDetailEntry[] | undefined;
+  href?: (scope: WorkspaceScope) => string | undefined;
+  label?: string;
 }
 
 /**
@@ -280,7 +322,8 @@ const CODE_DESCRIPTORS: Record<string, CodeDescriptor> = {
       "Hosted Asset publishing is unavailable until object storage is configured for this deployment. Ask an operator to configure Mosaic object storage, then retry.",
   },
   experiment_invalid: {
-    description: "Mosaic refused this Experiment request because a publish precondition failed.",
+    description:
+      "Mosaic refused this Experiment request because a publish precondition failed.",
     details: reasonEntries,
   },
   experiment_placement_decision_required: {
@@ -314,10 +357,11 @@ const CODE_DESCRIPTORS: Record<string, CodeDescriptor> = {
     details: capabilityEntries,
   },
   validation_failed: {
-    description: "Mosaic rejected the submitted values. Resolve the listed issues, then try again.",
+    description:
+      "Mosaic rejected the submitted values. Resolve the listed issues, then try again.",
     details: validationEntries,
   },
-}
+};
 
 /**
  * Maps an unknown thrown value onto Mosaic-owned, user-safe copy plus the
@@ -328,24 +372,27 @@ const CODE_DESCRIPTORS: Record<string, CodeDescriptor> = {
  * and details are unchanged and only the link is omitted, so callers outside a
  * project context still get the specific explanation.
  */
-export function describeApiError(error: unknown, scope: WorkspaceScope = {}): ApiErrorDescription {
+export function describeApiError(
+  error: unknown,
+  scope: WorkspaceScope = {}
+): ApiErrorDescription {
   if (error instanceof ApiError) {
-    const kind = classifyApiError(error)
-    const descriptor = CODE_DESCRIPTORS[error.code]
+    const kind = classifyApiError(error);
+    const descriptor = CODE_DESCRIPTORS[error.code];
     if (!descriptor) {
       return {
         correlationId: error.correlationId,
         description: DESCRIPTIONS[kind],
         kind,
         retryable: error.retryable,
-      }
+      };
     }
 
-    const details = descriptor.details?.(error.details)
-    const href = descriptor.href?.(scope)
+    const details = descriptor.details?.(error.details);
+    const href = descriptor.href?.(scope);
     const recovery = descriptor.label
       ? { ...(href ? { href } : {}), label: descriptor.label }
-      : undefined
+      : undefined;
 
     return {
       correlationId: error.correlationId,
@@ -354,8 +401,12 @@ export function describeApiError(error: unknown, scope: WorkspaceScope = {}): Ap
       kind,
       ...(recovery ? { recovery } : {}),
       retryable: error.retryable,
-    }
+    };
   }
 
-  return { description: DESCRIPTIONS.unknown, kind: "unknown", retryable: false }
+  return {
+    description: DESCRIPTIONS.unknown,
+    kind: "unknown",
+    retryable: false,
+  };
 }

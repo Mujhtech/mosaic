@@ -1,47 +1,40 @@
-import { PlusIcon } from "@phosphor-icons/react/dist/ssr/Plus"
+import { PlusIcon } from "@phosphor-icons/react/dist/ssr/Plus";
 
-import { Button } from "@/components/ui/button"
-import { useEditorActions } from "@/features/paywall-editor/stores/editor-store-context"
-import type { ProtocolNode } from "@/features/paywall-editor/types/editor"
-import {
-  flattenDocument,
-  resolveLocalizedText,
-} from "@/features/paywall-editor/utils/document-tree"
-import type { MosaicPaywallV02BaseTypography } from "@/lib/mosaic-protocol"
-
+import { Button } from "@/components/ui/button";
+import { SelectItem } from "@/components/ui/select";
 import {
   AdvancedSection,
   ControlAccessibilitySection,
   TextAccessibilitySection,
-} from "@/features/paywall-editor/components/property-inspector-accessibility"
+} from "@/features/paywall-editor/components/property-inspector-accessibility";
 import {
   BackgroundSection,
   BorderSection,
-} from "@/features/paywall-editor/components/property-inspector-background"
+} from "@/features/paywall-editor/components/property-inspector-background";
 import {
   FeatureListInspector,
   IconInspector,
   ImageInspector,
   StackInspector,
   TextInspector,
-} from "@/features/paywall-editor/components/property-inspector-basic-nodes"
+} from "@/features/paywall-editor/components/property-inspector-basic-nodes";
 import {
   CONTROL_CLASS,
   CompactOptionField,
-  FLOW_OPTIONS,
   Field,
+  FLOW_OPTIONS,
   InspectorSection,
-  TwoColumn,
   layerDisplayLabel,
+  TwoColumn,
   useInspectorContext,
-} from "@/features/paywall-editor/components/property-inspector-core"
+} from "@/features/paywall-editor/components/property-inspector-core";
 import {
   CheckboxField,
   ComponentTextField,
   LocalizedField,
   NumberField,
   SelectField,
-} from "@/features/paywall-editor/components/property-inspector-fields"
+} from "@/features/paywall-editor/components/property-inspector-fields";
 import {
   AppearanceSection,
   SizingFields,
@@ -51,82 +44,116 @@ import {
   TypographyFields,
   TypographySection,
   VisibilitySection,
-} from "@/features/paywall-editor/components/property-inspector-layout"
+} from "@/features/paywall-editor/components/property-inspector-layout";
 import {
   ProductBadgeInspector,
   ProductCardInspector,
   ProductSelectorInspector,
-} from "@/features/paywall-editor/components/property-inspector-products"
-import { SelectItem } from "@/components/ui/select"
+} from "@/features/paywall-editor/components/property-inspector-products";
+import { useEditorActions } from "@/features/paywall-editor/stores/editor-store-context";
+import type { ProtocolNode } from "@/features/paywall-editor/types/editor";
+import {
+  flattenDocument,
+  resolveLocalizedText,
+} from "@/features/paywall-editor/utils/document-tree";
+import type { MosaicPaywallV02BaseTypography } from "@/lib/mosaic-protocol";
 
-export function ButtonInspector({ node }: { node: Extract<ProtocolNode, { type: "button" }> }) {
-  const { disabled, document } = useInspectorContext()
-  const editor = useEditorActions()
-  const entries = flattenDocument(document)
-  const sourceEntry = entries.find((entry) => entry.node.id === node.id)
-  const sourceScreenIndex = sourceEntry?.documentPath.match(/^\/screens\/(\d+)/)?.[1]
-  const screenPrefix = sourceScreenIndex === undefined ? null : `/screens/${sourceScreenIndex}/`
+const SCREEN_INDEX = /^\/screens\/(\d+)/;
+
+export function ButtonInspector({
+  node,
+}: {
+  node: Extract<ProtocolNode, { type: "button" }>;
+}) {
+  const { disabled, document } = useInspectorContext();
+  const editor = useEditorActions();
+  const entries = flattenDocument(document);
+  const sourceEntry = entries.find((entry) => entry.node.id === node.id);
+  const sourceScreenIndex = sourceEntry?.documentPath.match(SCREEN_INDEX)?.[1];
+  const screenPrefix =
+    sourceScreenIndex === undefined ? null : `/screens/${sourceScreenIndex}/`;
   const selectors = entries
     .filter(
       (
-        entry,
+        entry
       ): entry is typeof entry & {
-        node: Extract<ProtocolNode, { type: "productSelector" }>
+        node: Extract<ProtocolNode, { type: "productSelector" }>;
       } =>
-        entry.node.type === "productSelector" && entry.documentPath.startsWith(screenPrefix ?? ""),
+        entry.node.type === "productSelector" &&
+        entry.documentPath.startsWith(screenPrefix ?? "")
     )
-    .map((entry) => entry.node)
+    .map((entry) => entry.node);
   const sourceScreen =
-    sourceScreenIndex === undefined ? undefined : document.screens[Number(sourceScreenIndex)]
-  const destinationScreens = document.screens.filter((screen) => screen.id !== sourceScreen?.id)
-  const externalUrl = node.action.type === "openExternalUrl" ? node.action.url : ""
+    sourceScreenIndex === undefined
+      ? undefined
+      : document.screens[Number(sourceScreenIndex)];
+  const destinationScreens = document.screens.filter(
+    (screen) => screen.id !== sourceScreen?.id
+  );
+  const externalUrl =
+    node.action.type === "openExternalUrl" ? node.action.url : "";
 
   function changeAction(type: string) {
     editor.updateComponent(node.id, (current) => {
-      if (current.type !== "button") return current
+      if (current.type !== "button") {
+        return current;
+      }
       const action = (() => {
         switch (type) {
           case "purchase":
             return selectors[0]
-              ? { type: "purchase" as const, productSelectorId: selectors[0].id }
-              : null
+              ? {
+                  type: "purchase" as const,
+                  productSelectorId: selectors[0].id,
+                }
+              : null;
           case "restore":
-            return { type: "restore" as const }
+            return { type: "restore" as const };
           case "close":
-            return { type: "close" as const }
+            return { type: "close" as const };
           case "navigateTo":
             return destinationScreens[0]
-              ? { type: "navigateTo" as const, screenId: destinationScreens[0].id }
-              : null
+              ? {
+                  type: "navigateTo" as const,
+                  screenId: destinationScreens[0].id,
+                }
+              : null;
           case "navigateBack":
-            return { type: "navigateBack" as const }
+            return { type: "navigateBack" as const };
           case "openExternalUrl":
-            return { type: "openExternalUrl" as const, url: "https://example.com" }
+            return {
+              type: "openExternalUrl" as const,
+              url: "https://example.com",
+            };
           default:
-            return null
+            return null;
         }
-      })()
-      if (!action) return current
+      })();
+      if (!action) {
+        return current;
+      }
       return {
         ...current,
         action,
-        ...(type === "purchase" || type === "restore" ? {} : { inProgressChildren: undefined }),
-      }
-    })
+        ...(type === "purchase" || type === "restore"
+          ? {}
+          : { inProgressChildren: undefined }),
+      };
+    });
   }
 
   return (
     <>
       <InspectorSection defaultOpen title="Content">
         <p className="text-muted-foreground text-xs leading-5">
-          Button content is made from child nodes. Add, reorder, and edit its Text or Icon children
-          directly in Layers.
+          Button content is made from child nodes. Add, reorder, and edit its
+          Text or Icon children directly in Layers.
         </p>
         {node.action.type === "purchase" || node.action.type === "restore" ? (
           node.inProgressChildren?.length ? (
             <p className="text-muted-foreground text-xs leading-5">
-              In-progress children appear as labelled layers and preview automatically when
-              selected.
+              In-progress children appear as labelled layers and preview
+              automatically when selected.
             </p>
           ) : (
             <Button
@@ -160,7 +187,10 @@ export function ButtonInspector({ node }: { node: Extract<ProtocolNode, { type: 
           </SelectItem>
           <SelectItem value="restore">Restore purchases</SelectItem>
           <SelectItem value="close">Close paywall</SelectItem>
-          <SelectItem disabled={destinationScreens.length === 0} value="navigateTo">
+          <SelectItem
+            disabled={destinationScreens.length === 0}
+            value="navigateTo"
+          >
             Navigate to screen
           </SelectItem>
           <SelectItem value="navigateBack">Navigate back</SelectItem>
@@ -173,8 +203,11 @@ export function ButtonInspector({ node }: { node: Extract<ProtocolNode, { type: 
             onChange={(productSelectorId) =>
               editor.updateComponent(node.id, (current) =>
                 current.type === "button" && current.action.type === "purchase"
-                  ? { ...current, action: { ...current.action, productSelectorId } }
-                  : current,
+                  ? {
+                      ...current,
+                      action: { ...current.action, productSelectorId },
+                    }
+                  : current
               )
             }
             value={node.action.productSelectorId}
@@ -192,9 +225,10 @@ export function ButtonInspector({ node }: { node: Extract<ProtocolNode, { type: 
             label="Destination"
             onChange={(screenId) =>
               editor.updateComponent(node.id, (current) =>
-                current.type === "button" && current.action.type === "navigateTo"
+                current.type === "button" &&
+                current.action.type === "navigateTo"
                   ? { ...current, action: { ...current.action, screenId } }
-                  : current,
+                  : current
               )
             }
             value={node.action.screenId}
@@ -205,7 +239,7 @@ export function ButtonInspector({ node }: { node: Extract<ProtocolNode, { type: 
                   ? resolveLocalizedText(
                       document,
                       screen.accessibilityLabel,
-                      document.localization.defaultLocale,
+                      document.localization.defaultLocale
                     )
                   : screen.id}
               </SelectItem>
@@ -220,9 +254,16 @@ export function ButtonInspector({ node }: { node: Extract<ProtocolNode, { type: 
                 className={CONTROL_CLASS}
                 onChange={(event) =>
                   editor.updateComponent(node.id, (current) =>
-                    current.type === "button" && current.action.type === "openExternalUrl"
-                      ? { ...current, action: { ...current.action, url: event.target.value } }
-                      : current,
+                    current.type === "button" &&
+                    current.action.type === "openExternalUrl"
+                      ? {
+                          ...current,
+                          action: {
+                            ...current.action,
+                            url: event.target.value,
+                          },
+                        }
+                      : current
                   )
                 }
                 placeholder="https://example.com/terms"
@@ -240,8 +281,11 @@ export function ButtonInspector({ node }: { node: Extract<ProtocolNode, { type: 
           onChange={(direction) =>
             editor.updateComponent(node.id, (current) =>
               current.type === "button"
-                ? { ...current, direction: direction as typeof current.direction }
-                : current,
+                ? {
+                    ...current,
+                    direction: direction as typeof current.direction,
+                  }
+                : current
             )
           }
           options={FLOW_OPTIONS}
@@ -254,7 +298,7 @@ export function ButtonInspector({ node }: { node: Extract<ProtocolNode, { type: 
           min={0}
           onChange={(gap) =>
             editor.updateComponent(node.id, (current) =>
-              current.type === "button" ? { ...current, gap } : current,
+              current.type === "button" ? { ...current, gap } : current
             )
           }
           unit="lu"
@@ -270,34 +314,36 @@ export function ButtonInspector({ node }: { node: Extract<ProtocolNode, { type: 
       <ControlAccessibilitySection node={node} />
       <AdvancedSection node={node} />
     </>
-  )
+  );
 }
 
-export function CarouselInspector({ node }: { node: Extract<ProtocolNode, { type: "carousel" }> }) {
-  const editor = useEditorActions()
+export function CarouselInspector({
+  node,
+}: {
+  node: Extract<ProtocolNode, { type: "carousel" }>;
+}) {
+  const editor = useEditorActions();
   return (
     <>
       <InspectorSection defaultOpen title="Content">
-        <>
-          <SelectField
-            address="initialPageIndex"
-            label="Initial page"
-            onChange={(value) =>
-              editor.updateComponent(node.id, (current) =>
-                current.type === "carousel"
-                  ? { ...current, initialPageIndex: Number(value) }
-                  : current,
-              )
-            }
-            value={String(node.initialPageIndex)}
-          >
-            {node.pages.map((page, index) => (
-              <SelectItem key={page.id} value={index}>
-                Page {index + 1}
-              </SelectItem>
-            ))}
-          </SelectField>
-        </>
+        <SelectField
+          address="initialPageIndex"
+          label="Initial page"
+          onChange={(value) =>
+            editor.updateComponent(node.id, (current) =>
+              current.type === "carousel"
+                ? { ...current, initialPageIndex: Number(value) }
+                : current
+            )
+          }
+          value={String(node.initialPageIndex)}
+        >
+          {node.pages.map((page, index) => (
+            <SelectItem key={page.id} value={index}>
+              Page {index + 1}
+            </SelectItem>
+          ))}
+        </SelectField>
         {node.pages.map((page, index) => (
           <LocalizedField
             address={`pages.${index}.accessibilityLabel`}
@@ -306,7 +352,7 @@ export function CarouselInspector({ node }: { node: Extract<ProtocolNode, { type
             text={page.accessibilityLabel}
           />
         ))}
-        <p className="text-muted-foreground text-[11px] leading-4">
+        <p className="text-[11px] text-muted-foreground leading-4">
           Arrange each page&apos;s Stack and children directly in Layers.
         </p>
       </InspectorSection>
@@ -317,7 +363,9 @@ export function CarouselInspector({ node }: { node: Extract<ProtocolNode, { type
           label="Show indicators"
           onChange={(showsIndicators) =>
             editor.updateComponent(node.id, (current) =>
-              current.type === "carousel" ? { ...current, showsIndicators } : current,
+              current.type === "carousel"
+                ? { ...current, showsIndicators }
+                : current
             )
           }
         />
@@ -331,22 +379,30 @@ export function CarouselInspector({ node }: { node: Extract<ProtocolNode, { type
       <ControlAccessibilitySection node={node} />
       <AdvancedSection node={node} />
     </>
-  )
+  );
 }
 
-export function SwitchInspector({ node }: { node: Extract<ProtocolNode, { type: "switch" }> }) {
-  const editor = useEditorActions()
+export function SwitchInspector({
+  node,
+}: {
+  node: Extract<ProtocolNode, { type: "switch" }>;
+}) {
+  const editor = useEditorActions();
   return (
     <>
       <InspectorSection defaultOpen title="Content">
-        <LocalizedField address="label" label="Switch label" text={node.label} />
+        <LocalizedField
+          address="label"
+          label="Switch label"
+          text={node.label}
+        />
         <CheckboxField
           address="initialValue"
           checked={node.initialValue}
           label="On by default"
           onChange={(initialValue) =>
             editor.updateComponent(node.id, (current) =>
-              current.type === "switch" ? { ...current, initialValue } : current,
+              current.type === "switch" ? { ...current, initialValue } : current
             )
           }
         />
@@ -357,7 +413,10 @@ export function SwitchInspector({ node }: { node: Extract<ProtocolNode, { type: 
           node={node}
           onChange={(current, typography) =>
             current.type === "switch"
-              ? { ...current, typography: typography as MosaicPaywallV02BaseTypography }
+              ? {
+                  ...current,
+                  typography: typography as MosaicPaywallV02BaseTypography,
+                }
               : current
           }
           typography={node.typography}
@@ -371,15 +430,15 @@ export function SwitchInspector({ node }: { node: Extract<ProtocolNode, { type: 
       <ControlAccessibilitySection node={node} />
       <AdvancedSection node={node} />
     </>
-  )
+  );
 }
 
 export function CountdownInspector({
   node,
 }: {
-  node: Extract<ProtocolNode, { type: "countdown" }>
+  node: Extract<ProtocolNode, { type: "countdown" }>;
 }) {
-  const editor = useEditorActions()
+  const editor = useEditorActions();
   return (
     <>
       <InspectorSection defaultOpen title="Content">
@@ -400,7 +459,7 @@ export function CountdownInspector({
               editor.updateComponent(node.id, (current) =>
                 current.type === "countdown"
                   ? ({ ...current, largestUnit } as typeof current)
-                  : current,
+                  : current
               )
             }
             value={node.largestUnit}
@@ -418,7 +477,7 @@ export function CountdownInspector({
               editor.updateComponent(node.id, (current) =>
                 current.type === "countdown"
                   ? ({ ...current, smallestUnit } as typeof current)
-                  : current,
+                  : current
               )
             }
             value={node.smallestUnit}
@@ -430,13 +489,20 @@ export function CountdownInspector({
             ))}
           </SelectField>
         </TwoColumn>
-        <LocalizedField address="completedText" label="Completed text" text={node.completedText} />
+        <LocalizedField
+          address="completedText"
+          label="Completed text"
+          text={node.completedText}
+        />
       </InspectorSection>
       <TypographySection
         node={node}
         onChange={(current, typography) =>
           current.type === "countdown"
-            ? { ...current, typography: typography as MosaicPaywallV02BaseTypography }
+            ? {
+                ...current,
+                typography: typography as MosaicPaywallV02BaseTypography,
+              }
             : current
         }
         typography={node.typography}
@@ -450,34 +516,34 @@ export function CountdownInspector({
       <TextAccessibilitySection node={node} />
       <AdvancedSection node={node} />
     </>
-  )
+  );
 }
 
 export function InspectorForNode({ node }: { node: ProtocolNode }) {
   switch (node.type) {
     case "stack":
-      return <StackInspector node={node} />
+      return <StackInspector node={node} />;
     case "text":
-      return <TextInspector node={node} />
+      return <TextInspector node={node} />;
     case "image":
-      return <ImageInspector node={node} />
+      return <ImageInspector node={node} />;
     case "icon":
-      return <IconInspector node={node} />
+      return <IconInspector node={node} />;
     case "featureList":
-      return <FeatureListInspector node={node} />
+      return <FeatureListInspector node={node} />;
     case "productSelector":
-      return <ProductSelectorInspector node={node} />
+      return <ProductSelectorInspector node={node} />;
     case "productCard":
-      return <ProductCardInspector node={node} />
+      return <ProductCardInspector node={node} />;
     case "productBadge":
-      return <ProductBadgeInspector node={node} />
+      return <ProductBadgeInspector node={node} />;
     case "button":
-      return <ButtonInspector node={node} />
+      return <ButtonInspector node={node} />;
     case "carousel":
-      return <CarouselInspector node={node} />
+      return <CarouselInspector node={node} />;
     case "switch":
-      return <SwitchInspector node={node} />
+      return <SwitchInspector node={node} />;
     case "countdown":
-      return <CountdownInspector node={node} />
+      return <CountdownInspector node={node} />;
   }
 }

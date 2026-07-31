@@ -1,12 +1,11 @@
-import { mutationOptions, type QueryClient } from "@tanstack/react-query"
-
+import { mutationOptions, type QueryClient } from "@tanstack/react-query";
+import { grantVersionKeys } from "@/features/entitlement-grants/queries/grant-version-queries";
 import {
+  type PublishGrantVersionRequest,
   previewProductEntitlementGrantImpact,
   publishProductEntitlementGrantVersion,
-  type PublishGrantVersionRequest,
-} from "@/generated/api"
-import { grantVersionKeys } from "@/features/entitlement-grants/queries/grant-version-queries"
-import { generatedDashboardClient } from "@/lib/api/generated-dashboard-client"
+} from "@/generated/api";
+import { generatedDashboardClient } from "@/lib/api/generated-dashboard-client";
 
 /**
  * Preview writes nothing — not even an audit event.
@@ -24,10 +23,10 @@ export function previewGrantImpactMutationOptions(projectId: string) {
         client: generatedDashboardClient,
         path: { projectId },
         throwOnError: true,
-      })
-      return result.data.data
+      });
+      return result.data.data;
     },
-  })
+  });
 }
 
 /**
@@ -39,7 +38,10 @@ export function previewGrantImpactMutationOptions(projectId: string) {
  * history query is invalidated on success because the previously open interval
  * has just been closed.
  */
-export function publishGrantVersionMutationOptions(projectId: string, queryClient: QueryClient) {
+export function publishGrantVersionMutationOptions(
+  projectId: string,
+  queryClient: QueryClient
+) {
   return mutationOptions({
     mutationFn: async (request: PublishGrantVersionRequest) => {
       const result = await publishProductEntitlementGrantVersion({
@@ -47,10 +49,12 @@ export function publishGrantVersionMutationOptions(projectId: string, queryClien
         client: generatedDashboardClient,
         path: { projectId },
         throwOnError: true,
-      })
-      return result.data.data
+      });
+      return result.data.data;
     },
     onSuccess: async () =>
-      queryClient.invalidateQueries({ queryKey: grantVersionKeys.scope(projectId) }),
-  })
+      queryClient.invalidateQueries({
+        queryKey: grantVersionKeys.scope(projectId),
+      }),
+  });
 }

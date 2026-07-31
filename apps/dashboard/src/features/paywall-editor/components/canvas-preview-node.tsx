@@ -1,75 +1,73 @@
-import { CaretLeftIcon } from "@phosphor-icons/react/dist/ssr/CaretLeft"
-import { CaretRightIcon } from "@phosphor-icons/react/dist/ssr/CaretRight"
-import { CheckIcon } from "@phosphor-icons/react/dist/ssr/Check"
-import { createElement } from "react"
-import type { CSSProperties, ReactNode } from "react"
-
-import { useEditorActions } from "@/features/paywall-editor/stores/editor-store-context"
-import type {
-  MockProductDefinition,
-  MockPurchaseState,
-  MosaicDocument,
-  ProtocolNode,
-} from "@/features/paywall-editor/types/editor"
-import { getEditableCanvasText } from "@/features/paywall-editor/utils/canvas-preview-interactions"
-import { resolveLocalizedText } from "@/features/paywall-editor/utils/document-tree"
+import { CaretLeftIcon } from "@phosphor-icons/react/dist/ssr/CaretLeft";
+import { CaretRightIcon } from "@phosphor-icons/react/dist/ssr/CaretRight";
+import { CheckIcon } from "@phosphor-icons/react/dist/ssr/Check";
+import type { CSSProperties, ReactNode } from "react";
+import { createElement } from "react";
 import {
-  resolvedBackground,
-  resolvedProtocolColor,
-} from "@/features/paywall-editor/utils/protocol-styles"
-import {
-  evaluateVisibility,
-  resolveProductBadgeStyle,
-  resolveProductCardStyle,
-} from "@/lib/mosaic-protocol"
-
-import {
-  InlineEditor,
-  NodeFrame,
-  RTL_ICON_NAMES,
   alignmentStyle,
   appearanceStyle,
   countdownText,
   distributionStyle,
   headingElement,
+  InlineEditor,
+  NodeFrame,
+  type PreviewProductContext,
   productCardRequiresPrice,
   productPrice,
+  RTL_ICON_NAMES,
   resolveProductTemplate,
   subtreeIncludesId,
   typographyStyle,
-  type PreviewProductContext,
-} from "@/features/paywall-editor/components/canvas-preview-node-primitives"
+} from "@/features/paywall-editor/components/canvas-preview-node-primitives";
+import { useEditorActions } from "@/features/paywall-editor/stores/editor-store-context";
+import type {
+  MockProductDefinition,
+  MockPurchaseState,
+  MosaicDocument,
+  ProtocolNode,
+} from "@/features/paywall-editor/types/editor";
+import { getEditableCanvasText } from "@/features/paywall-editor/utils/canvas-preview-interactions";
+import { resolveLocalizedText } from "@/features/paywall-editor/utils/document-tree";
+import {
+  resolvedBackground,
+  resolvedProtocolColor,
+} from "@/features/paywall-editor/utils/protocol-styles";
+import {
+  evaluateVisibility,
+  resolveProductBadgeStyle,
+  resolveProductCardStyle,
+} from "@/lib/mosaic-protocol";
 
 export interface PreviewNodeProps {
-  readonly carouselPages: Readonly<Record<string, number>>
-  readonly document: MosaicDocument
-  readonly direction: "ltr" | "rtl"
-  readonly editingComponentId: string | null
-  readonly hiddenIds: ReadonlySet<string>
-  readonly hoveredComponentId: string | null
-  readonly inheritedLocked: boolean
-  readonly locale: string
-  readonly lockedIds: ReadonlySet<string>
-  readonly mockProducts: readonly MockProductDefinition[]
-  readonly mockPurchaseState: MockPurchaseState
-  readonly node: ProtocolNode
-  readonly productContext?: PreviewProductContext
+  readonly carouselPages: Readonly<Record<string, number>>;
+  readonly direction: "ltr" | "rtl";
+  readonly document: MosaicDocument;
+  readonly editingComponentId: string | null;
+  readonly hiddenIds: ReadonlySet<string>;
+  readonly hoveredComponentId: string | null;
+  readonly inheritedLocked: boolean;
+  readonly locale: string;
+  readonly lockedIds: ReadonlySet<string>;
+  readonly mockProducts: readonly MockProductDefinition[];
+  readonly mockPurchaseState: MockPurchaseState;
+  readonly node: ProtocolNode;
+  readonly now: number;
+  readonly onBeginEdit: (node: ProtocolNode) => void;
+  readonly onCancelEdit: () => void;
+  readonly onCarouselPageChange: (id: string, index: number) => void;
+  readonly onCommitEdit: () => void;
+  readonly onProductSelect: (id: string, productId: string) => void;
+  readonly onSwitchChange: (id: string, value: boolean) => void;
+  readonly onUpdateEdit: (node: ProtocolNode, value: string) => void;
+  readonly productContext?: PreviewProductContext;
   readonly productLayerPreview: {
-    readonly nodeId: string
-    readonly state: "default" | "selected"
-  } | null
-  readonly now: number
-  readonly purchaseDisabledIds: ReadonlySet<string>
-  readonly selectedComponentId: string | null
-  readonly selectedProducts: Readonly<Record<string, string>>
-  readonly switchValues: Readonly<Record<string, boolean>>
-  readonly onBeginEdit: (node: ProtocolNode) => void
-  readonly onCancelEdit: () => void
-  readonly onCarouselPageChange: (id: string, index: number) => void
-  readonly onCommitEdit: () => void
-  readonly onProductSelect: (id: string, productId: string) => void
-  readonly onSwitchChange: (id: string, value: boolean) => void
-  readonly onUpdateEdit: (node: ProtocolNode, value: string) => void
+    readonly nodeId: string;
+    readonly state: "default" | "selected";
+  } | null;
+  readonly purchaseDisabledIds: ReadonlySet<string>;
+  readonly selectedComponentId: string | null;
+  readonly selectedProducts: Readonly<Record<string, string>>;
+  readonly switchValues: Readonly<Record<string, boolean>>;
 }
 
 export function PreviewNode(props: PreviewNodeProps) {
@@ -92,22 +90,29 @@ export function PreviewNode(props: PreviewNodeProps) {
     selectedComponentId,
     selectedProducts,
     switchValues,
-  } = props
-  const editor = useEditorActions()
-  const visibility = "visibility" in node ? node.visibility : undefined
-  if (hiddenIds.has(node.id) || !evaluateVisibility(visibility, switchValues)) return null
-  const selected = selectedComponentId === node.id
-  const hovered = hoveredComponentId === node.id
-  const locked = inheritedLocked || lockedIds.has(node.id)
-  const editing = editingComponentId === node.id
-  const editable = getEditableCanvasText(node)
+  } = props;
+  const editor = useEditorActions();
+  const visibility = "visibility" in node ? node.visibility : undefined;
+  if (hiddenIds.has(node.id) || !evaluateVisibility(visibility, switchValues)) {
+    return null;
+  }
+  const selected = selectedComponentId === node.id;
+  const hovered = hoveredComponentId === node.id;
+  const locked = inheritedLocked || lockedIds.has(node.id);
+  const editing = editingComponentId === node.id;
+  const editable = getEditableCanvasText(node);
 
-  function beginEdit(event: { preventDefault: () => void; stopPropagation: () => void }) {
-    event.preventDefault()
-    event.stopPropagation()
-    if (locked || !editable) return
-    editor.selectComponent(node.id)
-    props.onBeginEdit(node)
+  function beginEdit(event: {
+    preventDefault: () => void;
+    stopPropagation: () => void;
+  }) {
+    event.preventDefault();
+    event.stopPropagation();
+    if (locked || !editable) {
+      return;
+    }
+    editor.selectComponent(node.id);
+    props.onBeginEdit(node);
   }
 
   /**
@@ -116,23 +121,31 @@ export function PreviewNode(props: PreviewNodeProps) {
    * expose the same affordance to keyboard users.
    */
   function beginEditKeyDown(event: React.KeyboardEvent) {
-    if (!editable || locked) return
-    if (event.key !== "Enter" && event.key !== "F2") return
-    beginEdit(event)
+    if (!editable || locked) {
+      return;
+    }
+    if (event.key !== "Enter" && event.key !== "F2") {
+      return;
+    }
+    beginEdit(event);
   }
 
   function editTriggerProps() {
-    if (!editable || locked) return {}
+    if (!editable || locked) {
+      return {};
+    }
     return {
       onDoubleClick: beginEdit,
       onKeyDown: beginEditKeyDown,
       tabIndex: 0,
       title: "Press Enter or F2 to edit this text",
-    }
+    };
   }
 
   function inlineEditor(className: string, style?: CSSProperties) {
-    if (!editable) return null
+    if (!editable) {
+      return null;
+    }
     return (
       <InlineEditor
         ariaLabel={editable.ariaLabel}
@@ -144,10 +157,10 @@ export function PreviewNode(props: PreviewNodeProps) {
         style={style}
         value={resolveLocalizedText(document, editable.text, locale)}
       />
-    )
+    );
   }
 
-  let content: ReactNode
+  let content: ReactNode;
   switch (node.type) {
     case "stack":
       content = (
@@ -166,54 +179,71 @@ export function PreviewNode(props: PreviewNodeProps) {
           }}
         >
           {node.children.length === 0 ? (
-            <div className="border-border text-muted-foreground w-full rounded border border-dashed p-3 text-center text-xs">
+            <div className="w-full rounded border border-border border-dashed p-3 text-center text-muted-foreground text-xs">
               Empty Stack
             </div>
           ) : (
             node.children.map((child) => (
-              <PreviewNode key={child.id} {...props} inheritedLocked={locked} node={child} />
+              <PreviewNode
+                key={child.id}
+                {...props}
+                inheritedLocked={locked}
+                node={child}
+              />
             ))
           )}
         </div>
-      )
-      break
+      );
+      break;
     case "text": {
       const value = resolveProductTemplate(
         resolveLocalizedText(document, node.value, locale),
-        props.productContext,
-      )
-      const style = typographyStyle(document, node.typography)
+        props.productContext
+      );
+      const style = typographyStyle(document, node.typography);
       content = editing
-        ? inlineEditor("w-full resize-none bg-transparent px-1 py-0.5 focus:outline-none", style)
+        ? inlineEditor(
+            "w-full resize-none bg-transparent px-1 py-0.5 focus:outline-none",
+            style
+          )
         : createElement(
-            node.accessibility.role === "heading" ? headingElement(node.accessibility.level) : "p",
+            node.accessibility.role === "heading"
+              ? headingElement(node.accessibility.level)
+              : "p",
             {
               "aria-label": node.accessibility.label
                 ? resolveProductTemplate(
-                    resolveLocalizedText(document, node.accessibility.label, locale),
-                    props.productContext,
+                    resolveLocalizedText(
+                      document,
+                      node.accessibility.label,
+                      locale
+                    ),
+                    props.productContext
                   )
                 : undefined,
               className: "w-full px-1 py-0.5",
               ...editTriggerProps(),
-              style: { ...appearanceStyle(document, node.appearance), ...style },
+              style: {
+                ...appearanceStyle(document, node.appearance),
+                ...style,
+              },
             },
-            value,
-          )
-      break
+            value
+          );
+      break;
     }
     case "image": {
       const asset = document.assets.find(
-        (entry) => entry.id === node.assetId && entry.type === "image",
-      )
+        (entry) => entry.id === node.assetId && entry.type === "image"
+      );
       const imageLabel = node.accessibility.hidden
         ? undefined
-        : resolveLocalizedText(document, node.accessibility.label, locale)
+        : resolveLocalizedText(document, node.accessibility.label, locale);
       content = (
         <figure
           aria-hidden={node.accessibility.hidden || undefined}
           aria-label={imageLabel}
-          className="flex w-full items-center justify-center overflow-hidden bg-linear-to-br from-cyan-100 to-teal-200 text-xs font-medium text-teal-900"
+          className="flex w-full items-center justify-center overflow-hidden bg-linear-to-br from-cyan-100 to-teal-200 font-medium text-teal-900 text-xs"
           role={node.accessibility.hidden ? undefined : "img"}
           style={{
             ...appearanceStyle(document, node.appearance),
@@ -226,17 +256,22 @@ export function PreviewNode(props: PreviewNodeProps) {
               alt=""
               className="size-full"
               src={asset.source.url}
-              style={{ objectFit: node.contentMode === "fit" ? "contain" : "cover" }}
+              style={{
+                objectFit: node.contentMode === "fit" ? "contain" : "cover",
+              }}
             />
           ) : (
             <figcaption>{asset?.source.key ?? node.assetId}</figcaption>
           )}
         </figure>
-      )
-      break
+      );
+      break;
     }
     case "icon": {
-      const iconName = direction === "rtl" ? (RTL_ICON_NAMES[node.name] ?? node.name) : node.name
+      const iconName =
+        direction === "rtl"
+          ? (RTL_ICON_NAMES[node.name] ?? node.name)
+          : node.name;
       const glyph = {
         checkmark: "✓",
         close: "×",
@@ -247,7 +282,7 @@ export function PreviewNode(props: PreviewNodeProps) {
         arrowForward: "→",
         chevronBackward: "‹",
         chevronForward: "›",
-      }[iconName]
+      }[iconName];
       content = (
         <span
           aria-hidden={node.accessibility.hidden || undefined}
@@ -270,15 +305,23 @@ export function PreviewNode(props: PreviewNodeProps) {
         >
           {glyph}
         </span>
-      )
-      break
+      );
+      break;
     }
     case "featureList":
       content = (
         <ul
-          aria-label={resolveLocalizedText(document, node.accessibility.label, locale)}
+          aria-label={resolveLocalizedText(
+            document,
+            node.accessibility.label,
+            locale
+          )}
           className="w-full text-left"
-          style={{ ...appearanceStyle(document, node.appearance), display: "grid", gap: node.gap }}
+          style={{
+            ...appearanceStyle(document, node.appearance),
+            display: "grid",
+            gap: node.gap,
+          }}
         >
           {node.items.map((item) => (
             <li
@@ -296,32 +339,42 @@ export function PreviewNode(props: PreviewNodeProps) {
             </li>
           ))}
         </ul>
-      )
-      break
+      );
+      break;
     case "productSelector": {
-      const selectorLabel = resolveLocalizedText(document, node.accessibility.label, locale)
+      const selectorLabel = resolveLocalizedText(
+        document,
+        node.accessibility.label,
+        locale
+      );
       const selectorHint = node.accessibility.hint
         ? resolveLocalizedText(document, node.accessibility.hint, locale)
-        : null
+        : null;
       const availableCards = node.cards.flatMap((card) => {
-        const reference = document.products.find((entry) => entry.id === card.productReferenceId)
+        const reference = document.products.find(
+          (entry) => entry.id === card.productReferenceId
+        );
         const mock = mockProducts.find(
-          (entry) => entry.productReferenceId === card.productReferenceId,
-        )
+          (entry) => entry.productReferenceId === card.productReferenceId
+        );
         if (
           mockPurchaseState === "productUnavailable" ||
           !reference ||
           mock?.availability !== "available" ||
-          (productCardRequiresPrice(document, card, locale) && !mock.localizedPrice.trim())
+          (productCardRequiresPrice(document, card, locale) &&
+            !mock.localizedPrice.trim())
         ) {
-          return []
+          return [];
         }
-        return [{ card, mock, reference }]
-      })
-      const requestedCardId = selectedProducts[node.id] ?? node.initialProductCardId
-      const chosenCardId = availableCards.some(({ card }) => card.id === requestedCardId)
+        return [{ card, mock, reference }];
+      });
+      const requestedCardId =
+        selectedProducts[node.id] ?? node.initialProductCardId;
+      const chosenCardId = availableCards.some(
+        ({ card }) => card.id === requestedCardId
+      )
         ? requestedCardId
-        : availableCards[0]?.card.id
+        : availableCards[0]?.card.id;
       content = (
         <fieldset
           aria-describedby={selectorHint ? `${node.id}-hint` : undefined}
@@ -337,8 +390,12 @@ export function PreviewNode(props: PreviewNodeProps) {
             </span>
           ) : null}
           {availableCards.length === 0 ? (
-            <p className="rounded border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
-              {resolveLocalizedText(document, node.unavailableFallback.message, locale)}
+            <p className="rounded border border-amber-200 bg-amber-50 p-3 text-amber-900 text-sm">
+              {resolveLocalizedText(
+                document,
+                node.unavailableFallback.message,
+                locale
+              )}
             </p>
           ) : (
             <div
@@ -350,11 +407,11 @@ export function PreviewNode(props: PreviewNodeProps) {
               }}
             >
               {availableCards.map(({ card, mock, reference }) => {
-                const chosen = card.id === chosenCardId
+                const chosen = card.id === chosenCardId;
                 const visualSelected =
                   productLayerPreview?.nodeId === card.id
                     ? productLayerPreview.state === "selected"
-                    : chosen
+                    : chosen;
                 const productContext: PreviewProductContext = {
                   cardId: card.id,
                   name: resolveLocalizedText(document, reference.label, locale),
@@ -363,7 +420,7 @@ export function PreviewNode(props: PreviewNodeProps) {
                   selected: chosen,
                   visualSelected,
                   selectorId: node.id,
-                }
+                };
                 return (
                   <PreviewNode
                     key={card.id}
@@ -372,25 +429,27 @@ export function PreviewNode(props: PreviewNodeProps) {
                     node={card}
                     productContext={productContext}
                   />
-                )
+                );
               })}
             </div>
           )}
         </fieldset>
-      )
-      break
+      );
+      break;
     }
     case "productCard": {
-      const product = props.productContext
-      if (!product) return null
-      const style = resolveProductCardStyle(node, product.visualSelected)
-      const cardBackground = resolvedBackground(document, style.background)
+      const product = props.productContext;
+      if (!product) {
+        return null;
+      }
+      const style = resolveProductCardStyle(node, product.visualSelected);
+      const cardBackground = resolvedBackground(document, style.background);
       const accessibleLabel = node.accessibility
         ? resolveProductTemplate(
             resolveLocalizedText(document, node.accessibility.label, locale),
-            product,
+            product
           )
-        : undefined
+        : undefined;
       content = (
         <div
           aria-label={accessibleLabel}
@@ -445,18 +504,20 @@ export function PreviewNode(props: PreviewNodeProps) {
             ✓
           </span>
         </div>
-      )
-      break
+      );
+      break;
     }
     case "productBadge": {
-      const product = props.productContext
-      if (!product) return null
+      const product = props.productContext;
+      if (!product) {
+        return null;
+      }
       const visualSelected =
         productLayerPreview?.nodeId === node.id
           ? productLayerPreview.state === "selected"
-          : product.visualSelected
-      const style = resolveProductBadgeStyle(node, visualSelected)
-      const badgeBackground = resolvedBackground(document, style.background)
+          : product.visualSelected;
+      const style = resolveProductBadgeStyle(node, visualSelected);
+      const badgeBackground = resolvedBackground(document, style.background);
       content = (
         <span
           className="relative min-w-0"
@@ -494,17 +555,22 @@ export function PreviewNode(props: PreviewNodeProps) {
             />
           ))}
         </span>
-      )
-      break
+      );
+      break;
     }
     case "button": {
       const purchaseUnavailable =
-        node.action.type === "purchase" && purchaseDisabledIds.has(node.id)
+        node.action.type === "purchase" && purchaseDisabledIds.has(node.id);
       const previewingProgress =
-        node.inProgressChildren?.some((child) => subtreeIncludesId(child, selectedComponentId)) ??
-        false
-      const children = previewingProgress ? node.inProgressChildren! : node.children
-      const editingInside = children.some((child) => subtreeIncludesId(child, editingComponentId))
+        node.inProgressChildren?.some((child) =>
+          subtreeIncludesId(child, selectedComponentId)
+        ) ?? false;
+      const children = previewingProgress
+        ? node.inProgressChildren!
+        : node.children;
+      const editingInside = children.some((child) =>
+        subtreeIncludesId(child, editingComponentId)
+      );
       content = (
         <div
           className="relative w-full"
@@ -514,7 +580,11 @@ export function PreviewNode(props: PreviewNodeProps) {
         >
           <button
             aria-busy={previewingProgress || undefined}
-            aria-label={resolveLocalizedText(document, node.accessibility.label, locale)}
+            aria-label={resolveLocalizedText(
+              document,
+              node.accessibility.label,
+              locale
+            )}
             className="pointer-events-none absolute inset-0 size-full rounded-[inherit] border-0 bg-transparent"
             disabled={locked || purchaseUnavailable}
             tabIndex={-1}
@@ -531,12 +601,17 @@ export function PreviewNode(props: PreviewNodeProps) {
             }}
           >
             {children.map((child) => (
-              <PreviewNode key={child.id} {...props} inheritedLocked={locked} node={child} />
+              <PreviewNode
+                key={child.id}
+                {...props}
+                inheritedLocked={locked}
+                node={child}
+              />
             ))}
           </div>
         </div>
-      )
-      break
+      );
+      break;
     }
     case "switch":
       content = (
@@ -550,7 +625,7 @@ export function PreviewNode(props: PreviewNodeProps) {
           {editing ? (
             inlineEditor(
               "min-w-0 flex-1 resize-none bg-transparent focus:outline-none",
-              typographyStyle(document, node.typography),
+              typographyStyle(document, node.typography)
             )
           ) : (
             <span {...editTriggerProps()}>
@@ -558,23 +633,31 @@ export function PreviewNode(props: PreviewNodeProps) {
             </span>
           )}
           <input
-            aria-label={resolveLocalizedText(document, node.accessibility.label, locale)}
+            aria-label={resolveLocalizedText(
+              document,
+              node.accessibility.label,
+              locale
+            )}
             checked={switchValues[node.id] ?? node.initialValue}
             className="h-5 w-9 accent-[var(--primary)]"
             disabled={locked}
-            onChange={(event) => props.onSwitchChange(node.id, event.target.checked)}
+            onChange={(event) =>
+              props.onSwitchChange(node.id, event.target.checked)
+            }
             role="switch"
-            style={{ accentColor: resolvedProtocolColor(document, node.onTrackColor) }}
+            style={{
+              accentColor: resolvedProtocolColor(document, node.onTrackColor),
+            }}
             type="checkbox"
           />
         </label>
-      )
-      break
+      );
+      break;
     case "countdown": {
-      const completed = Date.parse(node.endsAt) <= now
+      const completed = Date.parse(node.endsAt) <= now;
       const accessible = node.accessibility.label
         ? resolveLocalizedText(document, node.accessibility.label, locale)
-        : undefined
+        : undefined;
       content = (
         <time
           aria-label={accessible}
@@ -588,17 +671,21 @@ export function PreviewNode(props: PreviewNodeProps) {
             ? resolveLocalizedText(document, node.completedText, locale)
             : countdownText(node, now)}
         </time>
-      )
-      break
+      );
+      break;
     }
     case "carousel": {
       const pageIndex = Math.min(
         node.pages.length - 1,
-        carouselPages[node.id] ?? node.initialPageIndex,
-      )
+        carouselPages[node.id] ?? node.initialPageIndex
+      );
       content = (
         <section
-          aria-label={resolveLocalizedText(document, node.accessibility.label, locale)}
+          aria-label={resolveLocalizedText(
+            document,
+            node.accessibility.label,
+            locale
+          )}
           aria-roledescription="carousel"
           className="w-full"
           style={appearanceStyle(document, node.appearance)}
@@ -607,7 +694,11 @@ export function PreviewNode(props: PreviewNodeProps) {
             {node.pages.map((page, index) => (
               <div
                 aria-hidden={index !== pageIndex}
-                aria-label={resolveLocalizedText(document, page.accessibilityLabel, locale)}
+                aria-label={resolveLocalizedText(
+                  document,
+                  page.accessibilityLabel,
+                  locale
+                )}
                 className="col-start-1 row-start-1 min-w-0"
                 key={page.id}
                 style={{
@@ -615,7 +706,11 @@ export function PreviewNode(props: PreviewNodeProps) {
                   visibility: index === pageIndex ? "visible" : "hidden",
                 }}
               >
-                <PreviewNode {...props} inheritedLocked={locked} node={page.content} />
+                <PreviewNode
+                  {...props}
+                  inheritedLocked={locked}
+                  node={page.content}
+                />
               </div>
             ))}
           </div>
@@ -625,15 +720,18 @@ export function PreviewNode(props: PreviewNodeProps) {
               className="grid size-7 place-items-center rounded-full border"
               disabled={locked || pageIndex === 0}
               onClick={(event) => {
-                event.stopPropagation()
-                props.onCarouselPageChange(node.id, pageIndex - 1)
+                event.stopPropagation();
+                props.onCarouselPageChange(node.id, pageIndex - 1);
               }}
               type="button"
             >
               <CaretLeftIcon aria-hidden />
             </button>
             {node.showsIndicators ? (
-              <span aria-live="polite" className="text-muted-foreground text-xs">
+              <span
+                aria-live="polite"
+                className="text-muted-foreground text-xs"
+              >
                 {pageIndex + 1} / {node.pages.length}
               </span>
             ) : null}
@@ -642,8 +740,8 @@ export function PreviewNode(props: PreviewNodeProps) {
               className="grid size-7 place-items-center rounded-full border"
               disabled={locked || pageIndex === node.pages.length - 1}
               onClick={(event) => {
-                event.stopPropagation()
-                props.onCarouselPageChange(node.id, pageIndex + 1)
+                event.stopPropagation();
+                props.onCarouselPageChange(node.id, pageIndex + 1);
               }}
               type="button"
             >
@@ -651,15 +749,15 @@ export function PreviewNode(props: PreviewNodeProps) {
             </button>
           </div>
         </section>
-      )
-      break
+      );
+      break;
     }
   }
 
   return (
     <NodeFrame
-      hovered={hovered}
       document={document}
+      hovered={hovered}
       inheritedLocked={inheritedLocked}
       lockedIds={lockedIds}
       node={node}
@@ -667,5 +765,5 @@ export function PreviewNode(props: PreviewNodeProps) {
     >
       {content}
     </NodeFrame>
-  )
+  );
 }

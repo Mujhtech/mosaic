@@ -1,19 +1,27 @@
-import type { AnalyticsBreakdown } from "../types/analytics"
+import type { AnalyticsBreakdown } from "../types/analytics";
 
-export function BreakdownTables({ breakdowns }: { breakdowns: AnalyticsBreakdown[] }) {
+export function BreakdownTables({
+  breakdowns,
+}: {
+  breakdowns: AnalyticsBreakdown[];
+}) {
   return (
     <section aria-labelledby="analytics-breakdowns-title" className="space-y-3">
       <div>
-        <h2 className="text-sm font-semibold" id="analytics-breakdowns-title">
+        <h2 className="font-semibold text-sm" id="analytics-breakdowns-title">
           Event breakdowns
         </h2>
-        <p className="text-muted-foreground mt-1 text-xs">
-          Accepted, deduplicated event counts for the active date range and filters.
+        <p className="mt-1 text-muted-foreground text-xs">
+          Accepted, deduplicated event counts for the active date range and
+          filters.
         </p>
       </div>
       <div className="grid gap-3 lg:grid-cols-2">
         {breakdowns.map((breakdown) => (
-          <div className="overflow-x-auto rounded border" key={breakdown.dimension}>
+          <div
+            className="overflow-x-auto rounded border"
+            key={breakdown.dimension}
+          >
             <table className="w-full text-left text-sm">
               <caption className="px-4 py-3 text-left font-semibold capitalize">
                 By {breakdown.dimension}
@@ -28,10 +36,10 @@ export function BreakdownTables({ breakdowns }: { breakdowns: AnalyticsBreakdown
                   </th>
                 </tr>
               </thead>
-              <tbody className="divide-border divide-y">
+              <tbody className="divide-y divide-border">
                 {breakdown.rows.length === 0 ? (
                   <tr>
-                    <td className="text-muted-foreground px-4 py-4" colSpan={2}>
+                    <td className="px-4 py-4 text-muted-foreground" colSpan={2}>
                       No data for this breakdown.
                     </td>
                   </tr>
@@ -53,5 +61,5 @@ export function BreakdownTables({ breakdowns }: { breakdowns: AnalyticsBreakdown
         ))}
       </div>
     </section>
-  )
+  );
 }

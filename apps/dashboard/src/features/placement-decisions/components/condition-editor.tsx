@@ -1,16 +1,15 @@
-import { useId } from "react"
+import { PlusIcon } from "@phosphor-icons/react/dist/ssr/Plus";
+import { TrashIcon } from "@phosphor-icons/react/dist/ssr/Trash";
+import { useId } from "react";
 
-import { PlusIcon } from "@phosphor-icons/react/dist/ssr/Plus"
-import { TrashIcon } from "@phosphor-icons/react/dist/ssr/Trash"
-
-import { Button } from "@/components/ui/button"
+import { Button } from "@/components/ui/button";
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from "@/components/ui/select"
+} from "@/components/ui/select";
 import type {
   AttributeDefinition,
   ConditionGroup,
@@ -19,7 +18,7 @@ import type {
   ConditionSource,
   DecisionValidationIssue,
   LeafCondition,
-} from "@/features/placement-decisions/types/placement-decision"
+} from "@/features/placement-decisions/types/placement-decision";
 
 const SOURCES: readonly { label: string; value: ConditionSource }[] = [
   { label: "Platform", value: "device.platform" },
@@ -32,7 +31,7 @@ const SOURCES: readonly { label: string; value: ConditionSource }[] = [
   { label: "Product availability", value: "product_availability" },
   { label: "Product readiness", value: "product_readiness" },
   { label: "Provider capability", value: "provider_capability" },
-]
+];
 
 const OPERATORS: readonly { label: string; value: ConditionOperator }[] = [
   { label: "equals", value: "equals" },
@@ -48,7 +47,7 @@ const OPERATORS: readonly { label: string; value: ConditionOperator }[] = [
   { label: "contains any", value: "contains_any" },
   { label: "contains all", value: "contains_all" },
   { label: "locale matches", value: "locale_matches" },
-]
+];
 
 const EXACT_OPERATORS: readonly ConditionOperator[] = [
   "equals",
@@ -57,43 +56,48 @@ const EXACT_OPERATORS: readonly ConditionOperator[] = [
   "not_in",
   "exists",
   "does_not_exist",
-]
+];
 const ORDERED_OPERATORS: readonly ConditionOperator[] = [
   ...EXACT_OPERATORS,
   "greater_than",
   "greater_than_or_equal",
   "less_than",
   "less_than_or_equal",
-]
+];
 const USER_ATTRIBUTE_OPERATORS: readonly ConditionOperator[] = [
   ...ORDERED_OPERATORS,
   "contains_any",
   "contains_all",
-]
+];
 
 function operatorsFor(
   condition: LeafCondition,
-  attributes: readonly AttributeDefinition[],
+  attributes: readonly AttributeDefinition[]
 ): readonly ConditionOperator[] {
   if (condition.source === "application.locale") {
-    return [...EXACT_OPERATORS, "locale_matches"]
+    return [...EXACT_OPERATORS, "locale_matches"];
   }
-  if (condition.source === "application.version" || condition.source === "device.os_version") {
-    return ORDERED_OPERATORS
+  if (
+    condition.source === "application.version" ||
+    condition.source === "device.os_version"
+  ) {
+    return ORDERED_OPERATORS;
   }
   if (condition.source === "user_attribute") {
-    const definition = attributes.find((attribute) => attribute.key === condition.referenceKey)
+    const definition = attributes.find(
+      (attribute) => attribute.key === condition.referenceKey
+    );
     return definition
       ? definition.allowedOperators.filter((operator) =>
-          USER_ATTRIBUTE_OPERATORS.includes(operator),
+          USER_ATTRIBUTE_OPERATORS.includes(operator)
         )
-      : USER_ATTRIBUTE_OPERATORS
+      : USER_ATTRIBUTE_OPERATORS;
   }
-  return EXACT_OPERATORS
+  return EXACT_OPERATORS;
 }
 
 function id(prefix: string) {
-  return `${prefix}-${typeof crypto?.randomUUID === "function" ? crypto.randomUUID() : Date.now().toString(36)}`
+  return `${prefix}-${typeof crypto?.randomUUID === "function" ? crypto.randomUUID() : Date.now().toString(36)}`;
 }
 
 function newLeaf(): LeafCondition {
@@ -103,18 +107,27 @@ function newLeaf(): LeafCondition {
     operator: "equals",
     source: "device.platform",
     value: "ios",
-  }
+  };
 }
 
-function updateChild(group: ConditionGroup, childId: string, child: ConditionNode): ConditionGroup {
-  return { ...group, children: group.children.map((item) => (item.id === childId ? child : item)) }
+function updateChild(
+  group: ConditionGroup,
+  childId: string,
+  child: ConditionNode
+): ConditionGroup {
+  return {
+    ...group,
+    children: group.children.map((item) =>
+      item.id === childId ? child : item
+    ),
+  };
 }
 
 const GROUP_KIND_OPTIONS = [
   { label: "All conditions", value: "all" },
   { label: "Any condition", value: "any" },
   { label: "Not", value: "not" },
-]
+];
 
 export function ConditionEditor({
   attributes,
@@ -123,27 +136,30 @@ export function ConditionEditor({
   onChange,
   value,
 }: {
-  attributes: readonly AttributeDefinition[]
-  depth?: number
-  issues: readonly DecisionValidationIssue[]
-  onChange: (value: ConditionGroup) => void
-  value: ConditionGroup
+  attributes: readonly AttributeDefinition[];
+  depth?: number;
+  issues: readonly DecisionValidationIssue[];
+  onChange: (value: ConditionGroup) => void;
+  value: ConditionGroup;
 }) {
-  const maxChildren = value.kind === "not" ? 1 : 16
+  const maxChildren = value.kind === "not" ? 1 : 16;
   return (
-    <fieldset className="border-border space-y-3 rounded border p-3">
-      <legend className="px-1 text-xs font-semibold">Condition group {depth} of 5</legend>
-      <div className="grid gap-1 text-xs font-medium sm:max-w-52">
+    <fieldset className="space-y-3 rounded border border-border p-3">
+      <legend className="px-1 font-semibold text-xs">
+        Condition group {depth} of 5
+      </legend>
+      <div className="grid gap-1 font-medium text-xs sm:max-w-52">
         <label htmlFor={`condition-group-kind-${depth}`}>Match</label>
         <Select
           items={GROUP_KIND_OPTIONS}
           onValueChange={(selectedValue) => {
-            const kind = selectedValue as ConditionGroup["kind"]
+            const kind = selectedValue as ConditionGroup["kind"];
             onChange({
               ...value,
-              children: kind === "not" ? value.children.slice(0, 1) : value.children,
+              children:
+                kind === "not" ? value.children.slice(0, 1) : value.children,
               kind,
-            })
+            });
           }}
           value={value.kind}
         >
@@ -168,12 +184,18 @@ export function ConditionEditor({
             key={node.id}
             onChange={(child) => onChange(updateChild(value, node.id, child))}
             onRemove={() =>
-              onChange({ ...value, children: value.children.filter((item) => item.id !== node.id) })
+              onChange({
+                ...value,
+                children: value.children.filter((item) => item.id !== node.id),
+              })
             }
             value={node}
           />
         ) : (
-          <div className="border-border/70 space-y-2 border-s ps-3" key={node.id}>
+          <div
+            className="space-y-2 border-border/70 border-s ps-3"
+            key={node.id}
+          >
             <ConditionEditor
               attributes={attributes}
               depth={depth + 1}
@@ -185,7 +207,9 @@ export function ConditionEditor({
               onClick={() =>
                 onChange({
                   ...value,
-                  children: value.children.filter((item) => item.id !== node.id),
+                  children: value.children.filter(
+                    (item) => item.id !== node.id
+                  ),
                 })
               }
               size="sm"
@@ -195,13 +219,15 @@ export function ConditionEditor({
               <TrashIcon aria-hidden /> Remove group
             </Button>
           </div>
-        ),
+        )
       )}
 
       <div className="flex flex-wrap gap-2">
         <Button
           disabled={value.children.length >= maxChildren}
-          onClick={() => onChange({ ...value, children: [...value.children, newLeaf()] })}
+          onClick={() =>
+            onChange({ ...value, children: [...value.children, newLeaf()] })
+          }
           size="sm"
           type="button"
           variant="outline"
@@ -209,13 +235,21 @@ export function ConditionEditor({
           <PlusIcon aria-hidden /> Add condition
         </Button>
         <Button
-          disabled={depth >= 5 || value.kind === "not" || value.children.length >= maxChildren}
+          disabled={
+            depth >= 5 ||
+            value.kind === "not" ||
+            value.children.length >= maxChildren
+          }
           onClick={() =>
             onChange({
               ...value,
               children: [
                 ...value.children,
-                { children: [newLeaf(), newLeaf()], id: id("group"), kind: "all" },
+                {
+                  children: [newLeaf(), newLeaf()],
+                  id: id("group"),
+                  kind: "all",
+                },
               ],
             })
           }
@@ -234,7 +268,7 @@ export function ConditionEditor({
         </p>
       ) : null}
     </fieldset>
-  )
+  );
 }
 
 function LeafEditor({
@@ -244,44 +278,48 @@ function LeafEditor({
   onRemove,
   value,
 }: {
-  attributes: readonly AttributeDefinition[]
-  issues: readonly DecisionValidationIssue[]
-  onChange: (value: LeafCondition) => void
-  onRemove: () => void
-  value: LeafCondition
+  attributes: readonly AttributeDefinition[];
+  issues: readonly DecisionValidationIssue[];
+  onChange: (value: LeafCondition) => void;
+  onRemove: () => void;
+  value: LeafCondition;
 }) {
-  const fieldId = useId()
-  const allowedOperators = operatorsFor(value, attributes)
-  const operatorOptions = OPERATORS.filter((operator) => allowedOperators.includes(operator.value))
+  const fieldId = useId();
+  const allowedOperators = operatorsFor(value, attributes);
+  const operatorOptions = OPERATORS.filter((operator) =>
+    allowedOperators.includes(operator.value)
+  );
   const attributeOptions = [
     { label: "Select attribute", value: "" },
     ...attributes
       .filter((attribute) => attribute.status === "active")
       .map((attribute) => ({ label: attribute.key, value: attribute.key })),
-  ]
-  const noOperand = value.operator === "exists" || value.operator === "does_not_exist"
+  ];
+  const noOperand =
+    value.operator === "exists" || value.operator === "does_not_exist";
   const referenceLabel =
     value.source === "entitlement_state"
       ? "Access key"
-      : value.source === "product_availability" || value.source === "product_readiness"
+      : value.source === "product_availability" ||
+          value.source === "product_readiness"
         ? "Product ID"
         : value.source === "provider_capability"
           ? "Capability"
-          : undefined
+          : undefined;
   return (
-    <div className="bg-muted/25 grid gap-2 rounded border p-3 md:grid-cols-[1fr_1fr_1fr_1fr_auto] md:items-start">
-      <div className="grid gap-1 text-xs font-medium">
+    <div className="grid gap-2 rounded border bg-muted/25 p-3 md:grid-cols-[1fr_1fr_1fr_1fr_auto] md:items-start">
+      <div className="grid gap-1 font-medium text-xs">
         <label htmlFor={`condition-source-${fieldId}`}>Source</label>
         <Select
           items={SOURCES}
           onValueChange={(selectedValue) => {
-            const source = selectedValue as ConditionSource
+            const source = selectedValue as ConditionSource;
             onChange({
               ...value,
               operator: "equals",
               referenceKey: undefined,
               source,
-            })
+            });
           }}
           value={value.source}
         >
@@ -297,7 +335,7 @@ function LeafEditor({
           </SelectContent>
         </Select>
       </div>
-      <div className="grid gap-1 text-xs font-medium">
+      <div className="grid gap-1 font-medium text-xs">
         <label htmlFor={`condition-operator-${fieldId}`}>Operator</label>
         <Select
           items={operatorOptions}
@@ -319,19 +357,19 @@ function LeafEditor({
         </Select>
       </div>
       {value.source === "user_attribute" ? (
-        <div className="grid gap-1 text-xs font-medium">
+        <div className="grid gap-1 font-medium text-xs">
           <label htmlFor={`condition-attribute-${fieldId}`}>Attribute</label>
           <Select
             items={attributeOptions}
             onValueChange={(referenceKey) => {
-              const next = { ...value, referenceKey }
-              const nextOperators = operatorsFor(next, attributes)
+              const next = { ...value, referenceKey };
+              const nextOperators = operatorsFor(next, attributes);
               onChange({
                 ...next,
                 operator: nextOperators.includes(value.operator)
                   ? value.operator
                   : (nextOperators[0] ?? "equals"),
-              })
+              });
             }}
             value={value.referenceKey ?? ""}
           >
@@ -348,11 +386,13 @@ function LeafEditor({
           </Select>
         </div>
       ) : referenceLabel ? (
-        <label className="grid gap-1 text-xs font-medium">
+        <label className="grid gap-1 font-medium text-xs">
           {referenceLabel}
           <input
-            className="border-input bg-background h-8 rounded border px-2 text-sm"
-            onChange={(event) => onChange({ ...value, referenceKey: event.currentTarget.value })}
+            className="h-8 rounded border border-input bg-background px-2 text-sm"
+            onChange={(event) =>
+              onChange({ ...value, referenceKey: event.currentTarget.value })
+            }
             value={value.referenceKey ?? ""}
           />
         </label>
@@ -362,12 +402,18 @@ function LeafEditor({
       {noOperand ? (
         <span />
       ) : (
-        <label className="grid gap-1 text-xs font-medium">
-          {value.source === "context.country" ? "Country (explicit host input)" : "Value"}
+        <label className="grid gap-1 font-medium text-xs">
+          {value.source === "context.country"
+            ? "Country (explicit host input)"
+            : "Value"}
           <input
-            className="border-input bg-background h-8 rounded border px-2 text-sm"
-            onChange={(event) => onChange({ ...value, value: event.currentTarget.value })}
-            placeholder={value.source === "application.version" ? "2.3.0" : undefined}
+            className="h-8 rounded border border-input bg-background px-2 text-sm"
+            onChange={(event) =>
+              onChange({ ...value, value: event.currentTarget.value })
+            }
+            placeholder={
+              value.source === "application.version" ? "2.3.0" : undefined
+            }
             value={typeof value.value === "string" ? value.value : ""}
           />
         </label>
@@ -382,10 +428,14 @@ function LeafEditor({
         <TrashIcon aria-hidden />
       </Button>
       {issues.map((issue) => (
-        <p className="text-destructive text-xs md:col-span-5" key={issue.code} role="alert">
+        <p
+          className="text-destructive text-xs md:col-span-5"
+          key={issue.code}
+          role="alert"
+        >
           {issue.message}
         </p>
       ))}
     </div>
-  )
+  );
 }

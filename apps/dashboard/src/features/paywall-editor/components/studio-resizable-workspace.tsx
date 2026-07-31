@@ -1,13 +1,23 @@
-import { SlidersHorizontalIcon } from "@phosphor-icons/react/dist/ssr/SlidersHorizontal"
-import { useCallback, useEffect, useImperativeHandle, useRef, useState } from "react"
-import type { ReactNode, Ref } from "react"
+import { SlidersHorizontalIcon } from "@phosphor-icons/react/dist/ssr/SlidersHorizontal";
+import type { ReactNode, Ref } from "react";
+import {
+  useCallback,
+  useEffect,
+  useImperativeHandle,
+  useRef,
+  useState,
+} from "react";
 
-import { Button } from "@/components/ui/button"
-import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from "@/components/ui/resizable"
+import { Button } from "@/components/ui/button";
 import type {
   ResizableLayoutChangedMeta,
   ResizablePanelImperativeHandle,
-} from "@/components/ui/resizable"
+} from "@/components/ui/resizable";
+import {
+  ResizableHandle,
+  ResizablePanel,
+  ResizablePanelGroup,
+} from "@/components/ui/resizable";
 import {
   Sheet,
   SheetContent,
@@ -15,48 +25,51 @@ import {
   SheetHeader,
   SheetTitle,
   SheetTrigger,
-} from "@/components/ui/sheet"
-import { StudioActivityRail } from "@/features/paywall-editor/components/studio-activity-rail"
-import { DEFAULT_STUDIO_WORKSPACE_PREFERENCES } from "@/features/paywall-editor/constants/studio-workspace"
-import type { StudioViewportMode } from "@/features/paywall-editor/hooks/use-studio-viewport-mode"
-import {
-  useStudioWorkspaceActions,
-  useStudioWorkspaceSelector,
-} from "@/features/paywall-editor/stores/studio-workspace-store-context"
+} from "@/components/ui/sheet";
+import { StudioActivityRail } from "@/features/paywall-editor/components/studio-activity-rail";
+import { DEFAULT_STUDIO_WORKSPACE_PREFERENCES } from "@/features/paywall-editor/constants/studio-workspace";
+import type { StudioViewportMode } from "@/features/paywall-editor/hooks/use-studio-viewport-mode";
 import type {
   StudioWorkspaceActions,
   StudioWorkspaceSnapshot,
-} from "@/features/paywall-editor/stores/studio-workspace-store"
+} from "@/features/paywall-editor/stores/studio-workspace-store";
+import {
+  useStudioWorkspaceActions,
+  useStudioWorkspaceSelector,
+} from "@/features/paywall-editor/stores/studio-workspace-store-context";
 import type {
   StudioWorkspacePanel,
   StudioWorkspacePanelPreference,
-} from "@/features/paywall-editor/types/studio-workspace"
+} from "@/features/paywall-editor/types/studio-workspace";
 import {
   commitCompletedPanelLayout,
   commitUpstreamDoubleClickResult,
   restoreWorkspacePanelPreferences,
-} from "@/features/paywall-editor/utils/resizable-workspace-layout"
+} from "@/features/paywall-editor/utils/resizable-workspace-layout";
 
-const selectPanelPreferences = (snapshot: StudioWorkspaceSnapshot) => snapshot.preferences.panels
-const selectSelectedTool = (snapshot: StudioWorkspaceSnapshot) => snapshot.preferences.selectedTool
-const selectLatestPersistence = (snapshot: StudioWorkspaceSnapshot) => snapshot.latestPersistence
+const selectPanelPreferences = (snapshot: StudioWorkspaceSnapshot) =>
+  snapshot.preferences.panels;
+const selectSelectedTool = (snapshot: StudioWorkspaceSnapshot) =>
+  snapshot.preferences.selectedTool;
+const selectLatestPersistence = (snapshot: StudioWorkspaceSnapshot) =>
+  snapshot.latestPersistence;
 
 export interface StudioResizableWorkspaceProps {
-  readonly ref?: Ref<StudioResizableWorkspaceHandle>
-  readonly viewportMode: StudioViewportMode
-  readonly leftPanel: ReactNode
-  readonly canvas: ReactNode
-  readonly propertiesPanel: ReactNode
-  readonly diagnosticsPanel: ReactNode
-  readonly desktopRequiredContent: ReactNode
-  readonly onOpenCommands: () => void
+  readonly canvas: ReactNode;
+  readonly desktopRequiredContent: ReactNode;
+  readonly diagnosticsPanel: ReactNode;
+  readonly leftPanel: ReactNode;
+  readonly onOpenCommands: () => void;
+  readonly propertiesPanel: ReactNode;
+  readonly ref?: Ref<StudioResizableWorkspaceHandle>;
+  readonly viewportMode: StudioViewportMode;
 }
 
 export interface StudioResizableWorkspaceHandle {
-  collapse: (panel: StudioWorkspacePanel) => boolean
-  expand: (panel: StudioWorkspacePanel) => boolean
-  toggle: (panel: StudioWorkspacePanel) => boolean
-  reset: () => boolean
+  collapse: (panel: StudioWorkspacePanel) => boolean;
+  expand: (panel: StudioWorkspacePanel) => boolean;
+  reset: () => boolean;
+  toggle: (panel: StudioWorkspacePanel) => boolean;
 }
 
 function CompactPropertiesSheet({
@@ -64,9 +77,9 @@ function CompactPropertiesSheet({
   onOpenChange,
   open,
 }: {
-  readonly children: ReactNode
-  readonly onOpenChange: (open: boolean) => void
-  readonly open: boolean
+  readonly children: ReactNode;
+  readonly onOpenChange: (open: boolean) => void;
+  readonly open: boolean;
 }) {
   return (
     <Sheet onOpenChange={onOpenChange} open={open}>
@@ -83,40 +96,53 @@ function CompactPropertiesSheet({
         <SlidersHorizontalIcon aria-hidden />
         Properties
       </SheetTrigger>
-      <SheetContent className="w-[min(90vw,560px)] sm:max-w-[560px]" side="right">
+      <SheetContent
+        className="w-[min(90vw,560px)] sm:max-w-[560px]"
+        side="right"
+      >
         <SheetHeader>
           <SheetTitle>Properties</SheetTitle>
           <SheetDescription>
             Edit the selected component without hiding the Studio canvas.
           </SheetDescription>
         </SheetHeader>
-        <div className="min-h-0 flex-1 overflow-auto" data-slot="studio-compact-properties">
+        <div
+          className="min-h-0 flex-1 overflow-auto"
+          data-slot="studio-compact-properties"
+        >
           {children}
         </div>
       </SheetContent>
     </Sheet>
-  )
+  );
 }
 
-function DesktopRequiredWorkspace({ children }: { readonly children: ReactNode }) {
+function DesktopRequiredWorkspace({
+  children,
+}: {
+  readonly children: ReactNode;
+}) {
   return (
     <section
       aria-labelledby="studio-desktop-required-title"
-      className="bg-background text-foreground grid min-h-full place-items-center p-6"
+      className="grid min-h-full place-items-center bg-background p-6 text-foreground"
       data-studio-viewport-mode="desktop-required"
       data-testid="studio-desktop-required"
     >
-      <div className="border-border bg-card w-full max-w-xl rounded border p-6 shadow-sm">
-        <h1 id="studio-desktop-required-title" className="text-lg font-semibold">
+      <div className="w-full max-w-xl rounded border border-border bg-card p-6 shadow-sm">
+        <h1
+          className="font-semibold text-lg"
+          id="studio-desktop-required-title"
+        >
           Studio requires a larger screen
         </h1>
-        <p className="text-muted-foreground mt-2 text-sm">
+        <p className="mt-2 text-muted-foreground text-sm">
           Use a display at least 768 pixels wide to edit this paywall safely.
         </p>
         <div className="mt-5">{children}</div>
       </div>
     </section>
-  )
+  );
 }
 
 // The workspace coordinates one upstream panel group and its imperative handles; geometry helpers,
@@ -132,160 +158,201 @@ export function StudioResizableWorkspace({
   desktopRequiredContent,
   onOpenCommands,
 }: StudioResizableWorkspaceProps) {
-  const panelPreferences = useStudioWorkspaceSelector(selectPanelPreferences)
-  const selectedTool = useStudioWorkspaceSelector(selectSelectedTool)
-  const latestPersistence = useStudioWorkspaceSelector(selectLatestPersistence)
-  const actions = useStudioWorkspaceActions()
-  const leftPanelRef = useRef<ResizablePanelImperativeHandle | null>(null)
-  const propertiesPanelRef = useRef<ResizablePanelImperativeHandle | null>(null)
-  const diagnosticsPanelRef = useRef<ResizablePanelImperativeHandle | null>(null)
-  const restoredViewportModeRef = useRef<StudioViewportMode | null>(null)
-  const restoringViewportModeRef = useRef<StudioViewportMode | null>(null)
-  const observedResetRef = useRef<typeof latestPersistence | null>(null)
-  const pendingCommitsRef = useRef(new Map<StudioWorkspacePanel, number>())
-  const compactPropertiesOpenRef = useRef(false)
-  const [compactPropertiesOpen, setCompactPropertiesOpenState] = useState(false)
-  const hasResizableProperties = viewportMode === "large" || viewportMode === "medium"
+  const panelPreferences = useStudioWorkspaceSelector(selectPanelPreferences);
+  const selectedTool = useStudioWorkspaceSelector(selectSelectedTool);
+  const latestPersistence = useStudioWorkspaceSelector(selectLatestPersistence);
+  const actions = useStudioWorkspaceActions();
+  const leftPanelRef = useRef<ResizablePanelImperativeHandle | null>(null);
+  const propertiesPanelRef = useRef<ResizablePanelImperativeHandle | null>(
+    null
+  );
+  const diagnosticsPanelRef = useRef<ResizablePanelImperativeHandle | null>(
+    null
+  );
+  const restoredViewportModeRef = useRef<StudioViewportMode | null>(null);
+  const restoringViewportModeRef = useRef<StudioViewportMode | null>(null);
+  const observedResetRef = useRef<typeof latestPersistence | null>(null);
+  const pendingCommitsRef = useRef(new Map<StudioWorkspacePanel, number>());
+  const compactPropertiesOpenRef = useRef(false);
+  const [compactPropertiesOpen, setCompactPropertiesOpenState] =
+    useState(false);
+  const hasResizableProperties =
+    viewportMode === "large" || viewportMode === "medium";
 
   const setCompactPropertiesOpen = useCallback(
     (open: boolean) => {
-      if (viewportMode !== "compact" || compactPropertiesOpenRef.current === open) return false
-      compactPropertiesOpenRef.current = open
-      setCompactPropertiesOpenState(open)
-      return true
+      if (
+        viewportMode !== "compact" ||
+        compactPropertiesOpenRef.current === open
+      ) {
+        return false;
+      }
+      compactPropertiesOpenRef.current = open;
+      setCompactPropertiesOpenState(open);
+      return true;
     },
-    [viewportMode],
-  )
+    [viewportMode]
+  );
 
   // Leaving compact mode closes an external Sheet surface; this synchronizes a Base UI boundary,
   // rather than deriving display state from viewportMode.
   // oxlint-disable react-doctor/no-adjust-state-on-prop-change, react-doctor/no-reset-all-state-on-prop-change
   useEffect(() => {
-    if (viewportMode === "compact" || !compactPropertiesOpenRef.current) return
-    compactPropertiesOpenRef.current = false
-    setCompactPropertiesOpenState(false)
-  }, [viewportMode])
+    if (viewportMode === "compact" || !compactPropertiesOpenRef.current) {
+      return;
+    }
+    compactPropertiesOpenRef.current = false;
+    setCompactPropertiesOpenState(false);
+  }, [viewportMode]);
   // oxlint-enable react-doctor/no-adjust-state-on-prop-change, react-doctor/no-reset-all-state-on-prop-change
 
   const restoreVisiblePanelPreferences = useCallback(
     (preferences: StudioWorkspaceSnapshot["preferences"]["panels"]) => {
-      if (restoringViewportModeRef.current === viewportMode) return false
+      if (restoringViewportModeRef.current === viewportMode) {
+        return false;
+      }
       if (viewportMode === "desktop-required") {
-        restoredViewportModeRef.current = viewportMode
-        return true
+        restoredViewportModeRef.current = viewportMode;
+        return true;
       }
 
-      restoringViewportModeRef.current = viewportMode
+      restoringViewportModeRef.current = viewportMode;
       const ready = restoreWorkspacePanelPreferences({
         diagnosticsPanelHandle: diagnosticsPanelRef.current,
         includeProperties: hasResizableProperties,
         leftPanelHandle: leftPanelRef.current,
         preferences,
         propertiesPanelHandle: propertiesPanelRef.current,
-      })
-      restoringViewportModeRef.current = null
-      if (ready) restoredViewportModeRef.current = viewportMode
-      return ready
+      });
+      restoringViewportModeRef.current = null;
+      if (ready) {
+        restoredViewportModeRef.current = viewportMode;
+      }
+      return ready;
     },
-    [hasResizableProperties, viewportMode],
-  )
+    [hasResizableProperties, viewportMode]
+  );
 
   useEffect(() => {
     if (restoredViewportModeRef.current !== viewportMode) {
-      restoreVisiblePanelPreferences(panelPreferences)
+      restoreVisiblePanelPreferences(panelPreferences);
     }
-  }, [panelPreferences, restoreVisiblePanelPreferences, viewportMode])
+  }, [panelPreferences, restoreVisiblePanelPreferences, viewportMode]);
 
   useEffect(() => {
-    if (latestPersistence.operation !== "reset" || observedResetRef.current === latestPersistence) {
-      return
+    if (
+      latestPersistence.operation !== "reset" ||
+      observedResetRef.current === latestPersistence
+    ) {
+      return;
     }
 
-    observedResetRef.current = latestPersistence
-    restoredViewportModeRef.current = null
-    restoreVisiblePanelPreferences(DEFAULT_STUDIO_WORKSPACE_PREFERENCES.panels)
-  }, [latestPersistence, restoreVisiblePanelPreferences])
+    observedResetRef.current = latestPersistence;
+    restoredViewportModeRef.current = null;
+    restoreVisiblePanelPreferences(DEFAULT_STUDIO_WORKSPACE_PREFERENCES.panels);
+  }, [latestPersistence, restoreVisiblePanelPreferences]);
 
   useEffect(
     () => () => {
       for (const timeoutId of pendingCommitsRef.current.values()) {
-        window.clearTimeout(timeoutId)
+        window.clearTimeout(timeoutId);
       }
-      pendingCommitsRef.current.clear()
+      pendingCommitsRef.current.clear();
     },
-    [],
-  )
+    []
+  );
 
   function scheduleCompletedPanelCommit(
     panel: StudioWorkspacePanel,
     panelHandle: ResizablePanelImperativeHandle | null,
     preference: StudioWorkspacePanelPreference,
-    meta: ResizableLayoutChangedMeta,
+    meta: ResizableLayoutChangedMeta
   ) {
     if (!meta.isUserInteraction) {
       if (restoredViewportModeRef.current !== viewportMode) {
-        restoreVisiblePanelPreferences(panelPreferences)
+        restoreVisiblePanelPreferences(panelPreferences);
       }
-      return
+      return;
     }
-    if (!panelHandle) return
+    if (!panelHandle) {
+      return;
+    }
 
-    const previousTimeout = pendingCommitsRef.current.get(panel)
-    if (previousTimeout !== undefined) window.clearTimeout(previousTimeout)
+    const previousTimeout = pendingCommitsRef.current.get(panel);
+    if (previousTimeout !== undefined) {
+      window.clearTimeout(previousTimeout);
+    }
 
     const timeoutId = window.setTimeout(() => {
-      pendingCommitsRef.current.delete(panel)
-      commitCompletedPanelLayout({ actions, meta, panel, panelHandle, preference })
-    }, 0)
-    pendingCommitsRef.current.set(panel, timeoutId)
+      pendingCommitsRef.current.delete(panel);
+      commitCompletedPanelLayout({
+        actions,
+        meta,
+        panel,
+        panelHandle,
+        preference,
+      });
+    }, 0);
+    pendingCommitsRef.current.set(panel, timeoutId);
   }
 
   function scheduleDoubleClickPanelCommit(
     panel: StudioWorkspacePanel,
     panelHandle: ResizablePanelImperativeHandle | null,
-    preference: StudioWorkspacePanelPreference,
+    preference: StudioWorkspacePanelPreference
   ) {
-    if (!panelHandle) return
+    if (!panelHandle) {
+      return;
+    }
 
-    const previousTimeout = pendingCommitsRef.current.get(panel)
-    if (previousTimeout !== undefined) window.clearTimeout(previousTimeout)
+    const previousTimeout = pendingCommitsRef.current.get(panel);
+    if (previousTimeout !== undefined) {
+      window.clearTimeout(previousTimeout);
+    }
 
     const timeoutId = window.setTimeout(() => {
-      pendingCommitsRef.current.delete(panel)
-      commitUpstreamDoubleClickResult({ actions, panel, panelHandle, preference })
-    }, 0)
-    pendingCommitsRef.current.set(panel, timeoutId)
+      pendingCommitsRef.current.delete(panel);
+      commitUpstreamDoubleClickResult({
+        actions,
+        panel,
+        panelHandle,
+        preference,
+      });
+    }, 0);
+    pendingCommitsRef.current.set(panel, timeoutId);
   }
 
   const getPanelHandle = useCallback(
     (panel: StudioWorkspacePanel) => {
       switch (panel) {
         case "left":
-          return leftPanelRef.current
+          return leftPanelRef.current;
         case "properties":
-          return hasResizableProperties ? propertiesPanelRef.current : null
+          return hasResizableProperties ? propertiesPanelRef.current : null;
         case "diagnostics":
-          return diagnosticsPanelRef.current
+          return diagnosticsPanelRef.current;
       }
     },
-    [hasResizableProperties],
-  )
+    [hasResizableProperties]
+  );
 
   const setPanelCollapsed = useCallback(
     (panel: StudioWorkspacePanel, collapsed: boolean) => {
-      const panelHandle = getPanelHandle(panel)
-      const preference = panelPreferences[panel]
-      if (!panelHandle || preference.collapsed === collapsed) return false
+      const panelHandle = getPanelHandle(panel);
+      const preference = panelPreferences[panel];
+      if (!panelHandle || preference.collapsed === collapsed) {
+        return false;
+      }
 
       if (collapsed) {
-        panelHandle.collapse()
+        panelHandle.collapse();
       } else {
-        panelHandle.expand()
+        panelHandle.expand();
       }
-      return actions.commitPanelLayout(panel, { ...preference, collapsed })
+      return actions.commitPanelLayout(panel, { ...preference, collapsed });
     },
-    [actions, getPanelHandle, panelPreferences],
-  )
+    [actions, getPanelHandle, panelPreferences]
+  );
 
   useImperativeHandle(
     ref,
@@ -303,35 +370,47 @@ export function StudioResizableWorkspace({
           ? setCompactPropertiesOpen(!compactPropertiesOpenRef.current)
           : setPanelCollapsed(panel, !panelPreferences[panel].collapsed),
       reset: () => {
-        actions.resetWorkspace()
-        return true
+        actions.resetWorkspace();
+        return true;
       },
     }),
-    [actions, panelPreferences, setCompactPropertiesOpen, setPanelCollapsed, viewportMode],
-  )
+    [
+      actions,
+      panelPreferences,
+      setCompactPropertiesOpen,
+      setPanelCollapsed,
+      viewportMode,
+    ]
+  );
 
   function setLeftPanelCollapsed(collapsed: boolean) {
-    return setPanelCollapsed("left", collapsed)
+    return setPanelCollapsed("left", collapsed);
   }
 
-  function selectTool(tool: Parameters<StudioWorkspaceActions["setSelectedTool"]>[0]) {
-    actions.setSelectedTool(tool)
+  function selectTool(
+    tool: Parameters<StudioWorkspaceActions["setSelectedTool"]>[0]
+  ) {
+    actions.setSelectedTool(tool);
     if (panelPreferences.left.collapsed) {
-      setLeftPanelCollapsed(false)
+      setLeftPanelCollapsed(false);
     }
   }
 
   function toggleActiveTool() {
-    setLeftPanelCollapsed(!panelPreferences.left.collapsed)
+    setLeftPanelCollapsed(!panelPreferences.left.collapsed);
   }
 
   if (viewportMode === "desktop-required") {
-    return <DesktopRequiredWorkspace>{desktopRequiredContent}</DesktopRequiredWorkspace>
+    return (
+      <DesktopRequiredWorkspace>
+        {desktopRequiredContent}
+      </DesktopRequiredWorkspace>
+    );
   }
 
   return (
     <div
-      className="bg-background text-foreground flex h-full min-h-0 w-full overflow-hidden"
+      className="flex h-full min-h-0 w-full overflow-hidden bg-background text-foreground"
       data-studio-viewport-mode={viewportMode}
       data-testid="studio-resizable-workspace"
       data-workspace-persistence-operation={latestPersistence.operation}
@@ -345,7 +424,10 @@ export function StudioResizableWorkspace({
         selectedTool={selectedTool}
       />
 
-      <div className="relative min-h-0 min-w-0 flex-1" data-slot="studio-workspace-surface">
+      <div
+        className="relative min-h-0 min-w-0 flex-1"
+        data-slot="studio-workspace-surface"
+      >
         <ResizablePanelGroup
           className="min-h-0"
           data-layout-orientation="vertical"
@@ -356,12 +438,16 @@ export function StudioResizableWorkspace({
               "diagnostics",
               diagnosticsPanelRef.current,
               panelPreferences.diagnostics,
-              meta,
-            )
+              meta
+            );
           }}
           orientation="vertical"
         >
-          <ResizablePanel className="min-h-0" data-collapsible="false" id="studio-main-panel">
+          <ResizablePanel
+            className="min-h-0"
+            data-collapsible="false"
+            id="studio-main-panel"
+          >
             <ResizablePanelGroup
               className="min-w-0"
               data-layout-orientation="horizontal"
@@ -372,15 +458,15 @@ export function StudioResizableWorkspace({
                   "left",
                   leftPanelRef.current,
                   panelPreferences.left,
-                  meta,
-                )
+                  meta
+                );
                 if (hasResizableProperties) {
                   scheduleCompletedPanelCommit(
                     "properties",
                     propertiesPanelRef.current,
                     panelPreferences.properties,
-                    meta,
-                  )
+                    meta
+                  );
                 }
               }}
               orientation="horizontal"
@@ -411,7 +497,7 @@ export function StudioResizableWorkspace({
                   scheduleDoubleClickPanelCommit(
                     "left",
                     leftPanelRef.current,
-                    panelPreferences.left,
+                    panelPreferences.left
                   )
                 }
                 withHandle
@@ -437,7 +523,7 @@ export function StudioResizableWorkspace({
                       scheduleDoubleClickPanelCommit(
                         "properties",
                         propertiesPanelRef.current,
-                        panelPreferences.properties,
+                        panelPreferences.properties
                       )
                     }
                     withHandle
@@ -472,7 +558,7 @@ export function StudioResizableWorkspace({
               scheduleDoubleClickPanelCommit(
                 "diagnostics",
                 diagnosticsPanelRef.current,
-                panelPreferences.diagnostics,
+                panelPreferences.diagnostics
               )
             }
             withHandle
@@ -508,5 +594,5 @@ export function StudioResizableWorkspace({
         ) : null}
       </div>
     </div>
-  )
+  );
 }

@@ -1,33 +1,49 @@
-import { useForm } from "@tanstack/react-form"
-import { useMutation, useQueryClient } from "@tanstack/react-query"
-import { useNavigate } from "@tanstack/react-router"
+import { useForm } from "@tanstack/react-form";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useNavigate } from "@tanstack/react-router";
 
-import { Button } from "@/components/ui/button"
-import { Field, FieldDescription, FieldError, FieldLabel } from "@/components/ui/field"
-import { Input } from "@/components/ui/input"
-import { createProjectMutationOptions } from "@/features/projects/mutations/project-mutations"
-import { WorkspacePage, WorkflowPanel } from "@/features/orgs/components/workspace-page"
+import { Button } from "@/components/ui/button";
+import {
+  Field,
+  FieldDescription,
+  FieldError,
+  FieldLabel,
+} from "@/components/ui/field";
+import { Input } from "@/components/ui/input";
+import {
+  WorkflowPanel,
+  WorkspacePage,
+} from "@/features/orgs/components/workspace-page";
+import { createProjectMutationOptions } from "@/features/projects/mutations/project-mutations";
+import { workspaceScopeParams } from "@/lib/routing/workspace-params";
 
-const KEY_PATTERN = /^[a-z][a-z0-9_-]{1,62}$/
+const KEY_PATTERN = /^[a-z][a-z0-9_-]{1,62}$/;
 
-export function CreateProjectPage({ organizationId }: { organizationId: string }) {
-  const navigate = useNavigate()
-  const queryClient = useQueryClient()
-  const mutation = useMutation(createProjectMutationOptions(queryClient))
+export function CreateProjectPage({
+  organizationId,
+}: {
+  organizationId: string;
+}) {
+  const navigate = useNavigate();
+  const queryClient = useQueryClient();
+  const mutation = useMutation(createProjectMutationOptions(queryClient));
   const form = useForm({
     defaultValues: { key: "", name: "" },
     onSubmit: async ({ value }) => {
-      const project = await mutation.mutateAsync({
+      await mutation.mutateAsync({
         key: value.key.trim(),
         name: value.name.trim(),
         organizationId,
-      })
+      });
       await navigate({
-        params: (prev) => prev,
+        params: (prev) => ({
+          ...prev,
+          ...workspaceScopeParams(prev),
+        }),
         to: "/orgs/$organizationId/projects/$projectId/env/$environmentKey",
-      })
+      });
     },
-  })
+  });
 
   return (
     <WorkspacePage
@@ -38,19 +54,22 @@ export function CreateProjectPage({ organizationId }: { organizationId: string }
         <form
           className="max-w-xl space-y-5"
           onSubmit={(event) => {
-            event.preventDefault()
-            event.stopPropagation()
-            void form.handleSubmit()
+            event.preventDefault();
+            event.stopPropagation();
+            form.handleSubmit();
           }}
         >
           <form.Field
             name="name"
             validators={{
-              onBlur: ({ value }) => (value.trim() ? undefined : "Enter a project name."),
+              onBlur: ({ value }) =>
+                value.trim() ? undefined : "Enter a project name.",
             }}
           >
             {(field) => (
-              <Field data-invalid={field.state.meta.errors.length > 0 || undefined}>
+              <Field
+                data-invalid={field.state.meta.errors.length > 0 || undefined}
+              >
                 <FieldLabel htmlFor="project-name">Project name</FieldLabel>
                 <Input
                   id="project-name"
@@ -59,7 +78,11 @@ export function CreateProjectPage({ organizationId }: { organizationId: string }
                   placeholder="Acme Pro"
                   value={field.state.value}
                 />
-                <FieldError errors={field.state.meta.errors.map((message) => ({ message }))} />
+                <FieldError
+                  errors={field.state.meta.errors.map((message) => ({
+                    message,
+                  }))}
+                />
               </Field>
             )}
           </form.Field>
@@ -73,23 +96,33 @@ export function CreateProjectPage({ organizationId }: { organizationId: string }
             }}
           >
             {(field) => (
-              <Field data-invalid={field.state.meta.errors.length > 0 || undefined}>
+              <Field
+                data-invalid={field.state.meta.errors.length > 0 || undefined}
+              >
                 <FieldLabel htmlFor="project-key">Project key</FieldLabel>
                 <Input
                   id="project-key"
                   onBlur={field.handleBlur}
-                  onChange={(event) => field.handleChange(event.target.value.toLowerCase())}
+                  onChange={(event) =>
+                    field.handleChange(event.target.value.toLowerCase())
+                  }
                   placeholder="acme_pro"
                   value={field.state.value}
                 />
-                <FieldDescription>Unique within the organization.</FieldDescription>
-                <FieldError errors={field.state.meta.errors.map((message) => ({ message }))} />
+                <FieldDescription>
+                  Unique within the organization.
+                </FieldDescription>
+                <FieldError
+                  errors={field.state.meta.errors.map((message) => ({
+                    message,
+                  }))}
+                />
               </Field>
             )}
           </form.Field>
           <p className="text-muted-foreground text-sm leading-6">
-            Development, Staging, and Production are created automatically. Environment keys are
-            immutable.
+            Development, Staging, and Production are created automatically.
+            Environment keys are immutable.
           </p>
           {mutation.error ? (
             <p className="text-destructive text-sm" role="alert">
@@ -102,5 +135,5 @@ export function CreateProjectPage({ organizationId }: { organizationId: string }
         </form>
       </WorkflowPanel>
     </WorkspacePage>
-  )
+  );
 }

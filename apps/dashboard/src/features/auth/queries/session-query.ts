@@ -1,11 +1,11 @@
-import { queryOptions } from "@tanstack/react-query"
+import { queryOptions } from "@tanstack/react-query";
 
-import { getSession } from "@/generated/api/sdk.gen"
-import { generatedDashboardClient } from "@/lib/api/generated-dashboard-client"
+import { getSession } from "@/generated/api/sdk.gen";
+import { generatedDashboardClient } from "@/lib/api/generated-dashboard-client";
 
 export const sessionKeys = {
   current: ["auth", "session"] as const,
-}
+};
 
 export function sessionQueryOptions() {
   return queryOptions({
@@ -15,9 +15,9 @@ export function sessionQueryOptions() {
         client: generatedDashboardClient,
         signal,
         throwOnError: true,
-      })
-      return result.data.data
+      });
+      return result.data.data;
     },
     retry: false,
-  })
+  });
 }

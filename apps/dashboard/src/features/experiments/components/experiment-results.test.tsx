@@ -1,10 +1,10 @@
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query"
-import { render, screen } from "@testing-library/react"
-import { describe, expect, it } from "vitest"
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { render, screen } from "@testing-library/react";
+import { describe, expect, it } from "vitest";
 
-import type { ExperimentAdapter } from "../api/experiment-adapter"
-import { ExperimentAdapterProvider } from "../api/experiment-adapter-provider"
-import { ExperimentResultsPanel } from "./experiment-results"
+import type { ExperimentAdapter } from "../api/experiment-adapter";
+import { ExperimentAdapterProvider } from "../api/experiment-adapter-provider";
+import { ExperimentResultsPanel } from "./experiment-results";
 
 describe("Experiment result interpretation", () => {
   it("shows uncertainty and an actionable SRM warning without declaring a winner", async () => {
@@ -27,8 +27,10 @@ describe("Experiment result interpretation", () => {
             code: "sample_ratio_mismatch",
             continues: true,
             investigation: "Check exposure instrumentation by Variant.",
-            message: "Observed exposure allocation differs from the immutable allocation.",
-            recoveryAction: "Inspect instrumentation; do not reallocate traffic in place.",
+            message:
+              "Observed exposure allocation differs from the immutable allocation.",
+            recoveryAction:
+              "Inspect instrumentation; do not reallocate traffic in place.",
             severity: "critical" as const,
             title: "Sample-ratio mismatch",
           },
@@ -36,7 +38,9 @@ describe("Experiment result interpretation", () => {
         primaryMetricName: "Presentation to purchase start",
         primaryMetricAuthority: "provider_confirmed" as const,
         primaryMetricAvailability: "trusted_source_unavailable" as const,
-        primaryMetricEventFilter: { "payload.reason": "provider_unavailable" as const },
+        primaryMetricEventFilter: {
+          "payload.reason": "provider_unavailable" as const,
+        },
         srm: {
           cells: [
             {
@@ -56,7 +60,7 @@ describe("Experiment result interpretation", () => {
           ],
           degreesOfFreedom: 1,
           exclusions: ["QA overrides"],
-          pValue: 0.00001,
+          pValue: 0.000_01,
           severity: "critical" as const,
           statistic: 32,
           status: "mismatch" as const,
@@ -71,7 +75,7 @@ describe("Experiment result interpretation", () => {
         ],
         variants: [
           {
-            allocationBasisPoints: 5_000,
+            allocationBasisPoints: 5000,
             conversions: 10,
             estimate: 0.1,
             interval: { high: 0.17, low: 0.06 },
@@ -81,7 +85,7 @@ describe("Experiment result interpretation", () => {
             variantId: "control",
           },
           {
-            allocationBasisPoints: 5_000,
+            allocationBasisPoints: 5000,
             conversions: 12,
             estimate: 0.12,
             interval: { high: 0.19, low: 0.07 },
@@ -92,8 +96,10 @@ describe("Experiment result interpretation", () => {
           },
         ],
       }),
-    } as unknown as ExperimentAdapter
-    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+    } as unknown as ExperimentAdapter;
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
 
     render(
       <QueryClientProvider client={queryClient}>
@@ -103,18 +109,26 @@ describe("Experiment result interpretation", () => {
             scope={{ environmentId: "staging", projectId: "project" }}
           />
         </ExperimentAdapterProvider>
-      </QueryClientProvider>,
-    )
+      </QueryClientProvider>
+    );
 
-    expect(await screen.findByText("Sample-ratio mismatch")).toBeInTheDocument()
-    expect(screen.getByText("Do not interpret yet")).toBeInTheDocument()
-    expect(screen.getByText("Observed estimate")).toBeInTheDocument()
-    expect(screen.getByText("Descriptive lift")).toBeInTheDocument()
-    expect(screen.getByText(/95% Wilson estimates/)).toBeInTheDocument()
-    expect(screen.getByText(/95% Newcombe interval/)).toBeInTheDocument()
-    expect(screen.getByText(/No automatic winner is selected/i)).toBeInTheDocument()
-    expect(screen.getByText(/Trusted source: trusted source unavailable/i)).toBeInTheDocument()
-    expect(screen.getByText(/payload.reason = provider_unavailable/i)).toBeInTheDocument()
-    expect(screen.queryByText(/^Winner$/i)).not.toBeInTheDocument()
-  })
-})
+    expect(
+      await screen.findByText("Sample-ratio mismatch")
+    ).toBeInTheDocument();
+    expect(screen.getByText("Do not interpret yet")).toBeInTheDocument();
+    expect(screen.getByText("Observed estimate")).toBeInTheDocument();
+    expect(screen.getByText("Descriptive lift")).toBeInTheDocument();
+    expect(screen.getByText(/95% Wilson estimates/)).toBeInTheDocument();
+    expect(screen.getByText(/95% Newcombe interval/)).toBeInTheDocument();
+    expect(
+      screen.getByText(/No automatic winner is selected/i)
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(/Trusted source: trusted source unavailable/i)
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(/payload.reason = provider_unavailable/i)
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/^Winner$/i)).not.toBeInTheDocument();
+  });
+});

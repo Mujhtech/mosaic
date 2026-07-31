@@ -1,7 +1,10 @@
-import type { MosaicDocument, ProtocolNode } from "@/features/paywall-editor/types/editor"
-import { findParent } from "@/features/paywall-editor/utils/document-tree"
+import type {
+  MosaicDocument,
+  ProtocolNode,
+} from "@/features/paywall-editor/types/editor";
+import { findParent } from "@/features/paywall-editor/utils/document-tree";
 
-export type SizingAxis = "width" | "height"
+export type SizingAxis = "width" | "height";
 
 function containerDirection(node: ProtocolNode | undefined) {
   if (
@@ -12,21 +15,38 @@ function containerDirection(node: ProtocolNode | undefined) {
       node.type === "productCard" ||
       node.type === "productBadge")
   ) {
-    return node.direction
+    return node.direction;
   }
-  return null
+  return null;
 }
 
-export function fillAxisIsBounded(document: MosaicDocument, node: ProtocolNode, axis: SizingAxis) {
-  const isRootContent = document.screens.some((screen) => screen.layout.content.id === node.id)
-  if (isRootContent) return axis === "width"
+export function fillAxisIsBounded(
+  document: MosaicDocument,
+  node: ProtocolNode,
+  axis: SizingAxis
+) {
+  const isRootContent = document.screens.some(
+    (screen) => screen.layout.content.id === node.id
+  );
+  if (isRootContent) {
+    return axis === "width";
+  }
 
-  const direction = containerDirection(findParent(document, node.id)?.parent)
-  if (!direction) return false
-  return axis === "width" ? direction === "vertical" : direction === "horizontal"
+  const direction = containerDirection(findParent(document, node.id)?.parent);
+  if (!direction) {
+    return false;
+  }
+  return axis === "width"
+    ? direction === "vertical"
+    : direction === "horizontal";
 }
 
 export function fixedSizingClipsOverflow(node: ProtocolNode) {
-  if (!("sizing" in node) || !node.sizing) return false
-  return typeof node.sizing.width === "object" || typeof node.sizing.height === "object"
+  if (!("sizing" in node && node.sizing)) {
+    return false;
+  }
+  return (
+    typeof node.sizing.width === "object" ||
+    typeof node.sizing.height === "object"
+  );
 }

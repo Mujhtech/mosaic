@@ -1,43 +1,54 @@
-import { useMemo } from "react"
-import type { ReactNode } from "react"
-import { useQueryClient } from "@tanstack/react-query"
+import { useQueryClient } from "@tanstack/react-query";
+import type { ReactNode } from "react";
+import { useMemo } from "react";
 
-import { hostedDraftQueryOptions, paywallKeys } from "@/features/paywalls/queries/paywall-queries"
+import {
+  hostedDraftQueryOptions,
+  paywallKeys,
+} from "@/features/paywalls/queries/paywall-queries";
+import {
+  type HostedDraftSession,
+  HostedDraftSessionContext,
+} from "@/features/paywalls/stores/use-hosted-draft-session";
 import type {
   HostedDraft,
   HostedPublishingAdapter,
-} from "@/features/publishing/api/hosted-publishing-adapter"
-import {
-  HostedDraftSessionContext,
-  type HostedDraftSession,
-} from "@/features/paywalls/stores/use-hosted-draft-session"
+} from "@/features/publishing/api/hosted-publishing-adapter";
 
 export function HostedDraftSessionProvider({
   adapter,
   children,
   draft,
 }: {
-  adapter: HostedPublishingAdapter
-  children: ReactNode
-  draft: HostedDraft
+  adapter: HostedPublishingAdapter;
+  children: ReactNode;
+  draft: HostedDraft;
 }) {
-  const queryClient = useQueryClient()
+  const queryClient = useQueryClient();
   const value = useMemo<HostedDraftSession>(
     () => ({
       acceptSavedDraft: (saved) =>
         queryClient.setQueryData(
           paywallKeys.draft(
-            { draftId: saved.id, paywallId: saved.paywallId, projectId: saved.projectId },
-            adapter,
+            {
+              draftId: saved.id,
+              paywallId: saved.paywallId,
+              projectId: saved.projectId,
+            },
+            adapter
           ),
-          saved,
+          saved
         ),
       draft,
       fetchLatestDraft: () =>
         queryClient.fetchQuery({
           ...hostedDraftQueryOptions(
-            { draftId: draft.id, paywallId: draft.paywallId, projectId: draft.projectId },
-            adapter,
+            {
+              draftId: draft.id,
+              paywallId: draft.paywallId,
+              projectId: draft.projectId,
+            },
+            adapter
           ),
           staleTime: 0,
         }),
@@ -48,12 +59,12 @@ export function HostedDraftSessionProvider({
           projectId: draft.projectId,
         }),
     }),
-    [adapter, draft, queryClient],
-  )
+    [adapter, draft, queryClient]
+  );
 
   return (
     <HostedDraftSessionContext.Provider value={value}>
       {children}
     </HostedDraftSessionContext.Provider>
-  )
+  );
 }

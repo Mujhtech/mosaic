@@ -1,8 +1,8 @@
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
-import { EmptyState } from "@/components/feedback/empty-state"
-import { Button } from "@/components/ui/button"
-import { buttonVariants } from "@/components/ui/button-variants"
+import { EmptyState } from "@/components/feedback/empty-state";
+import { Button } from "@/components/ui/button";
+import { buttonVariants } from "@/components/ui/button-variants";
 import {
   Table,
   TableBody,
@@ -11,39 +11,42 @@ import {
   TableHead,
   TableHeader,
   TableRow,
-} from "@/components/ui/table"
-import { HostedResourceBoundary } from "@/features/auth/components/hosted-resource-boundary"
-import { resolveHostedQueryState } from "@/features/auth/types/hosted-query-state"
+} from "@/components/ui/table";
+import { HostedResourceBoundary } from "@/features/auth/components/hosted-resource-boundary";
+import { resolveHostedQueryState } from "@/features/auth/types/hosted-query-state";
 import {
   BillingBoundaryNote,
   StatusPill,
-} from "@/features/billing-ledger/components/billing-chrome"
+} from "@/features/billing-ledger/components/billing-chrome";
 import {
   formatBillingTimestamp,
   providerLabel,
   runStatusLabel,
   runTriggerLabel,
-} from "@/features/billing-ledger/types/billing-vocabulary"
-import { CreateReconciliationRunSheet } from "@/features/billing-operations/components/create-reconciliation-run-sheet"
-import { createReconciliationRunMutationOptions } from "@/features/billing-operations/mutations/reconciliation-mutations"
+} from "@/features/billing-ledger/types/billing-vocabulary";
+import { CreateReconciliationRunSheet } from "@/features/billing-operations/components/create-reconciliation-run-sheet";
+import { createReconciliationRunMutationOptions } from "@/features/billing-operations/mutations/reconciliation-mutations";
 import {
   reconciliationRunIsTerminal,
   reconciliationRunsQueryOptions,
-} from "@/features/billing-operations/queries/reconciliation-queries"
-import { environmentsQueryOptions } from "@/features/environments/queries/environments-query"
-import { ScopeMismatchRecovery } from "@/features/orgs/components/scope-mismatch-recovery"
-import { WorkspacePage, WorkflowPanel } from "@/features/orgs/components/workspace-page"
-import { useValidatedProjectScope } from "@/features/projects/hooks/use-validated-project-scope"
-import { storeCredentialsQueryOptions } from "@/features/store-connections/queries/store-connection-queries"
-import { useOrganizationAccess } from "@/hooks/use-organization-access"
-import { storeConnectionsHref } from "@/lib/routing/workspace-hrefs"
+} from "@/features/billing-operations/queries/reconciliation-queries";
+import { environmentsQueryOptions } from "@/features/environments/queries/environments-query";
+import { ScopeMismatchRecovery } from "@/features/orgs/components/scope-mismatch-recovery";
+import {
+  WorkflowPanel,
+  WorkspacePage,
+} from "@/features/orgs/components/workspace-page";
+import { useValidatedProjectScope } from "@/features/projects/hooks/use-validated-project-scope";
+import { storeCredentialsQueryOptions } from "@/features/store-connections/queries/store-connection-queries";
+import { useOrganizationAccess } from "@/hooks/use-organization-access";
+import { storeConnectionsHref } from "@/lib/routing/workspace-hrefs";
 
 interface ReconciliationPageProps {
-  cursor?: string
-  environmentId: string
-  onCursorChange: (cursor: string | undefined) => void
-  organizationId: string
-  projectId: string
+  cursor?: string;
+  environmentId: string;
+  onCursorChange: (cursor: string | undefined) => void;
+  organizationId: string;
+  projectId: string;
 }
 
 export function ReconciliationPage({
@@ -53,49 +56,67 @@ export function ReconciliationPage({
   organizationId,
   projectId,
 }: ReconciliationPageProps) {
-  const queryClient = useQueryClient()
-  const access = useOrganizationAccess(organizationId)
-  const { project, scopeMismatch, scopeReady } = useValidatedProjectScope(organizationId, projectId)
-  const environments = useQuery({ ...environmentsQueryOptions(projectId), enabled: scopeReady })
+  const queryClient = useQueryClient();
+  const access = useOrganizationAccess(organizationId);
+  const { project, scopeMismatch, scopeReady } = useValidatedProjectScope(
+    organizationId,
+    projectId
+  );
+  const environments = useQuery({
+    ...environmentsQueryOptions(projectId),
+    enabled: scopeReady,
+  });
   const credentials = useQuery({
     ...storeCredentialsQueryOptions(projectId),
     enabled: scopeReady,
-  })
+  });
   const runs = useQuery({
     ...reconciliationRunsQueryOptions(projectId, environmentId, cursor ?? ""),
     enabled: scopeReady,
-  })
+  });
   const create = useMutation(
-    createReconciliationRunMutationOptions(projectId, environmentId, queryClient),
-  )
+    createReconciliationRunMutationOptions(
+      projectId,
+      environmentId,
+      queryClient
+    )
+  );
 
   const environmentName =
-    environments.data?.items.find((item) => item.id === environmentId)?.name ?? environmentId
-  const items = runs.data?.items ?? []
-  const nextCursor = runs.data?.nextCursor
+    environments.data?.items.find((item) => item.id === environmentId)?.name ??
+    environmentId;
+  const items = runs.data?.items ?? [];
+  const nextCursor = runs.data?.nextCursor;
   const environmentCredentials = (credentials.data ?? []).filter(
-    (credential) => credential.environmentId === environmentId,
-  )
+    (credential) => credential.environmentId === environmentId
+  );
   function credentialName(credentialId: string | undefined) {
-    if (!credentialId) return "—"
-    return environmentCredentials.find((item) => item.id === credentialId)?.name ?? credentialId
+    if (!credentialId) {
+      return "—";
+    }
+    return (
+      environmentCredentials.find((item) => item.id === credentialId)?.name ??
+      credentialId
+    );
   }
 
-  const error = project.error ?? environments.error ?? credentials.error ?? runs.error
+  const error =
+    project.error ?? environments.error ?? credentials.error ?? runs.error;
   const state = resolveHostedQueryState({
     error,
     isEmpty: false,
     isPending:
       project.isPending ||
-      (scopeReady && (environments.isPending || credentials.isPending || runs.isPending)),
+      (scopeReady &&
+        (environments.isPending || credentials.isPending || runs.isPending)),
     loadingDescription: `Loading reconciliation runs for the ${environmentName} Mosaic Environment.`,
     onRetry: () => {
-      void runs.refetch()
+      runs.refetch();
     },
     permissionDescription:
       "Organization owner or admin permission is required to read reconciliation runs.",
     scope: { environmentId, organizationId, projectId },
-  })
+  });
 
   if (scopeMismatch) {
     return (
@@ -109,10 +130,10 @@ export function ReconciliationPage({
           projectId={projectId}
         />
       </WorkspacePage>
-    )
+    );
   }
 
-  const base = `/orgs/${encodeURIComponent(organizationId)}/projects/${encodeURIComponent(projectId)}/billing/${encodeURIComponent(environmentId)}`
+  const base = `/orgs/${encodeURIComponent(organizationId)}/projects/${encodeURIComponent(projectId)}/billing/${encodeURIComponent(environmentId)}`;
 
   return (
     <WorkspacePage
@@ -122,9 +143,11 @@ export function ReconciliationPage({
             credentials={environmentCredentials}
             environmentName={environmentName}
             onCreate={async (request) => {
-              await create.mutateAsync(request)
+              await create.mutateAsync(request);
             }}
-            storeConnectionsHref={storeConnectionsHref({ organizationId, projectId }) ?? "#"}
+            storeConnectionsHref={
+              storeConnectionsHref({ organizationId, projectId }) ?? "#"
+            }
           />
         ) : null
       }
@@ -146,11 +169,18 @@ export function ReconciliationPage({
             <EmptyState
               action={
                 cursor ? (
-                  <Button onClick={() => onCursorChange(undefined)} type="button" variant="outline">
+                  <Button
+                    onClick={() => onCursorChange(undefined)}
+                    type="button"
+                    variant="outline"
+                  >
                     Back to the most recent runs
                   </Button>
                 ) : (
-                  <a className={buttonVariants({ variant: "outline" })} href={`${base}/health`}>
+                  <a
+                    className={buttonVariants({ variant: "outline" })}
+                    href={`${base}/health`}
+                  >
                     Check billing health first
                   </a>
                 )
@@ -179,7 +209,8 @@ export function ReconciliationPage({
           >
             <Table>
               <TableCaption>
-                Reconciliation history for the {environmentName} Mosaic Environment, newest first.
+                Reconciliation history for the {environmentName} Mosaic
+                Environment, newest first.
               </TableCaption>
               <TableHeader>
                 <TableRow>
@@ -201,12 +232,12 @@ export function ReconciliationPage({
                   <TableRow key={run.id}>
                     <TableCell>
                       <a
-                        className="text-primary font-medium"
+                        className="font-medium text-primary"
                         href={`${base}/reconciliation/${encodeURIComponent(run.id ?? "")}`}
                       >
                         {formatBillingTimestamp(run.windowStart)}
                       </a>
-                      <span className="text-muted-foreground block text-xs">
+                      <span className="block text-muted-foreground text-xs">
                         → {formatBillingTimestamp(run.windowEnd)}
                       </span>
                     </TableCell>
@@ -232,7 +263,9 @@ export function ReconciliationPage({
                     <TableCell>{run.duplicateCount ?? 0}</TableCell>
                     <TableCell>
                       {(run.conflictCount ?? 0) > 0 ? (
-                        <span className="text-destructive font-medium">{run.conflictCount}</span>
+                        <span className="font-medium text-destructive">
+                          {run.conflictCount}
+                        </span>
                       ) : (
                         0
                       )}
@@ -256,7 +289,7 @@ export function ReconciliationPage({
         )}
       </HostedResourceBoundary>
     </WorkspacePage>
-  )
+  );
 }
 
 /** Forward paging, so a page of runs is never presented as the whole history. */
@@ -265,16 +298,23 @@ function ReconciliationPaging({
   nextCursor,
   onCursorChange,
 }: {
-  cursor: string | undefined
-  nextCursor: string | undefined
-  onCursorChange: (cursor: string | undefined) => void
+  cursor: string | undefined;
+  nextCursor: string | undefined;
+  onCursorChange: (cursor: string | undefined) => void;
 }) {
-  if (!cursor && !nextCursor) return null
+  if (!(cursor || nextCursor)) {
+    return null;
+  }
 
   return (
     <div className="mt-4 flex flex-wrap items-center gap-2">
       {cursor ? (
-        <Button onClick={() => onCursorChange(undefined)} size="sm" type="button" variant="outline">
+        <Button
+          onClick={() => onCursorChange(undefined)}
+          size="sm"
+          type="button"
+          variant="outline"
+        >
           Most recent runs
         </Button>
       ) : null}
@@ -288,8 +328,10 @@ function ReconciliationPaging({
           Older runs
         </Button>
       ) : (
-        <p className="text-muted-foreground text-xs">End of the reconciliation history.</p>
+        <p className="text-muted-foreground text-xs">
+          End of the reconciliation history.
+        </p>
       )}
     </div>
-  )
+  );
 }

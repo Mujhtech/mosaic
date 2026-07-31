@@ -1,32 +1,39 @@
-import { ArrowRightIcon } from "@phosphor-icons/react/dist/ssr/ArrowRight"
-import { PlusIcon } from "@phosphor-icons/react/dist/ssr/Plus"
-import { useQuery } from "@tanstack/react-query"
-import { Link } from "@tanstack/react-router"
+import { ArrowRightIcon } from "@phosphor-icons/react/dist/ssr/ArrowRight";
+import { PlusIcon } from "@phosphor-icons/react/dist/ssr/Plus";
+import { useQuery } from "@tanstack/react-query";
+import { Link } from "@tanstack/react-router";
 
-import { buttonVariants } from "@/components/ui/button-variants"
-import { HostedResourceBoundary } from "@/features/auth/components/hosted-resource-boundary"
-import { resolveHostedQueryState } from "@/features/auth/types/hosted-query-state"
-import { organizationsQueryOptions } from "@/features/orgs/queries/organizations-query"
-import { WorkspacePage, WorkflowPanel } from "@/features/orgs/components/workspace-page"
+import { buttonVariants } from "@/components/ui/button-variants";
+import { HostedResourceBoundary } from "@/features/auth/components/hosted-resource-boundary";
+import { resolveHostedQueryState } from "@/features/auth/types/hosted-query-state";
+import {
+  WorkflowPanel,
+  WorkspacePage,
+} from "@/features/orgs/components/workspace-page";
+import { organizationsQueryOptions } from "@/features/orgs/queries/organizations-query";
 
 export function WorkspaceHome() {
-  const organizations = useQuery(organizationsQueryOptions())
-  const items = organizations.data?.items ?? []
+  const organizations = useQuery(organizationsQueryOptions());
+  const items = organizations.data?.items ?? [];
   const state = resolveHostedQueryState({
     emptyAction: (
       <Link className={buttonVariants()} to="/orgs/new">
         Create organization
       </Link>
     ),
-    emptyDescription: "Create an organization to establish the tenant and membership boundary.",
+    emptyDescription:
+      "Create an organization to establish the tenant and membership boundary.",
     emptyTitle: "No organizations yet",
     error: organizations.error,
     isEmpty: organizations.isSuccess && items.length === 0,
     isPending: organizations.isPending,
     loadingDescription: "Loading organizations from the hosted workspace.",
-    onRetry: () => void organizations.refetch(),
-    permissionDescription: "Organization membership is required to view this workspace.",
-  })
+    onRetry: () => {
+      organizations.refetch();
+    },
+    permissionDescription:
+      "Organization membership is required to view this workspace.",
+  });
 
   return (
     <WorkspacePage
@@ -48,13 +55,15 @@ export function WorkspaceHome() {
             {items.map((organization) => (
               <li key={organization.id}>
                 <Link
-                  className="hover:bg-muted/45 focus-visible:ring-ring flex items-center justify-between gap-4 rounded px-3 py-4 focus-visible:ring-2 focus-visible:outline-none"
+                  className="flex items-center justify-between gap-4 rounded px-3 py-4 hover:bg-muted/45 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                   params={{ organizationId: organization.id }}
                   to="/orgs/$organizationId"
                 >
                   <span>
-                    <span className="block text-sm font-semibold">{organization.name}</span>
-                    <span className="text-muted-foreground mt-1 block text-xs">
+                    <span className="block font-semibold text-sm">
+                      {organization.name}
+                    </span>
+                    <span className="mt-1 block text-muted-foreground text-xs">
                       {organization.id}
                     </span>
                   </span>
@@ -66,5 +75,5 @@ export function WorkspaceHome() {
         </WorkflowPanel>
       </HostedResourceBoundary>
     </WorkspacePage>
-  )
+  );
 }

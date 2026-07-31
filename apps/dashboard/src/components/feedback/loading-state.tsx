@@ -1,32 +1,40 @@
-import { cn } from "@/lib/utils"
+import { cn } from "@/lib/utils";
 
 interface LoadingStateProps {
-  className?: string
-  description?: string
-  title?: string
+  className?: string;
+  description?: string;
+  title?: string;
 }
 
-export function LoadingState({ className, description, title = "Loading" }: LoadingStateProps) {
+export function LoadingState({
+  className,
+  description,
+  title = "Loading",
+}: LoadingStateProps) {
   return (
     <section
       aria-busy="true"
       aria-live="polite"
       className={cn(
-        "border-border/70 bg-card/75 flex min-h-36 items-center justify-center gap-3 rounded border p-6 text-left shadow-xs",
-        className,
+        "flex min-h-36 items-center justify-center gap-3 rounded border border-border/70 bg-card/75 p-6 text-left shadow-xs",
+        className
       )}
       role="status"
     >
       <span
         aria-hidden="true"
-        className="border-muted-foreground/25 border-t-primary size-4 animate-spin rounded-full border-2 motion-reduce:animate-none"
+        className="size-4 animate-spin rounded-full border-2 border-muted-foreground/25 border-t-primary motion-reduce:animate-none"
       />
       <span>
-        <span className="text-foreground block text-sm font-medium">{title}</span>
+        <span className="block font-medium text-foreground text-sm">
+          {title}
+        </span>
         {description ? (
-          <span className="text-muted-foreground mt-0.5 block text-sm">{description}</span>
+          <span className="mt-0.5 block text-muted-foreground text-sm">
+            {description}
+          </span>
         ) : null}
       </span>
     </section>
-  )
+  );
 }

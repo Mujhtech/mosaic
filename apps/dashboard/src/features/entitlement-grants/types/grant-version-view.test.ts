@@ -1,12 +1,12 @@
-import { describe, expect, it } from "vitest"
+import { describe, expect, it } from "vitest";
 
 import {
   evaluatePublishGate,
+  type GrantProposal,
   isGrantVersionEditable,
   narrowingCodeExplanation,
   proposalFingerprint,
-  type GrantProposal,
-} from "@/features/entitlement-grants/types/grant-version-view"
+} from "@/features/entitlement-grants/types/grant-version-view";
 
 const proposal: GrantProposal = {
   effectiveStart: "2026-08-01T00:00:00.000Z",
@@ -17,9 +17,9 @@ const proposal: GrantProposal = {
   productId: "prod_01",
   reason: "Grace access was never intended to be off.",
   supportedPurchaseTypes: ["auto_renewable_subscription"],
-}
+};
 
-const previewed = proposalFingerprint(proposal)
+const previewed = proposalFingerprint(proposal);
 
 /**
  * These tests protect the confirmation contract of the only Mosaic operation
@@ -38,23 +38,23 @@ describe("grant version publish gate", () => {
       isSubmitting: false,
       previewedFingerprint: undefined,
       proposal,
-    })
-    expect(withoutPreview.allowed).toBe(false)
-    expect(withoutPreview.blockedBy).toBe("preview_stale")
-  })
+    });
+    expect(withoutPreview.allowed).toBe(false);
+    expect(withoutPreview.blockedBy).toBe("preview_stale");
+  });
 
   it("invalidates the preview when any published field changes afterwards", () => {
-    const widened: GrantProposal = { ...proposal, grantsInBillingRetry: true }
+    const widened: GrantProposal = { ...proposal, grantsInBillingRetry: true };
     const gate = evaluatePublishGate({
       canManage: true,
       impact: { additiveSuperset: true, impactedActiveSources: 3 },
       isSubmitting: false,
       previewedFingerprint: previewed,
       proposal: widened,
-    })
-    expect(gate.allowed).toBe(false)
-    expect(gate.blockedBy).toBe("preview_stale")
-  })
+    });
+    expect(gate.allowed).toBe(false);
+    expect(gate.blockedBy).toBe("preview_stale");
+  });
 
   it("allows publishing a previewed, complete, additive proposal", () => {
     expect(
@@ -64,9 +64,9 @@ describe("grant version publish gate", () => {
         isSubmitting: false,
         previewedFingerprint: previewed,
         proposal,
-      }).allowed,
-    ).toBe(true)
-  })
+      }).allowed
+    ).toBe(true);
+  });
 
   it("refuses a retroactive narrowing the publish call would reject anyway", () => {
     const gate = evaluatePublishGate({
@@ -79,10 +79,10 @@ describe("grant version publish gate", () => {
       isSubmitting: false,
       previewedFingerprint: previewed,
       proposal,
-    })
-    expect(gate.allowed).toBe(false)
-    expect(gate.blockedBy).toBe("narrowing")
-  })
+    });
+    expect(gate.allowed).toBe(false);
+    expect(gate.blockedBy).toBe("narrowing");
+  });
 
   it("requires a reason and management permission", () => {
     expect(
@@ -92,8 +92,8 @@ describe("grant version publish gate", () => {
         isSubmitting: false,
         previewedFingerprint: previewed,
         proposal: { ...proposal, reason: "   " },
-      }).blockedBy,
-    ).toBe("reason_required")
+      }).blockedBy
+    ).toBe("reason_required");
 
     expect(
       evaluatePublishGate({
@@ -102,17 +102,17 @@ describe("grant version publish gate", () => {
         isSubmitting: false,
         previewedFingerprint: previewed,
         proposal,
-      }).blockedBy,
-    ).toBe("no_permission")
-  })
-})
+      }).blockedBy
+    ).toBe("no_permission");
+  });
+});
 
 describe("grant version immutability", () => {
   it("offers no edit affordance for any published version", () => {
     // The API answers 409 grant_version_immutable to PATCH, PUT, and DELETE.
     // A UI that offers editing turns a documented rule into a failed request.
-    expect(isGrantVersionEditable()).toBe(false)
-  })
+    expect(isGrantVersionEditable()).toBe(false);
+  });
 
   it("explains every narrowing code the additive-superset rule can produce", () => {
     for (const code of [
@@ -124,11 +124,13 @@ describe("grant version immutability", () => {
       "purchase_type_support_narrowed",
       "trial_access_narrowed",
     ]) {
-      expect(narrowingCodeExplanation(code)).toBeTruthy()
-      expect(narrowingCodeExplanation(code)).not.toContain(code)
+      expect(narrowingCodeExplanation(code)).toBeTruthy();
+      expect(narrowingCodeExplanation(code)).not.toContain(code);
     }
     // A code this build has not seen still explains the rule rather than
     // rendering a bare enum member.
-    expect(narrowingCodeExplanation("future_narrowing")).toContain("never remove or narrow")
-  })
-})
+    expect(narrowingCodeExplanation("future_narrowing")).toContain(
+      "never remove or narrow"
+    );
+  });
+});

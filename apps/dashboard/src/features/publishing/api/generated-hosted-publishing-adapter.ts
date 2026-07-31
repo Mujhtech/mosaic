@@ -1,8 +1,24 @@
+import { providerRecoveryDescriptor } from "@/features/catalog/types/provider-recovery";
+import type { MosaicDocument } from "@/features/paywall-editor/types/editor";
+import {
+  type HostedDraft,
+  HostedDraftConflictError,
+  HostedDraftOfflineError,
+  type HostedPaywallDetail,
+  type HostedPaywallListItem,
+  type HostedPaywallVersion,
+  type HostedPlacement,
+  type HostedPlacementBinding,
+  type HostedPublishingAdapter,
+  type HostedRelease,
+  type PublishValidationResult,
+} from "@/features/publishing/api/hosted-publishing-adapter";
+import type { Client } from "@/generated/api/client";
 import {
   bindPlacement,
   clonePaywallVersionToDraft,
-  createPaywallDraft,
   createPaywall,
+  createPaywallDraft,
   createPlacement,
   getActivePaywallDraft,
   getPaywall,
@@ -20,57 +36,51 @@ import {
   rollbackConfigurationRelease,
   updatePaywallDraft,
   validatePaywallDraft,
-} from "@/generated/api/sdk.gen"
-import type { Client } from "@/generated/api/client"
+} from "@/generated/api/sdk.gen";
 import type {
   ConfigurationRelease,
   DraftResource,
   Paywall,
   PaywallVersion,
   Placement,
-} from "@/generated/api/types.gen"
-import { providerRecoveryDescriptor } from "@/features/catalog/types/provider-recovery"
-import type { MosaicDocument } from "@/features/paywall-editor/types/editor"
-import {
-  HostedDraftConflictError,
-  HostedDraftOfflineError,
-  type HostedDraft,
-  type HostedPaywallDetail,
-  type HostedPaywallListItem,
-  type HostedPaywallVersion,
-  type HostedPlacement,
-  type HostedPlacementBinding,
-  type HostedPublishingAdapter,
-  type HostedRelease,
-  type PublishValidationResult,
-} from "@/features/publishing/api/hosted-publishing-adapter"
-import { generatedDashboardClient } from "@/lib/api/generated-dashboard-client"
-import { ApiError, ApiNetworkError } from "@/lib/api/errors"
-import { parsePortablePaywallJson } from "@/lib/mosaic-protocol"
+} from "@/generated/api/types.gen";
+import { ApiError, ApiNetworkError } from "@/lib/api/errors";
+import { generatedDashboardClient } from "@/lib/api/generated-dashboard-client";
+import { parsePortablePaywallJson } from "@/lib/mosaic-protocol";
 
 function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value)
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 function createIdempotencyKey() {
-  if (typeof globalThis.crypto?.randomUUID === "function") return globalThis.crypto.randomUUID()
-  return `mosaic-${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`
+  if (typeof globalThis.crypto?.randomUUID === "function") {
+    return globalThis.crypto.randomUUID();
+  }
+  return `mosaic-${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
 }
 
 function draftETag(draftId: string, revision: number) {
-  return `"draft-${draftId}-r${revision}"`
+  return `"draft-${draftId}-r${revision}"`;
 }
 
-function documentRequest(document: MosaicDocument, paywallId: string): Record<string, unknown> {
-  const request = JSON.parse(JSON.stringify(document)) as Record<string, unknown>
-  request.id = paywallId
-  return request
+function documentRequest(
+  document: MosaicDocument,
+  paywallId: string
+): Record<string, unknown> {
+  const request = JSON.parse(JSON.stringify(document)) as Record<
+    string,
+    unknown
+  >;
+  request.id = paywallId;
+  return request;
 }
 
 function hostedDocument(document: Record<string, unknown>): MosaicDocument {
-  const result = parsePortablePaywallJson(JSON.stringify(document))
-  if (!result.ok) throw new Error("The hosted Draft returned an invalid Mosaic document.")
-  return result.value as MosaicDocument
+  const result = parsePortablePaywallJson(JSON.stringify(document));
+  if (!result.ok) {
+    throw new Error("The hosted Draft returned an invalid Mosaic document.");
+  }
+  return result.value as MosaicDocument;
 }
 
 function mapDraft(resource: DraftResource): HostedDraft {
@@ -82,7 +92,7 @@ function mapDraft(resource: DraftResource): HostedDraft {
     projectId: resource.draft.projectId,
     revision: resource.draft.revision,
     updatedAt: resource.draft.updatedAt,
-  }
+  };
 }
 
 function mapPaywall(paywall: Paywall): HostedPaywallListItem {
@@ -92,7 +102,7 @@ function mapPaywall(paywall: Paywall): HostedPaywallListItem {
     name: paywall.name,
     status: paywall.status,
     updatedAt: paywall.updatedAt,
-  }
+  };
 }
 
 function mapVersion(version: PaywallVersion): HostedPaywallVersion {
@@ -103,7 +113,7 @@ function mapVersion(version: PaywallVersion): HostedPaywallVersion {
     protocolVersion: version.protocolVersion,
     sourceDraftRevision: version.sourceRevision,
     versionNumber: version.versionNumber,
-  }
+  };
 }
 
 function mapPlacement(placement: Placement): HostedPlacement {
@@ -112,64 +122,83 @@ function mapPlacement(placement: Placement): HostedPlacement {
     key: placement.key,
     name: placement.name,
     status: placement.status,
-  }
+  };
 }
 
-function mapRelease(release: ConfigurationRelease, isCurrent = false): HostedRelease {
+function mapRelease(
+  release: ConfigurationRelease,
+  isCurrent = false
+): HostedRelease {
   return {
     id: release.id,
     isCurrent,
     number: release.releaseNumber,
     publishedAt: release.publishedAt,
-  }
+  };
 }
 
 function conflictFrom(error: unknown) {
-  if (!(error instanceof ApiError) || error.code !== "draft_revision_conflict") return null
-  const details = isRecord(error.details) ? error.details : undefined
-  const revision = details?.currentRevision
-  if (typeof revision !== "number") return null
+  if (
+    !(error instanceof ApiError) ||
+    error.code !== "draft_revision_conflict"
+  ) {
+    return null;
+  }
+  const details = isRecord(error.details) ? error.details : undefined;
+  const revision = details?.currentRevision;
+  if (typeof revision !== "number") {
+    return null;
+  }
   return new HostedDraftConflictError(
     revision,
-    typeof details?.updatedAt === "string" ? details.updatedAt : undefined,
-  )
+    typeof details?.updatedAt === "string" ? details.updatedAt : undefined
+  );
 }
 
 function recoveryActionLabel(recoveryAction: string) {
-  return providerRecoveryDescriptor(recoveryAction).label
+  return providerRecoveryDescriptor(recoveryAction).label;
 }
 
-function recoveryActionMessage(recoveryAction: string, product: string, application: string) {
-  return `${product} · ${application}: ${providerRecoveryDescriptor(recoveryAction).message}`
+function recoveryActionMessage(
+  recoveryAction: string,
+  product: string,
+  application: string
+) {
+  return `${product} · ${application}: ${providerRecoveryDescriptor(recoveryAction).message}`;
 }
 
 export function resolvePlacementReadiness(
   placements: readonly HostedPlacement[],
-  paywallId: string,
+  paywallId: string
 ) {
   return placements.map((placement) => ({
     bound: placement.binding?.paywallId === paywallId,
     id: placement.id,
     key: placement.key,
-  }))
+  }));
 }
 
 export function createGeneratedHostedPublishingAdapter(
-  client: Client = generatedDashboardClient,
+  client: Client = generatedDashboardClient
 ): HostedPublishingAdapter {
-  const idempotencyKeys = new Map<string, string>()
-  const placementBindings = new Map<string, string>()
+  const idempotencyKeys = new Map<string, string>();
+  const placementBindings = new Map<string, string>();
 
   function placementBindingKey(environmentId: string, placementId: string) {
-    return `${environmentId}:${placementId}`
+    return `${environmentId}:${placementId}`;
   }
 
-  async function idempotent<T>(scope: string, request: (key: string) => Promise<T>) {
-    const key = idempotencyKeys.get(scope) ?? createIdempotencyKey()
-    idempotencyKeys.set(scope, key)
-    const result = await request(key)
-    if (idempotencyKeys.get(scope) === key) idempotencyKeys.delete(scope)
-    return result
+  async function idempotent<T>(
+    scope: string,
+    request: (key: string) => Promise<T>
+  ) {
+    const key = idempotencyKeys.get(scope) ?? createIdempotencyKey();
+    idempotencyKeys.set(scope, key);
+    const result = await request(key);
+    if (idempotencyKeys.get(scope) === key) {
+      idempotencyKeys.delete(scope);
+    }
+    return result;
   }
 
   return {
@@ -184,18 +213,18 @@ export function createGeneratedHostedPublishingAdapter(
           projectId: input.projectId,
         },
         throwOnError: true,
-      })
+      });
       const binding = {
         environmentId: result.data.data.environmentId,
         paywallId: result.data.data.paywallId,
         placementId: result.data.data.placementId,
         projectId: result.data.data.projectId,
-      }
+      };
       placementBindings.set(
         placementBindingKey(binding.environmentId, binding.placementId),
-        binding.paywallId,
-      )
-      return binding
+        binding.paywallId
+      );
+      return binding;
     },
     async createDraft(input) {
       return idempotent(
@@ -210,10 +239,10 @@ export function createGeneratedHostedPublishingAdapter(
             headers: { "Idempotency-Key": key },
             path: { paywallId: input.paywallId, projectId: input.projectId },
             throwOnError: true,
-          })
-          return mapDraft(result.data.data)
-        },
-      )
+          });
+          return mapDraft(result.data.data);
+        }
+      );
     },
     async createDraftFromVersion(input) {
       return idempotent(
@@ -228,10 +257,10 @@ export function createGeneratedHostedPublishingAdapter(
               versionId: input.versionId,
             },
             throwOnError: true,
-          })
-          return mapDraft(result.data.data)
-        },
-      )
+          });
+          return mapDraft(result.data.data);
+        }
+      );
     },
     async createPaywall(input): Promise<HostedPaywallDetail> {
       const result = await createPaywall({
@@ -239,13 +268,13 @@ export function createGeneratedHostedPublishingAdapter(
         client,
         path: { projectId: input.projectId },
         throwOnError: true,
-      })
+      });
       return {
         ...mapPaywall(result.data.data),
         drafts: [],
         projectId: input.projectId,
         versions: [],
-      }
+      };
     },
     async createPlacement(input) {
       const result = await createPlacement({
@@ -253,8 +282,8 @@ export function createGeneratedHostedPublishingAdapter(
         client,
         path: { projectId: input.projectId },
         throwOnError: true,
-      })
-      return mapPlacement(result.data.data)
+      });
+      return mapPlacement(result.data.data);
     },
     async getActiveDraft(input) {
       try {
@@ -263,11 +292,13 @@ export function createGeneratedHostedPublishingAdapter(
           path: { paywallId: input.paywallId, projectId: input.projectId },
           query: { environmentId: input.environmentId },
           throwOnError: true,
-        })
-        return mapDraft(result.data.data)
+        });
+        return mapDraft(result.data.data);
       } catch (error) {
-        if (error instanceof ApiError && error.status === 404) return null
-        throw error
+        if (error instanceof ApiError && error.status === 404) {
+          return null;
+        }
+        throw error;
       }
     },
     async getDraft(input) {
@@ -275,28 +306,28 @@ export function createGeneratedHostedPublishingAdapter(
         client,
         path: input,
         throwOnError: true,
-      })
-      return mapDraft(result.data.data)
+      });
+      return mapDraft(result.data.data);
     },
     async getPaywall(input) {
       const [paywallResult, versionsResult] = await Promise.all([
         getPaywall({ client, path: input, throwOnError: true }),
         listPaywallVersions({ client, path: input, throwOnError: true }),
-      ])
+      ]);
       return {
         ...mapPaywall(paywallResult.data.data),
         drafts: [],
         projectId: paywallResult.data.data.projectId,
         versions: versionsResult.data.data.items.map(mapVersion),
-      }
+      };
     },
     async listPaywalls(projectId) {
       const result = await listPaywalls({
         client,
         path: { projectId },
         throwOnError: true,
-      })
-      return result.data.data.items.map(mapPaywall)
+      });
+      return result.data.data.items.map(mapPaywall);
     },
     async listPlacements(input) {
       const [placementsResult, paywallsResult] = await Promise.all([
@@ -310,10 +341,13 @@ export function createGeneratedHostedPublishingAdapter(
           path: { projectId: input.projectId },
           throwOnError: true,
         }),
-      ])
+      ]);
       const paywallNames = new Map(
-        paywallsResult.data.data.items.map((paywall) => [paywall.id, paywall.name]),
-      )
+        paywallsResult.data.data.items.map((paywall) => [
+          paywall.id,
+          paywall.name,
+        ])
+      );
       const bindings = await Promise.all(
         placementsResult.data.data.items.map(async (placement) => {
           try {
@@ -325,19 +359,23 @@ export function createGeneratedHostedPublishingAdapter(
                 projectId: input.projectId,
               },
               throwOnError: true,
-            })
-            return result.data.data
+            });
+            return result.data.data;
           } catch (error) {
-            if (error instanceof ApiError && error.status === 404) return null
-            throw error
+            if (error instanceof ApiError && error.status === 404) {
+              return null;
+            }
+            throw error;
           }
-        }),
-      )
+        })
+      );
       return placementsResult.data.data.items.map((placement, index) => {
-        const mapped = mapPlacement(placement)
+        const mapped = mapPlacement(placement);
         const paywallId =
           bindings[index]?.paywallId ??
-          placementBindings.get(placementBindingKey(input.environmentId, placement.id))
+          placementBindings.get(
+            placementBindingKey(input.environmentId, placement.id)
+          );
         return paywallId
           ? {
               ...mapped,
@@ -347,8 +385,8 @@ export function createGeneratedHostedPublishingAdapter(
                 paywallName: paywallNames.get(paywallId) ?? "Selected paywall",
               },
             }
-          : mapped
-      })
+          : mapped;
+      });
     },
     async listPublishedVersions(input) {
       const [paywallResult, versionsResult] = await Promise.all([
@@ -362,26 +400,36 @@ export function createGeneratedHostedPublishingAdapter(
           path: { paywallId: input.paywallId, projectId: input.projectId },
           throwOnError: true,
         }),
-      ])
+      ]);
       return versionsResult.data.data.items
         .filter((version) => version.environmentId === input.environmentId)
-        .map((version) => ({ ...mapVersion(version), paywallName: paywallResult.data.data.name }))
+        .map((version) => ({
+          ...mapVersion(version),
+          paywallName: paywallResult.data.data.name,
+        }));
     },
     async listReleases(input) {
       const result = await listConfigurationReleases({
         client,
         path: input,
         throwOnError: true,
-      })
+      });
       const releaseNumbers = new Map(
-        result.data.data.items.map((release) => [release.id, release.releaseNumber]),
-      )
+        result.data.data.items.map((release) => [
+          release.id,
+          release.releaseNumber,
+        ])
+      );
       return result.data.data.items.map((release, index) => ({
         ...mapRelease(release, index === 0),
         ...(release.rollbackSourceReleaseId
-          ? { rollbackSourceNumber: releaseNumbers.get(release.rollbackSourceReleaseId) }
+          ? {
+              rollbackSourceNumber: releaseNumbers.get(
+                release.rollbackSourceReleaseId
+              ),
+            }
           : {}),
-      }))
+      }));
     },
     async publishDraft(input) {
       return idempotent(
@@ -395,12 +443,15 @@ export function createGeneratedHostedPublishingAdapter(
             },
             client,
             headers: { "Idempotency-Key": key },
-            path: { environmentId: input.environmentId, projectId: input.projectId },
+            path: {
+              environmentId: input.environmentId,
+              projectId: input.projectId,
+            },
             throwOnError: true,
-          })
-          return mapRelease(result.data.data.release, true)
-        },
-      )
+          });
+          return mapRelease(result.data.data.release, true);
+        }
+      );
     },
     async rollbackRelease(input) {
       return idempotent(
@@ -411,10 +462,10 @@ export function createGeneratedHostedPublishingAdapter(
             headers: { "Idempotency-Key": key },
             path: input,
             throwOnError: true,
-          })
-          return mapRelease(result.data.data, true)
-        },
-      )
+          });
+          return mapRelease(result.data.data, true);
+        }
+      );
     },
     async saveDraft(input) {
       try {
@@ -422,7 +473,9 @@ export function createGeneratedHostedPublishingAdapter(
           `save:${input.projectId}:${input.paywallId}:${input.draftId}:${input.expectedRevision}`,
           async (key) => {
             const result = await updatePaywallDraft({
-              body: { document: documentRequest(input.document, input.paywallId) },
+              body: {
+                document: documentRequest(input.document, input.paywallId),
+              },
               client,
               headers: {
                 "Idempotency-Key": key,
@@ -434,15 +487,20 @@ export function createGeneratedHostedPublishingAdapter(
                 projectId: input.projectId,
               },
               throwOnError: true,
-            })
-            return mapDraft(result.data.data)
-          },
-        )
+            });
+            return mapDraft(result.data.data);
+          }
+        );
       } catch (error) {
-        const conflict = conflictFrom(error)
-        if (conflict) throw conflict
-        if (error instanceof ApiNetworkError) throw new HostedDraftOfflineError(error)
-        throw error
+        const conflict = conflictFrom(error);
+        if (conflict) {
+          throw conflict;
+        }
+        if (error instanceof ApiNetworkError) {
+          // biome-ignore lint/style/useErrorCause: HostedDraftOfflineError chains the cause through its constructor
+          throw new HostedDraftOfflineError(error);
+        }
+        throw error;
       }
     },
     async validateDraftForPublish(input): Promise<PublishValidationResult> {
@@ -450,7 +508,7 @@ export function createGeneratedHostedPublishingAdapter(
         draftId: input.draftId,
         paywallId: input.paywallId,
         projectId: input.projectId,
-      }
+      };
       const [
         validationResult,
         draftResult,
@@ -480,16 +538,20 @@ export function createGeneratedHostedPublishingAdapter(
           path: { projectId: input.projectId },
           throwOnError: true,
         }),
-      ])
-      const document = hostedDocument(draftResult.data.data.document)
-      const productIds = [...new Set(document.products.map((product) => product.productId))]
+      ]);
+      const document = hostedDocument(draftResult.data.data.document);
+      const productIds = [
+        ...new Set(document.products.map((product) => product.productId)),
+      ];
       const environment = environmentsResult.data.data.items.find(
-        (item) => item.id === input.environmentId,
-      )
+        (item) => item.id === input.environmentId
+      );
       if (!environment) {
-        throw new Error("The selected Environment is unavailable in this Project.")
+        throw new Error(
+          "The selected Environment is unavailable in this Project."
+        );
       }
-      const applications = applicationsResult.data.data.items
+      const applications = applicationsResult.data.data.items;
       const products = await Promise.all(
         productIds.map(async (productId) => {
           const scopes = await Promise.all(
@@ -502,10 +564,10 @@ export function createGeneratedHostedPublishingAdapter(
                   environmentId: environment.id,
                 },
                 throwOnError: true,
-              })
-              return { application, readiness: result.data.data }
-            }),
-          )
+              });
+              return { application, readiness: result.data.data };
+            })
+          );
           return {
             id: productId,
             name: productId,
@@ -513,13 +575,14 @@ export function createGeneratedHostedPublishingAdapter(
               scopes.length > 0 &&
               scopes.every(
                 ({ readiness }) =>
-                  (readiness.state === "configured" || readiness.state === "verifiedInTest") &&
-                  readiness.blockers.length === 0,
+                  (readiness.state === "configured" ||
+                    readiness.state === "verifiedInTest") &&
+                  readiness.blockers.length === 0
               ),
             scopes,
-          }
-        }),
-      )
+          };
+        })
+      );
       const productIssues = products.flatMap((product) =>
         product.scopes.flatMap(({ application, readiness }) => [
           ...readiness.blockers.map((issue) => ({
@@ -527,20 +590,31 @@ export function createGeneratedHostedPublishingAdapter(
             code: issue.code,
             connectionId: readiness.connectionId,
             environmentId: readiness.environmentId,
-            message: recoveryActionMessage(issue.recoveryAction, product.name, application.name),
+            message: recoveryActionMessage(
+              issue.recoveryAction,
+              product.name,
+              application.name
+            ),
             productId: product.id,
             recoveryAction: issue.recoveryAction,
             recoveryLabel: recoveryActionLabel(issue.recoveryAction),
             resourceId: issue.resourceId,
             resourceType: issue.resourceType,
-            severity: environment.mode === "production" ? ("error" as const) : ("warning" as const),
+            severity:
+              environment.mode === "production"
+                ? ("error" as const)
+                : ("warning" as const),
           })),
           ...readiness.warnings.map((issue) => ({
             applicationId: readiness.applicationId,
             code: issue.code,
             connectionId: readiness.connectionId,
             environmentId: readiness.environmentId,
-            message: recoveryActionMessage(issue.recoveryAction, product.name, application.name),
+            message: recoveryActionMessage(
+              issue.recoveryAction,
+              product.name,
+              application.name
+            ),
             productId: product.id,
             recoveryAction: issue.recoveryAction,
             recoveryLabel: recoveryActionLabel(issue.recoveryAction),
@@ -548,37 +622,46 @@ export function createGeneratedHostedPublishingAdapter(
             resourceType: issue.resourceType,
             severity: "warning" as const,
           })),
-        ]),
-      )
+        ])
+      );
       const managedAssetsByUrl = new Map(
-        assetsResult.data.data.items.map((asset) => [asset.url, asset]),
-      )
+        assetsResult.data.data.items.map((asset) => [asset.url, asset])
+      );
       const assetReadiness = document.assets.map((asset) => {
         const managedAsset =
-          asset.source.type === "remote" ? managedAssetsByUrl.get(asset.source.url) : undefined
+          asset.source.type === "remote"
+            ? managedAssetsByUrl.get(asset.source.url)
+            : undefined;
         return {
           id: asset.id,
           name: managedAsset?.originalFilename ?? asset.id,
-          ready: asset.source.type === "bundled" || managedAsset?.status === "ready",
-        }
-      })
+          ready:
+            asset.source.type === "bundled" || managedAsset?.status === "ready",
+        };
+      });
       const assetIssues = assetReadiness
         .filter((asset) => !asset.ready)
         .map((asset) => ({
           code: "asset.hosted_mapping_required",
           message: `${asset.name} is not backed by a ready managed Asset. Upload or select one before publishing.`,
           severity: "error" as const,
-        }))
-      const placementsForPaywall = resolvePlacementReadiness(placements, input.paywallId)
-      const placementIssues = placementsForPaywall.some((placement) => placement.bound)
+        }));
+      const placementsForPaywall = resolvePlacementReadiness(
+        placements,
+        input.paywallId
+      );
+      const placementIssues = placementsForPaywall.some(
+        (placement) => placement.bound
+      )
         ? []
         : [
             {
               code: "placement.binding_required",
-              message: "Bind at least one Placement to this Paywall in the selected Environment.",
+              message:
+                "Bind at least one Placement to this Paywall in the selected Environment.",
               severity: "error" as const,
             },
-          ]
+          ];
       return {
         assets: assetReadiness,
         issues: [
@@ -603,9 +686,10 @@ export function createGeneratedHostedPublishingAdapter(
           ready: product.ready,
         })),
         protocolVersion: "0.2",
-      }
+      };
     },
-  }
+  };
 }
 
-export const generatedHostedPublishingAdapter = createGeneratedHostedPublishingAdapter()
+export const generatedHostedPublishingAdapter =
+  createGeneratedHostedPublishingAdapter();

@@ -1,45 +1,54 @@
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
-import { EmptyState } from "@/components/feedback/empty-state"
-import { buttonVariants } from "@/components/ui/button-variants"
+import { EmptyState } from "@/components/feedback/empty-state";
+import { buttonVariants } from "@/components/ui/button-variants";
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from "@/components/ui/select"
-import { HostedResourceBoundary } from "@/features/auth/components/hosted-resource-boundary"
-import { resolveHostedQueryState } from "@/features/auth/types/hosted-query-state"
-import { DefinitionRow, StatusPill } from "@/features/billing-ledger/components/billing-chrome"
-import { formatBillingTimestamp } from "@/features/billing-ledger/types/billing-vocabulary"
+} from "@/components/ui/select";
+import { HostedResourceBoundary } from "@/features/auth/components/hosted-resource-boundary";
+import { resolveHostedQueryState } from "@/features/auth/types/hosted-query-state";
+import {
+  DefinitionRow,
+  StatusPill,
+} from "@/features/billing-ledger/components/billing-chrome";
+import { formatBillingTimestamp } from "@/features/billing-ledger/types/billing-vocabulary";
 import {
   entitlementsQueryOptions,
   productsQueryOptions,
-} from "@/features/catalog/queries/catalog-query"
-import { PublishGrantVersionWizard } from "@/features/entitlement-grants/components/publish-grant-version-wizard"
+} from "@/features/catalog/queries/catalog-query";
+import { PublishGrantVersionWizard } from "@/features/entitlement-grants/components/publish-grant-version-wizard";
 import {
   previewGrantImpactMutationOptions,
   publishGrantVersionMutationOptions,
-} from "@/features/entitlement-grants/mutations/grant-version-mutations"
-import { grantVersionHistoryQueryOptions } from "@/features/entitlement-grants/queries/grant-version-queries"
+} from "@/features/entitlement-grants/mutations/grant-version-mutations";
+import { grantVersionHistoryQueryOptions } from "@/features/entitlement-grants/queries/grant-version-queries";
 import {
   grantPolicyFields,
   grantPolicyLabel,
-} from "@/features/entitlement-grants/types/grant-version-view"
-import { ScopeMismatchRecovery } from "@/features/orgs/components/scope-mismatch-recovery"
-import { WorkflowPanel, WorkspacePage } from "@/features/orgs/components/workspace-page"
-import { useValidatedProjectScope } from "@/features/projects/hooks/use-validated-project-scope"
-import { useOrganizationAccess } from "@/hooks/use-organization-access"
-import { catalogProductsHref } from "@/lib/routing/workspace-hrefs"
-import type { ProductEntitlementGrantVersion } from "@/generated/api"
+} from "@/features/entitlement-grants/types/grant-version-view";
+import { ScopeMismatchRecovery } from "@/features/orgs/components/scope-mismatch-recovery";
+import {
+  WorkflowPanel,
+  WorkspacePage,
+} from "@/features/orgs/components/workspace-page";
+import { useValidatedProjectScope } from "@/features/projects/hooks/use-validated-project-scope";
+import type { ProductEntitlementGrantVersion } from "@/generated/api";
+import { useOrganizationAccess } from "@/hooks/use-organization-access";
+import { catalogProductsHref } from "@/lib/routing/workspace-hrefs";
 
 interface GrantVersionsPageProps {
-  entitlementId?: string
-  onScopeChange: (scope: { entitlementId?: string; productId?: string }) => void
-  organizationId: string
-  productId?: string
-  projectId: string
+  entitlementId?: string;
+  onScopeChange: (scope: {
+    entitlementId?: string;
+    productId?: string;
+  }) => void;
+  organizationId: string;
+  productId?: string;
+  projectId: string;
 }
 
 /**
@@ -59,35 +68,53 @@ export function GrantVersionsPage({
   productId,
   projectId,
 }: GrantVersionsPageProps) {
-  const { project, scopeMismatch, scopeReady } = useValidatedProjectScope(organizationId, projectId)
-  const access = useOrganizationAccess(organizationId)
-  const queryClient = useQueryClient()
-  const products = useQuery({ ...productsQueryOptions(projectId), enabled: scopeReady })
-  const entitlements = useQuery({ ...entitlementsQueryOptions(projectId), enabled: scopeReady })
+  const { project, scopeMismatch, scopeReady } = useValidatedProjectScope(
+    organizationId,
+    projectId
+  );
+  const access = useOrganizationAccess(organizationId);
+  const queryClient = useQueryClient();
+  const products = useQuery({
+    ...productsQueryOptions(projectId),
+    enabled: scopeReady,
+  });
+  const entitlements = useQuery({
+    ...entitlementsQueryOptions(projectId),
+    enabled: scopeReady,
+  });
 
-  const productItems = products.data?.items ?? []
-  const selectedProductId = productId ?? productItems[0]?.id
+  const productItems = products.data?.items ?? [];
+  const selectedProductId = productId ?? productItems[0]?.id;
   const versions = useQuery({
-    ...grantVersionHistoryQueryOptions(projectId, selectedProductId ?? "", entitlementId),
+    ...grantVersionHistoryQueryOptions(
+      projectId,
+      selectedProductId ?? "",
+      entitlementId
+    ),
     enabled: scopeReady && Boolean(selectedProductId),
-  })
+  });
 
-  const preview = useMutation(previewGrantImpactMutationOptions(projectId))
-  const publish = useMutation(publishGrantVersionMutationOptions(projectId, queryClient))
+  const preview = useMutation(previewGrantImpactMutationOptions(projectId));
+  const publish = useMutation(
+    publishGrantVersionMutationOptions(projectId, queryClient)
+  );
 
-  const error = project.error ?? products.error ?? entitlements.error ?? versions.error
+  const error =
+    project.error ?? products.error ?? entitlements.error ?? versions.error;
   const state = resolveHostedQueryState({
     error,
     isEmpty: false,
-    isPending: project.isPending || (scopeReady && (products.isPending || entitlements.isPending)),
+    isPending:
+      project.isPending ||
+      (scopeReady && (products.isPending || entitlements.isPending)),
     loadingDescription: "Loading grant version history for this Project.",
     onRetry: () => {
-      void versions.refetch()
+      versions.refetch();
     },
     permissionDescription:
       "Membership of the owning Organization is required to read grant version history.",
     scope: { organizationId, projectId },
-  })
+  });
 
   if (scopeMismatch) {
     return (
@@ -101,22 +128,23 @@ export function GrantVersionsPage({
           projectId={projectId}
         />
       </WorkspacePage>
-    )
+    );
   }
 
-  const productsHref = catalogProductsHref({ organizationId, projectId }) ?? "#"
+  const productsHref =
+    catalogProductsHref({ organizationId, projectId }) ?? "#";
   const productOptions = productItems.map((product) => ({
     label: product.internalName,
     value: product.id,
-  }))
+  }));
   const entitlementOptions = [
     { label: "All Entitlements", value: "" },
     ...(entitlements.data?.items ?? []).map((entitlement) => ({
       label: entitlement.name,
       value: entitlement.id,
     })),
-  ]
-  const grouped = groupByEntitlement(versions.data ?? [])
+  ];
+  const grouped = groupByEntitlement(versions.data ?? []);
 
   return (
     <WorkspacePage
@@ -125,10 +153,11 @@ export function GrantVersionsPage({
       title="Grant versions"
     >
       <p className="text-muted-foreground text-xs leading-5">
-        Published versions are immutable. Intervals are half-open and abut exactly, so every instant
-        is covered by at most one version per Entitlement — never a gap that would strand a purchase
-        with no applicable grant, never an overlap that would make the applicable version a function
-        of row order.
+        Published versions are immutable. Intervals are half-open and abut
+        exactly, so every instant is covered by at most one version per
+        Entitlement — never a gap that would strand a purchase with no
+        applicable grant, never an overlap that would make the applicable
+        version a function of row order.
       </p>
 
       <HostedResourceBoundary state={state}>
@@ -148,14 +177,16 @@ export function GrantVersionsPage({
               <div className="grid gap-3 sm:grid-cols-2">
                 <div className="text-sm">
                   <label
-                    className="text-muted-foreground block text-xs"
+                    className="block text-muted-foreground text-xs"
                     htmlFor="grant-scope-product"
                   >
                     Product
                   </label>
                   <Select
                     items={productOptions}
-                    onValueChange={(value) => onScopeChange({ entitlementId, productId: value })}
+                    onValueChange={(value) =>
+                      onScopeChange({ entitlementId, productId: value })
+                    }
                     value={selectedProductId ?? ""}
                   >
                     <SelectTrigger className="mt-1" id="grant-scope-product">
@@ -172,7 +203,7 @@ export function GrantVersionsPage({
                 </div>
                 <div className="text-sm">
                   <label
-                    className="text-muted-foreground block text-xs"
+                    className="block text-muted-foreground text-xs"
                     htmlFor="grant-scope-entitlement"
                   >
                     Entitlement
@@ -187,7 +218,10 @@ export function GrantVersionsPage({
                     }
                     value={entitlementId ?? ""}
                   >
-                    <SelectTrigger className="mt-1" id="grant-scope-entitlement">
+                    <SelectTrigger
+                      className="mt-1"
+                      id="grant-scope-entitlement"
+                    >
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
@@ -203,23 +237,25 @@ export function GrantVersionsPage({
               <div className="mt-4">
                 <PublishGrantVersionWizard
                   canManage={access.canManage}
-                  entitlementId={entitlementId ?? entitlements.data?.items[0]?.id ?? ""}
+                  entitlementId={
+                    entitlementId ?? entitlements.data?.items[0]?.id ?? ""
+                  }
                   entitlements={entitlements.data?.items ?? []}
                   onPreview={(proposal) => preview.mutateAsync(proposal)}
                   onPublish={async (proposal) => {
-                    await publish.mutateAsync(proposal)
+                    await publish.mutateAsync(proposal);
                   }}
                   productId={selectedProductId ?? ""}
                   products={productItems}
                 />
-                {!access.canManage ? (
+                {access.canManage ? null : (
                   <a
-                    className="text-primary mt-2 inline-flex text-sm font-semibold"
+                    className="mt-2 inline-flex font-semibold text-primary text-sm"
                     href={`/orgs/${encodeURIComponent(organizationId)}/members`}
                   >
                     Ask an Owner or Admin to change what this Product grants
                   </a>
-                ) : null}
+                )}
               </div>
             </WorkflowPanel>
 
@@ -237,13 +273,21 @@ export function GrantVersionsPage({
                 >
                   <ul className="space-y-3">
                     {items.map((version) => (
-                      <li className="rounded border p-4" key={version.grantVersionId}>
+                      <li
+                        className="rounded border p-4"
+                        key={version.grantVersionId}
+                      >
                         <div className="flex flex-wrap items-center gap-2">
-                          <span className="text-sm font-semibold">Version {version.version}</span>
+                          <span className="font-semibold text-sm">
+                            Version {version.version}
+                          </span>
                           {version.current ? (
                             <StatusPill label="In force now" tone="positive" />
                           ) : (
-                            <StatusPill label="Closed interval" tone="neutral" />
+                            <StatusPill
+                              label="Closed interval"
+                              tone="neutral"
+                            />
                           )}
                           {version.retroactive ? (
                             <StatusPill label="Backdated" tone="attention" />
@@ -253,7 +297,9 @@ export function GrantVersionsPage({
                         <dl className="mt-3">
                           <DefinitionRow
                             label="Effective from"
-                            value={formatBillingTimestamp(version.effectiveStart)}
+                            value={formatBillingTimestamp(
+                              version.effectiveStart
+                            )}
                           />
                           <DefinitionRow
                             label="Effective until"
@@ -269,19 +315,27 @@ export function GrantVersionsPage({
                           />
                           <DefinitionRow
                             label="Purchase types"
-                            value={(version.supportedPurchaseTypes ?? []).join(", ") || "—"}
+                            value={
+                              (version.supportedPurchaseTypes ?? []).join(
+                                ", "
+                              ) || "—"
+                            }
                           />
-                          <DefinitionRow label="Reason" value={version.reason ?? "—"} />
+                          <DefinitionRow
+                            label="Reason"
+                            value={version.reason ?? "—"}
+                          />
                           <DefinitionRow
                             label="Published"
                             value={formatBillingTimestamp(version.createdAt)}
                           />
                         </dl>
-                        <p className="text-muted-foreground mt-3 text-xs leading-5">
-                          This version cannot be edited or deleted. A purchase made inside its
-                          interval is still explained by it, so changing it would change what
-                          someone was entitled to at an instant that has already passed. Publish a
-                          new version instead.
+                        <p className="mt-3 text-muted-foreground text-xs leading-5">
+                          This version cannot be edited or deleted. A purchase
+                          made inside its interval is still explained by it, so
+                          changing it would change what someone was entitled to
+                          at an instant that has already passed. Publish a new
+                          version instead.
                         </p>
                       </li>
                     ))}
@@ -293,23 +347,29 @@ export function GrantVersionsPage({
         )}
       </HostedResourceBoundary>
     </WorkspacePage>
-  )
+  );
 }
 
-function groupByEntitlement(versions: readonly ProductEntitlementGrantVersion[]) {
-  const groups = new Map<string, ProductEntitlementGrantVersion[]>()
+function groupByEntitlement(
+  versions: readonly ProductEntitlementGrantVersion[]
+) {
+  const groups = new Map<string, ProductEntitlementGrantVersion[]>();
   for (const version of versions) {
-    const key = version.entitlementId ?? "unknown"
-    groups.set(key, [...(groups.get(key) ?? []), version])
+    const key = version.entitlementId ?? "unknown";
+    groups.set(key, [...(groups.get(key) ?? []), version]);
   }
   for (const items of groups.values()) {
-    items.sort((left, right) => (right.version ?? 0) - (left.version ?? 0))
+    items.sort((left, right) => (right.version ?? 0) - (left.version ?? 0));
   }
-  return [...groups.entries()]
+  return [...groups.entries()];
 }
 
 function describePolicy(version: ProductEntitlementGrantVersion) {
-  const policy = version.accessPolicy ?? {}
-  const granted = grantPolicyFields.filter((field) => policy[field] === true).map(grantPolicyLabel)
-  return granted.length > 0 ? granted.join(", ") : "Nothing — this version grants no access"
+  const policy = version.accessPolicy ?? {};
+  const granted = grantPolicyFields
+    .filter((field) => policy[field] === true)
+    .map(grantPolicyLabel);
+  return granted.length > 0
+    ? granted.join(", ")
+    : "Nothing — this version grants no access";
 }
