@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
-	"net"
 	"net/http"
 	"strconv"
 	"strings"
@@ -18,6 +17,7 @@ import (
 
 	"github.com/Mujhtech/mosaic/apps/api/internal/analytics"
 	"github.com/Mujhtech/mosaic/apps/api/internal/platform/authn"
+	"github.com/Mujhtech/mosaic/apps/api/internal/platform/httpserver/httpmiddleware"
 	"github.com/Mujhtech/mosaic/apps/api/internal/platform/httpserver/response"
 )
 
@@ -33,12 +33,32 @@ type Handler struct {
 	eventLimiter          EventLimiter
 }
 
-func RegisterPublicRoutes(router chi.Router, service *analytics.Service, ip, key Limiter, events EventLimiter) {
+// RegisterPublicRoutes mounts the SDK ingestion endpoint. ingestMiddleware
+// carries the per-route timeout override, because a 100-event batch legitimately
+// takes longer than the global request budget.
+func RegisterPublicRoutes(router chi.Router, service *analytics.Service, ip, key Limiter, events EventLimiter, ingestMiddleware ...func(http.Handler) http.Handler) {
 	h := &Handler{service: service, ipLimiter: ip, keyLimiter: key, eventLimiter: events}
-	router.Post("/sdk/events/batch", h.ingest)
+	router.With(nonNil(ingestMiddleware)...).Post("/sdk/events/batch", h.ingest)
 }
-func RegisterProjectRoutes(router chi.Router, service *analytics.Service) {
+
+// nonNil drops unset optional middleware so callers can pass a nil override.
+func nonNil(middleware []func(http.Handler) http.Handler) []func(http.Handler) http.Handler {
+	result := make([]func(http.Handler) http.Handler, 0, len(middleware))
+	for _, item := range middleware {
+		if item != nil {
+			result = append(result, item)
+		}
+	}
+	return result
+}
+
+// RegisterProjectRoutes mounts the authenticated analytics routes.
+// exportMiddleware carries the export-specific rate limit. Every route it wraps
+// enqueues a background job that scans analytics history, so those routes are
+// bounded separately from the baseline API limit shared by dashboard reads.
+func RegisterProjectRoutes(router chi.Router, service *analytics.Service, exportMiddleware ...func(http.Handler) http.Handler) {
 	h := &Handler{service: service}
+	export := nonNil(exportMiddleware)
 	router.Route("/environments/{environmentId}/analytics", func(a chi.Router) {
 		a.Get("/settings", h.settings)
 		a.Put("/settings", h.updateSettings)
@@ -49,13 +69,13 @@ func RegisterProjectRoutes(router chi.Router, service *analytics.Service) {
 		a.Get("/product-availability-failures", h.productFailures)
 		a.Get("/breakdowns/{dimension}", h.breakdown)
 		a.Get("/freshness", h.freshness)
-		a.Post("/exports", h.eventExport)
+		a.With(export...).Post("/exports", h.eventExport)
 	})
-	router.Post("/environments/{environmentId}/experiments/{experimentId}/exports", h.experimentExport)
+	router.With(export...).Post("/environments/{environmentId}/experiments/{experimentId}/exports", h.experimentExport)
 	router.Route("/analytics/privacy", func(p chi.Router) {
 		p.Post("/preview", h.preview)
-		p.Post("/exports", h.userExport)
-		p.Post("/deletions", h.deletion)
+		p.With(export...).Post("/exports", h.userExport)
+		p.With(export...).Post("/deletions", h.deletion)
 	})
 	router.Get("/analytics/jobs/{jobId}", h.job)
 	router.Get("/analytics/jobs/{jobId}/download", h.download)
@@ -81,10 +101,7 @@ func (h *Handler) ingest(w http.ResponseWriter, r *http.Request) {
 		writeError(w, r, analytics.ErrInvalidBatch)
 		return
 	}
-	host, _, _ := net.SplitHostPort(r.RemoteAddr)
-	if host == "" {
-		host = r.RemoteAddr
-	}
+	host := httpmiddleware.ClientIP(r)
 	if ok, retry := h.ipLimiter.Allow("ip:" + host); !ok {
 		w.Header().Set("Retry-After", retryHeader(retry))
 		writeError(w, r, analytics.ErrRateLimited)

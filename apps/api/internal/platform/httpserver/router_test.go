@@ -14,6 +14,7 @@ import (
 
 	"github.com/rs/zerolog"
 
+	"github.com/Mujhtech/mosaic/apps/api/internal/analytics"
 	"github.com/Mujhtech/mosaic/apps/api/internal/cloudworkspace"
 	"github.com/Mujhtech/mosaic/apps/api/internal/hostedpublishing"
 	"github.com/Mujhtech/mosaic/apps/api/internal/platform/authn"
@@ -181,8 +182,9 @@ func TestEmptyCORSOriginsDisableCrossOriginAccess(t *testing.T) {
 func TestMiddlewareOrder(t *testing.T) {
 	want := []string{
 		"request_id",
-		"real_ip",
+		"trusted_proxy_real_ip",
 		"otelchi",
+		"otelchi_metrics",
 		"request_scoped_zerolog",
 		"recovery",
 		"security_headers",
@@ -295,4 +297,86 @@ func newTestHandler() http.Handler {
 		AllowedOrigins: []string{"http://localhost:3000"},
 		RequestTimeout: time.Second,
 	}, zerolog.Nop())
+}
+
+// exhaustedLimiter rejects everything, so a request that reaches it is proof the
+// middleware is mounted on that route.
+type exhaustedLimiter struct{ keys []string }
+
+func (limiter *exhaustedLimiter) Allow(key string) (bool, time.Duration) {
+	limiter.keys = append(limiter.keys, key)
+	return false, time.Second
+}
+
+// Asset upload and the four export/privacy submissions each cost far more than a
+// dashboard read -- a large body plus an object-storage write, or an enqueued job
+// that scans analytics history. Before Phase 8 Stage 6 they shared the baseline
+// per-principal API bucket. This pins both halves of that wiring: the expensive
+// routes really are behind their own limiter, and the limiter does not leak onto
+// the ordinary reads mounted beside them, which would 429 normal dashboard use.
+func TestUploadAndExportLimitersCoverOnlyTheExpensiveRoutes(t *testing.T) {
+	service := cloudworkspace.NewService(cloudworkspacememory.New())
+	actor := cloudworkspace.Actor{ID: "actor-owner"}
+	organization, err := service.CreateOrganization(context.Background(), actor, "Acme")
+	if err != nil {
+		t.Fatalf("create organization: %v", err)
+	}
+	project, err := service.CreateProject(context.Background(), actor, organization.ID, "ios-app", "iOS App")
+	if err != nil {
+		t.Fatalf("create project: %v", err)
+	}
+	uploadLimiter := &exhaustedLimiter{}
+	exportLimiter := &exhaustedLimiter{}
+	handler := NewWithDependencies(Config{
+		ServiceName:    "mosaic-api-test",
+		AllowedOrigins: []string{"http://localhost:3000"},
+		RequestTimeout: time.Second,
+	}, zerolog.Nop(), Dependencies{
+		CloudWorkspace:   service,
+		HostedPublishing: hostedpublishing.NewService(nil),
+		Analytics:        analytics.NewService(nil, nil),
+		PrincipalResolver: authn.ResolverFunc(func(*http.Request) (authn.Principal, error) {
+			return authn.Principal{ActorID: actor.ID, Method: "test"}, nil
+		}),
+		UploadLimiter: uploadLimiter,
+		ExportLimiter: exportLimiter,
+	})
+
+	base := "/v1/projects/" + project.ID
+	for _, limited := range []struct {
+		name string
+		path string
+	}{
+		{name: "asset upload", path: base + "/assets"},
+		{name: "analytics export", path: base + "/environments/env-1/analytics/exports"},
+		{name: "experiment export", path: base + "/environments/env-1/experiments/experiment-1/exports"},
+		{name: "privacy export", path: base + "/analytics/privacy/exports"},
+		{name: "privacy deletion request", path: base + "/analytics/privacy/deletions"},
+	} {
+		recorder := httptest.NewRecorder()
+		request := httptest.NewRequest(http.MethodPost, limited.path, strings.NewReader("{}"))
+		request.Header.Set("Content-Type", "application/json")
+		handler.ServeHTTP(recorder, request)
+		if recorder.Code != http.StatusTooManyRequests {
+			t.Fatalf("%s status = %d, want 429 from its own limiter; body=%s", limited.name, recorder.Code, recorder.Body.String())
+		}
+	}
+	if len(uploadLimiter.keys) != 1 {
+		t.Fatalf("upload limiter saw %d requests, want exactly the upload route", len(uploadLimiter.keys))
+	}
+	if len(exportLimiter.keys) != 4 {
+		t.Fatalf("export limiter saw %d requests, want the four export and privacy submissions", len(exportLimiter.keys))
+	}
+
+	// Reads mounted beside the limited routes must be unaffected.
+	for _, path := range []string{base + "/assets", base + "/environments/env-1/analytics/settings"} {
+		recorder := httptest.NewRecorder()
+		handler.ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, path, nil))
+		if recorder.Code == http.StatusTooManyRequests {
+			t.Fatalf("GET %s was rate limited by an upload/export bucket", path)
+		}
+	}
+	if len(uploadLimiter.keys) != 1 || len(exportLimiter.keys) != 4 {
+		t.Fatalf("a read consumed an upload/export token: upload=%d export=%d", len(uploadLimiter.keys), len(exportLimiter.keys))
+	}
 }

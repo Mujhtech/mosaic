@@ -16,7 +16,12 @@ let package = Package(
   targets: [
     .target(
       name: "MosaicSDK",
-      resources: [.process("Resources")]
+      resources: [
+        .process("Resources"),
+        // Apple requires the privacy manifest verbatim; processing could
+        // rewrite or relocate it.
+        .copy("PrivacyInfo.xcprivacy"),
+      ]
     ),
     // The PNG is consumed by the Xcode-hosted UIKit snapshot target, not by
     // the macOS SwiftPM test process.

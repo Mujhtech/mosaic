@@ -11,6 +11,178 @@ import org.junit.Test
 import java.nio.file.Files
 
 class PaywallStateTest {
+    /**
+     * Experiment conversion attribution joins solely on the tuple carried by the conversion event
+     * itself, and the tuple is legal only on a v2 event. An SDK that emits `experiment_exposed` on
+     * v2 while emitting `product_selected`/`purchase_*` on v1 makes every Experiment report zero
+     * conversions, with no ingest rejection and no diagnostic. This pins the emitter to the
+     * `analytics-event-v1-to-v2` MUST table: under an active assignment every conversion event is
+     * v2 and carries the complete all-or-none tuple.
+     */
+    @Test
+    fun conversionEventsCarryTheExperimentTupleOnV2UnderAnActiveAssignment() = runTest {
+        val events = emitConversionJourney(experimentAssigned = true)
+
+        val conversions = events.filter {
+            it.eventName == "product_selected" || it.eventName.startsWith("purchase_")
+        }
+        assertTrue("expected conversion events, got ${events.map { it.eventName }}", conversions.isNotEmpty())
+        assertTrue(
+            listOf("product_selected", "purchase_started", "purchase_completed_client")
+                .all { name -> conversions.any { it.eventName == name } },
+        )
+        conversions.forEach { event ->
+            assertEquals("${event.eventName} must be v2", "2", event.eventSchemaVersion)
+            assertTrue("${event.eventName} must carry the tuple", event.attribution.hasExperimentTuple())
+            assertEquals("experiment_checkout", event.attribution.experimentId)
+            assertEquals("experiment_version_checkout_1", event.attribution.experimentVersionId)
+            assertEquals("variant_control", event.attribution.experimentVariantId)
+            assertEquals("allocation_checkout_1", event.attribution.experimentAllocationVersion)
+        }
+        // The exposure denominator is emitted for the same presentation.
+        assertTrue(events.any { it.eventName == "experiment_exposed" })
+    }
+
+    /**
+     * A fallback presentation shows the normal Paywall, so its conversions are NOT Variant outcomes
+     * and MUST omit the tuple. `product_selection_purchase_start` uses `product_selected` as its
+     * *denominator*, so a tuple-carrying fallback conversion becomes a counted exposure and, being
+     * earlier, can displace the Variant's own first unit for that bucket — attributing
+     * normal-Paywall outcomes to the Variant. `experiment_fallback_presented` still requires the
+     * tuple, because it identifies the assignment that fell back.
+     *
+     * The normative requirement is the absent tuple, not the schema version. These events stay on
+     * v2 because the release is Delivery v3, and a tuple-free v1-shaped event is a valid v2 event
+     * ("A v1 event is a valid v2 event once `eventSchemaVersion` is `2`"). Forcing them to v1 would
+     * split one presentation across two batches for no benefit, and versions are never mixed inside
+     * a batch. Aggregation joins on the tuple columns, which are absent either way.
+     */
+    @Test
+    fun fallbackPresentationConversionsOmitTheExperimentTuple() = runTest {
+        val events = emitConversionJourney(
+            experimentAssigned = true,
+            kind = MosaicExperimentPresentationKind.FALLBACK,
+        )
+
+        val conversions = events.filter {
+            it.eventName == "product_selected" || it.eventName.startsWith("purchase_")
+        }
+        assertTrue(conversions.isNotEmpty())
+        conversions.forEach { event ->
+            assertFalse(
+                "${event.eventName} must not carry the tuple on a fallback presentation",
+                event.attribution.hasExperimentTuple(),
+            )
+            assertEquals("2", event.eventSchemaVersion)
+        }
+        // The fallback's own event still carries the tuple: it identifies the assignment.
+        val fallback = events.single { it.eventName == "experiment_fallback_presented" }
+        assertEquals("2", fallback.eventSchemaVersion)
+        assertTrue(fallback.attribution.hasExperimentTuple())
+        assertTrue(events.none { it.eventName == "experiment_exposed" })
+    }
+
+    /**
+     * A QA-override presentation emits no statistical exposure, so its conversions must not be
+     * attributed to the Variant either; otherwise QA traffic inflates the denominator.
+     */
+    @Test
+    fun qaOverridePresentationConversionsOmitTheExperimentTuple() = runTest {
+        val events = emitConversionJourney(experimentAssigned = true, qaOverride = true)
+
+        val conversions = events.filter {
+            it.eventName == "product_selected" || it.eventName.startsWith("purchase_")
+        }
+        assertTrue(conversions.isNotEmpty())
+        conversions.forEach { assertFalse(it.attribution.hasExperimentTuple()) }
+        assertTrue(events.none { it.eventName == "experiment_exposed" })
+    }
+
+    /** Without an Experiment the SDK stays on v1: v1 is approved and current for non-Experiment use. */
+    @Test
+    fun conversionEventsRemainOnV1WithoutAnExperiment() = runTest {
+        val events = emitConversionJourney(experimentAssigned = false)
+
+        assertTrue(events.isNotEmpty())
+        events.forEach { event ->
+            assertEquals("${event.eventName} must be v1", "1", event.eventSchemaVersion)
+            assertFalse(event.attribution.hasExperimentTuple())
+        }
+    }
+
+    private suspend fun emitConversionJourney(
+        experimentAssigned: Boolean,
+        kind: MosaicExperimentPresentationKind = MosaicExperimentPresentationKind.VARIANT,
+        qaOverride: Boolean = false,
+    ): List<MosaicAnalyticsEvent> {
+        val queue = MosaicAnalyticsQueue(MemoryStore()) { 1_700_000_000_000 }
+        val runtime = MosaicAnalyticsRuntime(
+            identityStore = { MosaicIdentityState("installation_001", "customer_42", emptyMap(), 1) },
+            queue = queue,
+            transport = object : MosaicAnalyticsTransport {
+                override suspend fun send(batch: MosaicAnalyticsBatch) =
+                    MosaicAnalyticsTransportResult.Retryable("analytics.unavailable")
+            },
+            baseContext = MosaicAnalyticsContext(),
+            environmentEnabled = true,
+        )
+        val experiment = MosaicExperimentAttribution(
+            "experiment_checkout", "experiment_version_checkout_1", "variant_control", "allocation_checkout_1",
+        )
+        val attribution = MosaicAnalyticsAttribution(
+            placementId = "placement_checkout",
+            paywallId = "paywall_checkout_control",
+            paywallVersionId = "paywall_version_control_7",
+        ).let {
+            if (!experimentAssigned) it else it.copy(
+                experimentId = experiment.experimentId,
+                experimentVersionId = experiment.experimentVersionId,
+                experimentVariantId = experiment.experimentVariantId,
+                experimentAllocationVersion = experiment.experimentAllocationVersion,
+            )
+        }
+        val document = canonicalDocument()
+        val state = MosaicPaywallState(
+            document,
+            MockMosaicPurchaseProvider(MockMosaicPurchaseProvider.phase1Products()),
+            analyticsRuntime = runtime,
+            analyticsContext = MosaicAnalyticsPresentationContext(
+                "placement_request_1",
+                "presentation_1",
+                MosaicAnalyticsContext(configurationDeliveryVersion = if (experimentAssigned) "3" else "2"),
+                attribution,
+                if (!experimentAssigned) null else MosaicExperimentPresentationContext(
+                    experiment, "identified_user", MOSAIC_EXPERIMENT_BUCKETING_ALGORITHM, qaOverride,
+                    kind,
+                    fallbackReason = if (kind == MosaicExperimentPresentationKind.FALLBACK) {
+                        "product_unavailable"
+                    } else {
+                        null
+                    },
+                    presentedPaywallId = "paywall_checkout_control",
+                    presentedPaywallVersionId = "paywall_version_control_7",
+                ),
+            ),
+        )
+        state.presented()
+        state.loadProducts()
+        val selectorId = document.walkNodesDepthFirst()
+            .filterIsInstance<MosaicProductSelectorComponent>().first().id
+        state.selectorStates[selectorId]?.options?.lastOrNull()?.let {
+            state.selectProduct(selectorId, it.reference.id)
+        }
+        state.purchase(selectorId)
+        runtime.drainPendingRecords()
+        runtime.close()
+        return queue.ready(100, 2 * 1024 * 1024).map { MosaicAnalyticsCodec.decodeEvent(it.encoded) }
+    }
+
+    private class MemoryStore : MosaicAnalyticsStore {
+        private var state = MosaicAnalyticsPersistedState()
+        override suspend fun read() = state
+        override suspend fun write(state: MosaicAnalyticsPersistedState) { this.state = state }
+    }
+
     @Test
     fun renderingFailureIsTerminalAndEmittedOnlyOncePerSafeCode() {
         val state = MosaicPaywallState(canonicalDocument(), MockMosaicPurchaseProvider())

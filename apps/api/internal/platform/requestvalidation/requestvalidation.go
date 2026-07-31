@@ -2,6 +2,7 @@ package requestvalidation
 
 import (
 	"errors"
+	"regexp"
 	"strings"
 	"unicode"
 
@@ -9,6 +10,24 @@ import (
 )
 
 const requestField = "_request"
+
+// placementKeyPattern mirrors the PostgreSQL CHECK constraints on
+// placements.key, placement_aliases.key, and
+// placement_attribute_definitions.key exactly. Those three columns are the only
+// keys in the schema that forbid hyphens, and the transport layer previously
+// validated length alone — so a hyphenated key (the form the Product and
+// Project key patterns accept, and the form an operator naturally types) passed
+// validation, reached PostgreSQL, and came back as an unexplained 500 instead of
+// a field error naming the offending key.
+var placementKeyPattern = regexp.MustCompile(`^[a-z][a-z0-9_]{0,63}$`)
+
+// PlacementKey validates a Placement, Placement alias, or Placement attribute
+// key against the database's own format rule, so an invalid key is rejected at
+// the boundary with a 422 that says what is wrong.
+func PlacementKey() validation.Rule {
+	return validation.Match(placementKeyPattern).
+		Error("must start with a lowercase letter and contain only lowercase letters, digits, and underscores")
+}
 
 // FieldErrors converts Ozzo validation errors to Mosaic's field-error shape.
 // The boolean is false for non-validation and Ozzo internal errors so callers

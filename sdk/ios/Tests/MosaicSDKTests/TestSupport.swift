@@ -112,6 +112,42 @@ func analyticsFixtureData(_ relativePath: String) throws -> Data {
   try phase5FixtureData("analytics-event/v1/\(relativePath)")
 }
 
+/// One canonical bucketing vector from
+/// `protocol/fixtures/experiment-assignment/v1/assignment-vectors.json`.
+struct CanonicalBucketVector {
+  let name: String
+  let values: [String]
+  let bucket: Int
+}
+
+/// The canonical assignment and mutual-exclusion group bucketing vectors.
+///
+/// Reading them keeps the Swift bucketing implementation bound to the shared
+/// protocol contract instead of numbers copied into this test target.
+func canonicalBucketVectors() throws -> (
+  assignments: [CanonicalBucketVector],
+  groups: [CanonicalBucketVector]
+) {
+  let object = try JSONSerialization.jsonObject(
+    with: phase5FixtureData("experiment-assignment/v1/assignment-vectors.json"))
+  guard let root = object as? [String: Any] else {
+    throw CanonicalFixtureLookupError.invalidShape
+  }
+  func vectors(_ key: String) throws -> [CanonicalBucketVector] {
+    guard let entries = root[key] as? [[String: Any]], !entries.isEmpty else {
+      throw CanonicalFixtureLookupError.invalidShape
+    }
+    return try entries.map { entry in
+      guard let name = entry["name"] as? String,
+        let values = entry["values"] as? [String],
+        let bucket = entry["bucket"] as? Int
+      else { throw CanonicalFixtureLookupError.invalidShape }
+      return CanonicalBucketVector(name: name, values: values, bucket: bucket)
+    }
+  }
+  return (try vectors("assignmentVectors"), try vectors("groupVectors"))
+}
+
 func commerceConfigurationFixtureData(
   named name: String = "revenuecat-configuration.json"
 ) throws -> Data {

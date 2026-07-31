@@ -3,7 +3,12 @@ package dev.mosaic.sdk
 /** The single protocol contract supported during pre-release iteration. */
 const val MOSAIC_PROTOCOL_VERSION: String = "0.2"
 const val MOSAIC_LATEST_PROTOCOL_VERSION: String = MOSAIC_PROTOCOL_VERSION
-const val MOSAIC_ANDROID_SDK_VERSION: String = "0.2.0-dev.1"
+/**
+ * The exact published artifact version of `dev.mosaic.sdk:mosaic`. It is sent as
+ * `Mosaic-SDK-Version` on every request and must be bumped with the Gradle module versions in the
+ * same change; it is not a protocol version.
+ */
+const val MOSAIC_ANDROID_SDK_VERSION: String = "0.1.0-dev.7"
 
 val MOSAIC_SUPPORTED_PROTOCOL_VERSIONS: Set<String> = setOf(
     MOSAIC_PROTOCOL_VERSION,

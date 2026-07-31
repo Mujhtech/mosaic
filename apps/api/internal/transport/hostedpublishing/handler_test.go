@@ -414,3 +414,35 @@ func TestAssetContentRetainsArchivedImmutableBytes(t *testing.T) {
 }
 
 var _ hostedpublishing.ObjectStore = deliveryObjectStore{}
+
+// A referenced Asset whose bytes are missing from object storage is a "not
+// found", not a "Mosaic is broken": an SDK must be able to tell them apart to
+// fall back to its bundled Asset, and a 500 tells it the wrong thing. Storage
+// that is genuinely failing must still be a retryable 503.
+func TestMissingAssetObjectIsNotFoundAndFailingStorageIsRetryable(t *testing.T) {
+	for name, testCase := range map[string]struct {
+		err        error
+		wantStatus int
+		wantCode   string
+	}{
+		"asset bytes are absent from the bucket": {
+			hostedpublishing.ErrAssetObjectMissing, http.StatusNotFound, "asset_object_missing",
+		},
+		"object storage is failing": {
+			hostedpublishing.ErrAssetStorage, http.StatusServiceUnavailable, "asset_storage_failed",
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			recorder := httptest.NewRecorder()
+			request := httptest.NewRequest(http.MethodGet, "/v1/sdk/assets/asset_1/sha256:abc", nil)
+			writeError(recorder, request, testCase.err)
+
+			if recorder.Code != testCase.wantStatus {
+				t.Fatalf("status = %d, want %d (body %s)", recorder.Code, testCase.wantStatus, recorder.Body.String())
+			}
+			if !strings.Contains(recorder.Body.String(), `"code":"`+testCase.wantCode+`"`) {
+				t.Fatalf("body = %s, want code %q", recorder.Body.String(), testCase.wantCode)
+			}
+		})
+	}
+}

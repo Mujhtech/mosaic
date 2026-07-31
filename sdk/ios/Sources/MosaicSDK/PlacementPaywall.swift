@@ -172,7 +172,11 @@ public struct MosaicPlacementPaywall: View {
               document: document,
               analytics: await mosaic.analyticsPresentationInstrumentation(
                 placementRequestID: placementRequestID, presentationID: presentationID,
-                attribution: attribution, experimentAttribution: experiment),
+                attribution: attribution,
+                experimentAttribution: Self.conversionExperimentAttribution(
+                  experiment: experiment,
+                  selection: evaluation.experimentSelection,
+                  fallbackReason: evaluation.experimentFallbackReason)),
               attribution: attribution, experimentAttribution: experiment,
               selection: evaluation.experimentSelection,
               fallbackReason: evaluation.experimentFallbackReason,
@@ -279,17 +283,9 @@ public struct MosaicPlacementPaywall: View {
       guard let selection = resolved.selection, !selection.excludedFromResults,
         let experiment = resolved.experimentAttribution
       else { return }
-      if let reason = resolved.fallbackReason {
-        _ = await mosaic.recordAnalytics(
-          .experimentFallbackPresented,
-          correlation: .init(
-            placementRequestId: placementRequestID, paywallPresentationId: presentationID),
-          attribution: experiment,
-          payload: .init(
-            diagnosticCode: "experiment.\(reason)", reason: reason,
-            presentedPaywallId: attribution.paywallId,
-            presentedPaywallVersionId: attribution.paywallVersionId))
-      } else {
+      if Self.recordsStatisticalExposure(
+        selection: selection, experiment: experiment, fallbackReason: resolved.fallbackReason)
+      {
         _ = await mosaic.recordAnalytics(
           .experimentExposed,
           correlation: .init(
@@ -300,6 +296,16 @@ public struct MosaicPlacementPaywall: View {
             bucketingAlgorithm: selection.assignment.bucketingAlgorithm,
             productReadiness: "ready", providerCapability: "accepted", qaOverride: false))
         await mosaic.markExperimentExposed(selection)
+      } else if let reason = resolved.fallbackReason {
+        _ = await mosaic.recordAnalytics(
+          .experimentFallbackPresented,
+          correlation: .init(
+            placementRequestId: placementRequestID, paywallPresentationId: presentationID),
+          attribution: experiment,
+          payload: .init(
+            diagnosticCode: "experiment.\(reason)", reason: reason,
+            presentedPaywallId: attribution.paywallId,
+            presentedPaywallVersionId: attribution.paywallVersionId))
       }
     }
   }
@@ -310,6 +316,46 @@ public struct MosaicPlacementPaywall: View {
     acknowledgementGate.reset()
     state = .loading
     generation += 1
+  }
+
+  /// The exact condition under which this presentation records a statistical
+  /// exposure, meaning it emits `experiment_exposed`.
+  ///
+  /// This is the single source of truth for both the exposure emission below
+  /// and `conversionExperimentAttribution(experiment:selection:fallbackReason:)`,
+  /// so "carries the tuple" and "has an exposure row" cannot drift apart.
+  static func recordsStatisticalExposure(
+    selection: MosaicExperimentSelection?,
+    experiment: MosaicAnalyticsAttribution?,
+    fallbackReason: String?
+  ) -> Bool {
+    guard let selection, experiment != nil else { return false }
+    // A QA override is excluded from results, and a fallback presented the
+    // normal Placement rather than the assigned Variant.
+    return !selection.excludedFromResults && fallbackReason == nil
+  }
+
+  /// The Experiment tuple that a presentation's conversion events may carry.
+  ///
+  /// Conversion attribution joins a conversion to an exposure by equality on
+  /// the Experiment columns of the conversion event itself. A presentation that
+  /// records no exposure must therefore emit tuple-free conversions: a
+  /// tuple-carrying `product_selected` from a fallback or a QA override would
+  /// displace the Variant's legitimate denominator row in
+  /// `product_selection_purchase_start`.
+  ///
+  /// Only the tuple is removed. The event still uses Event Schema v2.
+  ///
+  /// `experiment_fallback_presented` still carries the tuple. It is a
+  /// diagnostic event, not a conversion.
+  static func conversionExperimentAttribution(
+    experiment: MosaicAnalyticsAttribution?,
+    selection: MosaicExperimentSelection?,
+    fallbackReason: String?
+  ) -> MosaicAnalyticsAttribution? {
+    recordsStatisticalExposure(
+      selection: selection, experiment: experiment, fallbackReason: fallbackReason)
+      ? experiment : nil
   }
 
   private func exposureAttribution(

@@ -1,6 +1,6 @@
 {
   "configurationDeliveryVersion": "2",
-  "status": "releaseCandidate",
+  "status": "approved",
   "releaseSchema": "../../schema/configuration-delivery/v2/release.schema.json",
   "capabilityRequestSchema": "../../schema/configuration-delivery/v2/capability-request.schema.json",
   "canonicalFixture": "../../fixtures/configuration-delivery/v2/advanced-release.json",

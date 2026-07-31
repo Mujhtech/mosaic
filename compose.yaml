@@ -1,6 +1,51 @@
+# Mosaic single-host Docker Compose deployment (supported Profile A).
+#
+# `docker compose up -d` yields a complete installation: PostgreSQL, MinIO,
+# a one-shot migration step, the API, the worker, the dashboard, and a local
+# TLS edge.
+#
+# PostgreSQL and MinIO ports are NOT published to the host by default; nothing
+# outside the Compose network needs them. Use the `debug` profile when you want
+# to attach psql or the MinIO console:
+#
+#   docker compose --profile debug up -d
+#
+# Named volumes are deliberately NOT pinned with an explicit `name:`. Compose
+# prefixes them with the project name, so `docker compose -p other-project up`
+# gets its own PostgreSQL, MinIO, and Caddy state instead of silently sharing
+# this installation's data. The `name: mosaic` below fixes the default project
+# name so the resolved volumes stay `mosaic_postgres_data`, `mosaic_minio_data`,
+# `mosaic_caddy_data`, and `mosaic_caddy_config` regardless of the directory the
+# repository is checked out into.
+name: mosaic
+
+# Operator configuration. `.env.example` documents every variable the API and
+# worker read, but the service blocks below list only the ones Compose itself
+# must control (the in-network database and object-storage endpoints, the listen
+# addresses, the service names). Without this the other ~59 documented variables
+# -- every rate limit, timeout, log level, session lifetime, upload ceiling, and
+# worker interval -- silently had no effect in the supported deployment profile,
+# so an operator could edit `.env` and change nothing. `environment:` is applied
+# over `env_file:`, so the explicit values below still win.
+x-operator-env: &operator-env
+  - path: ${MOSAIC_ENV_FILE:-.env}
+    required: false
+
+x-api-build: &api-build
+  context: .
+  dockerfile: apps/api/Dockerfile
+  args:
+    VERSION: ${MOSAIC_VERSION:-dev}
+    COMMIT: ${MOSAIC_COMMIT:-}
+    BUILD_DATE: ${MOSAIC_BUILD_DATE:-}
+
+x-database-url: &database-url
+  DATABASE_URL: postgres://${POSTGRES_USER:-mosaic}:${POSTGRES_PASSWORD:-mosaic_dev}@postgres:5432/${POSTGRES_DB:-mosaic}?sslmode=disable
+
 services:
   postgres:
     image: postgres:17-alpine
+    restart: unless-stopped
     environment:
       POSTGRES_DB: ${POSTGRES_DB:-mosaic}
       POSTGRES_USER: ${POSTGRES_USER:-mosaic}
@@ -11,24 +56,34 @@ services:
       timeout: 3s
       retries: 10
     volumes:
-      - mosaic_postgres_data:/var/lib/postgresql/data
+      - postgres_data:/var/lib/postgresql/data
+
+  # Host-published PostgreSQL, opt-in through the debug profile.
+  postgres-debug-ports:
+    profiles: ["debug"]
+    image: alpine/socat:1.8.0.3
+    restart: unless-stopped
+    command: ["TCP-LISTEN:5432,fork,reuseaddr", "TCP:postgres:5432"]
+    depends_on:
+      postgres:
+        condition: service_healthy
     ports:
       - "${POSTGRES_PORT:-5432}:5432"
 
   migrate:
-    build:
-      context: .
-      dockerfile: apps/api/Dockerfile
+    build: *api-build
     entrypoint: ["/usr/local/bin/migrate"]
     command: ["up"]
+    env_file: *operator-env
     environment:
-      DATABASE_URL: postgres://${POSTGRES_USER:-mosaic}:${POSTGRES_PASSWORD:-mosaic_dev}@postgres:5432/${POSTGRES_DB:-mosaic}?sslmode=disable
+      <<: *database-url
     depends_on:
       postgres:
         condition: service_healthy
 
   minio:
     image: minio/minio:RELEASE.2025-07-23T15-54-02Z
+    restart: unless-stopped
     command: ["server", "/data", "--console-address", ":9001"]
     environment:
       MINIO_ROOT_USER: ${MINIO_ROOT_USER:-mosaic}
@@ -39,9 +94,18 @@ services:
       timeout: 3s
       retries: 10
     volumes:
-      - mosaic_minio_data:/data
+      - minio_data:/data
+
+  # Host-published MinIO API and console, opt-in through the debug profile.
+  minio-debug-ports:
+    profiles: ["debug"]
+    image: alpine/socat:1.8.0.3
+    restart: unless-stopped
+    command: ["TCP-LISTEN:9001,fork,reuseaddr", "TCP:minio:9001"]
+    depends_on:
+      minio:
+        condition: service_healthy
     ports:
-      - "${MINIO_API_PORT:-9000}:9000"
       - "${MINIO_CONSOLE_PORT:-9001}:9001"
 
   minio-init:
@@ -60,15 +124,26 @@ services:
         condition: service_healthy
 
   api:
-    build:
-      context: .
-      dockerfile: apps/api/Dockerfile
+    build: *api-build
+    restart: unless-stopped
+    env_file: *operator-env
     environment:
-      DATABASE_URL: postgres://${POSTGRES_USER:-mosaic}:${POSTGRES_PASSWORD:-mosaic_dev}@postgres:5432/${POSTGRES_DB:-mosaic}?sslmode=disable
+      <<: *database-url
+      MOSAIC_ENVIRONMENT: ${MOSAIC_ENVIRONMENT:-development}
       DATABASE_MAX_CONNECTIONS: ${DATABASE_MAX_CONNECTIONS:-10}
       DATABASE_MIN_CONNECTIONS: ${DATABASE_MIN_CONNECTIONS:-2}
       DATABASE_CONNECT_TIMEOUT: ${DATABASE_CONNECT_TIMEOUT:-5s}
       MOSAIC_HTTP_ADDRESS: :8080
+      MOSAIC_CORS_ALLOWED_ORIGINS: ${MOSAIC_CORS_ALLOWED_ORIGINS:-http://localhost:3000,http://127.0.0.1:3000}
+      # The local-edge (Caddy) container terminates TLS in front of the API, so
+      # without this every request through https://localhost:8443 would be
+      # bucketed and logged under Caddy's single container address. Only the
+      # edge's pinned address is trusted -- not the whole Compose subnet --
+      # because the Docker bridge gateway is also inside that subnet and carries
+      # traffic sent straight to the published port 8080, which must never be
+      # allowed to set its own client address. Change this together with
+      # MOSAIC_EDGE_IPV4 below.
+      MOSAIC_TRUSTED_PROXY_CIDRS: ${MOSAIC_TRUSTED_PROXY_CIDRS:-172.28.0.10/32}
       MOSAIC_OBJECT_STORAGE_ENDPOINT: minio:9000
       MOSAIC_OBJECT_STORAGE_ACCESS_KEY: ${MINIO_ROOT_USER:-mosaic}
       MOSAIC_OBJECT_STORAGE_SECRET_KEY: ${MINIO_ROOT_PASSWORD:-mosaic_dev_secret}
@@ -80,6 +155,14 @@ services:
       MOSAIC_PROVIDER_CREDENTIAL_KEYRING: ${MOSAIC_PROVIDER_CREDENTIAL_KEYRING:-}
       MOSAIC_REVENUECAT_BASE_URL: ${MOSAIC_REVENUECAT_BASE_URL:-https://api.revenuecat.com/v2}
       MOSAIC_PROVIDER_OPERATION_TIMEOUT: ${MOSAIC_PROVIDER_OPERATION_TIMEOUT:-60s}
+      OTEL_SERVICE_NAME: mosaic-api
+      OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-}
+    healthcheck:
+      test: ["CMD", "/usr/local/bin/healthcheck", "http://127.0.0.1:8080/health/ready"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
     depends_on:
       postgres:
         condition: service_healthy
@@ -90,47 +173,102 @@ services:
     ports:
       - "${MOSAIC_API_PORT:-8080}:8080"
 
-  provider-worker:
-    profiles: ["providers"]
-    build:
-      context: .
-      dockerfile: apps/api/Dockerfile
+  # Runs analytics aggregation, retention, privacy, Experiment scheduling, and
+  # provider synchronization jobs. Not profile-gated: analytics and Experiment
+  # jobs are part of every installation.
+  worker:
+    build: *api-build
+    restart: unless-stopped
     entrypoint: ["/usr/local/bin/worker"]
+    env_file: *operator-env
     environment:
-      DATABASE_URL: postgres://${POSTGRES_USER:-mosaic}:${POSTGRES_PASSWORD:-mosaic_dev}@postgres:5432/${POSTGRES_DB:-mosaic}?sslmode=disable
+      <<: *database-url
+      MOSAIC_ENVIRONMENT: ${MOSAIC_ENVIRONMENT:-development}
       DATABASE_MAX_CONNECTIONS: ${DATABASE_MAX_CONNECTIONS:-10}
       DATABASE_MIN_CONNECTIONS: ${DATABASE_MIN_CONNECTIONS:-2}
       DATABASE_CONNECT_TIMEOUT: ${DATABASE_CONNECT_TIMEOUT:-5s}
-      MOSAIC_PROVIDER_INTEGRATIONS_ENABLED: "true"
+      MOSAIC_OBJECT_STORAGE_ENDPOINT: minio:9000
+      MOSAIC_OBJECT_STORAGE_ACCESS_KEY: ${MINIO_ROOT_USER:-mosaic}
+      MOSAIC_OBJECT_STORAGE_SECRET_KEY: ${MINIO_ROOT_PASSWORD:-mosaic_dev_secret}
+      MOSAIC_OBJECT_STORAGE_BUCKET: ${MOSAIC_OBJECT_STORAGE_BUCKET:-mosaic-assets}
+      MOSAIC_OBJECT_STORAGE_TLS: "false"
+      MOSAIC_PUBLIC_ASSET_BASE_URL: ${MOSAIC_PUBLIC_ASSET_BASE_URL:-https://localhost:8443/v1/sdk/assets}
+      MOSAIC_PROVIDER_INTEGRATIONS_ENABLED: ${MOSAIC_PROVIDER_INTEGRATIONS_ENABLED:-false}
       MOSAIC_PROVIDER_CREDENTIAL_KEYRING: ${MOSAIC_PROVIDER_CREDENTIAL_KEYRING:-}
       MOSAIC_REVENUECAT_BASE_URL: ${MOSAIC_REVENUECAT_BASE_URL:-https://api.revenuecat.com/v2}
       MOSAIC_PROVIDER_OPERATION_TIMEOUT: ${MOSAIC_PROVIDER_OPERATION_TIMEOUT:-60s}
-      OTEL_SERVICE_NAME: mosaic-provider-worker
+      MOSAIC_WORKER_HEALTH_ADDRESS: :8081
+      OTEL_SERVICE_NAME: mosaic-worker
+      OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-}
+    healthcheck:
+      test: ["CMD", "/usr/local/bin/healthcheck", "http://127.0.0.1:8081/health/ready"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
     depends_on:
       postgres:
         condition: service_healthy
       migrate:
         condition: service_completed_successfully
+      minio-init:
+        condition: service_completed_successfully
+
+  dashboard:
+    # The build context is the repository root because the dashboard consumes
+    # the local `file:` packages under packages/ and the generated protocol
+    # browser bundle. apps/dashboard/Dockerfile.dockerignore scopes that context.
+    build:
+      context: .
+      dockerfile: apps/dashboard/Dockerfile
+      args:
+        VERSION: ${MOSAIC_VERSION:-dev}
+        COMMIT: ${MOSAIC_COMMIT:-}
+    restart: unless-stopped
+    environment:
+      # Server-side runtime configuration: the SSR layer injects the API origin
+      # into the page, so one image works for every deployment.
+      MOSAIC_DASHBOARD_API_BASE_URL: ${MOSAIC_DASHBOARD_API_BASE_URL:-http://localhost:8080}
+    # The image declares its own HEALTHCHECK, which deliberately probes only the
+    # dashboard server: the dashboard must stay up and report API problems rather
+    # than fail with them.
+    depends_on:
+      api:
+        condition: service_healthy
+    ports:
+      - "${MOSAIC_DASHBOARD_PORT:-3000}:3000"
 
   local-edge:
     image: caddy:2.10-alpine
     restart: unless-stopped
+    # Pinned so the API can trust exactly this address in
+    # MOSAIC_TRUSTED_PROXY_CIDRS. A dynamic address would force operators to
+    # trust the whole subnet, which would also trust the bridge gateway.
+    networks:
+      default:
+        ipv4_address: ${MOSAIC_EDGE_IPV4:-172.28.0.10}
     volumes:
       - ./deploy/local/Caddyfile:/etc/caddy/Caddyfile:ro
-      - mosaic_caddy_data:/data
-      - mosaic_caddy_config:/config
+      - caddy_data:/data
+      - caddy_config:/config
     depends_on:
       api:
         condition: service_started
     ports:
       - "${MOSAIC_HTTPS_PORT:-8443}:8443"
 
+# The default network carries an explicit subnet so the edge proxy can hold a
+# stable address. Override MOSAIC_COMPOSE_SUBNET (and MOSAIC_EDGE_IPV4 plus
+# MOSAIC_TRUSTED_PROXY_CIDRS with it) if 172.28.0.0/16 collides with an existing
+# network on the host.
+networks:
+  default:
+    ipam:
+      config:
+        - subnet: ${MOSAIC_COMPOSE_SUBNET:-172.28.0.0/16}
+
 volumes:
-  mosaic_postgres_data:
-    name: mosaic_postgres_data
-  mosaic_minio_data:
-    name: mosaic_minio_data
-  mosaic_caddy_data:
-    name: mosaic_caddy_data
-  mosaic_caddy_config:
-    name: mosaic_caddy_config
+  postgres_data:
+  minio_data:
+  caddy_data:
+  caddy_config:

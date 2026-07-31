@@ -1,16 +1,17 @@
 # Mosaic Protocol Versioning
 
-## Current pre-release rule
+## Approved contract set
 
-Protocol `0.2` RC4 and Local Preview `0.2` are the only supported contracts
-while Mosaic is iterating before its first stable release. Earlier experimental
-contracts have been retired rather than carried as compatibility readers.
+Every Mosaic contract is `approved` at v1 GA. The approved set is: Paywall
+Protocol `0.2`; Local Preview `0.2` (development-only); Configuration Delivery
+`1`/`2`/`3`; Placement Decision `1`; Experiment Assignment `1`; Analytics Event
+`1`/`2`; Commerce Provider Contracts `1`/`2`; Commerce Configurations `1`/`2`.
+Earlier experimental contracts were retired before approval rather than carried
+as compatibility readers.
 
-Configuration Delivery `1`/`2`/`3`, Placement Decision `1`, Experiment
-Assignment `1`, Analytics Event `1`/`2`, Commerce Provider Contracts `1`/`2`,
-and Commerce Configurations `1`/`2` are independent versioned contracts. Their
-exact version values do not imply compatibility with one another and do not
-change the Paywall `schemaVersion`.
+These are independent versioned contracts. Their exact version values do not
+imply compatibility with one another and do not change the Paywall
+`schemaVersion`.
 
 `schemaVersion`, Local Preview versions, and capability versions are exact
 identifiers. A reader declaring `0.2` accepts only `0.2`; it must not infer
@@ -18,18 +19,64 @@ forward or backward support from numeric ordering.
 
 ## Artifact lifecycle
 
-Compatibility manifest status is one of:
+Compatibility manifest `status` is one of:
 
-- `draft`: under active design;
-- `releaseCandidate`: coherent and implemented for a review gate;
-- `approved`: product-owner-approved and immutable; or
-- `deprecated`: still readable where explicitly supported.
+- `draft`: under active design; no compatibility guarantee; may change or
+  disappear without a version bump.
+- `releaseCandidate`: coherent and implemented, presented for a review gate.
+  Narrowing corrections are still permitted (see
+  [breaking-change process](breaking-change-process.md)).
+- `approved`: product-owner-approved and **immutable**. Behaviour changes
+  require a new contract version. This is the state every contract is in at v1
+  GA.
+- `deprecated`: still fully readable and still supported, but superseded. New
+  work targets the successor. A deprecated manifest carries a `deprecation`
+  block stating `deprecatedAt`, `retiresAt`, and — when a successor exists —
+  `supersededBy` and `migrationGuide`.
+- `retired`: no longer produced by Mosaic and no longer required of readers. The
+  schemas, fixtures, and documentation **remain in the repository permanently**,
+  so a historical document can always be interpreted. Retirement removes an
+  obligation; it never deletes a definition.
 
-Protocol `0.2` remains a release candidate. Corrections update its canonical
-schemas, fixtures, generated browser contract, Studio, and all three native
-renderers together. After the first contract is approved and published,
-behavior-changing corrections require a new version and an explicit
-compatibility policy.
+Transitions are forward-only: `draft → releaseCandidate → approved →
+deprecated → retired`. A contract never returns to an earlier state. Timing
+requirements for the last two transitions are in the
+[deprecation policy](deprecation-policy.md).
+
+Paywall Protocol `0.2` is approved. Its manifest retains
+`releaseCandidate: "RC4"` as an **approved-lineage record** — it names the
+release candidate the approved contract was cut from, for traceability. It is
+not a lifecycle state and does not mean the contract is a release candidate;
+`status` is the only lifecycle field.
+
+Because approved contracts are immutable, a correction to an approved contract's
+*behaviour* requires a new contract version. Corrections that do not change
+behaviour — documentation, a diagnostic message, a comment — update the
+canonical schemas, fixtures, generated browser contract, Studio, and all three
+native renderers together.
+
+## Capability negotiation
+
+An SDK advertises the exact contract versions and capabilities it supports. The
+server selects **the highest representation supported by both the SDK's
+advertised set and the release**, then withholds anything the SDK cannot read.
+For Configuration Delivery the preference ladder is `3 → 2 → 1`
+(`PreferredDeliveryVersion` in
+`apps/api/internal/hostedpublishing/capability_request.go`).
+
+Selecting a version is not the same as satisfying it. After version selection
+the server still requires exact support for every capability the release
+actually needs — Paywall protocol capabilities, Placement Decision features and
+bucketing algorithms, Experiment features, bucketing algorithms, and schedule
+policies. Any missing capability withholds the release at that version rather
+than downgrading it silently or stripping the unsupported material.
+
+When no mutually supported representation exists, the SDK receives nothing new
+and retains its last accepted configuration, then its bundled fallback, then
+reports configuration unavailable. An outage or a negotiation failure never
+degrades into rendering a partially understood release.
+
+This documents behaviour that already exists; Phase 8 did not change it.
 
 ## Reader sequence
 
@@ -139,3 +186,17 @@ Commerce Provider v2 operation and update references use the exact accepted
 Commerce Configuration v2 content digest as `configurationRevision`. A
 different digest is a different immutable revision; readers do not compare
 numeric ordering or accept aliases.
+
+## Related policy documents
+
+- [Compatibility policy](compatibility-policy.md) — consolidating index of the
+  approved contract set, negotiation, and reader obligations.
+- [Deprecation policy](deprecation-policy.md) — runway requirements for the
+  `approved → deprecated → retired` transitions.
+- [Breaking-change process](breaking-change-process.md) — what counts as
+  breaking, and who approves it.
+- [Fixture lifecycle](fixture-lifecycle.md) — adding, freezing, and retiring
+  fixtures; rejection-layer metadata.
+- [Release approval process](release-approval-process.md) — how a contract
+  reaches `approved`.
+- [Migration guides](migration/) — per-version upgrade guides.

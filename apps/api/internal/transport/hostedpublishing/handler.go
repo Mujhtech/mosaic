@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
-	"net"
 	"net/http"
 	"strconv"
 	"strings"
@@ -14,16 +13,22 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	validation "github.com/go-ozzo/ozzo-validation/v4"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/metric"
 
 	"github.com/Mujhtech/mosaic/apps/api/internal/hostedpublishing"
 	"github.com/Mujhtech/mosaic/apps/api/internal/platform/authn"
+	"github.com/Mujhtech/mosaic/apps/api/internal/platform/httpserver/httpmiddleware"
 	"github.com/Mujhtech/mosaic/apps/api/internal/platform/httpserver/response"
 	"github.com/Mujhtech/mosaic/apps/api/internal/platform/requestvalidation"
 )
 
 const (
-	maxDocumentRequestBytes             = 4 << 20
-	maxAssetRequestBytes                = 11 << 20
+	maxDocumentRequestBytes = 4 << 20
+	// multipartOverheadBytes covers the MIME part headers and boundary markers
+	// wrapping the Asset bytes themselves.
+	multipartOverheadBytes              = 1 << 20
 	idempotencyHeader                   = "Idempotency-Key"
 	ifMatchHeader                       = "If-Match"
 	deliveryContentType                 = "application/vnd.mosaic.configuration+json;version=1"
@@ -56,10 +61,19 @@ func RegisterRoutes(router chi.Router, service *hostedpublishing.Service, resolv
 	RegisterPublicRoutes(router, service, limiters...)
 }
 
-func RegisterProjectRoutes(router chi.Router, service *hostedpublishing.Service) {
+// RegisterProjectRoutes mounts the authenticated publishing routes.
+// uploadMiddleware carries the per-route timeout override for asset upload,
+// which must not be bounded by the global request budget.
+func RegisterProjectRoutes(router chi.Router, service *hostedpublishing.Service, uploadMiddleware ...func(http.Handler) http.Handler) {
 	handler := &Handler{service: service}
+	upload := make([]func(http.Handler) http.Handler, 0, len(uploadMiddleware))
+	for _, item := range uploadMiddleware {
+		if item != nil {
+			upload = append(upload, item)
+		}
+	}
 	router.Get("/assets", handler.listAssets)
-	router.Post("/assets", handler.uploadAsset)
+	router.With(upload...).Post("/assets", handler.uploadAsset)
 	router.Get("/assets/{assetId}", handler.getAsset)
 	router.Delete("/assets/{assetId}", handler.archiveAsset)
 	router.Get("/assets/{assetId}/usage", handler.assetUsage)
@@ -147,7 +161,7 @@ type placementRequest struct {
 
 func (request *placementRequest) Validate() error {
 	return validation.ValidateStruct(request,
-		validation.Field(&request.Key, validation.Required, validation.Length(2, 63)),
+		validation.Field(&request.Key, validation.Required, validation.Length(2, 63), requestvalidation.PlacementKey()),
 		validation.Field(&request.Name, validation.Required, validation.Length(1, 120)),
 		validation.Field(&request.Description, validation.Length(0, 1000)))
 }
@@ -243,6 +257,8 @@ func writeError(w http.ResponseWriter, r *http.Request, err error) {
 		status, code, message = http.StatusConflict, "asset_not_ready", "The Asset is not ready for this operation."
 	case errors.Is(err, hostedpublishing.ErrAssetReferenced):
 		status, code, message = http.StatusConflict, "asset_referenced", "The Asset is referenced and its bytes must be retained."
+	case errors.Is(err, hostedpublishing.ErrAssetObjectMissing):
+		status, code, message = http.StatusNotFound, "asset_object_missing", "The Asset's stored bytes are not available."
 	case errors.Is(err, hostedpublishing.ErrAssetStorage):
 		status, code, message = http.StatusServiceUnavailable, "asset_storage_failed", "Asset storage is temporarily unavailable."
 	case errors.Is(err, hostedpublishing.ErrPlacementUnpublished):
@@ -263,13 +279,29 @@ func writeError(w http.ResponseWriter, r *http.Request, err error) {
 		}
 	case errors.Is(err, hostedpublishing.ErrUnsupportedCapability):
 		status, code, message = http.StatusNotAcceptable, "unsupported_capability", "The SDK does not support this Configuration Release."
+		// Name the term that failed. Without it an integrator has no path from
+		// the 406 to the header they must send or the SDK they must upgrade.
+		if capabilityError, ok := hostedpublishing.CapabilityFailure(err); ok {
+			details := map[string]any{
+				"requirement": capabilityError.Requirement,
+				"reason":      string(capabilityError.Reason),
+				"detail":      capabilityError.Detail(),
+			}
+			if capabilityError.Name != "" {
+				details["capability"] = capabilityError.Name
+			}
+			if capabilityError.Version != "" {
+				details["version"] = capabilityError.Version
+			}
+			apiError.Details = details
+		}
 	}
 	apiError.Status, apiError.Code, apiError.Message = status, code, message
 	response.Error(w, r, apiError)
 }
 
 func (h *Handler) uploadAsset(w http.ResponseWriter, r *http.Request) {
-	r.Body = http.MaxBytesReader(w, r.Body, maxAssetRequestBytes)
+	r.Body = http.MaxBytesReader(w, r.Body, h.service.AssetUploadLimit()+multipartOverheadBytes)
 	reader, err := r.MultipartReader()
 	if err != nil {
 		response.Error(w, r, response.ValidationFailed(map[string][]string{"file": {"A multipart file upload is required."}}))
@@ -588,13 +620,13 @@ func (h *Handler) rollback(w http.ResponseWriter, r *http.Request) {
 func capabilityRequestFromHeaders(r *http.Request) (hostedpublishing.SDKCapabilityRequest, error) {
 	capabilityHeader := r.Header.Get(capabilitiesHeader)
 	if len(capabilityHeader) == 0 || len(capabilityHeader) > maxCapabilityHeaderSize {
-		return hostedpublishing.SDKCapabilityRequest{}, hostedpublishing.ErrUnsupportedCapability
+		return hostedpublishing.SDKCapabilityRequest{}, hostedpublishing.NewCapabilityError("paywallCapability", capabilitiesHeader, "", hostedpublishing.CapabilityMalformed)
 	}
 	capabilities := make([]hostedpublishing.SDKCapability, 0)
 	for _, item := range strings.Split(capabilityHeader, ",") {
 		name, version, ok := strings.Cut(strings.TrimSpace(item), "@")
 		if !ok || name == "" || version == "" || strings.Contains(version, "@") {
-			return hostedpublishing.SDKCapabilityRequest{}, hostedpublishing.ErrUnsupportedCapability
+			return hostedpublishing.SDKCapabilityRequest{}, hostedpublishing.NewCapabilityError("paywallCapability", name, version, hostedpublishing.CapabilityMalformed)
 		}
 		capabilities = append(capabilities, hostedpublishing.SDKCapability{Name: name, Version: version})
 	}
@@ -616,7 +648,7 @@ func capabilityRequestFromHeaders(r *http.Request) (hostedpublishing.SDKCapabili
 	}
 	for _, name := range []string{experimentAssignmentVersionsHeader, experimentFeaturesHeader, experimentBucketingAlgorithmsHeader, experimentSchedulePoliciesHeader} {
 		if len(r.Header.Get(name)) > maxCapabilityHeaderSize {
-			return hostedpublishing.SDKCapabilityRequest{}, hostedpublishing.ErrUnsupportedCapability
+			return hostedpublishing.SDKCapabilityRequest{}, hostedpublishing.NewCapabilityError("experimentCapabilityHeader", name, "", hostedpublishing.CapabilityMalformed)
 		}
 	}
 	return request, nil
@@ -673,8 +705,26 @@ func digestBytes(payload []byte) string {
 	return hostedpublishing.ContentHash(payload)
 }
 
+// deliveryResponses counts Configuration Release deliveries split by whether
+// the SDK's cached representation was still current. The 304 ratio is the
+// documented signal for delivery efficiency and cache correctness.
+var deliveryResponses = func() metric.Int64Counter {
+	counter, _ := otel.Meter("mosaic/hostedpublishing").Int64Counter(
+		"mosaic.delivery.responses",
+		metric.WithDescription("Configuration delivery responses, split by cache outcome."),
+	)
+	return counter
+}()
+
+func recordDelivery(r *http.Request, surface string, notModified bool) {
+	deliveryResponses.Add(r.Context(), 1, metric.WithAttributes(
+		attribute.String("surface", surface),
+		attribute.Bool("not_modified", notModified),
+	))
+}
+
 func (h *Handler) sdkConfiguration(w http.ResponseWriter, r *http.Request) {
-	if !h.allowDelivery(w, r, "ip:"+requestIP(r)) {
+	if !h.allowDelivery(w, r, "ip:"+httpmiddleware.ClientIP(r)) {
 		return
 	}
 	capabilities, err := capabilityRequestFromHeaders(r)
@@ -683,7 +733,7 @@ func (h *Handler) sdkConfiguration(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if hostedpublishing.PreferredDeliveryVersion(capabilities.SupportedConfigurationDeliveryVersions) == "" {
-		writeError(w, r, hostedpublishing.ErrUnsupportedCapability)
+		writeError(w, r, hostedpublishing.NewCapabilityError("configurationDeliveryVersion", "Mosaic-Configuration-Versions", "", hostedpublishing.CapabilityMalformed))
 		return
 	}
 	configuration, err := h.service.AuthenticateSDKKeyVersions(r.Context(), bearer(r), capabilities.SupportedConfigurationDeliveryVersions)
@@ -717,19 +767,21 @@ func (h *Handler) sdkConfiguration(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Encoding", encoding)
 	}
 	if r.Header.Get("If-None-Match") == etag {
+		recordDelivery(r, "configuration", true)
 		response.Representation(w, http.StatusNotModified, "application/vnd.mosaic.configuration+json;version="+deliveryVersion, nil)
 		return
 	}
+	recordDelivery(r, "configuration", false)
 	response.Representation(w, http.StatusOK, "application/vnd.mosaic.configuration+json;version="+deliveryVersion, payload)
 }
 
 func (h *Handler) sdkCommerceConfiguration(w http.ResponseWriter, r *http.Request) {
-	if !h.allowDelivery(w, r, "ip:"+requestIP(r)) {
+	if !h.allowDelivery(w, r, "ip:"+httpmiddleware.ClientIP(r)) {
 		return
 	}
 	if !headerContains(r.Header.Get("Accept"), commerceContentType) &&
 		!headerContains(r.Header.Get("Accept"), commerceContentTypeV2) {
-		writeError(w, r, hostedpublishing.ErrUnsupportedCapability)
+		writeError(w, r, hostedpublishing.NewCapabilityError("acceptMediaType", commerceContentType, "", hostedpublishing.CapabilityMissing))
 		return
 	}
 	sdkPlatform := strings.TrimSpace(r.Header.Get("Mosaic-SDK-Platform"))
@@ -763,7 +815,7 @@ func (h *Handler) sdkCommerceConfiguration(w http.ResponseWriter, r *http.Reques
 		Version string `json:"commerceConfigurationVersion"`
 	}
 	if err := json.Unmarshal(configuration.Snapshot.Payload, &envelope); err != nil {
-		writeError(w, r, hostedpublishing.ErrUnsupportedCapability)
+		writeError(w, r, hostedpublishing.NewCapabilityError("commerceConfigurationVersion", "", "", hostedpublishing.CapabilityUnavailable))
 		return
 	}
 	if err := hostedpublishing.ValidateSDKCommerceSnapshotCapability(
@@ -781,9 +833,11 @@ func (h *Handler) sdkCommerceConfiguration(w http.ResponseWriter, r *http.Reques
 	w.Header().Set("Vary", "Authorization, Accept, Mosaic-SDK-Platform, Mosaic-SDK-Version, Mosaic-Commerce-Configuration-Versions, Mosaic-Commerce-Provider-Contract-Versions")
 	contentType := "application/vnd.mosaic.commerce-configuration+json;version=" + envelope.Version
 	if r.Header.Get("If-None-Match") == etag {
+		recordDelivery(r, "commerce-configuration", true)
 		response.Representation(w, http.StatusNotModified, contentType, nil)
 		return
 	}
+	recordDelivery(r, "commerce-configuration", false)
 	response.Representation(w, http.StatusOK, contentType, configuration.Snapshot.Payload)
 }
 
@@ -799,12 +853,4 @@ func (h *Handler) allowDelivery(w http.ResponseWriter, r *http.Request, key stri
 	w.Header().Set("Retry-After", strconv.FormatInt(seconds, 10))
 	response.Error(w, r, response.NewAPIError(http.StatusTooManyRequests, "rate_limited", "Too many configuration requests. Retry later."))
 	return false
-}
-
-func requestIP(r *http.Request) string {
-	host, _, err := net.SplitHostPort(r.RemoteAddr)
-	if err == nil {
-		return host
-	}
-	return r.RemoteAddr
 }

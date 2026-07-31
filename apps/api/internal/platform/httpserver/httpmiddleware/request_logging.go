@@ -23,7 +23,9 @@ func RequestLogging(base zerolog.Logger) func(http.Handler) http.Handler {
 				Str("request_id", requestID).
 				Str("http_method", r.Method).
 				Str("http_path", r.URL.Path).
-				Str("remote_ip", r.RemoteAddr)
+				// ClientIP reflects the trusted-proxy decision, so a forged
+				// X-Forwarded-For never appears here as the client address.
+				Str("remote_ip", ClientIP(r))
 			if spanContext.IsValid() {
 				context = context.Str("trace_id", spanContext.TraceID().String())
 			}

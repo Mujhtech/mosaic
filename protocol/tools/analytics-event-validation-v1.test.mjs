@@ -185,7 +185,7 @@ test("every declared event name has one closed valid typed payload", () => {
   unknown.payload.customProperties = { unrestricted: true };
   assert.ok(
     validateAnalyticsEventV1Event(unknown, artifacts).some((error) =>
-      error.includes("additional properties"),
+      error.includes("payload.customProperties is not allowed"),
     ),
   );
 });
@@ -242,6 +242,11 @@ test("event-specific correlation and attribution reject unrelated global fields"
   );
 });
 
+// Both invariants are now enforced by the canonical schema via
+// `dependentRequired` rather than only by the semantic validator, so these
+// assertions name the field the rejection is about instead of matching the
+// semantic layer's prose. The protected risk is unchanged: a partial rollout
+// tuple or a half-identified Rule Set must never be accepted.
 test("rollout and Rule Set attribution are all-or-none", () => {
   const artifacts = loadAnalyticsEventV1Artifacts();
   const noPaywall = clientEvent(artifacts, "placement_no_paywall");
@@ -256,7 +261,7 @@ test("rollout and Rule Set attribution are all-or-none", () => {
   delete noPaywall.payload.bucketingAlgorithm;
   assert.ok(
     validateAnalyticsEventV1Event(noPaywall, artifacts).some((error) =>
-      error.includes("rollout attribution must be absent or complete"),
+      error.includes("bucketingAlgorithm"),
     ),
   );
 
@@ -264,7 +269,15 @@ test("rollout and Rule Set attribution are all-or-none", () => {
   selected.attribution.placementRuleSetId = "rule_set_selected";
   assert.ok(
     validateAnalyticsEventV1Event(selected, artifacts).some((error) =>
-      error.includes("both ID and version"),
+      error.includes("placementRuleSetVersion"),
+    ),
+  );
+
+  const orphanRule = clientEvent(artifacts, "placement_no_paywall");
+  orphanRule.attribution.winningRuleId = "rule_without_ruleset";
+  assert.ok(
+    validateAnalyticsEventV1Event(orphanRule, artifacts).some((error) =>
+      error.includes("placementRuleSetId"),
     ),
   );
 });

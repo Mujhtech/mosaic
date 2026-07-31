@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
-	"net"
 	"net/http"
 	"strconv"
 	"strings"
@@ -16,6 +15,7 @@ import (
 	"github.com/go-ozzo/ozzo-validation/v4/is"
 
 	"github.com/Mujhtech/mosaic/apps/api/internal/browserauth"
+	"github.com/Mujhtech/mosaic/apps/api/internal/platform/httpserver/httpmiddleware"
 	"github.com/Mujhtech/mosaic/apps/api/internal/platform/httpserver/response"
 	"github.com/Mujhtech/mosaic/apps/api/internal/platform/requestvalidation"
 )
@@ -48,6 +48,19 @@ func RegisterRoutes(router chi.Router, service *browserauth.Service, cfg Config)
 	})
 }
 
+// emailAddress validates the shape of an email address without resolving it.
+//
+// ozzo's `is.Email` is `govalidator.IsExistingEmail`, which performs a live
+// net.LookupMX (then net.LookupIP) on the domain of every submitted address.
+// That made administrator bootstrap depend on outbound DNS from the API
+// container and rejected every internal-only domain (`.internal`, `.local`,
+// an intranet zone, an RFC 2606 `.test`/`.example` name), so a self-hosted
+// installation on an isolated network could not create its first user. It also
+// put an unbounded, uncancellable network call inside two unauthenticated
+// handlers. Mosaic validates the format only; deliverability is not something
+// an authentication boundary can or should assert.
+var emailAddress = is.EmailFormat
+
 type signupRequest struct {
 	Email    string `json:"email"`
 	Name     string `json:"name"`
@@ -56,7 +69,7 @@ type signupRequest struct {
 
 func (request *signupRequest) Validate() error {
 	return validation.ValidateStruct(request,
-		validation.Field(&request.Email, validation.Required, is.Email, validation.Length(3, 320)),
+		validation.Field(&request.Email, validation.Required, emailAddress, validation.Length(3, 320)),
 		validation.Field(&request.Name, validation.Required, validation.Length(1, 120)),
 		validation.Field(&request.Password, validation.Required, validation.Length(12, 72)),
 	)
@@ -69,7 +82,7 @@ type loginRequest struct {
 
 func (request *loginRequest) Validate() error {
 	return validation.ValidateStruct(request,
-		validation.Field(&request.Email, validation.Required, is.Email, validation.Length(3, 320)),
+		validation.Field(&request.Email, validation.Required, emailAddress, validation.Length(3, 320)),
 		validation.Field(&request.Password, validation.Required, validation.Length(1, 72)),
 	)
 }
@@ -106,7 +119,7 @@ func (h *Handler) signup(w http.ResponseWriter, r *http.Request) {
 	if !h.requireTrustedOrigin(w, r) {
 		return
 	}
-	if !h.allowAuthentication(w, r, "ip:"+requestIP(r)) {
+	if !h.allowAuthentication(w, r, "ip:"+httpmiddleware.ClientIP(r)) {
 		return
 	}
 	request := new(signupRequest)
@@ -129,7 +142,7 @@ func (h *Handler) login(w http.ResponseWriter, r *http.Request) {
 	if !h.requireTrustedOrigin(w, r) {
 		return
 	}
-	if !h.allowAuthentication(w, r, "ip:"+requestIP(r)) {
+	if !h.allowAuthentication(w, r, "ip:"+httpmiddleware.ClientIP(r)) {
 		return
 	}
 	request := new(loginRequest)
@@ -203,14 +216,6 @@ func fmtDigest(value []byte) string {
 		result[index*2], result[index*2+1] = digits[item>>4], digits[item&0x0f]
 	}
 	return string(result)
-}
-
-func requestIP(r *http.Request) string {
-	host, _, err := net.SplitHostPort(r.RemoteAddr)
-	if err == nil {
-		return host
-	}
-	return r.RemoteAddr
 }
 
 func (h *Handler) session(w http.ResponseWriter, r *http.Request) {

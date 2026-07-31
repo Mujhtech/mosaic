@@ -73,3 +73,34 @@ func TestSignupConflictDoesNotConfirmAccountExistence(t *testing.T) {
 		t.Fatalf("enumerating signup response: status=%d body=%s", recorder.Code, recorder.Body.String())
 	}
 }
+
+// TestEmailValidationDoesNotDependOnDomainResolution protects administrator
+// bootstrap on an isolated self-hosted installation. ozzo's `is.Email` resolves
+// MX records for the submitted domain, which made signup and login fail closed
+// whenever the API container had no outbound DNS and rejected every
+// internal-only or RFC 2606 reserved domain outright. The risk is an
+// installation that cannot create its first user; the assertion is that
+// validation is a pure format check.
+func TestEmailValidationDoesNotDependOnDomainResolution(t *testing.T) {
+	unresolvable := []string{
+		"admin@mosaic.internal",
+		"admin@drill.test",
+		"admin@studio.example",
+		"admin@host.invalid",
+		"admin@deep.subdomain.example.com",
+	}
+	for _, address := range unresolvable {
+		if err := (&signupRequest{Email: address, Name: "Operator", Password: "correct-horse-battery"}).Validate(); err != nil {
+			t.Errorf("signup with %q = %v, want accepted without resolving the domain", address, err)
+		}
+		if err := (&loginRequest{Email: address, Password: "correct-horse-battery"}).Validate(); err != nil {
+			t.Errorf("login with %q = %v, want accepted without resolving the domain", address, err)
+		}
+	}
+	malformed := []string{"admin", "admin@", "@example.com", "admin example.com", "admin@@example.com"}
+	for _, address := range malformed {
+		if err := (&signupRequest{Email: address, Name: "Operator", Password: "correct-horse-battery"}).Validate(); err == nil {
+			t.Errorf("signup with malformed %q was accepted", address)
+		}
+	}
+}

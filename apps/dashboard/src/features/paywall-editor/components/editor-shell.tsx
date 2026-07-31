@@ -389,8 +389,8 @@ export function EditorShell({
         canRedo={canRedo}
         canUndo={canUndo}
         documentIdentity={document.id}
-        backHref={source.kind === "hosted" ? hostedStudioBackHref(source) : "/foundation"}
-        backLabel={source.kind === "hosted" ? "Paywall" : "Foundation"}
+        backHref={source.kind === "hosted" ? hostedStudioBackHref(source) : "/workspace"}
+        backLabel={source.kind === "hosted" ? "Paywall" : "Workspace"}
         environmentLabel={
           source.kind === "hosted" ? `Environment · ${hostedEnvironmentName}` : undefined
         }

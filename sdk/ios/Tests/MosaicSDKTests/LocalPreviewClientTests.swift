@@ -405,7 +405,7 @@ final class LocalPreviewClientTests: XCTestCase {
     )
     let client = MosaicLocalPreviewClient(
       configuration: configuration,
-      codec: MosaicPreviewMessageCodec(protocolVersion: mosaicLocalPreviewProtocolVersion),
+      codec: MosaicPreviewMessageCodec(),
       fallbackProtocolVersions: []
     )
     client.connect()
@@ -472,7 +472,7 @@ final class LocalPreviewClientTests: XCTestCase {
     return MosaicLocalPreviewClient(
       configuration: configuration,
       connector: connector,
-      codec: MosaicPreviewMessageCodec(protocolVersion: mosaicLocalPreviewProtocolVersion),
+      codec: MosaicPreviewMessageCodec(),
       fallbackProtocolVersions: [],
       delay: delay
     )

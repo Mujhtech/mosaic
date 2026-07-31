@@ -4,6 +4,12 @@ import { fileURLToPath } from "node:url";
 
 import Ajv2020 from "ajv/dist/2020.js";
 
+import {
+  describeSchemaError,
+  focusedEventSchemaErrors,
+} from "./analytics-event-validation-v1.mjs";
+import { REJECTION_LAYERS_FILENAME } from "./generate-rejection-layers.mjs";
+
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 export const analyticsEventV2Paths = Object.freeze({
   eventSchema: resolve(root, "schema/analytics-event/v2/event.schema.json"),
@@ -14,9 +20,15 @@ export const analyticsEventV2Paths = Object.freeze({
   fixtureDirectory: resolve(root, "fixtures/analytics-event/v2"),
 });
 const read = (path) => JSON.parse(readFileSync(path, "utf8"));
-function jsonPaths(directory) { return readdirSync(directory, { withFileTypes: true }).flatMap((entry) => { const path = resolve(directory, entry.name); return entry.isDirectory() ? jsonPaths(path) : entry.name.endsWith(".json") ? [path] : []; }).sort(); }
+// `rejection-layers.json` is generated metadata about a directory's fixtures,
+// not a fixture. See tools/generate-rejection-layers.mjs.
+function jsonPaths(directory) { return readdirSync(directory, { withFileTypes: true }).flatMap((entry) => { const path = resolve(directory, entry.name); if (entry.isDirectory()) return jsonPaths(path); if (entry.name === REJECTION_LAYERS_FILENAME) return []; return entry.name.endsWith(".json") ? [path] : []; }).sort(); }
 const duplicates = (values) => { const seen = new Set(); return values.filter((value) => seen.has(value) || !seen.add(value)); };
-const schemaErrors = (label, errors = []) => errors.map((error) => `${label}${error.instancePath || "/"} ${error.message ?? "is invalid"}`);
+const schemaErrors = (label, errors = []) => {
+  const specific = errors.filter((error) => error.keyword !== "oneOf");
+  const reported = specific.length > 0 ? specific : errors;
+  return [...new Set(reported.map((error) => describeSchemaError(label, error)))];
+};
 
 export function loadAnalyticsEventV2Artifacts() {
   const paths = jsonPaths(analyticsEventV2Paths.fixtureDirectory);
@@ -49,7 +61,7 @@ const allowedExperimentAttribution = {
   experiment_fallback_presented: [...placement, ...experimentTuple],
   experiment_assignment_failed: [...placement, ...experimentTuple],
 };
-const correlationByEvent = Object.freeze({
+export const analyticsEventV2CorrelationAllowLists = Object.freeze({
   placement_requested: ["placementRequestId"], placement_paywall_selected: ["placementRequestId"], placement_no_paywall: ["placementRequestId"], placement_fallback_used: ["placementRequestId"], placement_unavailable: ["placementRequestId"], placement_evaluation_failed: ["placementRequestId"],
   paywall_presented: ["placementRequestId", "paywallPresentationId"], paywall_dismissed: ["placementRequestId", "paywallPresentationId"], paywall_action_selected: ["placementRequestId", "paywallPresentationId"], paywall_render_failed: ["placementRequestId", "paywallPresentationId"],
   product_load_started: ["placementRequestId", "paywallPresentationId", "productLoadAttemptId"], product_load_completed: ["placementRequestId", "paywallPresentationId", "productLoadAttemptId"], product_load_failed: ["placementRequestId", "paywallPresentationId", "productLoadAttemptId"], product_unavailable: ["placementRequestId", "paywallPresentationId", "productLoadAttemptId"], product_selected: ["placementRequestId", "paywallPresentationId", "productLoadAttemptId"],
@@ -57,7 +69,7 @@ const correlationByEvent = Object.freeze({
   restore_started: ["restoreAttemptId", "providerOperationId"], restore_completed: ["restoreAttemptId", "providerOperationId"], restore_nothing_found: ["restoreAttemptId", "providerOperationId"], restore_cancelled: ["restoreAttemptId", "providerOperationId"], restore_failed: ["restoreAttemptId", "providerOperationId"],
   experiment_assigned: ["placementRequestId"], experiment_exposed: ["placementRequestId", "paywallPresentationId"], experiment_fallback_presented: ["placementRequestId", "paywallPresentationId"], experiment_assignment_failed: ["placementRequestId"],
 });
-const attributionByEvent = Object.freeze({
+export const analyticsEventV2AttributionAllowLists = Object.freeze({
   placement_requested: placement.filter((field) => field !== "winningRuleId"), placement_paywall_selected: paywall, placement_no_paywall: placement, placement_fallback_used: paywall, placement_unavailable: placement, placement_evaluation_failed: placement.filter((field) => field !== "winningRuleId"),
   paywall_presented: paywall, paywall_dismissed: paywall, paywall_action_selected: paywall, paywall_render_failed: paywall,
   product_load_started: paywall, product_load_completed: paywall, product_load_failed: paywall, product_unavailable: product, product_selected: product.concat(experimentTuple),
@@ -71,8 +83,8 @@ function semantics(event) {
   if (present.length !== 0 && present.length !== experimentTuple.length) errors.push(`${event.eventId} Experiment attribution must be absent or complete`);
   if (experimentNames.has(event.eventName) && present.length !== experimentTuple.length) errors.push(`${event.eventId} Experiment event requires immutable attribution`);
   if (present.length > 0 && !experimentNames.has(event.eventName) && !productAndPurchase.has(event.eventName)) errors.push(`${event.eventId} Experiment attribution is not allowed for ${event.eventName}`);
-  for (const field of Object.keys(event.correlation ?? {})) if (!correlationByEvent[event.eventName]?.includes(field)) errors.push(`${event.eventId} correlation.${field} is not allowed for ${event.eventName}`);
-  for (const field of Object.keys(event.attribution ?? {})) if (!attributionByEvent[event.eventName]?.includes(field)) errors.push(`${event.eventId} attribution.${field} is not allowed for ${event.eventName}`);
+  for (const field of Object.keys(event.correlation ?? {})) if (!analyticsEventV2CorrelationAllowLists[event.eventName]?.includes(field)) errors.push(`${event.eventId} correlation.${field} is not allowed for ${event.eventName}`);
+  for (const field of Object.keys(event.attribution ?? {})) if (!analyticsEventV2AttributionAllowLists[event.eventName]?.includes(field)) errors.push(`${event.eventId} attribution.${field} is not allowed for ${event.eventName}`);
   const hasRuleSetId = event.attribution?.placementRuleSetId !== undefined;
   const hasRuleSetVersion = event.attribution?.placementRuleSetVersion !== undefined;
   if (hasRuleSetId !== hasRuleSetVersion) errors.push(`${event.eventId} Rule Set attribution must include ID and version`);
@@ -90,7 +102,7 @@ function semantics(event) {
 
 export function validateAnalyticsEventV2Event(event, artifacts = loadAnalyticsEventV2Artifacts()) {
   const validate = validators(artifacts).event;
-  return validate(event) ? semantics(event) : schemaErrors(`event ${event?.eventId ?? "unknown"}`, validate.errors);
+  return validate(event) ? semantics(event) : focusedEventSchemaErrors(`event ${event?.eventId ?? "unknown"}`, event, artifacts.eventSchema, validate.errors);
 }
 export function validateAnalyticsEventV2Batch(batch, artifacts = loadAnalyticsEventV2Artifacts()) {
   const validate = validators(artifacts).batch;

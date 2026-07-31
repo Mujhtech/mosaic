@@ -142,15 +142,34 @@ is unavailable; the example shows a clear loading or connection state instead.
 
 ## Build
 
+The example depends on the optional RevenueCat adapter, which depends on
+`purchases-ios` from GitHub. **A cold build needs network access**, and
+`xcodebuild`'s own package resolution is slow enough to exceed ten minutes on a
+cold cache. Seed the cache with SwiftPM first, then point `xcodebuild` at it.
+
 From the repository root:
 
 ```bash
+set -o pipefail
+
+# 1. Resolve once with SwiftPM, which is far faster than xcodebuild's resolver.
+swift package --package-path sdk/ios/RevenueCat resolve
+
+# 2. Build the example against the seeded clone directory.
 xcodebuild -project examples/ios-example/MosaicExample.xcodeproj \
   -scheme MosaicExample \
   -destination 'generic/platform=iOS Simulator' \
   -derivedDataPath examples/ios-example/.build/DerivedData \
+  -clonedSourcePackagesDirPath sdk/ios/RevenueCat/.build/checkouts \
   CODE_SIGNING_ALLOWED=NO build
 ```
+
+`set -o pipefail` is required whenever this command is piped into `tail`,
+`grep`, or a formatter. Without it a failed build reports success.
+
+Omitting `-clonedSourcePackagesDirPath` still works; it is only an
+accelerator. If resolution appears to hang, it is almost always downloading
+`purchases-ios`, not stuck.
 
 ## Simulator tests
 
@@ -158,17 +177,39 @@ Choose an available simulator ID from `xcrun simctl list devices available`,
 then run the native golden, accessibility-size, and preview-status tests:
 
 ```bash
+set -o pipefail
 xcodebuild -project examples/ios-example/MosaicExample.xcodeproj \
   -scheme MosaicExample \
   -destination 'platform=iOS Simulator,id=<SIMULATOR_ID>' \
   -derivedDataPath examples/ios-example/.build/DerivedData \
+  -clonedSourcePackagesDirPath sdk/ios/RevenueCat/.build/checkouts \
   test
 ```
 
-The reviewed 390-by-844 goldens cover the current Protocol 0.2 path
-and the Protocol 0.2 RC4 renderer. The Simulator suite also verifies native
-Sheet presentation, deterministic video fallback diagnostics, and horizontal
-Product Card placement. The current baselines use iOS 26.5 native
-control rendering; run golden comparisons on that Simulator runtime. Set
-`MOSAIC_RECORD_SNAPSHOTS=1` in the scheme only after visual review, and limit
-recording to the intended `SwiftUISnapshotTests` golden method.
+One reviewed 390-by-844 golden covers the canonical Protocol 0.2 RC4 paywall.
+The Simulator suite also verifies native Sheet presentation, deterministic
+video fallback diagnostics, horizontal Product Card placement, RTL at
+accessibility text sizes, and preview status.
+
+Baselines are recorded at scale 1 into a fixed frame, so they do not depend on
+the Simulator device, but they do depend on the runtime's native control
+rendering. The current baseline was recorded on **Xcode 26.5 with the iOS 26.5
+Simulator runtime**; run golden comparisons on that runtime. Re-record only
+after visually reviewing the rendered output:
+
+```bash
+set -o pipefail
+TEST_RUNNER_MOSAIC_RECORD_SNAPSHOTS=1 xcodebuild \
+  -project examples/ios-example/MosaicExample.xcodeproj \
+  -scheme MosaicExample \
+  -destination 'platform=iOS Simulator,id=<SIMULATOR_ID>' \
+  -derivedDataPath examples/ios-example/.build/DerivedData \
+  -clonedSourcePackagesDirPath sdk/ios/RevenueCat/.build/checkouts \
+  -only-testing:MosaicExampleTests/SwiftUISnapshotTests/testProtocolV02CompleteFixtureMatchesDeterministicSwiftUIGolden \
+  test
+```
+
+The `TEST_RUNNER_` prefix is required: `xcodebuild` forwards only prefixed
+variables into the test runner process. Setting `MOSAIC_RECORD_SNAPSHOTS=1` in
+the shell alone has no effect. Always limit recording with `-only-testing:` to
+the intended golden method.

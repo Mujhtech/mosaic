@@ -493,19 +493,38 @@ public enum MosaicExperimentAssignmentEngine {
   }
 }
 
+/// A monotonic instant that keeps counting while the device is asleep.
+///
+/// `ContinuousClock` has the same semantics but is only available from iOS 16,
+/// and Mosaic's declared floor is iOS 15. `CLOCK_MONOTONIC_RAW` is the same
+/// Darwin source `ContinuousClock` reads, so trusted-time evaluation is
+/// unchanged.
+enum MosaicMonotonicClock {
+  static var now: UInt64 { clock_gettime_nsec_np(CLOCK_MONOTONIC_RAW) }
+
+  /// Elapsed seconds from `instant` to now, or `nil` when the reading is
+  /// unusable (an unsupported clock reports zero) or moved backwards.
+  static func elapsedSeconds(since instant: UInt64) -> Double? {
+    let current = now
+    guard instant != 0, current != 0, current >= instant else { return nil }
+    return Double(current - instant) / 1_000_000_000
+  }
+}
+
 struct MosaicTrustedTimeAnchor: Sendable {
   static let maximumAge: TimeInterval = 7 * 24 * 60 * 60
   static let maximumWallDeviation: TimeInterval = 5 * 60
   let serverTime: Date
   let localReceiptTime: Date
   let systemUptime: TimeInterval
-  let continuousReceipt: ContinuousClock.Instant
+  /// `CLOCK_MONOTONIC_RAW` nanoseconds captured when the anchor was accepted.
+  let monotonicReceipt: UInt64
 
   static func remote(serverTime: Date, localReceiptTime: Date) -> Self {
     .init(
       serverTime: serverTime, localReceiptTime: localReceiptTime,
       systemUptime: ProcessInfo.processInfo.systemUptime,
-      continuousReceipt: ContinuousClock.now)
+      monotonicReceipt: MosaicMonotonicClock.now)
   }
 
   static func cached(
@@ -525,14 +544,13 @@ struct MosaicTrustedTimeAnchor: Sendable {
     return .init(
       serverTime: serverTime.addingTimeInterval(currentUptime - systemUptime),
       localReceiptTime: now, systemUptime: currentUptime,
-      continuousReceipt: ContinuousClock.now)
+      monotonicReceipt: MosaicMonotonicClock.now)
   }
 
   func now() -> Date? {
-    let elapsed = continuousReceipt.duration(to: ContinuousClock.now)
-    let components = elapsed.components
-    let seconds = Double(components.seconds) + Double(components.attoseconds) / 1e18
-    guard seconds >= 0, seconds <= Self.maximumAge else { return nil }
+    guard let seconds = MosaicMonotonicClock.elapsedSeconds(since: monotonicReceipt),
+      seconds <= Self.maximumAge
+    else { return nil }
     return serverTime.addingTimeInterval(seconds)
   }
 }

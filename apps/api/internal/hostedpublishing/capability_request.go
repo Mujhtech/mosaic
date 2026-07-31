@@ -87,121 +87,148 @@ func ValidateSDKCapabilityPayload(request SDKCapabilityRequest, payload json.Raw
 		return ValidateSDKCapabilityRequest(request, release)
 	}
 	if version == "3" {
-		if !containsExactUnique(request.SupportedConfigurationDeliveryVersions, "3", 8) ||
-			!containsExactUnique(request.SupportedExperimentAssignmentContracts, "1", 8) ||
-			!containsKnownUnique(request.SupportedExperimentFeatures, supportedExperimentFeatures, MaxSDKCapabilityCount) ||
-			!containsKnownUnique(request.SupportedExperimentBucketingAlgorithms, supportedExperimentBucketingAlgorithms, 8) ||
-			!containsKnownUnique(request.SupportedExperimentSchedulePolicies, supportedExperimentSchedulePolicies, 8) {
-			return ErrUnsupportedCapability
-		}
-		var envelope struct {
-			ConfigurationDeliveryVersion string `json:"configurationDeliveryVersion"`
-			Release                      struct {
-				Compatibility struct {
-					PaywallProtocols []deliveryProtocolCompatibility `json:"paywallProtocols"`
-					Experiment       []struct {
-						Version             string   `json:"version"`
-						RequiredFeatures    []string `json:"requiredFeatures"`
-						BucketingAlgorithms []string `json:"bucketingAlgorithms"`
-						SchedulePolicies    []string `json:"schedulePolicies"`
-					} `json:"experimentAssignmentContracts"`
-				} `json:"compatibility"`
-				ExperimentAssignments []json.RawMessage `json:"experimentAssignments"`
-			} `json:"release"`
-		}
-		if err := json.Unmarshal(payload, &envelope); err != nil || envelope.ConfigurationDeliveryVersion != "3" {
-			return ErrUnsupportedCapability
-		}
-		features := stringSet(request.SupportedExperimentFeatures)
-		algorithms := stringSet(request.SupportedExperimentBucketingAlgorithms)
-		policies := stringSet(request.SupportedExperimentSchedulePolicies)
-		for _, contract := range envelope.Release.Compatibility.Experiment {
-			if contract.Version != "1" {
-				return ErrUnsupportedCapability
-			}
-			for _, v := range contract.RequiredFeatures {
-				if _, ok := features[v]; !ok {
-					return ErrUnsupportedCapability
-				}
-			}
-			for _, v := range contract.BucketingAlgorithms {
-				if _, ok := algorithms[v]; !ok {
-					return ErrUnsupportedCapability
-				}
-			}
-			for _, v := range contract.SchedulePolicies {
-				if _, ok := policies[v]; !ok {
-					return ErrUnsupportedCapability
-				}
-			}
-		}
-		clone := request
-		clone.SupportedConfigurationDeliveryVersions = []string{"1"}
-		v1 := deliveryEnvelope{ConfigurationDeliveryVersion: "1", Release: deliveryRelease{Compatibility: deliveryCompatibility{PaywallProtocols: envelope.Release.Compatibility.PaywallProtocols, Acceptance: "atomic"}}}
-		v1Payload, _ := json.Marshal(v1)
-		return ValidateSDKCapabilityRequest(clone, Release{DeliveryContractVersion: "1", Payload: v1Payload})
+		return validateDeliveryV3(request, payload)
 	}
-	if version != "2" || !containsExactUnique(request.SupportedConfigurationDeliveryVersions, "2", 8) || !containsExactUnique(request.SupportedPlacementDecisionContracts, "1", 8) {
-		return ErrUnsupportedCapability
+	return validateDeliveryV2(request, payload, version)
+}
+
+func validateDeliveryV3(request SDKCapabilityRequest, payload json.RawMessage) error {
+	if err := requireExactUnique("configurationDeliveryVersion", request.SupportedConfigurationDeliveryVersions, "3", 8); err != nil {
+		return err
+	}
+	if err := requireExactUnique("experimentAssignmentContractVersion", request.SupportedExperimentAssignmentContracts, "1", 8); err != nil {
+		return err
+	}
+	if err := requireKnownUnique("experimentFeature", request.SupportedExperimentFeatures, supportedExperimentFeatures, MaxSDKCapabilityCount); err != nil {
+		return err
+	}
+	if err := requireKnownUnique("experimentBucketingAlgorithm", request.SupportedExperimentBucketingAlgorithms, supportedExperimentBucketingAlgorithms, 8); err != nil {
+		return err
+	}
+	if err := requireKnownUnique("experimentSchedulePolicy", request.SupportedExperimentSchedulePolicies, supportedExperimentSchedulePolicies, 8); err != nil {
+		return err
+	}
+	var envelope struct {
+		ConfigurationDeliveryVersion string `json:"configurationDeliveryVersion"`
+		Release                      struct {
+			Compatibility struct {
+				PaywallProtocols []deliveryProtocolCompatibility `json:"paywallProtocols"`
+				Experiment       []struct {
+					Version             string   `json:"version"`
+					RequiredFeatures    []string `json:"requiredFeatures"`
+					BucketingAlgorithms []string `json:"bucketingAlgorithms"`
+					SchedulePolicies    []string `json:"schedulePolicies"`
+				} `json:"experimentAssignmentContracts"`
+			} `json:"compatibility"`
+			ExperimentAssignments []json.RawMessage `json:"experimentAssignments"`
+		} `json:"release"`
+	}
+	if err := json.Unmarshal(payload, &envelope); err != nil || envelope.ConfigurationDeliveryVersion != "3" {
+		return unsupportedCapability("configurationDeliveryVersion", "", "3", CapabilityUnavailable)
+	}
+	features := stringSet(request.SupportedExperimentFeatures)
+	algorithms := stringSet(request.SupportedExperimentBucketingAlgorithms)
+	policies := stringSet(request.SupportedExperimentSchedulePolicies)
+	for _, contract := range envelope.Release.Compatibility.Experiment {
+		if contract.Version != "1" {
+			return unsupportedCapability("experimentAssignmentContractVersion", "", contract.Version, CapabilityUnsupported)
+		}
+		for _, feature := range contract.RequiredFeatures {
+			if _, ok := features[feature]; !ok {
+				return unsupportedCapability("experimentFeature", feature, "", CapabilityMissing)
+			}
+		}
+		for _, algorithm := range contract.BucketingAlgorithms {
+			if _, ok := algorithms[algorithm]; !ok {
+				return unsupportedCapability("experimentBucketingAlgorithm", algorithm, "", CapabilityMissing)
+			}
+		}
+		for _, policy := range contract.SchedulePolicies {
+			if _, ok := policies[policy]; !ok {
+				return unsupportedCapability("experimentSchedulePolicy", policy, "", CapabilityMissing)
+			}
+		}
+	}
+	return validateEmbeddedV1(request, envelope.Release.Compatibility.PaywallProtocols)
+}
+
+func validateDeliveryV2(request SDKCapabilityRequest, payload json.RawMessage, version string) error {
+	if version != "2" {
+		return unsupportedCapability("configurationDeliveryVersion", "", version, CapabilityUnsupported)
+	}
+	if err := requireExactUnique("configurationDeliveryVersion", request.SupportedConfigurationDeliveryVersions, "2", 8); err != nil {
+		return err
+	}
+	if err := requireExactUnique("placementDecisionContractVersion", request.SupportedPlacementDecisionContracts, "1", 8); err != nil {
+		return err
 	}
 	var envelope deliveryV2Envelope
 	if err := json.Unmarshal(payload, &envelope); err != nil || envelope.ConfigurationDeliveryVersion != "2" {
-		return ErrUnsupportedCapability
+		return unsupportedCapability("configurationDeliveryVersion", "", "2", CapabilityUnavailable)
 	}
 	features := map[string]struct{}{}
 	for _, feature := range request.SupportedDecisionFeatures {
 		if _, duplicate := features[feature]; duplicate {
-			return ErrUnsupportedCapability
+			return unsupportedCapability("decisionFeature", feature, "", CapabilityDuplicate)
 		}
 		features[feature] = struct{}{}
 	}
 	algorithms := map[string]struct{}{}
 	for _, algorithm := range request.SupportedBucketingAlgorithms {
 		if algorithm != placementdecision.BucketingAlgorithm {
-			return ErrUnsupportedCapability
+			return unsupportedCapability("bucketingAlgorithm", algorithm, "", CapabilityUnknown)
 		}
 		if _, duplicate := algorithms[algorithm]; duplicate {
-			return ErrUnsupportedCapability
+			return unsupportedCapability("bucketingAlgorithm", algorithm, "", CapabilityDuplicate)
 		}
 		algorithms[algorithm] = struct{}{}
 	}
 	for _, contract := range envelope.Release.Compatibility.PlacementDecisionContracts {
 		if contract.Version != "1" {
-			return ErrUnsupportedCapability
+			return unsupportedCapability("placementDecisionContractVersion", "", contract.Version, CapabilityUnsupported)
 		}
 		for _, feature := range contract.RequiredFeatures {
 			if _, ok := features[feature]; !ok {
-				return ErrUnsupportedCapability
+				return unsupportedCapability("decisionFeature", feature, "", CapabilityMissing)
 			}
 		}
 		for _, algorithm := range contract.BucketingAlgorithms {
 			if _, ok := algorithms[algorithm]; !ok {
-				return ErrUnsupportedCapability
+				return unsupportedCapability("bucketingAlgorithm", algorithm, "", CapabilityMissing)
 			}
 		}
 	}
+	return validateEmbeddedV1(request, envelope.Release.Compatibility.PaywallProtocols)
+}
+
+// validateEmbeddedV1 re-runs the Paywall-protocol half of negotiation against a
+// synthesized v1 envelope, so a v2 or v3 Release is still refused when the SDK
+// cannot render one of its Paywall capabilities.
+func validateEmbeddedV1(request SDKCapabilityRequest, protocols []deliveryProtocolCompatibility) error {
 	clone := request
 	clone.SupportedConfigurationDeliveryVersions = []string{"1"}
-	v1 := deliveryEnvelope{ConfigurationDeliveryVersion: "1", Release: deliveryRelease{Compatibility: deliveryCompatibility{PaywallProtocols: envelope.Release.Compatibility.PaywallProtocols, Acceptance: "atomic"}}}
+	v1 := deliveryEnvelope{ConfigurationDeliveryVersion: "1", Release: deliveryRelease{Compatibility: deliveryCompatibility{PaywallProtocols: protocols, Acceptance: "atomic"}}}
 	v1Payload, _ := json.Marshal(v1)
 	return ValidateSDKCapabilityRequest(clone, Release{DeliveryContractVersion: "1", Payload: v1Payload})
 }
 
-func containsKnownUnique(values []string, supported map[string]struct{}, limit int) bool {
+// requireKnownUnique accepts a non-empty, bounded, duplicate-free list drawn
+// entirely from Mosaic's own vocabulary, naming the first offending value.
+func requireKnownUnique(requirement string, values []string, supported map[string]struct{}, limit int) error {
 	if len(values) == 0 || len(values) > limit {
-		return false
+		return unsupportedCapability(requirement, "", "", CapabilityMalformed)
 	}
 	seen := make(map[string]struct{}, len(values))
 	for _, value := range values {
 		if _, ok := supported[value]; !ok {
-			return false
+			return unsupportedCapability(requirement, value, "", CapabilityUnknown)
 		}
 		if _, duplicate := seen[value]; duplicate {
-			return false
+			return unsupportedCapability(requirement, value, "", CapabilityDuplicate)
 		}
 		seen[value] = struct{}{}
 	}
-	return true
+	return nil
 }
 
 func stringSet(values []string) map[string]struct{} {
@@ -218,39 +245,42 @@ func stringSet(values []string) map[string]struct{} {
 // and verifies that the selected immutable Release can be accepted atomically.
 func ValidateSDKCapabilityRequest(request SDKCapabilityRequest, release Release) error {
 	if request.Platform != "flutter" && request.Platform != "ios" && request.Platform != "android" {
-		return ErrUnsupportedCapability
+		return unsupportedCapability("sdkPlatform", request.Platform, "", CapabilityUnsupported)
 	}
 	if len(request.SDKVersion) > 64 || !semanticVersionPattern.MatchString(request.SDKVersion) {
-		return ErrUnsupportedCapability
+		return unsupportedCapability("sdkVersion", "", request.SDKVersion, CapabilityMalformed)
 	}
 	if request.ApplicationVersion != "" && (len(request.ApplicationVersion) > 64 || !safeApplicationVersion(request.ApplicationVersion)) {
-		return ErrUnsupportedCapability
+		return unsupportedCapability("applicationVersion", "", "", CapabilityMalformed)
 	}
-	if !containsExactUnique(request.SupportedConfigurationDeliveryVersions, DeliveryVersion, 8) {
-		return ErrUnsupportedCapability
+	if err := requireExactUnique("configurationDeliveryVersion", request.SupportedConfigurationDeliveryVersions, DeliveryVersion, 8); err != nil {
+		return err
 	}
 	if len(request.SupportedPaywallProtocols) == 0 || len(request.SupportedPaywallProtocols) > 8 {
-		return ErrUnsupportedCapability
+		return unsupportedCapability("paywallProtocolVersion", "", "", CapabilityMalformed)
 	}
 	protocols := make(map[string]map[string]struct{}, len(request.SupportedPaywallProtocols))
 	for _, protocol := range request.SupportedPaywallProtocols {
-		if protocol.Version != ProtocolVersion || len(protocol.Capabilities) == 0 || len(protocol.Capabilities) > MaxSDKCapabilityCount {
-			return ErrUnsupportedCapability
+		if protocol.Version != ProtocolVersion {
+			return unsupportedCapability("paywallProtocolVersion", "", protocol.Version, CapabilityUnsupported)
+		}
+		if len(protocol.Capabilities) == 0 || len(protocol.Capabilities) > MaxSDKCapabilityCount {
+			return unsupportedCapability("paywallCapability", "", protocol.Version, CapabilityMalformed)
 		}
 		if _, duplicate := protocols[protocol.Version]; duplicate {
-			return ErrUnsupportedCapability
+			return unsupportedCapability("paywallProtocolVersion", "", protocol.Version, CapabilityDuplicate)
 		}
 		capabilities := make(map[string]struct{}, len(protocol.Capabilities))
 		for _, capability := range protocol.Capabilities {
 			if capability.Version != protocol.Version {
-				return ErrUnsupportedCapability
+				return unsupportedCapability("paywallCapability", capability.Name, capability.Version, CapabilityUnsupported)
 			}
 			if _, known := supportedProtocolCapabilities[capability.Name]; !known {
-				return ErrUnsupportedCapability
+				return unsupportedCapability("paywallCapability", capability.Name, capability.Version, CapabilityUnknown)
 			}
 			key := capability.Name + "@" + capability.Version
 			if _, duplicate := capabilities[key]; duplicate {
-				return ErrUnsupportedCapability
+				return unsupportedCapability("paywallCapability", capability.Name, capability.Version, CapabilityDuplicate)
 			}
 			capabilities[key] = struct{}{}
 		}
@@ -258,22 +288,22 @@ func ValidateSDKCapabilityRequest(request SDKCapabilityRequest, release Release)
 	}
 	reported, ok := protocols[ProtocolVersion]
 	if !ok {
-		return ErrUnsupportedCapability
+		return unsupportedCapability("paywallProtocolVersion", "", ProtocolVersion, CapabilityMissing)
 	}
 	var envelope deliveryEnvelope
 	if err := json.Unmarshal(release.Payload, &envelope); err != nil || envelope.ConfigurationDeliveryVersion != DeliveryVersion {
-		return ErrUnsupportedCapability
+		return unsupportedCapability("configurationDeliveryVersion", "", DeliveryVersion, CapabilityUnavailable)
 	}
 	if len(envelope.Release.Compatibility.PaywallProtocols) == 0 {
-		return ErrUnsupportedCapability
+		return unsupportedCapability("paywallProtocolVersion", "", "", CapabilityUnavailable)
 	}
 	for _, protocol := range envelope.Release.Compatibility.PaywallProtocols {
 		if protocol.Version != ProtocolVersion {
-			return ErrUnsupportedCapability
+			return unsupportedCapability("paywallProtocolVersion", "", protocol.Version, CapabilityUnsupported)
 		}
 		for _, required := range protocol.RequiredCapabilities {
 			if _, ok := reported[required.Name+"@"+required.Version]; !ok {
-				return ErrUnsupportedCapability
+				return unsupportedCapability("paywallCapability", required.Name, required.Version, CapabilityMissing)
 			}
 		}
 	}
@@ -285,27 +315,25 @@ func ValidateSDKCapabilityRequest(request SDKCapabilityRequest, release Release)
 // to a client that declared only v1 support.
 func ValidateSDKCommerceCapabilityRequest(platform, sdkVersion string, configurationVersions, providerContractVersions []string) error {
 	if platform != "flutter" && platform != "ios" && platform != "android" {
-		return ErrUnsupportedCapability
+		return unsupportedCapability("sdkPlatform", platform, "", CapabilityUnsupported)
 	}
 	if len(sdkVersion) > 64 || !semanticVersionPattern.MatchString(sdkVersion) {
-		return ErrUnsupportedCapability
+		return unsupportedCapability("sdkVersion", "", sdkVersion, CapabilityMalformed)
 	}
-	if !containsSupportedUnique(configurationVersions, 8) ||
-		!containsSupportedUnique(providerContractVersions, 8) {
-		return ErrUnsupportedCapability
+	if err := requireSupportedUnique("commerceConfigurationVersion", configurationVersions, 8); err != nil {
+		return err
 	}
-	return nil
+	return requireSupportedUnique("commerceProviderContractVersion", providerContractVersions, 8)
 }
 
 func ValidateSDKCommerceSnapshotCapability(version string, configurationVersions, providerContractVersions []string) error {
 	if version != "1" && version != "2" {
-		return ErrUnsupportedCapability
+		return unsupportedCapability("commerceConfigurationVersion", "", version, CapabilityUnsupported)
 	}
-	if !containsExactUnique(configurationVersions, version, 8) ||
-		!containsExactUnique(providerContractVersions, version, 8) {
-		return ErrUnsupportedCapability
+	if err := requireExactUnique("commerceConfigurationVersion", configurationVersions, version, 8); err != nil {
+		return err
 	}
-	return nil
+	return requireExactUnique("commerceProviderContractVersion", providerContractVersions, version, 8)
 }
 
 func safeApplicationVersion(value string) bool {
@@ -317,40 +345,45 @@ func safeApplicationVersion(value string) bool {
 	return true
 }
 
-func containsExactUnique(values []string, expected string, limit int) bool {
+// requireExactUnique accepts a bounded, duplicate-free list that contains the
+// expected version, naming the version the caller failed to advertise.
+func requireExactUnique(requirement string, values []string, expected string, limit int) error {
 	if len(values) == 0 || len(values) > limit {
-		return false
+		return unsupportedCapability(requirement, "", expected, CapabilityMalformed)
 	}
 	seen := make(map[string]struct{}, len(values))
 	found := false
 	for _, value := range values {
 		if value == "" {
-			return false
+			return unsupportedCapability(requirement, "", "", CapabilityMalformed)
 		}
 		if _, duplicate := seen[value]; duplicate {
-			return false
+			return unsupportedCapability(requirement, "", value, CapabilityDuplicate)
 		}
 		seen[value] = struct{}{}
 		if value == expected {
 			found = true
 		}
 	}
-	return found
+	if !found {
+		return unsupportedCapability(requirement, "", expected, CapabilityMissing)
+	}
+	return nil
 }
 
-func containsSupportedUnique(values []string, limit int) bool {
+func requireSupportedUnique(requirement string, values []string, limit int) error {
 	if len(values) == 0 || len(values) > limit {
-		return false
+		return unsupportedCapability(requirement, "", "", CapabilityMalformed)
 	}
 	seen := make(map[string]struct{}, len(values))
 	for _, value := range values {
 		if value != "1" && value != "2" {
-			return false
+			return unsupportedCapability(requirement, "", value, CapabilityUnsupported)
 		}
 		if _, duplicate := seen[value]; duplicate {
-			return false
+			return unsupportedCapability(requirement, "", value, CapabilityDuplicate)
 		}
 		seen[value] = struct{}{}
 	}
-	return true
+	return nil
 }

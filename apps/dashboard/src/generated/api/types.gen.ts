@@ -1655,7 +1655,10 @@ export type ErrorEnvelope = {
 
 export type HealthEnvelope = {
     data: {
-        status: 'ok';
+        status: 'ok' | 'ready';
+        version: string;
+        commit?: string;
+        built?: string;
     };
 };
 

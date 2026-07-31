@@ -1,7 +1,11 @@
 import { createFileRoute, Outlet } from "@tanstack/react-router"
 
+import { RouteErrorState, RoutePendingState } from "@/components/feedback/route-feedback"
+
 export const Route = createFileRoute("/_studio_layout")({
   component: RouteComponent,
+  errorComponent: RouteErrorState,
+  pendingComponent: RoutePendingState,
 })
 
 function RouteComponent() {

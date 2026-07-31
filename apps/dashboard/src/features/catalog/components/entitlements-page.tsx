@@ -53,7 +53,7 @@ export function EntitlementsPage({ organizationId, projectId }: EntitlementsPage
     return (
       <WorkspacePage
         description="The routed Organization does not own this Project."
-        title="Entitlements unavailable in this Organization"
+        title="Access unavailable in this Organization"
       >
         <ScopeMismatchRecovery
           mismatch={scopeMismatch}
@@ -66,9 +66,9 @@ export function EntitlementsPage({ organizationId, projectId }: EntitlementsPage
 
   return (
     <WorkspacePage
-      description="Entitlements define access Products unlock. Mosaic does not calculate or assert customer subscription state here."
+      description="Access is defined by Entitlements: named capabilities that Products unlock. Mosaic does not calculate or assert customer subscription state here."
       eyebrow="Catalog · Project-wide"
-      title="Entitlements"
+      title="Access"
     >
       <HostedResourceBoundary state={state}>
         <WorkflowPanel title="Entitlement definitions">

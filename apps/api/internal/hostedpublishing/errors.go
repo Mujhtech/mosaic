@@ -24,8 +24,14 @@ var (
 	ErrAssetNotReady           = errors.New("asset is not ready")
 	ErrAssetReferenced         = errors.New("asset is referenced")
 	ErrAssetStorage            = errors.New("asset storage operation failed")
-	ErrNoCurrentRelease        = errors.New("no current release")
-	ErrUnsupportedCapability   = errors.New("unsupported capability")
+	// ErrAssetObjectMissing means the Asset row exists but its immutable bytes
+	// are absent from object storage -- the state a failed or partial restore
+	// leaves behind. It is a 404, not a 500: the request named something that
+	// is not there, and an SDK must be able to tell that from "Mosaic is
+	// broken" so it can fall back to its bundled Asset.
+	ErrAssetObjectMissing    = errors.New("asset object is missing from storage")
+	ErrNoCurrentRelease      = errors.New("no current release")
+	ErrUnsupportedCapability = errors.New("unsupported capability")
 )
 
 type ConflictError struct {

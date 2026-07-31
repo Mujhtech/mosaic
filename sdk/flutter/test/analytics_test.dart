@@ -1,20 +1,19 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mosaic_sdk/mosaic_sdk.dart';
+
+import 'support/canonical_fixture.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
   group('Analytics Event Contract v1', () {
     test('decodes and exactly re-encodes every canonical event fixture', () {
-      final root = Directory('../../protocol/fixtures/analytics-event/v1');
-      final fixtures = root
-          .listSync()
-          .whereType<File>()
-          .where((file) => file.path.endsWith('.json'))
-          .where((file) => !file.path.contains('/invalid/'));
+      final root = repositoryDirectory('protocol/fixtures/analytics-event/v1');
+      final fixtures = canonicalFixtureFiles(root);
       expect(fixtures, isNotEmpty);
       for (final fixture in fixtures) {
         final original = jsonDecode(fixture.readAsStringSync());
@@ -22,16 +21,14 @@ void main() {
         expect(decoded.toJson(), original, reason: fixture.path);
       }
 
-      for (final batchFile in Directory('${root.path}/batches')
-          .listSync()
-          .whereType<File>()
-          .where((file) => file.path.endsWith('.json'))) {
+      for (final batchFile
+          in canonicalFixtureFiles(Directory('${root.path}/batches'))) {
         final batch = MosaicAnalyticsBatch.decode(batchFile.readAsStringSync());
         expect(batch.toJson(), jsonDecode(batchFile.readAsStringSync()),
             reason: batchFile.path);
       }
       for (final file
-          in Directory('${root.path}/responses').listSync().whereType<File>()) {
+          in canonicalFixtureFiles(Directory('${root.path}/responses'))) {
         expect(
           MosaicAnalyticsIngestionResponse.decode(file.readAsStringSync())
               .results,
@@ -39,9 +36,18 @@ void main() {
           reason: file.path,
         );
       }
-      final manifest = jsonDecode(File(
-        '../../protocol/compatibility/analytics-event/v1.json',
-      ).readAsStringSync()) as Map;
+      for (final file
+          in canonicalFixtureFiles(Directory('${root.path}/invalid'))) {
+        expect(
+          () => MosaicAnalyticsEvent.decode(file.readAsStringSync()),
+          throwsFormatException,
+          reason: file.path,
+        );
+      }
+      final manifest = jsonDecode(
+        repositoryFile('protocol/compatibility/analytics-event/v1.json')
+            .readAsStringSync(),
+      ) as Map;
       final report = MosaicAnalyticsCapabilityReport();
       expect(report.contractVersion, manifest['analyticsEventContractVersion']);
       expect(report.supportedEventNames, hasLength(27));
@@ -52,8 +58,8 @@ void main() {
     });
 
     test('public event construction rejects provider-confirmed authority', () {
-      final source = File(
-        '../../protocol/fixtures/analytics-event/v1/purchase-completed-provider.json',
+      final source = repositoryFile(
+        'protocol/fixtures/analytics-event/v1/purchase-completed-provider.json',
       ).readAsStringSync();
       final object = (jsonDecode(source) as Map).cast<String, Object?>()
         ..['authority'] = 'client_observed';
@@ -64,8 +70,8 @@ void main() {
     });
 
     test('rejects correlation and attribution from unrelated event stages', () {
-      final source = File(
-        '../../protocol/fixtures/analytics-event/v1/placement-request.json',
+      final source = repositoryFile(
+        'protocol/fixtures/analytics-event/v1/placement-request.json',
       ).readAsStringSync();
       final unrelatedCorrelation =
           (jsonDecode(source) as Map).cast<String, Object?>();
@@ -104,8 +110,8 @@ void main() {
         throwsFormatException,
       );
 
-      final source = File(
-        '../../protocol/fixtures/analytics-event/v1/placement-request.json',
+      final source = repositoryFile(
+        'protocol/fixtures/analytics-event/v1/placement-request.json',
       ).readAsStringSync();
       final object = (jsonDecode(source) as Map).cast<String, Object?>()
         ..['eventName'] = 'placement_no_paywall'
@@ -118,6 +124,78 @@ void main() {
         };
       expect(
         () => MosaicAnalyticsEvent.fromJson(object),
+        throwsFormatException,
+      );
+    });
+
+    test('decodes and re-encodes every canonical v2 Experiment fixture', () {
+      final root = repositoryDirectory('protocol/fixtures/analytics-event/v2');
+      var decoded = 0;
+      for (final fixture in canonicalFixtureFiles(root)) {
+        final object = jsonDecode(fixture.readAsStringSync());
+        expect(
+          mosaicDecodeExperimentAnalyticsEvent(object),
+          object,
+          reason: fixture.path,
+        );
+        decoded++;
+      }
+      // Four Experiment events plus the two attributed conversion events.
+      expect(decoded, 6, reason: 'every v2 event fixture is covered');
+
+      for (final batchFile
+          in canonicalFixtureFiles(Directory('${root.path}/batches'))) {
+        final object = (jsonDecode(batchFile.readAsStringSync()) as Map)
+            .cast<String, Object?>();
+        final batch = MosaicExperimentAnalyticsBatch(
+          batchId: object['batchId']! as String,
+          sentAt: DateTime.parse(object['sentAt']! as String),
+          events: (object['events']! as List)
+              .map(mosaicDecodeExperimentAnalyticsEvent),
+        );
+        expect(batch.toJson(), object, reason: batchFile.path);
+      }
+
+      for (final file
+          in canonicalFixtureFiles(Directory('${root.path}/responses'))) {
+        expect(
+          MosaicAnalyticsIngestionResponse.decode(
+            file.readAsStringSync(),
+            contractVersion: mosaicAnalyticsEventContractVersionV2,
+          ).results,
+          isNotEmpty,
+          reason: file.path,
+        );
+      }
+
+      for (final file
+          in canonicalFixtureFiles(Directory('${root.path}/invalid'))) {
+        expect(
+          () => mosaicDecodeExperimentAnalyticsEvent(
+            jsonDecode(file.readAsStringSync()),
+          ),
+          throwsFormatException,
+          reason: file.path,
+        );
+      }
+    });
+
+    test('a v2 batch is only acknowledged by a v2 ingestion response', () {
+      final response = repositoryFile(
+        'protocol/fixtures/analytics-event/v2/responses/accepted-exposure.json',
+      ).readAsStringSync();
+      expect(
+        () => MosaicAnalyticsIngestionResponse.decode(response),
+        throwsFormatException,
+      );
+      final v1 = repositoryFile(
+        'protocol/fixtures/analytics-event/v1/responses/accepted-event.json',
+      ).readAsStringSync();
+      expect(
+        () => MosaicAnalyticsIngestionResponse.decode(
+          v1,
+          contractVersion: mosaicAnalyticsEventContractVersionV2,
+        ),
         throwsFormatException,
       );
     });
@@ -434,6 +512,291 @@ void main() {
       hasLength(1),
     );
   });
+
+  test('an active Experiment stamps conversions as v2 and keeps v1 otherwise',
+      () async {
+    const experiment = MosaicExperimentAttribution(
+      experimentId: 'experiment_checkout',
+      experimentVersionId: 'experiment_version_checkout_1',
+      experimentVariantId: 'variant_control',
+      experimentAllocationVersion: 'allocation_checkout_1',
+    );
+    const presentation = MosaicAnalyticsPresentationContext(
+      placementRequestId: 'placement_request_1',
+      paywallPresentationId: 'presentation_1',
+      attribution: MosaicAnalyticsAttribution(
+        paywallId: 'paywall_1',
+        paywallVersionId: 'paywall_version_1',
+      ),
+      providerId: 'app_store',
+      experiment: experiment,
+    );
+    const unattributed = MosaicAnalyticsPresentationContext(
+      placementRequestId: 'placement_request_2',
+      paywallPresentationId: 'presentation_2',
+      attribution: MosaicAnalyticsAttribution(
+        paywallId: 'paywall_1',
+        paywallVersionId: 'paywall_version_1',
+      ),
+      providerId: 'app_store',
+    );
+
+    // Conversion attribution carries the tuple; Product attribution never does,
+    // because `product_unavailable` forbids it.
+    expect(presentation.forConversion('product_1').experiment, experiment);
+    expect(presentation.forProduct('product_1').experiment, isNull);
+    expect(unattributed.forConversion('product_1').experiment, isNull);
+
+    final storage = MosaicMemoryAnalyticsStorage();
+    final transport = _RecordingTransport();
+    final runtime = _runtime(
+      storage,
+      MosaicIdentityController(
+        storage: MosaicMemoryIdentityStorage(),
+        namespace: 'd' * 64,
+      ),
+      _Clock(DateTime.utc(2026, 7, 26, 12)),
+      transport,
+    );
+    await runtime.setCollection(
+      environment:
+          const MosaicAnalyticsEnvironmentSettings(collectionEnabled: true),
+    );
+
+    Future<bool> conversion(
+      MosaicAnalyticsPresentationContext context,
+      MosaicAnalyticsEventName name,
+      Map<String, Object?> payload,
+    ) =>
+        runtime.record(
+          name: name,
+          correlation: context.correlation(purchaseAttemptId: 'attempt_1'),
+          attribution: context.forConversion('product_1'),
+          payload: payload,
+        );
+
+    expect(
+      await conversion(
+        presentation,
+        MosaicAnalyticsEventName.purchaseCompletedClient,
+        const <String, Object?>{
+          'outcome': 'purchased',
+          'durationMs': 5,
+          'observedEntitlementKeys': <String>[],
+        },
+      ),
+      isTrue,
+    );
+    expect(
+      await runtime.record(
+        name: MosaicAnalyticsEventName.productSelected,
+        correlation: presentation.correlation(),
+        attribution: presentation.forConversion('product_1'),
+        payload: const <String, Object?>{'source': 'user'},
+      ),
+      isTrue,
+    );
+    expect(
+      await conversion(
+        unattributed,
+        MosaicAnalyticsEventName.purchaseCompletedClient,
+        const <String, Object?>{
+          'outcome': 'purchased',
+          'durationMs': 5,
+          'observedEntitlementKeys': <String>[],
+        },
+      ),
+      isTrue,
+    );
+
+    // The attributed events must survive a restart: they are persisted as v2
+    // documents and reconstructed through the v2 decoder.
+    final reconstructed = _runtime(
+      storage,
+      MosaicIdentityController(
+        storage: MosaicMemoryIdentityStorage(),
+        namespace: 'd' * 64,
+      ),
+      _Clock(DateTime.utc(2026, 7, 26, 12)),
+      transport,
+    );
+    await reconstructed.setCollection(
+      environment:
+          const MosaicAnalyticsEnvironmentSettings(collectionEnabled: true),
+    );
+    expect((await reconstructed.diagnostics()).queuedEvents, 3);
+
+    // Versions are never mixed inside one batch, so the attributed events are
+    // delivered as v2 and the unattributed one as v1.
+    while (await reconstructed.flush() is MosaicAnalyticsFlushCompleted) {}
+    expect(transport.experimentBatches, hasLength(1));
+    expect(transport.batches, hasLength(1));
+    final attributed = transport.experimentBatches.single.events;
+    expect(attributed, hasLength(2));
+    for (final event in attributed) {
+      expect(event['eventSchemaVersion'], '2', reason: '${event['eventName']}');
+      expect(
+        (event['attribution']! as Map)['experimentVariantId'],
+        'variant_control',
+      );
+    }
+    expect(
+      attributed.map((event) => event['eventName']).toSet(),
+      <String>{'purchase_completed_client', 'product_selected'},
+    );
+    final plain = transport.batches.single.events.single;
+    expect(plain.eventSchemaVersion, '1');
+    expect(plain.attribution.experiment, isNull);
+    expect(plain.toJson().containsKey('experimentId'), isFalse);
+  });
+
+  test('Experiment attribution is all-or-none and conversion-only', () {
+    Map<String, Object?> attributed(
+      String eventName,
+      Map<String, Object?> attribution,
+    ) =>
+        <String, Object?>{
+          'eventId': 'event_1',
+          'eventSchemaVersion': '2',
+          'eventName': eventName,
+          'occurredAt': '2026-07-26T12:00:00.000Z',
+          'queuedAt': '2026-07-26T12:00:00.000Z',
+          'authority': 'client_observed',
+          'identity': <String, Object?>{
+            'installationId': 'installation_1',
+            'generation': 1,
+          },
+          'sessionId': 'session_1',
+          'context': <String, Object?>{
+            'platform': 'ios',
+            'sdkFamily': 'flutter',
+            'sdkVersion': '0.2.0-dev.11',
+          },
+          'correlation': <String, Object?>{
+            'paywallPresentationId': 'presentation_1',
+          },
+          'attribution': attribution,
+          'payload': <String, Object?>{'source': 'user'},
+        };
+    const complete = <String, Object?>{
+      'paywallId': 'paywall_1',
+      'paywallVersionId': 'paywall_version_1',
+      'mosaicProductId': 'product_1',
+      'experimentId': 'experiment_1',
+      'experimentVersionId': 'experiment_version_1',
+      'experimentVariantId': 'variant_1',
+      'experimentAllocationVersion': 'allocation_1',
+    };
+    expect(
+      MosaicAnalyticsEvent.fromJson(attributed('product_selected', complete))
+          .attribution
+          .experiment
+          ?.experimentVariantId,
+      'variant_1',
+    );
+
+    // A partial tuple cannot be interpreted, so the document is rejected.
+    final partial = Map<String, Object?>.from(complete)
+      ..remove('experimentVariantId');
+    expect(
+      () => MosaicAnalyticsEvent.fromJson(
+        attributed('product_selected', partial),
+      ),
+      throwsFormatException,
+    );
+
+    // The tuple is forbidden on every event that is not a conversion event.
+    expect(
+      () => MosaicAnalyticsEvent.fromJson(
+        attributed('paywall_dismissed', complete),
+      ),
+      throwsFormatException,
+    );
+
+    // A v1 event may never carry the tuple, and a v2 event must carry it.
+    final asV1 = attributed('product_selected', complete)
+      ..['eventSchemaVersion'] = '1';
+    expect(() => MosaicAnalyticsEvent.fromJson(asV1), throwsFormatException);
+    final withoutTuple = attributed('product_selected', <String, Object?>{
+      'paywallId': 'paywall_1',
+      'paywallVersionId': 'paywall_version_1',
+      'mosaicProductId': 'product_1',
+    });
+    expect(
+      () => MosaicAnalyticsEvent.fromJson(withoutTuple),
+      throwsFormatException,
+    );
+  });
+
+  test('disposal and delivery survive an unavailable analytics storage',
+      () async {
+    final storage = _UnavailableAnalyticsStorage();
+    final identity = MosaicIdentityController(
+      storage: MosaicMemoryIdentityStorage(),
+      namespace: 'b' * 64,
+    );
+    final clock = _Clock(DateTime.utc(2026, 7, 26, 12));
+    final runtime = _runtime(storage, identity, clock, _FailingTransport());
+    await runtime.setCollection(
+      environment: const MosaicAnalyticsEnvironmentSettings(
+        collectionEnabled: true,
+      ),
+    );
+    expect(
+      await runtime.record(
+        name: MosaicAnalyticsEventName.purchaseCompletedClient,
+        correlation: const MosaicAnalyticsCorrelation(
+          purchaseAttemptId: 'purchase_attempt_1',
+        ),
+        attribution: const MosaicAnalyticsAttribution(
+          mosaicProductId: 'product_1',
+          providerId: 'app_store',
+        ),
+        payload: const <String, Object?>{
+          'outcome': 'purchased',
+          'durationMs': 10,
+          'observedEntitlementKeys': <String>[],
+        },
+      ),
+      isTrue,
+    );
+
+    // Backgrounding flushes without awaiting. A storage failure must not become
+    // an uncaught zone error, which would crash the host application.
+    runtime.didChangeAppLifecycleState(AppLifecycleState.paused);
+    await pumpEventQueue();
+
+    await expectLater(runtime.disposeRuntime(), completes);
+    final diagnostics = await runtime.diagnostics();
+    expect(diagnostics.lastSafeCode, isNotNull);
+    expect(storage.writeAttempts, greaterThan(0));
+  });
+
+  test('identity survives a failed write and a later load recovers', () async {
+    final storage = _UnavailableIdentityStorage();
+    final controller = MosaicIdentityController(
+      storage: storage,
+      namespace: 'c' * 64,
+    );
+    final created = await controller.load();
+    expect(created.installationId, startsWith('installation_'));
+    expect(controller.lastSafeCode, mosaicIdentityStorageUnavailableCode);
+
+    // A failed persistence attempt must not poison later resolution.
+    final identified = await controller.identify('user_1');
+    expect(identified.userId, 'user_1');
+    expect(await controller.load(), same(identified));
+
+    storage.available = true;
+    final recovered = MosaicIdentityController(
+      storage: storage,
+      namespace: 'c' * 64,
+    );
+    final restored = await recovered.load();
+    expect(restored.installationId, startsWith('installation_'));
+    expect(recovered.lastSafeCode, isNull);
+    expect(storage.source, isNotNull);
+  });
 }
 
 MosaicAnalyticsRuntime _runtime(
@@ -544,4 +907,85 @@ final class _UnknownCodeTransport implements MosaicAnalyticsTransport {
           ),
         ],
       );
+}
+
+/// Storage that is never writable, modelling a full or permission-denied
+/// application-private directory.
+final class _UnavailableAnalyticsStorage implements MosaicAnalyticsStorage {
+  int writeAttempts = 0;
+
+  @override
+  Future<String?> read(String namespace) async => null;
+
+  @override
+  Future<void> write(String namespace, String source) async {
+    writeAttempts++;
+    throw const FileSystemException('Analytics storage is unavailable.');
+  }
+
+  @override
+  Future<void> clear(String namespace) async =>
+      throw const FileSystemException('Analytics storage is unavailable.');
+}
+
+final class _UnavailableIdentityStorage implements MosaicIdentityStorage {
+  bool available = false;
+  String? source;
+
+  @override
+  Future<String?> read(String namespace) async {
+    if (!available) {
+      throw const FileSystemException('Identity storage is unavailable.');
+    }
+    return source;
+  }
+
+  @override
+  Future<void> write(String namespace, String source) async {
+    if (!available) {
+      throw const FileSystemException('Identity storage is unavailable.');
+    }
+    this.source = source;
+  }
+}
+
+/// Transport that retains the exact batches it was asked to deliver, so a test
+/// can assert that v1 and v2 events are never mixed inside one batch.
+final class _RecordingTransport
+    implements MosaicAnalyticsTransport, MosaicExperimentAnalyticsTransport {
+  final List<MosaicAnalyticsBatch> batches = <MosaicAnalyticsBatch>[];
+  final List<MosaicExperimentAnalyticsBatch> experimentBatches =
+      <MosaicExperimentAnalyticsBatch>[];
+
+  @override
+  Future<MosaicAnalyticsIngestionResponse> send(
+      MosaicAnalyticsBatch batch) async {
+    batches.add(batch);
+    return MosaicAnalyticsIngestionResponse(
+      batchId: batch.batchId,
+      receivedAt: batch.sentAt,
+      results: batch.events
+          .map((event) => MosaicAnalyticsIngestionResult(
+                eventId: event.eventId,
+                status: MosaicAnalyticsIngestionStatus.accepted,
+              ))
+          .toList(),
+    );
+  }
+
+  @override
+  Future<MosaicAnalyticsIngestionResponse> sendExperiment(
+      MosaicExperimentAnalyticsBatch batch) async {
+    experimentBatches.add(batch);
+    return MosaicAnalyticsIngestionResponse(
+      batchId: batch.batchId,
+      receivedAt: batch.sentAt,
+      results: batch.events
+          .map((event) => MosaicAnalyticsIngestionResult(
+                eventId: event['eventId']! as String,
+                status: MosaicAnalyticsIngestionStatus.accepted,
+              ))
+          .toList(),
+    );
+  }
 }

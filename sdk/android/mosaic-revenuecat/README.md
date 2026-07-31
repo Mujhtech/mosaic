@@ -9,6 +9,24 @@ The adapter reports Provider ID `revenuecat` and Mosaic adapter version
 implementation; `10.15.0` is the independent RevenueCat Purchases Android
 dependency version.
 
+## Artifact coordinates
+
+Mosaic does not publish this module to any registry. Its **development
+coordinate**, produced by a local publication you run yourself, is:
+
+```text
+dev.mosaic.sdk:mosaic-revenuecat:0.1.0-dev.7
+```
+
+```bash
+cd sdk/android
+./gradlew :mosaic-revenuecat:publishReleasePublicationToMavenLocal
+```
+
+The module shares one artifact version with `:mosaic` and
+`:mosaic-google-play`. See the installation section of `sdk/android/README.md`
+for the two supported pre-1.0 install paths.
+
 The host owns RevenueCat configuration and customer identity. Configure
 RevenueCat exactly once using its documented Android setup, then pass the
 existing `Purchases` instance:

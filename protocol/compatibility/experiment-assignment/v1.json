@@ -1,6 +1,6 @@
 {
   "experimentAssignmentVersion": "1",
-  "status": "releaseCandidate",
+  "status": "approved",
   "assignmentSchema": "../../schema/experiment-assignment/v1/assignment.schema.json",
   "canonicalFixture": "../../fixtures/experiment-assignment/v1/running-ab.json",
   "conformanceFixture": "../../fixtures/experiment-assignment/v1/assignment-vectors.json",

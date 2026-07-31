@@ -1,22 +1,23 @@
 name: mosaic_sdk
 description: Native Mosaic Protocol 0.2 renderer with Local Preview for Flutter.
-version: 0.2.0-dev.5
+version: 0.2.0-dev.11
 publish_to: none
 
+# Flutter 3.22 / Dart 3.4 is the tested supported floor. It matches the
+# `mosaic_revenuecat` adapter, which already required 3.22.
 environment:
-  sdk: ">=3.3.0 <4.0.0"
-  flutter: ">=3.19.0"
+  sdk: ">=3.4.0 <4.0.0"
+  flutter: ">=3.22.0"
 
 dependencies:
   flutter:
     sdk: flutter
   # Provides the application-private directory used by the crash-safe
-  # Configuration Delivery cache. 2.1.4 retains the package's Dart 3.3 floor.
+  # Configuration Delivery cache. The exact pins below remain the minimum
+  # versions compatible with the Flutter 3.22 / Dart 3.4 floor, so the v1
+  # feature freeze keeps them; newer releases are deliberately not adopted.
   path_provider: 2.1.4
-  # 6.3.0 is the newest release whose package-level SDK bounds retain the
-  # public Flutter 3.19 / Dart 3.3 minimum declared above.
   url_launcher: 6.3.0
-  # Last release supporting Mosaic's Flutter 3.19 / Dart 3.3 floor.
   video_player: 2.9.2
 
 dev_dependencies:

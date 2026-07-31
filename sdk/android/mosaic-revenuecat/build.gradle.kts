@@ -1,6 +1,12 @@
+import org.gradle.api.publish.maven.MavenPublication
+
 plugins {
     id("com.android.library")
+    id("maven-publish")
 }
+
+group = "dev.mosaic.sdk"
+version = "0.1.0-dev.7"
 
 android {
     namespace = "dev.mosaic.sdk.revenuecat"
@@ -18,6 +24,27 @@ android {
 
     testOptions {
         unitTests.isReturnDefaultValues = true
+    }
+
+    publishing {
+        singleVariant("release") {
+            withSourcesJar()
+        }
+    }
+}
+
+afterEvaluate {
+    publishing {
+        publications {
+            register<MavenPublication>("release") {
+                from(components["release"])
+                artifactId = "mosaic-revenuecat"
+                pom {
+                    name.set("Mosaic RevenueCat")
+                    description.set("Optional RevenueCat provider for the Mosaic Android SDK.")
+                }
+            }
+        }
     }
 }
 

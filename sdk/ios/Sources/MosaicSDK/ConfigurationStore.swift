@@ -36,6 +36,17 @@ protocol MosaicConfigurationCacheStore: Sendable {
   func save(_ record: MosaicConfigurationCacheRecord) async throws
 }
 
+/// Degraded persistence used when Application Support is unreachable. The SDK
+/// stays usable for the process lifetime; nothing survives relaunch.
+actor MosaicConfigurationMemoryStore: MosaicConfigurationCacheStore {
+  private var record: MosaicConfigurationCacheRecord?
+
+  init(record: MosaicConfigurationCacheRecord? = nil) { self.record = record }
+
+  func load() -> MosaicConfigurationCacheRecord? { record }
+  func save(_ record: MosaicConfigurationCacheRecord) { self.record = record }
+}
+
 actor MosaicConfigurationFileStore: MosaicConfigurationCacheStore {
   private let directory: URL
   private let fileURL: URL

@@ -1,5 +1,61 @@
 # Changelog
 
+## 0.2.0-dev.11
+
+- Raise the supported floor to Flutter 3.22 / Dart 3.4, the tested minimum.
+  This matches the floor `mosaic_revenuecat` already required.
+- Reconcile the package version, the `mosaicFlutterSdkVersion` wire constant,
+  and this changelog, so the `Mosaic-SDK-Version` header, the analytics context
+  `sdkVersion`, and the capability report all report the exact package version.
+- Make persistence failure safe on every public path: analytics queue writes,
+  cache clears, lifecycle and queue-threshold delivery, `Mosaic.dispose()`, and
+  identity writes now degrade to a safe diagnostic code instead of throwing or
+  escaping as an uncaught error. A failed identity write no longer poisons
+  later identity resolution.
+- `decidePlacement` returns `MosaicPlacementDecisionUnavailable` with
+  `identity.unavailable` when identity cannot be resolved, instead of throwing.
+- Add `MosaicIdentityController.lastSafeCode` and the
+  `mosaicAnalyticsStorageUnavailableCode` /
+  `mosaicIdentityStorageUnavailableCode` diagnostic codes.
+- Emit Analytics Event v2 conversion events for an Experiment presentation.
+  `product_selected` and the purchase lifecycle events now carry the immutable
+  all-or-none Experiment tuple whenever the presented Paywall is a successfully
+  exposed original Variant. Experiment conversion attribution joins solely on
+  that tuple, so emitting exposures on v2 while emitting conversions on v1
+  reported zero conversions for every Experiment, silently.
+- Conversions from a fallback presentation, and from a QA override, are emitted
+  without the tuple: neither is an exposed Variant presentation, and a
+  tuple-carrying fallback conversion can displace the Variant's own row in the
+  conversion denominator.
+- Accept and exactly re-encode the canonical attributed v2 conversion fixtures;
+  reject a partial tuple, a tuple on a non-conversion event, a v1 event carrying
+  a tuple, and a v2 event without one.
+- Deliver v2 events in a v2 batch and read the acknowledgement as v2. Previously
+  every Experiment batch was read as a delivery failure, retried, and dropped.
+- Accept `configurationDeliveryVersion: "3"` in the analytics context of a v2
+  event, matching the canonical schema.
+- Reject an incomplete rollout attribution tuple, and never emit one. A
+  `placement_paywall_selected` or `placement_no_paywall` event carrying an
+  assignment key type without its bucket and algorithm was permanently rejected
+  by ingestion.
+- Document honest installation (git pin or local path; not published to
+  pub.dev) and record the known limitations register.
+
+## 0.2.0-dev.10
+
+- Add exact Experiment Assignment Contract v1 decoding with canonical
+  assignment hash vectors, deterministic bucketing, and stable Experiment
+  ordering within a Placement.
+- Accept Configuration Delivery v3 atomically, including delivered Experiment
+  assignments, mutual-exclusion groups, and emergency-stop handling.
+- Add the bounded, digest-only Experiment assignment store, so no raw
+  installation or user identifier is ever persisted.
+- Evaluate Experiments conservatively: unreliable time, missing identity,
+  unready required Products, and unsupported Variants fall back to normal
+  Placement with a recorded reason.
+- Emit Analytics Event v2 Experiment exposure, assignment-failure, and
+  fallback-presented events only after a successful presentation.
+
 ## 0.2.0-dev.9
 
 - Add the exact Analytics Event Contract v1 event, batch, and partial-response

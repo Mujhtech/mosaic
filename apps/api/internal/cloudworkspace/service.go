@@ -221,11 +221,7 @@ func (s *Service) ListOrganizations(ctx context.Context, actor Actor, options Li
 	}
 	var values []Organization
 	err := s.repository.View(ctx, func(reader Reader) error {
-		for _, organization := range reader.Organizations() {
-			if _, ok := reader.Membership(organization.ID, actor.ID); ok {
-				values = append(values, organization)
-			}
-		}
+		values = reader.OrganizationsForActor(actor.ID)
 		return nil
 	})
 	return paginated(values, options, func(value Organization) string { return value.ID }, err)

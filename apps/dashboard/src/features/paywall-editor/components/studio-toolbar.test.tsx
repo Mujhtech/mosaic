@@ -29,9 +29,9 @@ describe("StudioToolbar", () => {
     const props = toolbarProps()
     render(<StudioToolbar {...props} />)
 
-    expect(screen.getByRole("link", { name: "Back to Foundation" })).toHaveAttribute(
+    expect(screen.getByRole("link", { name: "Back to Workspace" })).toHaveAttribute(
       "href",
-      "/foundation",
+      "/workspace",
     )
     expect(screen.getByRole("heading", { name: "Focused offer v2" })).toBeVisible()
     expect(screen.getByText("Saved locally")).toBeVisible()
@@ -106,7 +106,7 @@ describe("StudioToolbar", () => {
       />,
     )
     const blockedEvent = new MouseEvent("click", { bubbles: true, cancelable: true })
-    fireEvent(screen.getByRole("link", { name: "Back to Foundation" }), blockedEvent)
+    fireEvent(screen.getByRole("link", { name: "Back to Workspace" }), blockedEvent)
     expect(flush).toHaveBeenCalledOnce()
     expect(blockedEvent.defaultPrevented).toBe(true)
 
@@ -120,7 +120,7 @@ describe("StudioToolbar", () => {
       />,
     )
     const allowedEvent = new MouseEvent("click", { bubbles: true, cancelable: true })
-    fireEvent(screen.getByRole("link", { name: "Back to Foundation" }), allowedEvent)
+    fireEvent(screen.getByRole("link", { name: "Back to Workspace" }), allowedEvent)
     expect(successfulFlush).toHaveBeenCalledOnce()
     expect(allowedEvent.defaultPrevented).toBe(false)
   })

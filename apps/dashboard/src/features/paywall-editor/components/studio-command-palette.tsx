@@ -20,6 +20,7 @@ import { Button } from "@/components/ui/button"
 import { COMPONENT_CATALOG } from "@/features/paywall-editor/components/component-catalog"
 import { useEditorHistory } from "@/features/paywall-editor/hooks/use-editor-history"
 import { STUDIO_SHORTCUT_HINTS } from "@/features/paywall-editor/hooks/use-editor-keyboard-shortcuts"
+import { LiveAnnouncer } from "@/components/feedback/live-announcer"
 import { useEditorActions } from "@/features/paywall-editor/stores/editor-store-context"
 import type { StudioWorkspaceSnapshot } from "@/features/paywall-editor/stores/studio-workspace-store"
 import {
@@ -506,6 +507,18 @@ export function StudioCommandPalette({
               value={query}
             />
           </label>
+
+          {/* Filtering happens without any visible focus change, so the result
+              count is announced instead. */}
+          <LiveAnnouncer
+            message={
+              query.trim().length === 0
+                ? undefined
+                : visibleCommands.length === 1
+                  ? "1 command matches."
+                  : `${visibleCommands.length} commands match.`
+            }
+          />
 
           <div className="min-h-0 flex-1 overflow-y-auto p-2" ref={listRef}>
             {groupedCommands.size > 0 ? (

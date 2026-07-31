@@ -1,6 +1,6 @@
 {
   "placementDecisionVersion": "1",
-  "status": "releaseCandidate",
+  "status": "approved",
   "decisionSchema": "../../schema/placement-decision/v1/decision.schema.json",
   "canonicalFixture": "../../fixtures/placement-decision/v1/evaluator-conformance.json",
   "rolloutFixture": "../../fixtures/placement-decision/v1/rollout-vectors.json",

@@ -293,7 +293,13 @@ export function NodeFrame({
         : "hover:ring-primary/35 hover:ring-1"
   return (
     <div
+      aria-current={selected ? "true" : undefined}
       aria-disabled={locked || undefined}
+      // A canvas node frequently contains its own buttons and text controls,
+      // so it must not claim role="button": that nests interactive content
+      // inside a control and hides the children from assistive technology.
+      aria-label={`${node.type} component`}
+      role="group"
       className={`relative min-w-0 rounded outline-none ${stateClass}`}
       data-component-id={node.id}
       data-preview-node-type={node.type}
@@ -320,7 +326,6 @@ export function NodeFrame({
         ...(background.video ? background.style : {}),
         isolation: "isolate",
       }}
-      role="button"
       tabIndex={locked ? -1 : 0}
       title={locked ? "Locked in Studio Layers" : undefined}
     >

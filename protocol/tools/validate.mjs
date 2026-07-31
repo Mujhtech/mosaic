@@ -67,6 +67,8 @@ import {
   validateAnalyticsEventV2Artifacts,
   validateAnalyticsEventV2JsonFormatting,
 } from "./analytics-event-validation-v2.mjs";
+import { validateAnalyticsMinimizationProjection } from "./generate-analytics-minimization.mjs";
+import { validateRejectionLayers } from "./generate-rejection-layers.mjs";
 
 try {
   const artifactsV02 = loadProtocolV02Artifacts();
@@ -133,6 +135,8 @@ try {
     ...validateDeliveryV3JsonFormatting(),
     ...validateAnalyticsEventV2Artifacts(analyticsEventArtifactsV2),
     ...validateAnalyticsEventV2JsonFormatting(),
+    ...validateAnalyticsMinimizationProjection(),
+    ...validateRejectionLayers(),
   ];
 
   if (errors.length > 0) {

@@ -19,8 +19,13 @@ internal data class MosaicAnalyticsJourney(
     val context: MosaicAnalyticsContext? = null,
 )
 
+/** The runtime only needs an identity snapshot, so it does not depend on the file-backed store. */
+internal fun interface MosaicIdentitySnapshotSource {
+    suspend fun current(): MosaicIdentityState
+}
+
 class MosaicAnalyticsRuntime internal constructor(
-    private val identityStore: MosaicIdentityStore,
+    private val identityStore: MosaicIdentitySnapshotSource,
     private val queue: MosaicAnalyticsQueue,
     private val transport: MosaicAnalyticsTransport,
     private val baseContext: MosaicAnalyticsContext,
@@ -85,6 +90,16 @@ class MosaicAnalyticsRuntime internal constructor(
         }
     }
 
+    /**
+     * Applies a changed owner-approved Environment flag to an already-constructed runtime. It is
+     * ordered on the same single-parallelism scope as [record], so it cannot block the caller and
+     * cannot interleave with an event already accepted for enqueueing.
+     */
+    internal fun reconcileEnvironmentEnabled(enabled: Boolean) {
+        if (environmentEnabled == enabled) return
+        scope.launch { runCatching { setEnvironmentEnabled(enabled) } }
+    }
+
     suspend fun setHostEnabled(enabled: Boolean) {
         collectionLock.withLock {
             val changed = hostEnabled != enabled
@@ -107,10 +122,17 @@ class MosaicAnalyticsRuntime internal constructor(
             sentAt = mosaicAnalyticsTimestamp(now()),
             events = sent.map { MosaicAnalyticsCodec.decodeEvent(it.encoded) },
         )
+        val batchContractVersion = firstVersion
         when (val result = runCatching { transport.send(batch) }.getOrNull()) {
+            // A response is authoritative only when it echoes both the exact batch ID and the
+            // exact contract version that was submitted. A version mismatch means the server did
+            // not acknowledge the batch that was actually sent, so the events are retried rather
+            // than removed on the strength of an unrelated acknowledgement.
             is MosaicAnalyticsTransportResult.Received -> queue.applyResults(
                 sent,
-                result.response.takeIf { it.batchId == batch.batchId },
+                result.response.takeIf {
+                    it.batchId == batch.batchId && it.analyticsEventContractVersion == batchContractVersion
+                },
                 null,
                 jitter,
             )
@@ -136,6 +158,12 @@ internal object MosaicAnalyticsRuntimeRegistry {
     private val runtimes = ConcurrentHashMap<String, MosaicAnalyticsRuntime>()
     private val lifecycles = ConcurrentHashMap<String, MosaicAnalyticsLifecycle>()
 
+    /**
+     * A namespace keeps one runtime per process. A later handle for the same namespace may carry a
+     * different owner-approved `analyticsCollectionEnabled` value — for example after the host
+     * reconfigures Mosaic once the Environment setting has been fetched. Returning the existing
+     * runtime unchanged would silently keep the stale flag, so the retrieved runtime reconciles it.
+     */
     fun runtime(
         application: Application,
         namespace: String,
@@ -143,7 +171,7 @@ internal object MosaicAnalyticsRuntimeRegistry {
         identityStore: MosaicIdentityStore,
     ): MosaicAnalyticsRuntime = runtimes.getOrPut(namespace) {
         MosaicAnalyticsRuntime(
-            identityStore = identityStore,
+            identityStore = MosaicIdentitySnapshotSource { identityStore.current() },
             queue = MosaicAnalyticsQueue(MosaicFileAnalyticsStore(application, namespace), System::currentTimeMillis),
             transport = MosaicHTTPAnalyticsTransport(configuration),
             baseContext = MosaicAnalyticsContext(applicationVersion = configuration.applicationVersion),
@@ -151,6 +179,8 @@ internal object MosaicAnalyticsRuntimeRegistry {
         ).also { runtime ->
             lifecycles[namespace] = MosaicAnalyticsLifecycle(application, runtime)
         }
+    }.also { runtime ->
+        runtime.reconcileEnvironmentEnabled(configuration.analyticsCollectionEnabled)
     }
 }
 

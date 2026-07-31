@@ -36,6 +36,7 @@ export function ExperimentsPage({
     loadingDescription: "Loading Environment-scoped Experiments.",
     onRetry: () => void experiments.refetch(),
     permissionDescription: "Environment access is required to inspect Experiments.",
+    scope: { environmentId, organizationId, projectId },
   })
   const createLink = access.canManage ? (
     <Link

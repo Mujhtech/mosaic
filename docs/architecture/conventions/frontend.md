@@ -130,6 +130,44 @@ business behavior, application icons, or shadcn primitives. React remains its pe
 the dashboard TypeScript symlink preservation and Vite/Vitest React deduplication settings when
 using the local file-linked package.
 
+## Supported Browsers and Delivery Requirements
+
+| Browser | Minimum |
+| ------- | ------- |
+| Chrome  | 111     |
+| Edge    | 111     |
+| Safari  | 16.4    |
+| Firefox | 128     |
+
+The floor is set by Tailwind CSS v4, which requires modern cascade-layer and `@property` support.
+Encode the matrix as `browserslist` in the dashboard package so the CSS and JS pipelines target
+exactly these engines. Do not add a polyfill without measured evidence that a supported browser in
+this matrix needs it.
+
+Serve the dashboard over HTTPS, or over `http://localhost` in development. The session cookie is
+`Secure`, and clipboard access is restricted to secure contexts, so plain `http://` on any other
+host breaks authentication.
+
+Viewport floors:
+
+- Studio is desktop-only and requires at least 768 px of width. Below that, present a
+  desktop-required state that still permits a safe local export.
+- The hosted workspace is desktop-first. It stays usable on a tablet, but it is not a supported
+  phone experience; document that rather than redesigning it.
+
+## Runtime Configuration
+
+Read deployment configuration once at startup from the SSR-injected `window.__MOSAIC_CONFIG__`.
+Validate every value, and fall back to a documented safe default instead of throwing, so a
+misconfigured deployment still renders a page that can explain the problem. Compile-time `VITE_*`
+variables are development fallbacks only; a shipped bundle must not require them.
+
+## Client Error Reporting
+
+Mosaic ships no client-side error reporting by design. Do not add a crash reporter, telemetry
+beacon, or automatic error upload. Surface the API correlation identifier instead, and never render
+raw server messages or stack traces to users.
+
 ## Responsive Workspace Styling
 
 Studio is desktop-first. Preserve canvas space before showing every panel simultaneously:

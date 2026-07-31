@@ -9,12 +9,22 @@ import { LoadingState } from "@/components/feedback/loading-state"
 import { Button } from "@/components/ui/button"
 import { buttonVariants } from "@/components/ui/button-variants"
 import { HostedAccessBanner } from "@/features/auth/components/hosted-access-banner"
+import type { ApiErrorDetailEntry, ApiErrorRecovery } from "@/lib/api/errors"
+
+interface HostedResourceFailure {
+  description?: string
+  details?: ApiErrorDetailEntry[]
+  onRetry?: () => void
+  recovery?: ApiErrorRecovery
+  requestId?: string
+}
 
 export type HostedResourceState =
   | { kind: "decision_required" }
   | { description?: string; kind: "loading"; title?: string }
   | { description: string; kind: "empty"; title: string; action?: ReactNode }
-  | { description?: string; kind: "error"; requestId?: string; onRetry?: () => void }
+  | (HostedResourceFailure & { kind: "error" })
+  | (HostedResourceFailure & { kind: "degraded" })
   | { action?: ReactNode; description: string; kind: "permission"; requiredRole?: string }
   | { kind: "ready" }
 
@@ -34,6 +44,7 @@ export function HostedResourceBoundary({ children, state }: HostedResourceBounda
         <EmptyState action={state.action} description={state.description} title={state.title} />
       )
     case "error":
+    case "degraded":
       return <HostedErrorState state={state} />
     case "permission":
       return (
@@ -59,14 +70,12 @@ export function HostedResourceBoundary({ children, state }: HostedResourceBounda
   }
 }
 
-function HostedErrorState({ state }: { state: Extract<HostedResourceState, { kind: "error" }> }) {
-  const [copied, setCopied] = useState(false)
-
-  async function copyRequestId() {
-    if (!state.requestId) return
-    await navigator.clipboard.writeText(state.requestId)
-    setCopied(true)
-  }
+function HostedErrorState({
+  state,
+}: {
+  state: Extract<HostedResourceState, { kind: "degraded" | "error" }>
+}) {
+  const degraded = state.kind === "degraded"
 
   return (
     <div className="space-y-3">
@@ -77,19 +86,95 @@ function HostedErrorState({ state }: { state: Extract<HostedResourceState, { kin
         }
         onRetry={state.onRetry}
         retryLabel="Retry"
-        title="Cloud workspace unavailable"
+        title={degraded ? "Mosaic API unreachable" : "Cloud workspace unavailable"}
       />
+      <ApiErrorDetails details={state.details} />
       <div className="flex flex-wrap items-center gap-2">
+        {state.recovery ? <ApiErrorRecoveryAction recovery={state.recovery} /> : null}
         <Link className={buttonVariants({ variant: "outline" })} to="/studio">
           Continue locally
         </Link>
-        {state.requestId ? (
-          <Button onClick={() => void copyRequestId()} variant="ghost">
-            <CopyIcon aria-hidden size={16} />
-            {copied ? "Request ID copied" : "Copy request ID"}
-          </Button>
-        ) : null}
       </div>
+      {state.requestId ? <RequestIdCopy requestId={state.requestId} /> : null}
+    </div>
+  )
+}
+
+/**
+ * Server-supplied specifics for a coded failure: readiness blockers, rejected
+ * fields, the refused precondition. These are Mosaic-owned codes and resource
+ * identifiers, never server prose.
+ */
+export function ApiErrorDetails({ details }: { details?: ApiErrorDetailEntry[] }) {
+  if (!details || details.length === 0) return null
+
+  return (
+    <dl className="border-border bg-muted/30 space-y-1 rounded border p-3 text-sm">
+      {details.map((entry) => (
+        <div className="flex flex-wrap gap-x-2" key={`${entry.label ?? ""}:${entry.value}`}>
+          {entry.label ? (
+            <dt className="text-muted-foreground font-medium">{entry.label}</dt>
+          ) : (
+            <dt className="sr-only">Detail</dt>
+          )}
+          <dd className="font-mono text-xs break-all">{entry.value}</dd>
+        </div>
+      ))}
+    </dl>
+  )
+}
+
+/**
+ * The single next step for a coded failure. A recovery without a destination
+ * would be a dead control, so the link renders only when the surrounding view
+ * supplied the identifiers the destination needs.
+ */
+export function ApiErrorRecoveryAction({ recovery }: { recovery: ApiErrorRecovery }) {
+  if (!recovery.href) return null
+
+  return (
+    <a className={buttonVariants({ variant: "default" })} href={recovery.href}>
+      {recovery.label}
+    </a>
+  )
+}
+
+/**
+ * Clipboard access is unavailable outside secure contexts and in some
+ * browsers, so the identifier always stays selectable as a manual fallback.
+ */
+export function RequestIdCopy({ requestId }: { requestId: string }) {
+  const [copied, setCopied] = useState(false)
+  const [failed, setFailed] = useState(false)
+
+  const canCopy =
+    typeof navigator !== "undefined" && typeof navigator.clipboard?.writeText === "function"
+
+  async function copyRequestId() {
+    try {
+      await navigator.clipboard.writeText(requestId)
+      setCopied(true)
+      setFailed(false)
+    } catch {
+      setFailed(true)
+    }
+  }
+
+  return (
+    <div className="flex flex-wrap items-center gap-2">
+      <span className="text-muted-foreground text-xs">
+        Request ID:{" "}
+        <code className="bg-muted rounded px-1 py-0.5 font-mono select-all">{requestId}</code>
+      </span>
+      {canCopy ? (
+        <Button onClick={() => void copyRequestId()} size="sm" variant="ghost">
+          <CopyIcon aria-hidden size={16} />
+          {copied ? "Request ID copied" : "Copy request ID"}
+        </Button>
+      ) : null}
+      <span aria-live="polite" className="text-muted-foreground text-xs">
+        {failed ? "Copying failed. Select the request ID above to copy it manually." : ""}
+      </span>
     </div>
   )
 }

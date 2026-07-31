@@ -13,6 +13,7 @@ import 'configuration_delivery.dart';
 import 'experiment_analytics.dart';
 import 'experiment_assignment.dart';
 import 'placement_decision.dart';
+import 'placement_identity.dart';
 import 'presentation.dart';
 import 'renderer.dart';
 
@@ -177,7 +178,17 @@ extension MosaicPlacementClient on Mosaic {
           ),
       };
     }
-    final identity = await loadIdentity();
+    final MosaicIdentityState identity;
+    try {
+      identity = await loadIdentity();
+    } on Object {
+      // Identity is required for deterministic bucketing. A failure here is
+      // reported as a safe unavailable decision rather than thrown at the host.
+      return MosaicPlacementDecisionUnavailable(
+        placementKey: key,
+        diagnosticCode: 'identity.unavailable',
+      );
+    }
     final products = <String, MosaicProductDecisionState>{};
     if (release.productReferences.isNotEmpty) {
       try {
@@ -613,6 +624,7 @@ final class _MosaicPlacementHostState extends State<MosaicPlacementHost> {
       resolution.configuration,
       resolution.paywallVersion,
       decision: resolution.decision,
+      conversionExperiment: mosaicConversionExperimentAttribution(resolution),
     );
     final decision = resolution.decision;
     if (decision?.usedFallback == true) {
@@ -638,12 +650,14 @@ final class _MosaicPlacementHostState extends State<MosaicPlacementHost> {
       <String, Object?>{
         'finalOutcome': 'paywall',
         'decisionContractVersion': '1',
-        if (decision?.assignmentKeyType != null)
+        // Rollout attribution is atomic: the key type, algorithm, and bucket
+        // are emitted together or not at all, matching the canonical contract.
+        if (decision?.rolloutBucket != null &&
+            decision?.assignmentKeyType != null) ...<String, Object?>{
           'assignmentKeyType': decision!.assignmentKeyType,
-        if (decision?.rolloutBucket != null)
-          'rolloutBucket': decision!.rolloutBucket,
-        if (decision?.rolloutBucket != null)
+          'rolloutBucket': decision.rolloutBucket,
           'bucketingAlgorithm': mosaicRolloutAlgorithm,
+        },
       },
     );
     final experiment = resolution.experiment;
@@ -801,12 +815,13 @@ final class _MosaicPlacementHostState extends State<MosaicPlacementHost> {
         <String, Object?>{
           'finalOutcome': 'no_paywall',
           'decisionContractVersion': '1',
-          if (resolution.decision.assignmentKeyType != null)
+          if (resolution.decision.rolloutBucket != null &&
+              resolution.decision.assignmentKeyType !=
+                  null) ...<String, Object?>{
             'assignmentKeyType': resolution.decision.assignmentKeyType,
-          if (resolution.decision.rolloutBucket != null)
             'rolloutBucket': resolution.decision.rolloutBucket,
-          if (resolution.decision.rolloutBucket != null)
             'bucketingAlgorithm': mosaicRolloutAlgorithm,
+          },
         },
       );
     }
@@ -926,6 +941,7 @@ final class _MosaicPlacementHostState extends State<MosaicPlacementHost> {
     MosaicAcceptedConfiguration configuration,
     MosaicDeliveredPaywallVersion paywallVersion, {
     MosaicPlacementDecisionResult? decision,
+    MosaicExperimentAttribution? conversionExperiment,
   }) {
     final release = configuration.envelope.release;
     final ruleSet = release.decisionForPlacement(widget.placementKey);
@@ -948,6 +964,7 @@ final class _MosaicPlacementHostState extends State<MosaicPlacementHost> {
             const <MosaicCommerceProductMapping>[])
           mapping.mosaicProductId: mapping.mappingId,
       },
+      experiment: conversionExperiment,
     );
   }
 
@@ -1031,4 +1048,29 @@ final class _MosaicPlacementHostState extends State<MosaicPlacementHost> {
       _ => null,
     };
   }
+}
+
+/// The Experiment tuple that conversion events from [resolution] must carry, or
+/// `null` when they must be emitted without one.
+///
+/// Only a successfully exposed original-Variant presentation may attribute a
+/// conversion to a Variant:
+///
+/// * a fallback presentation shows the normal Placement, and a tuple-carrying
+///   conversion would enter the `product_selection_purchase_start` denominator
+///   and can displace the Variant's own row, counting a normal-Paywall outcome
+///   as a Variant outcome; and
+/// * a QA override deliberately emits no statistical exposure, so its
+///   conversions must not appear in Variant results either.
+MosaicExperimentAttribution? mosaicConversionExperimentAttribution(
+  MosaicPlacementDecisionPaywall resolution,
+) {
+  final experiment = resolution.experiment;
+  if (experiment == null || experiment.qaOverride) return null;
+  return MosaicExperimentAttribution(
+    experimentId: experiment.assignment.experimentId,
+    experimentVersionId: experiment.assignment.experimentVersionId,
+    experimentVariantId: experiment.variant.id,
+    experimentAllocationVersion: experiment.assignment.allocationVersion,
+  );
 }

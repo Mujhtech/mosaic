@@ -699,7 +699,9 @@ enum MosaicProtocolV02Semantics {
           usedAssetIDs.insert(posterID)
         }
         try self.color(fallback)
-      case .token: preconditionFailure("Resolved background cannot remain a token")
+      // Token resolution already ran, so this is unreachable. Rejecting the
+      // document is still safer than trapping inside a host application.
+      case .token: throw violation("protocol_unknown_or_cyclic_background_token")
       }
     }
 

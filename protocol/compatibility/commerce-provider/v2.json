@@ -1,6 +1,6 @@
 {
   "commerceProviderContractVersion": "2",
-  "status": "releaseCandidate",
+  "status": "approved",
   "schema": "../../schema/commerce-provider/v2/contract.schema.json",
   "canonicalFixtures": [
     "../../fixtures/commerce-provider/v2/storekit-profile.json",

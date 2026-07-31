@@ -76,6 +76,122 @@
         "providerCapability": "accepted",
         "qaOverride": false
       }
+    },
+    {
+      "eventId": "event_product_selected_batch",
+      "eventSchemaVersion": "2",
+      "eventName": "product_selected",
+      "occurredAt": "2026-07-26T12:01:02.000Z",
+      "queuedAt": "2026-07-26T12:01:02.005Z",
+      "authority": "client_observed",
+      "identity": {
+        "installationId": "installation_001",
+        "generation": 1
+      },
+      "sessionId": "session_001",
+      "context": {
+        "platform": "ios",
+        "sdkFamily": "ios",
+        "sdkVersion": "0.7.0",
+        "configurationDeliveryVersion": "3"
+      },
+      "correlation": {
+        "placementRequestId": "placement_request_batch",
+        "paywallPresentationId": "presentation_batch"
+      },
+      "attribution": {
+        "placementId": "placement_checkout",
+        "paywallId": "paywall_checkout_control",
+        "paywallVersionId": "paywall_version_control_7",
+        "mosaicProductId": "product_pro_yearly",
+        "experimentId": "experiment_checkout",
+        "experimentVersionId": "experiment_version_checkout_1",
+        "experimentVariantId": "variant_control",
+        "experimentAllocationVersion": "allocation_checkout_1"
+      },
+      "payload": {
+        "source": "user"
+      }
+    },
+    {
+      "eventId": "event_purchase_started_batch",
+      "eventSchemaVersion": "2",
+      "eventName": "purchase_started",
+      "occurredAt": "2026-07-26T12:01:03.000Z",
+      "queuedAt": "2026-07-26T12:01:03.005Z",
+      "authority": "client_observed",
+      "identity": {
+        "installationId": "installation_001",
+        "generation": 1
+      },
+      "sessionId": "session_001",
+      "context": {
+        "platform": "ios",
+        "sdkFamily": "ios",
+        "sdkVersion": "0.7.0",
+        "configurationDeliveryVersion": "3"
+      },
+      "correlation": {
+        "placementRequestId": "placement_request_batch",
+        "paywallPresentationId": "presentation_batch",
+        "purchaseAttemptId": "purchase_attempt_batch",
+        "providerOperationId": "commerce_operation_batch"
+      },
+      "attribution": {
+        "placementId": "placement_checkout",
+        "paywallId": "paywall_checkout_control",
+        "paywallVersionId": "paywall_version_control_7",
+        "mosaicProductId": "product_pro_yearly",
+        "providerId": "app_store",
+        "experimentId": "experiment_checkout",
+        "experimentVersionId": "experiment_version_checkout_1",
+        "experimentVariantId": "variant_control",
+        "experimentAllocationVersion": "allocation_checkout_1"
+      },
+      "payload": {}
+    },
+    {
+      "eventId": "event_purchase_completed_client_batch",
+      "eventSchemaVersion": "2",
+      "eventName": "purchase_completed_client",
+      "occurredAt": "2026-07-26T12:01:05.000Z",
+      "queuedAt": "2026-07-26T12:01:05.005Z",
+      "authority": "client_observed",
+      "identity": {
+        "installationId": "installation_001",
+        "generation": 1
+      },
+      "sessionId": "session_001",
+      "context": {
+        "platform": "ios",
+        "sdkFamily": "ios",
+        "sdkVersion": "0.7.0",
+        "configurationDeliveryVersion": "3"
+      },
+      "correlation": {
+        "placementRequestId": "placement_request_batch",
+        "paywallPresentationId": "presentation_batch",
+        "purchaseAttemptId": "purchase_attempt_batch",
+        "providerOperationId": "commerce_operation_batch"
+      },
+      "attribution": {
+        "placementId": "placement_checkout",
+        "paywallId": "paywall_checkout_control",
+        "paywallVersionId": "paywall_version_control_7",
+        "mosaicProductId": "product_pro_yearly",
+        "providerId": "app_store",
+        "experimentId": "experiment_checkout",
+        "experimentVersionId": "experiment_version_checkout_1",
+        "experimentVariantId": "variant_control",
+        "experimentAllocationVersion": "allocation_checkout_1"
+      },
+      "payload": {
+        "outcome": "purchased",
+        "durationMs": 2400,
+        "observedEntitlementKeys": [
+          "pro_access"
+        ]
+      }
     }
   ]
 }

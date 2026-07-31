@@ -14,6 +14,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"sort"
 	"strings"
 )
 
@@ -260,3 +261,23 @@ func fingerprint(key, plaintext []byte) []byte {
 }
 
 var _ CredentialCipher = (*AESGCMCipher)(nil)
+
+// ValidateKeyring reports whether an encoded keyring is structurally usable
+// without retaining any key material. It never echoes the supplied value.
+func ValidateKeyring(encoded string) error {
+	_, _, err := parseKeyring(encoded)
+	return err
+}
+
+// ActiveKeyID is the key identifier new envelopes are sealed under.
+func (c *AESGCMCipher) ActiveKeyID() string { return c.activeKeyID }
+
+// KeyIDs lists every key identifier the keyring can decrypt with, sorted.
+func (c *AESGCMCipher) KeyIDs() []string {
+	ids := make([]string, 0, len(c.keys))
+	for id := range c.keys {
+		ids = append(ids, id)
+	}
+	sort.Strings(ids)
+	return ids
+}

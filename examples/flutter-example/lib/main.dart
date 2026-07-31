@@ -253,29 +253,30 @@ final class _HostedPaywallPlaygroundState
   }
 
   Mosaic _createMosaic() => Mosaic.configure(
-    publicSdkKey: _publicSdkKey,
-    baseUrl: Uri.parse(_hostedBaseUrl),
-    applicationVersion: '2.10.0',
-    applicationId: !_connectedCommerceEnabled ? null : _mosaicApplicationId,
-    storePlatform: _connectedCommerceEnabled ? _runtimeStorePlatform : null,
-    purchaseProvider: _fallbackPurchaseProvider(),
-    analyticsEnvironmentSettings: MosaicAnalyticsEnvironmentSettings(
-      collectionEnabled: _analyticsEnabled,
-    ),
-    commerceProviderFactories: <MosaicCommerceProviderFactory>[
-      MosaicStoreKitProviderFactory(acceptUpdate: _acceptNativeStoreUpdate),
-      MosaicGooglePlayProviderFactory(acceptUpdate: _acceptNativeStoreUpdate),
-      if (_revenueCatReady) const MosaicRevenueCatProviderFactory(),
-    ],
-    bundledFallbackLoader: () async => rootBundle.loadString(
-      _phase5Demo
-          ? 'assets/generated/advanced-configuration-release.json'
-          : 'assets/generated/configuration-release.json',
-    ),
-    onDiagnostic: (diagnostic) {
-      if (mounted) _recordEvent('Configuration: ${diagnostic.code}');
-    },
-  );
+        publicSdkKey: _publicSdkKey,
+        baseUrl: Uri.parse(_hostedBaseUrl),
+        applicationVersion: '2.10.0',
+        applicationId: !_connectedCommerceEnabled ? null : _mosaicApplicationId,
+        storePlatform: _connectedCommerceEnabled ? _runtimeStorePlatform : null,
+        purchaseProvider: _fallbackPurchaseProvider(),
+        analyticsEnvironmentSettings: MosaicAnalyticsEnvironmentSettings(
+          collectionEnabled: _analyticsEnabled,
+        ),
+        commerceProviderFactories: <MosaicCommerceProviderFactory>[
+          MosaicStoreKitProviderFactory(acceptUpdate: _acceptNativeStoreUpdate),
+          MosaicGooglePlayProviderFactory(
+              acceptUpdate: _acceptNativeStoreUpdate),
+          if (_revenueCatReady) const MosaicRevenueCatProviderFactory(),
+        ],
+        bundledFallbackLoader: () async => rootBundle.loadString(
+          _phase5Demo
+              ? 'assets/generated/advanced-configuration-release.json'
+              : 'assets/generated/configuration-release.json',
+        ),
+        onDiagnostic: (diagnostic) {
+          if (mounted) _recordEvent('Configuration: ${diagnostic.code}');
+        },
+      );
 
   Future<MosaicNativeStoreUpdateAcceptanceDisposition> _acceptNativeStoreUpdate(
     MosaicCommerceUpdate update,
@@ -556,14 +557,16 @@ final class _PreviewStatusPanel extends StatelessWidget {
   static Color _connectionColor(
     BuildContext context,
     MosaicPreviewConnectionStatus status,
-  ) => switch (status) {
-    MosaicPreviewConnectionStatus.connected => Colors.green.shade800,
-    MosaicPreviewConnectionStatus.connecting ||
-    MosaicPreviewConnectionStatus.reconnecting => Colors.orange.shade900,
-    MosaicPreviewConnectionStatus.disconnected => Theme.of(
-      context,
-    ).colorScheme.error,
-  };
+  ) =>
+      switch (status) {
+        MosaicPreviewConnectionStatus.connected => Colors.green.shade800,
+        MosaicPreviewConnectionStatus.connecting ||
+        MosaicPreviewConnectionStatus.reconnecting =>
+          Colors.orange.shade900,
+        MosaicPreviewConnectionStatus.disconnected => Theme.of(
+            context,
+          ).colorScheme.error,
+      };
 }
 
 final class _StatusChip extends StatelessWidget {

@@ -87,6 +87,24 @@ func providerErrorCode(err error) (ProviderErrorCode, bool, *int) {
 	return code, catalogError.Retryable, retryAfterSeconds
 }
 
+// providerOperationError converts a failed provider operation into the error the
+// caller should see.
+//
+// Only a real provider-adapter failure becomes a provider error code. An
+// authorization or lookup refusal must survive unchanged: routing it through
+// publicProviderError reported a cross-tenant `POST /provider-connections/{id}/test`
+// as "the provider is temporarily unavailable" instead of 403, so an
+// unauthorized attempt looked like an outage and a legitimate operator missing a
+// permission had no way to tell.
+func providerOperationError(err error) error {
+	var catalogError *providercatalog.Error
+	if !errors.As(err, &catalogError) {
+		return err
+	}
+	code, _, _ := providerErrorCode(err)
+	return publicProviderError(code)
+}
+
 func publicProviderError(code ProviderErrorCode) error {
 	switch code {
 	case ProviderErrorCredentialInvalid:
@@ -201,8 +219,7 @@ func (s *Service) TestProviderConnection(ctx context.Context, actor Actor, conne
 	connection, project, _, err := s.fetchProviderCatalog(ctx, actor, connectionID, true)
 	if err != nil {
 		s.saveProviderFailure(ctx, actor, connectionID, "test", err)
-		code, _, _ := providerErrorCode(err)
-		return ProviderConnectionHealth{}, publicProviderError(code)
+		return ProviderConnectionHealth{}, providerOperationError(err)
 	}
 	var result ProviderConnectionHealth
 	err = s.repository.Transact(ctx, func(tx Transaction) error {
@@ -319,8 +336,7 @@ func (s *Service) PreviewProviderCatalog(ctx context.Context, actor Actor, conne
 	_, _, catalog, err := s.fetchProviderCatalog(ctx, actor, connectionID, false)
 	if err != nil {
 		s.saveProviderFailure(ctx, actor, connectionID, "preview", err)
-		code, _, _ := providerErrorCode(err)
-		return ProviderCatalogPreview{}, publicProviderError(code)
+		return ProviderCatalogPreview{}, providerOperationError(err)
 	}
 	return catalogPreview(connectionID, catalog), nil
 }
@@ -628,8 +644,7 @@ func (s *Service) ImportProviderProducts(ctx context.Context, actor Actor, proje
 	connection, project, catalog, err := s.fetchProviderCatalog(ctx, actor, connectionID, true)
 	if err != nil {
 		s.saveProviderFailure(ctx, actor, connectionID, "import", err)
-		code, _, _ := providerErrorCode(err)
-		return ProviderImportResult{}, publicProviderError(code)
+		return ProviderImportResult{}, providerOperationError(err)
 	}
 	if connection.ProjectID != projectID || project.ID != projectID {
 		return ProviderImportResult{}, ErrScopeMismatch
@@ -972,8 +987,7 @@ func (s *Service) ReplaceProviderMapping(ctx context.Context, actor Actor, mappi
 	connection, project, catalog, err := s.fetchProviderCatalog(ctx, actor, original.ConnectionID, true)
 	if err != nil {
 		s.saveProviderFailure(ctx, actor, original.ConnectionID, "mapping_replace", err)
-		code, _, _ := providerErrorCode(err)
-		return ProviderProductMapping{}, publicProviderError(code)
+		return ProviderProductMapping{}, providerOperationError(err)
 	}
 	providerProduct, ok := catalogProduct(catalog, input.ProviderProductIdentifier)
 	if !ok || providerProduct.State != "active" {

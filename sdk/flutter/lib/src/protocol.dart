@@ -10,7 +10,7 @@ part 'protocol_validation_support.dart';
 
 const String mosaicProtocolVersion = '0.2';
 const String mosaicProtocolV02Version = mosaicProtocolVersion;
-const String mosaicFlutterSdkVersion = '0.3.0';
+const String mosaicFlutterSdkVersion = '0.2.0-dev.11';
 
 /// Every Protocol 0.2 capability implemented by this Flutter SDK.
 const Set<String> mosaicProtocolV02Capabilities = <String>{

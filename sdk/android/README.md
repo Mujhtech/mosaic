@@ -8,10 +8,105 @@ Configuration Delivery v1, v2, and v3. RevenueCat support is isolated in the opt
 Billing dependency. Native Google Play support is isolated in the optional
 `:mosaic-google-play` module and consumes Commerce Configuration v2.
 
-Development Maven coordinates are
-`dev.mosaic.sdk:mosaic:0.1.0-dev.6` and
-`dev.mosaic.sdk:mosaic-google-play:0.1.0-dev.6`. Artifact versions do not track
-the independently versioned commerce-adapter identity.
+## Installation
+
+The Mosaic Android SDK is pre-1.0 and is **not published to Maven Central, Google
+Maven, or any other registry**. There is nothing to resolve from a remote
+repository, and no coordinate below can be fetched over the network.
+
+Install it by source, using either supported path:
+
+**Composite/local-path build.** Include the modules directly, as
+`examples/android-example` does:
+
+```kotlin
+// settings.gradle.kts
+include(":app", ":mosaic", ":mosaic-google-play", ":mosaic-revenuecat")
+project(":mosaic").projectDir = file("path/to/mosaic/sdk/android/mosaic")
+project(":mosaic-google-play").projectDir = file("path/to/mosaic/sdk/android/mosaic-google-play")
+project(":mosaic-revenuecat").projectDir = file("path/to/mosaic/sdk/android/mosaic-revenuecat")
+```
+
+```kotlin
+// app/build.gradle.kts
+implementation(project(":mosaic"))
+implementation(project(":mosaic-google-play")) // optional
+implementation(project(":mosaic-revenuecat"))  // optional
+```
+
+**Git pin plus local publication.** Pin the Mosaic repository at an exact commit
+or tag, then publish to your own Maven repository or to `mavenLocal()`:
+
+```bash
+cd sdk/android
+./gradlew \
+  :mosaic:publishReleasePublicationToMavenLocal \
+  :mosaic-google-play:publishReleasePublicationToMavenLocal \
+  :mosaic-revenuecat:publishReleasePublicationToMavenLocal
+```
+
+The **development Maven coordinates** produced by that local publication — they
+describe artifacts you built yourself, not artifacts Mosaic distributes — are:
+
+```text
+dev.mosaic.sdk:mosaic:0.1.0-dev.7
+dev.mosaic.sdk:mosaic-google-play:0.1.0-dev.7
+dev.mosaic.sdk:mosaic-revenuecat:0.1.0-dev.7
+```
+
+All three modules share one artifact version. That version is independent of the
+commerce-adapter identities reported through the Commerce Provider contract,
+which are both `1.0.0`.
+
+`MOSAIC_ANDROID_SDK_VERSION` equals the artifact version exactly and is sent as
+`Mosaic-SDK-Version` on every hosted request. It must be changed together with
+the three module versions in the same commit; nothing derives one from the other
+automatically.
+
+## Minification and R8
+
+The Mosaic Android SDK **requires no consumer ProGuard/R8 keep rules**, and its
+`consumer-rules.pro` files are intentionally empty of rules.
+
+That holds because Mosaic never uses reflective object binding. Every persisted
+and transmitted document — protocol documents, the analytics queue, the
+configuration cache record, Experiment assignment records, and the Google Play
+local-delivery markers — is read and written by an explicit codec that names
+each field literally. Gson is used only for its JSON tree and string-escaping
+APIs, never for `fromJson(json, Model::class.java)`. R8 may therefore rename,
+repackage, and shrink Mosaic classes and fields freely without changing any
+persisted or wire shape.
+
+This design is load-bearing rather than cosmetic. In a minified build R8 renames
+the fields of Mosaic's persisted models — verifiably, in
+`examples/android-example/app/build/outputs/mapping/release/mapping.txt`:
+
+```text
+dev.mosaic.sdk.MosaicCachedConfiguration -> ak1:
+    java.lang.String etag -> a
+    java.lang.String payload -> b
+    ...
+```
+
+Reflective binding would have written `{"a":…,"b":…}` and would have failed to
+read any record written by a build with different R8 output, silently discarding
+the last-known-valid Configuration Release. The explicit codecs keep the literal
+names, and a record with unknown, missing, or wrongly typed fields is rejected
+outright rather than partially decoded.
+
+Verification is permanent, not a one-off audit: the example application enables
+`isMinifyEnabled` in its `release` build type, so R8 runs on the full Mosaic
+dependency graph on every release build.
+
+```bash
+cd examples/android-example
+../../sdk/android/gradlew -p . :app:assembleRelease
+```
+
+A Mosaic change that ever began to need keep rules would fail that task with an
+R8 missing-class or missing-rule error. The two codec round-trip tests
+(`ConfigurationDeliveryTest`, `ExperimentContractTest`) protect the data shape
+itself, so a passing R8 build alone is never treated as sufficient evidence.
 
 ## Analytics, identity, and privacy
 
@@ -67,14 +162,49 @@ The deterministic offline reconstruction and canonical partial-response demo is:
   --tests 'dev.mosaic.sdk.AnalyticsQueueTest.offlineQueueSurvivesReconstructionThenAppliesCanonicalPartialBatch'
 ```
 
-## Requirements
+## Supported version matrix
 
-- JDK 17
-- Android SDK 36
-- Gradle 9.3.1
-- Android Gradle Plugin 9.1.1
-- Kotlin/Compose compiler plugin 2.2.10
-- minimum host Android API 24
+This is a support policy, not a compatibility guess. "Tested" means Phase 8
+validation ran on it. Anything absent from this table is unsupported: it may
+work, but Mosaic does not verify it and will not treat a failure there as a
+release blocker.
+
+### Toolchain used to build the SDK (tested)
+
+| Component | Version |
+| --- | --- |
+| JDK | 17 |
+| Gradle | 9.3.1 (pinned wrapper in `sdk/android`) |
+| Android Gradle Plugin | 9.1.1 |
+| Kotlin / Compose compiler plugin | 2.2.10 |
+| `compileSdk` / `targetSdk` | 36 |
+| `minSdk` | 24 |
+
+### Floor required to consume the AAR (enforced)
+
+| Requirement | Value | How it is enforced |
+| --- | --- | --- |
+| Host `compileSdk` | 36 or later | `minCompileSdk=36` in the AAR metadata; AGP fails the consuming build below it |
+| Host Kotlin | 2.2.0 or later | Class files carry Kotlin metadata `mv=[2,2,0]`; earlier compilers reject it |
+| Host AGP | any AGP that supports `compileSdk = 36` | AGP rejects `minCompileSdk=36` otherwise; AGP 9.1.1 is the only tested version |
+| Host JDK | 17 or later | Library bytecode targets Java 17 |
+| Device / emulator API | 24 or later | `minSdk` |
+
+Both floors above were read from the built artifact
+(`META-INF/com/android/build/gradle/aar-metadata.properties` and the Kotlin
+`@Metadata` annotation), not estimated. Only AGP 9.1.1 with Kotlin 2.2.10 is
+tested. An exact minimum AGP version is deliberately not claimed: Mosaic has not
+verified one, and the practical floor is whichever AGP release your host uses to
+compile against API 36.
+
+Hosts that render Mosaic paywalls compose Mosaic's `@Composable` functions and
+therefore need the Compose compiler plugin enabled in their own build. Mosaic's
+Compose runtime requirement comes from Compose BOM `2026.02.00` and is resolved
+by Gradle as an ordinary dependency constraint.
+
+Dependency versions are frozen for GA (see `docs/known-limitations.md`), so
+Android lint's `NewerVersionAvailable` warnings are expected and are not
+actionable in this release.
 
 ## Canonical protocol ownership
 
@@ -283,8 +413,10 @@ and requires exact equality of every `(name, support, reasonCode)` capability
 tuple. The installed adapter is the authority for runtime capabilities;
 sidecar claims cannot upgrade, omit, or otherwise replace them.
 
-For RevenueCat, add the optional `:mosaic-revenuecat` artifact and configure
-RevenueCat in host code exactly once. Pass the already-configured instance to
+For RevenueCat, add the optional `:mosaic-revenuecat` module — published under
+the development coordinate `dev.mosaic.sdk:mosaic-revenuecat:0.1.0-dev.7` by the
+same local publication as the other two modules — and configure RevenueCat in
+host code exactly once. Pass the already-configured instance to
 Mosaic; the adapter intentionally has no API-key or app-user-ID parameter:
 
 ```kotlin
@@ -435,11 +567,19 @@ Documented Android differences:
 From `sdk/android`:
 
 ```bash
-./gradlew :mosaic:assembleDebug
-./gradlew :mosaic:testDebugUnitTest
-./gradlew :mosaic:lintDebug
+./gradlew test lint assemble
 ./gradlew :mosaic:assembleDebugAndroidTest
 ./gradlew :mosaic:connectedDebugAndroidTest
+```
+
+`connectedDebugAndroidTest` requires a connected device or a running emulator;
+it cannot run headless.
+
+The R8 regression guard lives in the example application:
+
+```bash
+cd ../../examples/android-example
+../../sdk/android/gradlew -p . :app:assembleRelease :app:assembleDebug :app:lint
 ```
 
 The instrumentation suite checks accessibility semantics, selection,

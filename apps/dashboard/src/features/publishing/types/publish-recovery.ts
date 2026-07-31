@@ -1,4 +1,5 @@
 import type { PublishValidationIssue } from "@/features/publishing/api/hosted-publishing-adapter"
+import { appendSearch } from "@/lib/routing/workspace-hrefs"
 import {
   providerRecoveryDescriptor,
   type ProviderRecoveryDestination,
@@ -13,15 +14,6 @@ interface PublishRecoveryContext {
   projectId: string
   providersHref: string
   returnTo?: string
-}
-
-function appendSearch(href: string, values: Record<string, string | undefined>) {
-  if (!href.startsWith("/")) return href
-  const url = new URL(href, "https://mosaic.local")
-  for (const [key, value] of Object.entries(values)) {
-    if (value) url.searchParams.set(key, value)
-  }
-  return `${url.pathname}${url.search}${url.hash}`
 }
 
 function productHref(context: PublishRecoveryContext, issue: PublishValidationIssue) {

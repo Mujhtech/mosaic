@@ -1,6 +1,7 @@
 package config
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -226,6 +227,20 @@ func clearConfigEnvironment(t *testing.T) {
 		"MOSAIC_PROVIDER_OPERATION_TIMEOUT", "MOSAIC_PROVIDER_CONNECT_TIMEOUT", "MOSAIC_PROVIDER_MAX_RESPONSE_BYTES",
 		"MOSAIC_PROVIDER_MAX_ATTEMPTS", "MOSAIC_PROVIDER_SNAPSHOT_TTL",
 		"MOSAIC_PROVIDER_WORKER_POLL_INTERVAL",
+		"MOSAIC_ANALYTICS_EVENT_SCHEMA_PATH", "MOSAIC_ANALYTICS_EVENT_V2_SCHEMA_PATH",
+		"MOSAIC_ANALYTICS_IP_REQUESTS_PER_MINUTE", "MOSAIC_ANALYTICS_IP_BURST",
+		"MOSAIC_ANALYTICS_KEY_BATCHES_PER_MINUTE", "MOSAIC_ANALYTICS_KEY_BATCH_BURST",
+		"MOSAIC_ANALYTICS_KEY_EVENTS_PER_MINUTE", "MOSAIC_ANALYTICS_KEY_EVENT_BURST",
+		"MOSAIC_ANALYTICS_LIMITER_ENTRIES", "MOSAIC_ANALYTICS_WORKER_POLL_INTERVAL",
+		"MOSAIC_COMMERCE_PROVIDER_V2_SCHEMA_PATH", "MOSAIC_COMMERCE_CONFIGURATION_V2_SCHEMA_PATH",
+		"MOSAIC_HTTP_UPLOAD_TIMEOUT", "MOSAIC_HTTP_INGEST_TIMEOUT", "MOSAIC_TELEMETRY_SHUTDOWN_TIMEOUT",
+		"MOSAIC_TRUSTED_PROXY_CIDRS", "MOSAIC_DATABASE_ALLOW_INSECURE",
+		"MOSAIC_OBJECT_STORAGE_ALLOW_INSECURE", "MOSAIC_OBJECT_STORAGE_OPERATION_TIMEOUT",
+		"MOSAIC_OBJECT_STORAGE_CHECK_TIMEOUT", "MOSAIC_API_REQUESTS_PER_MINUTE", "MOSAIC_API_BURST",
+		"MOSAIC_DECISION_REQUESTS_PER_MINUTE", "MOSAIC_DECISION_BURST",
+		"MOSAIC_WORKER_HEALTH_ADDRESS", "MOSAIC_WORKER_JOB_SHUTDOWN_BUDGET", "MOSAIC_WORKER_SCHEDULE_LEASE",
+		"DATABASE_MAX_CONN_LIFETIME", "DATABASE_MAX_CONN_IDLE_TIME", "DATABASE_HEALTH_CHECK_PERIOD",
+		"DATABASE_STATEMENT_TIMEOUT", "DATABASE_LOCK_TIMEOUT", "DATABASE_CLOSE_TIMEOUT",
 	}
 	for _, key := range keys {
 		value, existed := os.LookupEnv(key)
@@ -240,5 +255,160 @@ func clearConfigEnvironment(t *testing.T) {
 				_ = os.Unsetenv(capturedKey)
 			}
 		})
+	}
+}
+
+// Production guards are the last line of defence between an operator's typo and
+// a GA deployment that leaks credentials over plaintext transport or accepts
+// requests from any origin. Each case asserts one guard fires and that the
+// error names the variable without echoing its value.
+func TestProductionConfigurationGuards(t *testing.T) {
+	secureProduction := map[string]string{
+		"MOSAIC_ENVIRONMENT":               "production",
+		"MOSAIC_CORS_ALLOWED_ORIGINS":      "https://studio.example",
+		"MOSAIC_SESSION_COOKIE_SECURE":     "true",
+		"MOSAIC_PUBLIC_ASSET_BASE_URL":     "https://assets.example/v1/sdk/assets",
+		"MOSAIC_OBJECT_STORAGE_ACCESS_KEY": "production-access",
+		"MOSAIC_OBJECT_STORAGE_SECRET_KEY": "production-secret",
+		"MOSAIC_OBJECT_STORAGE_TLS":        "true",
+		"DATABASE_URL":                     "postgres://mosaic:secret-password@db.example:5432/mosaic?sslmode=verify-full",
+	}
+
+	for name, test := range map[string]struct {
+		overrides map[string]string
+		want      string
+		accepted  bool
+	}{
+		"baseline production configuration is accepted": {
+			overrides: map[string]string{},
+			accepted:  true,
+		},
+		"wildcard CORS origin is rejected": {
+			overrides: map[string]string{"MOSAIC_CORS_ALLOWED_ORIGINS": "*"},
+			want:      "MOSAIC_CORS_ALLOWED_ORIGINS",
+		},
+		"plaintext CORS origin is rejected": {
+			overrides: map[string]string{"MOSAIC_CORS_ALLOWED_ORIGINS": "http://studio.example"},
+			want:      "MOSAIC_CORS_ALLOWED_ORIGINS",
+		},
+		"DATABASE_URL without sslmode is rejected": {
+			overrides: map[string]string{"DATABASE_URL": "postgres://mosaic:secret-password@db.example:5432/mosaic"},
+			want:      "DATABASE_URL",
+		},
+		"DATABASE_URL with sslmode=disable is rejected": {
+			overrides: map[string]string{"DATABASE_URL": "postgres://mosaic:secret-password@db.example:5432/mosaic?sslmode=disable"},
+			want:      "DATABASE_URL",
+		},
+		"DATABASE_URL escape hatch is honoured": {
+			overrides: map[string]string{
+				"DATABASE_URL":                   "postgres://mosaic:secret-password@db.example:5432/mosaic",
+				"MOSAIC_DATABASE_ALLOW_INSECURE": "true",
+			},
+			accepted: true,
+		},
+		"object storage without TLS is rejected": {
+			overrides: map[string]string{"MOSAIC_OBJECT_STORAGE_TLS": "false"},
+			want:      "MOSAIC_OBJECT_STORAGE_TLS",
+		},
+		"object storage escape hatch is honoured": {
+			overrides: map[string]string{
+				"MOSAIC_OBJECT_STORAGE_TLS":            "false",
+				"MOSAIC_OBJECT_STORAGE_ALLOW_INSECURE": "true",
+			},
+			accepted: true,
+		},
+		"unknown log level is rejected": {
+			overrides: map[string]string{"MOSAIC_LOG_LEVEL": "verbose"},
+			want:      "MOSAIC_LOG_LEVEL",
+		},
+		"malformed keyring is rejected": {
+			overrides: map[string]string{"MOSAIC_PROVIDER_CREDENTIAL_KEYRING": `{"version":1,"activeKeyId":"k1"}`},
+			want:      "MOSAIC_PROVIDER_CREDENTIAL_KEYRING",
+		},
+		"upload bytes above the transport ceiling are rejected": {
+			overrides: map[string]string{"MOSAIC_ASSET_MAX_UPLOAD_BYTES": "1073741824"},
+			want:      "MOSAIC_ASSET_MAX_UPLOAD_BYTES",
+		},
+		"upload timeout at or above the write timeout is rejected": {
+			overrides: map[string]string{"MOSAIC_HTTP_UPLOAD_TIMEOUT": "120s", "MOSAIC_HTTP_WRITE_TIMEOUT": "120s"},
+			want:      "MOSAIC_HTTP_UPLOAD_TIMEOUT",
+		},
+		"malformed trusted proxy CIDR is rejected": {
+			overrides: map[string]string{"MOSAIC_TRUSTED_PROXY_CIDRS": "not-a-network"},
+			want:      "MOSAIC_TRUSTED_PROXY_CIDRS",
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			values := make(map[string]string, len(secureProduction)+len(test.overrides))
+			for key, value := range secureProduction {
+				values[key] = value
+			}
+			for key, value := range test.overrides {
+				values[key] = value
+			}
+			_, err := loadTestConfig(t, values)
+			if test.accepted {
+				if err != nil {
+					t.Fatalf("secure production configuration rejected: %v", err)
+				}
+				return
+			}
+			if err == nil {
+				t.Fatalf("configuration accepted, want %s rejected", test.want)
+			}
+			if !strings.Contains(err.Error(), test.want) {
+				t.Fatalf("error = %q, want it to name %s", err, test.want)
+			}
+			for _, secret := range []string{"secret-password", "production-secret"} {
+				if strings.Contains(err.Error(), secret) {
+					t.Fatalf("startup error leaked a secret value: %q", err)
+				}
+			}
+		})
+	}
+}
+
+func TestValidationErrorReportsEveryProblem(t *testing.T) {
+	_, err := loadTestConfig(t, map[string]string{
+		"MOSAIC_LOG_LEVEL":             "verbose",
+		"MOSAIC_LOG_FORMAT":            "yaml",
+		"MOSAIC_WORKER_HEALTH_ADDRESS": "not-an-address",
+	})
+	var validationError *ValidationError
+	if !errors.As(err, &validationError) {
+		t.Fatalf("error = %v, want *ValidationError", err)
+	}
+	if len(validationError.Problems) < 3 {
+		t.Fatalf("problems = %#v, want every problem reported in one pass", validationError.Problems)
+	}
+}
+
+// A rolling restart sheds traffic at the edge unless readiness reports 503 for
+// long enough that a load balancer notices before the listener closes. The
+// default must therefore be non-zero; 0 is a deliberate opt-out, and a negative
+// value is a configuration error rather than a silently-ignored one.
+func TestDrainDelayDefaultsToAnObservableWindow(t *testing.T) {
+	t.Setenv("DATABASE_URL", "postgres://mosaic:mosaic@localhost:5432/mosaic?sslmode=disable")
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("load configuration: %v", err)
+	}
+	if cfg.HTTP.DrainDelay <= 0 {
+		t.Fatalf("MOSAIC_HTTP_DRAIN_DELAY default = %s, want a non-zero window", cfg.HTTP.DrainDelay)
+	}
+	if cfg.HTTP.DrainDelay >= cfg.HTTP.ShutdownTimeout {
+		t.Fatalf("drain delay %s must leave room inside the shutdown timeout %s",
+			cfg.HTTP.DrainDelay, cfg.HTTP.ShutdownTimeout)
+	}
+
+	t.Setenv("MOSAIC_HTTP_DRAIN_DELAY", "-1s")
+	if _, err := Load(); err == nil {
+		t.Fatal("a negative drain delay was accepted")
+	}
+
+	t.Setenv("MOSAIC_HTTP_DRAIN_DELAY", "0s")
+	cfg, err = Load()
+	if err != nil || cfg.HTTP.DrainDelay != 0 {
+		t.Fatalf("0 must be an accepted opt-out: delay=%s err=%v", cfg.HTTP.DrainDelay, err)
 	}
 }

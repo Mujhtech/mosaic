@@ -86,20 +86,36 @@ export function ExperimentResultsPanel({
       >
         <div className="overflow-x-auto">
           <table className="w-full min-w-160 text-left text-sm">
+            <caption className="sr-only">
+              Conversion and uncertainty by Variant, with allocation, unique exposures, conversions,
+              observed estimate, and the 95% Wilson interval.
+            </caption>
             <thead>
               <tr className="border-b">
-                <th className="py-2 pr-4">Variant</th>
-                <th className="px-4 py-2">Allocation</th>
-                <th className="px-4 py-2">Unique exposures</th>
-                <th className="px-4 py-2">Conversions</th>
-                <th className="px-4 py-2">Observed estimate</th>
-                <th className="py-2 pl-4">95% interval</th>
+                <th className="py-2 pr-4" scope="col">
+                  Variant
+                </th>
+                <th className="px-4 py-2" scope="col">
+                  Allocation
+                </th>
+                <th className="px-4 py-2" scope="col">
+                  Unique exposures
+                </th>
+                <th className="px-4 py-2" scope="col">
+                  Conversions
+                </th>
+                <th className="px-4 py-2" scope="col">
+                  Observed estimate
+                </th>
+                <th className="py-2 pl-4" scope="col">
+                  95% interval
+                </th>
               </tr>
             </thead>
             <tbody>
               {results.variants.map((variant) => (
                 <tr className="border-b last:border-0" key={variant.variantId}>
-                  <th className="py-3 pr-4 font-medium">
+                  <th className="py-3 pr-4 font-medium" scope="row">
                     {variant.name}{" "}
                     <span className="text-muted-foreground text-xs capitalize">
                       ({variant.role})
@@ -168,18 +184,29 @@ export function ExperimentResultsPanel({
         </div>
         <div className="mt-3 overflow-x-auto">
           <table className="w-full min-w-120 text-left text-sm">
+            <caption className="sr-only">
+              Sample ratio mismatch cells: observed versus expected assignment counts per Variant.
+            </caption>
             <thead>
               <tr className="border-b">
-                <th className="py-2 pr-4">Variant</th>
-                <th className="px-4 py-2">Observed</th>
-                <th className="px-4 py-2">Expected</th>
-                <th className="py-2 pl-4">Observed / expected share</th>
+                <th className="py-2 pr-4" scope="col">
+                  Variant
+                </th>
+                <th className="px-4 py-2" scope="col">
+                  Observed
+                </th>
+                <th className="px-4 py-2" scope="col">
+                  Expected
+                </th>
+                <th className="py-2 pl-4" scope="col">
+                  Observed / expected share
+                </th>
               </tr>
             </thead>
             <tbody>
               {results.srm.cells.map((cell) => (
                 <tr className="border-b last:border-0" key={cell.variantId}>
-                  <th className="py-3 pr-4 font-medium">
+                  <th className="py-3 pr-4 font-medium" scope="row">
                     {results.variants.find((variant) => variant.variantId === cell.variantId)
                       ?.name ?? cell.variantId}
                   </th>

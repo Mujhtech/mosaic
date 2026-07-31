@@ -1,6 +1,6 @@
 {
   "commerceProviderContractVersion": "1",
-  "status": "releaseCandidate",
+  "status": "approved",
   "schema": "../../schema/commerce-provider/v1/contract.schema.json",
   "canonicalFixtures": [
     "../../fixtures/commerce-provider/v1/provider-profile.json",

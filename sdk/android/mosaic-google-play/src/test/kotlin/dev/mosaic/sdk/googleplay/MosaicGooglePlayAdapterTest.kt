@@ -211,15 +211,15 @@ class MosaicGooglePlayAdapterTest {
     private class RecordingDeliveryStore(
         private val order: MutableList<String>,
     ) : DeliveryStore {
-        override fun recordPending(digest: String) {
+        override suspend fun recordPending(digest: String) {
             order += "pending"
         }
-        override fun recordAccepted(digest: String) {
+        override suspend fun recordAccepted(digest: String) {
             order += "accepted"
         }
-        override fun recordFinalized(digest: String) {
+        override suspend fun recordFinalized(digest: String) {
             order += "finalized"
         }
-        override fun isFinalized(digest: String) = false
+        override suspend fun isFinalized(digest: String) = false
     }
 }

@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/go-chi/chi/v5"
 	chimiddleware "github.com/go-chi/chi/v5/middleware"
 	"github.com/go-chi/render"
 	"github.com/rs/zerolog"
@@ -108,7 +109,29 @@ func Representation(w http.ResponseWriter, status int, contentType string, body 
 func Error(w http.ResponseWriter, r *http.Request, err error) {
 	status, payload := errorDetails(err)
 	payload.RequestID = chimiddleware.GetReqID(r.Context())
+	if status >= http.StatusInternalServerError {
+		logUnexpectedError(r, status, payload.RequestID, err)
+	}
 	writeJSON(w, r, status, errorEnvelope{Error: payload})
+}
+
+// logUnexpectedError records the cause behind a 5xx response. The response body
+// deliberately carries only `internal_error` and a request ID, so without this
+// the cause was discarded entirely: an operator following any "the API returned
+// 500" runbook saw nothing but an access-log line with http_status 500 and had
+// no way to reach the underlying error. The cause is written to the operator log
+// only — never to the response — and the request ID ties the two together.
+func logUnexpectedError(r *http.Request, status int, requestID string, err error) {
+	event := zerolog.Ctx(r.Context()).Error().
+		Int("http_status", status).
+		Str("http_method", r.Method)
+	if route := chi.RouteContext(r.Context()); route != nil && route.RoutePattern() != "" {
+		event = event.Str("http_route", route.RoutePattern())
+	}
+	if requestID != "" {
+		event = event.Str("request_id", requestID)
+	}
+	event.Err(err).Msg("request failed with an unexpected error")
 }
 
 func RequestTimeout(w http.ResponseWriter, r *http.Request) {
@@ -120,8 +143,15 @@ func RequestTimeout(w http.ResponseWriter, r *http.Request) {
 }
 
 func ServiceUnavailable(w http.ResponseWriter, r *http.Request, code, message string) {
+	ServiceUnavailableWithDetails(w, r, code, message, nil)
+}
+
+// ServiceUnavailableWithDetails adds safe machine-readable diagnostics such as
+// per-dependency readiness codes. Details must never contain credentials,
+// connection strings, or internal topology.
+func ServiceUnavailableWithDetails(w http.ResponseWriter, r *http.Request, code, message string, details map[string]any) {
 	writeJSON(w, r, http.StatusServiceUnavailable, errorEnvelope{Error: errorPayload{
-		Code: code, Message: message, RequestID: chimiddleware.GetReqID(r.Context()),
+		Code: code, Message: message, Details: cloneDetails(details), RequestID: chimiddleware.GetReqID(r.Context()),
 	}})
 }
 
@@ -134,8 +164,31 @@ func errorDetails(err error) (int, errorPayload) {
 	if apiError.Status < http.StatusBadRequest || apiError.Status > 599 {
 		return internalError()
 	}
-	if apiError.Status >= http.StatusInternalServerError {
+	// A 500 is by definition the unexpected bucket: never trust whatever code
+	// or message reached it, and never let a cause escape.
+	//
+	// Statuses above 500 are different. A handler that answers 503
+	// `providerUnavailable` or 502 `providerInvalidResponse` chose a safe,
+	// documented, machine-readable outcome that an SDK uses to decide whether
+	// to retry. Collapsing every 5xx into 500 `internal_error` erased all of
+	// them: every deliberate upstream-failure code in the OpenAPI contract was
+	// unreachable, and clients could not tell "the provider is down, retry"
+	// from "Mosaic is broken". A code is still required, so an APIError that
+	// forgot to set one degrades to internal_error rather than leaking.
+	if apiError.Status == http.StatusInternalServerError || apiError.Code == "" {
 		return internalError()
+	}
+	// Above 500 the status and code are preserved but the message is replaced.
+	// Codes are Mosaic-owned constants and safe by construction; messages are
+	// free text and are where internal topology leaks (a readiness message
+	// naming a database host, for example). Clients need the code, not the
+	// prose.
+	if apiError.Status > http.StatusInternalServerError {
+		return apiError.Status, errorPayload{
+			Code:    apiError.Code,
+			Message: upstreamFailureMessage,
+			Details: cloneDetails(apiError.Details),
+		}
 	}
 
 	code := apiError.Code
@@ -154,6 +207,10 @@ func errorDetails(err error) (int, errorPayload) {
 		Details: cloneDetails(apiError.Details),
 	}
 }
+
+// upstreamFailureMessage is the fixed human text for a deliberate 5xx above
+// 500. The machine-readable code carries the meaning.
+const upstreamFailureMessage = "The request could not be completed because a dependency failed. Retry may succeed."
 
 func internalError() (int, errorPayload) {
 	return http.StatusInternalServerError, errorPayload{

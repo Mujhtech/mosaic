@@ -153,6 +153,11 @@ data class MosaicAnalyticsIngestionResponse(
     val batchId: String,
     val receivedAt: String,
     val results: List<MosaicAnalyticsEventResult>,
+    /**
+     * The contract version the server echoed. It must equal the submitted batch's version before
+     * any result is applied: a v2 Experiment batch is acknowledged only by a v2 response.
+     */
+    val analyticsEventContractVersion: String,
 )
 
 internal fun mosaicAnalyticsId(prefix: String): String = "${prefix}_${UUID.randomUUID()}"

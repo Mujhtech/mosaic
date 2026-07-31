@@ -460,6 +460,10 @@ protocol RevenueCatClient: Sendable {
   func activeEntitlements() async throws -> Set<String>
 }
 
+private enum LiveRevenueCatClientError: Error {
+  case unsupportedProductHandle
+}
+
 private final class LiveRevenueCatClient: RevenueCatClient, @unchecked Sendable {
   private let purchases: Purchases
 
@@ -502,7 +506,10 @@ private final class LiveRevenueCatClient: RevenueCatClient, @unchecked Sendable 
     case .package(let package):
       result = try await purchases.purchase(package: package)
     case .test:
-      preconditionFailure("Test RevenueCat handles cannot reach the live client.")
+      // Unreachable through the public API, but a trap here would crash the
+      // host application. The router sanitizes this into a safe purchase
+      // failure diagnostic instead.
+      throw LiveRevenueCatClientError.unsupportedProductHandle
     }
     if result.userCancelled { return .cancelled }
     return .purchased(transactionID: result.transaction?.transactionIdentifier)

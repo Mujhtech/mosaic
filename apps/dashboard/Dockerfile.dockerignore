@@ -1,0 +1,23 @@
+# BuildKit prefers this file over the repository-root .dockerignore when
+# building apps/dashboard/Dockerfile, so the dashboard can use the repository
+# root as its context (it needs packages/) without the API's exclusions.
+.git
+.github
+.vscode
+.codex
+.claude
+**/.DS_Store
+
+apps/api/
+apps/worker/
+sdk/
+examples/
+deploy/
+docs/
+scripts/
+
+**/node_modules/
+**/dist/
+**/.output/
+**/coverage/
+**/*.log

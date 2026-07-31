@@ -677,4 +677,3 @@ public enum MosaicProductCardChild: Decodable, Sendable, Equatable, Identifiable
     }
   }
 }
-

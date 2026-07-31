@@ -32,6 +32,10 @@ test("v2 preserves event-specific closed correlation and attribution from v1", (
   event.correlation.providerUpdateId = "provider_update_unrelated";
   event.attribution.winningRuleId = "rule_without_ruleset";
   const errors = validateAnalyticsEventV2Event(event, artifacts);
+  // Both rules are now enforced by the canonical schema (per-event allow-list
+  // and `dependentRequired` Rule Set pairing) rather than only by this semantic
+  // validator, so the assertions name the offending fields instead of the
+  // semantic layer's prose.
   assert.ok(errors.some((error) => error.includes("correlation.providerUpdateId")));
-  assert.ok(errors.some((error) => error.includes("winning Rule")));
+  assert.ok(errors.some((error) => error.includes("placementRuleSetId")));
 });

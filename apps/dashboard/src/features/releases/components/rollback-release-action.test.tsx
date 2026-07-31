@@ -48,8 +48,13 @@ describe("RollbackReleaseAction", () => {
         releaseId: "release_04",
       }),
     )
-    expect(await screen.findByRole("status")).toHaveTextContent(
+    const confirmation = await screen.findByRole("status")
+    expect(confirmation).toHaveTextContent(
       "Release 8 is now current. Release 4 remains in history.",
     )
+    // The confirm button unmounts on success. Without an explicit focus move,
+    // keyboard focus falls back to document.body and the operator loses their
+    // place in the release list.
+    await waitFor(() => expect(confirmation).toHaveFocus())
   })
 })

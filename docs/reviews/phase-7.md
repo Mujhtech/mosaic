@@ -2,7 +2,31 @@
 
 ## Status
 
-**Rejected pending fixes**
+**Accepted with owner note (2026-07-27)** — original review verdict below was
+"Rejected pending fixes"; the product owner subsequently accepted Phase 7 with
+the following note.
+
+### Owner Acceptance Note (2026-07-27)
+
+The product owner accepts Phase 7 and classifies Mosaic as v1 feature complete
+for the purpose of starting Phase 8, with these explicit conditions:
+
+1. The outstanding post-fix runtime evidence listed under "Required Path to
+   Re-review" (migration 17/18 down/up cycle, complete Flutter and Android
+   suite reruns, the post-fix end-to-end Experiment demonstration, and the
+   dashboard relay/browser path) is tracked as mandatory Phase 8 verification
+   work. It must be completed and evidenced during Phase 8 before GA; it may
+   not be silently dropped.
+2. The open Phase 6 ingestion-boundary defect (event-specific correlation,
+   attribution, and rollout-minimization rules enforced by the protocol tool
+   but not by the canonical schema or API ingestion path) is authorized as
+   in-scope Phase 8 data-integrity/security work and is classified as a GA
+   release blocker until fixed and verified.
+3. The `v1.0.0-rc.1` tag at commit `2c4f272` is confirmed by the owner as the
+   accepted v1 release-candidate baseline for Phase 8.
+4. No new feature scope is authorized by this acceptance.
+
+**Rejected pending fixes** (original verdict, retained for the record)
 
 Phase 7 implements the planned Experiment protocol, backend, dashboard, and
 native SDK surfaces, and the available source-level validation is green. Two

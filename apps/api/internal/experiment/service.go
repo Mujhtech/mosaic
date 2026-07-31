@@ -6,6 +6,7 @@ import (
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"sort"
 	"strings"
@@ -14,6 +15,8 @@ import (
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/trace"
+
+	"github.com/Mujhtech/mosaic/apps/api/internal/platform/jobtelemetry"
 )
 
 type Service struct {
@@ -56,7 +59,7 @@ func parseMetricVersion(value string) (string, int, bool) {
 
 func CompileSchedule(schedule Schedule, publicationTime time.Time) (Schedule, error) {
 	if schedule.StartsAt == nil {
-		return Schedule{}, ErrInvalid
+		return Schedule{}, Invalid("schedule_start_missing")
 	}
 	compiled := schedule
 	if !compiled.StartsAt.After(publicationTime) {
@@ -64,7 +67,7 @@ func CompileSchedule(schedule Schedule, publicationTime time.Time) (Schedule, er
 		compiled.StartsAt = &start
 	}
 	if compiled.EndsAt != nil && !compiled.EndsAt.After(*compiled.StartsAt) {
-		return Schedule{}, ErrInvalid
+		return Schedule{}, Invalid("schedule_end_not_after_start")
 	}
 	return compiled, nil
 }
@@ -539,12 +542,37 @@ func (s *Service) RevokeOverride(ctx context.Context, actor Actor, p, e, id, ove
 	return s.repository.RevokeOverride(ctx, scope, actor, id, overrideID, s.now())
 }
 
+// scheduleCompletionBudget bounds how long a job-outcome write may take after
+// the run context has been cancelled during shutdown.
+const scheduleCompletionBudget = 10 * time.Second
+
+// scheduleFailureCode maps a transition failure to a stable diagnostic code so
+// an operator inspecting a dead-lettered job knows why it stopped retrying.
+func scheduleFailureCode(err error) string {
+	switch {
+	case errors.Is(err, ErrNotFound):
+		return "experiment_not_found"
+	case errors.Is(err, ErrConflict):
+		return "experiment_state_conflict"
+	case errors.Is(err, ErrForbidden):
+		return "schedule_actor_forbidden"
+	case errors.Is(err, ErrInvalid):
+		return "schedule_transition_invalid"
+	default:
+		return "schedule_transition_failed"
+	}
+}
+
 func (s *Service) ProcessNextSchedule(ctx context.Context, worker string) (bool, error) {
 	now := s.now()
 	job, ok, err := s.repository.LeaseSchedule(ctx, worker, now, now.Add(2*time.Minute))
 	if err != nil || !ok {
 		return ok, err
 	}
+	jobtelemetry.Annotate(ctx, jobtelemetry.Identity{
+		JobID: job.ID, JobKind: "experiment_schedule_" + job.Action,
+		ProjectID: job.ProjectID, EnvironmentID: job.EnvironmentID, ResourceID: job.ExperimentID,
+	})
 	target := "running"
 	reason := "scheduled_start"
 	if job.Action == "complete" {
@@ -552,7 +580,16 @@ func (s *Service) ProcessNextSchedule(ctx context.Context, worker string) (bool,
 		reason = "scheduled_end"
 	}
 	_, err = s.Transition(ctx, Actor{ID: job.ActorID}, job.ProjectID, job.EnvironmentID, job.ExperimentID, target, reason)
-	finishErr := s.repository.FinishSchedule(ctx, job.ID, err == nil, s.now())
+	code := ""
+	if err != nil {
+		code = scheduleFailureCode(err)
+	}
+	// completionContext detaches the bookkeeping write from the run context so a
+	// SIGTERM arriving mid-transition still records the job outcome instead of
+	// leaving the lease to expire.
+	completionContext, cancel := context.WithTimeout(context.WithoutCancel(ctx), scheduleCompletionBudget)
+	defer cancel()
+	finishErr := s.repository.FinishSchedule(completionContext, job, err == nil, code, s.now())
 	if err != nil {
 		return true, err
 	}

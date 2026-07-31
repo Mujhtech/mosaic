@@ -506,7 +506,11 @@ export function CanvasPreviewDevice({
               event.preventDefault()
               onRootSelect()
             }}
-            role="button"
+            // The Paywall root contains the entire interactive Paywall, so it
+            // is a labelled group rather than a button.
+            aria-current={selectedComponentId === root.id ? "true" : undefined}
+            aria-label="Paywall root content"
+            role="group"
             style={{
               alignItems: alignmentStyle(root.crossAxisAlignment),
               ...rootBackground.style,

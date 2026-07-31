@@ -25,6 +25,8 @@ import dev.mosaic.sdk.MosaicEntitlement
 import dev.mosaic.sdk.MosaicProductLoadResult
 import dev.mosaic.sdk.MosaicPurchaseResult
 import dev.mosaic.sdk.MosaicRestoreResult
+import java.io.File
+import java.io.FileOutputStream
 import java.lang.ref.WeakReference
 import java.security.MessageDigest
 import java.text.SimpleDateFormat
@@ -35,6 +37,7 @@ import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -44,6 +47,7 @@ import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.withContext
 
 fun interface MosaicGooglePlayActivityProvider {
     fun resumedActivity(): Activity?
@@ -69,7 +73,7 @@ class MosaicGooglePlayAdapter internal constructor(
         service = AndroidGooglePlayBillingService(context),
         activityProvider = activityProvider,
         deliveryAcceptance = deliveryAcceptance,
-        deliveryStore = SharedPreferencesDeliveryStore(context),
+        deliveryStore = FileDeliveryStore(context),
         lifecycle = null,
         scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate),
     )
@@ -688,7 +692,7 @@ class MosaicGooglePlayAdapter internal constructor(
                 service = AndroidGooglePlayBillingService(application),
                 activityProvider = tracker,
                 deliveryAcceptance = deliveryAcceptance,
-                deliveryStore = SharedPreferencesDeliveryStore(application),
+                deliveryStore = FileDeliveryStore(application),
                 lifecycle = tracker,
                 scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate),
             )
@@ -711,26 +715,125 @@ class MosaicGooglePlayAdapter internal constructor(
 }
 
 internal interface DeliveryStore {
-    fun recordPending(digest: String)
-    fun recordAccepted(digest: String)
-    fun recordFinalized(digest: String)
-    fun isFinalized(digest: String): Boolean
+    suspend fun recordPending(digest: String)
+    suspend fun recordAccepted(digest: String)
+    suspend fun recordFinalized(digest: String)
+    suspend fun isFinalized(digest: String): Boolean
 }
 
-private class SharedPreferencesDeliveryStore(context: Context) : DeliveryStore {
-    private val preferences = context.applicationContext.getSharedPreferences(
-        "mosaic-google-play-delivery-v1",
-        Context.MODE_PRIVATE,
+/**
+ * Local delivery markers are app-private, excluded from Android auto-backup, bounded, and written
+ * atomically off the main thread.
+ *
+ * Storage lives under [Context.getNoBackupFilesDir] because a restored marker from another device
+ * or install would let a purchase short-circuit host delivery and grant Entitlements that were
+ * never delivered on this device. The legacy `mosaic-google-play-delivery-v1` SharedPreferences
+ * file was backup-eligible, so it is deliberately not migrated: its contents cannot be trusted.
+ * It is deleted once, and losing a genuine marker is safe because re-delivery is idempotent — the
+ * host reports `ALREADY_ACCEPTED` and Google Play acknowledgement is skipped for an already
+ * acknowledged purchase.
+ *
+ * The file is bounded to [MAX_DIGESTS] entries; the least recently written entries are evicted
+ * first. An evicted marker degrades to another idempotent re-delivery, never to a lost purchase.
+ *
+ * The record is a line-delimited `state<tab>digest` list written by literal name. Both fields are
+ * closed vocabularies (three states, hexadecimal digests), so the adapter needs no JSON dependency
+ * and no reflective binding that R8 could rename.
+ */
+internal class FileDeliveryStore internal constructor(
+    private val file: File,
+    private val io: CoroutineDispatcher,
+    private val legacyPreferences: (() -> Unit)? = null,
+) : DeliveryStore {
+    constructor(context: Context, io: CoroutineDispatcher = Dispatchers.IO) : this(
+        file = File(
+            context.applicationContext.noBackupFilesDir,
+            "mosaic/google-play/delivery-v2/markers.txt",
+        ),
+        io = io,
+        legacyPreferences = {
+            context.applicationContext.deleteSharedPreferences(
+                "mosaic-google-play-delivery-v1",
+            )
+        },
     )
 
-    override fun recordPending(digest: String) = write(digest, "pending")
-    override fun recordAccepted(digest: String) = write(digest, "accepted")
-    override fun recordFinalized(digest: String) = write(digest, "finalized")
-    override fun isFinalized(digest: String): Boolean = preferences.getString(digest, null) == "finalized"
-    private fun write(digest: String, state: String) {
-        check(preferences.edit().putString(digest, state).commit()) {
-            "Could not persist Google Play delivery state."
+    private val lock = Mutex()
+    private var discardedLegacy = false
+
+    override suspend fun recordPending(digest: String) = write(digest, "pending")
+    override suspend fun recordAccepted(digest: String) = write(digest, "accepted")
+    override suspend fun recordFinalized(digest: String) = write(digest, "finalized")
+
+    override suspend fun isFinalized(digest: String): Boolean = lock.withLock {
+        read()[digest] == "finalized"
+    }
+
+    private suspend fun write(digest: String, state: String) = lock.withLock {
+        val markers = LinkedHashMap(read())
+        markers.remove(digest)
+        markers[digest] = state
+        while (markers.size > MAX_DIGESTS) {
+            markers.remove(markers.keys.first())
         }
+        persist(markers)
+    }
+
+    /** Insertion order is the write order, so the first key is always the least recently written. */
+    private suspend fun read(): Map<String, String> = withContext(io) {
+        discardLegacyPreferencesOnce()
+        if (!file.isFile) return@withContext emptyMap()
+        runCatching { decode(file.readText(Charsets.UTF_8)) }.getOrDefault(emptyMap())
+    }
+
+    private suspend fun persist(markers: Map<String, String>) = withContext(io) {
+        file.parentFile?.let {
+            if (!it.isDirectory && !it.mkdirs()) {
+                error("Could not create the Mosaic Google Play delivery directory.")
+            }
+        }
+        val temporary = File.createTempFile("markers-", ".tmp", file.parentFile)
+        try {
+            FileOutputStream(temporary).use { output ->
+                output.writer(Charsets.UTF_8).buffered().use { writer ->
+                    writer.write(encode(markers)); writer.flush(); output.fd.sync()
+                }
+            }
+            if (!temporary.renameTo(file)) {
+                error("Could not atomically persist Google Play delivery state.")
+            }
+        } finally {
+            if (temporary.exists()) temporary.delete()
+        }
+    }
+
+    private fun discardLegacyPreferencesOnce() {
+        if (discardedLegacy) return
+        discardedLegacy = true
+        legacyPreferences?.let { discard -> runCatching { discard() } }
+    }
+
+    private fun encode(markers: Map<String, String>): String =
+        markers.entries.joinToString("\n") { (digest, state) -> "$state\t$digest" }
+
+    private fun decode(source: String): Map<String, String> {
+        val markers = LinkedHashMap<String, String>()
+        source.lineSequence().filter(String::isNotEmpty).forEach { line ->
+            val separator = line.indexOf('\t')
+            require(separator > 0) { "A Google Play delivery marker line is malformed." }
+            val state = line.substring(0, separator)
+            val digest = line.substring(separator + 1)
+            require(state in STATES && digest.isNotEmpty() && digest.all { it in HEXADECIMAL })
+            markers[digest] = state
+        }
+        require(markers.size <= MAX_DIGESTS)
+        return markers
+    }
+
+    private companion object {
+        const val MAX_DIGESTS = 256
+        val STATES = setOf("pending", "accepted", "finalized")
+        const val HEXADECIMAL = "0123456789abcdef"
     }
 }
 

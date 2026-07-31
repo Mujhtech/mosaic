@@ -286,7 +286,7 @@ extension on _MosaicPaywallState {
     if (productId != null) {
       _analytics(
         MosaicAnalyticsEventName.productSelected,
-        attribution: widget.analyticsContext?.forProduct(productId),
+        attribution: widget.analyticsContext?.forConversion(productId),
         payload: const <String, Object?>{'source': 'user'},
       );
     }
@@ -333,7 +333,7 @@ extension on _MosaicPaywallState {
     final analyticsAttemptId = mosaicAnalyticsId('purchase_attempt');
     final analyticsStartedAt = widget.clock().toUtc();
     final analyticsAttribution =
-        widget.analyticsContext?.forProduct(reference.productId);
+        widget.analyticsContext?.forConversion(reference.productId);
     _analytics(
       MosaicAnalyticsEventName.paywallActionSelected,
       payload: <String, Object?>{'action': 'purchase', 'componentId': buttonId},

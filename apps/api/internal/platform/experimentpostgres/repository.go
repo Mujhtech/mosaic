@@ -343,7 +343,7 @@ func (r *Repository) Publish(ctx context.Context, scope experiment.Scope, input 
 		var ok bool
 		e = tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM paywall_versions v JOIN paywalls p ON p.id=v.paywall_id WHERE v.id=$1 AND v.paywall_id=$2 AND v.project_id=$3 AND v.environment_id=$4 AND p.status='active')`, variant.PaywallVersionID, variant.PaywallID, scope.ProjectID, scope.EnvironmentID).Scan(&ok)
 		if e != nil || !ok {
-			return experiment.PublishOutput{}, fmt.Errorf("paywall version is not publishable: %w", experiment.ErrInvalid)
+			return experiment.PublishOutput{}, experiment.Invalid("variant_paywall_version_not_publishable")
 		}
 		var unsafe int
 		e = tx.QueryRow(ctx, `SELECT count(*) FROM paywall_version_products pvp
@@ -368,7 +368,7 @@ func (r *Repository) Publish(ctx context.Context, scope experiment.Scope, input 
 				)
 			)`, variant.PaywallVersionID, scope.EnvironmentID).Scan(&unsafe)
 		if e != nil || unsafe > 0 {
-			return experiment.PublishOutput{}, fmt.Errorf("paywall version has unsafe products: %w", experiment.ErrInvalid)
+			return experiment.PublishOutput{}, experiment.Invalid("variant_paywall_products_not_ready")
 		}
 	}
 	var overlap int
@@ -391,7 +391,7 @@ func (r *Repository) Publish(ctx context.Context, scope experiment.Scope, input 
 			return experiment.PublishOutput{}, persistence(e)
 		}
 		if !groupValid {
-			return experiment.PublishOutput{}, fmt.Errorf("mutual exclusion group is invalid: %w", experiment.ErrInvalid)
+			return experiment.PublishOutput{}, experiment.Invalid("mutual_exclusion_group_invalid")
 		}
 		var outsideGroup int
 		e = tx.QueryRow(ctx, `SELECT count(*) FROM experiments other
@@ -453,7 +453,7 @@ func (r *Repository) Publish(ctx context.Context, scope experiment.Scope, input 
 		var snapshot []byte
 		e = tx.QueryRow(ctx, `SELECT jsonb_build_object('id',id,'version',version,'name',name,'numeratorEvent',numerator_event,'denominatorEvent',denominator_event,'assignmentUnit',assignment_unit,'authority',authority,'availability',availability,'eventFilter',event_filter,'attributionWindowSeconds',attribution_window_seconds,'freshnessSeconds',freshness_seconds,'definition',definition) FROM experiment_metric_definitions WHERE id=$1 AND version=$2 AND availability='available' AND (($3='primary' AND primary_eligible) OR ($3='guardrail' AND guardrail_eligible))`, id, mv, kind).Scan(&snapshot)
 		if e != nil {
-			return experiment.PublishOutput{}, fmt.Errorf("metric snapshot is unavailable: %w", experiment.ErrInvalid)
+			return experiment.PublishOutput{}, experiment.Invalid("metric_definition_unavailable")
 		}
 		_, e = tx.Exec(ctx, `INSERT INTO experiment_metric_snapshots(experiment_version_id,project_id,metric_id,metric_version,kind,snapshot) VALUES($1,$2,$3,$4,$5,$6)`, versionID, scope.ProjectID, id, mv, kind, snapshot)
 		if e != nil {
@@ -480,7 +480,7 @@ func (r *Repository) Publish(ctx context.Context, scope experiment.Scope, input 
 		if jobErr != nil {
 			return experiment.PublishOutput{}, persistence(jobErr)
 		}
-		_, e = tx.Exec(ctx, `INSERT INTO experiment_scheduling_jobs(id,experiment_id,project_id,environment_id,action,scheduled_at,status,actor_id,created_at,updated_at) VALUES($1,$2,$3,$4,'start',$5,'queued',$6,$7,$7)`, jobID, input.Experiment.ID, scope.ProjectID, scope.EnvironmentID, input.Document.Schedule.StartsAt, input.ActorID, input.Now)
+		_, e = tx.Exec(ctx, scheduleJobStartInsert, jobID, input.Experiment.ID, scope.ProjectID, scope.EnvironmentID, input.Document.Schedule.StartsAt, input.ActorID, input.Now)
 		if e != nil {
 			return experiment.PublishOutput{}, persistence(e)
 		}
@@ -490,7 +490,7 @@ func (r *Repository) Publish(ctx context.Context, scope experiment.Scope, input 
 		if jobErr != nil {
 			return experiment.PublishOutput{}, persistence(jobErr)
 		}
-		_, e = tx.Exec(ctx, `INSERT INTO experiment_scheduling_jobs(id,experiment_id,project_id,environment_id,action,scheduled_at,status,actor_id,created_at,updated_at) VALUES($1,$2,$3,$4,'complete',$5,'queued',$6,$7,$7)`, jobID, input.Experiment.ID, scope.ProjectID, scope.EnvironmentID, input.Document.Schedule.EndsAt, input.ActorID, input.Now)
+		_, e = tx.Exec(ctx, scheduleJobCompleteInsert, jobID, input.Experiment.ID, scope.ProjectID, scope.EnvironmentID, input.Document.Schedule.EndsAt, input.ActorID, input.Now)
 		if e != nil {
 			return experiment.PublishOutput{}, persistence(e)
 		}
@@ -518,7 +518,7 @@ func (r *Repository) publishRelease(ctx context.Context, tx pgx.Tx, scope experi
 	var number int64
 	e := tx.QueryRow(ctx, `SELECT current_release_id,last_release_number FROM environment_release_state WHERE environment_id=$1 FOR UPDATE`, scope.EnvironmentID).Scan(&oldID, &number)
 	if e != nil || oldID == "" {
-		return "", fmt.Errorf("environment has no current release: %w", experiment.ErrInvalid)
+		return "", experiment.Invalid("environment_has_no_current_release")
 	}
 	var base []byte
 	e = tx.QueryRow(ctx, `SELECT COALESCE((SELECT payload_bytes FROM configuration_release_representations WHERE release_id=$1 AND delivery_contract_version='2'),(SELECT payload_bytes FROM configuration_releases WHERE id=$1))`, oldID).Scan(&base)
@@ -527,11 +527,11 @@ func (r *Repository) publishRelease(ctx context.Context, tx pgx.Tx, scope experi
 	}
 	var envelope map[string]any
 	if e = json.Unmarshal(base, &envelope); e != nil {
-		return "", fmt.Errorf("current release bytes are invalid: %w", experiment.ErrInvalid)
+		return "", experiment.Invalid("current_release_payload_unreadable")
 	}
 	release, ok := envelope["release"].(map[string]any)
 	if !ok {
-		return "", fmt.Errorf("current release envelope is missing release metadata: %w", experiment.ErrInvalid)
+		return "", experiment.Invalid("current_release_metadata_missing")
 	}
 	releaseID, e := nextID(ctx, tx, "release")
 	if e != nil {
@@ -544,6 +544,14 @@ func (r *Repository) publishRelease(ctx context.Context, tx pgx.Tx, scope experi
 	v2, e := json.Marshal(envelope)
 	if e != nil {
 		return "", fmt.Errorf("marshal delivery v2: %w", e)
+	}
+	// The base above falls back to the Release's v1 payload when the
+	// Environment has no v2 representation, which only happens when no
+	// Placement rule set has been published there. Publishing an Experiment
+	// then cannot produce a v3 Release. Say so: the generic
+	// `emitted_delivery_invalid` sent the caller looking at the Experiment.
+	if version, _ := envelope["configurationDeliveryVersion"].(string); version != "2" {
+		return "", experiment.ErrPlacementDecisionRequired
 	}
 	if e = validateDeliveryPayload(v2, "2"); e != nil {
 		return "", e
@@ -652,23 +660,68 @@ func (r *Repository) publishRelease(ctx context.Context, tx pgx.Tx, scope experi
 	if e != nil {
 		return "", persistence(e)
 	}
-	_, e = tx.Exec(ctx, `INSERT INTO configuration_release_placements SELECT $1,project_id,environment_id,placement_id,placement_key,paywall_version_id FROM configuration_release_placements WHERE release_id=$2; INSERT INTO configuration_release_products SELECT $1,environment_id,project_id,product_id FROM configuration_release_products WHERE release_id=$2; INSERT INTO configuration_release_assets SELECT $1,environment_id,project_id,asset_id FROM configuration_release_assets WHERE release_id=$2; INSERT INTO configuration_release_rule_set_versions SELECT $1,environment_id,project_id,rule_set_version_id,placement_id FROM configuration_release_rule_set_versions WHERE release_id=$2`, releaseID, oldID)
+	// Legacy projection: a v1-only SDK must still receive the highest
+	// representation it can read.
+	//
+	// The preceding Release's v1 representation is the authoritative v1 view:
+	// publishing an Experiment does not change the Environment's
+	// Placement-to-Paywall bindings, and `placements` exists only in v1 (v2
+	// replaces it with placementDecisions), so projecting from the v2 envelope
+	// alone produces a v1 payload with no Placements at all -- served, but
+	// useless to the client it exists for. Carry the previous v1 forward and
+	// restamp its identity; fall back to the projection only when there is no
+	// previous v1 to carry.
+	var previousV1 []byte
+	if e = tx.QueryRow(ctx, `SELECT payload_bytes FROM configuration_release_representations WHERE release_id=$1 AND delivery_contract_version='1'`, oldID).Scan(&previousV1); e != nil && !errors.Is(e, pgx.ErrNoRows) {
+		return "", persistence(e)
+	}
+	var v1Release map[string]any
+	if len(previousV1) > 0 {
+		var previousEnvelope map[string]any
+		if e = json.Unmarshal(previousV1, &previousEnvelope); e != nil {
+			return "", experiment.Invalid("previous_v1_representation_unreadable")
+		}
+		v1Release, _ = previousEnvelope["release"].(map[string]any)
+	}
+	if v1Release == nil {
+		v1Release, e = deliveryV1Projection(release)
+		if e != nil {
+			return "", e
+		}
+	} else {
+		v1Release["id"] = releaseID
+		v1Release["number"] = number + 1
+		v1Release["publishedAt"] = now.Format("2006-01-02T15:04:05.000Z")
+		if e = setReleaseContentDigest(v1Release); e != nil {
+			return "", e
+		}
+	}
+	v1, e := json.Marshal(map[string]any{"configurationDeliveryVersion": "1", "release": v1Release})
+	if e != nil {
+		return "", fmt.Errorf("marshal delivery v1: %w", e)
+	}
+	if e = validateDeliveryPayload(v1, "1"); e != nil {
+		return "", e
+	}
+	sum1 := sha256.Sum256(v1)
+	_, e = tx.Exec(ctx, `INSERT INTO configuration_release_representations(release_id,environment_id,delivery_contract_version,payload,payload_bytes,content_hash,created_at) VALUES($1,$2,'1',$3::jsonb,$4::bytea,$5,$6)`, releaseID, scope.EnvironmentID, string(v1), v1, hex.EncodeToString(sum1[:]), now)
 	if e != nil {
 		return "", persistence(e)
 	}
-	_, e = tx.Exec(ctx, `
-		INSERT INTO configuration_release_products(release_id,environment_id,project_id,product_id)
-		SELECT DISTINCT $1,$2,$3,pvp.product_id FROM experiment_versions ev
-		JOIN experiment_variants variant ON variant.experiment_version_id=ev.id
-		JOIN paywall_version_products pvp ON pvp.version_id=variant.paywall_version_id
-		WHERE ev.id=ANY($4::text[]) ON CONFLICT DO NOTHING;
-		INSERT INTO configuration_release_assets(release_id,environment_id,project_id,asset_id)
-		SELECT DISTINCT $1,$2,$3,pva.asset_id FROM experiment_versions ev
-		JOIN experiment_variants variant ON variant.experiment_version_id=ev.id
-		JOIN paywall_version_assets pva ON pva.version_id=variant.paywall_version_id
-		WHERE ev.id=ANY($4::text[]) ON CONFLICT DO NOTHING`, releaseID, scope.EnvironmentID, scope.ProjectID, activeVersions)
-	if e != nil {
-		return "", persistence(e)
+	// pgx uses the extended protocol, which accepts exactly one statement per
+	// parameterized Exec. These four carries were previously one semicolon-joined
+	// string, so every Experiment publish failed with SQLSTATE 42601 ("cannot
+	// insert multiple commands into a prepared statement") and no Experiment could
+	// ever reach a published Version.
+	for _, statement := range carryForwardReleaseMaterialStatements {
+		if _, e = tx.Exec(ctx, statement, releaseID, oldID); e != nil {
+			return "", persistence(e)
+		}
+	}
+	for _, statement := range experimentVariantReleaseMaterialStatements {
+		if _, e = tx.Exec(ctx, statement, releaseID, scope.EnvironmentID, scope.ProjectID, activeVersions); e != nil {
+			return "", persistence(e)
+		}
 	}
 	for _, versionID := range activeVersions {
 		if _, e = tx.Exec(ctx, `INSERT INTO configuration_release_experiment_versions(release_id,experiment_version_id,project_id,environment_id) VALUES($1,$2,$3,$4)`, releaseID, versionID, scope.ProjectID, scope.EnvironmentID); e != nil {
@@ -677,6 +730,56 @@ func (r *Repository) publishRelease(ctx context.Context, tx pgx.Tx, scope experi
 	}
 	_, e = tx.Exec(ctx, `UPDATE environment_release_state SET current_release_id=$1,last_release_number=$2,updated_at=$3 WHERE environment_id=$4`, releaseID, number+1, now, scope.EnvironmentID)
 	return releaseID, persistence(e)
+}
+
+// deliveryV1Keys is the exact member set of a Delivery v1 Release. The v1
+// projection is built by whitelisting these rather than deleting the v2/v3
+// members, so a future contract addition cannot leak into the legacy view.
+var deliveryV1Keys = []string{
+	"id", "number", "environment", "publishedAt",
+	"compatibility", "placements", "paywallVersions", "productReferences", "assetReferences",
+}
+
+// deliveryV1Projection renders the Delivery v1 view of a v2/v3 Release.
+//
+// Negotiation selects the highest representation a client can read, and a
+// v1-only SDK can read v1. Before this, publishing an Experiment produced a
+// Release carrying only v2 and v3 representations, so every v1-only SDK was
+// answered 406 and could not fetch configuration at all until it upgraded --
+// the opposite of the stated compatibility guarantee. The v1 projection simply
+// contains no Placement decisions and no Experiments: a legacy client keeps
+// receiving the Environment's Placement-to-Paywall bindings and renders them.
+func deliveryV1Projection(release map[string]any) (map[string]any, error) {
+	projected := make(map[string]any, len(deliveryV1Keys))
+	for _, key := range deliveryV1Keys {
+		if value, ok := release[key]; ok {
+			projected[key] = value
+		}
+	}
+	// v1 compatibility declares Paywall protocols and atomic acceptance only;
+	// the Placement-decision and Experiment contracts are not v1 vocabulary.
+	compatibility, _ := release["compatibility"].(map[string]any)
+	v1Compatibility := map[string]any{"acceptance": "atomic"}
+	if compatibility != nil {
+		if protocols, ok := compatibility["paywallProtocols"]; ok {
+			v1Compatibility["paywallProtocols"] = protocols
+		}
+	}
+	projected["compatibility"] = v1Compatibility
+	// The environment member is narrower in v1: identity only.
+	if environment, ok := release["environment"].(map[string]any); ok {
+		v1Environment := map[string]any{}
+		for _, key := range []string{"id", "key"} {
+			if value, present := environment[key]; present {
+				v1Environment[key] = value
+			}
+		}
+		projected["environment"] = v1Environment
+	}
+	if err := setReleaseContentDigest(projected); err != nil {
+		return nil, err
+	}
+	return projected, nil
 }
 
 func setReleaseContentDigest(release map[string]any) error {
@@ -700,6 +803,77 @@ func objectArray(value any) []map[string]any {
 	}
 	return out
 }
+
+// carryForwardReleaseMaterialStatements copy the previous Release's material onto
+// the new Experiment-bearing Release. Each is a separate statement because pgx
+// speaks the extended protocol; a semicolon-joined parameterized statement is
+// rejected outright.
+var carryForwardReleaseMaterialStatements = []string{
+	`INSERT INTO configuration_release_placements SELECT $1,project_id,environment_id,placement_id,placement_key,paywall_version_id FROM configuration_release_placements WHERE release_id=$2`,
+	`INSERT INTO configuration_release_products SELECT $1,environment_id,project_id,product_id FROM configuration_release_products WHERE release_id=$2`,
+	`INSERT INTO configuration_release_assets SELECT $1,environment_id,project_id,asset_id FROM configuration_release_assets WHERE release_id=$2`,
+	`INSERT INTO configuration_release_rule_set_versions SELECT $1,environment_id,project_id,rule_set_version_id,placement_id FROM configuration_release_rule_set_versions WHERE release_id=$2`,
+}
+
+// experimentVariantReleaseMaterialStatements add the Products and Assets that only
+// the Experiment Variants' Paywall Versions reference, so the Release is closed
+// over everything an SDK must resolve.
+var experimentVariantReleaseMaterialStatements = []string{
+	`INSERT INTO configuration_release_products(release_id,environment_id,project_id,product_id)
+		SELECT DISTINCT $1,$2,$3,pvp.product_id FROM experiment_versions ev
+		JOIN experiment_variants variant ON variant.experiment_version_id=ev.id
+		JOIN paywall_version_products pvp ON pvp.version_id=variant.paywall_version_id
+		WHERE ev.id=ANY($4::text[]) ON CONFLICT DO NOTHING`,
+	`INSERT INTO configuration_release_assets(release_id,environment_id,project_id,asset_id)
+		SELECT DISTINCT $1,$2,$3,pva.asset_id FROM experiment_versions ev
+		JOIN experiment_variants variant ON variant.experiment_version_id=ev.id
+		JOIN paywall_version_assets pva ON pva.version_id=variant.paywall_version_id
+		WHERE ev.id=ANY($4::text[]) ON CONFLICT DO NOTHING`,
+}
+
+// The Experiment publish release-closure path reads Paywall Version material
+// straight out of the hosted-publishing tables. None of it had a test, and one
+// statement selected `a.url` from a column actually named `public_url`, so every
+// Experiment publish failed with a 500 the moment the closure needed to load a
+// Variant's Paywall Version. The statements are named constants so an
+// integration test can prepare each one against the migrated schema.
+const (
+	closurePaywallVersionQuery = `SELECT paywall_id,protocol_version,document,document_hash FROM paywall_versions WHERE id=$1 AND project_id=$2 AND environment_id=$3`
+
+	closurePaywallProductsQuery = `SELECT p.id,p.type,p.internal_name,p.readiness_ready FROM paywall_version_products pvp JOIN products p ON p.id=pvp.product_id AND p.project_id=pvp.project_id WHERE pvp.version_id=$1 ORDER BY p.id`
+
+	closurePaywallAssetsQuery = `SELECT pva.document_asset_id,a.id,a.kind,a.media_type,a.byte_length,a.content_digest,a.public_url FROM paywall_version_assets pva JOIN assets a ON a.id=pva.asset_id AND a.project_id=pva.project_id WHERE pva.version_id=$1 ORDER BY pva.document_asset_id`
+
+	closureEntitlementGrantsQuery = `SELECT DISTINCT e.id,e.key FROM product_entitlement_grants peg JOIN entitlements e ON e.id=peg.entitlement_id AND e.project_id=peg.project_id WHERE peg.product_id=ANY($1::text[]) ORDER BY e.id`
+)
+
+// Migration 00020 made experiment_scheduling_jobs.available_at NOT NULL so an
+// expired lease can be reclaimed and a transient failure requeued with backoff.
+// The writer was never updated to set it, so every Experiment publish carrying a
+// schedule failed with a not-null violation and no Experiment could be
+// scheduled. available_at starts equal to scheduled_at: the job is eligible the
+// moment it is due, and each retry pushes it forward.
+const (
+	scheduleJobStartInsert    = `INSERT INTO experiment_scheduling_jobs(id,experiment_id,project_id,environment_id,action,scheduled_at,available_at,status,actor_id,created_at,updated_at) VALUES($1,$2,$3,$4,'start',$5,$5,'queued',$6,$7,$7)`
+	scheduleJobCompleteInsert = `INSERT INTO experiment_scheduling_jobs(id,experiment_id,project_id,environment_id,action,scheduled_at,available_at,status,actor_id,created_at,updated_at) VALUES($1,$2,$3,$4,'complete',$5,$5,'queued',$6,$7,$7)`
+)
+
+// ScheduleJobInsertStatements exposes the scheduling-job writes so an
+// integration test can execute them against the real schema.
+var ScheduleJobInsertStatements = []string{scheduleJobStartInsert, scheduleJobCompleteInsert}
+
+// ReleaseClosureStatements lists every statement above so
+// TestReleaseClosureStatementsMatchTheSchema can prepare them all.
+var ReleaseClosureStatements = func() []string {
+	statements := []string{
+		closurePaywallVersionQuery,
+		closurePaywallProductsQuery,
+		closurePaywallAssetsQuery,
+		closureEntitlementGrantsQuery,
+	}
+	statements = append(statements, carryForwardReleaseMaterialStatements...)
+	return append(statements, experimentVariantReleaseMaterialStatements...)
+}()
 
 func (r *Repository) ensureExperimentReleaseClosure(ctx context.Context, tx pgx.Tx, scope experiment.Scope, release map[string]any, assignments []any) error {
 	paywalls := objectArray(release["paywallVersions"])
@@ -742,11 +916,11 @@ func (r *Repository) ensureExperimentReleaseClosure(ctx context.Context, tx pgx.
 		}
 		var paywallID, protocolVersion, documentHash string
 		var document []byte
-		if err := tx.QueryRow(ctx, `SELECT paywall_id,protocol_version,document,document_hash FROM paywall_versions WHERE id=$1 AND project_id=$2 AND environment_id=$3`, id, scope.ProjectID, scope.EnvironmentID).Scan(&paywallID, &protocolVersion, &document, &documentHash); err != nil {
+		if err := tx.QueryRow(ctx, closurePaywallVersionQuery, id, scope.ProjectID, scope.EnvironmentID).Scan(&paywallID, &protocolVersion, &document, &documentHash); err != nil {
 			return persistence(err)
 		}
 		productIDs := []string{}
-		rows, err := tx.Query(ctx, `SELECT p.id,p.type,p.internal_name,p.readiness_ready FROM paywall_version_products pvp JOIN products p ON p.id=pvp.product_id AND p.project_id=pvp.project_id WHERE pvp.version_id=$1 ORDER BY p.id`, id)
+		rows, err := tx.Query(ctx, closurePaywallProductsQuery, id)
 		if err != nil {
 			return persistence(err)
 		}
@@ -769,7 +943,7 @@ func (r *Repository) ensureExperimentReleaseClosure(ctx context.Context, tx pgx.
 		}
 		rows.Close()
 		bindings := []any{}
-		rows, err = tx.Query(ctx, `SELECT pva.document_asset_id,a.id,a.kind,a.media_type,a.byte_length,a.content_digest,a.url FROM paywall_version_assets pva JOIN assets a ON a.id=pva.asset_id AND a.project_id=pva.project_id WHERE pva.version_id=$1 ORDER BY pva.document_asset_id`, id)
+		rows, err = tx.Query(ctx, closurePaywallAssetsQuery, id)
 		if err != nil {
 			return persistence(err)
 		}
@@ -794,7 +968,7 @@ func (r *Repository) ensureExperimentReleaseClosure(ctx context.Context, tx pgx.
 		paywalls = append(paywalls, map[string]any{"id": id, "paywallId": paywallID, "protocolVersion": protocolVersion, "documentDigest": "sha256:" + documentHash, "document": decoded, "productReferenceIds": productIDs, "assetBindings": bindings})
 		paywallSet[id] = true
 	}
-	rows, err := tx.Query(ctx, `SELECT DISTINCT e.id,e.key FROM product_entitlement_grants peg JOIN entitlements e ON e.id=peg.entitlement_id AND e.project_id=peg.project_id WHERE peg.product_id=ANY($1::text[]) ORDER BY e.id`, mapKeys(productSet))
+	rows, err := tx.Query(ctx, closureEntitlementGrantsQuery, mapKeys(productSet))
 	if err != nil {
 		return persistence(err)
 	}
@@ -848,7 +1022,7 @@ func validateExperimentDeliveryPayload(payload []byte) error {
 		} `json:"release"`
 	}
 	if err := json.Unmarshal(payload, &envelope); err != nil || envelope.Version != "3" {
-		return fmt.Errorf("emitted delivery v3 is invalid: %w", experiment.ErrInvalid)
+		return experiment.Invalid("emitted_delivery_v3_invalid")
 	}
 	paywalls, products := map[string]bool{}, map[string]bool{}
 	for _, value := range envelope.Release.PaywallVersions {
@@ -862,11 +1036,11 @@ func validateExperimentDeliveryPayload(payload []byte) error {
 	for _, assignment := range envelope.Release.Assignments {
 		for _, variant := range assignment.Variants {
 			if !paywalls[variant.PaywallVersionID] {
-				return fmt.Errorf("experiment paywall closure is incomplete: %w", experiment.ErrInvalid)
+				return experiment.Invalid("experiment_paywall_closure_incomplete")
 			}
 			for _, id := range variant.Compatibility.ProductIDs {
 				if !products[id] {
-					return fmt.Errorf("experiment product closure is incomplete: %w", experiment.ErrInvalid)
+					return experiment.Invalid("experiment_product_closure_incomplete")
 				}
 			}
 		}
@@ -877,15 +1051,15 @@ func validateExperimentDeliveryPayload(payload []byte) error {
 func validateDeliveryPayload(payload []byte, expectedVersion string) error {
 	var root map[string]any
 	if err := json.Unmarshal(payload, &root); err != nil || root["configurationDeliveryVersion"] != expectedVersion {
-		return fmt.Errorf("emitted delivery v%s is invalid: %w", expectedVersion, experiment.ErrInvalid)
+		return experiment.Invalid("emitted_delivery_invalid")
 	}
 	release, ok := root["release"].(map[string]any)
 	if !ok {
-		return fmt.Errorf("emitted delivery v%s has no release: %w", expectedVersion, experiment.ErrInvalid)
+		return experiment.Invalid("emitted_delivery_has_no_release")
 	}
 	declared, _ := release["contentDigest"].(string)
 	if err := setReleaseContentDigest(release); err != nil || release["contentDigest"] != declared {
-		return fmt.Errorf("emitted delivery v%s digest is invalid: %w", expectedVersion, experiment.ErrInvalid)
+		return experiment.Invalid("emitted_delivery_digest_invalid")
 	}
 	return nil
 }
@@ -1352,6 +1526,10 @@ func (r *Repository) RevokeOverride(ctx context.Context, scope experiment.Scope,
 	return persistence(tx.Commit(ctx))
 }
 
+// LeaseSchedule claims the next due scheduling job. It also reclaims leases
+// whose owner died before finishing, which the original query could not do: an
+// expired lease left the row stuck in 'leased' forever and the scheduled
+// Experiment start or completion was silently lost.
 func (r *Repository) LeaseSchedule(ctx context.Context, worker string, now, expires time.Time) (experiment.ScheduleJob, bool, error) {
 	tx, err := r.pool.Begin(ctx)
 	if err != nil {
@@ -1359,7 +1537,12 @@ func (r *Repository) LeaseSchedule(ctx context.Context, worker string, now, expi
 	}
 	defer tx.Rollback(ctx)
 	var job experiment.ScheduleJob
-	err = tx.QueryRow(ctx, `SELECT id,experiment_id,project_id,environment_id,action,actor_id FROM experiment_scheduling_jobs WHERE status='queued' AND scheduled_at<=$1 ORDER BY scheduled_at,id FOR UPDATE SKIP LOCKED LIMIT 1`, now).Scan(&job.ID, &job.ExperimentID, &job.ProjectID, &job.EnvironmentID, &job.Action, &job.ActorID)
+	err = tx.QueryRow(ctx, `SELECT id,experiment_id,project_id,environment_id,action,actor_id,attempt_count,max_attempts
+		FROM experiment_scheduling_jobs
+		WHERE (status='queued' OR (status='leased' AND lease_expires_at<=$1))
+		  AND scheduled_at<=$1 AND available_at<=$1 AND attempt_count<max_attempts
+		ORDER BY available_at,scheduled_at,id FOR UPDATE SKIP LOCKED LIMIT 1`, now).
+		Scan(&job.ID, &job.ExperimentID, &job.ProjectID, &job.EnvironmentID, &job.Action, &job.ActorID, &job.AttemptCount, &job.MaxAttempts)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return job, false, nil
 	}
@@ -1373,15 +1556,45 @@ func (r *Repository) LeaseSchedule(ctx context.Context, worker string, now, expi
 	if err = tx.Commit(ctx); err != nil {
 		return job, false, persistence(err)
 	}
+	job.AttemptCount++
 	return job, true, nil
 }
 
-func (r *Repository) FinishSchedule(ctx context.Context, id string, success bool, now time.Time) error {
-	status := "failed"
-	if success {
-		status = "completed"
+// scheduleBackoff is the requeue delay for attempt n, capped so a repeatedly
+// failing job still retries within a scheduling window an operator would notice.
+func scheduleBackoff(attempt int) time.Duration {
+	const base = 15 * time.Second
+	const cap = 10 * time.Minute
+	delay := base << min(attempt, 6)
+	if delay > cap {
+		return cap
 	}
-	tag, err := r.pool.Exec(ctx, `UPDATE experiment_scheduling_jobs SET status=$2,lease_owner=NULL,lease_expires_at=NULL,updated_at=$3 WHERE id=$1 AND status='leased'`, id, status, now)
+	return delay
+}
+
+// FinishSchedule closes out a leased job. A transient failure is requeued with
+// backoff until the retry budget is spent, at which point the job is terminally
+// failed with a diagnostic code instead of disappearing.
+func (r *Repository) FinishSchedule(ctx context.Context, job experiment.ScheduleJob, success bool, code string, now time.Time) error {
+	if success {
+		tag, err := r.pool.Exec(ctx, `UPDATE experiment_scheduling_jobs SET status='completed',lease_owner=NULL,lease_expires_at=NULL,last_error_code=NULL,updated_at=$2 WHERE id=$1 AND status='leased'`, job.ID, now)
+		if err != nil {
+			return persistence(err)
+		}
+		if tag.RowsAffected() != 1 {
+			return experiment.ErrConflict
+		}
+		return nil
+	}
+	if code == "" {
+		code = "schedule_transition_failed"
+	}
+	tag, err := r.pool.Exec(ctx, `UPDATE experiment_scheduling_jobs
+		SET status=CASE WHEN attempt_count>=max_attempts THEN 'failed' ELSE 'queued' END,
+		    lease_owner=NULL,lease_expires_at=NULL,last_error_code=$2,
+		    available_at=$3::timestamptz+$4::interval,updated_at=$3
+		WHERE id=$1 AND status='leased'`,
+		job.ID, code, now, scheduleBackoff(job.AttemptCount).String())
 	if err != nil {
 		return persistence(err)
 	}

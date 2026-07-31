@@ -1,6 +1,8 @@
 # Commerce Configuration changelog
 
-## Version 2 release candidate - 2026-07-24
+## Version 2 - 2026-07-24
+
+Status: approved at v1 GA (2026-07-27); released as a candidate on 2026-07-24
 
 - Preserved Commerce Configuration v1 as a parallel readable sidecar.
 - Added credential-free native-store activation and explicit recovery mode.
@@ -13,7 +15,9 @@
 - Added configured-versus-observed native freshness and exact v1/v2 fallback
   policy.
 
-## Version 1 release candidate - 2026-07-23
+## Version 1 - 2026-07-23
+
+Status: approved at v1 GA (2026-07-27); released as a candidate on 2026-07-23
 
 - Added an immutable Commerce Configuration sidecar without changing Paywall
   Protocol `0.2`, Local Preview `0.2`, Configuration Delivery `1`, or Commerce

@@ -39,8 +39,8 @@ export function PaywallsPage({
 
   const items = paywalls.data ?? []
   const state = resolveHostedQueryState({
-    emptyDescription: "",
-    emptyTitle: "",
+    // Emptiness is presented inside the page body, next to the create form,
+    // rather than replacing the whole view.
     error: paywalls.error,
     isEmpty: false,
     isPending: paywalls.isPending,
@@ -56,6 +56,7 @@ export function PaywallsPage({
       </Link>
     ),
     permissionDescription: "Project membership is required to manage hosted Paywalls.",
+    scope: { environmentId, organizationId, projectId },
   })
 
   return (

@@ -176,3 +176,58 @@ func validPlacementEvent(now time.Time) Event {
 		Payload: json.RawMessage(`{"decisionContractVersion":"1"}`),
 	}
 }
+
+// The Phase 6 ingestion defect was a contract divergence: the canonical
+// semantic validator rejected these fixtures while the API's own runtime path
+// accepted them, so Mosaic collected identifiers the contract forbids. This
+// test drives every canonical invalid fixture through the exact validation the
+// batch endpoint uses and requires a permanent-rejection code for each.
+func TestCanonicalInvalidFixturesAreRejectedByTheIngestionPath(t *testing.T) {
+	v1, err := os.Open(protocolPath(t, "protocol/schema/analytics-event/v1/event.schema.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer v1.Close()
+	v2, err := os.Open(protocolPath(t, "protocol/schema/analytics-event/v2/event.schema.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer v2.Close()
+	validator, err := CompileSchemaValidators(v1, v2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	service := NewService(batchVersionRepository{}, nil, validator)
+
+	fixtures := make([]string, 0, 8)
+	for _, pattern := range []string{
+		"protocol/fixtures/analytics-event/v1/invalid/*.json",
+		"protocol/fixtures/analytics-event/v2/invalid/*.json",
+	} {
+		matched, globErr := filepath.Glob(protocolPath(t, pattern))
+		if globErr != nil {
+			t.Fatal(globErr)
+		}
+		fixtures = append(fixtures, matched...)
+	}
+	if len(fixtures) == 0 {
+		t.Fatal("no canonical invalid fixtures found")
+	}
+
+	// Fixed clock inside the fixtures' validity window so a rejection is caused
+	// by the contract violation under test, not by expiry.
+	now := time.Date(2026, 7, 26, 12, 5, 0, 0, time.UTC)
+	for _, fixture := range fixtures {
+		t.Run(filepath.Base(fixture), func(t *testing.T) {
+			document, readErr := os.ReadFile(fixture)
+			if readErr != nil {
+				t.Fatal(readErr)
+			}
+			_, code := service.ValidateRawEvent(document, now, now)
+			if code == "" {
+				t.Fatalf("canonical invalid fixture %s was accepted by the ingestion path", filepath.Base(fixture))
+			}
+			t.Logf("rejected with %s", code)
+		})
+	}
+}

@@ -11,6 +11,7 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as SignupRouteImport } from './routes/signup'
 import { Route as LoginRouteImport } from './routes/login'
+import { Route as DiagnosticsRouteImport } from './routes/diagnostics'
 import { Route as Studio_layoutRouteImport } from './routes/_studio_layout'
 import { Route as HostedRouteImport } from './routes/_hosted'
 import { Route as IndexRouteImport } from './routes/index'
@@ -52,6 +53,11 @@ const SignupRoute = SignupRouteImport.update({
 const LoginRoute = LoginRouteImport.update({
   id: '/login',
   path: '/login',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const DiagnosticsRoute = DiagnosticsRouteImport.update({
+  id: '/diagnostics',
+  path: '/diagnostics',
   getParentRoute: () => rootRouteImport,
 } as any)
 const Studio_layoutRoute = Studio_layoutRouteImport.update({
@@ -288,6 +294,7 @@ const HostedOrganizationsOrganizationIdProjectsProjectIdMonetizationEnvironmentI
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/diagnostics': typeof DiagnosticsRoute
   '/login': typeof LoginRoute
   '/signup': typeof SignupRoute
   '/workspace': typeof HostedWorkspaceRoute
@@ -322,6 +329,7 @@ export interface FileRoutesByFullPath {
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/diagnostics': typeof DiagnosticsRoute
   '/login': typeof LoginRoute
   '/signup': typeof SignupRoute
   '/workspace': typeof HostedWorkspaceRoute
@@ -359,6 +367,7 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/_hosted': typeof HostedRouteWithChildren
   '/_studio_layout': typeof Studio_layoutRouteWithChildren
+  '/diagnostics': typeof DiagnosticsRoute
   '/login': typeof LoginRoute
   '/signup': typeof SignupRoute
   '/_hosted/workspace': typeof HostedWorkspaceRoute
@@ -395,6 +404,7 @@ export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/'
+    | '/diagnostics'
     | '/login'
     | '/signup'
     | '/workspace'
@@ -429,6 +439,7 @@ export interface FileRouteTypes {
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
+    | '/diagnostics'
     | '/login'
     | '/signup'
     | '/workspace'
@@ -465,6 +476,7 @@ export interface FileRouteTypes {
     | '/'
     | '/_hosted'
     | '/_studio_layout'
+    | '/diagnostics'
     | '/login'
     | '/signup'
     | '/_hosted/workspace'
@@ -502,6 +514,7 @@ export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   HostedRoute: typeof HostedRouteWithChildren
   Studio_layoutRoute: typeof Studio_layoutRouteWithChildren
+  DiagnosticsRoute: typeof DiagnosticsRoute
   LoginRoute: typeof LoginRoute
   SignupRoute: typeof SignupRoute
 }
@@ -520,6 +533,13 @@ declare module '@tanstack/react-router' {
       path: '/login'
       fullPath: '/login'
       preLoaderRoute: typeof LoginRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/diagnostics': {
+      id: '/diagnostics'
+      path: '/diagnostics'
+      fullPath: '/diagnostics'
+      preLoaderRoute: typeof DiagnosticsRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/_studio_layout': {
@@ -904,6 +924,7 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   HostedRoute: HostedRouteWithChildren,
   Studio_layoutRoute: Studio_layoutRouteWithChildren,
+  DiagnosticsRoute: DiagnosticsRoute,
   LoginRoute: LoginRoute,
   SignupRoute: SignupRoute,
 }

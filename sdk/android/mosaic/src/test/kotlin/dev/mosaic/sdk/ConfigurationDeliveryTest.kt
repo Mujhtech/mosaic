@@ -24,6 +24,72 @@ import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.ResponseBody.Companion.toResponseBody
 
 class ConfigurationDeliveryTest {
+    /**
+     * The cache record is persisted by an explicit tree codec instead of reflective Gson binding,
+     * because R8 renames fields in a minified release build and reflective binding would silently
+     * lose the accepted release, its paired Commerce sidecar, and its trusted time anchor. This
+     * asserts the literal wire names and every optional field survive a round trip.
+     */
+    @Test
+    fun `the cached configuration record round trips through the explicit codec`() {
+        val record = MosaicCachedConfiguration(
+            etag = "\"release-1\"",
+            payload = validRelease(),
+            commercePayload = "{\"commerce\":true}",
+            trustedServerTimeEpochMillis = 1_700_000_000_000,
+            trustedReceiptWallTimeEpochMillis = 1_700_000_001_000,
+            trustedReceiptElapsedRealtimeMillis = 4_242,
+        )
+
+        val encoded = MosaicCachedConfigurationCodec.encode(record)
+
+        assertEquals(record, MosaicCachedConfigurationCodec.decode(encoded))
+        assertEquals(
+            setOf(
+                "etag", "payload", "commercePayload", "trustedServerTimeEpochMillis",
+                "trustedReceiptWallTimeEpochMillis", "trustedReceiptElapsedRealtimeMillis",
+            ),
+            JsonParser.parseString(encoded).asJsonObject.keySet(),
+        )
+        assertEquals(
+            record.copy(
+                commercePayload = null,
+                trustedServerTimeEpochMillis = null,
+                trustedReceiptWallTimeEpochMillis = null,
+                trustedReceiptElapsedRealtimeMillis = null,
+            ),
+            MosaicCachedConfigurationCodec.decode(
+                MosaicCachedConfigurationCodec.encode(
+                    MosaicCachedConfiguration(etag = record.etag, payload = record.payload),
+                ),
+            ),
+        )
+    }
+
+    /**
+     * A truncated, foreign, or renamed cache record must be rejected so the SDK falls back to the
+     * bundled configuration instead of presenting a partially decoded release.
+     */
+    @Test
+    fun `a malformed cached configuration record is rejected instead of partially decoded`() {
+        listOf(
+            "{}",
+            """{"payload":"{}","unexpected":"value"}""",
+            """{"payload":7}""",
+            """{"etag":"\"release-1\""}""",
+            """{"payload":"{}","trustedServerTimeEpochMillis":"soon"}""",
+            "not json at all",
+        ).forEach { source ->
+            var rejected = false
+            try {
+                MosaicCachedConfigurationCodec.decode(source)
+            } catch (_: Exception) {
+                rejected = true
+            }
+            assertTrue("Expected rejection of $source", rejected)
+        }
+    }
+
     @Test
     fun `decodes the canonical delivery fixture and resolves its placement`() {
         val release = MosaicConfigurationDeliveryDecoder.decode(validRelease())
@@ -288,6 +354,72 @@ class ConfigurationDeliveryTest {
         assertEquals(
             MosaicConfigurationSource.BUNDLED_FALLBACK,
             (result as MosaicPlacementResult.Available).source,
+        )
+    }
+
+    /**
+     * The mandatory fallback chain's last resort, driven end to end with the **actual packaged
+     * bundled document** rather than a document lifted out of a delivery-release fixture. An
+     * unreachable transport plus an empty cache must still produce a renderable paywall, never
+     * `ConfigurationUnavailable`. Two iOS bugs made this path dead on that platform while remaining
+     * invisible because no test exercised it: the bundled document must be decoded as a raw Paywall
+     * document, never re-wrapped in a synthesized delivery release tagged with the latest
+     * advertised contract version.
+     */
+    @Test
+    fun `an unreachable transport and empty cache still render the packaged bundled paywall`() = runTest {
+        val packaged = canonicalFixtureSource()
+        val diagnostics = mutableListOf<String>()
+        val client = MosaicHostedConfigurationClient(
+            // Throwing, not a Failed result: an unreachable network is not a protocol response.
+            transport = MosaicConfigurationTransport { error("network unreachable") },
+            cache = MemoryCache(null),
+            bundledFallback = MosaicPaywallDocumentSource { packaged },
+            diagnostics = MosaicDiagnosticSink { diagnostics += it.code.wireName },
+        )
+
+        assertTrue(client.refresh() is MosaicConfigurationRefreshResult.Unavailable)
+        val decision = client.decidePlacement("onboarding_complete")
+
+        assertTrue("expected the bundled fallback, got $decision", decision is MosaicPlacementDecisionResult.Available)
+        val available = decision as MosaicPlacementDecisionResult.Available
+        assertEquals(MosaicConfigurationSource.BUNDLED_FALLBACK, available.source)
+        // Renderable, not merely decodable: the selector must resolve real product options.
+        val state = MosaicPaywallState(
+            available.document,
+            MockMosaicPurchaseProvider(MockMosaicPurchaseProvider.phase1Products()),
+        )
+        state.loadProducts()
+        val selectorId = available.document.walkNodesDepthFirst()
+            .filterIsInstance<MosaicProductSelectorComponent>().first().id
+        assertEquals(3, state.selectorStates[selectorId]?.options?.size)
+        // The stable v1 Placement API resolves the same fallback.
+        assertTrue(client.paywall("onboarding_complete") is MosaicPlacementResult.Available)
+        assertFalse(
+            "the bundled fallback must not be reported as missing or rejected",
+            diagnostics.any { it.startsWith("configuration.bundledFallback") },
+        )
+    }
+
+    /**
+     * The reader's asset path is a packaging contract: the generated canonical fixture must be
+     * present in the AAR at exactly the path [MosaicCanonicalBundleSource.ASSET_NAME] resolves, and
+     * byte-identical to the protocol fixture. A JVM test cannot open an AAR asset, so this asserts
+     * the generated source of truth the packaging step copies.
+     */
+    @Test
+    fun `the packaged bundled asset path and content match the canonical fixture`() {
+        assertEquals("mosaic/complete-paywall.json", MosaicCanonicalBundleSource.ASSET_NAME)
+        val generated = File(
+            System.getProperty("mosaic.repositoryRoot"),
+            "sdk/android/mosaic/build/generated/mosaic/canonical-assets/mosaic/complete-paywall.json",
+        )
+        assertTrue("the canonical asset generation task has not run", generated.isFile)
+        assertEquals(canonicalFixtureSource(), generated.readText(Charsets.UTF_8))
+        // The packaged bytes must decode into a renderable document on their own.
+        assertEquals(
+            "phase1-complete-paywall",
+            MosaicProtocolDecoder.decode(generated.readText(Charsets.UTF_8)).id,
         )
     }
 

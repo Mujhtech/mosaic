@@ -13,11 +13,12 @@ The module is optional. `:mosaic` has no Play Billing dependency, and existing v
 
 ## Artifact coordinates
 
-The Gate 4B development artifacts are:
+Mosaic does not publish this module to any registry. The **development
+coordinates** below describe artifacts you build and publish yourself:
 
 ```text
-dev.mosaic.sdk:mosaic:0.1.0-dev.6
-dev.mosaic.sdk:mosaic-google-play:0.1.0-dev.6
+dev.mosaic.sdk:mosaic:0.1.0-dev.7
+dev.mosaic.sdk:mosaic-google-play:0.1.0-dev.7
 ```
 
 The Google Play POM declares the matching `mosaic` core dependency. These
@@ -41,6 +42,9 @@ For local consumer testing only:
   :mosaic:publishReleasePublicationToMavenLocal \
   :mosaic-google-play:publishReleasePublicationToMavenLocal
 ```
+
+See the installation section of `sdk/android/README.md` for the two supported
+pre-1.0 install paths.
 
 ## Integration
 

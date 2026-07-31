@@ -105,14 +105,12 @@ MosaicPreviewClient _client(
 }
 
 List<Map<String, Object?>> _flow() {
-  final messages =
-      (jsonDecode(
-                _repositoryFile(
-                  'protocol/fixtures/local-preview/v0.2/session-flow.messages.json',
-                ).readAsStringSync(),
-              )
-              as List<Object?>)
-          .cast<Map<String, Object?>>();
+  final messages = (jsonDecode(
+    _repositoryFile(
+      'protocol/fixtures/local-preview/v0.2/session-flow.messages.json',
+    ).readAsStringSync(),
+  ) as List<Object?>)
+      .cast<Map<String, Object?>>();
   for (final message in messages) {
     message['sessionId'] = 'session_local_01';
   }
@@ -130,13 +128,12 @@ Map<String, Object?> _unsupportedUpdate(Map<String, Object?> valid) {
   final document = payload['document']! as Map<String, Object?>;
   final screens = document['screens']! as List<Object?>;
   final initialScreen = screens.first! as Map<String, Object?>;
-  final content =
-      (initialScreen['layout']! as Map<String, Object?>)['content']!
-          as Map<String, Object?>;
+  final content = (initialScreen['layout']! as Map<String, Object?>)['content']!
+      as Map<String, Object?>;
   final children = content['children']! as List<Object?>;
   final headline = children.cast<Map<String, Object?>>().firstWhere(
-    (node) => node['id'] == 'headline',
-  );
+        (node) => node['id'] == 'headline',
+      );
   headline['type'] = 'video';
   return message;
 }
@@ -165,7 +162,8 @@ final class _ExampleConnector implements MosaicPreviewSocketConnector {
   Future<MosaicPreviewSocket> connect(
     Uri endpoint, {
     required Iterable<String> protocols,
-  }) async => _sockets.removeAt(0);
+  }) async =>
+      _sockets.removeAt(0);
 }
 
 final class _ExampleSocket implements MosaicNegotiatedPreviewSocket {

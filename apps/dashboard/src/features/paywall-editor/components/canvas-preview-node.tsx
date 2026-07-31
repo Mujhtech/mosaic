@@ -110,6 +110,27 @@ export function PreviewNode(props: PreviewNodeProps) {
     props.onBeginEdit(node)
   }
 
+  /**
+   * Double-click is not a keyboard-reachable gesture. Enter and F2 are the
+   * conventional keys for entering an inline edit, so text and switch labels
+   * expose the same affordance to keyboard users.
+   */
+  function beginEditKeyDown(event: React.KeyboardEvent) {
+    if (!editable || locked) return
+    if (event.key !== "Enter" && event.key !== "F2") return
+    beginEdit(event)
+  }
+
+  function editTriggerProps() {
+    if (!editable || locked) return {}
+    return {
+      onDoubleClick: beginEdit,
+      onKeyDown: beginEditKeyDown,
+      tabIndex: 0,
+      title: "Press Enter or F2 to edit this text",
+    }
+  }
+
   function inlineEditor(className: string, style?: CSSProperties) {
     if (!editable) return null
     return (
@@ -174,7 +195,7 @@ export function PreviewNode(props: PreviewNodeProps) {
                   )
                 : undefined,
               className: "w-full px-1 py-0.5",
-              onDoubleClick: beginEdit,
+              ...editTriggerProps(),
               style: { ...appearanceStyle(document, node.appearance), ...style },
             },
             value,
@@ -532,7 +553,7 @@ export function PreviewNode(props: PreviewNodeProps) {
               typographyStyle(document, node.typography),
             )
           ) : (
-            <span onDoubleClick={beginEdit}>
+            <span {...editTriggerProps()}>
               {resolveLocalizedText(document, node.label, locale)}
             </span>
           )}

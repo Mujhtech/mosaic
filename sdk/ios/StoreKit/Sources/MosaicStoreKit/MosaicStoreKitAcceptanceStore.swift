@@ -23,10 +23,11 @@ public actor MosaicStoreKitFileAcceptanceStore: MosaicStoreKitAcceptanceStore {
   public static func defaultStore(
     identifier: String = Bundle.main.bundleIdentifier ?? "mosaic-host"
   ) throws -> MosaicStoreKitFileAcceptanceStore {
-    let root = FileManager.default.urls(
-      for: .applicationSupportDirectory,
-      in: .userDomainMask
-    ).first ?? FileManager.default.temporaryDirectory
+    let root =
+      FileManager.default.urls(
+        for: .applicationSupportDirectory,
+        in: .userDomainMask
+      ).first ?? FileManager.default.temporaryDirectory
     let digest = SHA256.hash(data: Data(identifier.utf8))
       .map { String(format: "%02x", $0) }
       .joined()

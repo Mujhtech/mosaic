@@ -27,3 +27,10 @@ func Timeout(timeout time.Duration) func(http.Handler) http.Handler {
 		})
 	}
 }
+
+// RouteTimeout overrides the global handler timeout for a subtree of routes.
+// Asset upload and analytics ingestion legitimately take longer than the
+// default request budget, and the global timeout must not bound them.
+func RouteTimeout(timeout time.Duration) func(http.Handler) http.Handler {
+	return Timeout(timeout)
+}

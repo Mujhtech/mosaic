@@ -138,7 +138,17 @@ Map<String, Object?> mosaicDecodeExperimentAnalyticsEvent(Object? source) {
     'experiment_fallback_presented',
     'experiment_assignment_failed',
   }.contains(name)) {
-    throw const FormatException('Unsupported Experiment event.');
+    // A conversion event attributed to an Experiment Variant. Analytics Event
+    // v2 is a superset of v1, so the shared event codec owns its structure,
+    // payload, and per-event correlation/attribution allow-lists; the only
+    // difference is the Experiment tuple, which must be complete and present.
+    final decoded = MosaicAnalyticsEvent.fromJson(event);
+    if (decoded.attribution.experiment == null) {
+      throw const FormatException(
+        'A v2 event must carry Experiment attribution.',
+      );
+    }
+    return Map.unmodifiable(event);
   }
   Map<String, Object?> object(String key) {
     final value = event[key];
@@ -161,6 +171,38 @@ Map<String, Object?> mosaicDecodeExperimentAnalyticsEvent(Object? source) {
               name == 'experiment_fallback_presented') &&
           correlation['paywallPresentationId'] is! String) {
     throw const FormatException('Invalid Experiment correlation.');
+  }
+  // Analytics minimization: each event may carry only the correlation and
+  // attribution identifiers its own semantics justify. Anything else is a
+  // rejected document, not an ignorable extra field.
+  const presentationCorrelation = {
+    'placementRequestId',
+    'paywallPresentationId'
+  };
+  final allowedCorrelation =
+      name == 'experiment_exposed' || name == 'experiment_fallback_presented'
+          ? presentationCorrelation
+          : const {'placementRequestId'};
+  const decidedPlacementAttribution = {
+    'configurationReleaseId',
+    'placementId',
+    'placementRuleSetId',
+    'placementRuleSetVersion',
+    'winningRuleId',
+    ...tuple,
+  };
+  final allowedAttribution = name == 'experiment_exposed'
+      ? const {
+          'paywallId',
+          'paywallVersionId',
+          ...decidedPlacementAttribution,
+        }
+      : decidedPlacementAttribution;
+  if (correlation.keys.toSet().difference(allowedCorrelation).isNotEmpty ||
+      attribution.keys.toSet().difference(allowedAttribution).isNotEmpty) {
+    throw const FormatException(
+      'Experiment event carries unrelated correlation or attribution.',
+    );
   }
   if (name == 'experiment_exposed' &&
       (attribution['paywallId'] is! String ||

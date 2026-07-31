@@ -1,8 +1,15 @@
 # Mosaic Protocol
 
-Protocol `0.2` RC4 is Mosaic's single pre-release native-paywall contract. It
-is platform-neutral and contains declarative data only. Studio, Local Preview,
-Flutter, SwiftUI, and Jetpack Compose all consume this exact version.
+Protocol `0.2` is Mosaic's single **approved** native-paywall contract, as of
+Mosaic v1 GA. It is platform-neutral and contains declarative data only. Studio,
+Local Preview, Flutter, SwiftUI, and Jetpack Compose all consume this exact
+version.
+
+Approved contracts are immutable: their behaviour is frozen and a behaviour
+change requires a new contract version. See
+[versioning](../docs/protocol/versioning.md), the
+[compatibility policy](../docs/protocol/compatibility-policy.md), and the
+[breaking-change process](../docs/protocol/breaking-change-process.md).
 
 Canonical artifacts live under:
 

@@ -1,8 +1,10 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { Link } from "@tanstack/react-router"
-import { useState } from "react"
+import { useEffect, useRef, useState } from "react"
 
+import { EmptyState } from "@/components/feedback/empty-state"
 import { Button } from "@/components/ui/button"
+import { describeApiError } from "@/lib/api/errors"
 import { buttonVariants } from "@/components/ui/button-variants"
 import { PublishReview } from "@/features/publishing/components/publish-review"
 import { publishDraftMutationOptions } from "@/features/publishing/mutations/publish-mutation"
@@ -53,7 +55,17 @@ export function HostedPublishPanel({
     ),
   )
 
-  if (!session) return null
+  if (!session) {
+    // A missing Draft session is a real, recoverable condition (the Draft was
+    // published, discarded, or never loaded). Silently rendering nothing left
+    // the publish panel looking broken.
+    return (
+      <EmptyState
+        description="Open or create a Draft for this Paywall to review and publish it."
+        title="No Draft is loaded"
+      />
+    )
+  }
   const assetsHref = `/organizations/${encodeURIComponent(organizationId)}/projects/${encodeURIComponent(projectId)}/monetization/${encodeURIComponent(environmentId)}/assets`
   const placementsHref = `/organizations/${encodeURIComponent(organizationId)}/projects/${encodeURIComponent(projectId)}/monetization/${encodeURIComponent(environmentId)}/placements`
   const catalogHref = `/organizations/${encodeURIComponent(organizationId)}/projects/${encodeURIComponent(projectId)}/catalog/products`
@@ -88,31 +100,14 @@ export function HostedPublishPanel({
 
   if (publish.data) {
     return (
-      <section className="border-primary/25 bg-primary/5 rounded border p-4" role="status">
-        <p className="text-sm font-semibold">
-          Release {publish.data.number} is live in {environmentName}
-        </p>
-        <p className="text-muted-foreground mt-1 text-sm leading-6">
-          This immutable Release is now current. Continue editing by creating a new Draft; this
-          published snapshot will not change.
-        </p>
-        <div className="mt-3 flex flex-wrap gap-2">
-          <Link
-            className={buttonVariants({ size: "sm" })}
-            params={{ environmentId, organizationId, projectId }}
-            to="/organizations/$organizationId/projects/$projectId/monetization/$environmentId/releases"
-          >
-            View Publish history
-          </Link>
-          <Link
-            className={buttonVariants({ size: "sm", variant: "outline" })}
-            params={{ environmentId, organizationId, paywallId, projectId }}
-            to="/organizations/$organizationId/projects/$projectId/monetization/$environmentId/paywalls/$paywallId"
-          >
-            Open published Paywall
-          </Link>
-        </div>
-      </section>
+      <PublishSuccessPanel
+        environmentId={environmentId}
+        environmentName={environmentName}
+        organizationId={organizationId}
+        paywallId={paywallId}
+        projectId={projectId}
+        releaseNumber={publish.data.number}
+      />
     )
   }
 
@@ -132,7 +127,9 @@ export function HostedPublishPanel({
       />
       {validation.error ? (
         <div className="border-destructive/25 bg-destructive/5 rounded border p-3" role="alert">
-          <p className="text-destructive text-sm">{validation.error.message}</p>
+          <p className="text-destructive text-sm">
+            {describeApiError(validation.error).description}
+          </p>
           <Button
             className="mt-2"
             disabled={validation.isFetching}
@@ -147,9 +144,7 @@ export function HostedPublishPanel({
       ) : null}
       {publish.error ? (
         <div className="border-destructive/25 bg-destructive/5 rounded border p-3" role="alert">
-          <p className="text-destructive text-sm" role="alert">
-            {publish.error.message}
-          </p>
+          <p className="text-destructive text-sm">{describeApiError(publish.error).description}</p>
           <Button
             className="mt-2"
             disabled={publish.isPending}
@@ -163,5 +158,65 @@ export function HostedPublishPanel({
         </div>
       ) : null}
     </div>
+  )
+}
+
+/**
+ * Publishing replaces the trigger with this confirmation, so keyboard focus
+ * would otherwise fall back to the document body. The section receives focus
+ * explicitly, keeping the follow-up actions reachable.
+ */
+function PublishSuccessPanel({
+  environmentId,
+  environmentName,
+  organizationId,
+  paywallId,
+  projectId,
+  releaseNumber,
+}: {
+  environmentId: string
+  environmentName: string
+  organizationId: string
+  paywallId: string
+  projectId: string
+  releaseNumber: number
+}) {
+  const sectionRef = useRef<HTMLElement>(null)
+
+  useEffect(() => {
+    sectionRef.current?.focus()
+  }, [])
+
+  return (
+    <section
+      className="border-primary/25 bg-primary/5 rounded border p-4"
+      ref={sectionRef}
+      role="status"
+      tabIndex={-1}
+    >
+      <p className="text-sm font-semibold">
+        Release {releaseNumber} is live in {environmentName}
+      </p>
+      <p className="text-muted-foreground mt-1 text-sm leading-6">
+        This immutable Release is now current. Continue editing by creating a new Draft; this
+        published snapshot will not change.
+      </p>
+      <div className="mt-3 flex flex-wrap gap-2">
+        <Link
+          className={buttonVariants({ size: "sm" })}
+          params={{ environmentId, organizationId, projectId }}
+          to="/organizations/$organizationId/projects/$projectId/monetization/$environmentId/releases"
+        >
+          View Publish history
+        </Link>
+        <Link
+          className={buttonVariants({ size: "sm", variant: "outline" })}
+          params={{ environmentId, organizationId, paywallId, projectId }}
+          to="/organizations/$organizationId/projects/$projectId/monetization/$environmentId/paywalls/$paywallId"
+        >
+          Open published Paywall
+        </Link>
+      </div>
+    </section>
   )
 }

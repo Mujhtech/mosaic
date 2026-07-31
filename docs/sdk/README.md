@@ -1,41 +1,132 @@
 # Mosaic Native SDKs
 
-Mosaic Protocol `0.2` drives three idiomatic native paywall renderers from
-one repository-owned fixture. Local Preview `0.2` adds a shared, local-only
-WebSocket contract so each renderer can apply Studio revisions without an app
-rebuild:
+Mosaic renders paywalls natively on three platforms from one platform-neutral
+protocol. There is no shared WebView renderer and no executable code inside
+delivered configuration.
 
-| Platform | Native surface                 | Local fallback                      | Phase 2 verification                                                       |
-| -------- | ------------------------------ | ----------------------------------- | -------------------------------------------------------------------------- |
-| Flutter  | Flutter and Material widgets   | Host bundle loader                  | Analyzer, 82 tests, widget coverage, real-relay example proof              |
-| iOS      | SwiftUI                        | SwiftPM packaged canonical resource | Swift build, 59 package tests, 6 simulator tests, real-relay example proof |
-| Android  | Jetpack Compose and Material 3 | Generated AAR asset                 | Assemble/lint, 52 JVM tests, 7 emulator tests, real-relay example proof    |
+| Platform | Native surface                 | Package                                                        |
+| -------- | ------------------------------ | -------------------------------------------------------------- |
+| Flutter  | Flutter and Material widgets   | `sdk/flutter` (`mosaic_sdk`)                                   |
+| iOS      | SwiftUI                        | `sdk/ios` (`MosaicSDK`)                                        |
+| Android  | Jetpack Compose and Material 3 | `sdk/android` (`:mosaic`)                                      |
 
-Phase 2 remains deliberately local-only. None of these packages fetch hosted
-configuration, publish content, authenticate users, ingest analytics, evaluate
-placements, or call a real billing provider.
+Optional commerce adapters are separate packages on every platform, so an
+application that does not use a provider never links it:
+
+| Provider           | Flutter                | iOS                    | Android                |
+| ------------------ | ---------------------- | ---------------------- | ---------------------- |
+| RevenueCat         | `mosaic_revenuecat`    | `MosaicRevenueCat`     | `:mosaic-revenuecat`   |
+| StoreKit 2         | `mosaic_native_store`  | `MosaicStoreKit`       | not applicable         |
+| Google Play Billing| `mosaic_native_store`  | not applicable         | `:mosaic-google-play`  |
+
+## Capabilities at v1
+
+All three SDKs provide the same conceptual capabilities:
+
+- SDK configuration with an Environment-scoped public SDK key and a hosted or
+  self-hosted base URL;
+- strict Mosaic Protocol 0.2 decoding and native rendering;
+- hosted Configuration Delivery with negotiation across contract versions 1, 2,
+  and 3;
+- crash-safe last-known-valid caching, bundled fallback configuration, and an
+  explicit unavailable result, applied in that order;
+- Placement resolution and local deterministic Placement Decision v1 evaluation
+  with targeting, rollout, and QA overrides;
+- Experiment Assignment v1: local deterministic SHA-256 bucketing, mutual
+  exclusion, schedules, emergency stop, and conservative fallback;
+- Product loading, selection, purchasing, restoration, and Entitlement
+  observation through a provider abstraction, with mock and custom providers;
+- Commerce Configuration v1/v2 sidecars bound to the accepted release;
+- Analytics Event Contract v1, and v2 for the Experiment events plus the
+  conversion events of an exposed Variant presentation, with a bounded,
+  app-private, persistent queue and best-effort delivery;
+- identity: installation identity, optional application user identity, typed
+  attributes, and resets;
+- normalized sealed result types for purchased, restored, already entitled,
+  dismissed, cancelled, product unavailable, configuration unavailable, purchase
+  failed, and rendering failed;
+- safe structured diagnostics that never contain credentials;
+- Local Preview 0.2 over a loopback-only WebSocket relay; and
+- capability reporting to the backend.
+
+Analytics delivery never blocks rendering or purchasing, and a Mosaic outage
+never prevents cached or bundled rendering.
+
+## Supported versions
+
+| Item                        | Supported                                              |
+| --------------------------- | ------------------------------------------------------ |
+| Flutter / Dart              | Flutter 3.22 / Dart 3.4 minimum (the tested floor)     |
+| iOS deployment target       | iOS 15.0 minimum; Swift 6.0 language mode; Xcode 16.0+ |
+| Android                     | minSdk 24; compile/target SDK 36; Kotlin 2.2.10; JDK 17 |
+| Protocol document           | Paywall 0.2                                            |
+| Configuration Delivery      | 1, 2, 3 (exact-match readers, highest mutual wins)     |
+| Commerce Provider Contract  | 1, 2                                                   |
+| Commerce Configuration      | 1, 2                                                   |
+| Placement Decision          | 1                                                      |
+| Analytics Event Contract    | 1, 2                                                   |
+| Experiment Assignment       | 1                                                      |
+| Local Preview               | 0.2                                                    |
+
+Unsupported contract versions fail safely: the SDK rejects the document and
+retains its last-known-valid configuration.
+
+## Distribution and installation
+
+All three SDKs are **pre-1.0 (`0.x-dev`) and are not published to any package
+registry** at v1 (owner decision D6). There is no pub.dev, CocoaPods trunk, or
+Maven Central artifact to resolve. Installation is by Git pin at an exact tag or
+commit, or by local path, on every platform. This is recorded in
+`docs/known-limitations.md`.
+
+- **Flutter**: a `git` dependency with `path: sdk/flutter` and an exact `ref`,
+  or a `path:` dependency. See `sdk/flutter/README.md`.
+- **iOS**: SwiftPM against the repository at an exact tag or revision, or a
+  local package reference. The bundled podspec is not published to CocoaPods
+  trunk. See `sdk/ios/README.md`.
+- **Android**: a Gradle composite build (`includeBuild`) or a local path, or
+  publish the modules to `mavenLocal()` or your own Maven repository from a
+  pinned checkout. No `dev.mosaic.sdk` coordinate resolves from a remote
+  repository. See `sdk/android/README.md`.
+
+Because every SDK is pre-1.0, treat each version bump as potentially breaking,
+read the SDK's `CHANGELOG.md` before upgrading, and pin exactly.
+
+Each SDK reports its own artifact version to the backend in the
+`Mosaic-SDK-Version` header, in the analytics context, and in its capability
+report. On every platform that value is a single constant that equals the
+package manifest version: `mosaicFlutterSdkVersion` (pubspec `version`),
+`mosaicSDKVersion` (podspec `version`), and the Android wire constant (module
+`version`). The authoritative number is always the manifest in the SDK
+directory, not this document.
 
 ## Canonical protocol contract
 
-The sole source fixture is:
+The canonical fixture is:
 
 ```text
 protocol/fixtures/v0.2/complete-paywall.json
 ```
 
-It covers the RC1 scroll container, recursive vertical stacks, text, bundled
-image with a same-geometry placeholder, feature list, product selector,
-purchase, restore, close, and legal text. Its catalogs exercise English, long
-German copy, and Arabic right-to-left layout.
+No SDK owns a schema fork, and no SDK renames protocol fields without a decoding
+boundary. Each platform binds to the canonical files differently because of how
+its build system packages resources:
 
-SDKs do not own schema forks. Flutter conformance tests read the repository
-fixture and its example generates an ignored byte-identical asset. SwiftPM and
-the iOS example package repository-relative symlinks. Android generates an
-ignored build asset from the canonical source before packaging.
+- **Flutter** conformance tests read the repository fixtures directly by walking
+  up to the checkout root; `examples/flutter-example` generates an ignored
+  byte-identical asset with `dart run tool/sync_fixture.dart`.
+- **iOS** packages a byte-identical **checked-in copy** of the fixture. It is
+  not a repository-relative symlink: SwiftPM copies symbolic links without
+  rebasing their targets, which would produce a broken fallback in a built
+  package. A package test prevents the copy from drifting.
+- **Android** generates an ignored build asset from the canonical source before
+  packaging.
 
-Every decoder rejects an unsupported version or capability, unknown property
-or component, invalid reference, duplicate ID, localization inconsistency, and
-capability/content drift atomically.
+Every decoder atomically rejects an unsupported version or capability, an
+unknown property or component, an invalid reference, a duplicate identifier, a
+localization inconsistency, and capability/content drift. Unknown optional
+components follow the protocol's fallback rules rather than failing the
+document.
 
 ## Equivalent renderer behaviour
 
@@ -44,20 +135,23 @@ All three SDKs:
 - resolve locale by exact tag, base language, fallback locale, default locale,
   then inline default;
 - derive direction independently from the first declared locale candidate;
-- resolve store price and period data only through injected commerce;
+- resolve store price and period data only through the injected commerce
+  provider, never from configuration;
 - omit unavailable products, preserve the configured selection when possible,
-  otherwise select the first available reference, and show the declared
-  fallback when none are available;
+  otherwise select the first available reference, and show the declared fallback
+  when none are available;
 - treat initial product unavailability as an interaction-only notification and
-  return terminal `productUnavailable` only for a purchase attempt/provider
+  return terminal `productUnavailable` only for a purchase attempt or provider
   result;
 - map purchase, restore, close, configuration, and rendering outcomes to the
-  exact RC1 normalized names;
-- try the bundled fallback after a rejected local candidate and report
-  `configurationUnavailable` only when neither document can be used;
+  same normalized names;
+- try the bundled fallback after a rejected candidate and report
+  `configurationUnavailable` only when no document can be used;
 - preserve image geometry when a logical bundled image is missing or invalid;
-- expose native accessibility labels, hints/state, headings, selected product
-  state, large-text layout, and RTL ordering; and
+- expose native accessibility labels, hints and state, headings, selected
+  product state, large-text layout, and RTL ordering;
+- keep persistence failures safe: a failed cache, identity, or analytics write
+  degrades to a diagnostic code and never crashes the host app; and
 - report results without dismissing host-owned navigation or presentation UI.
 
 ## Intentional platform differences
@@ -71,9 +165,13 @@ TalkBack because its stable semantics API has no separate hint property.
 Presentation result payloads are idiomatic wrappers around the same normalized
 outcome. Required product identity is always the document-local product
 reference ID. Flutter may additionally return sets of local references for
-restore/already-entitled results; Android may retain mock entitlement and
-transaction metadata; SwiftUI keeps those presentation payloads minimal.
-Diagnostics likewise use platform-native types while exposing only safe codes.
+restore and already-entitled results; Android may retain mock entitlement and
+transaction metadata; SwiftUI keeps those payloads minimal. Diagnostics use
+platform-native types while exposing only safe codes.
+
+The protocol vocabulary is deliberately not unified across contracts:
+`product_load` (Experiment Assignment) and `product_loading` (Placement
+Decision) are distinct terms in distinct contracts, and no SDK renames either.
 
 ## Local preview behaviour
 
@@ -86,7 +184,7 @@ last accepted document on failure.
 
 Local endpoints are credential-free and restricted to loopback, emulator-host,
 private, link-local, or local-development hosts. Unsupported components,
-invalid documents, missing products/assets, and render failures produce safe,
+invalid documents, missing products or assets, and render failures produce safe
 structured diagnostics rather than crashing the host app.
 
 Start Studio and its relay with `npm run dev:studio` from `apps/dashboard`.
@@ -99,23 +197,41 @@ Each example README documents its simulator or emulator endpoint.
 ```bash
 cd sdk/flutter
 dart format --output=none --set-exit-if-changed lib test example/lib
-flutter analyze --no-pub
-flutter test --no-pub
-cd example
-flutter build bundle --no-pub
+flutter analyze
+flutter test
+cd example && flutter build bundle --release --no-pub
 ```
 
-The full scenario app is under `examples/flutter-example`; run
-`dart run tool/sync_fixture.dart` before its build or launch.
-
-With the relay running, enable the real WebSocket slice with:
+The adapter packages are separate Flutter packages with their own suites:
 
 ```bash
+cd sdk/flutter/packages/mosaic_revenuecat && flutter analyze && flutter test
+cd sdk/flutter/packages/mosaic_native_store && flutter analyze && flutter test
+```
+
+The full scenario app is `examples/flutter-example`. Run
+`dart run tool/sync_fixture.dart` before every build or launch: the bundled
+fallback asset is generated and Git-ignored, so the build fails or falls back
+without it.
+
+```bash
+cd examples/flutter-example
+dart run tool/sync_fixture.dart
+dart format --output=none --set-exit-if-changed lib test tool
+flutter analyze --no-pub
+flutter test --no-pub
+flutter build bundle --release --no-pub
+```
+
+With the relay running, enable the real WebSocket slice:
+
+```bash
+cd sdk/flutter
 flutter test --no-pub --dart-define=MOSAIC_RUN_RELAY_INTEGRATION=true \
   test/preview_relay_integration_test.dart
 ```
 
-### SwiftUI
+### iOS
 
 ```bash
 swift format lint --strict --recursive sdk/ios/Package.swift sdk/ios/Sources sdk/ios/Tests
@@ -128,13 +244,12 @@ xcodebuild -project examples/ios-example/MosaicExample.xcodeproj \
   CODE_SIGNING_ALLOWED=NO build
 ```
 
-The concrete-simulator golden command is documented in
-`examples/ios-example/README.md`.
+The package suite is 118 tests. The concrete-simulator golden command and the
+iOS 15 deployment-target compile check are documented in `sdk/ios/README.md` and
+`examples/ios-example/README.md`. Set `MOSAIC_PREVIEW_RELAY_TEST=1` to include
+the package's real-relay vertical slice while the local relay is running.
 
-Set `MOSAIC_PREVIEW_RELAY_TEST=1` to include the package's real-relay vertical
-slice while the local relay is running.
-
-### Jetpack Compose
+### Android
 
 ```bash
 cd sdk/android
@@ -143,10 +258,29 @@ cd sdk/android
 ./gradlew --no-daemon :mosaic:connectedDebugAndroidTest
 ```
 
-The runnable Compose app is under `examples/android-example`.
+The instrumentation task requires a connected device or emulator; without one it
+cannot run, and that gap is recorded in `docs/known-limitations.md` rather than
+implied as passing. The runnable Compose app is `examples/android-example`.
+
+## Experiment conversion attribution
+
+Experiment results join a conversion to an exposure solely on the Experiment
+tuple carried by the conversion event itself, and that tuple may only appear on
+an Analytics Event v2 event. Every SDK therefore emits `product_selected` and the
+purchase lifecycle events on v2 with the complete tuple whenever the presented
+Paywall is a successfully exposed original Variant, and without the tuple for a
+fallback presentation or a QA override. A partial tuple is never synthesized.
+See `docs/protocol/migration/analytics-event-v1-to-v2.md`.
+
+## Known limitations
+
+Per-platform pre-GA limitations, including the pre-1.0 distribution model and
+the checks that are environment-dependent, are recorded in
+`docs/known-limitations.md`. Commerce adapters are contract-tested but **not
+live-verified** against a RevenueCat sandbox, an Apple sandbox, or a Google Play
+test track (owner decision D10).
 
 ## Gate status
 
-Phase 1 is accepted. See `docs/reviews/phase-2.md` for the Phase 2 compatibility
-matrix, live three-platform evidence, unavailable environmental checks, and
-tracked follow-ups. Phase 2.5 and later work remain outside these SDK changes.
+See `docs/reviews/` for the accepted phase reviews and their evidence, including
+the cross-platform compatibility matrix and tracked follow-ups.

@@ -29,30 +29,21 @@ final class ExperimentTests: XCTestCase {
   }
 
   func testCanonicalBucketsIdentityAndScheduleBoundariesAreExact() throws {
-    XCTAssertEqual(
-      MosaicExperimentAssignmentEngine.bucket(
-        domain: "mosaic-experiment-assignment",
-        values: [
-          "project_alpha", "environment_production", "experiment_checkout",
-          "experiment_version_checkout_1", "identified_user", "customer_42",
-        ]),
-      1118)
-    XCTAssertEqual(
-      MosaicExperimentAssignmentEngine.bucket(
-        domain: "mosaic-experiment-assignment",
-        values: [
-          "project_alpha", "environment_production", "experiment_checkout",
-          "experiment_version_checkout_1", "installation", "installation_001",
-        ]),
-      9810)
-    XCTAssertEqual(
-      MosaicExperimentAssignmentEngine.bucket(
-        domain: "mosaic-experiment-group",
-        values: [
-          "project_alpha", "environment_production", "experiment_group_checkout",
-          "experiment_group_version_checkout_1", "identified_user", "customer_42",
-        ]),
-      6837)
+    let vectors = try canonicalBucketVectors()
+    for vector in vectors.assignments {
+      XCTAssertEqual(
+        MosaicExperimentAssignmentEngine.bucket(
+          domain: "mosaic-experiment-assignment", values: vector.values),
+        vector.bucket, vector.name)
+    }
+    for vector in vectors.groups {
+      XCTAssertEqual(
+        MosaicExperimentAssignmentEngine.bucket(
+          domain: "mosaic-experiment-group", values: vector.values),
+        vector.bucket, vector.name)
+    }
+    let installationVector = try XCTUnwrap(
+      vectors.assignments.first { $0.values.contains("installation_001") })
 
     let assignment = try assignmentWithoutGroup()
     let identity = MosaicIdentitySnapshot(
@@ -64,7 +55,7 @@ final class ExperimentTests: XCTestCase {
         assignment, identity: identity, trustedTime: start)
     else { return XCTFail("Inclusive start should select the canonical Treatment.") }
     XCTAssertEqual(selected.variant.id, "variant_treatment_a")
-    XCTAssertEqual(selected.bucket, 9810)
+    XCTAssertEqual(selected.bucket, installationVector.bucket)
     XCTAssertEqual(selected.keyType, .installation)
 
     XCTAssertEqual(
@@ -109,9 +100,17 @@ final class ExperimentTests: XCTestCase {
       )
       .analyticsEventContractVersion,
       "2")
-    XCTAssertThrowsError(
-      try MosaicAnalyticsCodec.decodeEvent(
-        phase5FixtureData("analytics-event/v2/invalid/partial-experiment-attribution.json")))
+    // Named explicitly: the canonical invalid/ directories also contain
+    // `rejection-layers.json` metadata, which is not an event fixture.
+    for fixture in [
+      "partial-experiment-attribution.json",
+      "experiment-exposure-unrelated-correlation.json",
+      "experiment-fallback-unrelated-attribution.json",
+    ] {
+      XCTAssertThrowsError(
+        try MosaicAnalyticsCodec.decodeEvent(
+          phase5FixtureData("analytics-event/v2/invalid/\(fixture)")), fixture)
+    }
   }
 
   func testPresentationAcknowledgementIsExactlyOncePerRequest() {

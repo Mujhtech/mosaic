@@ -2,6 +2,8 @@ module github.com/Mujhtech/mosaic/apps/api
 
 go 1.26.2
 
+toolchain go1.26.5
+
 require (
 	github.com/dlclark/regexp2 v1.11.0
 	github.com/exaring/otelpgx v0.11.1

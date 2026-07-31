@@ -488,7 +488,10 @@ final class Mosaic extends ChangeNotifier with WidgetsBindingObserver {
   void dispose() {
     if (_observingLifecycle) WidgetsBinding.instance.removeObserver(this);
     _commerceProviderRouter?.deactivate();
-    if (_analyticsRuntime case final runtime?) unawaited(runtime.release());
+    if (_analyticsRuntime case final runtime?) {
+      // Disposal must never surface storage failures as uncaught zone errors.
+      unawaited(runtime.release().catchError((Object _) {}));
+    }
     super.dispose();
   }
 }

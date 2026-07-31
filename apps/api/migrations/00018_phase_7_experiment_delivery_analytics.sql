@@ -38,12 +38,18 @@ ALTER TABLE analytics_events
       OR
       (event_schema_version='2' AND experiment_id IS NOT NULL AND experiment_version_id IS NOT NULL AND experiment_variant_id IS NOT NULL AND experiment_allocation_version IS NOT NULL AND char_length(experiment_allocation_version) BETWEEN 1 AND 128)
     ),
-    ADD CONSTRAINT analytics_events_experiment_tuple_fk FOREIGN KEY (experiment_version_id, experiment_id, project_id, environment_id, experiment_allocation_version) REFERENCES experiment_versions(id, experiment_id, project_id, environment_id, allocation_version) ON DELETE RESTRICT,
-    ADD CONSTRAINT analytics_events_experiment_variant_tuple_fk FOREIGN KEY (experiment_variant_id, experiment_version_id, project_id) REFERENCES experiment_variants(id, experiment_version_id, project_id) ON DELETE RESTRICT;
+    ADD CONSTRAINT analytics_events_experiment_tuple_fk FOREIGN KEY (experiment_version_id, experiment_id, project_id, environment_id, experiment_allocation_version) REFERENCES experiment_versions(id, experiment_id, project_id, environment_id, allocation_version) ON DELETE RESTRICT NOT VALID,
+    ADD CONSTRAINT analytics_events_experiment_variant_tuple_fk FOREIGN KEY (experiment_variant_id, experiment_version_id, project_id) REFERENCES experiment_variants(id, experiment_version_id, project_id) ON DELETE RESTRICT NOT VALID;
 
-CREATE INDEX analytics_events_experiment_analysis_idx
-    ON analytics_events(environment_id,experiment_version_id,experiment_variant_id,occurred_at,subject_id)
-    WHERE experiment_version_id IS NOT NULL AND experiment_qa_override=false;
+-- The columns above were just added, so no existing row can violate these
+-- constraints. Adding them NOT VALID and validating separately keeps the
+-- write-blocking window on a populated analytics_events table to the ALTER
+-- itself instead of a full validating scan.
+ALTER TABLE analytics_events VALIDATE CONSTRAINT analytics_events_experiment_tuple_fk;
+ALTER TABLE analytics_events VALIDATE CONSTRAINT analytics_events_experiment_variant_tuple_fk;
+
+-- The analysis index is built CONCURRENTLY by migration 00019 so ingestion is
+-- never blocked by an index build on a populated table.
 
 CREATE TABLE experiment_daily_unique_units (
     project_id text NOT NULL,
@@ -91,6 +97,33 @@ CREATE TRIGGER immutable_release_experiment_versions BEFORE UPDATE OR DELETE ON 
 FOR EACH ROW EXECUTE FUNCTION reject_experiment_immutable_change();
 
 -- +goose Down
+-- Rolling this migration back destroys Delivery v3 Releases, Analytics Event v2
+-- attribution, and Experiment analysis state, none of which the Phase 6 schema
+-- can represent. Down migrations are not a rollback strategy: when affected
+-- data exists the supported recovery is restore-from-backup
+-- (docs/backend/operations/backup-restore.md). Immutability triggers are never
+-- disabled to force a rollback through.
+-- +goose StatementBegin
+DO $$
+DECLARE
+  v3_releases bigint;
+  v2_events bigint;
+  experiment_rows bigint;
+BEGIN
+  SELECT count(*) INTO v3_releases FROM configuration_releases WHERE delivery_contract_version = '3';
+  SELECT count(*) INTO v2_events FROM analytics_events WHERE event_schema_version = '2';
+  SELECT count(*) INTO experiment_rows FROM configuration_release_experiment_versions;
+  IF v3_releases > 0 OR v2_events > 0 OR experiment_rows > 0 THEN
+    RAISE EXCEPTION USING
+      ERRCODE = '55000',
+      MESSAGE = format(
+        'migration 00018 cannot be rolled back: %s Delivery v3 Release(s), %s Analytics Event v2 row(s), and %s Release-to-Experiment link(s) would be destroyed',
+        v3_releases, v2_events, experiment_rows),
+      HINT = 'Restore from a backup taken before the upgrade: see docs/backend/operations/backup-restore.md';
+  END IF;
+END
+$$;
+-- +goose StatementEnd
 DROP TRIGGER immutable_release_experiment_versions ON configuration_release_experiment_versions;
 ALTER TABLE analytics_export_jobs DROP CONSTRAINT analytics_export_jobs_experiment_fk;
 ALTER TABLE analytics_export_jobs DROP CONSTRAINT analytics_export_jobs_kind_check;
@@ -99,7 +132,7 @@ ALTER TABLE analytics_export_jobs DROP COLUMN include_identity;
 ALTER TABLE analytics_export_jobs DROP COLUMN experiment_version_id;
 DROP TABLE experiment_analysis_rebuilds;
 DROP TABLE experiment_daily_unique_units;
-DROP INDEX analytics_events_experiment_analysis_idx;
+DROP INDEX IF EXISTS analytics_events_experiment_analysis_idx;
 ALTER TABLE analytics_events
     DROP CONSTRAINT analytics_events_experiment_variant_tuple_fk,
     DROP CONSTRAINT analytics_events_experiment_tuple_fk,

@@ -1,5 +1,11 @@
 # Dashboard Foundation
 
+> **Historical record.** This page describes the Phase 0 dashboard skeleton. It
+> is superseded by the shipped application: there is no `features/foundation/`
+> directory and no `/foundation` route. For the current structure see
+> [`docs/architecture/conventions/frontend.md`](../architecture/conventions/frontend.md);
+> for operating the dashboard see [`operations.md`](operations.md).
+
 ## Phase 0 scope
 
 The dashboard currently proves that the approved frontend stack can run as one coherent shell. It

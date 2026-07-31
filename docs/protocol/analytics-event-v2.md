@@ -17,8 +17,16 @@ Internal canonical names are:
 - `experiment_fallback_presented`: successful normal-Placement fallback;
 - `experiment_assignment_failed`: safe diagnostics.
 
-Public/export names add the `mosaic_` prefix. Provider-native events retain
-their provider namespace.
+These canonical names are the wire names. They are what SDKs emit, what
+ingestion accepts, what the schemas enumerate, and what Mosaic's own NDJSON and
+CSV exports write. There is no prefixed variant anywhere in Mosaic.
+
+`mosaic_*` is a *recommended convention for third-party downstream
+destinations* — a warehouse or product-analytics tool where Mosaic events share
+a namespace with events from other sources. Applying it is the operator's
+choice, made in their own pipeline. Provider-native events retain their
+provider namespace (`rc_*`, `af_*`). See
+[Analytics export names](analytics-export-names.md) for the complete mapping.
 
 Experiment attribution is the all-or-none tuple `experimentId`,
 `experimentVersionId`, `experimentVariantId`, and

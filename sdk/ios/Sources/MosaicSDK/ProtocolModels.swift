@@ -4,7 +4,10 @@ import Foundation
 public let mosaicProtocolVersion = "0.2"
 public let mosaicLatestProtocolVersion = mosaicProtocolVersion
 public let mosaicSupportedProtocolVersions = [mosaicProtocolVersion]
-public let mosaicSDKVersion = "0.2.0-dev.1"
+/// The exact published artifact version. It must stay identical to
+/// `MosaicSDK.podspec` and `StoreKit/MosaicStoreKit.podspec` because it is sent
+/// as the `Mosaic-SDK-Version` header and reported in analytics context.
+public let mosaicSDKVersion = "0.1.0-dev.6"
 
 public enum MosaicCapabilityName: String, Codable, CaseIterable, Sendable {
   case scrollContainer = "layout.scrollContainer"

@@ -1,11 +1,80 @@
 # Protocol changelog
 
-All notable Mosaic protocol changes are recorded here. Versioned artifacts are
-not immutable until their review gate is approved.
+All notable Mosaic protocol changes are recorded here. A contract's artifacts
+become immutable when its `status` reaches `approved`; before that, its review
+gate may still change them. Every Mosaic contract is `approved` as of v1 GA.
+
+## v1 General Availability: all contracts approved - 2026-07-27
+
+Status: approved
+
+Contract approval (D2). No wire-format change to any accepted document; every
+contract identifier is unchanged.
+
+- Flipped all 13 compatibility manifests to `status: "approved"`: Paywall
+  Protocol `0.2`, Local Preview `0.2`, Configuration Delivery `1`/`2`/`3`,
+  Placement Decision `1`, Experiment Assignment `1`, Analytics Event `1`/`2`,
+  Commerce Provider `1`/`2`, and Commerce Configuration `1`/`2`. Approved
+  contracts are immutable; behaviour changes now require a new contract version.
+- Widened every manifest schema, **before** the approval flip, so the lifecycle
+  is expressible after the one-way door closes: `status` gains `retired`, and an
+  optional `deprecation` block records `deprecatedAt`, `retiresAt`,
+  `supersededBy`, and `migrationGuide`. The two Analytics Event manifest schemas
+  that hard-coded `status` as a `releaseCandidate` const now use the full
+  lifecycle enumeration.
+- Added the Local Preview `0.2` compatibility manifest and its schema
+  (`audience: "developmentOnly"`), completing the manifest family. Local Preview
+  had canonical schemas and fixtures but no manifest, so its reader rules,
+  message taxonomy, capability set, and draft-delivery diagnostic codes were
+  documented in prose only and could drift from the tools unchecked.
+- Retained `releaseCandidate: "RC4"` in the Paywall `0.2` manifest, redefined as
+  an approved-lineage record naming the candidate the approved contract was cut
+  from. It is not a lifecycle state.
+
+Corrections made before approval, permitted because they only narrow schemas to
+reject what the semantic validators already rejected (see
+`docs/protocol/breaking-change-process.md`):
+
+- Encoded analytics minimization in the canonical Analytics Event `1` and `2`
+  schemas: per-event correlation and attribution allow-lists, plus
+  `dependentRequired` atomicity for Rule Set pairing, the Experiment tuple (v2),
+  and the Placement rollout tuple. Previously these rules existed only in the
+  semantic validators and the API runtime path, so the canonical schema accepted
+  documents Mosaic rejected — the Phase 6 defect class, and a release-blocker
+  category in its own right. Four invalid fixtures that the schema previously
+  accepted are now schema-rejected. All canonical valid fixtures are unaffected.
+- The allow-lists are generated from the semantic validators' own tables
+  (`npm run generate:analytics-minimization`) and reconciled by `npm run
+  validate`, so schema/validator divergence now fails CI instead of shipping.
+- Completed the Configuration Delivery `3` manifest `readerPolicy`, which was
+  missing `noAcceptedRelease` and `bundledReleaseRejected`. The documented
+  fallback chain — retain last accepted release, then bundled release, then
+  report configuration unavailable — was prose-only at v3 while v2 declared it
+  in metadata.
+
+Also:
+
+- Recorded, per invalid fixture, which layer rejects it (`schema` or `semantic`)
+  in a generated `rejection-layers.json` in each `invalid/` directory. No
+  fixtures were moved. See `docs/protocol/fixture-lifecycle.md`.
+- Added Analytics Event v2 negative fixtures for correlation and attribution
+  allow-list violations.
+- Corrected the false claim in `docs/protocol/analytics-event-v2.md` that
+  public/export names add a `mosaic_` prefix. Canonical names are unprefixed and
+  Mosaic's own exports emit them verbatim; `mosaic_*` is a recommended
+  convention for third-party downstream destinations. Added
+  `docs/protocol/analytics-export-names.md` with the complete mapping and the
+  reserved `rc_*`/`af_*` provider namespaces.
+- Added the compatibility, deprecation, breaking-change, fixture-lifecycle, and
+  release-approval policies, plus per-contract migration guides, under
+  `docs/protocol/`.
+- Improved analytics schema diagnostics: rejections now name the offending field
+  and report only the branch matching the document's own `eventName`, instead of
+  emitting every `oneOf` branch's failures.
 
 ## Experiment Assignment v1, Configuration Delivery v3, and Analytics Event v2 - 2026-07-26
 
-Status: release candidate
+Status: approved at v1 GA (2026-07-27); released as a candidate on this date
 
 - Added deterministic offline Experiment assignment with exact Control and Treatment Paywall Versions, immutable allocation ranges, identity policies, trusted scheduling, mutual exclusion, QA metadata, and normal-Placement fallback.
 - Added Configuration Delivery `3` as the atomic complete Delivery `2` snapshot plus exact Experiment Assignment `1` definitions and capability negotiation.
@@ -18,7 +87,7 @@ Status: release candidate
 
 ## Analytics Event Contract v1 - 2026-07-26
 
-Status: release candidate
+Status: approved at v1 GA (2026-07-27); released as a candidate on this date
 
 - Added a separate closed Analytics Event `1` contract with typed Placement,
   Paywall, Product, purchase, and restore observations.
@@ -33,7 +102,7 @@ Status: release candidate
 
 ## Placement Decision v1 and Configuration Delivery v2 - 2026-07-26
 
-Status: release candidate
+Status: approved at v1 GA (2026-07-27); released as a candidate on this date
 
 - Added a separate Placement Decision `1` contract for deterministic local targeting, three-state evaluation, explicit outcomes/fallbacks, assignment policy, rollout, compatibility, and privacy-safe diagnostics.
 - Added Configuration Delivery `2` as an atomic envelope containing exact Decision v1 Rule Sets, Paywall Protocol `0.2` Versions, and Product/Entitlement references.
@@ -43,7 +112,7 @@ Status: release candidate
 
 ## Commerce Provider and Configuration v2 - 2026-07-24
 
-Status: release candidate
+Status: approved at v1 GA (2026-07-27); released as a candidate on this date
 
 - Added parallel v2 Commerce contracts without changing v1, Configuration
   Delivery `1`, or Paywall Protocol `0.2`.
@@ -61,7 +130,7 @@ Status: release candidate
 
 ## Commerce Configuration v1 - 2026-07-23
 
-Status: release candidate
+Status: approved at v1 GA (2026-07-27); released as a candidate on this date
 
 - Added a separate immutable release-associated sidecar binding exact
   Environment, Application, store platform, Configuration Release ID, and
@@ -77,7 +146,7 @@ Status: release candidate
 
 ## Commerce Provider Contract v1 - 2026-07-23
 
-Status: release candidate
+Status: approved at v1 GA (2026-07-27); released as a candidate on this date
 
 - Added a separately versioned provider-neutral commerce contract for explicit
   capabilities, stable Mosaic Product resolution, localized metadata,
@@ -101,7 +170,7 @@ Status: accepted by ADR-0016
 
 ## Protocol and Local Preview 0.2 RC4 - 2026-07-18
 
-Status: release candidate; SDK, Studio, quality, and product-owner approval pending
+Status: approved at v1 GA (2026-07-27); this entry records the RC4 candidate the approved contract was cut from
 
 - Preserved every approved Protocol and Local Preview `0.1` artifact
   byte-for-byte. RC4 supersedes the unapproved `0.2` RC3 candidate.

@@ -1,6 +1,6 @@
 {
   "configurationDeliveryVersion": "3",
-  "status": "releaseCandidate",
+  "status": "approved",
   "releaseSchema": "../../schema/configuration-delivery/v3/release.schema.json",
   "capabilityRequestSchema": "../../schema/configuration-delivery/v3/capability-request.schema.json",
   "canonicalFixture": "../../fixtures/configuration-delivery/v3/experiment-release.json",
@@ -23,6 +23,8 @@
     "invalidReference": "rejectRelease",
     "invalidDigest": "rejectRelease",
     "candidateRejected": "keepLastAcceptedRelease",
+    "noAcceptedRelease": "loadBundledRelease",
+    "bundledReleaseRejected": "configurationUnavailable",
     "partialAcceptance": "forbidden",
     "legacyProjection": "unchangedNormalPlacementV2"
   }

@@ -16,7 +16,20 @@ Hosted clients enqueue Analytics Event v2 assignment,
 presentation-confirmed exposure, and explicit fallback events through the
 default durable analytics queue and transport. A custom
 `MosaicExperimentAnalyticsSink` remains available for tests. QA overrides never
-emit statistical exposure. The default assignment store persists only one-way
+emit statistical exposure.
+
+Conversion events are emitted on Analytics Event v2 carrying the same immutable
+Experiment tuple whenever the presented Paywall is a successfully exposed
+original Variant: `product_selected`, `purchase_started`,
+`purchase_completed_client`, and the rest of the purchase lifecycle. Experiment
+results join a conversion to an exposure solely on that tuple, so a conversion
+emitted on v1 would silently count as zero. Conversions from a fallback
+presentation or a QA override are emitted without the tuple, because neither is
+an exposed Variant presentation and attributing them to the Variant would count
+a normal-Paywall outcome as a Variant outcome. Presentation, Placement, restore,
+and Product-availability events never carry the tuple.
+
+The default assignment store persists only one-way
 subject digests, is backup-excluded, and is atomically bounded to 256 records
 and 180 days. Trusted server and local receipt anchors are cached with Delivery
 v3 so valid schedules remain evaluable across restart.
@@ -37,9 +50,8 @@ It retains RC3's generalized Buttons and Stacks, authored Product Cards and
 Badges, safe product templates, navigation, Carousel, Switch, Countdown, and
 conditional visibility. The SDK never migrates a document implicitly.
 
-Experiments remain outside this package. Real billing adapters
-remain optional sibling packages, so core applications do not resolve or
-embed RevenueCat, StoreKit, or Google Play Billing.
+Real billing adapters remain optional sibling packages, so core applications do
+not resolve or embed RevenueCat, StoreKit, or Google Play Billing.
 
 ## Advanced Placement decisions
 
@@ -127,8 +139,60 @@ rendering, purchase, or restore results. Local Preview, lower-level local
 
 ## Requirements
 
-- Flutter 3.19 or newer
-- Dart 3.3 or newer
+- Flutter 3.22 or newer (the tested minimum)
+- Dart 3.4 or newer
+- iOS 13 or newer, Android API 21 or newer, as inherited from Flutter
+
+## Installation
+
+This package is **not published to pub.dev**. Mosaic SDKs stay pre-1.0
+(`0.x-dev`) at v1, so they are installed by Git pin or local path. Both forms
+are supported and tested; the version below is the current package version.
+
+Pin an immutable commit or tag from the Mosaic repository:
+
+```yaml
+dependencies:
+  mosaic_sdk:
+    git:
+      url: https://github.com/<your-org>/mosaic.git
+      path: sdk/flutter
+      ref: v1.0.0-rc.1 # A tag or full commit SHA. Never a branch name.
+```
+
+The optional adapters live inside the same repository and are pinned the same
+way, with their own `path`:
+
+```yaml
+dependencies:
+  mosaic_revenuecat:
+    git:
+      url: https://github.com/<your-org>/mosaic.git
+      path: sdk/flutter/packages/mosaic_revenuecat
+      ref: v1.0.0-rc.1
+  mosaic_native_store:
+    git:
+      url: https://github.com/<your-org>/mosaic.git
+      path: sdk/flutter/packages/mosaic_native_store
+      ref: v1.0.0-rc.1
+```
+
+For a vendored checkout or a monorepo that already contains Mosaic, use path
+dependencies instead — this is what `examples/flutter-example` does:
+
+```yaml
+dependencies:
+  mosaic_sdk:
+    path: ../../sdk/flutter
+  mosaic_revenuecat:
+    path: ../../sdk/flutter/packages/mosaic_revenuecat
+```
+
+Because the package is pre-1.0, treat every version bump as potentially
+breaking, read `CHANGELOG.md` before upgrading, and pin exactly. The package
+version is reported to the backend in the `Mosaic-SDK-Version` header, in the
+analytics context, and in `mosaicFlutterCapabilityReport`; all three read the
+single `mosaicFlutterSdkVersion` constant.
 
 ## Public boundary
 
@@ -231,9 +295,9 @@ stable code, safe message, retryability, correlation ID, optional safe provider
 code, and recovery action.
 
 The optional RevenueCat adapter is at `packages/mosaic_revenuecat`. It pins
-`purchases_flutter 10.4.3` and requires Flutter 3.22/Dart 3.4 without raising
-Mosaic Core's Flutter 3.19/Dart 3.3 floor. The host configures RevenueCat and
-owns login/logout/customer identity:
+`purchases_flutter 10.4.3` and requires Flutter 3.22/Dart 3.4, which is now the
+core package's floor as well. The host configures RevenueCat and owns
+login/logout/customer identity:
 
 ```dart
 await Purchases.configure(PurchasesConfiguration(revenueCatPublicSdkKey));
@@ -492,3 +556,9 @@ Update it only after an intentional renderer review, then rerun without
 The full scenario and locale playground is at
 `examples/flutter-example/README.md`. It generates its ignored bundled fixture
 byte-for-byte from the canonical repository file before build or run.
+
+## Known limitations
+
+Flutter-specific pre-GA limitations, including the pre-1.0 distribution model,
+are recorded in `docs/known-limitations.md` at the repository root. Read it
+before shipping this SDK in a production application.

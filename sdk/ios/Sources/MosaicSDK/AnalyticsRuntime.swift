@@ -316,6 +316,12 @@ actor MosaicAnalyticsRuntime {
       guard response.statusCode == 200,
         let acknowledgement = try? MosaicAnalyticsCodec.decodeResponse(response.data),
         acknowledgement.batchId == batch.batchId,
+        // The acknowledgement must echo the contract version that was
+        // submitted. Accepting a mismatch would apply v1 result semantics to a
+        // v2 batch. `decodeResponse` deliberately reads both versions so a
+        // mismatch is detected here rather than looking like a transport
+        // failure.
+        acknowledgement.analyticsEventContractVersion == batch.analyticsEventContractVersion,
         validAcknowledgement(acknowledgement, for: records)
       else {
         retry(
@@ -528,25 +534,39 @@ actor MosaicAnalyticsRuntimeRegistry {
   static let shared = MosaicAnalyticsRuntimeRegistry()
   private var runtimes: [String: MosaicAnalyticsRuntime] = [:]
 
+  /// Returns the shared runtime for this endpoint and key, plus whether it had
+  /// to fall back to process-lifetime persistence. A degraded queue still
+  /// batches and delivers events; it just cannot survive relaunch.
   func runtime(
     baseURL: URL, apiKey: String, timeout: TimeInterval, identityStore: MosaicIdentityStore,
-    applicationVersion: String?
-  ) throws -> MosaicAnalyticsRuntime {
+    applicationVersion: String?, rootDirectory: URL?
+  ) -> (runtime: MosaicAnalyticsRuntime, degraded: Bool) {
     let namespace = baseURL.absoluteString + "\n" + apiKey
-    if let existing = runtimes[namespace] { return existing }
+    if let existing = runtimes[namespace] { return (existing, false) }
+    var degraded = false
+    let persistence: any MosaicAnalyticsPersistence
+    if let rootDirectory,
+      let file = try? MosaicAnalyticsFilePersistence(
+        baseURL: baseURL, publicSDKKey: apiKey, rootDirectory: rootDirectory)
+    {
+      persistence = file
+    } else {
+      persistence = MosaicMemoryAnalyticsPersistence()
+      degraded = true
+    }
     let runtime = MosaicAnalyticsRuntime(
-      persistence: try MosaicAnalyticsFilePersistence(baseURL: baseURL, publicSDKKey: apiKey),
+      persistence: persistence,
       transport: MosaicURLSessionAnalyticsTransport(
         baseURL: baseURL, apiKey: apiKey, timeout: timeout),
       identityStore: identityStore,
       context: MosaicAnalyticsContext(
-        sdkVersion: "0.6.0",
+        sdkVersion: mosaicSDKVersion,
         operatingSystemVersion: ProcessInfo.processInfo.operatingSystemVersionString
           .split(separator: " ").first(where: { $0.first?.isNumber == true }).map(String.init),
         applicationVersion: applicationVersion,
         locale: Locale.current.identifier.replacingOccurrences(of: "_", with: "-"),
         configurationDeliveryVersion: "3", commerceProviderContractVersion: "2"))
     runtimes[namespace] = runtime
-    return runtime
+    return (runtime, degraded)
   }
 }

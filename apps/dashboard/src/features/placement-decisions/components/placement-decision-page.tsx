@@ -3,14 +3,28 @@ import { FloppyDiskIcon } from "@phosphor-icons/react/dist/ssr/FloppyDisk"
 import { Link } from "@tanstack/react-router"
 import { useForm } from "@tanstack/react-form"
 import { queryOptions, useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
-import { useState } from "react"
+import { useRef, useState } from "react"
 
 import { EmptyState } from "@/components/feedback/empty-state"
 import { ErrorState } from "@/components/feedback/error-state"
+import {
+  ApiErrorDetails,
+  ApiErrorRecoveryAction,
+  RequestIdCopy,
+} from "@/features/auth/components/hosted-resource-boundary"
+import { describeApiError } from "@/lib/api/errors"
 import { LoadingState } from "@/components/feedback/loading-state"
 import { Button } from "@/components/ui/button"
 import { Field, FieldLabel } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetFooter,
+  SheetHeader,
+  SheetTitle,
+} from "@/components/ui/sheet"
 import { MonetizationWorkspace } from "@/features/environments/components/monetization-workspace"
 import { environmentsQueryOptions } from "@/features/environments/queries/environments-query"
 import { usePlacementDecisionsAdapter } from "@/features/placement-decisions/api/use-placement-decisions-adapter"
@@ -110,16 +124,14 @@ export function PlacementDecisionPage({
       surface="placements"
       title={detail.data?.name ?? "Placement"}
     >
-      {detail.isPending ||
-      paywalls.isPending ||
-      paywallVersions.isPending ||
-      attributes.isPending ? (
-        <LoadingState description="Loading the Placement decision settings and their references." />
-      ) : null}
+      {/* Loading and error are mutually exclusive: a failed reference query
+          previously left the spinner mounted next to the error. */}
       {detail.error || paywalls.error || paywallVersions.error || attributes.error ? (
         <ErrorState
           description={
-            (detail.error ?? paywalls.error ?? paywallVersions.error ?? attributes.error)?.message
+            describeApiError(
+              detail.error ?? paywalls.error ?? paywallVersions.error ?? attributes.error,
+            ).description
           }
           onRetry={() => {
             void detail.refetch()
@@ -128,6 +140,11 @@ export function PlacementDecisionPage({
             void attributes.refetch()
           }}
         />
+      ) : detail.isPending ||
+        paywalls.isPending ||
+        paywallVersions.isPending ||
+        attributes.isPending ? (
+        <LoadingState description="Loading the Placement decision settings and their references." />
       ) : null}
       {detail.data && paywallVersions.data && attributes.data ? (
         <DecisionWorkspace
@@ -162,6 +179,7 @@ function DecisionWorkspace({
   scope: { environmentId: string; placementId: string; projectId: string }
 }) {
   const [tab, setTab] = useState<DetailTab>("overview")
+  const [confirmingRuleSetArchive, setConfirmingRuleSetArchive] = useState(false)
   const queryClient = useQueryClient()
   const save = useMutation(saveRuleSetMutationOptions(scope, adapter, queryClient))
   const validation = useMutation(validateRuleSetMutationOptions(scope, adapter))
@@ -197,6 +215,17 @@ function DecisionWorkspace({
         queryKey: placementDecisionKeys.detail(scope, adapter),
       }),
   })
+  // Archiving a Placement or its rule set previously rendered the raw server
+  // message. Mosaic-owned copy plus the correlation ID is the documented
+  // support path, and a coded refusal here can name the page that resolves it.
+  const archiveError = archiveRuleSet.error ?? archive.error
+  const archiveFailure = archiveError
+    ? describeApiError(archiveError, {
+        environmentId: scope.environmentId,
+        organizationId,
+        projectId: scope.projectId,
+      })
+    : null
   const form = useForm({
     defaultValues: detail.draft,
     onSubmit: async ({ value }) => {
@@ -276,21 +305,13 @@ function DecisionWorkspace({
               <p className="text-sm font-medium">Archive the active decision settings first</p>
               <p className="text-muted-foreground mt-1 text-xs">
                 This preserves published version history and removes the active decision settings so
-                the Placement can then be archived. Archived decision settings cannot be restored in
-                Phase 5.
+                the Placement can then be archived. Archiving decision settings cannot be undone;
+                rebuilding them means recreating every rule by hand.
               </p>
             </div>
             <Button
               disabled={archiveRuleSet.isPending}
-              onClick={() => {
-                if (
-                  window.confirm(
-                    "Archive these decision settings? Published versions remain in history, but the settings cannot be restored in Phase 5.",
-                  )
-                ) {
-                  archiveRuleSet.mutate()
-                }
-              }}
+              onClick={() => setConfirmingRuleSetArchive(true)}
               size="sm"
               type="button"
               variant="outline"
@@ -298,12 +319,32 @@ function DecisionWorkspace({
               <ArchiveIcon aria-hidden />
               {archiveRuleSet.isPending ? "Archiving decision settings…" : "Archive settings"}
             </Button>
+            <ArchiveRuleSetConfirmation
+              onConfirm={() => {
+                archiveRuleSet.mutate(undefined, {
+                  onSuccess: () => setConfirmingRuleSetArchive(false),
+                })
+              }}
+              onOpenChange={setConfirmingRuleSetArchive}
+              open={confirmingRuleSetArchive}
+              pending={archiveRuleSet.isPending}
+              placementKey={detail.key}
+            />
           </div>
         ) : null}
-        {archiveRuleSet.error || archive.error ? (
-          <p className="text-destructive mt-3 text-sm" role="alert">
-            {(archiveRuleSet.error ?? archive.error)?.message}
-          </p>
+        {archiveFailure ? (
+          <div className="mt-3 space-y-2">
+            <p className="text-destructive text-sm" role="alert">
+              {archiveFailure.description}
+            </p>
+            <ApiErrorDetails details={archiveFailure.details} />
+            {archiveFailure.recovery ? (
+              <ApiErrorRecoveryAction recovery={archiveFailure.recovery} />
+            ) : null}
+            {archiveFailure.correlationId ? (
+              <RequestIdCopy requestId={archiveFailure.correlationId} />
+            ) : null}
+          </div>
         ) : null}
       </div>
 
@@ -804,5 +845,66 @@ export function ValidationSummary({
         </ul>
       ) : null}
     </div>
+  )
+}
+
+/**
+ * Archiving a rule set is irreversible, so the confirmation is a real dialog:
+ * the browser's `window.confirm` cannot state the consequence in Mosaic's own
+ * words, cannot be styled or read as part of the page, and cannot place focus
+ * on the safe choice. Focus opens on Cancel and returns to the trigger.
+ */
+function ArchiveRuleSetConfirmation({
+  onConfirm,
+  onOpenChange,
+  open,
+  pending,
+  placementKey,
+}: {
+  onConfirm: () => void
+  onOpenChange: (open: boolean) => void
+  open: boolean
+  pending: boolean
+  placementKey: string
+}) {
+  const cancelRef = useRef<HTMLButtonElement>(null)
+
+  return (
+    <Sheet onOpenChange={onOpenChange} open={open}>
+      <SheetContent className="w-full sm:max-w-md" initialFocus={cancelRef}>
+        <SheetHeader className="border-b p-5">
+          <SheetTitle>Archive decision settings for {placementKey}?</SheetTitle>
+          <SheetDescription>This cannot be undone.</SheetDescription>
+        </SheetHeader>
+        <div className="p-5">
+          <p className="text-muted-foreground text-sm leading-6">
+            Published versions of this Placement stay in history and keep serving. The active rules,
+            outcomes, and fallbacks are removed permanently: restoring them means recreating every
+            rule by hand. Archive the settings only when you intend to archive the Placement itself.
+          </p>
+        </div>
+        <SheetFooter className="flex-row flex-wrap gap-2 border-t p-5">
+          <Button
+            disabled={pending}
+            onClick={onConfirm}
+            size="sm"
+            type="button"
+            variant="destructive"
+          >
+            {pending ? "Archiving decision settings…" : "Archive decision settings"}
+          </Button>
+          <Button
+            disabled={pending}
+            onClick={() => onOpenChange(false)}
+            ref={cancelRef}
+            size="sm"
+            type="button"
+            variant="ghost"
+          >
+            Keep settings
+          </Button>
+        </SheetFooter>
+      </SheetContent>
+    </Sheet>
   )
 }

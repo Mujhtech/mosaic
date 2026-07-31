@@ -1,6 +1,6 @@
 {
   "commerceConfigurationVersion": "1",
-  "status": "releaseCandidate",
+  "status": "approved",
   "schema": "../../schema/commerce-configuration/v1/configuration.schema.json",
   "canonicalFixtures": [
     "../../fixtures/commerce-configuration/v1/revenuecat-configuration.json",

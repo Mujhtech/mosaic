@@ -91,9 +91,83 @@ void main() {
       publicSdkKey: 'mos_public_sdk_test.secret',
       baseUrl: Uri.parse('https://mosaic.example'),
       purchaseProvider: MockMosaicPurchaseProvider(),
+      analyticsStorage: MosaicMemoryAnalyticsStorage(),
       experimentAssignmentStorage: MosaicMemoryExperimentAssignmentStorage(),
     );
     expect(mosaic.experimentAssignmentStore, isNotNull);
+    mosaic.dispose();
+  });
+
+  test('only an exposed original Variant stamps conversion attribution', () {
+    final assignment = const MosaicExperimentAssignmentDecoder().decode(
+      jsonDecode(File(
+        '$root/protocol/fixtures/experiment-assignment/v1/running-ab.json',
+      ).readAsStringSync()),
+      production: true,
+    );
+    final envelope = const MosaicConfigurationDeliveryDecoder().decode(
+      File(
+        '$root/protocol/fixtures/configuration-delivery/v3/experiment-release.json',
+      ).readAsStringSync(),
+    );
+    final configuration = MosaicAcceptedConfiguration(
+      envelope: envelope,
+      source: MosaicConfigurationSource.bundledFallback,
+    );
+    final paywallVersion = envelope.release.paywallVersions.values.first;
+    MosaicExperimentAssigned assigned({required bool qaOverride}) =>
+        MosaicExperimentAssigned(
+          assignment: assignment,
+          variant: assignment.variants.first,
+          assignmentKeyType: 'installation',
+          bucket: 1118,
+          groupBucket: null,
+          qaOverride: qaOverride,
+        );
+    MosaicPlacementDecisionPaywall resolution({
+      MosaicExperimentAssigned? experiment,
+      MosaicExperimentAssigned? fallback,
+    }) =>
+        MosaicPlacementDecisionPaywall(
+          placementKey: 'export_pdf',
+          paywallVersion: paywallVersion,
+          configuration: configuration,
+          decision: null,
+          experiment: experiment,
+          experimentFallback: fallback,
+          experimentFallbackReason:
+              fallback == null ? null : 'product_unavailable',
+        );
+
+    // An exposed original-Variant presentation attributes its conversions.
+    expect(
+      mosaicConversionExperimentAttribution(
+        resolution(experiment: assigned(qaOverride: false)),
+      )?.experimentVariantId,
+      assignment.variants.first.id,
+    );
+
+    // A fallback presented the normal Placement. Its conversions must not claim
+    // the Variant: they would enter the Variant's conversion denominator and can
+    // displace the Variant's own row.
+    expect(
+      mosaicConversionExperimentAttribution(
+        resolution(fallback: assigned(qaOverride: false)),
+      ),
+      isNull,
+    );
+
+    // A QA override emits no statistical exposure, so it emits no attributed
+    // conversion either.
+    expect(
+      mosaicConversionExperimentAttribution(
+        resolution(experiment: assigned(qaOverride: true)),
+      ),
+      isNull,
+    );
+
+    // No Experiment at all: conversions stay on v1.
+    expect(mosaicConversionExperimentAttribution(resolution()), isNull);
   });
 
   test('canonical Delivery v3 decodes atomically', () {
@@ -118,8 +192,8 @@ void main() {
       final first = candidate('a');
       final second = candidate('b');
       for (final assignment in <Map<String, Object?>>[first, second]) {
-        final group = assignment['mutualExclusionGroup']!
-            as Map<String, Object?>;
+        final group =
+            assignment['mutualExclusionGroup']! as Map<String, Object?>;
         group['members'] = <Object?>[
           <String, Object?>{
             'experimentId': 'experiment_a',
@@ -138,8 +212,8 @@ void main() {
       release['experimentAssignments'] = <Object?>[second, first];
     });
     final envelope = const MosaicConfigurationDeliveryDecoder().decode(source);
-    final candidates = envelope.release
-        .experimentsForPlacement('placement_export_pdf');
+    final candidates =
+        envelope.release.experimentsForPlacement('placement_export_pdf');
     expect(candidates.map((value) => value.experimentId),
         <String>['experiment_a', 'experiment_b']);
 
@@ -176,6 +250,7 @@ void main() {
       transport: _TestTransport(const []),
       cache: _TestCache(),
       identityStorage: identityStorage,
+      analyticsStorage: MosaicMemoryAnalyticsStorage(),
       bundledFallbackLoader: () async => source,
     );
     await mosaic.loadConfiguration();
@@ -232,8 +307,9 @@ void main() {
       final assignment = (release['experimentAssignments'] as List).single
           as Map<String, Object?>;
       final variant = (assignment['variants'] as List).last as Map;
-      (variant['compatibility'] as Map)['requiredProductIds'] =
-          <String>['product_export_pro'];
+      (variant['compatibility'] as Map)['requiredProductIds'] = <String>[
+        'product_export_pro'
+      ];
     });
     final cache = _TestCache(
       MosaicConfigurationCacheEntry(
@@ -256,18 +332,22 @@ void main() {
         ),
       ]),
       cache: cache,
+      analyticsStorage: MosaicMemoryAnalyticsStorage(),
     );
     await mosaic.loadConfiguration();
-    expect(mosaic.acceptedConfiguration!.envelope.release
-        .experimentAssignments.single.lifecycle,
+    expect(
+        mosaic.acceptedConfiguration!.envelope.release.experimentAssignments
+            .single.lifecycle,
         MosaicExperimentLifecycle.running);
     expect(
       await mosaic.refreshConfiguration(),
       isA<MosaicConfigurationUpdated>(),
     );
     final stoppedConfiguration = mosaic.acceptedConfiguration;
-    expect(stoppedConfiguration!.envelope.release.experimentAssignments.single
-        .lifecycle, MosaicExperimentLifecycle.stopped);
+    expect(
+        stoppedConfiguration!
+            .envelope.release.experimentAssignments.single.lifecycle,
+        MosaicExperimentLifecycle.stopped);
     expect(
       await mosaic.refreshConfiguration(),
       isA<MosaicConfigurationRetained>(),
@@ -314,7 +394,8 @@ String _deliveryV3(void Function(Map<String, Object?> release) mutate) {
   final root = Directory.current.path.endsWith('/sdk/flutter') ? '../..' : '.';
   final envelope = (jsonDecode(File(
     '$root/protocol/fixtures/configuration-delivery/v3/experiment-release.json',
-  ).readAsStringSync()) as Map).cast<String, Object?>();
+  ).readAsStringSync()) as Map)
+      .cast<String, Object?>();
   final release = (envelope['release'] as Map).cast<String, Object?>();
   mutate(release);
   release.remove('contentDigest');

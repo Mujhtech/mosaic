@@ -160,11 +160,29 @@ interface.
 
 ## Installation
 
-Swift Package Manager is the primary source integration. Add `sdk/ios` for the
-`MosaicSDK` product and, when native StoreKit commerce is required, add
-`sdk/ios/StoreKit` for `MosaicStoreKit`.
+The SDK is pre-1.0 (`0.1.0-dev.6`). Public API may still change between
+`0.x-dev` versions.
 
-CocoaPods consumers can use the versioned podspecs locally while developing:
+Swift Package Manager is the supported integration. Depend on it by Git
+revision or tag:
+
+```swift
+.package(url: "https://github.com/Mujhtech/mosaic.git", from: "ios-v0.1.0-dev.6")
+```
+
+or, while developing against a checkout, by local path:
+
+```swift
+.package(path: "../mosaic/sdk/ios")
+```
+
+Add the `MosaicSDK` product, and when native StoreKit commerce is required add
+`sdk/ios/StoreKit` for `MosaicStoreKit`. The optional RevenueCat adapter is
+`sdk/ios/RevenueCat`.
+
+**CocoaPods is local-path-only.** Mosaic does not yet publish CocoaPods
+release artifacts, so the podspecs cannot be resolved by version from a
+podspec repository or a release URL:
 
 ```ruby
 pod "MosaicSDK", :path => "../mosaic/sdk/ios"
@@ -172,25 +190,49 @@ pod "MosaicStoreKit", :path => "../mosaic/sdk/ios/StoreKit"
 ```
 
 Both local pods must be present in the Podfile because CocoaPods does not permit
-a podspec dependency to declare another pod's local path. For distribution,
-publish `MosaicSDK.podspec` and `StoreKit/MosaicStoreKit.podspec` at the same
-version. The matching `ios-v<version>` GitHub release must contain
-`MosaicSDK-<version>.zip`, rooted at the contents of `sdk/ios`, and
-`MosaicStoreKit-<version>.zip`, rooted at the contents of `sdk/ios/StoreKit`.
-Consumers can then depend on both pods by version normally. The StoreKit pod has
-an exact same-version dependency on the core pod and does not duplicate core
-sources.
+a podspec dependency to declare another pod's local path. `spec.source` in each
+podspec names the repository and an `ios-v<version>` tag so `pod lib lint` can
+run; that tag does not exist until a release is published, and version-based
+installation is unsupported until then. When distribution begins,
+`MosaicSDK.podspec` and `StoreKit/MosaicStoreKit.podspec` must publish at the
+same version — the StoreKit pod has an exact same-version dependency on the
+core pod and does not duplicate core sources.
 
 ## Requirements
 
-- Swift 6.0 or newer
-- Xcode 16 or newer
-- iOS 15 or newer for host applications
-- macOS with Xcode to run Swift Package tests
+Minimums are what the SDK declares and compiles against. Verified means Mosaic
+actually exercises them.
 
-The package declares macOS 14 only so its SwiftUI surface can compile in the
-development-host test process. Mosaic does not expose a macOS renderer in this
-phase.
+| | Minimum | Verified |
+| --- | --- | --- |
+| iOS | 15.0 | 15.0 typechecked; runtime/UI verified on iOS 26.5 Simulator |
+| Swift language mode | 6.0 | 6.3.2 compiler |
+| Xcode | 16.0 | 26.5 |
+
+The iOS 15 floor is a compile-only guarantee enforced by the typecheck command
+in [Validation](#validation). Mosaic does not run its Simulator suite on an iOS
+15 runtime, so iOS 15 rendering and behaviour are not empirically verified.
+Report iOS 15 runtime issues rather than assuming they are covered.
+
+Running the Swift Package tests additionally requires macOS with Xcode. The
+package declares macOS 14 only so its SwiftUI surface can compile in the
+development-host test process. Mosaic does not expose a macOS renderer.
+
+### Behaviour the SDK does not guarantee
+
+- **Background analytics delivery is not guaranteed.** Foreground and
+  background flushes are coalesced and best effort. iOS may suspend the app
+  before a batch completes; queued events are retried on a later launch, and
+  events can expire after seven days. Use `flushAnalytics()` when a
+  deterministic result is required.
+- **`refresh()` is not cancellable.** Concurrent callers join one in-flight
+  refresh, and cancelling the calling `Task` does not abort the network
+  request. The request ends on its own when `requestTimeout` elapses.
+- If Application Support is unreachable, `configure` degrades to
+  process-lifetime storage plus the bundled fallback instead of throwing. The
+  configuration cache, installation identity, assignment replay records, and
+  the analytics queue then do not survive relaunch, and
+  `configurationStatus()` reports `delivery_persistence_unavailable`.
 
 ## Protocol 0.2 RC4 rendering
 
@@ -476,19 +518,51 @@ from drifting; it is not an SDK-owned schema or fixture fork.
 
 ## Validation
 
-From the repository root:
+From the repository root. Formatting uses the pinned repository-root
+`.swift-format` configuration:
 
 ```bash
-swift format lint --strict --recursive sdk/ios/Package.swift sdk/ios/Sources sdk/ios/Tests
+swift format lint --strict --recursive \
+  sdk/ios/Package.swift sdk/ios/Sources sdk/ios/Tests \
+  sdk/ios/StoreKit/Package.swift sdk/ios/StoreKit/Sources sdk/ios/StoreKit/Tests \
+  sdk/ios/RevenueCat/Package.swift sdk/ios/RevenueCat/Sources sdk/ios/RevenueCat/Tests
 swift build --package-path sdk/ios
+swift build --package-path sdk/ios -c release
 swift test --package-path sdk/ios
+swift build --package-path sdk/ios/StoreKit
 swift test --package-path sdk/ios/RevenueCat
+```
+
+The declared iOS 15 floor is compile-verified separately, because the package
+tests build for the macOS development host and would not catch an
+iOS 16-only API:
+
+```bash
+cd sdk/ios
+xcrun swiftc -typecheck -swift-version 6 \
+  -target arm64-apple-ios15.0-simulator \
+  -sdk "$(xcrun --sdk iphonesimulator --show-sdk-path)" \
+  Sources/MosaicSDK/*.swift
+```
+
+Then the example application:
+
+```bash
+set -o pipefail
 xcodebuild -project examples/ios-example/MosaicExample.xcodeproj \
   -scheme MosaicExample \
   -destination 'generic/platform=iOS Simulator' \
   -derivedDataPath examples/ios-example/.build/DerivedData \
   CODE_SIGNING_ALLOWED=NO build
 ```
+
+Always run `set -o pipefail` before piping `xcodebuild` into `tail`, `grep`,
+or `xcpretty`. Without it the shell reports the pipeline's exit status and a
+failed build is silently reported as success. This masked a real regression in
+a previous phase.
+
+`examples/ios-example/README.md` documents the package-cache seeding needed to
+keep the example build from spending minutes on dependency resolution.
 
 The package test suite uses an in-memory WebSocket to cover the full local
 preview flow. To run the opt-in transport smoke test against a live local

@@ -4,6 +4,8 @@ import { fileURLToPath } from "node:url";
 
 import Ajv2020 from "ajv/dist/2020.js";
 
+import { REJECTION_LAYERS_FILENAME } from "./generate-rejection-layers.mjs";
+
 const toolsDirectory = dirname(fileURLToPath(import.meta.url));
 export const analyticsEventV1Root = resolve(toolsDirectory, "..");
 
@@ -42,11 +44,11 @@ function jsonPaths(directory) {
   return readdirSync(directory, { withFileTypes: true })
     .flatMap((entry) => {
       const path = resolve(directory, entry.name);
-      return entry.isDirectory()
-        ? jsonPaths(path)
-        : entry.name.endsWith(".json")
-          ? [path]
-          : [];
+      if (entry.isDirectory()) return jsonPaths(path);
+      // `rejection-layers.json` is generated metadata about the fixtures in a
+      // directory, not a fixture. See tools/generate-rejection-layers.mjs.
+      if (entry.name === REJECTION_LAYERS_FILENAME) return [];
+      return entry.name.endsWith(".json") ? [path] : [];
     })
     .sort();
 }
@@ -115,11 +117,83 @@ function validators(artifacts) {
   };
 }
 
+/**
+ * Names the offending property for allow-list violations. Ajv reports the
+ * rejected key in `params`, not in `message`, so a bare message would tell an
+ * operator only that "an" unevaluated property exists. Minimization rejections
+ * are only actionable if the diagnostic names the field.
+ */
+export function describeSchemaError(label, error) {
+  const at = `${label}${error.instancePath || "/"}`;
+  const offending =
+    error.params?.unevaluatedProperty ?? error.params?.additionalProperty;
+  if (offending !== undefined) {
+    return `${at}.${offending} is not allowed`;
+  }
+  return `${at} ${error.message ?? "is invalid"}`;
+}
+
 function schemaErrors(label, errors = []) {
-  return errors.map(
-    (error) =>
-      `${label}${error.instancePath || "/"} ${error.message ?? "is invalid"}`,
+  // "must match exactly one schema in oneOf" restates the taxonomy dispatch and
+  // adds nothing once a specific cause is reported.
+  const specific = errors.filter((error) => error.keyword !== "oneOf");
+  const reported = specific.length > 0 ? specific : errors;
+  return [...new Set(reported.map((error) => describeSchemaError(label, error)))];
+}
+
+/** Maps `eventName` to the `$defs` branch that declares it. */
+function branchDefinitions(eventSchema) {
+  const declared = (node) => {
+    if (node === null || typeof node !== "object") return undefined;
+    const name = node.properties?.eventName?.const;
+    if (typeof name === "string") return name;
+    for (const composed of node.allOf ?? []) {
+      const found = declared(composed);
+      if (found !== undefined) return found;
+    }
+    return undefined;
+  };
+  return new Map(
+    Object.entries(eventSchema.$defs)
+      .map(([defName, def]) => [declared(def), defName])
+      .filter(([eventName]) => eventName !== undefined),
   );
+}
+
+const focusedValidatorCache = new Map();
+
+/**
+ * The event schema is a 27-way (v2: 31-way) `oneOf` over `$ref` branches, so a
+ * single bad field makes Ajv emit every branch's failures -- roughly 150 lines,
+ * nearly all of them complaining that the document is not some other event
+ * type. An operator cannot act on that.
+ *
+ * Once the verdict is known to be "reject", revalidate against a copy of the
+ * schema whose `oneOf` contains only the branch matching the document's own
+ * `eventName`. That yields the handful of errors the author actually needs.
+ * Reporting only -- the accept/reject verdict always comes from the full schema.
+ */
+export function focusedEventSchemaErrors(label, event, eventSchema, fallback) {
+  const defName = branchDefinitions(eventSchema).get(event?.eventName);
+  if (defName === undefined) return schemaErrors(label, fallback);
+  const cacheKey = `${eventSchema.$id}#${defName}`;
+  let validate = focusedValidatorCache.get(cacheKey);
+  if (validate === undefined) {
+    const ajv = new Ajv2020({
+      allErrors: true,
+      strict: true,
+      strictRequired: false,
+      strictTypes: false,
+    });
+    validate = ajv.compile({
+      ...eventSchema,
+      $id: `${eventSchema.$id}:focused:${defName}`,
+      oneOf: [{ $ref: `#/$defs/${defName}` }],
+    });
+    focusedValidatorCache.set(cacheKey, validate);
+  }
+  if (validate(event)) return schemaErrors(label, fallback);
+  return schemaErrors(label, validate.errors);
 }
 
 function duplicates(values) {
@@ -135,7 +209,7 @@ function encodedBytes(value) {
   return Buffer.byteLength(JSON.stringify(value), "utf8");
 }
 
-const correlationFieldsByEvent = Object.freeze({
+export const analyticsEventV1CorrelationAllowLists = Object.freeze({
   placement_requested: ["placementRequestId"],
   placement_paywall_selected: ["placementRequestId"],
   placement_no_paywall: ["placementRequestId"],
@@ -175,7 +249,7 @@ const productAttribution = [
   "providerProductMappingId",
 ];
 
-const attributionFieldsByEvent = Object.freeze({
+export const analyticsEventV1AttributionAllowLists = Object.freeze({
   placement_requested: placementAttribution.filter((field) => field !== "winningRuleId"),
   placement_paywall_selected: paywallAttribution,
   placement_no_paywall: placementAttribution,
@@ -227,13 +301,13 @@ function eventSemantics(event) {
 
   for (const field of unexpectedFields(
     event.correlation,
-    correlationFieldsByEvent[event.eventName] ?? [],
+    analyticsEventV1CorrelationAllowLists[event.eventName] ?? [],
   )) {
     errors.push(`${event.eventId} correlation.${field} is not allowed for ${event.eventName}`);
   }
   for (const field of unexpectedFields(
     event.attribution,
-    attributionFieldsByEvent[event.eventName] ?? [],
+    analyticsEventV1AttributionAllowLists[event.eventName] ?? [],
   )) {
     errors.push(`${event.eventId} attribution.${field} is not allowed for ${event.eventName}`);
   }
@@ -288,8 +362,10 @@ function eventSemantics(event) {
 export function validateAnalyticsEventV1Event(event, artifacts) {
   const validate = validators(artifacts).event;
   if (!validate(event)) {
-    return schemaErrors(
+    return focusedEventSchemaErrors(
       `Analytics event ${event?.eventId ?? "event"}`,
+      event,
+      artifacts.eventSchema,
       validate.errors,
     );
   }
@@ -369,8 +445,10 @@ export function validateAnalyticsEventV1Artifacts(artifacts) {
   for (const [index, event] of artifacts.eventFixtures.entries()) {
     if (!compiled.event(event)) {
       errors.push(
-        ...schemaErrors(
+        ...focusedEventSchemaErrors(
           `Analytics fixture ${relative(analyticsEventV1Root, artifacts.eventFixturePaths[index])}`,
+          event,
+          artifacts.eventSchema,
           compiled.event.errors,
         ),
       );

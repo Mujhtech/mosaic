@@ -17,6 +17,11 @@ const int mosaicAnalyticsMaximumAttempts = 10;
 const Duration mosaicAnalyticsEventExpiry = Duration(days: 7);
 const Duration mosaicAnalyticsSessionInactivity = Duration(minutes: 30);
 
+/// Safe diagnostic code reported when analytics persistence is unavailable.
+/// Queued events stay in memory; delivery and purchasing continue unaffected.
+const String mosaicAnalyticsStorageUnavailableCode =
+    'analytics.storage_unavailable';
+
 typedef MosaicAnalyticsClock = DateTime Function();
 typedef MosaicAnalyticsRandom = double Function();
 
@@ -97,14 +102,17 @@ final class MosaicIoAnalyticsTransport
 
   @override
   Future<MosaicAnalyticsIngestionResponse> send(MosaicAnalyticsBatch batch) =>
-      _send(batch.encode());
+      _send(batch.encode(), mosaicAnalyticsEventContractVersion);
 
   @override
   Future<MosaicAnalyticsIngestionResponse> sendExperiment(
           MosaicExperimentAnalyticsBatch batch) =>
-      _send(batch.encode());
+      _send(batch.encode(), mosaicAnalyticsEventContractVersionV2);
 
-  Future<MosaicAnalyticsIngestionResponse> _send(String encoded) async {
+  Future<MosaicAnalyticsIngestionResponse> _send(
+    String encoded,
+    String contractVersion,
+  ) async {
     final client = HttpClient()..connectionTimeout = timeout;
     try {
       final endpoint = baseUrl.resolve('/v1/sdk/events/batch');
@@ -118,7 +126,10 @@ final class MosaicIoAnalyticsTransport
       if (response.statusCode < 200 || response.statusCode >= 300) {
         throw HttpException('Analytics ingestion unavailable.', uri: endpoint);
       }
-      return MosaicAnalyticsIngestionResponse.decode(body);
+      return MosaicAnalyticsIngestionResponse.decode(
+        body,
+        contractVersion: contractVersion,
+      );
     } finally {
       client.close(force: true);
     }
@@ -222,15 +233,26 @@ final class _QueuedAnalyticsEvent {
   MosaicAnalyticsEventPriority get priority {
     final normal = event;
     if (normal != null) return normal.name.priority;
-    return switch (experimentEvent!['eventName']) {
+    final name = experimentEvent!['eventName'];
+    return switch (name) {
       'experiment_assigned' ||
       'experiment_assignment_failed' =>
         MosaicAnalyticsEventPriority.low,
       'experiment_exposed' ||
       'experiment_fallback_presented' =>
         MosaicAnalyticsEventPriority.presentation,
-      _ => MosaicAnalyticsEventPriority.low,
+      // An attributed conversion event keeps the priority of its shared event
+      // name, so overflow eviction still protects purchase outcomes.
+      _ => _sharedEventPriority(name) ?? MosaicAnalyticsEventPriority.low,
     };
+  }
+
+  static MosaicAnalyticsEventPriority? _sharedEventPriority(Object? name) {
+    try {
+      return MosaicAnalyticsEventName.parse(name).priority;
+    } on FormatException {
+      return null;
+    }
   }
 
   Map<String, Object?> toJson() => {
@@ -330,7 +352,7 @@ final class MosaicAnalyticsRuntime
           _queue.clear();
           _sessionId = null;
           _lastActivityAt = null;
-          await storage.clear(namespace);
+          await _clearStorageSafely();
         }
       });
 
@@ -346,13 +368,13 @@ final class MosaicAnalyticsRuntime
           _queue.clear();
           _sessionId = null;
           _lastActivityAt = null;
-          await storage.clear(namespace);
+          await _clearStorageSafely();
         } else {
           if (!wasEnabled) {
             _sessionId = null;
             _lastActivityAt = null;
           }
-          await _persist();
+          await _persistSafely();
         }
       });
 
@@ -387,21 +409,29 @@ final class MosaicAnalyticsRuntime
         payload: payload,
       );
       final encoded = event.encode();
-      final queued = _QueuedAnalyticsEvent(event: event, encoded: encoded);
+      // An event carrying Experiment attribution is an Analytics Event v2
+      // document and must be delivered in a v2 batch. Versions are never mixed
+      // inside one batch.
+      final queued = event.attribution.experiment == null
+          ? _QueuedAnalyticsEvent(event: event, encoded: encoded)
+          : _QueuedAnalyticsEvent.experiment(
+              event: event.toJson(),
+              encoded: encoded,
+            );
       _dropExpired(clock().toUtc());
       _makeRoom(queued);
       if (_queue.length >= mosaicAnalyticsMaximumQueueEvents ||
           _queueBytes + queued.bytes > mosaicAnalyticsMaximumQueueBytes) {
         _dropped++;
         _lastSafeCode = 'analytics.queue_overflow';
-        await _persist();
+        await _persistSafely();
         return;
       }
       _queue.add(queued);
       accepted = true;
-      await _persist();
+      await _persistSafely();
     });
-    if (accepted && _queue.length >= 50) unawaited(flush());
+    if (accepted && _queue.length >= 50) _flushInBackground();
     return accepted;
   }
 
@@ -433,11 +463,11 @@ final class MosaicAnalyticsRuntime
             _queueBytes + queued.bytes > mosaicAnalyticsMaximumQueueBytes) {
           _dropped++;
           _lastSafeCode = 'analytics.queue_overflow';
-          await _persist();
+          await _persistSafely();
           return;
         }
         _queue.add(queued);
-        await _persist();
+        await _persistSafely();
       });
 
   Future<MosaicAnalyticsFlushResult> flush() =>
@@ -498,7 +528,7 @@ final class MosaicAnalyticsRuntime
           );
         }
       }
-      await _persist();
+      await _persistSafely();
     });
     if (!collectionEnabled) return const MosaicAnalyticsFlushDisabled();
     if (batch == null && experimentBatch == null) {
@@ -560,7 +590,7 @@ final class MosaicAnalyticsRuntime
         }
       }
       _lastFlushAt = clock().toUtc();
-      await _persist();
+      await _persistSafely();
     });
     return MosaicAnalyticsFlushCompleted(
         sent: sent.length, removed: removed, retained: retained);
@@ -574,7 +604,7 @@ final class MosaicAnalyticsRuntime
         for (final item in sent) {
           _scheduleRetry(item);
         }
-        await _persist();
+        await _persistSafely();
       });
   void _scheduleRetry(_QueuedAnalyticsEvent item, {Duration? explicit}) {
     if (!_queue.contains(item)) return;
@@ -615,22 +645,22 @@ final class MosaicAnalyticsRuntime
           _sessionId = null;
           _lastActivityAt = null;
         }
-        await _persist();
+        await _persistSafely();
       });
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.paused ||
         state == AppLifecycleState.inactive ||
-        state == AppLifecycleState.detached) unawaited(flush());
-    if (state == AppLifecycleState.resumed) unawaited(flush());
+        state == AppLifecycleState.detached) _flushInBackground();
+    if (state == AppLifecycleState.resumed) _flushInBackground();
   }
 
   Future<void> disposeRuntime() => _serialize(() async {
         if (_disposed) return;
         _disposed = true;
         if (_observingLifecycle) WidgetsBinding.instance.removeObserver(this);
-        await _persist();
+        await _persistSafely();
       });
 
   Future<void> release() async {
@@ -741,9 +771,39 @@ final class MosaicAnalyticsRuntime
       }
     } on Object {
       _queue.clear();
-      await storage.clear(namespace);
+      await _clearStorageSafely();
       _lastSafeCode = 'analytics.queue_rejected';
     }
+  }
+
+  /// Persists the queue, degrading to a diagnostic safe code when the injected
+  /// storage fails. Analytics persistence must never surface as a host-app
+  /// error, and must never block rendering or purchasing.
+  Future<void> _persistSafely() async {
+    try {
+      await _persist();
+    } on Object {
+      _lastSafeCode = mosaicAnalyticsStorageUnavailableCode;
+    }
+  }
+
+  Future<void> _clearStorageSafely() async {
+    try {
+      await storage.clear(namespace);
+    } on Object {
+      _lastSafeCode = mosaicAnalyticsStorageUnavailableCode;
+    }
+  }
+
+  /// Starts a delivery attempt without awaiting it. Failures are recorded as
+  /// safe diagnostics rather than escaping as uncaught zone errors.
+  void _flushInBackground() {
+    unawaited(flush().then<void>(
+      (_) {},
+      onError: (Object _, StackTrace __) {
+        _lastSafeCode = mosaicAnalyticsStorageUnavailableCode;
+      },
+    ));
   }
 
   Future<void> _persist() => storage.write(
@@ -771,7 +831,7 @@ final class MosaicAnalyticsRuntime
         _queue.clear();
         _sessionId = null;
         _lastActivityAt = null;
-        await storage.clear(namespace);
+        await _clearStorageSafely();
       }
     }
   }
@@ -820,12 +880,18 @@ final class MosaicAnalyticsPresentationContext {
     required this.attribution,
     this.providerId,
     this.providerProductMappingIds = const <String, String>{},
+    this.experiment,
   });
   final String placementRequestId;
   final String paywallPresentationId;
   final MosaicAnalyticsAttribution attribution;
   final String? providerId;
   final Map<String, String> providerProductMappingIds;
+
+  /// The Experiment Variant this presentation is attributed to, when the SDK
+  /// also emits a statistical exposure for it. Conversion events must carry it:
+  /// Experiment results join conversions to exposures solely on this tuple.
+  final MosaicExperimentAttribution? experiment;
 
   MosaicAnalyticsCorrelation correlation({
     String? productLoadAttemptId,
@@ -842,6 +908,26 @@ final class MosaicAnalyticsPresentationContext {
         providerOperationId: providerOperationId,
       );
 
+  /// Attribution for a conversion event: Product attribution plus the
+  /// Experiment tuple when this presentation is attributed to a Variant. Only
+  /// the conversion events named by the v1-to-v2 migration contract may use it.
+  MosaicAnalyticsAttribution forConversion(String mosaicProductId) =>
+      MosaicAnalyticsAttribution(
+        configurationReleaseId: attribution.configurationReleaseId,
+        placementId: attribution.placementId,
+        placementRuleSetId: attribution.placementRuleSetId,
+        placementRuleSetVersion: attribution.placementRuleSetVersion,
+        winningRuleId: attribution.winningRuleId,
+        paywallId: attribution.paywallId,
+        paywallVersionId: attribution.paywallVersionId,
+        mosaicProductId: mosaicProductId,
+        providerId: providerId,
+        providerProductMappingId: providerProductMappingIds[mosaicProductId],
+        experiment: experiment,
+      );
+
+  /// Product attribution without Experiment attribution, for the Product events
+  /// that forbid the tuple.
   MosaicAnalyticsAttribution forProduct(String mosaicProductId) =>
       MosaicAnalyticsAttribution(
         configurationReleaseId: attribution.configurationReleaseId,

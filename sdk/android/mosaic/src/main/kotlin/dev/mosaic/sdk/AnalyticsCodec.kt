@@ -41,7 +41,7 @@ object MosaicAnalyticsCodec {
     fun decodeResponse(source: String): MosaicAnalyticsIngestionResponse {
         val root = JsonParser.parseString(source).asJsonObject
         root.exact(setOf("analyticsEventContractVersion", "batchId", "receivedAt", "results"))
-        require(root.string("analyticsEventContractVersion") in setOf("1", "2"))
+        val contractVersion = root.string("analyticsEventContractVersion").also { require(it in setOf("1", "2")) }
         val results = root.getAsJsonArray("results").map { element ->
             val item = element.asJsonObject
             val id = item.identifier("eventId")
@@ -61,7 +61,7 @@ object MosaicAnalyticsCodec {
             }
         }
         require(results.isNotEmpty() && results.size <= 100 && results.map { it.eventId }.toSet().size == results.size)
-        return MosaicAnalyticsIngestionResponse(root.identifier("batchId"), root.timestamp("receivedAt"), results)
+        return MosaicAnalyticsIngestionResponse(root.identifier("batchId"), root.timestamp("receivedAt"), results, contractVersion)
     }
 
     private fun parseEvent(root: JsonObject): MosaicAnalyticsEvent {
@@ -164,7 +164,10 @@ object MosaicAnalyticsCodec {
             event.eventName.startsWith("purchase_")
         require(!attribution.hasExperimentTuple() || (event.eventSchemaVersion == "2" && experimentAllowed))
         require(!experimentEvent || (event.eventSchemaVersion == "2" && attribution.hasExperimentTuple()))
-        if (event.eventSchemaVersion == "2") validateV2FieldOwnership(event)
+        // Ownership allow-lists apply to every schema version. Restricting them to v2 previously
+        // let a v1 event carry unrelated attribution (the Phase 6 ingestion-boundary defect class).
+        validateFieldOwnership(event)
+        validateCorrelationOwnership(event)
         fun requireCorrelation(vararg values: String?) = require(values.all { it != null })
         fun requireAttribution(vararg values: String?) = require(values.all { it != null })
         when (event.eventName) {
@@ -194,7 +197,50 @@ object MosaicAnalyticsCodec {
         validatePayloadSemantics(event.eventName, event.payload)
     }
 
-    private fun validateV2FieldOwnership(event: MosaicAnalyticsEvent) {
+    /**
+     * Each event name may carry only the correlation identifiers that belong to its own causal
+     * chain. An unrelated identifier silently joins the event to a different journey during
+     * ingestion, which corrupts funnel and Experiment attribution, so it is rejected outright.
+     */
+    private fun validateCorrelationOwnership(event: MosaicAnalyticsEvent) {
+        val placement = setOf("placementRequestId")
+        val presentation = placement + "paywallPresentationId"
+        val productLoad = presentation + "productLoadAttemptId"
+        val purchase = presentation + setOf("purchaseAttemptId", "providerOperationId")
+        val restore = setOf("restoreAttemptId", "providerOperationId")
+        val allowed = when (event.eventName) {
+            "placement_requested", "placement_paywall_selected", "placement_no_paywall",
+            "placement_fallback_used", "placement_unavailable", "placement_evaluation_failed",
+            "experiment_assigned", "experiment_assignment_failed" -> placement
+            "paywall_presented", "paywall_dismissed", "paywall_action_selected", "paywall_render_failed",
+            "product_selected", "experiment_exposed", "experiment_fallback_presented" -> presentation
+            "product_load_started", "product_load_completed", "product_load_failed",
+            "product_unavailable" -> productLoad
+            "purchase_started", "purchase_completed_client", "purchase_pending", "purchase_deferred",
+            "purchase_cancelled", "purchase_failed" -> purchase
+            "purchase_completed_provider" -> setOf("purchaseAttemptId", "providerUpdateId", "providerOperationId")
+            "restore_started", "restore_completed", "restore_nothing_found", "restore_cancelled",
+            "restore_failed" -> restore
+            else -> emptySet()
+        }
+        val present = buildSet {
+            fun field(name: String, value: String?) { if (value != null) add(name) }
+            with(event.correlation) {
+                field("placementRequestId", placementRequestId)
+                field("paywallPresentationId", paywallPresentationId)
+                field("productLoadAttemptId", productLoadAttemptId)
+                field("purchaseAttemptId", purchaseAttemptId)
+                field("restoreAttemptId", restoreAttemptId)
+                field("providerOperationId", providerOperationId)
+                field("providerUpdateId", providerUpdateId)
+            }
+        }
+        require(present.all(allowed::contains)) {
+            "Event ${event.eventName} carries correlation identifiers outside its causal chain."
+        }
+    }
+
+    private fun validateFieldOwnership(event: MosaicAnalyticsEvent) {
         val placement = setOf("configurationReleaseId", "placementId", "placementRuleSetId", "placementRuleSetVersion", "winningRuleId")
         val paywall = placement + setOf("paywallId", "paywallVersionId")
         val product = paywall + setOf("mosaicProductId", "planId", "providerId", "providerProductMappingId")

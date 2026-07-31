@@ -6,7 +6,7 @@ plugins {
 }
 
 group = "dev.mosaic.sdk"
-version = "0.1.0-dev.6"
+version = "0.1.0-dev.7"
 
 android {
     namespace = "dev.mosaic.sdk.googleplay"

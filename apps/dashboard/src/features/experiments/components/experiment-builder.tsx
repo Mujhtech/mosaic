@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button"
 import { buttonVariants } from "@/components/ui/button-variants"
 import { Field, FieldError, FieldLabel } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
+import { describeApiError } from "@/lib/api/errors"
 import { useOrganizationAccess } from "@/hooks/use-organization-access"
 import { useHostedPublishingAdapter } from "@/features/publishing/api/use-hosted-publishing-adapter"
 import { placementsQueryOptions } from "@/features/placements/queries/placement-queries"
@@ -234,10 +235,11 @@ export function ExperimentBuilder({
     const error = resources.error ?? placements.error ?? environments.error ?? access.error
     return (
       <ErrorState
-        description={error?.message ?? "Builder resources are unavailable."}
+        description={describeApiError(error).description}
         onRetry={() => {
           void resources.refetch()
           void placements.refetch()
+          void environments.refetch()
         }}
       />
     )

@@ -23,8 +23,7 @@ export function ReleaseHistoryPage({
   const releases = useQuery(releasesQueryOptions({ environmentId, projectId }, adapter))
   const items = releases.data ?? []
   const state = resolveHostedQueryState({
-    emptyDescription: "",
-    emptyTitle: "",
+    // Emptiness is presented inside the page body rather than replacing it.
     error: releases.error,
     isEmpty: false,
     isPending: releases.isPending,
@@ -40,6 +39,7 @@ export function ReleaseHistoryPage({
       </Link>
     ),
     permissionDescription: "Project membership with publishing access is required to view history.",
+    scope: { environmentId, organizationId, projectId },
   })
 
   return (
@@ -93,6 +93,7 @@ export function ReleaseHistoryPage({
                   {!release.isCurrent ? (
                     <RollbackReleaseAction
                       environmentId={environmentId}
+                      organizationId={organizationId}
                       projectId={projectId}
                       release={release}
                     />

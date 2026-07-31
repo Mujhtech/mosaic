@@ -54,10 +54,19 @@ func Middleware(resolver Resolver) func(http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			principal, err := resolver.Resolve(r)
 			if err != nil && !errors.Is(err, ErrUnauthenticated) {
+				// The resolver error is deliberately reduced to its type here:
+				// an authentication resolver failure can carry connection
+				// strings or credential fragments in its message. Because
+				// response.Error logs the cause behind every 5xx, handing it
+				// the raw error would put exactly what this line redacts into
+				// the operator log. Respond with a cause-free internal error.
 				zerolog.Ctx(r.Context()).Error().
 					Str("resolver_error_type", fmt.Sprintf("%T", err)).
 					Msg("authentication resolver failed")
-				response.Error(w, r, err)
+				response.Error(w, r, &response.APIError{
+					Status: http.StatusInternalServerError, Code: "internal_error",
+					Message: "An unexpected error occurred.",
+				})
 				return
 			}
 			if err == nil && principal.Authenticated() {
