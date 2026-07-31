@@ -64,8 +64,8 @@ export function restoreJobsQueryOptions(
         nextCursor: result.data.data?.nextCursor,
       };
     },
-    refetchInterval: (query) => {
-      const items = query.state.data?.items ?? [];
+    refetchInterval: (queryValue) => {
+      const items = queryValue.state.data?.items ?? [];
       return items.some((job) => isRestoreJobRunning(job)) ? 5000 : false;
     },
   });

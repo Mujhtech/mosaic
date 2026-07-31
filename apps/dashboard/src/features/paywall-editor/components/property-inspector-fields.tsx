@@ -54,7 +54,7 @@ export function LocalizedField({
   const transaction = useDocumentTransaction();
   const value = resolveLocalizedText(document, text, locale);
 
-  function update(value: string) {
+  function update(valueValue: string) {
     if (disabled || !(transaction.isActive() || transaction.begin())) {
       return;
     }
@@ -63,7 +63,7 @@ export function LocalizedField({
         document: current,
         locale,
         localizationKey: text.localizationKey,
-        value,
+        value: valueValue,
       })
     );
   }
@@ -497,8 +497,8 @@ export function DocumentColorField({
     if (disabled || !(transaction.isActive() || transaction.begin())) {
       return;
     }
-    transaction.editor.updateDocumentInTransaction((document) =>
-      onUpdate(document, nextValue)
+    transaction.editor.updateDocumentInTransaction((documentValue) =>
+      onUpdate(documentValue, nextValue)
     );
   }
 

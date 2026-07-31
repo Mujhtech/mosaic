@@ -97,7 +97,9 @@ function SidebarProvider({
   // Helper to toggle the sidebar.
   const toggleSidebar = useCallback(
     () =>
-      isMobile ? setOpenMobile((open) => !open) : setOpen((open) => !open),
+      isMobile
+        ? setOpenMobile((openValue) => !openValue)
+        : setOpen((openValue) => !openValue),
     [isMobile, setOpen]
   );
 

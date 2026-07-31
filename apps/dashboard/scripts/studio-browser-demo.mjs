@@ -220,23 +220,23 @@ const result = {
 console.log(JSON.stringify(result, null, 2));
 cdp.close();
 
-async function bodyText() {
+function bodyText() {
   return cdp.evaluate("document.body?.innerText ?? ''");
 }
 
-async function elementValue(selector) {
+function elementValue(selector) {
   return cdp.evaluate(
     `(() => { const element = document.querySelector(${JSON.stringify(selector)}); return element ? element.value : null })()`
   );
 }
 
-async function elementChecked(selector) {
+function elementChecked(selector) {
   return cdp.evaluate(
     `(() => { const element = document.querySelector(${JSON.stringify(selector)}); return element instanceof HTMLInputElement ? element.checked : null })()`
   );
 }
 
-async function exactTextCount(text) {
+function exactTextCount(text) {
   return cdp.evaluate(
     `([...document.querySelectorAll("body *")].filter((element) => element.children.length === 0 && element.textContent?.trim() === ${JSON.stringify(text)})).length`
   );

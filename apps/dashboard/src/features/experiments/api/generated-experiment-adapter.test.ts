@@ -76,23 +76,25 @@ function draftDocument(): ExperimentDraftDocument {
 describe("generated Experiment adapter", () => {
   it("creates a subsequent mutual-exclusion Version without mutating the group root", async () => {
     let request: Request | undefined;
-    const fetchImplementation = vi.fn(async (input: RequestInfo | URL) => {
+    const fetchImplementation = vi.fn((input: RequestInfo | URL) => {
       request = input as Request;
-      return response(
-        {
-          assignmentKeyPolicy: "identified_user",
-          bucketingAlgorithm: "experiment_sha256_length_prefixed_v1",
-          createdAt: "2026-07-26T01:00:00Z",
-          groupId: "group",
-          holdoutBasisPoints: 1000,
-          id: "group-version-2",
-          members: [
-            { allocationBasisPoints: 4500, experimentId: "experiment-a" },
-            { allocationBasisPoints: 4500, experimentId: "experiment-b" },
-          ],
-          versionNumber: 2,
-        },
-        201
+      return Promise.resolve(
+        response(
+          {
+            assignmentKeyPolicy: "identified_user",
+            bucketingAlgorithm: "experiment_sha256_length_prefixed_v1",
+            createdAt: "2026-07-26T01:00:00Z",
+            groupId: "group",
+            holdoutBasisPoints: 1000,
+            id: "group-version-2",
+            members: [
+              { allocationBasisPoints: 4500, experimentId: "experiment-a" },
+              { allocationBasisPoints: 4500, experimentId: "experiment-b" },
+            ],
+            versionNumber: 2,
+          },
+          201
+        )
       );
     }) as typeof fetch;
     const adapter = createGeneratedExperimentAdapter(
@@ -127,9 +129,9 @@ describe("generated Experiment adapter", () => {
 
   it("preserves unsaved input by stopping before PUT when the server Draft is newer", async () => {
     const requests: Request[] = [];
-    const fetchImplementation = vi.fn(async (input: RequestInfo | URL) => {
+    const fetchImplementation = vi.fn((input: RequestInfo | URL) => {
       requests.push(input as Request);
-      return response(experiment(8));
+      return Promise.resolve(response(experiment(8)));
     }) as typeof fetch;
     const adapter = createGeneratedExperimentAdapter(
       createGeneratedDashboardClient(fetchImplementation)

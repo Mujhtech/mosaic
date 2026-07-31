@@ -226,7 +226,7 @@ export function createGeneratedHostedPublishingAdapter(
       );
       return binding;
     },
-    async createDraft(input) {
+    createDraft(input) {
       return idempotent(
         `create-draft:${input.projectId}:${input.paywallId}:${input.environmentId}`,
         async (key) => {
@@ -244,7 +244,7 @@ export function createGeneratedHostedPublishingAdapter(
         }
       );
     },
-    async createDraftFromVersion(input) {
+    createDraftFromVersion(input) {
       return idempotent(
         `clone:${input.projectId}:${input.paywallId}:${input.versionId}`,
         async (key) => {
@@ -431,7 +431,7 @@ export function createGeneratedHostedPublishingAdapter(
           : {}),
       }));
     },
-    async publishDraft(input) {
+    publishDraft(input) {
       return idempotent(
         `publish:${input.projectId}:${input.environmentId}:${input.draftId}:${input.expectedRevision}:${input.acknowledgeMockProducts}`,
         async (key) => {
@@ -453,7 +453,7 @@ export function createGeneratedHostedPublishingAdapter(
         }
       );
     },
-    async rollbackRelease(input) {
+    rollbackRelease(input) {
       return idempotent(
         `rollback:${input.projectId}:${input.environmentId}:${input.releaseId}`,
         async (key) => {

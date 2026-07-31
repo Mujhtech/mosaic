@@ -169,7 +169,7 @@ export function appendProductCard(
   const identifiers = identifierSet(document);
   const keys = localizationKeySet(document);
   const usedReferences = new Set(
-    selector.cards.map((card) => card.productReferenceId)
+    selector.cards.map((cardValue) => cardValue.productReferenceId)
   );
   let products = [...document.products];
   let reference = products.find((product) => !usedReferences.has(product.id));

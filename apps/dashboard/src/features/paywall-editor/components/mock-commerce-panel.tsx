@@ -447,26 +447,28 @@ function ConnectedProductBindingContext({
   });
   const scopedMappings =
     mappings.data?.items.filter(
-      (mapping) =>
-        mapping.applicationId === applicationId &&
-        mapping.environmentId === environmentId &&
-        mapping.provider === activeAssignment.data?.provider &&
+      (mappingValue) =>
+        mappingValue.applicationId === applicationId &&
+        mappingValue.environmentId === environmentId &&
+        mappingValue.provider === activeAssignment.data?.provider &&
         (activeAssignment.data?.activationKind === "native_store"
-          ? !mapping.connectionId
-          : mapping.connectionId === activeAssignment.data?.connectionId)
+          ? !mappingValue.connectionId
+          : mappingValue.connectionId === activeAssignment.data?.connectionId)
     ) ?? [];
   const metadata = useQueries({
-    queries: scopedMappings.map((mapping) => ({
-      ...providerMappingMetadataQueryOptions(mapping.id),
+    queries: scopedMappings.map((mappingValue) => ({
+      ...providerMappingMetadataQueryOptions(mappingValue.id),
       enabled:
-        Boolean(mapping.currentSnapshotId) && mapping.status !== "archived",
+        Boolean(mappingValue.currentSnapshotId) &&
+        mappingValue.status !== "archived",
     })),
   });
   const observations = useQueries({
-    queries: scopedMappings.map((mapping) => ({
-      ...providerMappingObservationsQueryOptions(mapping.id),
+    queries: scopedMappings.map((mappingValue) => ({
+      ...providerMappingObservationsQueryOptions(mappingValue.id),
       enabled:
-        mapping.provider === "app_store" || mapping.provider === "google_play",
+        mappingValue.provider === "app_store" ||
+        mappingValue.provider === "google_play",
     })),
   });
   const mapping = scopedMappings.length === 1 ? scopedMappings[0] : undefined;

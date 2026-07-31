@@ -269,10 +269,10 @@ export function createGeneratedExperimentAdapter(
   client: Client = generatedDashboardClient
 ): ExperimentAdapter {
   return {
-    async archive(scope, experimentId, reason) {
+    archive(scope, experimentId, reason) {
       return this.transition(scope, experimentId, "archived", reason);
     },
-    async complete(scope, experimentId, reason) {
+    complete(scope, experimentId, reason) {
       return this.transition(scope, experimentId, "completed", reason);
     },
     async create(scope, input) {

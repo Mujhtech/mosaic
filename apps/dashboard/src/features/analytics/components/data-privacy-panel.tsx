@@ -233,7 +233,7 @@ function IdentityOperationsPanel({
     [deletionMutation, exportMutation, identityRequest, mode, preview]
   );
   const downloadMutation = useMutation({
-    mutationFn: async () => {
+    mutationFn: () => {
       if (!job?.id) {
         throw new Error("The private export job is unavailable.");
       }

@@ -172,7 +172,7 @@ describe("analytics dimension mapping", () => {
   it("maps backend dimension keys into Paywall comparison and issue rows", async () => {
     const fetchMock = vi.fn<
       (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>
-    >(async (input) => {
+    >((input) => {
       const url = input instanceof Request ? input.url : String(input);
       const metrics = url.includes("paywall-version-comparison")
         ? [
@@ -203,12 +203,11 @@ describe("analytics dimension mapping", () => {
               },
             ]
           : [];
-      return new Response(
-        JSON.stringify({ data: { metrics, freshness: {} } }),
-        {
+      return Promise.resolve(
+        new Response(JSON.stringify({ data: { metrics, freshness: {} } }), {
           status: 200,
           headers: { "Content-Type": "application/json" },
-        }
+        })
       );
     });
     const adapter = createGeneratedAnalyticsAdapter(
@@ -254,31 +253,33 @@ describe("analytics dimension mapping", () => {
   it("maps the supported platform and locale breakdowns without inventing dimensions", async () => {
     const fetchMock = vi.fn<
       (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>
-    >(async (input) => {
+    >((input) => {
       const url = input instanceof Request ? input.url : String(input);
       const isPlatform = url.includes("/breakdowns/platforms");
-      return new Response(
-        JSON.stringify({
-          data: {
-            metrics: [
-              {
-                id: "events",
-                value: isPlatform ? 9 : 7,
-                numerator: isPlatform ? 9 : 7,
-                basis: "event_count",
-                authority: "client_observed",
-                attributionWindow: "24h",
-                timezone: "UTC",
-                definition: "Accepted events",
-                dimensions: isPlatform
-                  ? { platform: "ios" }
-                  : { locale: "en-NG" },
-              },
-            ],
-            freshness: {},
-          },
-        }),
-        { status: 200, headers: { "Content-Type": "application/json" } }
+      return Promise.resolve(
+        new Response(
+          JSON.stringify({
+            data: {
+              metrics: [
+                {
+                  id: "events",
+                  value: isPlatform ? 9 : 7,
+                  numerator: isPlatform ? 9 : 7,
+                  basis: "event_count",
+                  authority: "client_observed",
+                  attributionWindow: "24h",
+                  timezone: "UTC",
+                  definition: "Accepted events",
+                  dimensions: isPlatform
+                    ? { platform: "ios" }
+                    : { locale: "en-NG" },
+                },
+              ],
+              freshness: {},
+            },
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } }
+        )
       );
     });
     const adapter = createGeneratedAnalyticsAdapter(

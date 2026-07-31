@@ -21,12 +21,12 @@ export function EventExportAction({
   const [jobId, setJobId] = useState<string>();
   const mutation = useMutation({
     mutationFn: () => adapter.createEventExport(scope, filters),
-    onSuccess: (job) => setJobId(job.id),
+    onSuccess: (jobValue) => setJobId(jobValue.id),
   });
   const handleClick3 = useCallback(() => mutation.mutate(), [mutation]);
   const handleClick2 = useCallback(() => mutation.mutate(), [mutation]);
   const downloadMutation = useMutation({
-    mutationFn: async () => {
+    mutationFn: () => {
       if (!jobId) {
         throw new Error("The export job is unavailable.");
       }

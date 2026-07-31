@@ -158,9 +158,9 @@ export function appendBackgroundAsset(
   document: MosaicDocument,
   type: "image" | "video"
 ): { readonly assetId: string; readonly document: MosaicDocument } {
-  const used = new Set(document.assets.map((asset) => asset.id));
+  const used = new Set(document.assets.map((assetValue) => assetValue.id));
   let ordinal =
-    document.assets.filter((asset) => asset.type === type).length + 1;
+    document.assets.filter((assetValue) => assetValue.type === type).length + 1;
   while (used.has(`${type}-${ordinal}`)) {
     ordinal += 1;
   }

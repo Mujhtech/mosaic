@@ -131,8 +131,8 @@ export function ScrollContainerInspector({
           description="Controls the native scroll indicator."
           label="Show scroll indicators"
           onChange={(showsIndicators) =>
-            editor.updateDocument((document) =>
-              updateScrollContainer(document, layout.id, (current) => ({
+            editor.updateDocument((documentValue) =>
+              updateScrollContainer(documentValue, layout.id, (current) => ({
                 ...current,
                 showsIndicators,
               }))
@@ -147,8 +147,8 @@ export function ScrollContainerInspector({
       <InspectorSection title="Background">
         <DocumentBackgroundEditor
           address="background"
-          onUpdate={(document, background) => ({
-            ...updateScrollContainer(document, layout.id, (current) => ({
+          onUpdate={(documentValue, background) => ({
+            ...updateScrollContainer(documentValue, layout.id, (current) => ({
               ...current,
               background,
             })),

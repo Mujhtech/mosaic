@@ -13,46 +13,54 @@ import type {
   MosaicPlacementDecisionV1TypedValue,
 } from "../../../../../../protocol/browser/generated/contract-types.js";
 
-function source(condition: LeafCondition): MosaicPlacementDecisionV1Source {
+function source(
+  conditionValue: LeafCondition
+): MosaicPlacementDecisionV1Source {
   if (
-    condition.source === "user_attribute" ||
-    condition.source === "entitlement_state"
+    conditionValue.source === "user_attribute" ||
+    conditionValue.source === "entitlement_state"
   ) {
-    return { kind: condition.source, key: condition.referenceKey ?? "" };
-  }
-  if (
-    condition.source === "product_availability" ||
-    condition.source === "product_readiness"
-  ) {
-    return { kind: condition.source, productId: condition.referenceKey ?? "" };
-  }
-  if (condition.source === "provider_capability") {
     return {
-      capability: (condition.referenceKey ?? "product_loading") as
+      kind: conditionValue.source,
+      key: conditionValue.referenceKey ?? "",
+    };
+  }
+  if (
+    conditionValue.source === "product_availability" ||
+    conditionValue.source === "product_readiness"
+  ) {
+    return {
+      kind: conditionValue.source,
+      productId: conditionValue.referenceKey ?? "",
+    };
+  }
+  if (conditionValue.source === "provider_capability") {
+    return {
+      capability: (conditionValue.referenceKey ?? "product_loading") as
         | "product_loading"
         | "purchase"
         | "restore"
         | "entitlement_lookup",
-      kind: condition.source,
+      kind: conditionValue.source,
     };
   }
-  return { kind: condition.source };
+  return { kind: conditionValue.source };
 }
 
 function operand(
-  condition: LeafCondition,
+  conditionValue: LeafCondition,
   attributes: ReadonlyMap<string, AttributeDefinition>
 ): MosaicPlacementDecisionV1TypedValue | undefined {
   if (
-    condition.operator === "exists" ||
-    condition.operator === "does_not_exist"
+    conditionValue.operator === "exists" ||
+    conditionValue.operator === "does_not_exist"
   ) {
     return;
   }
-  const value = condition.value ?? "";
+  const value = conditionValue.value ?? "";
   const attributeType =
-    condition.source === "user_attribute"
-      ? attributes.get(condition.referenceKey ?? "")?.type
+    conditionValue.source === "user_attribute"
+      ? attributes.get(conditionValue.referenceKey ?? "")?.type
       : undefined;
   if (attributeType === "boolean" || typeof value === "boolean") {
     return {
@@ -71,7 +79,7 @@ function operand(
   }
   if (
     attributeType === "semantic_version" ||
-    condition.source.endsWith("version")
+    conditionValue.source.endsWith("version")
   ) {
     return { type: "semantic_version", value: String(value) };
   }

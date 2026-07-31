@@ -39,13 +39,13 @@ function InitializeDocument({
       withoutSelector
         ? {
             ...source,
-            screens: source.screens.map((screen) => ({
-              ...screen,
+            screens: source.screens.map((screenValue) => ({
+              ...screenValue,
               layout: {
-                ...screen.layout,
+                ...screenValue.layout,
                 content: {
-                  ...screen.layout.content,
-                  children: screen.layout.content.children.filter(
+                  ...screenValue.layout.content,
+                  children: screenValue.layout.content.children.filter(
                     (node) => node.type !== "productSelector"
                   ),
                 },

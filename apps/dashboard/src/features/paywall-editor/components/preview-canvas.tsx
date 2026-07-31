@@ -158,7 +158,7 @@ interface CanvasDeviceNodeData extends Record<string, unknown> {
 
 type CanvasDeviceFlowNode = Node<CanvasDeviceNodeData, "device-preview">;
 
-const DevicePreviewFlowNode = memo(function DevicePreviewFlowNode({
+const DevicePreviewFlowNode = memo(function DevicePreviewFlowNodeComponent({
   data,
 }: NodeProps<CanvasDeviceFlowNode>) {
   const viewport = useViewport();

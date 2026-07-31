@@ -26,9 +26,9 @@ const sourceDraft: PlacementRuleSetDraft = {
 describe("generated Placement decisions adapter", () => {
   it("archives the active Rule Set through the generated recovery endpoint", async () => {
     let archiveRequest: Request | undefined;
-    const fetchImplementation = vi.fn(async (input: RequestInfo | URL) => {
+    const fetchImplementation = vi.fn((input: RequestInfo | URL) => {
       archiveRequest = input as Request;
-      return new Response(null, { status: 204 });
+      return Promise.resolve(new Response(null, { status: 204 }));
     }) as typeof fetch;
     const adapter = createGeneratedPlacementDecisionsAdapter(
       createGeneratedDashboardClient(fetchImplementation)
@@ -91,7 +91,7 @@ describe("generated Placement decisions adapter", () => {
           document: await request
             .clone()
             .json()
-            .then((body) => body.document),
+            .then((bodyValue) => bodyValue.document),
           draft: {
             createdAt: "2026-07-26T00:00:00Z",
             createdByActorId: "actor",

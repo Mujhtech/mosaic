@@ -168,12 +168,12 @@ export function DocumentBackgroundEditor({
   }
 
   const addAndUseMedia = useCallback(
-    (type: "image" | "video") => {
+    (typeValue: "image" | "video") => {
       editor.updateDocument((current) => {
-        const result = appendBackgroundAsset(current, type);
+        const result = appendBackgroundAsset(current, typeValue);
         return onUpdate(
           result.document,
-          defaultMediaBackground(type, result.assetId)
+          defaultMediaBackground(typeValue, result.assetId)
         );
       });
     },

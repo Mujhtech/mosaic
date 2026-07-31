@@ -325,7 +325,7 @@ export function DesignSystemPanel() {
   function move(category: DesignCategory, id: string, offset: -1 | 1) {
     updateSystem((current) => {
       const reorder = <Token extends DesignToken>(tokens: readonly Token[]) => {
-        const index = tokens.findIndex((token) => token.id === id);
+        const index = tokens.findIndex((tokenValue) => tokenValue.id === id);
         const target = index + offset;
         if (index < 0 || target < 0 || target >= tokens.length) {
           return [...tokens];

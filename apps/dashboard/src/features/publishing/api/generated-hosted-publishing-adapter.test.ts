@@ -66,15 +66,15 @@ describe("generated hosted publishing adapter", () => {
 
   it("copies a local document into the hosted Paywall identity without mutating the local source", async () => {
     let request: Request | undefined;
-    const fetchImplementation = vi.fn(
-      async (inputRequest: RequestInfo | URL) => {
-        request = inputRequest as Request;
-        return new Response(JSON.stringify(draftEnvelope(1)), {
+    const fetchImplementation = vi.fn((inputRequest: RequestInfo | URL) => {
+      request = inputRequest as Request;
+      return Promise.resolve(
+        new Response(JSON.stringify(draftEnvelope(1)), {
           headers: { "Content-Type": "application/json" },
           status: 201,
-        });
-      }
-    ) as typeof fetch;
+        })
+      );
+    }) as typeof fetch;
     const adapter = createGeneratedHostedPublishingAdapter(
       createGeneratedDashboardClient(fetchImplementation)
     );
@@ -96,16 +96,18 @@ describe("generated hosted publishing adapter", () => {
 
   it("reuses its idempotency key after an uncertain save and sends the strong Draft precondition", async () => {
     const requests: Request[] = [];
-    const fetchImplementation = vi.fn(async (request: RequestInfo | URL) => {
+    const fetchImplementation = vi.fn((request: RequestInfo | URL) => {
       const normalized = request as Request;
       requests.push(normalized);
       if (requests.length === 1) {
         throw new TypeError("network unavailable");
       }
-      return new Response(JSON.stringify(draftEnvelope(5)), {
-        headers: { "Content-Type": "application/json" },
-        status: 200,
-      });
+      return Promise.resolve(
+        new Response(JSON.stringify(draftEnvelope(5)), {
+          headers: { "Content-Type": "application/json" },
+          status: 200,
+        })
+      );
     }) as typeof fetch;
     const adapter = createGeneratedHostedPublishingAdapter(
       createGeneratedDashboardClient(fetchImplementation)

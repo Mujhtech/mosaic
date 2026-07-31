@@ -164,7 +164,7 @@ describe("property inspector safety", () => {
     );
   });
 
-  it("keeps media background selection valid with inline asset recovery", async () => {
+  it("keeps media background selection valid with inline asset recovery", () => {
     renderInspector("close");
     openInspectorSection("Background");
 
