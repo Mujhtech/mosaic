@@ -140,7 +140,7 @@ export function PublishGrantVersionWizard({
     setBusy(false);
   }
 
-  async function preview() {
+  const preview = useCallback(async () => {
     setBusy(true);
     setError(null);
     try {
@@ -157,12 +157,12 @@ export function PublishGrantVersionWizard({
     } finally {
       setBusy(false);
     }
-  }
+  }, [onPreview, proposal]);
 
   const handleClick = useCallback(() => {
     preview();
   }, [preview]);
-  async function publish() {
+  const publish = useCallback(async () => {
     setBusy(true);
     setError(null);
     try {
@@ -178,7 +178,7 @@ export function PublishGrantVersionWizard({
     } finally {
       setBusy(false);
     }
-  }
+  }, [onPublish, proposal, reset]);
 
   const handleClick5 = useCallback(() => {
     publish();

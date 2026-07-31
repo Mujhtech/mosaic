@@ -200,32 +200,35 @@ export function ProviderCatalogImport({
     });
   }
 
-  async function submit(ids = [...selectedIds]) {
-    setError(null);
-    setIsImporting(true);
-    const items = selections(ids);
-    const requestSignature = JSON.stringify(items);
-    const attempt = nextProviderImportAttempt(
-      pendingAttempt.current,
-      requestSignature,
-      providerImportIdempotencyKey
-    );
-    pendingAttempt.current = attempt;
-    try {
-      const nextResult = await onImport(items, attempt.idempotencyKey);
-      pendingAttempt.current = null;
-      setResult(nextResult);
-      if (nextResult.status === "completed") {
-        setSelectedIds(new Set());
-      }
-    } catch (caught) {
-      setError(
-        caught instanceof Error ? caught.message : "Provider import failed."
+  const submit = useCallback(
+    async (ids = [...selectedIds]) => {
+      setError(null);
+      setIsImporting(true);
+      const items = selections(ids);
+      const requestSignature = JSON.stringify(items);
+      const attempt = nextProviderImportAttempt(
+        pendingAttempt.current,
+        requestSignature,
+        providerImportIdempotencyKey
       );
-    } finally {
-      setIsImporting(false);
-    }
-  }
+      pendingAttempt.current = attempt;
+      try {
+        const nextResult = await onImport(items, attempt.idempotencyKey);
+        pendingAttempt.current = null;
+        setResult(nextResult);
+        if (nextResult.status === "completed") {
+          setSelectedIds(new Set());
+        }
+      } catch (caught) {
+        setError(
+          caught instanceof Error ? caught.message : "Provider import failed."
+        );
+      } finally {
+        setIsImporting(false);
+      }
+    },
+    [onImport, selectedIds, selections]
+  );
 
   const handleClick = useCallback(() => {
     submit();

@@ -36,19 +36,22 @@ export function CreateDraftAction({
     )
   );
 
-  async function create(document: MosaicDocument) {
-    const draft = await createDraft.mutateAsync(cloneValue(document));
-    await navigate({
-      params: (prev) => ({
-        ...prev,
-        ...studioScopeParams(prev),
-        environmentId,
-        draftId: draft.id,
-        paywallId,
-      }),
-      to: "/studio/$organizationId/$projectId/$environmentId/$paywallId/$draftId",
-    });
-  }
+  const create = useCallback(
+    async (document: MosaicDocument) => {
+      const draft = await createDraft.mutateAsync(cloneValue(document));
+      await navigate({
+        params: (prev) => ({
+          ...prev,
+          ...studioScopeParams(prev),
+          environmentId,
+          draftId: draft.id,
+          paywallId,
+        }),
+        to: "/studio/$organizationId/$projectId/$environmentId/$paywallId/$draftId",
+      });
+    },
+    [createDraft, environmentId, navigate, paywallId]
+  );
 
   const handleClick = useCallback(() => {
     create(EDITOR_TEMPLATES[0]!.document);

@@ -120,14 +120,17 @@ export function ApiKeysPage({
   const revoke = useMutation(
     revokeApiKeyMutationOptions(selectedEnvironment?.id ?? "", queryClient)
   );
-  function revealSecret(result: ApiKeySecretResult) {
-    transferApiKeySecret(
-      queryClient,
-      result,
-      setRevealed,
-      sanitizeSecretMutationState
-    );
-  }
+  const revealSecret = useCallback(
+    (result: ApiKeySecretResult) => {
+      transferApiKeySecret(
+        queryClient,
+        result,
+        setRevealed,
+        sanitizeSecretMutationState
+      );
+    },
+    [queryClient, sanitizeSecretMutationState]
+  );
   const handleClick3 = useCallback(
     () =>
       create.mutate(buildApiKeyCreationInput("secret_server"), {

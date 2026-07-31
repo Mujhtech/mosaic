@@ -36,7 +36,7 @@ export function HostedDraftConflict({
   const [isInspecting, setIsInspecting] = useState(false);
   const [inspectError, setInspectError] = useState<string | null>(null);
 
-  async function inspectLatest() {
+  const inspectLatest = useCallback(async () => {
     setIsInspecting(true);
     setInspectError(null);
     try {
@@ -50,7 +50,7 @@ export function HostedDraftConflict({
     } finally {
       setIsInspecting(false);
     }
-  }
+  }, [onInspectLatest]);
 
   const handleClick2 = useCallback(() => {
     inspectLatest();

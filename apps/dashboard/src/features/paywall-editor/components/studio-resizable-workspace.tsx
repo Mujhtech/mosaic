@@ -296,31 +296,34 @@ export function StudioResizableWorkspace({
     pendingCommitsRef.current.set(panel, timeoutId);
   }
 
-  function scheduleDoubleClickPanelCommit(
-    panel: StudioWorkspacePanel,
-    panelHandle: ResizablePanelImperativeHandle | null,
-    preference: StudioWorkspacePanelPreference
-  ) {
-    if (!panelHandle) {
-      return;
-    }
+  const scheduleDoubleClickPanelCommit = useCallback(
+    (
+      panel: StudioWorkspacePanel,
+      panelHandle: ResizablePanelImperativeHandle | null,
+      preference: StudioWorkspacePanelPreference
+    ) => {
+      if (!panelHandle) {
+        return;
+      }
 
-    const previousTimeout = pendingCommitsRef.current.get(panel);
-    if (previousTimeout !== undefined) {
-      window.clearTimeout(previousTimeout);
-    }
+      const previousTimeout = pendingCommitsRef.current.get(panel);
+      if (previousTimeout !== undefined) {
+        window.clearTimeout(previousTimeout);
+      }
 
-    const timeoutId = window.setTimeout(() => {
-      pendingCommitsRef.current.delete(panel);
-      commitUpstreamDoubleClickResult({
-        actions,
-        panel,
-        panelHandle,
-        preference,
-      });
-    }, 0);
-    pendingCommitsRef.current.set(panel, timeoutId);
-  }
+      const timeoutId = window.setTimeout(() => {
+        pendingCommitsRef.current.delete(panel);
+        commitUpstreamDoubleClickResult({
+          actions,
+          panel,
+          panelHandle,
+          preference,
+        });
+      }, 0);
+      pendingCommitsRef.current.set(panel, timeoutId);
+    },
+    [actions]
+  );
 
   const handleDoubleClick3 = useCallback(
     () =>

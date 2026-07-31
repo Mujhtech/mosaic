@@ -184,7 +184,7 @@ export function RequestIdCopy({ requestId }: { requestId: string }) {
     typeof navigator !== "undefined" &&
     typeof navigator.clipboard?.writeText === "function";
 
-  async function copyRequestId() {
+  const copyRequestId = useCallback(async () => {
     try {
       await navigator.clipboard.writeText(requestId);
       setCopied(true);
@@ -192,7 +192,7 @@ export function RequestIdCopy({ requestId }: { requestId: string }) {
     } catch {
       setFailed(true);
     }
-  }
+  }, [requestId]);
 
   const handleClick = useCallback(() => {
     copyRequestId();

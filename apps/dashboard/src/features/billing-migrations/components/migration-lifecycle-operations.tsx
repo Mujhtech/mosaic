@@ -462,7 +462,7 @@ export function MigrationLifecycleOperations({
         : "Enter every reference and expected digest required to bind this command to reviewed server state."
     : `The server has not granted ${capability}. Organization role ${organizationRole ?? "unknown"} is explanatory only.`;
 
-  async function submit() {
+  const submit = useCallback(async () => {
     const expectedStateVersion = program.stateVersion;
     const expiration = expiresAt ? new Date(expiresAt).toISOString() : "";
     const scope = {
@@ -646,7 +646,22 @@ export function MigrationLifecycleOperations({
     });
     setReason("");
     setAcknowledged(false);
-  }
+  }, [
+    approvalDigest,
+    authorityDigest,
+    caseDigest,
+    digests,
+    expectedDigest,
+    expiresAt,
+    mutation,
+    name,
+    prerequisiteDigest,
+    program,
+    reason,
+    referenceId,
+    scopeKind,
+    secondaryId,
+  ]);
 
   const handleConfirm = useCallback(() => {
     submit();

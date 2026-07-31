@@ -54,7 +54,7 @@ export function ProjectionReplayPanel({
 
   const scopeIssue = validateReplayScope(request);
 
-  async function run() {
+  const run = useCallback(async () => {
     setBusy(true);
     setError(null);
     setResult(undefined);
@@ -70,7 +70,7 @@ export function ProjectionReplayPanel({
     } finally {
       setBusy(false);
     }
-  }
+  }, [onReplay, request]);
 
   const handleClick = useCallback(() => {
     run();

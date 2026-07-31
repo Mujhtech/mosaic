@@ -163,15 +163,18 @@ export function DocumentBackgroundEditor({
     });
   }
 
-  function addAndUseMedia(type: "image" | "video") {
-    editor.updateDocument((current) => {
-      const result = appendBackgroundAsset(current, type);
-      return onUpdate(
-        result.document,
-        defaultMediaBackground(type, result.assetId)
-      );
-    });
-  }
+  const addAndUseMedia = useCallback(
+    (type: "image" | "video") => {
+      editor.updateDocument((current) => {
+        const result = appendBackgroundAsset(current, type);
+        return onUpdate(
+          result.document,
+          defaultMediaBackground(type, result.assetId)
+        );
+      });
+    },
+    [editor, onUpdate]
+  );
 
   const handleClick2 = useCallback(
     () => addAndUseMedia("video"),

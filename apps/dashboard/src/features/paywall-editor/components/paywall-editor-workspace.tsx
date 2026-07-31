@@ -220,30 +220,33 @@ function WorkspaceContent({
     openHostedDraft(hostedDraftData.document, hostedDraftData.id);
   }, [editableDocumentId, hostedDraftData, openHostedDraft, source.kind]);
 
-  function applyProject(project: LocalProjectFile) {
-    const preview = resolveRestoredPreviewContext({
-      document: project.document,
-      localProjectPreview: project.preview,
-      workspaceCanvas,
-      workspaceSource,
-    });
-    workspace.setCanvasPreferences({
-      ...workspaceCanvas,
-      locale: preview.locale,
-      textScale: preview.textScale,
-    });
-    restoreProject(
-      project.document,
-      project.editableDocumentId,
-      project.revision.sequence,
-      preview.locale,
-      preview.textScale
-    );
-    setMockProducts(cloneValue(project.mockCommerce.state.products));
-    setMockPurchaseState(
-      readLocalMockPurchaseState(project) ?? presetForProject(project)
-    );
-  }
+  const applyProject = useCallback(
+    (project: LocalProjectFile) => {
+      const preview = resolveRestoredPreviewContext({
+        document: project.document,
+        localProjectPreview: project.preview,
+        workspaceCanvas,
+        workspaceSource,
+      });
+      workspace.setCanvasPreferences({
+        ...workspaceCanvas,
+        locale: preview.locale,
+        textScale: preview.textScale,
+      });
+      restoreProject(
+        project.document,
+        project.editableDocumentId,
+        project.revision.sequence,
+        preview.locale,
+        preview.textScale
+      );
+      setMockProducts(cloneValue(project.mockCommerce.state.products));
+      setMockPurchaseState(
+        readLocalMockPurchaseState(project) ?? presetForProject(project)
+      );
+    },
+    [restoreProject, workspace, workspaceCanvas, workspaceSource]
+  );
 
   const handleResume = useCallback(() => {
     if (autosave.status === "valid" || autosave.status === "recoverable") {

@@ -39,7 +39,7 @@ export function OneTimeSecret({
   const [copyFailed, setCopyFailed] = useState(false);
   const titleId = useId();
 
-  async function copySecret() {
+  const copySecret = useCallback(async () => {
     try {
       await writeToClipboard(secret);
       setCopied(true);
@@ -47,7 +47,7 @@ export function OneTimeSecret({
     } catch {
       setCopyFailed(true);
     }
-  }
+  }, [secret, writeToClipboard]);
 
   const handleClick = useCallback(() => {
     copySecret();

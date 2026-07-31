@@ -396,12 +396,15 @@ export function CanvasPreviewToolbar() {
   const viewport = useViewport();
   const visibleZoom = canvas.fitMode === "fit" ? viewport.zoom : canvas.zoom;
 
-  function setZoom(value: number) {
-    const nextZoom = clampZoom(Number(value.toFixed(2)));
-    workspace.setCanvasPreference("fitMode", "manual");
-    workspace.setCanvasPreference("zoom", nextZoom);
-    flow.zoomTo(nextZoom, { duration: 160 });
-  }
+  const setZoom = useCallback(
+    (value: number) => {
+      const nextZoom = clampZoom(Number(value.toFixed(2)));
+      workspace.setCanvasPreference("fitMode", "manual");
+      workspace.setCanvasPreference("zoom", nextZoom);
+      flow.zoomTo(nextZoom, { duration: 160 });
+    },
+    [flow, workspace]
+  );
 
   const handleClick4 = useCallback(
     () => setZoom(visibleZoom + 0.1),

@@ -101,10 +101,10 @@ export function StoreConnectionDetailPage({
   );
 
   const handleClick = useCallback(() => test.mutate(), [test]);
-  function sanitizeSecretMutationState() {
+  const sanitizeSecretMutationState = useCallback(() => {
     rotate.reset();
     clearStoreCredentialSecretMutationCache(queryClient);
-  }
+  }, [queryClient, rotate]);
 
   const handleDismiss = useCallback(() => {
     setRevealed(null);

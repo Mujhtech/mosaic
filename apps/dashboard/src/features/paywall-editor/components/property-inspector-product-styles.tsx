@@ -136,18 +136,21 @@ export function ProductLayerStyleSection({ node }: { node: ProductLayerNode }) {
     return () => editor.setProductLayerPreview(null);
   }, [editor, node.id, state]);
 
-  function updateStyles(
-    updater: (
-      styles: MosaicPaywallV02ProductCardStyles
-    ) => MosaicPaywallV02ProductCardStyles
-  ) {
-    editor.updateComponent(node.id, (current) => {
-      if (current.type !== "productCard" && current.type !== "productBadge") {
-        return current;
-      }
-      return { ...current, styles: updater(current.styles) } as ProtocolNode;
-    });
-  }
+  const updateStyles = useCallback(
+    (
+      updater: (
+        styles: MosaicPaywallV02ProductCardStyles
+      ) => MosaicPaywallV02ProductCardStyles
+    ) => {
+      editor.updateComponent(node.id, (current) => {
+        if (current.type !== "productCard" && current.type !== "productBadge") {
+          return current;
+        }
+        return { ...current, styles: updater(current.styles) } as ProtocolNode;
+      });
+    },
+    [editor, node]
+  );
 
   const handleClick = useCallback(
     () => updateStyles((styles) => ({ ...styles, selected: {} })),

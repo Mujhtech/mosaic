@@ -266,32 +266,35 @@ function AssetsPanel({ assets }: { assets: readonly Asset[] }) {
     return `${prefix}-${index}`;
   }
 
-  function addAsset(type: Asset["type"]) {
-    const id = uniqueId(type);
-    const asset: Asset =
-      type === "image"
-        ? {
-            type,
-            id,
-            source: { type: "remote", url: "https://example.com/image.jpg" },
-            fallback: {
-              type: "placeholder",
-              value: {
-                default: "Image unavailable",
-                localizationKey: `paywall.assets.${id.replaceAll("-", "_")}.fallback`,
+  const addAsset = useCallback(
+    (type: Asset["type"]) => {
+      const id = uniqueId(type);
+      const asset: Asset =
+        type === "image"
+          ? {
+              type,
+              id,
+              source: { type: "remote", url: "https://example.com/image.jpg" },
+              fallback: {
+                type: "placeholder",
+                value: {
+                  default: "Image unavailable",
+                  localizationKey: `paywall.assets.${id.replaceAll("-", "_")}.fallback`,
+                },
               },
-            },
-          }
-        : {
-            type,
-            id,
-            source: { type: "remote", url: "https://example.com/video.mp4" },
-          };
-    editor.updateDocument((document) => ({
-      ...document,
-      assets: [...document.assets, asset],
-    }));
-  }
+            }
+          : {
+              type,
+              id,
+              source: { type: "remote", url: "https://example.com/video.mp4" },
+            };
+      editor.updateDocument((document) => ({
+        ...document,
+        assets: [...document.assets, asset],
+      }));
+    },
+    [editor, uniqueId]
+  );
 
   const handleClick2 = useCallback(() => addAsset("video"), [addAsset]);
   const handleClick = useCallback(() => addAsset("image"), [addAsset]);

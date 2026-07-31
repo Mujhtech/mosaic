@@ -320,7 +320,7 @@ export function ProductDetailPage({
     }) ?? [];
   const manageProvidersHref = `/orgs/${encodeURIComponent(organizationId)}/projects/${encodeURIComponent(projectId)}/catalog/providers`;
 
-  async function confirmArchive() {
+  const confirmArchive = useCallback(async () => {
     try {
       if (replacementNeedsSave && selectedReplacementId) {
         await setReplacement.mutateAsync({
@@ -334,7 +334,14 @@ export function ProductDetailPage({
     } catch {
       // TanStack Mutation exposes the actionable API error in the workflow below.
     }
-  }
+  }, [
+    archive,
+    product,
+    productId,
+    replacementNeedsSave,
+    selectedReplacementId,
+    setReplacement,
+  ]);
 
   const handleClick2 = useCallback(() => {
     confirmArchive();

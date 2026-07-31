@@ -35,9 +35,12 @@ function ObserverHarness() {
     mutationKey: apiKeySecretMutationKey("environment_one", "rotate"),
   });
 
-  function reveal(result: ApiKeySecretResult) {
-    transferApiKeySecret(queryClient, result, setRevealed, mutation.reset);
-  }
+  const reveal = useCallback(
+    (result: ApiKeySecretResult) => {
+      transferApiKeySecret(queryClient, result, setRevealed, mutation.reset);
+    },
+    [mutation, queryClient]
+  );
 
   const handleClick2 = useCallback(
     () => mutation.mutate("mosaic_secret_second", { onSuccess: reveal }),

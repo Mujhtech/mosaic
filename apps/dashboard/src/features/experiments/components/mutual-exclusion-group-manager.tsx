@@ -121,15 +121,18 @@ export function MutualExclusionGroupManager({
     });
   }
 
-  function beginVersion(groupId = "") {
-    setSelectedGroupId(groupId);
-    setSelected([]);
-    setAllocations({});
-    setLocalError(undefined);
-    createGroup.reset();
-    createVersion.reset();
-    form.reset();
-  }
+  const beginVersion = useCallback(
+    (groupId = "") => {
+      setSelectedGroupId(groupId);
+      setSelected([]);
+      setAllocations({});
+      setLocalError(undefined);
+      createGroup.reset();
+      createVersion.reset();
+      form.reset();
+    },
+    [createGroup, createVersion, form]
+  );
 
   const handleClick = useCallback(() => beginVersion(), [beginVersion]);
   const selectedGroup = groups.data?.find(
