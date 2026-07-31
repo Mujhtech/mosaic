@@ -1,0 +1,190 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:mosaic:protocol:schema:billing-migration-operations:v1:compatibility-manifest",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "billingMigrationOperationsContractVersion",
+    "status",
+    "schema",
+    "canonicalFixtures",
+    "recordTypes",
+    "sourcePullConditionVectors",
+    "commandPreconditionVectors",
+    "commandPreconditions",
+    "completionTimingVectors",
+    "policy"
+  ],
+  "properties": {
+    "billingMigrationOperationsContractVersion": {
+      "const": "1"
+    },
+    "status": {
+      "enum": [
+        "draft",
+        "releaseCandidate",
+        "approved",
+        "deprecated",
+        "retired"
+      ]
+    },
+    "schema": {
+      "const": "../../schema/billing-migration-operations/v1/contract.schema.json"
+    },
+    "canonicalFixtures": {
+      "type": "array",
+      "minItems": 16,
+      "maxItems": 64,
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "pattern": "^\\.\\./\\.\\./fixtures/billing-migration-operations/v1/.*\\.json$"
+      }
+    },
+    "recordTypes": {
+      "type": "array",
+      "minItems": 18,
+      "maxItems": 18,
+      "uniqueItems": true,
+      "items": {
+        "$ref": "urn:mosaic:protocol:schema:billing-migration-operations:v1:contract#/properties/recordType"
+      }
+    },
+    "sourcePullConditionVectors": {
+      "const": "../../fixtures/billing-migration-operations/v1/vectors/source-pull-conditions.json"
+    },
+    "commandPreconditionVectors": {
+      "const": "../../fixtures/billing-migration-operations/v1/vectors/command-preconditions.json"
+    },
+    "commandPreconditions": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "cutoverDigestKeys",
+        "rollbackDigestKeys",
+        "stateVersion",
+        "digestMismatch",
+        "approvalExpiry"
+      ],
+      "properties": {
+        "cutoverDigestKeys": {
+          "const": [
+            "scopeDigest",
+            "manifestDigest",
+            "mappingDigest",
+            "policyDigest",
+            "evidenceDigest",
+            "readinessDigest",
+            "finalWatermarkDigest",
+            "applicationVersionDigest",
+            "approvalDigest"
+          ]
+        },
+        "rollbackDigestKeys": {
+          "const": [
+            "checkpointDigest",
+            "authorityDigest",
+            "rollbackPrerequisitesDigest",
+            "approvalDigest"
+          ]
+        },
+        "stateVersion": {
+          "const": "exactCompareAndSwap"
+        },
+        "digestMismatch": {
+          "const": "rejectWithoutAuthorityChange"
+        },
+        "approvalExpiry": {
+          "const": "rejectAfterExpiresAt"
+        }
+      }
+    },
+    "completionTimingVectors": {
+      "const": "../../fixtures/billing-migration-operations/v1/vectors/completion-timing.json"
+    },
+    "policy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "identityMatching",
+        "sourceRecord",
+        "scopeWildcard",
+        "productionApprovals",
+        "nonProductionApprovals",
+        "approvalEnvironmentAuthority",
+        "authorityEpoch",
+        "factMutation",
+        "arbitraryRepair",
+        "initialAdapter",
+        "defaultRollbackWindowDays",
+        "rawSourceRetentionDays",
+        "credentialRemoval",
+        "repairAudit",
+        "pendingRepairExecution",
+        "sourcePull",
+        "finalDeltaEvaluation",
+        "separateFinalDeltaCommand",
+        "operatorCapabilities"
+      ],
+      "properties": {
+        "identityMatching": {
+          "const": "exactOrAuditedAliasOnly"
+        },
+        "sourceRecord": {
+          "const": "neverBecomesTransactionFact"
+        },
+        "scopeWildcard": {
+          "const": "forbidden"
+        },
+        "productionApprovals": {
+          "const": "twoDistinctHumans"
+        },
+        "nonProductionApprovals": {
+          "const": "oneAuthorizedOperatorMaySelfApprove"
+        },
+        "approvalEnvironmentAuthority": {
+          "const": "serverDerivedFromProgram"
+        },
+        "authorityEpoch": {
+          "const": "monotonicNeverDecrement"
+        },
+        "factMutation": {
+          "const": "forbidden"
+        },
+        "arbitraryRepair": {
+          "const": "forbidden"
+        },
+        "initialAdapter": {
+          "const": "revenuecat"
+        },
+        "defaultRollbackWindowDays": {
+          "const": 7
+        },
+        "rawSourceRetentionDays": {
+          "const": 30
+        },
+        "credentialRemoval": {
+          "const": "requiredAtOrAfterRollbackWindow"
+        },
+        "repairAudit": {
+          "const": "boundedScopeActorBeforeAndTerminalAfterResult"
+        },
+        "pendingRepairExecution": {
+          "const": "durableReservationUnsettledNoAfterStateClaims"
+        },
+        "sourcePull": {
+          "const": "durableIdempotentExpectedStateVersionJob"
+        },
+        "finalDeltaEvaluation": {
+          "const": "automaticallyQueuedAfterProviderValidationImportSettles"
+        },
+        "separateFinalDeltaCommand": {
+          "const": "forbidden"
+        },
+        "operatorCapabilities": {
+          "const": "affordanceEvidenceOnlyBackendAuthorizationAuthoritative"
+        }
+      }
+    }
+  }
+}

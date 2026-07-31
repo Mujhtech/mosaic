@@ -1,0 +1,43 @@
+{
+  "vectors": [
+    {
+      "id": "normal-completion",
+      "completedAt": "2026-08-05T10:00:00.000Z",
+      "stabilizationEndedAt": "2026-08-05T10:00:00.000Z",
+      "rollbackWindowEndedAt": "2026-08-05T10:00:00.000Z",
+      "credentialRemovedAt": "2026-08-05T10:00:00.000Z",
+      "legalHold": false,
+      "sourceObjectsDeleteAt": "2026-09-04T10:00:00.000Z",
+      "decision": "accept"
+    },
+    {
+      "id": "credential-removed-before-rollback-window",
+      "completedAt": "2026-08-05T10:00:00.000Z",
+      "stabilizationEndedAt": "2026-08-05T10:00:00.000Z",
+      "rollbackWindowEndedAt": "2026-08-05T10:00:00.000Z",
+      "credentialRemovedAt": "2026-08-05T09:59:59.000Z",
+      "legalHold": false,
+      "sourceObjectsDeleteAt": "2026-09-04T10:00:00.000Z",
+      "decision": "reject_credential_before_rollback_end"
+    },
+    {
+      "id": "source-deletion-before-thirty-days",
+      "completedAt": "2026-08-05T10:00:00.000Z",
+      "stabilizationEndedAt": "2026-08-05T10:00:00.000Z",
+      "rollbackWindowEndedAt": "2026-08-05T10:00:00.000Z",
+      "credentialRemovedAt": "2026-08-05T10:00:00.000Z",
+      "legalHold": false,
+      "sourceObjectsDeleteAt": "2026-09-03T10:00:00.000Z",
+      "decision": "reject_source_deletion_not_thirty_days"
+    },
+    {
+      "id": "legal-hold-suppresses-deletion",
+      "completedAt": "2026-08-05T10:00:00.000Z",
+      "stabilizationEndedAt": "2026-08-05T10:00:00.000Z",
+      "rollbackWindowEndedAt": "2026-08-05T10:00:00.000Z",
+      "credentialRemovedAt": "2026-08-05T10:00:00.000Z",
+      "legalHold": true,
+      "decision": "accept"
+    }
+  ]
+}

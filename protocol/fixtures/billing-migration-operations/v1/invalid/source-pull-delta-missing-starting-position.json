@@ -1,0 +1,14 @@
+{
+  "billingMigrationOperationsContractVersion": "1",
+  "recordType": "sourcePullJob",
+  "payload": {
+    "programId": "mig-001",
+    "sourcePullJobId": "pull-delta-invalid-001",
+    "command": "sourcePull",
+    "intent": "delta",
+    "idempotencyKey": "pull-delta-invalid-idem-001",
+    "expectedStateVersion": 5,
+    "status": "pending",
+    "requestedAt": "2026-07-29T09:00:00.000Z"
+  }
+}

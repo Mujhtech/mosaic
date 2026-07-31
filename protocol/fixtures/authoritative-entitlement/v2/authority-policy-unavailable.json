@@ -1,0 +1,14 @@
+{
+  "authoritativeEntitlementContractVersion": "2",
+  "recordType": "authorityUnavailable",
+  "payload": {
+    "scope": {
+      "projectId": "fixture-project-mosaic",
+      "environmentId": "fixture-environment-production",
+      "applicationId": "fixture-application-ios",
+      "platform": "ios"
+    },
+    "result": "unavailable",
+    "reason": "policy_unavailable"
+  }
+}

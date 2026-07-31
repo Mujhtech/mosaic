@@ -1,0 +1,14 @@
+{
+  "billingMigrationOperationsContractVersion": "1",
+  "recordType": "importBatch",
+  "payload": {
+    "programId": "mig-001",
+    "stateVersion": 6,
+    "batchId": "batch-001",
+    "idempotencyKey": "import-001",
+    "status": "completed",
+    "recordCount": 500,
+    "validatedCount": 495,
+    "quarantinedCount": 5
+  }
+}

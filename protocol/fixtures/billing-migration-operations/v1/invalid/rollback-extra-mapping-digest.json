@@ -1,0 +1,31 @@
+{
+  "billingMigrationOperationsContractVersion": "1",
+  "recordType": "authorityCommand",
+  "payload": {
+    "programId": "mig-001",
+    "idempotencyKey": "rollback-invalid-extra",
+    "expectedStateVersion": 12,
+    "expectedDigests": {
+      "checkpointDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "authorityDigest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "rollbackPrerequisitesDigest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+      "approvalDigest": "sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+      "mappingDigest": "sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+    },
+    "reason": "Invalid extra rollback digest",
+    "command": "rollback",
+    "scope": {
+      "projectId": "project-001",
+      "environmentId": "env-production",
+      "applications": [
+        {
+          "applicationId": "app-ios",
+          "platform": "ios"
+        }
+      ]
+    },
+    "checkpointId": "checkpoint-001",
+    "approvalId": "approval-rollback-001",
+    "expectedAuthorityEpoch": 5
+  }
+}

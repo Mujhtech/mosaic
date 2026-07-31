@@ -1,0 +1,84 @@
+{
+  "vectors": [
+    {
+      "id": "snapshot-pending-without-starting-position",
+      "intent": "snapshot",
+      "status": "pending",
+      "hasStartingPosition": false,
+      "hasResult": false,
+      "providerValidationImportStatus": null,
+      "hasFinalDeltaEvaluation": false,
+      "decision": "accept"
+    },
+    {
+      "id": "snapshot-with-starting-position",
+      "intent": "snapshot",
+      "status": "pending",
+      "hasStartingPosition": true,
+      "hasResult": false,
+      "providerValidationImportStatus": null,
+      "hasFinalDeltaEvaluation": false,
+      "decision": "reject_unexpected_starting_position"
+    },
+    {
+      "id": "delta-without-starting-position",
+      "intent": "delta",
+      "status": "pending",
+      "hasStartingPosition": false,
+      "hasResult": false,
+      "providerValidationImportStatus": null,
+      "hasFinalDeltaEvaluation": false,
+      "decision": "reject_missing_starting_position"
+    },
+    {
+      "id": "completed-without-result",
+      "intent": "snapshot",
+      "status": "completed",
+      "hasStartingPosition": false,
+      "hasResult": false,
+      "providerValidationImportStatus": null,
+      "hasFinalDeltaEvaluation": false,
+      "decision": "reject_missing_result"
+    },
+    {
+      "id": "final-delta-completed-with-evaluation",
+      "intent": "final_delta",
+      "status": "completed",
+      "hasStartingPosition": true,
+      "hasResult": true,
+      "providerValidationImportStatus": "completed",
+      "hasFinalDeltaEvaluation": true,
+      "decision": "accept"
+    },
+    {
+      "id": "final-delta-completed-without-evaluation",
+      "intent": "final_delta",
+      "status": "completed",
+      "hasStartingPosition": true,
+      "hasResult": true,
+      "providerValidationImportStatus": "completed",
+      "hasFinalDeltaEvaluation": false,
+      "decision": "reject_missing_final_delta_evaluation"
+    },
+    {
+      "id": "snapshot-with-final-delta-evaluation",
+      "intent": "snapshot",
+      "status": "completed",
+      "hasStartingPosition": false,
+      "hasResult": true,
+      "providerValidationImportStatus": "completed",
+      "hasFinalDeltaEvaluation": true,
+      "decision": "reject_unexpected_final_delta_evaluation"
+    },
+    {
+      "id": "final-delta-waits-for-provider-validation-import",
+      "intent": "final_delta",
+      "status": "completed",
+      "hasStartingPosition": true,
+      "hasResult": true,
+      "providerValidationImportStatus": "pending",
+      "hasFinalDeltaEvaluation": false,
+      "decision": "accept"
+    }
+  ]
+}

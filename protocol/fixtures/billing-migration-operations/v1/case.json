@@ -1,0 +1,13 @@
+{
+  "billingMigrationOperationsContractVersion": "1",
+  "recordType": "reconciliationCase",
+  "payload": {
+    "programId": "mig-001",
+    "stateVersion": 7,
+    "caseId": "case-001",
+    "classification": "blocking",
+    "status": "open",
+    "reason": "Supported application version lacks authority metadata",
+    "openedAt": "2026-07-29T09:00:00.000Z"
+  }
+}

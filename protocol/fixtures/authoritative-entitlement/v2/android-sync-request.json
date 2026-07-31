@@ -1,0 +1,25 @@
+{
+  "authoritativeEntitlementContractVersion": "2",
+  "recordType": "entitlementSyncRequest",
+  "payload": {
+    "knownAuthorityEpoch": 5,
+    "knownSnapshotVersion": 4,
+    "knownSnapshotAuthorityDigest": "sha256:5b88fde51256612b2823afb6c6ee05063f6d52f9b1ac6ba98323ecf13516a61e",
+    "request": {
+      "applicationId": "fixture-application-android",
+      "platform": "android",
+      "appVersion": "4.2.0",
+      "sdkVersion": "2.0.0",
+      "supportedContractVersions": [
+        "1",
+        "2"
+      ],
+      "capabilities": [
+        "authority_epoch",
+        "authority_scope",
+        "urgent_authority_sync",
+        "mosaic_authoritative_targeting"
+      ]
+    }
+  }
+}

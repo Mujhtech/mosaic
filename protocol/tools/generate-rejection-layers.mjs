@@ -209,6 +209,35 @@ export const rejectionLayerTargets = Object.freeze([
     validator: () =>
       pureSchemaValidator("schema/customer-access-token/v1/token.schema.json"),
   },
+  {
+    contract: "Authoritative Entitlement v2",
+    directory: "fixtures/authoritative-entitlement/v2/invalid",
+    validator: () =>
+      pureSchemaValidator(
+        "schema/authoritative-entitlement/v2/contract.schema.json",
+        ["schema/authoritative-entitlement/v1/snapshot.schema.json"],
+      ),
+  },
+  {
+    contract: "Billing Migration Operations v1",
+    directory: "fixtures/billing-migration-operations/v1/invalid",
+    validator: () =>
+      pureSchemaValidator(
+        "schema/billing-migration-operations/v1/contract.schema.json",
+      ),
+  },
+  {
+    contract: "Billing State Webhook v2",
+    directory: "fixtures/billing-state-webhook/v2/invalid",
+    validator: () =>
+      pureSchemaValidator(
+        "schema/billing-state-webhook/v2/contract.schema.json",
+        [
+          "schema/billing-state-webhook/v1/event.schema.json",
+          "schema/billing-state-webhook/v1/delivery.schema.json",
+        ],
+      ),
+  },
 ]);
 
 const DESCRIPTION =

@@ -1,0 +1,32 @@
+{
+  "billingMigrationOperationsContractVersion": "1",
+  "recordType": "sourcePullJob",
+  "payload": {
+    "programId": "mig-001",
+    "sourcePullJobId": "pull-failed-invalid-001",
+    "command": "sourcePull",
+    "intent": "snapshot",
+    "idempotencyKey": "pull-failed-invalid-idem-001",
+    "expectedStateVersion": 3,
+    "status": "failed",
+    "requestedAt": "2026-07-29T07:55:00.000Z",
+    "startedAt": "2026-07-29T07:55:01.000Z",
+    "failedAt": "2026-07-29T07:56:00.000Z",
+    "failureCode": "provider_unavailable",
+    "result": {
+      "sourceObject": {
+        "reference": "source-object-invalid-001",
+        "digest": "sha256:1111111111111111111111111111111111111111111111111111111111111111"
+      },
+      "manifest": {
+        "reference": "manifest-invalid-001",
+        "digest": "sha256:2222222222222222222222222222222222222222222222222222222222222222"
+      },
+      "providerValidationImport": {
+        "reference": "import-invalid-001",
+        "digest": "sha256:3333333333333333333333333333333333333333333333333333333333333333",
+        "status": "completed"
+      }
+    }
+  }
+}

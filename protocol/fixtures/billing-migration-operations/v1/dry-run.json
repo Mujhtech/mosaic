@@ -1,0 +1,23 @@
+{
+  "billingMigrationOperationsContractVersion": "1",
+  "recordType": "dryRunResult",
+  "payload": {
+    "programId": "mig-001",
+    "stateVersion": 7,
+    "dryRunId": "dry-run-001",
+    "mappingDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "policyDigest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "divergences": {
+      "critical": 0,
+      "blocking": 0,
+      "warning": 3,
+      "informational": 8
+    },
+    "watermarks": {
+      "source": "2026-07-29T09:00:00.000Z",
+      "provider": "2026-07-29T09:00:00.000Z",
+      "shadow": "2026-07-29T09:00:00.000Z"
+    },
+    "completedAt": "2026-07-29T09:10:00.000Z"
+  }
+}

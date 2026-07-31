@@ -29,6 +29,9 @@ carries no compatibility meaning relative to any other contract.
 | Authoritative Entitlement | `1` | `draft` | `protocol/compatibility/authoritative-entitlement/v1.json` |
 | Customer Access Token | `1` | `draft` | `protocol/compatibility/customer-access-token/v1.json` |
 | Billing State Webhook | `1` | `draft` | `protocol/compatibility/billing-state-webhook/v1.json` |
+| Billing Migration Operations | `1` | `draft` | `protocol/compatibility/billing-migration-operations/v1.json` |
+| Authoritative Entitlement | `2` | `draft` | `protocol/compatibility/authoritative-entitlement/v2.json` |
+| Billing State Webhook | `2` | `draft` | `protocol/compatibility/billing-state-webhook/v2.json` |
 
 A draft contract carries **no compatibility guarantee**: it may change or
 disappear without a version bump, and nothing in the approved set depends on it.

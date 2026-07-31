@@ -1,0 +1,21 @@
+{
+  "billingMigrationOperationsContractVersion": "1",
+  "recordType": "readinessAssessment",
+  "payload": {
+    "programId": "mig-001",
+    "stateVersion": 8,
+    "ready": true,
+    "currentAccessMappingPercent": 100,
+    "currentAccessEvidencePercent": 100,
+    "unresolved": {
+      "critical": 0,
+      "blocking": 0,
+      "warning": 3,
+      "informational": 8
+    },
+    "finalDeltaCompleted": true,
+    "watermarksFresh": true,
+    "supportedVersionsAuthorityAware": true,
+    "readinessDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+  }
+}

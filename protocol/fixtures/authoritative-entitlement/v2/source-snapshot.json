@@ -1,0 +1,53 @@
+{
+  "authoritativeEntitlementContractVersion": "2",
+  "recordType": "customerEntitlementSnapshot",
+  "payload": {
+    "authority": {
+      "authorityEpoch": 4,
+      "authorityKind": "source",
+      "scope": {
+        "projectId": "fixture-project-mosaic",
+        "environmentId": "fixture-environment-production",
+        "applicationId": "fixture-application-ios",
+        "platform": "ios"
+      },
+      "transitionState": "stable"
+    },
+    "snapshot": {
+      "snapshotId": "fixture-customer-snapshot-never-projected",
+      "billingCustomerId": "fixture-customer-never-projected",
+      "projectId": "fixture-project-mosaic",
+      "environmentId": "fixture-environment-production",
+      "snapshotVersion": 0,
+      "projectionRuleVersion": 1,
+      "issuedAt": "2026-07-29T08:00:00.000Z",
+      "asOf": "2026-07-29T08:00:00.000Z",
+      "refreshAfter": "2026-07-29T09:00:00.000Z",
+      "validUntil": "2026-08-05T08:00:00.000Z",
+      "entityTag": "cs-never-projected-v0",
+      "contentDigest": "sha256:20c88af435b8e0a8987aeb7c893fc5411d613b7f4897d8235a8e43d723cfa20a",
+      "entries": [],
+      "sources": [],
+      "projectionStatus": {
+        "state": "pending",
+        "lastProjectedAt": "2026-07-29T08:00:00.000Z",
+        "pendingFactCount": 0
+      },
+      "changeReason": "initial_projection",
+      "correlationId": "fixture-correlation-never-projected"
+    },
+    "snapshotAuthorityDigest": "sha256:54c3055f779d2e919ae130ae90e102d74dd8652c64b79edc2804268f111bc28c",
+    "minimumSupport": {
+      "minimumContractVersion": "2",
+      "minimumSdkVersion": "2.0.0",
+      "supportedAppVersionWindow": {
+        "minimumInclusive": "4.0.0",
+        "maximumInclusive": "5.9.9"
+      },
+      "requiredCapabilities": [
+        "authority_epoch",
+        "authority_scope"
+      ]
+    }
+  }
+}

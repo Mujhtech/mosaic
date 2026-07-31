@@ -1,0 +1,24 @@
+{
+  "authoritativeEntitlementContractVersion": "2",
+  "recordType": "authorityUnavailable",
+  "payload": {
+    "scope": {
+      "projectId": "fixture-project-mosaic",
+      "environmentId": "fixture-environment-production",
+      "applicationId": "fixture-application-ios",
+      "platform": "ios"
+    },
+    "result": "unavailable",
+    "reason": "policy_unavailable",
+    "minimumSupport": {
+      "minimumContractVersion": "2",
+      "minimumSdkVersion": "2.0.0",
+      "supportedAppVersionWindow": {
+        "minimumInclusive": "4.0.0"
+      },
+      "requiredCapabilities": [
+        "authority_epoch"
+      ]
+    }
+  }
+}

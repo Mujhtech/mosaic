@@ -1,0 +1,43 @@
+{
+  "authoritativeEntitlementContractVersion": "2",
+  "status": "draft",
+  "schema": "../../schema/authoritative-entitlement/v2/contract.schema.json",
+  "canonicalFixtures": [
+    "../../fixtures/authoritative-entitlement/v2/sync-request.json",
+    "../../fixtures/authoritative-entitlement/v2/android-sync-request.json",
+    "../../fixtures/authoritative-entitlement/v2/sync-request-without-known-digest.json",
+    "../../fixtures/authoritative-entitlement/v2/source-snapshot.json",
+    "../../fixtures/authoritative-entitlement/v2/ios-full-snapshot.json",
+    "../../fixtures/authoritative-entitlement/v2/android-full-snapshot.json",
+    "../../fixtures/authoritative-entitlement/v2/snapshot-unchanged.json",
+    "../../fixtures/authoritative-entitlement/v2/android-snapshot-unchanged.json",
+    "../../fixtures/authoritative-entitlement/v2/authority-unavailable.json",
+    "../../fixtures/authoritative-entitlement/v2/authority-policy-unavailable.json"
+  ],
+  "recordTypes": [
+    "entitlementSyncRequest",
+    "customerEntitlementSnapshot",
+    "snapshotUnchanged",
+    "authorityUnavailable"
+  ],
+  "conformancePlatforms": [
+    "ios",
+    "android"
+  ],
+  "readerPolicy": {
+    "authorityPrecedence": "authorityEpochBeforeSnapshotVersion",
+    "olderAuthorityEpoch": "rejectPreserveNewerAuthorityCache",
+    "sameEpochOlderSnapshot": "rejectPreserveCache",
+    "legacyCache": "authority_unknown",
+    "authorityUnknown": "unavailableNeverInactive",
+    "policyUnavailable": "omitMinimumSupportFailClosedNeverInferAuthority",
+    "scopeMismatch": "rejectClearCacheReportUnavailable",
+    "providerUnion": "forbidden",
+    "transitionRefresh": "urgentBeforeConfigurationRefresh",
+    "cacheIntegrity": "bindCustomerEnvironmentApplicationPlatformEpoch",
+    "requestScopeAuthority": "deriveFromOpaqueCATAndSdkAuthentication",
+    "knownSnapshotAuthorityDigest": "optionalVerificationInputNeverSelector",
+    "unchangedEligibility": "exactDigestScopeEpochAndSnapshotMatch",
+    "unchangedResponse": "embedExactV1PayloadAndSlideFreshness"
+  }
+}

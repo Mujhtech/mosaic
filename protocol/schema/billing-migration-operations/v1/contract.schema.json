@@ -1,0 +1,2172 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:mosaic:protocol:schema:billing-migration-operations:v1:contract",
+  "title": "Mosaic Billing Migration Operations Contract v1",
+  "description": "Strict operator-facing records and commands for an audited migration. Source evidence never becomes a transaction fact through this contract.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "billingMigrationOperationsContractVersion",
+    "recordType",
+    "payload"
+  ],
+  "properties": {
+    "billingMigrationOperationsContractVersion": {
+      "const": "1"
+    },
+    "recordType": {
+      "enum": [
+        "migrationProgram",
+        "migrationScope",
+        "capabilityAssessment",
+        "sourcePullJob",
+        "operatorCapabilities",
+        "sourceManifest",
+        "mappingSet",
+        "importBatch",
+        "dryRunResult",
+        "divergence",
+        "readinessAssessment",
+        "migrationCheckpoint",
+        "migrationApproval",
+        "authorityCommand",
+        "reconciliationCase",
+        "repairAction",
+        "completionReport",
+        "webhookRedeliveryCommand"
+      ]
+    },
+    "payload": {}
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "recordType": {
+            "const": "migrationProgram"
+          }
+        },
+        "required": [
+          "recordType"
+        ]
+      },
+      "then": {
+        "properties": {
+          "payload": {
+            "$ref": "#/$defs/program"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "recordType": {
+            "const": "migrationScope"
+          }
+        },
+        "required": [
+          "recordType"
+        ]
+      },
+      "then": {
+        "properties": {
+          "payload": {
+            "$ref": "#/$defs/scopeRecord"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "recordType": {
+            "const": "capabilityAssessment"
+          }
+        },
+        "required": [
+          "recordType"
+        ]
+      },
+      "then": {
+        "properties": {
+          "payload": {
+            "$ref": "#/$defs/capabilityAssessment"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "recordType": {
+            "const": "sourcePullJob"
+          }
+        },
+        "required": [
+          "recordType"
+        ]
+      },
+      "then": {
+        "properties": {
+          "payload": {
+            "$ref": "#/$defs/sourcePullJob"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "recordType": {
+            "const": "operatorCapabilities"
+          }
+        },
+        "required": [
+          "recordType"
+        ]
+      },
+      "then": {
+        "properties": {
+          "payload": {
+            "$ref": "#/$defs/operatorCapabilities"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "recordType": {
+            "const": "sourceManifest"
+          }
+        },
+        "required": [
+          "recordType"
+        ]
+      },
+      "then": {
+        "properties": {
+          "payload": {
+            "$ref": "#/$defs/manifest"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "recordType": {
+            "const": "mappingSet"
+          }
+        },
+        "required": [
+          "recordType"
+        ]
+      },
+      "then": {
+        "properties": {
+          "payload": {
+            "$ref": "#/$defs/mappingSet"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "recordType": {
+            "const": "importBatch"
+          }
+        },
+        "required": [
+          "recordType"
+        ]
+      },
+      "then": {
+        "properties": {
+          "payload": {
+            "$ref": "#/$defs/importBatch"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "recordType": {
+            "const": "dryRunResult"
+          }
+        },
+        "required": [
+          "recordType"
+        ]
+      },
+      "then": {
+        "properties": {
+          "payload": {
+            "$ref": "#/$defs/dryRun"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "recordType": {
+            "const": "divergence"
+          }
+        },
+        "required": [
+          "recordType"
+        ]
+      },
+      "then": {
+        "properties": {
+          "payload": {
+            "$ref": "#/$defs/divergence"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "recordType": {
+            "const": "readinessAssessment"
+          }
+        },
+        "required": [
+          "recordType"
+        ]
+      },
+      "then": {
+        "properties": {
+          "payload": {
+            "$ref": "#/$defs/readiness"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "recordType": {
+            "const": "migrationCheckpoint"
+          }
+        },
+        "required": [
+          "recordType"
+        ]
+      },
+      "then": {
+        "properties": {
+          "payload": {
+            "$ref": "#/$defs/checkpoint"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "recordType": {
+            "const": "migrationApproval"
+          }
+        },
+        "required": [
+          "recordType"
+        ]
+      },
+      "then": {
+        "properties": {
+          "payload": {
+            "$ref": "#/$defs/approval"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "recordType": {
+            "const": "authorityCommand"
+          }
+        },
+        "required": [
+          "recordType"
+        ]
+      },
+      "then": {
+        "properties": {
+          "payload": {
+            "$ref": "#/$defs/authorityCommand"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "recordType": {
+            "const": "reconciliationCase"
+          }
+        },
+        "required": [
+          "recordType"
+        ]
+      },
+      "then": {
+        "properties": {
+          "payload": {
+            "$ref": "#/$defs/case"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "recordType": {
+            "const": "repairAction"
+          }
+        },
+        "required": [
+          "recordType"
+        ]
+      },
+      "then": {
+        "properties": {
+          "payload": {
+            "$ref": "#/$defs/repair"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "recordType": {
+            "const": "completionReport"
+          }
+        },
+        "required": [
+          "recordType"
+        ]
+      },
+      "then": {
+        "properties": {
+          "payload": {
+            "$ref": "#/$defs/completion"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "recordType": {
+            "const": "webhookRedeliveryCommand"
+          }
+        },
+        "required": [
+          "recordType"
+        ]
+      },
+      "then": {
+        "properties": {
+          "payload": {
+            "$ref": "#/$defs/redelivery"
+          }
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+    },
+    "sourceIdentifier": {
+      "description": "Exact opaque identifier from the migration source. Unlike Mosaic IDs it may begin with '$' (for example RevenueCat $RCAnonymousID values). It is preserved byte-for-byte; no case folding, trimming, email interpretation, or heuristic normalization is permitted.",
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 512,
+      "pattern": "^[^\\r\\n\\u0000-\\u001F\\u007F]+$"
+    },
+    "text": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 500,
+      "pattern": "^[^\\r\\n\\u0000-\\u001F\\u007F]*$"
+    },
+    "timestamp": {
+      "type": "string",
+      "minLength": 24,
+      "maxLength": 24,
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\\.[0-9]{3}Z$"
+    },
+    "digest": {
+      "type": "string",
+      "minLength": 71,
+      "maxLength": 71,
+      "pattern": "^sha256:[a-f0-9]{64}$"
+    },
+    "platform": {
+      "enum": [
+        "ios",
+        "android"
+      ]
+    },
+    "scopeItem": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "applicationId",
+        "platform"
+      ],
+      "properties": {
+        "applicationId": {
+          "$ref": "#/$defs/id"
+        },
+        "platform": {
+          "$ref": "#/$defs/platform"
+        }
+      }
+    },
+    "scope": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "projectId",
+        "environmentId",
+        "applications"
+      ],
+      "properties": {
+        "projectId": {
+          "$ref": "#/$defs/id"
+        },
+        "environmentId": {
+          "$ref": "#/$defs/id"
+        },
+        "applications": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 100,
+          "uniqueItems": true,
+          "items": {
+            "$ref": "#/$defs/scopeItem"
+          }
+        }
+      }
+    },
+    "base": {
+      "type": "object",
+      "required": [
+        "programId",
+        "stateVersion"
+      ],
+      "properties": {
+        "programId": {
+          "$ref": "#/$defs/id"
+        },
+        "stateVersion": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 999999999999
+        }
+      }
+    },
+    "command": {
+      "type": "object",
+      "required": [
+        "programId",
+        "idempotencyKey",
+        "expectedStateVersion",
+        "expectedDigests",
+        "reason"
+      ],
+      "properties": {
+        "programId": {
+          "$ref": "#/$defs/id"
+        },
+        "idempotencyKey": {
+          "$ref": "#/$defs/id"
+        },
+        "expectedStateVersion": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 999999999999
+        },
+        "expectedDigests": {
+          "type": "object"
+        },
+        "reason": {
+          "$ref": "#/$defs/text"
+        }
+      }
+    },
+    "program": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "programId",
+        "stateVersion",
+        "state",
+        "scope",
+        "source",
+        "authorityEpochBefore",
+        "stabilizationDays",
+        "rollbackWindowDays"
+      ],
+      "properties": {
+        "programId": {
+          "$ref": "#/$defs/id"
+        },
+        "stateVersion": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "state": {
+          "enum": [
+            "draft",
+            "assessing",
+            "mapping",
+            "importing",
+            "dry_run",
+            "shadowing",
+            "ready",
+            "cutover_pending",
+            "stabilizing",
+            "completed",
+            "rolled_back",
+            "failed",
+            "cancelled"
+          ]
+        },
+        "scope": {
+          "$ref": "#/$defs/scope"
+        },
+        "source": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "adapter",
+            "adapterVersion",
+            "credentialReference"
+          ],
+          "properties": {
+            "adapter": {
+              "const": "revenuecat"
+            },
+            "adapterVersion": {
+              "$ref": "#/$defs/id"
+            },
+            "credentialReference": {
+              "$ref": "#/$defs/id"
+            }
+          }
+        },
+        "authorityEpochBefore": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "authorityEpochAfter": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "stabilizationDays": {
+          "description": "Program policy frozen before the first production dry run. The compatibility manifest declares the default; an explicitly reviewed program may choose another bounded value.",
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 30
+        },
+        "rollbackWindowDays": {
+          "description": "Program policy frozen before the first production dry run. The compatibility manifest declares the default; an explicitly reviewed program may choose another bounded value.",
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 30
+        }
+      }
+    },
+    "scopeRecord": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/base"
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "programId",
+            "stateVersion",
+            "scope",
+            "scopeDigest"
+          ],
+          "properties": {
+            "programId": {
+              "$ref": "#/$defs/id"
+            },
+            "stateVersion": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "scope": {
+              "$ref": "#/$defs/scope"
+            },
+            "scopeDigest": {
+              "$ref": "#/$defs/digest"
+            }
+          }
+        }
+      ]
+    },
+    "capabilityAssessment": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "programId",
+        "stateVersion",
+        "adapter",
+        "providerApiVersion",
+        "capabilities",
+        "assessedAt"
+      ],
+      "properties": {
+        "programId": {
+          "$ref": "#/$defs/id"
+        },
+        "stateVersion": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "adapter": {
+          "const": "revenuecat"
+        },
+        "providerApiVersion": {
+          "$ref": "#/$defs/id"
+        },
+        "capabilities": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "enum": [
+              "read_customers",
+              "read_subscriptions",
+              "read_aliases",
+              "read_transfers",
+              "incremental_delta"
+            ]
+          }
+        },
+        "assessedAt": {
+          "$ref": "#/$defs/timestamp"
+        }
+      }
+    },
+    "artifactReference": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "reference",
+        "digest"
+      ],
+      "properties": {
+        "reference": {
+          "$ref": "#/$defs/id"
+        },
+        "digest": {
+          "$ref": "#/$defs/digest"
+        }
+      }
+    },
+    "sourcePullStartingPosition": {
+      "description": "Exact source position from which a delta continues. Cursor bytes are opaque; the watermark digest binds the cursor to the stated watermark.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "cursor",
+        "watermark",
+        "watermarkDigest"
+      ],
+      "properties": {
+        "cursor": {
+          "$ref": "#/$defs/sourceIdentifier"
+        },
+        "watermark": {
+          "$ref": "#/$defs/sourceIdentifier"
+        },
+        "watermarkDigest": {
+          "$ref": "#/$defs/digest"
+        }
+      }
+    },
+    "sourcePullResult": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "sourceObject",
+        "manifest",
+        "providerValidationImport"
+      ],
+      "properties": {
+        "sourceObject": {
+          "$ref": "#/$defs/artifactReference"
+        },
+        "manifest": {
+          "$ref": "#/$defs/artifactReference"
+        },
+        "providerValidationImport": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "reference",
+            "digest",
+            "status"
+          ],
+          "properties": {
+            "reference": {
+              "$ref": "#/$defs/id"
+            },
+            "digest": {
+              "$ref": "#/$defs/digest"
+            },
+            "status": {
+              "enum": [
+                "pending",
+                "running",
+                "completed",
+                "failed"
+              ]
+            }
+          }
+        },
+        "finalDeltaEvaluation": {
+          "description": "Server-created evaluation result. It is never requested through a separate public final-delta command.",
+          "$ref": "#/$defs/artifactReference"
+        }
+      }
+    },
+    "sourcePullJob": {
+      "description": "Durable server-returned state for the sourcePull command. A completed final_delta includes the evaluation automatically queued after its provider-validation import settles.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "programId",
+        "sourcePullJobId",
+        "command",
+        "intent",
+        "idempotencyKey",
+        "expectedStateVersion",
+        "status",
+        "requestedAt"
+      ],
+      "properties": {
+        "programId": {
+          "$ref": "#/$defs/id"
+        },
+        "sourcePullJobId": {
+          "$ref": "#/$defs/id"
+        },
+        "command": {
+          "const": "sourcePull"
+        },
+        "intent": {
+          "enum": [
+            "snapshot",
+            "delta",
+            "final_delta"
+          ]
+        },
+        "idempotencyKey": {
+          "$ref": "#/$defs/id"
+        },
+        "expectedStateVersion": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 999999999999
+        },
+        "startingPosition": {
+          "$ref": "#/$defs/sourcePullStartingPosition"
+        },
+        "status": {
+          "enum": [
+            "pending",
+            "running",
+            "completed",
+            "failed"
+          ]
+        },
+        "requestedAt": {
+          "$ref": "#/$defs/timestamp"
+        },
+        "startedAt": {
+          "$ref": "#/$defs/timestamp"
+        },
+        "completedAt": {
+          "$ref": "#/$defs/timestamp"
+        },
+        "failedAt": {
+          "$ref": "#/$defs/timestamp"
+        },
+        "failureCode": {
+          "$ref": "#/$defs/id"
+        },
+        "result": {
+          "$ref": "#/$defs/sourcePullResult"
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "intent": {
+                "const": "snapshot"
+              }
+            },
+            "required": [
+              "intent"
+            ]
+          },
+          "then": {
+            "not": {
+              "required": [
+                "startingPosition"
+              ]
+            }
+          },
+          "else": {
+            "required": [
+              "startingPosition"
+            ]
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "status": {
+                "const": "pending"
+              }
+            },
+            "required": [
+              "status"
+            ]
+          },
+          "then": {
+            "not": {
+              "anyOf": [
+                {
+                  "required": [
+                    "startedAt"
+                  ]
+                },
+                {
+                  "required": [
+                    "completedAt"
+                  ]
+                },
+                {
+                  "required": [
+                    "failedAt"
+                  ]
+                },
+                {
+                  "required": [
+                    "failureCode"
+                  ]
+                },
+                {
+                  "required": [
+                    "result"
+                  ]
+                }
+              ]
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "status": {
+                "const": "running"
+              }
+            },
+            "required": [
+              "status"
+            ]
+          },
+          "then": {
+            "required": [
+              "startedAt"
+            ],
+            "not": {
+              "anyOf": [
+                {
+                  "required": [
+                    "completedAt"
+                  ]
+                },
+                {
+                  "required": [
+                    "failedAt"
+                  ]
+                },
+                {
+                  "required": [
+                    "failureCode"
+                  ]
+                },
+                {
+                  "required": [
+                    "result"
+                  ]
+                }
+              ]
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "status": {
+                "const": "completed"
+              }
+            },
+            "required": [
+              "status"
+            ]
+          },
+          "then": {
+            "required": [
+              "startedAt",
+              "completedAt",
+              "result"
+            ],
+            "not": {
+              "anyOf": [
+                {
+                  "required": [
+                    "failedAt"
+                  ]
+                },
+                {
+                  "required": [
+                    "failureCode"
+                  ]
+                }
+              ]
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "status": {
+                "const": "failed"
+              }
+            },
+            "required": [
+              "status"
+            ]
+          },
+          "then": {
+            "required": [
+              "startedAt",
+              "failedAt",
+              "failureCode"
+            ],
+            "not": {
+              "anyOf": [
+                {
+                  "required": [
+                    "completedAt"
+                  ]
+                },
+                {
+                  "required": [
+                    "result"
+                  ]
+                }
+              ]
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "intent": {
+                "const": "final_delta"
+              },
+              "status": {
+                "const": "completed"
+              },
+              "result": {
+                "properties": {
+                  "providerValidationImport": {
+                    "properties": {
+                      "status": {
+                        "const": "completed"
+                      }
+                    },
+                    "required": [
+                      "status"
+                    ]
+                  }
+                },
+                "required": [
+                  "providerValidationImport"
+                ]
+              }
+            },
+            "required": [
+              "intent",
+              "status",
+              "result"
+            ]
+          },
+          "then": {
+            "properties": {
+              "result": {
+                "required": [
+                  "finalDeltaEvaluation"
+                ]
+              }
+            }
+          },
+          "else": {
+            "properties": {
+              "result": {
+                "not": {
+                  "required": [
+                    "finalDeltaEvaluation"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      ]
+    },
+    "operatorCapabilities": {
+      "description": "Server-returned UI affordance evidence for one operator and program state. Possession never substitutes for backend authorization at command execution.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "programId",
+        "stateVersion",
+        "actorId",
+        "capabilities",
+        "evaluatedAt"
+      ],
+      "properties": {
+        "programId": {
+          "$ref": "#/$defs/id"
+        },
+        "stateVersion": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 999999999999
+        },
+        "actorId": {
+          "$ref": "#/$defs/id"
+        },
+        "capabilities": {
+          "type": "array",
+          "uniqueItems": true,
+          "maxItems": 15,
+          "items": {
+            "enum": [
+              "view",
+              "manage-source",
+              "manage-mappings",
+              "run-import",
+              "assess-readiness",
+              "propose-cutover",
+              "approve-cutover",
+              "execute-cutover",
+              "execute-rollback",
+              "execute-repair",
+              "remove-credential",
+              "manage-legal-hold",
+              "complete-migration",
+              "redeliver-webhook",
+              "delete-source"
+            ]
+          }
+        },
+        "evaluatedAt": {
+          "$ref": "#/$defs/timestamp"
+        }
+      }
+    },
+    "manifest": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "programId",
+        "stateVersion",
+        "manifestId",
+        "adapterVersion",
+        "providerApiVersion",
+        "schemaVersion",
+        "recordCount",
+        "currentAccessRecordCount",
+        "objectChecksum",
+        "manifestDigest",
+        "capturedAt"
+      ],
+      "properties": {
+        "programId": {
+          "$ref": "#/$defs/id"
+        },
+        "stateVersion": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "manifestId": {
+          "$ref": "#/$defs/id"
+        },
+        "adapterVersion": {
+          "$ref": "#/$defs/id"
+        },
+        "providerApiVersion": {
+          "$ref": "#/$defs/id"
+        },
+        "schemaVersion": {
+          "$ref": "#/$defs/id"
+        },
+        "recordCount": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "currentAccessRecordCount": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "objectChecksum": {
+          "$ref": "#/$defs/digest"
+        },
+        "manifestDigest": {
+          "$ref": "#/$defs/digest"
+        },
+        "capturedAt": {
+          "$ref": "#/$defs/timestamp"
+        }
+      }
+    },
+    "mappingEntry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "sourceKind",
+        "sourceIdentifier",
+        "targetId",
+        "matchKind"
+      ],
+      "properties": {
+        "sourceKind": {
+          "enum": [
+            "customer_id",
+            "original_customer_id",
+            "audited_alias",
+            "product",
+            "entitlement"
+          ]
+        },
+        "sourceIdentifier": {
+          "$ref": "#/$defs/sourceIdentifier"
+        },
+        "targetId": {
+          "$ref": "#/$defs/id"
+        },
+        "matchKind": {
+          "enum": [
+            "exact",
+            "audited_alias"
+          ]
+        }
+      }
+    },
+    "mappingSet": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "programId",
+        "stateVersion",
+        "mappingSetId",
+        "version",
+        "status",
+        "entries",
+        "mappingDigest"
+      ],
+      "properties": {
+        "programId": {
+          "$ref": "#/$defs/id"
+        },
+        "stateVersion": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "mappingSetId": {
+          "$ref": "#/$defs/id"
+        },
+        "version": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "status": {
+          "enum": [
+            "draft",
+            "frozen"
+          ]
+        },
+        "entries": {
+          "type": "array",
+          "maxItems": 10000,
+          "items": {
+            "$ref": "#/$defs/mappingEntry"
+          }
+        },
+        "mappingDigest": {
+          "$ref": "#/$defs/digest"
+        }
+      }
+    },
+    "importBatch": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "programId",
+        "stateVersion",
+        "batchId",
+        "idempotencyKey",
+        "status",
+        "recordCount",
+        "validatedCount",
+        "quarantinedCount"
+      ],
+      "properties": {
+        "programId": {
+          "$ref": "#/$defs/id"
+        },
+        "stateVersion": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "batchId": {
+          "$ref": "#/$defs/id"
+        },
+        "idempotencyKey": {
+          "$ref": "#/$defs/id"
+        },
+        "status": {
+          "enum": [
+            "pending",
+            "running",
+            "completed",
+            "failed"
+          ]
+        },
+        "recordCount": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "validatedCount": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "quarantinedCount": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    },
+    "counts": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "critical",
+        "blocking",
+        "warning",
+        "informational"
+      ],
+      "properties": {
+        "critical": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "blocking": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "warning": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "informational": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    },
+    "watermarks": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "source",
+        "provider",
+        "shadow"
+      ],
+      "properties": {
+        "source": {
+          "$ref": "#/$defs/timestamp"
+        },
+        "provider": {
+          "$ref": "#/$defs/timestamp"
+        },
+        "shadow": {
+          "$ref": "#/$defs/timestamp"
+        },
+        "cutover": {
+          "$ref": "#/$defs/timestamp"
+        }
+      }
+    },
+    "dryRun": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "programId",
+        "stateVersion",
+        "dryRunId",
+        "mappingDigest",
+        "policyDigest",
+        "divergences",
+        "watermarks",
+        "completedAt"
+      ],
+      "properties": {
+        "programId": {
+          "$ref": "#/$defs/id"
+        },
+        "stateVersion": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "dryRunId": {
+          "$ref": "#/$defs/id"
+        },
+        "mappingDigest": {
+          "$ref": "#/$defs/digest"
+        },
+        "policyDigest": {
+          "$ref": "#/$defs/digest"
+        },
+        "divergences": {
+          "$ref": "#/$defs/counts"
+        },
+        "watermarks": {
+          "$ref": "#/$defs/watermarks"
+        },
+        "completedAt": {
+          "$ref": "#/$defs/timestamp"
+        }
+      }
+    },
+    "divergence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "programId",
+        "stateVersion",
+        "divergenceId",
+        "classification",
+        "reason",
+        "observedAt",
+        "classificationRuleVersion"
+      ],
+      "properties": {
+        "programId": {
+          "$ref": "#/$defs/id"
+        },
+        "stateVersion": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "divergenceId": {
+          "$ref": "#/$defs/id"
+        },
+        "classification": {
+          "enum": [
+            "critical",
+            "blocking",
+            "warning",
+            "informational"
+          ]
+        },
+        "reason": {
+          "enum": [
+            "source_grants_mosaic_denies",
+            "identity_conflict",
+            "authority_scope_conflict",
+            "mapping_missing",
+            "provider_validation_missing",
+            "watermark_stale",
+            "unsupported_application_version",
+            "historical_mismatch",
+            "provider_timing_lag",
+            "normalization_difference"
+          ]
+        },
+        "observedAt": {
+          "$ref": "#/$defs/timestamp"
+        },
+        "classificationRuleVersion": {
+          "$ref": "#/$defs/id"
+        }
+      }
+    },
+    "readiness": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "programId",
+        "stateVersion",
+        "ready",
+        "currentAccessMappingPercent",
+        "currentAccessEvidencePercent",
+        "unresolved",
+        "finalDeltaCompleted",
+        "watermarksFresh",
+        "supportedVersionsAuthorityAware",
+        "readinessDigest"
+      ],
+      "properties": {
+        "programId": {
+          "$ref": "#/$defs/id"
+        },
+        "stateVersion": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "ready": {
+          "type": "boolean"
+        },
+        "currentAccessMappingPercent": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 100
+        },
+        "currentAccessEvidencePercent": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 100
+        },
+        "unresolved": {
+          "$ref": "#/$defs/counts"
+        },
+        "finalDeltaCompleted": {
+          "type": "boolean"
+        },
+        "watermarksFresh": {
+          "type": "boolean"
+        },
+        "supportedVersionsAuthorityAware": {
+          "type": "boolean"
+        },
+        "readinessDigest": {
+          "$ref": "#/$defs/digest"
+        }
+      }
+    },
+    "checkpoint": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "programId",
+        "stateVersion",
+        "checkpointId",
+        "scope",
+        "authorityEpoch",
+        "watermarks",
+        "manifestDigest",
+        "mappingDigest",
+        "policyDigest",
+        "readinessDigest",
+        "createdAt"
+      ],
+      "properties": {
+        "programId": {
+          "$ref": "#/$defs/id"
+        },
+        "stateVersion": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "checkpointId": {
+          "$ref": "#/$defs/id"
+        },
+        "scope": {
+          "$ref": "#/$defs/scope"
+        },
+        "authorityEpoch": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "watermarks": {
+          "$ref": "#/$defs/watermarks"
+        },
+        "manifestDigest": {
+          "$ref": "#/$defs/digest"
+        },
+        "mappingDigest": {
+          "$ref": "#/$defs/digest"
+        },
+        "policyDigest": {
+          "$ref": "#/$defs/digest"
+        },
+        "readinessDigest": {
+          "$ref": "#/$defs/digest"
+        },
+        "createdAt": {
+          "$ref": "#/$defs/timestamp"
+        }
+      }
+    },
+    "approval": {
+      "description": "Approval output for cutover or rollback. The program Environment is server-derived and intentionally absent: production requires distinct proposer and approver identities, while development and sandbox permit one authorized operator to occupy both roles.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "programId",
+        "stateVersion",
+        "approvalId",
+        "command",
+        "proposerActorId",
+        "approverActorId",
+        "approvalDigest",
+        "approvedAt",
+        "expiresAt"
+      ],
+      "properties": {
+        "programId": {
+          "$ref": "#/$defs/id"
+        },
+        "stateVersion": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "approvalId": {
+          "$ref": "#/$defs/id"
+        },
+        "command": {
+          "enum": [
+            "cutover",
+            "rollback"
+          ]
+        },
+        "proposerActorId": {
+          "$ref": "#/$defs/id"
+        },
+        "approverActorId": {
+          "$ref": "#/$defs/id"
+        },
+        "approvalDigest": {
+          "$ref": "#/$defs/digest"
+        },
+        "approvedAt": {
+          "$ref": "#/$defs/timestamp"
+        },
+        "expiresAt": {
+          "$ref": "#/$defs/timestamp"
+        }
+      }
+    },
+    "cutoverExpectedDigests": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "scopeDigest",
+        "manifestDigest",
+        "mappingDigest",
+        "policyDigest",
+        "evidenceDigest",
+        "readinessDigest",
+        "finalWatermarkDigest",
+        "applicationVersionDigest",
+        "approvalDigest"
+      ],
+      "properties": {
+        "scopeDigest": {
+          "$ref": "#/$defs/digest"
+        },
+        "manifestDigest": {
+          "$ref": "#/$defs/digest"
+        },
+        "mappingDigest": {
+          "$ref": "#/$defs/digest"
+        },
+        "policyDigest": {
+          "$ref": "#/$defs/digest"
+        },
+        "evidenceDigest": {
+          "$ref": "#/$defs/digest"
+        },
+        "readinessDigest": {
+          "$ref": "#/$defs/digest"
+        },
+        "finalWatermarkDigest": {
+          "$ref": "#/$defs/digest"
+        },
+        "applicationVersionDigest": {
+          "$ref": "#/$defs/digest"
+        },
+        "approvalDigest": {
+          "$ref": "#/$defs/digest"
+        }
+      }
+    },
+    "rollbackExpectedDigests": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "checkpointDigest",
+        "authorityDigest",
+        "rollbackPrerequisitesDigest",
+        "approvalDigest"
+      ],
+      "properties": {
+        "checkpointDigest": {
+          "$ref": "#/$defs/digest"
+        },
+        "authorityDigest": {
+          "$ref": "#/$defs/digest"
+        },
+        "rollbackPrerequisitesDigest": {
+          "$ref": "#/$defs/digest"
+        },
+        "approvalDigest": {
+          "$ref": "#/$defs/digest"
+        }
+      }
+    },
+    "authorityCommand": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/command"
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "programId",
+            "idempotencyKey",
+            "expectedStateVersion",
+            "expectedDigests",
+            "reason",
+            "command",
+            "scope",
+            "checkpointId",
+            "approvalId",
+            "expectedAuthorityEpoch"
+          ],
+          "properties": {
+            "programId": {
+              "$ref": "#/$defs/id"
+            },
+            "idempotencyKey": {
+              "$ref": "#/$defs/id"
+            },
+            "expectedStateVersion": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "expectedDigests": {
+              "oneOf": [
+                {
+                  "$ref": "#/$defs/cutoverExpectedDigests"
+                },
+                {
+                  "$ref": "#/$defs/rollbackExpectedDigests"
+                }
+              ]
+            },
+            "reason": {
+              "$ref": "#/$defs/text"
+            },
+            "command": {
+              "enum": [
+                "cutover",
+                "rollback"
+              ]
+            },
+            "scope": {
+              "$ref": "#/$defs/scope"
+            },
+            "checkpointId": {
+              "$ref": "#/$defs/id"
+            },
+            "approvalId": {
+              "$ref": "#/$defs/id"
+            },
+            "expectedAuthorityEpoch": {
+              "type": "integer",
+              "minimum": 0
+            }
+          },
+          "allOf": [
+            {
+              "if": {
+                "properties": {
+                  "command": {
+                    "const": "cutover"
+                  }
+                },
+                "required": [
+                  "command"
+                ]
+              },
+              "then": {
+                "properties": {
+                  "expectedDigests": {
+                    "$ref": "#/$defs/cutoverExpectedDigests"
+                  }
+                }
+              }
+            },
+            {
+              "if": {
+                "properties": {
+                  "command": {
+                    "const": "rollback"
+                  }
+                },
+                "required": [
+                  "command"
+                ]
+              },
+              "then": {
+                "properties": {
+                  "expectedDigests": {
+                    "$ref": "#/$defs/rollbackExpectedDigests"
+                  }
+                }
+              }
+            }
+          ]
+        }
+      ]
+    },
+    "case": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "programId",
+        "stateVersion",
+        "caseId",
+        "classification",
+        "status",
+        "reason",
+        "openedAt"
+      ],
+      "properties": {
+        "programId": {
+          "$ref": "#/$defs/id"
+        },
+        "stateVersion": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "caseId": {
+          "$ref": "#/$defs/id"
+        },
+        "classification": {
+          "enum": [
+            "critical",
+            "blocking",
+            "warning",
+            "informational"
+          ]
+        },
+        "status": {
+          "enum": [
+            "open",
+            "in_progress",
+            "resolved",
+            "dismissed"
+          ]
+        },
+        "reason": {
+          "$ref": "#/$defs/text"
+        },
+        "openedAt": {
+          "$ref": "#/$defs/timestamp"
+        },
+        "resolvedAt": {
+          "$ref": "#/$defs/timestamp"
+        },
+        "sourceAccessException": {
+          "description": "Scoped, expiring exception used only when provider revalidation is impossible. It never creates a Transaction Fact or authorizes an identity merge.",
+          "$ref": "#/$defs/sourceAccessException"
+        }
+      }
+    },
+    "sourceAccessException": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "exceptionId",
+        "scope",
+        "reason",
+        "affectedCustomerCount",
+        "rollbackTreatment",
+        "identityAmbiguityCount",
+        "proposerActorId",
+        "approverActorId",
+        "approvedAt",
+        "expiresAt"
+      ],
+      "properties": {
+        "exceptionId": {
+          "$ref": "#/$defs/id"
+        },
+        "scope": {
+          "$ref": "#/$defs/scopeItem"
+        },
+        "reason": {
+          "$ref": "#/$defs/text"
+        },
+        "affectedCustomerCount": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 1000000
+        },
+        "rollbackTreatment": {
+          "$ref": "#/$defs/text"
+        },
+        "identityAmbiguityCount": {
+          "const": 0
+        },
+        "proposerActorId": {
+          "$ref": "#/$defs/id"
+        },
+        "approverActorId": {
+          "$ref": "#/$defs/id"
+        },
+        "approvedAt": {
+          "$ref": "#/$defs/timestamp"
+        },
+        "expiresAt": {
+          "$ref": "#/$defs/timestamp"
+        }
+      }
+    },
+    "repairScope": {
+      "description": "Bounded set of exact immutable references affected by one repair execution.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "kind",
+        "references"
+      ],
+      "properties": {
+        "kind": {
+          "enum": [
+            "provider_reference",
+            "fact_range",
+            "audited_alias",
+            "mapping_set",
+            "source_record"
+          ]
+        },
+        "references": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 100,
+          "uniqueItems": true,
+          "items": {
+            "$ref": "#/$defs/sourceIdentifier"
+          }
+        }
+      }
+    },
+    "repairExpectedDigests": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "caseDigest",
+        "policyDigest"
+      ],
+      "properties": {
+        "caseDigest": {
+          "$ref": "#/$defs/digest"
+        },
+        "policyDigest": {
+          "$ref": "#/$defs/digest"
+        }
+      }
+    },
+    "repair": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/command"
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "programId",
+            "idempotencyKey",
+            "expectedStateVersion",
+            "expectedDigests",
+            "reason",
+            "repairKind",
+            "caseId",
+            "scope",
+            "actorId",
+            "beforeDigest",
+            "executionStatus"
+          ],
+          "properties": {
+            "programId": {
+              "$ref": "#/$defs/id"
+            },
+            "idempotencyKey": {
+              "$ref": "#/$defs/id"
+            },
+            "expectedStateVersion": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "expectedDigests": {
+              "$ref": "#/$defs/repairExpectedDigests"
+            },
+            "reason": {
+              "$ref": "#/$defs/text"
+            },
+            "repairKind": {
+              "enum": [
+                "provider_revalidate",
+                "projection_replay",
+                "attach_proven_alias",
+                "replace_mapping_set",
+                "retry_quarantined_record"
+              ]
+            },
+            "caseId": {
+              "$ref": "#/$defs/id"
+            },
+            "scope": {
+              "$ref": "#/$defs/repairScope"
+            },
+            "actorId": {
+              "$ref": "#/$defs/id"
+            },
+            "beforeDigest": {
+              "$ref": "#/$defs/digest"
+            },
+            "afterDigest": {
+              "$ref": "#/$defs/digest"
+            },
+            "executionStatus": {
+              "enum": [
+                "pending",
+                "completed"
+              ]
+            },
+            "result": {
+              "enum": [
+                "succeeded",
+                "failed",
+                "no_change"
+              ]
+            }
+          },
+          "allOf": [
+            {
+              "if": {
+                "properties": {
+                  "executionStatus": {
+                    "const": "pending"
+                  }
+                },
+                "required": [
+                  "executionStatus"
+                ]
+              },
+              "then": {
+                "allOf": [
+                  {
+                    "not": {
+                      "required": [
+                        "afterDigest"
+                      ]
+                    }
+                  },
+                  {
+                    "not": {
+                      "required": [
+                        "result"
+                      ]
+                    }
+                  }
+                ]
+              },
+              "else": {
+                "required": [
+                  "afterDigest",
+                  "result"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    "completion": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "programId",
+        "stateVersion",
+        "completedAt",
+        "stabilizationEndedAt",
+        "rollbackWindowEndedAt",
+        "credentialRemoved",
+        "credentialRemovedAt",
+        "legalHold",
+        "completionDigest"
+      ],
+      "properties": {
+        "programId": {
+          "$ref": "#/$defs/id"
+        },
+        "stateVersion": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "completedAt": {
+          "$ref": "#/$defs/timestamp"
+        },
+        "stabilizationEndedAt": {
+          "$ref": "#/$defs/timestamp"
+        },
+        "rollbackWindowEndedAt": {
+          "$ref": "#/$defs/timestamp"
+        },
+        "sourceObjectsDeleteAt": {
+          "$ref": "#/$defs/timestamp"
+        },
+        "legalHold": {
+          "type": "boolean"
+        },
+        "credentialRemoved": {
+          "const": true
+        },
+        "credentialRemovedAt": {
+          "$ref": "#/$defs/timestamp"
+        },
+        "completionDigest": {
+          "$ref": "#/$defs/digest"
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "legalHold": {
+                "const": false
+              }
+            },
+            "required": [
+              "legalHold"
+            ]
+          },
+          "then": {
+            "required": [
+              "sourceObjectsDeleteAt"
+            ]
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "legalHold": {
+                "const": true
+              }
+            },
+            "required": [
+              "legalHold"
+            ]
+          },
+          "then": {
+            "not": {
+              "required": [
+                "sourceObjectsDeleteAt"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "redeliveryExpectedDigests": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "eventDigest"
+      ],
+      "properties": {
+        "eventDigest": {
+          "$ref": "#/$defs/digest"
+        }
+      }
+    },
+    "redelivery": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/command"
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "programId",
+            "idempotencyKey",
+            "expectedStateVersion",
+            "expectedDigests",
+            "reason",
+            "eventId",
+            "destinationId"
+          ],
+          "properties": {
+            "programId": {
+              "$ref": "#/$defs/id"
+            },
+            "idempotencyKey": {
+              "$ref": "#/$defs/id"
+            },
+            "expectedStateVersion": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "expectedDigests": {
+              "$ref": "#/$defs/redeliveryExpectedDigests"
+            },
+            "reason": {
+              "$ref": "#/$defs/text"
+            },
+            "eventId": {
+              "$ref": "#/$defs/id"
+            },
+            "destinationId": {
+              "$ref": "#/$defs/id"
+            }
+          }
+        }
+      ]
+    }
+  }
+}

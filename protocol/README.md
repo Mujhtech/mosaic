@@ -96,6 +96,19 @@ vocabulary. Acceptance of an observation is explicitly not a validation claim,
 and a client can never author a transaction fact. It is optional, adds nothing
 to any existing contract, and is not generated into the browser contract.
 
+Phase 9C adds three separate **draft**, server-facing contracts: Billing
+Migration Operations `1`, Authoritative Entitlement `2`, and Billing State
+Webhook `2`. Migration Operations freezes the RevenueCat-first operator
+vocabulary. Entitlement v2 wraps the unchanged v1 snapshot body with explicit
+application/platform authority scope and a monotonic epoch. Webhook v2 carries
+matching authority metadata and transition notifications while preserving v1
+delivery and signing. Customer Access Token `1`, Configuration Delivery `3`,
+Commerce Provider, and Billing Ingestion `1` remain unchanged. These contracts
+are not generated into browser declarations. Migration Operations also models
+durable idempotent `sourcePull` jobs and a closed server-returned operator
+capability vocabulary; those capability strings are affordance evidence only,
+never authorization.
+
 Canonical Commerce artifacts live under:
 
 ```text
@@ -172,3 +185,6 @@ See:
 - `docs/protocol/configuration-delivery-v3.md`
 - `docs/protocol/analytics-event-v2.md`
 - `docs/protocol/billing-ingestion-v1.md` (draft contract)
+- `docs/protocol/billing-migration-operations-v1.md` (draft contract)
+- `docs/protocol/authoritative-entitlement-v2.md` (draft contract)
+- `docs/protocol/billing-state-webhook-v2.md` (draft contract)

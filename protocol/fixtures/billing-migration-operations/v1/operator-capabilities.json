@@ -1,0 +1,27 @@
+{
+  "billingMigrationOperationsContractVersion": "1",
+  "recordType": "operatorCapabilities",
+  "payload": {
+    "programId": "mig-001",
+    "stateVersion": 11,
+    "actorId": "operator-001",
+    "capabilities": [
+      "view",
+      "manage-source",
+      "manage-mappings",
+      "run-import",
+      "assess-readiness",
+      "propose-cutover",
+      "approve-cutover",
+      "execute-cutover",
+      "execute-rollback",
+      "execute-repair",
+      "remove-credential",
+      "manage-legal-hold",
+      "complete-migration",
+      "redeliver-webhook",
+      "delete-source"
+    ],
+    "evaluatedAt": "2026-07-29T10:15:00.000Z"
+  }
+}

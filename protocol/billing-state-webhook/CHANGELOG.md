@@ -1,5 +1,18 @@
 # Billing State Webhook Contract changelog
 
+## Version 2 - 2026-07-29
+
+Status: draft
+
+Adds authority scope, epoch, kind, transition state, cutover instant, and
+snapshot-authority digest plus authority transition events. HMAC signing,
+at-least-once delivery, stable event IDs, and tolerant consumers remain
+unchanged. V1 destinations receive only v1 events and cannot satisfy the
+authority-aware readiness gate.
+
+Each authority transition event is bound structurally to its exact authority
+kind and transition state; mismatch fixtures freeze producer rejection.
+
 ## Version 1 - 2026-07-28
 
 Status: draft

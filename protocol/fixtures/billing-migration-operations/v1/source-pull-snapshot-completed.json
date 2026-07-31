@@ -1,0 +1,31 @@
+{
+  "billingMigrationOperationsContractVersion": "1",
+  "recordType": "sourcePullJob",
+  "payload": {
+    "programId": "mig-001",
+    "sourcePullJobId": "pull-snapshot-001",
+    "command": "sourcePull",
+    "intent": "snapshot",
+    "idempotencyKey": "pull-snapshot-idem-001",
+    "expectedStateVersion": 3,
+    "status": "completed",
+    "requestedAt": "2026-07-29T07:55:00.000Z",
+    "startedAt": "2026-07-29T07:55:01.000Z",
+    "completedAt": "2026-07-29T08:05:00.000Z",
+    "result": {
+      "sourceObject": {
+        "reference": "source-object-001",
+        "digest": "sha256:1111111111111111111111111111111111111111111111111111111111111111"
+      },
+      "manifest": {
+        "reference": "manifest-001",
+        "digest": "sha256:2222222222222222222222222222222222222222222222222222222222222222"
+      },
+      "providerValidationImport": {
+        "reference": "import-001",
+        "digest": "sha256:3333333333333333333333333333333333333333333333333333333333333333",
+        "status": "completed"
+      }
+    }
+  }
+}

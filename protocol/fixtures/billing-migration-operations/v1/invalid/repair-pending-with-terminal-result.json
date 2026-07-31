@@ -1,0 +1,26 @@
+{
+  "billingMigrationOperationsContractVersion": "1",
+  "recordType": "repairAction",
+  "payload": {
+    "programId": "mig-001",
+    "idempotencyKey": "repair-pending-terminal-result",
+    "expectedStateVersion": 7,
+    "expectedDigests": {
+      "caseDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "policyDigest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+    },
+    "reason": "Pending validation cannot claim a terminal result",
+    "repairKind": "provider_revalidate",
+    "caseId": "case-001",
+    "scope": {
+      "kind": "provider_reference",
+      "references": [
+        "provider-ref-001"
+      ]
+    },
+    "actorId": "actor-operator-001",
+    "beforeDigest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "executionStatus": "pending",
+    "result": "no_change"
+  }
+}

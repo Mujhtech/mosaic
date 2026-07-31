@@ -1,0 +1,134 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:mosaic:protocol:schema:billing-state-webhook:v2:compatibility-manifest",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "billingStateWebhookContractVersion",
+    "status",
+    "schema",
+    "canonicalFixtures",
+    "recordTypes",
+    "eventTypes",
+    "authorityEventBindings",
+    "delivery",
+    "consumerPolicy"
+  ],
+  "properties": {
+    "billingStateWebhookContractVersion": {
+      "const": "2"
+    },
+    "status": {
+      "enum": [
+        "draft",
+        "releaseCandidate",
+        "approved",
+        "deprecated",
+        "retired"
+      ]
+    },
+    "schema": {
+      "const": "../../schema/billing-state-webhook/v2/contract.schema.json"
+    },
+    "canonicalFixtures": {
+      "type": "array",
+      "minItems": 4,
+      "maxItems": 24,
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "pattern": "^\\.\\./\\.\\./fixtures/billing-state-webhook/v2/.*\\.json$"
+      }
+    },
+    "recordTypes": {
+      "type": "array",
+      "minItems": 2,
+      "maxItems": 2,
+      "uniqueItems": true,
+      "items": {
+        "$ref": "urn:mosaic:protocol:schema:billing-state-webhook:v2:contract#/properties/recordType"
+      }
+    },
+    "eventTypes": {
+      "type": "array",
+      "minItems": 5,
+      "maxItems": 5,
+      "uniqueItems": true,
+      "items": {
+        "$ref": "urn:mosaic:protocol:schema:billing-state-webhook:v2:contract#/$defs/event/properties/eventType"
+      }
+    },
+    "authorityEventBindings": {
+      "const": {
+        "authority.cutover.pending": {
+          "authorityKind": "source",
+          "transitionState": "cutover_pending"
+        },
+        "authority.cutover.completed": {
+          "authorityKind": "mosaic",
+          "transitionState": "stabilizing"
+        },
+        "authority.rollback.completed": {
+          "authorityKind": "source_rollback",
+          "transitionState": "rolled_back"
+        },
+        "authority.stabilization.completed": {
+          "authorityKind": "mosaic",
+          "transitionState": "stable"
+        }
+      }
+    },
+    "delivery": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "semantics",
+        "eventIdOnRetry",
+        "signing"
+      ],
+      "properties": {
+        "semantics": {
+          "const": "atLeastOnce"
+        },
+        "eventIdOnRetry": {
+          "const": "stable"
+        },
+        "signing": {
+          "const": "hmacSha256V1RawBodyUnchanged"
+        }
+      }
+    },
+    "consumerPolicy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "unknownField",
+        "unknownEventType",
+        "unknownEnumeration",
+        "authoritativeState",
+        "v1Destination",
+        "readiness"
+      ],
+      "properties": {
+        "unknownField": {
+          "const": "ignore"
+        },
+        "unknownEventType": {
+          "const": "ignore"
+        },
+        "unknownEnumeration": {
+          "const": "ignore"
+        },
+        "authoritativeState": {
+          "const": "reReadAuthoritativeEntitlementV2"
+        },
+        "v1Destination": {
+          "const": "receivesV1EventsOnly"
+        },
+        "readiness": {
+          "const": "v1DestinationCannotSatisfyAuthorityAwareGate"
+        }
+      }
+    }
+  }
+}

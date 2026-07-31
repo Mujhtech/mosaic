@@ -1,0 +1,20 @@
+{
+  "billingMigrationOperationsContractVersion": "1",
+  "recordType": "mappingSet",
+  "payload": {
+    "programId": "mig-001",
+    "stateVersion": 5,
+    "mappingSetId": "mapping-invalid-source",
+    "version": 1,
+    "status": "draft",
+    "entries": [
+      {
+        "sourceKind": "customer_id",
+        "sourceIdentifier": "$RCAnonymousID:bad\nvalue",
+        "targetId": "customer-001",
+        "matchKind": "exact"
+      }
+    ],
+    "mappingDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+  }
+}

@@ -1,0 +1,34 @@
+{
+  "billingStateWebhookContractVersion": "2",
+  "recordType": "billingStateEvent",
+  "payload": {
+    "eventId": "event-access-001",
+    "eventType": "customer.entitlements.changed",
+    "billingCustomerId": "customer-001",
+    "authority": {
+      "authorityEpoch": 5,
+      "authorityKind": "mosaic",
+      "scope": {
+        "projectId": "project-001",
+        "environmentId": "env-production",
+        "applicationId": "app-ios",
+        "platform": "ios"
+      },
+      "transitionState": "stabilizing",
+      "cutoverAt": "2026-07-29T10:00:00.000Z",
+      "snapshotAuthorityDigest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+    },
+    "snapshotVersion": 43,
+    "previousSnapshotVersion": 42,
+    "occurredAt": "2026-07-29T10:02:00.000Z",
+    "createdAt": "2026-07-29T10:02:01.000Z",
+    "correlationId": "correlation-access-001",
+    "changedEntitlements": [
+      {
+        "entitlementKey": "premium",
+        "previousState": "inactive",
+        "currentState": "active"
+      }
+    ]
+  }
+}

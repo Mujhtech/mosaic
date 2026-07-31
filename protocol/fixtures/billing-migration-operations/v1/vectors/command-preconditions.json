@@ -1,0 +1,128 @@
+{
+  "vectors": [
+    {
+      "id": "current-cutover-preconditions",
+      "command": "cutover",
+      "expectedStateVersion": 9,
+      "actualStateVersion": 9,
+      "commandAt": "2026-07-29T10:00:00.000Z",
+      "approvalExpiresAt": "2026-07-29T10:05:00.000Z",
+      "expectedDigests": {
+        "scopeDigest": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+        "manifestDigest": "sha256:2222222222222222222222222222222222222222222222222222222222222222",
+        "mappingDigest": "sha256:3333333333333333333333333333333333333333333333333333333333333333",
+        "policyDigest": "sha256:4444444444444444444444444444444444444444444444444444444444444444",
+        "evidenceDigest": "sha256:5555555555555555555555555555555555555555555555555555555555555555",
+        "readinessDigest": "sha256:6666666666666666666666666666666666666666666666666666666666666666",
+        "finalWatermarkDigest": "sha256:7777777777777777777777777777777777777777777777777777777777777777",
+        "applicationVersionDigest": "sha256:8888888888888888888888888888888888888888888888888888888888888888",
+        "approvalDigest": "sha256:9999999999999999999999999999999999999999999999999999999999999999"
+      },
+      "actualDigests": {
+        "scopeDigest": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+        "manifestDigest": "sha256:2222222222222222222222222222222222222222222222222222222222222222",
+        "mappingDigest": "sha256:3333333333333333333333333333333333333333333333333333333333333333",
+        "policyDigest": "sha256:4444444444444444444444444444444444444444444444444444444444444444",
+        "evidenceDigest": "sha256:5555555555555555555555555555555555555555555555555555555555555555",
+        "readinessDigest": "sha256:6666666666666666666666666666666666666666666666666666666666666666",
+        "finalWatermarkDigest": "sha256:7777777777777777777777777777777777777777777777777777777777777777",
+        "applicationVersionDigest": "sha256:8888888888888888888888888888888888888888888888888888888888888888",
+        "approvalDigest": "sha256:9999999999999999999999999999999999999999999999999999999999999999"
+      },
+      "decision": "accept"
+    },
+    {
+      "id": "cutover-missing-evidence-digest",
+      "command": "cutover",
+      "expectedStateVersion": 9,
+      "actualStateVersion": 9,
+      "commandAt": "2026-07-29T10:00:00.000Z",
+      "approvalExpiresAt": "2026-07-29T10:05:00.000Z",
+      "expectedDigests": {
+        "scopeDigest": "sha256:1111111111111111111111111111111111111111111111111111111111111111"
+      },
+      "actualDigests": {},
+      "decision": "reject_invalid_digest_set"
+    },
+    {
+      "id": "rollback-extra-mapping-digest",
+      "command": "rollback",
+      "expectedStateVersion": 12,
+      "actualStateVersion": 12,
+      "commandAt": "2026-07-30T10:00:00.000Z",
+      "approvalExpiresAt": "2026-07-30T10:05:00.000Z",
+      "expectedDigests": {
+        "checkpointDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "authorityDigest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "rollbackPrerequisitesDigest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "approvalDigest": "sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+        "mappingDigest": "sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+      },
+      "actualDigests": {},
+      "decision": "reject_invalid_digest_set"
+    },
+    {
+      "id": "stale-cutover-state",
+      "command": "cutover",
+      "expectedStateVersion": 8,
+      "actualStateVersion": 9,
+      "commandAt": "2026-07-29T10:00:00.000Z",
+      "approvalExpiresAt": "2026-07-29T10:05:00.000Z",
+      "expectedDigests": {
+        "scopeDigest": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+        "manifestDigest": "sha256:2222222222222222222222222222222222222222222222222222222222222222",
+        "mappingDigest": "sha256:3333333333333333333333333333333333333333333333333333333333333333",
+        "policyDigest": "sha256:4444444444444444444444444444444444444444444444444444444444444444",
+        "evidenceDigest": "sha256:5555555555555555555555555555555555555555555555555555555555555555",
+        "readinessDigest": "sha256:6666666666666666666666666666666666666666666666666666666666666666",
+        "finalWatermarkDigest": "sha256:7777777777777777777777777777777777777777777777777777777777777777",
+        "applicationVersionDigest": "sha256:8888888888888888888888888888888888888888888888888888888888888888",
+        "approvalDigest": "sha256:9999999999999999999999999999999999999999999999999999999999999999"
+      },
+      "actualDigests": {},
+      "decision": "reject_stale_state"
+    },
+    {
+      "id": "stale-rollback-checkpoint",
+      "command": "rollback",
+      "expectedStateVersion": 12,
+      "actualStateVersion": 12,
+      "commandAt": "2026-07-30T10:00:00.000Z",
+      "approvalExpiresAt": "2026-07-30T10:05:00.000Z",
+      "expectedDigests": {
+        "checkpointDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "authorityDigest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "rollbackPrerequisitesDigest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "approvalDigest": "sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
+      },
+      "actualDigests": {
+        "checkpointDigest": "sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+        "authorityDigest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "rollbackPrerequisitesDigest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "approvalDigest": "sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
+      },
+      "decision": "reject_stale_digest"
+    },
+    {
+      "id": "expired-cutover-approval",
+      "command": "cutover",
+      "expectedStateVersion": 9,
+      "actualStateVersion": 9,
+      "commandAt": "2026-07-29T10:06:00.000Z",
+      "approvalExpiresAt": "2026-07-29T10:05:00.000Z",
+      "expectedDigests": {
+        "scopeDigest": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+        "manifestDigest": "sha256:2222222222222222222222222222222222222222222222222222222222222222",
+        "mappingDigest": "sha256:3333333333333333333333333333333333333333333333333333333333333333",
+        "policyDigest": "sha256:4444444444444444444444444444444444444444444444444444444444444444",
+        "evidenceDigest": "sha256:5555555555555555555555555555555555555555555555555555555555555555",
+        "readinessDigest": "sha256:6666666666666666666666666666666666666666666666666666666666666666",
+        "finalWatermarkDigest": "sha256:7777777777777777777777777777777777777777777777777777777777777777",
+        "applicationVersionDigest": "sha256:8888888888888888888888888888888888888888888888888888888888888888",
+        "approvalDigest": "sha256:9999999999999999999999999999999999999999999999999999999999999999"
+      },
+      "actualDigests": {},
+      "decision": "reject_expired_approval"
+    }
+  ]
+}

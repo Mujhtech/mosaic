@@ -1,0 +1,17 @@
+{
+  "billingMigrationOperationsContractVersion": "1",
+  "recordType": "sourceManifest",
+  "payload": {
+    "programId": "mig-001",
+    "stateVersion": 4,
+    "manifestId": "manifest-001",
+    "adapterVersion": "rc-v2",
+    "providerApiVersion": "v2",
+    "schemaVersion": "2026-07",
+    "recordCount": 1200,
+    "currentAccessRecordCount": 800,
+    "objectChecksum": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "manifestDigest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "capturedAt": "2026-07-29T08:00:00.000Z"
+  }
+}

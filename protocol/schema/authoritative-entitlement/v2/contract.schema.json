@@ -1,0 +1,488 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:mosaic:protocol:schema:authoritative-entitlement:v2:contract",
+  "title": "Mosaic Authoritative Entitlement Contract v2",
+  "description": "Authority-aware SDK synchronization. Customer/tenant scope is derived from opaque Customer Access Token and SDK authentication, never client-authored. V1 snapshot and snapshotUnchanged bodies are embedded unchanged and bound to explicit application/platform authority scope.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "authoritativeEntitlementContractVersion",
+    "recordType",
+    "payload"
+  ],
+  "properties": {
+    "authoritativeEntitlementContractVersion": {
+      "const": "2"
+    },
+    "recordType": {
+      "enum": [
+        "entitlementSyncRequest",
+        "customerEntitlementSnapshot",
+        "snapshotUnchanged",
+        "authorityUnavailable"
+      ]
+    },
+    "payload": {}
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "recordType": {
+            "const": "entitlementSyncRequest"
+          }
+        },
+        "required": [
+          "recordType"
+        ]
+      },
+      "then": {
+        "properties": {
+          "payload": {
+            "$ref": "#/$defs/syncRequest"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "recordType": {
+            "const": "customerEntitlementSnapshot"
+          }
+        },
+        "required": [
+          "recordType"
+        ]
+      },
+      "then": {
+        "properties": {
+          "payload": {
+            "$ref": "#/$defs/authoritySnapshot"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "recordType": {
+            "const": "snapshotUnchanged"
+          }
+        },
+        "required": [
+          "recordType"
+        ]
+      },
+      "then": {
+        "properties": {
+          "payload": {
+            "$ref": "#/$defs/snapshotUnchanged"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "recordType": {
+            "const": "authorityUnavailable"
+          }
+        },
+        "required": [
+          "recordType"
+        ]
+      },
+      "then": {
+        "properties": {
+          "payload": {
+            "$ref": "#/$defs/authorityUnavailable"
+          }
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "identifier": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+    },
+    "version": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 64,
+      "pattern": "^[0-9A-Za-z][0-9A-Za-z.+_-]*$"
+    },
+    "timestamp": {
+      "type": "string",
+      "minLength": 24,
+      "maxLength": 24,
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\\.[0-9]{3}Z$"
+    },
+    "digest": {
+      "type": "string",
+      "minLength": 71,
+      "maxLength": 71,
+      "pattern": "^sha256:[a-f0-9]{64}$"
+    },
+    "platform": {
+      "enum": [
+        "ios",
+        "android"
+      ]
+    },
+    "scope": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "projectId",
+        "environmentId",
+        "applicationId",
+        "platform"
+      ],
+      "properties": {
+        "projectId": {
+          "$ref": "#/$defs/identifier"
+        },
+        "environmentId": {
+          "$ref": "#/$defs/identifier"
+        },
+        "applicationId": {
+          "$ref": "#/$defs/identifier"
+        },
+        "platform": {
+          "$ref": "#/$defs/platform"
+        }
+      }
+    },
+    "requestMetadata": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "applicationId",
+        "platform",
+        "appVersion",
+        "sdkVersion",
+        "supportedContractVersions",
+        "capabilities"
+      ],
+      "properties": {
+        "applicationId": {
+          "$ref": "#/$defs/identifier"
+        },
+        "platform": {
+          "$ref": "#/$defs/platform"
+        },
+        "appVersion": {
+          "$ref": "#/$defs/version"
+        },
+        "sdkVersion": {
+          "$ref": "#/$defs/version"
+        },
+        "supportedContractVersions": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 8,
+          "uniqueItems": true,
+          "contains": {
+            "const": "2"
+          },
+          "items": {
+            "type": "string",
+            "enum": [
+              "1",
+              "2"
+            ]
+          }
+        },
+        "capabilities": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 16,
+          "uniqueItems": true,
+          "contains": {
+            "const": "authority_epoch"
+          },
+          "items": {
+            "enum": [
+              "authority_epoch",
+              "authority_scope",
+              "urgent_authority_sync",
+              "mosaic_authoritative_targeting"
+            ]
+          }
+        }
+      }
+    },
+    "authority": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "authorityEpoch",
+        "authorityKind",
+        "scope",
+        "transitionState"
+      ],
+      "properties": {
+        "authorityEpoch": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 999999999999
+        },
+        "authorityKind": {
+          "enum": [
+            "source",
+            "mosaic",
+            "source_rollback"
+          ]
+        },
+        "scope": {
+          "$ref": "#/$defs/scope"
+        },
+        "transitionState": {
+          "enum": [
+            "stable",
+            "cutover_pending",
+            "stabilizing",
+            "rolled_back"
+          ]
+        },
+        "cutoverAt": {
+          "$ref": "#/$defs/timestamp"
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "authorityKind": {
+                "enum": [
+                  "mosaic",
+                  "source_rollback"
+                ]
+              }
+            },
+            "required": [
+              "authorityKind"
+            ]
+          },
+          "then": {
+            "required": [
+              "cutoverAt"
+            ]
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "authorityKind": {
+                "const": "source"
+              }
+            },
+            "required": [
+              "authorityKind"
+            ]
+          },
+          "then": {
+            "properties": {
+              "transitionState": {
+                "enum": [
+                  "stable",
+                  "cutover_pending"
+                ]
+              }
+            },
+            "not": {
+              "required": [
+                "cutoverAt"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "minimumSupport": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "minimumContractVersion",
+        "minimumSdkVersion",
+        "supportedAppVersionWindow",
+        "requiredCapabilities"
+      ],
+      "properties": {
+        "minimumContractVersion": {
+          "const": "2"
+        },
+        "minimumSdkVersion": {
+          "$ref": "#/$defs/version"
+        },
+        "supportedAppVersionWindow": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "minimumInclusive"
+          ],
+          "properties": {
+            "minimumInclusive": {
+              "$ref": "#/$defs/version"
+            },
+            "maximumInclusive": {
+              "$ref": "#/$defs/version"
+            }
+          }
+        },
+        "requiredCapabilities": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 8,
+          "uniqueItems": true,
+          "contains": {
+            "const": "authority_epoch"
+          },
+          "items": {
+            "enum": [
+              "authority_epoch",
+              "authority_scope",
+              "urgent_authority_sync",
+              "mosaic_authoritative_targeting"
+            ]
+          }
+        }
+      }
+    },
+    "syncRequest": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "request"
+      ],
+      "properties": {
+        "knownAuthorityEpoch": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 999999999999
+        },
+        "knownSnapshotVersion": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 999999999999
+        },
+        "knownSnapshotAuthorityDigest": {
+          "description": "Optional integrity identity of the retained authority-bound snapshot. It is verification input only: absence or mismatch requires a full snapshot and never selects customer, tenant, scope, or authority.",
+          "$ref": "#/$defs/digest"
+        },
+        "request": {
+          "$ref": "#/$defs/requestMetadata"
+        }
+      }
+    },
+    "authoritySnapshot": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "authority",
+        "snapshot",
+        "snapshotAuthorityDigest",
+        "minimumSupport"
+      ],
+      "properties": {
+        "authority": {
+          "$ref": "#/$defs/authority"
+        },
+        "snapshot": {
+          "$ref": "urn:mosaic:protocol:schema:authoritative-entitlement:v1:snapshot#/$defs/customerEntitlementSnapshot"
+        },
+        "snapshotAuthorityDigest": {
+          "$ref": "#/$defs/digest"
+        },
+        "minimumSupport": {
+          "$ref": "#/$defs/minimumSupport"
+        }
+      }
+    },
+    "snapshotUnchanged": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "authority",
+        "unchanged",
+        "snapshotAuthorityDigest",
+        "minimumSupport"
+      ],
+      "properties": {
+        "authority": {
+          "$ref": "#/$defs/authority"
+        },
+        "unchanged": {
+          "description": "The exact Authoritative Entitlement v1 snapshotUnchanged payload. It confirms the retained cached snapshot and slides its freshness window.",
+          "$ref": "urn:mosaic:protocol:schema:authoritative-entitlement:v1:snapshot#/$defs/snapshotUnchanged"
+        },
+        "snapshotAuthorityDigest": {
+          "$ref": "#/$defs/digest"
+        },
+        "minimumSupport": {
+          "$ref": "#/$defs/minimumSupport"
+        }
+      }
+    },
+    "authorityUnavailable": {
+      "description": "Safe response for a legacy/unsupported request or an authority that cannot be established. It is not inactive access.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "scope",
+        "result",
+        "reason"
+      ],
+      "properties": {
+        "scope": {
+          "$ref": "#/$defs/scope"
+        },
+        "result": {
+          "const": "unavailable"
+        },
+        "reason": {
+          "enum": [
+            "authority_unknown",
+            "unsupported_contract",
+            "unsupported_app_version",
+            "scope_mismatch",
+            "policy_unavailable"
+          ]
+        },
+        "minimumSupport": {
+          "$ref": "#/$defs/minimumSupport"
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "reason": {
+                "const": "policy_unavailable"
+              }
+            },
+            "required": [
+              "reason"
+            ]
+          },
+          "then": {
+            "not": {
+              "required": [
+                "minimumSupport"
+              ]
+            }
+          },
+          "else": {
+            "required": [
+              "minimumSupport"
+            ]
+          }
+        }
+      ]
+    }
+  }
+}

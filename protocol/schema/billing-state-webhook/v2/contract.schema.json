@@ -1,0 +1,462 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:mosaic:protocol:schema:billing-state-webhook:v2:contract",
+  "title": "Mosaic Billing State Webhook Contract v2",
+  "description": "Authority-aware billing state and transition notifications. Events notify; consumers always re-read Authoritative Entitlement v2.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "billingStateWebhookContractVersion",
+    "recordType",
+    "payload"
+  ],
+  "properties": {
+    "billingStateWebhookContractVersion": {
+      "const": "2"
+    },
+    "recordType": {
+      "enum": [
+        "billingStateEvent",
+        "webhookDeliveryAttempt"
+      ]
+    },
+    "payload": {}
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "recordType": {
+            "const": "billingStateEvent"
+          }
+        },
+        "required": [
+          "recordType"
+        ]
+      },
+      "then": {
+        "properties": {
+          "payload": {
+            "$ref": "#/$defs/event"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "recordType": {
+            "const": "webhookDeliveryAttempt"
+          }
+        },
+        "required": [
+          "recordType"
+        ]
+      },
+      "then": {
+        "properties": {
+          "payload": {
+            "$ref": "urn:mosaic:protocol:schema:billing-state-webhook:v1:delivery#/$defs/webhookDeliveryAttempt"
+          }
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+    },
+    "timestamp": {
+      "type": "string",
+      "minLength": 24,
+      "maxLength": 24,
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\\.[0-9]{3}Z$"
+    },
+    "digest": {
+      "type": "string",
+      "minLength": 71,
+      "maxLength": 71,
+      "pattern": "^sha256:[a-f0-9]{64}$"
+    },
+    "scope": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "projectId",
+        "environmentId",
+        "applicationId",
+        "platform"
+      ],
+      "properties": {
+        "projectId": {
+          "$ref": "#/$defs/id"
+        },
+        "environmentId": {
+          "$ref": "#/$defs/id"
+        },
+        "applicationId": {
+          "$ref": "#/$defs/id"
+        },
+        "platform": {
+          "enum": [
+            "ios",
+            "android"
+          ]
+        }
+      }
+    },
+    "authority": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "authorityEpoch",
+        "authorityKind",
+        "scope",
+        "transitionState",
+        "snapshotAuthorityDigest"
+      ],
+      "properties": {
+        "authorityEpoch": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 999999999999
+        },
+        "authorityKind": {
+          "enum": [
+            "source",
+            "mosaic",
+            "source_rollback"
+          ]
+        },
+        "scope": {
+          "$ref": "#/$defs/scope"
+        },
+        "transitionState": {
+          "enum": [
+            "stable",
+            "cutover_pending",
+            "stabilizing",
+            "rolled_back"
+          ]
+        },
+        "cutoverAt": {
+          "$ref": "#/$defs/timestamp"
+        },
+        "snapshotAuthorityDigest": {
+          "$ref": "#/$defs/digest"
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "authorityKind": {
+                "enum": [
+                  "mosaic",
+                  "source_rollback"
+                ]
+              }
+            },
+            "required": [
+              "authorityKind"
+            ]
+          },
+          "then": {
+            "required": [
+              "cutoverAt"
+            ]
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "authorityKind": {
+                "const": "source"
+              }
+            },
+            "required": [
+              "authorityKind"
+            ]
+          },
+          "then": {
+            "properties": {
+              "transitionState": {
+                "enum": [
+                  "stable",
+                  "cutover_pending"
+                ]
+              }
+            },
+            "not": {
+              "required": [
+                "cutoverAt"
+              ]
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "authorityKind": {
+                "const": "mosaic"
+              }
+            },
+            "required": [
+              "authorityKind"
+            ]
+          },
+          "then": {
+            "properties": {
+              "transitionState": {
+                "enum": [
+                  "stabilizing",
+                  "stable"
+                ]
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "authorityKind": {
+                "const": "source_rollback"
+              }
+            },
+            "required": [
+              "authorityKind"
+            ]
+          },
+          "then": {
+            "properties": {
+              "transitionState": {
+                "const": "rolled_back"
+              }
+            }
+          }
+        }
+      ]
+    },
+    "changedEntitlement": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "entitlementKey",
+        "previousState",
+        "currentState"
+      ],
+      "properties": {
+        "entitlementKey": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64,
+          "pattern": "^[a-z][a-z0-9_.-]*$"
+        },
+        "previousState": {
+          "enum": [
+            "active",
+            "inactive",
+            "unknown",
+            "absent"
+          ]
+        },
+        "currentState": {
+          "enum": [
+            "active",
+            "inactive",
+            "unknown"
+          ]
+        }
+      }
+    },
+    "event": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "eventId",
+        "eventType",
+        "billingCustomerId",
+        "authority",
+        "snapshotVersion",
+        "occurredAt",
+        "createdAt",
+        "correlationId",
+        "changedEntitlements"
+      ],
+      "properties": {
+        "eventId": {
+          "$ref": "#/$defs/id"
+        },
+        "eventType": {
+          "enum": [
+            "customer.entitlements.changed",
+            "authority.cutover.pending",
+            "authority.cutover.completed",
+            "authority.rollback.completed",
+            "authority.stabilization.completed"
+          ]
+        },
+        "billingCustomerId": {
+          "$ref": "#/$defs/id"
+        },
+        "authority": {
+          "$ref": "#/$defs/authority"
+        },
+        "snapshotVersion": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 999999999999
+        },
+        "previousSnapshotVersion": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 999999999999
+        },
+        "occurredAt": {
+          "$ref": "#/$defs/timestamp"
+        },
+        "createdAt": {
+          "$ref": "#/$defs/timestamp"
+        },
+        "correlationId": {
+          "$ref": "#/$defs/id"
+        },
+        "changedEntitlements": {
+          "type": "array",
+          "maxItems": 200,
+          "items": {
+            "$ref": "#/$defs/changedEntitlement"
+          }
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "eventType": {
+                "const": "customer.entitlements.changed"
+              }
+            },
+            "required": [
+              "eventType"
+            ]
+          },
+          "then": {
+            "properties": {
+              "changedEntitlements": {
+                "minItems": 1
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "eventType": {
+                "const": "authority.cutover.pending"
+              }
+            },
+            "required": [
+              "eventType"
+            ]
+          },
+          "then": {
+            "properties": {
+              "authority": {
+                "properties": {
+                  "authorityKind": {
+                    "const": "source"
+                  },
+                  "transitionState": {
+                    "const": "cutover_pending"
+                  }
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "eventType": {
+                "const": "authority.cutover.completed"
+              }
+            },
+            "required": [
+              "eventType"
+            ]
+          },
+          "then": {
+            "properties": {
+              "authority": {
+                "properties": {
+                  "authorityKind": {
+                    "const": "mosaic"
+                  },
+                  "transitionState": {
+                    "const": "stabilizing"
+                  }
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "eventType": {
+                "const": "authority.rollback.completed"
+              }
+            },
+            "required": [
+              "eventType"
+            ]
+          },
+          "then": {
+            "properties": {
+              "authority": {
+                "properties": {
+                  "authorityKind": {
+                    "const": "source_rollback"
+                  },
+                  "transitionState": {
+                    "const": "rolled_back"
+                  }
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "eventType": {
+                "const": "authority.stabilization.completed"
+              }
+            },
+            "required": [
+              "eventType"
+            ]
+          },
+          "then": {
+            "properties": {
+              "authority": {
+                "properties": {
+                  "authorityKind": {
+                    "const": "mosaic"
+                  },
+                  "transitionState": {
+                    "const": "stable"
+                  }
+                }
+              }
+            }
+          }
+        }
+      ]
+    }
+  }
+}

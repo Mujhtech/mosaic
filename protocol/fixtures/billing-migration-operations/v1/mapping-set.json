@@ -1,0 +1,32 @@
+{
+  "billingMigrationOperationsContractVersion": "1",
+  "recordType": "mappingSet",
+  "payload": {
+    "programId": "mig-001",
+    "stateVersion": 5,
+    "mappingSetId": "mapping-001",
+    "version": 2,
+    "status": "frozen",
+    "entries": [
+      {
+        "sourceKind": "customer_id",
+        "sourceIdentifier": "rc-customer-001",
+        "targetId": "customer-001",
+        "matchKind": "exact"
+      },
+      {
+        "sourceKind": "audited_alias",
+        "sourceIdentifier": "rc-alias-001",
+        "targetId": "customer-001",
+        "matchKind": "audited_alias"
+      },
+      {
+        "sourceKind": "customer_id",
+        "sourceIdentifier": "$RCAnonymousID:8460f7dd8d3b4cf7a8f1154b113dccb8",
+        "targetId": "customer-002",
+        "matchKind": "exact"
+      }
+    ],
+    "mappingDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+  }
+}

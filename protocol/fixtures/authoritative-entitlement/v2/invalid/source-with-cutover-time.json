@@ -1,0 +1,30 @@
+{
+  "authoritativeEntitlementContractVersion": "2",
+  "recordType": "snapshotUnchanged",
+  "payload": {
+    "authority": {
+      "authorityEpoch": 4,
+      "authorityKind": "source",
+      "scope": {
+        "projectId": "fixture-project-mosaic",
+        "environmentId": "fixture-environment-production",
+        "applicationId": "fixture-application-ios",
+        "platform": "ios"
+      },
+      "transitionState": "stable",
+      "cutoverAt": "2026-07-29T10:00:00.000Z"
+    },
+    "snapshotVersion": 41,
+    "snapshotAuthorityDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "minimumSupport": {
+      "minimumContractVersion": "2",
+      "minimumSdkVersion": "2.0.0",
+      "supportedAppVersionWindow": {
+        "minimumInclusive": "4.0.0"
+      },
+      "requiredCapabilities": [
+        "authority_epoch"
+      ]
+    }
+  }
+}
