@@ -1,16 +1,39 @@
+import { useState } from "react"
 import { useForm } from "@tanstack/react-form"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 
 import { Button } from "@/components/ui/button"
+import {
+  Dialog,
+  DialogClose,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog"
 import { Field, FieldDescription, FieldLabel } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
 import { HostedResourceBoundary } from "@/features/auth/components/hosted-resource-boundary"
 import { resolveHostedQueryState } from "@/features/auth/types/hosted-query-state"
-import { WorkspacePage, WorkflowPanel } from "@/features/organizations/components/workspace-page"
-import { ScopeMismatchRecovery } from "@/features/organizations/components/scope-mismatch-recovery"
+import { WorkspacePage, WorkflowPanel } from "@/features/orgs/components/workspace-page"
+import { ScopeMismatchRecovery } from "@/features/orgs/components/scope-mismatch-recovery"
 import { useValidatedProjectScope } from "@/features/projects/hooks/use-validated-project-scope"
 import { createApplicationMutationOptions } from "@/features/projects/mutations/project-mutations"
 import { applicationsQueryOptions } from "@/features/projects/queries/projects-query"
+
+const PLATFORM_OPTIONS = [
+  { label: "iOS", value: "ios" },
+  { label: "Android", value: "android" },
+]
 
 interface ApplicationsPageProps {
   organizationId: string
@@ -23,6 +46,7 @@ export function ApplicationsPage({ organizationId, projectId }: ApplicationsPage
   const applications = useQuery({ ...applicationsQueryOptions(projectId), enabled: scopeReady })
   const mutation = useMutation(createApplicationMutationOptions(projectId, queryClient))
   const items = applications.data?.items ?? []
+  const [registerOpen, setRegisterOpen] = useState(false)
   const form = useForm({
     defaultValues: { identifier: "", name: "", platform: "ios" as "android" | "ios" },
     onSubmit: async ({ value }) => {
@@ -32,6 +56,7 @@ export function ApplicationsPage({ organizationId, projectId }: ApplicationsPage
         platform: value.platform,
       })
       form.reset()
+      setRegisterOpen(false)
     },
   })
   const state = resolveHostedQueryState({
@@ -63,8 +88,108 @@ export function ApplicationsPage({ organizationId, projectId }: ApplicationsPage
     )
   }
 
+  const registerDialog = (
+    <Dialog
+      onOpenChange={(open) => {
+        setRegisterOpen(open)
+        if (!open) {
+          form.reset()
+          mutation.reset()
+        }
+      }}
+      open={registerOpen}
+    >
+      <DialogTrigger render={<Button size="sm" />}>Register application</DialogTrigger>
+      <DialogContent aria-describedby="register-application-description">
+        <form
+          onSubmit={(event) => {
+            event.preventDefault()
+            event.stopPropagation()
+            void form.handleSubmit()
+          }}
+        >
+          <DialogHeader>
+            <DialogTitle>Register application</DialogTitle>
+            <DialogDescription id="register-application-description">
+              Register an iOS bundle ID or Android package identifier. Framework is intentionally
+              not collected.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-4 px-4">
+            <form.Field name="name">
+              {(field) => (
+                <Field>
+                  <FieldLabel htmlFor="app-name">Name</FieldLabel>
+                  <Input
+                    id="app-name"
+                    onChange={(event) => field.handleChange(event.target.value)}
+                    placeholder="Acme iOS"
+                    value={field.state.value}
+                  />
+                </Field>
+              )}
+            </form.Field>
+            <form.Field name="platform">
+              {(field) => (
+                <Field>
+                  <FieldLabel htmlFor="app-platform">Platform</FieldLabel>
+                  <Select
+                    items={PLATFORM_OPTIONS}
+                    onValueChange={(value) => field.handleChange(value as "android" | "ios")}
+                    value={field.state.value}
+                  >
+                    <SelectTrigger id="app-platform">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {PLATFORM_OPTIONS.map((option) => (
+                        <SelectItem key={option.value} value={option.value}>
+                          {option.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <FieldDescription>No framework field.</FieldDescription>
+                </Field>
+              )}
+            </form.Field>
+            <form.Field name="identifier">
+              {(field) => (
+                <Field>
+                  <FieldLabel htmlFor="app-identifier">Bundle or package identifier</FieldLabel>
+                  <Input
+                    id="app-identifier"
+                    onChange={(event) => field.handleChange(event.target.value)}
+                    placeholder={
+                      field.form.getFieldValue("platform") === "ios"
+                        ? "com.example.app"
+                        : "dev.example.app"
+                    }
+                    value={field.state.value}
+                  />
+                </Field>
+              )}
+            </form.Field>
+            {mutation.error ? (
+              <p className="text-destructive text-sm" role="alert">
+                {mutation.error.message}
+              </p>
+            ) : null}
+          </div>
+          <DialogFooter>
+            <DialogClose render={<Button type="button" variant="outline" />}>Cancel</DialogClose>
+            <Button disabled={mutation.isPending} type="submit">
+              {mutation.isPending ? "Registering…" : "Register application"}
+            </Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
+  )
+
   return (
     <WorkspacePage
+      actions={canManageApplications ? registerDialog : null}
       description="Applications are concrete iOS or Android identities and remain project-wide."
       eyebrow="Project-wide"
       title="Applications"
@@ -88,76 +213,6 @@ export function ApplicationsPage({ organizationId, projectId }: ApplicationsPage
           </ul>
         </WorkflowPanel>
       </HostedResourceBoundary>
-      {canManageApplications ? (
-        <WorkflowPanel title="Register application">
-          <form
-            className="grid gap-4 md:grid-cols-3"
-            onSubmit={(event) => {
-              event.preventDefault()
-              event.stopPropagation()
-              void form.handleSubmit()
-            }}
-          >
-            <form.Field name="name">
-              {(field) => (
-                <Field>
-                  <FieldLabel htmlFor="app-name">Name</FieldLabel>
-                  <Input
-                    id="app-name"
-                    onChange={(event) => field.handleChange(event.target.value)}
-                    placeholder="Acme iOS"
-                    value={field.state.value}
-                  />
-                </Field>
-              )}
-            </form.Field>
-            <form.Field name="platform">
-              {(field) => (
-                <Field>
-                  <FieldLabel htmlFor="app-platform">Platform</FieldLabel>
-                  <select
-                    className="border-input bg-background h-9 rounded border px-3 text-sm"
-                    id="app-platform"
-                    onChange={(event) =>
-                      field.handleChange(event.target.value as "android" | "ios")
-                    }
-                    value={field.state.value}
-                  >
-                    <option value="ios">iOS</option>
-                    <option value="android">Android</option>
-                  </select>
-                  <FieldDescription>No framework field.</FieldDescription>
-                </Field>
-              )}
-            </form.Field>
-            <form.Field name="identifier">
-              {(field) => (
-                <Field>
-                  <FieldLabel htmlFor="app-identifier">Bundle or package identifier</FieldLabel>
-                  <Input
-                    id="app-identifier"
-                    onChange={(event) => field.handleChange(event.target.value)}
-                    placeholder={
-                      field.form.getFieldValue("platform") === "ios"
-                        ? "com.example.app"
-                        : "dev.example.app"
-                    }
-                    value={field.state.value}
-                  />
-                </Field>
-              )}
-            </form.Field>
-            <Button className="md:col-start-3" disabled={mutation.isPending} type="submit">
-              {mutation.isPending ? "Registering…" : "Register application"}
-            </Button>
-          </form>
-          {mutation.error ? (
-            <p className="text-destructive mt-4 text-sm" role="alert">
-              {mutation.error.message}
-            </p>
-          ) : null}
-        </WorkflowPanel>
-      ) : null}
     </WorkspacePage>
   )
 }

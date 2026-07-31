@@ -13,6 +13,15 @@ import type { ReactNode } from "react"
 
 import { Button } from "@/components/ui/button"
 import {
+  Select,
+  SelectContent,
+  SelectGroup,
+  SelectItem,
+  SelectLabel,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
+import {
   Popover,
   PopoverContent,
   PopoverDescription,
@@ -81,6 +90,14 @@ function IconControl({
   )
 }
 
+const DEVICE_ITEM_GROUPS = CANVAS_DEVICE_GROUPS.map((group) => ({
+  items: CANVAS_DEVICE_PRESETS.filter((entry) => entry.group === group).map((entry) => ({
+    label: entry.label,
+    value: entry.id,
+  })),
+  label: group,
+}))
+
 function DeviceSelect({ toolbar }: { toolbar: boolean }) {
   const canvas = useStudioWorkspaceSelector(selectCanvasPreferences)
   const workspace = useStudioWorkspaceActions()
@@ -104,29 +121,34 @@ function DeviceSelect({ toolbar }: { toolbar: boolean }) {
             className="text-muted-foreground pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2"
           />
         )}
-        <select
-          aria-label={toolbar ? "Preview device" : undefined}
-          className={`${CONTROL_CLASS} ${toolbar ? "h-8 w-40 pr-8 pl-8" : "w-full"}`}
-          id={fieldId}
-          onChange={(event) =>
-            workspace.setCanvasPreference("device", event.target.value as StudioCanvasDevice)
+        <Select
+          items={DEVICE_ITEM_GROUPS}
+          onValueChange={(value) =>
+            workspace.setCanvasPreference("device", value as StudioCanvasDevice)
           }
           value={canvas.device}
         >
-          {CANVAS_DEVICE_GROUPS.map((group) => (
-            <optgroup key={group} label={group}>
-              {CANVAS_DEVICE_PRESETS.flatMap((entry) =>
-                entry.group === group ? (
-                  <option key={entry.id} value={entry.id}>
-                    {entry.label}
-                  </option>
-                ) : (
-                  []
-                ),
-              )}
-            </optgroup>
-          ))}
-        </select>
+          <SelectTrigger
+            aria-label={toolbar ? "Preview device" : undefined}
+            className={toolbar ? "w-40 pl-8" : "w-full"}
+            id={fieldId}
+            size={toolbar ? "sm" : "default"}
+          >
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {DEVICE_ITEM_GROUPS.map((group) => (
+              <SelectGroup key={group.label}>
+                <SelectLabel>{group.label}</SelectLabel>
+                {group.items.map((option) => (
+                  <SelectItem key={option.value} value={option.value}>
+                    {option.label}
+                  </SelectItem>
+                ))}
+              </SelectGroup>
+            ))}
+          </SelectContent>
+        </Select>
       </span>
     </label>
   )
@@ -150,27 +172,38 @@ function SecondaryPreviewSettings({ toolbar }: { toolbar: boolean }) {
     if (next) setPreference("countdownPreviewAt", next)
   }
 
+  const previewLocaleOptions = Object.entries(document.localization.locales).map(
+    ([locale, catalog]) => ({
+      label: `${locale} · ${catalog.direction.toUpperCase()}`,
+      value: locale,
+    }),
+  )
+
   const countdownFieldId = toolbar
     ? "canvas-toolbar-countdown-preview-at"
     : "preview-panel-countdown-preview-at"
 
   return (
     <div className={toolbar ? "space-y-4" : "space-y-3"}>
-      <label className="block space-y-1 text-xs">
+      <div className="block space-y-1 text-xs">
         <span className="text-muted-foreground block font-medium">Preview locale</span>
-        <select
-          aria-label="Preview locale"
-          className={`${CONTROL_CLASS} w-full`}
-          onChange={(event) => setPreference("locale", event.target.value)}
+        <Select
+          items={previewLocaleOptions}
+          onValueChange={(value) => setPreference("locale", value)}
           value={canvas.locale}
         >
-          {Object.entries(document.localization.locales).map(([locale, catalog]) => (
-            <option key={locale} value={locale}>
-              {locale} · {catalog.direction.toUpperCase()}
-            </option>
-          ))}
-        </select>
-      </label>
+          <SelectTrigger aria-label="Preview locale" size="sm">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {previewLocaleOptions.map((option) => (
+              <SelectItem key={option.value} value={option.value}>
+                {option.label}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
 
       <label className="block space-y-2 text-xs">
         <span className="flex items-center justify-between gap-3">
@@ -421,6 +454,11 @@ export function PreviewControls() {
     workspace.setCanvasPreference("zoom", clampZoom(Number(value.toFixed(2))))
   }
 
+  const localeOptions = Object.keys(document.localization.locales).map((locale) => ({
+    label: locale,
+    value: locale,
+  }))
+
   return (
     <section aria-labelledby="preview-context-title" className="space-y-4">
       <div>
@@ -478,45 +516,55 @@ export function PreviewControls() {
             These portable settings are part of the paywall document and its undo history.
           </p>
         </div>
-        <label className="block space-y-1 text-xs" htmlFor="document-default-locale">
-          <span className="text-muted-foreground font-medium">Default locale</span>
-          <select
-            className={`${CONTROL_CLASS} w-full`}
-            id="document-default-locale"
-            onChange={(event) =>
-              editor.updateDocument((current) =>
-                changeDocumentDefaultLocale(current, event.target.value),
-              )
+        <div className="block space-y-1 text-xs">
+          <label className="text-muted-foreground font-medium" htmlFor="document-default-locale">
+            Default locale
+          </label>
+          <Select
+            items={localeOptions}
+            onValueChange={(value) =>
+              editor.updateDocument((current) => changeDocumentDefaultLocale(current, value))
             }
             value={document.localization.defaultLocale}
           >
-            {Object.keys(document.localization.locales).map((locale) => (
-              <option key={locale} value={locale}>
-                {locale}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label className="block space-y-1 text-xs" htmlFor="document-fallback-locale">
-          <span className="text-muted-foreground font-medium">Fallback locale</span>
-          <select
-            className={`${CONTROL_CLASS} w-full`}
-            id="document-fallback-locale"
-            onChange={(event) =>
+            <SelectTrigger id="document-default-locale" size="sm">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {localeOptions.map((option) => (
+                <SelectItem key={option.value} value={option.value}>
+                  {option.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="block space-y-1 text-xs">
+          <label className="text-muted-foreground font-medium" htmlFor="document-fallback-locale">
+            Fallback locale
+          </label>
+          <Select
+            items={localeOptions}
+            onValueChange={(value) =>
               editor.updateDocument((current) => ({
                 ...current,
-                localization: { ...current.localization, fallbackLocale: event.target.value },
+                localization: { ...current.localization, fallbackLocale: value },
               }))
             }
             value={document.localization.fallbackLocale}
           >
-            {Object.keys(document.localization.locales).map((locale) => (
-              <option key={locale} value={locale}>
-                {locale}
-              </option>
-            ))}
-          </select>
-        </label>
+            <SelectTrigger id="document-fallback-locale" size="sm">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {localeOptions.map((option) => (
+                <SelectItem key={option.value} value={option.value}>
+                  {option.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
       </div>
     </section>
   )

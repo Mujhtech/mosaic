@@ -6,6 +6,13 @@ import type { RefObject } from "react"
 import { useQuery } from "@tanstack/react-query"
 
 import { Button } from "@/components/ui/button"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
 import { buttonVariants } from "@/components/ui/button-variants"
 import { generatedAssetAdapter } from "@/features/assets/api/generated-asset-adapter"
 import { assetsQueryOptions } from "@/features/assets/queries/asset-queries"
@@ -132,7 +139,16 @@ function HostedManagedAssets({
     ...assetsQueryOptions(source.projectId, generatedAssetAdapter),
   })
   const readyManagedAssets = managedAssets.data?.filter((asset) => asset.status === "ready") ?? []
-  const assetsHref = `/organizations/${encodeURIComponent(source.organizationId)}/projects/${encodeURIComponent(source.projectId)}/monetization/${encodeURIComponent(source.environmentId)}/assets?returnTo=${encodeURIComponent(hostedStudioHref(source))}`
+  const assetsHref = `/orgs/${encodeURIComponent(source.organizationId)}/projects/${encodeURIComponent(source.projectId)}/monetization/${encodeURIComponent(source.environmentId)}/assets?returnTo=${encodeURIComponent(hostedStudioHref(source))}`
+
+  function managedAssetOptions(kind: Asset["type"]) {
+    return [
+      { label: "Choose a managed Asset", value: "" },
+      ...readyManagedAssets
+        .filter((candidate) => candidate.kind === kind)
+        .map((candidate) => ({ label: candidate.name, value: candidate.id })),
+    ]
+  }
 
   function selectedManagedAssetId(asset: Asset) {
     if (asset.source.type !== "remote") return ""
@@ -166,14 +182,14 @@ function HostedManagedAssets({
       {readyManagedAssets.length > 0 && assets.length > 0 ? (
         <div className="space-y-2">
           {assets.map((asset) => (
-            <label className="grid gap-1 text-[11px]" key={asset.id}>
-              <span className="text-muted-foreground">Managed Asset for {asset.id}</span>
-              <select
-                className="border-input bg-background h-8 rounded border px-2 text-xs"
-                onChange={(event) => {
-                  const selected = readyManagedAssets.find(
-                    (candidate) => candidate.id === event.currentTarget.value,
-                  )
+            <div className="grid gap-1 text-[11px]" key={asset.id}>
+              <label className="text-muted-foreground" htmlFor={`managed-asset-${asset.id}`}>
+                Managed Asset for {asset.id}
+              </label>
+              <Select
+                items={managedAssetOptions(asset.type)}
+                onValueChange={(value) => {
+                  const selected = readyManagedAssets.find((candidate) => candidate.id === value)
                   if (!selected) return
                   updateAsset(asset.id, (current) => ({
                     ...current,
@@ -182,16 +198,18 @@ function HostedManagedAssets({
                 }}
                 value={selectedManagedAssetId(asset)}
               >
-                <option value="">Choose a managed Asset</option>
-                {readyManagedAssets
-                  .filter((candidate) => candidate.kind === asset.type)
-                  .map((candidate) => (
-                    <option key={candidate.id} value={candidate.id}>
-                      {candidate.name}
-                    </option>
+                <SelectTrigger className="text-xs" id={`managed-asset-${asset.id}`} size="sm">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {managedAssetOptions(asset.type).map((option) => (
+                    <SelectItem key={option.value} value={option.value}>
+                      {option.label}
+                    </SelectItem>
                   ))}
-              </select>
-            </label>
+                </SelectContent>
+              </Select>
+            </div>
           ))}
         </div>
       ) : null}
@@ -298,15 +316,17 @@ function AssetsPanel({ assets }: { assets: readonly Asset[] }) {
                   <TrashIcon aria-hidden />
                 </Button>
               </div>
-              <label className="grid gap-1 text-[11px]">
-                <span className="text-muted-foreground">Source</span>
-                <select
-                  className="border-input bg-background h-8 rounded border px-2 text-xs"
-                  onChange={(event) =>
+              <div className="grid gap-1 text-[11px]">
+                <label className="text-muted-foreground" htmlFor={`asset-source-${asset.id}`}>
+                  Source
+                </label>
+                <Select
+                  items={ASSET_SOURCE_OPTIONS}
+                  onValueChange={(value) =>
                     updateAsset(asset.id, (current) => ({
                       ...current,
                       source:
-                        event.target.value === "remote"
+                        value === "remote"
                           ? {
                               type: "remote",
                               url:
@@ -319,10 +339,18 @@ function AssetsPanel({ assets }: { assets: readonly Asset[] }) {
                   }
                   value={asset.source.type}
                 >
-                  <option value="remote">Remote HTTPS</option>
-                  <option value="bundled">Bundled key</option>
-                </select>
-              </label>
+                  <SelectTrigger className="text-xs" id={`asset-source-${asset.id}`} size="sm">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {ASSET_SOURCE_OPTIONS.map((option) => (
+                      <SelectItem key={option.value} value={option.value}>
+                        {option.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
               <label className="grid gap-1 text-[11px]">
                 <span className="text-muted-foreground">
                   {asset.source.type === "remote" ? "HTTPS URL" : "Bundle key"}
@@ -449,6 +477,11 @@ export interface StudioToolPanelProps {
   readonly onPurchaseStateChange: (state: MockPurchaseState) => void
 }
 
+const ASSET_SOURCE_OPTIONS = [
+  { label: "Remote HTTPS", value: "remote" },
+  { label: "Bundled key", value: "bundled" },
+]
+
 export function StudioToolPanel({
   assets,
   mockProducts,
@@ -464,7 +497,7 @@ export function StudioToolPanel({
   return (
     <aside
       aria-labelledby={TOOL_TITLE_IDS[selectedTool]}
-      className="bg-card h-full overflow-y-auto"
+      className="bg-card h-full scrollbar-thin scrollbar-gutter-stable overflow-y-auto"
     >
       <div className="p-4">
         {selectedTool === "layers" ? (

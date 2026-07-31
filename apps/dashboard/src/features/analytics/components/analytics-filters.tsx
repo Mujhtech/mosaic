@@ -1,5 +1,27 @@
 import { Button } from "@/components/ui/button"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
 import type { AnalyticsFilters as Filters } from "../types/analytics"
+
+const TIMEZONE_OPTIONS = [
+  { label: "UTC", value: "UTC" },
+  { label: "America/Los Angeles", value: "America/Los_Angeles" },
+  { label: "America/New York", value: "America/New_York" },
+  { label: "Europe/London", value: "Europe/London" },
+  { label: "Africa/Lagos", value: "Africa/Lagos" },
+  { label: "Asia/Tokyo", value: "Asia/Tokyo" },
+]
+
+const PLATFORM_OPTIONS = [
+  { label: "All platforms", value: "" },
+  { label: "iOS", value: "ios" },
+  { label: "Android", value: "android" },
+]
 
 interface Props {
   filters: Filters
@@ -29,25 +51,36 @@ export function AnalyticsFilters({ filters, onChange }: Props) {
     >
       <FilterField label="From" name="from" type="date" value={filters.from} />
       <FilterField label="To" name="to" type="date" value={filters.to} />
-      <label className="space-y-1 text-xs font-medium">
-        Timezone
-        <select className={fieldClass} defaultValue={filters.timezone} name="timezone">
-          <option value="UTC">UTC</option>
-          <option value="America/Los_Angeles">America/Los Angeles</option>
-          <option value="America/New_York">America/New York</option>
-          <option value="Europe/London">Europe/London</option>
-          <option value="Africa/Lagos">Africa/Lagos</option>
-          <option value="Asia/Tokyo">Asia/Tokyo</option>
-        </select>
-      </label>
-      <label className="space-y-1 text-xs font-medium">
-        Platform
-        <select className={fieldClass} defaultValue={filters.platform ?? ""} name="platform">
-          <option value="">All platforms</option>
-          <option value="ios">iOS</option>
-          <option value="android">Android</option>
-        </select>
-      </label>
+      <div className="space-y-1 text-xs font-medium">
+        <label htmlFor="analytics-timezone">Timezone</label>
+        <Select defaultValue={filters.timezone} items={TIMEZONE_OPTIONS} name="timezone">
+          <SelectTrigger id="analytics-timezone" size="sm">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {TIMEZONE_OPTIONS.map((option) => (
+              <SelectItem key={option.value} value={option.value}>
+                {option.label}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+      <div className="space-y-1 text-xs font-medium">
+        <label htmlFor="analytics-platform">Platform</label>
+        <Select defaultValue={filters.platform ?? ""} items={PLATFORM_OPTIONS} name="platform">
+          <SelectTrigger id="analytics-platform" size="sm">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {PLATFORM_OPTIONS.map((option) => (
+              <SelectItem key={option.value} value={option.value}>
+                {option.label}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
       <FilterField label="Locale" name="locale" placeholder="en-US" value={filters.locale ?? ""} />
       <FilterField
         label="App version"

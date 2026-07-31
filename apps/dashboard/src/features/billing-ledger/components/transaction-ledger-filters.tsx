@@ -1,6 +1,13 @@
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
+import {
   billingProviders,
   ENVIRONMENT_DISTINCTION_NOTE,
   providerLabel,
@@ -15,7 +22,7 @@ import {
   TRANSACTION_PAGE_SIZES,
   type TransactionFilters,
 } from "@/features/billing-ledger/types/transaction-filters"
-import { WorkflowPanel } from "@/features/organizations/components/workspace-page"
+import { WorkflowPanel } from "@/features/orgs/components/workspace-page"
 import type { Application, Product } from "@/generated/api"
 
 const fieldClass =
@@ -44,6 +51,31 @@ export function TransactionLedgerFilters({
     onChange({ ...rest, ...patch })
   }
 
+  const storeEnvironmentOptions = [
+    { label: "Any Store Environment", value: "" },
+    ...storeEnvironments.map((value) => ({ label: storeEnvironmentLabel(value), value })),
+  ]
+  const providerOptions = [
+    { label: "Any store", value: "" },
+    ...billingProviders.map((value) => ({ label: providerLabel(value), value })),
+  ]
+  const applicationOptions = [
+    { label: "Any Application", value: "" },
+    ...applications.map((application) => ({ label: application.name, value: application.id })),
+  ]
+  const productOptions = [
+    { label: "Any Product", value: "" },
+    ...products.map((product) => ({ label: product.internalName, value: product.id })),
+  ]
+  const resolutionOptions = [
+    { label: "Any resolution", value: "" },
+    ...resolutionStates.map((value) => ({ label: resolutionStateLabel(value), value })),
+  ]
+  const pageSizeOptions = TRANSACTION_PAGE_SIZES.map((size) => ({
+    label: String(size),
+    value: String(size),
+  }))
+
   const clientFilters = clientAppliedFilterCount(filters)
 
   return (
@@ -62,106 +94,115 @@ export function TransactionLedgerFilters({
           </span>
         </label>
 
-        <label className="space-y-1 text-sm font-medium">
-          Store Environment
-          <select
-            className={fieldClass}
-            onChange={(event) =>
+        <div className="space-y-1 text-sm font-medium">
+          <label htmlFor="ledger-store-environment">Store Environment</label>
+          <Select
+            items={storeEnvironmentOptions}
+            onValueChange={(value) =>
               update({
-                storeEnvironment:
-                  event.currentTarget.value === ""
-                    ? undefined
-                    : (event.currentTarget.value as TransactionFilters["storeEnvironment"]),
+                storeEnvironment: (value || undefined) as TransactionFilters["storeEnvironment"],
               })
             }
             value={filters.storeEnvironment ?? ""}
           >
-            <option value="">Any Store Environment</option>
-            {storeEnvironments.map((value) => (
-              <option key={value} value={value}>
-                {storeEnvironmentLabel(value)}
-              </option>
-            ))}
-          </select>
-        </label>
+            <SelectTrigger id="ledger-store-environment">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {storeEnvironmentOptions.map((option) => (
+                <SelectItem key={option.value} value={option.value}>
+                  {option.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
 
-        <label className="space-y-1 text-sm font-medium">
-          Store
-          <select
-            className={fieldClass}
-            onChange={(event) =>
-              update({
-                provider:
-                  event.currentTarget.value === ""
-                    ? undefined
-                    : (event.currentTarget.value as TransactionFilters["provider"]),
-              })
+        <div className="space-y-1 text-sm font-medium">
+          <label htmlFor="ledger-store">Store</label>
+          <Select
+            items={providerOptions}
+            onValueChange={(value) =>
+              update({ provider: (value || undefined) as TransactionFilters["provider"] })
             }
             value={filters.provider ?? ""}
           >
-            <option value="">Any store</option>
-            {billingProviders.map((value) => (
-              <option key={value} value={value}>
-                {providerLabel(value)}
-              </option>
-            ))}
-          </select>
-        </label>
+            <SelectTrigger id="ledger-store">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {providerOptions.map((option) => (
+                <SelectItem key={option.value} value={option.value}>
+                  {option.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
 
-        <label className="space-y-1 text-sm font-medium">
-          Application
-          <select
-            className={fieldClass}
-            onChange={(event) => update({ applicationId: event.currentTarget.value || undefined })}
+        <div className="space-y-1 text-sm font-medium">
+          <label htmlFor="ledger-application">Application</label>
+          <Select
+            items={applicationOptions}
+            onValueChange={(value) => update({ applicationId: value || undefined })}
             value={filters.applicationId ?? ""}
           >
-            <option value="">Any Application</option>
-            {applications.map((application) => (
-              <option key={application.id} value={application.id}>
-                {application.name}
-              </option>
-            ))}
-          </select>
-        </label>
+            <SelectTrigger id="ledger-application">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {applicationOptions.map((option) => (
+                <SelectItem key={option.value} value={option.value}>
+                  {option.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
 
-        <label className="space-y-1 text-sm font-medium">
-          Mosaic Product
-          <select
-            className={fieldClass}
-            onChange={(event) => update({ productId: event.currentTarget.value || undefined })}
+        <div className="space-y-1 text-sm font-medium">
+          <label htmlFor="ledger-product">Mosaic Product</label>
+          <Select
+            items={productOptions}
+            onValueChange={(value) => update({ productId: value || undefined })}
             value={filters.productId ?? ""}
           >
-            <option value="">Any Product</option>
-            {products.map((product) => (
-              <option key={product.id} value={product.id}>
-                {product.internalName}
-              </option>
-            ))}
-          </select>
-        </label>
+            <SelectTrigger id="ledger-product">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {productOptions.map((option) => (
+                <SelectItem key={option.value} value={option.value}>
+                  {option.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
 
-        <label className="space-y-1 text-sm font-medium">
-          Resolution
-          <select
-            className={fieldClass}
-            onChange={(event) =>
+        <div className="space-y-1 text-sm font-medium">
+          <label htmlFor="ledger-resolution">Resolution</label>
+          <Select
+            items={resolutionOptions}
+            onValueChange={(value) =>
               update({
-                resolutionState:
-                  event.currentTarget.value === ""
-                    ? undefined
-                    : (event.currentTarget.value as TransactionFilters["resolutionState"]),
+                resolutionState: (value || undefined) as TransactionFilters["resolutionState"],
               })
             }
             value={filters.resolutionState ?? ""}
           >
-            <option value="">Any resolution</option>
-            {resolutionStates.map((value) => (
-              <option key={value} value={value}>
-                {resolutionStateLabel(value)}
-              </option>
-            ))}
-          </select>
-        </label>
+            <SelectTrigger id="ledger-resolution">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {resolutionOptions.map((option) => (
+                <SelectItem key={option.value} value={option.value}>
+                  {option.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
 
         <label className="space-y-1 text-sm font-medium">
           Occurred from
@@ -192,20 +233,25 @@ export function TransactionLedgerFilters({
           />
         </label>
 
-        <label className="space-y-1 text-sm font-medium">
-          Rows per page
-          <select
-            className={fieldClass}
-            onChange={(event) => update({ limit: Number(event.currentTarget.value) })}
-            value={filters.limit}
+        <div className="space-y-1 text-sm font-medium">
+          <label htmlFor="ledger-page-size">Rows per page</label>
+          <Select
+            items={pageSizeOptions}
+            onValueChange={(value) => update({ limit: Number(value) })}
+            value={String(filters.limit)}
           >
-            {TRANSACTION_PAGE_SIZES.map((size) => (
-              <option key={size} value={size}>
-                {size}
-              </option>
-            ))}
-          </select>
-        </label>
+            <SelectTrigger id="ledger-page-size">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {pageSizeOptions.map((option) => (
+                <SelectItem key={option.value} value={option.value}>
+                  {option.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
       </div>
 
       <div className="mt-4 flex flex-wrap items-center gap-3">

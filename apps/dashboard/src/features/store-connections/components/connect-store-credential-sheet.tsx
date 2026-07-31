@@ -5,6 +5,13 @@ import { Button } from "@/components/ui/button"
 import { Field, FieldDescription, FieldError, FieldLabel } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
+import {
   Sheet,
   SheetContent,
   SheetDescription,
@@ -27,9 +34,6 @@ import {
 } from "@/features/store-connections/types/store-credential-input"
 import type { Application, CreateStoreServerCredentialRequest, Environment } from "@/generated/api"
 
-const fieldClass =
-  "border-input bg-background focus-visible:border-ring focus-visible:ring-ring/40 h-9 w-full rounded border px-3 text-sm outline-none focus-visible:ring-3"
-
 interface ConnectStoreCredentialSheetProps {
   applications: readonly Application[]
   applicationsHref: string
@@ -51,6 +55,16 @@ interface ConnectStoreCredentialSheetProps {
  * is identical; only the credential-specific fields differ. Two near-identical
  * sheets would be two places for the secret-handling rules to drift.
  */
+const STORE_PROVIDER_OPTIONS = [
+  { label: providerLabel("app_store"), value: "app_store" },
+  { label: providerLabel("google_play"), value: "google_play" },
+]
+
+const STORE_ENVIRONMENT_OPTIONS = [
+  { label: "Sandbox", value: "sandbox" },
+  { label: "Production", value: "production" },
+]
+
 export function ConnectStoreCredentialSheet({
   applications,
   applicationsHref,
@@ -106,6 +120,13 @@ export function ConnectStoreCredentialSheet({
   const compatibleEnvironments = environments.filter((environment) =>
     storeEnvironmentMatchesMode(environment.mode, storeEnvironment),
   )
+  const environmentOptions = [
+    { label: "Select an Environment", value: "" },
+    ...compatibleEnvironments.map((environment) => ({
+      label: `${environment.name} · ${environment.mode}`,
+      value: environment.id,
+    })),
+  ]
   const googleSummary =
     provider === "google_play" && secretValue.trim().length > 0
       ? readGoogleServiceAccount(secretValue)
@@ -142,20 +163,25 @@ export function ConnectStoreCredentialSheet({
               {(field) => (
                 <Field>
                   <FieldLabel htmlFor="store-credential-provider">Store</FieldLabel>
-                  <select
-                    className={fieldClass}
-                    id="store-credential-provider"
-                    onChange={(event) => {
-                      field.handleChange(
-                        event.currentTarget.value as StoreCredentialFormValues["provider"],
-                      )
+                  <Select
+                    items={STORE_PROVIDER_OPTIONS}
+                    onValueChange={(value) => {
+                      field.handleChange(value as StoreCredentialFormValues["provider"])
                       form.setFieldValue("secret", "")
                     }}
                     value={field.state.value}
                   >
-                    <option value="app_store">{providerLabel("app_store")}</option>
-                    <option value="google_play">{providerLabel("google_play")}</option>
-                  </select>
+                    <SelectTrigger id="store-credential-provider">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {STORE_PROVIDER_OPTIONS.map((option) => (
+                        <SelectItem key={option.value} value={option.value}>
+                          {option.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </Field>
               )}
             </form.Field>
@@ -193,12 +219,10 @@ export function ConnectStoreCredentialSheet({
                   <FieldLabel htmlFor="store-credential-store-environment">
                     Store Environment
                   </FieldLabel>
-                  <select
-                    className={fieldClass}
-                    id="store-credential-store-environment"
-                    onChange={(event) => {
-                      const next = event.currentTarget
-                        .value as StoreCredentialFormValues["storeEnvironment"]
+                  <Select
+                    items={STORE_ENVIRONMENT_OPTIONS}
+                    onValueChange={(value) => {
+                      const next = value as StoreCredentialFormValues["storeEnvironment"]
                       field.handleChange(next)
                       const selected = environments.find(
                         (item) => item.id === form.getFieldValue("environmentId"),
@@ -209,9 +233,17 @@ export function ConnectStoreCredentialSheet({
                     }}
                     value={field.state.value}
                   >
-                    <option value="sandbox">Sandbox</option>
-                    <option value="production">Production</option>
-                  </select>
+                    <SelectTrigger id="store-credential-store-environment">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {STORE_ENVIRONMENT_OPTIONS.map((option) => (
+                        <SelectItem key={option.value} value={option.value}>
+                          {option.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                   <FieldDescription>
                     Sandbox and production are separate connections and never mix. This is the
                     store&rsquo;s own classification, not your Mosaic Environment.
@@ -244,20 +276,25 @@ export function ConnectStoreCredentialSheet({
                       </a>
                     </div>
                   ) : (
-                    <select
-                      aria-invalid={field.state.meta.errors.length > 0}
-                      className={fieldClass}
-                      id="store-credential-environment"
-                      onChange={(event) => field.handleChange(event.currentTarget.value)}
+                    <Select
+                      items={environmentOptions}
+                      onValueChange={(value) => field.handleChange(value)}
                       value={field.state.value}
                     >
-                      <option value="">Select an Environment</option>
-                      {compatibleEnvironments.map((environment) => (
-                        <option key={environment.id} value={environment.id}>
-                          {environment.name} · {environment.mode}
-                        </option>
-                      ))}
-                    </select>
+                      <SelectTrigger
+                        aria-invalid={field.state.meta.errors.length > 0}
+                        id="store-credential-environment"
+                      >
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {environmentOptions.map((option) => (
+                          <SelectItem key={option.value} value={option.value}>
+                            {option.label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
                   )}
                   <FieldError errors={field.state.meta.errors.map((message) => ({ message }))} />
                 </Field>

@@ -1,4 +1,5 @@
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react"
+import { chooseSelectOption } from "@/test/select"
 import { describe, expect, it } from "vitest"
 
 import { EDITOR_TEMPLATES } from "@/features/paywall-editor/constants/templates"
@@ -20,8 +21,13 @@ describe("property inspector safety", () => {
   it("keeps product binding contextual to the selected Product Card", async () => {
     renderInspector("monthly-card")
     const product = await screen.findByLabelText("Product")
-    expect(product).toHaveValue("monthly-plan")
-    expect(within(product).getByRole("option", { name: "Yearly" })).toBeDisabled()
+    expect(product).toHaveTextContent("Monthly")
+    fireEvent.click(product)
+    expect(await screen.findByRole("option", { name: "Yearly" })).toHaveAttribute(
+      "data-disabled",
+      "",
+    )
+    fireEvent.keyDown(document.body, { key: "Escape" })
     expect(screen.getByTestId("bindings")).toHaveTextContent("monthly-plan,yearly-plan")
   })
 
@@ -105,19 +111,17 @@ describe("property inspector safety", () => {
     renderInspector("monthly-card")
     const size = within(await waitFor(() => openInspectorSection("Layout")))
 
-    fireEvent.change(size.getByRole("combobox", { name: "Width behaviour" }), {
-      target: { value: "fixed" },
-    })
+    await chooseSelectOption(size.getByRole("combobox", { name: "Width behaviour" }), "Fixed")
 
     expect(size.getByRole("spinbutton", { name: "Fixed width" })).toHaveValue(320)
     expect(screen.getByTestId("inspector-document")).toHaveTextContent(
       '"width":{"mode":"fixed","value":320}',
     )
 
-    fireEvent.change(size.getByRole("combobox", { name: "Width behaviour" }), {
-      target: { value: "fill" },
-    })
-    expect(size.getByRole("combobox", { name: "Width behaviour" })).toHaveValue("fill")
+    await chooseSelectOption(size.getByRole("combobox", { name: "Width behaviour" }), "Fill")
+    expect(size.getByRole("combobox", { name: "Width behaviour" })).toHaveAccessibleName(
+      "Width behaviour",
+    )
     expect(size.getByText(/Width Fill is unbounded/)).toBeVisible()
     expect(screen.getByTestId("inspector-document")).toHaveTextContent('"sizing":{"width":"fill"')
   })

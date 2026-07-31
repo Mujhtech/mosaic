@@ -9,6 +9,13 @@ import { ErrorState } from "@/components/feedback/error-state"
 import { LoadingState } from "@/components/feedback/loading-state"
 import { Field, FieldError, FieldLabel } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
 import type { PlacementDecisionsAdapter } from "@/features/placement-decisions/api/placement-decisions-adapter"
 import { createAttributeMutationOptions } from "@/features/placement-decisions/mutations/placement-decision-mutations"
 import {
@@ -27,6 +34,20 @@ const DEFAULT_OPERATORS: readonly ConditionOperator[] = [
   "not_equals",
   "exists",
   "does_not_exist",
+]
+
+const ATTRIBUTE_TYPE_OPTIONS = [
+  "string",
+  "boolean",
+  "number",
+  "timestamp",
+  "semantic_version",
+  "string_list",
+].map((type) => ({ label: type.replace("_", " "), value: type }))
+
+const SENSITIVITY_OPTIONS = [
+  { label: "Standard", value: "standard" },
+  { label: "Sensitive", value: "sensitive" },
 ]
 
 export function AttributeDefinitions({
@@ -118,25 +139,22 @@ export function AttributeDefinitions({
           {(field) => (
             <Field>
               <FieldLabel htmlFor="attribute-type">Type</FieldLabel>
-              <select
-                className="border-input bg-background h-9 rounded border px-3 text-sm"
-                id="attribute-type"
-                onChange={(event) => field.handleChange(event.currentTarget.value as AttributeType)}
+              <Select
+                items={ATTRIBUTE_TYPE_OPTIONS}
+                onValueChange={(value) => field.handleChange(value as AttributeType)}
                 value={field.state.value}
               >
-                {[
-                  "string",
-                  "boolean",
-                  "number",
-                  "timestamp",
-                  "semantic_version",
-                  "string_list",
-                ].map((type) => (
-                  <option key={type} value={type}>
-                    {type.replace("_", " ")}
-                  </option>
-                ))}
-              </select>
+                <SelectTrigger id="attribute-type">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {ATTRIBUTE_TYPE_OPTIONS.map((option) => (
+                    <SelectItem key={option.value} value={option.value}>
+                      {option.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </Field>
           )}
         </form.Field>
@@ -144,17 +162,22 @@ export function AttributeDefinitions({
           {(field) => (
             <Field>
               <FieldLabel htmlFor="attribute-sensitivity">Sensitivity</FieldLabel>
-              <select
-                className="border-input bg-background h-9 rounded border px-3 text-sm"
-                id="attribute-sensitivity"
-                onChange={(event) =>
-                  field.handleChange(event.currentTarget.value as "standard" | "sensitive")
-                }
+              <Select
+                items={SENSITIVITY_OPTIONS}
+                onValueChange={(value) => field.handleChange(value as "standard" | "sensitive")}
                 value={field.state.value}
               >
-                <option value="standard">Standard</option>
-                <option value="sensitive">Sensitive</option>
-              </select>
+                <SelectTrigger id="attribute-sensitivity">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {SENSITIVITY_OPTIONS.map((option) => (
+                    <SelectItem key={option.value} value={option.value}>
+                      {option.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </Field>
           )}
         </form.Field>

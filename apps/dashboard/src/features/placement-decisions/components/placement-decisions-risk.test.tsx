@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor, within } from "@testing-library/react"
+import { fireEvent, render, screen, waitFor } from "@testing-library/react"
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query"
 import { describe, expect, it, vi } from "vitest"
 
@@ -10,6 +10,7 @@ import { ValidationSummary } from "@/features/placement-decisions/components/pla
 import { QaOverrides } from "@/features/placement-decisions/components/qa-overrides"
 import { RuleBuilder } from "@/features/placement-decisions/components/rule-builder"
 import { openPlacementRule } from "@/features/placement-decisions/components/rule-navigation"
+import { chooseSelectOption } from "@/test/select"
 
 function adapter(overrides: Partial<PlacementDecisionsAdapter> = {}): PlacementDecisionsAdapter {
   const unavailable = () => Promise.reject(new Error("not used"))
@@ -69,7 +70,7 @@ describe("Placement decision risk controls", () => {
     })
   })
 
-  it("offers only operators supported by the selected source", () => {
+  it("offers only operators supported by the selected source", async () => {
     const onChange = vi.fn()
     render(
       <ConditionEditor
@@ -101,12 +102,22 @@ describe("Placement decision risk controls", () => {
 
     const source = screen.getAllByLabelText("Source")[0]!
     const [operator, exactOperator] = screen.getAllByLabelText("Operator")
-    expect(within(operator!).getByRole("option", { name: "is greater than" })).toBeVisible()
-    expect(
-      within(exactOperator!).queryByRole("option", { name: "is greater than" }),
-    ).not.toBeInTheDocument()
 
-    fireEvent.change(source, { target: { value: "context.country" } })
+    // The options only exist while the list is open, so each row is inspected
+    // in turn rather than by reading a closed control's DOM.
+    fireEvent.click(operator!)
+    expect(await screen.findByRole("option", { name: "is greater than" })).toBeVisible()
+    fireEvent.keyDown(document.body, { key: "Escape" })
+    await waitFor(() =>
+      expect(screen.queryByRole("option", { name: "is greater than" })).not.toBeInTheDocument(),
+    )
+
+    fireEvent.click(exactOperator!)
+    expect(await screen.findByRole("option", { name: "equals" })).toBeVisible()
+    expect(screen.queryByRole("option", { name: "is greater than" })).not.toBeInTheDocument()
+    fireEvent.keyDown(document.body, { key: "Escape" })
+
+    await chooseSelectOption(source, "Explicit country")
     const changed = onChange.mock.calls.at(-1)?.[0]
     expect(changed.children[0]).toMatchObject({ operator: "equals", source: "context.country" })
   })

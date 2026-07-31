@@ -1,25 +1,50 @@
+import { useState } from "react"
 import { useForm } from "@tanstack/react-form"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 
 import { Button } from "@/components/ui/button"
+import {
+  Dialog,
+  DialogClose,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog"
 import { Field, FieldDescription, FieldLabel } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
 import { HostedResourceBoundary } from "@/features/auth/components/hosted-resource-boundary"
 import { resolveHostedQueryState } from "@/features/auth/types/hosted-query-state"
 import { addMemberMutationOptions } from "@/features/members/mutations/member-mutations"
 import { membersQueryOptions } from "@/features/members/queries/members-query"
-import { WorkspacePage, WorkflowPanel } from "@/features/organizations/components/workspace-page"
+import { WorkspacePage, WorkflowPanel } from "@/features/orgs/components/workspace-page"
+
+const ROLE_OPTIONS = [
+  { label: "Member", value: "member" },
+  { label: "Admin", value: "admin" },
+]
 
 export function MembersPage({ organizationId }: { organizationId: string }) {
   const queryClient = useQueryClient()
   const members = useQuery(membersQueryOptions(organizationId))
   const mutation = useMutation(addMemberMutationOptions(organizationId, queryClient))
   const items = members.data?.items ?? []
+  const [addOpen, setAddOpen] = useState(false)
   const form = useForm({
     defaultValues: { actorId: "", role: "member" as "admin" | "member" },
     onSubmit: async ({ value }) => {
       await mutation.mutateAsync({ actorId: value.actorId.trim(), role: value.role })
       form.reset()
+      setAddOpen(false)
     },
   })
   const state = resolveHostedQueryState({
@@ -35,38 +60,34 @@ export function MembersPage({ organizationId }: { organizationId: string }) {
   })
   const canManageMembers = state.kind === "empty" || state.kind === "ready"
 
-  return (
-    <WorkspacePage
-      description="Membership roles apply across this organization. The final owner can never be removed."
-      title="Members"
+  const addDialog = (
+    <Dialog
+      onOpenChange={(open) => {
+        setAddOpen(open)
+        if (!open) {
+          form.reset()
+          mutation.reset()
+        }
+      }}
+      open={addOpen}
     >
-      <HostedResourceBoundary state={state}>
-        <WorkflowPanel title="Organization members">
-          <ul className="divide-y">
-            {items.map((membership) => (
-              <li className="flex items-center justify-between gap-4 py-3" key={membership.actorId}>
-                <span className="font-mono text-sm">{membership.actorId}</span>
-                <span className="bg-muted rounded-full px-2.5 py-1 text-xs font-medium capitalize">
-                  {membership.role}
-                </span>
-              </li>
-            ))}
-          </ul>
-        </WorkflowPanel>
-      </HostedResourceBoundary>
-      {canManageMembers ? (
-        <WorkflowPanel
-          description="Invitations and email delivery remain deferred; this accepts an existing Actor ID only."
-          title="Add member"
+      <DialogTrigger render={<Button size="sm" />}>Add member</DialogTrigger>
+      <DialogContent>
+        <form
+          onSubmit={(event) => {
+            event.preventDefault()
+            event.stopPropagation()
+            void form.handleSubmit()
+          }}
         >
-          <form
-            className="grid max-w-2xl gap-4 sm:grid-cols-[1fr_10rem_auto] sm:items-end"
-            onSubmit={(event) => {
-              event.preventDefault()
-              event.stopPropagation()
-              void form.handleSubmit()
-            }}
-          >
+          <DialogHeader>
+            <DialogTitle>Add member</DialogTitle>
+            <DialogDescription>
+              Invitations and email delivery remain deferred; this accepts an existing Actor ID
+              only.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-4 px-4">
             <form.Field name="actorId">
               {(field) => (
                 <Field>
@@ -85,31 +106,62 @@ export function MembersPage({ organizationId }: { organizationId: string }) {
               {(field) => (
                 <Field>
                   <FieldLabel htmlFor="member-role">Role</FieldLabel>
-                  <select
-                    className="border-input bg-background h-9 rounded border px-3 text-sm"
-                    id="member-role"
-                    onChange={(event) =>
-                      field.handleChange(event.target.value as "admin" | "member")
-                    }
+                  <Select
+                    items={ROLE_OPTIONS}
+                    onValueChange={(value) => field.handleChange(value as "admin" | "member")}
                     value={field.state.value}
                   >
-                    <option value="member">Member</option>
-                    <option value="admin">Admin</option>
-                  </select>
+                    <SelectTrigger id="member-role">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {ROLE_OPTIONS.map((option) => (
+                        <SelectItem key={option.value} value={option.value}>
+                          {option.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </Field>
               )}
             </form.Field>
+            {mutation.error ? (
+              <p className="text-destructive text-sm" role="alert">
+                {mutation.error.message}
+              </p>
+            ) : null}
+          </div>
+          <DialogFooter>
+            <DialogClose render={<Button type="button" variant="outline" />}>Cancel</DialogClose>
             <Button disabled={mutation.isPending} type="submit">
               {mutation.isPending ? "Adding…" : "Add member"}
             </Button>
-          </form>
-          {mutation.error ? (
-            <p className="text-destructive mt-4 text-sm" role="alert">
-              {mutation.error.message}
-            </p>
-          ) : null}
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
+  )
+
+  return (
+    <WorkspacePage
+      actions={canManageMembers ? addDialog : null}
+      description="Membership roles apply across this organization. The final owner can never be removed."
+      title="Members"
+    >
+      <HostedResourceBoundary state={state}>
+        <WorkflowPanel title="Organization members">
+          <ul className="divide-y">
+            {items.map((membership) => (
+              <li className="flex items-center justify-between gap-4 py-3" key={membership.actorId}>
+                <span className="font-mono text-sm">{membership.actorId}</span>
+                <span className="bg-muted rounded-full px-2.5 py-1 text-xs font-medium capitalize">
+                  {membership.role}
+                </span>
+              </li>
+            ))}
+          </ul>
         </WorkflowPanel>
-      ) : null}
+      </HostedResourceBoundary>
     </WorkspacePage>
   )
 }

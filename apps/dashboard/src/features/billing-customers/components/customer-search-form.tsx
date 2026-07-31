@@ -4,6 +4,13 @@ import { Button } from "@/components/ui/button"
 import { Field, FieldDescription, FieldError, FieldLabel } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
+import {
   customerIdentifierTypes,
   describeSearchIssue,
   identifierTypeHelp,
@@ -14,9 +21,6 @@ import {
   validateCustomerSearch,
   type CustomerIdentifierType,
 } from "@/features/billing-customers/types/customer-search"
-
-const fieldClass =
-  "border-input bg-background focus-visible:border-ring focus-visible:ring-ring/40 h-9 w-full rounded border px-3 text-sm outline-none focus-visible:ring-3"
 
 interface CustomerSearchFormProps {
   isPending: boolean
@@ -41,6 +45,11 @@ export function CustomerSearchForm({ isPending, onSearch }: CustomerSearchFormPr
   const [identifierValue, setIdentifierValue] = useState("")
   const [issue, setIssue] = useState<string | undefined>(undefined)
 
+  const identifierTypeOptions = customerIdentifierTypes.map((type) => ({
+    label: identifierTypeLabel(type),
+    value: type,
+  }))
+
   async function submit() {
     const found = validateCustomerSearch({ identifierType, identifierValue })
     if (found) {
@@ -64,21 +73,25 @@ export function CustomerSearchForm({ isPending, onSearch }: CustomerSearchFormPr
       <div className="grid gap-3 sm:grid-cols-[minmax(0,14rem)_minmax(0,1fr)_auto] sm:items-end">
         <Field>
           <FieldLabel htmlFor="customer-identifier-type">Identifier type</FieldLabel>
-          <select
-            className={fieldClass}
-            id="customer-identifier-type"
-            onChange={(event) => {
-              setIdentifierType(event.currentTarget.value as CustomerIdentifierType)
+          <Select
+            items={identifierTypeOptions}
+            onValueChange={(value) => {
+              setIdentifierType(value as CustomerIdentifierType)
               setIssue(undefined)
             }}
             value={identifierType}
           >
-            {customerIdentifierTypes.map((type) => (
-              <option key={type} value={type}>
-                {identifierTypeLabel(type)}
-              </option>
-            ))}
-          </select>
+            <SelectTrigger id="customer-identifier-type">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {identifierTypeOptions.map((option) => (
+                <SelectItem key={option.value} value={option.value}>
+                  {option.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </Field>
 
         <Field data-invalid={issue !== undefined}>

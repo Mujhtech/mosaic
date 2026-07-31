@@ -3,6 +3,13 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { useState } from "react"
 
 import { Button } from "@/components/ui/button"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
 import { Input } from "@/components/ui/input"
 import { WorkflowPanel } from "@/features/orgs/components/workspace-page"
 import type { AnalyticsAdapter } from "../api/analytics-adapter"
@@ -15,6 +22,16 @@ import type {
   IdentityRequest,
 } from "../types/analytics"
 import { AnalyticsQueryResult } from "./query-result"
+
+const RETENTION_OPTIONS = [30, 60, 90, 180, 365, 730].map((days) => ({
+  label: `${days} days${days === 180 ? " (default)" : ""}`,
+  value: String(days),
+}))
+
+const IDENTITY_SCOPE_OPTIONS = [
+  { label: "Application user", value: "application_user" },
+  { label: "Installation", value: "installation" },
+]
 
 export function DataPrivacyPanel({
   adapter,
@@ -88,21 +105,26 @@ function CollectionSettingsPanel({
                 </span>
               </span>
             </label>
-            <label className="space-y-1 text-sm font-medium">
-              Raw event retention
-              <select
-                className="border-input bg-background h-10 w-full rounded border px-3"
-                defaultValue={settings.data.rawRetentionDays}
+            <div className="space-y-1 text-sm font-medium">
+              <label htmlFor="raw-event-retention">Raw event retention</label>
+              <Select
+                defaultValue={String(settings.data.rawRetentionDays)}
                 disabled={!canManage || mutation.isPending}
+                items={RETENTION_OPTIONS}
                 name="retention"
               >
-                {[30, 60, 90, 180, 365, 730].map((days) => (
-                  <option key={days} value={days}>
-                    {days} days{days === 180 ? " (default)" : ""}
-                  </option>
-                ))}
-              </select>
-            </label>
+                <SelectTrigger id="raw-event-retention">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {RETENTION_OPTIONS.map((option) => (
+                    <SelectItem key={option.value} value={option.value}>
+                      {option.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
             <p className="text-muted-foreground text-xs sm:col-span-2">
               Exact aggregates and privacy audit metadata are retained for 24 months. Retention
               changes apply to raw events received after the setting is saved.
@@ -240,19 +262,25 @@ function IdentityOperationsPanel({
         >
           <form.Field name="scope">
             {(field) => (
-              <label className="space-y-1 text-sm font-medium">
-                Identity scope
-                <select
-                  className="border-input bg-background h-10 w-full rounded border px-3"
-                  onChange={(event) =>
-                    field.handleChange(event.target.value as IdentityRequest["scope"])
-                  }
+              <div className="space-y-1 text-sm font-medium">
+                <label htmlFor="identity-scope">Identity scope</label>
+                <Select
+                  items={IDENTITY_SCOPE_OPTIONS}
+                  onValueChange={(value) => field.handleChange(value as IdentityRequest["scope"])}
                   value={field.state.value}
                 >
-                  <option value="application_user">Application user</option>
-                  <option value="installation">Installation</option>
-                </select>
-              </label>
+                  <SelectTrigger id="identity-scope">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {IDENTITY_SCOPE_OPTIONS.map((option) => (
+                      <SelectItem key={option.value} value={option.value}>
+                        {option.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
             )}
           </form.Field>
           <form.Field name="value">

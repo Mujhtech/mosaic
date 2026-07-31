@@ -10,11 +10,18 @@ import { Button } from "@/components/ui/button"
 import { buttonVariants } from "@/components/ui/button-variants"
 import { Field, FieldError, FieldLabel } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
 import { describeApiError } from "@/lib/api/errors"
 import { useOrganizationAccess } from "@/hooks/use-organization-access"
 import { useHostedPublishingAdapter } from "@/features/publishing/api/use-hosted-publishing-adapter"
 import { placementsQueryOptions } from "@/features/placements/queries/placement-queries"
-import { WorkflowPanel } from "@/features/organizations/components/workspace-page"
+import { WorkflowPanel } from "@/features/orgs/components/workspace-page"
 import { environmentsQueryOptions } from "@/features/environments/queries/environments-query"
 import { ExperimentDraftConflictError } from "../api/experiment-adapter"
 import { useExperimentAdapter } from "../api/use-experiment-adapter"
@@ -47,6 +54,12 @@ function splitFor(count: number) {
     index === count - 1 ? 10_000 - base * (count - 1) : base,
   )
 }
+
+const ASSIGNMENT_IDENTITY_OPTIONS = [
+  { label: "Identified user (requires identity)", value: "identified_user" },
+  { label: "Identified user, otherwise installation", value: "identified_user_or_installation" },
+  { label: "Installation", value: "installation" },
+]
 
 export function ExperimentBuilder({
   environmentId,
@@ -200,8 +213,8 @@ export function ExperimentBuilder({
         }
       }
       await navigate({
-        params: { environmentId, experimentId: target.id, organizationId, projectId },
-        to: "/organizations/$organizationId/projects/$projectId/monetization/$environmentId/experiments/$experimentId",
+        params: (prev) => ({ ...prev, experimentId: target.id }),
+        to: "/orgs/$organizationId/projects/$projectId/env/$environmentKey/monetization/experiments/$experimentId",
       })
     },
   })
@@ -254,6 +267,33 @@ export function ExperimentBuilder({
   }
 
   const versions = resources.data.paywallVersions
+  const placementOptions = [
+    { label: "Choose Placement", value: "" },
+    ...placements.data.map((placement) => ({ label: placement.name, value: placement.id })),
+  ]
+  const versionOptions = [
+    { label: "Choose immutable Version", value: "" },
+    ...versions.map((version) => ({
+      label: `${version.paywallName} · v${version.versionNumber}`,
+      value: version.id,
+    })),
+  ]
+  const metricOptions = [
+    { disabled: false, label: "Choose metric", value: "" },
+    ...resources.data.metrics
+      .filter((metric) => metric.eligibleAsPrimary)
+      .map((metric) => ({
+        disabled: !canSelectMetric(metric),
+        label: `${metric.name} · ${metric.authority.replace("_", " ")}${
+          canSelectMetric(metric) ? "" : " · trusted source unavailable"
+        }`,
+        value: metric.versionId,
+      })),
+  ]
+  const groupOptions = [
+    { label: "No group", value: "" },
+    ...resources.data.groups.map((group) => ({ label: group.name, value: group.versionId })),
+  ]
   const error = saveMutation.error ?? createMutation.error
   const conflict = error instanceof ExperimentDraftConflictError ? error : undefined
   function applyEvenSplit(nextTreatmentCount = treatmentCount) {
@@ -309,20 +349,26 @@ export function ExperimentBuilder({
               {(field) => (
                 <Field>
                   <FieldLabel htmlFor="experiment-placement">Placement</FieldLabel>
-                  <select
-                    className="border-input bg-background h-8 rounded border px-2 text-sm"
-                    disabled={Boolean(experiment)}
-                    id="experiment-placement"
+                  <Select
+                    items={placementOptions}
+                    onValueChange={(value) => field.handleChange(value)}
                     value={field.state.value}
-                    onChange={(event) => field.handleChange(event.currentTarget.value)}
                   >
-                    <option value="">Choose Placement</option>
-                    {placements.data.map((placement) => (
-                      <option key={placement.id} value={placement.id}>
-                        {placement.name}
-                      </option>
-                    ))}
-                  </select>
+                    <SelectTrigger
+                      id="experiment-placement"
+                      disabled={Boolean(experiment)}
+                      size="sm"
+                    >
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {placementOptions.map((option) => (
+                        <SelectItem key={option.value} value={option.value}>
+                          {option.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </Field>
               )}
             </form.Field>
@@ -355,8 +401,8 @@ export function ExperimentBuilder({
                 </p>
                 <Link
                   className={buttonVariants({ className: "mt-3", size: "sm", variant: "outline" })}
-                  params={{ environmentId, organizationId, projectId }}
-                  to="/organizations/$organizationId/projects/$projectId/monetization/$environmentId/paywalls"
+                  params={(prev) => prev}
+                  to="/orgs/$organizationId/projects/$projectId/env/$environmentKey/monetization/paywalls"
                 >
                   Open Paywalls
                 </Link>
@@ -386,19 +432,22 @@ export function ExperimentBuilder({
                     {(field) => (
                       <Field>
                         <FieldLabel htmlFor={`variant-${index}`}>{role} Paywall Version</FieldLabel>
-                        <select
-                          className="border-input bg-background h-8 rounded border px-2 text-sm"
-                          id={`variant-${index}`}
+                        <Select
+                          items={versionOptions}
+                          onValueChange={(value) => field.handleChange(value)}
                           value={field.state.value}
-                          onChange={(event) => field.handleChange(event.currentTarget.value)}
                         >
-                          <option value="">Choose immutable Version</option>
-                          {versions.map((version) => (
-                            <option key={version.id} value={version.id}>
-                              {version.paywallName} · v{version.versionNumber}
-                            </option>
-                          ))}
-                        </select>
+                          <SelectTrigger id={`variant-${index}`} size="sm">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {versionOptions.map((option) => (
+                              <SelectItem key={option.value} value={option.value}>
+                                {option.label}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
                       </Field>
                     )}
                   </form.Field>
@@ -470,20 +519,22 @@ export function ExperimentBuilder({
               {(field) => (
                 <Field>
                   <FieldLabel htmlFor="assignment-policy">Assignment identity</FieldLabel>
-                  <select
-                    className="border-input bg-background h-8 rounded border px-2 text-sm"
-                    id="assignment-policy"
+                  <Select
+                    items={ASSIGNMENT_IDENTITY_OPTIONS}
+                    onValueChange={(value) => field.handleChange(value as typeof field.state.value)}
                     value={field.state.value}
-                    onChange={(event) =>
-                      field.handleChange(event.currentTarget.value as typeof field.state.value)
-                    }
                   >
-                    <option value="identified_user">Identified user (requires identity)</option>
-                    <option value="identified_user_or_installation">
-                      Identified user, otherwise installation
-                    </option>
-                    <option value="installation">Installation</option>
-                  </select>
+                    <SelectTrigger id="assignment-policy" size="sm">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {ASSIGNMENT_IDENTITY_OPTIONS.map((option) => (
+                        <SelectItem key={option.value} value={option.value}>
+                          {option.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </Field>
               )}
             </form.Field>
@@ -491,26 +542,26 @@ export function ExperimentBuilder({
               {(field) => (
                 <Field>
                   <FieldLabel htmlFor="primary-metric">Primary metric</FieldLabel>
-                  <select
-                    className="border-input bg-background h-8 rounded border px-2 text-sm"
-                    id="primary-metric"
+                  <Select
+                    items={metricOptions}
+                    onValueChange={(value) => field.handleChange(value)}
                     value={field.state.value}
-                    onChange={(event) => field.handleChange(event.currentTarget.value)}
                   >
-                    <option value="">Choose metric</option>
-                    {resources.data.metrics
-                      .filter((metric) => metric.eligibleAsPrimary)
-                      .map((metric) => (
-                        <option
-                          disabled={!canSelectMetric(metric)}
-                          key={metric.versionId}
-                          value={metric.versionId}
+                    <SelectTrigger id="primary-metric" size="sm">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {metricOptions.map((option) => (
+                        <SelectItem
+                          disabled={option.disabled}
+                          key={option.value}
+                          value={option.value}
                         >
-                          {metric.name} · {metric.authority.replace("_", " ")}
-                          {canSelectMetric(metric) ? "" : " · trusted source unavailable"}
-                        </option>
+                          {option.label}
+                        </SelectItem>
                       ))}
-                  </select>
+                    </SelectContent>
+                  </Select>
                   {resources.data.metrics.find(
                     (metric) => metric.versionId === field.state.value,
                   ) ? (
@@ -570,20 +621,22 @@ export function ExperimentBuilder({
               {(field) => (
                 <Field className="md:col-span-2">
                   <FieldLabel htmlFor="exclusion-group">Mutual-exclusion group</FieldLabel>
-                  <select
-                    className="border-input bg-background h-8 rounded border px-2 text-sm"
-                    disabled={!experiment}
-                    id="exclusion-group"
+                  <Select
+                    items={groupOptions}
+                    onValueChange={(value) => field.handleChange(value)}
                     value={field.state.value}
-                    onChange={(event) => field.handleChange(event.currentTarget.value)}
                   >
-                    <option value="">No group</option>
-                    {resources.data.groups.map((group) => (
-                      <option key={group.versionId} value={group.versionId}>
-                        {group.name}
-                      </option>
-                    ))}
-                  </select>
+                    <SelectTrigger id="exclusion-group" disabled={!experiment} size="sm">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {groupOptions.map((option) => (
+                        <SelectItem key={option.value} value={option.value}>
+                          {option.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                   <p className="text-muted-foreground text-xs">
                     {experiment
                       ? "The selected immutable Group Version must contain this stable Experiment ID."

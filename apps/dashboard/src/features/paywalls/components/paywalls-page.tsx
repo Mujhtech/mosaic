@@ -3,11 +3,19 @@ import { Link } from "@tanstack/react-router"
 import { useEffect, useState } from "react"
 
 import { EmptyState } from "@/components/feedback/empty-state"
+import { Button } from "@/components/ui/button"
 import { buttonVariants } from "@/components/ui/button-variants"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog"
 import { HostedResourceBoundary } from "@/features/auth/components/hosted-resource-boundary"
 import { resolveHostedQueryState } from "@/features/auth/types/hosted-query-state"
 import { MonetizationWorkspace } from "@/features/environments/components/monetization-workspace"
-import { WorkflowPanel } from "@/features/organizations/components/workspace-page"
 import { CreatePaywallDraftForm } from "@/features/paywalls/components/create-paywall-draft-form"
 import { listHostedDraftRecoveries } from "@/features/paywalls/mutations/hosted-draft-recovery"
 import { paywallsQueryOptions } from "@/features/paywalls/queries/paywall-queries"
@@ -28,6 +36,7 @@ export function PaywallsPage({
     enabled: adapter.status === "available",
   })
   const [recoveryCount, setRecoveryCount] = useState(0)
+  const [createOpen, setCreateOpen] = useState(false)
 
   useEffect(() => {
     const timer = window.setTimeout(
@@ -49,8 +58,13 @@ export function PaywallsPage({
     permissionAction: (
       <Link
         className={buttonVariants({ variant: "outline" })}
-        params={{ organizationId, projectId }}
-        to="/organizations/$organizationId/projects/$projectId"
+        params={(prev) => ({
+          ...prev,
+          environmentKey: prev.environmentKey!,
+          organizationId: prev.organizationId!,
+          projectId: prev.projectId!,
+        })}
+        to="/orgs/$organizationId/projects/$projectId/env/$environmentKey"
       >
         Return to project
       </Link>
@@ -59,13 +73,27 @@ export function PaywallsPage({
     scope: { environmentId, organizationId, projectId },
   })
 
+  const createDialog = (
+    <Dialog onOpenChange={setCreateOpen} open={createOpen}>
+      <DialogTrigger render={<Button size="sm" />}>New paywall</DialogTrigger>
+      <DialogContent className="max-h-[calc(100vh-4rem)] overflow-y-auto sm:max-w-2xl">
+        <DialogHeader>
+          <DialogTitle>Create hosted Draft</DialogTitle>
+          <DialogDescription>
+            The local source remains unchanged. The hosted copy is scoped to the selected
+            Environment.
+          </DialogDescription>
+        </DialogHeader>
+        <div className="px-4 pb-4">
+          <CreatePaywallDraftForm environmentId={environmentId} projectId={projectId} />
+        </div>
+      </DialogContent>
+    </Dialog>
+  )
+
   return (
     <MonetizationWorkspace
-      actions={
-        <a className={buttonVariants()} href="#create-paywall">
-          New paywall
-        </a>
-      }
+      actions={createDialog}
       description="Create hosted Drafts, open Studio, and continue from immutable published versions."
       environmentId={environmentId}
       organizationId={organizationId}
@@ -91,8 +119,14 @@ export function PaywallsPage({
               <li key={paywall.id}>
                 <Link
                   className="hover:bg-muted/35 focus-visible:ring-ring block rounded border p-5 focus-visible:ring-2 focus-visible:outline-none"
-                  params={{ environmentId, organizationId, paywallId: paywall.id, projectId }}
-                  to="/organizations/$organizationId/projects/$projectId/monetization/$environmentId/paywalls/$paywallId"
+                  params={(prev) => ({
+                    ...prev,
+                    paywallId: paywall.id,
+                    environmentKey: prev.environmentKey!,
+                    organizationId: prev.organizationId!,
+                    projectId: prev.projectId!,
+                  })}
+                  to="/orgs/$organizationId/projects/$projectId/env/$environmentKey/monetization/paywalls/$paywallId"
                 >
                   <span className="flex items-center justify-between gap-3">
                     <span className="font-semibold">{paywall.name}</span>
@@ -111,16 +145,6 @@ export function PaywallsPage({
             ))}
           </ul>
         )}
-        <WorkflowPanel
-          description="The local source remains unchanged. The hosted copy is scoped to the selected Environment."
-          title="Create hosted Draft"
-        >
-          <CreatePaywallDraftForm
-            environmentId={environmentId}
-            organizationId={organizationId}
-            projectId={projectId}
-          />
-        </WorkflowPanel>
       </HostedResourceBoundary>
     </MonetizationWorkspace>
   )

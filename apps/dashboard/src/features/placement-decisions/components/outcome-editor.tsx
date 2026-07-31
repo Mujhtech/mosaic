@@ -1,11 +1,32 @@
 import { CheckCircleIcon } from "@phosphor-icons/react/dist/ssr/CheckCircle"
 
 import { Field, FieldLabel } from "@/components/ui/field"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
 import type {
   DecisionOutcome,
   NamedFallback,
 } from "@/features/placement-decisions/types/placement-decision"
 import type { HostedPaywallListItem } from "@/features/publishing/api/hosted-publishing-adapter"
+
+const OUTCOME_TYPE_OPTIONS = [
+  { label: "Show Paywall", value: "paywall" },
+  { label: "Show no Paywall", value: "no_paywall" },
+  { label: "Use named fallback", value: "fallback" },
+  { label: "Return unavailable", value: "unavailable" },
+]
+
+const UNAVAILABLE_REASON_OPTIONS = [
+  { label: "No safe decision", value: "no_safe_decision" },
+  { label: "Configuration incompatible", value: "configuration_incompatible" },
+  { label: "Content unavailable", value: "content_unavailable" },
+  { label: "Commerce unavailable", value: "commerce_unavailable" },
+]
 
 export function OutcomeEditor({
   fallbacks,
@@ -22,15 +43,25 @@ export function OutcomeEditor({
   paywalls: readonly HostedPaywallListItem[]
   value: DecisionOutcome
 }) {
+  const paywallOptions = [
+    { label: "Select a Paywall", value: "" },
+    ...paywalls
+      .filter((paywall) => paywall.status === "active")
+      .map((paywall) => ({ label: paywall.name, value: paywall.id })),
+  ]
+  const fallbackOptions = [
+    { label: "Select a named fallback", value: "" },
+    ...fallbacks.map((fallback) => ({ label: fallback.key, value: fallback.key })),
+  ]
+
   return (
     <div className="space-y-3">
       <Field>
         <FieldLabel htmlFor={`${id}-type`}>{label}</FieldLabel>
-        <select
-          className="border-input bg-background h-9 w-full rounded border px-3 text-sm"
-          id={`${id}-type`}
-          onChange={(event) => {
-            const type = event.currentTarget.value as DecisionOutcome["type"]
+        <Select
+          items={OUTCOME_TYPE_OPTIONS}
+          onValueChange={(selectedValue) => {
+            const type = selectedValue as DecisionOutcome["type"]
             if (type === "paywall") onChange({ type, paywallVersionId: paywalls[0]?.id ?? "" })
             if (type === "no_paywall") onChange({ type })
             if (type === "fallback") onChange({ type, fallbackKey: fallbacks[0]?.key ?? "" })
@@ -38,33 +69,40 @@ export function OutcomeEditor({
           }}
           value={value.type}
         >
-          <option value="paywall">Show Paywall</option>
-          <option value="no_paywall">Show no Paywall</option>
-          <option value="fallback">Use named fallback</option>
-          <option value="unavailable">Return unavailable</option>
-        </select>
+          <SelectTrigger id={`${id}-type`}>
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {OUTCOME_TYPE_OPTIONS.map((option) => (
+              <SelectItem key={option.value} value={option.value}>
+                {option.label}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
       </Field>
 
       {value.type === "paywall" ? (
         <Field>
           <FieldLabel htmlFor={`${id}-paywall`}>Published Paywall</FieldLabel>
-          <select
-            className="border-input bg-background h-9 w-full rounded border px-3 text-sm"
-            id={`${id}-paywall`}
-            onChange={(event) =>
-              onChange({ ...value, paywallVersionId: event.currentTarget.value })
+          <Select
+            items={paywallOptions}
+            onValueChange={(selectedValue) =>
+              onChange({ ...value, paywallVersionId: selectedValue })
             }
             value={value.paywallVersionId}
           >
-            <option value="">Select a Paywall</option>
-            {paywalls
-              .filter((paywall) => paywall.status === "active")
-              .map((paywall) => (
-                <option key={paywall.id} value={paywall.id}>
-                  {paywall.name}
-                </option>
+            <SelectTrigger id={`${id}-paywall`}>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {paywallOptions.map((option) => (
+                <SelectItem key={option.value} value={option.value}>
+                  {option.label}
+                </SelectItem>
               ))}
-          </select>
+            </SelectContent>
+          </Select>
           <p className="text-muted-foreground text-xs">
             Publication pins the current immutable published version and checks Product readiness.
           </p>
@@ -74,21 +112,24 @@ export function OutcomeEditor({
       {value.type === "fallback" ? (
         <Field>
           <FieldLabel htmlFor={`${id}-fallback`}>Fallback</FieldLabel>
-          <select
-            className="border-input bg-background h-9 w-full rounded border px-3 text-sm"
-            id={`${id}-fallback`}
-            onChange={(event) =>
-              onChange({ type: "fallback", fallbackKey: event.currentTarget.value })
+          <Select
+            items={fallbackOptions}
+            onValueChange={(selectedValue) =>
+              onChange({ type: "fallback", fallbackKey: selectedValue })
             }
             value={value.fallbackKey}
           >
-            <option value="">Select a named fallback</option>
-            {fallbacks.map((fallback) => (
-              <option key={fallback.key} value={fallback.key}>
-                {fallback.key}
-              </option>
-            ))}
-          </select>
+            <SelectTrigger id={`${id}-fallback`}>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {fallbackOptions.map((option) => (
+                <SelectItem key={option.value} value={option.value}>
+                  {option.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </Field>
       ) : null}
 
@@ -106,13 +147,12 @@ export function OutcomeEditor({
       {value.type === "unavailable" ? (
         <Field>
           <FieldLabel htmlFor={`${id}-reason`}>Safe reason code</FieldLabel>
-          <select
-            className="border-input bg-background h-9 w-full rounded border px-3 text-sm"
-            id={`${id}-reason`}
-            onChange={(event) =>
+          <Select
+            items={UNAVAILABLE_REASON_OPTIONS}
+            onValueChange={(selectedValue) =>
               onChange({
                 type: "unavailable",
-                reason: event.currentTarget.value as Extract<
+                reason: selectedValue as Extract<
                   DecisionOutcome,
                   { type: "unavailable" }
                 >["reason"],
@@ -120,11 +160,17 @@ export function OutcomeEditor({
             }
             value={value.reason}
           >
-            <option value="no_safe_decision">No safe decision</option>
-            <option value="configuration_incompatible">Configuration incompatible</option>
-            <option value="content_unavailable">Content unavailable</option>
-            <option value="commerce_unavailable">Commerce unavailable</option>
-          </select>
+            <SelectTrigger id={`${id}-reason`}>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {UNAVAILABLE_REASON_OPTIONS.map((option) => (
+                <SelectItem key={option.value} value={option.value}>
+                  {option.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </Field>
       ) : null}
     </div>

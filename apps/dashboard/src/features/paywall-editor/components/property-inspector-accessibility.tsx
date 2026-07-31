@@ -27,6 +27,7 @@ import {
   NumberField,
   SelectField,
 } from "@/features/paywall-editor/components/property-inspector-fields"
+import { SelectItem } from "@/components/ui/select"
 
 export function seedOptionalLocalizedText(options: {
   defaultValue: string
@@ -141,8 +142,8 @@ export function TextAccessibilitySection({
           }
           value={node.accessibility.role}
         >
-          <option value="text">Text</option>
-          <option value="heading">Heading</option>
+          <SelectItem value="text">Text</SelectItem>
+          <SelectItem value="heading">Heading</SelectItem>
         </SelectField>
         {node.accessibility.role === "heading" ? (
           <NumberField

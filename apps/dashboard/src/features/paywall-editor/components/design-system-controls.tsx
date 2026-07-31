@@ -7,6 +7,13 @@ import { PlusIcon } from "@phosphor-icons/react/dist/ssr/Plus"
 import { TrashIcon } from "@phosphor-icons/react/dist/ssr/Trash"
 
 import { Button } from "@/components/ui/button"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
 import { InspectorColorControl } from "@/features/paywall-editor/components/inspector-color-control"
 import { useEditorActions } from "@/features/paywall-editor/stores/editor-store-context"
 import type {
@@ -245,6 +252,19 @@ export function ColorControl({
   )
 }
 
+const BACKGROUND_KIND_OPTIONS = [
+  { label: "Colour", value: "color" },
+  { label: "Linear gradient", value: "linearGradient" },
+  { label: "Radial gradient", value: "radialGradient" },
+  { label: "Image", value: "image" },
+  { label: "Video", value: "video" },
+]
+
+const CONTENT_MODE_OPTIONS = [
+  { label: "Fit", value: "fit" },
+  { label: "Fill", value: "fill" },
+]
+
 export function BackgroundEditor({
   document,
   id,
@@ -287,28 +307,43 @@ export function BackgroundEditor({
       if (videos[0]) onChange(defaultMediaBackground(type, videos[0].id))
     }
   }
+  const assetOptions = (value.type === "image" ? images : videos).map((asset) => ({
+    label: asset.id,
+    value: asset.id,
+  }))
+  const posterOptions = [
+    { label: "No poster", value: "" },
+    ...images.map((asset) => ({ label: asset.id, value: asset.id })),
+  ]
   const selectedMediaExists =
     value.type === "image" || value.type === "video"
       ? document.assets.some((asset) => asset.type === value.type && asset.id === value.assetId)
       : true
   return (
     <div className="space-y-2">
-      <select
-        aria-label="Background kind"
-        className={FIELD_CLASS}
-        onChange={(event) => changeType(event.target.value as ProtocolBackground["type"])}
+      <Select
+        items={BACKGROUND_KIND_OPTIONS}
+        onValueChange={(kind) => changeType(kind as ProtocolBackground["type"])}
         value={value.type}
       >
-        <option value="color">Colour</option>
-        <option value="linearGradient">Linear gradient</option>
-        <option value="radialGradient">Radial gradient</option>
-        <option disabled={images.length === 0 && value.type !== "image"} value="image">
-          Image
-        </option>
-        <option disabled={videos.length === 0 && value.type !== "video"} value="video">
-          Video
-        </option>
-      </select>
+        <SelectTrigger aria-label="Background kind" size="sm">
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          {BACKGROUND_KIND_OPTIONS.map((option) => (
+            <SelectItem
+              disabled={
+                (option.value === "image" && images.length === 0 && value.type !== "image") ||
+                (option.value === "video" && videos.length === 0 && value.type !== "video")
+              }
+              key={option.value}
+              value={option.value}
+            >
+              {option.label}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
       {images.length === 0 || videos.length === 0 || !selectedMediaExists ? (
         <div className="border-border bg-muted/30 flex flex-wrap gap-1.5 rounded border p-2">
           {!selectedMediaExists ? (
@@ -456,45 +491,59 @@ export function BackgroundEditor({
       ) : null}
       {value.type === "image" || value.type === "video" ? (
         <>
-          <select
-            aria-label={`${value.type} asset`}
-            className={FIELD_CLASS}
-            onChange={(event) => onChange({ ...value, assetId: event.target.value })}
+          <Select
+            items={assetOptions}
+            onValueChange={(assetId) => onChange({ ...value, assetId })}
             value={value.assetId}
           >
-            {(value.type === "image" ? images : videos).map((asset) => (
-              <option key={asset.id} value={asset.id}>
-                {asset.id}
-              </option>
-            ))}
-          </select>
-          <select
-            aria-label="Content mode"
-            className={FIELD_CLASS}
-            onChange={(event) =>
-              onChange({ ...value, contentMode: event.target.value as "fit" | "fill" })
+            <SelectTrigger aria-label={`${value.type} asset`} size="sm">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {assetOptions.map((option) => (
+                <SelectItem key={option.value} value={option.value}>
+                  {option.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <Select
+            items={CONTENT_MODE_OPTIONS}
+            onValueChange={(contentMode) =>
+              onChange({ ...value, contentMode: contentMode as "fit" | "fill" })
             }
             value={value.contentMode}
           >
-            <option value="fit">Fit</option>
-            <option value="fill">Fill</option>
-          </select>
+            <SelectTrigger aria-label="Content mode" size="sm">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {CONTENT_MODE_OPTIONS.map((option) => (
+                <SelectItem key={option.value} value={option.value}>
+                  {option.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
           {value.type === "video" ? (
-            <select
-              aria-label="Poster image"
-              className={FIELD_CLASS}
-              onChange={(event) =>
-                onChange({ ...value, posterAssetId: event.target.value || undefined })
+            <Select
+              items={posterOptions}
+              onValueChange={(posterAssetId) =>
+                onChange({ ...value, posterAssetId: posterAssetId || undefined })
               }
               value={value.posterAssetId ?? ""}
             >
-              <option value="">No poster</option>
-              {images.map((asset) => (
-                <option key={asset.id} value={asset.id}>
-                  {asset.id}
-                </option>
-              ))}
-            </select>
+              <SelectTrigger aria-label="Poster image" size="sm">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {posterOptions.map((option) => (
+                  <SelectItem key={option.value} value={option.value}>
+                    {option.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           ) : null}
           <ColorControl
             document={document}

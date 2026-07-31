@@ -1,4 +1,5 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react"
+import { chooseSelectOption } from "@/test/select"
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query"
 import { useEffect, useState } from "react"
 import { describe, expect, it } from "vitest"
@@ -178,21 +179,19 @@ describe("mock commerce controls", () => {
     expect(screen.getByText(/Hosted Environment: Staging/)).toBeVisible()
     expect(screen.getByRole("link", { name: "Register Application" })).toHaveAttribute(
       "href",
-      "/organizations/org_01/projects/project_01/apps",
+      "/orgs/org_01/projects/project_01/apps",
     )
     expect(screen.getByLabelText("Provider preview Application")).toBeDisabled()
   })
 
-  it("binds an imported product and commits its local price on blur", () => {
+  it("binds an imported product and commits its local price on blur", async () => {
     render(
       <EditorStoreProvider>
         <Harness />
       </EditorStoreProvider>,
     )
 
-    fireEvent.change(screen.getByLabelText("Starter mock availability"), {
-      target: { value: "available" },
-    })
+    await chooseSelectOption(screen.getByLabelText("Starter mock availability"), "Available")
     const price = screen.getByLabelText("Starter local price")
     fireEvent.change(price, { target: { value: "$4.99" } })
     fireEvent.blur(price)
@@ -206,7 +205,7 @@ describe("mock commerce controls", () => {
     )
   })
 
-  it("exposes deterministic empty and failed restore outcomes", () => {
+  it("exposes deterministic empty and failed restore outcomes", async () => {
     render(
       <EditorStoreProvider>
         <Harness />
@@ -214,12 +213,12 @@ describe("mock commerce controls", () => {
     )
 
     const outcome = screen.getByLabelText("Preview state")
-    expect(outcome).toHaveDisplayValue("Product unavailable")
-    fireEvent.change(outcome, { target: { value: "restoreNoPurchases" } })
+    expect(outcome).toHaveTextContent("Product unavailable")
+    await chooseSelectOption(outcome, "Restore has no purchases")
     expect(screen.getByLabelText("mock state")).toHaveTextContent(
       '"purchaseState":"restoreNoPurchases"',
     )
-    fireEvent.change(outcome, { target: { value: "restoreFailure" } })
+    await chooseSelectOption(outcome, "Restore failure")
     expect(screen.getByLabelText("mock state")).toHaveTextContent(
       '"purchaseState":"restoreFailure"',
     )
@@ -268,7 +267,7 @@ describe("mock commerce controls", () => {
     )
 
     const binding = await screen.findByLabelText("Catalog Product for Starter")
-    fireEvent.change(binding, { target: { value: "product_mosaic_monthly" } })
+    await chooseSelectOption(binding, "Monthly · connected")
 
     await waitFor(() =>
       expect(screen.getByLabelText("hosted document product")).toHaveTextContent(
@@ -276,7 +275,9 @@ describe("mock commerce controls", () => {
       ),
     )
     expect(screen.getByLabelText("Starter mock availability")).toBeVisible()
-    expect(screen.getByDisplayValue("Select Application")).toBeVisible()
+    expect(screen.getByLabelText("Provider preview Application")).toHaveTextContent(
+      "Select Application",
+    )
     expect(
       screen.getByText(
         /Select an Application to inspect its active provider, mapping, and readiness/,

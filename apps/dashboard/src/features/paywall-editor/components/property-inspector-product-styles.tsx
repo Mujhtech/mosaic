@@ -30,6 +30,7 @@ import {
   SelectField,
 } from "@/features/paywall-editor/components/property-inspector-fields"
 import { SizingFields } from "@/features/paywall-editor/components/property-inspector-layout"
+import { SelectItem } from "@/components/ui/select"
 
 export type CardState = "default" | "selected"
 export type ProductLayerNode = Extract<ProtocolNode, { type: "productCard" | "productBadge" }>
@@ -272,11 +273,11 @@ export function ProductLayerStyleSection({ node }: { node: ProductLayerNode }) {
         }
         value={resolved.shadow?.type ?? "none"}
       >
-        <option value="none">None</option>
-        <option value="shadow">Custom</option>
-        <option disabled={document.designSystem.shadows.length === 0} value="shadowToken">
+        <SelectItem value="none">None</SelectItem>
+        <SelectItem value="shadow">Custom</SelectItem>
+        <SelectItem disabled={document.designSystem.shadows.length === 0} value="shadowToken">
           Design-system shadow
-        </option>
+        </SelectItem>
       </SelectField>
       {resolved.shadow?.type === "shadowToken" ? (
         <SelectField
@@ -286,9 +287,9 @@ export function ProductLayerStyleSection({ node }: { node: ProductLayerNode }) {
           value={resolved.shadow.id}
         >
           {document.designSystem.shadows.map((token) => (
-            <option key={token.id} value={token.id}>
+            <SelectItem key={token.id} value={token.id}>
               {token.name}
-            </option>
+            </SelectItem>
           ))}
         </SelectField>
       ) : null}

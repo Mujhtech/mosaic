@@ -5,7 +5,14 @@ import { useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Field, FieldLabel } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
-import { WorkflowPanel } from "@/features/organizations/components/workspace-page"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
+import { WorkflowPanel } from "@/features/orgs/components/workspace-page"
 import { useExperimentAdapter } from "../api/use-experiment-adapter"
 import {
   createExperimentGroupMutationOptions,
@@ -17,6 +24,12 @@ import {
   experimentsQueryOptions,
 } from "../queries/experiment-queries"
 import { validateMutualExclusionAllocation, type ExperimentScope } from "../types/experiment"
+
+const GROUP_IDENTITY_OPTIONS = [
+  { label: "Identified user", value: "identified_user" },
+  { label: "Identified user, otherwise installation", value: "identified_user_or_installation" },
+  { label: "Installation", value: "installation" },
+]
 
 export function MutualExclusionGroupManager({ scope }: { scope: ExperimentScope }) {
   const adapter = useExperimentAdapter()
@@ -181,20 +194,22 @@ export function MutualExclusionGroupManager({ scope }: { scope: ExperimentScope 
               {(field) => (
                 <Field>
                   <FieldLabel htmlFor="group-policy">Group assignment identity</FieldLabel>
-                  <select
-                    className="border-input bg-background h-8 rounded border px-2 text-sm"
-                    id="group-policy"
+                  <Select
+                    items={GROUP_IDENTITY_OPTIONS}
+                    onValueChange={(value) => field.handleChange(value as typeof field.state.value)}
                     value={field.state.value}
-                    onChange={(event) =>
-                      field.handleChange(event.currentTarget.value as typeof field.state.value)
-                    }
                   >
-                    <option value="identified_user">Identified user</option>
-                    <option value="identified_user_or_installation">
-                      Identified user, otherwise installation
-                    </option>
-                    <option value="installation">Installation</option>
-                  </select>
+                    <SelectTrigger id="group-policy" size="sm">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {GROUP_IDENTITY_OPTIONS.map((option) => (
+                        <SelectItem key={option.value} value={option.value}>
+                          {option.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </Field>
               )}
             </form.Field>

@@ -1,4 +1,5 @@
 import { useLayoutEffect } from "react"
+import { chooseSelectOption } from "@/test/select"
 import type { RefObject } from "react"
 import { fireEvent, render, screen, waitFor } from "@testing-library/react"
 import { describe, expect, it, vi } from "vitest"
@@ -163,7 +164,7 @@ describe("StudioToolPanel", () => {
     expect(screen.queryByRole("textbox", { name: "Name for Colour 1" })).not.toBeInTheDocument()
     expect(screen.getByRole("textbox", { name: "Name for Background 1" })).toBeVisible()
     const kind = screen.getByRole("combobox", { name: "Background kind" })
-    fireEvent.change(kind, { target: { value: "linearGradient" } })
+    await chooseSelectOption(kind, "Linear gradient")
     fireEvent.click(screen.getByRole("button", { name: "Add stop" }))
 
     expect(screen.getByTestId("tool-document-json")).toHaveTextContent('"position":0.5')
@@ -180,7 +181,7 @@ describe("StudioToolPanel", () => {
     fireEvent.click(screen.getByRole("button", { name: "Add image" }))
 
     await waitFor(() =>
-      expect(screen.getByRole("combobox", { name: "Background kind" })).toHaveValue("image"),
+      expect(screen.getByRole("combobox", { name: "Background kind" })).toHaveTextContent("Image"),
     )
     expect(screen.getByTestId("tool-document-json")).toHaveTextContent(
       '"type":"image","id":"image-1"',

@@ -4,14 +4,21 @@ import { Button } from "@/components/ui/button"
 import { Field, FieldDescription, FieldLabel } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
 import {
-  Sheet,
-  SheetContent,
-  SheetDescription,
-  SheetFooter,
-  SheetHeader,
-  SheetTitle,
-  SheetTrigger,
-} from "@/components/ui/sheet"
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog"
 import { StatusPill } from "@/features/billing-ledger/components/billing-chrome"
 import {
   evaluatePublishGate,
@@ -25,9 +32,6 @@ import {
   type GrantProposal,
 } from "@/features/entitlement-grants/types/grant-version-view"
 import type { Entitlement, GrantVersionImpact, Product } from "@/generated/api"
-
-const fieldClass =
-  "border-input bg-background focus-visible:border-ring focus-visible:ring-ring/40 h-9 w-full rounded border px-3 text-sm outline-none focus-visible:ring-3"
 
 type PurchaseType = "auto_renewable_subscription" | "non_consumable"
 
@@ -102,6 +106,15 @@ export function PublishGrantVersionWizard({
     })
   }
 
+  const productOptions = products.map((product) => ({
+    label: product.internalName,
+    value: product.id,
+  }))
+  const entitlementOptions = entitlements.map((entitlement) => ({
+    label: entitlement.name,
+    value: entitlement.id,
+  }))
+
   const gate = evaluatePublishGate({
     canManage,
     impact,
@@ -148,24 +161,24 @@ export function PublishGrantVersionWizard({
   }
 
   return (
-    <Sheet
+    <Dialog
       onOpenChange={(nextOpen) => {
         setOpen(nextOpen)
         if (!nextOpen) reset()
       }}
       open={open}
     >
-      <SheetTrigger render={<Button disabled={!canManage} type="button" />}>
+      <DialogTrigger render={<Button disabled={!canManage} type="button" />}>
         {triggerLabel}
-      </SheetTrigger>
-      <SheetContent className="w-full overflow-y-auto sm:max-w-xl">
-        <SheetHeader className="border-b p-5">
-          <SheetTitle>Create a new grant version</SheetTitle>
-          <SheetDescription>
+      </DialogTrigger>
+      <DialogContent className="max-h-[calc(100vh-4rem)] gap-0 overflow-y-auto sm:max-w-xl">
+        <DialogHeader className="border-b p-5">
+          <DialogTitle>Create a new grant version</DialogTitle>
+          <DialogDescription>
             Published versions are never edited. This creates the next version and closes the
             current one at exactly its start, so the two intervals abut with no gap and no overlap.
-          </SheetDescription>
-        </SheetHeader>
+          </DialogDescription>
+        </DialogHeader>
 
         <div className="space-y-5 p-5">
           <ol className="text-muted-foreground flex flex-wrap gap-2 text-xs">
@@ -178,34 +191,42 @@ export function PublishGrantVersionWizard({
             <>
               <Field>
                 <FieldLabel htmlFor="grant-version-product">Product</FieldLabel>
-                <select
-                  className={fieldClass}
-                  id="grant-version-product"
-                  onChange={(event) => update({ productId: event.currentTarget.value })}
+                <Select
+                  items={productOptions}
+                  onValueChange={(value) => update({ productId: value })}
                   value={proposal.productId}
                 >
-                  {products.map((product) => (
-                    <option key={product.id} value={product.id}>
-                      {product.internalName}
-                    </option>
-                  ))}
-                </select>
+                  <SelectTrigger id="grant-version-product">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {productOptions.map((option) => (
+                      <SelectItem key={option.value} value={option.value}>
+                        {option.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </Field>
 
               <Field>
                 <FieldLabel htmlFor="grant-version-entitlement">Entitlement</FieldLabel>
-                <select
-                  className={fieldClass}
-                  id="grant-version-entitlement"
-                  onChange={(event) => update({ entitlementId: event.currentTarget.value })}
+                <Select
+                  items={entitlementOptions}
+                  onValueChange={(value) => update({ entitlementId: value })}
                   value={proposal.entitlementId}
                 >
-                  {entitlements.map((entitlement) => (
-                    <option key={entitlement.id} value={entitlement.id}>
-                      {entitlement.name}
-                    </option>
-                  ))}
-                </select>
+                  <SelectTrigger id="grant-version-entitlement">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {entitlementOptions.map((option) => (
+                      <SelectItem key={option.value} value={option.value}>
+                        {option.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
                 <FieldDescription>
                   One version history belongs to one (Product, Entitlement) pair.
                 </FieldDescription>
@@ -368,7 +389,7 @@ export function PublishGrantVersionWizard({
           ) : null}
         </div>
 
-        <SheetFooter className="border-t p-5">
+        <DialogFooter className="flex-col border-t p-5 sm:flex-col sm:justify-start">
           <div className="flex flex-wrap gap-2">
             {step === "shape" ? (
               <Button disabled={busy} onClick={() => void preview()} type="button">
@@ -407,9 +428,9 @@ export function PublishGrantVersionWizard({
             Publishing enqueues a reprojection for every Billing Customer whose current snapshot
             cites this Product, in the same transaction as the version itself.
           </p>
-        </SheetFooter>
-      </SheetContent>
-    </Sheet>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   )
 }
 

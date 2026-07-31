@@ -6,6 +6,13 @@ import { LiveAnnouncer } from "@/components/feedback/live-announcer"
 import { Button } from "@/components/ui/button"
 import { Field, FieldError, FieldLabel } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
 import type {
   DecisionScope,
   PlacementDecisionsAdapter,
@@ -20,6 +27,16 @@ import type { EnvironmentKind } from "@/features/placement-decisions/types/place
 function defaultExpiry() {
   return new Date(Date.now() + 60 * 60 * 1000).toISOString().slice(0, 16)
 }
+
+const IDENTITY_TYPE_OPTIONS = [
+  { label: "Installation", value: "installation" },
+  { label: "Identified user", value: "identified_user" },
+]
+
+const FORCED_OUTCOME_OPTIONS = [
+  { label: "Show no Paywall", value: "no_paywall" },
+  { label: "Return unavailable", value: "unavailable" },
+]
 
 export function QaOverrides({
   adapter,
@@ -114,19 +131,24 @@ export function QaOverrides({
             {(field) => (
               <Field>
                 <FieldLabel htmlFor="override-identity-type">Identity type</FieldLabel>
-                <select
-                  className="border-input bg-background h-9 rounded border px-3 text-sm"
-                  id="override-identity-type"
-                  onChange={(event) =>
-                    field.handleChange(
-                      event.currentTarget.value as "installation" | "identified_user",
-                    )
+                <Select
+                  items={IDENTITY_TYPE_OPTIONS}
+                  onValueChange={(value) =>
+                    field.handleChange(value as "installation" | "identified_user")
                   }
                   value={field.state.value}
                 >
-                  <option value="installation">Installation</option>
-                  <option value="identified_user">Identified user</option>
-                </select>
+                  <SelectTrigger id="override-identity-type">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {IDENTITY_TYPE_OPTIONS.map((option) => (
+                      <SelectItem key={option.value} value={option.value}>
+                        {option.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </Field>
             )}
           </form.Field>
@@ -181,17 +203,24 @@ export function QaOverrides({
             {(field) => (
               <Field>
                 <FieldLabel htmlFor="override-outcome">Forced outcome</FieldLabel>
-                <select
-                  className="border-input bg-background h-9 rounded border px-3 text-sm"
-                  id="override-outcome"
-                  onChange={(event) =>
-                    field.handleChange(event.currentTarget.value as "no_paywall" | "unavailable")
+                <Select
+                  items={FORCED_OUTCOME_OPTIONS}
+                  onValueChange={(value) =>
+                    field.handleChange(value as "no_paywall" | "unavailable")
                   }
                   value={field.state.value}
                 >
-                  <option value="no_paywall">Show no Paywall</option>
-                  <option value="unavailable">Return unavailable</option>
-                </select>
+                  <SelectTrigger id="override-outcome">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {FORCED_OUTCOME_OPTIONS.map((option) => (
+                      <SelectItem key={option.value} value={option.value}>
+                        {option.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </Field>
             )}
           </form.Field>

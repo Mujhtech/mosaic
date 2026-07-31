@@ -27,11 +27,9 @@ type DraftSource = "file" | "local" | "template"
 
 export function CreatePaywallDraftForm({
   environmentId,
-  organizationId,
   projectId,
 }: {
   environmentId: string
-  organizationId: string
   projectId: string
 }) {
   const adapter = useHostedPublishingAdapter()
@@ -67,14 +65,8 @@ export function CreatePaywallDraftForm({
           name: value.name.trim(),
         })
         await navigate({
-          params: {
-            draftId: result.draft.id,
-            environmentId,
-            organizationId,
-            paywallId: result.paywall.id,
-            projectId,
-          },
-          to: "/studio-hosted/$organizationId/$projectId/$environmentId/$paywallId/$draftId",
+          params: (prev) => ({ ...prev, draftId: result.draft.id, paywallId: result.paywall.id }),
+          to: "/studio/$organizationId/$projectId/$paywallId/$draftId",
         })
       } catch {
         // The mutation renders either a retryable partial result or the safe API error below.

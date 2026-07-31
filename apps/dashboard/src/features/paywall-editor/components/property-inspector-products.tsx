@@ -46,6 +46,7 @@ import {
   ProductLayerLayoutSection,
   ProductLayerStyleSection,
 } from "@/features/paywall-editor/components/property-inspector-product-styles"
+import { SelectItem } from "@/components/ui/select"
 
 export function ProductCardInspector({
   node,
@@ -83,13 +84,13 @@ export function ProductCardInspector({
           value={node.productReferenceId}
         >
           {document.products.map((candidate) => (
-            <option
+            <SelectItem
               disabled={usedProductIds.has(candidate.id)}
               key={candidate.id}
               value={candidate.id}
             >
               {resolveLocalizedText(document, candidate.label, locale)}
-            </option>
+            </SelectItem>
           ))}
         </SelectField>
         <CheckboxField
@@ -225,8 +226,8 @@ export function ProductBadgeInspector({
           }
           value={node.placement.mode}
         >
-          <option value="nested">Nested in card</option>
-          <option value="overlay">Overlaid on card</option>
+          <SelectItem value="nested">Nested in card</SelectItem>
+          <SelectItem value="overlay">Overlaid on card</SelectItem>
         </SelectField>
         {node.placement.mode === "overlay" ? (
           <TwoColumn>
@@ -248,10 +249,10 @@ export function ProductBadgeInspector({
               }
               value={node.placement.anchor}
             >
-              <option value="topStart">Top start</option>
-              <option value="topEnd">Top end</option>
-              <option value="bottomStart">Bottom start</option>
-              <option value="bottomEnd">Bottom end</option>
+              <SelectItem value="topStart">Top start</SelectItem>
+              <SelectItem value="topEnd">Top end</SelectItem>
+              <SelectItem value="bottomStart">Bottom start</SelectItem>
+              <SelectItem value="bottomEnd">Bottom end</SelectItem>
             </SelectField>
             <NumberField
               address="placement.inset"

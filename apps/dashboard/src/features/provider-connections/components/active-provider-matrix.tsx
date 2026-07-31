@@ -3,7 +3,14 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { useState } from "react"
 
 import { Button } from "@/components/ui/button"
-import { ScopeBadge } from "@/features/organizations/components/workspace-page"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
+import { ScopeBadge } from "@/features/orgs/components/workspace-page"
 import {
   clearActiveProviderMutationOptions,
   setActiveProviderMutationOptions,
@@ -246,6 +253,13 @@ function ProviderAssignmentControl({
   )
   const choices = purchaseProviderChoices(application, environment, connections)
   const selected = choices.find((choice) => choice.id === selectedChoiceId)
+  const choiceOptions = [
+    { label: "Select provider", value: "" },
+    ...choices.map((choice) => ({
+      label: `${choice.label}${choice.kind === "native" ? " · Built in" : ""}`,
+      value: choice.id,
+    })),
+  ]
   const availableConnectionCount = choices.filter((choice) => choice.kind === "connection").length
   const unavailableCount = connections.length - availableConnectionCount
   const current = connections.find(
@@ -265,8 +279,8 @@ function ProviderAssignmentControl({
   const mutation = reviewAction === "clear" ? clearProvider : setProvider
   const impactRequired = Boolean(currentAssignment)
   const canConfirmImpact = !impactRequired || impact.isSuccess
-  const catalogHref = `/organizations/${encodeURIComponent(organizationId)}/projects/${encodeURIComponent(projectId)}/catalog/products`
-  const providersHref = `/organizations/${encodeURIComponent(organizationId)}/projects/${encodeURIComponent(projectId)}/catalog/providers`
+  const catalogHref = `/orgs/${encodeURIComponent(organizationId)}/projects/${encodeURIComponent(projectId)}/catalog/products`
+  const providersHref = `/orgs/${encodeURIComponent(organizationId)}/projects/${encodeURIComponent(projectId)}/catalog/providers`
 
   if (reviewAction && (reviewAction === "clear" || selected)) {
     const isClearing = reviewAction === "clear"
@@ -393,20 +407,26 @@ function ProviderAssignmentControl({
   return (
     <div className="ml-auto max-w-xs text-right">
       <div className="flex items-center justify-end gap-2">
-        <select
-          aria-label={`Provider for ${application.name}`}
-          className="border-input bg-background h-8 min-w-36 rounded border px-2 text-xs"
-          onChange={(event) => setSelectedChoiceId(event.currentTarget.value)}
+        <Select
+          items={choiceOptions}
+          onValueChange={(value) => setSelectedChoiceId(value)}
           value={selectedChoiceId}
         >
-          <option value="">Select provider</option>
-          {choices.map((choice) => (
-            <option key={choice.id} value={choice.id}>
-              {choice.label}
-              {choice.kind === "native" ? " · Built in" : ""}
-            </option>
-          ))}
-        </select>
+          <SelectTrigger
+            aria-label={`Provider for ${application.name}`}
+            className="min-w-36 text-xs"
+            size="sm"
+          >
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {choiceOptions.map((option) => (
+              <SelectItem key={option.value} value={option.value}>
+                {option.label}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
         <Button
           disabled={!selected || selected.id === currentChoiceId}
           onClick={() => setReviewAction("set")}

@@ -57,6 +57,7 @@ import {
   TypographySection,
   VisibilitySection,
 } from "@/features/paywall-editor/components/property-inspector-layout"
+import { SelectItem } from "@/components/ui/select"
 
 export function ScrollContainerInspector({ layout }: { layout: ScrollContainer }) {
   const { document } = useInspectorContext()
@@ -90,10 +91,10 @@ export function ScrollContainerInspector({ layout }: { layout: ScrollContainer }
           }}
           value={presentation}
         >
-          <option value="screen">Screen</option>
-          <option disabled={isInitial} value="sheet">
+          <SelectItem value="screen">Screen</SelectItem>
+          <SelectItem disabled={isInitial} value="sheet">
             Sheet
-          </option>
+          </SelectItem>
         </SelectField>
         {screen && !isInitial && presentation === "screen" ? (
           <Button
@@ -300,9 +301,9 @@ export function ImageInspector({ node }: { node: Extract<ProtocolNode, { type: "
         >
           {document.assets.flatMap((asset) =>
             asset.type === "image" ? (
-              <option key={asset.id} value={asset.id}>
+              <SelectItem key={asset.id} value={asset.id}>
                 {asset.id}
-              </option>
+              </SelectItem>
             ) : (
               []
             ),
@@ -316,8 +317,8 @@ export function ImageInspector({ node }: { node: Extract<ProtocolNode, { type: "
           }
           value={node.contentMode}
         >
-          <option value="fit">Fit</option>
-          <option value="fill">Fill</option>
+          <SelectItem value="fit">Fit</SelectItem>
+          <SelectItem value="fill">Fill</SelectItem>
         </SelectField>
       </InspectorSection>
       <SizingLayoutSection node={node} />
@@ -388,9 +389,9 @@ export function IconInspector({ node }: { node: Extract<ProtocolNode, { type: "i
             "chevronBackward",
             "chevronForward",
           ].map((name) => (
-            <option key={name} value={name}>
+            <SelectItem key={name} value={name}>
               {name.replaceAll(/([A-Z])/g, " $1")}
-            </option>
+            </SelectItem>
           ))}
         </SelectField>
         <NumberField

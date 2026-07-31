@@ -1,7 +1,16 @@
+import { useId } from "react"
+
 import { PlusIcon } from "@phosphor-icons/react/dist/ssr/Plus"
 import { TrashIcon } from "@phosphor-icons/react/dist/ssr/Trash"
 
 import { Button } from "@/components/ui/button"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
 import type {
   AttributeDefinition,
   ConditionGroup,
@@ -101,6 +110,12 @@ function updateChild(group: ConditionGroup, childId: string, child: ConditionNod
   return { ...group, children: group.children.map((item) => (item.id === childId ? child : item)) }
 }
 
+const GROUP_KIND_OPTIONS = [
+  { label: "All conditions", value: "all" },
+  { label: "Any condition", value: "any" },
+  { label: "Not", value: "not" },
+]
+
 export function ConditionEditor({
   attributes,
   depth = 1,
@@ -118,12 +133,12 @@ export function ConditionEditor({
   return (
     <fieldset className="border-border space-y-3 rounded border p-3">
       <legend className="px-1 text-xs font-semibold">Condition group {depth} of 5</legend>
-      <label className="grid gap-1 text-xs font-medium sm:max-w-52">
-        Match
-        <select
-          className="border-input bg-background h-8 rounded border px-2 text-sm"
-          onChange={(event) => {
-            const kind = event.currentTarget.value as ConditionGroup["kind"]
+      <div className="grid gap-1 text-xs font-medium sm:max-w-52">
+        <label htmlFor={`condition-group-kind-${depth}`}>Match</label>
+        <Select
+          items={GROUP_KIND_OPTIONS}
+          onValueChange={(selectedValue) => {
+            const kind = selectedValue as ConditionGroup["kind"]
             onChange({
               ...value,
               children: kind === "not" ? value.children.slice(0, 1) : value.children,
@@ -132,11 +147,18 @@ export function ConditionEditor({
           }}
           value={value.kind}
         >
-          <option value="all">All conditions</option>
-          <option value="any">Any condition</option>
-          <option value="not">Not</option>
-        </select>
-      </label>
+          <SelectTrigger id={`condition-group-kind-${depth}`} size="sm">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {GROUP_KIND_OPTIONS.map((option) => (
+              <SelectItem key={option.value} value={option.value}>
+                {option.label}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
 
       {value.children.map((node) =>
         node.kind === "condition" ? (
@@ -228,7 +250,15 @@ function LeafEditor({
   onRemove: () => void
   value: LeafCondition
 }) {
+  const fieldId = useId()
   const allowedOperators = operatorsFor(value, attributes)
+  const operatorOptions = OPERATORS.filter((operator) => allowedOperators.includes(operator.value))
+  const attributeOptions = [
+    { label: "Select attribute", value: "" },
+    ...attributes
+      .filter((attribute) => attribute.status === "active")
+      .map((attribute) => ({ label: attribute.key, value: attribute.key })),
+  ]
   const noOperand = value.operator === "exists" || value.operator === "does_not_exist"
   const referenceLabel =
     value.source === "entitlement_state"
@@ -240,12 +270,12 @@ function LeafEditor({
           : undefined
   return (
     <div className="bg-muted/25 grid gap-2 rounded border p-3 md:grid-cols-[1fr_1fr_1fr_1fr_auto] md:items-start">
-      <label className="grid gap-1 text-xs font-medium">
-        Source
-        <select
-          className="border-input bg-background h-8 rounded border px-2 text-sm"
-          onChange={(event) => {
-            const source = event.currentTarget.value as ConditionSource
+      <div className="grid gap-1 text-xs font-medium">
+        <label htmlFor={`condition-source-${fieldId}`}>Source</label>
+        <Select
+          items={SOURCES}
+          onValueChange={(selectedValue) => {
+            const source = selectedValue as ConditionSource
             onChange({
               ...value,
               operator: "equals",
@@ -255,38 +285,45 @@ function LeafEditor({
           }}
           value={value.source}
         >
-          {SOURCES.map((source) => (
-            <option key={source.value} value={source.value}>
-              {source.label}
-            </option>
-          ))}
-        </select>
-      </label>
-      <label className="grid gap-1 text-xs font-medium">
-        Operator
-        <select
-          className="border-input bg-background h-8 rounded border px-2 text-sm"
-          onChange={(event) =>
-            onChange({ ...value, operator: event.currentTarget.value as ConditionOperator })
+          <SelectTrigger id={`condition-source-${fieldId}`} size="sm">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {SOURCES.map((source) => (
+              <SelectItem key={source.value} value={source.value}>
+                {source.label}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+      <div className="grid gap-1 text-xs font-medium">
+        <label htmlFor={`condition-operator-${fieldId}`}>Operator</label>
+        <Select
+          items={operatorOptions}
+          onValueChange={(selectedValue) =>
+            onChange({ ...value, operator: selectedValue as ConditionOperator })
           }
           value={value.operator}
         >
-          {OPERATORS.filter((operator) => allowedOperators.includes(operator.value)).map(
-            (operator) => (
-              <option key={operator.value} value={operator.value}>
+          <SelectTrigger id={`condition-operator-${fieldId}`} size="sm">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {operatorOptions.map((operator) => (
+              <SelectItem key={operator.value} value={operator.value}>
                 {operator.label}
-              </option>
-            ),
-          )}
-        </select>
-      </label>
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
       {value.source === "user_attribute" ? (
-        <label className="grid gap-1 text-xs font-medium">
-          Attribute
-          <select
-            className="border-input bg-background h-8 rounded border px-2 text-sm"
-            onChange={(event) => {
-              const referenceKey = event.currentTarget.value
+        <div className="grid gap-1 text-xs font-medium">
+          <label htmlFor={`condition-attribute-${fieldId}`}>Attribute</label>
+          <Select
+            items={attributeOptions}
+            onValueChange={(referenceKey) => {
               const next = { ...value, referenceKey }
               const nextOperators = operatorsFor(next, attributes)
               onChange({
@@ -298,16 +335,18 @@ function LeafEditor({
             }}
             value={value.referenceKey ?? ""}
           >
-            <option value="">Select attribute</option>
-            {attributes
-              .filter((attribute) => attribute.status === "active")
-              .map((attribute) => (
-                <option key={attribute.id} value={attribute.key}>
-                  {attribute.key}
-                </option>
+            <SelectTrigger id={`condition-attribute-${fieldId}`} size="sm">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {attributeOptions.map((option) => (
+                <SelectItem key={option.value} value={option.value}>
+                  {option.label}
+                </SelectItem>
               ))}
-          </select>
-        </label>
+            </SelectContent>
+          </Select>
+        </div>
       ) : referenceLabel ? (
         <label className="grid gap-1 text-xs font-medium">
           {referenceLabel}

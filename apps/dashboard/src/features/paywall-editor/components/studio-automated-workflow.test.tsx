@@ -1,4 +1,5 @@
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react"
+import { chooseSelectOption } from "@/test/select"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
 import { PaywallEditorWorkspace } from "@/features/paywall-editor/components/paywall-editor-workspace"
@@ -151,15 +152,16 @@ describe("Studio automated workflow", () => {
     )
     expect(actionSection).not.toBeNull()
     fireEvent.click(actionSection!.querySelector("summary")!)
-    expect(screen.getByRole("combobox", { name: "Product selector" })).toHaveValue("plans")
+    expect(screen.getByRole("combobox", { name: "Product selector" })).toHaveTextContent(
+      "Product Selector",
+    )
 
-    fireEvent.change(screen.getByRole("combobox", { name: "Preview device" }), {
-      target: { value: "pixel-10-pro" },
-    })
+    await chooseSelectOption(
+      screen.getByRole("combobox", { name: "Preview device" }),
+      "Pixel 10 Pro",
+    )
     fireEvent.click(screen.getByRole("button", { name: "Open preview settings" }))
-    fireEvent.change(screen.getByRole("combobox", { name: "Preview locale" }), {
-      target: { value: "ar" },
-    })
+    await chooseSelectOption(screen.getByRole("combobox", { name: "Preview locale" }), /^ar · /)
     fireEvent.click(screen.getByRole("checkbox", { name: "Force RTL" }))
 
     const device = canvas.querySelector<HTMLElement>('[data-device-id="pixel-10-pro"]')
@@ -206,9 +208,11 @@ describe("Studio automated workflow", () => {
     fireEvent.click(await screen.findByRole("button", { name: "Resume autosave" }))
     await screen.findByTestId("studio-editor-shell")
 
-    expect(screen.getByRole("combobox", { name: "Preview device" })).toHaveValue("pixel-10-pro")
+    expect(screen.getByRole("combobox", { name: "Preview device" })).toHaveTextContent(
+      "Pixel 10 Pro",
+    )
     fireEvent.click(screen.getByRole("button", { name: "Open preview settings" }))
-    expect(screen.getByRole("combobox", { name: "Preview locale" })).toHaveValue("ar")
+    expect(screen.getByRole("combobox", { name: "Preview locale" })).toHaveTextContent(/^ar · /)
     expect(screen.getByRole("checkbox", { name: "Force RTL" })).toBeChecked()
     const restoredCanvas = screen.getByRole("region", { name: "Browser editing preview" })
     expect(within(restoredCanvas).getByRole("heading", { level: 1 })).toHaveTextContent(

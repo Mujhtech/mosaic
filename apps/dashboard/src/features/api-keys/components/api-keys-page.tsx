@@ -5,6 +5,13 @@ import { useState } from "react"
 
 import { Button } from "@/components/ui/button"
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
+import {
   Sheet,
   SheetContent,
   SheetDescription,
@@ -57,6 +64,17 @@ export function ApiKeysPage({ environmentId, organizationId, projectId }: ApiKey
     environments.data?.items.find((item) => item.id === environmentId) ??
     environments.data?.items.find((item) => item.key === "development") ??
     environments.data?.items[0]
+  const environmentOptions = (environments.data?.items ?? []).map((environment) => ({
+    label: environment.name,
+    value: environment.id,
+  }))
+  const applicationOptions = [
+    { label: "Select an Application", value: "" },
+    ...(applications.data?.items ?? []).map((application) => ({
+      label: `${application.name} · ${application.platform}`,
+      value: application.id,
+    })),
+  ]
   const keys = useQuery({
     ...apiKeysQueryOptions(selectedEnvironment?.id ?? ""),
     enabled: scopeReady && Boolean(selectedEnvironment),
@@ -129,28 +147,33 @@ export function ApiKeysPage({ environmentId, organizationId, projectId }: ApiKey
       title="API keys"
     >
       <WorkflowPanel title="Environment">
-        <label className="flex max-w-md flex-col gap-2 text-sm font-medium">
-          Selected environment
-          <select
-            className="border-input bg-background h-9 rounded border px-3 text-sm"
-            onChange={(event) => {
+        <div className="flex max-w-md flex-col gap-2 text-sm font-medium">
+          <label htmlFor="api-key-environment">Selected environment</label>
+          <Select
+            items={environmentOptions}
+            onValueChange={(value) => {
               dismissSecret()
               setPendingAction(null)
               void navigate({
                 params: (prev) => prev,
-                search: { environmentId: event.target.value },
+                search: { environmentId: value },
                 to: "/orgs/$organizationId/projects/$projectId/env/$environmentKey/settings/api-keys",
               })
             }}
             value={selectedEnvironment?.id ?? ""}
           >
-            {environments.data?.items.map((environment) => (
-              <option key={environment.id} value={environment.id}>
-                {environment.name}
-              </option>
-            ))}
-          </select>
-        </label>
+            <SelectTrigger id="api-key-environment">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {environmentOptions.map((option) => (
+                <SelectItem key={option.value} value={option.value}>
+                  {option.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
       </WorkflowPanel>
 
       {revealed ? <OneTimeSecret onDismiss={dismissSecret} secret={revealed.secret} /> : null}
@@ -276,25 +299,29 @@ export function ApiKeysPage({ environmentId, organizationId, projectId }: ApiKey
           title="Create API key"
         >
           <div className="grid max-w-xl gap-3">
-            <label className="space-y-1 text-sm font-medium">
-              Application for SDK analytics
-              <select
-                className="border-input bg-background h-10 w-full rounded border px-3"
-                onChange={(event) => setApplicationId(event.target.value)}
+            <div className="space-y-1 text-sm font-medium">
+              <label htmlFor="api-key-application">Application for SDK analytics</label>
+              <Select
+                items={applicationOptions}
+                onValueChange={(value) => setApplicationId(value)}
                 value={applicationId}
               >
-                <option value="">Select an Application</option>
-                {applications.data?.items.map((application) => (
-                  <option key={application.id} value={application.id}>
-                    {application.name} · {application.platform}
-                  </option>
-                ))}
-              </select>
+                <SelectTrigger id="api-key-application">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {applicationOptions.map((option) => (
+                    <SelectItem key={option.value} value={option.value}>
+                      {option.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
               <span className="text-muted-foreground block text-xs font-normal">
                 Public SDK keys must be bound to one registered Application to ingest analytics.
                 Tenant scope still comes from the key; events never submit an Application ID.
               </span>
-            </label>
+            </div>
             <div className="flex flex-wrap gap-2">
               <Button
                 disabled={!applicationId || create.isPending}

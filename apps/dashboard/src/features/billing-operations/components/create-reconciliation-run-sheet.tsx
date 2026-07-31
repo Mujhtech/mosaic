@@ -5,6 +5,13 @@ import { Button } from "@/components/ui/button"
 import { Field, FieldDescription, FieldError, FieldLabel } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
+import {
   Sheet,
   SheetContent,
   SheetDescription,
@@ -26,9 +33,6 @@ import {
   validateReconciliationRange,
 } from "@/features/billing-operations/types/reconciliation-range"
 import type { CreateReconciliationRunRequest, StoreServerCredential } from "@/generated/api"
-
-const fieldClass =
-  "border-input bg-background focus-visible:border-ring focus-visible:ring-ring/40 h-9 w-full rounded border px-3 text-sm outline-none focus-visible:ring-3"
 
 /**
  * The strategies the API accepts today.
@@ -106,6 +110,17 @@ export function CreateReconciliationRunSheet({
 
   const credentialId = useStore(form.store, (state) => state.values.credentialId)
   const selected = usable.find((item) => item.id === credentialId)
+  const credentialOptions = [
+    { label: "Select a credential", value: "" },
+    ...usable.map((credential) => ({
+      label: `${credential.name} · ${providerLabel(credential.provider)} · ${storeEnvironmentLabel(credential.storeEnvironment)}`,
+      value: credential.id,
+    })),
+  ]
+  const strategyOptions = strategiesFor(selected?.provider).map((strategy) => ({
+    label: reconciliationStrategyLabel(strategy),
+    value: strategy,
+  }))
 
   return (
     <Sheet
@@ -160,24 +175,26 @@ export function CreateReconciliationRunSheet({
                   <FieldLabel htmlFor="reconciliation-credential">
                     Store Server Credential
                   </FieldLabel>
-                  <select
-                    className={fieldClass}
-                    id="reconciliation-credential"
-                    onChange={(event) => {
-                      field.handleChange(event.currentTarget.value)
-                      const next = usable.find((item) => item.id === event.currentTarget.value)
+                  <Select
+                    items={credentialOptions}
+                    onValueChange={(value) => {
+                      field.handleChange(value)
+                      const next = usable.find((item) => item.id === value)
                       form.setFieldValue("strategy", strategiesFor(next?.provider)[0] as Strategy)
                     }}
                     value={field.state.value}
                   >
-                    <option value="">Select a credential</option>
-                    {usable.map((credential) => (
-                      <option key={credential.id} value={credential.id}>
-                        {credential.name} · {providerLabel(credential.provider)} ·{" "}
-                        {storeEnvironmentLabel(credential.storeEnvironment)}
-                      </option>
-                    ))}
-                  </select>
+                    <SelectTrigger id="reconciliation-credential">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {credentialOptions.map((option) => (
+                        <SelectItem key={option.value} value={option.value}>
+                          {option.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                   <FieldDescription>
                     The credential fixes both the store and the Store Environment. The Mosaic
                     Environment is {environmentName} and comes from the address.
@@ -191,18 +208,22 @@ export function CreateReconciliationRunSheet({
               {(field) => (
                 <Field>
                   <FieldLabel htmlFor="reconciliation-strategy">Strategy</FieldLabel>
-                  <select
-                    className={fieldClass}
-                    id="reconciliation-strategy"
-                    onChange={(event) => field.handleChange(event.currentTarget.value as Strategy)}
+                  <Select
+                    items={strategyOptions}
+                    onValueChange={(value) => field.handleChange(value as Strategy)}
                     value={field.state.value}
                   >
-                    {strategiesFor(selected?.provider).map((strategy) => (
-                      <option key={strategy} value={strategy}>
-                        {reconciliationStrategyLabel(strategy)}
-                      </option>
-                    ))}
-                  </select>
+                    <SelectTrigger id="reconciliation-strategy">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {strategyOptions.map((option) => (
+                        <SelectItem key={option.value} value={option.value}>
+                          {option.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </Field>
               )}
             </form.Field>
