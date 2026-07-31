@@ -347,7 +347,7 @@ export function ProviderCatalogImport({
       ) : (
         <ul className="space-y-3">
           {visibleProducts.map((product) => {
-            const fieldIds = useId();
+            const rowIds = `${fieldIds}-${product.id}`;
             const draft = productDraft(product.id);
             const selected = selectedIds.has(product.id);
             const packageMappingOptions = [
@@ -430,12 +430,12 @@ export function ProviderCatalogImport({
                           <div className="grid gap-3 sm:grid-cols-2">
                             <label
                               className="font-medium text-xs"
-                              htmlFor={`${fieldIds}-internal-name`}
+                              htmlFor={`${rowIds}-internal-name`}
                             >
                               Internal name
                               <Input
                                 className="mt-1"
-                                id={`${fieldIds}-internal-name`}
+                                id={`${rowIds}-internal-name`}
                                 onChange={(event) =>
                                   updateDraft(product.id, {
                                     internalName: event.currentTarget.value,
@@ -446,12 +446,12 @@ export function ProviderCatalogImport({
                             </label>
                             <label
                               className="font-medium text-xs"
-                              htmlFor={`${fieldIds}-product-key`}
+                              htmlFor={`${rowIds}-product-key`}
                             >
                               Product key
                               <Input
                                 className="mt-1"
-                                id={`${fieldIds}-product-key`}
+                                id={`${rowIds}-product-key`}
                                 onChange={(event) =>
                                   updateDraft(product.id, {
                                     key: catalogKey(event.currentTarget.value),

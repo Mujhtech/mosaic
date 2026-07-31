@@ -83,6 +83,7 @@ export function ConnectStoreCredentialSheet({
 }: ConnectStoreCredentialSheetProps) {
   const [open, setOpen] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
+  const fieldIds = useId();
 
   const form = useForm({
     defaultValues: {
@@ -390,7 +391,7 @@ export function ConnectStoreCredentialSheet({
                   ) : (
                     <div className="grid gap-2">
                       {applications.map((application) => {
-                        const fieldIds = useId();
+                        const rowIds = `${fieldIds}-${application.id}`;
                         const selected = field.state.value.find(
                           (item) => item.applicationId === application.id
                         );
@@ -436,13 +437,13 @@ export function ConnectStoreCredentialSheet({
                             {selected ? (
                               <label
                                 className="mt-3 block space-y-1 font-medium text-xs"
-                                htmlFor={`${fieldIds}-field-1`}
+                                htmlFor={`${rowIds}-field-1`}
                               >
                                 {provider === "app_store"
                                   ? "Bundle ID"
                                   : "Package name"}
                                 <Input
-                                  id={`${fieldIds}-field-1`}
+                                  id={`${rowIds}-field-1`}
                                   onChange={(event) =>
                                     field.handleChange(
                                       field.state.value.map((item) =>
