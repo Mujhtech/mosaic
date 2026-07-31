@@ -19,8 +19,8 @@ import {
   storeEnvironmentLabel,
 } from "@/features/billing-ledger/types/billing-vocabulary"
 import { environmentsQueryOptions } from "@/features/environments/queries/environments-query"
-import { ScopeMismatchRecovery } from "@/features/organizations/components/scope-mismatch-recovery"
-import { WorkspacePage, WorkflowPanel } from "@/features/organizations/components/workspace-page"
+import { ScopeMismatchRecovery } from "@/features/orgs/components/scope-mismatch-recovery"
+import { WorkspacePage, WorkflowPanel } from "@/features/orgs/components/workspace-page"
 import { useValidatedProjectScope } from "@/features/projects/hooks/use-validated-project-scope"
 import { applicationsQueryOptions } from "@/features/projects/queries/projects-query"
 import { NotificationEndpointPanel } from "@/features/store-connections/components/notification-endpoint-panel"
@@ -202,7 +202,7 @@ export function StoreConnectionDetailPage({
                   credential.{" "}
                   <a
                     className="text-primary font-semibold"
-                    href={`/organizations/${encodeURIComponent(organizationId)}/members`}
+                    href={`/orgs/${encodeURIComponent(organizationId)}/members`}
                   >
                     Ask an Owner or Admin
                   </a>

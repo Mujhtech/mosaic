@@ -134,7 +134,7 @@ export function CloudWorkspaceShell() {
                   },
                   {
                     to: `${projectBase}/catalog/entitlements`,
-                    title: "Access",
+                    title: "Entitlements",
                     icon: <></>,
                   },
                   // What a Product grants is versioned and immutable, so it is

@@ -1,7 +1,7 @@
 import { useState } from "react"
 
 import { OneTimeSecret } from "@/components/feedback/one-time-secret"
-import { WorkflowPanel } from "@/features/organizations/components/workspace-page"
+import { WorkflowPanel } from "@/features/orgs/components/workspace-page"
 import { redactNotificationEndpoint } from "@/features/store-connections/types/store-connection-view"
 
 interface NotificationEndpointPanelProps {

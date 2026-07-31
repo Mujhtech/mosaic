@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button"
 import { Field, FieldDescription, FieldError, FieldLabel } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
 import { createProjectMutationOptions } from "@/features/projects/mutations/project-mutations"
-import { WorkspacePage, WorkflowPanel } from "@/features/organizations/components/workspace-page"
+import { WorkspacePage, WorkflowPanel } from "@/features/orgs/components/workspace-page"
 
 const KEY_PATTERN = /^[a-z][a-z0-9_-]{1,62}$/
 
@@ -23,8 +23,8 @@ export function CreateProjectPage({ organizationId }: { organizationId: string }
         organizationId,
       })
       await navigate({
-        params: { organizationId, projectId: project.id },
-        to: "/organizations/$organizationId/projects/$projectId",
+        params: (prev) => prev,
+        to: "/orgs/$organizationId/projects/$projectId/env/$environmentKey",
       })
     },
   })

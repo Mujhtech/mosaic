@@ -14,7 +14,7 @@ import {
   uncertaintyReasonLabel,
   uncertaintyTone,
 } from "@/features/billing-customers/types/entitlement-vocabulary"
-import { WorkflowPanel } from "@/features/organizations/components/workspace-page"
+import { WorkflowPanel } from "@/features/orgs/components/workspace-page"
 import {
   billingSubscriptionHref,
   catalogProductHref,

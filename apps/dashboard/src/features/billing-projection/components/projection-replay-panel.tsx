@@ -14,7 +14,7 @@ import {
   replaySummary,
   validateReplayScope,
 } from "@/features/billing-projection/types/projection-vocabulary"
-import { WorkflowPanel } from "@/features/organizations/components/workspace-page"
+import { WorkflowPanel } from "@/features/orgs/components/workspace-page"
 import type { CreateProjectionReplayRequest, ProjectionReplayResult } from "@/generated/api"
 
 interface ProjectionReplayPanelProps {

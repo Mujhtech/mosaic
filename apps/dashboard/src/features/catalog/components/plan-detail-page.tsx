@@ -14,9 +14,9 @@ import {
   planQueryOptions,
   productsQueryOptions,
 } from "@/features/catalog/queries/catalog-query"
-import { WorkspacePage, WorkflowPanel } from "@/features/organizations/components/workspace-page"
-import { ScopeMismatchRecovery } from "@/features/organizations/components/scope-mismatch-recovery"
-import { detectNestedScopeMismatch } from "@/features/organizations/types/nested-scope"
+import { WorkspacePage, WorkflowPanel } from "@/features/orgs/components/workspace-page"
+import { ScopeMismatchRecovery } from "@/features/orgs/components/scope-mismatch-recovery"
+import { detectNestedScopeMismatch } from "@/features/orgs/types/nested-scope"
 import { projectQueryOptions } from "@/features/projects/queries/projects-query"
 
 interface PlanDetailPageProps {
@@ -58,8 +58,8 @@ export function PlanDetailPage({ organizationId, planId, projectId }: PlanDetail
     permissionAction: (
       <Link
         className={buttonVariants({ variant: "outline" })}
-        params={{ organizationId, projectId }}
-        to="/organizations/$organizationId/projects/$projectId"
+        params={(prev) => prev}
+        to="/orgs/$organizationId/projects/$projectId/env/$environmentKey"
       >
         Return to Project
       </Link>
@@ -104,8 +104,8 @@ export function PlanDetailPage({ organizationId, planId, projectId }: PlanDetail
                 </span>
                 <Link
                   className="text-primary text-sm font-medium hover:underline"
-                  params={{ organizationId, productId: product.id, projectId }}
-                  to="/organizations/$organizationId/projects/$projectId/catalog/products/$productId"
+                  params={(prev) => ({ ...prev, productId: product.id })}
+                  to="/orgs/$organizationId/projects/$projectId/env/$environmentKey/catalog/products/$productId"
                 >
                   View Product
                 </Link>

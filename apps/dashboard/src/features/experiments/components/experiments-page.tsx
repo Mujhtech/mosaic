@@ -1,4 +1,4 @@
-import { Plus } from "@phosphor-icons/react"
+import { PlusIcon } from "@phosphor-icons/react"
 import { useQuery } from "@tanstack/react-query"
 import { Link } from "@tanstack/react-router"
 
@@ -41,10 +41,10 @@ export function ExperimentsPage({
   const createLink = access.canManage ? (
     <Link
       className={buttonVariants()}
-      params={{ environmentId, organizationId, projectId }}
-      to="/organizations/$organizationId/projects/$projectId/monetization/$environmentId/experiments/new"
+      params={(prev) => prev}
+      to="/orgs/$organizationId/projects/$projectId/env/$environmentKey/monetization/experiments/new"
     >
-      <Plus aria-hidden size={16} /> New Experiment
+      <PlusIcon aria-hidden size={16} /> New Experiment
     </Link>
   ) : undefined
 
@@ -66,8 +66,8 @@ export function ExperimentsPage({
               <Link
                 className="hover:border-primary/40 focus-visible:ring-ring grid gap-3 rounded border p-4 transition-colors focus-visible:ring-3 focus-visible:outline-none md:grid-cols-[1fr_auto]"
                 key={experiment.id}
-                params={{ environmentId, experimentId: experiment.id, organizationId, projectId }}
-                to="/organizations/$organizationId/projects/$projectId/monetization/$environmentId/experiments/$experimentId"
+                params={(prev) => ({ ...prev, experimentId: experiment.id })}
+                to="/orgs/$organizationId/projects/$projectId/env/$environmentKey/monetization/experiments/$experimentId"
               >
                 <div>
                   <div className="flex flex-wrap items-center gap-2">

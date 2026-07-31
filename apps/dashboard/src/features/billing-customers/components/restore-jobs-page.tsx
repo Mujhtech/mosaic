@@ -25,8 +25,8 @@ import {
   restoreOutcomeLabel,
   restoreOutcomeTone,
 } from "@/features/billing-customers/types/restore-vocabulary"
-import { ScopeMismatchRecovery } from "@/features/organizations/components/scope-mismatch-recovery"
-import { WorkflowPanel, WorkspacePage } from "@/features/organizations/components/workspace-page"
+import { ScopeMismatchRecovery } from "@/features/orgs/components/scope-mismatch-recovery"
+import { WorkflowPanel, WorkspacePage } from "@/features/orgs/components/workspace-page"
 import { useValidatedProjectScope } from "@/features/projects/hooks/use-validated-project-scope"
 import { billingCustomerHref, storeConnectionsHref } from "@/lib/routing/workspace-hrefs"
 import type { BillingRestoreJob } from "@/generated/api"

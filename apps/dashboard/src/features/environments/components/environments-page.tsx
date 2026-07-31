@@ -3,8 +3,8 @@ import { useQuery } from "@tanstack/react-query"
 import { HostedResourceBoundary } from "@/features/auth/components/hosted-resource-boundary"
 import { resolveHostedQueryState } from "@/features/auth/types/hosted-query-state"
 import { environmentsQueryOptions } from "@/features/environments/queries/environments-query"
-import { WorkspacePage, WorkflowPanel } from "@/features/organizations/components/workspace-page"
-import { ScopeMismatchRecovery } from "@/features/organizations/components/scope-mismatch-recovery"
+import { WorkspacePage, WorkflowPanel } from "@/features/orgs/components/workspace-page"
+import { ScopeMismatchRecovery } from "@/features/orgs/components/scope-mismatch-recovery"
 import { useValidatedProjectScope } from "@/features/projects/hooks/use-validated-project-scope"
 
 interface EnvironmentsPageProps {

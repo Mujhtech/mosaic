@@ -46,12 +46,12 @@ import {
 } from "@/features/billing-customers/types/entitlement-vocabulary"
 import { SubscriptionStateAxes } from "@/features/billing-customers/components/subscription-state-axes"
 import { environmentsQueryOptions } from "@/features/environments/queries/environments-query"
-import { ScopeMismatchRecovery } from "@/features/organizations/components/scope-mismatch-recovery"
+import { ScopeMismatchRecovery } from "@/features/orgs/components/scope-mismatch-recovery"
 import {
   ScopeBadge,
   WorkflowPanel,
   WorkspacePage,
-} from "@/features/organizations/components/workspace-page"
+} from "@/features/orgs/components/workspace-page"
 import { useValidatedProjectScope } from "@/features/projects/hooks/use-validated-project-scope"
 import { useOrganizationAccess } from "@/hooks/use-organization-access"
 import {

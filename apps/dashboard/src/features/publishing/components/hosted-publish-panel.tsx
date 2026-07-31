@@ -66,10 +66,10 @@ export function HostedPublishPanel({
       />
     )
   }
-  const assetsHref = `/organizations/${encodeURIComponent(organizationId)}/projects/${encodeURIComponent(projectId)}/monetization/${encodeURIComponent(environmentId)}/assets`
-  const placementsHref = `/organizations/${encodeURIComponent(organizationId)}/projects/${encodeURIComponent(projectId)}/monetization/${encodeURIComponent(environmentId)}/placements`
-  const catalogHref = `/organizations/${encodeURIComponent(organizationId)}/projects/${encodeURIComponent(projectId)}/catalog/products`
-  const providersHref = `/organizations/${encodeURIComponent(organizationId)}/projects/${encodeURIComponent(projectId)}/catalog/providers`
+  const assetsHref = `/orgs/${encodeURIComponent(organizationId)}/projects/${encodeURIComponent(projectId)}/monetization/${encodeURIComponent(environmentId)}/assets`
+  const placementsHref = `/orgs/${encodeURIComponent(organizationId)}/projects/${encodeURIComponent(projectId)}/monetization/${encodeURIComponent(environmentId)}/placements`
+  const catalogHref = `/orgs/${encodeURIComponent(organizationId)}/projects/${encodeURIComponent(projectId)}/catalog/products`
+  const providersHref = `/orgs/${encodeURIComponent(organizationId)}/projects/${encodeURIComponent(projectId)}/catalog/providers`
   const returnTo = hostedStudioPublishReviewHref({
     draftId: session.draft.id,
     environmentId,
@@ -204,15 +204,15 @@ function PublishSuccessPanel({
       <div className="mt-3 flex flex-wrap gap-2">
         <Link
           className={buttonVariants({ size: "sm" })}
-          params={{ environmentId, organizationId, projectId }}
-          to="/organizations/$organizationId/projects/$projectId/monetization/$environmentId/releases"
+          params={(prev) => prev}
+          to="/orgs/$organizationId/projects/$projectId/env/$environmentKey/monetization/releases"
         >
           View Publish history
         </Link>
         <Link
           className={buttonVariants({ size: "sm", variant: "outline" })}
-          params={{ environmentId, organizationId, paywallId, projectId }}
-          to="/organizations/$organizationId/projects/$projectId/monetization/$environmentId/paywalls/$paywallId"
+          params={(prev) => ({ ...prev, paywallId })}
+          to="/orgs/$organizationId/projects/$projectId/env/$environmentKey/monetization/paywalls/$paywallId"
         >
           Open published Paywall
         </Link>

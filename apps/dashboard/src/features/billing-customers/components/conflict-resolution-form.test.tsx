@@ -12,7 +12,7 @@ function renderForm(onResolve: ResolveFn = async () => undefined) {
     <ConflictResolutionForm
       canManage
       firstCustomerId="cus_incumbent"
-      membersHref="/organizations/org_01/members"
+      membersHref="/orgs/org_01/members"
       onResolve={spy}
       secondCustomerId="cus_challenger"
     />,
@@ -90,7 +90,7 @@ describe("conflict resolution form", () => {
       <ConflictResolutionForm
         canManage={false}
         firstCustomerId="cus_incumbent"
-        membersHref="/organizations/org_01/members"
+        membersHref="/orgs/org_01/members"
         onResolve={async () => undefined}
         secondCustomerId="cus_challenger"
       />,
@@ -99,6 +99,6 @@ describe("conflict resolution form", () => {
     expect(screen.queryByRole("button", { name: submitName })).not.toBeInTheDocument()
     expect(
       screen.getByRole("link", { name: "Ask an Owner or Admin to resolve this conflict" }),
-    ).toHaveAttribute("href", "/organizations/org_01/members")
+    ).toHaveAttribute("href", "/orgs/org_01/members")
   })
 })

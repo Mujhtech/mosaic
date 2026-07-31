@@ -32,8 +32,8 @@ export function ReleaseHistoryPage({
     permissionAction: (
       <Link
         className={buttonVariants({ variant: "outline" })}
-        params={{ environmentId, organizationId, projectId }}
-        to="/organizations/$organizationId/projects/$projectId/monetization/$environmentId/paywalls"
+        params={(prev) => prev}
+        to="/orgs/$organizationId/projects/$projectId/env/$environmentKey/monetization/paywalls"
       >
         Return to Paywalls
       </Link>
@@ -57,8 +57,8 @@ export function ReleaseHistoryPage({
             action={
               <Link
                 className={buttonVariants()}
-                params={{ environmentId, organizationId, projectId }}
-                to="/organizations/$organizationId/projects/$projectId/monetization/$environmentId/paywalls"
+                params={(prev) => prev}
+                to="/orgs/$organizationId/projects/$projectId/env/$environmentKey/monetization/paywalls"
               >
                 Open Paywalls
               </Link>
@@ -100,8 +100,8 @@ export function ReleaseHistoryPage({
                   ) : (
                     <Link
                       className={buttonVariants({ size: "sm", variant: "outline" })}
-                      params={{ environmentId, organizationId, projectId }}
-                      to="/organizations/$organizationId/projects/$projectId/monetization/$environmentId/paywalls"
+                      params={(prev) => prev}
+                      to="/orgs/$organizationId/projects/$projectId/env/$environmentKey/monetization/paywalls"
                     >
                       Edit a published Paywall
                     </Link>

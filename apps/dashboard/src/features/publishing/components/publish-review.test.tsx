@@ -21,7 +21,7 @@ describe("PublishReview", () => {
             {
               code: "product.missing",
               message: "Monthly is missing from this Project.",
-              recoveryHref: "/organizations/org/projects/project/catalog/products",
+              recoveryHref: "/orgs/org/projects/project/catalog/products",
               severity: "error",
             },
           ],
@@ -36,7 +36,7 @@ describe("PublishReview", () => {
     expect(screen.queryByRole("checkbox")).not.toBeInTheDocument()
     expect(screen.getByRole("link", { name: "Resolve issue" })).toHaveAttribute(
       "href",
-      "/organizations/org/projects/project/catalog/products",
+      "/orgs/org/projects/project/catalog/products",
     )
     fireEvent.click(screen.getByRole("button", { name: "Publish to Staging" }))
     expect(onPublish).not.toHaveBeenCalled()

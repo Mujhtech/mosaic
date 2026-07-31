@@ -15,8 +15,8 @@ import { ProjectionReplayPanel } from "@/features/billing-projection/components/
 import { createProjectionReplayMutationOptions } from "@/features/billing-projection/mutations/projection-replay-mutations"
 import { projectionHealthQueryOptions } from "@/features/billing-projection/queries/projection-health-queries"
 import { environmentsQueryOptions } from "@/features/environments/queries/environments-query"
-import { ScopeMismatchRecovery } from "@/features/organizations/components/scope-mismatch-recovery"
-import { WorkflowPanel, WorkspacePage } from "@/features/organizations/components/workspace-page"
+import { ScopeMismatchRecovery } from "@/features/orgs/components/scope-mismatch-recovery"
+import { WorkflowPanel, WorkspacePage } from "@/features/orgs/components/workspace-page"
 import { useValidatedProjectScope } from "@/features/projects/hooks/use-validated-project-scope"
 import { useOrganizationAccess } from "@/hooks/use-organization-access"
 import {
@@ -257,7 +257,7 @@ export function ProjectionHealthPage({
         <ProjectionReplayPanel
           activeRuleVersion={data?.activeProjectionRuleVersion}
           canManage={access.canManage}
-          membersHref={`/organizations/${encodeURIComponent(organizationId)}/members`}
+          membersHref={`/orgs/${encodeURIComponent(organizationId)}/members`}
           onReplay={(request) => replay.mutateAsync(request)}
         />
 

@@ -21,7 +21,7 @@ function productHref(context: PublishRecoveryContext, issue: PublishValidationIs
     return appendSearch(context.catalogHref, { returnTo: context.returnTo })
   }
 
-  const base = `/organizations/${encodeURIComponent(context.organizationId)}/projects/${encodeURIComponent(context.projectId)}/catalog/products/${encodeURIComponent(issue.productId)}`
+  const base = `/orgs/${encodeURIComponent(context.organizationId)}/projects/${encodeURIComponent(context.projectId)}/catalog/products/${encodeURIComponent(issue.productId)}`
   const search = new URLSearchParams()
   search.set("environmentId", issue.environmentId ?? context.environmentId)
   if (issue.applicationId) search.set("applicationId", issue.applicationId)
@@ -40,7 +40,7 @@ export function publishRecoveryHref(
     const destination = providerRecoveryDescriptor(issue.recoveryAction).destination
     const destinations: Record<ProviderRecoveryDestination, string> = {
       access: `${productHref(context, issue)}#access-grants-title`,
-      applications: `/organizations/${encodeURIComponent(context.organizationId)}/projects/${encodeURIComponent(context.projectId)}/apps`,
+      applications: `/orgs/${encodeURIComponent(context.organizationId)}/projects/${encodeURIComponent(context.projectId)}/apps`,
       lifecycle: `${productHref(context, issue)}#lifecycle-title`,
       mapping: `${productHref(context, issue)}#provider-mappings-title`,
       providers: appendSearch(context.providersHref, {

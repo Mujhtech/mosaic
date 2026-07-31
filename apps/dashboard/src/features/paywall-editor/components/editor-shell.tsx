@@ -498,7 +498,7 @@ export function EditorShell({
             />
           }
           propertiesPanel={
-            <aside aria-label="Component properties" className="bg-card h-full overflow-y-auto p-4">
+            <aside aria-label="Component properties" className="bg-card h-full overflow-y-auto p-4 scrollbar-thin scrollbar-gutter-stable">
               <PropertyInspector issues={validation.issues} />
             </aside>
           }

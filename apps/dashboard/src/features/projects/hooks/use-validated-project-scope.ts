@@ -1,6 +1,6 @@
 import { useQuery } from "@tanstack/react-query"
 
-import { detectNestedScopeMismatch } from "@/features/organizations/types/nested-scope"
+import { detectNestedScopeMismatch } from "@/features/orgs/types/nested-scope"
 import { projectQueryOptions } from "@/features/projects/queries/projects-query"
 
 export function useValidatedProjectScope(organizationId: string, projectId: string) {

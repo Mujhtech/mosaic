@@ -11,6 +11,7 @@ import {
   DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
+  DropdownMenuGroup,
 } from "@/components/ui/dropdown-menu"
 import {
   SidebarMenu,
@@ -41,6 +42,7 @@ export function UserMenu() {
   return (
     <SidebarMenu>
       <SidebarMenuItem>
+        <DropdownMenuGroup>
         <DropdownMenu>
           <DropdownMenuTrigger
             render={
@@ -80,7 +82,8 @@ export function UserMenu() {
               {logout.isError ? describeApiError(logout.error).description : ""}
             </p>
           </DropdownMenuContent>
-        </DropdownMenu>
+          </DropdownMenu>
+        </DropdownMenuGroup>
       </SidebarMenuItem>
     </SidebarMenu>
   )

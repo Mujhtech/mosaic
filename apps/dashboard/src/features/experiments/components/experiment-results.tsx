@@ -2,7 +2,7 @@ import { useQuery } from "@tanstack/react-query"
 
 import { LoadingState } from "@/components/feedback/loading-state"
 import { ErrorState } from "@/components/feedback/error-state"
-import { WorkflowPanel } from "@/features/organizations/components/workspace-page"
+import { WorkflowPanel } from "@/features/orgs/components/workspace-page"
 import { useExperimentAdapter } from "../api/use-experiment-adapter"
 import { experimentResultsQueryOptions } from "../queries/experiment-queries"
 import { describeMetricEventFilter, type ExperimentScope } from "../types/experiment"

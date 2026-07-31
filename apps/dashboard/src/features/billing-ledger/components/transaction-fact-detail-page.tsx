@@ -31,8 +31,8 @@ import {
 import { defaultTransactionFilters } from "@/features/billing-ledger/types/transaction-filters"
 import { productsQueryOptions } from "@/features/catalog/queries/catalog-query"
 import { environmentsQueryOptions } from "@/features/environments/queries/environments-query"
-import { ScopeMismatchRecovery } from "@/features/organizations/components/scope-mismatch-recovery"
-import { WorkspacePage, WorkflowPanel } from "@/features/organizations/components/workspace-page"
+import { ScopeMismatchRecovery } from "@/features/orgs/components/scope-mismatch-recovery"
+import { WorkspacePage, WorkflowPanel } from "@/features/orgs/components/workspace-page"
 import { useValidatedProjectScope } from "@/features/projects/hooks/use-validated-project-scope"
 import { applicationsQueryOptions } from "@/features/projects/queries/projects-query"
 import { useOrganizationAccess } from "@/hooks/use-organization-access"
@@ -153,7 +153,7 @@ export function TransactionFactDetailPage({
     )
   }
 
-  const projectBase = `/organizations/${encodeURIComponent(organizationId)}/projects/${encodeURIComponent(projectId)}`
+  const projectBase = `/orgs/${encodeURIComponent(organizationId)}/projects/${encodeURIComponent(projectId)}`
   const billingBase = `${projectBase}/billing/${encodeURIComponent(environmentId)}`
 
   return (

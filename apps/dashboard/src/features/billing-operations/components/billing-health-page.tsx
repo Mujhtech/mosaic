@@ -17,8 +17,8 @@ import {
 } from "@/features/billing-ledger/types/billing-vocabulary"
 import { billingHealthQueryOptions } from "@/features/billing-operations/queries/billing-health-queries"
 import { environmentsQueryOptions } from "@/features/environments/queries/environments-query"
-import { ScopeMismatchRecovery } from "@/features/organizations/components/scope-mismatch-recovery"
-import { WorkspacePage, WorkflowPanel } from "@/features/organizations/components/workspace-page"
+import { ScopeMismatchRecovery } from "@/features/orgs/components/scope-mismatch-recovery"
+import { WorkspacePage, WorkflowPanel } from "@/features/orgs/components/workspace-page"
 import { useValidatedProjectScope } from "@/features/projects/hooks/use-validated-project-scope"
 import { storeCredentialsQueryOptions } from "@/features/store-connections/queries/store-connection-queries"
 import {
@@ -96,7 +96,7 @@ export function BillingHealthPage({
     )
   }
 
-  const base = `/organizations/${encodeURIComponent(organizationId)}/projects/${encodeURIComponent(projectId)}/billing/${encodeURIComponent(environmentId)}`
+  const base = `/orgs/${encodeURIComponent(organizationId)}/projects/${encodeURIComponent(projectId)}/billing/${encodeURIComponent(environmentId)}`
   const connectionsHref = storeConnectionsHref({ organizationId, projectId }) ?? "#"
   const backlogSeconds = data?.oldestQueuedAgeSeconds
   const backlogUnhealthy = typeof backlogSeconds === "number" && backlogSeconds > 900

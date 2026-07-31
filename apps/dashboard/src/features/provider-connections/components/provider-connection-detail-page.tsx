@@ -15,7 +15,7 @@ import {
   providerMappingsQueryOptions,
 } from "@/features/catalog/queries/catalog-query"
 import { environmentsQueryOptions } from "@/features/environments/queries/environments-query"
-import { WorkspacePage, WorkflowPanel } from "@/features/organizations/components/workspace-page"
+import { WorkspacePage, WorkflowPanel } from "@/features/orgs/components/workspace-page"
 import { ProviderCatalogImport } from "@/features/provider-connections/components/provider-catalog-import"
 import { ProviderCredentialSheet } from "@/features/provider-connections/components/provider-credential-sheet"
 import {
@@ -173,7 +173,7 @@ export function ProviderConnectionDetailPage({
       >
         <a
           className={buttonVariants({ size: "sm", variant: "outline" })}
-          href={`/organizations/${encodeURIComponent(organizationId)}/projects/${encodeURIComponent(projectId)}/catalog/providers`}
+          href={`/orgs/${encodeURIComponent(organizationId)}/projects/${encodeURIComponent(projectId)}/catalog/providers`}
         >
           Return to Commerce providers
         </a>
@@ -186,7 +186,7 @@ export function ProviderConnectionDetailPage({
       actions={
         <a
           className={buttonVariants({ size: "sm", variant: "outline" })}
-          href={`/organizations/${encodeURIComponent(organizationId)}/projects/${encodeURIComponent(projectId)}/catalog/providers`}
+          href={`/orgs/${encodeURIComponent(organizationId)}/projects/${encodeURIComponent(projectId)}/catalog/providers`}
         >
           <ArrowLeftIcon aria-hidden /> All providers
         </a>
@@ -287,7 +287,7 @@ export function ProviderConnectionDetailPage({
                       <li key={product.id}>
                         <a
                           className="text-primary font-medium"
-                          href={`/organizations/${encodeURIComponent(organizationId)}/projects/${encodeURIComponent(projectId)}/catalog/products/${encodeURIComponent(product.id)}`}
+                          href={`/orgs/${encodeURIComponent(organizationId)}/projects/${encodeURIComponent(projectId)}/catalog/products/${encodeURIComponent(product.id)}`}
                         >
                           Review {product.internalName} usage and recovery
                         </a>
@@ -456,7 +456,7 @@ export function ProviderConnectionDetailPage({
           ) : catalog.data ? (
             <ProviderCatalogImport
               applications={scopedApplications}
-              catalogProductsHref={`/organizations/${encodeURIComponent(organizationId)}/projects/${encodeURIComponent(projectId)}/catalog/products`}
+              catalogProductsHref={`/orgs/${encodeURIComponent(organizationId)}/projects/${encodeURIComponent(projectId)}/catalog/products`}
               entitlements={entitlements.data?.items ?? []}
               environments={scopedEnvironments}
               onImport={(items, idempotencyKey) =>
@@ -464,7 +464,7 @@ export function ProviderConnectionDetailPage({
               }
               preview={catalog.data}
               products={products.data?.items ?? []}
-              providersHref={`/organizations/${encodeURIComponent(organizationId)}/projects/${encodeURIComponent(projectId)}/catalog/providers`}
+              providersHref={`/orgs/${encodeURIComponent(organizationId)}/projects/${encodeURIComponent(projectId)}/catalog/providers`}
             />
           ) : null}
         </WorkflowPanel>

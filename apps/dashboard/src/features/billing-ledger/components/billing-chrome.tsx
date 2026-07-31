@@ -3,7 +3,7 @@ import type { ReactNode } from "react"
 
 import { Button } from "@/components/ui/button"
 
-import { ScopeBadge } from "@/features/organizations/components/workspace-page"
+import { ScopeBadge } from "@/features/orgs/components/workspace-page"
 import {
   BILLING_BOUNDARY_NOTE,
   formatBillingTimestamp,
