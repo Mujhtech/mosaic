@@ -1,5 +1,40 @@
 # Changelog
 
+## Unreleased (Phase 9A: transaction ingestion and validation)
+
+- Add the optional Transaction Observation handoff, off by default behind
+  `MosaicConfiguration.transactionObservationEnabled`. When a host opts in, a
+  completed Google Play purchase is reported to Mosaic as a bounded provider
+  reference so server-side validation can start without waiting for a store
+  notification. An observation is a trigger, never proof: the SDK never learns a
+  validation outcome, `serverConfirmedTransactions` remains `unsupported`, and no
+  `MosaicPurchaseResult` changes.
+- Both the submitted observation and the submission answer are Billing Ingestion
+  Contract 1 records, asserted against the canonical fixtures: the request is a
+  `clientTransactionObservation` envelope carrying a stable `observationId`
+  beside the deterministic `submissionId`, and only an
+  `observationSubmissionResult` record is decoded. No Store Environment is ever
+  sent — classification is server-side, from verified provider metadata.
+- The raw purchase token never leaves the device. The wire carries the existing
+  SHA-256/UTF-8/lowercase-hex token digest plus, when Google supplies one, the
+  order identifier verbatim. `getOriginalJson()`, `getSignature()`, obfuscated
+  account and profile identifiers, and every other subject value are never read
+  into a payload, a log, or a diagnostic. The digest derivation is now a
+  documented cross-SDK contract asserted against shared reference vectors.
+- Add `orderId` to the normalized Google purchase and
+  `MosaicCommerceUpdate.providerOrderReference` (optional, bounded to the
+  provider-code charset so a token or receipt cannot be carried there). Existing
+  call sites are source compatible.
+- Emit the purchased commerce update after the transaction is finalized rather
+  than before acknowledgement, so no subscriber can report a purchase that Google
+  Play has not yet acknowledged. Acknowledgement itself is unchanged: it stays
+  client-side and is never gated on Mosaic.
+- Add an app-private, backup-excluded, duplicate-safe observation queue that
+  survives process restart (64 observations / 64 KiB, seven-day expiry, ten
+  attempts, full-jitter backoff, `Retry-After` respected) with best-effort
+  delivery on a scope the purchase path never waits on, plus
+  `flushTransactionObservations()` and `transactionObservationDiagnostics()`.
+
 ## 0.1.0-dev.7 — 2026-07-27 (Phase 8: operational hardening)
 
 Release-blocking fixes:

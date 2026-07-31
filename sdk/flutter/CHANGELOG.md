@@ -1,5 +1,54 @@
 # Changelog
 
+## Unreleased
+
+- Add the opt-in Transaction Observation handoff (Billing Ingestion Contract
+  v1). The SDK submits and persists the canonical `clientTransactionObservation`
+  record — envelope, `sourceAuthority: client_observation`, typed
+  `transactionReference`/`providerOrderReference`, `context`, and `correlation` —
+  and reads the canonical `observationSubmissionResult` record. Both are
+  asserted against the canonical fixtures. A response in any other shape,
+  contract version, or record type is retried, never guessed at. A client
+  observation never asserts a Store Environment. It is off by default: without
+  `Mosaic.configure(transactionObservation: ...)` the subsystem is never
+  constructed, and nothing is observed, queued, persisted, or submitted.
+- An observation is a trigger for server-side validation, never proof. The
+  sealed submission result has exactly four members —
+  `MosaicTransactionObservationAcceptedForValidation`, `...Duplicate`,
+  `...PermanentlyRejected`, `...RetryableFailure` — and none of them means
+  validated, verified, confirmed, or entitled. No purchase result, presentation
+  result, or interaction outcome is re-labelled by it.
+- The handoff can never block or alter a purchase: the renderer's sink returns
+  `void`, is never awaited, and a sink that throws is contained rather than
+  becoming a failed purchase.
+- References are sanitized structurally at construction. An Apple JWS
+  representation, a device-verification value, a raw Google Play purchase
+  token, and `mock-*`/`preview-*` placeholders cannot be submitted. The iOS
+  adapter's local `storekit_` prefix is stripped at this one decoding boundary
+  so the wire value is the raw decimal App Store transaction identifier,
+  carried as a string so `UInt64` values survive.
+- Add a dedicated durable queue in app-private application-support storage,
+  following the `MosaicExperimentAssignmentStore` convention with its own
+  storage interface, memory and file implementations, and SHA-256 namespace. It
+  is deliberately not the analytics queue: the contracts, retention policies,
+  and consent decisions are separate. Bounded to 128 observations/64 KiB,
+  14-day retention, 10 attempts with full-jitter exponential backoff honouring
+  `Retry-After`, and a persisted 256-entry acknowledged-key ring.
+- The submission identifier is deterministic and derived only from the
+  reference kind and value, so the renderer path and the provider-update path
+  submit one purchase once, and a retry after an ambiguous timeout is answered
+  `duplicate` instead of creating a second record.
+- Add `Mosaic.transactionObservations`, `setTransactionObservation`,
+  `flushTransactionObservations`, and `transactionObservationDiagnostics`.
+  Disabling collection clears the queue and deletes the persisted document.
+- Add the optional `MosaicCommerceUpdate.providerOrderReference` join handle
+  and accept it as an optional key in the native-store channel decoder. The
+  codec version is unchanged and an adapter that omits it is unaffected.
+- No new dependency, no background-execution machinery, and no server
+  credential of any kind. Store Notifications remain the authoritative and
+  timely ingestion path; this handoff is a latency and attribution
+  optimization.
+
 ## 0.2.0-dev.11
 
 - Raise the supported floor to Flutter 3.22 / Dart 3.4, the tested minimum.

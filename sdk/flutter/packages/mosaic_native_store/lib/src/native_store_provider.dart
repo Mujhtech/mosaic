@@ -635,6 +635,9 @@ MosaicCommerceUpdate _decodeUpdate(Map<String, Object?> value) {
     optional: const <String>{
       'operationId',
       'transactionReference',
+      // Consumed when the native adapter supplies it, tolerated when absent.
+      // The codec version is unchanged: an older plugin simply omits the key.
+      'providerOrderReference',
       'activeEntitlementKeys',
     },
   );
@@ -663,6 +666,7 @@ MosaicCommerceUpdate _decodeUpdate(Map<String, Object?> value) {
       (item) => item.name == value['outcome'],
     ),
     transactionReference: value['transactionReference'] as String?,
+    providerOrderReference: value['providerOrderReference'] as String?,
     activeEntitlementKeys: _stringSet(value['activeEntitlementKeys']),
     occurredAt: DateTime.parse(
       _string(value['occurredAt'], r'$.update.occurredAt'),

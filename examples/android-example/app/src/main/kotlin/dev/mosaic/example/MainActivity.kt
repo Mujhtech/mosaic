@@ -120,6 +120,10 @@ class MainActivity : ComponentActivity() {
             endpoint,
             applicationId = applicationId,
             analyticsCollectionEnabled = intent.getBooleanExtra(ANALYTICS_ENABLED_EXTRA, false),
+            // Off by default, exactly as the SDK ships it. The handoff only starts a server-side
+            // validation sooner; the example never treats it as proof of anything.
+            transactionObservationEnabled =
+                intent.getBooleanExtra(TRANSACTION_OBSERVATION_ENABLED_EXTRA, false),
         )
         val hosted = mosaic.hostedConfiguration(applicationContext)
         val placement = intent.getStringExtra(PLACEMENT_EXTRA)?.takeIf(String::isNotBlank)
@@ -127,14 +131,22 @@ class MainActivity : ComponentActivity() {
         setContent {
             MaterialTheme {
                 var analyticsStatus by remember { mutableStateOf("Analytics disabled or waiting.") }
+                var observationStatus by remember { mutableStateOf("Transaction observations disabled.") }
                 LaunchedEffect(hosted, placement) {
                     hosted.refresh()
                     if (intent.getBooleanExtra(ANALYTICS_FLUSH_EXTRA, false)) hosted.flushAnalytics()
                     val diagnostics = hosted.analyticsDiagnostics()
                     analyticsStatus = "Analytics queue: ${diagnostics.queuedEventCount} events · ${diagnostics.queuedBytes} bytes"
+                    val observations = hosted.transactionObservationDiagnostics()
+                    // Queued/accepted counts only. "Accepted" means Mosaic queued the observation
+                    // for validation; it never means the transaction was validated.
+                    observationStatus = "Observation queue: ${observations.queuedCount} queued · " +
+                        "${observations.acceptedCount} accepted for validation · " +
+                        "${observations.droppedCount} dropped · ${observations.lastSafeCode ?: "no code"}"
                 }
                 Column(Modifier.fillMaxSize()) {
                     Text(analyticsStatus, modifier = Modifier.padding(12.dp))
+                    Text(observationStatus, modifier = Modifier.padding(horizontal = 12.dp))
                     MosaicPlacement(
                         client = hosted,
                         placement = placement,
@@ -191,5 +203,6 @@ class MainActivity : ComponentActivity() {
         const val GOOGLE_PLAY_PROVIDER_EXTRA = "mosaic.google.play"
         const val ANALYTICS_ENABLED_EXTRA = "mosaic.analytics.enabled"
         const val ANALYTICS_FLUSH_EXTRA = "mosaic.analytics.flush"
+        const val TRANSACTION_OBSERVATION_ENABLED_EXTRA = "mosaic.observations.enabled"
     }
 }

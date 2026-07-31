@@ -460,6 +460,78 @@ a separate already-entitled restore result. Active Entitlement lookup returns
 exactly `.available`, `.unknown`, `.providerUnavailable`, or `.failed`.
 Provider failures never imply an empty or inactive Entitlement set.
 
+## Transaction observations (optional)
+
+A Transaction Observation is an untrusted report that a provider transaction
+may exist. It is a trigger for server-side validation and never proof. The
+handoff is **off by default** and changes nothing when it is off: no
+observation is built, queued, persisted, or sent.
+
+```swift
+let provider = try MosaicStoreKitProvider(acceptor: acceptor)
+let mosaic = try await Mosaic.configure(
+  publicSDKKey: key,
+  baseURL: baseURL,
+  transactionObservations: .enabled,
+  purchaseProvider: router)
+// The provider is constructed before `configure`, so the sink is attached
+// afterwards rather than passed through the initializer.
+await provider.attachTransactionObservationSink(mosaic.transactionObservationSink())
+```
+
+The submitted document is the canonical Billing Ingestion Contract 1
+`clientTransactionObservation` record: contract version `1`, the record type,
+and a payload of `observationId`, the deterministic `submissionId`,
+`providerId`, `storePlatform`, a `transactionReference` of
+`app_store_transaction_id` plus the raw decimal `Transaction.id` as a string,
+`observedAt`, `sourceAuthority: client_observation`, SDK `context`, and
+`correlation` when a purchase-attempt handle exists.
+
+Nothing else is submitted. The following are never read from StoreKit and can
+never reach a Mosaic payload: `jwsRepresentation`, `deviceVerification`,
+`deviceVerificationNonce`, `appAccountToken`, `appTransactionID`,
+`originalID`, price, and store product identity.
+
+A client never asserts a **Store Environment**. Sandbox and production
+classification is derived server-side from verified provider metadata during
+validation, so no environment field appears on the wire.
+
+Behaviour worth knowing before enabling it:
+
+- **Only a trigger is claimed.** `sourceAuthority` is always
+  `client_observation`, which the contract defines as the lowest authority: a
+  client observation can trigger validation but can never author a fact.
+- **The purchase result never changes.** `MosaicPurchaseResult` and
+  `MosaicCommerceUpdate` are byte-identical regardless of submission outcome,
+  and `serverConfirmedTransactions` stays `unsupported`. Nothing in the
+  submission response can re-label a locally verified purchase as
+  server-validated; the outcome vocabulary has no such member.
+- **Purchase never blocks on it.** Observation handoff is synchronous and
+  returns immediately; delivery happens on a detached task.
+- **The reference is a string end to end.** App Store transaction identifiers
+  exceed IEEE-754 double precision and `Int64`; never parse one.
+- **Xcode StoreKit testing is suppressed.** `Transaction.environment` is read
+  on iOS 16 and later for exactly one purpose: those transactions have no App
+  Store record, so no observation is enqueued for them. The value is never
+  submitted. Sandbox and production transactions are observed normally.
+- **The queue is persistent and duplicate-safe.** It lives in Application
+  Support beside the analytics queue, is excluded from backup, survives
+  relaunch, and de-duplicates on the deterministic submission identifier.
+  Retention is 30 days, with the same capped exponential backoff and
+  `Retry-After` handling as the analytics queue.
+- **No background execution.** Delivery is attempted on enqueue, on foreground
+  and background transitions, and on the next `configure`. There is no
+  background `URLSession` or `BGTaskScheduler` usage, because both require host
+  entitlements, Info.plist keys, and `AppDelegate` wiring a Swift package
+  cannot install. Store Notifications remain the reliable server-side path;
+  this handoff is a latency and attribution optimization.
+- **No server credentials.** Authorization is the same public SDK key bearer
+  token used by analytics.
+
+`transactionObservationDiagnostics()` reports the mode, queued count, and the
+accepted, duplicate, permanently rejected, retry, and dropped counters plus the
+last safe code. `flushTransactionObservations()` attempts delivery now.
+
 ## Bundled fallback and direct rendering
 
 The preview screen takes a valid bundled `MosaicPaywallDocument` and an

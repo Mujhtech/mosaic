@@ -1,0 +1,37 @@
+{
+  "billingIngestionContractVersion": "1",
+  "recordType": "validationResult",
+  "payload": {
+    "validationId": "fixture-validation-0004",
+    "observationId": "fixture-observation-apple-notification-0001",
+    "submissionId": "fixture-submission-apple-notification-0001",
+    "outcome": "transient_failure",
+    "attempt": 2,
+    "validatorVersion": "1",
+    "decidedAt": "2026-07-27T12:00:40.000Z",
+    "sourceAuthority": "provider_notification",
+    "storeEnvironmentClassification": {
+      "classification": "production",
+      "basis": "signature_environment"
+    },
+    "diagnostics": [
+      {
+        "code": "billing.provider.unreachable",
+        "safeMessage": "The provider validation endpoint did not respond within the request budget.",
+        "severity": "warning",
+        "retryable": true,
+        "correlationId": "fixture-correlation-0001",
+        "retryAfterSeconds": 60,
+        "recoveryAction": "retry"
+      }
+    ],
+    "retry": {
+      "retryable": true,
+      "attempt": 2,
+      "maxAttempts": 8,
+      "retryAfterSeconds": 60,
+      "nextAttemptAt": "2026-07-27T12:01:40.000Z",
+      "exhausted": false
+    }
+  }
+}

@@ -88,6 +88,14 @@ fallback-presentation, and assignment-failure events plus immutable Experiment
 attribution on Product selection and purchase lifecycle observations. Event
 Contract `1` remains unchanged and accepted beside v2.
 
+Billing Ingestion Contract `1` is a separate **draft** server-facing contract
+for observing, validating, and recording provider transactions. It proves a
+transaction is authentic and associates it with a Mosaic Product; it decides no
+customer access and contains no entitlement, subscription, or financial
+vocabulary. Acceptance of an observation is explicitly not a validation claim,
+and a client can never author a transaction fact. It is optional, adds nothing
+to any existing contract, and is not generated into the browser contract.
+
 Canonical Commerce artifacts live under:
 
 ```text
@@ -102,6 +110,7 @@ protocol/
 ├── schema/analytics-event/v2/
 ├── schema/experiment-assignment/v1/
 ├── schema/configuration-delivery/v3/
+├── schema/billing-ingestion/v1/
 ├── compatibility/commerce-configuration/v1.json
 ├── compatibility/commerce-configuration/v2.json
 ├── compatibility/commerce-provider/v1.json
@@ -110,6 +119,7 @@ protocol/
 ├── compatibility/analytics-event/v2.json
 ├── compatibility/experiment-assignment/v1.json
 ├── compatibility/configuration-delivery/v3.json
+├── compatibility/billing-ingestion/v1.json
 ├── fixtures/commerce-configuration/v1/
 ├── fixtures/commerce-configuration/v2/
 ├── fixtures/commerce-provider/v1/
@@ -120,11 +130,13 @@ protocol/
 ├── fixtures/analytics-event/v2/
 ├── fixtures/experiment-assignment/v1/
 ├── fixtures/configuration-delivery/v3/
+├── fixtures/billing-ingestion/v1/
 ├── commerce-configuration/CHANGELOG.md
 ├── commerce/CHANGELOG.md
 ├── placement-decision/CHANGELOG.md
 ├── analytics/CHANGELOG.md
-└── experiment/CHANGELOG.md
+├── experiment/CHANGELOG.md
+└── billing/CHANGELOG.md
 ```
 
 ## Generate and validate
@@ -159,3 +171,4 @@ See:
 - `docs/protocol/experiment-assignment-v1.md`
 - `docs/protocol/configuration-delivery-v3.md`
 - `docs/protocol/analytics-event-v2.md`
+- `docs/protocol/billing-ingestion-v1.md` (draft contract)

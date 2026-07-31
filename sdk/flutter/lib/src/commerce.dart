@@ -362,6 +362,7 @@ final class MosaicCommerceUpdate {
     required this.occurredAt,
     this.operationId,
     this.transactionReference,
+    this.providerOrderReference,
     Iterable<String> activeEntitlementKeys = const <String>[],
     Iterable<MosaicCommerceDiagnostic> diagnostics =
         const <MosaicCommerceDiagnostic>[],
@@ -374,7 +375,14 @@ final class MosaicCommerceUpdate {
   final String mosaicProductId;
   final MosaicCommerceConfigurationReference configuration;
   final MosaicCommerceUpdateOutcome outcome;
+
+  /// Provider-safe transaction reference. It is never a receipt, a signed
+  /// payload, a JWS representation, or a raw purchase token.
   final String? transactionReference;
+
+  /// Optional Google Play order reference, when the adapter supplies one. It is
+  /// a join handle only and is never the identity of a transaction.
+  final String? providerOrderReference;
   final Set<String> activeEntitlementKeys;
   final DateTime occurredAt;
   final List<MosaicCommerceDiagnostic> diagnostics;

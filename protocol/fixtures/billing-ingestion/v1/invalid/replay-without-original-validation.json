@@ -1,0 +1,63 @@
+{
+  "billingIngestionContractVersion": "1",
+  "recordType": "validationResult",
+  "payload": {
+    "validationId": "fixture-validation-0001",
+    "observationId": "fixture-observation-apple-notification-0001",
+    "submissionId": "fixture-submission-apple-notification-0001",
+    "outcome": "validated",
+    "attempt": 1,
+    "validatorVersion": "1",
+    "decidedAt": "2026-07-27T12:00:08.000Z",
+    "sourceAuthority": "provider_notification",
+    "storeEnvironmentClassification": {
+      "classification": "production",
+      "basis": "signature_environment"
+    },
+    "diagnostics": [],
+    "productResolution": {
+      "resolutionId": "fixture-resolution-0001",
+      "resolvedAt": "2026-07-27T12:00:07.000Z",
+      "resolution": "resolved",
+      "providerProductReference": "fixture.pro.monthly",
+      "mosaicProductId": "fixture-mosaic-product-pro-monthly",
+      "mappingId": "fixture-mapping-0003",
+      "mappingVersion": 3,
+      "productType": "subscription"
+    },
+    "transactionFact": {
+      "transactionFactId": "fixture-fact-apple-0001",
+      "factDigest": "sha256:66720e8760b45e54b50419aca36d175c69ecd9fc548f944fc4051f9867c783f2",
+      "factVersion": 1,
+      "providerId": "fixture-provider-apple",
+      "storePlatform": "apple_app_store",
+      "transactionReference": {
+        "referenceKind": "app_store_transaction_id",
+        "value": "2000000900000001"
+      },
+      "mosaicProductId": "fixture-mosaic-product-pro-monthly",
+      "mappingId": "fixture-mapping-0003",
+      "mappingVersion": 3,
+      "productType": "subscription",
+      "transactionType": "initial_purchase",
+      "storeEnvironment": "production",
+      "sourceAuthority": "provider_notification",
+      "occurredAt": "2026-07-27T11:59:58.000Z",
+      "providerReportedAt": "2026-07-27T11:59:58.000Z",
+      "recordedAt": "2026-07-27T12:00:08.000Z",
+      "periodStart": "2026-07-27T11:59:58.000Z",
+      "periodEnd": "2026-08-27T11:59:58.000Z",
+      "quantity": 1,
+      "validatorVersion": "1",
+      "correlation": {
+        "purchaseAttemptId": "fixture-purchase-attempt-0001"
+      }
+    },
+    "replay": {
+      "replayId": "fixture-replay-0002",
+      "reason": "quarantine_review",
+      "originalValidatorVersion": "1",
+      "requestedAt": "2026-08-05T09:59:00.000Z"
+    }
+  }
+}

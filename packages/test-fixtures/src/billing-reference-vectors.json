@@ -1,0 +1,77 @@
+{
+  "$comment": "Generated cross-SDK reference vectors. Regenerate with packages/test-fixtures/src/build-billing-reference-vectors.mjs; never hand-edit a digest.",
+  "contract": "Billing Ingestion Contract v1",
+  "contractVersion": "1",
+  "referenceKindDefinition": "protocol/schema/billing-ingestion/v1/observation.schema.json#/$defs/referenceKind",
+  "compatibilityManifest": "protocol/compatibility/billing-ingestion/v1.json",
+  "googlePlayTokenDigest": {
+    "referenceKind": "google_play_token_digest",
+    "derivation": "sha256_utf8_lowercase_hex",
+    "algorithm": {
+      "hash": "SHA-256",
+      "inputEncoding": "UTF-8",
+      "output": "lowercase hexadecimal",
+      "outputLength": 64,
+      "prefix": null
+    },
+    "rule": "Hash the raw purchase token bytes as UTF-8. Do not trim, normalize Unicode, base64-decode, uppercase, or prefix the result. The raw token never leaves the device and never appears in this contract.",
+    "vectors": [
+      {
+        "id": "canonical-fixture-token",
+        "token": "fixture-google-purchase-token-0001",
+        "tokenUtf8ByteLength": 34,
+        "digest": "ecdb16b8fb3378895aeb12223bc53edc67ac874ac2ea15c01e15c897af2c2478",
+        "notes": "The value carried by protocol/fixtures/billing-ingestion/v1/google-client-observation.json. An SDK that reproduces this digest agrees with the canonical fixture."
+      },
+      {
+        "id": "distinct-token",
+        "token": "fixture-google-purchase-token-0002",
+        "tokenUtf8ByteLength": 34,
+        "digest": "bc9bd8b5795fab18943a5b50c84de2c3f915096c8e962797d167e66d5bcb59ee",
+        "notes": "A different token must produce a different digest; guards a constant or truncated implementation."
+      },
+      {
+        "id": "non-ascii-token",
+        "token": "fixture-google-purchase-token-ünïcödé-中文-0003",
+        "tokenUtf8ByteLength": 53,
+        "digest": "bff4c062bd2a1d7bc93b7e71caaba532c534bb00b7226aca8cec3e951efaa641",
+        "notes": "Proves UTF-8 encoding. A UTF-16, Latin-1, or platform-default encoding produces a different digest here and agrees on every ASCII vector, so this is the vector that actually catches the bug."
+      },
+      {
+        "id": "long-token",
+        "token": "fixture-google-purchase-token-00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+        "tokenUtf8ByteLength": 230,
+        "digest": "d5fc0a2d7b6c696247f2b7529a20adf3d03523fb5c262e4293950f8c5879b495",
+        "notes": "A realistic-length token. The digest is always 64 characters regardless of input size."
+      }
+    ]
+  },
+  "appStoreTransactionId": {
+    "referenceKind": "app_store_transaction_id",
+    "derivation": "raw_decimal_provider_value",
+    "rule": "Submit the provider value verbatim as a decimal string. Never parse it into a signed 64-bit integer, a platform int, or a JSON number: values above 2^53-1 lose precision as an IEEE-754 double, and values above 2^63-1 overflow a signed 64-bit integer. Carry it as a string end to end.",
+    "pattern": "^[0-9]{1,24}$",
+    "vectors": [
+      {
+        "id": "minimum",
+        "value": "1",
+        "notes": "Lower bound of the pattern."
+      },
+      {
+        "id": "canonical-fixture-value",
+        "value": "2000000900000001",
+        "notes": "The value carried by protocol/fixtures/billing-ingestion/v1/apple-client-observation.json."
+      },
+      {
+        "id": "beyond-double-precision",
+        "value": "9007199254740993",
+        "notes": "2^53+1. Round-trips incorrectly through a JavaScript Number or a Dart web int; must survive as a string."
+      },
+      {
+        "id": "uint64-max",
+        "value": "18446744073709551615",
+        "notes": "UInt64.max, 20 digits. Overflows Int64, Kotlin Long, and Dart int on the native VM. StoreKit exposes Transaction.id as UInt64, so this is a representable provider value."
+      }
+    ]
+  }
+}

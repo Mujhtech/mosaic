@@ -2,7 +2,7 @@
 
 import { type Client, type ClientMeta, formDataBodySerializer, type Options as Options2, type RequestResult, type TDataShape } from './client';
 import { client } from './client.gen';
-import type { AddMemberData, AddMemberErrors, AddMemberResponses, AddPlanProductData, AddPlanProductErrors, AddPlanProductResponses, AddProductEntitlementData, AddProductEntitlementErrors, AddProductEntitlementResponses, ArchiveAssetData, ArchiveAssetErrors, ArchiveAssetResponses, ArchivePlacementAttributeData, ArchivePlacementAttributeErrors, ArchivePlacementAttributeResponses, ArchivePlacementRuleSetData, ArchivePlacementRuleSetErrors, ArchivePlacementRuleSetResponses, ArchivePlacementWithUsageCheckData, ArchivePlacementWithUsageCheckErrors, ArchivePlacementWithUsageCheckResponses, ArchiveProductData, ArchiveProductErrors, ArchiveProductResponses, ArchiveProjectData, ArchiveProjectErrors, ArchiveProjectResponses, ArchiveProviderMappingData, ArchiveProviderMappingErrors, ArchiveProviderMappingResponses, BindPlacementData, BindPlacementErrors, BindPlacementResponses, ClearActiveProviderAssignmentData, ClearActiveProviderAssignmentErrors, ClearActiveProviderAssignmentResponses, ClonePaywallVersionToDraftData, ClonePaywallVersionToDraftErrors, ClonePaywallVersionToDraftResponses, ClonePlacementRuleSetVersionData, ClonePlacementRuleSetVersionErrors, ClonePlacementRuleSetVersionResponses, CompareAnalyticsPaywallVersionsData, CompareAnalyticsPaywallVersionsErrors, CompareAnalyticsPaywallVersionsResponses, CreateAnalyticsEventExportData, CreateAnalyticsEventExportErrors, CreateAnalyticsEventExportResponses, CreateAnalyticsPrivacyDeletionData, CreateAnalyticsPrivacyDeletionErrors, CreateAnalyticsPrivacyDeletionResponses, CreateAnalyticsPrivacyExportData, CreateAnalyticsPrivacyExportErrors, CreateAnalyticsPrivacyExportResponses, CreateApiKeyData, CreateApiKeyErrors, CreateApiKeyResponses, CreateApplicationData, CreateApplicationErrors, CreateApplicationResponses, CreateEntitlementData, CreateEntitlementErrors, CreateEntitlementResponses, CreateExperimentData, CreateExperimentErrors, CreateExperimentGroupVersionData, CreateExperimentGroupVersionErrors, CreateExperimentGroupVersionResponses, CreateExperimentMutualExclusionGroupVersionData, CreateExperimentMutualExclusionGroupVersionErrors, CreateExperimentMutualExclusionGroupVersionResponses, CreateExperimentQaOverrideData, CreateExperimentQaOverrideErrors, CreateExperimentQaOverrideResponses, CreateExperimentRawExportData, CreateExperimentRawExportErrors, CreateExperimentRawExportResponses, CreateExperimentResponses, CreateOrganizationData, CreateOrganizationErrors, CreateOrganizationResponses, CreatePaywallData, CreatePaywallDraftData, CreatePaywallDraftErrors, CreatePaywallDraftResponses, CreatePaywallErrors, CreatePaywallResponses, CreatePlacementAliasData, CreatePlacementAliasErrors, CreatePlacementAliasResponses, CreatePlacementAttributeData, CreatePlacementAttributeErrors, CreatePlacementAttributeResponses, CreatePlacementData, CreatePlacementErrors, CreatePlacementQaOverrideData, CreatePlacementQaOverrideErrors, CreatePlacementQaOverrideResponses, CreatePlacementResponses, CreatePlacementRuleSetData, CreatePlacementRuleSetErrors, CreatePlacementRuleSetResponses, CreatePlanData, CreatePlanErrors, CreatePlanResponses, CreateProductData, CreateProductErrors, CreateProductResponses, CreateProjectData, CreateProjectErrors, CreateProjectResponses, CreateProviderConnectionData, CreateProviderConnectionErrors, CreateProviderConnectionResponses, CreateProviderMappingData, CreateProviderMappingDraftData, CreateProviderMappingDraftErrors, CreateProviderMappingDraftResponses, CreateProviderMappingErrors, CreateProviderMappingObservationData, CreateProviderMappingObservationErrors, CreateProviderMappingObservationResponses, CreateProviderMappingResponses, DeleteProductData, DeleteProductErrors, DeleteProductResponses, DownloadAnalyticsJobData, DownloadAnalyticsJobErrors, DownloadAnalyticsJobResponses, EnqueueProviderSyncData, EnqueueProviderSyncErrors, EnqueueProviderSyncResponses, GetActivePaywallDraftData, GetActivePaywallDraftErrors, GetActivePaywallDraftResponses, GetActiveProviderAssignmentData, GetActiveProviderAssignmentErrors, GetActiveProviderAssignmentResponses, GetAnalyticsBreakdownData, GetAnalyticsBreakdownErrors, GetAnalyticsBreakdownResponses, GetAnalyticsFreshnessData, GetAnalyticsFreshnessErrors, GetAnalyticsFreshnessResponses, GetAnalyticsFunnelData, GetAnalyticsFunnelErrors, GetAnalyticsFunnelResponses, GetAnalyticsJobData, GetAnalyticsJobErrors, GetAnalyticsJobResponses, GetAnalyticsOverviewData, GetAnalyticsOverviewErrors, GetAnalyticsOverviewResponses, GetAnalyticsProductAvailabilityFailuresData, GetAnalyticsProductAvailabilityFailuresErrors, GetAnalyticsProductAvailabilityFailuresResponses, GetAnalyticsProviderErrorsData, GetAnalyticsProviderErrorsErrors, GetAnalyticsProviderErrorsResponses, GetAnalyticsSettingsData, GetAnalyticsSettingsErrors, GetAnalyticsSettingsResponses, GetAssetContentData, GetAssetContentErrors, GetAssetContentResponses, GetAssetData, GetAssetErrors, GetAssetResponses, GetAssetUsageData, GetAssetUsageErrors, GetAssetUsageResponses, GetEntitlementData, GetEntitlementErrors, GetEntitlementResponses, GetExperimentData, GetExperimentErrors, GetExperimentResponses, GetExperimentResultsData, GetExperimentResultsResponses, GetExperimentSampleRatioMismatchData, GetExperimentSampleRatioMismatchResponses, GetHealthData, GetHealthResponses, GetNativeProviderProfileData, GetNativeProviderProfileErrors, GetNativeProviderProfileResponses, GetOrganizationData, GetOrganizationErrors, GetOrganizationResponses, GetPaywallData, GetPaywallDraftData, GetPaywallDraftErrors, GetPaywallDraftResponses, GetPaywallErrors, GetPaywallResponses, GetPaywallVersionData, GetPaywallVersionErrors, GetPaywallVersionResponses, GetPlacementBindingData, GetPlacementBindingErrors, GetPlacementBindingResponses, GetPlacementDecisionData, GetPlacementDecisionErrors, GetPlacementDecisionResponses, GetPlacementUsageData, GetPlacementUsageErrors, GetPlacementUsageResponses, GetPlanData, GetPlanErrors, GetPlanResponses, GetProductData, GetProductErrors, GetProductReadinessData, GetProductReadinessErrors, GetProductReadinessResponses, GetProductResponses, GetProductUsageData, GetProductUsageErrors, GetProductUsageResponses, GetProjectData, GetProjectErrors, GetProjectResponses, GetProviderConnectionCapabilitiesData, GetProviderConnectionCapabilitiesErrors, GetProviderConnectionCapabilitiesResponses, GetProviderConnectionData, GetProviderConnectionErrors, GetProviderConnectionHealthData, GetProviderConnectionHealthErrors, GetProviderConnectionHealthResponses, GetProviderConnectionResponses, GetProviderMappingMetadataData, GetProviderMappingMetadataErrors, GetProviderMappingMetadataResponses, GetProviderMappingUsageData, GetProviderMappingUsageErrors, GetProviderMappingUsageResponses, GetProviderReadinessData, GetProviderReadinessErrors, GetProviderReadinessResponses, GetReadinessData, GetReadinessErrors, GetReadinessResponses, GetSdkCommerceConfigurationData, GetSdkCommerceConfigurationErrors, GetSdkCommerceConfigurationResponses, GetSdkConfigurationData, GetSdkConfigurationErrors, GetSdkConfigurationResponses, GetSessionData, GetSessionErrors, GetSessionResponses, ImportProviderProductsData, ImportProviderProductsErrors, ImportProviderProductsResponses, IngestAnalyticsEventBatchData, IngestAnalyticsEventBatchErrors, IngestAnalyticsEventBatchResponses, ListApiKeysData, ListApiKeysErrors, ListApiKeysResponses, ListApplicationsData, ListApplicationsErrors, ListApplicationsResponses, ListAssetsData, ListAssetsErrors, ListAssetsResponses, ListAuditEventsData, ListAuditEventsErrors, ListAuditEventsResponses, ListConfigurationReleasesData, ListConfigurationReleasesErrors, ListConfigurationReleasesResponses, ListEntitlementsData, ListEntitlementsErrors, ListEntitlementsResponses, ListEnvironmentsData, ListEnvironmentsErrors, ListEnvironmentsResponses, ListExperimentGroupsData, ListExperimentGroupsResponses, ListExperimentHistoryData, ListExperimentHistoryResponses, ListExperimentMetricDefinitionsData, ListExperimentMetricDefinitionsResponses, ListExperimentMutualExclusionGroupVersionsData, ListExperimentMutualExclusionGroupVersionsErrors, ListExperimentMutualExclusionGroupVersionsResponses, ListExperimentQaOverridesData, ListExperimentQaOverridesResponses, ListExperimentsData, ListExperimentsResponses, ListExperimentVersionsData, ListExperimentVersionsResponses, ListMembersData, ListMembersErrors, ListMembersResponses, ListOrganizationsData, ListOrganizationsErrors, ListOrganizationsResponses, ListPaywallsData, ListPaywallsErrors, ListPaywallsResponses, ListPaywallVersionsData, ListPaywallVersionsErrors, ListPaywallVersionsResponses, ListPlacementAliasesData, ListPlacementAliasesResponses, ListPlacementAttributesData, ListPlacementAttributesErrors, ListPlacementAttributesResponses, ListPlacementQaOverridesData, ListPlacementQaOverridesResponses, ListPlacementRuleSetVersionsData, ListPlacementRuleSetVersionsResponses, ListPlacementsData, ListPlacementsErrors, ListPlacementsResponses, ListPlanProductsData, ListPlanProductsErrors, ListPlanProductsResponses, ListPlansData, ListPlansErrors, ListPlansResponses, ListProductEntitlementsData, ListProductEntitlementsErrors, ListProductEntitlementsResponses, ListProductsData, ListProductsErrors, ListProductsResponses, ListProjectsData, ListProjectsErrors, ListProjectsResponses, ListProviderConnectionDiagnosticsData, ListProviderConnectionDiagnosticsErrors, ListProviderConnectionDiagnosticsResponses, ListProviderConnectionsData, ListProviderConnectionsErrors, ListProviderConnectionsResponses, ListProviderMappingObservationsData, ListProviderMappingObservationsErrors, ListProviderMappingObservationsResponses, ListProviderMappingsData, ListProviderMappingsErrors, ListProviderMappingsResponses, ListProviderSyncRunsData, ListProviderSyncRunsErrors, ListProviderSyncRunsResponses, LoginData, LoginErrors, LoginResponses, LogoutData, LogoutResponses, PreviewAnalyticsPrivacyRequestData, PreviewAnalyticsPrivacyRequestErrors, PreviewAnalyticsPrivacyRequestResponses, PreviewProviderCatalogData, PreviewProviderCatalogErrors, PreviewProviderCatalogResponses, PublishConfigurationData, PublishConfigurationErrors, PublishConfigurationResponses, PublishExperimentData, PublishExperimentErrors, PublishExperimentResponses, PublishPlacementRuleSetData, PublishPlacementRuleSetErrors, PublishPlacementRuleSetResponses, ReconnectProviderConnectionData, ReconnectProviderConnectionErrors, ReconnectProviderConnectionResponses, RemoveMemberData, RemoveMemberErrors, RemoveMemberResponses, RemovePlanProductData, RemovePlanProductErrors, RemovePlanProductResponses, RemoveProductEntitlementData, RemoveProductEntitlementErrors, RemoveProductEntitlementResponses, ReplaceProviderConnectionScopesData, ReplaceProviderConnectionScopesErrors, ReplaceProviderConnectionScopesResponses, ReplaceProviderMappingData, ReplaceProviderMappingErrors, ReplaceProviderMappingResponses, RestoreProductData, RestoreProductErrors, RestoreProductResponses, RestoreProjectData, RestoreProjectErrors, RestoreProjectResponses, RevokeApiKeyData, RevokeApiKeyErrors, RevokeApiKeyResponses, RevokeExperimentQaOverrideData, RevokeExperimentQaOverrideErrors, RevokeExperimentQaOverrideResponses, RevokePlacementQaOverrideData, RevokePlacementQaOverrideErrors, RevokePlacementQaOverrideResponses, RevokeProviderConnectionData, RevokeProviderConnectionErrors, RevokeProviderConnectionResponses, RollbackConfigurationReleaseData, RollbackConfigurationReleaseErrors, RollbackConfigurationReleaseResponses, RotateApiKeyData, RotateApiKeyErrors, RotateApiKeyResponses, RotateProviderCredentialData, RotateProviderCredentialErrors, RotateProviderCredentialResponses, SetActiveProviderAssignmentData, SetActiveProviderAssignmentErrors, SetActiveProviderAssignmentResponses, SetEnvironmentModeData, SetEnvironmentModeErrors, SetEnvironmentModeResponses, SetProductReplacementData, SetProductReplacementErrors, SetProductReplacementResponses, SignUpData, SignUpErrors, SignUpResponses, SimulatePlacementDecisionData, SimulatePlacementDecisionErrors, SimulatePlacementDecisionResponses, TestProviderConnectionData, TestProviderConnectionErrors, TestProviderConnectionResponses, TransitionExperimentLifecycleData, TransitionExperimentLifecycleErrors, TransitionExperimentLifecycleResponses, UpdateAnalyticsSettingsData, UpdateAnalyticsSettingsErrors, UpdateAnalyticsSettingsResponses, UpdateEntitlementData, UpdateEntitlementErrors, UpdateEntitlementResponses, UpdateEnvironmentData, UpdateEnvironmentErrors, UpdateEnvironmentResponses, UpdateExperimentDraftData, UpdateExperimentDraftErrors, UpdateExperimentDraftResponses, UpdateMemberData, UpdateMemberErrors, UpdateMemberResponses, UpdateOrganizationData, UpdateOrganizationErrors, UpdateOrganizationResponses, UpdatePaywallData, UpdatePaywallDraftData, UpdatePaywallDraftErrors, UpdatePaywallDraftResponses, UpdatePaywallErrors, UpdatePaywallResponses, UpdatePlacementData, UpdatePlacementErrors, UpdatePlacementResponses, UpdatePlacementRuleSetDraftData, UpdatePlacementRuleSetDraftErrors, UpdatePlacementRuleSetDraftResponses, UpdatePlanData, UpdatePlanErrors, UpdatePlanResponses, UpdateProductData, UpdateProductErrors, UpdateProductResponses, UpdateProjectData, UpdateProjectErrors, UpdateProjectResponses, UploadAssetData, UploadAssetErrors, UploadAssetResponses, ValidateExperimentDraftData, ValidateExperimentDraftResponses, ValidatePaywallDraftData, ValidatePaywallDraftErrors, ValidatePaywallDraftResponses, ValidatePlacementRuleSetData, ValidatePlacementRuleSetResponses } from './types.gen';
+import type { AddMemberData, AddMemberErrors, AddMemberResponses, AddPlanProductData, AddPlanProductErrors, AddPlanProductResponses, AddProductEntitlementData, AddProductEntitlementErrors, AddProductEntitlementResponses, ArchiveAssetData, ArchiveAssetErrors, ArchiveAssetResponses, ArchivePlacementAttributeData, ArchivePlacementAttributeErrors, ArchivePlacementAttributeResponses, ArchivePlacementRuleSetData, ArchivePlacementRuleSetErrors, ArchivePlacementRuleSetResponses, ArchivePlacementWithUsageCheckData, ArchivePlacementWithUsageCheckErrors, ArchivePlacementWithUsageCheckResponses, ArchiveProductData, ArchiveProductErrors, ArchiveProductResponses, ArchiveProjectData, ArchiveProjectErrors, ArchiveProjectResponses, ArchiveProviderMappingData, ArchiveProviderMappingErrors, ArchiveProviderMappingResponses, BindPlacementData, BindPlacementErrors, BindPlacementResponses, ClearActiveProviderAssignmentData, ClearActiveProviderAssignmentErrors, ClearActiveProviderAssignmentResponses, ClonePaywallVersionToDraftData, ClonePaywallVersionToDraftErrors, ClonePaywallVersionToDraftResponses, ClonePlacementRuleSetVersionData, ClonePlacementRuleSetVersionErrors, ClonePlacementRuleSetVersionResponses, CloseQuarantineRecordSupersededData, CloseQuarantineRecordSupersededErrors, CloseQuarantineRecordSupersededResponses, CompareAnalyticsPaywallVersionsData, CompareAnalyticsPaywallVersionsErrors, CompareAnalyticsPaywallVersionsResponses, CreateAnalyticsEventExportData, CreateAnalyticsEventExportErrors, CreateAnalyticsEventExportResponses, CreateAnalyticsPrivacyDeletionData, CreateAnalyticsPrivacyDeletionErrors, CreateAnalyticsPrivacyDeletionResponses, CreateAnalyticsPrivacyExportData, CreateAnalyticsPrivacyExportErrors, CreateAnalyticsPrivacyExportResponses, CreateApiKeyData, CreateApiKeyErrors, CreateApiKeyResponses, CreateApplicationData, CreateApplicationErrors, CreateApplicationResponses, CreateEntitlementData, CreateEntitlementErrors, CreateEntitlementResponses, CreateExperimentData, CreateExperimentErrors, CreateExperimentGroupVersionData, CreateExperimentGroupVersionErrors, CreateExperimentGroupVersionResponses, CreateExperimentMutualExclusionGroupVersionData, CreateExperimentMutualExclusionGroupVersionErrors, CreateExperimentMutualExclusionGroupVersionResponses, CreateExperimentQaOverrideData, CreateExperimentQaOverrideErrors, CreateExperimentQaOverrideResponses, CreateExperimentRawExportData, CreateExperimentRawExportErrors, CreateExperimentRawExportResponses, CreateExperimentResponses, CreateOrganizationData, CreateOrganizationErrors, CreateOrganizationResponses, CreatePaywallData, CreatePaywallDraftData, CreatePaywallDraftErrors, CreatePaywallDraftResponses, CreatePaywallErrors, CreatePaywallResponses, CreatePlacementAliasData, CreatePlacementAliasErrors, CreatePlacementAliasResponses, CreatePlacementAttributeData, CreatePlacementAttributeErrors, CreatePlacementAttributeResponses, CreatePlacementData, CreatePlacementErrors, CreatePlacementQaOverrideData, CreatePlacementQaOverrideErrors, CreatePlacementQaOverrideResponses, CreatePlacementResponses, CreatePlacementRuleSetData, CreatePlacementRuleSetErrors, CreatePlacementRuleSetResponses, CreatePlanData, CreatePlanErrors, CreatePlanResponses, CreateProductData, CreateProductErrors, CreateProductResponses, CreateProjectData, CreateProjectErrors, CreateProjectResponses, CreateProviderConnectionData, CreateProviderConnectionErrors, CreateProviderConnectionResponses, CreateProviderMappingData, CreateProviderMappingDraftData, CreateProviderMappingDraftErrors, CreateProviderMappingDraftResponses, CreateProviderMappingErrors, CreateProviderMappingObservationData, CreateProviderMappingObservationErrors, CreateProviderMappingObservationResponses, CreateProviderMappingResponses, CreateReconciliationRunData, CreateReconciliationRunErrors, CreateReconciliationRunResponses, CreateReplayJobData, CreateReplayJobErrors, CreateReplayJobResponses, CreateStoreServerCredentialData, CreateStoreServerCredentialErrors, CreateStoreServerCredentialResponses, DeleteProductData, DeleteProductErrors, DeleteProductResponses, DownloadAnalyticsJobData, DownloadAnalyticsJobErrors, DownloadAnalyticsJobResponses, EnqueueProviderSyncData, EnqueueProviderSyncErrors, EnqueueProviderSyncResponses, GetActivePaywallDraftData, GetActivePaywallDraftErrors, GetActivePaywallDraftResponses, GetActiveProviderAssignmentData, GetActiveProviderAssignmentErrors, GetActiveProviderAssignmentResponses, GetAnalyticsBreakdownData, GetAnalyticsBreakdownErrors, GetAnalyticsBreakdownResponses, GetAnalyticsFreshnessData, GetAnalyticsFreshnessErrors, GetAnalyticsFreshnessResponses, GetAnalyticsFunnelData, GetAnalyticsFunnelErrors, GetAnalyticsFunnelResponses, GetAnalyticsJobData, GetAnalyticsJobErrors, GetAnalyticsJobResponses, GetAnalyticsOverviewData, GetAnalyticsOverviewErrors, GetAnalyticsOverviewResponses, GetAnalyticsProductAvailabilityFailuresData, GetAnalyticsProductAvailabilityFailuresErrors, GetAnalyticsProductAvailabilityFailuresResponses, GetAnalyticsProviderErrorsData, GetAnalyticsProviderErrorsErrors, GetAnalyticsProviderErrorsResponses, GetAnalyticsSettingsData, GetAnalyticsSettingsErrors, GetAnalyticsSettingsResponses, GetAssetContentData, GetAssetContentErrors, GetAssetContentResponses, GetAssetData, GetAssetErrors, GetAssetResponses, GetAssetUsageData, GetAssetUsageErrors, GetAssetUsageResponses, GetBillingHealthData, GetBillingHealthErrors, GetBillingHealthResponses, GetEntitlementData, GetEntitlementErrors, GetEntitlementResponses, GetExperimentData, GetExperimentErrors, GetExperimentResponses, GetExperimentResultsData, GetExperimentResultsResponses, GetExperimentSampleRatioMismatchData, GetExperimentSampleRatioMismatchResponses, GetHealthData, GetHealthResponses, GetNativeProviderProfileData, GetNativeProviderProfileErrors, GetNativeProviderProfileResponses, GetOrganizationData, GetOrganizationErrors, GetOrganizationResponses, GetPaywallData, GetPaywallDraftData, GetPaywallDraftErrors, GetPaywallDraftResponses, GetPaywallErrors, GetPaywallResponses, GetPaywallVersionData, GetPaywallVersionErrors, GetPaywallVersionResponses, GetPlacementBindingData, GetPlacementBindingErrors, GetPlacementBindingResponses, GetPlacementDecisionData, GetPlacementDecisionErrors, GetPlacementDecisionResponses, GetPlacementUsageData, GetPlacementUsageErrors, GetPlacementUsageResponses, GetPlanData, GetPlanErrors, GetPlanResponses, GetProductData, GetProductErrors, GetProductReadinessData, GetProductReadinessErrors, GetProductReadinessResponses, GetProductResponses, GetProductUsageData, GetProductUsageErrors, GetProductUsageResponses, GetProjectData, GetProjectErrors, GetProjectResponses, GetProviderConnectionCapabilitiesData, GetProviderConnectionCapabilitiesErrors, GetProviderConnectionCapabilitiesResponses, GetProviderConnectionData, GetProviderConnectionErrors, GetProviderConnectionHealthData, GetProviderConnectionHealthErrors, GetProviderConnectionHealthResponses, GetProviderConnectionResponses, GetProviderMappingMetadataData, GetProviderMappingMetadataErrors, GetProviderMappingMetadataResponses, GetProviderMappingUsageData, GetProviderMappingUsageErrors, GetProviderMappingUsageResponses, GetProviderReadinessData, GetProviderReadinessErrors, GetProviderReadinessResponses, GetQuarantineRecordData, GetQuarantineRecordErrors, GetQuarantineRecordResponses, GetReadinessData, GetReadinessErrors, GetReadinessResponses, GetSdkCommerceConfigurationData, GetSdkCommerceConfigurationErrors, GetSdkCommerceConfigurationResponses, GetSdkConfigurationData, GetSdkConfigurationErrors, GetSdkConfigurationResponses, GetSessionData, GetSessionErrors, GetSessionResponses, GetStoreServerCredentialData, GetStoreServerCredentialErrors, GetStoreServerCredentialResponses, ImportProviderProductsData, ImportProviderProductsErrors, ImportProviderProductsResponses, IngestAnalyticsEventBatchData, IngestAnalyticsEventBatchErrors, IngestAnalyticsEventBatchResponses, ListApiKeysData, ListApiKeysErrors, ListApiKeysResponses, ListApplicationsData, ListApplicationsErrors, ListApplicationsResponses, ListAssetsData, ListAssetsErrors, ListAssetsResponses, ListAuditEventsData, ListAuditEventsErrors, ListAuditEventsResponses, ListBillingLedgerData, ListBillingLedgerErrors, ListBillingLedgerResponses, ListBillingQuarantineData, ListBillingQuarantineErrors, ListBillingQuarantineResponses, ListConfigurationReleasesData, ListConfigurationReleasesErrors, ListConfigurationReleasesResponses, ListEntitlementsData, ListEntitlementsErrors, ListEntitlementsResponses, ListEnvironmentsData, ListEnvironmentsErrors, ListEnvironmentsResponses, ListExperimentGroupsData, ListExperimentGroupsResponses, ListExperimentHistoryData, ListExperimentHistoryResponses, ListExperimentMetricDefinitionsData, ListExperimentMetricDefinitionsResponses, ListExperimentMutualExclusionGroupVersionsData, ListExperimentMutualExclusionGroupVersionsErrors, ListExperimentMutualExclusionGroupVersionsResponses, ListExperimentQaOverridesData, ListExperimentQaOverridesResponses, ListExperimentsData, ListExperimentsResponses, ListExperimentVersionsData, ListExperimentVersionsResponses, ListMembersData, ListMembersErrors, ListMembersResponses, ListOrganizationsData, ListOrganizationsErrors, ListOrganizationsResponses, ListPaywallsData, ListPaywallsErrors, ListPaywallsResponses, ListPaywallVersionsData, ListPaywallVersionsErrors, ListPaywallVersionsResponses, ListPlacementAliasesData, ListPlacementAliasesResponses, ListPlacementAttributesData, ListPlacementAttributesErrors, ListPlacementAttributesResponses, ListPlacementQaOverridesData, ListPlacementQaOverridesResponses, ListPlacementRuleSetVersionsData, ListPlacementRuleSetVersionsResponses, ListPlacementsData, ListPlacementsErrors, ListPlacementsResponses, ListPlanProductsData, ListPlanProductsErrors, ListPlanProductsResponses, ListPlansData, ListPlansErrors, ListPlansResponses, ListProductEntitlementsData, ListProductEntitlementsErrors, ListProductEntitlementsResponses, ListProductsData, ListProductsErrors, ListProductsResponses, ListProjectsData, ListProjectsErrors, ListProjectsResponses, ListProviderConnectionDiagnosticsData, ListProviderConnectionDiagnosticsErrors, ListProviderConnectionDiagnosticsResponses, ListProviderConnectionsData, ListProviderConnectionsErrors, ListProviderConnectionsResponses, ListProviderMappingObservationsData, ListProviderMappingObservationsErrors, ListProviderMappingObservationsResponses, ListProviderMappingsData, ListProviderMappingsErrors, ListProviderMappingsResponses, ListProviderSyncRunsData, ListProviderSyncRunsErrors, ListProviderSyncRunsResponses, ListReconciliationRunsData, ListReconciliationRunsErrors, ListReconciliationRunsResponses, ListReplayJobsData, ListReplayJobsErrors, ListReplayJobsResponses, ListStoreServerCredentialsData, ListStoreServerCredentialsErrors, ListStoreServerCredentialsResponses, ListTransactionFactsData, ListTransactionFactsErrors, ListTransactionFactsResponses, ListValidationAttemptsData, ListValidationAttemptsErrors, ListValidationAttemptsResponses, LoginData, LoginErrors, LoginResponses, LogoutData, LogoutResponses, PreviewAnalyticsPrivacyRequestData, PreviewAnalyticsPrivacyRequestErrors, PreviewAnalyticsPrivacyRequestResponses, PreviewProviderCatalogData, PreviewProviderCatalogErrors, PreviewProviderCatalogResponses, PublishConfigurationData, PublishConfigurationErrors, PublishConfigurationResponses, PublishExperimentData, PublishExperimentErrors, PublishExperimentResponses, PublishPlacementRuleSetData, PublishPlacementRuleSetErrors, PublishPlacementRuleSetResponses, ReceiveAppleStoreNotificationData, ReceiveAppleStoreNotificationErrors, ReceiveAppleStoreNotificationResponses, ReconnectProviderConnectionData, ReconnectProviderConnectionErrors, ReconnectProviderConnectionResponses, RemoveMemberData, RemoveMemberErrors, RemoveMemberResponses, RemovePlanProductData, RemovePlanProductErrors, RemovePlanProductResponses, RemoveProductEntitlementData, RemoveProductEntitlementErrors, RemoveProductEntitlementResponses, ReplaceProviderConnectionScopesData, ReplaceProviderConnectionScopesErrors, ReplaceProviderConnectionScopesResponses, ReplaceProviderMappingData, ReplaceProviderMappingErrors, ReplaceProviderMappingResponses, RestoreProductData, RestoreProductErrors, RestoreProductResponses, RestoreProjectData, RestoreProjectErrors, RestoreProjectResponses, RetryQuarantinedInputData, RetryQuarantinedInputErrors, RetryQuarantinedInputResponses, RevokeApiKeyData, RevokeApiKeyErrors, RevokeApiKeyResponses, RevokeExperimentQaOverrideData, RevokeExperimentQaOverrideErrors, RevokeExperimentQaOverrideResponses, RevokePlacementQaOverrideData, RevokePlacementQaOverrideErrors, RevokePlacementQaOverrideResponses, RevokeProviderConnectionData, RevokeProviderConnectionErrors, RevokeProviderConnectionResponses, RevokeStoreServerCredentialData, RevokeStoreServerCredentialErrors, RevokeStoreServerCredentialResponses, RollbackConfigurationReleaseData, RollbackConfigurationReleaseErrors, RollbackConfigurationReleaseResponses, RotateApiKeyData, RotateApiKeyErrors, RotateApiKeyResponses, RotateProviderCredentialData, RotateProviderCredentialErrors, RotateProviderCredentialResponses, RotateStoreServerCredentialData, RotateStoreServerCredentialErrors, RotateStoreServerCredentialResponses, SetActiveProviderAssignmentData, SetActiveProviderAssignmentErrors, SetActiveProviderAssignmentResponses, SetEnvironmentModeData, SetEnvironmentModeErrors, SetEnvironmentModeResponses, SetProductReplacementData, SetProductReplacementErrors, SetProductReplacementResponses, SignUpData, SignUpErrors, SignUpResponses, SimulatePlacementDecisionData, SimulatePlacementDecisionErrors, SimulatePlacementDecisionResponses, SubmitServerTransactionObservationData, SubmitServerTransactionObservationErrors, SubmitServerTransactionObservationResponses, SubmitTransactionObservationData, SubmitTransactionObservationErrors, SubmitTransactionObservationResponses, TestProviderConnectionData, TestProviderConnectionErrors, TestProviderConnectionResponses, TestStoreServerCredentialData, TestStoreServerCredentialErrors, TestStoreServerCredentialResponses, TransitionExperimentLifecycleData, TransitionExperimentLifecycleErrors, TransitionExperimentLifecycleResponses, UpdateAnalyticsSettingsData, UpdateAnalyticsSettingsErrors, UpdateAnalyticsSettingsResponses, UpdateBillingSettingsData, UpdateBillingSettingsErrors, UpdateBillingSettingsResponses, UpdateEntitlementData, UpdateEntitlementErrors, UpdateEntitlementResponses, UpdateEnvironmentData, UpdateEnvironmentErrors, UpdateEnvironmentResponses, UpdateExperimentDraftData, UpdateExperimentDraftErrors, UpdateExperimentDraftResponses, UpdateMemberData, UpdateMemberErrors, UpdateMemberResponses, UpdateOrganizationData, UpdateOrganizationErrors, UpdateOrganizationResponses, UpdatePaywallData, UpdatePaywallDraftData, UpdatePaywallDraftErrors, UpdatePaywallDraftResponses, UpdatePaywallErrors, UpdatePaywallResponses, UpdatePlacementData, UpdatePlacementErrors, UpdatePlacementResponses, UpdatePlacementRuleSetDraftData, UpdatePlacementRuleSetDraftErrors, UpdatePlacementRuleSetDraftResponses, UpdatePlanData, UpdatePlanErrors, UpdatePlanResponses, UpdateProductData, UpdateProductErrors, UpdateProductResponses, UpdateProjectData, UpdateProjectErrors, UpdateProjectResponses, UploadAssetData, UploadAssetErrors, UploadAssetResponses, ValidateExperimentDraftData, ValidateExperimentDraftResponses, ValidatePaywallDraftData, ValidatePaywallDraftErrors, ValidatePaywallDraftResponses, ValidatePlacementRuleSetData, ValidatePlacementRuleSetResponses } from './types.gen';
 
 export type Options<TData extends TDataShape = TDataShape, ThrowOnError extends boolean = boolean, TResponse = unknown> = Options2<TData, ThrowOnError, TResponse> & {
     /**
@@ -1297,13 +1297,21 @@ export const rollbackConfigurationRelease = <ThrowOnError extends boolean = fals
 });
 
 export const getSdkConfiguration = <ThrowOnError extends boolean = false>(options: Options<GetSdkConfigurationData, ThrowOnError>): RequestResult<GetSdkConfigurationResponses, GetSdkConfigurationErrors, ThrowOnError> => (options.client ?? client).get<GetSdkConfigurationResponses, GetSdkConfigurationErrors, ThrowOnError>({
-    security: [{ scheme: 'bearer', type: 'http' }],
+    security: [{
+            key: 'PublicSDKKey',
+            scheme: 'bearer',
+            type: 'http'
+        }],
     url: '/v1/sdk/configuration',
     ...options
 });
 
 export const getSdkCommerceConfiguration = <ThrowOnError extends boolean = false>(options: Options<GetSdkCommerceConfigurationData, ThrowOnError>): RequestResult<GetSdkCommerceConfigurationResponses, GetSdkCommerceConfigurationErrors, ThrowOnError> => (options.client ?? client).get<GetSdkCommerceConfigurationResponses, GetSdkCommerceConfigurationErrors, ThrowOnError>({
-    security: [{ scheme: 'bearer', type: 'http' }],
+    security: [{
+            key: 'PublicSDKKey',
+            scheme: 'bearer',
+            type: 'http'
+        }],
     url: '/v1/sdk/commerce-configuration',
     ...options
 });
@@ -1782,7 +1790,11 @@ export const createExperimentRawExport = <ThrowOnError extends boolean = false>(
  * The enclosing Analytics Event contract version must exactly match every eventSchemaVersion in the batch; mixed-version batches reject atomically.
  */
 export const ingestAnalyticsEventBatch = <ThrowOnError extends boolean = false>(options: Options<IngestAnalyticsEventBatchData, ThrowOnError>): RequestResult<IngestAnalyticsEventBatchResponses, IngestAnalyticsEventBatchErrors, ThrowOnError> => (options.client ?? client).post<IngestAnalyticsEventBatchResponses, IngestAnalyticsEventBatchErrors, ThrowOnError>({
-    security: [{ scheme: 'bearer', type: 'http' }],
+    security: [{
+            key: 'PublicSDKKey',
+            scheme: 'bearer',
+            type: 'http'
+        }],
     url: '/v1/sdk/events/batch',
     ...options,
     headers: {
@@ -1974,4 +1986,388 @@ export const downloadAnalyticsJob = <ThrowOnError extends boolean = false>(optio
         }],
     url: '/v1/projects/{projectId}/analytics/jobs/{jobId}/download',
     ...options
+});
+
+/**
+ * App Store Server Notifications V2 intake. Authenticity comes from two independent
+ * factors: the unguessable per-credential intake token in the path (stored SHA-256 only)
+ * and JWS x5c-chain verification against the Apple Root CA compiled into the binary.
+ * Tenant identity always comes from the intake token, never from payload content.
+ *
+ * The endpoint never validates inline and never calls a store API on the request path:
+ * it verifies, persists the Raw Billing Input, enqueues validation, and returns 202.
+ * It is deliberately excluded from every 429-returning rate-limiter family, because a
+ * 429 consumes one of Apple's five non-renewable retries and can lose a transaction
+ * permanently. An unknown bundle, a wrong Application, or an unsupported notification
+ * type is recorded and answered 202; only a durable-storage failure answers non-2xx.
+ *
+ */
+export const receiveAppleStoreNotification = <ThrowOnError extends boolean = false>(options: Options<ReceiveAppleStoreNotificationData, ThrowOnError>): RequestResult<ReceiveAppleStoreNotificationResponses, ReceiveAppleStoreNotificationErrors, ThrowOnError> => (options.client ?? client).post<ReceiveAppleStoreNotificationResponses, ReceiveAppleStoreNotificationErrors, ThrowOnError>({
+    url: '/v1/billing/apple/notifications/{intakeToken}',
+    ...options,
+    headers: {
+        'Content-Type': 'application/json',
+        ...options.headers
+    }
+});
+
+/**
+ * Untrusted client report of a purchase reference, submitted as the Billing Ingestion
+ * Contract v1 clientTransactionObservation record. A Transaction Observation is a trigger,
+ * never proof: the response cannot and does not claim validation, and the status set has no
+ * member meaning validated, verified, confirmed, or entitled.
+ *
+ * A client may not classify the Store Environment. The contract record carries no such
+ * member and is additionalProperties:false, so a client-asserted storeEnvironment is
+ * rejected with `unknown_field` rather than ignored — a device can be made to say anything,
+ * and accepting its classification would let a sandbox purchase present itself as
+ * production. Classification comes only from server-side validation of the store's own
+ * response.
+ *
+ * sourceAuthority must be `client_observation`, matching what a public SDK key actually
+ * proves; a higher claimed authority is refused with `authority_not_allowed`. The
+ * reference kind must align with storePlatform, so an Android digest can never be
+ * validated against Apple's API.
+ *
+ * Every outcome, including a rejection, is returned as the contract's
+ * observationSubmissionResult record so an SDK decodes one shape. This endpoint may return
+ * 429; SDKs hold a durable queue and retry.
+ *
+ */
+export const submitTransactionObservation = <ThrowOnError extends boolean = false>(options: Options<SubmitTransactionObservationData, ThrowOnError>): RequestResult<SubmitTransactionObservationResponses, SubmitTransactionObservationErrors, ThrowOnError> => (options.client ?? client).post<SubmitTransactionObservationResponses, SubmitTransactionObservationErrors, ThrowOnError>({
+    security: [{
+            key: 'PublicSDKKey',
+            scheme: 'bearer',
+            type: 'http'
+        }],
+    url: '/v1/sdk/billing/observations',
+    ...options,
+    headers: {
+        'Content-Type': 'application/json',
+        ...options.headers
+    }
+});
+
+/**
+ * Trusted app-backend observation, authenticated by a Mosaic secret server key. Unlike
+ * the public SDK endpoint it may classify the Store Environment and may carry a full
+ * Google purchase token, which is encrypted on receipt and never logged, because the
+ * caller is a server Mosaic issued a secret key to rather than a device.
+ *
+ * A trusted caller is more accountable, not more authoritative: the observation is still
+ * subject to complete provider validation. Responses use the same
+ * observationSubmissionResult record as the public endpoint.
+ *
+ */
+export const submitServerTransactionObservation = <ThrowOnError extends boolean = false>(options: Options<SubmitServerTransactionObservationData, ThrowOnError>): RequestResult<SubmitServerTransactionObservationResponses, SubmitServerTransactionObservationErrors, ThrowOnError> => (options.client ?? client).post<SubmitServerTransactionObservationResponses, SubmitServerTransactionObservationErrors, ThrowOnError>({
+    security: [{
+            key: 'ServerSecretKey',
+            scheme: 'bearer',
+            type: 'http'
+        }],
+    url: '/v1/billing/server/observations',
+    ...options,
+    headers: {
+        'Content-Type': 'application/json',
+        ...options.headers
+    }
+});
+
+/**
+ * Enable or disable Mosaic Billing for a Project. Off by default. Owner or admin only.
+ *
+ * Disabling is refused with `409 store_credentials_still_active` while any Store Server
+ * Credential is active. Disabling with a credential in place would not stop ingestion: Apple
+ * keeps posting to an endpoint whose intake token still resolves, and every refusal spends
+ * one of five non-renewable delivery attempts. Revoking the credential is what actually stops
+ * the store, so the switch requires it first and then means exactly what it says.
+ *
+ * While disabled, notification intake, the RTDN pull consumer, and the validation,
+ * reconciliation, and replay workers all skip the Project as defense in depth.
+ *
+ */
+export const updateBillingSettings = <ThrowOnError extends boolean = false>(options: Options<UpdateBillingSettingsData, ThrowOnError>): RequestResult<UpdateBillingSettingsResponses, UpdateBillingSettingsErrors, ThrowOnError> => (options.client ?? client).put<UpdateBillingSettingsResponses, UpdateBillingSettingsErrors, ThrowOnError>({
+    security: [{
+            in: 'cookie',
+            name: 'mosaic_session',
+            type: 'apiKey'
+        }],
+    url: '/v1/projects/{projectId}/billing/settings',
+    ...options,
+    headers: {
+        'Content-Type': 'application/json',
+        ...options.headers
+    }
+});
+
+/**
+ * Owner or admin only. Secret material is never returned, and neither is the notification endpoint URL.
+ */
+export const listStoreServerCredentials = <ThrowOnError extends boolean = false>(options: Options<ListStoreServerCredentialsData, ThrowOnError>): RequestResult<ListStoreServerCredentialsResponses, ListStoreServerCredentialsErrors, ThrowOnError> => (options.client ?? client).get<ListStoreServerCredentialsResponses, ListStoreServerCredentialsErrors, ThrowOnError>({
+    security: [{
+            in: 'cookie',
+            name: 'mosaic_session',
+            type: 'apiKey'
+        }],
+    url: '/v1/projects/{projectId}/billing/store-credentials',
+    ...options
+});
+
+/**
+ * Store a new Store Server Credential. The secret (an Apple .p8 In-App Purchase key or a
+ * Google service-account JSON key) is parsed and validated before it is persisted, then
+ * sealed under the Mosaic keyring. For Apple, the response carries the full notification
+ * endpoint URL exactly once; it embeds an intake token stored only as SHA-256 and is
+ * never returned by any read. Owner or admin only. Audited.
+ *
+ */
+export const createStoreServerCredential = <ThrowOnError extends boolean = false>(options: Options<CreateStoreServerCredentialData, ThrowOnError>): RequestResult<CreateStoreServerCredentialResponses, CreateStoreServerCredentialErrors, ThrowOnError> => (options.client ?? client).post<CreateStoreServerCredentialResponses, CreateStoreServerCredentialErrors, ThrowOnError>({
+    security: [{
+            in: 'cookie',
+            name: 'mosaic_session',
+            type: 'apiKey'
+        }],
+    url: '/v1/projects/{projectId}/billing/store-credentials',
+    ...options,
+    headers: {
+        'Content-Type': 'application/json',
+        ...options.headers
+    }
+});
+
+export const getStoreServerCredential = <ThrowOnError extends boolean = false>(options: Options<GetStoreServerCredentialData, ThrowOnError>): RequestResult<GetStoreServerCredentialResponses, GetStoreServerCredentialErrors, ThrowOnError> => (options.client ?? client).get<GetStoreServerCredentialResponses, GetStoreServerCredentialErrors, ThrowOnError>({
+    security: [{
+            in: 'cookie',
+            name: 'mosaic_session',
+            type: 'apiKey'
+        }],
+    url: '/v1/projects/{projectId}/billing/store-credentials/{credentialId}',
+    ...options
+});
+
+/**
+ * Replace the secret and mint a new intake token. The previous token stops resolving
+ * immediately, which is the point of rotating after a suspected compromise. The new
+ * endpoint URL is returned exactly once. Owner or admin only. Audited.
+ *
+ */
+export const rotateStoreServerCredential = <ThrowOnError extends boolean = false>(options: Options<RotateStoreServerCredentialData, ThrowOnError>): RequestResult<RotateStoreServerCredentialResponses, RotateStoreServerCredentialErrors, ThrowOnError> => (options.client ?? client).post<RotateStoreServerCredentialResponses, RotateStoreServerCredentialErrors, ThrowOnError>({
+    security: [{
+            in: 'cookie',
+            name: 'mosaic_session',
+            type: 'apiKey'
+        }],
+    url: '/v1/projects/{projectId}/billing/store-credentials/{credentialId}/rotate',
+    ...options,
+    headers: {
+        'Content-Type': 'application/json',
+        ...options.headers
+    }
+});
+
+/**
+ * Stop the credential being used and clear its intake token so the notification endpoint
+ * stops resolving. Nothing already recorded is removed: the ledger is the evidence trail
+ * a revocation is usually part of investigating. Owner or admin only. Audited.
+ *
+ */
+export const revokeStoreServerCredential = <ThrowOnError extends boolean = false>(options: Options<RevokeStoreServerCredentialData, ThrowOnError>): RequestResult<RevokeStoreServerCredentialResponses, RevokeStoreServerCredentialErrors, ThrowOnError> => (options.client ?? client).post<RevokeStoreServerCredentialResponses, RevokeStoreServerCredentialErrors, ThrowOnError>({
+    security: [{
+            in: 'cookie',
+            name: 'mosaic_session',
+            type: 'apiKey'
+        }],
+    url: '/v1/projects/{projectId}/billing/store-credentials/{credentialId}/revoke',
+    ...options
+});
+
+/**
+ * Prove the stored secret still authenticates against the store without changing any
+ * store state. Apple is tested with a one-minute Get Notification History window; Google
+ * with a zero-consumption Pub/Sub pull. Owner or admin only. Audited.
+ *
+ */
+export const testStoreServerCredential = <ThrowOnError extends boolean = false>(options: Options<TestStoreServerCredentialData, ThrowOnError>): RequestResult<TestStoreServerCredentialResponses, TestStoreServerCredentialErrors, ThrowOnError> => (options.client ?? client).post<TestStoreServerCredentialResponses, TestStoreServerCredentialErrors, ThrowOnError>({
+    security: [{
+            in: 'cookie',
+            name: 'mosaic_session',
+            type: 'apiKey'
+        }],
+    url: '/v1/projects/{projectId}/billing/store-credentials/{credentialId}/test',
+    ...options
+});
+
+/**
+ * Validated, provider-independent Transaction Facts. A fact is never a subscription, an
+ * entitlement, or an access grant, and carries no customer identity, price, or currency.
+ * Mosaic Environment and Store Environment are always two separate values.
+ *
+ */
+export const listTransactionFacts = <ThrowOnError extends boolean = false>(options: Options<ListTransactionFactsData, ThrowOnError>): RequestResult<ListTransactionFactsResponses, ListTransactionFactsErrors, ThrowOnError> => (options.client ?? client).get<ListTransactionFactsResponses, ListTransactionFactsErrors, ThrowOnError>({
+    security: [{
+            in: 'cookie',
+            name: 'mosaic_session',
+            type: 'apiKey'
+        }],
+    url: '/v1/projects/{projectId}/environments/{environmentId}/billing/facts',
+    ...options
+});
+
+/**
+ * Append-only history of every validation try. Earlier attempts are never overwritten and no provider response body is ever stored.
+ */
+export const listValidationAttempts = <ThrowOnError extends boolean = false>(options: Options<ListValidationAttemptsData, ThrowOnError>): RequestResult<ListValidationAttemptsResponses, ListValidationAttemptsErrors, ThrowOnError> => (options.client ?? client).get<ListValidationAttemptsResponses, ListValidationAttemptsErrors, ThrowOnError>({
+    security: [{
+            in: 'cookie',
+            name: 'mosaic_session',
+            type: 'apiKey'
+        }],
+    url: '/v1/projects/{projectId}/environments/{environmentId}/billing/validation-attempts',
+    ...options
+});
+
+/**
+ * Append-only operational Billing Event Ledger. There is deliberately no update endpoint.
+ */
+export const listBillingLedger = <ThrowOnError extends boolean = false>(options: Options<ListBillingLedgerData, ThrowOnError>): RequestResult<ListBillingLedgerResponses, ListBillingLedgerErrors, ThrowOnError> => (options.client ?? client).get<ListBillingLedgerResponses, ListBillingLedgerErrors, ThrowOnError>({
+    security: [{
+            in: 'cookie',
+            name: 'mosaic_session',
+            type: 'apiKey'
+        }],
+    url: '/v1/projects/{projectId}/environments/{environmentId}/billing/ledger',
+    ...options
+});
+
+/**
+ * Inputs and facts that cannot safely proceed.
+ */
+export const listBillingQuarantine = <ThrowOnError extends boolean = false>(options: Options<ListBillingQuarantineData, ThrowOnError>): RequestResult<ListBillingQuarantineResponses, ListBillingQuarantineErrors, ThrowOnError> => (options.client ?? client).get<ListBillingQuarantineResponses, ListBillingQuarantineErrors, ThrowOnError>({
+    security: [{
+            in: 'cookie',
+            name: 'mosaic_session',
+            type: 'apiKey'
+        }],
+    url: '/v1/projects/{projectId}/environments/{environmentId}/billing/quarantine',
+    ...options
+});
+
+export const getBillingHealth = <ThrowOnError extends boolean = false>(options: Options<GetBillingHealthData, ThrowOnError>): RequestResult<GetBillingHealthResponses, GetBillingHealthErrors, ThrowOnError> => (options.client ?? client).get<GetBillingHealthResponses, GetBillingHealthErrors, ThrowOnError>({
+    security: [{
+            in: 'cookie',
+            name: 'mosaic_session',
+            type: 'apiKey'
+        }],
+    url: '/v1/projects/{projectId}/environments/{environmentId}/billing/health',
+    ...options
+});
+
+export const listReconciliationRuns = <ThrowOnError extends boolean = false>(options: Options<ListReconciliationRunsData, ThrowOnError>): RequestResult<ListReconciliationRunsResponses, ListReconciliationRunsErrors, ThrowOnError> => (options.client ?? client).get<ListReconciliationRunsResponses, ListReconciliationRunsErrors, ThrowOnError>({
+    security: [{
+            in: 'cookie',
+            name: 'mosaic_session',
+            type: 'apiKey'
+        }],
+    url: '/v1/projects/{projectId}/environments/{environmentId}/billing/reconciliation-runs',
+    ...options
+});
+
+/**
+ * Start a bounded, restart-safe reconciliation pass. Reconciliation validates provider
+ * facts and does not calculate customer access. The window may not exceed 180 days,
+ * which is Apple's own notification-history retention. Owner or admin only. Audited.
+ *
+ */
+export const createReconciliationRun = <ThrowOnError extends boolean = false>(options: Options<CreateReconciliationRunData, ThrowOnError>): RequestResult<CreateReconciliationRunResponses, CreateReconciliationRunErrors, ThrowOnError> => (options.client ?? client).post<CreateReconciliationRunResponses, CreateReconciliationRunErrors, ThrowOnError>({
+    security: [{
+            in: 'cookie',
+            name: 'mosaic_session',
+            type: 'apiKey'
+        }],
+    url: '/v1/projects/{projectId}/environments/{environmentId}/billing/reconciliation-runs',
+    ...options,
+    headers: {
+        'Content-Type': 'application/json',
+        ...options.headers
+    }
+});
+
+export const listReplayJobs = <ThrowOnError extends boolean = false>(options: Options<ListReplayJobsData, ThrowOnError>): RequestResult<ListReplayJobsResponses, ListReplayJobsErrors, ThrowOnError> => (options.client ?? client).get<ListReplayJobsResponses, ListReplayJobsErrors, ThrowOnError>({
+    security: [{
+            in: 'cookie',
+            name: 'mosaic_session',
+            type: 'apiKey'
+        }],
+    url: '/v1/projects/{projectId}/environments/{environmentId}/billing/replay-jobs',
+    ...options
+});
+
+/**
+ * Re-run accepted inputs deterministically. Replay appends new Validation Attempts and
+ * never rewrites prior attempts or facts: an unchanged outcome recomputes the same fact
+ * digest and writes nothing, a changed outcome appends a new fact beside the old one,
+ * and no customer access can change because no access state exists. Owner or admin only.
+ * Audited.
+ *
+ */
+export const createReplayJob = <ThrowOnError extends boolean = false>(options: Options<CreateReplayJobData, ThrowOnError>): RequestResult<CreateReplayJobResponses, CreateReplayJobErrors, ThrowOnError> => (options.client ?? client).post<CreateReplayJobResponses, CreateReplayJobErrors, ThrowOnError>({
+    security: [{
+            in: 'cookie',
+            name: 'mosaic_session',
+            type: 'apiKey'
+        }],
+    url: '/v1/projects/{projectId}/environments/{environmentId}/billing/replay-jobs',
+    ...options,
+    headers: {
+        'Content-Type': 'application/json',
+        ...options.headers
+    }
+});
+
+export const getQuarantineRecord = <ThrowOnError extends boolean = false>(options: Options<GetQuarantineRecordData, ThrowOnError>): RequestResult<GetQuarantineRecordResponses, GetQuarantineRecordErrors, ThrowOnError> => (options.client ?? client).get<GetQuarantineRecordResponses, GetQuarantineRecordErrors, ThrowOnError>({
+    security: [{
+            in: 'cookie',
+            name: 'mosaic_session',
+            type: 'apiKey'
+        }],
+    url: '/v1/projects/{projectId}/billing/quarantine/{recordId}',
+    ...options
+});
+
+/**
+ * Re-queue a quarantined input for validation, typically after repairing a Product
+ * mapping. This is the only recovery action that can lead to a Transaction Fact, and it
+ * leads there only by asking the store again: the record is closed only by a subsequent
+ * successful attempt, which is recorded as the justification. There is deliberately no
+ * endpoint that marks a quarantined input valid. Owner or admin only. Audited.
+ *
+ */
+export const retryQuarantinedInput = <ThrowOnError extends boolean = false>(options: Options<RetryQuarantinedInputData, ThrowOnError>): RequestResult<RetryQuarantinedInputResponses, RetryQuarantinedInputErrors, ThrowOnError> => (options.client ?? client).post<RetryQuarantinedInputResponses, RetryQuarantinedInputErrors, ThrowOnError>({
+    security: [{
+            in: 'cookie',
+            name: 'mosaic_session',
+            type: 'apiKey'
+        }],
+    url: '/v1/projects/{projectId}/billing/quarantine/{recordId}/retry',
+    ...options
+});
+
+/**
+ * Close a record because a later record replaced it. It asserts nothing about the
+ * original input's authenticity and produces no Transaction Fact. Owner or admin only.
+ * Audited.
+ *
+ */
+export const closeQuarantineRecordSuperseded = <ThrowOnError extends boolean = false>(options: Options<CloseQuarantineRecordSupersededData, ThrowOnError>): RequestResult<CloseQuarantineRecordSupersededResponses, CloseQuarantineRecordSupersededErrors, ThrowOnError> => (options.client ?? client).post<CloseQuarantineRecordSupersededResponses, CloseQuarantineRecordSupersededErrors, ThrowOnError>({
+    security: [{
+            in: 'cookie',
+            name: 'mosaic_session',
+            type: 'apiKey'
+        }],
+    url: '/v1/projects/{projectId}/billing/quarantine/{recordId}/close-superseded',
+    ...options,
+    headers: {
+        'Content-Type': 'application/json',
+        ...options.headers
+    }
 });

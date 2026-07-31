@@ -15,12 +15,42 @@ struct StoreKitProductSnapshot: Sendable {
   let introductoryOffer: MosaicCommerceIntroductoryOffer?
 }
 
+/// Store Environment as StoreKit reports it.
+///
+/// `localTesting` is StoreKit Testing in Xcode, whose transactions have no App
+/// Store record at all.
+enum StoreKitTransactionEnvironment: Sendable, Equatable {
+  case production
+  case sandbox
+  case localTesting
+}
+
 struct StoreKitTransaction: Sendable {
   let id: UInt64
   let storeProductID: String
   let occurredAt: Date
+  /// `nil` below iOS 16, where `Transaction.environment` does not exist.
+  let environment: StoreKitTransactionEnvironment?
 
+  init(
+    id: UInt64,
+    storeProductID: String,
+    occurredAt: Date,
+    environment: StoreKitTransactionEnvironment? = nil
+  ) {
+    self.id = id
+    self.storeProductID = storeProductID
+    self.occurredAt = occurredAt
+    self.environment = environment
+  }
+
+  /// The host-facing reference carried by `MosaicCommerceUpdate`.
   var safeReference: String { "storekit_\(id)" }
+
+  /// The raw decimal provider identifier. It is carried as a string end to
+  /// end: values above 2^53-1 lose precision as a double and values above
+  /// 2^63-1 overflow a signed 64-bit integer.
+  var providerTransactionID: String { String(id) }
 }
 
 enum StoreKitTransactionEvent: Sendable {
@@ -168,12 +198,33 @@ actor LiveStoreKitClient: StoreKitClient {
     transactions[transaction.id] = transaction
   }
 
+  /// The single narrowing point between StoreKit and Mosaic.
+  ///
+  /// `jwsRepresentation`, `deviceVerification`, `deviceVerificationNonce`,
+  /// `appAccountToken`, and `appTransactionID` are deliberately never read, so
+  /// signed or account-linking material cannot reach a Mosaic payload.
   nonisolated private static func snapshot(_ transaction: Transaction) -> StoreKitTransaction {
     StoreKitTransaction(
       id: transaction.id,
       storeProductID: transaction.productID,
-      occurredAt: transaction.purchaseDate
+      occurredAt: transaction.purchaseDate,
+      environment: environment(transaction)
     )
+  }
+
+  /// `Transaction.environment` is iOS 16 and macOS 13, while the package floor
+  /// is iOS 15. The gate keeps the floor rather than raising it; below the gate
+  /// the environment is simply unreported.
+  nonisolated private static func environment(
+    _ transaction: Transaction
+  ) -> StoreKitTransactionEnvironment? {
+    guard #available(iOS 16.0, macOS 13.0, tvOS 16.0, watchOS 9.0, *) else { return nil }
+    switch transaction.environment {
+    case .production: return .production
+    case .sandbox: return .sandbox
+    case .xcode: return .localTesting
+    default: return nil
+    }
   }
 
   private static func productType(_ type: Product.ProductType) -> MosaicCommerceProductType? {

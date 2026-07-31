@@ -608,3 +608,97 @@ failure.
 - Planned resolution: cosmetic fix in the first post-GA maintenance release.
 - GA safety: a visual defect on an authentication page with no functional,
   security, or data impact.
+
+### Mosaic does not acknowledge Google Play purchases
+
+- Surface: Mosaic Billing, Google Play validation.
+- Platforms: Android.
+- Symptom: Mosaic validates a Google purchase but never calls
+  `acknowledge`. Google auto-refunds an unacknowledged purchase after three
+  days (five minutes for license testers), so an application that relies on
+  Mosaic to acknowledge will silently lose those purchases.
+- Workaround: none needed for apps using the Mosaic Play Billing adapter, which
+  acknowledges client-side as it always has. An app that acknowledges nowhere
+  must add it.
+- Planned resolution: none for 9A. Acknowledgement asserts that goods were
+  delivered — an entitlement act — and Phase 9A grants nothing. Coupling a
+  customer's three-day refund window to Mosaic's availability is not an
+  acceptable trade for a phase whose promise is evidence, not access.
+- GA safety: unchanged from before Mosaic Billing existed; acknowledgement has
+  always been the application's responsibility, and this records it explicitly.
+
+### A transaction may carry more than one Transaction Fact
+
+- Surface: Mosaic Billing ledger, and any consumer reading
+  `billing_transaction_facts`.
+- Platforms: all.
+- Symptom: one store transaction can produce several fact rows. Two routes
+  reporting the same transaction (a store notification and a client
+  observation) make two *statements* that differ in what they know — the
+  notification carries renewal information the observation cannot — and both
+  are recorded. A change in Product-mapping history produces another. **The
+  count of facts is a count of distinct statements, not of purchases.**
+- Workaround: consumers must select over facts grouped by
+  `(environment, provider, provider_transaction_id)` and prefer the
+  notification-sourced statement; they must never count facts as purchases.
+- Planned resolution: none for 9A, deliberately. Duplicate *delivery* still
+  produces exactly one fact and replay still produces none, so the ledger is
+  not noisy — it is honest. Collapsing the two would mean discarding the more
+  informative statement whenever the poorer one arrived first, which is a worse
+  failure than a second row. Changing fact identity alters a `UNIQUE`
+  constraint and the meaning of every existing row, so it belongs to 9B with a
+  migration.
+- GA safety: an append-only evidence ledger recording what each route said. No
+  data is lost or overwritten; the risk is purely one of misreading, which the
+  documented selection rule addresses.
+
+### Apple transaction-history reconciliation is not implemented
+
+- Surface: Mosaic Billing reconciliation.
+- Platforms: iOS.
+- Symptom: only `apple_notification_history` and `google_token_requery` run.
+  `apple_transaction_history` exists in the stored enumeration for forward
+  compatibility but has no worker loop.
+- Workaround: `apple_notification_history` covers the gap that matters — Apple
+  retries a failed notification five times and never in sandbox, so recovering
+  missed notifications is the recovery path operators actually need.
+- Planned resolution: the API rejects the value with a clear validation error
+  and the dashboard does not offer it, so it is unreachable rather than
+  silently broken. The loop is a follow-up.
+- GA safety: no operator can reach a strategy that cannot succeed.
+
+### Live store sandbox verification has not been performed
+
+- Surface: Mosaic Billing, both providers.
+- Platforms: iOS and Android.
+- Symptom: no Apple sandbox purchase and no Google Play test purchase has been
+  run end to end against Mosaic. The Apple JWS verifier has never seen a real
+  Apple signature, and the Google OAuth exchange and Pub/Sub pull have never
+  been executed against live Google.
+- Workaround: verification uses synthetic signed vectors and constructed
+  provider payloads throughout, including a generated certificate chain that
+  exercises algorithm confusion, foreign roots, and tampered payloads.
+- Planned resolution: an operator follow-up recorded in the Phase 9A review.
+  Live store accounts, signing keys, and real notification delivery cannot be
+  provisioned in CI.
+- GA safety: the security boundary is tested against adversarial synthetic
+  input; what is unverified is Apple's and Google's real-world payload shape,
+  which is a first-run risk rather than a correctness one.
+
+### Migration 00008 cannot roll back against seeded Product-mapping data
+
+- Surface: schema rollback, `migrate down-to` past version 8.
+- Platforms: all.
+- Symptom: rolling back migration 00008 fails against a database containing
+  connection-less Provider Product Mappings, because 00008's own
+  `provider_product_mappings_scope_shape_check` rejects data 00008 itself
+  permits. `migrate down-to 0 --confirm` succeeds on a clean database and
+  `migrate preflight` reports `compatible`.
+- Workaround: restore from a backup rather than rolling back past 8 on a
+  populated database, as `docs/backend/operations/backup-restore.md` already
+  directs for destructive rollbacks.
+- Planned resolution: filed as its own item. It is pre-existing and predates
+  Mosaic Billing; Phase 9A neither introduced it nor made it worse, and 00027's
+  own down/up path was verified against live billing data.
+- GA safety: forward migration and preflight are unaffected; the failure mode
+  is a rollback that refuses rather than one that destroys data.

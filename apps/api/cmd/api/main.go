@@ -15,19 +15,24 @@ import (
 	"github.com/rs/zerolog"
 
 	"github.com/Mujhtech/mosaic/apps/api/internal/analytics"
+	"github.com/Mujhtech/mosaic/apps/api/internal/billing"
 	"github.com/Mujhtech/mosaic/apps/api/internal/browserauth"
 	"github.com/Mujhtech/mosaic/apps/api/internal/cloudworkspace"
 	"github.com/Mujhtech/mosaic/apps/api/internal/experiment"
 	"github.com/Mujhtech/mosaic/apps/api/internal/hostedpublishing"
 	"github.com/Mujhtech/mosaic/apps/api/internal/placementdecision"
 	"github.com/Mujhtech/mosaic/apps/api/internal/platform/analyticspostgres"
+	"github.com/Mujhtech/mosaic/apps/api/internal/platform/appstorejws"
+	"github.com/Mujhtech/mosaic/apps/api/internal/platform/appstoreserver"
 	"github.com/Mujhtech/mosaic/apps/api/internal/platform/authn"
+	"github.com/Mujhtech/mosaic/apps/api/internal/platform/billingpostgres"
 	"github.com/Mujhtech/mosaic/apps/api/internal/platform/browserauthpostgres"
 	"github.com/Mujhtech/mosaic/apps/api/internal/platform/buildinfo"
 	"github.com/Mujhtech/mosaic/apps/api/internal/platform/cloudworkspacepostgres"
 	"github.com/Mujhtech/mosaic/apps/api/internal/platform/config"
 	"github.com/Mujhtech/mosaic/apps/api/internal/platform/database"
 	"github.com/Mujhtech/mosaic/apps/api/internal/platform/experimentpostgres"
+	"github.com/Mujhtech/mosaic/apps/api/internal/platform/googleplay"
 	"github.com/Mujhtech/mosaic/apps/api/internal/platform/hostedpublishingpostgres"
 	"github.com/Mujhtech/mosaic/apps/api/internal/platform/httpserver"
 	"github.com/Mujhtech/mosaic/apps/api/internal/platform/logging"
@@ -249,6 +254,47 @@ func run() (runErr error) {
 	analyticsKeyLimiter := ratelimit.New(cfg.Analytics.KeyBatchesPerMinute, cfg.Analytics.KeyBatchBurst, cfg.Analytics.LimiterEntries)
 	analyticsEventLimiter := ratelimit.New(cfg.Analytics.KeyEventsPerMinute, cfg.Analytics.KeyEventBurst, cfg.Analytics.LimiterEntries)
 
+	var billingService *billing.Service
+	var billingIPLimiter, billingKeyLimiter *ratelimit.Limiter
+	if cfg.Billing.Enabled {
+		billingCipher, err := providercredential.NewAESGCMCipher(cfg.Providers.CredentialKeyring, rand.Reader)
+		if err != nil {
+			return fmt.Errorf("configure billing credential encryption: %w", err)
+		}
+		// The Apple root is compiled in, so a broken embed fails startup rather
+		// than the first notification.
+		verifier, err := appstorejws.NewVerifier()
+		if err != nil {
+			return fmt.Errorf("configure Apple notification verification: %w", err)
+		}
+		appleClient, err := appstoreserver.New(appstoreserver.Config{
+			ProductionBaseURL: cfg.Billing.AppleProductionBaseURL,
+			SandboxBaseURL:    cfg.Billing.AppleSandboxBaseURL,
+			RequestTimeout:    cfg.Providers.RequestTimeout,
+			ConnectTimeout:    cfg.Providers.ConnectTimeout,
+			MaxResponseBytes:  cfg.Providers.MaxResponseBytes,
+		})
+		if err != nil {
+			return fmt.Errorf("configure App Store Server client: %w", err)
+		}
+		googleClient, err := googleplay.New(googleplay.Config{
+			PlayBaseURL:      cfg.Billing.GooglePlayBaseURL,
+			PubSubBaseURL:    cfg.Billing.GooglePubSubBaseURL,
+			RequestTimeout:   cfg.Providers.RequestTimeout,
+			ConnectTimeout:   cfg.Providers.ConnectTimeout,
+			MaxResponseBytes: cfg.Providers.MaxResponseBytes,
+		})
+		if err != nil {
+			return fmt.Errorf("configure Google Play client: %w", err)
+		}
+		billingService = billing.NewService(billingpostgres.New(databasePool), billingCipher, verifier,
+			billing.WithProviders(appleClient, googleClient),
+			billing.WithRetention(cfg.Billing.RawRetention()),
+			billing.WithNotificationBaseURL(cfg.Billing.NotificationBaseURL))
+		billingIPLimiter = ratelimit.New(cfg.Billing.ObservationsPerMinute, cfg.Billing.ObservationBurst, cfg.Billing.LimiterEntries)
+		billingKeyLimiter = ratelimit.New(cfg.Billing.ObservationsPerMinute, cfg.Billing.ObservationBurst, cfg.Billing.LimiterEntries)
+	}
+
 	readiness := health.NewReadiness(
 		health.Check{Name: "postgresql", Code: "database_unavailable", Probe: func(ctx context.Context) error {
 			return database.Ping(ctx, databasePool)
@@ -286,6 +332,9 @@ func run() (runErr error) {
 		AnalyticsKeyLimiter:   analyticsKeyLimiter,
 		AnalyticsEventLimiter: analyticsEventLimiter,
 		Experiment:            experimentService,
+		Billing:               billingService,
+		BillingIPLimiter:      billingIPLimiter,
+		BillingKeyLimiter:     billingKeyLimiter,
 		APILimiter:            apiLimiter,
 		DecisionLimiter:       decisionLimiter,
 		UploadLimiter:         uploadLimiter,

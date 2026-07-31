@@ -1,0 +1,32 @@
+{
+  "billingIngestionContractVersion": "1",
+  "recordType": "clientTransactionObservation",
+  "payload": {
+    "observationId": "fixture-observation-google-0001",
+    "submissionId": "fixture-submission-google-0001",
+    "providerId": "fixture-provider-google",
+    "storePlatform": "google_play",
+    "transactionReference": {
+      "referenceKind": "google_play_token_digest",
+      "value": "ecdb16b8fb3378895aeb12223bc53edc67ac874ac2ea15c01e15c897af2c2478"
+    },
+    "providerOrderReference": {
+      "referenceKind": "google_play_order_id",
+      "value": "fixture-GPA.0000-0000-0000-00001"
+    },
+    "observedAt": "2026-07-27T12:00:01.000Z",
+    "sourceAuthority": "client_observation",
+    "context": {
+      "platform": "android",
+      "sdkFamily": "flutter",
+      "sdkVersion": "0.9.0",
+      "applicationVersion": "1.4.2",
+      "operatingSystemVersion": "15"
+    },
+    "correlation": {
+      "purchaseAttemptId": "fixture-purchase-attempt-0002",
+      "providerUpdateId": "fixture-provider-update-0002"
+    },
+    "claimedMosaicProductId": "fixture-mosaic-product-pro-monthly"
+  }
+}

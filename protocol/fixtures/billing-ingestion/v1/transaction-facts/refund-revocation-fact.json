@@ -1,0 +1,34 @@
+{
+  "billingIngestionContractVersion": "1",
+  "recordType": "transactionFact",
+  "payload": {
+    "transactionFactId": "fixture-fact-apple-refund-0001",
+    "factDigest": "sha256:2c6285f6e873cf91fb3af746aab3841379c96ffc61f0161ff3b3a809f5d0e77c",
+    "factVersion": 1,
+    "providerId": "fixture-provider-apple",
+    "storePlatform": "apple_app_store",
+    "transactionReference": {
+      "referenceKind": "app_store_transaction_id",
+      "value": "2000000900000001"
+    },
+    "mosaicProductId": "fixture-mosaic-product-pro-monthly",
+    "mappingId": "fixture-mapping-0003",
+    "mappingVersion": 3,
+    "productType": "subscription",
+    "transactionType": "refund",
+    "storeEnvironment": "production",
+    "sourceAuthority": "provider_notification",
+    "occurredAt": "2026-08-02T08:30:00.000Z",
+    "providerReportedAt": "2026-08-02T08:30:00.000Z",
+    "recordedAt": "2026-08-02T08:30:12.000Z",
+    "quantity": 1,
+    "validatorVersion": "1",
+    "correlation": {
+      "purchaseAttemptId": "fixture-purchase-attempt-0001"
+    },
+    "revocation": {
+      "reason": "refund",
+      "revokedAt": "2026-08-02T08:30:00.000Z"
+    }
+  }
+}

@@ -31,6 +31,15 @@ enum class MosaicDiagnosticCode(val wireName: String) {
     COMMERCE_PROVIDER_UNAVAILABLE("commerce.providerUnavailable"),
     EXPERIMENT_TIME_UNRELIABLE("experiment.time_unreliable"),
     EXPERIMENT_VARIANT_UNAVAILABLE("experiment.variant_unavailable"),
+
+    // Optional Transaction Observation handoff. Every code below is a local, secret-free operational
+    // signal; none of them describes the outcome of a server-side validation, which this SDK never
+    // learns and must never claim.
+    TRANSACTION_OBSERVATION_QUEUED("transaction.observation.queued"),
+    TRANSACTION_OBSERVATION_DELIVERY_FAILED("transaction.observation.deliveryFailed"),
+    TRANSACTION_OBSERVATION_REJECTED("transaction.observation.rejected"),
+    TRANSACTION_OBSERVATION_DROPPED("transaction.observation.dropped"),
+    TRANSACTION_OBSERVATION_REFERENCE_UNAVAILABLE("transaction.observation.referenceUnavailable"),
 }
 
 data class MosaicDiagnostic(

@@ -1,0 +1,13 @@
+{
+  "billingIngestionContractVersion": "1",
+  "recordType": "productResolution",
+  "payload": {
+    "resolutionId": "fixture-resolution-0001",
+    "resolvedAt": "2026-07-27T12:00:07.000Z",
+    "resolution": "resolved",
+    "providerProductReference": "fixture.pro.monthly",
+    "mosaicProductId": "fixture-mosaic-product-pro-monthly",
+    "mappingVersion": 3,
+    "productType": "subscription"
+  }
+}

@@ -35,6 +35,11 @@ const String _mosaicApplicationId = String.fromEnvironment(
 const bool _commerceEnabled = bool.fromEnvironment('MOSAIC_COMMERCE_ENABLED');
 const bool _phase5Demo = bool.fromEnvironment('MOSAIC_PHASE5_DEMO');
 const bool _analyticsEnabled = bool.fromEnvironment('MOSAIC_ANALYTICS_ENABLED');
+
+/// Off by default, exactly as the SDK opt-in is. When absent the Transaction
+/// Observation subsystem is never constructed.
+const bool _transactionObservationEnabled =
+    bool.fromEnvironment('MOSAIC_TRANSACTION_OBSERVATION_ENABLED');
 const String _revenueCatPublicSdkKey = String.fromEnvironment(
   'REVENUECAT_PUBLIC_SDK_KEY',
 );
@@ -188,6 +193,12 @@ final class _HostedPaywallPlaygroundState
             onPressed: () => unawaited(_flushAnalytics()),
             icon: const Icon(Icons.analytics_outlined),
           ),
+          if (kDebugMode && _transactionObservationEnabled)
+            IconButton(
+              tooltip: 'Flush transaction observations and show diagnostics',
+              onPressed: () => unawaited(_flushTransactionObservations()),
+              icon: const Icon(Icons.receipt_long_outlined),
+            ),
         ],
       ),
       body: Column(
@@ -262,6 +273,11 @@ final class _HostedPaywallPlaygroundState
         analyticsEnvironmentSettings: MosaicAnalyticsEnvironmentSettings(
           collectionEnabled: _analyticsEnabled,
         ),
+        // A Transaction Observation is a trigger for server-side validation.
+        // It never unlocks content and never re-labels a purchase result.
+        transactionObservation: _transactionObservationEnabled
+            ? const MosaicTransactionObservationSettings()
+            : null,
         commerceProviderFactories: <MosaicCommerceProviderFactory>[
           MosaicStoreKitProviderFactory(acceptUpdate: _acceptNativeStoreUpdate),
           MosaicGooglePlayProviderFactory(
@@ -312,6 +328,20 @@ final class _HostedPaywallPlaygroundState
           'Unavailable: $diagnosticCode',
       };
     });
+  }
+
+  /// Development-only diagnostics. There is deliberately nothing here that
+  /// reports a transaction as valid: acceptance means queued, and nothing more.
+  Future<void> _flushTransactionObservations() async {
+    final result = await _mosaic.flushTransactionObservations();
+    final diagnostics = await _mosaic.transactionObservationDiagnostics();
+    _recordEvent(
+      'Observations ${result.runtimeType}: ${diagnostics.queued} queued, '
+      '${diagnostics.deduplicated} deduplicated, '
+      '${diagnostics.rejectedReferences} references refused, '
+      '${diagnostics.incomplete} incomplete, '
+      'last ${diagnostics.lastSafeCode ?? 'none'}',
+    );
   }
 
   Future<void> _flushAnalytics() async {

@@ -82,6 +82,7 @@ public actor MosaicStoreKitProvider:
   private var diagnostics: [MosaicCommerceDiagnostic] = []
   private var diagnosticSequence = 0
   private var observerTask: Task<Void, Never>?
+  private var observationSink: (any MosaicTransactionObservationSink)?
 
   public init(
     acceptor: any MosaicCommerceUpdateAcceptor,
@@ -99,14 +100,30 @@ public actor MosaicStoreKitProvider:
   init(
     client: any StoreKitClient,
     acceptor: any MosaicCommerceUpdateAcceptor,
-    acceptanceStore: any MosaicStoreKitAcceptanceStore
+    acceptanceStore: any MosaicStoreKitAcceptanceStore,
+    observationSink: (any MosaicTransactionObservationSink)? = nil
   ) {
     self.client = client
     self.acceptor = acceptor
     self.acceptanceStore = acceptanceStore
+    self.observationSink = observationSink
     (updates, updateContinuation) = AsyncStream.makeStream(
       bufferingPolicy: .bufferingNewest(64)
     )
+  }
+
+  /// Opts this provider in to the Mosaic transaction-observation handoff.
+  ///
+  /// Observations are off unless a sink is attached. Pass
+  /// `Mosaic.transactionObservationSink()`, which is `nil` unless the host
+  /// configured `transactionObservations: .enabled`. Attaching a sink never
+  /// changes a purchase result, a restore result, or the reported capability
+  /// matrix: a StoreKit-verified purchase is still a local result, and
+  /// `serverConfirmedTransactions` stays `unsupported`.
+  public func attachTransactionObservationSink(
+    _ sink: (any MosaicTransactionObservationSink)?
+  ) {
+    observationSink = sink
   }
 
   deinit {
@@ -438,6 +455,11 @@ public actor MosaicStoreKitProvider:
         recordStaleConfiguration(mapping: mapping)
         return false
       }
+      // One choke point covers foreground purchases, `Transaction.updates`,
+      // and unfinished-transaction recovery, and inherits the acceptance
+      // store's de-duplication. The call is synchronous by contract so the
+      // purchase path cannot suspend on it.
+      observe(transaction, updateID: updateID, operationID: operationID)
       if emitsUpdate {
         updateContinuation.yield(update)
       }
@@ -453,6 +475,36 @@ public actor MosaicStoreKitProvider:
       )
       return false
     }
+  }
+
+  /// Hands one locally accepted transaction to the observation queue.
+  ///
+  /// The submitted reference is the raw decimal `Transaction.id`, which is what
+  /// Apple's transaction lookup accepts; the prefixed `safeReference` stays on
+  /// the host-facing `MosaicCommerceUpdate`. Nothing else about the transaction
+  /// is submitted — in particular the Store Environment is read here only to
+  /// suppress Xcode transactions, and is never asserted on the wire. Sandbox
+  /// and production classification is the server's job during validation.
+  private func observe(
+    _ transaction: StoreKitTransaction, updateID: String, operationID: String?
+  ) {
+    guard let observationSink else { return }
+    // StoreKit Testing in Xcode produces no App Store record, so submitting one
+    // would be guaranteed rejection noise.
+    guard transaction.environment != .localTesting else { return }
+    guard
+      let observation = MosaicTransactionObservation(
+        submissionID: updateID,
+        referenceKind: .appStoreTransactionID,
+        reference: transaction.providerTransactionID,
+        providerID: identity.id,
+        // Correlation uses the existing opaque handles only, so a validated
+        // fact can be joined to the purchase attempt that triggered it.
+        correlation: MosaicTransactionObservationCorrelation(
+          providerOperationID: operationID, providerUpdateID: updateID)
+      )
+    else { return }
+    observationSink.enqueue(observation)
   }
 
   private func currentEntitlementKeys() async -> Result<Set<String>, Error> {

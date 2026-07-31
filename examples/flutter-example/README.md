@@ -204,6 +204,32 @@ cancellation, and access lookup failure remain distinct safe outcomes. The
 mock provider remains the deterministic fallback for local Product/Paywall
 work.
 
+## Phase 9A transaction observation handoff
+
+Off by default. When opted in, the SDK reports a purchase *reference* so the
+server can start validating it. The handoff is fire-and-forget: it never blocks
+the purchase UI, never unlocks content, and never re-labels a local purchase
+result as server-validated. Store Notifications remain the authoritative and
+timely ingestion path; this is a latency and attribution optimization.
+
+```bash
+flutter run \
+  --dart-define=MOSAIC_HOSTED_BASE_URL=http://127.0.0.1:8080 \
+  --dart-define=MOSAIC_PUBLIC_SDK_KEY=public_example_key \
+  --dart-define=MOSAIC_APPLICATION_ID=application_ios \
+  --dart-define=MOSAIC_COMMERCE_ENABLED=true \
+  --dart-define=MOSAIC_TRANSACTION_OBSERVATION_ENABLED=true
+```
+
+A debug-only toolbar action then flushes the queue and shows aggregate safe
+diagnostics: how many observations are queued, how many were deduplicated, how
+many references were structurally refused, and the last safe code. There is
+deliberately no diagnostic that reports a transaction as valid.
+
+The mock and preview providers produce placeholder references (`mock-*`,
+`preview-*`) that the SDK refuses to submit, so this screen only produces real
+observations with StoreKit or Google Play commerce enabled.
+
 ## Verify
 
 ```bash

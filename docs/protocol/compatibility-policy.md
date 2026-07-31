@@ -21,6 +21,19 @@ All 13 manifests are `status: "approved"`. Every version identifier is
 independent: Delivery `3` does not imply Paywall `3`, and a contract's number
 carries no compatibility meaning relative to any other contract.
 
+### Draft contracts
+
+| Contract | Version | Status | Manifest |
+| --- | --- | --- | --- |
+| Billing Ingestion | `1` | `draft` | `protocol/compatibility/billing-ingestion/v1.json` |
+
+A draft contract carries **no compatibility guarantee**: it may change or
+disappear without a version bump, and nothing in the approved set depends on it.
+Billing Ingestion `1` reaches `approved` only through an explicit product-owner
+decision recorded in the Phase 9A review. It is optional, adds no required
+reference to any approved contract, and is not generated into the browser
+contract. See [Billing Ingestion Contract v1](billing-ingestion-v1.md).
+
 ## Exact-match reading
 
 Readers match versions **exactly**. A reader declaring Paywall `0.2` accepts

@@ -1,0 +1,28 @@
+{
+  "billingIngestionContractVersion": "1",
+  "recordType": "serverTransactionObservation",
+  "payload": {
+    "observationId": "fixture-observation-google-notification-0001",
+    "submissionId": "fixture-submission-google-notification-0001",
+    "providerId": "fixture-provider-google",
+    "storePlatform": "google_play",
+    "transactionReference": {
+      "referenceKind": "google_play_token_digest",
+      "value": "ecdb16b8fb3378895aeb12223bc53edc67ac874ac2ea15c01e15c897af2c2478"
+    },
+    "providerOrderReference": {
+      "referenceKind": "google_play_order_id",
+      "value": "fixture-GPA.0000-0000-0000-00001"
+    },
+    "sourceAuthority": "provider_notification",
+    "trustBasis": "mutual_tls",
+    "receivedAt": "2026-07-27T12:00:05.000Z",
+    "providerReportedAt": "2026-07-27T12:00:02.000Z",
+    "providerNotificationReference": "fixture-google-notification-0001",
+    "storeEnvironmentClassification": {
+      "classification": "production",
+      "basis": "provider_endpoint"
+    },
+    "originatingObservationId": "fixture-observation-google-0001"
+  }
+}

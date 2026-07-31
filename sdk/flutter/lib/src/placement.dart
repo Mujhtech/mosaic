@@ -614,6 +614,7 @@ final class _MosaicPlacementHostState extends State<MosaicPlacementHost> {
       onInteraction: widget.onInteraction,
       onDiagnostic: widget.onDiagnostic,
       analyticsRuntime: widget.mosaic.analytics,
+      transactionObservations: widget.mosaic.transactionObservations,
       analyticsContext: analytics,
       externalUrlOpener: widget.externalUrlOpener,
     );
@@ -701,6 +702,7 @@ final class _MosaicPlacementHostState extends State<MosaicPlacementHost> {
       onInteraction: widget.onInteraction,
       onDiagnostic: widget.onDiagnostic,
       analyticsRuntime: widget.mosaic.analytics,
+      transactionObservations: widget.mosaic.transactionObservations,
       analyticsContext: analytics,
       onPresented: experiment == null || experiment.qaOverride
           ? fallback == null || fallback.qaOverride

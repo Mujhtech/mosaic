@@ -1,0 +1,26 @@
+{
+  "billingIngestionContractVersion": "1",
+  "recordType": "validationResult",
+  "payload": {
+    "validationId": "fixture-validation-0001",
+    "observationId": "fixture-observation-apple-notification-0001",
+    "submissionId": "fixture-submission-apple-notification-0001",
+    "outcome": "transient_failure",
+    "attempt": 8,
+    "validatorVersion": "1",
+    "decidedAt": "2026-07-27T12:00:08.000Z",
+    "sourceAuthority": "provider_notification",
+    "storeEnvironmentClassification": {
+      "classification": "production",
+      "basis": "signature_environment"
+    },
+    "diagnostics": [],
+    "retry": {
+      "retryable": true,
+      "attempt": 8,
+      "maxAttempts": 8,
+      "retryAfterSeconds": 60,
+      "exhausted": false
+    }
+  }
+}

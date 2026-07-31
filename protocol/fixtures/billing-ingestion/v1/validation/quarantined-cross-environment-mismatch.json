@@ -1,0 +1,59 @@
+{
+  "billingIngestionContractVersion": "1",
+  "recordType": "validationResult",
+  "payload": {
+    "validationId": "fixture-validation-0009",
+    "observationId": "fixture-observation-apple-notification-0001",
+    "submissionId": "fixture-submission-apple-notification-0001",
+    "outcome": "quarantined",
+    "attempt": 1,
+    "validatorVersion": "1",
+    "decidedAt": "2026-07-27T12:08:00.000Z",
+    "sourceAuthority": "provider_notification",
+    "storeEnvironmentClassification": {
+      "classification": "sandbox",
+      "basis": "signature_environment"
+    },
+    "diagnostics": [
+      {
+        "code": "billing.environment.mismatch",
+        "safeMessage": "A sandbox transaction resolved against a production-scoped mapping.",
+        "severity": "error",
+        "retryable": false,
+        "correlationId": "fixture-correlation-0001",
+        "recoveryAction": "separateStoreEnvironments"
+      }
+    ],
+    "productResolution": {
+      "resolutionId": "fixture-resolution-0009",
+      "resolvedAt": "2026-07-27T12:07:59.000Z",
+      "resolution": "cross_environment_mismatch",
+      "providerProductReference": "fixture.pro.monthly",
+      "mappingId": "fixture-mapping-0003",
+      "observedStoreEnvironment": "sandbox",
+      "mappingStoreEnvironment": "production"
+    },
+    "quarantine": {
+      "quarantineId": "fixture-quarantine-0003",
+      "reason": "cross_environment_mismatch",
+      "severity": "error",
+      "status": "open",
+      "detectedAt": "2026-07-27T12:08:00.000Z",
+      "validationId": "fixture-validation-0009",
+      "storeEnvironmentClassification": {
+        "classification": "sandbox",
+        "basis": "signature_environment"
+      },
+      "diagnostics": [
+        {
+          "code": "billing.environment.mismatch",
+          "safeMessage": "A sandbox transaction resolved against a production-scoped mapping.",
+          "severity": "error",
+          "retryable": false,
+          "correlationId": "fixture-correlation-0001",
+          "recoveryAction": "separateStoreEnvironments"
+        }
+      ]
+    }
+  }
+}

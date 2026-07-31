@@ -1,0 +1,30 @@
+{
+  "billingIngestionContractVersion": "1",
+  "recordType": "transactionFact",
+  "payload": {
+    "transactionFactId": "fixture-fact-google-0001",
+    "factDigest": "sha256:7f6e46e3da3852d8a32c837b3f452513ea5051f3a8f5958fa73d2801a484c6be",
+    "factVersion": 1,
+    "providerId": "fixture-provider-google",
+    "storePlatform": "google_play",
+    "transactionReference": {
+      "referenceKind": "google_play_token_digest",
+      "value": "bc9bd8b5795fab18943a5b50c84de2c3f915096c8e962797d167e66d5bcb59ee"
+    },
+    "providerOrderReference": {
+      "referenceKind": "google_play_order_id",
+      "value": "fixture-GPA.0000-0000-0000-00002"
+    },
+    "mosaicProductId": "fixture-mosaic-product-lifetime",
+    "mappingId": "fixture-mapping-0011",
+    "mappingVersion": 1,
+    "productType": "one_time_non_consumable",
+    "transactionType": "initial_purchase",
+    "storeEnvironment": "production",
+    "sourceAuthority": "trusted_server_observation",
+    "occurredAt": "2026-07-27T12:04:55.000Z",
+    "recordedAt": "2026-07-27T12:05:03.000Z",
+    "quantity": 1,
+    "validatorVersion": "1"
+  }
+}

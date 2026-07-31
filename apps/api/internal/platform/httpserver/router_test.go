@@ -15,6 +15,7 @@ import (
 	"github.com/rs/zerolog"
 
 	"github.com/Mujhtech/mosaic/apps/api/internal/analytics"
+	"github.com/Mujhtech/mosaic/apps/api/internal/billing"
 	"github.com/Mujhtech/mosaic/apps/api/internal/cloudworkspace"
 	"github.com/Mujhtech/mosaic/apps/api/internal/hostedpublishing"
 	"github.com/Mujhtech/mosaic/apps/api/internal/platform/authn"
@@ -378,5 +379,58 @@ func TestUploadAndExportLimitersCoverOnlyTheExpensiveRoutes(t *testing.T) {
 	}
 	if len(uploadLimiter.keys) != 1 || len(exportLimiter.keys) != 4 {
 		t.Fatalf("a read consumed an upload/export token: upload=%d export=%d", len(uploadLimiter.keys), len(exportLimiter.keys))
+	}
+}
+
+// Store notification intake is the one public POST that a browser never makes and
+// that Mosaic cannot afford to reject. Two properties of its routing are pinned
+// here because both are easy to break by moving a route or adding a middleware,
+// and both fail silently in production rather than in a build.
+//
+// First, `trustedMutationOrigins` wraps every /v1 mutation, and Apple sends no
+// Origin header. If that middleware ever stopped passing originless requests
+// through, every production notification would 403 and Mosaic would burn Apple's
+// five non-renewable retries before anyone noticed. A browser POST from a
+// disallowed origin must still be blocked, so the exemption cannot be a blanket one.
+//
+// Second, the route must not sit behind a limiter that can answer 429, for the
+// same reason: a 429 to Apple consumes a delivery attempt that is never re-issued.
+func TestStoreNotificationIntakeAcceptsOriginlessPostsAndIsNotRateLimited(t *testing.T) {
+	limiter := &exhaustedLimiter{}
+	handler := NewWithDependencies(Config{
+		ServiceName: "mosaic-api-test", AllowedOrigins: []string{"https://studio.example"},
+		RequestTimeout: time.Second,
+	}, zerolog.Nop(), Dependencies{
+		Billing:           billing.NewService(nil, nil, nil),
+		BillingIPLimiter:  limiter,
+		BillingKeyLimiter: limiter,
+		APILimiter:        limiter,
+		ExportLimiter:     limiter,
+	})
+
+	const intakePath = "/v1/billing/apple/notifications/fixture-intake-token"
+
+	// Originless: Apple's actual shape. It must reach the handler, which answers
+	// 404 for an unresolvable token rather than 403 for a rejected origin.
+	request := httptest.NewRequest(http.MethodPost, intakePath, strings.NewReader(`{"signedPayload":"fixture"}`))
+	request.Header.Set("Content-Type", "application/json")
+	recorder := httptest.NewRecorder()
+	handler.ServeHTTP(recorder, request)
+	if recorder.Code == http.StatusForbidden {
+		t.Fatal("an originless store notification was rejected by the trusted-origin middleware")
+	}
+	if recorder.Code == http.StatusTooManyRequests {
+		t.Fatal("store notification intake is behind a 429-returning limiter, which would spend Apple's retry budget")
+	}
+
+	// A browser POST from a disallowed origin must still be blocked: the
+	// originless pass-through is not a blanket exemption.
+	forged := httptest.NewRequest(http.MethodPost, intakePath, strings.NewReader(`{"signedPayload":"fixture"}`))
+	forged.Header.Set("Content-Type", "application/json")
+	forged.Header.Set("Origin", "https://attacker.example")
+	forgedRecorder := httptest.NewRecorder()
+	handler.ServeHTTP(forgedRecorder, forged)
+	if forgedRecorder.Code != http.StatusForbidden {
+		t.Fatalf("a cross-origin browser POST to the intake route returned %d, want 403", forgedRecorder.Code)
 	}
 }

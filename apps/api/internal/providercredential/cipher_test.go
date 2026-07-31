@@ -2,11 +2,15 @@ package providercredential
 
 import (
 	"bytes"
+	"crypto/rand"
 	"encoding/base64"
 	"errors"
 	"fmt"
 	"testing"
 )
+
+// testKeyring is a fixed two-key keyring for the envelope-domain tests.
+var testKeyring = keyring("key-a", fmt.Sprintf(`%q:%q,%q:%q`, "key-a", encodedKey(7), "key-b", encodedKey(9)))
 
 func encodedKey(fill byte) string {
 	return base64.RawURLEncoding.EncodeToString(bytes.Repeat([]byte{fill}, 32))
@@ -122,5 +126,94 @@ func TestKeyRotationKeepsOldEnvelopesReadableAndUsesOnlyActiveKeyForWrites(t *te
 	}
 	if plaintext, err := onlyNew.Decrypt(resealed, scope); err != nil || string(plaintext) != "credential-value" {
 		t.Fatalf("re-sealed envelope after removing the retired key = %q, %v", plaintext, err)
+	}
+}
+
+// The Phase 9A envelope domain must be cryptographically separate from the
+// Provider Connection domain. This was a Stage 1A blocking prerequisite that
+// the code satisfied and nothing pinned.
+//
+// The failure it guards is a refactor that unifies additionalData and
+// subjectAdditionalData, or reorders their fields: a Store Server Credential
+// envelope would then be openable in a Provider Connection scope (scope
+// confusion), or a rotation would reseal under the wrong domain and make every
+// store credential permanently undecryptable (data loss). Both are silent —
+// AES-GCM simply fails to authenticate, and the caller sees "unavailable" —
+// which is exactly why the separation needs a test rather than a comment.
+func TestEnvelopeDomainsCannotCrossOpen(t *testing.T) {
+	cipher, err := NewAESGCMCipher(testKeyring, rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	secret := []byte("fixture-store-credential-material")
+
+	v1Scope := Scope{
+		OrganizationID: "org_1", ProjectID: "proj_1",
+		ConnectionID: "conn_1", CredentialClass: "serverSecret",
+	}
+	v2Scope := SubjectScope{
+		OrganizationID: "org_1", ProjectID: "proj_1",
+		SubjectKind: SubjectStoreServerCredential, SubjectID: "conn_1",
+		CredentialClass: "serverSecret",
+	}
+
+	v1Envelope, err := cipher.Encrypt(secret, v1Scope)
+	if err != nil {
+		t.Fatal(err)
+	}
+	v2Envelope, err := cipher.EncryptSubject(secret, v2Scope)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Each opens under its own domain, so the rejections below are about the
+	// domain and not about a broken cipher.
+	if _, err := cipher.Decrypt(v1Envelope, v1Scope); err != nil {
+		t.Fatalf("a v1 envelope did not open under its own scope: %v", err)
+	}
+	if _, err := cipher.DecryptSubject(v2Envelope, v2Scope); err != nil {
+		t.Fatalf("a v2 envelope did not open under its own scope: %v", err)
+	}
+
+	// The two scopes name the same tenant, the same identifier, and the same
+	// class deliberately: only the domain separates them.
+	if _, err := cipher.DecryptSubject(v1Envelope, v2Scope); !errors.Is(err, ErrCredentialUnavailable) {
+		t.Fatalf("a v1 envelope opened through the v2 path (err=%v)", err)
+	}
+	if _, err := cipher.Decrypt(v2Envelope, v1Scope); !errors.Is(err, ErrCredentialUnavailable) {
+		t.Fatalf("a v2 envelope opened through the v1 path (err=%v)", err)
+	}
+}
+
+// Within v2, the subject kind and subject id are part of the binding: a raw
+// billing body must not open as a credential, and a row moved between projects
+// or tables must become undecryptable rather than readable in the wrong context.
+func TestSubjectScopeBindsKindAndIdentity(t *testing.T) {
+	cipher, err := NewAESGCMCipher(testKeyring, rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	scope := SubjectScope{
+		OrganizationID: "org_1", ProjectID: "proj_1",
+		SubjectKind: SubjectStoreServerCredential, SubjectID: "ssc_1",
+		CredentialClass: "appleInAppPurchaseKey",
+	}
+	envelope, err := cipher.EncryptSubject([]byte("fixture-p8-material"), scope)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	for name, mutate := range map[string]func(*SubjectScope){
+		"different subject kind": func(s *SubjectScope) { s.SubjectKind = SubjectBillingRawInput },
+		"different subject id":   func(s *SubjectScope) { s.SubjectID = "ssc_2" },
+		"different project":      func(s *SubjectScope) { s.ProjectID = "proj_2" },
+		"different organization": func(s *SubjectScope) { s.OrganizationID = "org_2" },
+		"different class":        func(s *SubjectScope) { s.CredentialClass = "googleServiceAccountKey" },
+	} {
+		altered := scope
+		mutate(&altered)
+		if _, err := cipher.DecryptSubject(envelope, altered); !errors.Is(err, ErrCredentialUnavailable) {
+			t.Fatalf("envelope opened under a %s (err=%v)", name, err)
+		}
 	}
 }

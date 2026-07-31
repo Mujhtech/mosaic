@@ -17,6 +17,8 @@ import 'placement_decision.dart';
 import 'placement_identity.dart';
 import 'presentation.dart';
 import 'protocol.dart';
+import 'transaction_observation.dart';
+import 'transaction_observation_transport.dart';
 
 /// Immutable settings captured when a Mosaic client is configured.
 final class MosaicConfiguration {
@@ -139,13 +141,39 @@ final class Mosaic extends ChangeNotifier with WidgetsBindingObserver {
     MosaicCommerceProviderRouter? commerceProviderRouter,
     MosaicExperimentAnalyticsSink? experimentAnalyticsSink,
     MosaicExperimentAssignmentStore? experimentAssignmentStore,
+    MosaicTransactionObservationRuntime? transactionObservationRuntime,
   })  : _configurationClient = configurationClient,
         _identityController = identityController,
         _analyticsRuntime = analyticsRuntime,
         _experimentAnalyticsSink = experimentAnalyticsSink,
         _experimentAssignmentStore = experimentAssignmentStore,
+        _transactionObservationRuntime = transactionObservationRuntime,
         _commerceProviderRouter = commerceProviderRouter {
     _observeLifecycleIfAvailable();
+    _observeCommerceUpdates();
+  }
+
+  /// Bridges asynchronous Commerce Provider updates into the observation queue.
+  /// This is the primary source: it also covers store-replayed renewals and
+  /// out-of-band purchases that the renderer never sees.
+  void _observeCommerceUpdates() {
+    final runtime = _transactionObservationRuntime;
+    final router = _commerceProviderRouter;
+    if (runtime == null || router == null) return;
+    _commerceUpdateSubscription = router.commerceUpdates.listen((update) {
+      // Phase 9A observes a completed purchase only. Every other outcome,
+      // including pending and entitlement changes, stays on the device.
+      if (update.outcome != MosaicCommerceUpdateOutcome.purchased) return;
+      runtime.observeProviderUpdate(
+        providerId: update.providerId,
+        transactionReference: update.transactionReference,
+        providerOrderReference: update.providerOrderReference,
+        mosaicProductId: update.mosaicProductId,
+        providerOperationId: update.operationId,
+        providerUpdateId: update.updateId,
+        observedAt: update.occurredAt,
+      );
+    });
   }
 
   factory Mosaic.configure({
@@ -181,6 +209,10 @@ final class Mosaic extends ChangeNotifier with WidgetsBindingObserver {
     MosaicExperimentAnalyticsSink? experimentAnalyticsSink,
     MosaicExperimentAssignmentStorage experimentAssignmentStorage =
         const MosaicFileExperimentAssignmentStorage(),
+    MosaicTransactionObservationSettings? transactionObservation,
+    MosaicTransactionObservationStorage transactionObservationStorage =
+        const MosaicFileTransactionObservationStorage(),
+    MosaicTransactionObservationTransport? transactionObservationTransport,
   }) {
     final factories = commerceProviderFactories.toList(growable: false);
     final router = factories.isEmpty
@@ -254,9 +286,43 @@ final class Mosaic extends ChangeNotifier with WidgetsBindingObserver {
             environmentEnabled: analyticsEnvironmentSettings.collectionEnabled,
             hostEnabled: analyticsHostEnabled,
           );
+    // Off by default: absent opt-in means the subsystem is never constructed,
+    // so nothing is observed, queued, persisted, or submitted. A Store Platform
+    // is required because it determines the contract's reference kind; without
+    // one the handoff stays disabled rather than guessing.
+    final resolvedStorePlatform = configuration.storePlatform;
+    final resolvedObservationTransport = transactionObservationTransport ??
+        (resolvedBaseUrl == null
+            ? null
+            : MosaicIoTransactionObservationTransport(
+                baseUrl: resolvedBaseUrl,
+                publicSdkKey: configuration.publicSdkKey,
+                timeout: configuration.requestTimeout,
+              ));
+    final observationRuntime = transactionObservation == null ||
+            resolvedStorePlatform == null ||
+            resolvedObservationTransport == null
+        ? null
+        : MosaicTransactionObservationRuntime(
+            namespace: mosaicTransactionObservationNamespace(
+              resolvedBaseUrl ?? Uri.parse('mosaic://local'),
+              configuration.publicSdkKey,
+            ),
+            transport: resolvedObservationTransport,
+            storePlatform: resolvedStorePlatform,
+            context: MosaicTransactionObservationContext(
+              platform: resolvedStorePlatform.wireValue,
+              sdkVersion: analyticsSdkVersion,
+              applicationVersion: configuration.applicationVersion,
+              operatingSystemVersion: operatingSystemVersion,
+            ),
+            settings: transactionObservation,
+            storage: transactionObservationStorage,
+          );
     return Mosaic._(
       configuration: configuration,
       purchaseProvider: resolvedPurchaseProvider,
+      transactionObservationRuntime: observationRuntime,
       identityController: identityController,
       analyticsRuntime: runtime,
       configurationClient: resolvedBaseUrl == null
@@ -312,6 +378,8 @@ final class Mosaic extends ChangeNotifier with WidgetsBindingObserver {
   final MosaicExperimentAnalyticsSink? _experimentAnalyticsSink;
   final MosaicExperimentAssignmentStore? _experimentAssignmentStore;
   final MosaicCommerceProviderRouter? _commerceProviderRouter;
+  final MosaicTransactionObservationRuntime? _transactionObservationRuntime;
+  StreamSubscription<MosaicCommerceUpdate>? _commerceUpdateSubscription;
   bool _observingLifecycle = false;
 
   void _observeLifecycleIfAvailable() {
@@ -440,6 +508,45 @@ final class Mosaic extends ChangeNotifier with WidgetsBindingObserver {
         : await runtime.diagnostics();
   }
 
+  /// The renderer's fire-and-forget observation sink, or `null` when the
+  /// opt-in is absent. It exposes no way to read a validation outcome, because
+  /// a Transaction Observation is a trigger and never proof.
+  MosaicTransactionObservationSink? get transactionObservations =>
+      _transactionObservationRuntime;
+
+  /// Host consent switch for the Transaction Observation handoff. Turning it
+  /// off clears the queue and deletes the persisted document.
+  Future<void> setTransactionObservation({required bool hostEnabled}) async =>
+      _transactionObservationRuntime?.setCollection(hostEnabled: hostEnabled);
+
+  Future<MosaicTransactionObservationFlushResult>
+      flushTransactionObservations() async {
+    final runtime = _transactionObservationRuntime;
+    return runtime == null
+        ? const MosaicTransactionObservationFlushDisabled()
+        : await runtime.flush();
+  }
+
+  Future<MosaicTransactionObservationDiagnostics>
+      transactionObservationDiagnostics() async {
+    final runtime = _transactionObservationRuntime;
+    return runtime == null
+        ? const MosaicTransactionObservationDiagnostics(
+            enabled: false,
+            queued: 0,
+            queuedBytes: 0,
+            deduplicated: 0,
+            dropped: 0,
+            expired: 0,
+            rejectedReferences: 0,
+            incomplete: 0,
+            permanentlyRejected: 0,
+            retryable: 0,
+            attemptsExhausted: 0,
+          )
+        : await runtime.diagnostics();
+  }
+
   MosaicConfigurationCapabilityRequest get capabilityRequest =>
       MosaicConfigurationCapabilityRequest(
         applicationVersion: configuration.applicationVersion,
@@ -487,6 +594,11 @@ final class Mosaic extends ChangeNotifier with WidgetsBindingObserver {
   @override
   void dispose() {
     if (_observingLifecycle) WidgetsBinding.instance.removeObserver(this);
+    unawaited(_commerceUpdateSubscription?.cancel());
+    _commerceUpdateSubscription = null;
+    if (_transactionObservationRuntime case final runtime?) {
+      unawaited(runtime.disposeRuntime().catchError((Object _) {}));
+    }
     _commerceProviderRouter?.deactivate();
     if (_analyticsRuntime case final runtime?) {
       // Disposal must never surface storage failures as uncaught zone errors.

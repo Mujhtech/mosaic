@@ -26,3 +26,5 @@ export 'src/preview_renderer.dart';
 export 'src/preview_transport.dart';
 export 'src/protocol.dart';
 export 'src/renderer.dart';
+export 'src/transaction_observation.dart';
+export 'src/transaction_observation_transport.dart';

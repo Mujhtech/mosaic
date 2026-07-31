@@ -1,0 +1,679 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:mosaic:protocol:schema:billing-ingestion:v1:observation",
+  "title": "Mosaic Billing Ingestion Contract v1 transaction observation",
+  "description": "Untrusted client reports and trusted server reports that a provider transaction may exist. An observation is a trigger for server-side validation and is never evidence that a transaction is authentic. This schema also declares the shared primitives of Billing Ingestion Contract 1; the submission-response, validation, and transaction-fact schemas reference them.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "billingIngestionContractVersion",
+    "recordType",
+    "payload"
+  ],
+  "properties": {
+    "billingIngestionContractVersion": {
+      "const": "1"
+    },
+    "recordType": {
+      "enum": [
+        "clientTransactionObservation",
+        "serverTransactionObservation"
+      ]
+    },
+    "payload": {}
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "recordType": {
+            "const": "clientTransactionObservation"
+          }
+        },
+        "required": [
+          "recordType"
+        ]
+      },
+      "then": {
+        "properties": {
+          "payload": {
+            "$ref": "#/$defs/clientTransactionObservation"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "recordType": {
+            "const": "serverTransactionObservation"
+          }
+        },
+        "required": [
+          "recordType"
+        ]
+      },
+      "then": {
+        "properties": {
+          "payload": {
+            "$ref": "#/$defs/serverTransactionObservation"
+          }
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "identifier": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+    },
+    "safeText": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 240,
+      "pattern": "^[^\\r\\n\\u0000-\\u001F\\u007F]*$"
+    },
+    "safeProviderCode": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "pattern": "^[^\\r\\n\\u0000-\\u001F\\u007F]*$"
+    },
+    "utcTimestamp": {
+      "type": "string",
+      "maxLength": 32,
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(?:\\.[0-9]{1,6})?Z$"
+    },
+    "digest": {
+      "description": "Lowercase hexadecimal SHA-256 digest with an explicit algorithm prefix.",
+      "type": "string",
+      "minLength": 71,
+      "maxLength": 71,
+      "pattern": "^sha256:[a-f0-9]{64}$"
+    },
+    "validatorVersion": {
+      "description": "Version of the Mosaic validator that produced a record. Required on every validation result and every transaction fact so a validator defect can be scoped and replayed without guessing.",
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 64,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9.+_-]*$"
+    },
+    "mappingVersion": {
+      "description": "Version of the Provider Product mapping generation used by a Resolution Snapshot.",
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 1000000
+    },
+    "recordType": {
+      "description": "The complete, closed record-type set of Billing Ingestion Contract 1. Adding a member is a breaking change requiring contract version 2.",
+      "enum": [
+        "clientTransactionObservation",
+        "serverTransactionObservation",
+        "observationSubmissionResult",
+        "validationResult",
+        "transactionFact",
+        "productResolution",
+        "quarantineRecord"
+      ]
+    },
+    "storePlatform": {
+      "description": "Opaque store platform vocabulary. No StoreKit, Play Billing, SwiftUI, Compose, or Flutter type name appears anywhere in this contract.",
+      "enum": [
+        "apple_app_store",
+        "google_play"
+      ]
+    },
+    "referenceKind": {
+      "description": "Discriminator for every provider reference carried by this contract. app_store_transaction_id is the raw decimal App Store transaction identifier. google_play_token_digest is the SHA-256 digest, over the UTF-8 bytes of the Google Play purchase token, rendered as lowercase hexadecimal; this derivation is a documented cross-SDK contract. google_play_order_id is the optional Google Play order reference.",
+      "enum": [
+        "app_store_transaction_id",
+        "google_play_token_digest",
+        "google_play_order_id"
+      ]
+    },
+    "transactionReference": {
+      "description": "The provider reference a validation is performed against. Raw receipts, signed payloads, JWS representations, purchase tokens, and service-account material are structurally impossible to carry here.",
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "referenceKind",
+            "value"
+          ],
+          "properties": {
+            "referenceKind": {
+              "const": "app_store_transaction_id"
+            },
+            "value": {
+              "description": "Raw decimal App Store transaction identifier, submitted verbatim. Never a JWS representation and never a device-verification value.",
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 24,
+              "pattern": "^[0-9]{1,24}$"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "referenceKind",
+            "value"
+          ],
+          "properties": {
+            "referenceKind": {
+              "const": "google_play_token_digest"
+            },
+            "value": {
+              "description": "SHA-256 over the UTF-8 bytes of the Google Play purchase token, lowercase hexadecimal, unprefixed. The raw purchase token never crosses this contract boundary.",
+              "type": "string",
+              "minLength": 64,
+              "maxLength": 64,
+              "pattern": "^[a-f0-9]{64}$"
+            }
+          }
+        }
+      ]
+    },
+    "providerOrderReference": {
+      "description": "Optional Google Play order reference. It is a join handle only; it is never used as the identity of a transaction fact.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "referenceKind",
+        "value"
+      ],
+      "properties": {
+        "referenceKind": {
+          "const": "google_play_order_id"
+        },
+        "value": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$"
+        }
+      }
+    },
+    "storePlatformReferenceAlignment": {
+      "description": "A record's reference kind must match its store platform. An Apple record additionally may not carry a Google order reference.",
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "storePlatform": {
+                "const": "apple_app_store"
+              }
+            },
+            "required": [
+              "storePlatform"
+            ]
+          },
+          "then": {
+            "properties": {
+              "transactionReference": {
+                "properties": {
+                  "referenceKind": {
+                    "const": "app_store_transaction_id"
+                  }
+                }
+              }
+            },
+            "not": {
+              "required": [
+                "providerOrderReference"
+              ]
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "storePlatform": {
+                "const": "google_play"
+              }
+            },
+            "required": [
+              "storePlatform"
+            ]
+          },
+          "then": {
+            "properties": {
+              "transactionReference": {
+                "properties": {
+                  "referenceKind": {
+                    "const": "google_play_token_digest"
+                  }
+                }
+              }
+            }
+          }
+        }
+      ]
+    },
+    "sourceAuthority": {
+      "description": "The complete, closed source-authority set. Precedence, highest first, when two observations normalize to the same fact identity: provider_notification, trusted_server_observation, reconciliation_discovery, client_observation. manual_revalidation is an operator-initiated re-run rather than a competing authority and may never lower an existing fact's authority.",
+      "enum": [
+        "client_observation",
+        "trusted_server_observation",
+        "provider_notification",
+        "reconciliation_discovery",
+        "manual_revalidation"
+      ]
+    },
+    "nonClientSourceAuthority": {
+      "description": "Source authorities a server-side record may claim. client_observation is deliberately absent: a client observation can only trigger validation, never author a fact.",
+      "enum": [
+        "trusted_server_observation",
+        "provider_notification",
+        "reconciliation_discovery",
+        "manual_revalidation"
+      ]
+    },
+    "trustBasis": {
+      "description": "How trust in a server observation was established. It never names or carries the credential itself.",
+      "enum": [
+        "provider_signature_verified",
+        "mutual_tls",
+        "provider_server_api",
+        "operator_initiated"
+      ]
+    },
+    "storeEnvironment": {
+      "description": "Store Environment, as distinct from Mosaic Environment.",
+      "enum": [
+        "sandbox",
+        "production",
+        "unclassified"
+      ]
+    },
+    "classifiedStoreEnvironment": {
+      "description": "Store Environment on a record that must be classified. unclassified is deliberately absent.",
+      "enum": [
+        "sandbox",
+        "production"
+      ]
+    },
+    "storeEnvironmentBasis": {
+      "enum": [
+        "provider_asserted",
+        "provider_endpoint",
+        "signature_environment",
+        "mosaic_environment_policy",
+        "unknown"
+      ]
+    },
+    "storeEnvironmentClassification": {
+      "description": "Server-derived Store Environment classification. A client never asserts it: no observation submitted by a client carries this property at all.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "classification",
+        "basis"
+      ],
+      "properties": {
+        "classification": {
+          "$ref": "#/$defs/storeEnvironment"
+        },
+        "basis": {
+          "$ref": "#/$defs/storeEnvironmentBasis"
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "basis": {
+                "const": "unknown"
+              }
+            },
+            "required": [
+              "basis"
+            ]
+          },
+          "then": {
+            "properties": {
+              "classification": {
+                "const": "unclassified"
+              }
+            }
+          }
+        }
+      ]
+    },
+    "context": {
+      "description": "SDK context, mirroring the Analytics Event context vocabulary. It carries no Organization, Project, Environment, or Application identity: tenant scope is derived from the authenticated key.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "platform",
+        "sdkFamily",
+        "sdkVersion"
+      ],
+      "properties": {
+        "platform": {
+          "enum": [
+            "ios",
+            "android"
+          ]
+        },
+        "sdkFamily": {
+          "enum": [
+            "flutter",
+            "ios",
+            "android"
+          ]
+        },
+        "sdkVersion": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9.+_-]*$"
+        },
+        "operatingSystemVersion": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9.+_ -]*$"
+        },
+        "applicationVersion": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9.+_-]*$"
+        }
+      }
+    },
+    "correlation": {
+      "description": "Correlation to Analytics Event 1/2 uses the existing opaque handles only. No new cross-contract identifier is introduced and no Analytics contract changes.",
+      "type": "object",
+      "additionalProperties": false,
+      "minProperties": 1,
+      "properties": {
+        "purchaseAttemptId": {
+          "$ref": "#/$defs/identifier"
+        },
+        "providerOperationId": {
+          "$ref": "#/$defs/identifier"
+        },
+        "providerUpdateId": {
+          "$ref": "#/$defs/identifier"
+        }
+      }
+    },
+    "subjectReference": {
+      "description": "Optional host-defined opaque subject reference, 1-256 non-control characters, never Mosaic resource-ID syntax. Defined so that adding it later would not require a contract version bump. Phase 9A never populates or persists it, and no Phase 9A fixture carries it.",
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 256,
+      "pattern": "^[^\\r\\n\\u0000-\\u001F\\u007F]+$"
+    },
+    "monetaryAmount": {
+      "description": "Optional provider-reported amount recorded as a fact. It is not financial accounting, which is excluded from Phase 9 entirely. Phase 9A never populates or persists it, and no Phase 9A fixture carries it.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "currencyCode",
+        "minorUnits",
+        "scale"
+      ],
+      "properties": {
+        "currencyCode": {
+          "type": "string",
+          "pattern": "^[A-Z]{3}$"
+        },
+        "minorUnits": {
+          "type": "integer",
+          "minimum": -999999999999,
+          "maximum": 999999999999
+        },
+        "scale": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 6
+        }
+      }
+    },
+    "recoveryAction": {
+      "enum": [
+        "retry",
+        "reconfigureProviderCredentials",
+        "fixProductMapping",
+        "resolveMappingAmbiguity",
+        "separateStoreEnvironments",
+        "contactProvider",
+        "requestManualRevalidation",
+        "none"
+      ]
+    },
+    "diagnostic": {
+      "description": "Structurally identical to the accepted Commerce Provider diagnostic shape, redefined locally so Billing Ingestion 1 does not inherit another contract's lifecycle. Codes are namespaced billing.<stage>.<condition>. Raw provider error text is forbidden.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "code",
+        "safeMessage",
+        "severity",
+        "retryable",
+        "correlationId"
+      ],
+      "properties": {
+        "code": {
+          "type": "string",
+          "minLength": 3,
+          "maxLength": 96,
+          "pattern": "^[a-z][a-zA-Z0-9]*(?:[._-][a-zA-Z0-9]+)+$"
+        },
+        "safeMessage": {
+          "$ref": "#/$defs/safeText"
+        },
+        "severity": {
+          "enum": [
+            "info",
+            "warning",
+            "error"
+          ]
+        },
+        "retryable": {
+          "type": "boolean"
+        },
+        "retryAfterSeconds": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 86400
+        },
+        "correlationId": {
+          "$ref": "#/$defs/identifier"
+        },
+        "providerCode": {
+          "$ref": "#/$defs/safeProviderCode"
+        },
+        "mosaicProductId": {
+          "$ref": "#/$defs/identifier"
+        },
+        "recoveryAction": {
+          "$ref": "#/$defs/recoveryAction"
+        }
+      }
+    },
+    "diagnostics": {
+      "type": "array",
+      "maxItems": 10,
+      "items": {
+        "$ref": "#/$defs/diagnostic"
+      }
+    },
+    "clientTransactionObservation": {
+      "description": "An untrusted claim that a transaction may exist. It carries no receipt, no signed payload, no purchase token, no credential, no price, no entitlement assertion, no tenant identity, and no Store Environment assertion.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "observationId",
+        "submissionId",
+        "providerId",
+        "storePlatform",
+        "transactionReference",
+        "observedAt",
+        "sourceAuthority",
+        "context"
+      ],
+      "properties": {
+        "observationId": {
+          "$ref": "#/$defs/identifier"
+        },
+        "submissionId": {
+          "description": "Deterministic idempotency key computed by the SDK. Never derived from a timestamp, price, Product, or subject.",
+          "$ref": "#/$defs/identifier"
+        },
+        "providerId": {
+          "$ref": "#/$defs/identifier"
+        },
+        "storePlatform": {
+          "$ref": "#/$defs/storePlatform"
+        },
+        "transactionReference": {
+          "$ref": "#/$defs/transactionReference"
+        },
+        "providerOrderReference": {
+          "$ref": "#/$defs/providerOrderReference"
+        },
+        "observedAt": {
+          "$ref": "#/$defs/utcTimestamp"
+        },
+        "sourceAuthority": {
+          "const": "client_observation"
+        },
+        "context": {
+          "$ref": "#/$defs/context"
+        },
+        "correlation": {
+          "$ref": "#/$defs/correlation"
+        },
+        "claimedMosaicProductId": {
+          "description": "A claim only. The server resolves the Mosaic Product independently; a mismatch is a diagnostic and never an override.",
+          "$ref": "#/$defs/identifier"
+        }
+      },
+      "allOf": [
+        {
+          "$ref": "#/$defs/storePlatformReferenceAlignment"
+        }
+      ]
+    },
+    "serverTransactionObservation": {
+      "description": "An observation Mosaic's server produced or verified itself. It records how trust was established, never the credential that established it, and never a provider notification body.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "observationId",
+        "submissionId",
+        "providerId",
+        "storePlatform",
+        "transactionReference",
+        "sourceAuthority",
+        "trustBasis",
+        "receivedAt"
+      ],
+      "properties": {
+        "observationId": {
+          "$ref": "#/$defs/identifier"
+        },
+        "submissionId": {
+          "$ref": "#/$defs/identifier"
+        },
+        "providerId": {
+          "$ref": "#/$defs/identifier"
+        },
+        "storePlatform": {
+          "$ref": "#/$defs/storePlatform"
+        },
+        "transactionReference": {
+          "$ref": "#/$defs/transactionReference"
+        },
+        "providerOrderReference": {
+          "$ref": "#/$defs/providerOrderReference"
+        },
+        "sourceAuthority": {
+          "$ref": "#/$defs/nonClientSourceAuthority"
+        },
+        "trustBasis": {
+          "$ref": "#/$defs/trustBasis"
+        },
+        "receivedAt": {
+          "$ref": "#/$defs/utcTimestamp"
+        },
+        "providerReportedAt": {
+          "$ref": "#/$defs/utcTimestamp"
+        },
+        "providerNotificationReference": {
+          "description": "Opaque provider notification identifier. Never the notification body.",
+          "$ref": "#/$defs/safeProviderCode"
+        },
+        "storeEnvironmentClassification": {
+          "$ref": "#/$defs/storeEnvironmentClassification"
+        },
+        "correlation": {
+          "$ref": "#/$defs/correlation"
+        },
+        "originatingObservationId": {
+          "description": "Set when this trusted observation was triggered by an earlier observation. Referencing a client observation never raises that observation's authority.",
+          "$ref": "#/$defs/identifier"
+        },
+        "purchaseToken": {
+          "description": "The full Google Play purchase token, permitted ONLY on a trusted server observation submitted server-to-server with a Mosaic secret key. A public SDK can never carry it: clientTransactionObservation has no such property and rejects it as an unknown field. This is a transaction reference the buyer's own purchase produced, not a Mosaic provider credential; service-account keys, signing keys, and Authorization values remain forbidden everywhere. It is encrypted at rest on receipt, never logged, never returned on any read, and never relieves the record of full provider validation. When present it must digest to transactionReference.value.",
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 4096,
+          "pattern": "^[^\\r\\n\\u0000-\\u001F\\u007F]+$"
+        }
+      },
+      "allOf": [
+        {
+          "$ref": "#/$defs/storePlatformReferenceAlignment"
+        },
+        {
+          "if": {
+            "required": [
+              "purchaseToken"
+            ]
+          },
+          "then": {
+            "properties": {
+              "sourceAuthority": {
+                "const": "trusted_server_observation"
+              },
+              "storePlatform": {
+                "const": "google_play"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "sourceAuthority": {
+                "const": "provider_notification"
+              }
+            },
+            "required": [
+              "sourceAuthority"
+            ]
+          },
+          "then": {
+            "properties": {
+              "trustBasis": {
+                "enum": [
+                  "provider_signature_verified",
+                  "mutual_tls"
+                ]
+              }
+            }
+          }
+        }
+      ]
+    }
+  }
+}

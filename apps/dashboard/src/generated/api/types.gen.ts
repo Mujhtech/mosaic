@@ -4,6 +4,498 @@ export type ClientOptions = {
     baseUrl: `${string}://${string}` | (string & {});
 };
 
+/**
+ * The provider reference a validation is performed against. Raw receipts, signed payloads,
+ * JWS representations, purchase tokens, and service-account material are structurally
+ * impossible to carry here: an Apple value is at most 24 decimal digits and a Google value
+ * is exactly 64 lowercase hexadecimal characters.
+ *
+ */
+export type TransactionReference = {
+    referenceKind: 'app_store_transaction_id' | 'google_play_token_digest';
+    value: string;
+};
+
+/**
+ * Optional Google Play order reference. A join handle only; never the identity of a Transaction Fact, because promotional purchases have none.
+ */
+export type ProviderOrderReference = {
+    referenceKind: 'google_play_order_id';
+    value: string;
+};
+
+/**
+ * SDK context. It carries no Organization, Project, Environment, or Application identity: tenant scope is derived from the authenticated key.
+ */
+export type ObservationContext = {
+    platform: 'ios' | 'android';
+    sdkFamily: 'flutter' | 'ios' | 'android';
+    sdkVersion: string;
+    operatingSystemVersion?: string;
+    applicationVersion?: string;
+};
+
+/**
+ * Correlation to Analytics Event 1/2 through the existing opaque handles only.
+ */
+export type ObservationCorrelation = {
+    purchaseAttemptId?: string;
+    providerOperationId?: string;
+    providerUpdateId?: string;
+};
+
+/**
+ * Server-derived Store Environment classification. A client never asserts it: no observation submitted by a client carries this property at all.
+ */
+export type StoreEnvironmentClassification = {
+    classification: 'sandbox' | 'production' | 'unclassified';
+    basis: 'provider_asserted' | 'provider_endpoint' | 'signature_environment' | 'mosaic_environment_policy' | 'unknown';
+};
+
+/**
+ * The Billing Ingestion Contract v1 clientTransactionObservation record, accepted verbatim
+ * so one platform-neutral document travels from four SDKs to one server.
+ *
+ */
+export type ClientTransactionObservationRecord = {
+    billingIngestionContractVersion: '1';
+    recordType: 'clientTransactionObservation';
+    payload: ClientTransactionObservation;
+};
+
+/**
+ * An untrusted claim that a transaction may exist. It carries no receipt, no signed
+ * payload, no purchase token, no credential, no price, no entitlement assertion, no tenant
+ * identity, and no Store Environment assertion.
+ *
+ * There is deliberately no storeEnvironmentClassification member, and additionalProperties
+ * is false, so a client-asserted Store Environment is rejected with `unknown_field` rather
+ * than ignored. Classification comes only from server-side validation.
+ *
+ * sourceAuthority must be `client_observation`: a public SDK key proves only that a client
+ * sent the document, and any higher authority claimed here is refused with
+ * `authority_not_allowed`.
+ *
+ */
+export type ClientTransactionObservation = {
+    observationId: string;
+    /**
+     * Deterministic idempotency key computed by the SDK. Never derived from a timestamp, price, Product, or subject.
+     */
+    submissionId: string;
+    providerId: string;
+    storePlatform: 'apple_app_store' | 'google_play';
+    transactionReference: TransactionReference;
+    providerOrderReference?: ProviderOrderReference;
+    /**
+     * UTC timestamp, RFC 3339 with a literal Z.
+     */
+    observedAt: string;
+    sourceAuthority: 'client_observation';
+    context: ObservationContext;
+    correlation?: ObservationCorrelation;
+    /**
+     * A claim only. The server resolves the Mosaic Product independently; a mismatch is a diagnostic and never an override.
+     */
+    claimedMosaicProductId?: string;
+};
+
+export type ServerTransactionObservationRecord = {
+    billingIngestionContractVersion: '1';
+    recordType: 'serverTransactionObservation';
+    payload: ServerTransactionObservation;
+};
+
+/**
+ * A trusted app-backend observation. It records how trust was established, never the
+ * credential that established it. Like the client record it carries no purchase token: the
+ * reference is the same digest a client would send.
+ *
+ * On this endpoint sourceAuthority must be `trusted_server_observation`. A Mosaic secret
+ * server key proves a trusted backend sent the document; it proves nothing about a provider
+ * having signed anything, so `provider_notification`, `reconciliation_discovery`, and
+ * `manual_revalidation` — authorities only Mosaic's own pipeline may author — are refused
+ * with `authority_not_allowed`.
+ *
+ */
+export type ServerTransactionObservation = {
+    observationId: string;
+    submissionId: string;
+    providerId: string;
+    storePlatform: 'apple_app_store' | 'google_play';
+    transactionReference: TransactionReference;
+    providerOrderReference?: ProviderOrderReference;
+    sourceAuthority: 'trusted_server_observation';
+    trustBasis: 'provider_signature_verified' | 'mutual_tls' | 'provider_server_api' | 'operator_initiated';
+    /**
+     * The full Google Play purchase token, permitted only here, only on a `google_play`
+     * record, and only under `trusted_server_observation` authority. The client record has
+     * no such member and rejects one as `unknown_field`.
+     *
+     * It is a transaction reference the buyer's own purchase produced, not a Mosaic provider
+     * credential; service-account keys, signing keys, and Authorization values remain
+     * forbidden everywhere. It is encrypted at rest on receipt, never logged, never returned
+     * on any read, and never relieves the record of full provider validation.
+     *
+     * When present it MUST SHA-256-digest to this record's own `transactionReference.value`.
+     * Without that binding a caller could file a real token under a different transaction's
+     * reference, and Mosaic would validate the token, get a genuine answer from Google, and
+     * record it as a fact about the transaction the reference named. A mismatch is rejected
+     * with `provider_reference_malformed`.
+     *
+     * It exists because a digest cannot be reversed: without a token a Google observation
+     * has nothing to validate against and can only wait for the notification.
+     *
+     */
+    purchaseToken?: string;
+    receivedAt: string;
+    providerReportedAt?: string;
+    /**
+     * Opaque provider notification identifier. Never the notification body.
+     */
+    providerNotificationReference?: string;
+    storeEnvironmentClassification?: StoreEnvironmentClassification;
+    correlation?: ObservationCorrelation;
+    /**
+     * Referencing a client observation never raises that observation's authority.
+     */
+    originatingObservationId?: string;
+};
+
+/**
+ * The Billing Ingestion Contract v1 observationSubmissionResult record, returned verbatim
+ * by both observation endpoints so every SDK decodes one platform-neutral shape. Validated
+ * against protocol/schema/billing-ingestion/v1/submission-response.schema.json.
+ *
+ */
+export type ObservationSubmissionResultRecord = {
+    billingIngestionContractVersion: '1';
+    recordType: 'observationSubmissionResult';
+    payload: ObservationSubmissionResult;
+};
+
+/**
+ * The status set contains no member named validated, verified, confirmed, or entitled.
+ * Acceptance means the observation is well formed and queued and asserts nothing about the
+ * transaction being real. A reader must never grant access, unlock content, or emit a
+ * provider-confirmed Analytics Event on accepted_for_validation.
+ *
+ */
+export type ObservationSubmissionResult = {
+    submissionId: string;
+    /**
+     * UTC timestamp, RFC 3339 with a literal Z and at most microsecond precision.
+     */
+    receivedAt: string;
+    status: 'accepted_for_validation' | 'duplicate' | 'permanently_rejected' | 'retryable_failure';
+    /**
+     * Required for permanently_rejected and retryable_failure, absent otherwise.
+     */
+    code?: 'observation_schema_invalid' | 'unsupported_contract_version' | 'unsupported_record_type' | 'unknown_field' | 'invalid_identifier' | 'invalid_timestamp' | 'observed_at_too_far_future' | 'observation_expired' | 'observation_too_large' | 'provider_reference_malformed' | 'provider_reference_too_long' | 'reference_kind_not_supported_for_platform' | 'credential_shaped_value_rejected' | 'sensitive_value_rejected' | 'tenant_field_forbidden' | 'authority_not_allowed' | 'unknown_provider' | 'billing_not_enabled_for_environment' | 'observation_id_conflict' | 'rate_limited' | 'storage_temporarily_unavailable' | 'service_temporarily_unavailable' | 'ingestion_timeout' | 'validation_backlog_saturated';
+    /**
+     * Advisory hint on retryable_failure only.
+     */
+    retryAfterSeconds?: number;
+    /**
+     * Advisory hint on accepted_for_validation only. Says when validation is likely to run, never that it succeeded.
+     */
+    estimatedValidationDelaySeconds?: number;
+};
+
+export type StoreServerCredentialApplication = {
+    applicationId?: string;
+    platform?: 'ios' | 'android';
+    /**
+     * Apple bundle id or Google package name. The verified payload must match one of these.
+     */
+    providerApplicationIdentifier?: string;
+};
+
+/**
+ * Encrypted Apple or Google server credential. Secret material is never returned.
+ */
+export type StoreServerCredential = {
+    id?: string;
+    projectId?: string;
+    environmentId?: string;
+    provider?: 'app_store' | 'google_play';
+    /**
+     * Store Environment
+     */
+    storeEnvironment?: 'sandbox' | 'production';
+    name?: string;
+    status?: 'active' | 'revoked';
+    healthStatus?: 'untested' | 'healthy' | 'degraded' | 'unavailable' | 'revoked';
+    appleIssuerId?: string;
+    appleKeyId?: string;
+    googleClientEmail?: string;
+    googlePubSubProjectId?: string;
+    googlePubSubSubscriptionId?: string;
+    applications?: Array<StoreServerCredentialApplication>;
+    lastErrorCode?: string;
+    lastTestedAt?: string;
+    createdAt?: string;
+    rotatedAt?: string;
+    revokedAt?: string;
+    updatedAt?: string;
+};
+
+export type StoreServerCredentialWithEndpoint = StoreServerCredential & {
+    /**
+     * Full Apple notification endpoint including the intake token. Returned only on
+     * create and rotate. The token is stored as SHA-256 only and cannot be recovered.
+     *
+     */
+    notificationEndpointUrl?: string;
+};
+
+export type CreateStoreServerCredentialRequest = {
+    environmentId: string;
+    provider: 'app_store' | 'google_play';
+    /**
+     * Must align with the Environment mode; sandbox and production never mix.
+     */
+    storeEnvironment: 'sandbox' | 'production';
+    name: string;
+    /**
+     * Write-only. Apple .p8 PEM or Google service-account JSON. Validated before persistence, never returned.
+     */
+    secret: string;
+    appleIssuerId?: string;
+    appleKeyId?: string;
+    googleClientEmail?: string;
+    googlePubSubProjectId?: string;
+    googlePubSubSubscriptionId?: string;
+    applications: Array<StoreServerCredentialApplication>;
+};
+
+/**
+ * A normalized, provider-independent statement that a store confirmed something
+ * happened. Never a subscription, an entitlement, or an access grant. Carries no
+ * customer identity, price, or currency.
+ *
+ */
+export type TransactionFact = {
+    id?: string;
+    projectId?: string;
+    environmentId?: string;
+    applicationId?: string;
+    provider?: 'app_store' | 'google_play';
+    storeEnvironment?: 'sandbox' | 'production';
+    providerTransactionId?: string;
+    providerOriginalTransactionId?: string;
+    transactionType?: 'auto_renewable_subscription' | 'non_consumable';
+    factKind?: 'initial_purchase' | 'renewal' | 'one_time_purchase' | 'plan_change' | 'offer_redeemed' | 'refund' | 'revocation' | 'expiration' | 'grace_period_start' | 'billing_retry_start' | 'cancellation_scheduled' | 'auto_renew_disabled' | 'auto_renew_enabled' | 'purchase_superseded' | 'paused' | 'resumed';
+    occurredAt?: string;
+    /**
+     * Provider-stated validity only. Never interpreted as customer access.
+     */
+    periodStartAt?: string;
+    /**
+     * Provider-stated validity only. Never interpreted as customer access.
+     */
+    periodEndAt?: string;
+    revokedAt?: string;
+    refundedAt?: string;
+    renewalExpected?: boolean;
+    isTestTransaction?: boolean;
+    providerProductIdentifier?: string;
+    providerBasePlanIdentifier?: string;
+    providerOfferIdentifier?: string;
+    resolutionState?: 'active_mapping' | 'archived_mapping' | 'replacement_chain' | 'unresolved';
+    mosaicProductId?: string;
+    providerProductMappingId?: string;
+    /**
+     * Resolution Snapshot version
+     */
+    resolvedMappingVersion?: number;
+    validatorVersion?: number;
+    factVersion?: number;
+    sourceRawInputId?: string;
+    validationAttemptId?: string;
+    recordedAt?: string;
+};
+
+/**
+ * One append-only record of one validation try. No provider response body is ever stored.
+ */
+export type ValidationAttempt = {
+    id?: string;
+    projectId?: string;
+    environmentId?: string;
+    rawInputId?: string;
+    credentialId?: string;
+    attemptNumber?: number;
+    validatorVersion?: number;
+    startedAt?: string;
+    completedAt?: string;
+    outcome?: 'validated' | 'recorded_no_fact' | 'quarantined' | 'retryable_failure' | 'permanently_failed';
+    retryable?: boolean;
+    failureCategory?: 'transient' | 'rate_limited' | 'auth' | 'quota' | 'not_found_retryable' | 'not_found_terminal' | 'invalid' | 'signature' | 'resolution' | 'configuration';
+    /**
+     * Mosaic-owned stable code.
+     */
+    diagnosticCode?: string;
+    /**
+     * Provider machine code
+     */
+    providerCode?: string;
+    providerHttpStatus?: number;
+    storeEnvironment?: 'sandbox' | 'production' | 'unclassified';
+    latencyMs?: number;
+    replayOfAttemptId?: string;
+    correlationId?: string;
+};
+
+export type BillingLedgerEntry = {
+    id?: string;
+    projectId?: string;
+    environmentId?: string;
+    entryType?: 'input_received' | 'input_authenticated' | 'input_duplicate_detected' | 'validation_started' | 'validation_succeeded' | 'validation_failed' | 'product_resolved' | 'product_resolution_failed' | 'fact_recorded' | 'fact_deduplicated' | 'input_quarantined' | 'quarantine_closed' | 'reconciliation_started' | 'reconciliation_discovery' | 'reconciliation_completed' | 'replay_started' | 'replay_completed' | 'revalidation_completed' | 'credential_health_changed';
+    rawInputId?: string;
+    validationAttemptId?: string;
+    transactionFactId?: string;
+    credentialId?: string;
+    correlationId?: string;
+    occurredAt?: string;
+};
+
+/**
+ * An input that cannot safely proceed. The only status that follows a successful
+ * revalidation is closed_after_success, and it always names the attempt that justified
+ * it. There is no status, field, or action meaning an operator declared the input valid.
+ *
+ */
+export type QuarantineRecord = {
+    id?: string;
+    projectId?: string;
+    environmentId?: string;
+    rawInputId?: string;
+    applicationId?: string;
+    provider?: 'app_store' | 'google_play';
+    /**
+     * Store Environment of the quarantined input, always distinct from the Mosaic
+     * Environment. Never absent: an input whose environment was not classified before it
+     * quarantined reports `unclassified` explicitly, because a missing value on an operator
+     * surface reads as production to a careless eye.
+     *
+     */
+    storeEnvironment?: 'sandbox' | 'production' | 'unclassified';
+    /**
+     * The store Product the quarantined input named, carried from the input's most recent
+     * resolution attempt. For the common `product_unknown` case it is the single most
+     * actionable field on the record: it is exactly what the operator has to create a mapping
+     * for.
+     *
+     */
+    providerProductIdentifier?: string;
+    reasonCode?: 'signature_invalid' | 'application_mismatch' | 'environment_mismatch' | 'store_environment_mismatch' | 'credential_unavailable' | 'credential_revoked' | 'missing_validation_credential' | 'product_unknown' | 'product_ambiguous' | 'cross_environment_mismatch' | 'unsupported_product_type' | 'unsupported_transaction_type' | 'malformed_reference' | 'input_content_conflict' | 'replay_conflict' | 'provider_permanently_failed' | 'validation_exhausted';
+    severity?: 'warning' | 'error' | 'security';
+    scopes?: Array<string>;
+    status?: 'open' | 'retrying' | 'closed_after_success' | 'closed_superseded';
+    attemptCount?: number;
+    firstSeenAt?: string;
+    lastAttemptAt?: string;
+    /**
+     * The successful attempt that justified closure.
+     */
+    closingAttemptId?: string;
+    supersededByRecordId?: string;
+    closedAt?: string;
+    diagnosticCode?: string;
+};
+
+export type ReconciliationRun = {
+    id?: string;
+    projectId?: string;
+    environmentId?: string;
+    credentialId?: string;
+    provider?: 'app_store' | 'google_play';
+    trigger?: 'scheduled' | 'manual';
+    strategy?: 'apple_notification_history' | 'apple_transaction_history' | 'google_token_requery';
+    status?: 'queued' | 'leased' | 'completed' | 'partial' | 'failed';
+    windowStart?: string;
+    windowEnd?: string;
+    examinedCount?: number;
+    discoveredCount?: number;
+    duplicateCount?: number;
+    /**
+     * Discoveries that contradicted a fact already on record, as distinct from discoveries
+     * that were merely new. Gate 9A requires reconciliation to detect missing *or*
+     * conflicting state; without a separate counter the two are indistinguishable. Nothing is
+     * overwritten — both facts stand — and each conflict also opens a quarantine record.
+     *
+     */
+    conflictCount?: number;
+    failureCount?: number;
+    lastErrorCode?: string;
+    createdAt?: string;
+    startedAt?: string;
+    completedAt?: string;
+};
+
+export type CreateReconciliationRunRequest = {
+    credentialId: string;
+    provider: 'app_store' | 'google_play';
+    /**
+     * apple_transaction_history is deliberately absent: the worker has no run loop for it, so
+     * accepting it produced a 202 followed by a run that failed with `unsupported_strategy`
+     * and no explanation anywhere in the product. It remains in the stored enumeration for
+     * forward compatibility and is rejected at the API boundary until the loop exists.
+     *
+     */
+    strategy: 'apple_notification_history' | 'google_token_requery';
+    windowStart: string;
+    /**
+     * The window may not exceed 180 days
+     */
+    windowEnd: string;
+};
+
+export type ReplayJob = {
+    id?: string;
+    projectId?: string;
+    environmentId?: string;
+    kind?: 'replay' | 'revalidation';
+    rawInputId?: string;
+    windowStart?: string;
+    windowEnd?: string;
+    validatorVersion?: number;
+    status?: 'queued' | 'leased' | 'completed' | 'failed';
+    comparisonResult?: 'identical' | 'new_facts' | 'conflicting' | 'still_failing';
+    examinedCount?: number;
+    unchangedCount?: number;
+    newFactCount?: number;
+    conflictCount?: number;
+    lastErrorCode?: string;
+    createdAt?: string;
+    completedAt?: string;
+};
+
+/**
+ * Supply either a single rawInputId or a bounded window, never both.
+ */
+export type CreateReplayJobRequest = {
+    kind: 'replay' | 'revalidation';
+    rawInputId?: string;
+    windowStart?: string;
+    windowEnd?: string;
+    validatorVersion?: number;
+};
+
+export type BillingHealth = {
+    environmentId?: string;
+    billingEnabled?: boolean;
+    credentialCount?: number;
+    unhealthyCredentials?: number;
+    queueDepth?: number;
+    oldestQueuedAgeSeconds?: number;
+    openQuarantineCount?: number;
+    factCount?: number;
+    lastFactRecordedAt?: string;
+    lastReconciliationAt?: string;
+};
+
 export type CreateExperimentRequest = {
     placementId: string;
     name: string;
@@ -2011,6 +2503,16 @@ export type ApplicationId = string;
 export type ProviderConnectionId = string;
 
 export type ProviderMappingId = string;
+
+export type StoreCredentialId = string;
+
+export type QuarantineRecordId = string;
+
+export type BillingProviderFilter = 'app_store' | 'google_play';
+
+export type BillingFrom = string;
+
+export type BillingTo = string;
 
 export type ApiKeyId = string;
 
@@ -7079,3 +7581,869 @@ export type DownloadAnalyticsJobResponses = {
 };
 
 export type DownloadAnalyticsJobResponse = DownloadAnalyticsJobResponses[keyof DownloadAnalyticsJobResponses];
+
+export type ReceiveAppleStoreNotificationData = {
+    body: {
+        /**
+         * Apple JWS notification payload. Never logged or echoed.
+         */
+        signedPayload: string;
+    };
+    path: {
+        /**
+         * One-time intake token issued with the credential.
+         */
+        intakeToken: string;
+    };
+    query?: never;
+    url: '/v1/billing/apple/notifications/{intakeToken}';
+};
+
+export type ReceiveAppleStoreNotificationErrors = {
+    /**
+     * Stable machine-readable failure.
+     */
+    404: ErrorEnvelope;
+    /**
+     * Stable machine-readable failure.
+     */
+    503: ErrorEnvelope;
+};
+
+export type ReceiveAppleStoreNotificationError = ReceiveAppleStoreNotificationErrors[keyof ReceiveAppleStoreNotificationErrors];
+
+export type ReceiveAppleStoreNotificationResponses = {
+    /**
+     * The notification was durably recorded and queued for validation.
+     */
+    202: {
+        data?: {
+            status?: 'accepted';
+        };
+    };
+};
+
+export type ReceiveAppleStoreNotificationResponse = ReceiveAppleStoreNotificationResponses[keyof ReceiveAppleStoreNotificationResponses];
+
+export type SubmitTransactionObservationData = {
+    body: ClientTransactionObservationRecord;
+    path?: never;
+    query?: never;
+    url: '/v1/sdk/billing/observations';
+};
+
+export type SubmitTransactionObservationErrors = {
+    /**
+     * Stable machine-readable failure.
+     */
+    401: ErrorEnvelope;
+    /**
+     * Resubmitting the identical document cannot succeed. The SDK queue should drop it.
+     */
+    422: ObservationSubmissionResultRecord;
+    /**
+     * Transient. Resubmit the identical document later; Retry-After carries the hint.
+     */
+    429: ObservationSubmissionResultRecord;
+    /**
+     * Transient. Resubmit the identical document later; Retry-After carries the hint.
+     */
+    503: ObservationSubmissionResultRecord;
+};
+
+export type SubmitTransactionObservationError = SubmitTransactionObservationErrors[keyof SubmitTransactionObservationErrors];
+
+export type SubmitTransactionObservationResponses = {
+    /**
+     * The submission was already recorded. A duplicate is idempotent, not an error.
+     */
+    200: ObservationSubmissionResultRecord;
+    /**
+     * The observation is well formed and queued for validation. Nothing more: the store has not been consulted when this response is written.
+     */
+    202: ObservationSubmissionResultRecord;
+};
+
+export type SubmitTransactionObservationResponse = SubmitTransactionObservationResponses[keyof SubmitTransactionObservationResponses];
+
+export type SubmitServerTransactionObservationData = {
+    body: ServerTransactionObservationRecord;
+    path?: never;
+    query?: never;
+    url: '/v1/billing/server/observations';
+};
+
+export type SubmitServerTransactionObservationErrors = {
+    /**
+     * Stable machine-readable failure.
+     */
+    401: ErrorEnvelope;
+    /**
+     * Resubmitting the identical document cannot succeed. The SDK queue should drop it.
+     */
+    422: ObservationSubmissionResultRecord;
+    /**
+     * Transient. Resubmit the identical document later; Retry-After carries the hint.
+     */
+    429: ObservationSubmissionResultRecord;
+    /**
+     * Transient. Resubmit the identical document later; Retry-After carries the hint.
+     */
+    503: ObservationSubmissionResultRecord;
+};
+
+export type SubmitServerTransactionObservationError = SubmitServerTransactionObservationErrors[keyof SubmitServerTransactionObservationErrors];
+
+export type SubmitServerTransactionObservationResponses = {
+    /**
+     * The submission was already recorded. A duplicate is idempotent, not an error.
+     */
+    200: ObservationSubmissionResultRecord;
+    /**
+     * The observation is well formed and queued for validation. Nothing more: the store has not been consulted when this response is written.
+     */
+    202: ObservationSubmissionResultRecord;
+};
+
+export type SubmitServerTransactionObservationResponse = SubmitServerTransactionObservationResponses[keyof SubmitServerTransactionObservationResponses];
+
+export type UpdateBillingSettingsData = {
+    body: {
+        billingEnabled: boolean;
+    };
+    path: {
+        projectId: string;
+    };
+    query?: never;
+    url: '/v1/projects/{projectId}/billing/settings';
+};
+
+export type UpdateBillingSettingsErrors = {
+    /**
+     * Stable machine-readable failure.
+     */
+    403: ErrorEnvelope;
+    /**
+     * Stable machine-readable failure.
+     */
+    404: ErrorEnvelope;
+    /**
+     * Stable machine-readable failure.
+     */
+    409: ErrorEnvelope;
+};
+
+export type UpdateBillingSettingsError = UpdateBillingSettingsErrors[keyof UpdateBillingSettingsErrors];
+
+export type UpdateBillingSettingsResponses = {
+    /**
+     * Updated settings.
+     */
+    200: {
+        data?: {
+            billingEnabled?: boolean;
+        };
+    };
+};
+
+export type UpdateBillingSettingsResponse = UpdateBillingSettingsResponses[keyof UpdateBillingSettingsResponses];
+
+export type ListStoreServerCredentialsData = {
+    body?: never;
+    path: {
+        projectId: string;
+    };
+    query?: never;
+    url: '/v1/projects/{projectId}/billing/store-credentials';
+};
+
+export type ListStoreServerCredentialsErrors = {
+    /**
+     * Stable machine-readable failure.
+     */
+    403: ErrorEnvelope;
+};
+
+export type ListStoreServerCredentialsError = ListStoreServerCredentialsErrors[keyof ListStoreServerCredentialsErrors];
+
+export type ListStoreServerCredentialsResponses = {
+    /**
+     * Store Server Credentials.
+     */
+    200: {
+        data?: {
+            items?: Array<StoreServerCredential>;
+        };
+    };
+};
+
+export type ListStoreServerCredentialsResponse = ListStoreServerCredentialsResponses[keyof ListStoreServerCredentialsResponses];
+
+export type CreateStoreServerCredentialData = {
+    body: CreateStoreServerCredentialRequest;
+    path: {
+        projectId: string;
+    };
+    query?: never;
+    url: '/v1/projects/{projectId}/billing/store-credentials';
+};
+
+export type CreateStoreServerCredentialErrors = {
+    /**
+     * Stable machine-readable failure.
+     */
+    403: ErrorEnvelope;
+    /**
+     * Stable machine-readable failure.
+     */
+    409: ErrorEnvelope;
+    /**
+     * Stable machine-readable failure.
+     */
+    422: ErrorEnvelope;
+};
+
+export type CreateStoreServerCredentialError = CreateStoreServerCredentialErrors[keyof CreateStoreServerCredentialErrors];
+
+export type CreateStoreServerCredentialResponses = {
+    /**
+     * Store Server Credential including the one-time notification endpoint URL. This is the only response that ever carries it.
+     */
+    201: {
+        data?: StoreServerCredentialWithEndpoint;
+    };
+};
+
+export type CreateStoreServerCredentialResponse = CreateStoreServerCredentialResponses[keyof CreateStoreServerCredentialResponses];
+
+export type GetStoreServerCredentialData = {
+    body?: never;
+    path: {
+        projectId: string;
+        credentialId: string;
+    };
+    query?: never;
+    url: '/v1/projects/{projectId}/billing/store-credentials/{credentialId}';
+};
+
+export type GetStoreServerCredentialErrors = {
+    /**
+     * Stable machine-readable failure.
+     */
+    403: ErrorEnvelope;
+    /**
+     * Stable machine-readable failure.
+     */
+    404: ErrorEnvelope;
+};
+
+export type GetStoreServerCredentialError = GetStoreServerCredentialErrors[keyof GetStoreServerCredentialErrors];
+
+export type GetStoreServerCredentialResponses = {
+    /**
+     * Store Server Credential without secret material or endpoint URL.
+     */
+    200: {
+        data?: StoreServerCredential;
+    };
+};
+
+export type GetStoreServerCredentialResponse = GetStoreServerCredentialResponses[keyof GetStoreServerCredentialResponses];
+
+export type RotateStoreServerCredentialData = {
+    body: {
+        /**
+         * Write-only. Never returned.
+         */
+        secret: string;
+    };
+    path: {
+        projectId: string;
+        credentialId: string;
+    };
+    query?: never;
+    url: '/v1/projects/{projectId}/billing/store-credentials/{credentialId}/rotate';
+};
+
+export type RotateStoreServerCredentialErrors = {
+    /**
+     * Stable machine-readable failure.
+     */
+    403: ErrorEnvelope;
+    /**
+     * Stable machine-readable failure.
+     */
+    404: ErrorEnvelope;
+    /**
+     * Stable machine-readable failure.
+     */
+    409: ErrorEnvelope;
+};
+
+export type RotateStoreServerCredentialError = RotateStoreServerCredentialErrors[keyof RotateStoreServerCredentialErrors];
+
+export type RotateStoreServerCredentialResponses = {
+    /**
+     * Store Server Credential including the one-time notification endpoint URL. This is the only response that ever carries it.
+     */
+    200: {
+        data?: StoreServerCredentialWithEndpoint;
+    };
+};
+
+export type RotateStoreServerCredentialResponse = RotateStoreServerCredentialResponses[keyof RotateStoreServerCredentialResponses];
+
+export type RevokeStoreServerCredentialData = {
+    body?: never;
+    path: {
+        projectId: string;
+        credentialId: string;
+    };
+    query?: never;
+    url: '/v1/projects/{projectId}/billing/store-credentials/{credentialId}/revoke';
+};
+
+export type RevokeStoreServerCredentialErrors = {
+    /**
+     * Stable machine-readable failure.
+     */
+    403: ErrorEnvelope;
+    /**
+     * Stable machine-readable failure.
+     */
+    404: ErrorEnvelope;
+};
+
+export type RevokeStoreServerCredentialError = RevokeStoreServerCredentialErrors[keyof RevokeStoreServerCredentialErrors];
+
+export type RevokeStoreServerCredentialResponses = {
+    /**
+     * Store Server Credential without secret material or endpoint URL.
+     */
+    200: {
+        data?: StoreServerCredential;
+    };
+};
+
+export type RevokeStoreServerCredentialResponse = RevokeStoreServerCredentialResponses[keyof RevokeStoreServerCredentialResponses];
+
+export type TestStoreServerCredentialData = {
+    body?: never;
+    path: {
+        projectId: string;
+        credentialId: string;
+    };
+    query?: never;
+    url: '/v1/projects/{projectId}/billing/store-credentials/{credentialId}/test';
+};
+
+export type TestStoreServerCredentialErrors = {
+    /**
+     * Stable machine-readable failure.
+     */
+    403: ErrorEnvelope;
+    /**
+     * Stable machine-readable failure.
+     */
+    404: ErrorEnvelope;
+    /**
+     * Stable machine-readable failure.
+     */
+    429: ErrorEnvelope;
+};
+
+export type TestStoreServerCredentialError = TestStoreServerCredentialErrors[keyof TestStoreServerCredentialErrors];
+
+export type TestStoreServerCredentialResponses = {
+    /**
+     * Store Server Credential without secret material or endpoint URL.
+     */
+    200: {
+        data?: StoreServerCredential;
+    };
+};
+
+export type TestStoreServerCredentialResponse = TestStoreServerCredentialResponses[keyof TestStoreServerCredentialResponses];
+
+export type ListTransactionFactsData = {
+    body?: never;
+    path: {
+        projectId: string;
+        environmentId: string;
+    };
+    query?: {
+        /**
+         * Opaque cursor from the immediately preceding list response. Malformed or stale values return validation_failed.
+         */
+        cursor?: string;
+        limit?: number;
+        provider?: 'app_store' | 'google_play';
+        from?: string;
+        to?: string;
+    };
+    url: '/v1/projects/{projectId}/environments/{environmentId}/billing/facts';
+};
+
+export type ListTransactionFactsErrors = {
+    /**
+     * Stable machine-readable failure.
+     */
+    403: ErrorEnvelope;
+    /**
+     * Stable machine-readable failure.
+     */
+    404: ErrorEnvelope;
+};
+
+export type ListTransactionFactsError = ListTransactionFactsErrors[keyof ListTransactionFactsErrors];
+
+export type ListTransactionFactsResponses = {
+    /**
+     * Transaction Facts.
+     */
+    200: {
+        data?: {
+            items?: Array<TransactionFact>;
+            nextCursor?: string;
+        };
+    };
+};
+
+export type ListTransactionFactsResponse = ListTransactionFactsResponses[keyof ListTransactionFactsResponses];
+
+export type ListValidationAttemptsData = {
+    body?: never;
+    path: {
+        projectId: string;
+        environmentId: string;
+    };
+    query?: {
+        /**
+         * Opaque cursor from the immediately preceding list response. Malformed or stale values return validation_failed.
+         */
+        cursor?: string;
+        limit?: number;
+        status?: 'validated' | 'recorded_no_fact' | 'quarantined' | 'retryable_failure' | 'permanently_failed';
+        /**
+         * Narrow the list to one input's attempt history.
+         */
+        rawInputId?: string;
+    };
+    url: '/v1/projects/{projectId}/environments/{environmentId}/billing/validation-attempts';
+};
+
+export type ListValidationAttemptsErrors = {
+    /**
+     * Stable machine-readable failure.
+     */
+    403: ErrorEnvelope;
+    /**
+     * Stable machine-readable failure.
+     */
+    404: ErrorEnvelope;
+};
+
+export type ListValidationAttemptsError = ListValidationAttemptsErrors[keyof ListValidationAttemptsErrors];
+
+export type ListValidationAttemptsResponses = {
+    /**
+     * Validation Attempts.
+     */
+    200: {
+        data?: {
+            items?: Array<ValidationAttempt>;
+            nextCursor?: string;
+        };
+    };
+};
+
+export type ListValidationAttemptsResponse = ListValidationAttemptsResponses[keyof ListValidationAttemptsResponses];
+
+export type ListBillingLedgerData = {
+    body?: never;
+    path: {
+        projectId: string;
+        environmentId: string;
+    };
+    query?: {
+        /**
+         * Opaque cursor from the immediately preceding list response. Malformed or stale values return validation_failed.
+         */
+        cursor?: string;
+        limit?: number;
+        from?: string;
+        to?: string;
+    };
+    url: '/v1/projects/{projectId}/environments/{environmentId}/billing/ledger';
+};
+
+export type ListBillingLedgerErrors = {
+    /**
+     * Stable machine-readable failure.
+     */
+    403: ErrorEnvelope;
+    /**
+     * Stable machine-readable failure.
+     */
+    404: ErrorEnvelope;
+};
+
+export type ListBillingLedgerError = ListBillingLedgerErrors[keyof ListBillingLedgerErrors];
+
+export type ListBillingLedgerResponses = {
+    /**
+     * Billing Ledger Entries.
+     */
+    200: {
+        data?: {
+            items?: Array<BillingLedgerEntry>;
+            nextCursor?: string;
+        };
+    };
+};
+
+export type ListBillingLedgerResponse = ListBillingLedgerResponses[keyof ListBillingLedgerResponses];
+
+export type ListBillingQuarantineData = {
+    body?: never;
+    path: {
+        projectId: string;
+        environmentId: string;
+    };
+    query?: {
+        /**
+         * Opaque cursor from the immediately preceding list response. Malformed or stale values return validation_failed.
+         */
+        cursor?: string;
+        limit?: number;
+        status?: 'open' | 'retrying' | 'closed_after_success' | 'closed_superseded';
+        reasonCode?: string;
+        provider?: 'app_store' | 'google_play';
+    };
+    url: '/v1/projects/{projectId}/environments/{environmentId}/billing/quarantine';
+};
+
+export type ListBillingQuarantineErrors = {
+    /**
+     * Stable machine-readable failure.
+     */
+    403: ErrorEnvelope;
+    /**
+     * Stable machine-readable failure.
+     */
+    404: ErrorEnvelope;
+};
+
+export type ListBillingQuarantineError = ListBillingQuarantineErrors[keyof ListBillingQuarantineErrors];
+
+export type ListBillingQuarantineResponses = {
+    /**
+     * Quarantine Records.
+     */
+    200: {
+        data?: {
+            items?: Array<QuarantineRecord>;
+            nextCursor?: string;
+        };
+    };
+};
+
+export type ListBillingQuarantineResponse = ListBillingQuarantineResponses[keyof ListBillingQuarantineResponses];
+
+export type GetBillingHealthData = {
+    body?: never;
+    path: {
+        projectId: string;
+        environmentId: string;
+    };
+    query?: never;
+    url: '/v1/projects/{projectId}/environments/{environmentId}/billing/health';
+};
+
+export type GetBillingHealthErrors = {
+    /**
+     * Stable machine-readable failure.
+     */
+    403: ErrorEnvelope;
+    /**
+     * Stable machine-readable failure.
+     */
+    404: ErrorEnvelope;
+};
+
+export type GetBillingHealthError = GetBillingHealthErrors[keyof GetBillingHealthErrors];
+
+export type GetBillingHealthResponses = {
+    /**
+     * Billing health summary.
+     */
+    200: {
+        data?: BillingHealth;
+    };
+};
+
+export type GetBillingHealthResponse = GetBillingHealthResponses[keyof GetBillingHealthResponses];
+
+export type ListReconciliationRunsData = {
+    body?: never;
+    path: {
+        projectId: string;
+        environmentId: string;
+    };
+    query?: {
+        /**
+         * Opaque cursor from the immediately preceding list response. Malformed or stale values return validation_failed.
+         */
+        cursor?: string;
+        limit?: number;
+        status?: 'queued' | 'leased' | 'completed' | 'partial' | 'failed';
+    };
+    url: '/v1/projects/{projectId}/environments/{environmentId}/billing/reconciliation-runs';
+};
+
+export type ListReconciliationRunsErrors = {
+    /**
+     * Stable machine-readable failure.
+     */
+    403: ErrorEnvelope;
+    /**
+     * Stable machine-readable failure.
+     */
+    404: ErrorEnvelope;
+};
+
+export type ListReconciliationRunsError = ListReconciliationRunsErrors[keyof ListReconciliationRunsErrors];
+
+export type ListReconciliationRunsResponses = {
+    /**
+     * Reconciliation runs.
+     */
+    200: {
+        data?: {
+            items?: Array<ReconciliationRun>;
+            nextCursor?: string;
+        };
+    };
+};
+
+export type ListReconciliationRunsResponse = ListReconciliationRunsResponses[keyof ListReconciliationRunsResponses];
+
+export type CreateReconciliationRunData = {
+    body: CreateReconciliationRunRequest;
+    path: {
+        projectId: string;
+        environmentId: string;
+    };
+    query?: never;
+    url: '/v1/projects/{projectId}/environments/{environmentId}/billing/reconciliation-runs';
+};
+
+export type CreateReconciliationRunErrors = {
+    /**
+     * Stable machine-readable failure.
+     */
+    403: ErrorEnvelope;
+    /**
+     * Stable machine-readable failure.
+     */
+    409: ErrorEnvelope;
+    /**
+     * Stable machine-readable failure.
+     */
+    422: ErrorEnvelope;
+};
+
+export type CreateReconciliationRunError = CreateReconciliationRunErrors[keyof CreateReconciliationRunErrors];
+
+export type CreateReconciliationRunResponses = {
+    /**
+     * Reconciliation queued.
+     */
+    202: {
+        data?: ReconciliationRun;
+    };
+};
+
+export type CreateReconciliationRunResponse = CreateReconciliationRunResponses[keyof CreateReconciliationRunResponses];
+
+export type ListReplayJobsData = {
+    body?: never;
+    path: {
+        projectId: string;
+        environmentId: string;
+    };
+    query?: {
+        /**
+         * Opaque cursor from the immediately preceding list response. Malformed or stale values return validation_failed.
+         */
+        cursor?: string;
+        limit?: number;
+        status?: 'queued' | 'leased' | 'completed' | 'failed';
+    };
+    url: '/v1/projects/{projectId}/environments/{environmentId}/billing/replay-jobs';
+};
+
+export type ListReplayJobsErrors = {
+    /**
+     * Stable machine-readable failure.
+     */
+    403: ErrorEnvelope;
+    /**
+     * Stable machine-readable failure.
+     */
+    404: ErrorEnvelope;
+};
+
+export type ListReplayJobsError = ListReplayJobsErrors[keyof ListReplayJobsErrors];
+
+export type ListReplayJobsResponses = {
+    /**
+     * Replay jobs.
+     */
+    200: {
+        data?: {
+            items?: Array<ReplayJob>;
+            nextCursor?: string;
+        };
+    };
+};
+
+export type ListReplayJobsResponse = ListReplayJobsResponses[keyof ListReplayJobsResponses];
+
+export type CreateReplayJobData = {
+    body: CreateReplayJobRequest;
+    path: {
+        projectId: string;
+        environmentId: string;
+    };
+    query?: never;
+    url: '/v1/projects/{projectId}/environments/{environmentId}/billing/replay-jobs';
+};
+
+export type CreateReplayJobErrors = {
+    /**
+     * Stable machine-readable failure.
+     */
+    403: ErrorEnvelope;
+    /**
+     * Stable machine-readable failure.
+     */
+    422: ErrorEnvelope;
+};
+
+export type CreateReplayJobError = CreateReplayJobErrors[keyof CreateReplayJobErrors];
+
+export type CreateReplayJobResponses = {
+    /**
+     * Replay queued.
+     */
+    202: {
+        data?: ReplayJob;
+    };
+};
+
+export type CreateReplayJobResponse = CreateReplayJobResponses[keyof CreateReplayJobResponses];
+
+export type GetQuarantineRecordData = {
+    body?: never;
+    path: {
+        projectId: string;
+        recordId: string;
+    };
+    query?: never;
+    url: '/v1/projects/{projectId}/billing/quarantine/{recordId}';
+};
+
+export type GetQuarantineRecordErrors = {
+    /**
+     * Stable machine-readable failure.
+     */
+    403: ErrorEnvelope;
+    /**
+     * Stable machine-readable failure.
+     */
+    404: ErrorEnvelope;
+};
+
+export type GetQuarantineRecordError = GetQuarantineRecordErrors[keyof GetQuarantineRecordErrors];
+
+export type GetQuarantineRecordResponses = {
+    /**
+     * Quarantine Record.
+     */
+    200: {
+        data?: QuarantineRecord;
+    };
+};
+
+export type GetQuarantineRecordResponse = GetQuarantineRecordResponses[keyof GetQuarantineRecordResponses];
+
+export type RetryQuarantinedInputData = {
+    body?: never;
+    path: {
+        projectId: string;
+        recordId: string;
+    };
+    query?: never;
+    url: '/v1/projects/{projectId}/billing/quarantine/{recordId}/retry';
+};
+
+export type RetryQuarantinedInputErrors = {
+    /**
+     * Stable machine-readable failure.
+     */
+    403: ErrorEnvelope;
+    /**
+     * Stable machine-readable failure.
+     */
+    404: ErrorEnvelope;
+};
+
+export type RetryQuarantinedInputError = RetryQuarantinedInputErrors[keyof RetryQuarantinedInputErrors];
+
+export type RetryQuarantinedInputResponses = {
+    /**
+     * Quarantine Record.
+     */
+    202: {
+        data?: QuarantineRecord;
+    };
+};
+
+export type RetryQuarantinedInputResponse = RetryQuarantinedInputResponses[keyof RetryQuarantinedInputResponses];
+
+export type CloseQuarantineRecordSupersededData = {
+    body: {
+        supersededByRecordId: string;
+    };
+    path: {
+        projectId: string;
+        recordId: string;
+    };
+    query?: never;
+    url: '/v1/projects/{projectId}/billing/quarantine/{recordId}/close-superseded';
+};
+
+export type CloseQuarantineRecordSupersededErrors = {
+    /**
+     * Stable machine-readable failure.
+     */
+    403: ErrorEnvelope;
+    /**
+     * Stable machine-readable failure.
+     */
+    404: ErrorEnvelope;
+};
+
+export type CloseQuarantineRecordSupersededError = CloseQuarantineRecordSupersededErrors[keyof CloseQuarantineRecordSupersededErrors];
+
+export type CloseQuarantineRecordSupersededResponses = {
+    /**
+     * Quarantine Record.
+     */
+    200: {
+        data?: QuarantineRecord;
+    };
+};
+
+export type CloseQuarantineRecordSupersededResponse = CloseQuarantineRecordSupersededResponses[keyof CloseQuarantineRecordSupersededResponses];

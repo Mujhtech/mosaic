@@ -30,6 +30,7 @@ import { Route as HostedOrganizationsOrganizationIdProjectsProjectIdCatalogProvi
 import { Route as HostedOrganizationsOrganizationIdProjectsProjectIdCatalogProductsIndexRouteImport } from './routes/_hosted/organizations/$organizationId/projects/$projectId/catalog/products/index'
 import { Route as HostedOrganizationsOrganizationIdProjectsProjectIdCatalogPlansIndexRouteImport } from './routes/_hosted/organizations/$organizationId/projects/$projectId/catalog/plans/index'
 import { Route as HostedOrganizationsOrganizationIdProjectsProjectIdCatalogEntitlementsIndexRouteImport } from './routes/_hosted/organizations/$organizationId/projects/$projectId/catalog/entitlements/index'
+import { Route as HostedOrganizationsOrganizationIdProjectsProjectIdBillingConnectionsIndexRouteImport } from './routes/_hosted/organizations/$organizationId/projects/$projectId/billing/connections/index'
 import { Route as HostedOrganizationsOrganizationIdProjectsProjectIdMonetizationEnvironmentIdReleasesRouteImport } from './routes/_hosted/organizations/$organizationId/projects/$projectId/monetization/$environmentId/releases'
 import { Route as HostedOrganizationsOrganizationIdProjectsProjectIdMonetizationEnvironmentIdPlacementsRouteImport } from './routes/_hosted/organizations/$organizationId/projects/$projectId/monetization/$environmentId/placements'
 import { Route as HostedOrganizationsOrganizationIdProjectsProjectIdMonetizationEnvironmentIdPaywallsRouteImport } from './routes/_hosted/organizations/$organizationId/projects/$projectId/monetization/$environmentId/paywalls'
@@ -39,11 +40,19 @@ import { Route as HostedOrganizationsOrganizationIdProjectsProjectIdCatalogProvi
 import { Route as HostedOrganizationsOrganizationIdProjectsProjectIdCatalogProductsProductIdRouteImport } from './routes/_hosted/organizations/$organizationId/projects/$projectId/catalog/products/$productId'
 import { Route as HostedOrganizationsOrganizationIdProjectsProjectIdCatalogPlansPlanIdRouteImport } from './routes/_hosted/organizations/$organizationId/projects/$projectId/catalog/plans/$planId'
 import { Route as HostedOrganizationsOrganizationIdProjectsProjectIdCatalogEntitlementsEntitlementIdRouteImport } from './routes/_hosted/organizations/$organizationId/projects/$projectId/catalog/entitlements/$entitlementId'
+import { Route as HostedOrganizationsOrganizationIdProjectsProjectIdBillingConnectionsCredentialIdRouteImport } from './routes/_hosted/organizations/$organizationId/projects/$projectId/billing/connections/$credentialId'
+import { Route as HostedOrganizationsOrganizationIdProjectsProjectIdBillingEnvironmentIdHealthRouteImport } from './routes/_hosted/organizations/$organizationId/projects/$projectId/billing/$environmentId/health'
 import { Route as HostedOrganizationsOrganizationIdProjectsProjectIdAnalyticsEnvironmentIdSurfaceRouteImport } from './routes/_hosted/organizations/$organizationId/projects/$projectId/analytics/$environmentId/$surface'
+import { Route as HostedOrganizationsOrganizationIdProjectsProjectIdBillingEnvironmentIdTransactionsIndexRouteImport } from './routes/_hosted/organizations/$organizationId/projects/$projectId/billing/$environmentId/transactions/index'
+import { Route as HostedOrganizationsOrganizationIdProjectsProjectIdBillingEnvironmentIdReconciliationIndexRouteImport } from './routes/_hosted/organizations/$organizationId/projects/$projectId/billing/$environmentId/reconciliation/index'
+import { Route as HostedOrganizationsOrganizationIdProjectsProjectIdBillingEnvironmentIdQuarantineIndexRouteImport } from './routes/_hosted/organizations/$organizationId/projects/$projectId/billing/$environmentId/quarantine/index'
 import { Route as HostedOrganizationsOrganizationIdProjectsProjectIdMonetizationEnvironmentIdPlacementsPlacementIdRouteImport } from './routes/_hosted/organizations/$organizationId/projects/$projectId/monetization/$environmentId/placements/$placementId'
 import { Route as HostedOrganizationsOrganizationIdProjectsProjectIdMonetizationEnvironmentIdPaywallsPaywallIdRouteImport } from './routes/_hosted/organizations/$organizationId/projects/$projectId/monetization/$environmentId/paywalls/$paywallId'
 import { Route as HostedOrganizationsOrganizationIdProjectsProjectIdMonetizationEnvironmentIdExperimentsNewRouteImport } from './routes/_hosted/organizations/$organizationId/projects/$projectId/monetization/$environmentId/experiments/new'
 import { Route as HostedOrganizationsOrganizationIdProjectsProjectIdMonetizationEnvironmentIdExperimentsExperimentIdRouteImport } from './routes/_hosted/organizations/$organizationId/projects/$projectId/monetization/$environmentId/experiments/$experimentId'
+import { Route as HostedOrganizationsOrganizationIdProjectsProjectIdBillingEnvironmentIdTransactionsFactIdRouteImport } from './routes/_hosted/organizations/$organizationId/projects/$projectId/billing/$environmentId/transactions/$factId'
+import { Route as HostedOrganizationsOrganizationIdProjectsProjectIdBillingEnvironmentIdReconciliationRunIdRouteImport } from './routes/_hosted/organizations/$organizationId/projects/$projectId/billing/$environmentId/reconciliation/$runId'
+import { Route as HostedOrganizationsOrganizationIdProjectsProjectIdBillingEnvironmentIdQuarantineRecordIdRouteImport } from './routes/_hosted/organizations/$organizationId/projects/$projectId/billing/$environmentId/quarantine/$recordId'
 
 const SignupRoute = SignupRouteImport.update({
   id: '/signup',
@@ -174,6 +183,14 @@ const HostedOrganizationsOrganizationIdProjectsProjectIdCatalogEntitlementsIndex
       getParentRoute: () => HostedRoute,
     } as any,
   )
+const HostedOrganizationsOrganizationIdProjectsProjectIdBillingConnectionsIndexRoute =
+  HostedOrganizationsOrganizationIdProjectsProjectIdBillingConnectionsIndexRouteImport.update(
+    {
+      id: '/organizations/$organizationId/projects/$projectId/billing/connections/',
+      path: '/organizations/$organizationId/projects/$projectId/billing/connections/',
+      getParentRoute: () => HostedRoute,
+    } as any,
+  )
 const HostedOrganizationsOrganizationIdProjectsProjectIdMonetizationEnvironmentIdReleasesRoute =
   HostedOrganizationsOrganizationIdProjectsProjectIdMonetizationEnvironmentIdReleasesRouteImport.update(
     {
@@ -247,11 +264,51 @@ const HostedOrganizationsOrganizationIdProjectsProjectIdCatalogEntitlementsEntit
       getParentRoute: () => HostedRoute,
     } as any,
   )
+const HostedOrganizationsOrganizationIdProjectsProjectIdBillingConnectionsCredentialIdRoute =
+  HostedOrganizationsOrganizationIdProjectsProjectIdBillingConnectionsCredentialIdRouteImport.update(
+    {
+      id: '/organizations/$organizationId/projects/$projectId/billing/connections/$credentialId',
+      path: '/organizations/$organizationId/projects/$projectId/billing/connections/$credentialId',
+      getParentRoute: () => HostedRoute,
+    } as any,
+  )
+const HostedOrganizationsOrganizationIdProjectsProjectIdBillingEnvironmentIdHealthRoute =
+  HostedOrganizationsOrganizationIdProjectsProjectIdBillingEnvironmentIdHealthRouteImport.update(
+    {
+      id: '/organizations/$organizationId/projects/$projectId/billing/$environmentId/health',
+      path: '/organizations/$organizationId/projects/$projectId/billing/$environmentId/health',
+      getParentRoute: () => HostedRoute,
+    } as any,
+  )
 const HostedOrganizationsOrganizationIdProjectsProjectIdAnalyticsEnvironmentIdSurfaceRoute =
   HostedOrganizationsOrganizationIdProjectsProjectIdAnalyticsEnvironmentIdSurfaceRouteImport.update(
     {
       id: '/organizations/$organizationId/projects/$projectId/analytics/$environmentId/$surface',
       path: '/organizations/$organizationId/projects/$projectId/analytics/$environmentId/$surface',
+      getParentRoute: () => HostedRoute,
+    } as any,
+  )
+const HostedOrganizationsOrganizationIdProjectsProjectIdBillingEnvironmentIdTransactionsIndexRoute =
+  HostedOrganizationsOrganizationIdProjectsProjectIdBillingEnvironmentIdTransactionsIndexRouteImport.update(
+    {
+      id: '/organizations/$organizationId/projects/$projectId/billing/$environmentId/transactions/',
+      path: '/organizations/$organizationId/projects/$projectId/billing/$environmentId/transactions/',
+      getParentRoute: () => HostedRoute,
+    } as any,
+  )
+const HostedOrganizationsOrganizationIdProjectsProjectIdBillingEnvironmentIdReconciliationIndexRoute =
+  HostedOrganizationsOrganizationIdProjectsProjectIdBillingEnvironmentIdReconciliationIndexRouteImport.update(
+    {
+      id: '/organizations/$organizationId/projects/$projectId/billing/$environmentId/reconciliation/',
+      path: '/organizations/$organizationId/projects/$projectId/billing/$environmentId/reconciliation/',
+      getParentRoute: () => HostedRoute,
+    } as any,
+  )
+const HostedOrganizationsOrganizationIdProjectsProjectIdBillingEnvironmentIdQuarantineIndexRoute =
+  HostedOrganizationsOrganizationIdProjectsProjectIdBillingEnvironmentIdQuarantineIndexRouteImport.update(
+    {
+      id: '/organizations/$organizationId/projects/$projectId/billing/$environmentId/quarantine/',
+      path: '/organizations/$organizationId/projects/$projectId/billing/$environmentId/quarantine/',
       getParentRoute: () => HostedRoute,
     } as any,
   )
@@ -291,6 +348,30 @@ const HostedOrganizationsOrganizationIdProjectsProjectIdMonetizationEnvironmentI
         HostedOrganizationsOrganizationIdProjectsProjectIdMonetizationEnvironmentIdExperimentsRoute,
     } as any,
   )
+const HostedOrganizationsOrganizationIdProjectsProjectIdBillingEnvironmentIdTransactionsFactIdRoute =
+  HostedOrganizationsOrganizationIdProjectsProjectIdBillingEnvironmentIdTransactionsFactIdRouteImport.update(
+    {
+      id: '/organizations/$organizationId/projects/$projectId/billing/$environmentId/transactions/$factId',
+      path: '/organizations/$organizationId/projects/$projectId/billing/$environmentId/transactions/$factId',
+      getParentRoute: () => HostedRoute,
+    } as any,
+  )
+const HostedOrganizationsOrganizationIdProjectsProjectIdBillingEnvironmentIdReconciliationRunIdRoute =
+  HostedOrganizationsOrganizationIdProjectsProjectIdBillingEnvironmentIdReconciliationRunIdRouteImport.update(
+    {
+      id: '/organizations/$organizationId/projects/$projectId/billing/$environmentId/reconciliation/$runId',
+      path: '/organizations/$organizationId/projects/$projectId/billing/$environmentId/reconciliation/$runId',
+      getParentRoute: () => HostedRoute,
+    } as any,
+  )
+const HostedOrganizationsOrganizationIdProjectsProjectIdBillingEnvironmentIdQuarantineRecordIdRoute =
+  HostedOrganizationsOrganizationIdProjectsProjectIdBillingEnvironmentIdQuarantineRecordIdRouteImport.update(
+    {
+      id: '/organizations/$organizationId/projects/$projectId/billing/$environmentId/quarantine/$recordId',
+      path: '/organizations/$organizationId/projects/$projectId/billing/$environmentId/quarantine/$recordId',
+      getParentRoute: () => HostedRoute,
+    } as any,
+  )
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -310,6 +391,8 @@ export interface FileRoutesByFullPath {
   '/organizations/$organizationId/projects/$projectId/settings/environments': typeof HostedOrganizationsOrganizationIdProjectsProjectIdSettingsEnvironmentsRoute
   '/studio-hosted/$organizationId/$projectId/$environmentId/$paywallId/$draftId': typeof Studio_layoutStudioHostedOrganizationIdProjectIdEnvironmentIdPaywallIdDraftIdRoute
   '/organizations/$organizationId/projects/$projectId/analytics/$environmentId/$surface': typeof HostedOrganizationsOrganizationIdProjectsProjectIdAnalyticsEnvironmentIdSurfaceRoute
+  '/organizations/$organizationId/projects/$projectId/billing/$environmentId/health': typeof HostedOrganizationsOrganizationIdProjectsProjectIdBillingEnvironmentIdHealthRoute
+  '/organizations/$organizationId/projects/$projectId/billing/connections/$credentialId': typeof HostedOrganizationsOrganizationIdProjectsProjectIdBillingConnectionsCredentialIdRoute
   '/organizations/$organizationId/projects/$projectId/catalog/entitlements/$entitlementId': typeof HostedOrganizationsOrganizationIdProjectsProjectIdCatalogEntitlementsEntitlementIdRoute
   '/organizations/$organizationId/projects/$projectId/catalog/plans/$planId': typeof HostedOrganizationsOrganizationIdProjectsProjectIdCatalogPlansPlanIdRoute
   '/organizations/$organizationId/projects/$projectId/catalog/products/$productId': typeof HostedOrganizationsOrganizationIdProjectsProjectIdCatalogProductsProductIdRoute
@@ -319,13 +402,20 @@ export interface FileRoutesByFullPath {
   '/organizations/$organizationId/projects/$projectId/monetization/$environmentId/paywalls': typeof HostedOrganizationsOrganizationIdProjectsProjectIdMonetizationEnvironmentIdPaywallsRouteWithChildren
   '/organizations/$organizationId/projects/$projectId/monetization/$environmentId/placements': typeof HostedOrganizationsOrganizationIdProjectsProjectIdMonetizationEnvironmentIdPlacementsRouteWithChildren
   '/organizations/$organizationId/projects/$projectId/monetization/$environmentId/releases': typeof HostedOrganizationsOrganizationIdProjectsProjectIdMonetizationEnvironmentIdReleasesRoute
+  '/organizations/$organizationId/projects/$projectId/billing/connections/': typeof HostedOrganizationsOrganizationIdProjectsProjectIdBillingConnectionsIndexRoute
   '/organizations/$organizationId/projects/$projectId/catalog/entitlements/': typeof HostedOrganizationsOrganizationIdProjectsProjectIdCatalogEntitlementsIndexRoute
   '/organizations/$organizationId/projects/$projectId/catalog/plans/': typeof HostedOrganizationsOrganizationIdProjectsProjectIdCatalogPlansIndexRoute
   '/organizations/$organizationId/projects/$projectId/catalog/products/': typeof HostedOrganizationsOrganizationIdProjectsProjectIdCatalogProductsIndexRoute
+  '/organizations/$organizationId/projects/$projectId/billing/$environmentId/quarantine/$recordId': typeof HostedOrganizationsOrganizationIdProjectsProjectIdBillingEnvironmentIdQuarantineRecordIdRoute
+  '/organizations/$organizationId/projects/$projectId/billing/$environmentId/reconciliation/$runId': typeof HostedOrganizationsOrganizationIdProjectsProjectIdBillingEnvironmentIdReconciliationRunIdRoute
+  '/organizations/$organizationId/projects/$projectId/billing/$environmentId/transactions/$factId': typeof HostedOrganizationsOrganizationIdProjectsProjectIdBillingEnvironmentIdTransactionsFactIdRoute
   '/organizations/$organizationId/projects/$projectId/monetization/$environmentId/experiments/$experimentId': typeof HostedOrganizationsOrganizationIdProjectsProjectIdMonetizationEnvironmentIdExperimentsExperimentIdRoute
   '/organizations/$organizationId/projects/$projectId/monetization/$environmentId/experiments/new': typeof HostedOrganizationsOrganizationIdProjectsProjectIdMonetizationEnvironmentIdExperimentsNewRoute
   '/organizations/$organizationId/projects/$projectId/monetization/$environmentId/paywalls/$paywallId': typeof HostedOrganizationsOrganizationIdProjectsProjectIdMonetizationEnvironmentIdPaywallsPaywallIdRoute
   '/organizations/$organizationId/projects/$projectId/monetization/$environmentId/placements/$placementId': typeof HostedOrganizationsOrganizationIdProjectsProjectIdMonetizationEnvironmentIdPlacementsPlacementIdRoute
+  '/organizations/$organizationId/projects/$projectId/billing/$environmentId/quarantine/': typeof HostedOrganizationsOrganizationIdProjectsProjectIdBillingEnvironmentIdQuarantineIndexRoute
+  '/organizations/$organizationId/projects/$projectId/billing/$environmentId/reconciliation/': typeof HostedOrganizationsOrganizationIdProjectsProjectIdBillingEnvironmentIdReconciliationIndexRoute
+  '/organizations/$organizationId/projects/$projectId/billing/$environmentId/transactions/': typeof HostedOrganizationsOrganizationIdProjectsProjectIdBillingEnvironmentIdTransactionsIndexRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -345,6 +435,8 @@ export interface FileRoutesByTo {
   '/organizations/$organizationId/projects/$projectId/settings/environments': typeof HostedOrganizationsOrganizationIdProjectsProjectIdSettingsEnvironmentsRoute
   '/studio-hosted/$organizationId/$projectId/$environmentId/$paywallId/$draftId': typeof Studio_layoutStudioHostedOrganizationIdProjectIdEnvironmentIdPaywallIdDraftIdRoute
   '/organizations/$organizationId/projects/$projectId/analytics/$environmentId/$surface': typeof HostedOrganizationsOrganizationIdProjectsProjectIdAnalyticsEnvironmentIdSurfaceRoute
+  '/organizations/$organizationId/projects/$projectId/billing/$environmentId/health': typeof HostedOrganizationsOrganizationIdProjectsProjectIdBillingEnvironmentIdHealthRoute
+  '/organizations/$organizationId/projects/$projectId/billing/connections/$credentialId': typeof HostedOrganizationsOrganizationIdProjectsProjectIdBillingConnectionsCredentialIdRoute
   '/organizations/$organizationId/projects/$projectId/catalog/entitlements/$entitlementId': typeof HostedOrganizationsOrganizationIdProjectsProjectIdCatalogEntitlementsEntitlementIdRoute
   '/organizations/$organizationId/projects/$projectId/catalog/plans/$planId': typeof HostedOrganizationsOrganizationIdProjectsProjectIdCatalogPlansPlanIdRoute
   '/organizations/$organizationId/projects/$projectId/catalog/products/$productId': typeof HostedOrganizationsOrganizationIdProjectsProjectIdCatalogProductsProductIdRoute
@@ -354,13 +446,20 @@ export interface FileRoutesByTo {
   '/organizations/$organizationId/projects/$projectId/monetization/$environmentId/paywalls': typeof HostedOrganizationsOrganizationIdProjectsProjectIdMonetizationEnvironmentIdPaywallsRouteWithChildren
   '/organizations/$organizationId/projects/$projectId/monetization/$environmentId/placements': typeof HostedOrganizationsOrganizationIdProjectsProjectIdMonetizationEnvironmentIdPlacementsRouteWithChildren
   '/organizations/$organizationId/projects/$projectId/monetization/$environmentId/releases': typeof HostedOrganizationsOrganizationIdProjectsProjectIdMonetizationEnvironmentIdReleasesRoute
+  '/organizations/$organizationId/projects/$projectId/billing/connections': typeof HostedOrganizationsOrganizationIdProjectsProjectIdBillingConnectionsIndexRoute
   '/organizations/$organizationId/projects/$projectId/catalog/entitlements': typeof HostedOrganizationsOrganizationIdProjectsProjectIdCatalogEntitlementsIndexRoute
   '/organizations/$organizationId/projects/$projectId/catalog/plans': typeof HostedOrganizationsOrganizationIdProjectsProjectIdCatalogPlansIndexRoute
   '/organizations/$organizationId/projects/$projectId/catalog/products': typeof HostedOrganizationsOrganizationIdProjectsProjectIdCatalogProductsIndexRoute
+  '/organizations/$organizationId/projects/$projectId/billing/$environmentId/quarantine/$recordId': typeof HostedOrganizationsOrganizationIdProjectsProjectIdBillingEnvironmentIdQuarantineRecordIdRoute
+  '/organizations/$organizationId/projects/$projectId/billing/$environmentId/reconciliation/$runId': typeof HostedOrganizationsOrganizationIdProjectsProjectIdBillingEnvironmentIdReconciliationRunIdRoute
+  '/organizations/$organizationId/projects/$projectId/billing/$environmentId/transactions/$factId': typeof HostedOrganizationsOrganizationIdProjectsProjectIdBillingEnvironmentIdTransactionsFactIdRoute
   '/organizations/$organizationId/projects/$projectId/monetization/$environmentId/experiments/$experimentId': typeof HostedOrganizationsOrganizationIdProjectsProjectIdMonetizationEnvironmentIdExperimentsExperimentIdRoute
   '/organizations/$organizationId/projects/$projectId/monetization/$environmentId/experiments/new': typeof HostedOrganizationsOrganizationIdProjectsProjectIdMonetizationEnvironmentIdExperimentsNewRoute
   '/organizations/$organizationId/projects/$projectId/monetization/$environmentId/paywalls/$paywallId': typeof HostedOrganizationsOrganizationIdProjectsProjectIdMonetizationEnvironmentIdPaywallsPaywallIdRoute
   '/organizations/$organizationId/projects/$projectId/monetization/$environmentId/placements/$placementId': typeof HostedOrganizationsOrganizationIdProjectsProjectIdMonetizationEnvironmentIdPlacementsPlacementIdRoute
+  '/organizations/$organizationId/projects/$projectId/billing/$environmentId/quarantine': typeof HostedOrganizationsOrganizationIdProjectsProjectIdBillingEnvironmentIdQuarantineIndexRoute
+  '/organizations/$organizationId/projects/$projectId/billing/$environmentId/reconciliation': typeof HostedOrganizationsOrganizationIdProjectsProjectIdBillingEnvironmentIdReconciliationIndexRoute
+  '/organizations/$organizationId/projects/$projectId/billing/$environmentId/transactions': typeof HostedOrganizationsOrganizationIdProjectsProjectIdBillingEnvironmentIdTransactionsIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -383,6 +482,8 @@ export interface FileRoutesById {
   '/_hosted/organizations/$organizationId/projects/$projectId/settings/environments': typeof HostedOrganizationsOrganizationIdProjectsProjectIdSettingsEnvironmentsRoute
   '/_studio_layout/studio-hosted/$organizationId/$projectId/$environmentId/$paywallId/$draftId': typeof Studio_layoutStudioHostedOrganizationIdProjectIdEnvironmentIdPaywallIdDraftIdRoute
   '/_hosted/organizations/$organizationId/projects/$projectId/analytics/$environmentId/$surface': typeof HostedOrganizationsOrganizationIdProjectsProjectIdAnalyticsEnvironmentIdSurfaceRoute
+  '/_hosted/organizations/$organizationId/projects/$projectId/billing/$environmentId/health': typeof HostedOrganizationsOrganizationIdProjectsProjectIdBillingEnvironmentIdHealthRoute
+  '/_hosted/organizations/$organizationId/projects/$projectId/billing/connections/$credentialId': typeof HostedOrganizationsOrganizationIdProjectsProjectIdBillingConnectionsCredentialIdRoute
   '/_hosted/organizations/$organizationId/projects/$projectId/catalog/entitlements/$entitlementId': typeof HostedOrganizationsOrganizationIdProjectsProjectIdCatalogEntitlementsEntitlementIdRoute
   '/_hosted/organizations/$organizationId/projects/$projectId/catalog/plans/$planId': typeof HostedOrganizationsOrganizationIdProjectsProjectIdCatalogPlansPlanIdRoute
   '/_hosted/organizations/$organizationId/projects/$projectId/catalog/products/$productId': typeof HostedOrganizationsOrganizationIdProjectsProjectIdCatalogProductsProductIdRoute
@@ -392,13 +493,20 @@ export interface FileRoutesById {
   '/_hosted/organizations/$organizationId/projects/$projectId/monetization/$environmentId/paywalls': typeof HostedOrganizationsOrganizationIdProjectsProjectIdMonetizationEnvironmentIdPaywallsRouteWithChildren
   '/_hosted/organizations/$organizationId/projects/$projectId/monetization/$environmentId/placements': typeof HostedOrganizationsOrganizationIdProjectsProjectIdMonetizationEnvironmentIdPlacementsRouteWithChildren
   '/_hosted/organizations/$organizationId/projects/$projectId/monetization/$environmentId/releases': typeof HostedOrganizationsOrganizationIdProjectsProjectIdMonetizationEnvironmentIdReleasesRoute
+  '/_hosted/organizations/$organizationId/projects/$projectId/billing/connections/': typeof HostedOrganizationsOrganizationIdProjectsProjectIdBillingConnectionsIndexRoute
   '/_hosted/organizations/$organizationId/projects/$projectId/catalog/entitlements/': typeof HostedOrganizationsOrganizationIdProjectsProjectIdCatalogEntitlementsIndexRoute
   '/_hosted/organizations/$organizationId/projects/$projectId/catalog/plans/': typeof HostedOrganizationsOrganizationIdProjectsProjectIdCatalogPlansIndexRoute
   '/_hosted/organizations/$organizationId/projects/$projectId/catalog/products/': typeof HostedOrganizationsOrganizationIdProjectsProjectIdCatalogProductsIndexRoute
+  '/_hosted/organizations/$organizationId/projects/$projectId/billing/$environmentId/quarantine/$recordId': typeof HostedOrganizationsOrganizationIdProjectsProjectIdBillingEnvironmentIdQuarantineRecordIdRoute
+  '/_hosted/organizations/$organizationId/projects/$projectId/billing/$environmentId/reconciliation/$runId': typeof HostedOrganizationsOrganizationIdProjectsProjectIdBillingEnvironmentIdReconciliationRunIdRoute
+  '/_hosted/organizations/$organizationId/projects/$projectId/billing/$environmentId/transactions/$factId': typeof HostedOrganizationsOrganizationIdProjectsProjectIdBillingEnvironmentIdTransactionsFactIdRoute
   '/_hosted/organizations/$organizationId/projects/$projectId/monetization/$environmentId/experiments/$experimentId': typeof HostedOrganizationsOrganizationIdProjectsProjectIdMonetizationEnvironmentIdExperimentsExperimentIdRoute
   '/_hosted/organizations/$organizationId/projects/$projectId/monetization/$environmentId/experiments/new': typeof HostedOrganizationsOrganizationIdProjectsProjectIdMonetizationEnvironmentIdExperimentsNewRoute
   '/_hosted/organizations/$organizationId/projects/$projectId/monetization/$environmentId/paywalls/$paywallId': typeof HostedOrganizationsOrganizationIdProjectsProjectIdMonetizationEnvironmentIdPaywallsPaywallIdRoute
   '/_hosted/organizations/$organizationId/projects/$projectId/monetization/$environmentId/placements/$placementId': typeof HostedOrganizationsOrganizationIdProjectsProjectIdMonetizationEnvironmentIdPlacementsPlacementIdRoute
+  '/_hosted/organizations/$organizationId/projects/$projectId/billing/$environmentId/quarantine/': typeof HostedOrganizationsOrganizationIdProjectsProjectIdBillingEnvironmentIdQuarantineIndexRoute
+  '/_hosted/organizations/$organizationId/projects/$projectId/billing/$environmentId/reconciliation/': typeof HostedOrganizationsOrganizationIdProjectsProjectIdBillingEnvironmentIdReconciliationIndexRoute
+  '/_hosted/organizations/$organizationId/projects/$projectId/billing/$environmentId/transactions/': typeof HostedOrganizationsOrganizationIdProjectsProjectIdBillingEnvironmentIdTransactionsIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -420,6 +528,8 @@ export interface FileRouteTypes {
     | '/organizations/$organizationId/projects/$projectId/settings/environments'
     | '/studio-hosted/$organizationId/$projectId/$environmentId/$paywallId/$draftId'
     | '/organizations/$organizationId/projects/$projectId/analytics/$environmentId/$surface'
+    | '/organizations/$organizationId/projects/$projectId/billing/$environmentId/health'
+    | '/organizations/$organizationId/projects/$projectId/billing/connections/$credentialId'
     | '/organizations/$organizationId/projects/$projectId/catalog/entitlements/$entitlementId'
     | '/organizations/$organizationId/projects/$projectId/catalog/plans/$planId'
     | '/organizations/$organizationId/projects/$projectId/catalog/products/$productId'
@@ -429,13 +539,20 @@ export interface FileRouteTypes {
     | '/organizations/$organizationId/projects/$projectId/monetization/$environmentId/paywalls'
     | '/organizations/$organizationId/projects/$projectId/monetization/$environmentId/placements'
     | '/organizations/$organizationId/projects/$projectId/monetization/$environmentId/releases'
+    | '/organizations/$organizationId/projects/$projectId/billing/connections/'
     | '/organizations/$organizationId/projects/$projectId/catalog/entitlements/'
     | '/organizations/$organizationId/projects/$projectId/catalog/plans/'
     | '/organizations/$organizationId/projects/$projectId/catalog/products/'
+    | '/organizations/$organizationId/projects/$projectId/billing/$environmentId/quarantine/$recordId'
+    | '/organizations/$organizationId/projects/$projectId/billing/$environmentId/reconciliation/$runId'
+    | '/organizations/$organizationId/projects/$projectId/billing/$environmentId/transactions/$factId'
     | '/organizations/$organizationId/projects/$projectId/monetization/$environmentId/experiments/$experimentId'
     | '/organizations/$organizationId/projects/$projectId/monetization/$environmentId/experiments/new'
     | '/organizations/$organizationId/projects/$projectId/monetization/$environmentId/paywalls/$paywallId'
     | '/organizations/$organizationId/projects/$projectId/monetization/$environmentId/placements/$placementId'
+    | '/organizations/$organizationId/projects/$projectId/billing/$environmentId/quarantine/'
+    | '/organizations/$organizationId/projects/$projectId/billing/$environmentId/reconciliation/'
+    | '/organizations/$organizationId/projects/$projectId/billing/$environmentId/transactions/'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -455,6 +572,8 @@ export interface FileRouteTypes {
     | '/organizations/$organizationId/projects/$projectId/settings/environments'
     | '/studio-hosted/$organizationId/$projectId/$environmentId/$paywallId/$draftId'
     | '/organizations/$organizationId/projects/$projectId/analytics/$environmentId/$surface'
+    | '/organizations/$organizationId/projects/$projectId/billing/$environmentId/health'
+    | '/organizations/$organizationId/projects/$projectId/billing/connections/$credentialId'
     | '/organizations/$organizationId/projects/$projectId/catalog/entitlements/$entitlementId'
     | '/organizations/$organizationId/projects/$projectId/catalog/plans/$planId'
     | '/organizations/$organizationId/projects/$projectId/catalog/products/$productId'
@@ -464,13 +583,20 @@ export interface FileRouteTypes {
     | '/organizations/$organizationId/projects/$projectId/monetization/$environmentId/paywalls'
     | '/organizations/$organizationId/projects/$projectId/monetization/$environmentId/placements'
     | '/organizations/$organizationId/projects/$projectId/monetization/$environmentId/releases'
+    | '/organizations/$organizationId/projects/$projectId/billing/connections'
     | '/organizations/$organizationId/projects/$projectId/catalog/entitlements'
     | '/organizations/$organizationId/projects/$projectId/catalog/plans'
     | '/organizations/$organizationId/projects/$projectId/catalog/products'
+    | '/organizations/$organizationId/projects/$projectId/billing/$environmentId/quarantine/$recordId'
+    | '/organizations/$organizationId/projects/$projectId/billing/$environmentId/reconciliation/$runId'
+    | '/organizations/$organizationId/projects/$projectId/billing/$environmentId/transactions/$factId'
     | '/organizations/$organizationId/projects/$projectId/monetization/$environmentId/experiments/$experimentId'
     | '/organizations/$organizationId/projects/$projectId/monetization/$environmentId/experiments/new'
     | '/organizations/$organizationId/projects/$projectId/monetization/$environmentId/paywalls/$paywallId'
     | '/organizations/$organizationId/projects/$projectId/monetization/$environmentId/placements/$placementId'
+    | '/organizations/$organizationId/projects/$projectId/billing/$environmentId/quarantine'
+    | '/organizations/$organizationId/projects/$projectId/billing/$environmentId/reconciliation'
+    | '/organizations/$organizationId/projects/$projectId/billing/$environmentId/transactions'
   id:
     | '__root__'
     | '/'
@@ -492,6 +618,8 @@ export interface FileRouteTypes {
     | '/_hosted/organizations/$organizationId/projects/$projectId/settings/environments'
     | '/_studio_layout/studio-hosted/$organizationId/$projectId/$environmentId/$paywallId/$draftId'
     | '/_hosted/organizations/$organizationId/projects/$projectId/analytics/$environmentId/$surface'
+    | '/_hosted/organizations/$organizationId/projects/$projectId/billing/$environmentId/health'
+    | '/_hosted/organizations/$organizationId/projects/$projectId/billing/connections/$credentialId'
     | '/_hosted/organizations/$organizationId/projects/$projectId/catalog/entitlements/$entitlementId'
     | '/_hosted/organizations/$organizationId/projects/$projectId/catalog/plans/$planId'
     | '/_hosted/organizations/$organizationId/projects/$projectId/catalog/products/$productId'
@@ -501,13 +629,20 @@ export interface FileRouteTypes {
     | '/_hosted/organizations/$organizationId/projects/$projectId/monetization/$environmentId/paywalls'
     | '/_hosted/organizations/$organizationId/projects/$projectId/monetization/$environmentId/placements'
     | '/_hosted/organizations/$organizationId/projects/$projectId/monetization/$environmentId/releases'
+    | '/_hosted/organizations/$organizationId/projects/$projectId/billing/connections/'
     | '/_hosted/organizations/$organizationId/projects/$projectId/catalog/entitlements/'
     | '/_hosted/organizations/$organizationId/projects/$projectId/catalog/plans/'
     | '/_hosted/organizations/$organizationId/projects/$projectId/catalog/products/'
+    | '/_hosted/organizations/$organizationId/projects/$projectId/billing/$environmentId/quarantine/$recordId'
+    | '/_hosted/organizations/$organizationId/projects/$projectId/billing/$environmentId/reconciliation/$runId'
+    | '/_hosted/organizations/$organizationId/projects/$projectId/billing/$environmentId/transactions/$factId'
     | '/_hosted/organizations/$organizationId/projects/$projectId/monetization/$environmentId/experiments/$experimentId'
     | '/_hosted/organizations/$organizationId/projects/$projectId/monetization/$environmentId/experiments/new'
     | '/_hosted/organizations/$organizationId/projects/$projectId/monetization/$environmentId/paywalls/$paywallId'
     | '/_hosted/organizations/$organizationId/projects/$projectId/monetization/$environmentId/placements/$placementId'
+    | '/_hosted/organizations/$organizationId/projects/$projectId/billing/$environmentId/quarantine/'
+    | '/_hosted/organizations/$organizationId/projects/$projectId/billing/$environmentId/reconciliation/'
+    | '/_hosted/organizations/$organizationId/projects/$projectId/billing/$environmentId/transactions/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -668,6 +803,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof HostedOrganizationsOrganizationIdProjectsProjectIdCatalogEntitlementsIndexRouteImport
       parentRoute: typeof HostedRoute
     }
+    '/_hosted/organizations/$organizationId/projects/$projectId/billing/connections/': {
+      id: '/_hosted/organizations/$organizationId/projects/$projectId/billing/connections/'
+      path: '/organizations/$organizationId/projects/$projectId/billing/connections'
+      fullPath: '/organizations/$organizationId/projects/$projectId/billing/connections/'
+      preLoaderRoute: typeof HostedOrganizationsOrganizationIdProjectsProjectIdBillingConnectionsIndexRouteImport
+      parentRoute: typeof HostedRoute
+    }
     '/_hosted/organizations/$organizationId/projects/$projectId/monetization/$environmentId/releases': {
       id: '/_hosted/organizations/$organizationId/projects/$projectId/monetization/$environmentId/releases'
       path: '/organizations/$organizationId/projects/$projectId/monetization/$environmentId/releases'
@@ -731,11 +873,46 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof HostedOrganizationsOrganizationIdProjectsProjectIdCatalogEntitlementsEntitlementIdRouteImport
       parentRoute: typeof HostedRoute
     }
+    '/_hosted/organizations/$organizationId/projects/$projectId/billing/connections/$credentialId': {
+      id: '/_hosted/organizations/$organizationId/projects/$projectId/billing/connections/$credentialId'
+      path: '/organizations/$organizationId/projects/$projectId/billing/connections/$credentialId'
+      fullPath: '/organizations/$organizationId/projects/$projectId/billing/connections/$credentialId'
+      preLoaderRoute: typeof HostedOrganizationsOrganizationIdProjectsProjectIdBillingConnectionsCredentialIdRouteImport
+      parentRoute: typeof HostedRoute
+    }
+    '/_hosted/organizations/$organizationId/projects/$projectId/billing/$environmentId/health': {
+      id: '/_hosted/organizations/$organizationId/projects/$projectId/billing/$environmentId/health'
+      path: '/organizations/$organizationId/projects/$projectId/billing/$environmentId/health'
+      fullPath: '/organizations/$organizationId/projects/$projectId/billing/$environmentId/health'
+      preLoaderRoute: typeof HostedOrganizationsOrganizationIdProjectsProjectIdBillingEnvironmentIdHealthRouteImport
+      parentRoute: typeof HostedRoute
+    }
     '/_hosted/organizations/$organizationId/projects/$projectId/analytics/$environmentId/$surface': {
       id: '/_hosted/organizations/$organizationId/projects/$projectId/analytics/$environmentId/$surface'
       path: '/organizations/$organizationId/projects/$projectId/analytics/$environmentId/$surface'
       fullPath: '/organizations/$organizationId/projects/$projectId/analytics/$environmentId/$surface'
       preLoaderRoute: typeof HostedOrganizationsOrganizationIdProjectsProjectIdAnalyticsEnvironmentIdSurfaceRouteImport
+      parentRoute: typeof HostedRoute
+    }
+    '/_hosted/organizations/$organizationId/projects/$projectId/billing/$environmentId/transactions/': {
+      id: '/_hosted/organizations/$organizationId/projects/$projectId/billing/$environmentId/transactions/'
+      path: '/organizations/$organizationId/projects/$projectId/billing/$environmentId/transactions'
+      fullPath: '/organizations/$organizationId/projects/$projectId/billing/$environmentId/transactions/'
+      preLoaderRoute: typeof HostedOrganizationsOrganizationIdProjectsProjectIdBillingEnvironmentIdTransactionsIndexRouteImport
+      parentRoute: typeof HostedRoute
+    }
+    '/_hosted/organizations/$organizationId/projects/$projectId/billing/$environmentId/reconciliation/': {
+      id: '/_hosted/organizations/$organizationId/projects/$projectId/billing/$environmentId/reconciliation/'
+      path: '/organizations/$organizationId/projects/$projectId/billing/$environmentId/reconciliation'
+      fullPath: '/organizations/$organizationId/projects/$projectId/billing/$environmentId/reconciliation/'
+      preLoaderRoute: typeof HostedOrganizationsOrganizationIdProjectsProjectIdBillingEnvironmentIdReconciliationIndexRouteImport
+      parentRoute: typeof HostedRoute
+    }
+    '/_hosted/organizations/$organizationId/projects/$projectId/billing/$environmentId/quarantine/': {
+      id: '/_hosted/organizations/$organizationId/projects/$projectId/billing/$environmentId/quarantine/'
+      path: '/organizations/$organizationId/projects/$projectId/billing/$environmentId/quarantine'
+      fullPath: '/organizations/$organizationId/projects/$projectId/billing/$environmentId/quarantine/'
+      preLoaderRoute: typeof HostedOrganizationsOrganizationIdProjectsProjectIdBillingEnvironmentIdQuarantineIndexRouteImport
       parentRoute: typeof HostedRoute
     }
     '/_hosted/organizations/$organizationId/projects/$projectId/monetization/$environmentId/placements/$placementId': {
@@ -765,6 +942,27 @@ declare module '@tanstack/react-router' {
       fullPath: '/organizations/$organizationId/projects/$projectId/monetization/$environmentId/experiments/$experimentId'
       preLoaderRoute: typeof HostedOrganizationsOrganizationIdProjectsProjectIdMonetizationEnvironmentIdExperimentsExperimentIdRouteImport
       parentRoute: typeof HostedOrganizationsOrganizationIdProjectsProjectIdMonetizationEnvironmentIdExperimentsRoute
+    }
+    '/_hosted/organizations/$organizationId/projects/$projectId/billing/$environmentId/transactions/$factId': {
+      id: '/_hosted/organizations/$organizationId/projects/$projectId/billing/$environmentId/transactions/$factId'
+      path: '/organizations/$organizationId/projects/$projectId/billing/$environmentId/transactions/$factId'
+      fullPath: '/organizations/$organizationId/projects/$projectId/billing/$environmentId/transactions/$factId'
+      preLoaderRoute: typeof HostedOrganizationsOrganizationIdProjectsProjectIdBillingEnvironmentIdTransactionsFactIdRouteImport
+      parentRoute: typeof HostedRoute
+    }
+    '/_hosted/organizations/$organizationId/projects/$projectId/billing/$environmentId/reconciliation/$runId': {
+      id: '/_hosted/organizations/$organizationId/projects/$projectId/billing/$environmentId/reconciliation/$runId'
+      path: '/organizations/$organizationId/projects/$projectId/billing/$environmentId/reconciliation/$runId'
+      fullPath: '/organizations/$organizationId/projects/$projectId/billing/$environmentId/reconciliation/$runId'
+      preLoaderRoute: typeof HostedOrganizationsOrganizationIdProjectsProjectIdBillingEnvironmentIdReconciliationRunIdRouteImport
+      parentRoute: typeof HostedRoute
+    }
+    '/_hosted/organizations/$organizationId/projects/$projectId/billing/$environmentId/quarantine/$recordId': {
+      id: '/_hosted/organizations/$organizationId/projects/$projectId/billing/$environmentId/quarantine/$recordId'
+      path: '/organizations/$organizationId/projects/$projectId/billing/$environmentId/quarantine/$recordId'
+      fullPath: '/organizations/$organizationId/projects/$projectId/billing/$environmentId/quarantine/$recordId'
+      preLoaderRoute: typeof HostedOrganizationsOrganizationIdProjectsProjectIdBillingEnvironmentIdQuarantineRecordIdRouteImport
+      parentRoute: typeof HostedRoute
     }
   }
 }
@@ -844,6 +1042,8 @@ interface HostedRouteChildren {
   HostedOrganizationsOrganizationIdProjectsProjectIdSettingsApiKeysRoute: typeof HostedOrganizationsOrganizationIdProjectsProjectIdSettingsApiKeysRoute
   HostedOrganizationsOrganizationIdProjectsProjectIdSettingsEnvironmentsRoute: typeof HostedOrganizationsOrganizationIdProjectsProjectIdSettingsEnvironmentsRoute
   HostedOrganizationsOrganizationIdProjectsProjectIdAnalyticsEnvironmentIdSurfaceRoute: typeof HostedOrganizationsOrganizationIdProjectsProjectIdAnalyticsEnvironmentIdSurfaceRoute
+  HostedOrganizationsOrganizationIdProjectsProjectIdBillingEnvironmentIdHealthRoute: typeof HostedOrganizationsOrganizationIdProjectsProjectIdBillingEnvironmentIdHealthRoute
+  HostedOrganizationsOrganizationIdProjectsProjectIdBillingConnectionsCredentialIdRoute: typeof HostedOrganizationsOrganizationIdProjectsProjectIdBillingConnectionsCredentialIdRoute
   HostedOrganizationsOrganizationIdProjectsProjectIdCatalogEntitlementsEntitlementIdRoute: typeof HostedOrganizationsOrganizationIdProjectsProjectIdCatalogEntitlementsEntitlementIdRoute
   HostedOrganizationsOrganizationIdProjectsProjectIdCatalogPlansPlanIdRoute: typeof HostedOrganizationsOrganizationIdProjectsProjectIdCatalogPlansPlanIdRoute
   HostedOrganizationsOrganizationIdProjectsProjectIdCatalogProductsProductIdRoute: typeof HostedOrganizationsOrganizationIdProjectsProjectIdCatalogProductsProductIdRoute
@@ -852,9 +1052,16 @@ interface HostedRouteChildren {
   HostedOrganizationsOrganizationIdProjectsProjectIdMonetizationEnvironmentIdPaywallsRoute: typeof HostedOrganizationsOrganizationIdProjectsProjectIdMonetizationEnvironmentIdPaywallsRouteWithChildren
   HostedOrganizationsOrganizationIdProjectsProjectIdMonetizationEnvironmentIdPlacementsRoute: typeof HostedOrganizationsOrganizationIdProjectsProjectIdMonetizationEnvironmentIdPlacementsRouteWithChildren
   HostedOrganizationsOrganizationIdProjectsProjectIdMonetizationEnvironmentIdReleasesRoute: typeof HostedOrganizationsOrganizationIdProjectsProjectIdMonetizationEnvironmentIdReleasesRoute
+  HostedOrganizationsOrganizationIdProjectsProjectIdBillingConnectionsIndexRoute: typeof HostedOrganizationsOrganizationIdProjectsProjectIdBillingConnectionsIndexRoute
   HostedOrganizationsOrganizationIdProjectsProjectIdCatalogEntitlementsIndexRoute: typeof HostedOrganizationsOrganizationIdProjectsProjectIdCatalogEntitlementsIndexRoute
   HostedOrganizationsOrganizationIdProjectsProjectIdCatalogPlansIndexRoute: typeof HostedOrganizationsOrganizationIdProjectsProjectIdCatalogPlansIndexRoute
   HostedOrganizationsOrganizationIdProjectsProjectIdCatalogProductsIndexRoute: typeof HostedOrganizationsOrganizationIdProjectsProjectIdCatalogProductsIndexRoute
+  HostedOrganizationsOrganizationIdProjectsProjectIdBillingEnvironmentIdQuarantineRecordIdRoute: typeof HostedOrganizationsOrganizationIdProjectsProjectIdBillingEnvironmentIdQuarantineRecordIdRoute
+  HostedOrganizationsOrganizationIdProjectsProjectIdBillingEnvironmentIdReconciliationRunIdRoute: typeof HostedOrganizationsOrganizationIdProjectsProjectIdBillingEnvironmentIdReconciliationRunIdRoute
+  HostedOrganizationsOrganizationIdProjectsProjectIdBillingEnvironmentIdTransactionsFactIdRoute: typeof HostedOrganizationsOrganizationIdProjectsProjectIdBillingEnvironmentIdTransactionsFactIdRoute
+  HostedOrganizationsOrganizationIdProjectsProjectIdBillingEnvironmentIdQuarantineIndexRoute: typeof HostedOrganizationsOrganizationIdProjectsProjectIdBillingEnvironmentIdQuarantineIndexRoute
+  HostedOrganizationsOrganizationIdProjectsProjectIdBillingEnvironmentIdReconciliationIndexRoute: typeof HostedOrganizationsOrganizationIdProjectsProjectIdBillingEnvironmentIdReconciliationIndexRoute
+  HostedOrganizationsOrganizationIdProjectsProjectIdBillingEnvironmentIdTransactionsIndexRoute: typeof HostedOrganizationsOrganizationIdProjectsProjectIdBillingEnvironmentIdTransactionsIndexRoute
 }
 
 const HostedRouteChildren: HostedRouteChildren = {
@@ -878,6 +1085,10 @@ const HostedRouteChildren: HostedRouteChildren = {
     HostedOrganizationsOrganizationIdProjectsProjectIdSettingsEnvironmentsRoute,
   HostedOrganizationsOrganizationIdProjectsProjectIdAnalyticsEnvironmentIdSurfaceRoute:
     HostedOrganizationsOrganizationIdProjectsProjectIdAnalyticsEnvironmentIdSurfaceRoute,
+  HostedOrganizationsOrganizationIdProjectsProjectIdBillingEnvironmentIdHealthRoute:
+    HostedOrganizationsOrganizationIdProjectsProjectIdBillingEnvironmentIdHealthRoute,
+  HostedOrganizationsOrganizationIdProjectsProjectIdBillingConnectionsCredentialIdRoute:
+    HostedOrganizationsOrganizationIdProjectsProjectIdBillingConnectionsCredentialIdRoute,
   HostedOrganizationsOrganizationIdProjectsProjectIdCatalogEntitlementsEntitlementIdRoute:
     HostedOrganizationsOrganizationIdProjectsProjectIdCatalogEntitlementsEntitlementIdRoute,
   HostedOrganizationsOrganizationIdProjectsProjectIdCatalogPlansPlanIdRoute:
@@ -894,12 +1105,26 @@ const HostedRouteChildren: HostedRouteChildren = {
     HostedOrganizationsOrganizationIdProjectsProjectIdMonetizationEnvironmentIdPlacementsRouteWithChildren,
   HostedOrganizationsOrganizationIdProjectsProjectIdMonetizationEnvironmentIdReleasesRoute:
     HostedOrganizationsOrganizationIdProjectsProjectIdMonetizationEnvironmentIdReleasesRoute,
+  HostedOrganizationsOrganizationIdProjectsProjectIdBillingConnectionsIndexRoute:
+    HostedOrganizationsOrganizationIdProjectsProjectIdBillingConnectionsIndexRoute,
   HostedOrganizationsOrganizationIdProjectsProjectIdCatalogEntitlementsIndexRoute:
     HostedOrganizationsOrganizationIdProjectsProjectIdCatalogEntitlementsIndexRoute,
   HostedOrganizationsOrganizationIdProjectsProjectIdCatalogPlansIndexRoute:
     HostedOrganizationsOrganizationIdProjectsProjectIdCatalogPlansIndexRoute,
   HostedOrganizationsOrganizationIdProjectsProjectIdCatalogProductsIndexRoute:
     HostedOrganizationsOrganizationIdProjectsProjectIdCatalogProductsIndexRoute,
+  HostedOrganizationsOrganizationIdProjectsProjectIdBillingEnvironmentIdQuarantineRecordIdRoute:
+    HostedOrganizationsOrganizationIdProjectsProjectIdBillingEnvironmentIdQuarantineRecordIdRoute,
+  HostedOrganizationsOrganizationIdProjectsProjectIdBillingEnvironmentIdReconciliationRunIdRoute:
+    HostedOrganizationsOrganizationIdProjectsProjectIdBillingEnvironmentIdReconciliationRunIdRoute,
+  HostedOrganizationsOrganizationIdProjectsProjectIdBillingEnvironmentIdTransactionsFactIdRoute:
+    HostedOrganizationsOrganizationIdProjectsProjectIdBillingEnvironmentIdTransactionsFactIdRoute,
+  HostedOrganizationsOrganizationIdProjectsProjectIdBillingEnvironmentIdQuarantineIndexRoute:
+    HostedOrganizationsOrganizationIdProjectsProjectIdBillingEnvironmentIdQuarantineIndexRoute,
+  HostedOrganizationsOrganizationIdProjectsProjectIdBillingEnvironmentIdReconciliationIndexRoute:
+    HostedOrganizationsOrganizationIdProjectsProjectIdBillingEnvironmentIdReconciliationIndexRoute,
+  HostedOrganizationsOrganizationIdProjectsProjectIdBillingEnvironmentIdTransactionsIndexRoute:
+    HostedOrganizationsOrganizationIdProjectsProjectIdBillingEnvironmentIdTransactionsIndexRoute,
 }
 
 const HostedRouteWithChildren =

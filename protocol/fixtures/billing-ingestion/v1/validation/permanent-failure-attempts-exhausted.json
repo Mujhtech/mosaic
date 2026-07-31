@@ -1,0 +1,28 @@
+{
+  "billingIngestionContractVersion": "1",
+  "recordType": "validationResult",
+  "payload": {
+    "validationId": "fixture-validation-0006",
+    "observationId": "fixture-observation-apple-notification-0001",
+    "submissionId": "fixture-submission-apple-notification-0001",
+    "outcome": "permanent_failure",
+    "attempt": 8,
+    "validatorVersion": "1",
+    "decidedAt": "2026-07-27T20:00:00.000Z",
+    "sourceAuthority": "provider_notification",
+    "storeEnvironmentClassification": {
+      "classification": "production",
+      "basis": "signature_environment"
+    },
+    "diagnostics": [
+      {
+        "code": "billing.validation.attempts_exhausted",
+        "safeMessage": "Validation attempts were exhausted. The input is quarantined for operator review.",
+        "severity": "error",
+        "retryable": false,
+        "correlationId": "fixture-correlation-0001",
+        "recoveryAction": "requestManualRevalidation"
+      }
+    ]
+  }
+}

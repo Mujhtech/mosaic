@@ -474,13 +474,18 @@ class MosaicGooglePlayAdapter internal constructor(
         } catch (_: Exception) {
             return deliveryFailure(mapping.mosaicProductId)
         }
-        updates.emit(update)
+        // The purchased update is emitted exactly once on every path that emits it, but on the
+        // successful path it is emitted only after the transaction is finalized. Subscribers —
+        // including the optional Transaction Observation runtime — therefore never see a completed
+        // purchase before Google Play acknowledgement has succeeded and the local delivery marker is
+        // durable. Acknowledgement itself is unchanged: it stays client-side, ahead of any report.
         if (!purchase.acknowledged) {
             val acknowledgement = try {
                 service.acknowledge(purchase.token)
             } catch (error: CancellationException) {
                 throw error
             } catch (_: Exception) {
+                updates.emit(update)
                 diagnose("commerce.transaction.finalizationFailed", mapping.mosaicProductId)
                 return MosaicPurchaseResult.Failed(
                     mapping.mosaicProductId,
@@ -488,6 +493,7 @@ class MosaicGooglePlayAdapter internal constructor(
                 )
             }
             if (acknowledgement.code != BillingClient.BillingResponseCode.OK) {
+                updates.emit(update)
                 diagnose("commerce.transaction.finalizationFailed", mapping.mosaicProductId)
                 return MosaicPurchaseResult.Failed(
                     mapping.mosaicProductId,
@@ -498,8 +504,10 @@ class MosaicGooglePlayAdapter internal constructor(
         try {
             deliveryStore.recordFinalized(digest)
         } catch (_: Exception) {
+            updates.emit(update)
             return deliveryFailure(mapping.mosaicProductId)
         }
+        updates.emit(update)
         pendingPurchases.remove(digest)
         return MosaicPurchaseResult.Purchased(mapping.mosaicProductId, digest, grants)
     }
@@ -566,7 +574,26 @@ class MosaicGooglePlayAdapter internal constructor(
             transactionReference = digest,
             activeEntitlements = grants,
             occurredAt = utcNow(),
+            providerOrderReference = orderReference(purchase, outcome, context.mapping.mosaicProductId),
         )
+    }
+
+    /**
+     * Google's order identifier, verbatim, and only for a completed purchase. It is absent while a
+     * purchase is pending and is documented as null-able in general, so an unusable value degrades
+     * to a local diagnostic and never to a failed purchase. A value that does not fit the bounded
+     * provider-code charset is omitted rather than rewritten: a mangled identifier is worse than an
+     * absent one, and the token digest — the value that actually matters — is always present.
+     */
+    private fun orderReference(
+        purchase: GooglePurchase,
+        outcome: MosaicCommerceUpdateOutcome,
+        productId: String,
+    ): String? {
+        if (outcome != MosaicCommerceUpdateOutcome.PURCHASED) return null
+        val reference = purchase.orderId?.takeIf(ORDER_REFERENCE::matches)
+        if (reference == null) diagnose("transaction.observation.referenceUnavailable", productId)
+        return reference
     }
 
     private fun classifyLaunch(code: Int, productId: String): MosaicPurchaseResult = when (code) {
@@ -711,6 +738,8 @@ class MosaicGooglePlayAdapter internal constructor(
 
         private fun unsupported(name: String, reason: String) =
             MosaicCommerceProviderCapability(name, "unsupported", reason)
+
+        private val ORDER_REFERENCE = Regex("^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$")
     }
 }
 
@@ -866,7 +895,16 @@ private class ResumedActivityTracker(
     override fun onActivityDestroyed(activity: Activity) = Unit
 }
 
-private fun tokenDigest(token: String): String =
+/**
+ * The Google Play token reference derivation, frozen by Billing Ingestion Contract 1: SHA-256 over
+ * the **UTF-8 bytes** of the raw purchase token, rendered as lowercase hexadecimal, unprefixed. The
+ * encoding is part of the contract — a platform-default or UTF-16 encoding agrees on ASCII tokens
+ * and silently disagrees on every other one — and every SDK must reproduce the shared reference
+ * vectors in `packages/test-fixtures/src/billing-reference-vectors.json`.
+ *
+ * The digest is one-way: the raw token never leaves the device.
+ */
+internal fun tokenDigest(token: String): String =
     MessageDigest.getInstance("SHA-256").digest(token.toByteArray(Charsets.UTF_8))
         .joinToString("") { "%02x".format(it) }
 

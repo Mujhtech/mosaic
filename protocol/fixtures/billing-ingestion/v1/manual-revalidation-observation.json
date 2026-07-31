@@ -1,0 +1,22 @@
+{
+  "billingIngestionContractVersion": "1",
+  "recordType": "serverTransactionObservation",
+  "payload": {
+    "observationId": "fixture-observation-revalidation-0001",
+    "submissionId": "fixture-submission-revalidation-0001",
+    "providerId": "fixture-provider-apple",
+    "storePlatform": "apple_app_store",
+    "transactionReference": {
+      "referenceKind": "app_store_transaction_id",
+      "value": "2000000900000001"
+    },
+    "sourceAuthority": "manual_revalidation",
+    "trustBasis": "operator_initiated",
+    "receivedAt": "2026-07-28T09:30:00.000Z",
+    "storeEnvironmentClassification": {
+      "classification": "unclassified",
+      "basis": "unknown"
+    },
+    "originatingObservationId": "fixture-observation-apple-notification-0001"
+  }
+}

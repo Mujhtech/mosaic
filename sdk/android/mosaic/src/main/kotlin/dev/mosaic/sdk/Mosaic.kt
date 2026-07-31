@@ -10,6 +10,13 @@ data class MosaicConfiguration(
     val applicationId: String? = null,
     /** Must mirror the accepted Environment setting; false is the privacy-safe default. */
     val analyticsCollectionEnabled: Boolean = false,
+    /**
+     * Opt in to the Transaction Observation handoff: after a purchase is finalized locally, Mosaic
+     * reports a bounded, irreversible provider reference so server-side validation can start sooner.
+     * The raw purchase token never leaves the device, the handoff never blocks or alters a purchase,
+     * and an observation is never evidence that a transaction is authentic. False is the default.
+     */
+    val transactionObservationEnabled: Boolean = false,
 ) {
     init {
         require(apiKey.isNotBlank()) { "apiKey must not be blank." }
@@ -53,6 +60,22 @@ class Mosaic private constructor(
         val analytics = (context.applicationContext as? android.app.Application)?.let { application ->
             MosaicAnalyticsRuntimeRegistry.runtime(application, namespace, configuration, identityStore)
         }
+        // The observation runtime subscribes to the adapter stream that already exists; no provider
+        // API changes and no code runs at all unless the host opted in.
+        val commerceUpdates = (purchaseProvider as? MosaicConfiguredPurchaseProvider)?.commerceUpdateSource
+            ?: (purchaseProvider as? MosaicCommerceProviderAdapterV2)?.commerceUpdates
+        val observations = commerceUpdates
+            ?.takeIf { configuration.transactionObservationEnabled }
+            ?.let { updates ->
+                (context.applicationContext as? android.app.Application)?.let { application ->
+                    MosaicTransactionObservationRuntimeRegistry.runtime(
+                        application,
+                        namespace,
+                        configuration,
+                        updates,
+                    )
+                }
+            }
         return MosaicHostedConfigurationClient(
             transport = MosaicHTTPConfigurationTransport(configuration),
             commerceTransport = configuration.applicationId?.let {
@@ -68,6 +91,7 @@ class Mosaic private constructor(
             purchaseProvider = purchaseProvider,
             applicationVersion = configuration.applicationVersion,
             experimentStore = experimentStore,
+            transactionObservationRuntime = observations,
         ).also { client ->
             (context.applicationContext as? android.app.Application)?.let { application ->
                 MosaicForegroundRefreshRegistry.register(application, namespace, client)
@@ -83,6 +107,7 @@ class Mosaic private constructor(
             applicationVersion: String? = null,
             applicationId: String? = null,
             analyticsCollectionEnabled: Boolean = false,
+            transactionObservationEnabled: Boolean = false,
         ): Mosaic = Mosaic(
             configuration = MosaicConfiguration(
                 apiKey = apiKey,
@@ -90,6 +115,7 @@ class Mosaic private constructor(
                 applicationVersion = applicationVersion,
                 applicationId = applicationId,
                 analyticsCollectionEnabled = analyticsCollectionEnabled,
+                transactionObservationEnabled = transactionObservationEnabled,
             ).normalized(),
             purchaseProvider = purchaseProvider,
         )

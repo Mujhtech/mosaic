@@ -1,0 +1,13 @@
+{
+  "billingIngestionContractVersion": "1",
+  "recordType": "productResolution",
+  "payload": {
+    "resolutionId": "fixture-resolution-0008",
+    "resolvedAt": "2026-07-27T12:06:59.000Z",
+    "resolution": "ambiguous",
+    "providerProductReference": "fixture.pro.monthly",
+    "candidateMappingIds": [
+      "fixture-mapping-0003"
+    ]
+  }
+}

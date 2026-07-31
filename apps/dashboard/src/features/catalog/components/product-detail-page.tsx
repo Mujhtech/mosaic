@@ -53,6 +53,7 @@ import {
   projectQueryOptions,
 } from "@/features/projects/queries/projects-query"
 import { useOrganizationAccess } from "@/hooks/use-organization-access"
+import { describeReturnDestination } from "@/lib/routing/workspace-hrefs"
 
 interface ProductDetailPageProps {
   onReadinessScopeChange: (scope: { applicationId?: string; environmentId?: string }) => void
@@ -284,7 +285,7 @@ export function ProductDetailPage({
       <HostedResourceBoundary state={state}>
         {returnTo ? (
           <a className="text-primary inline-flex text-sm font-semibold" href={returnTo}>
-            Return to Publish review
+            {describeReturnDestination(returnTo)}
           </a>
         ) : null}
         <div className="grid gap-4 md:grid-cols-3">
