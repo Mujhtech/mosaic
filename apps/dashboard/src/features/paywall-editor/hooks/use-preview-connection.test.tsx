@@ -79,7 +79,9 @@ class FakeWebSocket {
   }
 
   private dispatch(type: string, event: SocketEvent) {
-    this.listeners.get(type)?.forEach((listener) => listener(event));
+    for (const listener of this.listeners.get(type) ?? []) {
+      listener(event);
+    }
   }
 }
 

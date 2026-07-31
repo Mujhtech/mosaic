@@ -605,7 +605,7 @@ export function validateEditorDocument(
     }
   });
 
-  entries.forEach(({ node, documentPath: path }) => {
+  for (const { node, documentPath: path } of entries) {
     if (seenIds.has(node.id)) {
       issues.push(
         issue(
@@ -880,7 +880,7 @@ export function validateEditorDocument(
         )
       );
     }
-  });
+  }
 
   return issues;
 }

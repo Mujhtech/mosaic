@@ -513,7 +513,7 @@ export function PreviewCanvas({
       const next = {
         ...(current.workspaceBase === framePositions ? current.positions : {}),
       };
-      positionChanges.forEach((change) => {
+      for (const change of positionChanges) {
         const screenId = [...deviceNodeIdByScreenId].find(
           ([, nodeId]) => nodeId === change.id
         )?.[0];
@@ -523,7 +523,7 @@ export function PreviewCanvas({
         if (screenId && position) {
           next[screenId] = position;
         }
-      });
+      }
       return { workspaceBase: framePositions, positions: next };
     });
   }

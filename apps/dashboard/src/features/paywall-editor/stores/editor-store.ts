@@ -215,7 +215,9 @@ export function createEditorStore(
 
   function emit(nextState: EditorState) {
     state = nextState;
-    listeners.forEach((listener) => listener());
+    for (const listener of listeners) {
+      listener();
+    }
   }
 
   function commitDocument(

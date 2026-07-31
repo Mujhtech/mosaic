@@ -403,7 +403,9 @@ export function visibleRows(
 
   function visitChildren(node: ProtocolNode, depth: number, progress: boolean) {
     if (node.type === "productSelector") {
-      node.cards.forEach((card) => visit(card, depth, node.id, progress));
+      for (const card of node.cards) {
+        visit(card, depth, node.id, progress);
+      }
       return;
     }
     if (
@@ -412,18 +414,20 @@ export function visibleRows(
       node.type === "productCard" ||
       node.type === "productBadge"
     ) {
-      node.children.forEach((child) => visit(child, depth, node.id, progress));
+      for (const child of node.children) {
+        visit(child, depth, node.id, progress);
+      }
       if (node.type === "button") {
-        node.inProgressChildren?.forEach((child) =>
-          visit(child, depth, node.id, true)
-        );
+        for (const child of node.inProgressChildren ?? []) {
+          visit(child, depth, node.id, true);
+        }
       }
       return;
     }
     if (node.type === "carousel") {
-      node.pages.forEach((page) =>
-        visit(page.content, depth, node.id, progress)
-      );
+      for (const page of node.pages) {
+        visit(page.content, depth, node.id, progress);
+      }
     }
   }
 
@@ -446,7 +450,7 @@ export function visibleRows(
     }
   }
 
-  document.screens.forEach((screen) => {
+  for (const screen of document.screens) {
     rows.push({
       kind: "scroll",
       id: screen.layout.id,
@@ -458,7 +462,7 @@ export function visibleRows(
     if (!collapsedScreenIds.has(screen.id)) {
       visit(screen.layout.content, 2, screen.layout.content.id);
     }
-  });
+  }
   return rows;
 }
 

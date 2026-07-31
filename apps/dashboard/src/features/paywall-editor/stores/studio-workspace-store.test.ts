@@ -80,16 +80,18 @@ function expectNoWrite(storage: StudioWorkspaceStorage, action: () => boolean) {
 
 function collectObjectKeys(value: unknown, keys = new Set<string>()) {
   if (Array.isArray(value)) {
-    value.forEach((entry) => collectObjectKeys(entry, keys));
+    for (const entry of value) {
+      collectObjectKeys(entry, keys);
+    }
     return keys;
   }
   if (!value || typeof value !== "object") {
     return keys;
   }
-  Object.entries(value).forEach(([key, entry]) => {
+  for (const [key, entry] of Object.entries(value)) {
     keys.add(key);
     collectObjectKeys(entry, keys);
-  });
+  }
   return keys;
 }
 

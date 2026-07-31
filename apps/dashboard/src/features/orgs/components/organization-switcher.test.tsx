@@ -23,14 +23,22 @@ beforeAll(() => {
   }
   window.matchMedia = (query: string) =>
     ({
-      addEventListener: () => {},
-      addListener: () => {},
+      addEventListener: () => {
+        /* stub for a browser API jsdom does not implement */
+      },
+      addListener: () => {
+        /* stub for a browser API jsdom does not implement */
+      },
       dispatchEvent: () => false,
       matches: false,
       media: query,
       onchange: null,
-      removeEventListener: () => {},
-      removeListener: () => {},
+      removeEventListener: () => {
+        /* stub for a browser API jsdom does not implement */
+      },
+      removeListener: () => {
+        /* stub for a browser API jsdom does not implement */
+      },
     }) as MediaQueryList;
 });
 

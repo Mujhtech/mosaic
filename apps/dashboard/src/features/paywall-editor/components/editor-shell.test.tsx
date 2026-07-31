@@ -20,9 +20,15 @@ import { cloneValue } from "@/features/paywall-editor/utils/clone";
 import { findNode } from "@/features/paywall-editor/utils/document-tree";
 
 class ResizeObserverStub {
-  disconnect() {}
-  observe() {}
-  unobserve() {}
+  disconnect() {
+    /* stub for a browser API jsdom does not implement */
+  }
+  observe() {
+    /* stub for a browser API jsdom does not implement */
+  }
+  unobserve() {
+    /* stub for a browser API jsdom does not implement */
+  }
 }
 
 function InvalidEditorHarness() {

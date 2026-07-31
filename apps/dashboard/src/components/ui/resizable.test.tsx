@@ -12,9 +12,15 @@ import {
 } from "@/components/ui/resizable";
 
 class ResizeObserverStub {
-  disconnect() {}
-  observe() {}
-  unobserve() {}
+  disconnect() {
+    /* stub for a browser API jsdom does not implement */
+  }
+  observe() {
+    /* stub for a browser API jsdom does not implement */
+  }
+  unobserve() {
+    /* stub for a browser API jsdom does not implement */
+  }
 }
 
 describe("Resizable", () => {

@@ -309,9 +309,9 @@ describe("PreviewCanvas layer metadata", () => {
       "[data-preview-node-type]"
     );
     expect(previewFrames.length).toBeGreaterThan(0);
-    previewFrames.forEach((frame) =>
-      expect(frame).not.toHaveAttribute("draggable")
-    );
+    for (const frame of previewFrames) {
+      expect(frame).not.toHaveAttribute("draggable");
+    }
     expect(screen.getByTestId("rf__node-studio-device-preview")).toHaveStyle({
       pointerEvents: "auto",
     });
@@ -691,9 +691,11 @@ describe("PreviewCanvas layer metadata", () => {
     expect(
       view.container.querySelector("[data-device-drag-surface]")
     ).toBeNull();
-    view.container
-      .querySelectorAll<HTMLElement>("[data-preview-node-type]")
-      .forEach((frame) => expect(frame).not.toHaveAttribute("draggable"));
+    for (const frame of view.container.querySelectorAll<HTMLElement>(
+      "[data-preview-node-type]"
+    )) {
+      expect(frame).not.toHaveAttribute("draggable");
+    }
 
     const viewport = screen.getByTestId("canvas-viewport");
     viewport.focus();

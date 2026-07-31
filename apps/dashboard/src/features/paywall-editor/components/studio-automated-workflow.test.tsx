@@ -59,7 +59,9 @@ describe("Studio automated workflow", () => {
       configurable: true,
       value: vi.fn(),
     });
-    vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => {});
+    vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => {
+      /* stub for a browser API jsdom does not implement */
+    });
     vi.spyOn(window, "confirm").mockReturnValue(true);
   });
 

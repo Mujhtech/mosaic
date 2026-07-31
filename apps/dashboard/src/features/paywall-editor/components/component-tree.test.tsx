@@ -263,11 +263,12 @@ function fireRowPointerEvent(
   point: { clientX: number; clientY: number; pointerId?: number }
 ) {
   const event = createEvent[type](element, { button: 0 });
-  Object.entries({ pointerId: point.pointerId ?? 1, ...point }).forEach(
-    ([key, value]) => {
-      Object.defineProperty(event, key, { configurable: true, value });
-    }
-  );
+  for (const [key, value] of Object.entries({
+    pointerId: point.pointerId ?? 1,
+    ...point,
+  })) {
+    Object.defineProperty(event, key, { configurable: true, value });
+  }
   fireEvent(element, event);
 }
 

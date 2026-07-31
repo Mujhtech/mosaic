@@ -135,7 +135,9 @@ function objectUsesStyleType(
 
 function collectLocalizedText(value: unknown, entries: LocalizedText[]) {
   if (Array.isArray(value)) {
-    value.forEach((entry) => collectLocalizedText(entry, entries));
+    for (const entry of value) {
+      collectLocalizedText(entry, entries);
+    }
     return;
   }
   if (!value || typeof value !== "object") {
@@ -152,9 +154,9 @@ function collectLocalizedText(value: unknown, entries: LocalizedText[]) {
     });
     return;
   }
-  Object.values(record).forEach((entry) =>
-    collectLocalizedText(entry, entries)
-  );
+  for (const entry of Object.values(record)) {
+    collectLocalizedText(entry, entries);
+  }
 }
 
 function localizedTextUsesProductTemplate(

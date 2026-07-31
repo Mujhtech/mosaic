@@ -354,75 +354,91 @@ describe("Studio workspace preference persistence", () => {
   it.each([
     [
       "left minimum",
-      (value: MutableStudioWorkspacePreferences) =>
-        (value.panels.left.size = 239),
+      (value: MutableStudioWorkspacePreferences) => {
+        value.panels.left.size = 239;
+      },
     ],
     [
       "left maximum",
-      (value: MutableStudioWorkspacePreferences) =>
-        (value.panels.left.size = 441),
+      (value: MutableStudioWorkspacePreferences) => {
+        value.panels.left.size = 441;
+      },
     ],
     [
       "properties minimum",
-      (value: MutableStudioWorkspacePreferences) =>
-        (value.panels.properties.size = 299),
+      (value: MutableStudioWorkspacePreferences) => {
+        value.panels.properties.size = 299;
+      },
     ],
     [
       "properties maximum",
-      (value: MutableStudioWorkspacePreferences) =>
-        (value.panels.properties.size = 561),
+      (value: MutableStudioWorkspacePreferences) => {
+        value.panels.properties.size = 561;
+      },
     ],
     [
       "diagnostics minimum",
-      (value: MutableStudioWorkspacePreferences) =>
-        (value.panels.diagnostics.size = 139),
+      (value: MutableStudioWorkspacePreferences) => {
+        value.panels.diagnostics.size = 139;
+      },
     ],
     [
       "diagnostics absolute maximum",
-      (value: MutableStudioWorkspacePreferences) =>
-        (value.panels.diagnostics.size =
-          STUDIO_WORKSPACE_PANEL_SIZE_BOUNDS.diagnostics.max + 1),
+      (value: MutableStudioWorkspacePreferences) => {
+        value.panels.diagnostics.size =
+          STUDIO_WORKSPACE_PANEL_SIZE_BOUNDS.diagnostics.max + 1;
+      },
     ],
     [
       "zoom minimum",
-      (value: MutableStudioWorkspacePreferences) => (value.canvas.zoom = 0.19),
+      (value: MutableStudioWorkspacePreferences) => {
+        value.canvas.zoom = 0.19;
+      },
     ],
     [
       "zoom maximum",
-      (value: MutableStudioWorkspacePreferences) => (value.canvas.zoom = 2.01),
+      (value: MutableStudioWorkspacePreferences) => {
+        value.canvas.zoom = 2.01;
+      },
     ],
     [
       "text-scale minimum",
-      (value: MutableStudioWorkspacePreferences) =>
-        (value.canvas.textScale = 0.74),
+      (value: MutableStudioWorkspacePreferences) => {
+        value.canvas.textScale = 0.74;
+      },
     ],
     [
       "text-scale maximum",
-      (value: MutableStudioWorkspacePreferences) =>
-        (value.canvas.textScale = 1.51),
+      (value: MutableStudioWorkspacePreferences) => {
+        value.canvas.textScale = 1.51;
+      },
     ],
     [
       "non-finite panel size",
-      (value: MutableStudioWorkspacePreferences) =>
-        (value.panels.left.size = Number.NaN),
+      (value: MutableStudioWorkspacePreferences) => {
+        value.panels.left.size = Number.NaN;
+      },
     ],
     [
       "non-finite zoom",
-      (value: MutableStudioWorkspacePreferences) =>
-        (value.canvas.zoom = Number.POSITIVE_INFINITY),
+      (value: MutableStudioWorkspacePreferences) => {
+        value.canvas.zoom = Number.POSITIVE_INFINITY;
+      },
     ],
     [
       "frame x minimum",
-      (value: MutableStudioWorkspacePreferences) =>
-        (value.framePositions.main = {
+      (value: MutableStudioWorkspacePreferences) => {
+        value.framePositions.main = {
           x: STUDIO_CANVAS_FRAME_POSITION_BOUNDS.min - 1,
           y: 0,
-        }),
+        };
+      },
     ],
     [
       "non-finite frame y",
-      (value: MutableStudioWorkspacePreferences) =>
-        (value.framePositions.main = { x: 0, y: Number.NaN }),
+      (value: MutableStudioWorkspacePreferences) => {
+        value.framePositions.main = { x: 0, y: Number.NaN };
+      },
     ],
   ])("rejects an out-of-range %s without clamping", (_name, invalidate) => {
     const value = mutableDefaults();
@@ -456,28 +472,33 @@ describe("Studio workspace preference persistence", () => {
   it.each([
     [
       "tool",
-      (value: MutableStudioWorkspacePreferences) =>
-        (value.selectedTool = "future-tool"),
+      (value: MutableStudioWorkspacePreferences) => {
+        value.selectedTool = "future-tool";
+      },
     ],
     [
       "device",
-      (value: MutableStudioWorkspacePreferences) =>
-        (value.canvas.device = "desktop"),
+      (value: MutableStudioWorkspacePreferences) => {
+        value.canvas.device = "desktop";
+      },
     ],
     [
       "orientation",
-      (value: MutableStudioWorkspacePreferences) =>
-        (value.canvas.orientation = "square"),
+      (value: MutableStudioWorkspacePreferences) => {
+        value.canvas.orientation = "square";
+      },
     ],
     [
       "fit mode",
-      (value: MutableStudioWorkspacePreferences) =>
-        (value.canvas.fitMode = "fill"),
+      (value: MutableStudioWorkspacePreferences) => {
+        value.canvas.fitMode = "fill";
+      },
     ],
     [
       "appearance",
-      (value: MutableStudioWorkspacePreferences) =>
-        (value.canvas.appearance = "system"),
+      (value: MutableStudioWorkspacePreferences) => {
+        value.canvas.appearance = "system";
+      },
     ],
   ])("rejects an unknown %s enum", (_name, invalidate) => {
     const value = mutableDefaults();

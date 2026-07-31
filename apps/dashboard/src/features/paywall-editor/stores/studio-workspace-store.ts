@@ -121,7 +121,9 @@ export function createStudioWorkspaceStore(
   const listeners = new Set<() => void>();
 
   function notify() {
-    listeners.forEach((listener) => listener());
+    for (const listener of listeners) {
+      listener();
+    }
   }
 
   function persistPreferences(preferences: StudioWorkspacePreferencesV1) {

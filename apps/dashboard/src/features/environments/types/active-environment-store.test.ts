@@ -65,13 +65,17 @@ describe("active environment store", () => {
     // Hydration is deferred to subscribe, which runs in an effect: reading storage
     // during render would report a value the server-rendered HTML did not have.
     expect(rememberedEnvironmentId("prj_01")).toBeUndefined();
-    subscribeToActiveEnvironment(() => {});
+    subscribeToActiveEnvironment(() => {
+      /* stub for a browser API jsdom does not implement */
+    });
     expect(rememberedEnvironmentId("prj_01")).toBe("env_prod");
   });
 
   it("ignores unrelated storage keys", () => {
     window.localStorage.setItem("unrelated.prj_01", "env_prod");
-    subscribeToActiveEnvironment(() => {});
+    subscribeToActiveEnvironment(() => {
+      /* stub for a browser API jsdom does not implement */
+    });
 
     expect(rememberedEnvironmentId("prj_01")).toBeUndefined();
   });

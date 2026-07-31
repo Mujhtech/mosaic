@@ -126,11 +126,11 @@ export function useComponentTreeModel({
       warningCount: 0,
     };
     const byComponent = new Map<string, LayerIssueSummary>();
-    validation.issues.forEach((issue) => {
+    for (const issue of validation.issues) {
       const key = issue.severity === "error" ? "errorCount" : "warningCount";
       documentSummary[key] += 1;
       if (!issue.componentId) {
-        return;
+        continue;
       }
       const componentSummary = byComponent.get(issue.componentId) ?? {
         errorCount: 0,
@@ -138,7 +138,7 @@ export function useComponentTreeModel({
       };
       componentSummary[key] += 1;
       byComponent.set(issue.componentId, componentSummary);
-    });
+    }
     return { byComponent, documentSummary };
   }, [validation.issues]);
 

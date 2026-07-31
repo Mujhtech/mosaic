@@ -319,9 +319,9 @@ export function visitContainerEntries(
     });
   }
 
-  containerCollections(container).forEach(([collection, children]) =>
-    visitCollection(children, collection)
-  );
+  for (const [collection, children] of containerCollections(container)) {
+    visitCollection(children, collection);
+  }
 }
 
 export function flattenDocument(document: MosaicDocument): NodeEntry[] {
@@ -629,7 +629,9 @@ export function revealNodeAncestors(
   expandedIds: ReadonlySet<string>
 ): ReadonlySet<string> {
   const expanded = new Set(reconcileExpandedTreeNodes(document, expandedIds));
-  document.screens.forEach((screen) => expanded.add(screen.layout.content.id));
+  for (const screen of document.screens) {
+    expanded.add(screen.layout.content.id);
+  }
   for (const ancestorId of findAncestorNodeIds(document, id)) {
     expanded.add(ancestorId);
   }

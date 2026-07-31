@@ -132,7 +132,9 @@ describe("PaywallEditorWorkspace", () => {
       configurable: true,
       value: revokeObjectURL,
     });
-    vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => {});
+    vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => {
+      /* stub for a browser API jsdom does not implement */
+    });
     render(<PaywallEditorWorkspace />);
 
     fireEvent.click(screen.getByRole("button", { name: /Focused offer/ }));

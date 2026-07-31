@@ -48,10 +48,14 @@ export function productCardBoundsAreValid(document: MosaicDocument) {
         const nextDepth = node.type === "stack" ? stackDepth + 1 : stackDepth;
         maximumStackDepth = Math.max(maximumStackDepth, nextDepth);
         if (node.type === "stack" || node.type === "productBadge") {
-          node.children.forEach((child) => visit(child, nextDepth));
+          for (const child of node.children) {
+            visit(child, nextDepth);
+          }
         }
       }
-      card.children.forEach((child) => visit(child, 0));
+      for (const child of card.children) {
+        visit(child, 0);
+      }
       return descendantCount <= 20 && maximumStackDepth <= 4;
     });
 }
@@ -133,9 +137,13 @@ export function identifierSet(document: MosaicDocument) {
   for (const entry of flattenDocument(document)) {
     identifiers.add(entry.node.id);
     if (entry.node.type === "featureList") {
-      entry.node.items.forEach((item) => identifiers.add(item.id));
+      for (const item of entry.node.items) {
+        identifiers.add(item.id);
+      }
     } else if (entry.node.type === "carousel") {
-      entry.node.pages.forEach((page) => identifiers.add(page.id));
+      for (const page of entry.node.pages) {
+        identifiers.add(page.id);
+      }
     }
   }
   return identifiers;

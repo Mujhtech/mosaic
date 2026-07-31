@@ -1,9 +1,15 @@
 import { vi } from "vitest";
 
 export class ResizeObserverStub {
-  disconnect() {}
-  observe() {}
-  unobserve() {}
+  disconnect() {
+    /* stub for a browser API jsdom does not implement */
+  }
+  observe() {
+    /* stub for a browser API jsdom does not implement */
+  }
+  unobserve() {
+    /* stub for a browser API jsdom does not implement */
+  }
 }
 
 export class PointerEventStub extends MouseEvent {

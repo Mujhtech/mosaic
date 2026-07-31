@@ -639,7 +639,7 @@ export function usePreviewConnection(options: {
         const rawDiagnostics = Array.isArray(payload.diagnostics)
           ? payload.diagnostics
           : [];
-        rawDiagnostics.forEach((raw) =>
+        for (const raw of rawDiagnostics) {
           addDiagnostic(
             diagnosticFromProtocol({
               raw,
@@ -650,14 +650,14 @@ export function usePreviewConnection(options: {
               fallbackCode: "preview.draftRejected",
               fallbackMessage: "The preview client rejected this revision.",
             })
-          )
-        );
+          );
+        }
         return;
       }
 
       if (message.type === "validationError") {
         const errors = Array.isArray(payload.errors) ? payload.errors : [];
-        errors.forEach((raw) =>
+        for (const raw of errors) {
           addDiagnostic(
             diagnosticFromProtocol({
               raw,
@@ -668,8 +668,8 @@ export function usePreviewConnection(options: {
               fallbackCode: "preview.validationError",
               fallbackMessage: "The native preview found an invalid property.",
             })
-          )
-        );
+          );
+        }
         return;
       }
 
@@ -677,7 +677,7 @@ export function usePreviewConnection(options: {
         const warnings = Array.isArray(payload.warnings)
           ? payload.warnings
           : [];
-        warnings.forEach((raw) =>
+        for (const raw of warnings) {
           addDiagnostic(
             diagnosticFromProtocol({
               raw,
@@ -688,8 +688,8 @@ export function usePreviewConnection(options: {
               fallbackCode: "preview.renderWarning",
               fallbackMessage: "The native preview used a defined fallback.",
             })
-          )
-        );
+          );
+        }
         return;
       }
 

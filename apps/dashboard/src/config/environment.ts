@@ -47,7 +47,9 @@ function validateUrl(
     return protocols.includes(parsed.protocol)
       ? candidate.replace(TRAILING_SLASHES, "")
       : undefined;
-  } catch {}
+  } catch {
+    /* an unparseable URL falls through to the undefined return below */
+  }
 }
 
 function readRawConfig(): Record<string, unknown> | undefined {

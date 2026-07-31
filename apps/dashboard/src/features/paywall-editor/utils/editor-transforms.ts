@@ -51,9 +51,9 @@ function replaceLocalizedDefault(
     return;
   }
   if (Array.isArray(value)) {
-    value.forEach((entry) =>
-      replaceLocalizedDefault(entry, localizationKey, nextValue)
-    );
+    for (const entry of value) {
+      replaceLocalizedDefault(entry, localizationKey, nextValue);
+    }
     return;
   }
   const record = value as Record<string, unknown>;
@@ -63,9 +63,9 @@ function replaceLocalizedDefault(
   ) {
     record.default = nextValue;
   }
-  Object.values(record).forEach((entry) =>
-    replaceLocalizedDefault(entry, localizationKey, nextValue)
-  );
+  for (const entry of Object.values(record)) {
+    replaceLocalizedDefault(entry, localizationKey, nextValue);
+  }
 }
 
 function replaceAllLocalizedDefaults(
@@ -76,7 +76,9 @@ function replaceAllLocalizedDefaults(
     return;
   }
   if (Array.isArray(value)) {
-    value.forEach((entry) => replaceAllLocalizedDefaults(entry, strings));
+    for (const entry of value) {
+      replaceAllLocalizedDefaults(entry, strings);
+    }
     return;
   }
   const record = value as Record<string, unknown>;
@@ -86,9 +88,9 @@ function replaceAllLocalizedDefaults(
   ) {
     record.default = strings[record.localizationKey] ?? record.default;
   }
-  Object.values(record).forEach((entry) =>
-    replaceAllLocalizedDefaults(entry, strings)
-  );
+  for (const entry of Object.values(record)) {
+    replaceAllLocalizedDefaults(entry, strings);
+  }
 }
 
 export function changeDocumentDefaultLocale(

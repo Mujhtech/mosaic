@@ -39,9 +39,15 @@ import {
 } from "@/features/paywall-editor/utils/resizable-workspace-layout";
 
 class ResizeObserverStub {
-  disconnect() {}
-  observe() {}
-  unobserve() {}
+  disconnect() {
+    /* stub for a browser API jsdom does not implement */
+  }
+  observe() {
+    /* stub for a browser API jsdom does not implement */
+  }
+  unobserve() {
+    /* stub for a browser API jsdom does not implement */
+  }
 }
 
 const slotProps = {
@@ -464,7 +470,9 @@ describe("StudioResizableWorkspace", () => {
     renderWorkspace("large", {
       children: (
         <WorkspaceActionsCapture
-          capture={(actions) => (capturedActions = actions)}
+          capture={(actions) => {
+            capturedActions = actions;
+          }}
         />
       ),
       storage: memory.storage,
