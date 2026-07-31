@@ -256,10 +256,9 @@ function SecondaryPreviewSettings({ toolbar }: { toolbar: boolean }) {
         <span className="block font-medium text-muted-foreground text-xs">
           Appearance
         </span>
-        <div
+        <fieldset
           aria-label="Preview appearance"
-          className="grid grid-cols-2 rounded bg-muted p-1"
-          role="group"
+          className="grid min-w-0 grid-cols-2 rounded bg-muted p-1"
         >
           <Button
             aria-pressed={canvas.appearance === "light"}
@@ -279,7 +278,7 @@ function SecondaryPreviewSettings({ toolbar }: { toolbar: boolean }) {
           >
             <MoonIcon aria-hidden /> Dark
           </Button>
-        </div>
+        </fieldset>
       </div>
 
       <div className="space-y-2 rounded border border-border p-2.5">
@@ -306,10 +305,9 @@ function SecondaryPreviewSettings({ toolbar }: { toolbar: boolean }) {
             value={countdownLocalInputFromInstant(canvas.countdownPreviewAt)}
           />
         </div>
-        <div
+        <fieldset
           aria-label="Advance Countdown preview time"
-          className="flex flex-wrap gap-1.5"
-          role="group"
+          className="flex min-w-0 flex-wrap gap-1.5"
         >
           <Button
             aria-label="Set Countdown preview to current UTC time"
@@ -349,7 +347,7 @@ function SecondaryPreviewSettings({ toolbar }: { toolbar: boolean }) {
           >
             +1d
           </Button>
-        </div>
+        </fieldset>
         <p className="text-[11px] text-muted-foreground leading-4">
           Frozen workspace-only time. Native SDKs use the device clock, so
           Countdown is not tamper-proof scarcity.

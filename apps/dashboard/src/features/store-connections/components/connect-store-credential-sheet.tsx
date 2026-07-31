@@ -1,5 +1,5 @@
 import { useForm, useStore } from "@tanstack/react-form";
-import { useState } from "react";
+import { useId, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -390,6 +390,7 @@ export function ConnectStoreCredentialSheet({
                   ) : (
                     <div className="grid gap-2">
                       {applications.map((application) => {
+                        const fieldIds = useId();
                         const selected = field.state.value.find(
                           (item) => item.applicationId === application.id
                         );
@@ -433,11 +434,15 @@ export function ConnectStoreCredentialSheet({
                               </span>
                             </label>
                             {selected ? (
-                              <label className="mt-3 block space-y-1 font-medium text-xs">
+                              <label
+                                className="mt-3 block space-y-1 font-medium text-xs"
+                                htmlFor={`${fieldIds}-field-1`}
+                              >
                                 {provider === "app_store"
                                   ? "Bundle ID"
                                   : "Package name"}
                                 <Input
+                                  id={`${fieldIds}-field-1`}
                                   onChange={(event) =>
                                     field.handleChange(
                                       field.state.value.map((item) =>

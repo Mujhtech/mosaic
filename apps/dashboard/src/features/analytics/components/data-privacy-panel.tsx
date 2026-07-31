@@ -1,6 +1,6 @@
 import { useForm } from "@tanstack/react-form";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useCallback, useState } from "react";
+import { useCallback, useId, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -180,6 +180,7 @@ function IdentityOperationsPanel({
   role?: AnalyticsRole;
   scope: AnalyticsScope;
 }) {
+  const fieldIds = useId();
   const handleClick2 = useCallback(() => {
     setMode("delete");
     setPreview(undefined);
@@ -281,7 +282,7 @@ function IdentityOperationsPanel({
       title="Identity privacy"
     >
       <div className="space-y-5">
-        <div aria-label="Privacy operation" className="flex gap-2" role="group">
+        <fieldset aria-label="Privacy operation" className="flex min-w-0 gap-2">
           <Button
             onClick={handleClick}
             type="button"
@@ -296,7 +297,7 @@ function IdentityOperationsPanel({
           >
             Delete
           </Button>
-        </div>
+        </fieldset>
         <form
           className="grid gap-4 sm:grid-cols-[12rem_1fr_auto]"
           onSubmit={(event) => {
@@ -332,10 +333,14 @@ function IdentityOperationsPanel({
           </form.Field>
           <form.Field name="value">
             {(field) => (
-              <label className="space-y-1 font-medium text-sm">
+              <label
+                className="space-y-1 font-medium text-sm"
+                htmlFor={`${fieldIds}-opaque-identity`}
+              >
                 Opaque identity
                 <Input
                   autoComplete="off"
+                  id={`${fieldIds}-opaque-identity`}
                   maxLength={256}
                   name="identity-value"
                   onChange={(event) => field.handleChange(event.target.value)}
@@ -419,6 +424,7 @@ function PreviewConfirmation({
   mode: "export" | "delete";
   preview: IdentityPreview;
 }) {
+  const fieldIds = useId();
   const [confirmation, setConfirmation] = useState("");
   return (
     <section
@@ -455,10 +461,14 @@ function PreviewConfirmation({
             links, then recomputes affected aggregates. Audit metadata retains
             no raw identity.
           </p>
-          <label className="block max-w-sm space-y-1 font-medium text-sm">
+          <label
+            className="block max-w-sm space-y-1 font-medium text-sm"
+            htmlFor={`${fieldIds}-type-delete-to-confirm`}
+          >
             Type DELETE to confirm
             <Input
               autoComplete="off"
+              id={`${fieldIds}-type-delete-to-confirm`}
               onChange={(event) => setConfirmation(event.target.value)}
               value={confirmation}
             />

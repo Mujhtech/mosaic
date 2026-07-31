@@ -1,7 +1,7 @@
 import { useForm } from "@tanstack/react-form";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
-import { useEffect, useState } from "react";
+import { useEffect, useId, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -38,6 +38,7 @@ export function CreatePaywallDraftForm({
   environmentId: string;
   projectId: string;
 }) {
+  const fieldIds = useId();
   const adapter = useHostedPublishingAdapter();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
@@ -245,7 +246,10 @@ export function CreatePaywallDraftForm({
                 </span>
               </span>
             </label>
-            <label className="block rounded border border-border p-3 text-sm">
+            <label
+              className="block rounded border border-border p-3 text-sm"
+              htmlFor={`${fieldIds}-field-1`}
+            >
               <span className="block font-medium">Import Mosaic JSON</span>
               <span className="mt-1 block text-muted-foreground">
                 A valid Protocol 0.2 paywall is copied into a new hosted Draft.
@@ -253,6 +257,7 @@ export function CreatePaywallDraftForm({
               <Input
                 accept="application/json,.json"
                 className="mt-3"
+                id={`${fieldIds}-field-1`}
                 onChange={(event) => {
                   const file = event.currentTarget.files?.[0];
                   if (file) {

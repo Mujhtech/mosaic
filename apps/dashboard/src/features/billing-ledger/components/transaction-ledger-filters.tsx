@@ -1,3 +1,4 @@
+import { useId } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -43,6 +44,7 @@ export function TransactionLedgerFilters({
   onChange,
   products,
 }: TransactionLedgerFiltersProps) {
+  const fieldIds = useId();
   // Any filter change invalidates the cursor: a cursor is only meaningful for
   // the query that produced it.
   function update(patch: Partial<TransactionFilters>) {
@@ -225,9 +227,13 @@ export function TransactionLedgerFilters({
           </Select>
         </div>
 
-        <label className="space-y-1 font-medium text-sm">
+        <label
+          className="space-y-1 font-medium text-sm"
+          htmlFor={`${fieldIds}-occurred-from`}
+        >
           Occurred from
           <Input
+            id={`${fieldIds}-occurred-from`}
             onChange={(event) =>
               update({ from: event.currentTarget.value || undefined })
             }
@@ -236,9 +242,13 @@ export function TransactionLedgerFilters({
           />
         </label>
 
-        <label className="space-y-1 font-medium text-sm">
+        <label
+          className="space-y-1 font-medium text-sm"
+          htmlFor={`${fieldIds}-occurred-to`}
+        >
           Occurred to
           <Input
+            id={`${fieldIds}-occurred-to`}
             onChange={(event) =>
               update({ to: event.currentTarget.value || undefined })
             }
@@ -247,9 +257,13 @@ export function TransactionLedgerFilters({
           />
         </label>
 
-        <label className="space-y-1 font-medium text-sm">
+        <label
+          className="space-y-1 font-medium text-sm"
+          htmlFor={`${fieldIds}-transaction-or-product-reference`}
+        >
           Transaction or Product reference
           <Input
+            id={`${fieldIds}-transaction-or-product-reference`}
             maxLength={128}
             onChange={(event) =>
               update({ reference: event.currentTarget.value || undefined })

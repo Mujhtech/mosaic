@@ -342,7 +342,7 @@ export function NodeFrame({
         ? "ring-primary/40 ring-1"
         : "hover:ring-primary/35 hover:ring-1";
   return (
-    <div
+    <fieldset
       aria-current={selected ? "true" : undefined}
       aria-disabled={locked || undefined}
       // A canvas node frequently contains its own buttons and text controls,
@@ -374,7 +374,6 @@ export function NodeFrame({
         event.stopPropagation();
         editor.hoverComponent(null);
       }}
-      role="group"
       style={{
         ...frameStyle(document, node),
         ...(background.video ? background.style : {}),
@@ -400,7 +399,7 @@ export function NodeFrame({
         />
       ) : null}
       {children}
-    </div>
+    </fieldset>
   );
 }
 

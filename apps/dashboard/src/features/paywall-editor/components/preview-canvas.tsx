@@ -147,7 +147,7 @@ interface CanvasDeviceNodeData extends Record<string, unknown> {
   readonly layout: Screen["layout"];
   readonly nodeGeometry: CanvasDeviceNodeGeometry;
   readonly onFrameSelect: () => void;
-  readonly onRootClick: (event: ReactMouseEvent<HTMLDivElement>) => void;
+  readonly onRootClick: (event: ReactMouseEvent<HTMLFieldSetElement>) => void;
   readonly onRootSelect: () => void;
   readonly presentation: "screen" | "sheet";
   readonly preset: CanvasDevicePreset;
@@ -743,12 +743,11 @@ export function PreviewCanvas({
       onDragOver={handleCatalogDragOver}
       onDrop={handleCatalogDrop}
     >
-      <div
+      <section
         aria-label="Paywall canvas viewport"
         className="h-full w-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset"
         data-testid="canvas-viewport"
         onKeyDown={handleCanvasKeyboard}
-        role="region"
         tabIndex={0}
       >
         <ReactFlow<CanvasDeviceFlowNode>
@@ -820,7 +819,7 @@ export function PreviewCanvas({
             <CanvasPreviewToolbar />
           </Panel>
         </ReactFlow>
-      </div>
+      </section>
     </section>
   );
 }

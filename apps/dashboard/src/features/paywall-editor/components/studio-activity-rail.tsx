@@ -178,10 +178,9 @@ export function StudioActivityRail({
           );
         })}
       </div>
-      <div
+      <fieldset
         aria-label="Studio commands"
-        className="mt-auto flex justify-center border-border border-t px-2 py-2"
-        role="group"
+        className="mt-auto flex min-w-0 justify-center border-border border-t px-2 py-2"
       >
         <Tooltip>
           <TooltipTrigger
@@ -203,7 +202,7 @@ export function StudioActivityRail({
             Open Studio commands ({STUDIO_SHORTCUT_HINTS.commandPalette})
           </TooltipContent>
         </Tooltip>
-      </div>
+      </fieldset>
     </nav>
   );
 }

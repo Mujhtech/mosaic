@@ -1,7 +1,7 @@
 import { useForm } from "@tanstack/react-form";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
-import { useState } from "react";
+import { useId, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { buttonVariants } from "@/components/ui/button-variants";
@@ -79,6 +79,7 @@ export function ProductsPage({
   projectId,
   returnTo,
 }: ProductsPageProps) {
+  const fieldIds = useId();
   const queryClient = useQueryClient();
   const { project, scopeMismatch, scopeReady } = useValidatedProjectScope(
     organizationId,
@@ -307,10 +308,11 @@ export function ProductsPage({
       </WorkflowPanel>
       <WorkflowPanel title="Filters">
         <div className="grid gap-3 sm:grid-cols-3">
-          <label className="font-medium text-sm">
+          <label className="font-medium text-sm" htmlFor={`${fieldIds}-search`}>
             Search
             <Input
               className="mt-2"
+              id={`${fieldIds}-search`}
               onChange={(event) =>
                 onFiltersChange({
                   ...filters,

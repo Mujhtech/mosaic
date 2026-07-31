@@ -1,5 +1,5 @@
 import { useMutation, useQueries, useQueryClient } from "@tanstack/react-query";
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useId, useMemo, useState } from "react";
 
 import { Input } from "@/components/ui/input";
 import {
@@ -104,6 +104,7 @@ export function MigrationProgramDetailPage({
   runJobId = "",
   tab,
 }: Props) {
+  const fieldIds = useId();
   const queryClient = useQueryClient();
   const access = useOrganizationAccess(organizationId);
   const { project, scopeMismatch, scopeReady } = useValidatedProjectScope(
@@ -541,9 +542,13 @@ export function MigrationProgramDetailPage({
                 title="Queue import batch"
               >
                 <div className="grid gap-3 sm:grid-cols-2">
-                  <label className="text-sm">
+                  <label
+                    className="text-sm"
+                    htmlFor={`${fieldIds}-record-count`}
+                  >
                     Record count
                     <Input
+                      id={`${fieldIds}-record-count`}
                       max={1000}
                       min={0}
                       onChange={(event) =>
@@ -553,9 +558,13 @@ export function MigrationProgramDetailPage({
                       value={importCount}
                     />
                   </label>
-                  <label className="text-sm">
+                  <label
+                    className="text-sm"
+                    htmlFor={`${fieldIds}-cursor-before`}
+                  >
                     Cursor before
                     <Input
+                      id={`${fieldIds}-cursor-before`}
                       onChange={(event) => setCursorBefore(event.target.value)}
                       value={cursorBefore}
                     />

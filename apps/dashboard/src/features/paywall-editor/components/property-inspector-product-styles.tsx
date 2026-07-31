@@ -216,10 +216,9 @@ export function ProductLayerStyleSection({ node }: { node: ProductLayerNode }) {
 
   return (
     <InspectorSection title="Appearance">
-      <div
+      <fieldset
         aria-label="Product layer state"
-        className="grid grid-cols-2 rounded bg-muted p-0.5"
-        role="group"
+        className="grid min-w-0 grid-cols-2 rounded bg-muted p-0.5"
       >
         {(["default", "selected"] as const).map((candidate) => (
           <button
@@ -232,7 +231,7 @@ export function ProductLayerStyleSection({ node }: { node: ProductLayerNode }) {
             {candidate === "default" ? "Default" : "Selected"}
           </button>
         ))}
-      </div>
+      </fieldset>
       {state === "selected" ? (
         <div className="space-y-2 rounded bg-muted/60 p-2 text-[11px] leading-4">
           <p>Selected values inherit from Default until you change them.</p>

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useId, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -35,6 +35,7 @@ export function ProviderMappingsPanel({
   ) => Promise<void>;
   productType?: "one_time_non_consumable" | "subscription";
 }) {
+  const fieldIds = useId();
   const [editingId, setEditingId] = useState<string | null>(null);
   const [usage, setUsage] = useState<ProviderMappingUsage | null>(null);
   const [usageError, setUsageError] = useState<Error | null>(null);
@@ -384,7 +385,10 @@ export function ProviderMappingsPanel({
                       </p>
                     ) : null}
                     <div className="mt-3 grid gap-3 sm:grid-cols-3">
-                      <label className="font-medium text-xs">
+                      <label
+                        className="font-medium text-xs"
+                        htmlFor={`${fieldIds}-field-1`}
+                      >
                         {mapping.provider === "app_store"
                           ? "StoreKit Product ID"
                           : mapping.provider === "google_play"
@@ -392,6 +396,7 @@ export function ProviderMappingsPanel({
                             : "Provider Product resource"}
                         <Input
                           className="mt-1"
+                          id={`${fieldIds}-field-1`}
                           onChange={(event) =>
                             setReplacement((current) => ({
                               ...current,
@@ -405,10 +410,14 @@ export function ProviderMappingsPanel({
                       {mapping.provider === "google_play" &&
                       productType === "subscription" ? (
                         <>
-                          <label className="font-medium text-xs">
+                          <label
+                            className="font-medium text-xs"
+                            htmlFor={`${fieldIds}-base-plan-id`}
+                          >
                             Base plan ID
                             <Input
                               className="mt-1"
+                              id={`${fieldIds}-base-plan-id`}
                               onChange={(event) =>
                                 setReplacement((current) => ({
                                   ...current,
@@ -453,10 +462,14 @@ export function ProviderMappingsPanel({
                             </label>
                           </fieldset>
                           {replacementOfferSelection === "specific" ? (
-                            <label className="font-medium text-xs">
+                            <label
+                              className="font-medium text-xs"
+                              htmlFor={`${fieldIds}-offer-id`}
+                            >
                               Offer ID
                               <Input
                                 className="mt-1"
+                                id={`${fieldIds}-offer-id`}
                                 onChange={(event) =>
                                   setReplacement((current) => ({
                                     ...current,
@@ -474,10 +487,14 @@ export function ProviderMappingsPanel({
                       ) : mapping.provider !== "app_store" &&
                         mapping.provider !== "google_play" ? (
                         <>
-                          <label className="font-medium text-xs">
+                          <label
+                            className="font-medium text-xs"
+                            htmlFor={`${fieldIds}-offering-lookup-key`}
+                          >
                             Offering lookup key
                             <Input
                               className="mt-1"
+                              id={`${fieldIds}-offering-lookup-key`}
                               onChange={(event) =>
                                 setReplacement((current) => ({
                                   ...current,
@@ -490,10 +507,14 @@ export function ProviderMappingsPanel({
                               }
                             />
                           </label>
-                          <label className="font-medium text-xs">
+                          <label
+                            className="font-medium text-xs"
+                            htmlFor={`${fieldIds}-package-lookup-key`}
+                          >
                             Package lookup key
                             <Input
                               className="mt-1"
+                              id={`${fieldIds}-package-lookup-key`}
                               onChange={(event) =>
                                 setReplacement((current) => ({
                                   ...current,

@@ -416,7 +416,7 @@ export function CanvasPreviewDevice({
   selectedComponentId: string | null;
   zoom: number;
   onFrameSelect: () => void;
-  onRootClick: (event: MouseEvent<HTMLDivElement>) => void;
+  onRootClick: (event: MouseEvent<HTMLFieldSetElement>) => void;
   onRootSelect: () => void;
 }) {
   const root = layout.content;
@@ -431,9 +431,9 @@ export function CanvasPreviewDevice({
     : { top: 0, right: 0, bottom: 0, left: 0 };
 
   return (
-    <div
+    <fieldset
       aria-label={`${preset.label}, ${preset.displayLabel}, ${canvas.orientation}, ${Math.round(zoom * 100)}% zoom`}
-      className="group/device relative select-none"
+      className="group/device relative min-w-0 select-none"
       data-canvas-fit-mode={canvas.fitMode}
       data-device-height={geometry.height}
       data-device-id={preset.id}
@@ -441,7 +441,6 @@ export function CanvasPreviewDevice({
       data-device-width={geometry.width}
       data-effective-zoom={zoom.toFixed(3)}
       data-presentation={presentation}
-      role="group"
       style={{ height: nodeGeometry.height, width: nodeGeometry.width }}
     >
       <div
@@ -553,7 +552,7 @@ export function CanvasPreviewDevice({
             />
           ) : null}
 
-          <div
+          <fieldset
             // The Paywall root contains the entire interactive Paywall, so it
             // is a labelled group rather than a button.
             aria-current={selectedComponentId === root.id ? "true" : undefined}
@@ -573,7 +572,6 @@ export function CanvasPreviewDevice({
               event.preventDefault();
               onRootSelect();
             }}
-            role="group"
             style={{
               alignItems: alignmentStyle(root.crossAxisAlignment),
               ...rootBackground.style,
@@ -638,9 +636,9 @@ export function CanvasPreviewDevice({
             ) : (
               children
             )}
-          </div>
+          </fieldset>
         </div>
       </div>
-    </div>
+    </fieldset>
   );
 }

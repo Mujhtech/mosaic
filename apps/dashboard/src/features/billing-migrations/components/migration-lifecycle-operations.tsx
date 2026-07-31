@@ -1,5 +1,5 @@
 import { type QueryClient, useMutation } from "@tanstack/react-query";
-import { useCallback, useState } from "react";
+import { useCallback, useId, useState } from "react";
 
 import { Input } from "@/components/ui/input";
 import {
@@ -346,6 +346,7 @@ export function MigrationLifecycleOperations({
   programId: string;
   queryClient: QueryClient;
 }) {
+  const fieldIds = useId();
   const program = detail.program;
   const mutation = useMutation(
     migrationLifecycleMutationOptions(projectId, programId, queryClient)
@@ -699,68 +700,99 @@ export function MigrationLifecycleOperations({
               </SelectContent>
             </Select>
           </div>
-          <label className="text-sm">
+          <label className="text-sm" htmlFor={`${fieldIds}-primary-reference`}>
             Primary reference
             <Input
+              id={`${fieldIds}-primary-reference`}
               onChange={(event) => setReferenceId(event.target.value)}
               placeholder="proposal, checkpoint, case, preview, or event ID"
               value={referenceId}
             />
           </label>
-          <label className="text-sm">
+          <label
+            className="text-sm"
+            htmlFor={`${fieldIds}-secondary-reference`}
+          >
             Secondary reference
             <Input
+              id={`${fieldIds}-secondary-reference`}
               onChange={(event) => setSecondaryId(event.target.value)}
               placeholder="approval, repair kind, or destination ID"
               value={secondaryId}
             />
           </label>
-          <label className="text-sm">
+          <label
+            className="text-sm"
+            htmlFor={`${fieldIds}-expected-object-digest`}
+          >
             Expected object digest
             <Input
+              id={`${fieldIds}-expected-object-digest`}
               onChange={(event) => setExpectedDigest(event.target.value)}
               value={expectedDigest}
             />
           </label>
-          <label className="text-sm">
+          <label
+            className="text-sm"
+            htmlFor={`${fieldIds}-expected-authority-digest`}
+          >
             Expected authority digest
             <Input
+              id={`${fieldIds}-expected-authority-digest`}
               onChange={(event) => setAuthorityDigest(event.target.value)}
               value={authorityDigest}
             />
           </label>
-          <label className="text-sm">
+          <label
+            className="text-sm"
+            htmlFor={`${fieldIds}-expected-prerequisite-digest`}
+          >
             Expected prerequisite digest
             <Input
+              id={`${fieldIds}-expected-prerequisite-digest`}
               onChange={(event) => setPrerequisiteDigest(event.target.value)}
               value={prerequisiteDigest}
             />
           </label>
-          <label className="text-sm">
+          <label
+            className="text-sm"
+            htmlFor={`${fieldIds}-expected-approval-digest`}
+          >
             Expected approval digest
             <Input
+              id={`${fieldIds}-expected-approval-digest`}
               onChange={(event) => setApprovalDigest(event.target.value)}
               value={approvalDigest}
             />
           </label>
-          <label className="text-sm">
+          <label
+            className="text-sm"
+            htmlFor={`${fieldIds}-expected-case-digest`}
+          >
             Expected case digest
             <Input
+              id={`${fieldIds}-expected-case-digest`}
               onChange={(event) => setCaseDigest(event.target.value)}
               value={caseDigest}
             />
           </label>
-          <label className="text-sm">
+          <label className="text-sm" htmlFor={`${fieldIds}-scope-kind`}>
             Scope kind
             <Input
+              id={`${fieldIds}-scope-kind`}
               onChange={(event) => setScopeKind(event.target.value)}
               value={scopeKind}
             />
           </label>
           {digestNames.map((digestName) => (
-            <label className="text-sm" key={digestName}>
+            <label
+              className="text-sm"
+              htmlFor={`${fieldIds}-expected-digest`}
+              key={digestName}
+            >
               Expected {digestName} digest
               <Input
+                id={`${fieldIds}-expected-digest`}
                 onChange={(event) =>
                   setDigests((current) => ({
                     ...current,
@@ -771,17 +803,22 @@ export function MigrationLifecycleOperations({
               />
             </label>
           ))}
-          <label className="text-sm md:col-span-2 xl:col-span-3">
+          <label
+            className="text-sm md:col-span-2 xl:col-span-3"
+            htmlFor={`${fieldIds}-reason`}
+          >
             Reason
             <Input
+              id={`${fieldIds}-reason`}
               onChange={(event) => setReason(event.target.value)}
               placeholder="Explain the incident, evidence, or operational need"
               value={reason}
             />
           </label>
-          <label className="text-sm">
+          <label className="text-sm" htmlFor={`${fieldIds}-expires-at`}>
             Expires at
             <Input
+              id={`${fieldIds}-expires-at`}
               onChange={(event) => setExpiresAt(event.target.value)}
               type="datetime-local"
               value={expiresAt}

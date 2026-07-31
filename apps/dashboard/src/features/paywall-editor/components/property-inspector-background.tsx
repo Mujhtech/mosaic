@@ -257,10 +257,9 @@ export function DocumentBackgroundEditor({
       data-property-address={address}
     >
       <div className="grid grid-cols-[minmax(0,1fr)_2rem_2rem] items-center gap-1.5">
-        <div
+        <fieldset
           aria-label={`${colorLabel} type`}
           className="grid h-8 min-w-0 grid-cols-3 rounded bg-muted p-0.5"
-          role="group"
         >
           {(
             [
@@ -289,7 +288,7 @@ export function DocumentBackgroundEditor({
               </Button>
             );
           })}
-        </div>
+        </fieldset>
         <Button
           aria-label={
             type === "none"

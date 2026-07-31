@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useId, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -143,6 +143,7 @@ function ActionControl({
   storeConnectionsHref: string;
   supersededBy: string;
 }) {
+  const fieldIds = useId();
   switch (action.kind) {
     case "retry_provider_validation":
       return (
@@ -164,9 +165,13 @@ function ActionControl({
     case "close_superseded":
       return (
         <div className="mt-3 space-y-2">
-          <label className="block max-w-sm space-y-1 font-medium text-xs">
+          <label
+            className="block max-w-sm space-y-1 font-medium text-xs"
+            htmlFor={`${fieldIds}-quarantine-record-that-replaced-this-one`}
+          >
             Quarantine record that replaced this one
             <Input
+              id={`${fieldIds}-quarantine-record-that-replaced-this-one`}
               onChange={(event) => setSupersededBy(event.currentTarget.value)}
               placeholder="Quarantine record ID"
               spellCheck={false}

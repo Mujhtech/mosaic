@@ -297,10 +297,9 @@ export function CompactOptionField({
   return (
     <Field address={address} group label={label}>
       {(fieldProps) => (
-        <div
+        <fieldset
           {...fieldProps}
-          className="grid h-9 overflow-hidden rounded border border-input bg-muted/35 p-0.5"
-          role="group"
+          className="grid h-9 min-w-0 overflow-hidden rounded border border-input bg-muted/35 p-0.5"
           style={{
             gridTemplateColumns: `repeat(${options.length}, minmax(0, 1fr))`,
           }}
@@ -326,7 +325,7 @@ export function CompactOptionField({
               </button>
             );
           })}
-        </div>
+        </fieldset>
       )}
     </Field>
   );

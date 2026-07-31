@@ -1,7 +1,7 @@
 import { CaretDownIcon } from "@phosphor-icons/react/dist/ssr/CaretDown";
 import { CheckCircleIcon } from "@phosphor-icons/react/dist/ssr/CheckCircle";
 import { WarningCircleIcon } from "@phosphor-icons/react/dist/ssr/WarningCircle";
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useId, useMemo, useRef, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -70,6 +70,7 @@ export function ProviderCatalogImport({
   products: readonly Product[];
   providersHref: string;
 }) {
+  const fieldIds = useId();
   const [search, setSearch] = useState("");
   const [availability, setAvailability] = useState<"all" | "importable">(
     "importable"
@@ -242,10 +243,14 @@ export function ProviderCatalogImport({
   return (
     <div className="space-y-5">
       <div className="grid gap-3 sm:grid-cols-3">
-        <label className="font-medium text-sm">
+        <label
+          className="font-medium text-sm"
+          htmlFor={`${fieldIds}-search-provider-catalog`}
+        >
           Search provider catalog
           <Input
             className="mt-2"
+            id={`${fieldIds}-search-provider-catalog`}
             onChange={(event) => setSearch(event.currentTarget.value)}
             placeholder="Product name or store ID"
             value={search}
@@ -329,6 +334,7 @@ export function ProviderCatalogImport({
       ) : (
         <ul className="space-y-3">
           {visibleProducts.map((product) => {
+            const fieldIds = useId();
             const draft = productDraft(product.id);
             const selected = selectedIds.has(product.id);
             const packageMappingOptions = [
@@ -409,10 +415,14 @@ export function ProviderCatalogImport({
                         </div>
                         {draft.existingProductId ? null : (
                           <div className="grid gap-3 sm:grid-cols-2">
-                            <label className="font-medium text-xs">
+                            <label
+                              className="font-medium text-xs"
+                              htmlFor={`${fieldIds}-internal-name`}
+                            >
                               Internal name
                               <Input
                                 className="mt-1"
+                                id={`${fieldIds}-internal-name`}
                                 onChange={(event) =>
                                   updateDraft(product.id, {
                                     internalName: event.currentTarget.value,
@@ -421,10 +431,14 @@ export function ProviderCatalogImport({
                                 value={draft.internalName}
                               />
                             </label>
-                            <label className="font-medium text-xs">
+                            <label
+                              className="font-medium text-xs"
+                              htmlFor={`${fieldIds}-product-key`}
+                            >
                               Product key
                               <Input
                                 className="mt-1"
+                                id={`${fieldIds}-product-key`}
                                 onChange={(event) =>
                                   updateDraft(product.id, {
                                     key: catalogKey(event.currentTarget.value),

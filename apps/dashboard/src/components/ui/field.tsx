@@ -33,7 +33,7 @@ const MANAGED_ATTRIBUTE = "data-field-described-by";
  * the error text.
  */
 function useFieldDescribedBy(
-  root: RefObject<HTMLDivElement | null>,
+  root: RefObject<HTMLFieldSetElement | null>,
   { descriptionId, errorId }: FieldContextValue
 ) {
   useEffect(() => {
@@ -138,7 +138,7 @@ function Field({
   className,
   orientation = "vertical",
   ...props
-}: ComponentProps<"div"> & VariantProps<typeof fieldVariants>) {
+}: ComponentProps<"fieldset"> & VariantProps<typeof fieldVariants>) {
   const generatedId = useId();
   const ids = useMemo(
     () => ({
@@ -147,17 +147,16 @@ function Field({
     }),
     [generatedId]
   );
-  const rootRef = useRef<HTMLDivElement>(null);
+  const rootRef = useRef<HTMLFieldSetElement>(null);
   useFieldDescribedBy(rootRef, ids);
 
   return (
     <FieldContext.Provider value={ids}>
-      <div
-        className={cn(fieldVariants({ orientation }), className)}
+      <fieldset
+        className={cn(fieldVariants({ orientation }), "min-w-0", className)}
         data-orientation={orientation}
         data-slot="field"
         ref={rootRef}
-        role="group"
         {...props}
       />
     </FieldContext.Provider>

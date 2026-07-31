@@ -84,7 +84,7 @@ export function OrganizationOverviewPage({
       description="Projects contain registered apps, isolated environments, API keys, and one project-wide Catalog."
       title={organization.data?.name ?? "Organization"}
     >
-      <div aria-label="Project status" className="flex gap-2" role="group">
+      <fieldset aria-label="Project status" className="flex min-w-0 gap-2">
         <button
           aria-pressed={projectStatus === "active"}
           className={buttonVariants({
@@ -105,7 +105,7 @@ export function OrganizationOverviewPage({
         >
           Archived Projects
         </button>
-      </div>
+      </fieldset>
       <HostedResourceBoundary state={state}>
         <WorkflowPanel
           title={
